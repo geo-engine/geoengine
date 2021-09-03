@@ -337,7 +337,8 @@ mod tests {
             400,
             "BodyDeserializeError",
             "missing field `email` at line 1 column 47",
-        ).await;
+        )
+        .await;
     }
 
     #[tokio::test]
@@ -356,7 +357,8 @@ mod tests {
             415,
             "UnsupportedMediaType",
             "Unsupported content type header.",
-        ).await;
+        )
+        .await;
     }
 
     async fn login_test_helper(method: Method, password: &str) -> ServiceResponse {

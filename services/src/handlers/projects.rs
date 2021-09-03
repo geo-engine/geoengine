@@ -249,7 +249,7 @@ mod tests {
 
         let req = test::TestRequest::default()
             .method(method)
-            .uri("/project/create")
+            .uri("/project")
             .append_header((header::CONTENT_LENGTH, 0))
             .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())))
             .set_json(&create);
@@ -277,7 +277,7 @@ mod tests {
         let session_id = ctx.default_session_ref().await.id();
 
         let req = test::TestRequest::post()
-            .uri("/project/create")
+            .uri("/project")
             .append_header((header::CONTENT_LENGTH, 0))
             .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())))
             .set_payload("no json");
@@ -304,7 +304,7 @@ mod tests {
         });
 
         let req = test::TestRequest::post()
-            .uri("/project/create")
+            .uri("/project")
             .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())))
             .set_json(&create);
         let res = send_test_request(req, ctx).await;
@@ -328,7 +328,7 @@ mod tests {
         });
 
         let req = test::TestRequest::post()
-            .uri("/project/create")
+            .uri("/project")
             .set_json(&create);
         let res = send_test_request(req, ctx).await;
 

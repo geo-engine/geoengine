@@ -4,13 +4,14 @@ use std::path::Path;
 use crate::datasets::storage::{AddDataset, DatasetDefinition, DatasetStore, MetaDataDefinition};
 use crate::datasets::upload::{UploadId, UploadRootPath};
 use crate::error;
-use crate::handlers::authenticate;
+use crate::error::Result;
 use crate::pro::contexts::ProContext;
 use crate::pro::projects::ProProjectDb;
 use crate::util::config::{get_config_element, Odm};
 use crate::util::user_input::UserInput;
 use crate::util::IdResponse;
 
+use actix_web::{web, Responder};
 use futures_util::StreamExt;
 use geoengine_datatypes::dataset::{DatasetId, InternalDatasetId};
 use geoengine_datatypes::primitives::Measurement;
@@ -23,14 +24,13 @@ use geoengine_operators::util::gdal::{gdal_open_dataset, gdal_parameters_from_da
 use log::info;
 use reqwest::header::CONTENT_TYPE;
 use reqwest::multipart::{self, Part};
+use reqwest::Body;
 use serde::{Deserialize, Serialize};
 use snafu::ResultExt;
 use tokio::fs::{self, File};
 use tokio::io::AsyncWriteExt;
 use tokio_util::codec::{BytesCodec, FramedRead};
 use uuid::Uuid;
-use warp::hyper::Body;
-use warp::Filter;
 
 #[derive(Deserialize, Serialize, Clone, Debug)]
 pub struct TaskStart {
@@ -77,26 +77,11 @@ pub struct CreateDatasetResponse {
 ///   "id": "aae098a4-3272-439b-bd93-40b6c39560cb",
 /// },
 /// ```
-pub(crate) fn start_task_handler<C: ProContext>(
-    ctx: C,
-) -> impl Filter<Extract = (impl warp::Reply,), Error = warp::Rejection> + Clone
-where
-    C::ProjectDB: ProProjectDb,
-{
-    warp::path!("droneMapping" / "task")
-        .and(warp::post())
-        .and(authenticate(ctx.clone()))
-        .and(warp::any().map(move || ctx.clone()))
-        .and(warp::body::json())
-        .and_then(start_task)
-}
-
-// TODO: move into handler once async closures are available?
-async fn start_task<C: ProContext>(
+pub(crate) async fn start_task_handler<C: ProContext>(
     _session: C::Session,
-    _ctx: C,
-    task_start: TaskStart,
-) -> Result<impl warp::Reply, warp::Rejection>
+    _ctx: web::Data<C>,
+    task_start: web::Json<TaskStart>,
+) -> Result<impl Responder>
 where
     C::ProjectDB: ProProjectDb,
 {
@@ -167,7 +152,7 @@ where
         .await
         .context(error::Reqwest)?;
 
-    Ok(warp::reply::json(&IdResponse::from(task_id)))
+    Ok(web::Json(IdResponse::from(task_id)))
 }
 
 /// Create a new dataset from the drone mapping result of the task with the given id.
@@ -192,25 +177,11 @@ where
 ///   }
 /// }
 /// ```
-pub(crate) fn dataset_from_drone_mapping_handler<C: ProContext>(
-    ctx: C,
-) -> impl Filter<Extract = (impl warp::Reply,), Error = warp::Rejection> + Clone
-where
-    C::ProjectDB: ProProjectDb,
-{
-    warp::path!("droneMapping" / "dataset" / Uuid)
-        .and(warp::post())
-        .and(authenticate(ctx.clone()))
-        .and(warp::any().map(move || ctx.clone()))
-        .and_then(dataset_from_drone_mapping)
-}
-
-// TODO: move into handler once async closures are available?
-async fn dataset_from_drone_mapping<C: ProContext>(
-    task_id: Uuid,
+pub(crate) async fn dataset_from_drone_mapping_handler<C: ProContext>(
+    task_id: web::Path<Uuid>,
     session: C::Session,
-    ctx: C,
-) -> Result<impl warp::Reply, warp::Rejection>
+    ctx: web::Data<C>,
+) -> Result<impl Responder>
 where
     C::ProjectDB: ProProjectDb,
 {
@@ -283,7 +254,7 @@ where
         .add_dataset(&session, dataset_definition.properties.validated()?, meta)
         .await?;
 
-    Ok(warp::reply::json(&CreateDatasetResponse {
+    Ok(web::Json(CreateDatasetResponse {
         upload: upload_id,
         dataset,
     }))
@@ -386,8 +357,7 @@ mod tests {
         pro::{contexts::ProInMemoryContext, util::tests::create_session_helper},
         util::config,
     };
-    use actix_web::dev::ServiceResponse;
-    use actix_web::{http::header, http::Method, test};
+    use actix_web::{http::header, test};
     use actix_web_httpauth::headers::authorization::Bearer;
     use geoengine_operators::engine::{
         MetaData, MetaDataProvider, RasterOperator, RasterQueryRectangle,
@@ -476,17 +446,13 @@ mod tests {
         let req = test::TestRequest::post()
             .uri("/droneMapping/task")
             .append_header((header::CONTENT_LENGTH, 0))
-            .header(
-                "Authorization",
-                format!("Bearer {}", session.id().to_string()),
-            )
+            .append_header((header::AUTHORIZATION, Bearer::new(session.id().to_string())))
             .set_json(&task);
-        let res = send_pro_test_request(req, ctx).await;
+        let res = send_pro_test_request(req, ctx.clone()).await;
 
         assert_eq!(res.status(), 200);
 
-        let body = std::str::from_utf8(res.body()).unwrap();
-        let task = serde_json::from_str::<IdResponse<Uuid>>(body)?;
+        let task: IdResponse<Uuid> = test::read_body_json(res).await;
 
         let task_uuid = task.id;
 
@@ -509,20 +475,14 @@ mod tests {
         );
 
         // download odm result through geo engine and create dataset
-        let req = test::TestRequest
-            .method("POST")
+        let req = test::TestRequest::post()
             .uri(&format!("/droneMapping/dataset/{}", task_uuid))
             .append_header((header::CONTENT_LENGTH, 0))
-            .header(
-                "Authorization",
-                format!("Bearer {}", session.id().to_string()),
-            )
-            .set_json(&task)
-            .reply(&dataset_from_drone_mapping_handler(ctx.clone()));
-        let res = send_pro_test_request(req, ctx).await;
+            .append_header((header::AUTHORIZATION, Bearer::new(session.id().to_string())))
+            .set_json(&task);
+        let res = send_pro_test_request(req, ctx.clone()).await;
 
-        let body = std::str::from_utf8(res.body()).unwrap();
-        let dataset_response = serde_json::from_str::<CreateDatasetResponse>(body).unwrap();
+        let dataset_response: CreateDatasetResponse = test::read_body_json(res).await;
         test_data.uploads.push(dataset_response.upload);
 
         // test if the meta data is correct

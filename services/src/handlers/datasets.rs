@@ -25,7 +25,7 @@ use gdal::{vector::Layer, Dataset};
 use gdal::{vector::OGRFieldType, DatasetOptions};
 use geoengine_datatypes::{
     collections::VectorDataType,
-    dataset::{DatasetId, DatasetProviderId},
+    dataset::{DatasetId, InternalDatasetId, DatasetProviderId},
     primitives::FeatureDataType,
     spatial_reference::{SpatialReference, SpatialReferenceOption},
 };
@@ -136,11 +136,11 @@ pub(crate) async fn list_datasets_handler<C: Context>(
 /// }
 /// ```
 pub(crate) async fn get_dataset_handler<C: Context>(
-    dataset: web::Path<DatasetId>,
+    dataset: web::Path<InternalDatasetId>,
     _session: C::Session,
     ctx: web::Data<C>,
 ) -> Result<impl Responder> {
-    let dataset = ctx.dataset_db_ref().await.load(&dataset).await?;
+    let dataset = ctx.dataset_db_ref().await.load(&dataset.into_inner().into()).await?;
     Ok(web::Json(dataset))
 }
 

@@ -7,8 +7,10 @@ use crate::util::config;
 use crate::util::config::get_config_element;
 
 use actix_files::Files;
+use actix_web::body::ResponseBody;
+use actix_web::dev::ServiceResponse;
 use actix_web::error::{InternalError, JsonPayloadError, QueryPayloadError};
-use actix_web::{middleware, web, App, HttpResponse, HttpServer, Responder};
+use actix_web::{http, middleware, web, App, HttpResponse, HttpServer, Responder};
 use actix_web_httpauth::middleware::HttpAuthentication;
 use log::info;
 use snafu::ResultExt;
@@ -112,6 +114,26 @@ pub(crate) fn configure_extractors(cfg: &mut web::ServiceConfig) {
     }));
 }
 
+pub(crate) fn render_401<B>(
+    mut res: ServiceResponse<B>,
+) -> actix_web::Result<middleware::ErrorHandlerResponse<B>> {
+    res.headers_mut().insert(
+        http::header::CONTENT_TYPE,
+        http::HeaderValue::from_static("application/json"),
+    );
+    res = res.map_body(|_, _| {
+        ResponseBody::Other(
+            serde_json::to_string(&ErrorResponse {
+                error: "MissingAuthorizationHeader".to_string(),
+                message: "Header with authorization token not provided.".to_string(),
+            })
+            .unwrap()
+            .into(),
+        )
+    });
+    Ok(middleware::ErrorHandlerResponse::Response(res))
+}
+
 pub(crate) fn init_routes<C>(cfg: &mut web::ServiceConfig)
 where
     C: SimpleContext,
@@ -130,6 +152,10 @@ where
         .service(
             web::scope("")
                 .wrap(HttpAuthentication::bearer(validate_token::<C>))
+                .wrap(
+                    middleware::ErrorHandlers::new()
+                        .handler(http::StatusCode::UNAUTHORIZED, render_401),
+                )
                 .route(
                     "/workflow",
                     web::post().to(handlers::workflows::register_workflow_handler::<C>),
