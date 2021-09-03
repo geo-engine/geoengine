@@ -234,6 +234,7 @@ mod test_util {
                     GdalMetadataMapping::identity(slope_key(), RasterPropertiesEntryType::Number),
                 ]),
                 gdal_open_options: None,
+                gdal_config_options: None,
             },
             result_descriptor: RasterResultDescriptor {
                 data_type: RasterDataType::I16,
