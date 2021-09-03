@@ -108,10 +108,6 @@ pub async fn start_pro_server(
     println!("|===========================================================================|");
 
     let web_config: config::Web = get_config_element()?;
-    let bind_address = web_config
-        .bind_address
-        .parse::<SocketAddr>()
-        .context(error::AddrParse)?;
 
     info!(
         "Starting server… {}",
@@ -126,7 +122,7 @@ pub async fn start_pro_server(
             start(
                 shutdown_rx,
                 static_files_dir,
-                bind_address,
+                web_config.bind_address,
                 ProInMemoryContext::new_with_data().await,
             )
             .await

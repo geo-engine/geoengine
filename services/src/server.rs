@@ -38,10 +38,6 @@ pub async fn start_server(
     static_files_dir: Option<PathBuf>,
 ) -> Result<()> {
     let web_config: config::Web = get_config_element()?;
-    let bind_address = web_config
-        .bind_address
-        .parse::<SocketAddr>()
-        .context(error::AddrParse)?;
 
     info!(
         "Starting server… {}",
@@ -55,7 +51,7 @@ pub async fn start_server(
     start(
         shutdown_rx,
         static_files_dir,
-        bind_address,
+        web_config.bind_address,
         InMemoryContext::new_with_data().await,
     )
     .await

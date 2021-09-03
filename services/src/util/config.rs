@@ -1,3 +1,4 @@
+use std::net::SocketAddr;
 use std::path::PathBuf;
 use std::sync::RwLock;
 
@@ -102,8 +103,8 @@ pub trait ConfigElement {
 
 #[derive(Debug, Deserialize)]
 pub struct Web {
-    pub bind_address: String,
-    #[serde(deserialize_with = "deserialize_base_url_option")]
+    pub bind_address: SocketAddr,
+    #[serde(deserialize_with = "deserialize_base_url_option", default)]
     pub external_address: Option<url::Url>,
     pub backend: Backend,
 }
