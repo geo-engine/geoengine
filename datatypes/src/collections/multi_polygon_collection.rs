@@ -1,7 +1,7 @@
 use crate::collections::{
-    FeatureCollection, FeatureCollectionInfos, FeatureCollectionIterator, FeatureCollectionRow,
-    FeatureCollectionRowBuilder, GeoFeatureCollectionRowBuilder, GeometryCollection,
-    GeometryRandomAccess, IntoGeometryIterator,
+    BuilderProvider, FeatureCollection, FeatureCollectionInfos, FeatureCollectionIterator,
+    FeatureCollectionRow, FeatureCollectionRowBuilder, GeoFeatureCollectionRowBuilder,
+    GeometryCollection, GeometryRandomAccess, IntoGeometryIterator,
 };
 use crate::primitives::{Coordinate2D, MultiPolygon, MultiPolygonAccess, MultiPolygonRef};
 use crate::util::Result;
@@ -9,6 +9,7 @@ use crate::{
     primitives::MultiLineString,
     util::arrow::{downcast_array, ArrowTyped},
 };
+use arrow::datatypes::ToByteSlice;
 use arrow::{
     array::{Array, ArrayData, FixedSizeListArray, Float64Array, ListArray},
     buffer::Buffer,
@@ -334,11 +335,79 @@ impl ReplaceRawArrayCoords for MultiPolygonCollection {
     }
 }
 
+impl From<Vec<geo::MultiPolygon<f64>>> for MultiPolygonCollection {
+    fn from(geo_polygons: Vec<geo::MultiPolygon<f64>>) -> Self {
+        let mut features = vec![];
+        let mut polygons = vec![];
+        let mut rings = vec![];
+        let mut coordinates = vec![];
+
+        for multi_polygon in geo_polygons {
+            features.push(polygons.len() as i32);
+            for polygon in multi_polygon {
+                polygons.push(rings.len() as i32);
+                rings.push(coordinates.len() as i32);
+
+                let mut outer_coords: Vec<Coordinate2D> =
+                    polygon.exterior().points_iter().map(From::from).collect();
+
+                coordinates.append(&mut outer_coords);
+
+                for inner_ring in polygon.interiors() {
+                    rings.push(coordinates.len() as i32);
+                    let mut inner_coords: Vec<Coordinate2D> =
+                        inner_ring.points_iter().map(From::from).collect();
+
+                    coordinates.append(&mut inner_coords);
+                }
+            }
+        }
+
+        features.push(polygons.len() as i32);
+        polygons.push(rings.len() as i32);
+        rings.push(coordinates.len() as i32);
+
+        let mut builder = FeatureCollection::<MultiPolygon>::builder()
+            .batch_builder(features.len() - 1, coordinates.len() - 1);
+
+        let feature_offsets = Buffer::from(features.to_byte_slice());
+        let polygon_offsets = Buffer::from(polygons.to_byte_slice());
+        let ring_offsets = Buffer::from(rings.to_byte_slice());
+        let coordinates = unsafe {
+            let coord_bytes: &[u8] = std::slice::from_raw_parts(
+                coordinates.as_ptr().cast::<u8>(),
+                coordinates.len() * std::mem::size_of::<Coordinate2D>(),
+            );
+            Buffer::from(coord_bytes)
+        };
+
+        builder
+            .set_polygons(coordinates, ring_offsets, polygon_offsets, feature_offsets)
+            .expect("setting polygons always works");
+
+        builder
+            .set_default_time_intervals()
+            .expect("setting default time always works");
+
+        builder
+            .finish()
+            .expect("geo polygons are valid and default time is set");
+
+        builder
+            .output
+            .expect("builder is finished")
+            .try_into_polygons()
+            .expect("builder builds polygons")
+    }
+}
+
 #[cfg(test)]
 mod tests {
+    use geo::polygon;
+
     use super::*;
 
-    use crate::collections::{BuilderProvider, FeatureCollectionModifications};
+    use crate::collections::{BuilderProvider, FeatureCollectionModifications, ToGeoJson};
     use crate::primitives::TimeInterval;
 
     #[test]
@@ -832,5 +901,51 @@ mod tests {
         let proj_collection = collection.reproject(&projector).unwrap();
 
         assert_eq!(proj_collection, expected_collection);
+    }
+
+    #[test]
+    fn polygons_from_geo() {
+        let poly1 = polygon!(
+            exterior: [
+                (x: -111., y: 45.),
+                (x: -111., y: 41.),
+                (x: -104., y: 41.),
+                (x: -104., y: 45.),
+            ],
+            interiors: [
+                [
+                    (x: -110., y: 44.),
+                    (x: -110., y: 42.),
+                    (x: -105., y: 42.),
+                    (x: -105., y: 44.),
+                ],
+            ],
+        );
+
+        let poly2 = polygon!(
+            exterior: [
+                (x: -111., y: 45.),
+                (x: -111., y: 41.),
+                (x: -104., y: 41.),
+                (x: -104., y: 45.),
+            ],
+            interiors: [
+                [
+                    (x: -110., y: 44.),
+                    (x: -110., y: 42.),
+                    (x: -105., y: 42.),
+                    (x: -105., y: 44.),
+                ],
+            ],
+        );
+
+        let multi1 = geo::MultiPolygon(vec![poly1, poly2]);
+
+        let geometries = vec![multi1];
+
+        let collection = MultiPolygonCollection::from(geometries);
+
+        eprintln!("{}", collection.to_geo_json());
+        // TODO: validate collection
     }
 }
