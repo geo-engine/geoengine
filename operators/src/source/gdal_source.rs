@@ -164,11 +164,11 @@ pub struct GdalDatasetParameters {
 }
 
 /// Set thread local gdal options and revert them on drop
-struct GdalThreadLocalConfigOptions {
+struct TemporaryGdalThreadLocalConfigOptions {
     original_configs: Vec<(String, Option<String>)>,
 }
 
-impl GdalThreadLocalConfigOptions {
+impl TemporaryGdalThreadLocalConfigOptions {
     /// Set thread local gdal options and revert them on drop
     fn new(configs: &[(String, String)]) -> Result<Self> {
         let mut original_configs = vec![];
@@ -193,7 +193,7 @@ impl GdalThreadLocalConfigOptions {
     }
 }
 
-impl Drop for GdalThreadLocalConfigOptions {
+impl Drop for TemporaryGdalThreadLocalConfigOptions {
     fn drop(&mut self) {
         for (key, value) in &self.original_configs {
             if let Some(value) = value {
@@ -455,11 +455,10 @@ where
             .map(|o| o.iter().map(String::as_str).collect::<Vec<_>>());
 
         // reverts the thread local configs on drop
-        info!("{:?}", dataset_params.gdal_config_options);
         let _thread_local_configs = dataset_params
             .gdal_config_options
             .as_ref()
-            .map(|config_options| GdalThreadLocalConfigOptions::new(config_options));
+            .map(|config_options| TemporaryGdalThreadLocalConfigOptions::new(config_options));
 
         let dataset_result = GdalDataset::open_ex(
             &dataset_params.file_path,
@@ -1407,7 +1406,8 @@ mod tests {
         let config_options = vec![("foo".to_owned(), "bar".to_owned())];
 
         {
-            let _config = GdalThreadLocalConfigOptions::new(config_options.as_slice()).unwrap();
+            let _config =
+                TemporaryGdalThreadLocalConfigOptions::new(config_options.as_slice()).unwrap();
 
             assert_eq!(
                 gdal::config::get_config_option("foo", "default").unwrap(),
