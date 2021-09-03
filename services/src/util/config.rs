@@ -1,13 +1,15 @@
+use std::path::PathBuf;
 use std::sync::RwLock;
 
 use crate::error::{self, Result};
+use crate::util::parsing::{deserialize_base_url, deserialize_base_url_option};
+
 use chrono::{DateTime, FixedOffset};
 use config::{Config, File};
 use geoengine_datatypes::primitives::{TimeInstance, TimeInterval};
 use lazy_static::lazy_static;
 use serde::Deserialize;
 use snafu::ResultExt;
-use std::path::PathBuf;
 
 lazy_static! {
     static ref SETTINGS: RwLock<Config> = RwLock::new({
@@ -101,7 +103,8 @@ pub trait ConfigElement {
 #[derive(Debug, Deserialize)]
 pub struct Web {
     pub bind_address: String,
-    pub external_address: Option<String>,
+    #[serde(deserialize_with = "deserialize_base_url_option")]
+    pub external_address: Option<url::Url>,
     pub backend: Backend,
 }
 
@@ -277,7 +280,8 @@ impl ConfigElement for Wms {
 
 #[derive(Debug, Deserialize)]
 pub struct Odm {
-    pub endpoint: String,
+    #[serde(deserialize_with = "deserialize_base_url")]
+    pub endpoint: url::Url,
 }
 
 impl ConfigElement for Odm {

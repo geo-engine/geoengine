@@ -16,6 +16,7 @@ use snafu::ResultExt;
 use std::net::SocketAddr;
 use std::path::PathBuf;
 use tokio::sync::oneshot::Receiver;
+use url::Url;
 use warp::Filter;
 
 use super::projects::ProProjectDb;
@@ -114,12 +115,9 @@ pub async fn start_pro_server(
 
     info!(
         "Starting server… {}",
-        format!(
-            "http://{}/",
-            web_config
-                .external_address
-                .unwrap_or(web_config.bind_address)
-        )
+        web_config
+            .external_address
+            .unwrap_or(Url::parse(&format!("http://{}/", web_config.bind_address))?)
     );
 
     match web_config.backend {
