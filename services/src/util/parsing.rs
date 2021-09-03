@@ -55,7 +55,7 @@ where
     deserializer.deserialize_any(StringOrVec(PhantomData))
 }
 
-/// Deserialize a base URL by enforcing a trailing slash and then
+/// Deserialize a base URL by enforcing a trailing slash and then parsing it as a URL.
 pub fn deserialize_base_url<'de, D>(deserializer: D) -> Result<Url, D::Error>
 where
     D: serde::Deserializer<'de>,
@@ -69,7 +69,7 @@ where
     Url::parse(&url_string).map_err(D::Error::custom)
 }
 
-/// Deserialize a base URL by enforcing a trailing slash and then
+/// Deserialize an optional base URL by enforcing a trailing slash and then parsing it as a URL.
 pub fn deserialize_base_url_option<'de, D>(deserializer: D) -> Result<Option<Url>, D::Error>
 where
     D: serde::Deserializer<'de>,
