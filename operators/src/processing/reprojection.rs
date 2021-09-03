@@ -1004,6 +1004,7 @@ mod tests {
                 no_data_value: Some(0.),
                 properties_mapping: None,
                 gdal_open_options: None,
+                gdal_config_options: None,
             },
             result_descriptor: RasterResultDescriptor {
                 data_type: RasterDataType::U8,

@@ -569,6 +569,7 @@ mod tests {
                     no_data_value: None,
                     properties_mapping: None,
                     gdal_open_options: None,
+                    gdal_config_options: None,
                 },
             }
         );
