@@ -200,15 +200,21 @@ pub struct GdalMetaDataStatic {
 impl MetaData<GdalLoadingInfo, RasterResultDescriptor, RasterQueryRectangle>
     for GdalMetaDataStatic
 {
-    async fn loading_info(&self, _query: RasterQueryRectangle) -> Result<GdalLoadingInfo> {
+    async fn loading_info(&self, query: RasterQueryRectangle) -> Result<GdalLoadingInfo> {
+        let valid = self.time.unwrap_or_default();
+
+        let parts = if valid.intersects(&query.time_interval) {
+            vec![GdalLoadingInfoPart {
+                time: valid,
+                params: self.params.clone(),
+            }]
+            .into_iter()
+        } else {
+            vec![].into_iter()
+        };
+
         Ok(GdalLoadingInfo {
-            info: GdalLoadingInfoPartIterator::Static {
-                parts: vec![GdalLoadingInfoPart {
-                    time: self.time.unwrap_or_default(),
-                    params: self.params.clone(),
-                }]
-                .into_iter(),
-            },
+            info: GdalLoadingInfoPartIterator::Static { parts },
         })
     }
 

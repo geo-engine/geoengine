@@ -92,6 +92,24 @@ macro_rules! call_on_generic_raster_processor {
     };
 }
 
+/// like `call_on_generic_raster_processor` but produces a `Result` which is `Err` if
+/// `RasterDataType` isn't supported by GDAL
+#[macro_export]
+macro_rules! call_on_generic_raster_processor_gdal_types {
+    ($typed_raster:expr, $processor_var:ident => $function_call:expr) => {
+        match $typed_raster {
+            $crate::engine::TypedRasterQueryProcessor::U8($processor_var) => Ok($function_call),
+            $crate::engine::TypedRasterQueryProcessor::U16($processor_var) => Ok($function_call),
+            $crate::engine::TypedRasterQueryProcessor::U32($processor_var) => Ok($function_call),
+            $crate::engine::TypedRasterQueryProcessor::I16($processor_var) => Ok($function_call),
+            $crate::engine::TypedRasterQueryProcessor::I32($processor_var) => Ok($function_call),
+            $crate::engine::TypedRasterQueryProcessor::F32($processor_var) => Ok($function_call),
+            $crate::engine::TypedRasterQueryProcessor::F64($processor_var) => Ok($function_call),
+            _ => Err(error::Error::RasterDataTypeNotSupportByGdal),
+        }
+    };
+}
+
 #[macro_export]
 macro_rules! call_on_generic_vector_processor {
     ($typed_vector:expr, $processor_var:ident => $function_call:expr) => {

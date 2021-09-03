@@ -1,3 +1,4 @@
+mod circle_merging_quadtree;
 mod column_range_filter;
 mod expression;
 mod map_query;
