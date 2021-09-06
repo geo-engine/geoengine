@@ -7,7 +7,7 @@ use crate::util::config;
 use crate::util::config::get_config_element;
 
 use actix_files::Files;
-use actix_web::body::ResponseBody;
+use actix_web::body::Body;
 use actix_web::dev::ServiceResponse;
 use actix_web::error::{InternalError, JsonPayloadError, QueryPayloadError};
 use actix_web::{http, middleware, web, App, HttpResponse, HttpServer, Responder};
@@ -83,14 +83,6 @@ where
 pub(crate) fn configure_extractors(cfg: &mut web::ServiceConfig) {
     cfg.app_data(web::JsonConfig::default().error_handler(|err, _req| {
         match err {
-            JsonPayloadError::Overflow => InternalError::from_response(
-                err,
-                HttpResponse::PayloadTooLarge().json(ErrorResponse {
-                    error: "Overflow".to_string(),
-                    message: "Json payload size is bigger than allowed".to_string(),
-                }),
-            )
-            .into(),
             JsonPayloadError::ContentType => InternalError::from_response(
                 err,
                 HttpResponse::UnsupportedMediaType().json(ErrorResponse {
@@ -99,16 +91,49 @@ pub(crate) fn configure_extractors(cfg: &mut web::ServiceConfig) {
                 }),
             )
             .into(),
-            JsonPayloadError::Deserialize(err) => ErrorResponse {
-                error: "BodyDeserializeError".to_string(),
-                message: err.to_string(),
-            }
+            JsonPayloadError::Overflow { limit } => InternalError::from_response(
+                err,
+                HttpResponse::PayloadTooLarge().json(ErrorResponse {
+                    error: "Overflow".to_string(),
+                    message: format!("JSON payload has exceeded limit ({} bytes).", limit),
+                }),
+            )
             .into(),
+            JsonPayloadError::OverflowKnownLength { length, limit } => {
+                InternalError::from_response(
+                    err,
+                    HttpResponse::PayloadTooLarge().json(ErrorResponse {
+                        error: "Overflow".to_string(),
+                        message: format!(
+                            "JSON payload ({} bytes) is larger than allowed (limit: {} bytes).",
+                            length, limit
+                        ),
+                    }),
+                )
+                .into()
+            }
             JsonPayloadError::Payload(err) => ErrorResponse {
                 error: "Payload".to_string(),
                 message: err.to_string(),
             }
             .into(),
+            JsonPayloadError::Deserialize(err) => ErrorResponse {
+                error: "BodyDeserializeError".to_string(),
+                message: err.to_string(),
+            }
+            .into(),
+            JsonPayloadError::Serialize(err) => ErrorResponse {
+                error: "BodySerializeError".to_string(),
+                message: err.to_string(),
+            }
+            .into(),
+            _ => {
+                debug!("Unkown JsonPayloadError variant");
+                ErrorResponse {
+                    error: "UnknownError".to_string(),
+                    message: "Unknown Error".to_string(),
+                }
+            }
         }
     }));
     cfg.app_data(web::QueryConfig::default().error_handler(|err, _req| {
@@ -119,27 +144,33 @@ pub(crate) fn configure_extractors(cfg: &mut web::ServiceConfig) {
                     error: "UnableToParseQueryString".to_string(),
                     message: format!("Unable to parse query string: {}", err),
                 },
+                _ => {
+                    debug!("Unkown QueryPayloadError variant");
+                    ErrorResponse {
+                        error: "UnknownError".to_string(),
+                        message: "Unknown Error".to_string(),
+                    }
+                }
             }),
         )
         .into()
     }));
 }
 
-pub(crate) fn render_401<B>(
-    mut res: ServiceResponse<B>,
-) -> actix_web::Result<middleware::ErrorHandlerResponse<B>> {
+pub(crate) fn render_401(
+    mut res: ServiceResponse<Body>,
+) -> actix_web::Result<middleware::ErrorHandlerResponse<Body>> {
     res.headers_mut().insert(
         http::header::CONTENT_TYPE,
         http::HeaderValue::from_static("application/json"),
     );
     res = res.map_body(|_, _| {
-        ResponseBody::Other(
+        Body::from(
             serde_json::to_string(&ErrorResponse {
                 error: "MissingAuthorizationHeader".to_string(),
                 message: "Header with authorization token not provided.".to_string(),
             })
-            .unwrap()
-            .into(),
+            .unwrap(),
         )
     });
     Ok(middleware::ErrorHandlerResponse::Response(res))
