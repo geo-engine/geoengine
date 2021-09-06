@@ -3,6 +3,7 @@ use crate::error::Result;
 use actix_http::Payload;
 use actix_web::{FromRequest, HttpRequest};
 use futures::future::{err, ok, Ready};
+use log::debug;
 use serde::de;
 
 pub trait UserInput: Clone {
@@ -53,7 +54,7 @@ where
         let query_string = req.query_string().replace("REQUEST", "request");
         serde_urlencoded::from_str::<T>(&query_string).map_or_else(
             move |e| {
-                log::debug!(
+                debug!(
                     "Failed during Query extractor deserialization. \
                      Request path: {:?}",
                     req.path()

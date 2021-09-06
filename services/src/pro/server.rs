@@ -1,4 +1,3 @@
-use crate::error;
 use crate::error::{Error, Result};
 use crate::handlers;
 use crate::pro;
@@ -7,19 +6,18 @@ use crate::pro::contexts::PostgresContext;
 use crate::pro::contexts::{ProContext, ProInMemoryContext};
 use crate::util::config::{self, get_config_element, Backend};
 
+use super::projects::ProProjectDb;
+use crate::handlers::validate_token;
+use crate::server::{configure_extractors, render_401, show_version_handler};
 use actix_files::Files;
 use actix_web::{http, middleware, web, App, HttpServer};
 use actix_web_httpauth::middleware::HttpAuthentication;
 #[cfg(feature = "postgres")]
 use bb8_postgres::tokio_postgres::NoTls;
 use log::info;
-use snafu::ResultExt;
 use std::net::SocketAddr;
 use std::path::PathBuf;
-
-use super::projects::ProProjectDb;
-use crate::handlers::validate_token;
-use crate::server::{configure_extractors, render_401, show_version_handler};
+use url::Url;
 
 async fn start<C>(
     static_files_dir: Option<PathBuf>,
@@ -66,19 +64,12 @@ pub async fn start_pro_server(static_files_dir: Option<PathBuf>) -> Result<()> {
     println!("|===========================================================================|");
 
     let web_config: config::Web = get_config_element()?;
-    let bind_address = web_config
-        .bind_address
-        .parse::<SocketAddr>()
-        .context(error::AddrParse)?;
 
     info!(
         "Starting server… {}",
-        format!(
-            "http://{}/",
-            web_config
-                .external_address
-                .unwrap_or(web_config.bind_address)
-        )
+        web_config
+            .external_address
+            .unwrap_or(Url::parse(&format!("http://{}/", web_config.bind_address))?)
     );
 
     match web_config.backend {
@@ -86,7 +77,7 @@ pub async fn start_pro_server(static_files_dir: Option<PathBuf>) -> Result<()> {
             info!("Using in memory backend"); // TODO: log
             start(
                 static_files_dir,
-                bind_address,
+                web_config.bind_address,
                 ProInMemoryContext::new_with_data().await,
             )
             .await
@@ -106,7 +97,7 @@ pub async fn start_pro_server(static_files_dir: Option<PathBuf>) -> Result<()> {
 
                 let ctx = PostgresContext::new(pg_config, NoTls).await?;
 
-                start(static_files_dir, bind_address, ctx).await
+                start(static_files_dir, web_config.bind_address, ctx).await
             }
             #[cfg(not(feature = "postgres"))]
             panic!("Postgres backend was selected but the postgres feature wasn't activated during compilation")

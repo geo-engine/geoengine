@@ -5,6 +5,7 @@ use geoengine_operators::call_on_generic_raster_processor_gdal_types;
 use geoengine_operators::util::raster_stream_to_geotiff::raster_stream_to_geotiff_bytes;
 use log::info;
 use snafu::{ensure, ResultExt};
+use url::Url;
 
 use geoengine_datatypes::primitives::{AxisAlignedRectangle, SpatialPartition2D};
 use geoengine_datatypes::{primitives::SpatialResolution, spatial_reference::SpatialReference};
@@ -42,12 +43,14 @@ pub(crate) async fn wcs_handler<C: Context>(
     }
 }
 
-fn wcs_url(workflow: WorkflowId) -> Result<String> {
+fn wcs_url(workflow: WorkflowId) -> Result<Url> {
     let base = crate::util::config::get_config_element::<crate::util::config::Web>()?
         .external_address
         .ok_or(Error::ExternalAddressNotConfigured)?;
 
-    Ok(format!("{}/wcs/{}", base, workflow.to_string()))
+    base.join("/wcs/")?
+        .join(&workflow.to_string())
+        .map_err(Into::into)
 }
 
 #[allow(clippy::unused_async)]

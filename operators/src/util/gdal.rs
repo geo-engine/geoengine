@@ -64,6 +64,7 @@ pub fn create_ndvi_meta_data() -> GdalMetaDataRegular {
             no_data_value,
             properties_mapping: None,
             gdal_open_options: None,
+            gdal_config_options: None,
         },
         result_descriptor: RasterResultDescriptor {
             data_type: RasterDataType::U8,
@@ -148,5 +149,6 @@ pub fn gdal_parameters_from_dataset(
         width: rasterband.x_size(),
         height: rasterband.y_size(),
         gdal_open_options: open_options,
+        gdal_config_options: None,
     })
 }

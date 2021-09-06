@@ -36,6 +36,10 @@ pub enum Error {
         source: reqwest::Error,
     },
 
+    Url {
+        source: url::ParseError,
+    },
+
     #[cfg(feature = "xml")]
     QuickXml {
         source: quick_xml::Error,
@@ -293,6 +297,12 @@ impl From<reqwest::Error> for Error {
 impl From<actix_multipart::MultipartError> for Error {
     fn from(source: actix_multipart::MultipartError) -> Self {
         Self::Multipart { source }
+    }
+}
+
+impl From<url::ParseError> for Error {
+    fn from(source: url::ParseError) -> Self {
+        Self::Url { source }
     }
 }
 

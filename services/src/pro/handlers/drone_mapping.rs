@@ -92,7 +92,7 @@ where
 
     // create task
     let response: OdmTaskStartResponse = client
-        .post(format!("{}task/new/init", base_url))
+        .post(base_url.join("task/new/init").context(error::Url)?)
         .send()
         .await
         .context(error::Reqwest)?
@@ -129,7 +129,11 @@ where
         let form = multipart::Form::new().part("images", Part::stream(reader).file_name(file_name));
 
         let response: OdmTaskNewUploadResponse = client
-            .post(format!("{}task/new/upload/{}", base_url, task_id))
+            .post(
+                base_url
+                    .join(&format!("task/new/upload/{}", task_id))
+                    .context(error::Url)?,
+            )
             .multipart(form)
             .send()
             .await
@@ -147,7 +151,11 @@ where
 
     // commit (start) the task
     client
-        .post(format!("{}task/new/commit/{}", base_url, task_id))
+        .post(
+            base_url
+                .join(&format!("task/new/commit/{}", task_id))
+                .context(error::Url)?,
+        )
         .send()
         .await
         .context(error::Reqwest)?;
@@ -192,10 +200,11 @@ where
 
     // request the zip archive of the drone mapping result
     let response = client
-        .get(format!(
-            "{}task/{}/download/{}",
-            base_url, task_id, "all.zip"
-        ))
+        .get(
+            base_url
+                .join(&format!("task/{}/download/all.zip", task_id))
+                .context(error::Url)?,
+        )
         .send()
         .await
         .context(error::Reqwest)?;
@@ -529,6 +538,7 @@ mod tests {
                     no_data_value: None,
                     properties_mapping: None,
                     gdal_open_options: None,
+                    gdal_config_options: None,
                 },
             }
         );

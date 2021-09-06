@@ -1,5 +1,4 @@
 use crate::contexts::{InMemoryContext, SimpleContext};
-use crate::error;
 use crate::error::{Error, Result};
 use crate::handlers;
 use crate::handlers::{validate_token, ErrorResponse};
@@ -12,10 +11,10 @@ use actix_web::dev::ServiceResponse;
 use actix_web::error::{InternalError, JsonPayloadError, QueryPayloadError};
 use actix_web::{http, middleware, web, App, HttpResponse, HttpServer, Responder};
 use actix_web_httpauth::middleware::HttpAuthentication;
-use log::info;
-use snafu::ResultExt;
+use log::{debug, info};
 use std::net::SocketAddr;
 use std::path::PathBuf;
+use url::Url;
 
 /// Starts the webserver for the Geo Engine API.
 ///
@@ -25,26 +24,19 @@ use std::path::PathBuf;
 ///
 pub async fn start_server(static_files_dir: Option<PathBuf>) -> Result<()> {
     let web_config: config::Web = get_config_element()?;
-    let bind_address = web_config
-        .bind_address
-        .parse::<SocketAddr>()
-        .context(error::AddrParse)?;
 
     info!(
         "Starting server… {}",
-        format!(
-            "http://{}/",
-            web_config
-                .external_address
-                .unwrap_or(web_config.bind_address)
-        )
+        web_config
+            .external_address
+            .unwrap_or(Url::parse(&format!("http://{}/", web_config.bind_address))?)
     );
 
     info!("Using in memory backend");
 
     start(
         static_files_dir,
-        bind_address,
+        web_config.bind_address,
         InMemoryContext::new_with_data().await,
     )
     .await
@@ -128,7 +120,7 @@ pub(crate) fn configure_extractors(cfg: &mut web::ServiceConfig) {
             }
             .into(),
             _ => {
-                log::debug!("Unkown JsonPayloadError variant");
+                debug!("Unkown JsonPayloadError variant");
                 ErrorResponse {
                     error: "UnknownError".to_string(),
                     message: "Unknown Error".to_string(),
@@ -146,7 +138,7 @@ pub(crate) fn configure_extractors(cfg: &mut web::ServiceConfig) {
                     message: format!("Unable to parse query string: {}", err),
                 },
                 _ => {
-                    log::debug!("Unkown QueryPayloadError variant");
+                    debug!("Unkown QueryPayloadError variant");
                     ErrorResponse {
                         error: "UnknownError".to_string(),
                         message: "Unknown Error".to_string(),
@@ -347,7 +339,7 @@ mod tests {
 
     async fn queries(shutdown_tx: Sender<()>) {
         let web_config: config::Web = get_config_element().unwrap();
-        let base_url = format!("http://{}", web_config.bind_address);
+        let base_url = Url::parse(&format!("http://{}", web_config.bind_address)).unwrap();
 
         assert!(wait_for_server(&base_url).await);
         issue_queries(&base_url).await;
@@ -355,11 +347,11 @@ mod tests {
         shutdown_tx.send(()).unwrap();
     }
 
-    async fn issue_queries(base_url: &str) {
+    async fn issue_queries(base_url: &Url) {
         let client = reqwest::Client::new();
 
         let body = client
-            .post(&format!("{}/{}", base_url, "anonymous"))
+            .post(base_url.join("anonymous").unwrap())
             .send()
             .await
             .unwrap()
@@ -370,7 +362,7 @@ mod tests {
         let session: SimpleSession = serde_json::from_str(&body).unwrap();
 
         let body = client
-            .post(&format!("{}/{}", base_url, "project"))
+            .post(base_url.join("project").unwrap())
             .header("Authorization", format!("Bearer {}", session.id()))
             .body("no json")
             .send()
@@ -392,9 +384,9 @@ mod tests {
     const WAIT_SERVER_RETRIES: i32 = 5;
     const WAIT_SERVER_RETRY_INTERVAL: u64 = 1;
 
-    async fn wait_for_server(base_url: &str) -> bool {
+    async fn wait_for_server(base_url: &Url) -> bool {
         for _ in 0..WAIT_SERVER_RETRIES {
-            if reqwest::get(base_url).await.is_ok() {
+            if reqwest::get(base_url.clone()).await.is_ok() {
                 return true;
             }
             std::thread::sleep(std::time::Duration::from_secs(WAIT_SERVER_RETRY_INTERVAL));
