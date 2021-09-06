@@ -51,9 +51,8 @@ where
 
     fn from_request(req: &HttpRequest, _payload: &mut Payload) -> Self::Future {
         let query_string = req.query_string().replace("REQUEST", "request");
-        serde_urlencoded::from_str::<T>(&query_string)
-            .map(|val| ok(QueryEx(val)))
-            .unwrap_or_else(move |e| {
+        serde_urlencoded::from_str::<T>(&query_string).map_or_else(
+            move |e| {
                 log::debug!(
                     "Failed during Query extractor deserialization. \
                      Request path: {:?}",
@@ -61,6 +60,8 @@ where
                 );
 
                 err(error::Error::UnableToParseQueryString { source: e })
-            })
+            },
+            |val| ok(QueryEx(val)),
+        )
     }
 }

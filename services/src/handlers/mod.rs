@@ -68,7 +68,9 @@ pub async fn validate_token<C: Context>(
     req: ServiceRequest,
     credentials: BearerAuth,
 ) -> Result<ServiceRequest, actix_web::Error> {
-    let ctx: &C = req.app_data::<web::Data<C>>().unwrap();
+    let ctx: &C = req
+        .app_data::<web::Data<C>>()
+        .expect("Context is registered");
 
     let token = SessionId::from_str(credentials.token())
         .map_err(Box::new)

@@ -184,7 +184,7 @@ pub async fn send_test_request<C: SimpleContext>(
     req: test::TestRequest,
     ctx: C,
 ) -> ServiceResponse {
-    let mut app = test::init_service(
+    let app = test::init_service(
         App::new()
             .app_data(web::Data::new(ctx))
             .wrap(middleware::NormalizePath::default())
@@ -192,7 +192,7 @@ pub async fn send_test_request<C: SimpleContext>(
             .configure(init_routes::<C>),
     )
     .await;
-    test::call_service(&mut app, req.to_request()).await
+    test::call_service(&app, req.to_request()).await
 }
 
 #[cfg(feature = "pro")]
@@ -201,7 +201,7 @@ where
     C: ProContext,
     C::ProjectDB: ProProjectDb,
 {
-    let mut app = test::init_service(
+    let app = test::init_service(
         App::new()
             .app_data(web::Data::new(ctx))
             .wrap(middleware::NormalizePath::default())
@@ -209,12 +209,12 @@ where
             .configure(init_pro_routes::<C>),
     )
     .await;
-    test::call_service(&mut app, req.to_request()).await
+    test::call_service(&app, req.to_request()).await
 }
 
 pub async fn read_body_string(res: ServiceResponse) -> String {
     let body = test::read_body(res).await;
-    String::from_utf8(body.to_vec()).unwrap()
+    String::from_utf8(body.to_vec()).expect("Body is utf 8 string")
 }
 
 /// Helper struct that removes all specified uploads on drop

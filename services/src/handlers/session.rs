@@ -58,6 +58,7 @@ pub(crate) async fn anonymous_handler<C: SimpleContext>(ctx: web::Data<C>) -> im
 /// # Errors
 ///
 /// This call fails if the session is invalid.
+#[allow(clippy::unused_async)] // the function signature of request handlers requires it
 pub(crate) async fn session_handler<C: Context>(session: C::Session) -> impl Responder {
     web::Json(session)
 }

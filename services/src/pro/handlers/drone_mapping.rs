@@ -101,7 +101,7 @@ where
         .context(error::Reqwest)?;
 
     if let Some(error) = response.error {
-        return Err(error::Error::Odm { reason: error }.into());
+        return Err(error::Error::Odm { reason: error });
     };
 
     let task_id = response.uuid.ok_or(error::Error::OdmInvalidResponse {
@@ -139,7 +139,7 @@ where
             .context(error::Reqwest)?;
 
         if let Some(error) = response.error {
-            return Err(error::Error::Odm { reason: error }.into());
+            return Err(error::Error::Odm { reason: error });
         };
 
         info!("Uploaded {:?}", entry);
@@ -212,8 +212,7 @@ where
 
         return Err(error::Error::Odm {
             reason: error.error.unwrap_or_else(|| "".to_owned()),
-        }
-        .into());
+        });
     }
 
     // create a new geo engine upload

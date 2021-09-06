@@ -128,11 +128,12 @@ pub(crate) fn configure_extractors(cfg: &mut web::ServiceConfig) {
             }
             .into(),
             _ => {
-                debug!("Unkown JsonPayloadError variant");
+                log::debug!("Unkown JsonPayloadError variant");
                 ErrorResponse {
                     error: "UnknownError".to_string(),
                     message: "Unknown Error".to_string(),
                 }
+                .into()
             }
         }
     }));
@@ -145,7 +146,7 @@ pub(crate) fn configure_extractors(cfg: &mut web::ServiceConfig) {
                     message: format!("Unable to parse query string: {}", err),
                 },
                 _ => {
-                    debug!("Unkown QueryPayloadError variant");
+                    log::debug!("Unkown QueryPayloadError variant");
                     ErrorResponse {
                         error: "UnknownError".to_string(),
                         message: "Unknown Error".to_string(),
@@ -157,6 +158,7 @@ pub(crate) fn configure_extractors(cfg: &mut web::ServiceConfig) {
     }));
 }
 
+#[allow(clippy::unnecessary_wraps)]
 pub(crate) fn render_401(
     mut res: ServiceResponse<Body>,
 ) -> actix_web::Result<middleware::ErrorHandlerResponse<Body>> {

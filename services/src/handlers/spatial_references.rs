@@ -18,6 +18,7 @@ pub struct SpatialReferenceSpecification {
     axis_labels: Option<(String, String)>,
 }
 
+#[allow(clippy::unused_async)] // the function signature of request handlers requires it
 pub(crate) async fn get_spatial_reference_specification_handler<C: Context>(
     srs_string: web::Path<String>,
     _session: C::Session,
@@ -74,7 +75,7 @@ pub(crate) async fn get_spatial_reference_specification_handler<C: Context>(
             axis_labels: None,
         },
 
-        _ => return Err(error::Error::UnknownSpatialReference { srs_string: srs_string.into_inner() }.into()), // TODO: 400 on invalid srsString, 404 not found
+        _ => return Err(error::Error::UnknownSpatialReference { srs_string: srs_string.into_inner() }), // TODO: 400 on invalid srsString, 404 not found
     };
 
     Ok(web::Json(spec))

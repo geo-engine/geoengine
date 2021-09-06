@@ -366,10 +366,10 @@ async fn get_feature<C: Context>(request: &GetFeature, ctx: &C) -> Result<HttpRe
             serde_json::from_str(&request.type_names.feature_type).context(error::SerdeJson)?
         }
         Some(_) => {
-            return Err(error::Error::InvalidNamespace.into());
+            return Err(error::Error::InvalidNamespace);
         }
         None => {
-            return Err(error::Error::InvalidWfsTypeNames.into());
+            return Err(error::Error::InvalidWfsTypeNames);
         }
     };
 
