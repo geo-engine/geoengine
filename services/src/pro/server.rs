@@ -16,6 +16,7 @@ use snafu::ResultExt;
 use std::net::SocketAddr;
 use std::path::PathBuf;
 use tokio::sync::oneshot::Receiver;
+use url::Url;
 use warp::Filter;
 
 use super::projects::ProProjectDb;
@@ -107,19 +108,12 @@ pub async fn start_pro_server(
     println!("|===========================================================================|");
 
     let web_config: config::Web = get_config_element()?;
-    let bind_address = web_config
-        .bind_address
-        .parse::<SocketAddr>()
-        .context(error::AddrParse)?;
 
     info!(
         "Starting server… {}",
-        format!(
-            "http://{}/",
-            web_config
-                .external_address
-                .unwrap_or(web_config.bind_address)
-        )
+        web_config
+            .external_address
+            .unwrap_or(Url::parse(&format!("http://{}/", web_config.bind_address))?)
     );
 
     match web_config.backend {
@@ -128,7 +122,7 @@ pub async fn start_pro_server(
             start(
                 shutdown_rx,
                 static_files_dir,
-                bind_address,
+                web_config.bind_address,
                 ProInMemoryContext::new_with_data().await,
             )
             .await
@@ -148,7 +142,7 @@ pub async fn start_pro_server(
 
                 let ctx = PostgresContext::new(pg_config, NoTls).await?;
 
-                start(shutdown_rx, static_files_dir, bind_address, ctx).await
+                start(shutdown_rx, static_files_dir, web_config.bind_address, ctx).await
             }
             #[cfg(not(feature = "postgres"))]
             panic!("Postgres backend was selected but the postgres feature wasn't activated during compilation")
