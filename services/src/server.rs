@@ -83,7 +83,14 @@ where
 pub(crate) fn configure_extractors(cfg: &mut web::ServiceConfig) {
     cfg.app_data(web::JsonConfig::default().error_handler(|err, _req| {
         match err {
-            JsonPayloadError::Overflow => todo!(),
+            JsonPayloadError::Overflow => InternalError::from_response(
+                err,
+                HttpResponse::PayloadTooLarge().json(ErrorResponse {
+                    error: "Overflow".to_string(),
+                    message: "Json payload size is bigger than allowed".to_string(),
+                }),
+            )
+            .into(),
             JsonPayloadError::ContentType => InternalError::from_response(
                 err,
                 HttpResponse::UnsupportedMediaType().json(ErrorResponse {
@@ -97,7 +104,11 @@ pub(crate) fn configure_extractors(cfg: &mut web::ServiceConfig) {
                 message: err.to_string(),
             }
             .into(),
-            JsonPayloadError::Payload(_err) => todo!(),
+            JsonPayloadError::Payload(err) => ErrorResponse {
+                error: "Payload".to_string(),
+                message: err.to_string(),
+            }
+            .into(),
         }
     }));
     cfg.app_data(web::QueryConfig::default().error_handler(|err, _req| {

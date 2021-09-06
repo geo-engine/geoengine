@@ -4,7 +4,6 @@ use actix_http::Payload;
 use actix_web::{FromRequest, HttpRequest};
 use futures::future::{err, ok, Ready};
 use serde::de;
-use std::borrow::Borrow;
 
 pub trait UserInput: Clone {
     /// Validates user input and returns itself
