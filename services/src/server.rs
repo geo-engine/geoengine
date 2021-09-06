@@ -139,12 +139,6 @@ where
     C: SimpleContext,
 {
     cfg.route("/version", web::get().to(show_version_handler)) // TODO: allow disabling this function via config or feature flag
-        .route("/wms", web::get().to(handlers::wms::wms_handler::<C>))
-        .route("/wfs", web::get().to(handlers::wfs::wfs_handler::<C>))
-        .route(
-            "/wcs/{workflow}",
-            web::get().to(handlers::wcs::wcs_handler::<C>),
-        )
         .route(
             "/anonymous",
             web::post().to(handlers::session::anonymous_handler::<C>),
@@ -155,6 +149,12 @@ where
                 .wrap(
                     middleware::ErrorHandlers::new()
                         .handler(http::StatusCode::UNAUTHORIZED, render_401),
+                )
+                .route("/wms", web::get().to(handlers::wms::wms_handler::<C>))
+                .route("/wfs", web::get().to(handlers::wfs::wfs_handler::<C>))
+                .route(
+                    "/wcs/{workflow}",
+                    web::get().to(handlers::wcs::wcs_handler::<C>),
                 )
                 .route(
                     "/workflow",

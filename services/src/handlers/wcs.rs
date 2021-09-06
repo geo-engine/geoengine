@@ -16,6 +16,7 @@ use crate::handlers::Context;
 use crate::ogc::wcs::request::{DescribeCoverage, GetCapabilities, GetCoverage, WcsRequest};
 use crate::util::config;
 use crate::util::config::get_config_element;
+use crate::util::user_input::QueryEx;
 use crate::workflows::registry::WorkflowRegistry;
 use crate::workflows::workflow::WorkflowId;
 
@@ -26,10 +27,10 @@ use geoengine_operators::processing::{Reprojection, ReprojectionParams};
 
 pub(crate) async fn wcs_handler<C: Context>(
     workflow: web::Path<WorkflowId>,
-    request: web::Query<WcsRequest>,
+    request: QueryEx<WcsRequest>,
     ctx: web::Data<C>,
+    _session: C::Session,
 ) -> Result<impl Responder> {
-    // TODO: authentication
     match request.into_inner() {
         WcsRequest::GetCapabilities(request) => {
             get_capabilities(&request, ctx.get_ref(), workflow.into_inner()).await
@@ -344,13 +345,16 @@ fn default_time_from_config() -> TimeInterval {
 
 #[cfg(test)]
 mod tests {
-    use crate::contexts::InMemoryContext;
+    use crate::contexts::{InMemoryContext, Session, SimpleContext};
     use crate::util::tests::{read_body_string, register_ndvi_workflow_helper, send_test_request};
+    use actix_web::http::header;
     use actix_web::test;
+    use actix_web_httpauth::headers::authorization::Bearer;
 
     #[tokio::test]
     async fn get_capabilities() {
         let ctx = InMemoryContext::default();
+        let session_id = ctx.default_session_ref().await.id();
 
         let (_, id) = register_ndvi_workflow_helper(&ctx).await;
 
@@ -360,11 +364,13 @@ mod tests {
             ("version", "1.1.1"),
         ];
 
-        let req = test::TestRequest::get().uri(&format!(
-            "/wcs/{}?{}",
-            &id.to_string(),
-            serde_urlencoded::to_string(params).unwrap()
-        ));
+        let req = test::TestRequest::get()
+            .uri(&format!(
+                "/wcs/{}?{}",
+                &id.to_string(),
+                serde_urlencoded::to_string(params).unwrap()
+            ))
+            .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())));
         let res = send_test_request(req, ctx).await;
 
         assert_eq!(res.status(), 200);
@@ -432,6 +438,7 @@ mod tests {
     #[tokio::test]
     async fn describe_coverage() {
         let ctx = InMemoryContext::default();
+        let session_id = ctx.default_session_ref().await.id();
 
         let (_, id) = register_ndvi_workflow_helper(&ctx).await;
 
@@ -442,11 +449,13 @@ mod tests {
             ("identifiers", &id.to_string()),
         ];
 
-        let req = test::TestRequest::get().uri(&format!(
-            "/wcs/{}?{}",
-            &id.to_string(),
-            serde_urlencoded::to_string(params).unwrap()
-        ));
+        let req = test::TestRequest::get()
+            .uri(&format!(
+                "/wcs/{}?{}",
+                &id.to_string(),
+                serde_urlencoded::to_string(params).unwrap()
+            ))
+            .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())));
         let res = send_test_request(req, ctx).await;
 
         assert_eq!(res.status(), 200);
@@ -492,6 +501,7 @@ mod tests {
     #[tokio::test]
     async fn get_coverage() {
         let ctx = InMemoryContext::default();
+        let session_id = ctx.default_session_ref().await.id();
 
         let (_, id) = register_ndvi_workflow_helper(&ctx).await;
 
@@ -510,11 +520,13 @@ mod tests {
             ("time", "2014-01-01T00:00:00.0Z"),
         ];
 
-        let req = test::TestRequest::get().uri(&format!(
-            "/wcs/{}?{}",
-            &id.to_string(),
-            serde_urlencoded::to_string(params).unwrap()
-        ));
+        let req = test::TestRequest::get()
+            .uri(&format!(
+                "/wcs/{}?{}",
+                &id.to_string(),
+                serde_urlencoded::to_string(params).unwrap()
+            ))
+            .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())));
         let res = send_test_request(req, ctx).await;
 
         assert_eq!(res.status(), 200);

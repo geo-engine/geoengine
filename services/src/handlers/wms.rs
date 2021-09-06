@@ -16,6 +16,7 @@ use crate::handlers::Context;
 use crate::ogc::wms::request::{GetCapabilities, GetLegendGraphic, GetMap, WmsRequest};
 use crate::util::config;
 use crate::util::config::get_config_element;
+use crate::util::user_input::QueryEx;
 use crate::workflows::registry::WorkflowRegistry;
 use crate::workflows::workflow::WorkflowId;
 
@@ -30,11 +31,10 @@ use num_traits::AsPrimitive;
 use std::str::FromStr;
 
 pub(crate) async fn wms_handler<C: Context>(
-    request: web::Query<WmsRequest>,
+    request: QueryEx<WmsRequest>,
     ctx: web::Data<C>,
+    _session: C::Session,
 ) -> Result<HttpResponse> {
-    // TODO: authentication
-    // TODO: more useful error output than "invalid query string"
     match request.into_inner() {
         WmsRequest::GetCapabilities(request) => get_capabilities(&request),
         WmsRequest::GetMap(request) => get_map(&request, ctx.get_ref()).await,
@@ -313,13 +313,15 @@ fn default_time_from_config() -> TimeInterval {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::contexts::{InMemoryContext, SimpleSession};
+    use crate::contexts::{InMemoryContext, Session, SimpleContext, SimpleSession};
     use crate::handlers::ErrorResponse;
     use crate::util::tests::{
         check_allowed_http_methods, register_ndvi_workflow_helper, send_test_request,
     };
     use actix_web::dev::ServiceResponse;
+    use actix_web::http::header;
     use actix_web::{http::Method, test};
+    use actix_web_httpauth::headers::authorization::Bearer;
     use geoengine_datatypes::operations::image::RgbaColor;
     use geoengine_datatypes::primitives::SpatialPartition2D;
     use geoengine_operators::engine::{
@@ -332,10 +334,12 @@ mod tests {
 
     async fn test_test_helper(method: Method, path: Option<&str>) -> ServiceResponse {
         let ctx = InMemoryContext::default();
+        let session_id = ctx.default_session_ref().await.id();
 
         let req = test::TestRequest::default()
             .method(method)
-            .uri(path.unwrap_or("/wms?request=GetMap&service=WMS&version=1.3.0&layers=mock_raster&bbox=1,2,3,4&width=100&height=100&crs=EPSG:4326&styles=ssss&format=image/png"));
+            .uri(path.unwrap_or("/wms?request=GetMap&service=WMS&version=1.3.0&layers=mock_raster&bbox=1,2,3,4&width=100&height=100&crs=EPSG:4326&styles=ssss&format=image/png"))
+            .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())));
         send_test_request(req, ctx).await
     }
 
@@ -383,9 +387,11 @@ mod tests {
 
     async fn get_capabilities_test_helper(method: Method) -> ServiceResponse {
         let ctx = InMemoryContext::default();
+        let session_id = ctx.default_session_ref().await.id();
 
-        let req =
-            test::TestRequest::with_uri("/wms?request=GetCapabilities&service=WMS").method(method);
+        let req = test::TestRequest::with_uri("/wms?request=GetCapabilities&service=WMS")
+            .method(method)
+            .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())));
         send_test_request(req, ctx).await
     }
 
@@ -449,11 +455,13 @@ mod tests {
 
     async fn get_map_test_helper(method: Method, path: Option<&str>) -> ServiceResponse {
         let ctx = InMemoryContext::default();
+        let session_id = ctx.default_session_ref().await.id();
 
         let (_, id) = register_ndvi_workflow_helper(&ctx).await;
 
         let req = test::TestRequest::with_uri(path.unwrap_or(&format!("/wms?request=GetMap&service=WMS&version=1.3.0&layers={}&bbox=20,-10,80,50&width=600&height=600&crs=EPSG:4326&styles=ssss&format=image/png&time=2014-01-01T00:00:00.0Z", id.to_string())))
-            .method(method);
+            .method(method)
+            .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())));
         send_test_request(req, ctx).await
     }
 
@@ -471,10 +479,11 @@ mod tests {
     #[tokio::test]
     async fn get_map_ndvi() {
         let ctx = InMemoryContext::default();
+        let session_id = ctx.default_session_ref().await.id();
 
         let (_, id) = register_ndvi_workflow_helper(&ctx).await;
 
-        let req = test::TestRequest::get().uri(&format!("/wms?service=WMS&version=1.3.0&request=GetMap&layers={}&styles=&width=335&height=168&crs=EPSG:4326&bbox=-90.0,-180.0,90.0,180.0&format=image/png&transparent=FALSE&bgcolor=0xFFFFFF&exceptions=XML&time=2014-04-01T12%3A00%3A00.000%2B00%3A00", id.to_string()));
+        let req = test::TestRequest::get().uri(&format!("/wms?service=WMS&version=1.3.0&request=GetMap&layers={}&styles=&width=335&height=168&crs=EPSG:4326&bbox=-90.0,-180.0,90.0,180.0&format=image/png&transparent=FALSE&bgcolor=0xFFFFFF&exceptions=XML&time=2014-04-01T12%3A00%3A00.000%2B00%3A00", id.to_string())).append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())));
         let response = send_test_request(req, ctx).await;
 
         assert_eq!(
@@ -494,10 +503,11 @@ mod tests {
     #[tokio::test]
     async fn get_map_uppercase() {
         let ctx = InMemoryContext::default();
+        let session_id = ctx.default_session_ref().await.id();
 
         let (_, id) = register_ndvi_workflow_helper(&ctx).await;
 
-        let req = test::TestRequest::get().uri(&format!("/wms?SERVICE=WMS&VERSION=1.3.0&REQUEST=GetMap&FORMAT=image%2Fpng&TRANSPARENT=true&LAYERS={}&CRS=EPSG:4326&STYLES=&WIDTH=600&HEIGHT=600&BBOX=20,-10,80,50&time=2014-01-01T00:00:00.0Z", id.to_string()));
+        let req = test::TestRequest::get().uri(&format!("/wms?SERVICE=WMS&VERSION=1.3.0&REQUEST=GetMap&FORMAT=image%2Fpng&TRANSPARENT=true&LAYERS={}&CRS=EPSG:4326&STYLES=&WIDTH=600&HEIGHT=600&BBOX=20,-10,80,50&time=2014-01-01T00:00:00.0Z", id.to_string())).append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())));
         let res = send_test_request(req, ctx).await;
 
         assert_eq!(res.status(), 200);
@@ -529,6 +539,7 @@ mod tests {
     #[tokio::test]
     async fn get_map_colorizer() {
         let ctx = InMemoryContext::default();
+        let session_id = ctx.default_session_ref().await.id();
 
         let (_, id) = register_ndvi_workflow_helper(&ctx).await;
 
@@ -559,10 +570,12 @@ mod tests {
             ("time", "2014-01-01T00:00:00.0Z"),
         ];
 
-        let req = test::TestRequest::get().uri(&format!(
-            "/wms?{}",
-            serde_urlencoded::to_string(params).unwrap()
-        ));
+        let req = test::TestRequest::get()
+            .uri(&format!(
+                "/wms?{}",
+                serde_urlencoded::to_string(params).unwrap()
+            ))
+            .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())));
         let res = send_test_request(req, ctx).await;
 
         assert_eq!(res.status(), 200);

@@ -8,6 +8,7 @@ use crate::handlers::Context;
 use crate::ogc::wfs::request::{GetCapabilities, GetFeature, TypeNames, WfsRequest};
 use crate::util::config;
 use crate::util::config::get_config_element;
+use crate::util::user_input::QueryEx;
 use crate::workflows::registry::WorkflowRegistry;
 use crate::workflows::workflow::{Workflow, WorkflowId};
 use futures::StreamExt;
@@ -30,11 +31,10 @@ use serde_json::json;
 use std::str::FromStr;
 
 pub(crate) async fn wfs_handler<C: Context>(
-    request: web::Query<WfsRequest>,
+    request: QueryEx<WfsRequest>,
     ctx: web::Data<C>,
+    _session: C::Session,
 ) -> Result<HttpResponse> {
-    // TODO: authentication
-    // TODO: more useful error output than "invalid query string"
     match request.into_inner() {
         WfsRequest::GetCapabilities(request) => get_capabilities(&request),
         WfsRequest::GetFeature(request) => get_feature(&request, ctx.get_ref()).await,
@@ -545,14 +545,16 @@ fn default_time_from_config() -> TimeInterval {
 mod tests {
     use super::*;
 
-    use crate::contexts::SimpleContext;
+    use crate::contexts::{Session, SimpleContext};
     use crate::datasets::storage::{DatasetDefinition, DatasetStore};
     use crate::handlers::ErrorResponse;
     use crate::util::tests::{check_allowed_http_methods, read_body_string, send_test_request};
     use crate::util::user_input::UserInput;
     use crate::{contexts::InMemoryContext, workflows::workflow::Workflow};
     use actix_web::dev::ServiceResponse;
+    use actix_web::http::header;
     use actix_web::{http::Method, test};
+    use actix_web_httpauth::headers::authorization::Bearer;
     use geoengine_datatypes::dataset::DatasetId;
     use geoengine_operators::engine::TypedOperator;
     use geoengine_operators::source::CsvSourceParameters;
@@ -564,9 +566,11 @@ mod tests {
     #[tokio::test]
     async fn mock_test() {
         let ctx = InMemoryContext::default();
+        let session_id = ctx.default_session_ref().await.id();
 
         let req = test::TestRequest::get()
-            .uri("/wfs?request=GetFeature&service=WFS&version=2.0.0&typeNames=test&bbox=1,2,3,4");
+            .uri("/wfs?request=GetFeature&service=WFS&version=2.0.0&typeNames=test&bbox=1,2,3,4")
+            .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())));
         let res = send_test_request(req, ctx).await;
         assert_eq!(res.status(), 200);
         assert_eq!(
@@ -653,9 +657,11 @@ mod tests {
 
     async fn get_capabilities_test_helper(method: Method) -> ServiceResponse {
         let ctx = InMemoryContext::default();
+        let session_id = ctx.default_session_ref().await.id();
 
-        let req =
-            test::TestRequest::with_uri("/wfs?request=GetCapabilities&service=WFS").method(method);
+        let req = test::TestRequest::with_uri("/wfs?request=GetCapabilities&service=WFS")
+            .method(method)
+            .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())));
         send_test_request(req, ctx).await
     }
 
@@ -694,6 +700,7 @@ x;y
         temp_file.seek(SeekFrom::Start(0)).unwrap();
 
         let ctx = InMemoryContext::default();
+        let session_id = ctx.default_session_ref().await.id();
 
         let workflow = Workflow {
             operator: TypedOperator::Vector(Box::new(CsvSource {
@@ -717,7 +724,7 @@ x;y
             .await
             .unwrap();
 
-        let req = test::TestRequest::with_uri(&format!("/wfs?request=GetFeature&service=WFS&version=2.0.0&typeNames=registry:{}&bbox=-90,-180,90,180&srsName=EPSG:4326", id.to_string())).method(method);
+        let req = test::TestRequest::with_uri(&format!("/wfs?request=GetFeature&service=WFS&version=2.0.0&typeNames=registry:{}&bbox=-90,-180,90,180&srsName=EPSG:4326", id.to_string())).method(method).append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())));
         send_test_request(req, ctx).await
     }
 
@@ -780,10 +787,11 @@ x;y
     #[tokio::test]
     async fn get_feature_registry_missing_fields() {
         let ctx = InMemoryContext::default();
+        let session_id = ctx.default_session_ref().await.id();
 
         let req = test::TestRequest::get().uri(
             "/wfs?request=GetFeature&service=WFS&version=2.0.0&bbox=-90,-180,90,180&crs=EPSG:4326",
-        );
+        ).append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())));
         let res = send_test_request(req, ctx).await;
 
         ErrorResponse::assert(
@@ -810,6 +818,7 @@ x;y
         temp_file.seek(SeekFrom::Start(0)).unwrap();
 
         let ctx = InMemoryContext::default();
+        let session_id = ctx.default_session_ref().await.id();
 
         let workflow = Workflow {
             operator: TypedOperator::Vector(Box::new(CsvSource {
@@ -839,7 +848,8 @@ x;y
             "/wfs?{}",
             &serde_urlencoded::to_string(params).unwrap()
         ))
-        .method(method);
+        .method(method)
+        .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())));
         send_test_request(req, ctx).await
     }
 
@@ -902,6 +912,7 @@ x;y
     #[tokio::test]
     async fn get_feature_json_missing_fields() {
         let ctx = InMemoryContext::default();
+        let session_id = ctx.default_session_ref().await.id();
 
         let params = &[
             ("request", "GetFeature"),
@@ -910,10 +921,12 @@ x;y
             ("bbox", "-90,-180,90,180"),
             ("crs", "EPSG:4326"),
         ];
-        let req = test::TestRequest::get().uri(&format!(
-            "/wfs?{}",
-            &serde_urlencoded::to_string(params).unwrap()
-        ));
+        let req = test::TestRequest::get()
+            .uri(&format!(
+                "/wfs?{}",
+                &serde_urlencoded::to_string(params).unwrap()
+            ))
+            .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())));
         let res = send_test_request(req, ctx).await;
 
         ErrorResponse::assert(
@@ -954,6 +967,7 @@ x;y
         dir_up();
 
         let ctx = InMemoryContext::default();
+        let session_id = ctx.default_session_ref().await.id();
 
         let ndvi_id = add_dataset_definition_to_datasets(
             &ctx,
@@ -1006,10 +1020,12 @@ x;y
             ("srsName", "EPSG:4326"),
             ("time", "2014-04-01T12:00:00.000Z/2014-04-01T12:00:00.000Z"),
         ];
-        let req = test::TestRequest::get().uri(&format!(
-            "/wfs?{}",
-            &serde_urlencoded::to_string(params).unwrap()
-        ));
+        let req = test::TestRequest::get()
+            .uri(&format!(
+                "/wfs?{}",
+                &serde_urlencoded::to_string(params).unwrap()
+            ))
+            .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())));
         let res = send_test_request(req, ctx).await;
 
         let body: serde_json::Value = test::read_body_json(res).await;

@@ -120,12 +120,6 @@ where
     C::ProjectDB: ProProjectDb,
 {
     cfg.route("/version", web::get().to(show_version_handler)) // TODO: allow disabling this function via config or feature flag
-        .route("/wms", web::get().to(handlers::wms::wms_handler::<C>))
-        .route("/wfs", web::get().to(handlers::wfs::wfs_handler::<C>))
-        .route(
-            "/wcs/{workflow}",
-            web::get().to(handlers::wcs::wcs_handler::<C>),
-        )
         .route(
             "/user",
             web::post().to(pro::handlers::users::register_user_handler::<C>),
@@ -145,6 +139,12 @@ where
         .route(
             "/logout",
             web::post().to(pro::handlers::users::logout_handler::<C>),
+        )
+        .route("/wms", web::get().to(handlers::wms::wms_handler::<C>))
+        .route("/wfs", web::get().to(handlers::wfs::wfs_handler::<C>))
+        .route(
+            "/wcs/{workflow}",
+            web::get().to(handlers::wcs::wcs_handler::<C>),
         )
         .route(
             "/workflow",
