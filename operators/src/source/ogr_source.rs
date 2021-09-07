@@ -3216,7 +3216,7 @@ mod tests {
         let info = StaticMetaData {
             loading_info: dataset_information,
             result_descriptor: VectorResultDescriptor {
-                data_type: VectorDataType::MultiPoint,
+                data_type: VectorDataType::Data,
                 spatial_reference: SpatialReferenceOption::Unreferenced,
                 columns: [
                     ("a".to_string(), FeatureDataType::Int),
@@ -3253,6 +3253,101 @@ mod tests {
             result[0],
             DataCollection::from_data(
                 vec![],
+                vec![Default::default(); 2],
+                [
+                    (
+                        "a".to_string(),
+                        FeatureData::NullableInt(vec![Some(1), Some(2)])
+                    ),
+                    (
+                        "b".to_string(),
+                        FeatureData::NullableFloat(vec![Some(5.4), None])
+                    ),
+                    (
+                        "c".to_string(),
+                        FeatureData::NullableText(vec![
+                            Some("foo".to_string()),
+                            Some("bar".to_string())
+                        ])
+                    ),
+                ]
+                .iter()
+                .cloned()
+                .collect(),
+            )?
+        );
+
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn default_geometry() -> Result<()> {
+        let dataset_information = OgrSourceDataset {
+            file_name: "test-data/vector/data/plain_data.csv".into(),
+            layer_name: "plain_data".to_string(),
+            data_type: None,
+            time: OgrSourceDatasetTimeType::None,
+            default_geometry: Some(TypedGeometry::MultiPoint({
+                MultiPoint::new(vec![Coordinate2D::new(1.0, 2.0)])?
+            })),
+            columns: Some(OgrSourceColumnSpec {
+                format_specifics: Some(Csv {
+                    header: CsvHeader::Auto,
+                }),
+                x: "".to_string(),
+                y: None,
+                float: vec!["b".to_string()],
+                int: vec!["a".to_string()],
+                text: vec!["c".to_string()],
+                rename: None,
+            }),
+            force_ogr_time_filter: false,
+            force_ogr_spatial_filter: false,
+            on_error: OgrSourceErrorSpec::Ignore,
+            sql_query: None,
+            attribute_query: None,
+        };
+
+        let info = StaticMetaData {
+            loading_info: dataset_information,
+            result_descriptor: VectorResultDescriptor {
+                data_type: VectorDataType::MultiPoint,
+                spatial_reference: SpatialReferenceOption::Unreferenced,
+                columns: [
+                    ("a".to_string(), FeatureDataType::Int),
+                    ("b".to_string(), FeatureDataType::Float),
+                    ("c".to_string(), FeatureDataType::Text),
+                ]
+                .iter()
+                .cloned()
+                .collect(),
+            },
+            phantom: Default::default(),
+        };
+
+        let query_processor = OgrSourceProcessor::<MultiPoint>::new(Box::new(info));
+
+        let context = MockQueryContext::new(usize::MAX);
+        let query = query_processor
+            .query(
+                VectorQueryRectangle {
+                    spatial_bounds: BoundingBox2D::new((0., 0.).into(), (1., 2.).into())?,
+                    time_interval: Default::default(),
+                    spatial_resolution: SpatialResolution::new(1., 1.)?,
+                },
+                &context,
+            )
+            .await
+            .unwrap();
+
+        let result: Vec<MultiPointCollection> = query.try_collect().await?;
+
+        assert_eq!(result.len(), 1);
+
+        assert_eq!(
+            result[0],
+            MultiPointCollection::from_data(
+                MultiPoint::many(vec![vec![(1.0, 2.0)], vec![(1.0, 2.0)]]).unwrap(),
                 vec![Default::default(); 2],
                 [
                     (
