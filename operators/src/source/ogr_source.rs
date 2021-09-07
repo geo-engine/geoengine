@@ -576,7 +576,7 @@ where
         if let Some("csv" | "tsv") = dataset_info.file_name.extension().and_then(OsStr::to_str) {
             true
         } else {
-            dataset_info.file_name.as_path().starts_with("CSV:/")
+            dataset_info.file_name.as_path().starts_with("CSV:")
         }
     }
 
