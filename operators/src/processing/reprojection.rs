@@ -523,6 +523,8 @@ where
 
 #[cfg(test)]
 mod tests {
+    use std::collections::HashMap;
+
     use crate::{
         engine::{QueryRectangle, VectorOperator},
         source::{
@@ -533,7 +535,10 @@ mod tests {
     };
     use gdal::Dataset;
     use geoengine_datatypes::{
-        collections::{MultiLineStringCollection, MultiPointCollection, MultiPolygonCollection},
+        collections::{
+            GeometryCollection, MultiLineStringCollection, MultiPointCollection,
+            MultiPolygonCollection,
+        },
         dataset::{DatasetId, InternalDatasetId},
         primitives::{
             BoundingBox2D, Measurement, MultiLineString, MultiPoint, MultiPolygon,
@@ -1004,6 +1009,7 @@ mod tests {
                 no_data_value: Some(0.),
                 properties_mapping: None,
                 gdal_open_options: None,
+                gdal_config_options: None,
             },
             result_descriptor: RasterResultDescriptor {
                 data_type: RasterDataType::U8,
@@ -1109,5 +1115,80 @@ mod tests {
         .unwrap();
         assert!(1. - (result_res.x / res_4326.x).abs() < 0.02);
         assert!(1. - (result_res.y / res_4326.y).abs() < 0.02);
+    }
+
+    #[tokio::test]
+    async fn points_from_wgs84_to_utm36n() {
+        let exe_ctx = MockExecutionContext::default();
+        let query_ctx = MockQueryContext::default();
+
+        let point_source = MockFeatureCollectionSource::single(
+            MultiPointCollection::from_data(
+                MultiPoint::many(vec![
+                    vec![(30.0, 0.0)], // lower left of utm36n area of use
+                    vec![(36.0, 84.0)],
+                    vec![(33.0, 42.0)], // upper right of utm36n area of use
+                ])
+                .unwrap(),
+                vec![TimeInterval::default(); 3],
+                HashMap::default(),
+            )
+            .unwrap(),
+        )
+        .boxed();
+
+        let initialized_operator = VectorOperator::boxed(Reprojection {
+            params: ReprojectionParams {
+                target_spatial_reference: SpatialReference::new(
+                    SpatialReferenceAuthority::Epsg,
+                    32636, // utm36n
+                ),
+            },
+            sources: SingleRasterOrVectorSource {
+                source: point_source.into(),
+            },
+        })
+        .initialize(&exe_ctx)
+        .await
+        .unwrap();
+
+        let qp = initialized_operator
+            .query_processor()
+            .unwrap()
+            .multi_point()
+            .unwrap();
+
+        let spatial_bounds = BoundingBox2D::new(
+            (166_021.44, 0.00).into(), // lower left of projected utm36n area of use
+            (534_994.666_6, 9_329_005.18).into(), // upper right of projected utm36n area of use
+        )
+        .unwrap();
+
+        let qs = qp
+            .vector_query(
+                QueryRectangle {
+                    spatial_bounds,
+                    time_interval: TimeInterval::default(),
+                    spatial_resolution: SpatialResolution::zero_point_one(),
+                },
+                &query_ctx,
+            )
+            .await
+            .unwrap();
+
+        let points = qs.map(Result::unwrap).collect::<Vec<_>>().await;
+
+        assert_eq!(points.len(), 1);
+
+        let points = &points[0];
+
+        assert_eq!(
+            points.coordinates(),
+            &[
+                (166_021.443_080_538_42, 0.0).into(),
+                (534_994.655_061_136_1, 9_329_005.182_447_437).into(),
+                (499_999.999_999_999_5, 4_649_776.224_819_178).into()
+            ]
+        );
     }
 }

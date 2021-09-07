@@ -420,6 +420,7 @@ async fn create_dataset<C: Context>(
                 no_data_value: result_descriptor.no_data_value,
                 properties_mapping: None, // TODO: add properties
                 gdal_open_options: None,
+                gdal_config_options: None,
             },
             result_descriptor: result_descriptor.clone(),
         }),
