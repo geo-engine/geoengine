@@ -12,7 +12,8 @@ use geoengine_datatypes::primitives::{
 use geoengine_datatypes::spatial_reference::SpatialReference;
 use geoengine_operators::engine::{StaticMetaData, VectorQueryRectangle, VectorResultDescriptor};
 use geoengine_operators::source::{
-    CsvHeaders, OgrSourceColumnSpec, OgrSourceDataset, OgrSourceDatasetTimeType, OgrSourceErrorSpec,
+    CsvHeader, FormatSpecifics, OgrSourceColumnSpec, OgrSourceDataset, OgrSourceDatasetTimeType,
+    OgrSourceErrorSpec,
 };
 use reqwest::Client;
 use serde::de;
@@ -89,9 +90,11 @@ impl PangeaMetaData {
             .collect();
 
         OgrSourceColumnSpec {
+            format_specifics: Some(FormatSpecifics::Csv {
+                header: CsvHeader::No,
+            }),
             x,
             y,
-            csv_headers: Some(CsvHeaders::No),
             rename: Some(rename),
             float: self
                 .columns

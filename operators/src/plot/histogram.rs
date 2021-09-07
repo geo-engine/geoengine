@@ -995,9 +995,9 @@ mod tests {
                     time: OgrSourceDatasetTimeType::None,
                     default_geometry: None,
                     columns: Some(OgrSourceColumnSpec {
+                        format_specifics: None,
                         x: "".to_string(),
                         y: None,
-                        csv_headers: None,
                         int: vec!["natlscale".to_string()],
                         float: vec!["scalerank".to_string()],
                         text: vec![

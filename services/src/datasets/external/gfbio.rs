@@ -316,9 +316,9 @@ impl MetaDataProvider<OgrSourceDataset, VectorResultDescriptor, VectorQueryRecta
                 time: OgrSourceDatasetTimeType::None, // TODO
                 default_geometry: None,
                 columns: Some(OgrSourceColumnSpec {
+                    format_specifics: None,
                     x: "".to_owned(),
                     y: None,
-                    csv_headers: None,
                     int: vec![],
                     float: vec![],
                     text: self
@@ -651,9 +651,9 @@ mod tests {
                 time: OgrSourceDatasetTimeType::None,
                 default_geometry: None,
                 columns: Some(OgrSourceColumnSpec {
+                    format_specifics: None,
                     x: "".to_owned(),
                     y: None,
-                    csv_headers: None,
                     int: vec![],
                     float: vec![],
                     text: vec![

@@ -470,9 +470,9 @@ fn auto_detect_meta_data_definition(main_file_path: &Path) -> Result<MetaDataDef
             time,
             default_geometry: None,
             columns: Some(OgrSourceColumnSpec {
+                format_specifics: None,
                 x,
                 y,
-                csv_headers: None,
                 int: columns_vecs.int,
                 float: columns_vecs.float,
                 text: columns_vecs.text,
@@ -1040,9 +1040,9 @@ mod tests {
                     time: OgrSourceDatasetTimeType::None,
                     default_geometry: None,
                     columns: Some(OgrSourceColumnSpec {
+                        format_specifics: None,
                         x: "".to_string(),
                         y: None,
-                        csv_headers: None,
                         int: vec!["scalerank".to_string()],
                         float: vec!["natlscale".to_string()],
                         text: vec![
@@ -1107,9 +1107,9 @@ mod tests {
                     },
                     default_geometry: None,
                     columns: Some(OgrSourceColumnSpec {
+                        format_specifics: None,
                         x: "".to_string(),
                         y: None,
-                        csv_headers: None,
                         float: vec![],
                         int: vec![],
                         text: vec![],
@@ -1159,9 +1159,9 @@ mod tests {
                     },
                     default_geometry: None,
                     columns: Some(OgrSourceColumnSpec {
+                        format_specifics: None,
                         x: "".to_string(),
                         y: None,
-                        csv_headers: None,
                         float: vec![],
                         int: vec![],
                         text: vec![],
@@ -1211,9 +1211,9 @@ mod tests {
                     },
                     default_geometry: None,
                     columns: Some(OgrSourceColumnSpec {
+                        format_specifics: None,
                         x: "".to_string(),
                         y: None,
-                        csv_headers: None,
                         float: vec![],
                         int: vec![],
                         text: vec![],
@@ -1267,9 +1267,9 @@ mod tests {
                     },
                     default_geometry: None,
                     columns: Some(OgrSourceColumnSpec {
+                        format_specifics: None,
                         x: "".to_string(),
                         y: None,
-                        csv_headers: None,
                         float: vec![],
                         int: vec!["duration".to_owned()],
                         text: vec![],
@@ -1317,9 +1317,9 @@ mod tests {
                     time: OgrSourceDatasetTimeType::None,
                     default_geometry: None,
                     columns: Some(OgrSourceColumnSpec {
+                        format_specifics: None,
                         x: "Longitude".to_string(),
                         y: Some("Latitude".to_string()),
-                        csv_headers: None,
                         float: vec![],
                         int: vec![],
                         text: vec![

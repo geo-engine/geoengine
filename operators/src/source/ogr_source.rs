@@ -173,6 +173,7 @@ impl Default for OgrSourceTimeFormat {
 }
 
 /// A mapping of the columns to data, time, space. Columns that are not listed are skipped when parsing.
+///  - format_specifics: Format specific options if any.
 ///  - x: the name of the column containing the x coordinate (or the wkt string) [if CSV file]
 ///  - y: the name of the column containing the y coordinate [if CSV file with y column]
 ///  - float: an array of column names containing float values
@@ -182,9 +183,9 @@ impl Default for OgrSourceTimeFormat {
 #[derive(Clone, Debug, PartialEq, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct OgrSourceColumnSpec {
+    pub format_specifics: Option<FormatSpecifics>,
     pub x: String,
     pub y: Option<String>,
-    pub csv_headers: Option<CsvHeaders>,
     pub int: Vec<String>,
     pub float: Vec<String>,
     pub text: Vec<String>,
@@ -207,24 +208,34 @@ impl OgrSourceColumnSpec {
     }
 }
 
+/// This enum provides all format specific options
+#[derive(Clone, Debug, PartialEq, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub enum FormatSpecifics {
+    Csv { header: CsvHeader },
+}
+
 /// For CSV files this tells gdal whether or not the file
 /// contains a header line.
 /// The value `Auto` enables gdal's auto detection.
 #[derive(Clone, Debug, PartialEq, Deserialize, Serialize)]
 #[serde(rename_all = "lowercase")]
-pub enum CsvHeaders {
+pub enum CsvHeader {
     Yes,
     No,
     Auto,
 }
 
-impl CsvHeaders {
-    fn option_value(&self) -> &str {
-        match self {
-            Self::Yes => "YES",
-            Self::No => "NO",
-            Self::Auto => "AUTO",
-        }
+impl CsvHeader {
+    fn as_gdal_param(&self) -> String {
+        format!(
+            "HEADERS={}",
+            match self {
+                Self::Yes => "YES",
+                Self::No => "NO",
+                Self::Auto => "AUTO",
+            }
+        )
     }
 }
 
@@ -525,13 +536,11 @@ where
 
         let mut dataset_options = DatasetOptions::default();
 
-        let headers = format!(
-            "HEADERS={}",
-            columns
-                .csv_headers
-                .as_ref()
-                .map_or("AUTO", CsvHeaders::option_value)
-        );
+        let headers = if let Some(FormatSpecifics::Csv { header }) = &columns.format_specifics {
+            header.as_gdal_param()
+        } else {
+            CsvHeader::Auto.as_gdal_param()
+        };
 
         // TODO: make column x optional or allow other indication for data collection
         if columns.x.is_empty() {
@@ -1227,6 +1236,7 @@ mod tests {
     use super::*;
 
     use crate::engine::{MockExecutionContext, MockQueryContext, StaticMetaData};
+    use crate::source::ogr_source::FormatSpecifics::Csv;
     use futures::TryStreamExt;
     use geoengine_datatypes::collections::{
         DataCollection, GeometryCollection, MultiPointCollection, MultiPolygonCollection,
@@ -1260,9 +1270,11 @@ mod tests {
                 MultiPoint::new(vec![[1.0, 2.0].into()]).unwrap(),
             )),
             columns: Some(OgrSourceColumnSpec {
+                format_specifics: Some(FormatSpecifics::Csv {
+                    header: CsvHeader::Auto,
+                }),
                 x: "x".to_string(),
                 y: Some("y".to_string()),
-                csv_headers: Some(CsvHeaders::Yes),
                 float: vec!["num".to_string()],
                 int: vec!["dec1".to_string(), "dec2".to_string()],
                 text: vec!["text".to_string()],
@@ -1302,9 +1314,13 @@ mod tests {
                     }
                 },
                 "columns": {
+                    "formatSpecifics": {
+                        "csv": {
+                            "header": "auto",
+                        }
+                    },
                     "x": "x",
                     "y": "y",
-                    "csvHeaders": "yes",
                     "int": ["dec1", "dec2"],
                     "float": ["num"],
                     "text": ["text"],
@@ -1343,9 +1359,13 @@ mod tests {
                     }
                 },
                 "columns": {
+                    "formatSpecifics": {
+                        "csv": {
+                            "header": "auto",
+                        }
+                    },
                     "x": "x",
                     "y": "y",
-                    "csvHeaders": "yes",
                     "int": ["dec1", "dec2"],
                     "float": ["num"],
                     "text": ["text"]
@@ -1824,9 +1844,9 @@ mod tests {
                     time: OgrSourceDatasetTimeType::None,
                     default_geometry: None,
                     columns: Some(OgrSourceColumnSpec {
+                        format_specifics: None,
                         x: "".to_string(),
                         y: None,
-                        csv_headers: None,
                         int: vec!["scalerank".to_string()],
                         float: vec!["natlscale".to_string()],
                         text: vec![
@@ -3177,9 +3197,11 @@ mod tests {
             time: OgrSourceDatasetTimeType::None,
             default_geometry: None,
             columns: Some(OgrSourceColumnSpec {
+                format_specifics: Some(Csv {
+                    header: CsvHeader::Auto,
+                }),
                 x: "".to_string(),
                 y: None,
-                csv_headers: Some(CsvHeaders::Yes),
                 float: vec!["b".to_string()],
                 int: vec!["a".to_string()],
                 text: vec!["c".to_string()],
@@ -3599,9 +3621,9 @@ mod tests {
                     time: OgrSourceDatasetTimeType::None,
                     default_geometry: None,
                     columns: Some(OgrSourceColumnSpec {
+                        format_specifics: None,
                         x: "".to_owned(),
                         y: None,
-                        csv_headers: None,
                         int: vec![],
                         float: vec![],
                         text: vec![],
@@ -3692,9 +3714,11 @@ mod tests {
                     time: OgrSourceDatasetTimeType::None,
                     default_geometry: None,
                     columns: Some(OgrSourceColumnSpec {
+                        format_specifics: Some(Csv {
+                            header: CsvHeader::Yes,
+                        }),
                         x: "x".to_owned(),
                         y: Some("y".to_owned()),
-                        csv_headers: Some(CsvHeaders::Yes),
                         int: vec!["num".to_owned()],
                         float: vec![],
                         text: vec!["txt".to_owned()],
@@ -3806,9 +3830,11 @@ mod tests {
                     },
                     default_geometry: None,
                     columns: Some(OgrSourceColumnSpec {
+                        format_specifics: Some(Csv {
+                            header: CsvHeader::Yes,
+                        }),
                         x: "Longitude".to_owned(),
                         y: Some("Latitude".to_owned()),
-                        csv_headers: Some(CsvHeaders::Yes),
                         int: vec![],
                         float: vec![],
                         text: vec!["Name".to_owned()],
@@ -3913,9 +3939,11 @@ mod tests {
                     },
                     default_geometry: None,
                     columns: Some(OgrSourceColumnSpec {
+                        format_specifics: Some(Csv {
+                            header: CsvHeader::Yes,
+                        }),
                         x: "Longitude".to_owned(),
                         y: Some("Latitude".to_owned()),
-                        csv_headers: Some(CsvHeaders::Yes),
                         int: vec![],
                         float: vec![],
                         text: vec!["Name".to_owned()],
@@ -4020,9 +4048,11 @@ mod tests {
                     },
                     default_geometry: None,
                     columns: Some(OgrSourceColumnSpec {
+                        format_specifics: Some(Csv {
+                            header: CsvHeader::Yes,
+                        }),
                         x: "Longitude".to_owned(),
                         y: Some("Latitude".to_owned()),
-                        csv_headers: Some(CsvHeaders::Yes),
                         int: vec![],
                         float: vec![],
                         text: vec!["Name".to_owned()],
@@ -4111,9 +4141,11 @@ mod tests {
             time: OgrSourceDatasetTimeType::None,
             default_geometry: None,
             columns: Some(OgrSourceColumnSpec {
+                format_specifics: Some(Csv {
+                    header: CsvHeader::Yes,
+                }),
                 x: "".to_string(),
                 y: None,
-                csv_headers: Some(CsvHeaders::Yes),
                 float: vec!["b".to_string()],
                 int: vec!["a".to_string()],
                 text: vec!["c".to_string()],
