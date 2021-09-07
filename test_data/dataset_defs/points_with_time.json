@@ -11,7 +11,7 @@
   "metaData": {
     "type": "OgrMetaData",
     "loadingInfo": {
-      "fileName": "operators/test-data/vector/data/points_with_time.json",
+      "fileName": "test_data/vector/data/points_with_time.json",
       "layerName": "points_with_time",
       "dataType": "MultiPoint",
       "time": {

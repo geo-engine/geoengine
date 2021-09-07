@@ -507,6 +507,7 @@ impl MetaDataProvider<OgrSourceDataset, VectorResultDescriptor, VectorQueryRecta
 mod tests {
     use std::{fs::File, io::BufReader, str::FromStr};
 
+    use crate::test_data;
     use futures::StreamExt;
     use geoengine_datatypes::primitives::{SpatialPartition2D, SpatialResolution};
     use geoengine_operators::{
@@ -521,7 +522,7 @@ mod tests {
         // TODO: mock STAC endpoint
 
         let def: Box<dyn DatasetProviderDefinition> = serde_json::from_reader(BufReader::new(
-            File::open("services/test-data/provider_defs/pro/sentinel_s2_l2a_cogs.json")?,
+            File::open(test_data!("provider_defs/pro/sentinel_s2_l2a_cogs.json"))?,
         ))?;
 
         let provider = def.initialize().await?;
@@ -596,7 +597,7 @@ mod tests {
         let mut exe = MockExecutionContext::default();
 
         let def: Box<dyn DatasetProviderDefinition> = serde_json::from_reader(BufReader::new(
-            File::open("services/test-data/provider_defs/pro/sentinel_s2_l2a_cogs.json")?,
+            File::open(test_data!("provider_defs/pro/sentinel_s2_l2a_cogs.json"))?,
         ))?;
 
         let provider = def.initialize().await?;

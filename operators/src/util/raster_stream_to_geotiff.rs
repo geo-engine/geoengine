@@ -255,9 +255,8 @@ mod tests {
         .unwrap();
 
         assert_eq!(
-            include_bytes!(
-                "../../../operators/test-data/raster/geotiff_from_stream_compressed.tiff"
-            ) as &[u8],
+            include_bytes!("../../../test_data/raster/geotiff_from_stream_compressed.tiff")
+                as &[u8],
             bytes.as_slice()
         );
     }

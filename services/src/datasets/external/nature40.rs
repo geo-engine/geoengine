@@ -400,7 +400,7 @@ mod tests {
     };
     use serde_json::json;
 
-    use crate::{datasets::listing::OrderBy, util::user_input::UserInput};
+    use crate::{datasets::listing::OrderBy, test_data, util::user_input::UserInput};
 
     use super::*;
 
@@ -493,7 +493,7 @@ mod tests {
         );
 
         let mut geonode_ortho_muf_1m_bytes = vec![];
-        File::open("test-data/nature40/geonode_ortho_muf_1m.tiff")
+        File::open(test_data!("nature40/geonode_ortho_muf_1m.tiff"))
             .unwrap()
             .read_to_end(&mut geonode_ortho_muf_1m_bytes)
             .unwrap();
@@ -599,7 +599,7 @@ mod tests {
         );
 
         let mut lidar_2018_wetness_1m = vec![];
-        File::open("test-data/nature40/lidar_2018_wetness_1m.tiff")
+        File::open(test_data!("nature40/lidar_2018_wetness_1m.tiff"))
             .unwrap()
             .read_to_end(&mut lidar_2018_wetness_1m)
             .unwrap();

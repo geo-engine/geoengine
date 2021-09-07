@@ -18,7 +18,7 @@ user = "geoengine"
 password = "geoengine"
 
 [operators.gdal_source]
-raster_data_root_path = "operators/test-data/raster"
+raster_data_root_path = "test_data/raster"
 
 [raster.tiling_specification]
 origin_coordinate_x = 0.0

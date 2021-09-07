@@ -34,3 +34,19 @@ pub mod util;
 /// Compiles Geo Engine Pro
 #[cfg(feature = "pro")]
 pub mod pro;
+
+#[macro_export]
+macro_rules! test_data {
+    ($name:expr) => {
+        dbg!(std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+            .canonicalize() // get a full path
+            .unwrap()
+            .parent()
+            .unwrap()
+            .join("test_data/") // TODO: move somewhere else!
+            .join($name)
+            //.canonicalize() // strip all the ./ ../ and so on
+            //.unwrap()
+            .as_path())
+    };
+}

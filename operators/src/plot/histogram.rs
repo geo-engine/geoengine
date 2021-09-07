@@ -589,6 +589,7 @@ mod tests {
     use crate::source::{
         OgrSourceColumnSpec, OgrSourceDataset, OgrSourceDatasetTimeType, OgrSourceErrorSpec,
     };
+    use crate::test_data;
     use chrono::NaiveDate;
     use geoengine_datatypes::dataset::{DatasetId, InternalDatasetId};
     use geoengine_datatypes::primitives::{
@@ -988,8 +989,7 @@ mod tests {
             DatasetId::Internal { dataset_id },
             Box::new(StaticMetaData {
                 loading_info: OgrSourceDataset {
-                    file_name: "operators/test-data/vector/data/ne_10m_ports/ne_10m_ports.shp"
-                        .into(),
+                    file_name: test_data!("vector/data/ne_10m_ports/ne_10m_ports.shp").into(),
                     layer_name: "ne_10m_ports".to_string(),
                     data_type: Some(VectorDataType::MultiPoint),
                     time: OgrSourceDatasetTimeType::None,

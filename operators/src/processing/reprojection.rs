@@ -529,7 +529,8 @@ mod tests {
             FileNotFoundHandling, GdalDatasetParameters, GdalMetaDataRegular, GdalSource,
             GdalSourceParameters,
         },
-        util::gdal::{add_ndvi_dataset, raster_dir},
+        test_data,
+        util::gdal::add_ndvi_dataset,
     };
     use gdal::Dataset;
     use geoengine_datatypes::{
@@ -943,7 +944,7 @@ mod tests {
         // gdalwarp -t_srs EPSG:3857 -tr 11111.11111111 11111.11111111 -r near -te 0.0 5011111.111111112 5000000.0 10011111.111111112 -te_srs EPSG:3857 -of GTiff ./MOD13A2_M_NDVI_2014-04-01.TIFF ./MOD13A2_M_NDVI_2014-04-01_tile-20.rst
         assert_eq!(
             include_bytes!(
-                "../../test-data/raster/modis_ndvi/projected_3857/MOD13A2_M_NDVI_2014-04-01_tile-20.rst"
+                "../../../test_data/raster/modis_ndvi/projected_3857/MOD13A2_M_NDVI_2014-04-01_tile-20.rst"
             ) as &[u8],
             res[8].clone().into_materialized_tile().grid_array.data.as_slice()
         );
@@ -990,8 +991,10 @@ mod tests {
             placeholder: "%%%_START_TIME_%%%".to_string(),
             time_format: "%Y-%m-%d".to_string(),
             params: GdalDatasetParameters {
-                file_path: raster_dir()
-                    .join("modis_ndvi/projected_3857/MOD13A2_M_NDVI_%%%_START_TIME_%%%.TIFF"),
+                file_path: test_data!(
+                    "raster/modis_ndvi/projected_3857/MOD13A2_M_NDVI_%%%_START_TIME_%%%.TIFF"
+                )
+                .into(),
                 rasterband_channel: 1,
                 geo_transform: GeoTransform {
                     origin_coordinate: (20_037_508.342_789_244, 19_971_868.880_408_563).into(),
@@ -1086,14 +1089,16 @@ mod tests {
             CoordinateProjector::from_known_srs(epsg_3857, epsg_4326).unwrap();
 
         // use ndvi dataset that was reprojected using gdal as ground truth
-        let dataset_4326 =
-            Dataset::open(&raster_dir().join("modis_ndvi/MOD13A2_M_NDVI_2014-04-01.TIFF")).unwrap();
+        let dataset_4326 = Dataset::open(test_data!(
+            "raster/modis_ndvi/MOD13A2_M_NDVI_2014-04-01.TIFF"
+        ))
+        .unwrap();
         let geotransform_4326 = dataset_4326.geo_transform().unwrap();
         let res_4326 = SpatialResolution::new(geotransform_4326[1], -geotransform_4326[5]).unwrap();
 
-        let dataset_3857 = Dataset::open(
-            &raster_dir().join("modis_ndvi/projected_3857/MOD13A2_M_NDVI_2014-04-01.TIFF"),
-        )
+        let dataset_3857 = Dataset::open(test_data!(
+            "raster/modis_ndvi/projected_3857/MOD13A2_M_NDVI_2014-04-01.TIFF"
+        ))
         .unwrap();
         let geotransform_3857 = dataset_3857.geo_transform().unwrap();
         let res_3857 = SpatialResolution::new(geotransform_3857[1], -geotransform_3857[5]).unwrap();
