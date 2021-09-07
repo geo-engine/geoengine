@@ -572,7 +572,6 @@ where
         Ok(Dataset::open_ex(&dataset_info.file_name, dataset_options)?)
     }
 
-    // TODO: reliably detect CSV files or allow defining them as such in params
     fn is_csv(dataset_info: &OgrSourceDataset) -> bool {
         if let Some("csv" | "tsv") = dataset_info.file_name.extension().and_then(OsStr::to_str) {
             true
