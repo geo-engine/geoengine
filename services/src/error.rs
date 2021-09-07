@@ -37,6 +37,10 @@ pub enum Error {
         source: reqwest::Error,
     },
 
+    Url {
+        source: url::ParseError,
+    },
+
     #[cfg(feature = "xml")]
     QuickXml {
         source: quick_xml::Error,
@@ -266,6 +270,12 @@ impl From<gdal::errors::GdalError> for Error {
 impl From<reqwest::Error> for Error {
     fn from(source: reqwest::Error) -> Self {
         Self::Reqwest { source }
+    }
+}
+
+impl From<url::ParseError> for Error {
+    fn from(source: url::ParseError) -> Self {
+        Self::Url { source }
     }
 }
 
