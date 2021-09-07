@@ -43,10 +43,8 @@ macro_rules! test_data {
             .unwrap()
             .parent()
             .unwrap()
-            .join("test_data/") // TODO: move somewhere else!
+            .join("test_data/")
             .join($name)
-            //.canonicalize() // strip all the ./ ../ and so on
-            //.unwrap()
             .as_path())
     };
 }
