@@ -227,7 +227,7 @@ mod tests {
     use tokio::fs::OpenOptions;
     use tokio::io::AsyncReadExt;
 
-    const PROVIDER_ID: &str = "d29f2430-5c5e-4748-a2fa-6423aa2af42d";
+    const PROVIDER_ID: &str = "39f8a6e4-3145-46f8-ab59-80376a264874";
 
     pub fn test_data_path(file_name: &str) -> PathBuf {
         crate::util::test_data_dir().join("pangaea").join(file_name)
