@@ -173,7 +173,7 @@ impl Default for OgrSourceTimeFormat {
 }
 
 /// A mapping of the columns to data, time, space. Columns that are not listed are skipped when parsing.
-///  - format_specifics: Format specific options if any.
+///  - `format_specifics`: Format specific options if any.
 ///  - x: the name of the column containing the x coordinate (or the wkt string) [if CSV file]
 ///  - y: the name of the column containing the y coordinate [if CSV file with y column]
 ///  - float: an array of column names containing float values
@@ -886,9 +886,15 @@ where
     ) -> Result<FeatureCollection<G>> {
         let mut builder = feature_collection_builder.finish_header();
 
+        let default_geometry: Option<G> = match &dataset_information.default_geometry {
+            Some(tg) => Some(tg.clone().try_into()?),
+            None => None,
+        };
+
         for feature in feature_iterator {
             if let Err(error) = Self::add_feature_to_batch(
-                dataset_information,
+                dataset_information.on_error,
+                &default_geometry,
                 data_types,
                 query_rectangle,
                 time_extractor,
@@ -913,7 +919,8 @@ where
 
     #[allow(clippy::too_many_arguments)]
     fn add_feature_to_batch(
-        dataset_information: &OgrSourceDataset,
+        error_spec: OgrSourceErrorSpec,
+        default_geometry: &Option<G>,
         data_types: &HashMap<String, FeatureDataType>,
         query_rectangle: &VectorQueryRectangle,
         time_extractor: &dyn Fn(&Feature) -> Result<TimeInterval, Error>,
@@ -922,8 +929,6 @@ where
         was_time_filtered_by_ogr: bool,
         was_spatial_filtered_by_ogr: bool,
     ) -> Result<()> {
-        let error_spec = dataset_information.on_error;
-
         let time_interval = time_extractor(feature)?;
 
         // filter out data items not in the query time interval
@@ -936,13 +941,15 @@ where
         ) {
             Ok(g) => g,
             Err(Error::Gdal {
-                source: GdalError::InvalidFieldIndex { .. },
-            }) if dataset_information.default_geometry.is_some() => dataset_information
-                .default_geometry
-                .as_ref()
-                .expect("Impossible")
-                .clone()
-                .try_into()?,
+                source: GdalError::InvalidFieldIndex { method_name, index },
+            }) => match default_geometry.as_ref() {
+                Some(g) => g.clone(),
+                None => {
+                    return Err(Error::Gdal {
+                        source: GdalError::InvalidFieldIndex { method_name, index },
+                    })
+                }
+            },
             Err(e) => return Err(e),
         };
 
