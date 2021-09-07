@@ -3,8 +3,7 @@ pub use clonable_operator::{
     CloneableRasterOperator, CloneableVectorOperator,
 };
 pub use execution_context::{
-    ExecutionContext, MetaData, MetaDataProvider, MockExecutionContext, PreLoadHook,
-    StaticMetaData, StaticMetaDataWithHook,
+    ExecutionContext, MetaData, MetaDataProvider, MockExecutionContext, StaticMetaData,
 };
 pub use operator::{
     InitializedPlotOperator, InitializedRasterOperator, InitializedVectorOperator,

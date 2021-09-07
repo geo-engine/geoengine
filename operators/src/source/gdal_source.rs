@@ -1,6 +1,4 @@
-use crate::engine::{
-    MetaData, OperatorDatasets, PreLoadHook, QueryProcessor, RasterQueryRectangle,
-};
+use crate::engine::{MetaData, OperatorDatasets, QueryProcessor, RasterQueryRectangle};
 use crate::{
     engine::{
         InitializedRasterOperator, RasterOperator, RasterQueryProcessor, RasterResultDescriptor,
@@ -222,10 +220,6 @@ impl MetaData<GdalLoadingInfo, RasterResultDescriptor, RasterQueryRectangle>
         Ok(self.result_descriptor.clone())
     }
 
-    fn pre_load_hook(&self) -> Option<&dyn PreLoadHook> {
-        None
-    }
-
     fn box_clone(
         &self,
     ) -> Box<dyn MetaData<GdalLoadingInfo, RasterResultDescriptor, RasterQueryRectangle>> {
@@ -279,10 +273,6 @@ impl MetaData<GdalLoadingInfo, RasterResultDescriptor, RasterQueryRectangle>
 
     async fn result_descriptor(&self) -> Result<RasterResultDescriptor> {
         Ok(self.result_descriptor.clone())
-    }
-
-    fn pre_load_hook(&self) -> Option<&dyn PreLoadHook> {
-        None
     }
 
     fn box_clone(
@@ -575,10 +565,6 @@ where
         let meta_data = self.meta_data.loading_info(query).await?;
 
         debug!("GdalLoadingInfo: {:?}.", &meta_data);
-
-        if let Some(hook) = self.meta_data.pre_load_hook() {
-            hook.execute().await?;
-        }
 
         // TODO: what to do if loading info is empty?
         let stream = stream::iter(meta_data.info)
