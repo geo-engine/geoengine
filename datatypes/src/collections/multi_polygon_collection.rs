@@ -407,7 +407,7 @@ mod tests {
 
     use super::*;
 
-    use crate::collections::{BuilderProvider, FeatureCollectionModifications, ToGeoJson};
+    use crate::collections::{BuilderProvider, FeatureCollectionModifications};
     use crate::primitives::TimeInterval;
 
     #[test]
@@ -943,9 +943,49 @@ mod tests {
 
         let geometries = vec![multi1];
 
-        let collection = MultiPolygonCollection::from(geometries);
+        let from_geo = MultiPolygonCollection::from(geometries);
 
-        eprintln!("{}", collection.to_geo_json());
-        // TODO: validate collection
+        let collection = MultiPolygonCollection::from_data(
+            vec![MultiPolygon::new(vec![
+                vec![
+                    vec![
+                        Coordinate2D::new(-111., 45.),
+                        Coordinate2D::new(-111., 41.),
+                        Coordinate2D::new(-104., 41.),
+                        Coordinate2D::new(-104., 45.),
+                        Coordinate2D::new(-111., 45.),
+                    ],
+                    vec![
+                        Coordinate2D::new(-110., 44.),
+                        Coordinate2D::new(-110., 42.),
+                        Coordinate2D::new(-105., 42.),
+                        Coordinate2D::new(-105., 44.),
+                        Coordinate2D::new(-110., 44.),
+                    ],
+                ],
+                vec![
+                    vec![
+                        Coordinate2D::new(-111., 45.),
+                        Coordinate2D::new(-111., 41.),
+                        Coordinate2D::new(-104., 41.),
+                        Coordinate2D::new(-104., 45.),
+                        Coordinate2D::new(-111., 45.),
+                    ],
+                    vec![
+                        Coordinate2D::new(-110., 44.),
+                        Coordinate2D::new(-110., 42.),
+                        Coordinate2D::new(-105., 42.),
+                        Coordinate2D::new(-105., 44.),
+                        Coordinate2D::new(-110., 44.),
+                    ],
+                ],
+            ])
+            .unwrap()],
+            vec![Default::default(); 1],
+            Default::default(),
+        )
+        .unwrap();
+
+        assert_eq!(collection, from_geo);
     }
 }
