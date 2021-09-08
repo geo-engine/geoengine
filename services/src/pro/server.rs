@@ -5,7 +5,7 @@ use crate::pro;
 #[cfg(feature = "postgres")]
 use crate::pro::contexts::PostgresContext;
 use crate::pro::contexts::{ProContext, ProInMemoryContext};
-use crate::server::serve_static_directory;
+use crate::server::{serve_static_directory, show_version_handler};
 use crate::util::config::{self, get_config_element, Backend};
 use crate::{combine, error};
 
@@ -16,6 +16,7 @@ use snafu::ResultExt;
 use std::net::SocketAddr;
 use std::path::PathBuf;
 use tokio::sync::oneshot::Receiver;
+use url::Url;
 use warp::Filter;
 
 use super::projects::ProProjectDb;
@@ -30,11 +31,12 @@ where
     C: ProContext,
     C::ProjectDB: ProProjectDb,
 {
-    let handler = combine!(
+    let filter = combine!(
         handlers::workflows::register_workflow_handler(ctx.clone()),
         handlers::workflows::load_workflow_handler(ctx.clone()),
         handlers::workflows::get_workflow_metadata_handler(ctx.clone()),
         handlers::workflows::get_workflow_provenance_handler(ctx.clone()),
+        handlers::workflows::dataset_from_workflow_handler(ctx.clone()),
         pro::handlers::users::register_user_handler(ctx.clone()),
         pro::handlers::users::anonymous_handler(ctx.clone()),
         pro::handlers::users::login_handler(ctx.clone()),
@@ -64,9 +66,18 @@ where
         handlers::plots::get_plot_handler(ctx.clone()),
         handlers::upload::upload_handler(ctx.clone()),
         handlers::spatial_references::get_spatial_reference_specification_handler(ctx.clone()),
-        serve_static_directory(static_files_dir)
-    )
-    .recover(handle_rejection);
+        show_version_handler() // TODO: allow disabling this function via config or feature flag
+    );
+
+    #[cfg(feature = "odm")]
+    let filter = combine!(
+        filter,
+        pro::handlers::drone_mapping::start_task_handler(ctx.clone()),
+        pro::handlers::drone_mapping::dataset_from_drone_mapping_handler(ctx.clone())
+    );
+
+    let handler =
+        combine!(filter, serve_static_directory(static_files_dir)).recover(handle_rejection);
 
     let task = if let Some(receiver) = shutdown_rx {
         let (_, server) = warp::serve(handler).bind_with_graceful_shutdown(bind_address, async {
@@ -97,19 +108,12 @@ pub async fn start_pro_server(
     println!("|===========================================================================|");
 
     let web_config: config::Web = get_config_element()?;
-    let bind_address = web_config
-        .bind_address
-        .parse::<SocketAddr>()
-        .context(error::AddrParse)?;
 
     info!(
         "Starting server… {}",
-        format!(
-            "http://{}/",
-            web_config
-                .external_address
-                .unwrap_or(web_config.bind_address)
-        )
+        web_config
+            .external_address
+            .unwrap_or(Url::parse(&format!("http://{}/", web_config.bind_address))?)
     );
 
     match web_config.backend {
@@ -118,7 +122,7 @@ pub async fn start_pro_server(
             start(
                 shutdown_rx,
                 static_files_dir,
-                bind_address,
+                web_config.bind_address,
                 ProInMemoryContext::new_with_data().await,
             )
             .await
@@ -138,7 +142,7 @@ pub async fn start_pro_server(
 
                 let ctx = PostgresContext::new(pg_config, NoTls).await?;
 
-                start(shutdown_rx, static_files_dir, bind_address, ctx).await
+                start(shutdown_rx, static_files_dir, web_config.bind_address, ctx).await
             }
             #[cfg(not(feature = "postgres"))]
             panic!("Postgres backend was selected but the postgres feature wasn't activated during compilation")

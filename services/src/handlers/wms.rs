@@ -16,6 +16,8 @@ use crate::error;
 use crate::error::Result;
 use crate::handlers::Context;
 use crate::ogc::wms::request::{GetCapabilities, GetLegendGraphic, GetMap, WmsRequest};
+use crate::util::config;
+use crate::util::config::get_config_element;
 use crate::workflows::registry::WorkflowRegistry;
 use crate::workflows::workflow::WorkflowId;
 
@@ -259,10 +261,7 @@ async fn get_map<C: Context>(
 
     let query_rect = RasterQueryRectangle {
         spatial_bounds: query_bbox,
-        time_interval: request.time.unwrap_or_else(|| {
-            let time = TimeInstance::from(chrono::offset::Utc::now());
-            TimeInterval::new_unchecked(time, time)
-        }),
+        time_interval: request.time.unwrap_or_else(default_time_from_config),
         spatial_resolution: SpatialResolution::new_unchecked(
             x_query_resolution,
             y_query_resolution,
@@ -329,6 +328,27 @@ fn get_map_mock(request: &GetMap) -> Result<Box<dyn warp::Reply>, warp::Rejectio
             .body(image_bytes)
             .context(error::Http)?,
     ))
+}
+
+fn default_time_from_config() -> TimeInterval {
+    get_config_element::<config::Wms>()
+        .ok()
+        .and_then(|wms| wms.default_time)
+        .map_or_else(
+            || {
+                get_config_element::<config::Ogc>()
+                    .ok()
+                    .and_then(|ogc| ogc.default_time)
+                    .map_or_else(
+                        || {
+                            TimeInterval::new_instant(TimeInstance::now())
+                                .expect("is a valid time interval")
+                        },
+                        |time| time.time_interval(),
+                    )
+            },
+            |time| time.time_interval(),
+        )
 }
 
 #[cfg(test)]

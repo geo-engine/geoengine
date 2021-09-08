@@ -3,6 +3,8 @@ use crate::contexts::SimpleSession;
 use crate::datasets::provenance::Provenance;
 use crate::datasets::storage::AddDataset;
 use crate::datasets::storage::DatasetStore;
+use crate::datasets::upload::UploadId;
+use crate::datasets::upload::UploadRootPath;
 use crate::handlers::ErrorResponse;
 use crate::projects::{
     CreateProject, Layer, LayerUpdate, ProjectDb, ProjectId, RasterSymbology, STRectangle,
@@ -165,4 +167,20 @@ where
     TRes: futures::Future<Output = Response<Bytes>> + 'a,
 {
     check_allowed_http_methods2(test_helper, allowed_methods, |res| res)
+}
+
+/// Helper struct that removes all specified uploads on drop
+#[derive(Default)]
+pub struct TestDataUploads {
+    pub uploads: Vec<UploadId>,
+}
+
+impl Drop for TestDataUploads {
+    fn drop(&mut self) {
+        for upload in &self.uploads {
+            if let Ok(path) = upload.root_path() {
+                let _res = std::fs::remove_dir_all(path);
+            }
+        }
+    }
 }

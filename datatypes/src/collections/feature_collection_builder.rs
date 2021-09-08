@@ -227,6 +227,42 @@ where
         Ok(())
     }
 
+    /// Append a null to `column` if possible
+    pub fn push_null(&mut self, column: &str) -> Result<()> {
+        // also checks that column exists
+        let data_builder = if let Some(builder) = self.builders.get_mut(column) {
+            builder
+        } else {
+            return Err(FeatureCollectionError::ColumnDoesNotExist {
+                name: column.to_string(),
+            }
+            .into());
+        };
+
+        match self.types.get(column).expect("checked before") {
+            FeatureDataType::Category => {
+                let category_builder: &mut UInt8Builder = downcast_mut_array(data_builder.as_mut());
+                category_builder.append_null()?;
+            }
+            FeatureDataType::Int => {
+                let category_builder: &mut Int64Builder = downcast_mut_array(data_builder.as_mut());
+                category_builder.append_null()?;
+            }
+            FeatureDataType::Float => {
+                let category_builder: &mut Float64Builder =
+                    downcast_mut_array(data_builder.as_mut());
+                category_builder.append_null()?;
+            }
+            FeatureDataType::Text => {
+                let category_builder: &mut StringBuilder =
+                    downcast_mut_array(data_builder.as_mut());
+                category_builder.append_null()?;
+            }
+        }
+
+        Ok(())
+    }
+
     /// Indicate a finished row
     pub fn finish_row(&mut self) {
         self.rows += 1;

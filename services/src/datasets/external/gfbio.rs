@@ -149,7 +149,7 @@ impl GfbioDataProvider {
         ))
     }
 
-    fn build_query(&self, surrogate_key: i32) -> String {
+    fn build_sql_query(&self) -> String {
         let mut columns: Vec<_> = self
             .column_hash_to_name
             .iter()
@@ -163,11 +163,14 @@ impl GfbioDataProvider {
         });
 
         format!(
-            r#"SELECT surrogate_key, geom {columns} FROM {schema}.abcd_units WHERE surrogate_key = {surrogate}"#,
+            r#"SELECT surrogate_key, geom {columns} FROM {schema}.abcd_units"#,
             columns = columns,
             schema = self.db_config.schema,
-            surrogate = surrogate_key
         )
+    }
+
+    fn build_attribute_query(surrogate_key: i32) -> String {
+        format!("surrogate_key = {surrogate}", surrogate = surrogate_key)
     }
 }
 
@@ -335,7 +338,8 @@ impl MetaDataProvider<OgrSourceDataset, VectorResultDescriptor, VectorQueryRecta
                 force_ogr_time_filter: false,
                 force_ogr_spatial_filter: true,
                 on_error: OgrSourceErrorSpec::Ignore,
-                sql_query: Some(self.build_query(surrogate_key)),
+                sql_query: Some(self.build_sql_query()),
+                attribute_query: Some(GfbioDataProvider::build_attribute_query(surrogate_key)),
             },
             result_descriptor: VectorResultDescriptor {
                 data_type: VectorDataType::MultiPoint,
@@ -698,7 +702,8 @@ mod tests {
                 force_ogr_time_filter: false,
                 force_ogr_spatial_filter: true,
                 on_error: OgrSourceErrorSpec::Ignore,
-                sql_query: Some(format!("SELECT surrogate_key, geom , \"150ac8760faba3bbf29ee77713fc0402641eea82\", \"6df446e57190f19d63fcf99ba25476510c5c8ce6\", \"09e05cff5522bf112eedf91c5c2f1432539e59aa\", \"8003ddd80b42736ebf36b87018e51db3ee84efaf\", \"9691f318c0f84b4e71e3c125492902af3ad22a81\", \"abc0ceb08b2723a43274e1db093dfe1f333fe453\", \"f65b72bbbd0b17e7345821a34c1da49d317ca28b\", \"d22ecb7dd0e5de6e8b2721977056d30aefda1b75\", \"bad2f7cae88e4219f2c3b186628189c5380f3c52\", \"624516976f697c1eacc7bccfb668d2c25ae7756e\", \"4f885a9545b143d322f3bf34bf2c5148e07d578a\", \"8603069b15071933545a8ce6563308da4d8ee019\", \"83fb54d8cfa58d729125f3dccac3a6820d95ccaa\", \"46b0ed7a1faa8d25b0c681fbbdc2cca60cecbdf0\", \"2598ba17aa170832b45c3c206f8133ddddc52c6e\", \"54a52959a34f3c19fa1b0e22cea2ae5c8ce78602\", \"7fdf1ed68add3ac2f4a1b2c89b75245260890dfe\", \"0dcf8788cadda41eaa5831f44227d8c531411953\", \"f2374ad051911a65bc0d0a46c13ada2625f55a10\", \"2b603312fc185489ffcffd5763bcd47c4b126f31\", \"adf8c075f2c6b97eaab5cee8f22e97abfdaf6b71\" FROM {}.abcd_units WHERE surrogate_key = 1", test_schema))
+                sql_query: Some(format!("SELECT surrogate_key, geom , \"150ac8760faba3bbf29ee77713fc0402641eea82\", \"6df446e57190f19d63fcf99ba25476510c5c8ce6\", \"09e05cff5522bf112eedf91c5c2f1432539e59aa\", \"8003ddd80b42736ebf36b87018e51db3ee84efaf\", \"9691f318c0f84b4e71e3c125492902af3ad22a81\", \"abc0ceb08b2723a43274e1db093dfe1f333fe453\", \"f65b72bbbd0b17e7345821a34c1da49d317ca28b\", \"d22ecb7dd0e5de6e8b2721977056d30aefda1b75\", \"bad2f7cae88e4219f2c3b186628189c5380f3c52\", \"624516976f697c1eacc7bccfb668d2c25ae7756e\", \"4f885a9545b143d322f3bf34bf2c5148e07d578a\", \"8603069b15071933545a8ce6563308da4d8ee019\", \"83fb54d8cfa58d729125f3dccac3a6820d95ccaa\", \"46b0ed7a1faa8d25b0c681fbbdc2cca60cecbdf0\", \"2598ba17aa170832b45c3c206f8133ddddc52c6e\", \"54a52959a34f3c19fa1b0e22cea2ae5c8ce78602\", \"7fdf1ed68add3ac2f4a1b2c89b75245260890dfe\", \"0dcf8788cadda41eaa5831f44227d8c531411953\", \"f2374ad051911a65bc0d0a46c13ada2625f55a10\", \"2b603312fc185489ffcffd5763bcd47c4b126f31\", \"adf8c075f2c6b97eaab5cee8f22e97abfdaf6b71\" FROM {}.abcd_units", test_schema)),
+                attribute_query: Some("surrogate_key = 1".to_string()),
             };
 
             if loading_info != expected {
@@ -754,8 +759,7 @@ mod tests {
             let processor: OgrSourceProcessor<MultiPoint> = OgrSourceProcessor::new(meta);
 
             let query_rectangle = VectorQueryRectangle {
-                spatial_bounds: BoundingBox2D::new((-180., -90.).into(), (180., 90.).into())
-                    .unwrap(),
+                spatial_bounds: BoundingBox2D::new((0., -90.).into(), (180., 90.).into()).unwrap(),
                 time_interval: TimeInterval::default(),
                 spatial_resolution: SpatialResolution::zero_point_one(),
             };
@@ -779,30 +783,30 @@ mod tests {
             let result = result[0].as_ref().unwrap();
 
             let expected = MultiPointCollection::from_data(
-                MultiPoint::many(vec![(-176.20972, -13.27737)]).unwrap(),
-                vec![TimeInterval::default(); 1],
+                MultiPoint::many(vec![(0.20972, -13.27737), (176.20972, 13.27737)]).unwrap(),
+                vec![TimeInterval::default(); 2],
                 [
-                ("/DataSets/DataSet/Units/Unit/DateLastEdited".to_owned(),FeatureData::NullableText(vec![Some("2014-01-01T00:00:00".to_owned())])),
-                ("/DataSets/DataSet/Units/Unit/Gathering/Agents/GatheringAgent/AgentText".to_owned(),FeatureData::NullableText(vec![None])),
-                ("/DataSets/DataSet/Units/Unit/Gathering/Country/ISO3166Code".to_owned(),FeatureData::NullableText(vec![None])),
-                ("/DataSets/DataSet/Units/Unit/Gathering/Country/Name".to_owned(),FeatureData::NullableText(vec![Some("Country".to_owned())])),
-                ("/DataSets/DataSet/Units/Unit/Gathering/DateTime/ISODateTimeBegin".to_owned(),FeatureData::NullableText(vec![None])),
-                ("/DataSets/DataSet/Units/Unit/Gathering/LocalityText".to_owned(),FeatureData::NullableText(vec![Some("Locality text".to_owned())])),
-                ("/DataSets/DataSet/Units/Unit/Gathering/SiteCoordinateSets/SiteCoordinates/CoordinatesLatLong/SpatialDatum".to_owned(),FeatureData::NullableText(vec![None])),
-                ("/DataSets/DataSet/Units/Unit/Identifications/Identification/Result/TaxonIdentified/HigherTaxa/HigherTaxon/HigherTaxonName".to_owned(),FeatureData::NullableText(vec![Some("Higher Taxon Name".to_owned())])),
-                ("/DataSets/DataSet/Units/Unit/Identifications/Identification/Result/TaxonIdentified/HigherTaxa/HigherTaxon/HigherTaxonRank".to_owned(),FeatureData::NullableText(vec![Some("Taxon Rank".to_owned())])),
-                ("/DataSets/DataSet/Units/Unit/Identifications/Identification/Result/TaxonIdentified/ScientificName/FullScientificNameString".to_owned(),FeatureData::NullableText(vec![Some("Full Scientific Name".to_owned())])),
-                ("/DataSets/DataSet/Units/Unit/MultiMediaObjects/MultiMediaObject/Creator".to_owned(),FeatureData::NullableText(vec![None])),
-                ("/DataSets/DataSet/Units/Unit/MultiMediaObjects/MultiMediaObject/FileURI".to_owned(),FeatureData::NullableText(vec![None])),
-                ("/DataSets/DataSet/Units/Unit/MultiMediaObjects/MultiMediaObject/Format".to_owned(),FeatureData::NullableText(vec![None])),
-                ("/DataSets/DataSet/Units/Unit/MultiMediaObjects/MultiMediaObject/IPR/Licenses/License/Details".to_owned(),FeatureData::NullableText(vec![None])),
-                ("/DataSets/DataSet/Units/Unit/MultiMediaObjects/MultiMediaObject/IPR/Licenses/License/Text".to_owned(),FeatureData::NullableText(vec![None])),
-                ("/DataSets/DataSet/Units/Unit/MultiMediaObjects/MultiMediaObject/IPR/Licenses/License/URI".to_owned(),FeatureData::NullableText(vec![None])),
-                ("/DataSets/DataSet/Units/Unit/RecordBasis".to_owned(),FeatureData::NullableText(vec![Some("Record Basis".to_owned())])),
-                ("/DataSets/DataSet/Units/Unit/RecordURI".to_owned(),FeatureData::NullableText(vec![None])),
-                ("/DataSets/DataSet/Units/Unit/SourceID".to_owned(),FeatureData::NullableText(vec![Some("Source ID".to_owned())])),
-                ("/DataSets/DataSet/Units/Unit/SourceInstitutionID".to_owned(),FeatureData::NullableText(vec![Some("Institution Id".to_owned())])),
-                ("/DataSets/DataSet/Units/Unit/UnitID".to_owned(),FeatureData::NullableText(vec![Some("Unit ID".to_owned())]))]
+                ("/DataSets/DataSet/Units/Unit/DateLastEdited".to_owned(),FeatureData::NullableText(vec![Some("2014-01-01T00:00:00".to_owned()); 2])),
+                ("/DataSets/DataSet/Units/Unit/Gathering/Agents/GatheringAgent/AgentText".to_owned(),FeatureData::NullableText(vec![None; 2])),
+                ("/DataSets/DataSet/Units/Unit/Gathering/Country/ISO3166Code".to_owned(),FeatureData::NullableText(vec![None; 2])),
+                ("/DataSets/DataSet/Units/Unit/Gathering/Country/Name".to_owned(),FeatureData::NullableText(vec![Some("Country".to_owned()); 2])),
+                ("/DataSets/DataSet/Units/Unit/Gathering/DateTime/ISODateTimeBegin".to_owned(),FeatureData::NullableText(vec![None; 2])),
+                ("/DataSets/DataSet/Units/Unit/Gathering/LocalityText".to_owned(),FeatureData::NullableText(vec![Some("Locality text".to_owned()); 2])),
+                ("/DataSets/DataSet/Units/Unit/Gathering/SiteCoordinateSets/SiteCoordinates/CoordinatesLatLong/SpatialDatum".to_owned(),FeatureData::NullableText(vec![None; 2])),
+                ("/DataSets/DataSet/Units/Unit/Identifications/Identification/Result/TaxonIdentified/HigherTaxa/HigherTaxon/HigherTaxonName".to_owned(),FeatureData::NullableText(vec![Some("Higher Taxon Name".to_owned()); 2])),
+                ("/DataSets/DataSet/Units/Unit/Identifications/Identification/Result/TaxonIdentified/HigherTaxa/HigherTaxon/HigherTaxonRank".to_owned(),FeatureData::NullableText(vec![Some("Taxon Rank".to_owned()); 2])),
+                ("/DataSets/DataSet/Units/Unit/Identifications/Identification/Result/TaxonIdentified/ScientificName/FullScientificNameString".to_owned(),FeatureData::NullableText(vec![Some("Full Scientific Name".to_owned());2])),
+                ("/DataSets/DataSet/Units/Unit/MultiMediaObjects/MultiMediaObject/Creator".to_owned(),FeatureData::NullableText(vec![None; 2])),
+                ("/DataSets/DataSet/Units/Unit/MultiMediaObjects/MultiMediaObject/FileURI".to_owned(),FeatureData::NullableText(vec![None; 2])),
+                ("/DataSets/DataSet/Units/Unit/MultiMediaObjects/MultiMediaObject/Format".to_owned(),FeatureData::NullableText(vec![None; 2])),
+                ("/DataSets/DataSet/Units/Unit/MultiMediaObjects/MultiMediaObject/IPR/Licenses/License/Details".to_owned(),FeatureData::NullableText(vec![None; 2])),
+                ("/DataSets/DataSet/Units/Unit/MultiMediaObjects/MultiMediaObject/IPR/Licenses/License/Text".to_owned(),FeatureData::NullableText(vec![None; 2])),
+                ("/DataSets/DataSet/Units/Unit/MultiMediaObjects/MultiMediaObject/IPR/Licenses/License/URI".to_owned(),FeatureData::NullableText(vec![None; 2])),
+                ("/DataSets/DataSet/Units/Unit/RecordBasis".to_owned(),FeatureData::NullableText(vec![Some("Record Basis".to_owned()); 2])),
+                ("/DataSets/DataSet/Units/Unit/RecordURI".to_owned(),FeatureData::NullableText(vec![None; 2])),
+                ("/DataSets/DataSet/Units/Unit/SourceID".to_owned(),FeatureData::NullableText(vec![Some("Source ID".to_owned()); 2])),
+                ("/DataSets/DataSet/Units/Unit/SourceInstitutionID".to_owned(),FeatureData::NullableText(vec![Some("Institution Id".to_owned()); 2])),
+                ("/DataSets/DataSet/Units/Unit/UnitID".to_owned(),FeatureData::NullableText(vec![Some("Unit ID".to_owned()); 2]))]
                 .iter()
                 .cloned()
                 .collect(),

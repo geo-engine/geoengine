@@ -72,7 +72,13 @@ pub fn parse_time_option<'de, D>(deserializer: D) -> Result<Option<TimeInterval>
 where
     D: serde::Deserializer<'de>,
 {
-    parse_time(deserializer).map(Some)
+    let s = String::deserialize(deserializer)?;
+
+    if s.is_empty() {
+        return Ok(None);
+    }
+
+    parse_time_from_str::<D>(&s).map(Some)
 }
 
 /// Parse the time string of a WMS request
@@ -88,7 +94,13 @@ where
     // TODO: support relative time intervals
 
     let s = String::deserialize(deserializer)?;
+    parse_time_from_str::<D>(&s)
+}
 
+fn parse_time_from_str<'de, D>(s: &str) -> Result<TimeInterval, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
     let split: Vec<_> = s
         .split('/')
         // use `from_str` instead of `parse_from_rfc3339` to use a relaxed form of RFC3339 that supports dates BC

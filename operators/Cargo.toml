@@ -20,8 +20,7 @@ crossbeam = "0.8"
 csv = "1.1"
 float-cmp = "0.9"
 futures = "0.3"
-gdal = { version = "0.8", features = ["datetime"] }
-gdal-sys = "0.4.0"
+gdal = { version = "^0.9", features = ["datetime"] }
 geo = "0.18"
 geoengine-datatypes = { path = "../datatypes" }
 lazy_static = "1.4"
@@ -32,6 +31,7 @@ ocl = { git = "https://github.com/michaelmattig/ocl", branch = "tentative_master
 ouroboros = "0.10"
 paste = "1.0"
 pin-project = "1.0"
+rustc-hash = { version = "1.0", default-features = false }
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 snafu = "0.6"
@@ -42,7 +42,7 @@ uuid = { version = "0.8", features = ["serde", "v4", "v5"] }
 [dev-dependencies]
 criterion = {version = "0.3", features =["async_futures", "async_tokio"]}
 geo-rand = { git = "https://github.com/lelongg/geo-rand", tag = "v0.3.0" }
-rand = "0.8.4"
+rand = "0.8"
 tempfile = "3.1"
 
 

@@ -3,13 +3,26 @@ use geoengine_datatypes::dataset::DatasetId;
 use geoengine_datatypes::primitives::FeatureDataType;
 use snafu::Snafu;
 use std::ops::Range;
+use std::path::PathBuf;
 
 #[derive(Debug, Snafu)]
 #[snafu(visibility = "pub(crate)")]
 pub enum Error {
-    #[snafu(display("MissingRasterProperty Error: {}", property))]
-    MissingRasterProperty {
-        property: String,
+    UnsupportedRasterValue,
+
+    InvalidMeteosatSatellite,
+
+    InvalidUTCTimestamp,
+
+    #[snafu(display("InvalidChannel Error (requested channel: {})", channel))]
+    InvalidChannel {
+        channel: usize,
+    },
+
+    #[snafu(display("InvalidMeasurement Error; expected {}, found: {}", expected, found))]
+    InvalidMeasurement {
+        expected: String,
+        found: String,
     },
 
     #[snafu(display("CsvSource Error: {}", source))]
@@ -194,6 +207,10 @@ pub enum Error {
 
     FeatureDataValueMustNotBeNull,
     InvalidFeatureDataType,
+    InvalidRasterDataType,
+
+    #[snafu(display("No candidate source resolutions were produced."))]
+    NoSourceResolution,
 
     WindowSizeMustNotBeZero,
 
@@ -223,6 +240,29 @@ pub enum Error {
     OgrSqlQuery,
 
     GdalRasterDataTypeNotSupported,
+
+    #[snafu(display("Input `{}` must be greater than zero at `{}`", name, scope))]
+    InputMustBeGreaterThanZero {
+        scope: &'static str,
+        name: &'static str,
+    },
+
+    #[snafu(display("Input `{}` must be zero or positive at `{}`", name, scope))]
+    InputMustBeZeroOrPositive {
+        scope: &'static str,
+        name: &'static str,
+    },
+
+    DuplicateOutputColumns,
+
+    #[snafu(display("Input column `{:}` is missing", name))]
+    MissingInputColumn {
+        name: String,
+    },
+
+    InvalidGdalFilePath {
+        file_path: PathBuf,
+    },
 }
 
 impl From<geoengine_datatypes::error::Error> for Error {

@@ -55,6 +55,13 @@ impl Coordinate2D {
             y: self.y.max(other.y),
         }
     }
+
+    pub fn euclidean_distance(&self, other: &Self) -> f64 {
+        let x_diff = self.x - other.x;
+        let y_diff = self.y - other.y;
+        let sq_sum = x_diff * x_diff + y_diff * y_diff;
+        sq_sum.sqrt()
+    }
 }
 
 impl fmt::Display for Coordinate2D {
@@ -352,5 +359,22 @@ mod test {
     fn div_scalar() {
         let res = Coordinate2D { x: 4., y: 8. } / 2.;
         assert_eq!(res, Coordinate2D { x: 2., y: 4. });
+    }
+
+    #[test]
+    #[allow(clippy::float_cmp)]
+    fn test_euclidean_distance() {
+        assert_eq!(
+            Coordinate2D::new(0., 0.).euclidean_distance(&(0., 1.).into()),
+            1.0
+        );
+        assert_eq!(
+            Coordinate2D::new(0., 0.).euclidean_distance(&(1., 0.).into()),
+            1.0
+        );
+        assert_eq!(
+            Coordinate2D::new(0., 0.).euclidean_distance(&(1., 1.).into()),
+            2.0_f64.sqrt()
+        );
     }
 }
