@@ -317,6 +317,12 @@ mod tests {
                 .respond_with(status_code(404)),
         );
 
+        server.expect(
+            Expectation::matching(request::method_path("GET", "/10.1594/PANGAEA.csvt"))
+                .times(0..=1)
+                .respond_with(status_code(404)),
+        );
+
         setup(
             server,
             "HEAD",
