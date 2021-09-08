@@ -66,7 +66,6 @@ pub(crate) async fn list_external_datasets_handler<C: Context>(
         .await?
         .list(options)
         .await?;
-    // TODO: it appears errors here lead to the internal datasets being listed because the route also matches /datasets,
     Ok(web::Json(list))
 }
 
