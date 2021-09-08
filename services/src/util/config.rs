@@ -288,3 +288,13 @@ pub struct Odm {
 impl ConfigElement for Odm {
     const KEY: &'static str = "odm";
 }
+
+#[derive(Debug, Deserialize)]
+pub struct DataProvider {
+    pub dataset_defs_path: PathBuf,
+    pub provider_defs_path: PathBuf,
+}
+
+impl ConfigElement for DataProvider {
+    const KEY: &'static str = "dataprovider";
+}

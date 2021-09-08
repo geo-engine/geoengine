@@ -41,4 +41,4 @@ pub mod workflows;
 #[cfg(feature = "pro")]
 pub mod pro;
 
-use geoengine_datatypes::test_data;
+pub use geoengine_datatypes::test_data;

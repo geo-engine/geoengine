@@ -5,8 +5,6 @@ use std::str::FromStr;
 
 pub use geoengine_datatypes::util::Identifier;
 
-use crate::test_data;
-
 pub mod config;
 pub mod parsing;
 pub mod tests;
@@ -64,20 +62,6 @@ where
                 D::Error::custom(format_args!("could not parse string as boolean: {}", s))
             })
     }
-}
-
-/// # Panics
-/// If current dir is not accessible
-// TODO: better way for determining dataset_defs directory
-pub fn dataset_defs_dir() -> std::path::PathBuf {
-    test_data!("dataset_defs").into()
-}
-
-/// # Panics
-/// If current dir is not accessible
-// TODO: better way for determining dataset_defs directory
-pub fn provider_defs_dir() -> std::path::PathBuf {
-    test_data!("provider_defs").into()
 }
 
 #[cfg(test)]
