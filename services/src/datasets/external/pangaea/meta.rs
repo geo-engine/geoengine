@@ -2,7 +2,6 @@
 //! and parse meta-data for a pangaea dataset
 
 use crate::error::Error;
-use bstr::ByteSlice;
 use futures::StreamExt;
 use geoengine_datatypes::collections::VectorDataType;
 use geoengine_datatypes::primitives::{
@@ -200,23 +199,27 @@ enum TSVParseState {
 impl TSVParseState {
     fn proceed(self, buf: &mut Vec<u8>) -> TSVParseState {
         match self {
-            TSVParseState::Initial => match buf.as_slice().find("/*") {
+            TSVParseState::Initial => match buf.windows(2).position(|chars| chars == b"/*") {
                 Some(0) => TSVParseState::CommentStart,
                 None if buf.len() >= 2 => TSVParseState::HeaderStart(0),
                 _ => TSVParseState::MoreData(Box::new(self)),
             },
-            TSVParseState::CommentStart => match buf.as_slice().find("*/") {
+            TSVParseState::CommentStart => match buf.windows(2).position(|chars| chars == b"*/") {
                 Some(idx) => TSVParseState::CommentEnd(idx),
                 _ => TSVParseState::MoreData(Box::new(self)),
             },
-            TSVParseState::CommentEnd(ce) => match buf.as_slice()[ce..].find_byte(b'\n') {
-                Some(idx) => TSVParseState::HeaderStart(ce + idx + 1),
-                _ => TSVParseState::MoreData(Box::new(self)),
-            },
-            TSVParseState::HeaderStart(h) => match buf.as_slice()[h..].find_byte(b'\n') {
-                Some(idx) => TSVParseState::DataStart(h + idx + 1),
-                _ => TSVParseState::MoreData(Box::new(self)),
-            },
+            TSVParseState::CommentEnd(ce) => {
+                match buf.as_slice()[ce..].iter().position(|&char| char == b'\n') {
+                    Some(idx) => TSVParseState::HeaderStart(ce + idx + 1),
+                    _ => TSVParseState::MoreData(Box::new(self)),
+                }
+            }
+            TSVParseState::HeaderStart(h) => {
+                match buf.as_slice()[h..].iter().position(|&char| char == b'\n') {
+                    Some(idx) => TSVParseState::DataStart(h + idx + 1),
+                    _ => TSVParseState::MoreData(Box::new(self)),
+                }
+            }
             TSVParseState::DataStart(_) => self,
             TSVParseState::MoreData(inner) => inner.proceed(buf),
         }
