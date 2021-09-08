@@ -3,12 +3,15 @@ use geoengine_datatypes::identifier;
 use geoengine_datatypes::util::Identifier;
 use serde::{Deserialize, Serialize};
 
+use crate::contexts::{Context, InMemoryContext};
 use crate::error;
+use crate::handlers::get_token;
 use crate::projects::ProjectId;
 use crate::projects::STRectangle;
 use actix_http::Payload;
-use actix_web::{FromRequest, HttpRequest};
-use futures::future::{err, ok, Ready};
+use actix_web::{web, FromRequest, HttpRequest};
+use futures::future::{err, LocalBoxFuture};
+use futures_util::FutureExt;
 
 identifier!(SessionId);
 
@@ -72,14 +75,16 @@ impl MockableSession for SimpleSession {
 impl FromRequest for SimpleSession {
     type Config = ();
     type Error = error::Error;
-    type Future = Ready<Result<Self, Self::Error>>;
+    type Future = LocalBoxFuture<'static, Result<Self, Self::Error>>;
 
     fn from_request(req: &HttpRequest, _payload: &mut Payload) -> Self::Future {
-        let session = req.extensions_mut().remove::<Self>();
-
-        match session {
-            Some(session) => ok(session),
-            None => err(error::Error::MissingAuthorizationHeader),
-        }
+        let token = match get_token(req) {
+            Ok(token) => token,
+            Err(error) => return Box::pin(err(error)),
+        };
+        let ctx = req.app_data::<web::Data<InMemoryContext>>().expect(
+            "InMemoryContext will be registered because SimpleSession is only used in demo mode",
+        ).get_ref().clone();
+        async move { ctx.session_by_id(token).await.map_err(Into::into) }.boxed_local()
     }
 }

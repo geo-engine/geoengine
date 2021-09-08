@@ -7,11 +7,9 @@ use crate::pro::contexts::{ProContext, ProInMemoryContext};
 use crate::util::config::{self, get_config_element, Backend};
 
 use super::projects::ProProjectDb;
-use crate::handlers::validate_token;
-use crate::server::{configure_extractors, render_401, show_version_handler};
+use crate::server::{configure_extractors, show_version_handler};
 use actix_files::Files;
-use actix_web::{http, middleware, web, App, HttpServer};
-use actix_web_httpauth::middleware::HttpAuthentication;
+use actix_web::{middleware, web, App, HttpServer};
 #[cfg(feature = "postgres")]
 use bb8_postgres::tokio_postgres::NoTls;
 use log::info;
@@ -122,11 +120,7 @@ where
         .route(
             "/login",
             web::post().to(pro::handlers::users::login_handler::<C>),
-        );
-    #[allow(unused_mut)]
-    let mut scope_with_auth = web::scope("")
-        .wrap(HttpAuthentication::bearer(validate_token::<C>))
-        .wrap(middleware::ErrorHandlers::new().handler(http::StatusCode::UNAUTHORIZED, render_401))
+        )
         .route(
             "/logout",
             web::post().to(pro::handlers::users::logout_handler::<C>),
@@ -252,16 +246,13 @@ where
         );
     #[cfg(feature = "odm")]
     {
-        scope_with_auth = scope_with_auth
-            .route(
-                "/droneMapping/task",
-                web::post().to(pro::handlers::drone_mapping::start_task_handler::<C>),
-            )
-            .route(
-                "/droneMapping/dataset/{task_id}",
-                web::post()
-                    .to(pro::handlers::drone_mapping::dataset_from_drone_mapping_handler::<C>),
-            )
+        cfg.route(
+            "/droneMapping/task",
+            web::post().to(pro::handlers::drone_mapping::start_task_handler::<C>),
+        )
+        .route(
+            "/droneMapping/dataset/{task_id}",
+            web::post().to(pro::handlers::drone_mapping::dataset_from_drone_mapping_handler::<C>),
+        );
     }
-    cfg.service(scope_with_auth);
 }

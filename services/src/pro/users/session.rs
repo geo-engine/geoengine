@@ -1,14 +1,19 @@
 use serde::{Deserialize, Serialize};
 
-use crate::contexts::{MockableSession, Session, SessionId};
+use crate::contexts::{Context, MockableSession, Session, SessionId};
 use crate::error;
+use crate::handlers::get_token;
+use crate::pro::contexts::{PostgresContext, ProInMemoryContext};
 use crate::pro::users::UserId;
 use crate::projects::{ProjectId, STRectangle};
 use crate::util::Identifier;
 use actix_http::Payload;
-use actix_web::{FromRequest, HttpRequest};
+use actix_web::{web, FromRequest, HttpRequest};
+use bb8_postgres::tokio_postgres::NoTls;
 use chrono::{DateTime, Utc};
-use futures::future::{err, ok, Ready};
+use futures::future::err;
+use futures_util::future::LocalBoxFuture;
+use futures_util::FutureExt;
 
 #[derive(Debug, PartialEq, Serialize, Deserialize, Clone)]
 #[serde(rename_all = "camelCase")]
@@ -71,14 +76,28 @@ impl Session for UserSession {
 impl FromRequest for UserSession {
     type Config = ();
     type Error = error::Error;
-    type Future = Ready<Result<Self, Self::Error>>;
+    type Future = LocalBoxFuture<'static, Result<Self, Self::Error>>;
 
     fn from_request(req: &HttpRequest, _payload: &mut Payload) -> Self::Future {
-        let session = req.extensions_mut().remove::<Self>();
+        let token = match get_token(req) {
+            Ok(token) => token,
+            Err(error) => return Box::pin(err(error)),
+        };
 
-        match session {
-            Some(session) => ok(session),
-            None => err(error::Error::MissingAuthorizationHeader),
+        if let Some(mem_ctx) = req.app_data::<web::Data<ProInMemoryContext>>() {
+            let mem_ctx = mem_ctx.get_ref().clone();
+            async move { mem_ctx.session_by_id(token).await.map_err(Into::into) }.boxed_local()
+        } else {
+            #[cfg(not(feature = "postgres"))]
+            unreachable!("if postgres was disabled only an in memory context could be registered");
+            #[cfg(feature = "postgres")]
+            {
+                let pg_ctx = req.app_data::<web::Data<PostgresContext<NoTls>>>().expect(
+                    "PostgresContext will be registered because UserSession is only used in pro mode and there was no in memory context",
+                );
+                let pg_ctx = pg_ctx.get_ref().clone();
+                async move { pg_ctx.session_by_id(token).await.map_err(Into::into) }.boxed_local()
+            }
         }
     }
 }

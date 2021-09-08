@@ -1,13 +1,11 @@
 use crate::contexts::Context;
 use crate::contexts::SessionId;
-use crate::error;
-use crate::error::Result;
-use actix_web::dev::{ServiceRequest, ServiceResponse};
-use actix_web::http::StatusCode;
-use actix_web::{test, web, HttpMessage, HttpResponse};
-use actix_web_httpauth::extractors::bearer::BearerAuth;
+use crate::error::{Error, Result};
+use actix_web::dev::ServiceResponse;
+use actix_web::http::{header, StatusCode};
+use actix_web::{test, HttpRequest, HttpResponse};
+use actix_web_httpauth::headers::authorization::{Bearer, Scheme};
 use serde::{Deserialize, Serialize};
-use snafu::ResultExt;
 use std::fmt;
 use std::str::FromStr;
 
@@ -64,21 +62,17 @@ impl fmt::Display for ErrorResponse {
     }
 }
 
-pub async fn validate_token<C: Context>(
-    req: ServiceRequest,
-    credentials: BearerAuth,
-) -> Result<ServiceRequest, actix_web::Error> {
-    let ctx: &C = req
-        .app_data::<web::Data<C>>()
-        .expect("Context is registered");
-
-    let token = SessionId::from_str(credentials.token())
-        .map_err(Box::new)
-        .context(error::Authorization)?;
-
-    let session = ctx.session_by_id(token).await?;
-
-    req.extensions_mut().insert(session);
-
-    Ok(req)
+pub fn get_token(req: &HttpRequest) -> Result<SessionId> {
+    let header = req
+        .headers()
+        .get(header::AUTHORIZATION)
+        .ok_or(Error::Authorization {
+            source: Box::new(Error::MissingAuthorizationHeader),
+        })?;
+    let scheme = Bearer::parse(header).map_err(|_| Error::Authorization {
+        source: Box::new(Error::InvalidAuthorizationScheme),
+    })?;
+    SessionId::from_str(scheme.token()).map_err(|err| Error::Authorization {
+        source: Box::new(err),
+    })
 }
