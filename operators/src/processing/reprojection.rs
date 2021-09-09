@@ -1035,11 +1035,11 @@ mod tests {
                 file_path: raster_dir()
                     .join("modis_ndvi/projected_3857/MOD13A2_M_NDVI_%%%_START_TIME_%%%.TIFF"),
                 rasterband_channel: 1,
-                geo_transform: GeoTransform {
-                    origin_coordinate: (20_037_508.342_789_244, 19_971_868.880_408_563).into(),
-                    x_pixel_size: 14_052.950_258_048_739,
-                    y_pixel_size: -14_057.881_117_788_405,
-                },
+                geo_transform: GeoTransform::new(
+                    (20_037_508.342_789_244, 19_971_868.880_408_563).into(),
+                    14_052.950_258_048_739,
+                    -14_057.881_117_788_405,
+                ),
                 width: 1000,
                 height: 1000,
                 file_not_found_handling: FileNotFoundHandling::Error,

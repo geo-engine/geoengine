@@ -145,11 +145,11 @@ impl TileInformation {
         Self {
             tile_size_in_pixels: shape,
             global_tile_position: [0, 0].into(),
-            global_geo_transform: GeoTransform {
-                origin_coordinate: partition.upper_left(),
-                x_pixel_size: partition.size_x() / shape.axis_size_x() as f64,
-                y_pixel_size: -partition.size_y() / shape.axis_size_y() as f64,
-            },
+            global_geo_transform: GeoTransform::new(
+                partition.upper_left(),
+                partition.size_x() / shape.axis_size_x() as f64,
+                -partition.size_y() / shape.axis_size_y() as f64,
+            ),
         }
     }
 
@@ -208,8 +208,8 @@ impl TileInformation {
 
         GeoTransform::new(
             tile_upper_left_coord,
-            self.global_geo_transform.x_pixel_size,
-            self.global_geo_transform.y_pixel_size,
+            self.global_geo_transform.x_pixel_size(),
+            self.global_geo_transform.y_pixel_size(),
         )
     }
 }

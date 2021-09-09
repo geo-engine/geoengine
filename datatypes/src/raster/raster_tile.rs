@@ -78,8 +78,8 @@ where
 
         GeoTransform::new(
             tile_upper_left_coord,
-            self.global_geo_transform.x_pixel_size,
-            self.global_geo_transform.y_pixel_size,
+            self.global_geo_transform.x_pixel_size(),
+            self.global_geo_transform.y_pixel_size(),
         )
     }
 }

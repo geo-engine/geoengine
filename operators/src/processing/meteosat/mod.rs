@@ -215,11 +215,11 @@ mod test_util {
             params: GdalDatasetParameters {
                 file_path: raster_dir().join("msg/%%%_START_TIME_%%%.tif"),
                 rasterband_channel: 1,
-                geo_transform: GeoTransform {
-                    origin_coordinate: (-5_570_248.477_339_745, 5_570_248.477_339_745).into(),
-                    x_pixel_size: 3_000.403_165_817_261,
-                    y_pixel_size: -3_000.403_165_817_261,
-                },
+                geo_transform: GeoTransform::new(
+                    (-5_570_248.477_339_745, 5_570_248.477_339_745).into(),
+                    3_000.403_165_817_261,
+                    -3_000.403_165_817_261,
+                ),
                 width: 3712,
                 height: 3712,
                 file_not_found_handling: FileNotFoundHandling::Error,

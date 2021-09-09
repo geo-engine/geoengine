@@ -561,11 +561,11 @@ mod tests {
             params: GdalDatasetParameters {
                 file_path: "/vsicurl/https://sentinel-cogs.s3.us-west-2.amazonaws.com/sentinel-s2-l2a-cogs/32/R/PU/2021/1/S2B_32RPU_20210102_0_L2A/B01.tif".into(),
                 rasterband_channel: 1,
-                geo_transform: GeoTransform {
-                    origin_coordinate: (600_000.0, 3_400_020.0).into(),
-                    x_pixel_size: 60.,
-                    y_pixel_size: -60.,
-                },
+                geo_transform: GeoTransform::new(
+                    (600_000.0, 3_400_020.0).into(),
+                     60.,
+                    -60.,
+                ),
                 width: 1830,
                 height: 1830,
                 file_not_found_handling: FileNotFoundHandling::NoData,

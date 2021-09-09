@@ -15,8 +15,8 @@ pub type GdalGeoTransform = [f64; 6];
 #[serde(rename_all = "camelCase")]
 pub struct GeoTransform {
     pub origin_coordinate: Coordinate2D,
-    pub x_pixel_size: f64,
-    pub y_pixel_size: f64,
+    x_pixel_size: f64,
+    y_pixel_size: f64,
 }
 
 impl GeoTransform {
@@ -32,6 +32,9 @@ impl GeoTransform {
     ///
     #[inline]
     pub fn new(origin_coordinate: Coordinate2D, x_pixel_size: f64, y_pixel_size: f64) -> Self {
+        debug_assert!(x_pixel_size > 0.0);
+        debug_assert!(y_pixel_size < 0.0);
+
         Self {
             origin_coordinate,
             x_pixel_size,
@@ -55,11 +58,22 @@ impl GeoTransform {
         origin_coordinate_y: f64,
         y_pixel_size: f64,
     ) -> Self {
+        debug_assert!(x_pixel_size > 0.0);
+        debug_assert!(y_pixel_size < 0.0);
+
         Self {
             origin_coordinate: (origin_coordinate_x, origin_coordinate_y).into(),
             x_pixel_size,
             y_pixel_size,
         }
+    }
+
+    pub fn x_pixel_size(&self) -> f64 {
+        self.x_pixel_size
+    }
+
+    pub fn y_pixel_size(&self) -> f64 {
+        self.y_pixel_size
     }
 
     /// Transforms a grid coordinate (row, column) ~ (y, x) into a SRS coordinate (x,y)

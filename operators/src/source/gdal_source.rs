@@ -209,8 +209,8 @@ impl SpatialPartitioned for GdalDatasetParameters {
     fn spatial_partition(&self) -> SpatialPartition2D {
         let lower_right_coordinate = self.geo_transform.origin_coordinate
             + Coordinate2D::from((
-                self.geo_transform.x_pixel_size * self.width as f64,
-                self.geo_transform.y_pixel_size * self.height as f64,
+                self.geo_transform.x_pixel_size() * self.width as f64,
+                self.geo_transform.y_pixel_size() * self.height as f64,
             ));
         SpatialPartition2D::new_unchecked(
             self.geo_transform.origin_coordinate,
@@ -574,7 +574,7 @@ where
         let geo_transform = info.params.geo_transform;
 
         // adjust the spatial resolution to the sign of the geotransform
-        let x_signed = if geo_transform.x_pixel_size.is_sign_positive()
+        let x_signed = if geo_transform.x_pixel_size().is_sign_positive()
             && spatial_resolution.x.is_sign_positive()
         {
             spatial_resolution.x
@@ -582,7 +582,7 @@ where
             spatial_resolution.x * -1.0
         };
 
-        let y_signed = if geo_transform.y_pixel_size.is_sign_positive()
+        let y_signed = if geo_transform.y_pixel_size().is_sign_positive()
             && spatial_resolution.y.is_sign_positive()
         {
             spatial_resolution.y
@@ -894,11 +894,7 @@ mod tests {
             &GdalDatasetParameters {
                 file_path: raster_dir().join("modis_ndvi/MOD13A2_M_NDVI_2014-01-01.TIFF"),
                 rasterband_channel: 1,
-                geo_transform: GeoTransform {
-                    origin_coordinate: (-180., 90.).into(),
-                    x_pixel_size: 0.1,
-                    y_pixel_size: -0.1,
-                },
+                geo_transform: GeoTransform::new((-180., 90.).into(), 0.1, -0.1),
                 width: 3600,
                 height: 1800,
                 file_not_found_handling: FileNotFoundHandling::NoData,
