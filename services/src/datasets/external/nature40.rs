@@ -2,7 +2,7 @@ use std::path::Path;
 
 use crate::datasets::provenance::{ProvenanceOutput, ProvenanceProvider};
 use crate::error::Error;
-use crate::util::parsing::string_or_string_array;
+use crate::util::parsing::{deserialize_base_url, string_or_string_array};
 use crate::{datasets::listing::DatasetListOptions, error::Result};
 use crate::{
     datasets::{
@@ -36,13 +36,15 @@ use quick_xml::Reader;
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
 use snafu::ResultExt;
+use url::Url;
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Nature40DataProviderDefinition {
     id: DatasetProviderId,
     name: String,
-    base_url: String,
+    #[serde(deserialize_with = "deserialize_base_url")]
+    base_url: Url,
     user: String,
     password: String,
 }
@@ -74,7 +76,7 @@ impl DatasetProviderDefinition for Nature40DataProviderDefinition {
 
 pub struct Nature40DataProvider {
     id: DatasetProviderId,
-    base_url: String,
+    base_url: Url,
     user: String,
     password: String,
 }
@@ -88,15 +90,15 @@ struct RasterDb {
 }
 
 impl RasterDb {
-    fn url_from_name(base_url: &str, name: &str) -> String {
-        format!(
-            "WCS:{}/rasterdb/{name}/wcs?VERSION=1.0.0&COVERAGE={name}",
-            base_url,
+    fn url_from_name(base_url: &Url, name: &str) -> Result<String> {
+        let raster_url = base_url.join(&format!(
+            "/rasterdb/{name}/wcs?VERSION=1.0.0&COVERAGE={name}",
             name = name
-        )
+        ))?;
+        Ok(format!("WCS:{}", raster_url))
     }
 
-    fn url(&self, base_url: &str) -> String {
+    fn url(&self, base_url: &Url) -> Result<String> {
         Self::url_from_name(base_url, &self.name)
     }
 }
@@ -120,7 +122,8 @@ impl DatasetProvider for Nature40DataProvider {
         let datasets = raster_dbs
             .rasterdbs
             .iter()
-            .map(|db| self.load_dataset(db.url(&self.base_url)));
+            .flat_map(|db| db.url(&self.base_url))
+            .map(|dataset_url| self.load_dataset(dataset_url));
         let datasets: Vec<Result<gdal::Dataset>> = join_all(datasets).await;
 
         for (db, dataset) in raster_dbs.rasterdbs.iter().zip(datasets) {
@@ -213,7 +216,7 @@ impl Nature40DataProvider {
 
     async fn load_raster_dbs(&self) -> Result<RasterDbs> {
         Client::new()
-            .get(format!("{}/rasterdbs.json", self.base_url))
+            .get(self.base_url.join("rasterdbs.json")?)
             .basic_auth(&self.user, Some(&self.password))
             .send()
             .await?
@@ -241,7 +244,7 @@ impl Nature40DataProvider {
             drop(dataset);
 
             let dataset = self
-                .load_dataset(RasterDb::url_from_name(&self.base_url, &name))
+                .load_dataset(RasterDb::url_from_name(&self.base_url, &name)?)
                 .await?;
 
             let labels = Self::parse_band_labels(&dataset)?;
@@ -318,7 +321,11 @@ impl MetaDataProvider<GdalLoadingInfo, RasterResultDescriptor, RasterQueryRectan
             }
         };
 
-        let db_url = RasterDb::url_from_name(&self.base_url, db_name);
+        let db_url = RasterDb::url_from_name(&self.base_url, db_name).map_err(|e| {
+            geoengine_operators::error::Error::LoadingInfo {
+                source: Box::new(e),
+            }
+        })?;
         let dataset = self.load_dataset(db_url.clone()).await.map_err(|e| {
             geoengine_operators::error::Error::LoadingInfo {
                 source: Box::new(e),
@@ -655,7 +662,7 @@ mod tests {
         let provider = Box::new(Nature40DataProviderDefinition {
             id: DatasetProviderId::from_str("2cb964d5-b9fa-4f8f-ab6f-f6c7fb47d4cd").unwrap(),
             name: "Nature40".to_owned(),
-            base_url: server.url_str("").strip_suffix('/').unwrap().to_owned(),
+            base_url: Url::parse(&server.url_str("")).unwrap(),
             user: "geoengine".to_owned(),
             password: "pwd".to_owned(),
         })
@@ -790,7 +797,7 @@ mod tests {
         let provider = Box::new(Nature40DataProviderDefinition {
             id: DatasetProviderId::from_str("2cb964d5-b9fa-4f8f-ab6f-f6c7fb47d4cd").unwrap(),
             name: "Nature40".to_owned(),
-            base_url: server.url_str("").strip_suffix('/').unwrap().to_owned(),
+            base_url: Url::parse(&server.url_str("")).unwrap(),
             user: "geoengine".to_owned(),
             password: "pwd".to_owned(),
         })
@@ -853,6 +860,7 @@ mod tests {
                         no_data_value: None,
                         properties_mapping: None,
                         gdal_open_options: Some(vec!["UserPwd=geoengine:pwd".to_owned(), "HttpAuth=BASIC".to_owned()]),
+                        gdal_config_options: None,
                     }
                 }
             );

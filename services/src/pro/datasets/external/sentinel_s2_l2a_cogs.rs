@@ -291,6 +291,7 @@ impl SentinelS2L2aCogsMetaData {
                 no_data_value: self.band.no_data_value,
                 properties_mapping: None,
                 gdal_open_options: None,
+                gdal_config_options: None,
             },
         })
     }
@@ -571,6 +572,7 @@ mod tests {
                 no_data_value: Some(0.),
                 properties_mapping: None,
                 gdal_open_options: None,
+                gdal_config_options: None,
             },
         }];
 

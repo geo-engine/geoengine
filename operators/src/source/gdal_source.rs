@@ -29,7 +29,7 @@ use geoengine_datatypes::{
         TilingSpecification,
     },
 };
-use log::debug;
+use log::{debug, info};
 use serde::{Deserialize, Serialize};
 use snafu::ResultExt;
 use std::{marker::PhantomData, path::PathBuf};
@@ -142,6 +142,7 @@ pub struct GdalLoadingInfoPart {
     pub params: GdalDatasetParameters,
 }
 
+/// Parameters for loading data using Gdal
 #[derive(PartialEq, Serialize, Deserialize, Debug, Clone)]
 #[serde(rename_all = "camelCase")]
 pub struct GdalDatasetParameters {
@@ -154,7 +155,54 @@ pub struct GdalDatasetParameters {
     pub file_not_found_handling: FileNotFoundHandling,
     pub no_data_value: Option<f64>,
     pub properties_mapping: Option<Vec<GdalMetadataMapping>>,
+    // Dataset open option as strings, e.g. `vec!["UserPwd=geoengine:pwd".to_owned(), "HttpAuth=BASIC".to_owned()]`
     pub gdal_open_options: Option<Vec<String>>,
+    // Configs as key, value pairs that will be set as thread local config options, e.g.
+    // `vec!["AWS_REGION".to_owned(), "eu-central-1".to_owned()]` and unset afterwards
+    // TODO: validate the config options: only allow specific keys and specific values
+    pub gdal_config_options: Option<Vec<(String, String)>>,
+}
+
+/// Set thread local gdal options and revert them on drop
+struct TemporaryGdalThreadLocalConfigOptions {
+    original_configs: Vec<(String, Option<String>)>,
+}
+
+impl TemporaryGdalThreadLocalConfigOptions {
+    /// Set thread local gdal options and revert them on drop
+    fn new(configs: &[(String, String)]) -> Result<Self> {
+        let mut original_configs = vec![];
+
+        for (key, value) in configs {
+            let old = gdal::config::get_thread_local_config_option(key, "").map(|value| {
+                if value.is_empty() {
+                    None
+                } else {
+                    Some(value)
+                }
+            })?;
+
+            // TODO: check if overriding existing config (local & global) is ok for the given key
+            gdal::config::set_thread_local_config_option(key, value)?;
+            info!("set {}={}", key, value);
+
+            original_configs.push((key.clone(), old));
+        }
+
+        Ok(Self { original_configs })
+    }
+}
+
+impl Drop for TemporaryGdalThreadLocalConfigOptions {
+    fn drop(&mut self) {
+        for (key, value) in &self.original_configs {
+            if let Some(value) = value {
+                let _result = gdal::config::set_thread_local_config_option(key, value);
+            } else {
+                let _result = gdal::config::clear_thread_local_config_option(key);
+            }
+        }
+    }
 }
 
 impl SpatialPartitioned for GdalDatasetParameters {
@@ -305,6 +353,7 @@ impl GdalDatasetParameters {
             file_path: file_path.into(),
             properties_mapping: self.properties_mapping.clone(),
             gdal_open_options: self.gdal_open_options.clone(),
+            gdal_config_options: self.gdal_config_options.clone(),
             ..*self
         })
     }
@@ -404,6 +453,12 @@ where
             .gdal_open_options
             .as_ref()
             .map(|o| o.iter().map(String::as_str).collect::<Vec<_>>());
+
+        // reverts the thread local configs on drop
+        let _thread_local_configs = dataset_params
+            .gdal_config_options
+            .as_ref()
+            .map(|config_options| TemporaryGdalThreadLocalConfigOptions::new(config_options));
 
         let dataset_result = GdalDataset::open_ex(
             &dataset_params.file_path,
@@ -873,6 +928,7 @@ mod tests {
                     },
                 ]),
                 gdal_open_options: None,
+                gdal_config_options: None,
             },
             &TileInformation::with_partition_and_shape(output_bounds, output_shape),
         )
@@ -1045,6 +1101,7 @@ mod tests {
             no_data_value: Some(0.),
             properties_mapping: None,
             gdal_open_options: None,
+            gdal_config_options: None,
         };
         let replaced = params
             .replace_time_placeholder("%TIME%", "%f", TimeInstance::from_millis_unchecked(22))
@@ -1085,6 +1142,7 @@ mod tests {
                 no_data_value,
                 properties_mapping: None,
                 gdal_open_options: None,
+                gdal_config_options: None,
             },
             placeholder: "%TIME%".to_string(),
             time_format: "%f".to_string(),
@@ -1341,5 +1399,25 @@ mod tests {
         );
 
         assert!(tile_1.is_empty());
+    }
+
+    #[test]
+    fn it_reverts_config_options() {
+        let config_options = vec![("foo".to_owned(), "bar".to_owned())];
+
+        {
+            let _config =
+                TemporaryGdalThreadLocalConfigOptions::new(config_options.as_slice()).unwrap();
+
+            assert_eq!(
+                gdal::config::get_config_option("foo", "default").unwrap(),
+                "bar".to_owned()
+            );
+        }
+
+        assert_eq!(
+            gdal::config::get_config_option("foo", "").unwrap(),
+            "".to_owned()
+        );
     }
 }
