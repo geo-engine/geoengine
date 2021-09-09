@@ -374,11 +374,11 @@ async fn unzip(zip_path: &Path, target_path: &Path) -> Result<(), error::Error> 
 #[cfg(test)]
 mod tests {
     use geoengine_datatypes::primitives::{SpatialPartition2D, SpatialResolution, TimeInterval};
-    use geoengine_datatypes::raster::{GeoTransform, RasterTile2D};
+    use geoengine_datatypes::raster::RasterTile2D;
     use geoengine_datatypes::spatial_reference::SpatialReferenceAuthority;
     use geoengine_operators::source::{
-        FileNotFoundHandling, GdalDatasetParameters, GdalLoadingInfo, GdalLoadingInfoPart,
-        GdalSource, GdalSourceParameters,
+        FileNotFoundHandling, GdalDatasetGeoTransform, GdalDatasetParameters, GdalLoadingInfo,
+        GdalLoadingInfoPart, GdalSource, GdalSourceParameters,
     };
     use httptest::responders::status_code;
     use httptest::{matchers::request, responders::json_encoded, Expectation, Server};
@@ -571,7 +571,11 @@ mod tests {
                 params: GdalDatasetParameters {
                     file_path: file_path.clone(),
                     rasterband_channel: 1,
-                    geo_transform: GeoTransform::new_with_coordinate_x_y(0., 1., 0., -1.),
+                    geo_transform: GdalDatasetGeoTransform {
+                        origin_coordinate: (0.0, 0.0).into(),
+                        x_pixel_size: 1.0,
+                        y_pixel_size: -1.0,
+                    },
                     width: 200,
                     height: 200,
                     file_not_found_handling: FileNotFoundHandling::Error,

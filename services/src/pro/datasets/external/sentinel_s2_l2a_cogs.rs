@@ -15,7 +15,7 @@ use geoengine_datatypes::operations::reproject::{
 use geoengine_datatypes::primitives::{
     AxisAlignedRectangle, BoundingBox2D, Measurement, SpatialPartitioned, TimeInterval,
 };
-use geoengine_datatypes::raster::{GeoTransform, RasterDataType};
+use geoengine_datatypes::raster::RasterDataType;
 use geoengine_datatypes::spatial_reference::{SpatialReference, SpatialReferenceAuthority};
 use geoengine_operators::engine::{
     MetaData, MetaDataProvider, RasterQueryRectangle, RasterResultDescriptor, VectorQueryRectangle,
@@ -23,8 +23,8 @@ use geoengine_operators::engine::{
 };
 use geoengine_operators::mock::MockDatasetDataSourceLoadingInfo;
 use geoengine_operators::source::{
-    GdalDatasetParameters, GdalLoadingInfo, GdalLoadingInfoPart, GdalLoadingInfoPartIterator,
-    OgrSourceDataset,
+    GdalDatasetGeoTransform, GdalDatasetParameters, GdalLoadingInfo, GdalLoadingInfoPart,
+    GdalLoadingInfoPartIterator, OgrSourceDataset,
 };
 use log::debug;
 use serde::{Deserialize, Serialize};
@@ -280,7 +280,7 @@ impl SentinelS2L2aCogsMetaData {
             params: GdalDatasetParameters {
                 file_path: PathBuf::from(format!("/vsicurl/{}", asset.href)),
                 rasterband_channel: 1,
-                geo_transform: GeoTransform::from(
+                geo_transform: GdalDatasetGeoTransform::from(
                     asset
                         .gdal_geotransform()
                         .ok_or(error::Error::StacInvalidGeoTransform)?,
@@ -561,11 +561,11 @@ mod tests {
             params: GdalDatasetParameters {
                 file_path: "/vsicurl/https://sentinel-cogs.s3.us-west-2.amazonaws.com/sentinel-s2-l2a-cogs/32/R/PU/2021/1/S2B_32RPU_20210102_0_L2A/B01.tif".into(),
                 rasterband_channel: 1,
-                geo_transform: GeoTransform::new(
-                    (600_000.0, 3_400_020.0).into(),
-                     60.,
-                    -60.,
-                ),
+                geo_transform: GdalDatasetGeoTransform {
+                    origin_coordinate: (600_000.0, 3_400_020.0).into(),
+                     x_pixel_size: 60.,
+                    y_pixel_size: -60.,
+                },
                 width: 1830,
                 height: 1830,
                 file_not_found_handling: FileNotFoundHandling::NoData,

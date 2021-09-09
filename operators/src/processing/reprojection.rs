@@ -566,8 +566,8 @@ mod tests {
     use crate::{
         engine::{QueryRectangle, VectorOperator},
         source::{
-            FileNotFoundHandling, GdalDatasetParameters, GdalMetaDataRegular, GdalMetaDataStatic,
-            GdalSource, GdalSourceParameters,
+            FileNotFoundHandling, GdalDatasetGeoTransform, GdalDatasetParameters,
+            GdalMetaDataRegular, GdalMetaDataStatic, GdalSource, GdalSourceParameters,
         },
         util::gdal::{add_ndvi_dataset, raster_dir},
     };
@@ -582,9 +582,7 @@ mod tests {
             BoundingBox2D, Measurement, MultiLineString, MultiPoint, MultiPolygon,
             SpatialResolution, TimeGranularity, TimeInstance, TimeInterval, TimeStep,
         },
-        raster::{
-            GeoTransform, Grid, GridShape, GridShape2D, GridSize, RasterDataType, RasterTile2D,
-        },
+        raster::{Grid, GridShape, GridShape2D, GridSize, RasterDataType, RasterTile2D},
         spatial_reference::SpatialReferenceAuthority,
         util::{
             well_known_data::{
@@ -1036,11 +1034,11 @@ mod tests {
                 file_path: raster_dir()
                     .join("modis_ndvi/projected_3857/MOD13A2_M_NDVI_%%%_START_TIME_%%%.TIFF"),
                 rasterband_channel: 1,
-                geo_transform: GeoTransform::new(
-                    (20_037_508.342_789_244, 19_971_868.880_408_563).into(),
-                    14_052.950_258_048_739,
-                    -14_057.881_117_788_405,
-                ),
+                geo_transform: GdalDatasetGeoTransform {
+                    origin_coordinate: (20_037_508.342_789_244, 19_971_868.880_408_563).into(),
+                    x_pixel_size: 14_052.950_258_048_739,
+                    y_pixel_size: -14_057.881_117_788_405,
+                },
                 width: 1000,
                 height: 1000,
                 file_not_found_handling: FileNotFoundHandling::Error,
@@ -1165,11 +1163,11 @@ mod tests {
             params: GdalDatasetParameters {
                 file_path: PathBuf::new(),
                 rasterband_channel: 1,
-                geo_transform: GeoTransform::new(
-                    (166_021.44, 9_329_005.188).into(),
-                    (534_994.66 - 166_021.444) / 100.,
-                    -9_329_005.18 / 100.,
-                ),
+                geo_transform: GdalDatasetGeoTransform {
+                    origin_coordinate: (166_021.44, 9_329_005.188).into(),
+                    x_pixel_size: (534_994.66 - 166_021.444) / 100.,
+                    y_pixel_size: -9_329_005.18 / 100.,
+                },
                 width: 100,
                 height: 100,
                 file_not_found_handling: FileNotFoundHandling::NoData,

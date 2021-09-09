@@ -10,7 +10,10 @@ use super::{GridBoundingBox2D, GridIdx, GridIdx2D};
 /// This is a typedef for the `GDAL GeoTransform`. It represents an affine transformation matrix.
 pub type GdalGeoTransform = [f64; 6];
 
-/// The `GeoTransform` is a more user friendly representation of the `GDAL GeoTransform` affine transformation matrix.
+/// The `GeoTransform` specifies the relation between pixel coordinates and geographic coordinates.
+/// In Geo Engine x pixel size is always postive and y pixel size is always negative. For raster tiles
+/// the origin is always the upper left corner. In the global grid for the `TilingStrategy` the origin
+/// is always located at (0, 0).
 #[derive(Copy, Clone, PartialEq, Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct GeoTransform {
