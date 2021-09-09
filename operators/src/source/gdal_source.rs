@@ -206,8 +206,8 @@ impl TryFrom<GdalDatasetGeoTransform> for GeoTransform {
 impl From<gdal::GeoTransform> for GdalDatasetGeoTransform {
     fn from(gdal_geo_transform: gdal::GeoTransform) -> Self {
         Self {
-            origin_coordinate: (gdal_geo_transform[0], gdal_geo_transform[1]).into(),
-            x_pixel_size: gdal_geo_transform[3],
+            origin_coordinate: (gdal_geo_transform[0], gdal_geo_transform[3]).into(),
+            x_pixel_size: gdal_geo_transform[1],
             y_pixel_size: gdal_geo_transform[5],
         }
     }

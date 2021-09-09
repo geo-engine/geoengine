@@ -563,7 +563,7 @@ mod tests {
                 rasterband_channel: 1,
                 geo_transform: GdalDatasetGeoTransform {
                     origin_coordinate: (600_000.0, 3_400_020.0).into(),
-                     x_pixel_size: 60.,
+                    x_pixel_size: 60.,
                     y_pixel_size: -60.,
                 },
                 width: 1830,
