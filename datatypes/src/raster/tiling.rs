@@ -23,6 +23,9 @@ impl TilingSpecification {
 
     /// create a `TilingStrategy` from self and pixel sizes
     pub fn strategy(self, x_pixel_size: f64, y_pixel_size: f64) -> TilingStrategy {
+        debug_assert!(x_pixel_size > 0.0);
+        debug_assert!(y_pixel_size < 0.0);
+
         TilingStrategy::new_with_tiling_spec(self, x_pixel_size, y_pixel_size)
     }
 }

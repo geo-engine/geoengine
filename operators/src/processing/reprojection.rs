@@ -486,7 +486,7 @@ where
         no_data_value: P,
     ) -> BoxStream<'a, Result<RasterTile2D<P>>> {
         let iter = tiling_spec
-            .strategy(query.spatial_resolution.x, query.spatial_resolution.y)
+            .strategy(query.spatial_resolution.x, -query.spatial_resolution.y)
             .tile_information_iterator(query.spatial_bounds)
             .map(move |tile| {
                 Ok(RasterTile2D::new_with_tile_info(
@@ -516,7 +516,7 @@ where
         let projector_source_target = CoordinateProjector::from_known_srs(self.from, self.to)?;
         let projector_target_source = CoordinateProjector::from_known_srs(self.to, self.from)?;
 
-        // if query does not intesect with source area of use, return stream with `EmptyTile`s
+        // if query does not intersect with source area of use, return stream with `EmptyTile`s
         let query_rect =
             match Self::clip_query(query, &projector_source_target, &projector_target_source) {
                 Ok(query_rect) => query_rect,
@@ -1242,12 +1242,10 @@ mod tests {
             .collect::<Vec<_>>()
             .await;
 
-        // TODO: fix this test
         assert_eq!(result.len(), 4);
 
         for r in result {
-            dbg!(r.tile_information());
-            // assert!(r.is_empty());
+            assert!(r.is_empty());
         }
     }
 
