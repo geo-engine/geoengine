@@ -69,7 +69,9 @@ impl TilingStrategy {
         let lr_idx = self
             .geo_transform
             .coordinate_to_grid_idx_2d(partition.lower_right());
-
+        // TODO: only subtract if lower right coordinate is exactly on pixel edge because
+        //       it is not included in the partition. We don't want to lose the pixel if
+        //       it is actually contained in the partition
         lr_idx - 1
     }
 

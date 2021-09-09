@@ -108,8 +108,10 @@ impl GeoTransform {
     ///
     #[inline]
     pub fn coordinate_to_grid_idx_2d(&self, coord: Coordinate2D) -> GridIdx2D {
-        let grid_x_index = ((coord.x - self.origin_coordinate.x) / self.x_pixel_size) as isize;
-        let grid_y_index = ((coord.y - self.origin_coordinate.y) / self.y_pixel_size) as isize;
+        let grid_x_index =
+            ((coord.x - self.origin_coordinate.x) / self.x_pixel_size).floor() as isize;
+        let grid_y_index =
+            ((coord.y - self.origin_coordinate.y) / self.y_pixel_size).floor() as isize;
         [grid_y_index, grid_x_index].into()
     }
 
@@ -270,6 +272,48 @@ mod tests {
         assert_eq!(
             geo_transform.coordinate_to_grid_idx_2d((4.0, 6.0).into()),
             GridIdx2D::new([-1, -1])
+        );
+    }
+
+    #[test]
+    fn geo_transform_coordinate_2d_to_global_grid_2d() {
+        let geo_transform = GeoTransform::new_with_coordinate_x_y(0.0, 1.0, 0.0, -1.0);
+        assert_eq!(
+            geo_transform.coordinate_to_grid_idx_2d((0.0, 0.0).into()),
+            GridIdx2D::new([0, 0])
+        );
+        assert_eq!(
+            geo_transform.coordinate_to_grid_idx_2d((0.5, 0.0).into()),
+            GridIdx2D::new([0, 0])
+        );
+        assert_eq!(
+            geo_transform.coordinate_to_grid_idx_2d((0.5, 0.5).into()),
+            GridIdx2D::new([-1, 0])
+        );
+        assert_eq!(
+            geo_transform.coordinate_to_grid_idx_2d((0.0, 0.5).into()),
+            GridIdx2D::new([-1, 0])
+        );
+        assert_eq!(
+            geo_transform.coordinate_to_grid_idx_2d((0.5, -0.5).into()),
+            GridIdx2D::new([0, 0])
+        );
+        assert_eq!(
+            geo_transform.coordinate_to_grid_idx_2d((-0.5, 0.5).into()),
+            GridIdx2D::new([-1, -1])
+        );
+        assert_eq!(
+            geo_transform.coordinate_to_grid_idx_2d((-0.5, -0.5).into()),
+            GridIdx2D::new([0, -1])
+        );
+
+        assert_eq!(
+            geo_transform.coordinate_to_grid_idx_2d((1.5, -0.5).into()),
+            GridIdx2D::new([0, 1])
+        );
+        assert_eq!(
+            geo_transform.coordinate_to_grid_idx_2d((-1.5, 1.5).into()),
+            GridIdx2D::new([-2, -2])
         );
     }
 
