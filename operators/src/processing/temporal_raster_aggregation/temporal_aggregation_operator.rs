@@ -199,13 +199,25 @@ where
                     no_data_ignoring_fold_future::<P, MinIgnoreNoDataAccFunction>,
                     P::max_value(),
                 )
-                .into_raster_overlap_adapter(&self.source, query, ctx, self.tiling_specification)
+                .into_raster_overlap_adapter(
+                    &self.source,
+                    query,
+                    ctx,
+                    self.tiling_specification,
+                    self.no_data_value,
+                )
                 .boxed()),
             Aggregation::Min {
                 ignore_no_data: false,
             } => Ok(self
                 .create_subquery(fold_future::<P, MinAccFunction>, P::max_value())
-                .into_raster_overlap_adapter(&self.source, query, ctx, self.tiling_specification)
+                .into_raster_overlap_adapter(
+                    &self.source,
+                    query,
+                    ctx,
+                    self.tiling_specification,
+                    self.no_data_value,
+                )
                 .boxed()),
             Aggregation::Max {
                 ignore_no_data: true,
@@ -214,13 +226,25 @@ where
                     no_data_ignoring_fold_future::<P, MaxIgnoreNoDataAccFunction>,
                     P::min_value(),
                 )
-                .into_raster_overlap_adapter(&self.source, query, ctx, self.tiling_specification)
+                .into_raster_overlap_adapter(
+                    &self.source,
+                    query,
+                    ctx,
+                    self.tiling_specification,
+                    self.no_data_value,
+                )
                 .boxed()),
             Aggregation::Max {
                 ignore_no_data: false,
             } => Ok(self
                 .create_subquery(fold_future::<P, MaxAccFunction>, P::min_value())
-                .into_raster_overlap_adapter(&self.source, query, ctx, self.tiling_specification)
+                .into_raster_overlap_adapter(
+                    &self.source,
+                    query,
+                    ctx,
+                    self.tiling_specification,
+                    self.no_data_value,
+                )
                 .boxed()),
             Aggregation::First {
                 ignore_no_data: true,
@@ -238,6 +262,7 @@ where
                         query,
                         ctx,
                         self.tiling_specification,
+                        self.no_data_value,
                     )
                     .boxed())
             }
@@ -254,6 +279,7 @@ where
                         query,
                         ctx,
                         self.tiling_specification,
+                        self.no_data_value,
                     )
                     .boxed())
             }
@@ -273,6 +299,7 @@ where
                         query,
                         ctx,
                         self.tiling_specification,
+                        self.no_data_value,
                     )
                     .boxed())
             }
@@ -290,6 +317,7 @@ where
                         query,
                         ctx,
                         self.tiling_specification,
+                        self.no_data_value,
                     )
                     .boxed())
             }
@@ -305,6 +333,7 @@ where
                         query,
                         ctx,
                         self.tiling_specification,
+                        self.no_data_value,
                     )
                     .boxed())
             }

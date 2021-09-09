@@ -102,6 +102,8 @@ where
     ended: bool,
     /// The `SubQuery` defines what this adapter does.
     sub_query: SubQuery,
+
+    no_data_value: Option<PixelType>,
 }
 
 impl<'a, PixelType, RasterProcessorType, SubQuery>
@@ -118,6 +120,7 @@ where
         tiling_spec: TilingSpecification,
         query_ctx: &'a dyn QueryContext,
         sub_query: SubQuery,
+        no_data_value: Option<PixelType>,
     ) -> Self {
         let tiling_strat = tiling_spec.strategy(
             query_rect.spatial_resolution.x,
@@ -140,6 +143,7 @@ where
             query_ctx,
             ended: false,
             sub_query,
+            no_data_value,
         }
     }
 }
@@ -269,7 +273,7 @@ where
                 fold_tile_spec,
                 GridOrEmpty::Empty(EmptyGrid2D::<PixelType>::new(
                     fold_tile_spec.tile_size_in_pixels,
-                    PixelType::zero(), // TODO: get no data value
+                    this.no_data_value.unwrap_or(PixelType::zero()),
                 )),
             ))
         };
@@ -471,12 +475,20 @@ where
         query: RasterQueryRectangle,
         ctx: &'a dyn QueryContext,
         tiling_specification: TilingSpecification,
+        no_data_value: Option<T>,
     ) -> RasterSubQueryAdapter<'a, T, S, Self>
     where
         S: RasterQueryProcessor<RasterType = T>,
         Self: Sized,
     {
-        RasterSubQueryAdapter::<'a, T, S, Self>::new(source, query, tiling_specification, ctx, self)
+        RasterSubQueryAdapter::<'a, T, S, Self>::new(
+            source,
+            query,
+            tiling_specification,
+            ctx,
+            self,
+            no_data_value,
+        )
     }
 }
 
@@ -757,6 +769,7 @@ mod tests {
             TileSubQueryIdentity {
                 fold_fn: fold_by_blit_future,
             },
+            no_data_value,
         );
         let res = a
             .map(Result::unwrap)
@@ -856,7 +869,14 @@ mod tests {
             fold_fn: fold_by_coordinate_lookup_future,
             in_spatial_res: query_rect.spatial_resolution,
         };
-        let a = RasterSubQueryAdapter::new(&qp, query_rect, tiling_strat, &query_ctx, state_gen);
+        let a = RasterSubQueryAdapter::new(
+            &qp,
+            query_rect,
+            tiling_strat,
+            &query_ctx,
+            state_gen,
+            no_data_value,
+        );
         let res = a
             .map(Result::unwrap)
             .collect::<Vec<RasterTile2D<u8>>>()

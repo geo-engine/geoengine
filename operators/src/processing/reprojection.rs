@@ -551,6 +551,7 @@ where
             self.tiling_spec,
             ctx,
             sub_query_spec,
+            Some(self.no_data_and_fill_value),
         );
 
         Ok(s.boxed())
