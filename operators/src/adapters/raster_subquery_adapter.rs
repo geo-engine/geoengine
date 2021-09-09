@@ -639,7 +639,6 @@ where
         })
     }
 
-    // TODO: return Result<Option<RasterQueryRectangle>>
     fn tile_query_rectangle(
         &self,
         tile_info: TileInformation,
