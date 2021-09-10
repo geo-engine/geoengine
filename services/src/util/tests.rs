@@ -7,12 +7,12 @@ use crate::datasets::upload::UploadId;
 use crate::datasets::upload::UploadRootPath;
 use crate::handlers::ErrorResponse;
 #[cfg(feature = "pro")]
-use crate::pro::{contexts::ProContext, projects::ProProjectDb, server::init_pro_routes};
+use crate::pro::{contexts::ProContext, projects::ProProjectDb};
 use crate::projects::{
     CreateProject, Layer, LayerUpdate, ProjectDb, ProjectId, RasterSymbology, STRectangle,
     Symbology, UpdateProject,
 };
-use crate::server::{configure_extractors, init_routes};
+use crate::server::configure_extractors;
 use crate::util::user_input::UserInput;
 use crate::util::Identifier;
 use crate::workflows::registry::WorkflowRegistry;
@@ -20,6 +20,7 @@ use crate::workflows::workflow::{Workflow, WorkflowId};
 use crate::{
     contexts::{Context, InMemoryContext},
     datasets::storage::{DatasetDefinition, MetaDataDefinition},
+    handlers, pro,
 };
 use actix_web::dev::ServiceResponse;
 use actix_web::{http::Method, middleware, test, web, App};
@@ -189,7 +190,17 @@ pub async fn send_test_request<C: SimpleContext>(
             .app_data(web::Data::new(ctx))
             .wrap(middleware::NormalizePath::default())
             .configure(configure_extractors)
-            .configure(init_routes::<C>),
+            .configure(configure_extractors)
+            .configure(handlers::datasets::init_dataset_routes::<C>)
+            .configure(handlers::plots::init_plot_routes::<C>)
+            .configure(handlers::projects::init_project_routes::<C>)
+            .configure(handlers::session::init_session_routes::<C>)
+            .configure(handlers::spatial_references::init_spatial_reference_routes::<C>)
+            .configure(handlers::upload::init_upload_routes::<C>)
+            .configure(handlers::wcs::init_wcs_routes::<C>)
+            .configure(handlers::wfs::init_wfs_routes::<C>)
+            .configure(handlers::wms::init_wms_routes::<C>)
+            .configure(handlers::workflows::init_workflow_routes::<C>),
     )
     .await;
     test::call_service(&app, req.to_request()).await
@@ -201,14 +212,26 @@ where
     C: ProContext,
     C::ProjectDB: ProProjectDb,
 {
-    let app = test::init_service(
-        App::new()
-            .app_data(web::Data::new(ctx))
-            .wrap(middleware::NormalizePath::default())
-            .configure(configure_extractors)
-            .configure(init_pro_routes::<C>),
-    )
-    .await;
+    #[allow(unused_mut)]
+    let mut app = App::new()
+        .app_data(web::Data::new(ctx))
+        .wrap(middleware::NormalizePath::default())
+        .configure(configure_extractors)
+        .configure(handlers::datasets::init_dataset_routes::<C>)
+        .configure(handlers::plots::init_plot_routes::<C>)
+        .configure(pro::handlers::projects::init_project_routes::<C>)
+        .configure(pro::handlers::users::init_user_routes::<C>)
+        .configure(handlers::spatial_references::init_spatial_reference_routes::<C>)
+        .configure(handlers::upload::init_upload_routes::<C>)
+        .configure(handlers::wcs::init_wcs_routes::<C>)
+        .configure(handlers::wfs::init_wfs_routes::<C>)
+        .configure(handlers::wms::init_wms_routes::<C>)
+        .configure(handlers::workflows::init_workflow_routes::<C>);
+    #[cfg(feature = "odm")]
+    {
+        app = app.configure(pro::handlers::drone_mapping::init_drone_mapping_routes::<C>);
+    }
+    let app = test::init_service(app).await;
     test::call_service(&app, req.to_request()).await
 }
 

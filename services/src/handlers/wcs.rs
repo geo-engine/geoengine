@@ -1,6 +1,6 @@
 use std::str::FromStr;
 
-use actix_web::{web, HttpResponse, Responder};
+use actix_web::{web, FromRequest, HttpResponse, Responder};
 use geoengine_operators::call_on_generic_raster_processor_gdal_types;
 use geoengine_operators::util::raster_stream_to_geotiff::raster_stream_to_geotiff_bytes;
 use log::info;
@@ -26,7 +26,15 @@ use geoengine_operators::engine::ResultDescriptor;
 use geoengine_operators::engine::{RasterOperator, RasterQueryRectangle};
 use geoengine_operators::processing::{Reprojection, ReprojectionParams};
 
-pub(crate) async fn wcs_handler<C: Context>(
+pub(crate) fn init_wcs_routes<C>(cfg: &mut web::ServiceConfig)
+where
+    C: Context,
+    C::Session: FromRequest,
+{
+    cfg.route("/wcs/{workflow}", web::get().to(wcs_handler::<C>));
+}
+
+async fn wcs_handler<C: Context>(
     workflow: web::Path<WorkflowId>,
     request: QueryEx<WcsRequest>,
     ctx: web::Data<C>,

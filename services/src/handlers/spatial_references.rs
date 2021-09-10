@@ -1,4 +1,4 @@
-use actix_web::{web, Responder};
+use actix_web::{web, FromRequest, Responder};
 use geoengine_datatypes::{
     primitives::BoundingBox2D,
     spatial_reference::{SpatialReference, SpatialReferenceAuthority},
@@ -7,6 +7,17 @@ use serde::{Deserialize, Serialize};
 
 use crate::handlers::Context;
 use crate::{error, error::Result};
+
+pub(crate) fn init_spatial_reference_routes<C>(cfg: &mut web::ServiceConfig)
+where
+    C: Context,
+    C::Session: FromRequest,
+{
+    cfg.route(
+        "/spatialReferenceSpecification/{srs_string}",
+        web::get().to(get_spatial_reference_specification_handler::<C>),
+    );
+}
 
 #[derive(Deserialize, Serialize, Debug, Clone, PartialEq)]
 #[serde(rename_all = "camelCase")]

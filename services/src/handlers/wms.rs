@@ -1,4 +1,4 @@
-use actix_web::{web, HttpResponse};
+use actix_web::{web, FromRequest, HttpResponse};
 use snafu::ResultExt;
 
 use geoengine_datatypes::primitives::{AxisAlignedRectangle, SpatialPartition2D};
@@ -27,10 +27,17 @@ use geoengine_operators::{
     call_on_generic_raster_processor, util::raster_stream_to_png::raster_stream_to_png_bytes,
 };
 use num_traits::AsPrimitive;
-
 use std::str::FromStr;
 
-pub(crate) async fn wms_handler<C: Context>(
+pub(crate) fn init_wms_routes<C>(cfg: &mut web::ServiceConfig)
+where
+    C: Context,
+    C::Session: FromRequest,
+{
+    cfg.route("/wms", web::get().to(wms_handler::<C>));
+}
+
+async fn wms_handler<C: Context>(
     request: QueryEx<WmsRequest>,
     ctx: web::Data<C>,
     _session: C::Session,

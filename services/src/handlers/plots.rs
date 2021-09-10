@@ -1,4 +1,4 @@
-use actix_web::{web, Responder};
+use actix_web::{web, FromRequest, Responder};
 use serde::{Deserialize, Serialize};
 use snafu::ResultExt;
 use uuid::Uuid;
@@ -7,13 +7,21 @@ use geoengine_datatypes::plots::PlotOutputFormat;
 use geoengine_datatypes::primitives::{BoundingBox2D, SpatialResolution, TimeInterval};
 use geoengine_operators::engine::{TypedPlotQueryProcessor, VectorQueryRectangle};
 
-use crate::contexts::Context;
 use crate::error;
 use crate::error::Result;
+use crate::handlers::Context;
 use crate::ogc::util::{parse_bbox, parse_time};
 use crate::util::parsing::parse_spatial_resolution;
 use crate::workflows::registry::WorkflowRegistry;
 use crate::workflows::workflow::WorkflowId;
+
+pub(crate) fn init_plot_routes<C>(cfg: &mut web::ServiceConfig)
+where
+    C: Context,
+    C::Session: FromRequest,
+{
+    cfg.route("/plot/{id}", web::get().to(get_plot_handler::<C>));
+}
 
 #[derive(Debug, Clone, PartialEq, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -106,7 +114,7 @@ pub(crate) struct GetPlot {
 ///   ]
 /// }
 /// ```
-pub(crate) async fn get_plot_handler<C: Context>(
+async fn get_plot_handler<C: Context>(
     id: web::Path<Uuid>,
     params: web::Query<GetPlot>,
     session: C::Session,

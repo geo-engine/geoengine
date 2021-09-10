@@ -3,7 +3,28 @@ use crate::handlers::Context;
 use crate::projects::{CreateProject, ProjectDb, ProjectId, ProjectListOptions, UpdateProject};
 use crate::util::user_input::UserInput;
 use crate::util::IdResponse;
-use actix_web::{web, HttpResponse, Responder};
+use actix_web::{web, FromRequest, HttpResponse, Responder};
+
+pub(crate) fn init_project_routes<C>(cfg: &mut web::ServiceConfig)
+where
+    C: Context,
+    C::Session: FromRequest,
+{
+    cfg.route("/project", web::post().to(create_project_handler::<C>))
+        .route("/projects", web::get().to(list_projects_handler::<C>))
+        .route(
+            "/project/{project}",
+            web::patch().to(update_project_handler::<C>),
+        )
+        .route(
+            "/project/{project}",
+            web::delete().to(delete_project_handler::<C>),
+        )
+        .route(
+            "/project/{project}",
+            web::get().to(load_project_handler::<C>),
+        );
+}
 
 /// Create a new project for the user by providing [`CreateProject`].
 ///
@@ -128,7 +149,7 @@ pub(crate) async fn list_projects_handler<C: Context>(
 ///   }
 /// }
 /// ```
-pub(crate) async fn load_project_handler<C: Context>(
+async fn load_project_handler<C: Context>(
     project: web::Path<ProjectId>,
     session: C::Session,
     ctx: web::Data<C>,

@@ -20,7 +20,7 @@ use crate::{
     datasets::{listing::DatasetListOptions, upload::UploadDb},
     util::IdResponse,
 };
-use actix_web::{web, Responder};
+use actix_web::{web, FromRequest, Responder};
 use gdal::{vector::Layer, Dataset};
 use gdal::{vector::OGRFieldType, DatasetOptions};
 use geoengine_datatypes::{
@@ -39,7 +39,33 @@ use geoengine_operators::{
 };
 use snafu::ResultExt;
 
-pub(crate) async fn list_providers_handler<C: Context>(
+pub(crate) fn init_dataset_routes<C>(cfg: &mut web::ServiceConfig)
+where
+    C: Context,
+    C::Session: FromRequest,
+{
+    cfg.route(
+        "/dataset/internal/{dataset}",
+        web::get().to(get_dataset_handler::<C>),
+    )
+    .route(
+        "/dataset/auto",
+        web::post().to(auto_create_dataset_handler::<C>),
+    )
+    .route("/dataset", web::post().to(create_dataset_handler::<C>))
+    .route(
+        "/dataset/suggest",
+        web::get().to(suggest_meta_data_handler::<C>),
+    )
+    .route("/providers", web::get().to(list_providers_handler::<C>))
+    .route(
+        "/datasets/external/{provider}",
+        web::get().to(list_external_datasets_handler::<C>),
+    )
+    .route("/datasets", web::get().to(list_datasets_handler::<C>));
+}
+
+async fn list_providers_handler<C: Context>(
     session: C::Session,
     ctx: web::Data<C>,
     options: web::Query<DatasetProviderListOptions>,
@@ -52,7 +78,7 @@ pub(crate) async fn list_providers_handler<C: Context>(
     Ok(web::Json(list))
 }
 
-pub(crate) async fn list_external_datasets_handler<C: Context>(
+async fn list_external_datasets_handler<C: Context>(
     provider: web::Path<DatasetProviderId>,
     session: C::Session,
     ctx: web::Data<C>,
@@ -98,7 +124,7 @@ pub(crate) async fn list_external_datasets_handler<C: Context>(
 ///   }
 /// ]
 /// ```
-pub(crate) async fn list_datasets_handler<C: Context>(
+async fn list_datasets_handler<C: Context>(
     _session: C::Session,
     ctx: web::Data<C>,
     options: web::Query<DatasetListOptions>,
@@ -134,7 +160,7 @@ pub(crate) async fn list_datasets_handler<C: Context>(
 ///   "sourceOperator": "OgrSource"
 /// }
 /// ```
-pub(crate) async fn get_dataset_handler<C: Context>(
+async fn get_dataset_handler<C: Context>(
     dataset: web::Path<InternalDatasetId>,
     _session: C::Session,
     ctx: web::Data<C>,
@@ -199,7 +225,7 @@ pub(crate) async fn get_dataset_handler<C: Context>(
 ///   }
 /// }
 /// ```
-pub(crate) async fn create_dataset_handler<C: Context>(
+async fn create_dataset_handler<C: Context>(
     session: C::Session,
     ctx: web::Data<C>,
     create: web::Json<CreateDataset>,
@@ -263,7 +289,7 @@ fn adjust_user_path_to_upload_path(meta: &mut MetaDataDefinition, upload: &Uploa
 ///   }
 /// }
 /// ```
-pub(crate) async fn auto_create_dataset_handler<C: Context>(
+async fn auto_create_dataset_handler<C: Context>(
     session: C::Session,
     ctx: web::Data<C>,
     create: web::Json<AutoCreateDataset>,
@@ -297,7 +323,7 @@ pub(crate) async fn auto_create_dataset_handler<C: Context>(
     Ok(web::Json(IdResponse::from(id)))
 }
 
-pub(crate) async fn suggest_meta_data_handler<C: Context>(
+async fn suggest_meta_data_handler<C: Context>(
     session: C::Session,
     ctx: web::Data<C>,
     suggest: web::Query<SuggestMetaData>,

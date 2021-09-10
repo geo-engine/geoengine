@@ -55,7 +55,17 @@ where
             .wrap(middleware::Logger::default())
             .wrap(middleware::NormalizePath::default())
             .configure(configure_extractors)
-            .configure(init_routes::<C>);
+            .configure(handlers::datasets::init_dataset_routes::<C>)
+            .configure(handlers::plots::init_plot_routes::<C>)
+            .configure(handlers::projects::init_project_routes::<C>)
+            .configure(handlers::session::init_session_routes::<C>)
+            .configure(handlers::spatial_references::init_spatial_reference_routes::<C>)
+            .configure(handlers::upload::init_upload_routes::<C>)
+            .configure(handlers::wcs::init_wcs_routes::<C>)
+            .configure(handlers::wfs::init_wfs_routes::<C>)
+            .configure(handlers::wms::init_wms_routes::<C>)
+            .configure(handlers::workflows::init_workflow_routes::<C>)
+            .route("/version", web::get().to(show_version_handler)); // TODO: allow disabling this function via config or feature flag
 
         if let Some(static_files_dir) = static_files_dir.clone() {
             app.service(Files::new("/static", static_files_dir))
@@ -145,116 +155,6 @@ pub(crate) fn configure_extractors(cfg: &mut web::ServiceConfig) {
         )
         .into()
     }));
-}
-
-pub(crate) fn init_routes<C>(cfg: &mut web::ServiceConfig)
-where
-    C: SimpleContext,
-{
-    cfg.route("/version", web::get().to(show_version_handler)) // TODO: allow disabling this function via config or feature flag
-        .route(
-            "/anonymous",
-            web::post().to(handlers::session::anonymous_handler::<C>),
-        )
-        .route("/wms", web::get().to(handlers::wms::wms_handler::<C>))
-        .route("/wfs", web::get().to(handlers::wfs::wfs_handler::<C>))
-        .route(
-            "/wcs/{workflow}",
-            web::get().to(handlers::wcs::wcs_handler::<C>),
-        )
-        .route(
-            "/workflow",
-            web::post().to(handlers::workflows::register_workflow_handler::<C>),
-        )
-        .route(
-            "/workflow/{id}",
-            web::get().to(handlers::workflows::load_workflow_handler::<C>),
-        )
-        .route(
-            "/workflow/{id}/metadata",
-            web::get().to(handlers::workflows::get_workflow_metadata_handler::<C>),
-        )
-        .route(
-            "/workflow/{id}/provenance",
-            web::get().to(handlers::workflows::get_workflow_provenance_handler::<C>),
-        )
-        .route(
-            "datasetFromWorkflow/{workflow_id}",
-            web::post().to(handlers::workflows::dataset_from_workflow_handler::<C>),
-        )
-        .route(
-            "/session",
-            web::get().to(handlers::session::session_handler::<C>),
-        )
-        .route(
-            "/session/project/{project}",
-            web::post().to(handlers::session::session_project_handler::<C>),
-        )
-        .route(
-            "/session/view",
-            web::post().to(handlers::session::session_view_handler::<C>),
-        )
-        .route(
-            "/project",
-            web::post().to(handlers::projects::create_project_handler::<C>),
-        )
-        .route(
-            "/projects",
-            web::get().to(handlers::projects::list_projects_handler::<C>),
-        )
-        .route(
-            "/project/{project}",
-            web::patch().to(handlers::projects::update_project_handler::<C>),
-        )
-        .route(
-            "/project/{project}",
-            web::delete().to(handlers::projects::delete_project_handler::<C>),
-        )
-        .route(
-            "/project/{project}",
-            web::get().to(handlers::projects::load_project_handler::<C>),
-        )
-        .route(
-            "/dataset/internal/{dataset}",
-            web::get().to(handlers::datasets::get_dataset_handler::<C>),
-        )
-        .route(
-            "/dataset/auto",
-            web::post().to(handlers::datasets::auto_create_dataset_handler::<C>),
-        )
-        .route(
-            "/dataset",
-            web::post().to(handlers::datasets::create_dataset_handler::<C>),
-        )
-        .route(
-            "/dataset/suggest",
-            web::get().to(handlers::datasets::suggest_meta_data_handler::<C>),
-        )
-        .route(
-            "/providers",
-            web::get().to(handlers::datasets::list_providers_handler::<C>),
-        )
-        .route(
-            "/datasets/external/{provider}",
-            web::get().to(handlers::datasets::list_external_datasets_handler::<C>),
-        )
-        .route(
-            "/datasets",
-            web::get().to(handlers::datasets::list_datasets_handler::<C>),
-        )
-        .route(
-            "/plot/{id}",
-            web::get().to(handlers::plots::get_plot_handler::<C>),
-        )
-        .route(
-            "/upload",
-            web::post().to(handlers::upload::upload_handler::<C>),
-        )
-        .route(
-            "/spatialReferenceSpecification/{srs_string}",
-            web::get()
-                .to(handlers::spatial_references::get_spatial_reference_specification_handler::<C>),
-        );
 }
 
 /// Shows information about the server software version.

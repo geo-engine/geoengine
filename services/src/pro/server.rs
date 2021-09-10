@@ -26,16 +26,31 @@ where
     C: ProContext,
     C::ProjectDB: ProProjectDb,
 {
-    //handlers::workflows::dataset_from_workflow_handler(ctx.clone()),
     let wrapped_ctx = web::Data::new(ctx);
 
     HttpServer::new(move || {
-        let app = App::new()
+        #[allow(unused_mut)]
+        let mut app = App::new()
             .app_data(wrapped_ctx.clone())
             .wrap(middleware::Logger::default())
             .wrap(middleware::NormalizePath::default())
             .configure(configure_extractors)
-            .configure(init_pro_routes::<C>);
+            .configure(handlers::datasets::init_dataset_routes::<C>)
+            .configure(handlers::plots::init_plot_routes::<C>)
+            .configure(pro::handlers::projects::init_project_routes::<C>)
+            .configure(pro::handlers::users::init_user_routes::<C>)
+            .configure(handlers::spatial_references::init_spatial_reference_routes::<C>)
+            .configure(handlers::upload::init_upload_routes::<C>)
+            .configure(handlers::wcs::init_wcs_routes::<C>)
+            .configure(handlers::wfs::init_wfs_routes::<C>)
+            .configure(handlers::wms::init_wms_routes::<C>)
+            .configure(handlers::workflows::init_workflow_routes::<C>)
+            .configure(pro::handlers::drone_mapping::init_drone_mapping_routes::<C>)
+            .route("/version", web::get().to(show_version_handler)); // TODO: allow disabling this function via config or feature flag
+        #[cfg(feature = "odm")]
+        {
+            app = app.configure(pro::handlers::drone_mapping::init_drone_mapping_routes::<C>);
+        }
 
         if let Some(static_files_dir) = static_files_dir.clone() {
             app.service(Files::new("/static", static_files_dir))
@@ -100,159 +115,5 @@ pub async fn start_pro_server(static_files_dir: Option<PathBuf>) -> Result<()> {
             #[cfg(not(feature = "postgres"))]
             panic!("Postgres backend was selected but the postgres feature wasn't activated during compilation")
         }
-    }
-}
-
-pub(crate) fn init_pro_routes<C>(cfg: &mut web::ServiceConfig)
-where
-    C: ProContext,
-    C::ProjectDB: ProProjectDb,
-{
-    cfg.route("/version", web::get().to(show_version_handler)) // TODO: allow disabling this function via config or feature flag
-        .route(
-            "/user",
-            web::post().to(pro::handlers::users::register_user_handler::<C>),
-        )
-        .route(
-            "/anonymous",
-            web::post().to(pro::handlers::users::anonymous_handler::<C>),
-        )
-        .route(
-            "/login",
-            web::post().to(pro::handlers::users::login_handler::<C>),
-        )
-        .route(
-            "/logout",
-            web::post().to(pro::handlers::users::logout_handler::<C>),
-        )
-        .route("/wms", web::get().to(handlers::wms::wms_handler::<C>))
-        .route("/wfs", web::get().to(handlers::wfs::wfs_handler::<C>))
-        .route(
-            "/wcs/{workflow}",
-            web::get().to(handlers::wcs::wcs_handler::<C>),
-        )
-        .route(
-            "/workflow",
-            web::post().to(handlers::workflows::register_workflow_handler::<C>),
-        )
-        .route(
-            "/workflow/{id}",
-            web::get().to(handlers::workflows::load_workflow_handler::<C>),
-        )
-        .route(
-            "/workflow/{id}/metadata",
-            web::get().to(handlers::workflows::get_workflow_metadata_handler::<C>),
-        )
-        .route(
-            "/workflow/{id}/provenance",
-            web::get().to(handlers::workflows::get_workflow_provenance_handler::<C>),
-        )
-        .route(
-            "datasetFromWorkflow/{workflow_id}",
-            web::post().to(handlers::workflows::dataset_from_workflow_handler::<C>),
-        )
-        .route(
-            "/session",
-            web::get().to(handlers::session::session_handler::<C>),
-        )
-        .route(
-            "/session/project/{project}",
-            web::post().to(pro::handlers::users::session_project_handler::<C>),
-        )
-        .route(
-            "/session/view",
-            web::post().to(pro::handlers::users::session_view_handler::<C>),
-        )
-        .route(
-            "/project",
-            web::post().to(handlers::projects::create_project_handler::<C>),
-        )
-        .route(
-            "/projects",
-            web::get().to(handlers::projects::list_projects_handler::<C>),
-        )
-        .route(
-            "/project/{project}",
-            web::patch().to(handlers::projects::update_project_handler::<C>),
-        )
-        .route(
-            "/project/{project}",
-            web::delete().to(handlers::projects::delete_project_handler::<C>),
-        )
-        .route(
-            "/project/{project}",
-            web::get().to(pro::handlers::projects::load_project_latest_handler::<C>),
-        )
-        .route(
-            "/project/{project}/{version}",
-            web::get().to(pro::handlers::projects::load_project_version_handler::<C>),
-        )
-        .route(
-            "/project/versions",
-            web::get().to(pro::handlers::projects::project_versions_handler::<C>),
-        )
-        .route(
-            "/project/permission/add",
-            web::post().to(pro::handlers::projects::add_permission_handler::<C>),
-        )
-        .route(
-            "/project/permission",
-            web::delete().to(pro::handlers::projects::remove_permission_handler::<C>),
-        )
-        .route(
-            "/project/{project}/permissions",
-            web::get().to(pro::handlers::projects::list_permissions_handler::<C>),
-        )
-        .route(
-            "/dataset/internal/{dataset}",
-            web::get().to(handlers::datasets::get_dataset_handler::<C>),
-        )
-        .route(
-            "/dataset/auto",
-            web::post().to(handlers::datasets::auto_create_dataset_handler::<C>),
-        )
-        .route(
-            "/dataset",
-            web::post().to(handlers::datasets::create_dataset_handler::<C>),
-        )
-        .route(
-            "/dataset/suggest",
-            web::get().to(handlers::datasets::suggest_meta_data_handler::<C>),
-        )
-        .route(
-            "/providers",
-            web::get().to(handlers::datasets::list_providers_handler::<C>),
-        )
-        .route(
-            "/datasets/external/{provider}",
-            web::get().to(handlers::datasets::list_external_datasets_handler::<C>),
-        )
-        .route(
-            "/datasets",
-            web::get().to(handlers::datasets::list_datasets_handler::<C>),
-        )
-        .route(
-            "/plot/{id}",
-            web::get().to(handlers::plots::get_plot_handler::<C>),
-        )
-        .route(
-            "/upload",
-            web::post().to(handlers::upload::upload_handler::<C>),
-        )
-        .route(
-            "/spatialReferenceSpecification/{srs_string}",
-            web::get()
-                .to(handlers::spatial_references::get_spatial_reference_specification_handler::<C>),
-        );
-    #[cfg(feature = "odm")]
-    {
-        cfg.route(
-            "/droneMapping/task",
-            web::post().to(pro::handlers::drone_mapping::start_task_handler::<C>),
-        )
-        .route(
-            "/droneMapping/dataset/{task_id}",
-            web::post().to(pro::handlers::drone_mapping::dataset_from_drone_mapping_handler::<C>),
-        );
     }
 }

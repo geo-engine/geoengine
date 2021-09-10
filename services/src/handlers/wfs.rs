@@ -1,4 +1,4 @@
-use actix_web::{web, HttpResponse};
+use actix_web::{web, FromRequest, HttpResponse};
 use snafu::ResultExt;
 
 use crate::contexts::MockableSession;
@@ -30,7 +30,15 @@ use geoengine_operators::processing::{Reprojection, ReprojectionParams};
 use serde_json::json;
 use std::str::FromStr;
 
-pub(crate) async fn wfs_handler<C: Context>(
+pub(crate) fn init_wfs_routes<C>(cfg: &mut web::ServiceConfig)
+where
+    C: Context,
+    C::Session: FromRequest,
+{
+    cfg.route("/wfs", web::get().to(wfs_handler::<C>));
+}
+
+async fn wfs_handler<C: Context>(
     request: QueryEx<WfsRequest>,
     ctx: web::Data<C>,
     _session: C::Session,

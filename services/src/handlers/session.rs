@@ -5,6 +5,19 @@ use crate::{
     projects::{ProjectId, STRectangle},
 };
 
+pub(crate) fn init_session_routes<C>(cfg: &mut web::ServiceConfig)
+where
+    C: SimpleContext,
+{
+    cfg.route("/anonymous", web::post().to(anonymous_handler::<C>))
+        .route("/session", web::get().to(session_handler::<C>))
+        .route(
+            "/session/project/{project}",
+            web::post().to(session_project_handler::<C>),
+        )
+        .route("/session/view", web::post().to(session_view_handler::<C>));
+}
+
 /// Creates session for anonymous user.
 ///
 /// # Example
@@ -27,7 +40,7 @@ use crate::{
 ///   "view": null
 /// }
 /// ```
-pub(crate) async fn anonymous_handler<C: SimpleContext>(ctx: web::Data<C>) -> impl Responder {
+async fn anonymous_handler<C: SimpleContext>(ctx: web::Data<C>) -> impl Responder {
     web::Json(ctx.default_session_ref().await.clone())
 }
 
@@ -59,7 +72,7 @@ pub(crate) async fn anonymous_handler<C: SimpleContext>(ctx: web::Data<C>) -> im
 ///
 /// This call fails if the session is invalid.
 #[allow(clippy::unused_async)] // the function signature of request handlers requires it
-pub(crate) async fn session_handler<C: Context>(session: C::Session) -> impl Responder {
+async fn session_handler<C: Context>(session: C::Session) -> impl Responder {
     web::Json(session)
 }
 
@@ -75,7 +88,7 @@ pub(crate) async fn session_handler<C: Context>(session: C::Session) -> impl Res
 /// # Errors
 ///
 /// This call fails if the session is invalid.
-pub(crate) async fn session_project_handler<C: SimpleContext>(
+async fn session_project_handler<C: SimpleContext>(
     project: web::Path<ProjectId>,
     _session: C::Session,
     ctx: web::Data<C>,
@@ -110,7 +123,7 @@ pub(crate) async fn session_project_handler<C: SimpleContext>(
 /// # Errors
 ///
 /// This call fails if the session is invalid.
-pub(crate) async fn session_view_handler<C: SimpleContext>(
+async fn session_view_handler<C: SimpleContext>(
     _session: C::Session,
     ctx: web::Data<C>,
     view: web::Json<STRectangle>,

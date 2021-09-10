@@ -13,6 +13,21 @@ use crate::util::IdResponse;
 use actix_web::{web, HttpResponse, Responder};
 use snafu::ResultExt;
 
+pub(crate) fn init_user_routes<C>(cfg: &mut web::ServiceConfig)
+where
+    C: ProContext,
+{
+    cfg.route("/user", web::post().to(register_user_handler::<C>))
+        .route("/anonymous", web::post().to(anonymous_handler::<C>))
+        .route("/login", web::post().to(login_handler::<C>))
+        .route("/logout", web::post().to(logout_handler::<C>))
+        .route(
+            "/session/project/{project}",
+            web::post().to(session_project_handler::<C>),
+        )
+        .route("/session/view", web::post().to(session_view_handler::<C>));
+}
+
 /// Registers a user by providing [`UserRegistration`] parameters.
 ///
 /// # Example

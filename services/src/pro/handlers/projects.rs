@@ -1,10 +1,58 @@
 use crate::error::Result;
+use crate::handlers;
 use crate::pro::contexts::ProContext;
 use crate::pro::projects::LoadVersion;
 use crate::pro::projects::{ProProjectDb, UserProjectPermission};
 use crate::projects::{ProjectId, ProjectVersionId};
 
 use actix_web::{web, HttpResponse, Responder};
+
+pub(crate) fn init_project_routes<C>(cfg: &mut web::ServiceConfig)
+where
+    C: ProContext,
+    C::ProjectDB: ProProjectDb,
+{
+    cfg.route(
+        "/project",
+        web::post().to(handlers::projects::create_project_handler::<C>),
+    )
+    .route(
+        "/projects",
+        web::get().to(handlers::projects::list_projects_handler::<C>),
+    )
+    .route(
+        "/project/{project}",
+        web::patch().to(handlers::projects::update_project_handler::<C>),
+    )
+    .route(
+        "/project/{project}",
+        web::delete().to(handlers::projects::delete_project_handler::<C>),
+    )
+    .route(
+        "/project/{project}",
+        web::get().to(load_project_latest_handler::<C>),
+    )
+    .route(
+        "/project/{project}/{version}",
+        web::get().to(load_project_version_handler::<C>),
+    )
+    .route(
+        "/project/versions",
+        web::get().to(project_versions_handler::<C>),
+    )
+    .route(
+        "/project/permission/add",
+        web::post().to(add_permission_handler::<C>),
+    )
+    .route(
+        "/project/permission",
+        web::delete().to(remove_permission_handler::<C>),
+    )
+    .route(
+        "/project/{project}/permissions",
+        web::get().to(list_permissions_handler::<C>),
+    );
+}
 
 /// Retrieves details about a [project](crate::projects::project::Project).
 /// If no version is specified, it loads the latest version.

@@ -32,6 +32,21 @@ use tokio::io::AsyncWriteExt;
 use tokio_util::codec::{BytesCodec, FramedRead};
 use uuid::Uuid;
 
+pub(crate) fn init_drone_mapping_routes<C>(cfg: &mut web::ServiceConfig)
+where
+    C: ProContext,
+    C::ProjectDB: ProProjectDb,
+{
+    cfg.route(
+        "/droneMapping/task",
+        web::post().to(start_task_handler::<C>),
+    )
+    .route(
+        "/droneMapping/dataset/{task_id}",
+        web::post().to(dataset_from_drone_mapping_handler::<C>),
+    );
+}
+
 #[derive(Deserialize, Serialize, Clone, Debug)]
 pub struct TaskStart {
     pub upload: UploadId,
@@ -77,7 +92,7 @@ pub struct CreateDatasetResponse {
 ///   "id": "aae098a4-3272-439b-bd93-40b6c39560cb",
 /// },
 /// ```
-pub(crate) async fn start_task_handler<C: ProContext>(
+async fn start_task_handler<C: ProContext>(
     _session: C::Session,
     _ctx: web::Data<C>,
     task_start: web::Json<TaskStart>,
@@ -185,7 +200,7 @@ where
 ///   }
 /// }
 /// ```
-pub(crate) async fn dataset_from_drone_mapping_handler<C: ProContext>(
+async fn dataset_from_drone_mapping_handler<C: ProContext>(
     task_id: web::Path<Uuid>,
     session: C::Session,
     ctx: web::Data<C>,

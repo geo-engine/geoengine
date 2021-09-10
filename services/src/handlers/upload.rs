@@ -1,7 +1,7 @@
 use tokio::{fs, io::AsyncWriteExt};
 
 use actix_multipart::Multipart;
-use actix_web::{web, Responder};
+use actix_web::{web, FromRequest, Responder};
 use futures::StreamExt;
 use geoengine_datatypes::util::Identifier;
 
@@ -11,6 +11,14 @@ use crate::error::Result;
 use crate::handlers::Context;
 use crate::util::IdResponse;
 use snafu::ResultExt;
+
+pub(crate) fn init_upload_routes<C>(cfg: &mut web::ServiceConfig)
+where
+    C: Context,
+    C::Session: FromRequest,
+{
+    cfg.route("/upload", web::post().to(upload_handler::<C>));
+}
 
 /// Uploads files.
 ///
@@ -32,7 +40,7 @@ use snafu::ResultExt;
 ///   "id": "420b06de-0a7e-45cb-9c1c-ea901b46ab69"
 /// }
 /// ```
-pub(crate) async fn upload_handler<C: Context>(
+async fn upload_handler<C: Context>(
     session: C::Session,
     ctx: web::Data<C>,
     mut body: Multipart,

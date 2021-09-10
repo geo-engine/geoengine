@@ -10,7 +10,7 @@ use crate::util::user_input::UserInput;
 use crate::util::IdResponse;
 use crate::workflows::registry::WorkflowRegistry;
 use crate::workflows::workflow::{Workflow, WorkflowId};
-use actix_web::{web, Responder};
+use actix_web::{web, FromRequest, Responder};
 use futures::future::join_all;
 use geoengine_datatypes::dataset::{DatasetId, InternalDatasetId};
 use geoengine_datatypes::primitives::AxisAlignedRectangle;
@@ -26,6 +26,27 @@ use geoengine_operators::{call_on_generic_raster_processor_gdal_types, call_on_t
 use serde::{Deserialize, Serialize};
 use snafu::ResultExt;
 use tokio::fs;
+
+pub(crate) fn init_workflow_routes<C>(cfg: &mut web::ServiceConfig)
+where
+    C: Context,
+    C::Session: FromRequest,
+{
+    cfg.route("/workflow", web::post().to(register_workflow_handler::<C>))
+        .route("/workflow/{id}", web::get().to(load_workflow_handler::<C>))
+        .route(
+            "/workflow/{id}/metadata",
+            web::get().to(get_workflow_metadata_handler::<C>),
+        )
+        .route(
+            "/workflow/{id}/provenance",
+            web::get().to(get_workflow_provenance_handler::<C>),
+        )
+        .route(
+            "datasetFromWorkflow/{workflow_id}",
+            web::post().to(dataset_from_workflow_handler::<C>),
+        );
+}
 
 /// Registers a new [Workflow].
 ///
@@ -54,7 +75,7 @@ use tokio::fs;
 ///   "id": "cee25e8c-18a0-5f1b-a504-0bc30de21e06"
 /// }
 /// ```
-pub(crate) async fn register_workflow_handler<C: Context>(
+async fn register_workflow_handler<C: Context>(
     _session: C::Session,
     ctx: web::Data<C>,
     workflow: web::Json<Workflow>,
@@ -96,7 +117,7 @@ pub(crate) async fn register_workflow_handler<C: Context>(
 ///   }
 /// }
 /// ```
-pub(crate) async fn load_workflow_handler<C: Context>(
+async fn load_workflow_handler<C: Context>(
     id: web::Path<WorkflowId>,
     _session: C::Session,
     ctx: web::Data<C>,
@@ -125,7 +146,7 @@ pub(crate) async fn load_workflow_handler<C: Context>(
 ///   "columns": {}
 /// }
 /// ```
-pub(crate) async fn get_workflow_metadata_handler<C: Context>(
+async fn get_workflow_metadata_handler<C: Context>(
     id: web::Path<WorkflowId>,
     session: C::Session,
     ctx: web::Data<C>,
@@ -182,7 +203,7 @@ pub(crate) async fn get_workflow_metadata_handler<C: Context>(
 ///   "uri": "http://example.org/"
 /// }]
 /// ```
-pub(crate) async fn get_workflow_provenance_handler<C: Context>(
+async fn get_workflow_provenance_handler<C: Context>(
     id: web::Path<WorkflowId>,
     _session: C::Session,
     ctx: web::Data<C>,
@@ -209,7 +230,7 @@ pub(crate) async fn get_workflow_provenance_handler<C: Context>(
 
 /// parameter for the dataset from workflow handler (body)
 #[derive(Clone, Debug, Deserialize, Serialize)]
-pub(crate) struct RasterDatasetFromWorkflow {
+struct RasterDatasetFromWorkflow {
     name: String,
     description: Option<String>,
     query: RasterQueryRectangle,
@@ -266,7 +287,7 @@ struct RasterDatasetFromWorkflowResult {
 ///   }
 /// }
 /// ```
-pub(crate) async fn dataset_from_workflow_handler<C: Context>(
+async fn dataset_from_workflow_handler<C: Context>(
     workflow_id: web::Path<WorkflowId>,
     session: C::Session,
     ctx: web::Data<C>,
