@@ -144,7 +144,9 @@ pub async fn start_pro_server(
                     .user(&db_config.user)
                     .password(&db_config.password)
                     .host(&db_config.host)
-                    .dbname(&db_config.database);
+                    .dbname(&db_config.database)
+                    // fix schema by providing `search_path` option
+                    .options(&format!("-c search_path={}", db_config.schema));
 
                 let ctx = PostgresContext::new(pg_config, NoTls).await?;
 

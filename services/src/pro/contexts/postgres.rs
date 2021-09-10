@@ -362,11 +362,13 @@ mod tests {
         CreateProject, Layer, LayerUpdate, OrderBy, Plot, PlotUpdate, PointSymbology, ProjectDb,
         ProjectFilter, ProjectId, ProjectListOptions, ProjectListing, STRectangle, UpdateProject,
     };
+    use crate::util::config::{get_config_element, Postgres};
     use crate::util::user_input::UserInput;
     use crate::workflows::registry::WorkflowRegistry;
     use crate::workflows::workflow::Workflow;
-    use bb8_postgres::tokio_postgres;
-    use bb8_postgres::tokio_postgres::NoTls;
+    use bb8_postgres::bb8::ManageConnection;
+    use bb8_postgres::tokio_postgres::{self, NoTls};
+    use futures::Future;
     use geoengine_datatypes::primitives::Coordinate2D;
     use geoengine_datatypes::spatial_reference::{SpatialReference, SpatialReferenceOption};
     use geoengine_operators::engine::{
@@ -374,50 +376,111 @@ mod tests {
     };
     use geoengine_operators::mock::{MockPointSource, MockPointSourceParams};
     use geoengine_operators::plot::{Statistics, StatisticsParams};
-    use std::str::FromStr;
+    use rand::RngCore;
+    use tokio::runtime::Handle;
 
-    #[tokio::test]
-    async fn test() {
-        // TODO: load from test config
-        let config = tokio_postgres::config::Config::from_str(
-            "postgresql://geoengine:geoengine@localhost:5432",
-        )
-        .unwrap();
+    /// Setup database schema and return its name.
+    async fn setup_db() -> (tokio_postgres::Config, String) {
+        let mut db_config = get_config_element::<Postgres>().unwrap();
+        db_config.schema = format!("geoengine_test_{}", rand::thread_rng().next_u64()); // generate random temp schema
 
-        // TODO: clean schema before test
+        let mut pg_config = tokio_postgres::Config::new();
+        pg_config
+            .user(&db_config.user)
+            .password(&db_config.password)
+            .host(&db_config.host)
+            .dbname(&db_config.database);
 
-        let ctx = PostgresContext::new(config, tokio_postgres::NoTls)
+        // generate schema with prior connection
+        PostgresConnectionManager::new(pg_config.clone(), NoTls)
+            .connect()
+            .await
+            .unwrap()
+            .batch_execute(&format!("CREATE SCHEMA {};", &db_config.schema))
             .await
             .unwrap();
 
-        anonymous(&ctx).await;
+        // fix schema by providing `search_path` option
+        pg_config.options(&format!("-c search_path={}", db_config.schema));
 
-        let _user_id = user_reg_login(&ctx).await;
+        (pg_config, db_config.schema)
+    }
 
-        let session = ctx
-            .user_db()
-            .write()
+    /// Tear down database schema.
+    async fn tear_down_db(pg_config: tokio_postgres::Config, schema: &str) {
+        // generate schema with prior connection
+        PostgresConnectionManager::new(pg_config, NoTls)
+            .connect()
             .await
-            .login(UserCredentials {
-                email: "foo@bar.de".into(),
-                password: "secret123".into(),
+            .unwrap()
+            .batch_execute(&format!("DROP SCHEMA {} CASCADE;", schema))
+            .await
+            .unwrap();
+    }
+
+    async fn with_temp_context<F, Fut>(f: F)
+    where
+        F: FnOnce(PostgresContext<NoTls>) -> Fut + std::panic::UnwindSafe + Send + 'static,
+        Fut: Future<Output = ()> + Send,
+    {
+        let (pg_config, schema) = setup_db().await;
+
+        // catch all panics and clean up first…
+        let executed_fn = {
+            let pg_config = pg_config.clone();
+            std::panic::catch_unwind(move || {
+                tokio::task::block_in_place(move || {
+                    Handle::current().block_on(async move {
+                        let ctx = PostgresContext::new(pg_config, tokio_postgres::NoTls)
+                            .await
+                            .unwrap();
+                        f(ctx).await
+                    })
+                })
             })
-            .await
-            .unwrap();
+        };
 
-        create_projects(&ctx, &session).await;
+        tear_down_db(pg_config, &schema).await;
 
-        let projects = list_projects(&ctx, &session).await;
+        // then throw errors afterwards
+        if let Err(err) = executed_fn {
+            std::panic::resume_unwind(err);
+        }
+    }
 
-        set_session(&ctx, &projects).await;
+    #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
+    async fn test() {
+        with_temp_context(|ctx| async move {
+            anonymous(&ctx).await;
 
-        let project_id = projects[0].id;
+            let _user_id = user_reg_login(&ctx).await;
 
-        update_projects(&ctx, &session, project_id).await;
+            let session = ctx
+                .user_db()
+                .write()
+                .await
+                .login(UserCredentials {
+                    email: "foo@bar.de".into(),
+                    password: "secret123".into(),
+                })
+                .await
+                .unwrap();
 
-        add_permission(&ctx, &session, project_id).await;
+            create_projects(&ctx, &session).await;
 
-        delete_project(ctx, &session, project_id).await;
+            let projects = list_projects(&ctx, &session).await;
+
+            set_session(&ctx, &projects).await;
+
+            let project_id = projects[0].id;
+
+            update_projects(&ctx, &session, project_id).await;
+
+            add_permission(&ctx, &session, project_id).await;
+
+            delete_project(&ctx, &session, project_id).await;
+        })
+        .await;
     }
 
     async fn set_session(ctx: &PostgresContext<NoTls>, projects: &[ProjectListing]) {
@@ -426,47 +489,30 @@ mod tests {
             password: "secret123".into(),
         };
 
-        let session = ctx
-            .user_db_ref_mut()
-            .await
-            .login(credentials)
-            .await
-            .unwrap();
+        let mut user_db = ctx.user_db_ref_mut().await;
 
-        ctx.user_db_ref_mut()
-            .await
+        let session = user_db.login(credentials).await.unwrap();
+
+        user_db
             .set_session_project(&session, projects[0].id)
             .await
             .unwrap();
+
         assert_eq!(
-            ctx.user_db_ref()
-                .await
-                .session(session.id)
-                .await
-                .unwrap()
-                .project,
+            user_db.session(session.id).await.unwrap().project,
             Some(projects[0].id)
         );
 
         let rect = STRectangle::new_unchecked(SpatialReference::epsg_4326(), 0., 1., 2., 3., 1, 2);
-        ctx.user_db_ref_mut()
-            .await
+        user_db
             .set_session_view(&session, rect.clone())
             .await
             .unwrap();
-        assert_eq!(
-            ctx.user_db_ref()
-                .await
-                .session(session.id)
-                .await
-                .unwrap()
-                .view,
-            Some(rect)
-        );
+        assert_eq!(user_db.session(session.id).await.unwrap().view, Some(rect));
     }
 
     async fn delete_project(
-        ctx: PostgresContext<NoTls>,
+        ctx: &PostgresContext<NoTls>,
         session: &UserSession,
         project_id: ProjectId,
     ) {
