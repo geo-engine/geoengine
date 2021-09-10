@@ -84,20 +84,18 @@ impl FromRequest for UserSession {
             Err(error) => return Box::pin(err(error)),
         };
 
-        if let Some(mem_ctx) = req.app_data::<web::Data<ProInMemoryContext>>() {
-            let mem_ctx = mem_ctx.get_ref().clone();
-            async move { mem_ctx.session_by_id(token).await.map_err(Into::into) }.boxed_local()
-        } else {
-            #[cfg(not(feature = "postgres"))]
-            unreachable!("if postgres was disabled only an in memory context could be registered");
-            #[cfg(feature = "postgres")]
-            {
-                let pg_ctx = req.app_data::<web::Data<PostgresContext<NoTls>>>().expect(
-                    "PostgresContext will be registered because UserSession is only used in pro mode and there was no in memory context",
-                );
+        #[cfg(feature = "postgres")]
+        {
+            if let Some(pg_ctx) = req.app_data::<web::Data<PostgresContext<NoTls>>>() {
                 let pg_ctx = pg_ctx.get_ref().clone();
-                async move { pg_ctx.session_by_id(token).await.map_err(Into::into) }.boxed_local()
+                return async move { pg_ctx.session_by_id(token).await.map_err(Into::into) }
+                    .boxed_local();
             }
         }
+        let mem_ctx = req
+            .app_data::<web::Data<ProInMemoryContext>>()
+            .expect("ProInMemoryContext will be registered because Postgres was not activated");
+        let mem_ctx = mem_ctx.get_ref().clone();
+        async move { mem_ctx.session_by_id(token).await.map_err(Into::into) }.boxed_local()
     }
 }

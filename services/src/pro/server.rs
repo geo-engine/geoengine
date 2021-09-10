@@ -72,7 +72,7 @@ pub async fn start_pro_server(static_files_dir: Option<PathBuf>) -> Result<()> {
 
     match web_config.backend {
         Backend::InMemory => {
-            info!("Using in memory backend"); // TODO: log
+            info!("Using in memory backend");
             start(
                 static_files_dir,
                 web_config.bind_address,
@@ -83,7 +83,7 @@ pub async fn start_pro_server(static_files_dir: Option<PathBuf>) -> Result<()> {
         Backend::Postgres => {
             #[cfg(feature = "postgres")]
             {
-                eprintln!("Using Postgres backend"); // TODO: log
+                info!("Using Postgres backend");
 
                 let db_config = config::get_config_element::<config::Postgres>()?;
                 let mut pg_config = bb8_postgres::tokio_postgres::Config::new();
