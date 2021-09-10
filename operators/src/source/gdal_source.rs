@@ -21,6 +21,7 @@ use geoengine_datatypes::raster::{
     RasterProperties, RasterPropertiesEntry, RasterPropertiesEntryType, RasterPropertiesKey,
     RasterTile2D,
 };
+use geoengine_datatypes::util::test::TestDefault;
 use geoengine_datatypes::{dataset::DatasetId, raster::TileInformation};
 use geoengine_datatypes::{
     primitives::{TimeInstance, TimeInterval, TimeStep, TimeStepIter},
@@ -175,8 +176,8 @@ pub struct GdalDatasetGeoTransform {
 }
 
 /// Default implementation for testing purposes where geo transform doesn't matter
-impl Default for GdalDatasetGeoTransform {
-    fn default() -> Self {
+impl TestDefault for GdalDatasetGeoTransform {
+    fn test_default() -> Self {
         Self {
             origin_coordinate: (0.0, 0.0).into(),
             x_pixel_size: 1.0,
@@ -1145,7 +1146,7 @@ mod tests {
         let params = GdalDatasetParameters {
             file_path: "/foo/bar_%TIME%.tiff".into(),
             rasterband_channel: 0,
-            geo_transform: Default::default(),
+            geo_transform: TestDefault::test_default(),
             width: 360,
             height: 180,
             file_not_found_handling: FileNotFoundHandling::NoData,
@@ -1186,7 +1187,7 @@ mod tests {
             params: GdalDatasetParameters {
                 file_path: "/foo/bar_%TIME%.tiff".into(),
                 rasterband_channel: 0,
-                geo_transform: Default::default(),
+                geo_transform: TestDefault::test_default(),
                 width: 360,
                 height: 180,
                 file_not_found_handling: FileNotFoundHandling::NoData,

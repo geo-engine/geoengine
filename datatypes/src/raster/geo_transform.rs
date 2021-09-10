@@ -1,7 +1,8 @@
 use std::cmp::max;
 
-use crate::primitives::{
-    AxisAlignedRectangle, Coordinate2D, SpatialPartition2D, SpatialResolution,
+use crate::{
+    primitives::{AxisAlignedRectangle, Coordinate2D, SpatialPartition2D, SpatialResolution},
+    util::test::TestDefault,
 };
 use serde::{de, Deserialize, Deserializer, Serialize};
 
@@ -190,8 +191,8 @@ impl GeoTransform {
     }
 }
 
-impl Default for GeoTransform {
-    fn default() -> Self {
+impl TestDefault for GeoTransform {
+    fn test_default() -> Self {
         GeoTransform::new_with_coordinate_x_y(0.0, 1.0, 0.0, -1.0)
     }
 }

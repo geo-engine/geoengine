@@ -37,6 +37,7 @@ fn satellite_key() -> RasterPropertiesKey {
 mod test_util {
     use chrono::{TimeZone, Utc};
     use futures::StreamExt;
+    use geoengine_datatypes::util::test::TestDefault;
     use num_traits::AsPrimitive;
 
     use geoengine_datatypes::dataset::{DatasetId, InternalDatasetId};
@@ -174,7 +175,7 @@ mod test_util {
             TileInformation {
                 global_tile_position: [-1, 0].into(),
                 tile_size_in_pixels: [3, 2].into(),
-                global_geo_transform: Default::default(),
+                global_geo_transform: TestDefault::test_default(),
             },
             raster,
             props,

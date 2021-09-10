@@ -243,6 +243,7 @@ mod tests {
     use crate::{
         primitives::TimeInterval,
         raster::{GeoTransform, Grid2D, GridIndexAccess, Pixel, RasterTile2D, TypedRasterTile2D},
+        util::test::TestDefault,
     };
     use crate::{raster::RasterDataType, util::test::catch_unwind_silent};
     use std::marker::PhantomData;
@@ -254,8 +255,11 @@ mod tests {
         }
 
         let r = Grid2D::new([3, 2].into(), vec![1, 2, 3, 4, 5, 6], None).unwrap();
-        let t =
-            RasterTile2D::new_without_offset(TimeInterval::default(), GeoTransform::default(), r);
+        let t = RasterTile2D::new_without_offset(
+            TimeInterval::default(),
+            GeoTransform::test_default(),
+            r,
+        );
         let typed_raster = TypedRasterTile2D::U32(t);
 
         assert_eq!(
@@ -271,8 +275,11 @@ mod tests {
         }
 
         let r = Grid2D::new([3, 2].into(), vec![1, 2, 3, 4, 5, 6], None).unwrap();
-        let t =
-            RasterTile2D::new_without_offset(TimeInterval::default(), GeoTransform::default(), r);
+        let t = RasterTile2D::new_without_offset(
+            TimeInterval::default(),
+            GeoTransform::test_default(),
+            r,
+        );
         let typed_raster = TypedRasterTile2D::U32(t);
 
         assert_eq!(
@@ -299,14 +306,18 @@ mod tests {
             ];
 
             let r = Grid2D::new([3, 2].into(), data, None).unwrap();
-            RasterTile2D::new_without_offset(TimeInterval::default(), GeoTransform::default(), r)
+            RasterTile2D::new_without_offset(
+                TimeInterval::default(),
+                GeoTransform::test_default(),
+                r,
+            )
         }
 
         assert_eq!(
             generate_generic_raster_tile_2d!(RasterDataType::U8, generate()),
             TypedRasterTile2D::U8(RasterTile2D::new_without_offset(
                 TimeInterval::default(),
-                GeoTransform::default(),
+                GeoTransform::test_default(),
                 Grid2D::new([3, 2].into(), vec![1, 2, 3, 4, 5, 6], None,).unwrap()
             ),)
         );
@@ -321,13 +332,19 @@ mod tests {
         }
 
         let r = Grid2D::new([3, 2].into(), vec![1, 2, 3, 4, 5, 6], None).unwrap();
-        let t =
-            RasterTile2D::new_without_offset(TimeInterval::default(), GeoTransform::default(), r);
+        let t = RasterTile2D::new_without_offset(
+            TimeInterval::default(),
+            GeoTransform::test_default(),
+            r,
+        );
         let typed_raster_a = TypedRasterTile2D::U32(t);
 
         let r = Grid2D::new([3, 2].into(), vec![1, 2, 3, 4, 5, 6], None).unwrap();
-        let t =
-            RasterTile2D::new_without_offset(TimeInterval::default(), GeoTransform::default(), r);
+        let t = RasterTile2D::new_without_offset(
+            TimeInterval::default(),
+            GeoTransform::test_default(),
+            r,
+        );
         let typed_raster_b = TypedRasterTile2D::U16(t);
 
         assert_eq!(
@@ -348,13 +365,19 @@ mod tests {
         }
 
         let r = Grid2D::new([3, 2].into(), vec![1, 2, 3, 4, 5, 6], None).unwrap();
-        let t =
-            RasterTile2D::new_without_offset(TimeInterval::default(), GeoTransform::default(), r);
+        let t = RasterTile2D::new_without_offset(
+            TimeInterval::default(),
+            GeoTransform::test_default(),
+            r,
+        );
         let typed_raster_a = TypedRasterTile2D::U32(t);
 
         let r = Grid2D::new([3, 2].into(), vec![1, 2, 3, 4, 5, 6], None).unwrap();
-        let t =
-            RasterTile2D::new_without_offset(TimeInterval::default(), GeoTransform::default(), r);
+        let t = RasterTile2D::new_without_offset(
+            TimeInterval::default(),
+            GeoTransform::test_default(),
+            r,
+        );
         let typed_raster_b = TypedRasterTile2D::U16(t);
 
         assert_eq!(
@@ -391,13 +414,19 @@ mod tests {
         }
 
         let r = Grid2D::new([3, 2].into(), vec![1, 2, 3, 4, 5, 6], None).unwrap();
-        let t =
-            RasterTile2D::new_without_offset(TimeInterval::default(), GeoTransform::default(), r);
+        let t = RasterTile2D::new_without_offset(
+            TimeInterval::default(),
+            GeoTransform::test_default(),
+            r,
+        );
         let typed_raster_a = TypedRasterTile2D::U32(t);
 
         let r = Grid2D::new([3, 2].into(), vec![1, 2, 3, 4, 5, 6], None).unwrap();
-        let t =
-            RasterTile2D::new_without_offset(TimeInterval::default(), GeoTransform::default(), r);
+        let t = RasterTile2D::new_without_offset(
+            TimeInterval::default(),
+            GeoTransform::test_default(),
+            r,
+        );
         let typed_raster_b = TypedRasterTile2D::U16(t);
 
         assert_eq!(

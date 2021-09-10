@@ -342,7 +342,7 @@ where
 
 #[cfg(test)]
 mod tests {
-    use crate::primitives::Coordinate2D;
+    use crate::{primitives::Coordinate2D, util::test::TestDefault};
 
     use super::*;
     use crate::raster::{Grid2D, GridIdx};
@@ -372,7 +372,7 @@ mod tests {
         let raster_tile = RasterTile2D::new_with_tile_info(
             TimeInterval::default(),
             TileInformation {
-                global_geo_transform: Default::default(),
+                global_geo_transform: TestDefault::test_default(),
                 global_tile_position: [0, 0].into(),
                 tile_size_in_pixels: [3, 2].into(),
             },
@@ -396,7 +396,7 @@ mod tests {
         let raster_tile = RasterTile2D::new_with_tile_info(
             TimeInterval::default(),
             TileInformation {
-                global_geo_transform: Default::default(),
+                global_geo_transform: TestDefault::test_default(),
                 global_tile_position: [1, 1].into(),
                 tile_size_in_pixels: [3, 2].into(),
             },
@@ -424,9 +424,9 @@ mod tests {
         let ti = TileInformation::new(
             GridIdx([0, 0]),
             GridShape2D::from([100, 100]),
-            GeoTransform::default(),
+            GeoTransform::test_default(),
         );
-        assert_eq!(ti.global_geo_transform, GeoTransform::default());
+        assert_eq!(ti.global_geo_transform, GeoTransform::test_default());
         assert_eq!(ti.global_tile_position, GridIdx([0, 0]));
         assert_eq!(ti.tile_size_in_pixels, GridShape2D::from([100, 100]));
     }
@@ -436,7 +436,7 @@ mod tests {
         let ti = TileInformation::new(
             GridIdx([0, 0]),
             GridShape2D::from([100, 100]),
-            GeoTransform::default(),
+            GeoTransform::test_default(),
         );
         assert_eq!(ti.global_tile_position(), GridIdx([0, 0]));
     }
@@ -446,7 +446,7 @@ mod tests {
         let ti = TileInformation::new(
             GridIdx([0, 0]),
             GridShape2D::from([100, 100]),
-            GeoTransform::default(),
+            GeoTransform::test_default(),
         );
         assert_eq!(ti.local_upper_left_pixel_idx(), GridIdx([0, 0]));
     }
@@ -456,7 +456,7 @@ mod tests {
         let ti = TileInformation::new(
             GridIdx([0, 0]),
             GridShape2D::from([100, 100]),
-            GeoTransform::default(),
+            GeoTransform::test_default(),
         );
         assert_eq!(ti.local_lower_left_pixel_idx(), GridIdx([99, 0]));
     }
@@ -466,7 +466,7 @@ mod tests {
         let ti = TileInformation::new(
             GridIdx([0, 0]),
             GridShape2D::from([100, 100]),
-            GeoTransform::default(),
+            GeoTransform::test_default(),
         );
         assert_eq!(ti.local_upper_right_pixel_idx(), GridIdx([0, 99]));
     }
@@ -476,7 +476,7 @@ mod tests {
         let ti = TileInformation::new(
             GridIdx([0, 0]),
             GridShape2D::from([100, 100]),
-            GeoTransform::default(),
+            GeoTransform::test_default(),
         );
         assert_eq!(ti.local_lower_right_pixel_idx(), GridIdx([99, 99]));
     }
@@ -486,7 +486,7 @@ mod tests {
         let ti = TileInformation::new(
             GridIdx([0, 0]),
             GridShape2D::from([100, 100]),
-            GeoTransform::default(),
+            GeoTransform::test_default(),
         );
         assert_eq!(ti.global_upper_left_pixel_idx(), GridIdx([0, 0]));
     }
@@ -496,7 +496,7 @@ mod tests {
         let ti = TileInformation::new(
             GridIdx([-2, 3]),
             GridShape2D::from([100, 1000]),
-            GeoTransform::default(),
+            GeoTransform::test_default(),
         );
         assert_eq!(ti.global_upper_left_pixel_idx(), GridIdx([-200, 3000]));
     }
@@ -506,7 +506,7 @@ mod tests {
         let ti = TileInformation::new(
             GridIdx([0, 0]),
             GridShape2D::from([100, 100]),
-            GeoTransform::default(),
+            GeoTransform::test_default(),
         );
         assert_eq!(ti.global_upper_right_pixel_idx(), GridIdx([0, 99]));
     }
@@ -516,7 +516,7 @@ mod tests {
         let ti = TileInformation::new(
             GridIdx([-2, 3]),
             GridShape2D::from([100, 1000]),
-            GeoTransform::default(),
+            GeoTransform::test_default(),
         );
         assert_eq!(ti.global_upper_right_pixel_idx(), GridIdx([-200, 3999]));
     }
@@ -526,7 +526,7 @@ mod tests {
         let ti = TileInformation::new(
             GridIdx([0, 0]),
             GridShape2D::from([100, 100]),
-            GeoTransform::default(),
+            GeoTransform::test_default(),
         );
         assert_eq!(ti.global_lower_right_pixel_idx(), GridIdx([99, 99]));
     }
@@ -536,7 +536,7 @@ mod tests {
         let ti = TileInformation::new(
             GridIdx([-2, 3]),
             GridShape2D::from([100, 1000]),
-            GeoTransform::default(),
+            GeoTransform::test_default(),
         );
         assert_eq!(ti.global_lower_right_pixel_idx(), GridIdx([-101, 3999]));
     }
@@ -546,7 +546,7 @@ mod tests {
         let ti = TileInformation::new(
             GridIdx([0, 0]),
             GridShape2D::from([100, 100]),
-            GeoTransform::default(),
+            GeoTransform::test_default(),
         );
         assert_eq!(ti.global_lower_left_pixel_idx(), GridIdx([99, 0]));
     }
@@ -556,7 +556,7 @@ mod tests {
         let ti = TileInformation::new(
             GridIdx([-2, 3]),
             GridShape2D::from([100, 1000]),
-            GeoTransform::default(),
+            GeoTransform::test_default(),
         );
         assert_eq!(ti.global_lower_left_pixel_idx(), GridIdx([-101, 3000]));
     }
@@ -566,7 +566,7 @@ mod tests {
         let ti = TileInformation::new(
             GridIdx([0, 0]),
             GridShape2D::from([100, 100]),
-            GeoTransform::default(),
+            GeoTransform::test_default(),
         );
         assert_eq!(
             ti.local_to_global_pixel_idx(GridIdx([25, 75])),
@@ -579,7 +579,7 @@ mod tests {
         let ti = TileInformation::new(
             GridIdx([-2, 3]),
             GridShape2D::from([100, 1000]),
-            GeoTransform::default(),
+            GeoTransform::test_default(),
         );
         assert_eq!(
             ti.local_to_global_pixel_idx(GridIdx([25, 75])),
@@ -592,7 +592,7 @@ mod tests {
         let ti = TileInformation::new(
             GridIdx([-2, 3]),
             GridShape2D::from([100, 1000]),
-            GeoTransform::default(),
+            GeoTransform::test_default(),
         );
         assert_eq!(
             ti.spatial_partition(),
