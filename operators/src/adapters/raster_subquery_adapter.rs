@@ -273,6 +273,7 @@ where
                 fold_tile_spec,
                 GridOrEmpty::Empty(EmptyGrid2D::<PixelType>::new(
                     fold_tile_spec.tile_size_in_pixels,
+                    // TODO: check if zero makes sense as default value or if we should return an error
                     this.no_data_value.unwrap_or(PixelType::zero()),
                 )),
             ))

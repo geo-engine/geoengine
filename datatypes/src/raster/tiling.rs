@@ -60,19 +60,37 @@ impl TilingStrategy {
         }
     }
 
+    /// compute the index of the upper left pixel that is contained in the `partition`
     pub fn upper_left_pixel_idx(&self, partition: SpatialPartition2D) -> GridIdx2D {
         self.geo_transform
             .coordinate_to_grid_idx_2d(partition.upper_left())
     }
 
+    /// compute the index of the lower right pixel that is contained in the `partition`
     pub fn lower_right_pixel_idx(&self, partition: SpatialPartition2D) -> GridIdx2D {
-        let lr_idx = self
-            .geo_transform
-            .coordinate_to_grid_idx_2d(partition.lower_right());
-        // TODO: only subtract if lower right coordinate is exactly on pixel edge because
-        //       it is not included in the partition. We don't want to lose the pixel if
-        //       it is actually contained in the partition
-        lr_idx - 1
+        // as the lower right coordinate is not included in the partition we subtract an epsilon
+        // in order to not include the next pixel if the lower right coordinate is exactly on the
+        // edge of the next pixel
+
+        // choose the epsilon relative to the pixel size
+        const EPSILON: f64 = 0.000_001;
+        let epsilon: Coordinate2D = (
+            self.geo_transform.x_pixel_size() * EPSILON,
+            self.geo_transform.y_pixel_size() * EPSILON,
+        )
+            .into();
+
+        // shift lower right by epsilon
+        let lower_right = partition.lower_right() - epsilon;
+
+        // ensure we don't accidentally go beyond the upper left pixel
+        let lower_right = (
+            lower_right.x.max(partition.upper_left().x),
+            lower_right.y.min(partition.upper_left().y),
+        )
+            .into();
+
+        self.geo_transform.coordinate_to_grid_idx_2d(lower_right)
     }
 
     pub fn pixel_idx_to_tile_idx(&self, pixel_idx: GridIdx2D) -> GridIdx2D {
@@ -223,5 +241,40 @@ impl SpatialPartitioned for TileInformation {
             .global_geo_transform
             .grid_idx_to_upper_left_coordinate_2d(self.global_lower_right_pixel_idx() + 1); // we need the border of the lower right pixel.
         SpatialPartition2D::new_unchecked(top_left_coord, lower_right_coord)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::util::test::TestDefault;
+
+    use super::*;
+
+    #[test]
+    fn lower_right_pixel_index_edge() {
+        let strat = TilingStrategy {
+            tile_size_in_pixels: [600, 600].into(),
+            geo_transform: GeoTransform::test_default(),
+        };
+
+        let partition = SpatialPartition2D::new((1., 1.).into(), (8., -8.).into()).unwrap();
+        assert_eq!(strat.lower_right_pixel_idx(partition), [7, 7].into());
+
+        let partition = SpatialPartition2D::new((1., 1.).into(), (8.5, -8.).into()).unwrap();
+        assert_eq!(strat.lower_right_pixel_idx(partition), [7, 8].into());
+
+        let partition = SpatialPartition2D::new((1., 1.).into(), (8., -8.5).into()).unwrap();
+        assert_eq!(strat.lower_right_pixel_idx(partition), [8, 7].into());
+    }
+
+    #[test]
+    fn lower_right_pixel_index_inside() {
+        let strat = TilingStrategy {
+            tile_size_in_pixels: [600, 600].into(),
+            geo_transform: GeoTransform::test_default(),
+        };
+
+        let partition = SpatialPartition2D::new((1., 1.).into(), (7.5, -7.5).into()).unwrap();
+        assert_eq!(strat.lower_right_pixel_idx(partition), [7, 7].into());
     }
 }
