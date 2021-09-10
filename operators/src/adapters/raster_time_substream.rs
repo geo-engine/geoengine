@@ -145,12 +145,13 @@ mod tests {
     use futures::stream::{self, StreamExt};
     use geoengine_datatypes::primitives::TimeInterval;
     use geoengine_datatypes::raster::{Grid2D, TileInformation};
+    use geoengine_datatypes::util::test::TestDefault;
     use tokio::pin;
 
     #[tokio::test]
     async fn simple() {
         let tile_information = TileInformation {
-            global_geo_transform: Default::default(),
+            global_geo_transform: TestDefault::test_default(),
             global_tile_position: [0, 0].into(),
             tile_size_in_pixels: [3, 2].into(),
         };
@@ -211,7 +212,7 @@ mod tests {
     #[tokio::test]
     async fn first_value() {
         let tile_information = TileInformation {
-            global_geo_transform: Default::default(),
+            global_geo_transform: TestDefault::test_default(),
             global_tile_position: [0, 0].into(),
             tile_size_in_pixels: [3, 2].into(),
         };

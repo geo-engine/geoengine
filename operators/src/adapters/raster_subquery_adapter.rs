@@ -10,6 +10,7 @@ use futures::{
 };
 use futures::{stream::FusedStream, Future};
 use geoengine_datatypes::primitives::{SpatialPartition2D, SpatialPartitioned};
+use geoengine_datatypes::raster::{EmptyGrid2D, GridOrEmpty};
 use geoengine_datatypes::{
     error::Error::{GridIndexOutOfBounds, InvalidGridIndex},
     operations::reproject::{
@@ -101,6 +102,8 @@ where
     ended: bool,
     /// The `SubQuery` defines what this adapter does.
     sub_query: SubQuery,
+
+    no_data_value: Option<PixelType>,
 }
 
 impl<'a, PixelType, RasterProcessorType, SubQuery>
@@ -117,6 +120,7 @@ where
         tiling_spec: TilingSpecification,
         query_ctx: &'a dyn QueryContext,
         sub_query: SubQuery,
+        no_data_value: Option<PixelType>,
     ) -> Self {
         let tiling_strat = tiling_spec.strategy(
             query_rect.spatial_resolution.x,
@@ -139,6 +143,7 @@ where
             query_ctx,
             ended: false,
             sub_query,
+            no_data_value,
         }
     }
 }
@@ -166,6 +171,7 @@ where
 {
     type Item = Result<RasterTile2D<PixelType>>;
 
+    #[allow(clippy::too_many_lines)]
     fn poll_next(
         self: Pin<&mut Self>,
         cx: &mut std::task::Context<'_>,
@@ -198,64 +204,80 @@ where
             *this.time_start,
         )?;
 
-        if this.running_query.as_ref().is_none() && this.running_fold.as_ref().is_none() {
-            // there is no query and no stream pending
-            debug!("New running_query for: {:?}", &tile_query_rectangle);
+        let tile_accu_result = if let Some(tile_query_rectangle) = tile_query_rectangle {
+            if this.running_query.as_ref().is_none() && this.running_fold.as_ref().is_none() {
+                // there is no query and no stream pending
+                debug!("New running_query for: {:?}", &tile_query_rectangle);
 
-            let tile_query_stream = this
-                .source
-                .query(tile_query_rectangle, *this.query_ctx)
-                .boxed();
+                let tile_query_stream = this
+                    .source
+                    .query(tile_query_rectangle, *this.query_ctx)
+                    .boxed();
 
-            this.running_query.set(Some(tile_query_stream));
-        }
+                this.running_query.set(Some(tile_query_stream));
+            }
 
-        let query_future_result =
-            if let Some(query_future) = this.running_query.as_mut().as_pin_mut() {
-                // TODO: match block?
-                let query_result: Result<BoxStream<'a, Result<RasterTile2D<PixelType>>>> =
-                    ready!(query_future.poll(cx));
-                Some(query_result)
-            } else {
-                None
+            let query_future_result =
+                if let Some(query_future) = this.running_query.as_mut().as_pin_mut() {
+                    // TODO: match block?
+                    let query_result: Result<BoxStream<'a, Result<RasterTile2D<PixelType>>>> =
+                        ready!(query_future.poll(cx));
+                    Some(query_result)
+                } else {
+                    None
+                };
+
+            this.running_query.set(None);
+
+            match query_future_result {
+                Some(Ok(tile_query_stream)) => {
+                    let tile_folding_accu = this
+                        .sub_query
+                        .new_fold_accu(fold_tile_spec, tile_query_rectangle)?;
+
+                    debug!("New running_fold: {:?}", &tile_query_rectangle);
+                    let tile_folding_stream =
+                        tile_query_stream.try_fold(tile_folding_accu, this.sub_query.fold_method());
+
+                    this.running_fold.set(Some(tile_folding_stream));
+                }
+                Some(Err(err)) => {
+                    debug!("Tile fold stream returned error: {:?}", &err);
+                    *this.ended = true;
+                    return Poll::Ready(Some(Err(err)));
+                }
+                None => {} // there is no result but there might be a running fold...
+            }
+
+            let future_result = match this.running_fold.as_mut().as_pin_mut() {
+                Some(fut) => {
+                    ready!(fut.poll(cx))
+                }
+                None => {
+                    debug!("running_fold is None");
+                    return Poll::Ready(None); // should initialize next tile query?
+                }
             };
 
-        this.running_query.set(None);
+            // set the running future to None --> will create a new one in the next call
+            this.running_fold.set(None);
 
-        match query_future_result {
-            Some(Ok(tile_query_stream)) => {
-                let tile_folding_accu = this
-                    .sub_query
-                    .new_fold_accu(fold_tile_spec, tile_query_rectangle)?;
+            let tile_accu_result: Result<RasterTile2D<PixelType>> =
+                future_result.map(FoldTileAccu::into_tile);
 
-                debug!("New running_fold: {:?}", &tile_query_rectangle);
-                let tile_folding_stream =
-                    tile_query_stream.try_fold(tile_folding_accu, this.sub_query.fold_method());
-
-                this.running_fold.set(Some(tile_folding_stream));
-            }
-            Some(Err(err)) => {
-                debug!("Tile fold stream returned error: {:?}", &err);
-                *this.ended = true;
-                return Poll::Ready(Some(Err(err)));
-            }
-            None => {} // there is no result but there meight be a running fold...
-        }
-
-        let future_result = match this.running_fold.as_mut().as_pin_mut() {
-            Some(fut) => {
-                ready!(fut.poll(cx))
-            }
-            None => {
-                debug!("running_fold is None");
-                return Poll::Ready(None); // should initialize next tile query?
-            }
+            tile_accu_result
+        } else {
+            // no sub query query rectangle was produced for the current tile, thus output an empty tile
+            Ok(RasterTile2D::new_with_tile_info(
+                this.query_rect.time_interval,
+                fold_tile_spec,
+                GridOrEmpty::Empty(EmptyGrid2D::<PixelType>::new(
+                    fold_tile_spec.tile_size_in_pixels,
+                    // TODO: check if zero makes sense as default value or if we should return an error
+                    this.no_data_value.unwrap_or(PixelType::zero()),
+                )),
+            ))
         };
-
-        // set the running future to None --> will create a new one in the next call
-        this.running_fold.set(None);
-
-        let tile_accu_result = future_result.map(FoldTileAccu::into_tile);
 
         // if we produced a tile: get the end of the current time slot (must be the same for all tiles in the slot)
         if let Ok(ref r) = tile_accu_result {
@@ -436,13 +458,14 @@ where
         query_rect: RasterQueryRectangle,
     ) -> Result<Self::TileAccu>;
 
-    /// This method generates a `QueryRectangle` for a tile-specific sub-query
+    /// This method generates `Some(QueryRectangle)` for a tile-specific sub-query or `None` if the `query_rect` cannot be translated.
+    /// In the latter case an `EmptyTile` will be produced for the sub query instead of querying the source.
     fn tile_query_rectangle(
         &self,
         tile_info: TileInformation,
         query_rect: RasterQueryRectangle,
         start_time: TimeInstance,
-    ) -> Result<RasterQueryRectangle>;
+    ) -> Result<Option<RasterQueryRectangle>>;
 
     /// This method generates the method which combines the accumulator and each tile of the sub-query stream in the `TryFold` stream adapter.
     fn fold_method(&self) -> Self::FoldMethod;
@@ -453,12 +476,20 @@ where
         query: RasterQueryRectangle,
         ctx: &'a dyn QueryContext,
         tiling_specification: TilingSpecification,
+        no_data_value: Option<T>,
     ) -> RasterSubQueryAdapter<'a, T, S, Self>
     where
         S: RasterQueryProcessor<RasterType = T>,
         Self: Sized,
     {
-        RasterSubQueryAdapter::<'a, T, S, Self>::new(source, query, tiling_specification, ctx, self)
+        RasterSubQueryAdapter::<'a, T, S, Self>::new(
+            source,
+            query,
+            tiling_specification,
+            ctx,
+            self,
+            no_data_value,
+        )
     }
 }
 
@@ -509,12 +540,12 @@ where
         tile_info: TileInformation,
         query_rect: RasterQueryRectangle,
         start_time: TimeInstance,
-    ) -> Result<RasterQueryRectangle> {
-        Ok(RasterQueryRectangle {
+    ) -> Result<Option<RasterQueryRectangle>> {
+        Ok(Some(RasterQueryRectangle {
             spatial_bounds: tile_info.spatial_partition(),
             time_interval: TimeInterval::new_instant(start_time)?,
             spatial_resolution: query_rect.spatial_resolution,
-        })
+        }))
     }
 
     fn fold_method(&self) -> Self::FoldMethod {
@@ -614,18 +645,25 @@ where
         tile_info: TileInformation,
         query_rect: RasterQueryRectangle,
         start_time: TimeInstance,
-    ) -> Result<RasterQueryRectangle> {
+    ) -> Result<Option<RasterQueryRectangle>> {
         let proj = CoordinateProjector::from_known_srs(self.out_srs, self.in_srs)?;
 
-        Ok(RasterQueryRectangle {
-            spatial_bounds: tile_info
-                .spatial_partition()
-                .intersection(&query_rect.spatial_partition())
-                .expect("should not be empty")
-                .reproject(&proj)?,
-            time_interval: TimeInterval::new_instant(start_time)?,
-            spatial_resolution: self.in_spatial_res,
-        })
+        let spatial_bounds = tile_info
+            .spatial_partition()
+            .intersection(&query_rect.spatial_partition())
+            .expect("should not be empty")
+            .reproject(&proj);
+
+        if let Ok(spatial_bounds) = spatial_bounds {
+            Ok(Some(RasterQueryRectangle {
+                spatial_bounds,
+                time_interval: TimeInterval::new_instant(start_time)?,
+                spatial_resolution: self.in_spatial_res,
+            }))
+        } else {
+            // output query rectangle is not valid in source projection => produce empty tile
+            Ok(None)
+        }
     }
 
     fn fold_method(&self) -> Self::FoldMethod {
@@ -639,6 +677,7 @@ mod tests {
         primitives::{Measurement, SpatialPartition2D, SpatialResolution, TimeInterval},
         raster::{Grid, GridShape, RasterDataType},
         spatial_reference::SpatialReference,
+        util::test::TestDefault,
     };
 
     use super::*;
@@ -655,7 +694,7 @@ mod tests {
             RasterTile2D {
                 time: TimeInterval::new_unchecked(0, 5),
                 tile_position: [-1, 0].into(),
-                global_geo_transform: Default::default(),
+                global_geo_transform: TestDefault::test_default(),
                 grid_array: Grid::new([2, 2].into(), vec![1, 2, 3, 4], no_data_value)
                     .unwrap()
                     .into(),
@@ -664,7 +703,7 @@ mod tests {
             RasterTile2D {
                 time: TimeInterval::new_unchecked(0, 5),
                 tile_position: [-1, 1].into(),
-                global_geo_transform: Default::default(),
+                global_geo_transform: TestDefault::test_default(),
                 grid_array: Grid::new([2, 2].into(), vec![7, 8, 9, 10], no_data_value)
                     .unwrap()
                     .into(),
@@ -673,7 +712,7 @@ mod tests {
             RasterTile2D {
                 time: TimeInterval::new_unchecked(5, 10),
                 tile_position: [-1, 0].into(),
-                global_geo_transform: Default::default(),
+                global_geo_transform: TestDefault::test_default(),
                 grid_array: Grid::new([2, 2].into(), vec![13, 14, 15, 16], no_data_value)
                     .unwrap()
                     .into(),
@@ -682,7 +721,7 @@ mod tests {
             RasterTile2D {
                 time: TimeInterval::new_unchecked(5, 10),
                 tile_position: [-1, 1].into(),
-                global_geo_transform: Default::default(),
+                global_geo_transform: TestDefault::test_default(),
                 grid_array: Grid::new([2, 2].into(), vec![19, 20, 21, 22], no_data_value)
                     .unwrap()
                     .into(),
@@ -731,6 +770,7 @@ mod tests {
             TileSubQueryIdentity {
                 fold_fn: fold_by_blit_future,
             },
+            no_data_value,
         );
         let res = a
             .map(Result::unwrap)
@@ -748,7 +788,7 @@ mod tests {
             RasterTile2D {
                 time: TimeInterval::new_unchecked(0, 5),
                 tile_position: [-1, 0].into(),
-                global_geo_transform: Default::default(),
+                global_geo_transform: TestDefault::test_default(),
                 grid_array: Grid::new([2, 2].into(), vec![1, 2, 3, 4], no_data_value)
                     .unwrap()
                     .into(),
@@ -757,7 +797,7 @@ mod tests {
             RasterTile2D {
                 time: TimeInterval::new_unchecked(0, 5),
                 tile_position: [-1, 1].into(),
-                global_geo_transform: Default::default(),
+                global_geo_transform: TestDefault::test_default(),
                 grid_array: Grid::new([2, 2].into(), vec![7, 8, 9, 10], no_data_value)
                     .unwrap()
                     .into(),
@@ -766,7 +806,7 @@ mod tests {
             RasterTile2D {
                 time: TimeInterval::new_unchecked(5, 10),
                 tile_position: [-1, 0].into(),
-                global_geo_transform: Default::default(),
+                global_geo_transform: TestDefault::test_default(),
                 grid_array: Grid::new([2, 2].into(), vec![13, 14, 15, 16], no_data_value)
                     .unwrap()
                     .into(),
@@ -775,7 +815,7 @@ mod tests {
             RasterTile2D {
                 time: TimeInterval::new_unchecked(5, 10),
                 tile_position: [-1, 1].into(),
-                global_geo_transform: Default::default(),
+                global_geo_transform: TestDefault::test_default(),
                 grid_array: Grid::new([2, 2].into(), vec![19, 20, 21, 22], no_data_value)
                     .unwrap()
                     .into(),
@@ -830,7 +870,14 @@ mod tests {
             fold_fn: fold_by_coordinate_lookup_future,
             in_spatial_res: query_rect.spatial_resolution,
         };
-        let a = RasterSubQueryAdapter::new(&qp, query_rect, tiling_strat, &query_ctx, state_gen);
+        let a = RasterSubQueryAdapter::new(
+            &qp,
+            query_rect,
+            tiling_strat,
+            &query_ctx,
+            state_gen,
+            no_data_value,
+        );
         let res = a
             .map(Result::unwrap)
             .collect::<Vec<RasterTile2D<u8>>>()
