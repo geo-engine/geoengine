@@ -222,9 +222,11 @@ mod tests {
 
     use crate::contexts::Session;
     use crate::handlers::ErrorResponse;
-    use crate::pro::util::tests::{create_project_helper, create_session_helper};
+    use crate::pro::util::tests::{
+        create_project_helper, create_session_helper, send_pro_test_request,
+    };
     use crate::pro::{contexts::ProInMemoryContext, projects::ProProjectDb, users::UserId};
-    use crate::util::tests::{check_allowed_http_methods, read_body_string, send_pro_test_request};
+    use crate::util::tests::{check_allowed_http_methods, read_body_string};
     use crate::util::user_input::Validated;
 
     use actix_web::dev::ServiceResponse;

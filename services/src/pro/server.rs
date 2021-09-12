@@ -29,7 +29,6 @@ where
     let wrapped_ctx = web::Data::new(ctx);
 
     HttpServer::new(move || {
-        #[allow(unused_mut)]
         let mut app = App::new()
             .app_data(wrapped_ctx.clone())
             .wrap(middleware::Logger::default())
@@ -45,18 +44,15 @@ where
             .configure(handlers::wfs::init_wfs_routes::<C>)
             .configure(handlers::wms::init_wms_routes::<C>)
             .configure(handlers::workflows::init_workflow_routes::<C>)
-            .configure(pro::handlers::drone_mapping::init_drone_mapping_routes::<C>)
             .route("/version", web::get().to(show_version_handler)); // TODO: allow disabling this function via config or feature flag
         #[cfg(feature = "odm")]
         {
             app = app.configure(pro::handlers::drone_mapping::init_drone_mapping_routes::<C>);
         }
-
         if let Some(static_files_dir) = static_files_dir.clone() {
-            app.service(Files::new("/static", static_files_dir))
-        } else {
-            app
+            app = app.service(Files::new("/static", static_files_dir));
         }
+        app
     })
     .bind(bind_address)?
     .run()

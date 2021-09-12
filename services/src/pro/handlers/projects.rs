@@ -282,11 +282,11 @@ mod tests {
             contexts::ProInMemoryContext,
             projects::ProjectPermission,
             users::{UserCredentials, UserDb, UserRegistration},
-            util::tests::create_project_helper,
+            util::tests::{create_project_helper, send_pro_test_request},
         },
         projects::{Project, ProjectDb, ProjectVersion},
         util::{
-            tests::{check_allowed_http_methods, send_pro_test_request, update_project_helper},
+            tests::{check_allowed_http_methods, update_project_helper},
             user_input::UserInput,
         },
     };

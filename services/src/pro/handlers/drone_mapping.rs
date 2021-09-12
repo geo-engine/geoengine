@@ -375,9 +375,12 @@ mod tests {
     use crate::contexts::{Context, Session};
     use crate::error::Result;
     use crate::util::test_data_dir;
-    use crate::util::tests::{send_pro_test_request, TestDataUploads};
+    use crate::util::tests::TestDataUploads;
     use crate::{
-        pro::{contexts::ProInMemoryContext, util::tests::create_session_helper},
+        pro::{
+            contexts::ProInMemoryContext,
+            util::tests::{create_session_helper, send_pro_test_request},
+        },
         util::config,
     };
     use actix_web::{http::header, test};

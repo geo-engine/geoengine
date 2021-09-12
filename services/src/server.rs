@@ -127,7 +127,7 @@ pub(crate) fn configure_extractors(cfg: &mut web::ServiceConfig) {
             }
             .into(),
             _ => {
-                debug!("Unkown JsonPayloadError variant");
+                debug!("Unknown JsonPayloadError variant");
                 ErrorResponse {
                     error: "UnknownError".to_string(),
                     message: "Unknown Error".to_string(),
@@ -145,7 +145,7 @@ pub(crate) fn configure_extractors(cfg: &mut web::ServiceConfig) {
                     message: format!("Unable to parse query string: {}", err),
                 },
                 _ => {
-                    debug!("Unkown QueryPayloadError variant");
+                    debug!("Unknown QueryPayloadError variant");
                     ErrorResponse {
                         error: "UnknownError".to_string(),
                         message: "Unknown Error".to_string(),
