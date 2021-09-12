@@ -186,31 +186,29 @@ pub(crate) async fn show_version_handler() -> impl Responder {
     })
 }
 
-/*#[cfg(test)]
+#[cfg(test)]
 mod tests {
     use super::*;
     use crate::contexts::{Session, SimpleSession};
     use crate::handlers::ErrorResponse;
-    use tokio::sync::oneshot;
 
-    /// Test the webserver startup to ensure that `tokio` and `warp` are working properly
-    #[tokio::test]
+    /// Test the webserver startup to ensure that `tokio` and `actix` are working properly
+    #[actix_rt::test]
     async fn webserver_start() {
-        let (shutdown_tx, shutdown_rx) = oneshot::channel();
-
-        let (server, _) =
-            tokio::join!(start_server(Some(shutdown_rx), None), queries(shutdown_tx),);
-        server.expect("server run");
+        tokio::select! {
+            server = start_server(None) => {
+                server.expect("server run");
+            }
+            _ = queries() => {}
+        }
     }
 
-    async fn queries(shutdown_tx: Sender<()>) {
+    async fn queries() {
         let web_config: config::Web = get_config_element().unwrap();
         let base_url = Url::parse(&format!("http://{}", web_config.bind_address)).unwrap();
 
         assert!(wait_for_server(&base_url).await);
         issue_queries(&base_url).await;
-
-        shutdown_tx.send(()).unwrap();
     }
 
     async fn issue_queries(base_url: &Url) {
@@ -230,6 +228,7 @@ mod tests {
         let body = client
             .post(base_url.join("project").unwrap())
             .header("Authorization", format!("Bearer {}", session.id()))
+            .header("Content-Type", "application/json")
             .body("no json")
             .send()
             .await
@@ -259,4 +258,4 @@ mod tests {
         }
         false
     }
-}*/
+}
