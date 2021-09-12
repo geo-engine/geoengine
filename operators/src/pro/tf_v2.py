@@ -2,6 +2,7 @@ import tensorflow as tf
 from tensorflow import keras
 import numpy as np
 from tensorflow.keras import layers
+from tensorflow.python.keras.backend import dropout
 
 
 physical_devices = tf.config.experimental.list_physical_devices('GPU')
@@ -73,8 +74,9 @@ def initUnet(num_classes, id, batch_size):
     # Define the model
     global model 
     model = keras.Model(inputs, outputs)
-    #Here we can add more metrics for later evaluation
-    model.compile(optimizer="rmsprop", loss="sparse_categorical_crossentropy")
+
+    optimizer=keras.optimizers.Adam(lr=0.01) 
+    model.compile(optimizer=optimizer, loss="sparse_categorical_crossentropy")
     model.summary()
     model.save('saved_model/{}'.format(id))
     print("Saved model under saved_model/{}".format(id))
@@ -90,9 +92,9 @@ def fit(X, y, batch_size):
     #print(y.shape)
     #print(X.shape)
     #TODO check wether nan's present?
-    print(np.isnan(np.sum(X)))
-    print(np.all(~np.isinf(X)))
-    X = np.nan_to_num(X)
+    #print("contains NaN's: {}".format(np.isnan(np.sum(X))))
+    #print("contains inf's: {}".format(~np.all(~np.isinf(X))))
+    #X = np.nan_to_num(X)
     
     model.fit(X, y, batch_size = batch_size)
 

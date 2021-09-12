@@ -8,209 +8,57 @@ use rand::prelude::*;
 use crate::util::Result;
 
 #[allow(clippy::too_many_arguments)]
-pub async fn imseg_fit<T, U, C: QueryContext>(
-    processor_ir_016: Box<dyn RasterQueryProcessor<RasterType = T>>,
-    processor_ir_039: Box<dyn RasterQueryProcessor<RasterType = T>>,
-    processor_ir_087: Box<dyn RasterQueryProcessor<RasterType = T>>,
-    processor_ir_097: Box<dyn RasterQueryProcessor<RasterType = T>>,
-    processor_ir_108: Box<dyn RasterQueryProcessor<RasterType = T>>,
-    processor_ir_120: Box<dyn RasterQueryProcessor<RasterType = T>>,
-    processor_ir_134: Box<dyn RasterQueryProcessor<RasterType = T>>,
-    processor_truth: Box<dyn RasterQueryProcessor<RasterType = U>>,
+pub async fn imseg_fit<C: QueryContext>(
+    processor_truth: Box<dyn RasterQueryProcessor<RasterType = u8>>,
     query_rect: QueryRectangle<SpatialPartition2D>,
     query_ctx: C,
-    batch_size: usize,
-    batches_per_query: usize,
 ) -> Result<()>
-where
-    T: Pixel + numpy::Element,
-    U: Pixel + numpy::Element,
 {
 
-    //For some reason we need that now...
-    pyo3::prepare_freethreaded_python();
-    let gil = pyo3::Python::acquire_gil();
-    let py = gil.python();
-
-    let mut rng = rand::thread_rng();
-
-    let py_mod = PyModule::from_code(py, include_str!("tf_v2.py"),"filename.py", "modulename").unwrap();
-    let name = PyUnicode::new(py, "first");
-    //TODO change depreciated function
-    let _init = py_mod.call("initUnet", (4,name, batch_size), None).unwrap();
-    //since every 15 minutes an image is available...
-    let step: i64 = (batch_size as i64 * 900_000) * batches_per_query as i64;
-    println!("Step: {}", step);
     
-    let mut start = query_rect.time_interval.start();
-    let mut inter_end = query_rect.time_interval.start();
-    let end = query_rect.time_interval.end();
     
-    let mut queries: Vec<QueryRectangle<SpatialPartition2D>> = Vec::new();
-    while start.as_utc_date_time().unwrap().timestamp() * 1000 <= (end.as_utc_date_time().unwrap().timestamp() * 1000) + step {
-        let end_time_new = (inter_end.as_utc_date_time().unwrap().timestamp() * 1000) + step;
-        inter_end = TimeInstance::from_millis(end_time_new)?;
         
-        let new_rect = QueryRectangle{
-            spatial_bounds: query_rect.spatial_bounds,
-            time_interval: TimeInterval::new(start, inter_end)?,
-            spatial_resolution: query_rect.spatial_resolution
-        };
-        queries.push(new_rect);
-        let start_time_new = (start.as_utc_date_time().unwrap().timestamp() * 1000) + step;
-        start = TimeInstance::from_millis(start_time_new)?;
-        
-    }
-    let mut rand_index: usize; 
-    while !queries.is_empty() {
-        let queries_left = queries.len();
-        println!("queries left: {:?}", queries_left);
-        rand_index = 0;
-        if queries_left > 1 {
-            println!("{:?}", queries_left - 1);
-            rand_index = rng.gen_range(0..queries_left-1);
-        }
-        
-        let the_chosen_one = queries.remove(rand_index);
-        let tile_stream_ir_016 = processor_ir_016.raster_query(the_chosen_one, &query_ctx).await?;
-        let tile_stream_ir_039 = processor_ir_039.raster_query(the_chosen_one, &query_ctx).await?;
-        let tile_stream_ir_087 = processor_ir_087.raster_query(the_chosen_one, &query_ctx).await?;
-        let tile_stream_ir_097 = processor_ir_097.raster_query(the_chosen_one, &query_ctx).await?;
-        let tile_stream_ir_108 = processor_ir_108.raster_query(the_chosen_one, &query_ctx).await?;
-        let tile_stream_ir_120 = processor_ir_120.raster_query(the_chosen_one, &query_ctx).await?;
-        let tile_stream_ir_134 = processor_ir_134.raster_query(the_chosen_one, &query_ctx).await?;
-        let tile_stream_truth = processor_truth.raster_query(the_chosen_one, &query_ctx).await?;
+    let mut tile_stream_truth = processor_truth.raster_query(query_rect, &query_ctx).await?;
 
-        let final_stream = tile_stream_ir_016.zip(tile_stream_ir_039.zip(tile_stream_ir_087.zip(tile_stream_ir_097.zip(tile_stream_ir_108.zip(tile_stream_ir_120.zip(tile_stream_ir_134.zip(tile_stream_truth)))))));
-
-        let mut chunked_stream = final_stream.chunks(batch_size);
-        while let Some(mut vctr) = chunked_stream.next().await {
-        let mut buffer: Vec<(Vec<T>, Vec<T>, Vec<T>, Vec<T>, Vec<T>, Vec<T>, Vec<T>, Vec<U>)> = Vec::new();
-        let mut tile_size: [usize;2] = [0,0];
-        let mut missing_elements: usize = 0;
-        
-             //TODO What if number of elements less than batch size?
-        
-        for _ in 0..batch_size {
-            let (ir_016, (ir_039, (ir_087, (ir_097, (ir_108, (ir_120, (ir_137, truth))))))) = vctr.remove(0);
-            // let a = ir_016.unwrap();
-            // let b = ir_039.unwrap();
-            // let c = ir_087.unwrap();
-            // let d = ir_097.unwrap();
-            // let e = ir_108.unwrap();
-            // let f = ir_120.unwrap();
-            // let g = ir_137.unwrap();
-            match (ir_016, ir_039, ir_087, ir_097, ir_108, ir_120, ir_137, truth) {
-                (Ok(ir_016), Ok(ir_039), Ok(ir_087), Ok(ir_097), Ok(ir_108), Ok(ir_120), Ok(ir_134), Ok(truth)) => {
-                    match (ir_016.grid_array, ir_039.grid_array, ir_087.grid_array, ir_097.grid_array, ir_108.grid_array, ir_120.grid_array, ir_134.grid_array, truth.grid_array) {
-                        (GridOrEmpty::Grid(grid_016), GridOrEmpty::Grid(grid_039),  GridOrEmpty::Grid(grid_087),  GridOrEmpty::Grid(grid_097), GridOrEmpty::Grid(grid_108), GridOrEmpty::Grid(grid_120), GridOrEmpty::Grid(grid_134), GridOrEmpty::Grid(grid_truth)) => {
-                            println!("016: {:?}", grid_016.data[131000]);
-                            println!("039: {:?}", grid_039.data[131000]);
-                            println!("087: {:?}", grid_087.data[131000]);
-                            println!("097: {:?}", grid_097.data[131000]);
-                            println!("108: {:?}", grid_108.data[131000]);
-                            println!("120: {:?}", grid_120.data[131000]);
-                            println!("134: {:?}", grid_134.data[131000]);
-                            
-                            
-                            tile_size = grid_016.shape.shape_array;
-                            buffer.push((grid_016.data, grid_039.data, grid_087.data, grid_097.data, grid_108.data, grid_120.data, grid_134.data, grid_truth.data));
-                            
-                        }, 
-                        _ => {
-                            println!("SOME ARE EMPTY");
-                            
-                            //if batch is not full we fill it with copies of randomnly selected elements already present(not ideal, just first idea I had)
-                            // buffer.push(buffer[rng.gen_range(0..buffer.len() - 1)].clone());
-                            // missing_elements = missing_elements + 1;
+    let mut x: Vec<u32> = vec![0,0,0,0,0];
+    let mut time: TimeInterval = TimeInterval::default();
+    let mut count: usize = 0;
+    while let Some(truth) = tile_stream_truth.next().await {
+        match truth {
+            Ok(truth) => {
+                time = truth.time;
+                match truth.grid_array {
+                    GridOrEmpty::Grid(g) => {
+                        count = count + 1;
+                        let nd = g.data.contains(&0);
+                        if !nd {
+                            for element in g.data.iter(){
+                                x[(*element - 1) as usize] = x[(*element - 1) as usize] + 1;
+                                
+                            }
+                        } else {
+                            println!("{}: {:?}", count, time);
                             
                         }
+                        
+                        
+                    }, 
+                    _ => {
+                        println!("It was empty");
+                        
                     }
-                },
-                (Err(e1), Err(e2), Err(e3), Err(e4), Err(e5), Err(e6), Err(e7), Ok(truth)) => {
-                    dbg!(e1);
-                },
-                (Err(e1), Err(e2), Err(e3), Err(e4), Err(e5), Err(e6), Err(e7), Err(truth)) => {
-                    dbg!(e1);
-                },
-                (Ok(e1), Ok(e2), Ok(e3), Ok(e4), Ok(e5), Ok(e6), Ok(e7), Err(truth)) => {
-                    dbg!(truth);
-                },
-                (Err(e1), Ok(e2), Ok(e3), Ok(e4), Ok(e5), Ok(e6), Ok(e7), Ok(truth)) => {
-                    dbg!(e1);
-                },
-                _ => {
-                    println!("AN ERROR OCCURED");
-                            
-                    //if batch is not full we fill it with copies of randomnly selected elements already  present(not ideal, just first idea I had)
-                    // buffer.push(buffer[rng.gen_range(0..buffer.len() - 1)].clone());
-                    // missing_elements = missing_elements + 1;
                 }
-            }
-        }
-    
-        let number_of_elements = buffer.len();
-
-        if number_of_elements != batch_size {
-            
-            //Filling up missing elements
-            let diff = batch_size - number_of_elements;
-            for _ in 0..diff {
+            }, 
+            _ => {
+                println!("Error");
                 
-                buffer.push(buffer[rng.gen_range(0..number_of_elements - 1)].clone());
-                missing_elements = missing_elements + 1;
             }
         }
-        //if more than 10% of the batch are copies we discard it alltogether
-        if missing_elements <= batch_size/10 {
-            let (data_016_init, data_039_init, data_087_init, data_097_init, data_108_init, data_120_init, data_134_init, data_truth_init) = buffer.remove(0);
 
-        let (mut arr_img_batch, mut arr_truth_batch) = create_arrays_from_data(data_016_init, data_039_init, data_087_init, data_097_init, data_108_init, data_120_init, data_134_init, data_truth_init, tile_size);
-        
-        let num_elements = buffer.len();
-
-        
-        let mut rand_index: usize;
-        for i in 0..(batch_size - 1) {
-            
-            rand_index = 0;
-            if num_elements - i > 0 {
-                rand_index = rng.gen_range(0..num_elements-i);
-            }
-            let (data_016, data_039, data_087, data_097, data_108, data_120, data_134, data_truth) = buffer.remove(rand_index);
-            let (arr_img, arr_truth) = create_arrays_from_data(data_016, data_039, data_087, data_097, data_108, data_120, data_134, data_truth, tile_size);
-
-            arr_img_batch = concatenate(Axis(0), &[arr_img_batch.view(), arr_img.view()]).unwrap();
-           
-            arr_truth_batch = concatenate(Axis(0), &[arr_truth_batch.view(), arr_truth.view()]).unwrap();
-            
-            
-        }
-
-        dbg!(&arr_img_batch.shape());
-        dbg!(&arr_truth_batch.shape());
-
-        let py_img = PyArray::from_owned_array(py, arr_img_batch);
-        let py_truth = PyArray::from_owned_array(py, arr_truth_batch );
-        //TODO change depreciated function
-        let _result = py_mod.call("fit", (py_img, py_truth, batch_size), None).unwrap();
-        
-        } else {
-            println!("Too many missing values!");
-        }
-        
-        
-        
-       }
     }
-       
-
-
+        
+    println!("end: {:?}", x);
     
-    
-    //TODO change depreciated function
-    let _save = py_mod.call("save", (name, ), None).unwrap();
-
     Ok(())
     
 }
@@ -290,278 +138,7 @@ mod tests {
 
         let query_bbox = SpatialPartition2D::new((0.0, 30000.0).into(), (30000.0, 0.0).into()).unwrap();
         let no_data_value = Some(0.);
-        let ir_016 = GdalMetaDataRegular{
-            result_descriptor: RasterResultDescriptor{
-                data_type: RasterDataType::I16,
-                spatial_reference: SpatialReferenceOption::
-                    SpatialReference(SpatialReference{
-                        authority: SpatialReferenceAuthority::SrOrg,
-                        code: 81,
-                    }),
-                measurement: Measurement::Continuous{
-                    measurement: "raw".to_string(),
-                    unit: None
-                },
-                no_data_value,
-            },
-            params: GdalDatasetParameters{
-                file_path: PathBuf::from("/mnt/panq/dbs_geo_data/satellite_data/msg_seviri/%%%_TIME_FORMATED_%%%"),
-                rasterband_channel: 1,
-                geo_transform: GeoTransform{
-                    origin_coordinate: (-5570248.477339744567871,5570248.477339744567871).into(),
-                    x_pixel_size: 3000.403165817260742,
-                    y_pixel_size: -3000.403165817260742, 
-                },
-                width: 11136,
-                height: 11136,
-                file_not_found_handling: FileNotFoundHandling::NoData,
-                no_data_value,
-                properties_mapping: Some(vec![GdalMetadataMapping::identity(offset_key(), RasterPropertiesEntryType::Number), GdalMetadataMapping::identity(slope_key(), RasterPropertiesEntryType::Number), GdalMetadataMapping::identity(channel_key(), RasterPropertiesEntryType::Number), GdalMetadataMapping::identity(satellite_key(), RasterPropertiesEntryType::Number)]),
-                gdal_open_options: None,
-            },
-            placeholder: "%%%_TIME_FORMATED_%%%".to_string(),
-            time_format: "%Y/%m/%d/%Y%m%d_%H%M/H-000-MSG3__-MSG3________-IR_016___-000001___-%Y%m%d%H%M-C_".to_string(),
-            start: TimeInstance::from_millis(1072917000000).unwrap(),
-            step: TimeStep{
-                granularity: TimeGranularity::Minutes,
-                step: 15,
-            }
-        };
-        let ir_039 = GdalMetaDataRegular{
-             result_descriptor: RasterResultDescriptor{
-                 data_type: RasterDataType::I16,
-                 spatial_reference: SpatialReferenceOption::
-                     SpatialReference(SpatialReference{
-                         authority: SpatialReferenceAuthority::SrOrg,
-                         code: 81,
-                     }),
-                 measurement: Measurement::Continuous{
-                    measurement: "raw".to_string(),
-                    unit: None
-                },
-                 no_data_value,
-             },
-             params: GdalDatasetParameters{
-                 file_path: PathBuf::from("/mnt/panq/dbs_geo_data/satellite_data/msg_seviri/%%%_TIME_FORMATED_%%%"),
-                 rasterband_channel: 1,
-                 geo_transform: GeoTransform{
-                     origin_coordinate: (-5570248.477339744567871,5570248.477339744567871).into(),
-                     x_pixel_size: 3000.403165817260742,
-                     y_pixel_size: -3000.403165817260742, 
-                 },
-                 width: 11136,
-                 height: 11136,
-                 file_not_found_handling: FileNotFoundHandling::NoData,
-                 no_data_value,
-                 properties_mapping: Some(vec![GdalMetadataMapping::identity(offset_key(), RasterPropertiesEntryType::Number), GdalMetadataMapping::identity(slope_key(), RasterPropertiesEntryType::Number), GdalMetadataMapping::identity(channel_key(), RasterPropertiesEntryType::Number), GdalMetadataMapping::identity(satellite_key(), RasterPropertiesEntryType::Number)]),
-                 gdal_open_options: None
-             },
-             placeholder: "%%%_TIME_FORMATED_%%%".to_string(),
-             time_format: "%Y/%m/%d/%Y%m%d_%H%M/H-000-MSG3__-MSG3________-IR_039___-000001___-%Y%m%d%H%M-C_".to_string(),
-             start: TimeInstance::from_millis(1072917000000).unwrap(),
-             step: TimeStep{
-                 granularity: TimeGranularity::Minutes,
-                step: 15,
-            }
-
-        };
-
-        let ir_087 = GdalMetaDataRegular{
-            result_descriptor: RasterResultDescriptor{
-                data_type: RasterDataType::I16,
-                spatial_reference: SpatialReferenceOption::
-                    SpatialReference(SpatialReference{
-                        authority: SpatialReferenceAuthority::SrOrg,
-                        code: 81,
-                    }),
-                measurement: Measurement::Continuous{
-                    measurement: "raw".to_string(),
-                    unit: None
-                },
-                no_data_value,
-            },
-            params: GdalDatasetParameters{
-                file_path: PathBuf::from("/mnt/panq/dbs_geo_data/satellite_data/msg_seviri/%%%_TIME_FORMATED_%%%"),
-                rasterband_channel: 1,
-                geo_transform: GeoTransform{
-                    origin_coordinate: (-5570248.477, 5570248.477).into(),
-                    x_pixel_size: 3000.403165817260742,
-                    y_pixel_size: -3000.403165817260742, 
-                },
-                width: 11136,
-                height: 11136,
-                file_not_found_handling: FileNotFoundHandling::NoData,
-                no_data_value,
-                properties_mapping: Some(vec![GdalMetadataMapping::identity(offset_key(), RasterPropertiesEntryType::Number), GdalMetadataMapping::identity(slope_key(), RasterPropertiesEntryType::Number), GdalMetadataMapping::identity(channel_key(), RasterPropertiesEntryType::Number), GdalMetadataMapping::identity(satellite_key(), RasterPropertiesEntryType::Number)]),
-                gdal_open_options: None,
-            },
-            placeholder: "%%%_TIME_FORMATED_%%%".to_string(),
-            time_format: "%Y/%m/%d/%Y%m%d_%H%M/H-000-MSG3__-MSG3________-IR_087___-000001___-%Y%m%d%H%M-C_".to_string(),
-            start: TimeInstance::from_millis(1072917000000).unwrap(),
-            step: TimeStep{
-                granularity: TimeGranularity::Minutes,
-                step: 15,
-            }
-
-        };
-
-        let ir_097 = GdalMetaDataRegular{
-            result_descriptor: RasterResultDescriptor{
-                data_type: RasterDataType::I16,
-                spatial_reference: SpatialReferenceOption::
-                    SpatialReference(SpatialReference{
-                        authority: SpatialReferenceAuthority::SrOrg,
-                        code: 81,
-                    }),
-                measurement: Measurement::Continuous{
-                    measurement: "raw".to_string(),
-                    unit: None
-                },
-                no_data_value,
-            },
-            params: GdalDatasetParameters{
-                file_path: PathBuf::from("/mnt/panq/dbs_geo_data/satellite_data/msg_seviri/%%%_TIME_FORMATED_%%%"),
-                rasterband_channel: 1,
-                geo_transform: GeoTransform{
-                    origin_coordinate: (-5570248.477, 5570248.477).into(),
-                    x_pixel_size: 3000.403165817260742,
-                    y_pixel_size: -3000.403165817260742, 
-                },
-                width: 11136,
-                height: 11136,
-                file_not_found_handling: FileNotFoundHandling::NoData,
-                no_data_value,
-                properties_mapping: Some(vec![GdalMetadataMapping::identity(offset_key(), RasterPropertiesEntryType::Number), GdalMetadataMapping::identity(slope_key(), RasterPropertiesEntryType::Number), GdalMetadataMapping::identity(channel_key(), RasterPropertiesEntryType::Number), GdalMetadataMapping::identity(satellite_key(), RasterPropertiesEntryType::Number)]),
-                gdal_open_options: None,
-            },
-            placeholder: "%%%_TIME_FORMATED_%%%".to_string(),
-            time_format: "%Y/%m/%d/%Y%m%d_%H%M/H-000-MSG3__-MSG3________-IR_097___-000001___-%Y%m%d%H%M-C_".to_string(),
-            start: TimeInstance::from_millis(1072917000000).unwrap(),
-            step: TimeStep{
-                granularity: TimeGranularity::Minutes,
-                step: 15,
-            }
-
-        };
-
-
-        let ir_108 = GdalMetaDataRegular{
-            result_descriptor: RasterResultDescriptor{
-                data_type: RasterDataType::I16,
-                spatial_reference: SpatialReferenceOption::
-                    SpatialReference(SpatialReference{
-                        authority: SpatialReferenceAuthority::SrOrg,
-                        code: 81,
-                    }),
-                measurement: Measurement::Continuous{
-                    measurement: "raw".to_string(),
-                    unit: None
-                },
-                no_data_value,
-            },
-            params: GdalDatasetParameters{
-                file_path: PathBuf::from("/mnt/panq/dbs_geo_data/satellite_data/msg_seviri/%%%_TIME_FORMATED_%%%"),
-                rasterband_channel: 1,
-                geo_transform: GeoTransform{
-                    origin_coordinate: (-5570248.477, 5570248.477).into(),
-                    x_pixel_size: 3000.403165817260742,
-                    y_pixel_size: -3000.403165817260742, 
-                },
-                width: 11136,
-                height: 11136,
-                file_not_found_handling: FileNotFoundHandling::NoData,
-                no_data_value,
-                properties_mapping: Some(vec![GdalMetadataMapping::identity(offset_key(), RasterPropertiesEntryType::Number), GdalMetadataMapping::identity(slope_key(), RasterPropertiesEntryType::Number), GdalMetadataMapping::identity(channel_key(), RasterPropertiesEntryType::Number), GdalMetadataMapping::identity(satellite_key(), RasterPropertiesEntryType::Number)]),
-                gdal_open_options: None,
-            },
-            placeholder: "%%%_TIME_FORMATED_%%%".to_string(),
-            time_format: "%Y/%m/%d/%Y%m%d_%H%M/H-000-MSG3__-MSG3________-IR_108___-000001___-%Y%m%d%H%M-C_".to_string(),
-            start: TimeInstance::from_millis(1072917000000).unwrap(),
-            step: TimeStep{
-                granularity: TimeGranularity::Minutes,
-                step: 15,
-            }
-
-        };
-
-        let ir_120 = GdalMetaDataRegular{
-            result_descriptor: RasterResultDescriptor{
-                data_type: RasterDataType::I16,
-                spatial_reference: SpatialReferenceOption::
-                    SpatialReference(SpatialReference{
-                        authority: SpatialReferenceAuthority::SrOrg,
-                        code: 81,
-                    }),
-                measurement: Measurement::Continuous{
-                    measurement: "raw".to_string(),
-                    unit: None
-                },
-                no_data_value,
-            },
-            params: GdalDatasetParameters{
-                file_path: PathBuf::from("/mnt/panq/dbs_geo_data/satellite_data/msg_seviri/%%%_TIME_FORMATED_%%%"),
-                rasterband_channel: 1,
-                geo_transform: GeoTransform{
-                    origin_coordinate: (-5570248.477, 5570248.477).into(),
-                    x_pixel_size: 3000.403165817260742,
-                    y_pixel_size: -3000.403165817260742, 
-                },
-                width: 11136,
-                height: 11136,
-                file_not_found_handling: FileNotFoundHandling::NoData,
-                no_data_value,
-                properties_mapping: Some(vec![GdalMetadataMapping::identity(offset_key(), RasterPropertiesEntryType::Number), GdalMetadataMapping::identity(slope_key(), RasterPropertiesEntryType::Number), GdalMetadataMapping::identity(channel_key(), RasterPropertiesEntryType::Number), GdalMetadataMapping::identity(satellite_key(), RasterPropertiesEntryType::Number)]),
-                gdal_open_options: None,
-            },
-            placeholder: "%%%_TIME_FORMATED_%%%".to_string(),
-            time_format: "%Y/%m/%d/%Y%m%d_%H%M/H-000-MSG3__-MSG3________-IR_120___-000001___-%Y%m%d%H%M-C_".to_string(),
-            start: TimeInstance::from_millis(1072917000000).unwrap(),
-            step: TimeStep{
-                granularity: TimeGranularity::Minutes,
-                step: 15,
-            }
-
-        };
-
-        let ir_134 = GdalMetaDataRegular{
-            result_descriptor: RasterResultDescriptor{
-                data_type: RasterDataType::I16,
-                spatial_reference: SpatialReferenceOption::
-                    SpatialReference(SpatialReference{
-                        authority: SpatialReferenceAuthority::SrOrg,
-                        code: 81,
-                    }),
-                measurement: Measurement::Continuous{
-                    measurement: "raw".to_string(),
-                    unit: None
-                },
-                no_data_value,
-            },
-            params: GdalDatasetParameters{
-                file_path: PathBuf::from("/mnt/panq/dbs_geo_data/satellite_data/msg_seviri/%%%_TIME_FORMATED_%%%"),
-                rasterband_channel: 1,
-                geo_transform: GeoTransform{
-                    origin_coordinate: (-5570248.477, 5570248.477).into(),
-                    x_pixel_size: 3000.403165817260742,
-                    y_pixel_size: -3000.403165817260742, 
-                },
-                width: 11136,
-                height: 11136,
-                file_not_found_handling: FileNotFoundHandling::NoData,
-                no_data_value,
-                properties_mapping: Some(vec![GdalMetadataMapping::identity(offset_key(), RasterPropertiesEntryType::Number), GdalMetadataMapping::identity(slope_key(), RasterPropertiesEntryType::Number), GdalMetadataMapping::identity(channel_key(), RasterPropertiesEntryType::Number), GdalMetadataMapping::identity(satellite_key(), RasterPropertiesEntryType::Number)]),
-                gdal_open_options: None,
-            },
-            placeholder: "%%%_TIME_FORMATED_%%%".to_string(),
-            time_format: "%Y/%m/%d/%Y%m%d_%H%M/H-000-MSG3__-MSG3________-IR_134___-000001___-%Y%m%d%H%M-C_".to_string(),
-            start: TimeInstance::from_millis(1072917000000).unwrap(),
-            step: TimeStep{
-                granularity: TimeGranularity::Minutes,
-                step: 15,
-            }
-
-        };
-
+        
         let claas = GdalMetaDataRegular{
             result_descriptor: RasterResultDescriptor{
                 data_type: RasterDataType::U8,
@@ -601,312 +178,32 @@ mod tests {
         let mut mc = MockExecutionContext::default();
         mc.tiling_specification = tiling_specification;
 
-        let id_ir_016 = DatasetId::Internal{
+        
+        let id_claas = DatasetId::Internal{
             dataset_id: InternalDatasetId::new(),
         };
 
-        let op_ir_016 = Box::new(GdalSource{
+        let op_claas = Box::new(GdalSource{
             params: GdalSourceParameters{
-                dataset: id_ir_016.clone(),
+                dataset: id_claas.clone(),
             }
         });
 
-        
-        mc.add_meta_data(id_ir_016, Box::new(ir_016.clone()));
-
-        let rad_ir_016 = RasterOperator::boxed(Radiance{
-            params: RadianceParams{
-                
-            },
-            sources: SingleRasterSource{
-                raster: op_ir_016
-            }
-        });
-        let ref_ir_016 = RasterOperator::boxed(Reflectance {
-            params: ReflectanceParams::default(),
-            sources: SingleRasterSource{
-                raster: rad_ir_016,
-            }
-        });
-
-        let exp_ir_016 = RasterOperator::boxed(Expression{
-            params: ExpressionParams { expression: "A-0.15282721917305925/0.040190788161123925".to_string(), output_type: RasterDataType::F32, output_no_data_value: no_data_value.unwrap(), output_measurement: Some(Measurement::Continuous{
-                measurement: "raw".to_string(),
-                unit: None,
-            })
-        },
-        sources: ExpressionSources{
-            a: ref_ir_016,
-            b: None,
-            c: None,
-        }
-        });
-        
-        let proc_ir_016 = ref_ir_016
-        .initialize(&mc).await.unwrap().query_processor().unwrap().get_f32().unwrap();
-
-        let id_ir_039 = DatasetId::Internal{
-            dataset_id: InternalDatasetId::new(),
-        };
-
-        let op_ir_039 = Box::new(GdalSource{
-            params: GdalSourceParameters{
-                dataset: id_ir_039.clone(),
-            }
-        });
-
-        
-        mc.add_meta_data(id_ir_039, Box::new(ir_039.clone()));
-
-        let temp_ir_039 = RasterOperator::boxed(Temperature{
-            params: TemperatureParams::default(),
-            sources: SingleRasterSource{
-                raster: op_ir_039
-            }
-        });
-        let proc_ir_039 = temp_ir_039
-        .initialize(&mc).await.unwrap().query_processor().unwrap().get_f32().unwrap();
-
-        let id_ir_087 = DatasetId::Internal{
-            dataset_id: InternalDatasetId::new(),
-        };
-
-        let op_ir_087 = Box::new(GdalSource{
-            params: GdalSourceParameters{
-                dataset: id_ir_087.clone(),
-            }
-        });
-
-        
-        mc.add_meta_data(id_ir_087, Box::new(ir_087.clone()));
-
-        let temp_ir_087 = RasterOperator::boxed(Temperature{
-            params: TemperatureParams::default(),
-            sources: SingleRasterSource{
-                raster: op_ir_087
-            }
-        });
-        let proc_ir_087 = temp_ir_087
-        .initialize(&mc).await.unwrap().query_processor().unwrap().get_f32().unwrap();
-
-        let id_ir_097 = DatasetId::Internal{
-            dataset_id: InternalDatasetId::new(),
-        };
-
-        let op_ir_097 = Box::new(GdalSource{
-            params: GdalSourceParameters{
-                dataset: id_ir_097.clone(),
-            }
-        });
-
-        
-        mc.add_meta_data(id_ir_097, Box::new(ir_097.clone()));
-
-        let temp_ir_097 = RasterOperator::boxed(Temperature{
-            params: TemperatureParams::default(),
-            sources: SingleRasterSource{
-                raster: op_ir_097
-            }
-        });
-        let proc_ir_097 = temp_ir_097
-        .initialize(&mc).await.unwrap().query_processor().unwrap().get_f32().unwrap();
-        
-        let id_ir_108 = DatasetId::Internal{
-            dataset_id: InternalDatasetId::new(),
-        };
-
-        let op_ir_108 = Box::new(GdalSource{
-            params: GdalSourceParameters{
-                dataset: id_ir_108.clone(),
-            }
-        });
-
-        
-        mc.add_meta_data(id_ir_108, Box::new(ir_108.clone()));
-
-        let temp_ir_108 = RasterOperator::boxed(Temperature{
-            params: TemperatureParams::default(),
-            sources: SingleRasterSource{
-                raster: op_ir_108
-            }
-        });
-        let proc_ir_108 = temp_ir_108
-        .initialize(&mc).await.unwrap().query_processor().unwrap().get_f32().unwrap();
+        mc.add_meta_data(id_claas, Box::new(claas.clone()));
 
 
-        let id_ir_120 = DatasetId::Internal{
-            dataset_id: InternalDatasetId::new(),
-        };
+        let proc_claas = op_claas
+        .initialize(&mc).await.unwrap().query_processor().unwrap().get_u8().unwrap();
 
-        let op_ir_120 = Box::new(GdalSource{
-            params: GdalSourceParameters{
-                dataset: id_ir_120.clone(),
-            }
-        });
-
-        
-        mc.add_meta_data(id_ir_120, Box::new(ir_120.clone()));
-
-        let temp_ir_120 = RasterOperator::boxed(Temperature{
-            params: TemperatureParams::default(),
-            sources: SingleRasterSource{
-                raster: op_ir_120
-            }
-        });
-        let proc_ir_120 = temp_ir_120
-        .initialize(&mc).await.unwrap().query_processor().unwrap().get_f32().unwrap();
-
-        let id_ir_134 = DatasetId::Internal{
-            dataset_id: InternalDatasetId::new(),
-        };
-
-        let op_ir_134 = Box::new(GdalSource{
-            params: GdalSourceParameters{
-                dataset: id_ir_134.clone(),
-            }
-        });
-
-        
-        mc.add_meta_data(id_ir_134, Box::new(ir_134.clone()));
-
-        let temp_ir_134 = RasterOperator::boxed(Temperature{
-            params: TemperatureParams::default(),
-            sources: SingleRasterSource{
-                raster: op_ir_134
-            }
-        });
-        let proc_ir_134 = temp_ir_134
-        .initialize(&mc).await.unwrap().query_processor().unwrap().get_f32().unwrap();
-
-
-        // let source_a = GdalSourceProcessor::<i16>{
-        //     tiling_specification,
-        //     meta_data: Box::new(ir_016),
-        //     phantom_data: Default::default(),
-        // };
-
-        
-
-        // let source_b = GdalSourceProcessor::<i16>{
-        //     tiling_specification,
-        //     meta_data: Box::new(ir_039),
-        //     phantom_data: Default::default(),
-        //  };
-        //  let source_c = GdalSourceProcessor::<i16>{
-        //    tiling_specification,
-        //    meta_data: Box::new(ir_087),
-        //    phantom_data: Default::default(),
-        //  };
-        // let source_d = GdalSourceProcessor::<i16>{
-        //     tiling_specification,
-        //     meta_data: Box::new(ir_097),
-        //     phantom_data: Default::default(),
-        // };
-
-        // let source_e = GdalSourceProcessor::<i16>{
-        //     tiling_specification,
-        //     meta_data: Box::new(ir_108),
-        //     phantom_data: Default::default(),
-        // };
-
-        // let source_f = GdalSourceProcessor::<i16>{
-        //     tiling_specification,
-        //     meta_data: Box::new(ir_120),
-        //     phantom_data: Default::default(),
-        // };
-   
-        // let source_g = GdalSourceProcessor::<i16>{
-        //     tiling_specification,
-        //     meta_data: Box::new(ir_134),
-        //     phantom_data: Default::default(),
-        // };
-
-        let source_h = GdalSourceProcessor::<u8>{
-            tiling_specification,
-            meta_data: Box::new(claas),
-            phantom_data: Default::default(),
-        };
-        
-
-        // let source_radiance_a = RasterQueryProcessor::boxed(RadianceProcessor::new(
-        //     source_a.boxed(),
-        //     no_data_value.unwrap() as f32
-        // ));
-
-        // let source_radiance_b = RasterQueryProcessor::boxed(RadianceProcessor::new(
-        //     source_b.boxed(),
-        //     no_data_value.unwrap() as f32
-        // ));
-
-        // let source_radiance_c = RasterQueryProcessor::boxed(RadianceProcessor::new(
-        //     source_c.boxed(),
-        //     no_data_value.unwrap() as f32
-        // ));
-
-        // let source_radiance_d = RasterQueryProcessor::boxed(RadianceProcessor::new(
-        //     source_d.boxed(),
-        //     no_data_value.unwrap() as f32
-        // ));
-
-        // let source_radiance_e = RasterQueryProcessor::boxed(RadianceProcessor::new(
-        //     source_e.boxed(),
-        //     no_data_value.unwrap() as f32
-        // ));
-
-        // let source_radiance_f = RasterQueryProcessor::boxed(RadianceProcessor::new(
-        //     source_f.boxed(),
-        //     no_data_value.unwrap() as f32
-        // ));
-
-        // let source_radiance_g = RasterQueryProcessor::boxed(RadianceProcessor::new(
-        //     source_g.boxed(),
-        //     no_data_value.unwrap() as f32
-        // ));
-
-        
-        // let source_temperature_a = RasterQueryProcessor::boxed(TemperatureProcessor::new(
-        //     source_radiance_a,
-        //     TemperatureParams::default(),
-        // ));
-
-        // let source_temperature_b = RasterQueryProcessor::boxed(TemperatureProcessor::new(
-        //     source_radiance_b,
-        //     TemperatureParams::default(),
-        // ));
-
-        // let source_temperature_c = RasterQueryProcessor::boxed(TemperatureProcessor::new(
-        //     source_radiance_c,
-        //     TemperatureParams::default(),
-        // ));
-
-        // let source_temperature_d = RasterQueryProcessor::boxed(TemperatureProcessor::new(
-        //     source_radiance_d,
-        //     TemperatureParams::default(),
-        // ));
-
-        // let source_temperature_e = RasterQueryProcessor::boxed(TemperatureProcessor::new(
-        //     source_radiance_e,
-        //     TemperatureParams::default(),
-        // ));
-
-        // let source_temperature_f = RasterQueryProcessor::boxed(TemperatureProcessor::new(
-        //     source_radiance_f,
-        //     TemperatureParams::default(),
-        // ));
-
-        // let source_temperature_g = RasterQueryProcessor::boxed(TemperatureProcessor::new(
-        //     source_radiance_g,
-        //     TemperatureParams::default(),
-        // ));
-
-
-        let x = imseg_fit(proc_ir_016, proc_ir_039, proc_ir_087, proc_ir_097, proc_ir_108, proc_ir_120, proc_ir_134,source_h.boxed(), QueryRectangle {
+        let x = imseg_fit(proc_claas, QueryRectangle {
             spatial_bounds: query_bbox,
-            time_interval: TimeInterval::new(1_388_536_200_000, 1_388_536_200_000 + 90_000_000)
+            time_interval: TimeInterval::new(1_388_574_000_000, 1_388_574_000_000 + 900_000_000)
                 .unwrap(),
             spatial_resolution: query_spatial_resolution,
         }, ctx,
-    10 as usize,
-10 as usize).await.unwrap();
+    ).await.unwrap();
     }
 }
+//[20992, 85395640, 108417253, 67523052, 631]
+//[85416632, 108417253, 67523052, 631, 0]
+//[85318247, 108293235, 67483311, 631, 0]

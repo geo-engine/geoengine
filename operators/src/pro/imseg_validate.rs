@@ -1,3 +1,5 @@
+use std::result;
+
 use futures::StreamExt;
 use geoengine_datatypes::{primitives::{SpatialPartition2D}, raster::{GridOrEmpty, Pixel}};
 use crate::{engine::{QueryContext, QueryRectangle, RasterQueryProcessor}};
@@ -21,6 +23,7 @@ pub async fn imseg_fit<T, U, C: QueryContext>(
     query_rect: QueryRectangle<SpatialPartition2D>,
     query_ctx: C,
     batch_size: usize,
+    no_data_value: U,
 ) -> Result<()>
 where
     T: Pixel + numpy::Element,
@@ -33,7 +36,7 @@ where
     let py = gil.python();
 
     let py_mod = PyModule::from_code(py, include_str!("tf_v2.py"),"filename.py", "modulename").unwrap();
-    let name = PyUnicode::new(py, "first");
+    let name = PyUnicode::new(py, "second");
     //TODO change depreciated function
     let _init = py_mod.call("load", (name, ), None).unwrap();
 
@@ -57,9 +60,13 @@ where
                 match (ir_016.grid_array, ir_039.grid_array, ir_087.grid_array, ir_097.grid_array, ir_108.grid_array, ir_120.grid_array, ir_134.grid_array, truth.grid_array) {
                     (GridOrEmpty::Grid(grid_016), GridOrEmpty::Grid(grid_039),  GridOrEmpty::Grid(grid_087),  GridOrEmpty::Grid(grid_097), GridOrEmpty::Grid(grid_108), GridOrEmpty::Grid(grid_120), GridOrEmpty::Grid(grid_134), GridOrEmpty::Grid(grid_truth)) => {
                         let tile_size = grid_016.shape.shape_array;
-                        let (arr_img_batch, arr_truth_batch) = create_arrays_from_data(grid_016.data, grid_039.data, grid_087.data, grid_097.data, grid_108.data, grid_120.data, grid_134.data, grid_truth.data, tile_size);
-                        dbg!(&arr_img_batch.shape());
-                        dbg!(&arr_truth_batch.shape());
+                        let ndv = grid_truth.data.contains(&0);
+                        
+                        if !ndv {
+
+                            let (arr_img_batch, arr_truth_batch) = create_arrays_from_data(grid_016.data, grid_039.data, grid_087.data, grid_097.data, grid_108.data, grid_120.data, grid_134.data, grid_truth.data, tile_size);
+                        // dbg!(&arr_img_batch.shape());
+                        // dbg!(&arr_truth_batch.shape());
 
                         let py_img = PyArray::from_owned_array(py, arr_img_batch);
                         //TODO change depreciated function
@@ -69,13 +76,21 @@ where
                         .unwrap()
                         .to_owned_array();
 
+                        println!("{}", arr_truth_batch);
+                        
+
+        
+
                         let mut segmap = Array2::<u8>::from_elem((512,512), 0);
                         let result = result_img.slice(ndarray::s![0,..,..,..]);
+                
                         for i in 0..512 {
                             for j in 0..512 {
                                 let view = result.slice(ndarray::s![i,j,..]);
                                 let mut max: f32 = 0.0;
                                 let mut max_class = 0;
+                                //println!("{:?}", view);
+                                
                                 
                                 for t in 0..3 {
                                     //println!("predited: {:?}", view[t as usize]);
@@ -94,10 +109,16 @@ where
                             for j in 0 .. tile_size[1] {
                                 
                                 
-                                counts[segmap[[i, j]] as usize][arr_truth_batch[[i, j ]] as usize] = counts[segmap[[i, j]] as usize][arr_truth_batch[[i, j ]] as usize] + 1;
+                                counts[segmap[[i, j]] as usize][(arr_truth_batch[[i, j ]] - 1) as usize] = counts[segmap[[i, j]] as usize][(arr_truth_batch[[i, j ]] - 1) as usize] + 1;
                             }
                         }
+                         
+
+                        } else {
+                            println!("No-data detected");
                             
+                        }
+                           
                     }, 
                     _ => {
                        
@@ -164,13 +185,21 @@ U: Clone {
 
 #[cfg(test)]
 mod tests {
-    use geoengine_datatypes::{raster::{GeoTransform, RasterDataType}, spatial_reference::{SpatialReference, SpatialReferenceAuthority, SpatialReferenceOption}, 
+    use geoengine_datatypes::{dataset::{DatasetId, InternalDatasetId},raster::{GeoTransform, RasterDataType, RasterPropertiesEntryType}, spatial_reference::{SpatialReference, SpatialReferenceAuthority, SpatialReferenceOption}, 
         primitives::{Coordinate2D, TimeInterval, SpatialResolution,  Measurement, TimeGranularity, TimeInstance, TimeStep},
         raster::{TilingSpecification}
     };
     use std::path::PathBuf;
-    use crate::{engine::{MockQueryContext, RasterResultDescriptor}, source::{GdalMetaDataRegular, GdalSourceProcessor,FileNotFoundHandling, GdalDatasetParameters}};
-
+    use crate::{engine::{MockQueryContext, RasterResultDescriptor, MockExecutionContext, RasterOperator}, source::{GdalMetadataMapping, GdalMetaDataRegular, GdalSourceProcessor,FileNotFoundHandling, GdalDatasetParameters, GdalSource, GdalSourceParameters}};
+    use crate::processing::meteosat::radiance::{Radiance, RadianceProcessor};
+    use crate::processing::meteosat::{offset_key, slope_key, satellite_key, channel_key};
+    use crate::processing::meteosat::temperature::{Temperature, TemperatureProcessor};
+    use crate::processing::meteosat::radiance::RadianceParams;
+    use crate::processing::meteosat::temperature::TemperatureParams;
+    use crate::processing::meteosat::reflectance::{Reflectance, ReflectanceParams};
+    use crate::processing::expression::{Expression, ExpressionParams, ExpressionSources};
+    use crate::engine::SingleRasterSource;
+    use geoengine_datatypes::util::Identifier;
 
     use super::*;
     
@@ -184,7 +213,7 @@ mod tests {
         let query_spatial_resolution = SpatialResolution::new(3000.4, 3000.4).unwrap();
 
         let query_bbox = SpatialPartition2D::new((0.0, 30000.0).into(), (30000.0, 0.0).into()).unwrap();
-        let no_data_value = Some(0.);
+        let no_data_value = Some(5.);
         let ir_016 = GdalMetaDataRegular{
             result_descriptor: RasterResultDescriptor{
                 data_type: RasterDataType::I16,
@@ -193,7 +222,10 @@ mod tests {
                         authority: SpatialReferenceAuthority::SrOrg,
                         code: 81,
                     }),
-                measurement: Measurement::Unitless,
+                measurement: Measurement::Continuous{
+                    measurement: "raw".to_string(),
+                    unit: None
+                },
                 no_data_value,
             },
             params: GdalDatasetParameters{
@@ -208,7 +240,7 @@ mod tests {
                 height: 11136,
                 file_not_found_handling: FileNotFoundHandling::NoData,
                 no_data_value,
-                properties_mapping: None,
+                properties_mapping: Some(vec![GdalMetadataMapping::identity(offset_key(), RasterPropertiesEntryType::Number), GdalMetadataMapping::identity(slope_key(), RasterPropertiesEntryType::Number), GdalMetadataMapping::identity(channel_key(), RasterPropertiesEntryType::Number), GdalMetadataMapping::identity(satellite_key(), RasterPropertiesEntryType::Number)]),
                 gdal_open_options: None,
             },
             placeholder: "%%%_TIME_FORMATED_%%%".to_string(),
@@ -227,7 +259,10 @@ mod tests {
                          authority: SpatialReferenceAuthority::SrOrg,
                          code: 81,
                      }),
-                 measurement: Measurement::Unitless,
+                 measurement: Measurement::Continuous{
+                    measurement: "raw".to_string(),
+                    unit: None
+                },
                  no_data_value,
              },
              params: GdalDatasetParameters{
@@ -242,7 +277,7 @@ mod tests {
                  height: 11136,
                  file_not_found_handling: FileNotFoundHandling::NoData,
                  no_data_value,
-                 properties_mapping: None,
+                 properties_mapping: Some(vec![GdalMetadataMapping::identity(offset_key(), RasterPropertiesEntryType::Number), GdalMetadataMapping::identity(slope_key(), RasterPropertiesEntryType::Number), GdalMetadataMapping::identity(channel_key(), RasterPropertiesEntryType::Number), GdalMetadataMapping::identity(satellite_key(), RasterPropertiesEntryType::Number)]),
                  gdal_open_options: None
              },
              placeholder: "%%%_TIME_FORMATED_%%%".to_string(),
@@ -263,7 +298,10 @@ mod tests {
                         authority: SpatialReferenceAuthority::SrOrg,
                         code: 81,
                     }),
-                measurement: Measurement::Unitless,
+                measurement: Measurement::Continuous{
+                    measurement: "raw".to_string(),
+                    unit: None
+                },
                 no_data_value,
             },
             params: GdalDatasetParameters{
@@ -278,7 +316,7 @@ mod tests {
                 height: 11136,
                 file_not_found_handling: FileNotFoundHandling::NoData,
                 no_data_value,
-                properties_mapping: None,
+                properties_mapping: Some(vec![GdalMetadataMapping::identity(offset_key(), RasterPropertiesEntryType::Number), GdalMetadataMapping::identity(slope_key(), RasterPropertiesEntryType::Number), GdalMetadataMapping::identity(channel_key(), RasterPropertiesEntryType::Number), GdalMetadataMapping::identity(satellite_key(), RasterPropertiesEntryType::Number)]),
                 gdal_open_options: None,
             },
             placeholder: "%%%_TIME_FORMATED_%%%".to_string(),
@@ -299,7 +337,10 @@ mod tests {
                         authority: SpatialReferenceAuthority::SrOrg,
                         code: 81,
                     }),
-                measurement: Measurement::Unitless,
+                measurement: Measurement::Continuous{
+                    measurement: "raw".to_string(),
+                    unit: None
+                },
                 no_data_value,
             },
             params: GdalDatasetParameters{
@@ -314,7 +355,7 @@ mod tests {
                 height: 11136,
                 file_not_found_handling: FileNotFoundHandling::NoData,
                 no_data_value,
-                properties_mapping: None,
+                properties_mapping: Some(vec![GdalMetadataMapping::identity(offset_key(), RasterPropertiesEntryType::Number), GdalMetadataMapping::identity(slope_key(), RasterPropertiesEntryType::Number), GdalMetadataMapping::identity(channel_key(), RasterPropertiesEntryType::Number), GdalMetadataMapping::identity(satellite_key(), RasterPropertiesEntryType::Number)]),
                 gdal_open_options: None,
             },
             placeholder: "%%%_TIME_FORMATED_%%%".to_string(),
@@ -336,7 +377,10 @@ mod tests {
                         authority: SpatialReferenceAuthority::SrOrg,
                         code: 81,
                     }),
-                measurement: Measurement::Unitless,
+                measurement: Measurement::Continuous{
+                    measurement: "raw".to_string(),
+                    unit: None
+                },
                 no_data_value,
             },
             params: GdalDatasetParameters{
@@ -351,7 +395,7 @@ mod tests {
                 height: 11136,
                 file_not_found_handling: FileNotFoundHandling::NoData,
                 no_data_value,
-                properties_mapping: None,
+                properties_mapping: Some(vec![GdalMetadataMapping::identity(offset_key(), RasterPropertiesEntryType::Number), GdalMetadataMapping::identity(slope_key(), RasterPropertiesEntryType::Number), GdalMetadataMapping::identity(channel_key(), RasterPropertiesEntryType::Number), GdalMetadataMapping::identity(satellite_key(), RasterPropertiesEntryType::Number)]),
                 gdal_open_options: None,
             },
             placeholder: "%%%_TIME_FORMATED_%%%".to_string(),
@@ -372,7 +416,10 @@ mod tests {
                         authority: SpatialReferenceAuthority::SrOrg,
                         code: 81,
                     }),
-                measurement: Measurement::Unitless,
+                measurement: Measurement::Continuous{
+                    measurement: "raw".to_string(),
+                    unit: None
+                },
                 no_data_value,
             },
             params: GdalDatasetParameters{
@@ -387,7 +434,7 @@ mod tests {
                 height: 11136,
                 file_not_found_handling: FileNotFoundHandling::NoData,
                 no_data_value,
-                properties_mapping: None,
+                properties_mapping: Some(vec![GdalMetadataMapping::identity(offset_key(), RasterPropertiesEntryType::Number), GdalMetadataMapping::identity(slope_key(), RasterPropertiesEntryType::Number), GdalMetadataMapping::identity(channel_key(), RasterPropertiesEntryType::Number), GdalMetadataMapping::identity(satellite_key(), RasterPropertiesEntryType::Number)]),
                 gdal_open_options: None,
             },
             placeholder: "%%%_TIME_FORMATED_%%%".to_string(),
@@ -408,7 +455,10 @@ mod tests {
                         authority: SpatialReferenceAuthority::SrOrg,
                         code: 81,
                     }),
-                measurement: Measurement::Unitless,
+                measurement: Measurement::Continuous{
+                    measurement: "raw".to_string(),
+                    unit: None
+                },
                 no_data_value,
             },
             params: GdalDatasetParameters{
@@ -423,7 +473,7 @@ mod tests {
                 height: 11136,
                 file_not_found_handling: FileNotFoundHandling::NoData,
                 no_data_value,
-                properties_mapping: None,
+                properties_mapping: Some(vec![GdalMetadataMapping::identity(offset_key(), RasterPropertiesEntryType::Number), GdalMetadataMapping::identity(slope_key(), RasterPropertiesEntryType::Number), GdalMetadataMapping::identity(channel_key(), RasterPropertiesEntryType::Number), GdalMetadataMapping::identity(satellite_key(), RasterPropertiesEntryType::Number)]),
                 gdal_open_options: None,
             },
             placeholder: "%%%_TIME_FORMATED_%%%".to_string(),
@@ -472,57 +522,286 @@ mod tests {
 
         };
 
-        let source_a = GdalSourceProcessor::<i16>{
-            tiling_specification,
-            meta_data: Box::new(ir_016),
-            phantom_data: Default::default(),
-        };
-        let source_b = GdalSourceProcessor::<i16>{
-            tiling_specification,
-            meta_data: Box::new(ir_039),
-            phantom_data: Default::default(),
-         };
-         let source_c = GdalSourceProcessor::<i16>{
-           tiling_specification,
-           meta_data: Box::new(ir_087),
-           phantom_data: Default::default(),
-         };
-        let source_d = GdalSourceProcessor::<i16>{
-            tiling_specification,
-            meta_data: Box::new(ir_097),
-            phantom_data: Default::default(),
+        let mut mc = MockExecutionContext::default();
+        mc.tiling_specification = tiling_specification;
+
+        let id_ir_016 = DatasetId::Internal{
+            dataset_id: InternalDatasetId::new(),
         };
 
-        let source_e = GdalSourceProcessor::<i16>{
-            tiling_specification,
-            meta_data: Box::new(ir_108),
-            phantom_data: Default::default(),
+        let op_ir_016 = Box::new(GdalSource{
+            params: GdalSourceParameters{
+                dataset: id_ir_016.clone(),
+            }
+        });
+
+        
+        mc.add_meta_data(id_ir_016, Box::new(ir_016.clone()));
+
+        let rad_ir_016 = RasterOperator::boxed(Radiance{
+            params: RadianceParams{
+                
+            },
+            sources: SingleRasterSource{
+                raster: op_ir_016
+            }
+        });
+        let ref_ir_016 = RasterOperator::boxed(Reflectance {
+            params: ReflectanceParams::default(),
+            sources: SingleRasterSource{
+                raster: rad_ir_016,
+            }
+        });
+
+        let exp_ir_016 = RasterOperator::boxed(Expression{
+            params: ExpressionParams { expression: "(A-0.15282721917305925)/0.040190788161123925".to_string(), output_type: RasterDataType::F32, output_no_data_value: no_data_value.unwrap(), output_measurement: Some(Measurement::Continuous{
+                measurement: "raw".to_string(),
+                unit: None,
+            })
+        },
+        sources: ExpressionSources{
+            a: ref_ir_016.clone(),
+            b: Some(ref_ir_016),
+            c: None,
+        }
+        });
+        
+        let proc_ir_016 = exp_ir_016
+        .initialize(&mc).await.unwrap().query_processor().unwrap().get_f32().unwrap();
+
+        let id_ir_039 = DatasetId::Internal{
+            dataset_id: InternalDatasetId::new(),
         };
 
-        let source_f = GdalSourceProcessor::<i16>{
-            tiling_specification,
-            meta_data: Box::new(ir_120),
-            phantom_data: Default::default(),
-        };
-   
-        let source_g = GdalSourceProcessor::<i16>{
-            tiling_specification,
-            meta_data: Box::new(ir_134),
-            phantom_data: Default::default(),
+        let op_ir_039 = Box::new(GdalSource{
+            params: GdalSourceParameters{
+                dataset: id_ir_039.clone(),
+            }
+        });
+
+        
+        mc.add_meta_data(id_ir_039, Box::new(ir_039.clone()));
+
+        let temp_ir_039 = RasterOperator::boxed(Temperature{
+            params: TemperatureParams::default(),
+            sources: SingleRasterSource{
+                raster: op_ir_039
+            }
+        });
+
+        let exp_ir_039 = RasterOperator::boxed(Expression{
+            params: ExpressionParams { expression: "(A-276.72667474831303)/255.45368321180788".to_string(), output_type: RasterDataType::F32, output_no_data_value: no_data_value.unwrap(), output_measurement: Some(Measurement::Continuous{
+                measurement: "raw".to_string(),
+                unit: None,
+            })
+        },
+        sources: ExpressionSources{
+            a: temp_ir_039.clone(),
+            b: Some(temp_ir_039),
+            c: None,
+        }
+        });
+        let proc_ir_039 = exp_ir_039
+        .initialize(&mc).await.unwrap().query_processor().unwrap().get_f32().unwrap();
+
+        let id_ir_087 = DatasetId::Internal{
+            dataset_id: InternalDatasetId::new(),
         };
 
-        let source_h = GdalSourceProcessor::<u8>{
-            tiling_specification,
-            meta_data: Box::new(claas),
-            phantom_data: Default::default(),
+        let op_ir_087 = Box::new(GdalSource{
+            params: GdalSourceParameters{
+                dataset: id_ir_087.clone(),
+            }
+        });
+
+        
+        mc.add_meta_data(id_ir_087, Box::new(ir_087.clone()));
+
+        let temp_ir_087 = RasterOperator::boxed(Temperature{
+            params: TemperatureParams::default(),
+            sources: SingleRasterSource{
+                raster: op_ir_087
+            }
+        });
+
+        let exp_ir_087 = RasterOperator::boxed(Expression{
+            params: ExpressionParams { expression: "(A-267.92274094012157)/248.48508230328764".to_string(), output_type: RasterDataType::F32, output_no_data_value: no_data_value.unwrap(), output_measurement: Some(Measurement::Continuous{
+                measurement: "raw".to_string(),
+                unit: None,
+            })
+        },
+        sources: ExpressionSources{
+            a: temp_ir_087.clone(),
+            b: Some(temp_ir_087),
+            c: None,
+        }
+        });
+        let proc_ir_087 = exp_ir_087
+        .initialize(&mc).await.unwrap().query_processor().unwrap().get_f32().unwrap();
+
+        let id_ir_097 = DatasetId::Internal{
+            dataset_id: InternalDatasetId::new(),
         };
 
-        let x = imseg_fit(source_a.boxed(), source_b.boxed(), source_c.boxed(), source_d.boxed(), source_e.boxed(), source_f.boxed(), source_g.boxed(),source_h.boxed(), vec![0,1,2,3],QueryRectangle {
+        let op_ir_097 = Box::new(GdalSource{
+            params: GdalSourceParameters{
+                dataset: id_ir_097.clone(),
+            }
+        });
+
+        
+        mc.add_meta_data(id_ir_097, Box::new(ir_097.clone()));
+
+        let temp_ir_097 = RasterOperator::boxed(Temperature{
+            params: TemperatureParams::default(),
+            sources: SingleRasterSource{
+                raster: op_ir_097
+            }
+        });
+
+        let exp_ir_097 = RasterOperator::boxed(Expression{
+            params: ExpressionParams { expression: "(A-245.4006454137375)/93.02522861255343".to_string(), output_type: RasterDataType::F32, output_no_data_value: no_data_value.unwrap(), output_measurement: Some(Measurement::Continuous{
+                measurement: "raw".to_string(),
+                unit: None,
+            })
+        },
+        sources: ExpressionSources{
+            a: temp_ir_097.clone(),
+            b: Some(temp_ir_097),
+            c: None,
+        }
+        });
+        let proc_ir_097 = exp_ir_097
+        .initialize(&mc).await.unwrap().query_processor().unwrap().get_f32().unwrap();
+        
+        let id_ir_108 = DatasetId::Internal{
+            dataset_id: InternalDatasetId::new(),
+        };
+
+        let op_ir_108 = Box::new(GdalSource{
+            params: GdalSourceParameters{
+                dataset: id_ir_108.clone(),
+            }
+        });
+
+        
+        mc.add_meta_data(id_ir_108, Box::new(ir_108.clone()));
+
+        let temp_ir_108 = RasterOperator::boxed(Temperature{
+            params: TemperatureParams::default(),
+            sources: SingleRasterSource{
+                raster: op_ir_108
+            }
+        });
+
+        let exp_ir_108 = RasterOperator::boxed(Expression{
+            params: ExpressionParams { expression: "(A-269.95727803541155)/286.4454521514864".to_string(), output_type: RasterDataType::F32, output_no_data_value: no_data_value.unwrap(), output_measurement: Some(Measurement::Continuous{
+                measurement: "raw".to_string(),
+                unit: None,
+            })
+        },
+        sources: ExpressionSources{
+            a: temp_ir_108.clone(),
+            b: Some(temp_ir_108),
+            c: None,
+        }
+        });
+        let proc_ir_108 = exp_ir_108
+        .initialize(&mc).await.unwrap().query_processor().unwrap().get_f32().unwrap();
+
+
+        let id_ir_120 = DatasetId::Internal{
+            dataset_id: InternalDatasetId::new(),
+        };
+
+        let op_ir_120 = Box::new(GdalSource{
+            params: GdalSourceParameters{
+                dataset: id_ir_120.clone(),
+            }
+        });
+
+        
+        mc.add_meta_data(id_ir_120, Box::new(ir_120.clone()));
+
+        let temp_ir_120 = RasterOperator::boxed(Temperature{
+            params: TemperatureParams::default(),
+            sources: SingleRasterSource{
+                raster: op_ir_120
+            }
+        });
+        let exp_ir_120 = RasterOperator::boxed(Expression{
+            params: ExpressionParams { expression: "(A-268.69063154766155)/287.7463867786664".to_string(), output_type: RasterDataType::F32, output_no_data_value: no_data_value.unwrap(), output_measurement: Some(Measurement::Continuous{
+                measurement: "raw".to_string(),
+                unit: None,
+            })
+        },
+        sources: ExpressionSources{
+            a: temp_ir_120.clone(),
+            b: Some(temp_ir_120),
+            c: None,
+        }
+        });
+        let proc_ir_120 = exp_ir_120
+        .initialize(&mc).await.unwrap().query_processor().unwrap().get_f32().unwrap();
+
+        let id_ir_134 = DatasetId::Internal{
+            dataset_id: InternalDatasetId::new(),
+        };
+
+        let op_ir_134 = Box::new(GdalSource{
+            params: GdalSourceParameters{
+                dataset: id_ir_134.clone(),
+            }
+        });
+
+        
+        mc.add_meta_data(id_ir_134, Box::new(ir_134.clone()));
+
+        let temp_ir_134 = RasterOperator::boxed(Temperature{
+            params: TemperatureParams::default(),
+            sources: SingleRasterSource{
+                raster: op_ir_134
+            }
+        });
+        let exp_ir_134 = RasterOperator::boxed(Expression{
+            params: ExpressionParams { expression: "(A-252.1465931705522)/124.80137314828508".to_string(), output_type: RasterDataType::F32, output_no_data_value: no_data_value.unwrap(), output_measurement: Some(Measurement::Continuous{
+                measurement: "raw".to_string(),
+                unit: None,
+            })
+        },
+        sources: ExpressionSources{
+            a: temp_ir_134.clone(),
+            b: Some(temp_ir_134),
+            c: None,
+        }
+        });
+        let proc_ir_134 = exp_ir_134
+        .initialize(&mc).await.unwrap().query_processor().unwrap().get_f32().unwrap();
+
+        let id_claas = DatasetId::Internal{
+            dataset_id: InternalDatasetId::new(),
+        };
+
+        let op_claas = Box::new(GdalSource{
+            params: GdalSourceParameters{
+                dataset: id_claas.clone(),
+            }
+        });
+
+        mc.add_meta_data(id_claas, Box::new(claas.clone()));
+
+        
+
+        let proc_claas = op_claas
+        .initialize(&mc).await.unwrap().query_processor().unwrap().get_u8().unwrap();
+
+        let x = imseg_fit(proc_ir_016, proc_ir_039, proc_ir_087, proc_ir_097, proc_ir_108, proc_ir_120, proc_ir_134,proc_claas, vec![0,1,2,3],QueryRectangle {
             spatial_bounds: query_bbox,
-            time_interval: TimeInterval::new(1_388_536_200_000, 1_388_536_200_000 + 1000)
+            time_interval: TimeInterval::new(1_388_574_000_000, 1_388_574_000_000 + 45_000_000)
                 .unwrap(),
             spatial_resolution: query_spatial_resolution,
         }, ctx,
-    10 as usize).await.unwrap();
+    10 as usize,
+-1 as i16).await.unwrap();
     }
 }
