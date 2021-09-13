@@ -233,7 +233,7 @@ mod tests {
         crate::util::test_data_dir().join("pangaea").join(file_name)
     }
 
-    async fn create_provider(server: &Server) -> Result<Box<dyn DatasetProvider>, Error> {
+    async fn create_provider(_server: &Server) -> Result<Box<dyn DatasetProvider>, Error> {
         Box::new(PangaeaDataProviderDefinition {
             id: DatasetProviderId::from_str(PROVIDER_ID).unwrap(),
             name: "Pangaea".to_string(),
@@ -258,44 +258,45 @@ mod tests {
         file_name: &str,
         format_param: &str,
         content_type: &str,
-        count: RangeInclusive<usize>,
+        _count: RangeInclusive<usize>,
     ) {
-        // let mut body = String::new();
-        //
-        // let path = test_data_path(file_name);
-        //
-        // OpenOptions::new()
-        //     .read(true)
-        //     .open(path.as_path())
-        //     .await
-        //     .unwrap()
-        //     .read_to_string(&mut body)
-        //     .await
-        //     .unwrap();
-        //
-        // // Let download urls point to test server
-        // let body = body.replace(
-        //     "https://doi.pangaea.de",
-        //     server.url_str("").strip_suffix('/').unwrap(),
-        // );
-        //
-        // let responder = status_code(200)
-        //     .append_header("content-type", content_type.to_owned())
-        //     .append_header("content-length", body.len())
-        //     .body(if "HEAD" == method {
-        //         "".to_string()
-        //     } else {
-        //         body
-        //     });
-        //
-        // server.expect(
-        //     Expectation::matching(all_of![
-        //         request::method_path(method.to_string(), format!("/{}", doi)),
-        //         request::query(url_decoded(contains(("format", format_param.to_owned()))))
-        //     ])
-        //     .times(count)
-        //     .respond_with(responder),
-        // );
+        let mut body = String::new();
+
+        let path = test_data_path(file_name);
+
+        OpenOptions::new()
+            .read(true)
+            .open(path.as_path())
+            .await
+            .unwrap()
+            .read_to_string(&mut body)
+            .await
+            .unwrap();
+
+        // Let download urls point to test server
+        let body = body.replace(
+            "https://doi.pangaea.de",
+            server.url_str("").strip_suffix('/').unwrap(),
+        );
+
+        let responder = status_code(200)
+            .append_header("content-type", content_type.to_owned())
+            .append_header("content-length", body.len())
+            .body(if "HEAD" == method {
+                "".to_string()
+            } else {
+                body
+            });
+
+        server.expect(
+            Expectation::matching(all_of![
+                request::method_path(method.to_string(), format!("/{}", doi)),
+                request::query(url_decoded(contains(("format", format_param.to_owned()))))
+            ])
+            .times(0..100)
+            // .times(count)
+            .respond_with(responder),
+        );
     }
 
     async fn setup_metadata(server: &mut Server, doi: &str, file_name: &str) {
