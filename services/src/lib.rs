@@ -40,3 +40,5 @@ pub mod workflows;
 /// Compiles Geo Engine Pro
 #[cfg(feature = "pro")]
 pub mod pro;
+
+pub use geoengine_datatypes::test_data;
