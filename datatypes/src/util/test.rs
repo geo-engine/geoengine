@@ -1,6 +1,12 @@
 use crate::raster::{EmptyGrid, Grid, GridOrEmpty, NoDataValue};
 use std::panic;
 
+pub trait TestDefault {
+    /// Generate a default value used for testing. Use this instead of the `Default` trait
+    /// if the default value only makes sense in tests and not in production code.
+    fn test_default() -> Self;
+}
+
 pub fn catch_unwind_silent<F: FnOnce() -> R + panic::UnwindSafe, R>(
     f: F,
 ) -> std::thread::Result<R> {

@@ -13,12 +13,11 @@ use crate::workflows::workflow::{Workflow, WorkflowId};
 use futures::future::join_all;
 use geoengine_datatypes::dataset::{DatasetId, InternalDatasetId};
 use geoengine_datatypes::primitives::AxisAlignedRectangle;
-use geoengine_datatypes::raster::GeoTransform;
 use geoengine_datatypes::spatial_reference::SpatialReference;
 use geoengine_datatypes::util::Identifier;
 use geoengine_operators::engine::{OperatorDatasets, RasterQueryRectangle, TypedResultDescriptor};
 use geoengine_operators::source::{
-    FileNotFoundHandling, GdalDatasetParameters, GdalMetaDataStatic,
+    FileNotFoundHandling, GdalDatasetGeoTransform, GdalDatasetParameters, GdalMetaDataStatic,
 };
 use geoengine_operators::util::raster_stream_to_geotiff::raster_stream_to_geotiff;
 use geoengine_operators::{call_on_generic_raster_processor_gdal_types, call_on_typed_operator};
@@ -407,11 +406,11 @@ async fn create_dataset<C: Context>(
             params: GdalDatasetParameters {
                 file_path,
                 rasterband_channel: 1,
-                geo_transform: GeoTransform::new(
-                    info.query.spatial_bounds.upper_left(),
-                    info.query.spatial_resolution.x,
-                    -info.query.spatial_resolution.y,
-                ),
+                geo_transform: GdalDatasetGeoTransform {
+                    origin_coordinate: info.query.spatial_bounds.upper_left(),
+                    x_pixel_size: info.query.spatial_resolution.x,
+                    y_pixel_size: -info.query.spatial_resolution.y,
+                },
                 width: (info.query.spatial_bounds.size_x() / info.query.spatial_resolution.x).ceil()
                     as usize,
                 height: (info.query.spatial_bounds.size_y() / info.query.spatial_resolution.y)

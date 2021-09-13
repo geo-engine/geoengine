@@ -357,12 +357,12 @@ where
         tile_info: TileInformation,
         query_rect: RasterQueryRectangle,
         start_time: TimeInstance,
-    ) -> Result<RasterQueryRectangle> {
-        Ok(QueryRectangle {
+    ) -> Result<Option<RasterQueryRectangle>> {
+        Ok(Some(QueryRectangle {
             spatial_bounds: tile_info.spatial_partition(),
             spatial_resolution: query_rect.spatial_resolution,
             time_interval: TimeInterval::new(start_time, (start_time + self.step)?)?,
-        })
+        }))
     }
 
     fn fold_method(&self) -> Self::FoldMethod {

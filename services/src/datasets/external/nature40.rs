@@ -389,14 +389,14 @@ mod tests {
 
     use geoengine_datatypes::{
         primitives::{Measurement, SpatialPartition2D, SpatialResolution, TimeInterval},
-        raster::{GeoTransform, RasterDataType},
+        raster::RasterDataType,
         spatial_reference::{SpatialReference, SpatialReferenceAuthority},
     };
     use geoengine_operators::{
         engine::QueryRectangle,
         source::{
-            FileNotFoundHandling, GdalDatasetParameters, GdalLoadingInfoPart,
-            GdalLoadingInfoPartIterator,
+            FileNotFoundHandling, GdalDatasetGeoTransform, GdalDatasetParameters,
+            GdalLoadingInfoPart, GdalLoadingInfoPartIterator,
         },
     };
     use httptest::{
@@ -853,7 +853,11 @@ mod tests {
                     params: GdalDatasetParameters {
                         file_path: PathBuf::from(format!("WCS:{}rasterdb/lidar_2018_wetness_1m/wcs?VERSION=1.0.0&COVERAGE=lidar_2018_wetness_1m", server.url_str(""))),
                         rasterband_channel: 1,
-                        geo_transform: GeoTransform::new_with_coordinate_x_y(473_922.5, 1.0, 5_634_057.5, -1.0),
+                        geo_transform: GdalDatasetGeoTransform {
+                            origin_coordinate: (473_922.5, 5_634_057.5).into(),
+                            x_pixel_size: 1.0,
+                            y_pixel_size: -1.0,
+                        },
                         width: 4295,
                         height: 3294,
                         file_not_found_handling: FileNotFoundHandling::Error,

@@ -7,7 +7,7 @@ use gdal::{raster::GDALDataType, Dataset, DatasetOptions};
 use geoengine_datatypes::{
     dataset::{DatasetId, InternalDatasetId},
     primitives::{Measurement, TimeGranularity, TimeInstance, TimeStep},
-    raster::{GeoTransform, RasterDataType},
+    raster::RasterDataType,
     spatial_reference::SpatialReference,
     util::Identifier,
 };
@@ -16,7 +16,9 @@ use snafu::ResultExt;
 use crate::{
     engine::{MockExecutionContext, RasterResultDescriptor},
     error::{self, Error},
-    source::{FileNotFoundHandling, GdalDatasetParameters, GdalMetaDataRegular},
+    source::{
+        FileNotFoundHandling, GdalDatasetGeoTransform, GdalDatasetParameters, GdalMetaDataRegular,
+    },
     test_data,
     util::Result,
 };
@@ -37,7 +39,7 @@ pub fn create_ndvi_meta_data() -> GdalMetaDataRegular {
             file_path: test_data!("raster/modis_ndvi/MOD13A2_M_NDVI_%%%_START_TIME_%%%.TIFF")
                 .into(),
             rasterband_channel: 1,
-            geo_transform: GeoTransform {
+            geo_transform: GdalDatasetGeoTransform {
                 origin_coordinate: (-180., 90.).into(),
                 x_pixel_size: 0.1,
                 y_pixel_size: -0.1,

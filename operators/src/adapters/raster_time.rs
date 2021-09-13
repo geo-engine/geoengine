@@ -197,7 +197,7 @@ where
 //             RasterTile2D {
 //                 time: TimeInterval::new_unchecked(0, 5),
 //                 tile_position: [-1, 0].into(),
-//                 global_geo_transform: Default::default(),
+//                 global_geo_transform: TestDefault::test_default(),
 //                 grid_array: Grid::new([3, 2].into(), vec![1, 2, 3, 4, 5, 6], no_data_value)
 //                     .unwrap()
 //                     .into(),
@@ -205,7 +205,7 @@ where
 //             RasterTile2D {
 //                 time: TimeInterval::new_unchecked(0, 5),
 //                 tile_position: [-1, 1].into(),
-//                 global_geo_transform: Default::default(),
+//                 global_geo_transform: TestDefault::test_default(),
 //                 grid_array: Grid::new(
 //                     [3, 2].into(),
 //                     vec![7, 8, 9, 10, 11, 12],
@@ -217,7 +217,7 @@ where
 //             RasterTile2D {
 //                 time: TimeInterval::new_unchecked(5, 10),
 //                 tile_position: [-1, 0].into(),
-//                 global_geo_transform: Default::default(),
+//                 global_geo_transform: TestDefault::test_default(),
 //                 grid_array: Grid::new(
 //                     [3, 2].into(),
 //                     vec![13, 14, 15, 16, 17, 18],
@@ -229,7 +229,7 @@ where
 //             RasterTile2D {
 //                 time: TimeInterval::new_unchecked(5, 10),
 //                 tile_position: [-1, 1].into(),
-//                 global_geo_transform: Default::default(),
+//                 global_geo_transform: TestDefault::test_default(),
 //                 grid_array: Grid::new(
 //                     [3, 2].into(),
 //                     vec![19, 20, 21, 22, 23, 24],
@@ -255,7 +255,7 @@ where
 //             RasterTile2D {
 //                 time: TimeInterval::new_unchecked(0, 3),
 //                 tile_position: [-1, 0].into(),
-//                 global_geo_transform: Default::default(),
+//                 global_geo_transform: TestDefault::test_default(),
 //                 grid_array: Grid::new(
 //                     [3, 2].into(),
 //                     vec![101, 102, 103, 104, 105, 106],
@@ -267,7 +267,7 @@ where
 //             RasterTile2D {
 //                 time: TimeInterval::new_unchecked(0, 3),
 //                 tile_position: [-1, 1].into(),
-//                 global_geo_transform: Default::default(),
+//                 global_geo_transform: TestDefault::test_default(),
 //                 grid_array: Grid::new(
 //                     [3, 2].into(),
 //                     vec![107, 108, 109, 110, 111, 112],
@@ -279,7 +279,7 @@ where
 //             RasterTile2D {
 //                 time: TimeInterval::new_unchecked(3, 6),
 //                 tile_position: [-1, 0].into(),
-//                 global_geo_transform: Default::default(),
+//                 global_geo_transform: TestDefault::test_default(),
 //                 grid_array: Grid::new(
 //                     [3, 2].into(),
 //                     vec![113, 114, 115, 116, 117, 118],
@@ -291,7 +291,7 @@ where
 //             RasterTile2D {
 //                 time: TimeInterval::new_unchecked(3, 6),
 //                 tile_position: [-1, 1].into(),
-//                 global_geo_transform: Default::default(),
+//                 global_geo_transform: TestDefault::test_default(),
 //                 grid_array: Grid::new(
 //                     [3, 2].into(),
 //                     vec![119, 120, 121, 122, 123, 124],
@@ -303,7 +303,7 @@ where
 //             RasterTile2D {
 //                 time: TimeInterval::new_unchecked(6, 10),
 //                 tile_position: [-1, 0].into(),
-//                 global_geo_transform: Default::default(),
+//                 global_geo_transform: TestDefault::test_default(),
 //                 grid_array: Grid::new(
 //                     [3, 2].into(),
 //                     vec![125, 126, 127, 128, 129, 130],
@@ -315,7 +315,7 @@ where
 //             RasterTile2D {
 //                 time: TimeInterval::new_unchecked(6, 10),
 //                 tile_position: [-1, 1].into(),
-//                 global_geo_transform: Default::default(),
+//                 global_geo_transform: TestDefault::test_default(),
 //                 grid_array: Grid::new(
 //                     [3, 2].into(),
 //                     vec![131, 132, 133, 134, 135, 136],
