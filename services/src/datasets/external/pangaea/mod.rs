@@ -237,8 +237,7 @@ mod tests {
         Box::new(PangaeaDataProviderDefinition {
             id: DatasetProviderId::from_str(PROVIDER_ID).unwrap(),
             name: "Pangaea".to_string(),
-            base_url: "https://doi.pangaea.de".to_owned(),
-            // base_url: server.url_str("").strip_suffix('/').unwrap().to_owned(),
+            base_url: server.url_str("").strip_suffix('/').unwrap().to_owned(),
         })
         .initialize()
         .await
@@ -293,8 +292,7 @@ mod tests {
                 request::method_path(method.to_string(), format!("/{}", doi)),
                 request::query(url_decoded(contains(("format", format_param.to_owned()))))
             ])
-            .times(0..100)
-            // .times(count)
+            .times(count)
             .respond_with(responder),
         );
     }
@@ -313,17 +311,17 @@ mod tests {
     }
 
     async fn setup_vsicurl(server: &mut Server, doi: &str, file_name: &str) {
-        // server.expect(
-        //     Expectation::matching(request::method_path("GET", "/10.1594/PANGAEA.prj"))
-        //         .times(0..=1)
-        //         .respond_with(status_code(404)),
-        // );
-        //
-        // server.expect(
-        //     Expectation::matching(request::method_path("GET", "/10.1594/PANGAEA.csvt"))
-        //         .times(0..=1)
-        //         .respond_with(status_code(404)),
-        // );
+        server.expect(
+            Expectation::matching(request::method_path("GET", "/10.1594/PANGAEA.prj"))
+                .times(0..=1)
+                .respond_with(status_code(404)),
+        );
+
+        server.expect(
+            Expectation::matching(request::method_path("GET", "/10.1594/PANGAEA.csvt"))
+                .times(0..=1)
+                .respond_with(status_code(404)),
+        );
 
         setup(
             server,
@@ -392,7 +390,7 @@ mod tests {
 
         server.verify_and_clear();
 
-        // assert!(meta.is_ok());
+        assert!(meta.is_ok());
 
         if let VectorDataType::Data = meta.unwrap().result_descriptor().await.unwrap().data_type {
         } else {
@@ -660,7 +658,7 @@ mod tests {
 
         server.verify_and_clear();
 
-        // assert!(result.is_ok());
+        assert!(result.is_ok());
 
         let result = result.unwrap();
 
