@@ -530,7 +530,12 @@ where
             .as_ref()
             .ok_or(error::Error::OgrSourceColumnsSpecMissing)?;
 
-        let mut dataset_options = DatasetOptions::default();
+        let mut dataset_options = DatasetOptions {
+            open_flags: GdalOpenFlags::GDAL_OF_VECTOR
+                | GdalOpenFlags::GDAL_OF_READONLY
+                | GdalOpenFlags::GDAL_OF_VERBOSE_ERROR,
+            ..Default::default()
+        };
 
         let headers = if let Some(FormatSpecifics::Csv { header }) = &columns.format_specifics {
             header.as_gdal_param()

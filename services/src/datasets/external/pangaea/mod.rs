@@ -388,6 +388,8 @@ mod tests {
             _,
         > = provider.meta_data(&id).await;
 
+        server.verify_and_clear();
+
         assert!(meta.is_ok());
 
         if let VectorDataType::Data = meta.unwrap().result_descriptor().await.unwrap().data_type {
@@ -444,6 +446,8 @@ mod tests {
         let result = proc.query(query_rectangle, &ctx).await;
 
         let result: Vec<DataCollection> = result.unwrap().map(Result::unwrap).collect().await;
+
+        server.verify_and_clear();
 
         assert_eq!(1, result.len());
         assert_eq!(60, result[0].len())
@@ -502,6 +506,8 @@ mod tests {
             .map(Result::unwrap)
             .collect()
             .await;
+
+        server.verify_and_clear();
 
         assert_eq!(1, result.len());
         assert_eq!(84, result[0].len());
@@ -568,6 +574,8 @@ mod tests {
             .collect()
             .await;
 
+        server.verify_and_clear();
+
         assert_eq!(3, result.len());
 
         let total_results: usize = result.iter().map(|c| c.len()).sum();
@@ -628,6 +636,8 @@ mod tests {
             .collect()
             .await;
 
+        server.verify_and_clear();
+
         assert_eq!(1, result.len());
         assert_eq!(27, result[0].len());
     }
@@ -645,6 +655,8 @@ mod tests {
         let id = create_id(doi);
 
         let result = provider.provenance(&id).await;
+
+        server.verify_and_clear();
 
         assert!(result.is_ok());
 
