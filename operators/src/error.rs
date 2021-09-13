@@ -263,6 +263,11 @@ pub enum Error {
     InvalidGdalFilePath {
         file_path: PathBuf,
     },
+
+    #[snafu(display(
+        "Raster data sets with a different origin than upper left are currently not supported"
+    ))]
+    GeoTransformOrigin,
 }
 
 impl From<geoengine_datatypes::error::Error> for Error {

@@ -197,6 +197,7 @@ struct WrappedPlotOutput {
 #[cfg(test)]
 mod tests {
     use chrono::NaiveDate;
+    use geoengine_datatypes::util::test::TestDefault;
     use num_traits::AsPrimitive;
     use serde_json::json;
 
@@ -226,7 +227,7 @@ mod tests {
                 data: vec![RasterTile2D::new_with_tile_info(
                     TimeInterval::default(),
                     TileInformation {
-                        global_geo_transform: Default::default(),
+                        global_geo_transform: TestDefault::test_default(),
                         global_tile_position: [0, 0].into(),
                         tile_size_in_pixels: [3, 2].into(),
                     },
