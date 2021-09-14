@@ -630,7 +630,7 @@ mod tests {
 
         let projected = bbox.reproject_clipped(&p).unwrap();
         let expected = BoundingBox2D::new_unchecked(
-            (-20_037_508.342_789_244, -20_048_966.104_014_6).into(),
+            (-20_037_508.342_789_244, -20_048_966.104_014_594).into(),
             (20_037_508.342_789_244, 20_048_966.104_014_594).into(),
         );
 
@@ -651,7 +651,7 @@ mod tests {
 
         let projected = bbox.reproject_clipped(&p).unwrap();
         let expected = BoundingBox2D::new_unchecked(
-            (-20_037_508.342_789_244, -20_048_966.104_014_6).into(),
+            (-20_037_508.342_789_244, -20_048_966.104_014_594).into(),
             (20_037_508.342_789_244, 20_048_966.104_014_594).into(),
         );
 

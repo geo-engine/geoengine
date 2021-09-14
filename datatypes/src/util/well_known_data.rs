@@ -18,7 +18,7 @@ pub const MARBURG_EPSG_4326: Coordinate2D = Coordinate2D {
 
 pub const MARBURG_EPSG_900_913: Coordinate2D = Coordinate2D {
     x: 975_914.966_045_882_4,
-    y: 6_586_374.702_844_66,
+    y: 6_586_374.702_844_657,
 };
 
 pub const COLOGNE_EPSG_4326: Coordinate2D = Coordinate2D {
@@ -28,7 +28,7 @@ pub const COLOGNE_EPSG_4326: Coordinate2D = Coordinate2D {
 
 pub const COLOGNE_EPSG_900_913: Coordinate2D = Coordinate2D {
     x: 774_814.669_531_319,
-    y: 6_610_251.109_926_419,
+    y: 6_610_251.109_926_421,
 };
 
 pub const HAMBURG_EPSG_4326: Coordinate2D = Coordinate2D {
@@ -38,5 +38,5 @@ pub const HAMBURG_EPSG_4326: Coordinate2D = Coordinate2D {
 
 pub const HAMBURG_EPSG_900_913: Coordinate2D = Coordinate2D {
     x: 1_113_349.530_705_447_5,
-    y: 7_088_251.296_224_878,
+    y: 7_088_251.296_224_877,
 };
