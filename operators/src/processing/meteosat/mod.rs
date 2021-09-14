@@ -64,7 +64,7 @@ mod test_util {
         GdalMetadataMapping, GdalSource, GdalSourceParameters, GdalSourceTimePlaceholder,
         WhichTime,
     };
-    use crate::util::gdal::raster_dir;
+    use crate::test_data;
     use crate::util::Result;
 
     pub(crate) async fn process<T>(
@@ -220,7 +220,7 @@ mod test_util {
                 },
             },
             params: GdalDatasetParameters {
-                file_path: raster_dir().join("msg/%_START_TIME_%.tif"),
+                file_path: test_data!("raster/msg/%_START_TIME_%.tif").into(),
                 rasterband_channel: 1,
                 geo_transform: GdalDatasetGeoTransform {
                     origin_coordinate: (-5_570_248.477_339_745, 5_570_248.477_339_745).into(),

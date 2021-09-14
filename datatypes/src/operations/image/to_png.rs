@@ -180,7 +180,7 @@ mod tests {
         let image_bytes = raster.to_png(100, 100, &colorizer).unwrap();
 
         assert_eq!(
-            include_bytes!("../../../test-data/colorizer/linear_gradient.png") as &[u8],
+            include_bytes!("../../../../test_data/colorizer/linear_gradient.png") as &[u8],
             image_bytes.as_slice()
         );
     }
@@ -207,7 +207,7 @@ mod tests {
         let image_bytes = raster.to_png(100, 100, &colorizer).unwrap();
 
         assert_eq!(
-            include_bytes!("../../../test-data/colorizer/logarithmic_gradient.png") as &[u8],
+            include_bytes!("../../../../test_data/colorizer/logarithmic_gradient.png") as &[u8],
             image_bytes.as_slice()
         );
     }
@@ -236,7 +236,7 @@ mod tests {
         let image_bytes = raster.to_png(100, 100, &colorizer).unwrap();
 
         assert_eq!(
-            include_bytes!("../../../test-data/colorizer/palette.png") as &[u8],
+            include_bytes!("../../../../test_data/colorizer/palette.png") as &[u8],
             image_bytes.as_slice()
         );
     }
@@ -253,7 +253,7 @@ mod tests {
         let image_bytes = raster.to_png(100, 100, &colorizer).unwrap();
 
         assert_eq!(
-            include_bytes!("../../../test-data/colorizer/rgba.png") as &[u8],
+            include_bytes!("../../../../test_data/colorizer/rgba.png") as &[u8],
             image_bytes.as_slice()
         );
     }
@@ -277,7 +277,7 @@ mod tests {
         let image_bytes = raster.to_png(100, 100, &colorizer).unwrap();
 
         assert_eq!(
-            include_bytes!("../../../test-data/colorizer/no_data.png") as &[u8],
+            include_bytes!("../../../../test_data/colorizer/no_data.png") as &[u8],
             image_bytes.as_slice()
         );
     }
@@ -301,7 +301,7 @@ mod tests {
         let image_bytes = raster.to_png(100, 100, &colorizer).unwrap();
 
         assert_eq!(
-            include_bytes!("../../../test-data/colorizer/empty.png") as &[u8],
+            include_bytes!("../../../../test_data/colorizer/empty.png") as &[u8],
             image_bytes.as_slice()
         );
     }
