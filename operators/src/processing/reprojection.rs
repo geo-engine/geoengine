@@ -1075,8 +1075,8 @@ mod tests {
         let output_shape: GridShape2D = [1000, 1000].into();
         let output_bounds =
             SpatialPartition2D::new_unchecked((-180., 90.).into(), (180., -90.).into());
-        let time_interval = TimeInterval::new_unchecked(1_388_534_400_000, 1_388_534_400_001);
-        // 2014-01-01
+        let time_interval = TimeInterval::new_unchecked(1_396_310_400_000, 1_396_310_400_000);
+        // 2014-04-01
 
         let gdal_op = GdalSource {
             params: GdalSourceParameters {
