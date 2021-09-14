@@ -1,5 +1,6 @@
 use crate::error;
 use crate::error::Result;
+use crate::handlers;
 use crate::pro::contexts::ProContext;
 use crate::pro::users::UserCredentials;
 use crate::pro::users::UserDb;
@@ -21,6 +22,10 @@ where
         .route("/anonymous", web::post().to(anonymous_handler::<C>))
         .route("/login", web::post().to(login_handler::<C>))
         .route("/logout", web::post().to(logout_handler::<C>))
+        .route(
+            "/session",
+            web::get().to(handlers::session::session_handler::<C>),
+        )
         .route(
             "/session/project/{project}",
             web::post().to(session_project_handler::<C>),
