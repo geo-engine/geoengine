@@ -389,7 +389,7 @@ mod tests {
     use super::*;
     use crate::contexts::{Context, Session};
     use crate::error::Result;
-    use crate::util::test_data_dir;
+    use crate::test_data;
     use crate::util::tests::TestDataUploads;
     use crate::{
         pro::{contexts::ProInMemoryContext, util::tests::create_session_helper},
@@ -448,10 +448,9 @@ mod tests {
         test_data.uploads.push(upload_id);
 
         // copy the test data into upload directory
-        let mut drone_images_dir =
-            fs::read_dir(test_data_dir().join("pro/drone_mapping/drone_images"))
-                .await
-                .context(error::Io)?;
+        let mut drone_images_dir = fs::read_dir(test_data!("pro/drone_mapping/drone_images"))
+            .await
+            .context(error::Io)?;
 
         while let Some(entry) = drone_images_dir.next_entry().await.context(error::Io)? {
             if entry.path().is_dir() {
@@ -485,7 +484,7 @@ mod tests {
         // create a dataset from the nodeodm result
 
         // create zip archive from test data
-        let odm_test_data_dir = test_data_dir().join("pro/drone_mapping/odm_result");
+        let odm_test_data_dir = test_data!("pro/drone_mapping/odm_result").into();
         let odm_all_zip_bytes = zip_dir(odm_test_data_dir).await.unwrap();
 
         mock_nodeodm.expect(

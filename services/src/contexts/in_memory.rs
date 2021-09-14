@@ -1,10 +1,10 @@
+use std::path::PathBuf;
 use std::sync::Arc;
 
 use crate::error::Error;
 use crate::{
     datasets::add_from_directory::{add_datasets_from_directory, add_providers_from_directory},
     error::Result,
-    util::{dataset_defs_dir, provider_defs_dir},
 };
 use crate::{projects::hashmap_projectdb::HashMapProjectDb, workflows::registry::HashMapRegistry};
 use async_trait::async_trait;
@@ -29,10 +29,10 @@ pub struct InMemoryContext {
 
 impl InMemoryContext {
     #[allow(clippy::too_many_lines)]
-    pub async fn new_with_data() -> Self {
+    pub async fn new_with_data(dataset_defs_path: PathBuf, provider_defs_path: PathBuf) -> Self {
         let mut db = HashMapDatasetDb::default();
-        add_datasets_from_directory(&mut db, dataset_defs_dir()).await;
-        add_providers_from_directory(&mut db, provider_defs_dir()).await;
+        add_datasets_from_directory(&mut db, dataset_defs_path).await;
+        add_providers_from_directory(&mut db, provider_defs_path).await;
 
         InMemoryContext {
             dataset_db: Arc::new(RwLock::new(db)),

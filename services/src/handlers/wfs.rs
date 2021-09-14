@@ -973,12 +973,12 @@ x;y
 
         let ndvi_id = add_dataset_definition_to_datasets(
             &ctx,
-            include_str!("../../test-data/dataset_defs/ndvi.json"),
+            include_str!("../../../test_data/dataset_defs/ndvi.json"),
         )
         .await;
         let ne_10m_ports_id = add_dataset_definition_to_datasets(
             &ctx,
-            include_str!("../../test-data/dataset_defs/points_with_time.json"),
+            include_str!("../../../test_data/dataset_defs/points_with_time.json"),
         )
         .await;
 
