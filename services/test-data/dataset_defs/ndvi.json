@@ -291,7 +291,7 @@
       "noDataValue": 0.0
     },
     "params": {
-      "filePath": "operators/test-data/raster/modis_ndvi/MOD13A2_M_NDVI_%%%_START_TIME_%%%.TIFF",
+      "filePath": "operators/test-data/raster/modis_ndvi/MOD13A2_M_NDVI_%_START_TIME_%.TIFF",
       "rasterbandChannel": 1,
       "geoTransform": {
         "originCoordinate": {
@@ -306,8 +306,12 @@
       "fileNotFoundHandling": "NoData",
       "noDataValue": 0.0
     },
-    "placeholder": "%%%_START_TIME_%%%",
-    "timeFormat": "%Y-%m-%d",
+    "timePlaceholders": {
+      "_START_TIME_": {
+        "timeFormat": "%Y-%m-%d",
+        "which": "timeStart"
+      }
+    },
     "start": 1388534400000,
     "step": {
       "granularity": "Months",

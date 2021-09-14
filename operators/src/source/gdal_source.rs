@@ -7,6 +7,7 @@ use crate::{
     error::{self, Error},
     util::Result,
 };
+use chrono::format::{DelayedFormat, StrftimeItems};
 use futures::{
     stream::{self, BoxStream, StreamExt},
     Stream,
@@ -33,6 +34,7 @@ use geoengine_datatypes::{
 use log::{debug, info};
 use serde::{Deserialize, Serialize};
 use snafu::{ensure, ResultExt};
+use std::collections::HashMap;
 use std::convert::{TryFrom, TryInto};
 use std::{marker::PhantomData, path::PathBuf};
 //use gdal::metadata::Metadata; // TODO: handle metadata
@@ -96,11 +98,24 @@ pub enum GdalLoadingInfoPartIterator {
     Dynamic {
         time_step_iter: TimeStepIter,
         params: GdalDatasetParameters,
-        placeholder: String,
-        time_format: String,
+        time_placeholders: HashMap<String, GdalSourceTimePlaceholder>,
         step: TimeStep,
         max_t2: TimeInstance,
     },
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct GdalSourceTimePlaceholder {
+    pub time_format: String,
+    pub which: WhichTime,
+}
+
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub enum WhichTime {
+    TimeStart,
+    TimeEnd,
 }
 
 impl Iterator for GdalLoadingInfoPartIterator {
@@ -112,8 +127,7 @@ impl Iterator for GdalLoadingInfoPartIterator {
             GdalLoadingInfoPartIterator::Dynamic {
                 time_step_iter,
                 params,
-                placeholder,
-                time_format,
+                time_placeholders,
                 step,
                 max_t2,
             } => {
@@ -125,7 +139,7 @@ impl Iterator for GdalLoadingInfoPartIterator {
                 let time_interval = TimeInterval::new_unchecked(t1, t2);
 
                 let loading_info_part = params
-                    .replace_time_placeholder(placeholder, time_format, time_interval.start())
+                    .replace_time_placeholder(time_placeholders, time_interval)
                     .map(|loading_info_part_params| GdalLoadingInfoPart {
                         time: time_interval,
                         params: loading_info_part_params,
@@ -279,7 +293,7 @@ impl GridShapeAccess for GdalDatasetParameters {
 }
 
 /// How to handle file not found errors
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
+#[derive(Serialize, Deserialize, Debug, Clone, Copy, PartialEq)]
 pub enum FileNotFoundHandling {
     NoData, // output tiles filled with nodata
     Error,  // return error tile
@@ -337,8 +351,7 @@ impl MetaData<GdalLoadingInfo, RasterResultDescriptor, RasterQueryRectangle>
 pub struct GdalMetaDataRegular {
     pub result_descriptor: RasterResultDescriptor,
     pub params: GdalDatasetParameters,
-    pub placeholder: String,
-    pub time_format: String,
+    pub time_placeholders: HashMap<String, GdalSourceTimePlaceholder>,
     pub start: TimeInstance,
     pub step: TimeStep,
 }
@@ -362,8 +375,7 @@ impl MetaData<GdalLoadingInfo, RasterResultDescriptor, RasterQueryRectangle>
             info: GdalLoadingInfoPartIterator::Dynamic {
                 time_step_iter: time_iterator,
                 params: self.params.clone(),
-                placeholder: self.placeholder.clone(),
-                time_format: self.time_format.clone(),
+                time_placeholders: self.time_placeholders.clone(),
                 step: self.step,
                 max_t2: query.time_interval.end(),
             },
@@ -382,25 +394,93 @@ impl MetaData<GdalLoadingInfo, RasterResultDescriptor, RasterQueryRectangle>
 }
 
 impl GdalDatasetParameters {
+    /// Placeholders are surrounded by `%` and are replaced by formatted time value.
+    /// E.g. `%my_placeholder%` will format the placeholder `my_placeholder`.
     pub fn replace_time_placeholder(
         &self,
-        placeholder: &str,
-        time_format: &str,
-        time: TimeInstance,
+        placeholders: &HashMap<String, GdalSourceTimePlaceholder>,
+        time: TimeInterval,
     ) -> Result<Self> {
-        let time_string = time
-            .as_naive_date_time()
-            .ok_or(Error::TimeInstanceNotDisplayable)?
-            .format(time_format)
-            .to_string();
-        let file_path = self
+        enum State {
+            Normal,
+            Escape,                              // `/`
+            Placeholder { placeholder: String }, // `%` to `%`
+        }
+        fn formatted_str<'p>(
+            placeholders: &'p HashMap<String, GdalSourceTimePlaceholder>,
+            placeholder: &str,
+            time: TimeInterval,
+        ) -> Result<DelayedFormat<StrftimeItems<'p>>> {
+            let placeholder = placeholders.get(placeholder).ok_or_else(|| {
+                Error::InvalidTimeStringPlaceholder {
+                    name: placeholder.to_string(),
+                }
+            })?;
+            let time = match placeholder.which {
+                WhichTime::TimeStart => time.start(),
+                WhichTime::TimeEnd => time.end(),
+            };
+            Ok(time
+                .as_naive_date_time()
+                .ok_or(Error::TimeInstanceNotDisplayable)?
+                .format(&placeholder.time_format))
+        }
+
+        let mut file_path = String::new();
+
+        let mut state = State::Normal;
+        for c in self
             .file_path
             .to_str()
-            .ok_or(Error::FilePathNotRepresentableAsString)?
-            .replace(placeholder, &time_string);
+            .ok_or(Error::TimeInstanceNotDisplayable)?
+            .chars()
+        {
+            state = match (state, c) {
+                (State::Normal, '%') => State::Placeholder {
+                    placeholder: String::new(),
+                },
+                (State::Normal, '\\') => State::Escape,
+                (State::Normal, c) => {
+                    file_path.push(c);
+                    State::Normal
+                }
+                (State::Escape, '%') => {
+                    file_path.push('%');
+                    State::Normal
+                }
+                (State::Escape, c) => {
+                    // was no escape
+                    file_path.push('\\');
+                    file_path.push(c);
+                    State::Normal
+                }
+                (State::Placeholder { placeholder }, '%') => {
+                    file_path
+                        .push_str(&formatted_str(placeholders, &placeholder, time)?.to_string());
+
+                    State::Normal
+                }
+                (State::Placeholder { mut placeholder }, c) => {
+                    placeholder.push(c);
+
+                    State::Placeholder { placeholder }
+                }
+            };
+        }
+
+        // last action to clean up state
+        match state {
+            State::Normal => (), // nothing to do
+            State::Escape => file_path.push('\\'),
+            State::Placeholder { placeholder } => {
+                // did not finish, so no placeholder
+                file_path.push('%');
+                file_path.push_str(&placeholder);
+            }
+        };
 
         Ok(Self {
-            file_not_found_handling: FileNotFoundHandling::NoData,
+            file_not_found_handling: self.file_not_found_handling,
             file_path: file_path.into(),
             properties_mapping: self.properties_mapping.clone(),
             gdal_open_options: self.gdal_open_options.clone(),
@@ -890,6 +970,7 @@ mod tests {
     use crate::engine::{MockExecutionContext, MockQueryContext};
     use crate::util::gdal::{add_ndvi_dataset, raster_dir};
     use crate::util::Result;
+    use geoengine_datatypes::hashmap;
     use geoengine_datatypes::primitives::{AxisAlignedRectangle, SpatialPartition2D};
     use geoengine_datatypes::raster::{TileInformation, TilingStrategy};
     use geoengine_datatypes::{
@@ -1156,7 +1237,15 @@ mod tests {
             gdal_config_options: None,
         };
         let replaced = params
-            .replace_time_placeholder("%TIME%", "%f", TimeInstance::from_millis_unchecked(22))
+            .replace_time_placeholder(
+                &hashmap! {
+                    "TIME".to_string() => GdalSourceTimePlaceholder {
+                        time_format: "%f".to_string(),
+                        which: WhichTime::TimeStart,
+                    },
+                },
+                TimeInterval::new_instant(TimeInstance::from_millis_unchecked(22)).unwrap(),
+            )
             .unwrap();
         assert_eq!(
             replaced.file_path.to_string_lossy(),
@@ -1196,8 +1285,12 @@ mod tests {
                 gdal_open_options: None,
                 gdal_config_options: None,
             },
-            placeholder: "%TIME%".to_string(),
-            time_format: "%f".to_string(),
+            time_placeholders: hashmap! {
+                "TIME".to_string() => GdalSourceTimePlaceholder {
+                    time_format: "%f".to_string(),
+                    which: WhichTime::TimeStart,
+                },
+            },
             start: TimeInstance::from_millis_unchecked(11),
             step: TimeStep {
                 granularity: TimeGranularity::Millis,

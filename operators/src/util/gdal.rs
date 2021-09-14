@@ -6,6 +6,7 @@ use std::{
 use gdal::{raster::GDALDataType, Dataset, DatasetOptions};
 use geoengine_datatypes::{
     dataset::{DatasetId, InternalDatasetId},
+    hashmap,
     primitives::{Measurement, TimeGranularity, TimeInstance, TimeStep},
     raster::RasterDataType,
     spatial_reference::SpatialReference,
@@ -18,6 +19,7 @@ use crate::{
     error::{self, Error},
     source::{
         FileNotFoundHandling, GdalDatasetGeoTransform, GdalDatasetParameters, GdalMetaDataRegular,
+        GdalSourceTimePlaceholder, WhichTime,
     },
     util::Result,
 };
@@ -50,10 +52,14 @@ pub fn create_ndvi_meta_data() -> GdalMetaDataRegular {
             granularity: TimeGranularity::Months,
             step: 1,
         },
-        placeholder: "%%%_START_TIME_%%%".to_string(),
-        time_format: "%Y-%m-%d".to_string(),
+        time_placeholders: hashmap! {
+            "_START_TIME_".to_string() => GdalSourceTimePlaceholder {
+                time_format: "%Y-%m-%d".to_string(),
+                which: WhichTime::TimeStart,
+            },
+        },
         params: GdalDatasetParameters {
-            file_path: raster_dir().join("modis_ndvi/MOD13A2_M_NDVI_%%%_START_TIME_%%%.TIFF"),
+            file_path: raster_dir().join("modis_ndvi/MOD13A2_M_NDVI_%_START_TIME_%.TIFF"),
             rasterband_channel: 1,
             geo_transform: GdalDatasetGeoTransform {
                 origin_coordinate: (-180., 90.).into(),

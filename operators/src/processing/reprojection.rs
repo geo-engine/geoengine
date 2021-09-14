@@ -568,6 +568,7 @@ mod tests {
         source::{
             FileNotFoundHandling, GdalDatasetGeoTransform, GdalDatasetParameters,
             GdalMetaDataRegular, GdalMetaDataStatic, GdalSource, GdalSourceParameters,
+            GdalSourceTimePlaceholder, WhichTime,
         },
         util::gdal::{add_ndvi_dataset, raster_dir},
     };
@@ -578,6 +579,7 @@ mod tests {
             MultiPolygonCollection,
         },
         dataset::{DatasetId, InternalDatasetId},
+        hashmap,
         primitives::{
             BoundingBox2D, Measurement, MultiLineString, MultiPoint, MultiPolygon,
             SpatialResolution, TimeGranularity, TimeInstance, TimeInterval, TimeStep,
@@ -1029,11 +1031,15 @@ mod tests {
                 granularity: TimeGranularity::Months,
                 step: 1,
             },
-            placeholder: "%%%_START_TIME_%%%".to_string(),
-            time_format: "%Y-%m-%d".to_string(),
+            time_placeholders: hashmap! {
+                "_START_TIME_".to_string() => GdalSourceTimePlaceholder {
+                    time_format: "%Y-%m-%d".to_string(),
+                    which: WhichTime::TimeStart,
+                },
+            },
             params: GdalDatasetParameters {
                 file_path: raster_dir()
-                    .join("modis_ndvi/projected_3857/MOD13A2_M_NDVI_%%%_START_TIME_%%%.TIFF"),
+                    .join("modis_ndvi/projected_3857/MOD13A2_M_NDVI_%_START_TIME_%.TIFF"),
                 rasterband_channel: 1,
                 geo_transform: GdalDatasetGeoTransform {
                     origin_coordinate: (20_037_508.342_789_244, 19_971_868.880_408_563).into(),

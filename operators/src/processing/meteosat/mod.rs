@@ -37,6 +37,7 @@ fn satellite_key() -> RasterPropertiesKey {
 mod test_util {
     use chrono::{TimeZone, Utc};
     use futures::StreamExt;
+    use geoengine_datatypes::hashmap;
     use geoengine_datatypes::util::test::TestDefault;
     use num_traits::AsPrimitive;
 
@@ -60,7 +61,8 @@ mod test_util {
     use crate::processing::meteosat::{channel_key, offset_key, satellite_key, slope_key};
     use crate::source::{
         FileNotFoundHandling, GdalDatasetGeoTransform, GdalDatasetParameters, GdalMetaDataRegular,
-        GdalMetadataMapping, GdalSource, GdalSourceParameters,
+        GdalMetadataMapping, GdalSource, GdalSourceParameters, GdalSourceTimePlaceholder,
+        WhichTime,
     };
     use crate::util::gdal::raster_dir;
     use crate::util::Result;
@@ -211,10 +213,14 @@ mod test_util {
                 granularity: TimeGranularity::Minutes,
                 step: 15,
             },
-            placeholder: "%%%_START_TIME_%%%".to_string(),
-            time_format: "%Y%m%d_%H%M".to_string(),
+            time_placeholders: hashmap! {
+                "_START_TIME_".to_string() => GdalSourceTimePlaceholder {
+                    time_format: "%Y%m%d_%H%M".to_string(),
+                    which: WhichTime::TimeStart,
+                },
+            },
             params: GdalDatasetParameters {
-                file_path: raster_dir().join("msg/%%%_START_TIME_%%%.tif"),
+                file_path: raster_dir().join("msg/%_START_TIME_%.tif"),
                 rasterband_channel: 1,
                 geo_transform: GdalDatasetGeoTransform {
                     origin_coordinate: (-5_570_248.477_339_745, 5_570_248.477_339_745).into(),

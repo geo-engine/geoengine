@@ -163,6 +163,10 @@ pub enum Error {
 
     TimeInstanceNotDisplayable,
 
+    InvalidTimeStringPlaceholder {
+        name: String,
+    },
+
     DatasetMetaData {
         source: Box<dyn std::error::Error + Send + Sync>,
     },
