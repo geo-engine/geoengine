@@ -31,10 +31,16 @@ pub async fn start_server(static_files_dir: Option<PathBuf>) -> Result<()> {
 
     info!("Using in memory backend");
 
+    let data_path_config: config::DataProvider = get_config_element()?;
+
     start(
         static_files_dir,
         web_config.bind_address,
-        InMemoryContext::new_with_data().await,
+        InMemoryContext::new_with_data(
+            data_path_config.dataset_defs_path,
+            data_path_config.provider_defs_path,
+        )
+        .await,
     )
     .await
 }

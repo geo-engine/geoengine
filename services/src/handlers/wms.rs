@@ -356,7 +356,7 @@ mod tests {
 
         assert_eq!(res.status(), 200);
         assert_eq!(
-            include_bytes!("../../../datatypes/test-data/colorizer/rgba.png") as &[u8],
+            include_bytes!("../../../test_data/colorizer/rgba.png") as &[u8],
             test::read_body(res).await
         );
     }
@@ -455,7 +455,7 @@ mod tests {
         .unwrap();
 
         assert_eq!(
-            include_bytes!("../../../services/test-data/wms/raster_small.png") as &[u8],
+            include_bytes!("../../../test_data/wms/raster_small.png") as &[u8],
             image_bytes.as_slice()
         );
     }
@@ -478,7 +478,7 @@ mod tests {
 
         assert_eq!(res.status(), 200);
         assert_eq!(
-            include_bytes!("../../../services/test-data/wms/get_map.png") as &[u8],
+            include_bytes!("../../../test_data/wms/get_map.png") as &[u8],
             test::read_body(res).await
         );
     }
@@ -501,7 +501,7 @@ mod tests {
         );
 
         assert_eq!(
-            include_bytes!("../../../services/test-data/wms/get_map_ndvi.png") as &[u8],
+            include_bytes!("../../../test_data/wms/get_map_ndvi.png") as &[u8],
             test::read_body(response).await
         );
     }
@@ -519,7 +519,7 @@ mod tests {
 
         assert_eq!(res.status(), 200);
         assert_eq!(
-            include_bytes!("../../../services/test-data/wms/get_map.png") as &[u8],
+            include_bytes!("../../../test_data/wms/get_map.png") as &[u8],
             test::read_body(res).await
         );
     }
@@ -587,7 +587,7 @@ mod tests {
 
         assert_eq!(res.status(), 200);
         assert_eq!(
-            include_bytes!("../../../services/test-data/wms/get_map_colorizer.png") as &[u8],
+            include_bytes!("../../../test_data/wms/get_map_colorizer.png") as &[u8],
             test::read_body(res).await
         );
     }

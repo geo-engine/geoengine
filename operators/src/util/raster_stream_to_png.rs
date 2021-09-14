@@ -145,8 +145,7 @@ mod tests {
         .unwrap();
 
         assert_eq!(
-            include_bytes!("../../../operators/test-data/raster/png/png_from_stream.png")
-                as &[u8],
+            include_bytes!("../../../test_data/raster/png/png_from_stream.png") as &[u8],
             image_bytes.as_slice()
         );
     }

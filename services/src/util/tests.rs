@@ -188,7 +188,6 @@ pub async fn send_test_request<C: SimpleContext>(
             .app_data(web::Data::new(ctx))
             .wrap(middleware::NormalizePath::default())
             .configure(configure_extractors)
-            .configure(configure_extractors)
             .configure(handlers::datasets::init_dataset_routes::<C>)
             .configure(handlers::plots::init_plot_routes::<C>)
             .configure(handlers::projects::init_project_routes::<C>)

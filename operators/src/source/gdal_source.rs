@@ -14,13 +14,14 @@ use futures::{
 
 use async_trait::async_trait;
 use gdal::raster::{GdalType, RasterBand as GdalRasterBand};
-use gdal::{Dataset as GdalDataset, DatasetOptions, Metadata as GdalMetadata};
+use gdal::{Dataset as GdalDataset, DatasetOptions, GdalOpenFlags, Metadata as GdalMetadata};
 use geoengine_datatypes::primitives::{Coordinate2D, SpatialPartition2D, SpatialPartitioned};
 use geoengine_datatypes::raster::{
     EmptyGrid, GeoTransform, Grid2D, GridOrEmpty2D, GridShapeAccess, Pixel, RasterDataType,
     RasterProperties, RasterPropertiesEntry, RasterPropertiesEntryType, RasterPropertiesKey,
     RasterTile2D,
 };
+use geoengine_datatypes::util::test::TestDefault;
 use geoengine_datatypes::{dataset::DatasetId, raster::TileInformation};
 use geoengine_datatypes::{
     primitives::{TimeInstance, TimeInterval, TimeStep, TimeStepIter},
@@ -31,7 +32,8 @@ use geoengine_datatypes::{
 };
 use log::{debug, info};
 use serde::{Deserialize, Serialize};
-use snafu::ResultExt;
+use snafu::{ensure, ResultExt};
+use std::convert::{TryFrom, TryInto};
 use std::{marker::PhantomData, path::PathBuf};
 //use gdal::metadata::Metadata; // TODO: handle metadata
 
@@ -148,8 +150,7 @@ pub struct GdalLoadingInfoPart {
 pub struct GdalDatasetParameters {
     pub file_path: PathBuf,
     pub rasterband_channel: usize,
-    #[serde(deserialize_with = "GeoTransform::deserialize_with_check")]
-    pub geo_transform: GeoTransform,
+    pub geo_transform: GdalDatasetGeoTransform,
     pub width: usize,
     pub height: usize,
     pub file_not_found_handling: FileNotFoundHandling,
@@ -161,6 +162,56 @@ pub struct GdalDatasetParameters {
     // `vec!["AWS_REGION".to_owned(), "eu-central-1".to_owned()]` and unset afterwards
     // TODO: validate the config options: only allow specific keys and specific values
     pub gdal_config_options: Option<Vec<(String, String)>>,
+}
+
+/// A user friendly representation of Gdal's geo transform. In contrast to [`GeoTransform`] this
+/// geo transform allows arbitrary pixel sizes and can thus also represent rasters where the origin is not located
+/// in the upper left corner. It should only be used for loading rasters with Gdal and not internally.
+#[derive(Copy, Clone, PartialEq, Debug, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct GdalDatasetGeoTransform {
+    pub origin_coordinate: Coordinate2D,
+    pub x_pixel_size: f64,
+    pub y_pixel_size: f64,
+}
+
+/// Default implementation for testing purposes where geo transform doesn't matter
+impl TestDefault for GdalDatasetGeoTransform {
+    fn test_default() -> Self {
+        Self {
+            origin_coordinate: (0.0, 0.0).into(),
+            x_pixel_size: 1.0,
+            y_pixel_size: -1.0,
+        }
+    }
+}
+
+/// Direct conversion from `GdalDatasetGeoTransform` to [`GeoTransform`] only works if origin is located in the upper left corner.
+impl TryFrom<GdalDatasetGeoTransform> for GeoTransform {
+    type Error = Error;
+
+    fn try_from(dataset_geo_transform: GdalDatasetGeoTransform) -> Result<Self> {
+        ensure!(
+            dataset_geo_transform.x_pixel_size > 0.0 && dataset_geo_transform.y_pixel_size < 0.0,
+            error::GeoTransformOrigin
+        );
+
+        Ok(GeoTransform::new(
+            dataset_geo_transform.origin_coordinate,
+            dataset_geo_transform.x_pixel_size,
+            dataset_geo_transform.y_pixel_size,
+        ))
+    }
+}
+
+impl From<gdal::GeoTransform> for GdalDatasetGeoTransform {
+    fn from(gdal_geo_transform: gdal::GeoTransform) -> Self {
+        Self {
+            origin_coordinate: (gdal_geo_transform[0], gdal_geo_transform[3]).into(),
+            x_pixel_size: gdal_geo_transform[1],
+            y_pixel_size: gdal_geo_transform[5],
+        }
+    }
 }
 
 /// Set thread local gdal options and revert them on drop
@@ -438,7 +489,8 @@ where
         tile_information: &TileInformation,
     ) -> Result<GridWithProperties<T>> {
         let dataset_bounds = dataset_params.spatial_partition();
-        let geo_transform = dataset_params.geo_transform;
+        // TODO: handle datasets where origin is not in the upper left corner
+        let geo_transform: GeoTransform = dataset_params.geo_transform.try_into()?;
         let output_bounds = tile_information.spatial_partition();
         let output_shape = tile_information.tile_size_in_pixels();
         let output_geo_transform = tile_information.tile_geo_transform();
@@ -463,6 +515,7 @@ where
         let dataset_result = GdalDataset::open_ex(
             &dataset_params.file_path,
             DatasetOptions {
+                open_flags: GdalOpenFlags::GDAL_OF_RASTER,
                 open_options: options.as_deref(),
                 ..DatasetOptions::default()
             },
@@ -836,7 +889,8 @@ fn properties_from_band(properties: &mut RasterProperties, gdal_dataset: &GdalRa
 mod tests {
     use super::*;
     use crate::engine::{MockExecutionContext, MockQueryContext};
-    use crate::util::gdal::{add_ndvi_dataset, raster_dir};
+    use crate::test_data;
+    use crate::util::gdal::add_ndvi_dataset;
     use crate::util::Result;
     use geoengine_datatypes::primitives::{AxisAlignedRectangle, SpatialPartition2D};
     use geoengine_datatypes::raster::{TileInformation, TilingStrategy};
@@ -892,9 +946,9 @@ mod tests {
     ) -> Result<GridWithProperties<u8>> {
         GdalSourceProcessor::<u8>::load_tile_data(
             &GdalDatasetParameters {
-                file_path: raster_dir().join("modis_ndvi/MOD13A2_M_NDVI_2014-01-01.TIFF"),
+                file_path: test_data!("raster/modis_ndvi/MOD13A2_M_NDVI_2014-01-01.TIFF").into(),
                 rasterband_channel: 1,
-                geo_transform: GeoTransform {
+                geo_transform: GdalDatasetGeoTransform {
                     origin_coordinate: (-180., 90.).into(),
                     x_pixel_size: 0.1,
                     y_pixel_size: -0.1,
@@ -1094,7 +1148,7 @@ mod tests {
         let params = GdalDatasetParameters {
             file_path: "/foo/bar_%TIME%.tiff".into(),
             rasterband_channel: 0,
-            geo_transform: Default::default(),
+            geo_transform: TestDefault::test_default(),
             width: 360,
             height: 180,
             file_not_found_handling: FileNotFoundHandling::NoData,
@@ -1135,7 +1189,7 @@ mod tests {
             params: GdalDatasetParameters {
                 file_path: "/foo/bar_%TIME%.tiff".into(),
                 rasterband_channel: 0,
-                geo_transform: Default::default(),
+                geo_transform: TestDefault::test_default(),
                 width: 360,
                 height: 180,
                 file_not_found_handling: FileNotFoundHandling::NoData,

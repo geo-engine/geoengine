@@ -148,15 +148,6 @@ impl ConfigElement for ProjectService {
 }
 
 #[derive(Debug, Deserialize)]
-pub struct GdalSource {
-    pub raster_data_root_path: PathBuf,
-}
-
-impl ConfigElement for GdalSource {
-    const KEY: &'static str = "operators.gdal_source";
-}
-
-#[derive(Debug, Deserialize)]
 pub struct TilingSpecification {
     pub origin_coordinate_x: f64,
     pub origin_coordinate_y: f64,
@@ -287,4 +278,14 @@ pub struct Odm {
 
 impl ConfigElement for Odm {
     const KEY: &'static str = "odm";
+}
+
+#[derive(Debug, Deserialize)]
+pub struct DataProvider {
+    pub dataset_defs_path: PathBuf,
+    pub provider_defs_path: PathBuf,
+}
+
+impl ConfigElement for DataProvider {
+    const KEY: &'static str = "dataprovider";
 }

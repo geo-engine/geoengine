@@ -19,8 +19,8 @@ impl<T: Pixel> Blit<RasterTile2D<T>> for MaterializedRasterTile2D<T> {
         // TODO: ensure pixels are aligned
 
         ensure!(
-            (self.geo_transform().x_pixel_size == source.geo_transform().x_pixel_size)
-                && (self.geo_transform().y_pixel_size == source.geo_transform().y_pixel_size),
+            (self.geo_transform().x_pixel_size() == source.geo_transform().x_pixel_size())
+                && (self.geo_transform().y_pixel_size() == source.geo_transform().y_pixel_size()),
             error::Blit {
                 details: "Incompatible pixel size"
             }

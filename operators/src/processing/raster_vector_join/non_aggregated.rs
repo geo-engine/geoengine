@@ -297,6 +297,7 @@ mod tests {
         Grid2D, RasterDataType, TileInformation, TilingSpecification,
     };
     use geoengine_datatypes::spatial_reference::SpatialReference;
+    use geoengine_datatypes::util::test::TestDefault;
 
     #[tokio::test]
     async fn both_instant() {
@@ -714,7 +715,7 @@ mod tests {
         let raster_tile_a_0 = RasterTile2D::new_with_tile_info(
             TimeInterval::new(0, 10).unwrap(),
             TileInformation {
-                global_geo_transform: Default::default(),
+                global_geo_transform: TestDefault::test_default(),
                 global_tile_position: [0, 0].into(),
                 tile_size_in_pixels: [3, 2].into(),
             },
@@ -725,7 +726,7 @@ mod tests {
         let raster_tile_a_1 = RasterTile2D::new_with_tile_info(
             TimeInterval::new(0, 10).unwrap(),
             TileInformation {
-                global_geo_transform: Default::default(),
+                global_geo_transform: TestDefault::test_default(),
                 global_tile_position: [0, 1].into(),
                 tile_size_in_pixels: [3, 2].into(),
             },
@@ -736,7 +737,7 @@ mod tests {
         let raster_tile_b_0 = RasterTile2D::new_with_tile_info(
             TimeInterval::new(10, 20).unwrap(),
             TileInformation {
-                global_geo_transform: Default::default(),
+                global_geo_transform: TestDefault::test_default(),
                 global_tile_position: [0, 0].into(),
                 tile_size_in_pixels: [3, 2].into(),
             },
@@ -747,7 +748,7 @@ mod tests {
         let raster_tile_b_1 = RasterTile2D::new_with_tile_info(
             TimeInterval::new(10, 20).unwrap(),
             TileInformation {
-                global_geo_transform: Default::default(),
+                global_geo_transform: TestDefault::test_default(),
                 global_tile_position: [0, 1].into(),
                 tile_size_in_pixels: [3, 2].into(),
             },
@@ -871,7 +872,7 @@ mod tests {
         let raster_tile_a_0 = RasterTile2D::new_with_tile_info(
             TimeInterval::new(0, 10).unwrap(),
             TileInformation {
-                global_geo_transform: Default::default(),
+                global_geo_transform: TestDefault::test_default(),
                 global_tile_position: [0, 0].into(),
                 tile_size_in_pixels: [3, 2].into(),
             },
@@ -882,7 +883,7 @@ mod tests {
         let raster_tile_a_1 = RasterTile2D::new_with_tile_info(
             TimeInterval::new(0, 10).unwrap(),
             TileInformation {
-                global_geo_transform: Default::default(),
+                global_geo_transform: TestDefault::test_default(),
                 global_tile_position: [0, 1].into(),
                 tile_size_in_pixels: [3, 2].into(),
             },
@@ -893,7 +894,7 @@ mod tests {
         let raster_tile_b_0 = RasterTile2D::new_with_tile_info(
             TimeInterval::new(10, 20).unwrap(),
             TileInformation {
-                global_geo_transform: Default::default(),
+                global_geo_transform: TestDefault::test_default(),
                 global_tile_position: [0, 0].into(),
                 tile_size_in_pixels: [3, 2].into(),
             },
@@ -904,7 +905,7 @@ mod tests {
         let raster_tile_b_1 = RasterTile2D::new_with_tile_info(
             TimeInterval::new(10, 20).unwrap(),
             TileInformation {
-                global_geo_transform: Default::default(),
+                global_geo_transform: TestDefault::test_default(),
                 global_tile_position: [0, 1].into(),
                 tile_size_in_pixels: [3, 2].into(),
             },

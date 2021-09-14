@@ -22,6 +22,7 @@ WORKDIR /app
 COPY /datatypes /app/datatypes
 COPY /operators /app/operators
 COPY /services /app/services
+COPY /test_data /app/test_data
 COPY Settings-* /app/
 COPY Cargo.toml /app/
 
@@ -42,8 +43,8 @@ RUN mkdir -p /app/upload \
     && \
     chown -R geoengine:geoengine /app/upload \
     && \
-    chown -R geoengine:geoengine /app/operators/test-data/vector/data
-# the last line is a work-around to allow the ogr-source to read gpkg files from the test-data folder. The gpkg driver needs RW rights.
+    chown -R geoengine:geoengine /app/test_data/vector/data
+# the last line is a work-around to allow the ogr-source to read gpkg files from the test_data folder. The gpkg driver needs RW rights.
 
 EXPOSE 8080
 

@@ -702,13 +702,12 @@ fn column_map_to_column_vecs(columns: &HashMap<String, ColumnDataType>) -> Colum
 
 #[cfg(test)]
 mod tests {
-    use std::{path::PathBuf, str::FromStr};
-
     use super::*;
     use crate::contexts::{InMemoryContext, Session, SimpleContext, SimpleSession};
     use crate::datasets::storage::{AddDataset, DatasetStore};
     use crate::error::Result;
     use crate::projects::{PointSymbology, Symbology};
+    use crate::test_data;
     use crate::util::tests::{read_body_string, send_test_request};
     use actix_web::{http::header, test};
     use actix_web_httpauth::headers::authorization::Bearer;
@@ -718,6 +717,7 @@ mod tests {
     use geoengine_operators::engine::{StaticMetaData, VectorResultDescriptor};
     use geoengine_operators::source::{OgrSourceDataset, OgrSourceErrorSpec};
     use serde_json::json;
+    use std::str::FromStr;
 
     #[tokio::test]
     #[allow(clippy::too_many_lines)]
@@ -900,7 +900,7 @@ mod tests {
                 "metaData": {
                     "type": "OgrMetaData",
                     "loadingInfo": {
-                        "fileName": "operators/test-data/vector/data/ne_10m_ports/ne_10m_ports.shp",
+                        "fileName": "test_data/vector/data/ne_10m_ports/ne_10m_ports.shp",
                         "layerName": "ne_10m_ports",
                         "dataType": "MultiPoint",
                         "time": {
@@ -947,10 +947,9 @@ mod tests {
 
     #[test]
     fn it_auto_detects() {
-        let mut meta_data = auto_detect_meta_data_definition(
-            &PathBuf::from_str("../operators/test-data/vector/data/ne_10m_ports/ne_10m_ports.shp")
-                .unwrap(),
-        )
+        let mut meta_data = auto_detect_meta_data_definition(test_data!(
+            "vector/data/ne_10m_ports/ne_10m_ports.shp"
+        ))
         .unwrap();
 
         if let MetaDataDefinition::OgrMetaData(meta_data) = &mut meta_data {
@@ -963,8 +962,7 @@ mod tests {
             meta_data,
             MetaDataDefinition::OgrMetaData(StaticMetaData {
                 loading_info: OgrSourceDataset {
-                    file_name: "../operators/test-data/vector/data/ne_10m_ports/ne_10m_ports.shp"
-                        .into(),
+                    file_name: test_data!("vector/data/ne_10m_ports/ne_10m_ports.shp").into(),
                     layer_name: "ne_10m_ports".to_string(),
                     data_type: Some(VectorDataType::MultiPoint),
                     time: OgrSourceDatasetTimeType::None,
@@ -1007,11 +1005,9 @@ mod tests {
 
     #[test]
     fn it_detects_time_json() {
-        let mut meta_data = auto_detect_meta_data_definition(
-            &PathBuf::from_str("../operators/test-data/vector/data/points_with_iso_time.json")
-                .unwrap(),
-        )
-        .unwrap();
+        let mut meta_data =
+            auto_detect_meta_data_definition(test_data!("vector/data/points_with_iso_time.json"))
+                .unwrap();
 
         if let MetaDataDefinition::OgrMetaData(meta_data) = &mut meta_data {
             if let Some(columns) = &mut meta_data.loading_info.columns {
@@ -1023,8 +1019,7 @@ mod tests {
             meta_data,
             MetaDataDefinition::OgrMetaData(StaticMetaData {
                 loading_info: OgrSourceDataset {
-                    file_name: "../operators/test-data/vector/data/points_with_iso_time.json"
-                        .into(),
+                    file_name: test_data!("vector/data/points_with_iso_time.json").into(),
                     layer_name: "points_with_iso_time".to_string(),
                     data_type: Some(VectorDataType::MultiPoint),
                     time: OgrSourceDatasetTimeType::StartEnd {
@@ -1059,10 +1054,9 @@ mod tests {
 
     #[test]
     fn it_detects_time_gpkg() {
-        let mut meta_data = auto_detect_meta_data_definition(
-            &PathBuf::from_str("../operators/test-data/vector/data/points_with_time.gpkg").unwrap(),
-        )
-        .unwrap();
+        let mut meta_data =
+            auto_detect_meta_data_definition(test_data!("vector/data/points_with_time.gpkg"))
+                .unwrap();
 
         if let MetaDataDefinition::OgrMetaData(meta_data) = &mut meta_data {
             if let Some(columns) = &mut meta_data.loading_info.columns {
@@ -1074,7 +1068,7 @@ mod tests {
             meta_data,
             MetaDataDefinition::OgrMetaData(StaticMetaData {
                 loading_info: OgrSourceDataset {
-                    file_name: "../operators/test-data/vector/data/points_with_time.gpkg".into(),
+                    file_name: test_data!("vector/data/points_with_time.gpkg").into(),
                     layer_name: "points_with_time".to_string(),
                     data_type: Some(VectorDataType::MultiPoint),
                     time: OgrSourceDatasetTimeType::StartEnd {
@@ -1109,10 +1103,9 @@ mod tests {
 
     #[test]
     fn it_detects_time_shp() {
-        let mut meta_data = auto_detect_meta_data_definition(
-            &PathBuf::from_str("../operators/test-data/vector/data/points_with_date.shp").unwrap(),
-        )
-        .unwrap();
+        let mut meta_data =
+            auto_detect_meta_data_definition(test_data!("vector/data/points_with_date.shp"))
+                .unwrap();
 
         if let MetaDataDefinition::OgrMetaData(meta_data) = &mut meta_data {
             if let Some(columns) = &mut meta_data.loading_info.columns {
@@ -1124,7 +1117,7 @@ mod tests {
             meta_data,
             MetaDataDefinition::OgrMetaData(StaticMetaData {
                 loading_info: OgrSourceDataset {
-                    file_name: "../operators/test-data/vector/data/points_with_date.shp".into(),
+                    file_name: test_data!("vector/data/points_with_date.shp").into(),
                     layer_name: "points_with_date".to_string(),
                     data_type: Some(VectorDataType::MultiPoint),
                     time: OgrSourceDatasetTimeType::StartEnd {
@@ -1159,12 +1152,9 @@ mod tests {
 
     #[test]
     fn it_detects_time_start_duration() {
-        let mut meta_data = auto_detect_meta_data_definition(
-            &PathBuf::from_str(
-                "../operators/test-data/vector/data/points_with_iso_start_duration.json",
-            )
-            .unwrap(),
-        )
+        let mut meta_data = auto_detect_meta_data_definition(test_data!(
+            "vector/data/points_with_iso_start_duration.json"
+        ))
         .unwrap();
 
         if let MetaDataDefinition::OgrMetaData(meta_data) = &mut meta_data {
@@ -1177,9 +1167,7 @@ mod tests {
             meta_data,
             MetaDataDefinition::OgrMetaData(StaticMetaData {
                 loading_info: OgrSourceDataset {
-                    file_name:
-                        "../operators/test-data/vector/data/points_with_iso_start_duration.json"
-                            .into(),
+                    file_name: test_data!("vector/data/points_with_iso_start_duration.json").into(),
                     layer_name: "points_with_iso_start_duration".to_string(),
                     data_type: Some(VectorDataType::MultiPoint),
                     time: OgrSourceDatasetTimeType::StartDuration {
@@ -1216,10 +1204,8 @@ mod tests {
 
     #[test]
     fn it_detects_csv() {
-        let mut meta_data = auto_detect_meta_data_definition(
-            &PathBuf::from_str("../operators/test-data/vector/data/lonlat.csv").unwrap(),
-        )
-        .unwrap();
+        let mut meta_data =
+            auto_detect_meta_data_definition(test_data!("vector/data/lonlat.csv")).unwrap();
 
         if let MetaDataDefinition::OgrMetaData(meta_data) = &mut meta_data {
             if let Some(columns) = &mut meta_data.loading_info.columns {
@@ -1231,7 +1217,7 @@ mod tests {
             meta_data,
             MetaDataDefinition::OgrMetaData(StaticMetaData {
                 loading_info: OgrSourceDataset {
-                    file_name: "../operators/test-data/vector/data/lonlat.csv".into(),
+                    file_name: test_data!("vector/data/lonlat.csv").into(),
                     layer_name: "lonlat".to_string(),
                     data_type: Some(VectorDataType::MultiPoint),
                     time: OgrSourceDatasetTimeType::None,
