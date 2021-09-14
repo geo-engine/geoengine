@@ -7,7 +7,7 @@ use crate::pro::contexts::{ProContext, ProInMemoryContext};
 use crate::util::config::{self, get_config_element, Backend};
 
 use super::projects::ProProjectDb;
-use crate::server::{configure_extractors, show_version_handler};
+use crate::server::{configure_extractors, render_404, show_version_handler};
 use actix_files::Files;
 use actix_web::{middleware, web, App, HttpServer};
 #[cfg(feature = "postgres")]
@@ -44,7 +44,8 @@ where
             .configure(handlers::wfs::init_wfs_routes::<C>)
             .configure(handlers::wms::init_wms_routes::<C>)
             .configure(handlers::workflows::init_workflow_routes::<C>)
-            .route("/version", web::get().to(show_version_handler)); // TODO: allow disabling this function via config or feature flag
+            .route("/version", web::get().to(show_version_handler)) // TODO: allow disabling this function via config or feature flag
+            .default_service(web::route().to(render_404));
         #[cfg(feature = "odm")]
         {
             app = app.configure(pro::handlers::drone_mapping::init_drone_mapping_routes::<C>);

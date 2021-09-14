@@ -10,7 +10,7 @@ use crate::projects::{
     CreateProject, Layer, LayerUpdate, ProjectDb, ProjectId, RasterSymbology, STRectangle,
     Symbology, UpdateProject,
 };
-use crate::server::configure_extractors;
+use crate::server::{configure_extractors, render_404};
 use crate::util::user_input::UserInput;
 use crate::util::Identifier;
 use crate::workflows::registry::WorkflowRegistry;
@@ -197,7 +197,8 @@ pub async fn send_test_request<C: SimpleContext>(
             .configure(handlers::wcs::init_wcs_routes::<C>)
             .configure(handlers::wfs::init_wfs_routes::<C>)
             .configure(handlers::wms::init_wms_routes::<C>)
-            .configure(handlers::workflows::init_workflow_routes::<C>),
+            .configure(handlers::workflows::init_workflow_routes::<C>)
+            .default_service(web::route().to(render_404)),
     )
     .await;
     test::call_service(&app, req.to_request()).await

@@ -10,7 +10,7 @@ use crate::{
         users::{UserCredentials, UserDb, UserId, UserInfo, UserRegistration, UserSession},
     },
     projects::{CreateProject, ProjectDb, ProjectId, STRectangle},
-    server::configure_extractors,
+    server::{configure_extractors, render_404},
     util::user_input::UserInput,
 };
 use actix_web::dev::ServiceResponse;
@@ -115,7 +115,8 @@ where
         .configure(handlers::wcs::init_wcs_routes::<C>)
         .configure(handlers::wfs::init_wfs_routes::<C>)
         .configure(handlers::wms::init_wms_routes::<C>)
-        .configure(handlers::workflows::init_workflow_routes::<C>);
+        .configure(handlers::workflows::init_workflow_routes::<C>)
+        .default_service(web::route().to(render_404));
     #[cfg(feature = "odm")]
     {
         app = app.configure(pro::handlers::drone_mapping::init_drone_mapping_routes::<C>);

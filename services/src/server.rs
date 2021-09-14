@@ -71,7 +71,8 @@ where
             .configure(handlers::wfs::init_wfs_routes::<C>)
             .configure(handlers::wms::init_wms_routes::<C>)
             .configure(handlers::workflows::init_workflow_routes::<C>)
-            .route("/version", web::get().to(show_version_handler)); // TODO: allow disabling this function via config or feature flag
+            .route("/version", web::get().to(show_version_handler)) // TODO: allow disabling this function via config or feature flag
+            .default_service(web::route().to(render_404));
 
         if let Some(static_files_dir) = static_files_dir.clone() {
             app.service(Files::new("/static", static_files_dir))
@@ -189,6 +190,14 @@ pub(crate) async fn show_version_handler() -> impl Responder {
     web::Json(&VersionInfo {
         build_date: option_env!("VERGEN_BUILD_DATE"),
         commit_hash: option_env!("VERGEN_GIT_SHA"),
+    })
+}
+
+#[allow(clippy::unused_async)] // the function signature of request handlers requires it
+pub(crate) async fn render_404() -> impl Responder {
+    HttpResponse::NotFound().json(ErrorResponse {
+        error: "NotFound".to_string(),
+        message: "Not Found".to_string(),
     })
 }
 

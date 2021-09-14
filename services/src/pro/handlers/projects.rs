@@ -5,7 +5,7 @@ use crate::pro::projects::LoadVersion;
 use crate::pro::projects::{ProProjectDb, UserProjectPermission};
 use crate::projects::{ProjectId, ProjectVersionId};
 
-use actix_web::{web, HttpResponse, Responder};
+use actix_web::{http::Method, web, HttpResponse, Responder};
 
 pub(crate) fn init_project_routes<C>(cfg: &mut web::ServiceConfig)
 where
@@ -13,28 +13,8 @@ where
     C::ProjectDB: ProProjectDb,
 {
     cfg.route(
-        "/project",
-        web::post().to(handlers::projects::create_project_handler::<C>),
-    )
-    .route(
         "/projects",
         web::get().to(handlers::projects::list_projects_handler::<C>),
-    )
-    .route(
-        "/project/{project}",
-        web::patch().to(handlers::projects::update_project_handler::<C>),
-    )
-    .route(
-        "/project/{project}",
-        web::delete().to(handlers::projects::delete_project_handler::<C>),
-    )
-    .route(
-        "/project/{project}",
-        web::get().to(load_project_latest_handler::<C>),
-    )
-    .route(
-        "/project/{project}/{version}",
-        web::get().to(load_project_version_handler::<C>),
     )
     .route(
         "/project/versions",
@@ -49,8 +29,34 @@ where
         web::delete().to(remove_permission_handler::<C>),
     )
     .route(
+        "/project",
+        web::post().to(handlers::projects::create_project_handler::<C>),
+    )
+    .service(
+        web::resource("/project/{project}")
+            .route(
+                web::route()
+                    .method(Method::GET)
+                    .to(load_project_latest_handler::<C>),
+            )
+            .route(
+                web::route()
+                    .method(Method::PATCH)
+                    .to(handlers::projects::update_project_handler::<C>),
+            )
+            .route(
+                web::route()
+                    .method(Method::DELETE)
+                    .to(handlers::projects::delete_project_handler::<C>),
+            ),
+    )
+    .route(
         "/project/{project}/permissions",
         web::get().to(list_permissions_handler::<C>),
+    )
+    .route(
+        "/project/{project}/{version}",
+        web::get().to(load_project_version_handler::<C>),
     );
 }
 
@@ -209,7 +215,7 @@ where
 /// # Example
 ///
 /// ```text
-/// POST /project/permission/add
+/// DELETE /project/permission
 /// Authorization: Bearer fc9b5dc2-a1eb-400f-aeed-a7845d9935c9
 ///
 /// {
