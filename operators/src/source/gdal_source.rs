@@ -395,88 +395,27 @@ impl MetaData<GdalLoadingInfo, RasterResultDescriptor, RasterQueryRectangle>
 impl GdalDatasetParameters {
     /// Placeholders are surrounded by `%` and are replaced by formatted time value.
     /// E.g. `%my_placeholder%` will format the placeholder `my_placeholder`.
-    pub fn replace_time_placeholder(
+    pub fn replace_time_placeholders(
         &self,
         placeholders: &HashMap<String, GdalSourceTimePlaceholder>,
         time: TimeInterval,
     ) -> Result<Self> {
-        enum State {
-            Normal,
-            Escape,                              // `/`
-            Placeholder { placeholder: String }, // `%` to `%`
-        }
-        fn formatted_str<'p>(
-            placeholders: &'p HashMap<String, GdalSourceTimePlaceholder>,
-            placeholder: &str,
-            time: TimeInterval,
-        ) -> Result<DelayedFormat<StrftimeItems<'p>>> {
-            let placeholder = placeholders.get(placeholder).ok_or_else(|| {
-                Error::InvalidTimeStringPlaceholder {
-                    name: placeholder.to_string(),
-                }
-            })?;
-            let time = match placeholder.which {
-                WhichTime::TimeStart => time.start(),
-                WhichTime::TimeEnd => time.end(),
+        let mut file_path: String = self.file_path.to_string_lossy().into();
+
+        for (placeholder, time_placeholder) in placeholders {
+            let time = match time_placeholder.reference {
+                TimeReference::Start => time.start(),
+                TimeReference::End => time.end(),
             };
-            Ok(time
+            let time_string = time
                 .as_naive_date_time()
                 .ok_or(Error::TimeInstanceNotDisplayable)?
-                .format(&placeholder.time_format))
+                .format(&time_placeholder.format)
+                .to_string();
+
+            // TODO: use more efficient algorithm for replacing multiple placeholders, e.g. aho-corasick
+            file_path = file_path.replace(placeholder, &time_string);
         }
-
-        let mut file_path = String::new();
-
-        let mut state = State::Normal;
-        for c in self
-            .file_path
-            .to_str()
-            .ok_or(Error::TimeInstanceNotDisplayable)?
-            .chars()
-        {
-            state = match (state, c) {
-                (State::Normal, '%') => State::Placeholder {
-                    placeholder: String::new(),
-                },
-                (State::Normal, '\\') => State::Escape,
-                (State::Normal, c) => {
-                    file_path.push(c);
-                    State::Normal
-                }
-                (State::Escape, '%') => {
-                    file_path.push('%');
-                    State::Normal
-                }
-                (State::Escape, c) => {
-                    // was no escape
-                    file_path.push('\\');
-                    file_path.push(c);
-                    State::Normal
-                }
-                (State::Placeholder { placeholder }, '%') => {
-                    file_path
-                        .push_str(&formatted_str(placeholders, &placeholder, time)?.to_string());
-
-                    State::Normal
-                }
-                (State::Placeholder { mut placeholder }, c) => {
-                    placeholder.push(c);
-
-                    State::Placeholder { placeholder }
-                }
-            };
-        }
-
-        // last action to clean up state
-        match state {
-            State::Normal => (), // nothing to do
-            State::Escape => file_path.push('\\'),
-            State::Placeholder { placeholder } => {
-                // did not finish, so no placeholder
-                file_path.push('%');
-                file_path.push_str(&placeholder);
-        }
-        };
 
         Ok(Self {
             file_not_found_handling: self.file_not_found_handling,
