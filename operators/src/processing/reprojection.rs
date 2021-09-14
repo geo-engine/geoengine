@@ -1019,6 +1019,31 @@ mod tests {
         );
     }
 
+    #[test]
+    fn query_rewrite_3857_4326() {
+        let query = VectorQueryRectangle {
+            spatial_bounds: BoundingBox2D::new_unchecked(
+                (-20_037_508.342_789_244, -20_048_966.104_014_594).into(),
+                (20_037_508.342_789_244, 20_048_966.104_014_594).into(),
+            ),
+            time_interval: TimeInterval::default(),
+            spatial_resolution: SpatialResolution::zero_point_one(),
+        };
+
+        let expected = BoundingBox2D::new_unchecked((-180., -85.06).into(), (180., 85.06).into());
+
+        assert_eq!(
+            expected,
+            query_rewrite_fn(
+                query,
+                SpatialReference::epsg_4326(),
+                SpatialReference::new(SpatialReferenceAuthority::Epsg, 3857),
+            )
+            .unwrap()
+            .spatial_bounds
+        );
+    }
+
     #[tokio::test]
     async fn raster_ndvi_3857_to_4326() -> Result<()> {
         let mut exe_ctx = MockExecutionContext::default();

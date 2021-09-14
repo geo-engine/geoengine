@@ -83,9 +83,9 @@ impl SpatialPartition2D {
     /// Checks if a coordinate is located inside spatial partition
     pub fn contains_coordinate(&self, coordinate: &Coordinate2D) -> bool {
         coordinate.x >= self.upper_left_coordinate.x
-            && coordinate.y >= self.upper_left_coordinate.y
+            && coordinate.y <= self.upper_left_coordinate.y
             && coordinate.x < self.lower_right_coordinate.x
-            && coordinate.y < self.lower_right_coordinate.y
+            && coordinate.y > self.lower_right_coordinate.y
     }
 
     /// Return true if the `other` partition has any space in common with the partition

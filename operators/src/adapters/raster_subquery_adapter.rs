@@ -611,6 +611,17 @@ where
         let output_raster =
             EmptyGrid::new(tile_info.tile_size_in_pixels, self.no_data_and_fill_value);
 
+        let proj = CoordinateProjector::from_known_srs(self.out_srs, self.in_srs)?;
+        let valid_bounds_proj =
+            CoordinateProjector::from_known_srs(SpatialReference::epsg_4326(), self.out_srs)?;
+
+        let valid_bounds = self
+            .in_srs
+            .area_of_use::<SpatialPartition2D>()?
+            .reproject(&valid_bounds_proj)?;
+
+        dbg!(&valid_bounds);
+
         let idxs: Vec<GridIdx2D> = grid_idx_iter_2d(&output_raster.bounding_box()).collect();
         let coords: Vec<Coordinate2D> = idxs
             .iter()
@@ -619,9 +630,9 @@ where
                     .tile_geo_transform()
                     .grid_idx_to_upper_left_coordinate_2d(i)
             })
+            .filter(|c| dbg!(valid_bounds.contains_coordinate(c)))
             .collect();
 
-        let proj = CoordinateProjector::from_known_srs(self.out_srs, self.in_srs)?;
         let projected_coords = project_coordinates_fail_tolerant(&coords, &proj);
 
         let coords: Vec<(GridIdx2D, Coordinate2D)> = idxs
