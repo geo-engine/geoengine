@@ -7,7 +7,6 @@ use crate::{
     error::{self, Error},
     util::Result,
 };
-use chrono::format::{DelayedFormat, StrftimeItems};
 use futures::{
     stream::{self, BoxStream, StreamExt},
     Stream,
@@ -107,15 +106,15 @@ pub enum GdalLoadingInfoPartIterator {
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(rename_all = "camelCase")]
 pub struct GdalSourceTimePlaceholder {
-    pub time_format: String,
-    pub which: WhichTime,
+    pub format: String,
+    pub reference: TimeReference,
 }
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq)]
 #[serde(rename_all = "camelCase")]
-pub enum WhichTime {
-    TimeStart,
-    TimeEnd,
+pub enum TimeReference {
+    Start,
+    End,
 }
 
 impl Iterator for GdalLoadingInfoPartIterator {
@@ -139,7 +138,7 @@ impl Iterator for GdalLoadingInfoPartIterator {
                 let time_interval = TimeInterval::new_unchecked(t1, t2);
 
                 let loading_info_part = params
-                    .replace_time_placeholder(time_placeholders, time_interval)
+                    .replace_time_placeholders(time_placeholders, time_interval)
                     .map(|loading_info_part_params| GdalLoadingInfoPart {
                         time: time_interval,
                         params: loading_info_part_params,
@@ -341,8 +340,8 @@ impl MetaData<GdalLoadingInfo, RasterResultDescriptor, RasterQueryRectangle>
 }
 
 /// Meta data for a regular time series that begins (is anchored) at `start` with multiple gdal data
-/// sets `step` time apart. The `placeholder` in the file path of the dataset is replaced with the
-/// queried time in specified `time_format`.
+/// sets `step` time apart. The `time_placeholders` in the file path of the dataset are replaced with the
+/// specified time `reference` in specified time `format`.
 // TODO: `start` is actually more a reference time, because the time series also goes in
 //        negative direction. Maybe it would be better to have a real start and end time, then
 //        everything before start and after end is just one big nodata raster instead of many
@@ -476,7 +475,7 @@ impl GdalDatasetParameters {
                 // did not finish, so no placeholder
                 file_path.push('%');
                 file_path.push_str(&placeholder);
-            }
+        }
         };
 
         Ok(Self {
@@ -1239,11 +1238,11 @@ mod tests {
             gdal_config_options: None,
         };
         let replaced = params
-            .replace_time_placeholder(
+            .replace_time_placeholders(
                 &hashmap! {
-                    "TIME".to_string() => GdalSourceTimePlaceholder {
-                        time_format: "%f".to_string(),
-                        which: WhichTime::TimeStart,
+                    "%TIME%".to_string() => GdalSourceTimePlaceholder {
+                        format: "%f".to_string(),
+                        reference: TimeReference::Start,
                     },
                 },
                 TimeInterval::new_instant(TimeInstance::from_millis_unchecked(22)).unwrap(),
@@ -1288,9 +1287,9 @@ mod tests {
                 gdal_config_options: None,
             },
             time_placeholders: hashmap! {
-                "TIME".to_string() => GdalSourceTimePlaceholder {
-                    time_format: "%f".to_string(),
-                    which: WhichTime::TimeStart,
+                "%TIME%".to_string() => GdalSourceTimePlaceholder {
+                    format: "%f".to_string(),
+                    reference: TimeReference::Start,
                 },
             },
             start: TimeInstance::from_millis_unchecked(11),

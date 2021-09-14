@@ -62,7 +62,7 @@ mod test_util {
     use crate::source::{
         FileNotFoundHandling, GdalDatasetGeoTransform, GdalDatasetParameters, GdalMetaDataRegular,
         GdalMetadataMapping, GdalSource, GdalSourceParameters, GdalSourceTimePlaceholder,
-        WhichTime,
+        TimeReference,
     };
     use crate::test_data;
     use crate::util::Result;
@@ -214,9 +214,9 @@ mod test_util {
                 step: 15,
             },
             time_placeholders: hashmap! {
-                "_START_TIME_".to_string() => GdalSourceTimePlaceholder {
-                    time_format: "%Y%m%d_%H%M".to_string(),
-                    which: WhichTime::TimeStart,
+                "%_START_TIME_%".to_string() => GdalSourceTimePlaceholder {
+                    format: "%Y%m%d_%H%M".to_string(),
+                    reference: TimeReference::Start,
                 },
             },
             params: GdalDatasetParameters {

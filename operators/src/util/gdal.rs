@@ -19,7 +19,7 @@ use crate::{
     error::{self, Error},
     source::{
         FileNotFoundHandling, GdalDatasetGeoTransform, GdalDatasetParameters, GdalMetaDataRegular,
-        GdalSourceTimePlaceholder, WhichTime,
+        GdalSourceTimePlaceholder, TimeReference,
     },
     test_data,
     util::Result,
@@ -36,9 +36,9 @@ pub fn create_ndvi_meta_data() -> GdalMetaDataRegular {
             step: 1,
         },
         time_placeholders: hashmap! {
-            "_START_TIME_".to_string() => GdalSourceTimePlaceholder {
-                time_format: "%Y-%m-%d".to_string(),
-                which: WhichTime::TimeStart,
+            "%_START_TIME_%".to_string() => GdalSourceTimePlaceholder {
+                format: "%Y-%m-%d".to_string(),
+                reference: TimeReference::Start,
             },
         },
         params: GdalDatasetParameters {

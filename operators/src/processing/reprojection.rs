@@ -568,7 +568,7 @@ mod tests {
         source::{
             FileNotFoundHandling, GdalDatasetGeoTransform, GdalDatasetParameters,
             GdalMetaDataRegular, GdalMetaDataStatic, GdalSource, GdalSourceParameters,
-            GdalSourceTimePlaceholder, WhichTime,
+            GdalSourceTimePlaceholder, TimeReference,
         },
         test_data,
         util::gdal::add_ndvi_dataset,
@@ -1033,9 +1033,9 @@ mod tests {
                 step: 1,
             },
             time_placeholders: hashmap! {
-                "_START_TIME_".to_string() => GdalSourceTimePlaceholder {
-                    time_format: "%Y-%m-%d".to_string(),
-                    which: WhichTime::TimeStart,
+                "%_START_TIME_%".to_string() => GdalSourceTimePlaceholder {
+                    format: "%Y-%m-%d".to_string(),
+                    reference: TimeReference::Start,
                 },
             },
             params: GdalDatasetParameters {

@@ -307,9 +307,9 @@
       "noDataValue": 0.0
     },
     "timePlaceholders": {
-      "_START_TIME_": {
-        "timeFormat": "%Y-%m-%d",
-        "which": "timeStart"
+      "%_START_TIME_%": {
+        "format": "%Y-%m-%d",
+        "reference": "start"
       }
     },
     "start": 1388534400000,
