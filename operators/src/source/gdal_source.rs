@@ -393,8 +393,8 @@ impl MetaData<GdalLoadingInfo, RasterResultDescriptor, RasterQueryRectangle>
 }
 
 impl GdalDatasetParameters {
-    /// Placeholders are surrounded by `%` and are replaced by formatted time value.
-    /// E.g. `%my_placeholder%` will format the placeholder `my_placeholder`.
+    /// Placeholders are replaced by formatted time value.
+    /// E.g. `%my_placeholder%` could be replaced by `2014-04-01` depending on the format and time input.
     pub fn replace_time_placeholders(
         &self,
         placeholders: &HashMap<String, GdalSourceTimePlaceholder>,
