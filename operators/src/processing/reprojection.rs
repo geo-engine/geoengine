@@ -12,9 +12,8 @@ use crate::{
     util::{input::RasterOrVectorOperator, Result},
 };
 use async_trait::async_trait;
-use futures::stream::BoxStream;
+use futures::stream::{self, BoxStream};
 use futures::StreamExt;
-use geoengine_datatypes::primitives::Coordinate2D;
 use geoengine_datatypes::{
     operations::reproject::{
         suggest_pixel_size_from_diag_cross_projected, CoordinateProjection, CoordinateProjector,
@@ -22,9 +21,10 @@ use geoengine_datatypes::{
     },
     primitives::{AxisAlignedRectangle, SpatialResolution},
     primitives::{BoundingBox2D, SpatialPartition2D},
-    raster::{Pixel, RasterTile2D, TilingSpecification},
+    raster::{GridOrEmpty, Pixel, RasterTile2D, TilingSpecification},
     spatial_reference::SpatialReference,
 };
+use geoengine_datatypes::{primitives::Coordinate2D, raster::EmptyGrid2D};
 use num_traits::AsPrimitive;
 use serde::{Deserialize, Serialize};
 use snafu::ResultExt;
@@ -443,6 +443,7 @@ where
 impl<Q, P> RasterReprojectionProcessor<Q, P>
 where
     Q: RasterQueryProcessor<RasterType = P>,
+    P: Pixel,
 {
     pub fn new(
         source: Q,
@@ -477,6 +478,25 @@ where
             spatial_resolution: query.spatial_resolution,
         })
     }
+
+    /// create a stream of `EmptyTile`s for the given query rectangle
+    fn no_data_stream<'a>(
+        query: QueryRectangle<SpatialPartition2D>,
+        tiling_spec: TilingSpecification,
+        no_data_value: P,
+    ) -> BoxStream<'a, Result<RasterTile2D<P>>> {
+        let iter = tiling_spec
+            .strategy(query.spatial_resolution.x, -query.spatial_resolution.y)
+            .tile_information_iterator(query.spatial_bounds)
+            .map(move |tile| {
+                Ok(RasterTile2D::new_with_tile_info(
+                    query.time_interval,
+                    tile,
+                    GridOrEmpty::Empty(EmptyGrid2D::new(tile.tile_size_in_pixels, no_data_value)),
+                ))
+            });
+        stream::iter(iter).boxed()
+    }
 }
 
 #[async_trait]
@@ -496,6 +516,22 @@ where
         let projector_source_target = CoordinateProjector::from_known_srs(self.from, self.to)?;
         let projector_target_source = CoordinateProjector::from_known_srs(self.to, self.from)?;
 
+        // if query does not intersect with source area of use, return stream with `EmptyTile`s
+        let query_rect =
+            match Self::clip_query(query, &projector_source_target, &projector_target_source) {
+                Ok(query_rect) => query_rect,
+                Err(Error::DataType {
+                    source: geoengine_datatypes::error::Error::SpatialBoundsDoNotIntersect { .. },
+                }) => {
+                    return Ok(Self::no_data_stream(
+                        query,
+                        self.tiling_spec,
+                        self.no_data_and_fill_value,
+                    ))
+                }
+                Err(e) => return Err(e),
+            };
+
         let sub_query_spec = TileReprojectionSubQuery {
             in_srs: self.from,
             out_srs: self.to,
@@ -511,10 +547,11 @@ where
         };
         let s = RasterSubQueryAdapter::<'a, P, _, _>::new(
             &self.source,
-            Self::clip_query(query, &projector_source_target, &projector_target_source)?,
+            query_rect,
             self.tiling_spec,
             ctx,
             sub_query_spec,
+            Some(self.no_data_and_fill_value),
         );
 
         Ok(s.boxed())
@@ -524,14 +561,16 @@ where
 #[cfg(test)]
 mod tests {
     use std::collections::HashMap;
+    use std::path::PathBuf;
 
     use crate::{
         engine::{QueryRectangle, VectorOperator},
         source::{
-            FileNotFoundHandling, GdalDatasetParameters, GdalMetaDataRegular, GdalSource,
-            GdalSourceParameters,
+            FileNotFoundHandling, GdalDatasetGeoTransform, GdalDatasetParameters,
+            GdalMetaDataRegular, GdalMetaDataStatic, GdalSource, GdalSourceParameters,
         },
-        util::gdal::{add_ndvi_dataset, raster_dir},
+        test_data,
+        util::gdal::add_ndvi_dataset,
     };
     use gdal::Dataset;
     use geoengine_datatypes::{
@@ -544,11 +583,10 @@ mod tests {
             BoundingBox2D, Measurement, MultiLineString, MultiPoint, MultiPolygon,
             SpatialResolution, TimeGranularity, TimeInstance, TimeInterval, TimeStep,
         },
-        raster::{
-            GeoTransform, Grid, GridShape, GridShape2D, GridSize, RasterDataType, RasterTile2D,
-        },
+        raster::{Grid, GridShape, GridShape2D, GridSize, RasterDataType, RasterTile2D},
         spatial_reference::SpatialReferenceAuthority,
         util::{
+            test::TestDefault,
             well_known_data::{
                 COLOGNE_EPSG_4326, COLOGNE_EPSG_900_913, HAMBURG_EPSG_4326, HAMBURG_EPSG_900_913,
                 MARBURG_EPSG_4326, MARBURG_EPSG_900_913,
@@ -786,7 +824,7 @@ mod tests {
             RasterTile2D {
                 time: TimeInterval::new_unchecked(0, 5),
                 tile_position: [-1, 0].into(),
-                global_geo_transform: Default::default(),
+                global_geo_transform: TestDefault::test_default(),
                 grid_array: Grid::new([2, 2].into(), vec![1, 2, 3, 4], no_data_value)
                     .unwrap()
                     .into(),
@@ -795,7 +833,7 @@ mod tests {
             RasterTile2D {
                 time: TimeInterval::new_unchecked(0, 5),
                 tile_position: [-1, 1].into(),
-                global_geo_transform: Default::default(),
+                global_geo_transform: TestDefault::test_default(),
                 grid_array: Grid::new([2, 2].into(), vec![7, 8, 9, 10], no_data_value)
                     .unwrap()
                     .into(),
@@ -804,7 +842,7 @@ mod tests {
             RasterTile2D {
                 time: TimeInterval::new_unchecked(5, 10),
                 tile_position: [-1, 0].into(),
-                global_geo_transform: Default::default(),
+                global_geo_transform: TestDefault::test_default(),
                 grid_array: Grid::new([2, 2].into(), vec![13, 14, 15, 16], no_data_value)
                     .unwrap()
                     .into(),
@@ -813,7 +851,7 @@ mod tests {
             RasterTile2D {
                 time: TimeInterval::new_unchecked(5, 10),
                 tile_position: [-1, 1].into(),
-                global_geo_transform: Default::default(),
+                global_geo_transform: TestDefault::test_default(),
                 grid_array: Grid::new([2, 2].into(), vec![19, 20, 21, 22], no_data_value)
                     .unwrap()
                     .into(),
@@ -946,7 +984,7 @@ mod tests {
         // gdalwarp -t_srs EPSG:3857 -tr 11111.11111111 11111.11111111 -r near -te 0.0 5011111.111111112 5000000.0 10011111.111111112 -te_srs EPSG:3857 -of GTiff ./MOD13A2_M_NDVI_2014-04-01.TIFF ./MOD13A2_M_NDVI_2014-04-01_tile-20.rst
         assert_eq!(
             include_bytes!(
-                "../../test-data/raster/modis_ndvi/projected_3857/MOD13A2_M_NDVI_2014-04-01_tile-20.rst"
+                "../../../test_data/raster/modis_ndvi/projected_3857/MOD13A2_M_NDVI_2014-04-01_tile-20.rst"
             ) as &[u8],
             res[8].clone().into_materialized_tile().grid_array.data.as_slice()
         );
@@ -993,10 +1031,12 @@ mod tests {
             placeholder: "%%%_START_TIME_%%%".to_string(),
             time_format: "%Y-%m-%d".to_string(),
             params: GdalDatasetParameters {
-                file_path: raster_dir()
-                    .join("modis_ndvi/projected_3857/MOD13A2_M_NDVI_%%%_START_TIME_%%%.TIFF"),
+                file_path: test_data!(
+                    "raster/modis_ndvi/projected_3857/MOD13A2_M_NDVI_%%%_START_TIME_%%%.TIFF"
+                )
+                .into(),
                 rasterband_channel: 1,
-                geo_transform: GeoTransform {
+                geo_transform: GdalDatasetGeoTransform {
                     origin_coordinate: (20_037_508.342_789_244, 19_971_868.880_408_563).into(),
                     x_pixel_size: 14_052.950_258_048_739,
                     y_pixel_size: -14_057.881_117_788_405,
@@ -1089,14 +1129,16 @@ mod tests {
             CoordinateProjector::from_known_srs(epsg_3857, epsg_4326).unwrap();
 
         // use ndvi dataset that was reprojected using gdal as ground truth
-        let dataset_4326 =
-            Dataset::open(&raster_dir().join("modis_ndvi/MOD13A2_M_NDVI_2014-04-01.TIFF")).unwrap();
+        let dataset_4326 = Dataset::open(test_data!(
+            "raster/modis_ndvi/MOD13A2_M_NDVI_2014-04-01.TIFF"
+        ))
+        .unwrap();
         let geotransform_4326 = dataset_4326.geo_transform().unwrap();
         let res_4326 = SpatialResolution::new(geotransform_4326[1], -geotransform_4326[5]).unwrap();
 
-        let dataset_3857 = Dataset::open(
-            &raster_dir().join("modis_ndvi/projected_3857/MOD13A2_M_NDVI_2014-04-01.TIFF"),
-        )
+        let dataset_3857 = Dataset::open(test_data!(
+            "raster/modis_ndvi/projected_3857/MOD13A2_M_NDVI_2014-04-01.TIFF"
+        ))
         .unwrap();
         let geotransform_3857 = dataset_3857.geo_transform().unwrap();
         let res_3857 = SpatialResolution::new(geotransform_3857[1], -geotransform_3857[5]).unwrap();
@@ -1113,6 +1155,101 @@ mod tests {
         .unwrap();
         assert!(1. - (result_res.x / res_4326.x).abs() < 0.02);
         assert!(1. - (result_res.y / res_4326.y).abs() < 0.02);
+    }
+
+    #[tokio::test]
+    async fn query_outside_projection_area_of_use_produces_empty_tiles() {
+        let mut exe_ctx = MockExecutionContext::default();
+        let query_ctx = MockQueryContext::default();
+
+        let m = GdalMetaDataStatic {
+            time: Some(TimeInterval::default()),
+            params: GdalDatasetParameters {
+                file_path: PathBuf::new(),
+                rasterband_channel: 1,
+                geo_transform: GdalDatasetGeoTransform {
+                    origin_coordinate: (166_021.44, 9_329_005.188).into(),
+                    x_pixel_size: (534_994.66 - 166_021.444) / 100.,
+                    y_pixel_size: -9_329_005.18 / 100.,
+                },
+                width: 100,
+                height: 100,
+                file_not_found_handling: FileNotFoundHandling::NoData,
+                no_data_value: Some(0.),
+                properties_mapping: None,
+                gdal_open_options: None,
+                gdal_config_options: None,
+            },
+            result_descriptor: RasterResultDescriptor {
+                data_type: RasterDataType::U8,
+                spatial_reference: SpatialReference::new(SpatialReferenceAuthority::Epsg, 32636)
+                    .into(),
+                measurement: Measurement::Unitless,
+                no_data_value: Some(0.),
+            },
+        };
+
+        let id: DatasetId = InternalDatasetId::new().into();
+        exe_ctx.add_meta_data(id.clone(), Box::new(m));
+
+        exe_ctx.tiling_specification =
+            TilingSpecification::new((0.0, 0.0).into(), [600, 600].into());
+
+        let output_shape: GridShape2D = [1000, 1000].into();
+        let output_bounds =
+            SpatialPartition2D::new_unchecked((-180., 0.).into(), (180., -90.).into());
+        let time_interval = TimeInterval::new_instant(1_388_534_400_000).unwrap(); // 2014-01-01
+
+        let gdal_op = GdalSource {
+            params: GdalSourceParameters {
+                dataset: id.clone(),
+            },
+        }
+        .boxed();
+
+        let initialized_operator = RasterOperator::boxed(Reprojection {
+            params: ReprojectionParams {
+                target_spatial_reference: SpatialReference::epsg_4326(),
+            },
+            sources: SingleRasterOrVectorSource {
+                source: gdal_op.into(),
+            },
+        })
+        .initialize(&exe_ctx)
+        .await
+        .unwrap();
+
+        let x_query_resolution = output_bounds.size_x() / output_shape.axis_size_x() as f64;
+        let y_query_resolution = output_bounds.size_y() / (output_shape.axis_size_y()) as f64;
+        let spatial_resolution =
+            SpatialResolution::new_unchecked(x_query_resolution, y_query_resolution);
+
+        let qp = initialized_operator
+            .query_processor()
+            .unwrap()
+            .get_u8()
+            .unwrap();
+
+        let result = qp
+            .raster_query(
+                QueryRectangle {
+                    spatial_bounds: output_bounds,
+                    time_interval,
+                    spatial_resolution,
+                },
+                &query_ctx,
+            )
+            .await
+            .unwrap()
+            .map(Result::unwrap)
+            .collect::<Vec<_>>()
+            .await;
+
+        assert_eq!(result.len(), 4);
+
+        for r in result {
+            assert!(r.is_empty());
+        }
     }
 
     #[tokio::test]

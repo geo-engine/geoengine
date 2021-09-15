@@ -9,12 +9,12 @@ use crate::workflows::registry::HashMapRegistry;
 use crate::{
     datasets::add_from_directory::{add_datasets_from_directory, add_providers_from_directory},
     error::Result,
-    util::{dataset_defs_dir, provider_defs_dir},
 };
 use async_trait::async_trait;
 use geoengine_operators::concurrency::ThreadPool;
 use geoengine_operators::concurrency::ThreadPoolContextCreator;
 use snafu::ResultExt;
+use std::path::PathBuf;
 use std::sync::Arc;
 use tokio::sync::{RwLock, RwLockReadGuard, RwLockWriteGuard};
 
@@ -31,11 +31,11 @@ pub struct ProInMemoryContext {
 
 impl ProInMemoryContext {
     #[allow(clippy::too_many_lines)]
-    pub async fn new_with_data() -> Self {
+    pub async fn new_with_data(dataset_defs_path: PathBuf, provider_defs_path: PathBuf) -> Self {
         let mut db = ProHashMapDatasetDb::default();
-        add_datasets_from_directory(&mut db, dataset_defs_dir()).await;
-        add_providers_from_directory(&mut db, provider_defs_dir()).await;
-        add_providers_from_directory(&mut db, provider_defs_dir().join("pro")).await;
+        add_datasets_from_directory(&mut db, dataset_defs_path).await;
+        add_providers_from_directory(&mut db, provider_defs_path.clone()).await;
+        add_providers_from_directory(&mut db, provider_defs_path.join("pro")).await;
 
         Self {
             dataset_db: Arc::new(RwLock::new(db)),

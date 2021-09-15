@@ -15,7 +15,7 @@ use geoengine_datatypes::operations::reproject::{
 use geoengine_datatypes::primitives::{
     AxisAlignedRectangle, BoundingBox2D, Measurement, SpatialPartitioned, TimeInterval,
 };
-use geoengine_datatypes::raster::{GeoTransform, RasterDataType};
+use geoengine_datatypes::raster::RasterDataType;
 use geoengine_datatypes::spatial_reference::{SpatialReference, SpatialReferenceAuthority};
 use geoengine_operators::engine::{
     MetaData, MetaDataProvider, RasterQueryRectangle, RasterResultDescriptor, VectorQueryRectangle,
@@ -23,8 +23,8 @@ use geoengine_operators::engine::{
 };
 use geoengine_operators::mock::MockDatasetDataSourceLoadingInfo;
 use geoengine_operators::source::{
-    GdalDatasetParameters, GdalLoadingInfo, GdalLoadingInfoPart, GdalLoadingInfoPartIterator,
-    OgrSourceDataset,
+    GdalDatasetGeoTransform, GdalDatasetParameters, GdalLoadingInfo, GdalLoadingInfoPart,
+    GdalLoadingInfoPartIterator, OgrSourceDataset,
 };
 use log::debug;
 use serde::{Deserialize, Serialize};
@@ -280,7 +280,7 @@ impl SentinelS2L2aCogsMetaData {
             params: GdalDatasetParameters {
                 file_path: PathBuf::from(format!("/vsicurl/{}", asset.href)),
                 rasterband_channel: 1,
-                geo_transform: GeoTransform::from(
+                geo_transform: GdalDatasetGeoTransform::from(
                     asset
                         .gdal_geotransform()
                         .ok_or(error::Error::StacInvalidGeoTransform)?,
@@ -507,6 +507,7 @@ impl MetaDataProvider<OgrSourceDataset, VectorResultDescriptor, VectorQueryRecta
 mod tests {
     use std::{fs::File, io::BufReader, str::FromStr};
 
+    use crate::test_data;
     use futures::StreamExt;
     use geoengine_datatypes::primitives::{SpatialPartition2D, SpatialResolution};
     use geoengine_operators::{
@@ -521,7 +522,7 @@ mod tests {
         // TODO: mock STAC endpoint
 
         let def: Box<dyn DatasetProviderDefinition> = serde_json::from_reader(BufReader::new(
-            File::open("services/test-data/provider_defs/pro/sentinel_s2_l2a_cogs.json")?,
+            File::open(test_data!("provider_defs/pro/sentinel_s2_l2a_cogs.json"))?,
         ))?;
 
         let provider = def.initialize().await?;
@@ -561,7 +562,7 @@ mod tests {
             params: GdalDatasetParameters {
                 file_path: "/vsicurl/https://sentinel-cogs.s3.us-west-2.amazonaws.com/sentinel-s2-l2a-cogs/32/R/PU/2021/1/S2B_32RPU_20210102_0_L2A/B01.tif".into(),
                 rasterband_channel: 1,
-                geo_transform: GeoTransform {
+                geo_transform: GdalDatasetGeoTransform {
                     origin_coordinate: (600_000.0, 3_400_020.0).into(),
                     x_pixel_size: 60.,
                     y_pixel_size: -60.,
@@ -596,7 +597,7 @@ mod tests {
         let mut exe = MockExecutionContext::default();
 
         let def: Box<dyn DatasetProviderDefinition> = serde_json::from_reader(BufReader::new(
-            File::open("services/test-data/provider_defs/pro/sentinel_s2_l2a_cogs.json")?,
+            File::open(test_data!("provider_defs/pro/sentinel_s2_l2a_cogs.json"))?,
         ))?;
 
         let provider = def.initialize().await?;

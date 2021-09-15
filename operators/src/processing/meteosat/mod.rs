@@ -37,6 +37,7 @@ fn satellite_key() -> RasterPropertiesKey {
 mod test_util {
     use chrono::{TimeZone, Utc};
     use futures::StreamExt;
+    use geoengine_datatypes::util::test::TestDefault;
     use num_traits::AsPrimitive;
 
     use geoengine_datatypes::dataset::{DatasetId, InternalDatasetId};
@@ -45,8 +46,8 @@ mod test_util {
         TimeInterval, TimeStep,
     };
     use geoengine_datatypes::raster::{
-        EmptyGrid2D, GeoTransform, Grid2D, GridOrEmpty, RasterDataType, RasterProperties,
-        RasterPropertiesEntry, RasterPropertiesEntryType, RasterTile2D, TileInformation,
+        EmptyGrid2D, Grid2D, GridOrEmpty, RasterDataType, RasterProperties, RasterPropertiesEntry,
+        RasterPropertiesEntryType, RasterTile2D, TileInformation,
     };
     use geoengine_datatypes::spatial_reference::{SpatialReference, SpatialReferenceAuthority};
     use geoengine_datatypes::util::Identifier;
@@ -58,10 +59,10 @@ mod test_util {
     use crate::mock::{MockRasterSource, MockRasterSourceParams};
     use crate::processing::meteosat::{channel_key, offset_key, satellite_key, slope_key};
     use crate::source::{
-        FileNotFoundHandling, GdalDatasetParameters, GdalMetaDataRegular, GdalMetadataMapping,
-        GdalSource, GdalSourceParameters,
+        FileNotFoundHandling, GdalDatasetGeoTransform, GdalDatasetParameters, GdalMetaDataRegular,
+        GdalMetadataMapping, GdalSource, GdalSourceParameters,
     };
-    use crate::util::gdal::raster_dir;
+    use crate::test_data;
     use crate::util::Result;
 
     pub(crate) async fn process<T>(
@@ -174,7 +175,7 @@ mod test_util {
             TileInformation {
                 global_tile_position: [-1, 0].into(),
                 tile_size_in_pixels: [3, 2].into(),
-                global_geo_transform: Default::default(),
+                global_geo_transform: TestDefault::test_default(),
             },
             raster,
             props,
@@ -213,9 +214,9 @@ mod test_util {
             placeholder: "%%%_START_TIME_%%%".to_string(),
             time_format: "%Y%m%d_%H%M".to_string(),
             params: GdalDatasetParameters {
-                file_path: raster_dir().join("msg/%%%_START_TIME_%%%.tif"),
+                file_path: test_data!("raster/msg/%%%_START_TIME_%%%.tif").into(),
                 rasterband_channel: 1,
-                geo_transform: GeoTransform {
+                geo_transform: GdalDatasetGeoTransform {
                     origin_coordinate: (-5_570_248.477_339_745, 5_570_248.477_339_745).into(),
                     x_pixel_size: 3_000.403_165_817_261,
                     y_pixel_size: -3_000.403_165_817_261,

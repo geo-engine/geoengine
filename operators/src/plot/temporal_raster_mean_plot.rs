@@ -250,7 +250,6 @@ mod tests {
         source::GdalSourceParameters,
     };
     use chrono::NaiveDate;
-    use geoengine_datatypes::raster::{Grid2D, RasterDataType, TileInformation};
     use geoengine_datatypes::spatial_reference::SpatialReference;
     use geoengine_datatypes::{
         dataset::InternalDatasetId,
@@ -259,6 +258,10 @@ mod tests {
     use geoengine_datatypes::{
         primitives::{BoundingBox2D, Measurement, SpatialResolution, TimeInterval},
         util::Identifier,
+    };
+    use geoengine_datatypes::{
+        raster::{Grid2D, RasterDataType, TileInformation},
+        util::test::TestDefault,
     };
     use num_traits::AsPrimitive;
     use serde_json::json;
@@ -378,7 +381,7 @@ mod tests {
             tiles.push(RasterTile2D::new_with_tile_info(
                 time_interval,
                 TileInformation {
-                    global_geo_transform: Default::default(),
+                    global_geo_transform: TestDefault::test_default(),
                     global_tile_position: [0, 0].into(),
                     tile_size_in_pixels: [3, 2].into(),
                 },

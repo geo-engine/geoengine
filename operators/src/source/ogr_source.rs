@@ -494,7 +494,13 @@ where
             .as_ref()
             .ok_or(error::Error::OgrSourceColumnsSpecMissing)?;
 
-        let mut dataset_options = DatasetOptions::default();
+        let allowed_drivers = Some(vec!["CSV"]);
+
+        let mut dataset_options = DatasetOptions {
+            open_flags: GdalOpenFlags::GDAL_OF_VECTOR,
+            allowed_drivers: allowed_drivers.as_deref(),
+            ..DatasetOptions::default()
+        };
 
         // TODO: make column x optional or allow other indication for data collection
         if columns.x.is_empty() {
@@ -1161,6 +1167,7 @@ mod tests {
     use super::*;
 
     use crate::engine::{MockExecutionContext, MockQueryContext, StaticMetaData};
+    use crate::test_data;
     use futures::TryStreamExt;
     use geoengine_datatypes::collections::{
         DataCollection, GeometryCollection, MultiPointCollection, MultiPolygonCollection,
@@ -1287,7 +1294,7 @@ mod tests {
     #[tokio::test]
     async fn empty_geojson() -> Result<()> {
         let dataset_information = OgrSourceDataset {
-            file_name: "test-data/vector/data/empty.json".into(),
+            file_name: test_data!("vector/data/empty.json").into(),
             layer_name: "empty".to_string(),
             data_type: None,
             time: OgrSourceDatasetTimeType::None,
@@ -1383,7 +1390,7 @@ mod tests {
     #[tokio::test]
     async fn on_error_ignore() -> Result<()> {
         let dataset_information = OgrSourceDataset {
-            file_name: "test-data/vector/data/missing_geo.json".into(),
+            file_name: test_data!("vector/data/missing_geo.json").into(),
             layer_name: "missing_geo".to_string(),
             data_type: None,
             time: OgrSourceDatasetTimeType::None,
@@ -1445,7 +1452,7 @@ mod tests {
             dataset.clone(),
             Box::new(StaticMetaData {
                 loading_info: OgrSourceDataset {
-                    file_name: "test-data/vector/data/ne_10m_ports/ne_10m_ports.shp".into(),
+                    file_name: test_data!("vector/data/ne_10m_ports/ne_10m_ports.shp").into(),
                     layer_name: "ne_10m_ports".to_string(),
                     data_type: Some(VectorDataType::MultiPoint),
                     time: OgrSourceDatasetTimeType::None,
@@ -1539,7 +1546,7 @@ mod tests {
             dataset.clone(),
             Box::new(StaticMetaData {
                 loading_info: OgrSourceDataset {
-                    file_name: "test-data/vector/data/ne_10m_ports/ne_10m_ports.shp".into(),
+                    file_name: test_data!("vector/data/ne_10m_ports/ne_10m_ports.shp").into(),
                     layer_name: "ne_10m_ports".to_string(),
                     data_type: Some(VectorDataType::MultiPoint),
                     time: OgrSourceDatasetTimeType::None,
@@ -1633,9 +1640,10 @@ mod tests {
             dataset.clone(),
             Box::new(StaticMetaData {
                 loading_info: OgrSourceDataset {
-                    file_name:
-                        "test-data/vector/data/ne_10m_ports/with_spatial_index/ne_10m_ports.gpkg"
-                            .into(),
+                    file_name: test_data!(
+                        "vector/data/ne_10m_ports/with_spatial_index/ne_10m_ports.gpkg"
+                    )
+                    .into(),
                     layer_name: "ne_10m_ports".to_string(),
                     data_type: Some(VectorDataType::MultiPoint),
                     time: OgrSourceDatasetTimeType::None,
@@ -1730,7 +1738,7 @@ mod tests {
             id.clone(),
             Box::new(StaticMetaData {
                 loading_info: OgrSourceDataset {
-                    file_name: "test-data/vector/data/ne_10m_ports/ne_10m_ports.shp".into(),
+                    file_name: test_data!("vector/data/ne_10m_ports/ne_10m_ports.shp").into(),
                     layer_name: "ne_10m_ports".to_string(),
                     data_type: Some(VectorDataType::MultiPoint),
                     time: OgrSourceDatasetTimeType::None,
@@ -1919,7 +1927,7 @@ mod tests {
             id.clone(),
             Box::new(StaticMetaData {
                 loading_info: OgrSourceDataset {
-                    file_name: "test-data/vector/data/ne_10m_ports/ne_10m_ports.shp".into(),
+                    file_name: test_data!("vector/data/ne_10m_ports/ne_10m_ports.shp").into(),
                     layer_name: "ne_10m_ports".to_string(),
                     data_type: Some(VectorDataType::MultiPoint),
                     time: OgrSourceDatasetTimeType::None,
@@ -3080,7 +3088,7 @@ mod tests {
     #[tokio::test]
     async fn plain_data() -> Result<()> {
         let dataset_information = OgrSourceDataset {
-            file_name: "test-data/vector/data/plain_data.csv".into(),
+            file_name: test_data!("vector/data/plain_data.csv").into(),
             layer_name: "plain_data".to_string(),
             data_type: None,
             time: OgrSourceDatasetTimeType::None,
@@ -3177,7 +3185,7 @@ mod tests {
             id.clone(),
             Box::new(StaticMetaData {
                 loading_info: OgrSourceDataset {
-                    file_name: "test-data/vector/data/ne_10m_ports/ne_10m_ports.shp".into(),
+                    file_name: test_data!("vector/data/ne_10m_ports/ne_10m_ports.shp").into(),
                     layer_name: "ne_10m_ports".to_string(),
                     data_type: Some(VectorDataType::MultiPoint),
                     time: OgrSourceDatasetTimeType::None,
@@ -3423,7 +3431,7 @@ mod tests {
             dataset.clone(),
             Box::new(StaticMetaData {
                 loading_info: OgrSourceDataset {
-                    file_name: "test-data/vector/data/ne_10m_ports/ne_10m_ports.shp".into(),
+                    file_name: test_data!("vector/data/ne_10m_ports/ne_10m_ports.shp").into(),
                     layer_name: "ne_10m_ports".to_string(),
                     data_type: Some(VectorDataType::MultiPoint),
                     time: OgrSourceDatasetTimeType::None,
@@ -3498,7 +3506,7 @@ mod tests {
             dataset.clone(),
             Box::new(StaticMetaData {
                 loading_info: OgrSourceDataset {
-                    file_name: "test-data/vector/data/germany_polygon.gpkg".into(),
+                    file_name: test_data!("vector/data/germany_polygon.gpkg").into(),
                     layer_name: "test_germany".to_owned(),
                     data_type: Some(VectorDataType::MultiPolygon),
                     time: OgrSourceDatasetTimeType::None,
@@ -3589,7 +3597,7 @@ mod tests {
             dataset.clone(),
             Box::new(StaticMetaData {
                 loading_info: OgrSourceDataset {
-                    file_name: "test-data/vector/data/points.csv".into(),
+                    file_name: test_data!("vector/data/points.csv").into(),
                     layer_name: "points".to_owned(),
                     data_type: Some(VectorDataType::MultiPoint),
                     time: OgrSourceDatasetTimeType::None,
@@ -3692,7 +3700,7 @@ mod tests {
             dataset.clone(),
             Box::new(StaticMetaData {
                 loading_info: OgrSourceDataset {
-                    file_name: "test-data/vector/data/lonlat_date.csv".into(),
+                    file_name: test_data!("vector/data/lonlat_date.csv").into(),
                     layer_name: "lonlat_date".to_owned(),
                     data_type: Some(VectorDataType::MultiPoint),
                     time: OgrSourceDatasetTimeType::Start {
@@ -3797,7 +3805,7 @@ mod tests {
             dataset.clone(),
             Box::new(StaticMetaData {
                 loading_info: OgrSourceDataset {
-                    file_name: "test-data/vector/data/lonlat_date_time.csv".into(),
+                    file_name: test_data!("vector/data/lonlat_date_time.csv").into(),
                     layer_name: "lonlat_date_time".to_owned(),
                     data_type: Some(VectorDataType::MultiPoint),
                     time: OgrSourceDatasetTimeType::Start {
@@ -3902,7 +3910,7 @@ mod tests {
             dataset.clone(),
             Box::new(StaticMetaData {
                 loading_info: OgrSourceDataset {
-                    file_name: "test-data/vector/data/lonlat_date_time_tz.csv".into(),
+                    file_name: test_data!("vector/data/lonlat_date_time_tz.csv").into(),
                     layer_name: "lonlat_date_time_tz".to_owned(),
                     data_type: Some(VectorDataType::MultiPoint),
                     time: OgrSourceDatasetTimeType::Start {
@@ -4000,7 +4008,7 @@ mod tests {
     #[tokio::test]
     async fn rename() -> Result<()> {
         let dataset_information = OgrSourceDataset {
-            file_name: "test-data/vector/data/plain_data.csv".into(),
+            file_name: test_data!("vector/data/plain_data.csv").into(),
             layer_name: "plain_data".to_string(),
             data_type: None,
             time: OgrSourceDatasetTimeType::None,

@@ -16,7 +16,7 @@
   "metaData": {
     "type": "OgrMetaData",
     "loadingInfo": {
-      "fileName": "operators/test-data/vector/data/ne_10m_ports/projected_3857/ne_10m_ports.shp",
+      "fileName": "test_data/vector/data/ne_10m_ports/projected_3857/ne_10m_ports.shp",
       "layerName": "ne_10m_ports",
       "dataType": "MultiPoint",
       "time": {

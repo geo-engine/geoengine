@@ -34,3 +34,27 @@ pub mod util;
 /// Compiles Geo Engine Pro
 #[cfg(feature = "pro")]
 pub mod pro;
+
+/// This macro resolves paths of files or folders in the test_data folder.
+/// The test_data folder is located in the workspace root and has the same name as this macro.
+/// To address data from the test_data folder you can use the macro like this:
+///
+/// Assuming a file "test.tiff" in "test_data" with the path "test_data/test.tiff" call the macro with `test_data!("test.tiff")`.
+/// Assuming a file "more-data.json" in "test_data/vector/" with the path "test_data/vector/more-data.csv" call the macro with `test_data!("vector/move-data.csv")`.
+///
+/// # Panics
+/// * if the path of the parent folder of `env!("CARGO_MANIFEST_DIR")` is unresolvable.
+///
+#[macro_export]
+macro_rules! test_data {
+    ($name:expr) => {
+        dbg!(std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+            .canonicalize() // get a full path
+            .unwrap()
+            .parent()
+            .unwrap()
+            .join("test_data/")
+            .join($name)
+            .as_path())
+    };
+}

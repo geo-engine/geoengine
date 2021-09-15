@@ -7,7 +7,7 @@ use gdal::{raster::GDALDataType, Dataset, DatasetOptions};
 use geoengine_datatypes::{
     dataset::{DatasetId, InternalDatasetId},
     primitives::{Measurement, TimeGranularity, TimeInstance, TimeStep},
-    raster::{GeoTransform, RasterDataType},
+    raster::RasterDataType,
     spatial_reference::SpatialReference,
     util::Identifier,
 };
@@ -16,27 +16,12 @@ use snafu::ResultExt;
 use crate::{
     engine::{MockExecutionContext, RasterResultDescriptor},
     error::{self, Error},
-    source::{FileNotFoundHandling, GdalDatasetParameters, GdalMetaDataRegular},
+    source::{
+        FileNotFoundHandling, GdalDatasetGeoTransform, GdalDatasetParameters, GdalMetaDataRegular,
+    },
+    test_data,
     util::Result,
 };
-
-/// # Panics
-/// If current dir is not accessible
-// TODO: better way for determining raster directory
-pub fn raster_dir() -> std::path::PathBuf {
-    let mut current_path = std::env::current_dir().unwrap();
-
-    if current_path.ends_with("services") {
-        current_path = current_path.join("../operators");
-    }
-
-    if !current_path.ends_with("operators") {
-        current_path = current_path.join("operators");
-    }
-
-    current_path = current_path.join("test-data/raster");
-    current_path
-}
 
 // TODO: move test helper somewhere else?
 #[allow(clippy::missing_panics_doc)]
@@ -51,9 +36,10 @@ pub fn create_ndvi_meta_data() -> GdalMetaDataRegular {
         placeholder: "%%%_START_TIME_%%%".to_string(),
         time_format: "%Y-%m-%d".to_string(),
         params: GdalDatasetParameters {
-            file_path: raster_dir().join("modis_ndvi/MOD13A2_M_NDVI_%%%_START_TIME_%%%.TIFF"),
+            file_path: test_data!("raster/modis_ndvi/MOD13A2_M_NDVI_%%%_START_TIME_%%%.TIFF")
+                .into(),
             rasterband_channel: 1,
-            geo_transform: GeoTransform {
+            geo_transform: GdalDatasetGeoTransform {
                 origin_coordinate: (-180., 90.).into(),
                 x_pixel_size: 0.1,
                 y_pixel_size: -0.1,
@@ -85,7 +71,7 @@ pub fn add_ndvi_dataset(ctx: &mut MockExecutionContext) -> DatasetId {
 /// Opens a Gdal Dataset with the given `path`.
 /// Other crates should use this method for Gdal Dataset access as a workaround to avoid strange errors.
 pub fn gdal_open_dataset(path: &Path) -> Result<Dataset> {
-    Dataset::open(path).context(error::Gdal)
+    gdal_open_dataset_ex(path, DatasetOptions::default())
 }
 
 /// Opens a Gdal Dataset with the given `path` and `dataset_options`.

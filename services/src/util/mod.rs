@@ -64,48 +64,6 @@ where
     }
 }
 
-/// # Panics
-/// If current dir is not accessible
-// TODO: better way for determining dataset_defs directory
-pub fn dataset_defs_dir() -> std::path::PathBuf {
-    let mut current_path = std::env::current_dir().unwrap();
-
-    if !current_path.ends_with("services") {
-        current_path = current_path.join("services");
-    }
-
-    current_path = current_path.join("test-data/dataset_defs");
-    current_path
-}
-
-/// # Panics
-/// If current dir is not accessible
-// TODO: better way for determining dataset_defs directory
-pub fn provider_defs_dir() -> std::path::PathBuf {
-    let mut current_path = std::env::current_dir().unwrap();
-
-    if !current_path.ends_with("services") {
-        current_path = current_path.join("services");
-    }
-
-    current_path = current_path.join("test-data/provider_defs");
-    current_path
-}
-
-/// # Panics
-/// If current dir is not accessible
-// TODO: better way for determining test_data directory
-pub fn test_data_dir() -> std::path::PathBuf {
-    let mut current_path = std::env::current_dir().unwrap();
-
-    if !current_path.ends_with("services") {
-        current_path = current_path.join("services");
-    }
-
-    current_path = current_path.join("test-data");
-    current_path
-}
-
 #[cfg(test)]
 mod mod_tests {
     use super::*;

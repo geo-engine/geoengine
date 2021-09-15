@@ -38,6 +38,7 @@ snafu = "0.6"
 tokio = { version = "1.1", features = ["macros", "signal", "sync", "rt-multi-thread"] }
 typetag = "0.1"
 uuid = { version = "0.8", features = ["serde", "v4", "v5"] }
+packed_simd_2 = "=0.3.5" # TODO: remove once packed_simd_2 workes in CI
 
 [dev-dependencies]
 criterion = {version = "0.3", features =["async_futures", "async_tokio"]}

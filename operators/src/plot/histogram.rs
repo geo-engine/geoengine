@@ -589,6 +589,7 @@ mod tests {
     use crate::source::{
         OgrSourceColumnSpec, OgrSourceDataset, OgrSourceDatasetTimeType, OgrSourceErrorSpec,
     };
+    use crate::test_data;
     use chrono::NaiveDate;
     use geoengine_datatypes::dataset::{DatasetId, InternalDatasetId};
     use geoengine_datatypes::primitives::{
@@ -596,6 +597,7 @@ mod tests {
     };
     use geoengine_datatypes::raster::{Grid2D, RasterDataType, RasterTile2D, TileInformation};
     use geoengine_datatypes::spatial_reference::SpatialReference;
+    use geoengine_datatypes::util::test::TestDefault;
     use geoengine_datatypes::util::Identifier;
     use geoengine_datatypes::{
         collections::{DataCollection, VectorDataType},
@@ -711,7 +713,7 @@ mod tests {
                 data: vec![RasterTile2D::new_with_tile_info(
                     TimeInterval::default(),
                     TileInformation {
-                        global_geo_transform: Default::default(),
+                        global_geo_transform: TestDefault::test_default(),
                         global_tile_position: [0, 0].into(),
                         tile_size_in_pixels: [3, 2].into(),
                     },
@@ -988,8 +990,7 @@ mod tests {
             DatasetId::Internal { dataset_id },
             Box::new(StaticMetaData {
                 loading_info: OgrSourceDataset {
-                    file_name: "operators/test-data/vector/data/ne_10m_ports/ne_10m_ports.shp"
-                        .into(),
+                    file_name: test_data!("vector/data/ne_10m_ports/ne_10m_ports.shp").into(),
                     layer_name: "ne_10m_ports".to_string(),
                     data_type: Some(VectorDataType::MultiPoint),
                     time: OgrSourceDatasetTimeType::None,
@@ -1053,7 +1054,7 @@ mod tests {
                     data: vec![RasterTile2D::new_with_tile_info(
                         TimeInterval::default(),
                         TileInformation {
-                            global_geo_transform: Default::default(),
+                            global_geo_transform: TestDefault::test_default(),
                             global_tile_position: [0, 0].into(),
                             tile_size_in_pixels: [3, 2].into(),
                         },
@@ -1240,7 +1241,7 @@ mod tests {
                     data: vec![RasterTile2D::new_with_tile_info(
                         TimeInterval::default(),
                         TileInformation {
-                            global_geo_transform: Default::default(),
+                            global_geo_transform: TestDefault::test_default(),
                             global_tile_position: [0, 0].into(),
                             tile_size_in_pixels: [3, 2].into(),
                         },
