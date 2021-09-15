@@ -45,6 +45,9 @@ pub enum Error {
     QuickXml {
         source: quick_xml::Error,
     },
+    Proj {
+        source: proj::ProjError,
+    },
 
     TokioChannelSend,
 
@@ -216,6 +219,14 @@ pub enum Error {
     },
     #[cfg(feature = "odm")]
     OdmMissingContentTypeHeader,
+
+    UnknownSrsString {
+        srs_string: String,
+    },
+
+    AxisOrderingNotKnownForSrs {
+        srs_string: String,
+    },
 }
 
 impl Reject for Error {}
@@ -289,5 +300,11 @@ impl From<quick_xml::Error> for Error {
 impl From<flexi_logger::FlexiLoggerError> for Error {
     fn from(source: flexi_logger::FlexiLoggerError) -> Self {
         Self::Logger { source }
+    }
+}
+
+impl From<proj::ProjError> for Error {
+    fn from(source: proj::ProjError) -> Self {
+        Self::Proj { source }
     }
 }
