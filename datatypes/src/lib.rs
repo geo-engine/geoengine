@@ -48,13 +48,13 @@ pub mod pro;
 #[macro_export]
 macro_rules! test_data {
     ($name:expr) => {
-        dbg!(std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+        std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
             .canonicalize() // get a full path
             .unwrap()
             .parent()
             .unwrap()
             .join("test_data/")
             .join($name)
-            .as_path())
+            .as_path()
     };
 }

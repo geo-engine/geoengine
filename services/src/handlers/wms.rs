@@ -612,4 +612,52 @@ mod tests {
             res.body().to_vec().as_slice()
         );
     }
+
+    #[tokio::test]
+    async fn it_zoomes_very_far() {
+        let ctx = InMemoryContext::default();
+
+        let (_, id) = register_ndvi_workflow_helper(&ctx).await;
+
+        let colorizer = Colorizer::linear_gradient(
+            vec![
+                (0.0, RgbaColor::white()).try_into().unwrap(),
+                (255.0, RgbaColor::black()).try_into().unwrap(),
+            ],
+            RgbaColor::transparent(),
+            RgbaColor::pink(),
+        )
+        .unwrap();
+
+        let params = &[
+            ("request", "GetMap"),
+            ("service", "WMS"),
+            ("version", "1.3.0"),
+            ("layers", &id.to_string()),
+            (
+                "bbox",
+                "1.95556640625,0.90087890625,1.9775390625,0.9228515625",
+            ),
+            ("width", "256"),
+            ("height", "256"),
+            ("crs", "EPSG:4326"),
+            (
+                "styles",
+                &format!("custom:{}", serde_json::to_string(&colorizer).unwrap()),
+            ),
+            ("format", "image/png"),
+            ("time", "2014-04-01T12:00:00.0Z"),
+        ];
+
+        let res = warp::test::request()
+            .method("GET")
+            .path(&format!(
+                "/wms?{}",
+                serde_urlencoded::to_string(params).unwrap()
+            ))
+            .reply(&wms_handler(ctx))
+            .await;
+
+        assert_eq!(res.status(), 200);
+    }
 }
