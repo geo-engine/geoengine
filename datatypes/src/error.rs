@@ -152,6 +152,7 @@ pub enum Error {
         source: PrimitivesError,
     },
 
+    #[snafu(display("Blit exception: {}", details))]
     Blit {
         details: String,
     },
