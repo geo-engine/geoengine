@@ -233,7 +233,7 @@ mod tests {
         crate::util::test_data_dir().join("pangaea").join(file_name)
     }
 
-    async fn create_provider(_server: &Server) -> Result<Box<dyn DatasetProvider>, Error> {
+    async fn create_provider(server: &Server) -> Result<Box<dyn DatasetProvider>, Error> {
         Box::new(PangaeaDataProviderDefinition {
             id: DatasetProviderId::from_str(PROVIDER_ID).unwrap(),
             name: "Pangaea".to_string(),
@@ -257,7 +257,7 @@ mod tests {
         file_name: &str,
         format_param: &str,
         content_type: &str,
-        _count: RangeInclusive<usize>,
+        count: RangeInclusive<usize>,
     ) {
         let mut body = String::new();
 
