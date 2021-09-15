@@ -447,6 +447,7 @@ mod tests {
     };
     use geoengine_datatypes::raster::TileInformation;
     use geoengine_datatypes::spatial_reference::SpatialReference;
+    use geoengine_datatypes::util::test::TestDefault;
 
     #[test]
     fn deserialize_params() {
@@ -582,7 +583,7 @@ mod tests {
             TileInformation {
                 global_tile_position: [-1, 0].into(),
                 tile_size_in_pixels: [3, 2].into(),
-                global_geo_transform: Default::default(),
+                global_geo_transform: TestDefault::test_default(),
             },
             raster.into(),
         );

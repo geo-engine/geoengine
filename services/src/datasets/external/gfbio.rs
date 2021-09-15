@@ -407,6 +407,7 @@ mod tests {
     use geoengine_operators::{engine::MockQueryContext, source::OgrSourceProcessor};
     use rand::RngCore;
 
+    use crate::test_data;
     use crate::{
         datasets::listing::OrderBy,
         util::{config, user_input::UserInput},
@@ -427,7 +428,7 @@ mod tests {
         let conn = pg_mgr.connect().await.unwrap();
 
         let mut sql = String::new();
-        File::open("test-data/gfbio/test_data.sql")
+        File::open(test_data!("gfbio/test_data.sql"))
             .unwrap()
             .read_to_string(&mut sql)
             .unwrap();

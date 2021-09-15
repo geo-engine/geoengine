@@ -116,6 +116,8 @@ pub async fn start_pro_server(
             .unwrap_or(Url::parse(&format!("http://{}/", web_config.bind_address))?)
     );
 
+    let data_path_config: config::DataProvider = get_config_element()?;
+
     match web_config.backend {
         Backend::InMemory => {
             info!("Using in memory backend"); // TODO: log
@@ -123,7 +125,11 @@ pub async fn start_pro_server(
                 shutdown_rx,
                 static_files_dir,
                 web_config.bind_address,
-                ProInMemoryContext::new_with_data().await,
+                ProInMemoryContext::new_with_data(
+                    data_path_config.dataset_defs_path,
+                    data_path_config.provider_defs_path,
+                )
+                .await,
             )
             .await
         }
@@ -138,7 +144,9 @@ pub async fn start_pro_server(
                     .user(&db_config.user)
                     .password(&db_config.password)
                     .host(&db_config.host)
-                    .dbname(&db_config.database);
+                    .dbname(&db_config.database)
+                    // fix schema by providing `search_path` option
+                    .options(&format!("-c search_path={}", db_config.schema));
 
                 let ctx = PostgresContext::new(pg_config, NoTls).await?;
 

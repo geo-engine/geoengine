@@ -530,11 +530,12 @@ where
             .as_ref()
             .ok_or(error::Error::OgrSourceColumnsSpecMissing)?;
 
+        let allowed_drivers = Some(vec!["CSV"]);
+
         let mut dataset_options = DatasetOptions {
-            open_flags: GdalOpenFlags::GDAL_OF_VECTOR
-                | GdalOpenFlags::GDAL_OF_READONLY
-                | GdalOpenFlags::GDAL_OF_VERBOSE_ERROR,
-            ..Default::default()
+            open_flags: GdalOpenFlags::GDAL_OF_VECTOR,
+            allowed_drivers: allowed_drivers.as_deref(),
+            ..DatasetOptions::default()
         };
 
         let headers = if let Some(FormatSpecifics::Csv { header }) = &columns.format_specifics {
@@ -1243,7 +1244,6 @@ mod tests {
     use super::*;
 
     use crate::engine::{MockExecutionContext, MockQueryContext, StaticMetaData};
-    use crate::source::ogr_source::FormatSpecifics::Csv;
     use futures::TryStreamExt;
     use geoengine_datatypes::collections::{
         DataCollection, GeometryCollection, MultiPointCollection, MultiPolygonCollection,
