@@ -245,6 +245,8 @@ pub enum Error {
 
     GdalRasterDataTypeNotSupported,
 
+    DynamicGdalSourceSpecHasEmptyTimePlaceholders,
+
     #[snafu(display("Input `{}` must be greater than zero at `{}`", name, scope))]
     InputMustBeGreaterThanZero {
         scope: &'static str,

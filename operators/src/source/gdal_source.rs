@@ -88,19 +88,50 @@ pub struct GdalLoadingInfo {
     pub info: GdalLoadingInfoPartIterator,
 }
 
+#[derive(Debug, Clone)]
+pub struct DynamicGdalLoadingInfoPartIterator {
+    time_step_iter: TimeStepIter,
+    params: GdalDatasetParameters,
+    time_placeholders: HashMap<String, GdalSourceTimePlaceholder>,
+    step: TimeStep,
+    max_t2: TimeInstance,
+}
+
+impl DynamicGdalLoadingInfoPartIterator {
+    fn new(
+        time_step_iter: TimeStepIter,
+        params: GdalDatasetParameters,
+        time_placeholders: HashMap<String, GdalSourceTimePlaceholder>,
+        step: TimeStep,
+        max_t2: TimeInstance,
+    ) -> Result<Self> {
+        // TODO: maybe fail on deserialization
+        if time_placeholders.is_empty()
+            || time_placeholders.keys().any(String::is_empty)
+            || time_placeholders
+                .values()
+                .any(|value| value.format.is_empty())
+        {
+            return Err(Error::DynamicGdalSourceSpecHasEmptyTimePlaceholders);
+        }
+
+        Ok(Self {
+            time_step_iter,
+            params,
+            time_placeholders,
+            step,
+            max_t2,
+        })
+    }
+}
+
 #[allow(clippy::large_enum_variant)]
 #[derive(Debug, Clone)]
 pub enum GdalLoadingInfoPartIterator {
     Static {
         parts: std::vec::IntoIter<GdalLoadingInfoPart>,
     },
-    Dynamic {
-        time_step_iter: TimeStepIter,
-        params: GdalDatasetParameters,
-        time_placeholders: HashMap<String, GdalSourceTimePlaceholder>,
-        step: TimeStep,
-        max_t2: TimeInstance,
-    },
+    Dynamic(DynamicGdalLoadingInfoPartIterator),
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -123,13 +154,13 @@ impl Iterator for GdalLoadingInfoPartIterator {
     fn next(&mut self) -> Option<Self::Item> {
         match self {
             GdalLoadingInfoPartIterator::Static { parts } => parts.next().map(Result::Ok),
-            GdalLoadingInfoPartIterator::Dynamic {
+            GdalLoadingInfoPartIterator::Dynamic(DynamicGdalLoadingInfoPartIterator {
                 time_step_iter,
                 params,
                 time_placeholders,
                 step,
                 max_t2,
-            } => {
+            }) => {
                 let t1 = time_step_iter.next()?;
 
                 let t2 = t1 + *step;
@@ -371,13 +402,13 @@ impl MetaData<GdalLoadingInfo, RasterResultDescriptor, RasterQueryRectangle>
             TimeStepIter::new_with_interval_incl_start(snapped_interval, self.step)?;
 
         Ok(GdalLoadingInfo {
-            info: GdalLoadingInfoPartIterator::Dynamic {
-                time_step_iter: time_iterator,
-                params: self.params.clone(),
-                time_placeholders: self.time_placeholders.clone(),
-                step: self.step,
-                max_t2: query.time_interval.end(),
-            },
+            info: GdalLoadingInfoPartIterator::Dynamic(DynamicGdalLoadingInfoPartIterator::new(
+                time_iterator,
+                self.params.clone(),
+                self.time_placeholders.clone(),
+                self.step,
+                query.time_interval.end(),
+            )?),
         })
     }
 
