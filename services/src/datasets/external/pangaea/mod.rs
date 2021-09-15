@@ -230,7 +230,7 @@ mod tests {
     const PROVIDER_ID: &str = "39f8a6e4-3145-46f8-ab59-80376a264874";
 
     pub fn test_data_path(file_name: &str) -> PathBuf {
-        crate::util::test_data_dir().join("pangaea").join(file_name)
+        crate::test_data!(String::from("pangaea/") + file_name).into()
     }
 
     async fn create_provider(server: &Server) -> Result<Box<dyn DatasetProvider>, Error> {
