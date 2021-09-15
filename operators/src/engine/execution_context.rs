@@ -23,7 +23,7 @@ pub trait ExecutionContext: Send
     + MetaDataProvider<OgrSourceDataset, VectorResultDescriptor, VectorQueryRectangle>
     + MetaDataProvider<GdalLoadingInfo, RasterResultDescriptor, RasterQueryRectangle>
 {
-    fn thread_pool(&self) -> ThreadPoolContext;
+    fn thread_pool_context(&self) -> ThreadPoolContext;
     fn tiling_specification(&self) -> TilingSpecification;
 }
 
@@ -92,7 +92,7 @@ impl MockExecutionContext {
 }
 
 impl ExecutionContext for MockExecutionContext {
-    fn thread_pool(&self) -> ThreadPoolContext {
+    fn thread_pool_context(&self) -> ThreadPoolContext {
         self.thread_pool.clone()
     }
 

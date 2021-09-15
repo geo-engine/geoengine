@@ -71,7 +71,7 @@ impl QueryContext for QueryContextImpl {
         self.chunk_byte_size
     }
 
-    fn thread_pool(&self) -> &ThreadPoolContext {
+    fn thread_pool_context(&self) -> &ThreadPoolContext {
         &self.thread_pool
     }
 }
@@ -111,7 +111,7 @@ where
         + MetaDataProvider<GdalLoadingInfo, RasterResultDescriptor, RasterQueryRectangle>,
     S: Session,
 {
-    fn thread_pool(&self) -> ThreadPoolContext {
+    fn thread_pool_context(&self) -> ThreadPoolContext {
         self.thread_pool.clone()
     }
 
