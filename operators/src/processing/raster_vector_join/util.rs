@@ -140,13 +140,13 @@ impl<'a> CoveredPixels<MultiPoint> for MultiPointCoveredPixels {
 }
 
 pub struct MultiPolygonCoveredPixels {
-    tester: PointInPolygonTesterWithCollection,
+    tester_with_collection: PointInPolygonTesterWithCollection,
 }
 
 impl CoveredPixels<MultiPolygon> for MultiPolygonCoveredPixels {
     fn initialize(collection: FeatureCollection<MultiPolygon>) -> Self {
         Self {
-            tester: PointInPolygonTesterWithCollection::new(collection), // TODO: parallelize
+            tester_with_collection: PointInPolygonTesterWithCollection::new(collection), // TODO: parallelize
         }
     }
 
@@ -159,7 +159,7 @@ impl CoveredPixels<MultiPolygon> for MultiPolygonCoveredPixels {
 
         let [height, width] = raster.grid_shape_array();
 
-        let tester = self.tester.tester();
+        let tester = self.tester_with_collection.tester();
 
         let mut pixels = vec![];
         for row in 0..height {
@@ -177,11 +177,11 @@ impl CoveredPixels<MultiPolygon> for MultiPolygonCoveredPixels {
     }
 
     fn collection_ref(&self) -> &FeatureCollection<MultiPolygon> {
-        self.tester.collection()
+        self.tester_with_collection.collection()
     }
 
     fn collection(self) -> FeatureCollection<MultiPolygon> {
-        self.tester.into()
+        self.tester_with_collection.into()
     }
 }
 
