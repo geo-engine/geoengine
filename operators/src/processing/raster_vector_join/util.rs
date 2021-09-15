@@ -167,7 +167,7 @@ impl CoveredPixels<MultiPolygon> for MultiPolygonCoveredPixels {
                 let idx = [row as isize, col as isize].into();
                 let coordinate = geo_transform.grid_idx_to_upper_left_coordinate_2d(idx);
 
-                if tester.is_coordinate_in_multi_polygon(coordinate, feature_index) {
+                if tester.multi_polygon_contains_coordinate(coordinate, feature_index) {
                     pixels.push(idx);
                 }
             }

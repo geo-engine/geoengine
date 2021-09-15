@@ -61,7 +61,6 @@ impl<'a> PointInPolygonTester<'a> {
         (constants, multiples)
     }
 
-    #[allow(clippy::suspicious_operation_groupings)]
     fn precalculate_ring(
         ring_start_index: usize,
         ring_end_index: usize,
@@ -91,7 +90,7 @@ impl<'a> PointInPolygonTester<'a> {
         }
     }
 
-    fn is_coordinate_in_ring(
+    fn ring_contains_coordinate(
         &self,
         coordinate: &Coordinate2D,
         ring_index_start: usize,
@@ -123,7 +122,7 @@ impl<'a> PointInPolygonTester<'a> {
         odd_nodes
     }
 
-    pub fn is_coordinate_in_multi_polygon(
+    pub fn multi_polygon_contains_coordinate(
         &self,
         coordinate: Coordinate2D,
         feature_index: usize,
@@ -131,7 +130,7 @@ impl<'a> PointInPolygonTester<'a> {
         let polygon_offsets = self.polygon_offsets;
         let ring_offsets = self.ring_offsets;
 
-        self.check_coordinate_in_multipolygons(
+        self.check_multipolygons_contain_coordinate(
             &coordinate,
             polygon_offsets,
             ring_offsets,
@@ -140,7 +139,7 @@ impl<'a> PointInPolygonTester<'a> {
         )
     }
 
-    fn check_coordinate_in_multipolygons(
+    fn check_multipolygons_contain_coordinate(
         &self,
         coordinate: &Coordinate2D,
         polygon_offsets: &[i32],
@@ -148,8 +147,6 @@ impl<'a> PointInPolygonTester<'a> {
         multi_polygon_start_index: usize,
         multi_polygon_end_index: usize,
     ) -> bool {
-        let mut is_coordinate_in_multi_polygon = false;
-
         for (polygon_start_index, polygon_end_index) in two_tuple_windows(
             polygon_offsets[multi_polygon_start_index..=multi_polygon_end_index]
                 .iter()
@@ -165,7 +162,7 @@ impl<'a> PointInPolygonTester<'a> {
             .enumerate()
             {
                 let is_coordinate_in_ring =
-                    self.is_coordinate_in_ring(coordinate, ring_start_index, ring_end_index);
+                    self.ring_contains_coordinate(coordinate, ring_start_index, ring_end_index);
 
                 if (ring_number == 0 && !is_coordinate_in_ring)
                     || (ring_number > 0 && is_coordinate_in_ring)
@@ -177,15 +174,14 @@ impl<'a> PointInPolygonTester<'a> {
             }
 
             if is_coordinate_in_polygon {
-                is_coordinate_in_multi_polygon = true;
-                break;
+                return true;
             }
         }
 
-        is_coordinate_in_multi_polygon
+        false
     }
 
-    fn coordinate_in_multi_polygon_iter<'p>(
+    fn multi_polygon_contains_coordinate_iter<'p>(
         &'p self,
         coordinate: &'p Coordinate2D,
         time_interval: &'p TimeInterval,
@@ -206,7 +202,7 @@ impl<'a> PointInPolygonTester<'a> {
                         return false;
                     }
 
-                    self.check_coordinate_in_multipolygons(
+                    self.check_multipolygons_contain_coordinate(
                         coordinate,
                         polygon_offsets,
                         ring_offsets,
@@ -225,22 +221,21 @@ impl<'a> PointInPolygonTester<'a> {
     ///
     /// TODO: check boundary conditions separately
     ///
-    pub fn is_coordinate_in_any_polygon(
+    pub fn any_polygon_contains_coordinate(
         &self,
         coordinate: &Coordinate2D,
         time_interval: &TimeInterval,
     ) -> bool {
-        self.coordinate_in_multi_polygon_iter(coordinate, time_interval)
+        self.multi_polygon_contains_coordinate_iter(coordinate, time_interval)
             .any(std::convert::identity)
     }
 
-    #[allow(dead_code)]
     pub fn multi_polygons_containing_coordinate(
         &self,
         coordinate: &Coordinate2D,
         time_interval: &TimeInterval,
     ) -> Vec<bool> {
-        self.coordinate_in_multi_polygon_iter(coordinate, time_interval)
+        self.multi_polygon_contains_coordinate_iter(coordinate, time_interval)
             .collect()
     }
 }
@@ -307,20 +302,19 @@ mod tests {
 
         let tester = PointInPolygonTester::new(&collection);
 
-        assert!(!tester.is_coordinate_in_ring(&Coordinate2D::new(4., 5.), 0, 5));
-        assert!(tester.is_coordinate_in_ring(&Coordinate2D::new(4., 5.), 5, 10));
-        assert!(!tester.is_coordinate_in_ring(&Coordinate2D::new(4., 5.), 10, 19));
+        assert!(!tester.ring_contains_coordinate(&Coordinate2D::new(4., 5.), 0, 5));
+        assert!(tester.ring_contains_coordinate(&Coordinate2D::new(4., 5.), 5, 10));
+        assert!(!tester.ring_contains_coordinate(&Coordinate2D::new(4., 5.), 10, 19));
 
-        assert!(!tester.is_coordinate_in_ring(&Coordinate2D::new(4., 2.), 0, 5));
-        assert!(tester.is_coordinate_in_ring(&Coordinate2D::new(4., 2.), 5, 10));
-        assert!(tester.is_coordinate_in_ring(&Coordinate2D::new(4., 2.), 10, 19));
+        assert!(!tester.ring_contains_coordinate(&Coordinate2D::new(4., 2.), 0, 5));
+        assert!(tester.ring_contains_coordinate(&Coordinate2D::new(4., 2.), 5, 10));
+        assert!(tester.ring_contains_coordinate(&Coordinate2D::new(4., 2.), 10, 19));
 
         assert!(
-            tester.is_coordinate_in_any_polygon(&Coordinate2D::new(4., 5.), &Default::default())
+            tester.any_polygon_contains_coordinate(&Coordinate2D::new(4., 5.), &Default::default())
         );
-        assert!(
-            !tester.is_coordinate_in_any_polygon(&Coordinate2D::new(4., 2.), &Default::default()),
-        );
+        assert!(!tester
+            .any_polygon_contains_coordinate(&Coordinate2D::new(4., 2.), &Default::default()),);
 
         assert_eq!(
             tester.multi_polygons_containing_coordinate(

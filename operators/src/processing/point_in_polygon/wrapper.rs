@@ -88,7 +88,7 @@ mod tests {
 
         assert!(wrapper
             .tester()
-            .is_coordinate_in_any_polygon(&(5.0, 5.1).into(), &TimeInterval::default()));
+            .any_polygon_contains_coordinate(&(5.0, 5.1).into(), &TimeInterval::default()));
 
         assert_eq!(wrapper.collection().len(), 2);
     }
