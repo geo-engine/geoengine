@@ -9,6 +9,7 @@ use futures::{
     FutureExt, TryFuture, TryStreamExt,
 };
 use futures::{stream::FusedStream, Future};
+use geoengine_datatypes::operations::reproject::ReprojectClipped;
 use geoengine_datatypes::primitives::{SpatialPartition2D, SpatialPartitioned};
 use geoengine_datatypes::raster::{EmptyGrid2D, GridOrEmpty};
 use geoengine_datatypes::{
@@ -602,7 +603,6 @@ where
         self.no_data_and_fill_value
     }
 
-    #[allow(clippy::type_complexity)] // TODO: move Result-type into struct
     fn new_fold_accu(
         &self,
         tile_info: TileInformation,
@@ -620,37 +620,45 @@ where
         let valid_bounds = self
             .in_srs
             .area_of_use::<SpatialPartition2D>()?
-            .reproject(&valid_bounds_proj)?;
+            .reproject_clipped(&valid_bounds_proj)?;
 
-        // get all pixel idxs and there coordinates.
+        // get all pixel idxs and coordinates.
         let idxs: Vec<GridIdx2D> = grid_idx_iter_2d(&output_raster.bounding_box()).collect();
-        let coords: Vec<Coordinate2D> = idxs
+        let idx_coords: Vec<(GridIdx2D, Coordinate2D)> = idxs
             .iter()
             .map(|&i| {
-                tile_info
-                    .tile_geo_transform()
-                    .grid_idx_to_upper_left_coordinate_2d(i)
+                (
+                    i,
+                    tile_info
+                        .tile_geo_transform()
+                        .grid_idx_to_upper_left_coordinate_2d(i),
+                )
             })
             .collect();
 
         // check if the tile to fill is contained by the valid bounds of the input projection
-        let coords = if valid_bounds.contains(&tile_info.spatial_partition()) {
+        let idx_coords = if valid_bounds.contains(&tile_info.spatial_partition()) {
             // use all pixel coordinates
-            coords
-        } else if valid_bounds.intersects(&query_rect.spatial_partition()) {
+            idx_coords
+        } else if valid_bounds.intersects(&tile_info.spatial_partition()) {
             // filter the coordinates to only contain valid ones
-            coords
+            idx_coords
                 .into_iter()
-                .filter(|c| valid_bounds.contains_coordinate(c))
+                .filter(|(_, c)| valid_bounds.contains_coordinate(c))
                 .collect()
         } else {
             // fastpath to skip filter
             vec![]
         };
 
+        // unzip to use batch projection
+        let (idxs, coords): (Vec<_>, Vec<_>) = idx_coords.into_iter().unzip();
+
+        // project
         let proj = CoordinateProjector::from_known_srs(self.out_srs, self.in_srs)?;
         let projected_coords = project_coordinates_fail_tolerant(&coords, &proj);
 
+        // zip idx and projected coordinates
         let coords: Vec<(GridIdx2D, Coordinate2D)> = idxs
             .into_iter()
             .zip(projected_coords.into_iter())
