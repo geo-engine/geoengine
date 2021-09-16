@@ -33,6 +33,7 @@ use geoengine_datatypes::{
 use log::{debug, info};
 use serde::{Deserialize, Serialize};
 use snafu::{ensure, ResultExt};
+use std::collections::HashMap;
 use std::convert::{TryFrom, TryInto};
 use std::{marker::PhantomData, path::PathBuf};
 //use gdal::metadata::Metadata; // TODO: handle metadata
@@ -87,20 +88,64 @@ pub struct GdalLoadingInfo {
     pub info: GdalLoadingInfoPartIterator,
 }
 
+#[derive(Debug, Clone)]
+pub struct DynamicGdalLoadingInfoPartIterator {
+    time_step_iter: TimeStepIter,
+    params: GdalDatasetParameters,
+    time_placeholders: HashMap<String, GdalSourceTimePlaceholder>,
+    step: TimeStep,
+    max_t2: TimeInstance,
+}
+
+impl DynamicGdalLoadingInfoPartIterator {
+    fn new(
+        time_step_iter: TimeStepIter,
+        params: GdalDatasetParameters,
+        time_placeholders: HashMap<String, GdalSourceTimePlaceholder>,
+        step: TimeStep,
+        max_t2: TimeInstance,
+    ) -> Result<Self> {
+        // TODO: maybe fail on deserialization
+        if time_placeholders.is_empty()
+            || time_placeholders.keys().any(String::is_empty)
+            || time_placeholders
+                .values()
+                .any(|value| value.format.is_empty())
+        {
+            return Err(Error::DynamicGdalSourceSpecHasEmptyTimePlaceholders);
+        }
+
+        Ok(Self {
+            time_step_iter,
+            params,
+            time_placeholders,
+            step,
+            max_t2,
+        })
+    }
+}
+
 #[allow(clippy::large_enum_variant)]
 #[derive(Debug, Clone)]
 pub enum GdalLoadingInfoPartIterator {
     Static {
         parts: std::vec::IntoIter<GdalLoadingInfoPart>,
     },
-    Dynamic {
-        time_step_iter: TimeStepIter,
-        params: GdalDatasetParameters,
-        placeholder: String,
-        time_format: String,
-        step: TimeStep,
-        max_t2: TimeInstance,
-    },
+    Dynamic(DynamicGdalLoadingInfoPartIterator),
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct GdalSourceTimePlaceholder {
+    pub format: String,
+    pub reference: TimeReference,
+}
+
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub enum TimeReference {
+    Start,
+    End,
 }
 
 impl Iterator for GdalLoadingInfoPartIterator {
@@ -109,14 +154,13 @@ impl Iterator for GdalLoadingInfoPartIterator {
     fn next(&mut self) -> Option<Self::Item> {
         match self {
             GdalLoadingInfoPartIterator::Static { parts } => parts.next().map(Result::Ok),
-            GdalLoadingInfoPartIterator::Dynamic {
+            GdalLoadingInfoPartIterator::Dynamic(DynamicGdalLoadingInfoPartIterator {
                 time_step_iter,
                 params,
-                placeholder,
-                time_format,
+                time_placeholders,
                 step,
                 max_t2,
-            } => {
+            }) => {
                 let t1 = time_step_iter.next()?;
 
                 let t2 = t1 + *step;
@@ -125,7 +169,7 @@ impl Iterator for GdalLoadingInfoPartIterator {
                 let time_interval = TimeInterval::new_unchecked(t1, t2);
 
                 let loading_info_part = params
-                    .replace_time_placeholder(placeholder, time_format, time_interval.start())
+                    .replace_time_placeholders(time_placeholders, time_interval)
                     .map(|loading_info_part_params| GdalLoadingInfoPart {
                         time: time_interval,
                         params: loading_info_part_params,
@@ -279,7 +323,7 @@ impl GridShapeAccess for GdalDatasetParameters {
 }
 
 /// How to handle file not found errors
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
+#[derive(Serialize, Deserialize, Debug, Clone, Copy, PartialEq)]
 pub enum FileNotFoundHandling {
     NoData, // output tiles filled with nodata
     Error,  // return error tile
@@ -327,8 +371,8 @@ impl MetaData<GdalLoadingInfo, RasterResultDescriptor, RasterQueryRectangle>
 }
 
 /// Meta data for a regular time series that begins (is anchored) at `start` with multiple gdal data
-/// sets `step` time apart. The `placeholder` in the file path of the dataset is replaced with the
-/// queried time in specified `time_format`.
+/// sets `step` time apart. The `time_placeholders` in the file path of the dataset are replaced with the
+/// specified time `reference` in specified time `format`.
 // TODO: `start` is actually more a reference time, because the time series also goes in
 //        negative direction. Maybe it would be better to have a real start and end time, then
 //        everything before start and after end is just one big nodata raster instead of many
@@ -337,8 +381,7 @@ impl MetaData<GdalLoadingInfo, RasterResultDescriptor, RasterQueryRectangle>
 pub struct GdalMetaDataRegular {
     pub result_descriptor: RasterResultDescriptor,
     pub params: GdalDatasetParameters,
-    pub placeholder: String,
-    pub time_format: String,
+    pub time_placeholders: HashMap<String, GdalSourceTimePlaceholder>,
     pub start: TimeInstance,
     pub step: TimeStep,
 }
@@ -359,14 +402,13 @@ impl MetaData<GdalLoadingInfo, RasterResultDescriptor, RasterQueryRectangle>
             TimeStepIter::new_with_interval_incl_start(snapped_interval, self.step)?;
 
         Ok(GdalLoadingInfo {
-            info: GdalLoadingInfoPartIterator::Dynamic {
-                time_step_iter: time_iterator,
-                params: self.params.clone(),
-                placeholder: self.placeholder.clone(),
-                time_format: self.time_format.clone(),
-                step: self.step,
-                max_t2: query.time_interval.end(),
-            },
+            info: GdalLoadingInfoPartIterator::Dynamic(DynamicGdalLoadingInfoPartIterator::new(
+                time_iterator,
+                self.params.clone(),
+                self.time_placeholders.clone(),
+                self.step,
+                query.time_interval.end(),
+            )?),
         })
     }
 
@@ -382,25 +424,32 @@ impl MetaData<GdalLoadingInfo, RasterResultDescriptor, RasterQueryRectangle>
 }
 
 impl GdalDatasetParameters {
-    pub fn replace_time_placeholder(
+    /// Placeholders are replaced by formatted time value.
+    /// E.g. `%my_placeholder%` could be replaced by `2014-04-01` depending on the format and time input.
+    pub fn replace_time_placeholders(
         &self,
-        placeholder: &str,
-        time_format: &str,
-        time: TimeInstance,
+        placeholders: &HashMap<String, GdalSourceTimePlaceholder>,
+        time: TimeInterval,
     ) -> Result<Self> {
-        let time_string = time
-            .as_naive_date_time()
-            .ok_or(Error::TimeInstanceNotDisplayable)?
-            .format(time_format)
-            .to_string();
-        let file_path = self
-            .file_path
-            .to_str()
-            .ok_or(Error::FilePathNotRepresentableAsString)?
-            .replace(placeholder, &time_string);
+        let mut file_path: String = self.file_path.to_string_lossy().into();
+
+        for (placeholder, time_placeholder) in placeholders {
+            let time = match time_placeholder.reference {
+                TimeReference::Start => time.start(),
+                TimeReference::End => time.end(),
+            };
+            let time_string = time
+                .as_naive_date_time()
+                .ok_or(Error::TimeInstanceNotDisplayable)?
+                .format(&time_placeholder.format)
+                .to_string();
+
+            // TODO: use more efficient algorithm for replacing multiple placeholders, e.g. aho-corasick
+            file_path = file_path.replace(placeholder, &time_string);
+        }
 
         Ok(Self {
-            file_not_found_handling: FileNotFoundHandling::NoData,
+            file_not_found_handling: self.file_not_found_handling,
             file_path: file_path.into(),
             properties_mapping: self.properties_mapping.clone(),
             gdal_open_options: self.gdal_open_options.clone(),
@@ -892,6 +941,7 @@ mod tests {
     use crate::test_data;
     use crate::util::gdal::add_ndvi_dataset;
     use crate::util::Result;
+    use geoengine_datatypes::hashmap;
     use geoengine_datatypes::primitives::{AxisAlignedRectangle, SpatialPartition2D};
     use geoengine_datatypes::raster::{TileInformation, TilingStrategy};
     use geoengine_datatypes::{
@@ -1158,7 +1208,15 @@ mod tests {
             gdal_config_options: None,
         };
         let replaced = params
-            .replace_time_placeholder("%TIME%", "%f", TimeInstance::from_millis_unchecked(22))
+            .replace_time_placeholders(
+                &hashmap! {
+                    "%TIME%".to_string() => GdalSourceTimePlaceholder {
+                        format: "%f".to_string(),
+                        reference: TimeReference::Start,
+                    },
+                },
+                TimeInterval::new_instant(TimeInstance::from_millis_unchecked(22)).unwrap(),
+            )
             .unwrap();
         assert_eq!(
             replaced.file_path.to_string_lossy(),
@@ -1198,8 +1256,12 @@ mod tests {
                 gdal_open_options: None,
                 gdal_config_options: None,
             },
-            placeholder: "%TIME%".to_string(),
-            time_format: "%f".to_string(),
+            time_placeholders: hashmap! {
+                "%TIME%".to_string() => GdalSourceTimePlaceholder {
+                    format: "%f".to_string(),
+                    reference: TimeReference::Start,
+                },
+            },
             start: TimeInstance::from_millis_unchecked(11),
             step: TimeStep {
                 granularity: TimeGranularity::Millis,

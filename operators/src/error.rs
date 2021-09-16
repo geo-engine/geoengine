@@ -163,6 +163,10 @@ pub enum Error {
 
     TimeInstanceNotDisplayable,
 
+    InvalidTimeStringPlaceholder {
+        name: String,
+    },
+
     DatasetMetaData {
         source: Box<dyn std::error::Error + Send + Sync>,
     },
@@ -240,6 +244,8 @@ pub enum Error {
     OgrSqlQuery,
 
     GdalRasterDataTypeNotSupported,
+
+    DynamicGdalSourceSpecHasEmptyTimePlaceholders,
 
     #[snafu(display("Input `{}` must be greater than zero at `{}`", name, scope))]
     InputMustBeGreaterThanZero {

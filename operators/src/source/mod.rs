@@ -9,6 +9,7 @@ pub use self::gdal_source::{
     FileNotFoundHandling, GdalDatasetGeoTransform, GdalDatasetParameters, GdalLoadingInfo,
     GdalLoadingInfoPart, GdalLoadingInfoPartIterator, GdalMetaDataRegular, GdalMetaDataStatic,
     GdalMetadataMapping, GdalSource, GdalSourceParameters, GdalSourceProcessor,
+    GdalSourceTimePlaceholder, TimeReference,
 };
 pub use self::ogr_source::{
     OgrSource, OgrSourceColumnSpec, OgrSourceDataset, OgrSourceDatasetTimeType,

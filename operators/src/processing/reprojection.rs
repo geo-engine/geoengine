@@ -568,6 +568,7 @@ mod tests {
         source::{
             FileNotFoundHandling, GdalDatasetGeoTransform, GdalDatasetParameters,
             GdalMetaDataRegular, GdalMetaDataStatic, GdalSource, GdalSourceParameters,
+            GdalSourceTimePlaceholder, TimeReference,
         },
         test_data,
         util::gdal::add_ndvi_dataset,
@@ -579,6 +580,7 @@ mod tests {
             MultiPolygonCollection,
         },
         dataset::{DatasetId, InternalDatasetId},
+        hashmap,
         primitives::{
             BoundingBox2D, Measurement, MultiLineString, MultiPoint, MultiPolygon,
             SpatialResolution, TimeGranularity, TimeInstance, TimeInterval, TimeStep,
@@ -1030,11 +1032,15 @@ mod tests {
                 granularity: TimeGranularity::Months,
                 step: 1,
             },
-            placeholder: "%%%_START_TIME_%%%".to_string(),
-            time_format: "%Y-%m-%d".to_string(),
+            time_placeholders: hashmap! {
+                "%_START_TIME_%".to_string() => GdalSourceTimePlaceholder {
+                    format: "%Y-%m-%d".to_string(),
+                    reference: TimeReference::Start,
+                },
+            },
             params: GdalDatasetParameters {
                 file_path: test_data!(
-                    "raster/modis_ndvi/projected_3857/MOD13A2_M_NDVI_%%%_START_TIME_%%%.TIFF"
+                    "raster/modis_ndvi/projected_3857/MOD13A2_M_NDVI_%_START_TIME_%.TIFF"
                 )
                 .into(),
                 rasterband_channel: 1,
@@ -1069,8 +1075,8 @@ mod tests {
         let output_shape: GridShape2D = [1000, 1000].into();
         let output_bounds =
             SpatialPartition2D::new_unchecked((-180., 90.).into(), (180., -90.).into());
-        let time_interval = TimeInterval::new_unchecked(1_388_534_400_000, 1_388_534_400_001);
-        // 2014-01-01
+        let time_interval = TimeInterval::new_unchecked(1_396_310_400_000, 1_396_310_400_000);
+        // 2014-04-01
 
         let gdal_op = GdalSource {
             params: GdalSourceParameters {
