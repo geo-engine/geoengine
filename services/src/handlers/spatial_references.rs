@@ -1,6 +1,7 @@
 use std::str::FromStr;
 
 use crate::error::Result;
+use geoengine_datatypes::spatial_reference::SpatialReferenceAuthority;
 use geoengine_datatypes::{primitives::BoundingBox2D, spatial_reference::SpatialReference};
 use proj_sys::PJ_PROJ_STRING_TYPE_PJ_PROJ_4;
 use serde::{Deserialize, Serialize};
@@ -161,7 +162,32 @@ async fn get_spatial_reference_specification<S: Session>(
     Ok(warp::reply::json(&spec))
 }
 
+/// custom spatial references not known by proj or that shall be overriden
+fn custom_spatial_reference_specification(
+    srs_string: &str,
+) -> Option<SpatialReferenceSpecification> {
+    // TODO: provide a generic storage for custom spatial reference specifications
+    match srs_string.to_uppercase().as_str() {
+        "SR-ORG:81" => Some(SpatialReferenceSpecification {
+            name: "GEOS - GEOstationary Satellite".to_owned(),
+            spatial_reference: SpatialReference::new(SpatialReferenceAuthority::SrOrg, 81),
+            proj_string: "+proj=geos +lon_0=0 +h=-0 +x_0=0 +y_0=0 +ellps=WGS84 +units=m +no_defs"
+                .into(),
+            extent: BoundingBox2D::new_unchecked(
+                (-5_568_748.276, -5_568_748.276).into(),
+                (5_568_748.276, 5_568_748.276).into(),
+            ),
+            axis_labels: None,
+        }),
+        _ => None,
+    }
+}
+
 fn spatial_reference_specification(srs_string: &str) -> Result<SpatialReferenceSpecification> {
+    if let Some(sref) = custom_spatial_reference_specification(srs_string) {
+        return Ok(sref);
+    }
+
     let spatial_reference = SpatialReference::from_str(srs_string).context(error::DataType)?;
     let json = proj_json(srs_string).ok_or_else(|| Error::UnknownSrsString {
         srs_string: srs_string.to_owned(),
@@ -291,21 +317,20 @@ mod tests {
 
     #[test]
     fn spec_geos() {
-        // TODO: support custom spatial references
-        // let spec = spatial_reference_specification("SR-ORG:81").unwrap();
-        // assert_eq!(
-        //     SpatialReferenceSpecification {
-        //         name: "GEOS - GEOstationary Satellite".to_owned(),
-        //         spatial_reference: SpatialReference::new(SpatialReferenceAuthority::SrOrg, 81),
-        //         proj_string:
-        //             "+proj=geos +lon_0=0 +h=-0 +x_0=0 +y_0=0 +ellps=WGS84 +units=m +no_defs".into(),
-        //         extent: BoundingBox2D::new_unchecked(
-        //             (-5_568_748.276, -5_568_748.276).into(),
-        //             (5_568_748.276, 5_568_748.276).into()
-        //         ),
-        //         axis_labels: None,
-        //     },
-        //     spec
-        // );
+        let spec = spatial_reference_specification("SR-ORG:81").unwrap();
+        assert_eq!(
+            SpatialReferenceSpecification {
+                name: "GEOS - GEOstationary Satellite".to_owned(),
+                spatial_reference: SpatialReference::new(SpatialReferenceAuthority::SrOrg, 81),
+                proj_string:
+                    "+proj=geos +lon_0=0 +h=-0 +x_0=0 +y_0=0 +ellps=WGS84 +units=m +no_defs".into(),
+                extent: BoundingBox2D::new_unchecked(
+                    (-5_568_748.276, -5_568_748.276).into(),
+                    (5_568_748.276, 5_568_748.276).into()
+                ),
+                axis_labels: None,
+            },
+            spec
+        );
     }
 }
