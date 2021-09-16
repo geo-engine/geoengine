@@ -83,9 +83,9 @@ impl SpatialPartition2D {
     /// Checks if a coordinate is located inside spatial partition
     pub fn contains_coordinate(&self, coordinate: &Coordinate2D) -> bool {
         coordinate.x >= self.upper_left_coordinate.x
-            && coordinate.y >= self.upper_left_coordinate.y
+            && coordinate.y <= self.upper_left_coordinate.y
             && coordinate.x < self.lower_right_coordinate.x
-            && coordinate.y < self.lower_right_coordinate.y
+            && coordinate.y > self.lower_right_coordinate.y
     }
 
     /// Return true if the `other` partition has any space in common with the partition
@@ -302,6 +302,17 @@ mod tests {
         let p2 = SpatialPartition2D::new_unchecked((0., 1.).into(), (0.5, 0.5).into());
         assert!(p1.contains(&p2));
         assert!(!p2.contains(&p1));
+    }
+
+    #[test]
+    fn it_contains_coord() {
+        let p1 = SpatialPartition2D::new_unchecked((0., 1.).into(), (1., 0.).into());
+
+        let c1 = Coordinate2D { x: 0.1, y: 0.1 };
+        let c2 = Coordinate2D { x: 1.1, y: 1.1 };
+
+        assert!(p1.contains_coordinate(&c1));
+        assert!(!p1.contains_coordinate(&c2));
     }
 
     #[test]
