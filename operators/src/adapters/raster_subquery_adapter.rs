@@ -611,6 +611,18 @@ where
         let output_raster =
             EmptyGrid::new(tile_info.tile_size_in_pixels, self.no_data_and_fill_value);
 
+        // generate a projector which transforms wgs84 into the projection we want to produce.
+        let valid_bounds_proj =
+            CoordinateProjector::from_known_srs(SpatialReference::epsg_4326(), self.out_srs)?;
+
+        // transform the bounds of the input srs (coordinates are in wgs84) into the output projection.
+        // TODO check if  there is a better / smarter way to check if the coordinates are valid.
+        let valid_bounds = self
+            .in_srs
+            .area_of_use::<SpatialPartition2D>()?
+            .reproject(&valid_bounds_proj)?;
+
+        // get all pixel idxs and there coordinates.
         let idxs: Vec<GridIdx2D> = grid_idx_iter_2d(&output_raster.bounding_box()).collect();
         let coords: Vec<Coordinate2D> = idxs
             .iter()
@@ -620,6 +632,21 @@ where
                     .grid_idx_to_upper_left_coordinate_2d(i)
             })
             .collect();
+
+        // check if the tile to fill is contained by the valid bounds of the input projection
+        let coords = if valid_bounds.contains(&tile_info.spatial_partition()) {
+            // use all pixel coordinates
+            coords
+        } else if valid_bounds.intersects(&query_rect.spatial_partition()) {
+            // filter the coordinates to only contain valid ones
+            coords
+                .into_iter()
+                .filter(|c| valid_bounds.contains_coordinate(c))
+                .collect()
+        } else {
+            // fastpath to skip filter
+            vec![]
+        };
 
         let proj = CoordinateProjector::from_known_srs(self.out_srs, self.in_srs)?;
         let projected_coords = project_coordinates_fail_tolerant(&coords, &proj);
