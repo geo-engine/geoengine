@@ -12,7 +12,7 @@ pub use self::gdal_source::{
     GdalSourceTimePlaceholder, TimeReference,
 };
 pub use self::ogr_source::{
-    OgrSource, OgrSourceColumnSpec, OgrSourceDataset, OgrSourceDatasetTimeType,
-    OgrSourceDurationSpec, OgrSourceErrorSpec, OgrSourceParameters, OgrSourceProcessor,
-    OgrSourceTimeFormat,
+    CsvHeader, FormatSpecifics, OgrSource, OgrSourceColumnSpec, OgrSourceDataset,
+    OgrSourceDatasetTimeType, OgrSourceDurationSpec, OgrSourceErrorSpec, OgrSourceParameters,
+    OgrSourceProcessor, OgrSourceTimeFormat,
 };

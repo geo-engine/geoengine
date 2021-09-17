@@ -378,6 +378,7 @@ mod tests {
                 layer_name: "".to_string(),
                 data_type: None,
                 time: Default::default(),
+                default_geometry: None,
                 columns: None,
                 force_ogr_time_filter: false,
                 force_ogr_spatial_filter: false,

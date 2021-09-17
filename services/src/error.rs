@@ -191,6 +191,7 @@ pub enum Error {
 
     InvalidDatasetId,
 
+    PangaeaNoTsv,
     GfbioMissingAbcdField,
     ExpectedExternalDatasetId,
     InvalidExternalDatasetId {
