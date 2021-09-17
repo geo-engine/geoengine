@@ -1116,7 +1116,7 @@ where
     ///
     /// # Errors
     ///
-    /// This constructor fails if the data lenghts are different or `data`'s keys use a reserved name
+    /// This constructor fails if the data lengths are different or `data`'s keys use a reserved name
     ///
     pub fn from_data(
         features: Vec<CollectionType>,

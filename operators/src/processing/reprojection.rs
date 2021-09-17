@@ -880,9 +880,7 @@ mod tests {
             shape_array: [2, 2],
         };
 
-        let query_ctx = MockQueryContext {
-            chunk_byte_size: 1024 * 1024,
-        };
+        let query_ctx = MockQueryContext::default();
 
         let initialized_operator = RasterOperator::boxed(Reprojection {
             params: ReprojectionParams {
