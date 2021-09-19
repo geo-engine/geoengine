@@ -103,6 +103,7 @@ mod tests {
     use actix_web_httpauth::headers::authorization::Bearer;
 
     #[tokio::test]
+    #[ignore]
     async fn upload() {
         let ctx = InMemoryContext::default();
 

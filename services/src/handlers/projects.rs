@@ -306,9 +306,9 @@ mod tests {
 
         ErrorResponse::assert(
             res,
-            400,
-            "BodyDeserializeError",
-            "expected ident at line 1 column 2",
+            415,
+            "UnsupportedMediaType",
+            "Unsupported content type header.",
         )
         .await;
     }
@@ -552,6 +552,7 @@ mod tests {
         let req = test::TestRequest::patch()
             .uri(&format!("/project/{}", project.to_string()))
             .append_header((header::CONTENT_LENGTH, 0))
+            .append_header((header::CONTENT_TYPE, mime::APPLICATION_JSON))
             .append_header((header::AUTHORIZATION, Bearer::new(session.id().to_string())))
             .set_payload("no json");
         let res = send_test_request(req, ctx).await;

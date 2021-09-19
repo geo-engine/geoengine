@@ -511,6 +511,7 @@ mod tests {
         let req = test::TestRequest::post()
             .uri("/workflow")
             .append_header((header::CONTENT_LENGTH, 0))
+            .append_header((header::CONTENT_TYPE, mime::APPLICATION_JSON))
             .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())))
             .set_payload("no json");
         let res = send_test_request(req, ctx).await;
