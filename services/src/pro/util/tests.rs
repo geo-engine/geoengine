@@ -10,11 +10,11 @@ use crate::{
         users::{UserCredentials, UserDb, UserId, UserInfo, UserRegistration, UserSession},
     },
     projects::{CreateProject, ProjectDb, ProjectId, STRectangle},
-    server::{configure_extractors, render_404},
+    server::{configure_extractors, render_404, render_405},
     util::user_input::UserInput,
 };
 use actix_web::dev::ServiceResponse;
-use actix_web::{middleware, test, web, App};
+use actix_web::{http, middleware, test, web, App};
 
 #[allow(clippy::missing_panics_doc)]
 pub async fn create_session_helper<C: ProContext>(ctx: &C) -> UserSession {
@@ -104,6 +104,11 @@ where
     #[allow(unused_mut)]
     let mut app = App::new()
         .app_data(web::Data::new(ctx))
+        .wrap(
+            middleware::ErrorHandlers::default()
+                .handler(http::StatusCode::NOT_FOUND, render_404)
+                .handler(http::StatusCode::METHOD_NOT_ALLOWED, render_405),
+        )
         .wrap(middleware::NormalizePath::default())
         .configure(configure_extractors)
         .configure(handlers::datasets::init_dataset_routes::<C>)
@@ -115,8 +120,7 @@ where
         .configure(handlers::wcs::init_wcs_routes::<C>)
         .configure(handlers::wfs::init_wfs_routes::<C>)
         .configure(handlers::wms::init_wms_routes::<C>)
-        .configure(handlers::workflows::init_workflow_routes::<C>)
-        .default_service(web::route().to(render_404));
+        .configure(handlers::workflows::init_workflow_routes::<C>);
     #[cfg(feature = "odm")]
     {
         app = app.configure(pro::handlers::drone_mapping::init_drone_mapping_routes::<C>);

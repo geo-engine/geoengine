@@ -10,7 +10,7 @@ use crate::projects::{
     CreateProject, Layer, LayerUpdate, ProjectDb, ProjectId, RasterSymbology, STRectangle,
     Symbology, UpdateProject,
 };
-use crate::server::{configure_extractors, render_404};
+use crate::server::{configure_extractors, render_404, render_405};
 use crate::util::user_input::UserInput;
 use crate::util::Identifier;
 use crate::workflows::registry::WorkflowRegistry;
@@ -21,7 +21,7 @@ use crate::{
     handlers,
 };
 use actix_web::dev::ServiceResponse;
-use actix_web::{http::Method, middleware, test, web, App};
+use actix_web::{http, http::Method, middleware, test, web, App};
 use geoengine_datatypes::dataset::DatasetId;
 use geoengine_datatypes::operations::image::Colorizer;
 use geoengine_datatypes::spatial_reference::SpatialReferenceOption;
@@ -186,6 +186,11 @@ pub async fn send_test_request<C: SimpleContext>(
     let app = test::init_service(
         App::new()
             .app_data(web::Data::new(ctx))
+            .wrap(
+                middleware::ErrorHandlers::default()
+                    .handler(http::StatusCode::NOT_FOUND, render_404)
+                    .handler(http::StatusCode::METHOD_NOT_ALLOWED, render_405),
+            )
             .wrap(middleware::NormalizePath::default())
             .configure(configure_extractors)
             .configure(handlers::datasets::init_dataset_routes::<C>)
@@ -197,8 +202,7 @@ pub async fn send_test_request<C: SimpleContext>(
             .configure(handlers::wcs::init_wcs_routes::<C>)
             .configure(handlers::wfs::init_wfs_routes::<C>)
             .configure(handlers::wms::init_wms_routes::<C>)
-            .configure(handlers::workflows::init_workflow_routes::<C>)
-            .default_service(web::route().to(render_404)),
+            .configure(handlers::workflows::init_workflow_routes::<C>),
     )
     .await;
     test::call_service(&app, req.to_request()).await

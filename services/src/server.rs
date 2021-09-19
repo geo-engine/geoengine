@@ -6,8 +6,9 @@ use crate::util::config;
 use crate::util::config::get_config_element;
 
 use actix_files::Files;
+use actix_web::dev::{Body, ServiceResponse};
 use actix_web::error::{InternalError, JsonPayloadError, QueryPayloadError};
-use actix_web::{middleware, web, App, HttpResponse, HttpServer, Responder};
+use actix_web::{http, middleware, web, App, HttpResponse, HttpServer, Responder};
 use log::{debug, info};
 use std::net::SocketAddr;
 use std::path::PathBuf;
@@ -58,6 +59,11 @@ where
     HttpServer::new(move || {
         let app = App::new()
             .app_data(wrapped_ctx.clone())
+            .wrap(
+                middleware::ErrorHandlers::default()
+                    .handler(http::StatusCode::NOT_FOUND, render_404)
+                    .handler(http::StatusCode::METHOD_NOT_ALLOWED, render_405),
+            )
             .wrap(middleware::Logger::default())
             .wrap(middleware::NormalizePath::default())
             .configure(configure_extractors)
@@ -71,8 +77,7 @@ where
             .configure(handlers::wfs::init_wfs_routes::<C>)
             .configure(handlers::wms::init_wms_routes::<C>)
             .configure(handlers::workflows::init_workflow_routes::<C>)
-            .route("/version", web::get().to(show_version_handler)) // TODO: allow disabling this function via config or feature flag
-            .default_service(web::route().to(render_404));
+            .route("/version", web::get().to(show_version_handler)); // TODO: allow disabling this function via config or feature flag
 
         if let Some(static_files_dir) = static_files_dir.clone() {
             app.service(Files::new("/static", static_files_dir))
@@ -193,12 +198,42 @@ pub(crate) async fn show_version_handler() -> impl Responder {
     })
 }
 
-#[allow(clippy::unused_async)] // the function signature of request handlers requires it
-pub(crate) async fn render_404() -> impl Responder {
-    HttpResponse::NotFound().json(ErrorResponse {
-        error: "NotFound".to_string(),
-        message: "Not Found".to_string(),
-    })
+pub(crate) fn render_404(
+    mut res: ServiceResponse,
+) -> actix_web::Result<middleware::ErrorHandlerResponse<Body>> {
+    res.headers_mut().insert(
+        http::header::CONTENT_TYPE,
+        http::HeaderValue::from_static("application/json"),
+    );
+    let res = res.map_body(|_, _| {
+        Body::from(
+            serde_json::to_string(&ErrorResponse {
+                error: "NotFound".to_string(),
+                message: "Not Found".to_string(),
+            })
+            .unwrap(),
+        )
+    });
+    Ok(middleware::ErrorHandlerResponse::Response(res))
+}
+
+pub(crate) fn render_405(
+    mut res: ServiceResponse,
+) -> actix_web::Result<middleware::ErrorHandlerResponse<Body>> {
+    res.headers_mut().insert(
+        http::header::CONTENT_TYPE,
+        http::HeaderValue::from_static("application/json"),
+    );
+    let res = res.map_body(|_, _| {
+        Body::from(
+            serde_json::to_string(&ErrorResponse {
+                error: "MethodNotAllowed".to_string(),
+                message: "HTTP method not allowed.".to_string(),
+            })
+            .unwrap(),
+        )
+    });
+    Ok(middleware::ErrorHandlerResponse::Response(res))
 }
 
 #[cfg(test)]
