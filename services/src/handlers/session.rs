@@ -9,13 +9,16 @@ pub(crate) fn init_session_routes<C>(cfg: &mut web::ServiceConfig)
 where
     C: SimpleContext,
 {
-    cfg.route("/anonymous", web::post().to(anonymous_handler::<C>))
-        .route("/session", web::get().to(session_handler::<C>))
-        .route(
-            "/session/project/{project}",
-            web::post().to(session_project_handler::<C>),
-        )
-        .route("/session/view", web::post().to(session_view_handler::<C>));
+    cfg.service(web::resource("/anonymous").route(web::post().to(anonymous_handler::<C>)))
+        .service(
+            web::scope("/session")
+                .service(web::resource("").route(web::get().to(session_handler::<C>)))
+                .service(
+                    web::resource("/project/{project}")
+                        .route(web::post().to(session_project_handler::<C>)),
+                )
+                .service(web::resource("/view").route(web::post().to(session_view_handler::<C>))),
+        );
 }
 
 /// Creates session for anonymous user.

@@ -44,25 +44,23 @@ where
     C: Context,
     C::Session: FromRequest,
 {
-    cfg.route(
-        "/dataset/internal/{dataset}",
-        web::get().to(get_dataset_handler::<C>),
+    cfg.service(
+        web::scope("/dataset")
+            .service(web::resource("").route(web::post().to(create_dataset_handler::<C>)))
+            .service(web::resource("/auto").route(web::post().to(auto_create_dataset_handler::<C>)))
+            .service(
+                web::resource("/internal/{dataset}").route(web::get().to(get_dataset_handler::<C>)),
+            )
+            .service(
+                web::resource("/suggest").route(web::get().to(suggest_meta_data_handler::<C>)),
+            ),
     )
-    .route(
-        "/dataset/auto",
-        web::post().to(auto_create_dataset_handler::<C>),
-    )
-    .route("/dataset", web::post().to(create_dataset_handler::<C>))
-    .route(
-        "/dataset/suggest",
-        web::get().to(suggest_meta_data_handler::<C>),
-    )
-    .route("/providers", web::get().to(list_providers_handler::<C>))
-    .route(
-        "/datasets/external/{provider}",
-        web::get().to(list_external_datasets_handler::<C>),
-    )
-    .route("/datasets", web::get().to(list_datasets_handler::<C>));
+    .service(web::resource("/providers").route(web::get().to(list_providers_handler::<C>)))
+    .service(web::resource("/datasets").route(web::get().to(list_datasets_handler::<C>)))
+    .service(
+        web::resource("/datasets/external/{provider}")
+            .route(web::get().to(list_external_datasets_handler::<C>)),
+    );
 }
 
 async fn list_providers_handler<C: Context>(

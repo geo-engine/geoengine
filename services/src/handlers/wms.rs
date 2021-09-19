@@ -34,7 +34,7 @@ where
     C: Context,
     C::Session: FromRequest,
 {
-    cfg.route("/wms", web::get().to(wms_handler::<C>));
+    cfg.service(web::resource("/wms").route(web::get().to(wms_handler::<C>)));
 }
 
 async fn wms_handler<C: Context>(

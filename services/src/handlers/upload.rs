@@ -17,7 +17,7 @@ where
     C: Context,
     C::Session: FromRequest,
 {
-    cfg.route("/upload", web::post().to(upload_handler::<C>));
+    cfg.service(web::resource("/upload").route(web::post().to(upload_handler::<C>)));
 }
 
 /// Uploads files.

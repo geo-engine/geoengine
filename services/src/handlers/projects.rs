@@ -10,19 +10,13 @@ where
     C: Context,
     C::Session: FromRequest,
 {
-    cfg.route("/project", web::post().to(create_project_handler::<C>))
-        .route("/projects", web::get().to(list_projects_handler::<C>))
-        .route(
-            "/project/{project}",
-            web::patch().to(update_project_handler::<C>),
-        )
-        .route(
-            "/project/{project}",
-            web::delete().to(delete_project_handler::<C>),
-        )
-        .route(
-            "/project/{project}",
-            web::get().to(load_project_handler::<C>),
+    cfg.service(web::resource("/project").route(web::post().to(create_project_handler::<C>)))
+        .service(web::resource("/projects").route(web::get().to(list_projects_handler::<C>)))
+        .service(
+            web::resource("/project/{project}")
+                .route(web::get().to(load_project_handler::<C>))
+                .route(web::patch().to(update_project_handler::<C>))
+                .route(web::delete().to(delete_project_handler::<C>)),
         );
 }
 
@@ -233,8 +227,7 @@ mod tests {
     use crate::contexts::{Session, SimpleContext, SimpleSession};
     use crate::handlers::ErrorResponse;
     use crate::util::tests::{
-        check_allowed_http_methods, check_allowed_http_methods2, create_project_helper,
-        send_test_request, update_project_helper,
+        check_allowed_http_methods, create_project_helper, send_test_request, update_project_helper,
     };
     use crate::util::Identifier;
     use crate::workflows::workflow::WorkflowId;
@@ -462,7 +455,11 @@ mod tests {
 
     #[tokio::test]
     async fn load_invalid_method() {
-        check_allowed_http_methods(load_test_helper, &[Method::GET]).await;
+        check_allowed_http_methods(
+            load_test_helper,
+            &[Method::GET, Method::PATCH, Method::DELETE],
+        )
+        .await;
     }
 
     #[tokio::test]
@@ -497,7 +494,7 @@ mod tests {
             .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())));
         let res = send_test_request(req, ctx).await;
 
-        ErrorResponse::assert(res, 404, "NotFound", "Not Found").await;
+        ErrorResponse::assert(res, 405, "MethodNotAllowed", "HTTP method not allowed.").await;
     }
 
     async fn update_test_helper(
@@ -535,12 +532,6 @@ mod tests {
             .unwrap();
         assert_eq!(loaded.name, "TestUpdate");
         assert_eq!(loaded.layers.len(), 1);
-    }
-
-    #[tokio::test]
-    async fn update_invalid_method() {
-        check_allowed_http_methods2(update_test_helper, &[Method::PATCH], |(_, _, _, res)| res)
-            .await;
     }
 
     #[tokio::test]

@@ -13,9 +13,9 @@ where
     C: Context,
     C::Session: FromRequest,
 {
-    cfg.route(
-        "/spatialReferenceSpecification/{srs_string}",
-        web::get().to(get_spatial_reference_specification_handler::<C>),
+    cfg.service(
+        web::resource("/spatialReferenceSpecification/{srs_string}")
+            .route(web::get().to(get_spatial_reference_specification_handler::<C>)),
     );
 }
 

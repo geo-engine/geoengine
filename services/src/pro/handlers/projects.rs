@@ -5,58 +5,45 @@ use crate::pro::projects::LoadVersion;
 use crate::pro::projects::{ProProjectDb, UserProjectPermission};
 use crate::projects::{ProjectId, ProjectVersionId};
 
-use actix_web::{http::Method, web, HttpResponse, Responder};
+use actix_web::{web, HttpResponse, Responder};
 
 pub(crate) fn init_project_routes<C>(cfg: &mut web::ServiceConfig)
 where
     C: ProContext,
     C::ProjectDB: ProProjectDb,
 {
-    cfg.route(
-        "/projects",
-        web::get().to(handlers::projects::list_projects_handler::<C>),
-    )
-    .route(
-        "/project/versions",
-        web::get().to(project_versions_handler::<C>),
-    )
-    .route(
-        "/project/permission/add",
-        web::post().to(add_permission_handler::<C>),
-    )
-    .route(
-        "/project/permission",
-        web::delete().to(remove_permission_handler::<C>),
-    )
-    .route(
-        "/project",
-        web::post().to(handlers::projects::create_project_handler::<C>),
+    cfg.service(
+        web::resource("/projects")
+            .route(web::get().to(handlers::projects::list_projects_handler::<C>)),
     )
     .service(
-        web::resource("/project/{project}")
-            .route(
-                web::route()
-                    .method(Method::GET)
-                    .to(load_project_latest_handler::<C>),
+        web::scope("/project")
+            .service(web::resource("/versions").route(web::get().to(project_versions_handler::<C>)))
+            .service(
+                web::resource("/permission/add").route(web::post().to(add_permission_handler::<C>)),
             )
-            .route(
-                web::route()
-                    .method(Method::PATCH)
-                    .to(handlers::projects::update_project_handler::<C>),
+            .service(
+                web::resource("/permission")
+                    .route(web::delete().to(remove_permission_handler::<C>)),
             )
-            .route(
-                web::route()
-                    .method(Method::DELETE)
-                    .to(handlers::projects::delete_project_handler::<C>),
+            .service(
+                web::resource("/")
+                    .route(web::post().to(handlers::projects::create_project_handler::<C>)),
+            )
+            .service(
+                web::resource("/{project}")
+                    .route(web::get().to(load_project_latest_handler::<C>))
+                    .route(web::patch().to(handlers::projects::update_project_handler::<C>))
+                    .route(web::delete().to(handlers::projects::delete_project_handler::<C>)),
+            )
+            .service(
+                web::resource("/{project}/permissions")
+                    .route(web::get().to(list_permissions_handler::<C>)),
+            )
+            .service(
+                web::resource("/{project}/{version}")
+                    .route(web::get().to(load_project_version_handler::<C>)),
             ),
-    )
-    .route(
-        "/project/{project}/permissions",
-        web::get().to(list_permissions_handler::<C>),
-    )
-    .route(
-        "/project/{project}/{version}",
-        web::get().to(load_project_version_handler::<C>),
     );
 }
 

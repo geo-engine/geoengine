@@ -18,19 +18,18 @@ pub(crate) fn init_user_routes<C>(cfg: &mut web::ServiceConfig)
 where
     C: ProContext,
 {
-    cfg.route("/user", web::post().to(register_user_handler::<C>))
-        .route("/anonymous", web::post().to(anonymous_handler::<C>))
-        .route("/login", web::post().to(login_handler::<C>))
-        .route("/logout", web::post().to(logout_handler::<C>))
-        .route(
-            "/session",
-            web::get().to(handlers::session::session_handler::<C>),
+    cfg.service(web::resource("/user").route(web::post().to(register_user_handler::<C>)))
+        .service(web::resource("/anonymous").route(web::post().to(anonymous_handler::<C>)))
+        .service(web::resource("/login").route(web::post().to(login_handler::<C>)))
+        .service(web::resource("/logout").route(web::post().to(logout_handler::<C>)))
+        .service(
+            web::resource("/session").route(web::get().to(handlers::session::session_handler::<C>)),
         )
-        .route(
-            "/session/project/{project}",
-            web::post().to(session_project_handler::<C>),
+        .service(
+            web::resource("/session/project/{project}")
+                .route(web::post().to(session_project_handler::<C>)),
         )
-        .route("/session/view", web::post().to(session_view_handler::<C>));
+        .service(web::resource("/session/view").route(web::post().to(session_view_handler::<C>)));
 }
 
 /// Registers a user by providing [`UserRegistration`] parameters.
@@ -331,9 +330,9 @@ mod tests {
 
         ErrorResponse::assert(
             res,
-            400,
-            "BodyDeserializeError",
-            "expected ident at line 1 column 2",
+            415,
+            "UnsupportedMediaType",
+            "Unsupported content type header.",
         )
         .await;
     }
@@ -447,6 +446,7 @@ mod tests {
         let req = test::TestRequest::post()
             .uri("/login")
             .append_header((header::CONTENT_LENGTH, 0))
+            .append_header((header::CONTENT_TYPE, mime::APPLICATION_JSON))
             .set_payload("no json");
         let res = send_pro_test_request(req, ctx).await;
 

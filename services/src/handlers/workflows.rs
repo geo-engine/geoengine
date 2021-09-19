@@ -31,20 +31,23 @@ where
     C: Context,
     C::Session: FromRequest,
 {
-    cfg.route("/workflow", web::post().to(register_workflow_handler::<C>))
-        .route("/workflow/{id}", web::get().to(load_workflow_handler::<C>))
-        .route(
-            "/workflow/{id}/metadata",
-            web::get().to(get_workflow_metadata_handler::<C>),
-        )
-        .route(
-            "/workflow/{id}/provenance",
-            web::get().to(get_workflow_provenance_handler::<C>),
-        )
-        .route(
-            "datasetFromWorkflow/{workflow_id}",
-            web::post().to(dataset_from_workflow_handler::<C>),
-        );
+    cfg.service(
+        web::scope("/workflow")
+            .service(web::resource("").route(web::post().to(register_workflow_handler::<C>)))
+            .service(web::resource("/{id}").route(web::get().to(load_workflow_handler::<C>)))
+            .service(
+                web::resource("/{id}/metadata")
+                    .route(web::get().to(get_workflow_metadata_handler::<C>)),
+            )
+            .service(
+                web::resource("/{id}/provenance")
+                    .route(web::get().to(get_workflow_provenance_handler::<C>)),
+            ),
+    )
+    .service(
+        web::resource("datasetFromWorkflow/{workflow_id}")
+            .route(web::post().to(dataset_from_workflow_handler::<C>)),
+    );
 }
 
 /// Registers a new [Workflow].

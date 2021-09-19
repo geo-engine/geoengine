@@ -20,7 +20,7 @@ where
     C: Context,
     C::Session: FromRequest,
 {
-    cfg.route("/plot/{id}", web::get().to(get_plot_handler::<C>));
+    cfg.service(web::resource("/plot/{id}").route(web::get().to(get_plot_handler::<C>)));
 }
 
 #[derive(Debug, Clone, PartialEq, Deserialize, Serialize)]

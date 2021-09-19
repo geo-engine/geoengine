@@ -35,7 +35,7 @@ where
     C: Context,
     C::Session: FromRequest,
 {
-    cfg.route("/wfs", web::get().to(wfs_handler::<C>));
+    cfg.service(web::resource("/wfs").route(web::get().to(wfs_handler::<C>)));
 }
 
 async fn wfs_handler<C: Context>(

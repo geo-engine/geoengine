@@ -191,13 +191,13 @@ pub(crate) async fn show_version_handler() -> impl Responder {
         build_date: Option<&'a str>,
         commit_hash: Option<&'a str>,
     }
-
     web::Json(&VersionInfo {
         build_date: option_env!("VERGEN_BUILD_DATE"),
         commit_hash: option_env!("VERGEN_GIT_SHA"),
     })
 }
 
+#[allow(clippy::unnecessary_wraps)]
 pub(crate) fn render_404(
     mut res: ServiceResponse,
 ) -> actix_web::Result<middleware::ErrorHandlerResponse<Body>> {
@@ -217,6 +217,7 @@ pub(crate) fn render_404(
     Ok(middleware::ErrorHandlerResponse::Response(res))
 }
 
+#[allow(clippy::unnecessary_wraps)]
 pub(crate) fn render_405(
     mut res: ServiceResponse,
 ) -> actix_web::Result<middleware::ErrorHandlerResponse<Body>> {

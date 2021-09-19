@@ -37,14 +37,11 @@ where
     C: ProContext,
     C::ProjectDB: ProProjectDb,
 {
-    cfg.route(
-        "/droneMapping/task",
-        web::post().to(start_task_handler::<C>),
-    )
-    .route(
-        "/droneMapping/dataset/{task_id}",
-        web::post().to(dataset_from_drone_mapping_handler::<C>),
-    );
+    cfg.service(web::resource("/droneMapping/task").route(web::post().to(start_task_handler::<C>)))
+        .service(
+            web::resource("/droneMapping/dataset/{task_id}")
+                .route(web::post().to(dataset_from_drone_mapping_handler::<C>)),
+        );
 }
 
 #[derive(Deserialize, Serialize, Clone, Debug)]

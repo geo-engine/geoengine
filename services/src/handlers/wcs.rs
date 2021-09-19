@@ -31,7 +31,7 @@ where
     C: Context,
     C::Session: FromRequest,
 {
-    cfg.route("/wcs/{workflow}", web::get().to(wcs_handler::<C>));
+    cfg.service(web::resource("/wcs/{workflow}").route(web::get().to(wcs_handler::<C>)));
 }
 
 async fn wcs_handler<C: Context>(
