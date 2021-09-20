@@ -314,7 +314,9 @@ impl MetaDataProvider<OgrSourceDataset, VectorResultDescriptor, VectorQueryRecta
                 layer_name: "".to_owned(),
                 data_type: Some(VectorDataType::MultiPoint),
                 time: OgrSourceDatasetTimeType::None, // TODO
+                default_geometry: None,
                 columns: Some(OgrSourceColumnSpec {
+                    format_specifics: None,
                     x: "".to_owned(),
                     y: None,
                     int: vec![],
@@ -648,7 +650,9 @@ mod tests {
                 layer_name: "".to_owned(),
                 data_type: Some(VectorDataType::MultiPoint),
                 time: OgrSourceDatasetTimeType::None,
+                default_geometry: None,
                 columns: Some(OgrSourceColumnSpec {
+                    format_specifics: None,
                     x: "".to_owned(),
                     y: None,
                     int: vec![],

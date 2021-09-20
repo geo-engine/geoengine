@@ -1,0 +1,123 @@
+{
+  "@context": "http://schema.org/",
+  "@id": "https://doi.org/10.1594/PANGAEA.933024",
+  "@type": "Dataset",
+  "identifier": "https://doi.org/10.1594/PANGAEA.933024",
+  "url": "https://doi.pangaea.de/10.1594/PANGAEA.933024",
+  "creator": [
+    {
+      "@id": "https://orcid.org/0000-0002-5404-5146",
+      "@type": "Person",
+      "name": "Stephanie Stainbank",
+      "familyName": "Stainbank",
+      "givenName": "Stephanie",
+      "identifier": "https://orcid.org/0000-0002-5404-5146",
+      "email": "stephaniehayman.23@gmail.com"
+    },
+    {
+      "@type": "Person",
+      "name": "Dick Kroon",
+      "familyName": "Kroon",
+      "givenName": "Dick",
+      "email": "dick.kroon@ed.ac.uk"
+    },
+    {
+      "@type": "Person",
+      "name": "Erica S de Leau",
+      "familyName": "de Leau",
+      "givenName": "Erica S",
+      "email": "E.S.deLeau@ed.ac.uk"
+    },
+    {
+      "@type": "Person",
+      "name": "Silvia Spezzaferri",
+      "familyName": "Spezzaferri",
+      "givenName": "Silvia",
+      "email": "silvia.spezzaferri@unifr.ch"
+    }
+  ],
+  "name": "Stable carbon and oxygen isotope ratios of Globigerinoides ruber (white) of IODP Hole 359-U1467A, recent",
+  "publisher": {
+    "@type": "Organization",
+    "name": "PANGAEA",
+    "disambiguatingDescription": "Data Publisher for Earth & Environmental Science",
+    "url": "https://www.pangaea.de/"
+  },
+  "includedInDataCatalog": {
+    "@type": "DataCatalog",
+    "name": "PANGAEA",
+    "disambiguatingDescription": "Data Publisher for Earth & Environmental Science",
+    "url": "https://www.pangaea.de/"
+  },
+  "datePublished": "2021-06-24",
+  "isPartOf": "https://doi.org/10.1594/PANGAEA.933025",
+  "description": "This dataset is about: Stable carbon and oxygen isotope ratios of Globigerinoides ruber (white) of IODP Hole 359-U1467A, recent. Please consult parent dataset @ https://doi.org/10.1594/PANGAEA.933025 for more information.",
+  "variableMeasured": [
+    {
+      "@type": "PropertyValue",
+      "name": "Sample code/label"
+    },
+    {
+      "@type": "PropertyValue",
+      "name": "Globigerinoides ruber white, δ13C",
+      "unitText": "‰ PDB",
+      "measurementTechnique": "Mass spectrometer Thermo Electron Delta plus Advantage, integrated with a Kiel carbonate III automated extraction line",
+      "description": "355-400 µm size fraction",
+      "subjectOf": {
+        "@type": "DefinedTermSet",
+        "hasDefinedTerm": {
+          "@type": "DefinedTerm",
+          "name": "δ13C",
+          "url": "http://en.wikipedia.org/wiki/List_of_elements_by_stability_of_isotopes"
+        }
+      }
+    },
+    {
+      "@type": "PropertyValue",
+      "name": "Globigerinoides ruber white, δ18O",
+      "unitText": "‰ PDB",
+      "measurementTechnique": "Mass spectrometer Thermo Electron Delta plus Advantage, integrated with a Kiel carbonate III automated extraction line",
+      "description": "355-400 µm size fraction",
+      "subjectOf": {
+        "@type": "DefinedTermSet",
+        "hasDefinedTerm": {
+          "@type": "DefinedTerm",
+          "name": "δ18O",
+          "url": "http://en.wikipedia.org/wiki/List_of_elements_by_stability_of_isotopes"
+        }
+      }
+    }
+  ],
+  "spatialCoverage": {
+    "@type": "Place",
+    "geo": {
+      "@type": "GeoCoordinates",
+      "latitude": 4.850232,
+      "longitude": 73.283667,
+      "elevation": "-487.0m"
+    }
+  },
+  "temporalCoverage": "2015-10-28T15:18:00/2015-10-29T04:00:00",
+  "inLanguage": "en",
+  "license": "https://creativecommons.org/licenses/by/4.0/",
+  "conditionsOfAccess": "unrestricted",
+  "isAccessibleForFree": true,
+  "keywords": "Foraminifera; Globigerinoides ruber; International Ocean Discovery Program (IODP); stable isotope geochemistry; Trilobatus sacculifer",
+  "size": {
+    "@type": "QuantitativeValue",
+    "value": 252,
+    "unitText": "data points"
+  },
+  "distribution": [
+    {
+      "@type": "DataDownload",
+      "encodingFormat": "text/html",
+      "contentUrl": "https://doi.pangaea.de/10.1594/PANGAEA.933024?format=html"
+    },
+    {
+      "@type": "DataDownload",
+      "encodingFormat": "text/tab-separated-values",
+      "contentUrl": "https://doi.pangaea.de/10.1594/PANGAEA.933024?format=textfile"
+    }
+  ]
+}

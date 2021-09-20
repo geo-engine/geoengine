@@ -788,9 +788,7 @@ mod tests {
             spatial_resolution: SpatialResolution::one(),
         };
 
-        let query_ctx = MockQueryContext {
-            chunk_byte_size: 1024 * 1024,
-        };
+        let query_ctx = MockQueryContext::default();
         let tiling_strat = exe_ctx.tiling_specification;
 
         let op = mrs1.initialize(&exe_ctx).await.unwrap();
@@ -882,9 +880,7 @@ mod tests {
             spatial_resolution: SpatialResolution::one(),
         };
 
-        let query_ctx = MockQueryContext {
-            chunk_byte_size: 1024 * 1024,
-        };
+        let query_ctx = MockQueryContext::default();
         let tiling_strat = exe_ctx.tiling_specification;
 
         let op = mrs1.initialize(&exe_ctx).await.unwrap();

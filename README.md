@@ -11,6 +11,15 @@ This workspace contains the Geo Engine crates.
 - You need a recent Rust environment with a Rust nightly compiler. We recommend rustup to manage Rust `https://rustup.rs/`.
 - Geo Engine uses OpenCL and therefore requires a functional OpenCL environment. On Linux you can use POCL to run OpenCL on CPUs.
 
+### Ubuntu Users
+We suggest to add the [UbuntuGIS PPA](https://wiki.ubuntu.com/UbuntuGIS) for a recent version of GDAL.
+```
+# Add ppa
+add-apt-repository ppa:ubuntugis/ppa
+# Update
+apt update
+```
+
 ### Dependencies
 
 ```
@@ -18,7 +27,7 @@ This workspace contains the Geo Engine crates.
 apt install build-essential
 # lld linker
 apt install clang lld
-# GDAL
+# GDAL (>= 3.2.1)
 apt install libgdal-dev gdal-bin
 # OpenCL
 apt install ocl-icd-opencl-dev

@@ -50,6 +50,7 @@ use crate::{
     error,
 };
 use async_trait::async_trait;
+use gdal::errors::GdalError;
 use geoengine_datatypes::dataset::DatasetId;
 use std::convert::{TryFrom, TryInto};
 
@@ -85,6 +86,7 @@ pub struct OgrSourceDataset {
     pub data_type: Option<VectorDataType>,
     #[serde(default)]
     pub time: OgrSourceDatasetTimeType,
+    pub default_geometry: Option<TypedGeometry>,
     pub columns: Option<OgrSourceColumnSpec>,
     #[serde(default)]
     pub force_ogr_time_filter: bool,
@@ -171,6 +173,7 @@ impl Default for OgrSourceTimeFormat {
 }
 
 /// A mapping of the columns to data, time, space. Columns that are not listed are skipped when parsing.
+///  - `format_specifics`: Format specific options if any.
 ///  - x: the name of the column containing the x coordinate (or the wkt string) [if CSV file]
 ///  - y: the name of the column containing the y coordinate [if CSV file with y column]
 ///  - float: an array of column names containing float values
@@ -178,7 +181,9 @@ impl Default for OgrSourceTimeFormat {
 ///  - text: an array of column names containing alpha-numeric values
 ///  - rename: a. optional map of column names from data source to the name in the resulting collection
 #[derive(Clone, Debug, PartialEq, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct OgrSourceColumnSpec {
+    pub format_specifics: Option<FormatSpecifics>,
     pub x: String,
     pub y: Option<String>,
     pub int: Vec<String>,
@@ -200,6 +205,37 @@ impl OgrSourceColumnSpec {
         self.float
             .retain(|attribute| attributes.contains(attribute));
         self.text.retain(|attribute| attributes.contains(attribute));
+    }
+}
+
+/// This enum provides all format specific options
+#[derive(Clone, Debug, PartialEq, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub enum FormatSpecifics {
+    Csv { header: CsvHeader },
+}
+
+/// For CSV files this tells gdal whether or not the file
+/// contains a header line.
+/// The value `Auto` enables gdal's auto detection.
+#[derive(Clone, Debug, PartialEq, Deserialize, Serialize)]
+#[serde(rename_all = "lowercase")]
+pub enum CsvHeader {
+    Yes,
+    No,
+    Auto,
+}
+
+impl CsvHeader {
+    fn as_gdal_param(&self) -> String {
+        format!(
+            "HEADERS={}",
+            match self {
+                Self::Yes => "YES",
+                Self::No => "NO",
+                Self::Auto => "AUTO",
+            }
+        )
     }
 }
 
@@ -502,8 +538,19 @@ where
             ..DatasetOptions::default()
         };
 
+        let headers = if let Some(FormatSpecifics::Csv { header }) = &columns.format_specifics {
+            header.as_gdal_param()
+        } else {
+            CsvHeader::Auto.as_gdal_param()
+        };
+
         // TODO: make column x optional or allow other indication for data collection
         if columns.x.is_empty() {
+            let open_opts = &[
+                headers.as_str(),
+                // "AUTODETECT_TYPE=YES", // This breaks tests
+            ];
+            dataset_options.open_options = Some(open_opts);
             return Ok(Dataset::open_ex(&dataset_info.file_name, dataset_options)?);
         }
 
@@ -511,33 +558,41 @@ where
             let open_opts = &[
                 &format!("X_POSSIBLE_NAMES={}", columns.x),
                 &format!("Y_POSSIBLE_NAMES={}", y),
+                headers.as_str(),
                 "AUTODETECT_TYPE=YES",
             ];
-
             dataset_options.open_options = Some(open_opts);
             return Ok(Dataset::open_ex(&dataset_info.file_name, dataset_options)?);
         }
 
         let open_opts = &[
             &format!("GEOM_POSSIBLE_NAMES={}", columns.x),
+            headers.as_str(),
             "AUTODETECT_TYPE=YES",
         ];
         dataset_options.open_options = Some(open_opts);
-
         Ok(Dataset::open_ex(&dataset_info.file_name, dataset_options)?)
     }
 
+    fn is_csv(dataset_info: &OgrSourceDataset) -> bool {
+        if let Some("csv" | "tsv") = dataset_info.file_name.extension().and_then(OsStr::to_str) {
+            true
+        } else {
+            dataset_info.file_name.as_path().starts_with("CSV:")
+        }
+    }
+
     fn open_gdal_dataset(dataset_info: &OgrSourceDataset) -> Result<Dataset> {
-        // TODO: reliably detect CSV files or allow defining them as such in params
-        match dataset_info.file_name.extension().and_then(OsStr::to_str) {
-            Some("csv" | "tsv") => Self::open_csv_dataset(dataset_info),
-            _ => Ok(Dataset::open_ex(
+        if Self::is_csv(dataset_info) {
+            Self::open_csv_dataset(dataset_info)
+        } else {
+            Ok(Dataset::open_ex(
                 &dataset_info.file_name,
                 DatasetOptions {
                     open_flags: GdalOpenFlags::GDAL_OF_VECTOR,
                     ..Default::default()
                 },
-            )?),
+            )?)
         }
     }
 
@@ -833,9 +888,15 @@ where
     ) -> Result<FeatureCollection<G>> {
         let mut builder = feature_collection_builder.finish_header();
 
+        let default_geometry: Option<G> = match &dataset_information.default_geometry {
+            Some(tg) => Some(tg.clone().try_into()?),
+            None => None,
+        };
+
         for feature in feature_iterator {
             if let Err(error) = Self::add_feature_to_batch(
                 dataset_information.on_error,
+                &default_geometry,
                 data_types,
                 query_rectangle,
                 time_extractor,
@@ -861,6 +922,7 @@ where
     #[allow(clippy::too_many_arguments)]
     fn add_feature_to_batch(
         error_spec: OgrSourceErrorSpec,
+        default_geometry: &Option<G>,
         data_types: &HashMap<String, FeatureDataType>,
         query_rectangle: &VectorQueryRectangle,
         time_extractor: &dyn Fn(&Feature) -> Result<TimeInterval, Error>,
@@ -876,8 +938,22 @@ where
             return Ok(());
         }
 
-        let geometry: G =
-            <G as TryFromOgrGeometry>::try_from(feature.geometry_by_index(0).map_err(Into::into))?;
+        let geometry: G = match <G as TryFromOgrGeometry>::try_from(
+            feature.geometry_by_index(0).map_err(Into::into),
+        ) {
+            Ok(g) => g,
+            Err(Error::Gdal {
+                source: GdalError::InvalidFieldIndex { method_name, index },
+            }) => match default_geometry.as_ref() {
+                Some(g) => g.clone(),
+                None => {
+                    return Err(Error::Gdal {
+                        source: GdalError::InvalidFieldIndex { method_name, index },
+                    })
+                }
+            },
+            Err(e) => return Err(e),
+        };
 
         // filter out geometries that are not contained in the query's bounding box
         if !was_spatial_filtered_by_ogr
@@ -901,6 +977,7 @@ where
                         Ok(Some(FieldValue::StringValue(s))) => Some(s),
                         Ok(Some(FieldValue::RealValue(v))) => Some(v.to_string()),
                         Ok(Some(FieldValue::DateTimeValue(v))) => Some(v.to_string()), //TODO: allow multiple date columns
+                        Ok(Some(FieldValue::DateValue(v))) => Some(v.to_string()),
                         Ok(None) => None,
                         Ok(Some(v)) => error_spec.on_error(Error::OgrColumnFieldTypeMismatch {
                             expected: "Text".to_string(),
@@ -1167,6 +1244,7 @@ mod tests {
     use super::*;
 
     use crate::engine::{MockExecutionContext, MockQueryContext, StaticMetaData};
+    use crate::source::ogr_source::FormatSpecifics::Csv;
     use crate::test_data;
     use futures::TryStreamExt;
     use geoengine_datatypes::collections::{
@@ -1197,7 +1275,13 @@ mod tests {
                     step: 42,
                 }),
             },
+            default_geometry: Some(TypedGeometry::MultiPoint(
+                MultiPoint::new(vec![[1.0, 2.0].into()]).unwrap(),
+            )),
             columns: Some(OgrSourceColumnSpec {
+                format_specifics: Some(FormatSpecifics::Csv {
+                    header: CsvHeader::Auto,
+                }),
                 x: "x".to_string(),
                 y: Some("y".to_string()),
                 float: vec!["num".to_string()],
@@ -1233,7 +1317,17 @@ mod tests {
                         "step": 42
                     }
                 },
+                "defaultGeometry": {
+                    "MultiPoint": {
+                        "coordinates":[{"x":1.0,"y":2.0}]
+                    }
+                },
                 "columns": {
+                    "formatSpecifics": {
+                        "csv": {
+                            "header": "auto",
+                        }
+                    },
                     "x": "x",
                     "y": "y",
                     "int": ["dec1", "dec2"],
@@ -1268,7 +1362,17 @@ mod tests {
                         "step": 42
                     }
                 },
+                "defaultGeometry": {
+                    "MultiPoint": {
+                        "coordinates":[{"x":1.0,"y":2.0}]
+                    }
+                },
                 "columns": {
+                    "formatSpecifics": {
+                        "csv": {
+                            "header": "auto",
+                        }
+                    },
                     "x": "x",
                     "y": "y",
                     "int": ["dec1", "dec2"],
@@ -1298,6 +1402,7 @@ mod tests {
             layer_name: "empty".to_string(),
             data_type: None,
             time: OgrSourceDatasetTimeType::None,
+            default_geometry: None,
             columns: None,
             force_ogr_time_filter: false,
             force_ogr_spatial_filter: false,
@@ -1346,6 +1451,7 @@ mod tests {
             layer_name: "".to_string(),
             data_type: None,
             time: OgrSourceDatasetTimeType::None,
+            default_geometry: None,
             columns: None,
             force_ogr_time_filter: false,
             force_ogr_spatial_filter: false,
@@ -1394,6 +1500,7 @@ mod tests {
             layer_name: "missing_geo".to_string(),
             data_type: None,
             time: OgrSourceDatasetTimeType::None,
+            default_geometry: None,
             columns: None,
             force_ogr_time_filter: false,
             force_ogr_spatial_filter: false,
@@ -1456,6 +1563,7 @@ mod tests {
                     layer_name: "ne_10m_ports".to_string(),
                     data_type: Some(VectorDataType::MultiPoint),
                     time: OgrSourceDatasetTimeType::None,
+                    default_geometry: None,
                     columns: None,
                     force_ogr_time_filter: false,
                     force_ogr_spatial_filter: false,
@@ -1550,6 +1658,7 @@ mod tests {
                     layer_name: "ne_10m_ports".to_string(),
                     data_type: Some(VectorDataType::MultiPoint),
                     time: OgrSourceDatasetTimeType::None,
+                    default_geometry: None,
                     columns: None,
                     force_ogr_time_filter: false,
                     force_ogr_spatial_filter: true,
@@ -1647,6 +1756,7 @@ mod tests {
                     layer_name: "ne_10m_ports".to_string(),
                     data_type: Some(VectorDataType::MultiPoint),
                     time: OgrSourceDatasetTimeType::None,
+                    default_geometry: None,
                     columns: None,
                     force_ogr_time_filter: false,
                     force_ogr_spatial_filter: false,
@@ -1742,7 +1852,9 @@ mod tests {
                     layer_name: "ne_10m_ports".to_string(),
                     data_type: Some(VectorDataType::MultiPoint),
                     time: OgrSourceDatasetTimeType::None,
+                    default_geometry: None,
                     columns: Some(OgrSourceColumnSpec {
+                        format_specifics: None,
                         x: "".to_string(),
                         y: None,
                         int: vec!["scalerank".to_string()],
@@ -1931,6 +2043,7 @@ mod tests {
                     layer_name: "ne_10m_ports".to_string(),
                     data_type: Some(VectorDataType::MultiPoint),
                     time: OgrSourceDatasetTimeType::None,
+                    default_geometry: None,
                     columns: None,
                     force_ogr_time_filter: false,
                     force_ogr_spatial_filter: false,
@@ -3092,7 +3205,11 @@ mod tests {
             layer_name: "plain_data".to_string(),
             data_type: None,
             time: OgrSourceDatasetTimeType::None,
+            default_geometry: None,
             columns: Some(OgrSourceColumnSpec {
+                format_specifics: Some(Csv {
+                    header: CsvHeader::Auto,
+                }),
                 x: "".to_string(),
                 y: None,
                 float: vec!["b".to_string()],
@@ -3110,7 +3227,7 @@ mod tests {
         let info = StaticMetaData {
             loading_info: dataset_information,
             result_descriptor: VectorResultDescriptor {
-                data_type: VectorDataType::MultiPoint,
+                data_type: VectorDataType::Data,
                 spatial_reference: SpatialReferenceOption::Unreferenced,
                 columns: [
                     ("a".to_string(), FeatureDataType::Int),
@@ -3175,6 +3292,101 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn default_geometry() -> Result<()> {
+        let dataset_information = OgrSourceDataset {
+            file_name: test_data!("vector/data/plain_data.csv").into(),
+            layer_name: "plain_data".to_string(),
+            data_type: None,
+            time: OgrSourceDatasetTimeType::None,
+            default_geometry: Some(TypedGeometry::MultiPoint({
+                MultiPoint::new(vec![Coordinate2D::new(1.0, 2.0)])?
+            })),
+            columns: Some(OgrSourceColumnSpec {
+                format_specifics: Some(Csv {
+                    header: CsvHeader::Auto,
+                }),
+                x: "".to_string(),
+                y: None,
+                float: vec!["b".to_string()],
+                int: vec!["a".to_string()],
+                text: vec!["c".to_string()],
+                rename: None,
+            }),
+            force_ogr_time_filter: false,
+            force_ogr_spatial_filter: false,
+            on_error: OgrSourceErrorSpec::Ignore,
+            sql_query: None,
+            attribute_query: None,
+        };
+
+        let info = StaticMetaData {
+            loading_info: dataset_information,
+            result_descriptor: VectorResultDescriptor {
+                data_type: VectorDataType::MultiPoint,
+                spatial_reference: SpatialReferenceOption::Unreferenced,
+                columns: [
+                    ("a".to_string(), FeatureDataType::Int),
+                    ("b".to_string(), FeatureDataType::Float),
+                    ("c".to_string(), FeatureDataType::Text),
+                ]
+                .iter()
+                .cloned()
+                .collect(),
+            },
+            phantom: Default::default(),
+        };
+
+        let query_processor = OgrSourceProcessor::<MultiPoint>::new(Box::new(info));
+
+        let context = MockQueryContext::new(usize::MAX);
+        let query = query_processor
+            .query(
+                VectorQueryRectangle {
+                    spatial_bounds: BoundingBox2D::new((0., 0.).into(), (1., 2.).into())?,
+                    time_interval: Default::default(),
+                    spatial_resolution: SpatialResolution::new(1., 1.)?,
+                },
+                &context,
+            )
+            .await
+            .unwrap();
+
+        let result: Vec<MultiPointCollection> = query.try_collect().await?;
+
+        assert_eq!(result.len(), 1);
+
+        assert_eq!(
+            result[0],
+            MultiPointCollection::from_data(
+                MultiPoint::many(vec![vec![(1.0, 2.0)], vec![(1.0, 2.0)]]).unwrap(),
+                vec![Default::default(); 2],
+                [
+                    (
+                        "a".to_string(),
+                        FeatureData::NullableInt(vec![Some(1), Some(2)])
+                    ),
+                    (
+                        "b".to_string(),
+                        FeatureData::NullableFloat(vec![Some(5.4), None])
+                    ),
+                    (
+                        "c".to_string(),
+                        FeatureData::NullableText(vec![
+                            Some("foo".to_string()),
+                            Some("bar".to_string())
+                        ])
+                    ),
+                ]
+                .iter()
+                .cloned()
+                .collect(),
+            )?
+        );
+
+        Ok(())
+    }
+
+    #[tokio::test]
     #[allow(clippy::too_many_lines)]
     async fn chunked() -> Result<()> {
         let id = DatasetId::Internal {
@@ -3189,6 +3401,7 @@ mod tests {
                     layer_name: "ne_10m_ports".to_string(),
                     data_type: Some(VectorDataType::MultiPoint),
                     time: OgrSourceDatasetTimeType::None,
+                    default_geometry: None,
                     columns: None,
                     force_ogr_time_filter: false,
                     force_ogr_spatial_filter: false,
@@ -3435,6 +3648,7 @@ mod tests {
                     layer_name: "ne_10m_ports".to_string(),
                     data_type: Some(VectorDataType::MultiPoint),
                     time: OgrSourceDatasetTimeType::None,
+                    default_geometry: None,
                     columns: None,
                     force_ogr_time_filter: false,
                     force_ogr_spatial_filter: false,
@@ -3510,7 +3724,9 @@ mod tests {
                     layer_name: "test_germany".to_owned(),
                     data_type: Some(VectorDataType::MultiPolygon),
                     time: OgrSourceDatasetTimeType::None,
+                    default_geometry: None,
                     columns: Some(OgrSourceColumnSpec {
+                        format_specifics: None,
                         x: "".to_owned(),
                         y: None,
                         int: vec![],
@@ -3601,7 +3817,11 @@ mod tests {
                     layer_name: "points".to_owned(),
                     data_type: Some(VectorDataType::MultiPoint),
                     time: OgrSourceDatasetTimeType::None,
+                    default_geometry: None,
                     columns: Some(OgrSourceColumnSpec {
+                        format_specifics: Some(Csv {
+                            header: CsvHeader::Yes,
+                        }),
                         x: "x".to_owned(),
                         y: Some("y".to_owned()),
                         int: vec!["num".to_owned()],
@@ -3713,7 +3933,11 @@ mod tests {
                             step: 84,
                         }),
                     },
+                    default_geometry: None,
                     columns: Some(OgrSourceColumnSpec {
+                        format_specifics: Some(Csv {
+                            header: CsvHeader::Yes,
+                        }),
                         x: "Longitude".to_owned(),
                         y: Some("Latitude".to_owned()),
                         int: vec![],
@@ -3818,7 +4042,11 @@ mod tests {
                             step: 84,
                         }),
                     },
+                    default_geometry: None,
                     columns: Some(OgrSourceColumnSpec {
+                        format_specifics: Some(Csv {
+                            header: CsvHeader::Yes,
+                        }),
                         x: "Longitude".to_owned(),
                         y: Some("Latitude".to_owned()),
                         int: vec![],
@@ -3923,7 +4151,11 @@ mod tests {
                             step: 84,
                         }),
                     },
+                    default_geometry: None,
                     columns: Some(OgrSourceColumnSpec {
+                        format_specifics: Some(Csv {
+                            header: CsvHeader::Yes,
+                        }),
                         x: "Longitude".to_owned(),
                         y: Some("Latitude".to_owned()),
                         int: vec![],
@@ -4012,7 +4244,11 @@ mod tests {
             layer_name: "plain_data".to_string(),
             data_type: None,
             time: OgrSourceDatasetTimeType::None,
+            default_geometry: None,
             columns: Some(OgrSourceColumnSpec {
+                format_specifics: Some(Csv {
+                    header: CsvHeader::Yes,
+                }),
                 x: "".to_string(),
                 y: None,
                 float: vec!["b".to_string()],
