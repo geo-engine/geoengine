@@ -149,23 +149,21 @@ pub(crate) fn configure_extractors(cfg: &mut web::ServiceConfig) {
         }
     }));
     cfg.app_data(web::QueryConfig::default().error_handler(|err, _req| {
-        actix_web::error::InternalError::from_response(
-            "",
-            HttpResponse::BadRequest().json(match err {
-                QueryPayloadError::Deserialize(err) => ErrorResponse {
-                    error: "UnableToParseQueryString".to_string(),
-                    message: format!("Unable to parse query string: {}", err),
-                },
-                _ => {
-                    debug!("Unknown QueryPayloadError variant");
-                    ErrorResponse {
-                        error: "UnknownError".to_string(),
-                        message: "Unknown Error".to_string(),
-                    }
+        match err {
+            QueryPayloadError::Deserialize(err) => ErrorResponse {
+                error: "UnableToParseQueryString".to_string(),
+                message: format!("Unable to parse query string: {}", err),
+            }
+            .into(),
+            _ => {
+                debug!("Unknown QueryPayloadError variant");
+                ErrorResponse {
+                    error: "UnknownError".to_string(),
+                    message: "Unknown Error".to_string(),
                 }
-            }),
-        )
-        .into()
+                .into()
+            }
+        }
     }));
 }
 
