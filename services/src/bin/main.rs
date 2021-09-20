@@ -89,12 +89,13 @@ fn colored_custom_log_format(
     record: &Record,
 ) -> Result<(), std::io::Error> {
     let level = record.level();
+    let style = style(level);
     write!(
         w,
         "[{}] {} [{}] {}",
-        style(level, now.now().format("%Y-%m-%d %H:%M:%S %:z")),
-        style(level, level),
+        style.paint(now.now().format("%Y-%m-%d %H:%M:%S %:z").to_string()),
+        style.paint(level.to_string()),
         record.module_path().unwrap_or("<unnamed>"),
-        style(level, &record.args())
+        style.paint(&record.args().to_string())
     )
 }

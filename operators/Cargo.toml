@@ -28,6 +28,7 @@ log = "0.4"
 num_cpus = "1.13" # TODO: remove and switch to std::thread::available_concurrency() when it is available
 num-traits = "0.2"
 ocl = { git = "https://github.com/michaelmattig/ocl", branch = "tentative_master" }  # TODO: use crates.io version once it builds again
+ouroboros = "0.10"
 paste = "1.0"
 pin-project = "1.0"
 rustc-hash = { version = "1.0", default-features = false }
@@ -41,9 +42,19 @@ packed_simd_2 = "=0.3.5" # TODO: remove once packed_simd_2 workes in CI
 
 [dev-dependencies]
 criterion = {version = "0.3", features =["async_futures", "async_tokio"]}
+geo-rand = { git = "https://github.com/lelongg/geo-rand", tag = "v0.3.0" }
 rand = "0.8"
 tempfile = "3.1"
 
+
 [[bench]]
 name = "workflows"
+harness = false
+
+[[bench]]
+name = "thread_pool"
+harness = false
+
+[[bench]]
+name = "pip"
 harness = false

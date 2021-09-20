@@ -96,8 +96,8 @@ impl TilingStrategy {
     pub fn pixel_idx_to_tile_idx(&self, pixel_idx: GridIdx2D) -> GridIdx2D {
         let GridIdx([y_pixel_idx, x_pixel_idx]) = pixel_idx;
         let [y_tile_size, x_tile_size] = self.tile_size_in_pixels.into_inner();
-        let y_tile_idx = (y_pixel_idx as f32 / y_tile_size as f32).floor() as isize;
-        let x_tile_idx = (x_pixel_idx as f32 / x_tile_size as f32).floor() as isize;
+        let y_tile_idx = (y_pixel_idx as f64 / y_tile_size as f64).floor() as isize;
+        let x_tile_idx = (x_pixel_idx as f64 / x_tile_size as f64).floor() as isize;
         [y_tile_idx, x_tile_idx].into()
     }
 
@@ -276,5 +276,33 @@ mod tests {
 
         let partition = SpatialPartition2D::new((1., 1.).into(), (7.5, -7.5).into()).unwrap();
         assert_eq!(strat.lower_right_pixel_idx(partition), [7, 7].into());
+    }
+
+    #[test]
+    fn it_generates_only_intersected_tiles() {
+        let strat = TilingStrategy {
+            tile_size_in_pixels: [600, 600].into(),
+            geo_transform: GeoTransform::new(
+                (0., 0.).into(),
+                2.095_475_792_884_826_7E-8,
+                -2.095_475_792_884_826_7E-8,
+            ),
+        };
+
+        let partition = SpatialPartition2D::new(
+            (12.477_738_261_222_84, 43.881_293_535_232_544).into(),
+            (12.477_743_625_640_87, 43.881_288_170_814_514).into(),
+        )
+        .unwrap();
+
+        let tiles = strat
+            .tile_information_iterator(partition)
+            .collect::<Vec<_>>();
+
+        assert_eq!(tiles.len(), 2);
+
+        for tile in tiles {
+            assert!(partition.intersects(&tile.spatial_partition()));
+        }
     }
 }
