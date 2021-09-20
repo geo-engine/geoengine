@@ -6,7 +6,7 @@ authors = [
     "Johannes Drönner <droenner@mathematik.uni-marburg.de>",
     "Michael Mattig <mattig@mathematik.uni-marburg.de>"
 ]
-edition = "2018"
+edition = "2021"
 
 [features]
 postgres = ["postgres-types"]
