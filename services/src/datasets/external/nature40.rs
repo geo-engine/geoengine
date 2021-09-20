@@ -129,34 +129,54 @@ impl DatasetProvider for Nature40DataProvider {
         for (db, dataset) in raster_dbs.rasterdbs.iter().zip(datasets) {
             if let Ok(dataset) = dataset {
                 let (dataset, band_labels) = self.get_band_labels(dataset).await?;
+                let (dataset, time_positions) = self.get_time_positions(dataset).await?;
 
-                for band_index in 1..=dataset.raster_count() {
-                    if let Ok(result_descriptor) =
-                        raster_descriptor_from_dataset(&dataset, band_index, None)
-                    {
-                        listing.push(Ok(DatasetListing {
-                            id: DatasetId::External(ExternalDatasetId {
-                                provider_id: self.id,
-                                dataset_id: format!("{}:{}", db.name.clone(), band_index),
-                            }),
-                            name: db.title.clone(),
-                            description: format!(
-                                "Band {}: {}",
-                                band_index,
-                                band_labels
-                                    .get((band_index - 1) as usize)
-                                    .unwrap_or(&"".to_owned())
-                            ),
-                            tags: db.tags.clone(),
-                            source_operator: "GdalSource".to_owned(),
-                            result_descriptor: TypedResultDescriptor::Raster(result_descriptor),
-                            symbology: None, // TODO: build symbology
-                        }));
-                    } else {
-                        info!(
-                            "Could not create restult descriptor for band {} of {}",
-                            band_index, db.name
-                        );
+                let mut time_indexes = 1;
+                let mut time_layer = false;
+
+                if !time_positions.is_empty() {
+                    time_indexes = time_positions.len();
+                    time_layer = true;
+                }
+
+                for time_index in 0..time_indexes {
+                    for band_index in 1..=dataset.raster_count() {
+                        let mut dataset_id = String::new();
+
+                        if time_layer {
+                            dataset_id =
+                                format!("{}:{}:{}", db.name.clone(), band_index, time_index);
+                        } else {
+                            dataset_id = format!("{}:{}", db.name.clone(), band_index);
+                        }
+
+                        if let Ok(result_descriptor) =
+                            raster_descriptor_from_dataset(&dataset, band_index, None)
+                        {
+                            listing.push(Ok(DatasetListing {
+                                id: DatasetId::External(ExternalDatasetId {
+                                    provider_id: self.id,
+                                    dataset_id: dataset_id.to_string(),
+                                }),
+                                name: db.title.clone(),
+                                description: format!(
+                                    "Band {}: {}",
+                                    band_index,
+                                    band_labels
+                                        .get((band_index - 1) as usize)
+                                        .unwrap_or(&"".to_owned())
+                                ),
+                                tags: db.tags.clone(),
+                                source_operator: "GdalSource".to_owned(),
+                                result_descriptor: TypedResultDescriptor::Raster(result_descriptor),
+                                symbology: None, // TODO: build symbology
+                            }));
+                        } else {
+                            info!(
+                                "Could not create restult descriptor for band {} of {}",
+                                band_index, db.name
+                            );
+                        }
                     }
                 }
             } else {
@@ -254,6 +274,31 @@ impl Nature40DataProvider {
         }
     }
 
+    async fn get_time_positions(
+        &self,
+        dataset: gdal::Dataset,
+    ) -> Result<(gdal::Dataset, Vec<String>)> {
+        let time_positions = Self::parse_time_positions(&dataset)?;
+
+        if time_positions.is_empty() {
+            // no time positions found during parsing, try to reopen the dataset to flush the cache and try again
+            let name = dataset
+                .metadata_item("label", "")
+                .ok_or(Error::Nature40WcsDatasetMissingLabelInMetadata)?;
+
+            drop(dataset);
+
+            let dataset = self
+                .load_dataset(RasterDb::url_from_name(&self.base_url, &name)?)
+                .await?;
+
+            let time_positions = Self::parse_time_positions(&dataset)?;
+            Ok((dataset, time_positions))
+        } else {
+            Ok((dataset, time_positions))
+        }
+    }
+
     fn parse_band_labels(dataset: &gdal::Dataset) -> Result<Vec<String>> {
         let mut reader = Reader::from_file(&dataset.description()?)?;
         reader.trim_text(true);
@@ -275,6 +320,31 @@ impl Nature40DataProvider {
                                     .unwrap_or_else(|_| "".to_owned()),
                             );
                         }
+                    }
+                }
+                Ok(Event::Eof) => break,
+                _ => (),
+            }
+            buf.clear();
+        }
+        Ok(txt)
+    }
+
+    fn parse_time_positions(dataset: &gdal::Dataset) -> Result<Vec<String>> {
+        let mut reader = Reader::from_file(&dataset.description()?)?;
+        reader.trim_text(true);
+        let mut txt = Vec::new();
+        let mut buf = Vec::new();
+
+        loop {
+            match reader.read_event(&mut buf) {
+                Ok(Event::Start(ref e)) => {
+                    if e.name() == b"timePosition" {
+                        txt.push(
+                            reader
+                                .read_text(e.name(), &mut Vec::new())
+                                .unwrap_or_else(|_| "".to_owned()),
+                        );
                     }
                 }
                 Ok(Event::Eof) => break,
@@ -628,6 +698,120 @@ mod tests {
         );
     }
 
+    fn expect_uas_requests(server: &mut Server) {
+        server.expect(
+            Expectation::matching(all_of![
+                request::headers(contains((
+                    lowercase("authorization"),
+                    "Basic Z2VvZW5naW5lOnB3ZA=="
+                ))),
+                request::method_path("GET", "/rasterdb/uas_orthomosaics_2020/wcs",),
+                request::query(url_decoded(contains(("REQUEST", "GetCapabilities"))))
+            ])
+            .respond_with(status_code(200).body(
+                r#"
+                <WCS_Capabilities version="1.0.0">
+                    <Service>
+                        <name>RSDB WCS</name>
+                        <label>uas_orthomosaics_2020</label>
+                    </Service>
+                    <ContentMetadata>
+                        <CoverageOfferingBrief>
+                            <name>uas_orthomosaics_2020</name>
+                            <label>uas_orthomosaics_2020</label>
+                        </CoverageOfferingBrief>
+                    </ContentMetadata>
+                </WCS_Capabilities>"#,
+            )),
+        );
+
+        server.expect(
+            Expectation::matching(all_of![
+                request::headers(contains((
+                    lowercase("authorization"),
+                    "Basic Z2VvZW5naW5lOnB3ZA=="
+                ))),
+                request::method_path("GET", "/rasterdb/uas_orthomosaics_2020/wcs",),
+                request::query(url_decoded(contains(("REQUEST", "DescribeCoverage"))))
+            ])
+            .respond_with(status_code(200).body(
+                r#"
+                <CoverageDescription version="1.0.0">
+                    <CoverageOffering>
+                        <name>RSDB WCS</name>
+                        <label>uas_orthomosaics_2020</label>
+                        <domainSet>
+                            <spatialDomain>
+                                <gml:Envelope srsName="EPSG:25832">
+                                    <gml:pos>477626.608700128 5632063.47065268</gml:pos>
+                                    <gml:pos>478182.26870012796 5632531.0706526805</gml:pos>
+                                </gml:Envelope>
+                                <gml:RectifiedGrid dimension="2">
+                                    <gml:limits>
+                                        <gml:GridEnvelope>
+                                            <gml:low>0 0</gml:low>
+                                            <gml:high>7937 6679</gml:high>
+                                        </gml:GridEnvelope>
+                                    </gml:limits>
+                                    <gml:axisName>x</gml:axisName>
+                                    <gml:axisName>y</gml:axisName>
+                                    <gml:origin>
+                                        <gml:pos>477626.608700128 5632531.0706526805</gml:pos>
+                                    </gml:origin>
+                                    <gml:offsetVector>0.07 0.0</gml:offsetVector>
+                                    <gml:offsetVector>0.0 -0.07</gml:offsetVector>
+                                </gml:RectifiedGrid>
+                            </spatialDomain>
+                            <temporalDomain>
+                                <gml:timePosition>2020-09-02T00:00</gml:timePosition>
+                                <gml:timePosition>2020-09-15T00:00</gml:timePosition>                    
+                            </temporalDomain>
+                        </domainSet>
+                        <rangeSet>
+                            <RangeSet>
+                                <name>1</name>
+                                <label>red</label>
+                                <name>2</name>
+                                <label>green</label>
+                                <name>3</name>
+                                <label>blue</label>
+                            </RangeSet>
+                        </rangeSet>
+                        <supportedCRSs>
+                            <requestResponseCRSs>EPSG:25832</requestResponseCRSs>
+                            <nativeCRSs>EPSG:25832</nativeCRSs>
+                        </supportedCRSs>
+                        <supportedFormats>
+                            <formats>GeoTIFF</formats>
+                        </supportedFormats>
+                    </CoverageOffering>
+                </CoverageDescription>"#,
+            )),
+        );
+
+        let mut uas_orthomosaics_2020 = vec![];
+        File::open(test_data!("nature40/uas_orthomosaics_2020.tiff"))
+            .unwrap()
+            .read_to_end(&mut uas_orthomosaics_2020)
+            .unwrap();
+
+        server.expect(
+            Expectation::matching(all_of![
+                request::headers(contains((
+                    lowercase("authorization"),
+                    "Basic Z2VvZW5naW5lOnB3ZA=="
+                ))),
+                request::method_path("GET", "/rasterdb/uas_orthomosaics_2020/wcs",),
+                request::query(url_decoded(contains(("REQUEST", "GetCoverage"))))
+            ])
+            .respond_with(
+                status_code(200)
+                    .append_header("Content-Type", "image/tiff")
+                    .body(uas_orthomosaics_2020),
+            ),
+        );
+    }
+
     #[allow(clippy::too_many_lines)]
     #[tokio::test]
     async fn it_lists() {
@@ -650,6 +834,11 @@ mod tests {
                     "name": "lidar_2018_wetness_1m",
                     "title": "Topografic Wetness index",
                     "tags": "natur40"
+                },
+                {
+                    "name": "uas_orthomosaics_2020",
+                    "title": "UAS Orthomosaics Fall 2020",
+                    "tags": ["UAV","natur40"]
                 }],
                 "tags": ["UAV", "natur40"],
                 "session": "lhtdVm"
@@ -658,6 +847,7 @@ mod tests {
 
         expect_geonode_requests(&mut server);
         expect_lidar_requests(&mut server);
+        expect_uas_requests(&mut server);
 
         let provider = Box::new(Nature40DataProviderDefinition {
             id: DatasetProviderId::from_str("2cb964d5-b9fa-4f8f-ab6f-f6c7fb47d4cd").unwrap(),
@@ -684,107 +874,251 @@ mod tests {
             .await
             .unwrap();
 
-        assert_eq!(
-            listing,
-            vec![
-                DatasetListing {
-                    id: DatasetId::External(ExternalDatasetId {
-                        provider_id: DatasetProviderId::from_str(
-                            "2cb964d5-b9fa-4f8f-ab6f-f6c7fb47d4cd"
-                        )
-                        .unwrap(),
-                        dataset_id: "geonode_ortho_muf_1m:1".to_owned()
-                    }),
-                    name: "MOF Luftbild".to_owned(),
-                    description: "Band 1: band1".to_owned(),
-                    tags: vec!["natur40".to_owned()],
-                    source_operator: "GdalSource".to_owned(),
-                    result_descriptor: TypedResultDescriptor::Raster(RasterResultDescriptor {
-                        data_type: RasterDataType::F32,
-                        spatial_reference: SpatialReference::new(
-                            SpatialReferenceAuthority::Epsg,
-                            3044
-                        )
-                        .into(),
-                        measurement: Measurement::Unitless,
-                        no_data_value: None
-                    }),
-                    symbology: None
-                },
-                DatasetListing {
-                    id: DatasetId::External(ExternalDatasetId {
-                        provider_id: DatasetProviderId::from_str(
-                            "2cb964d5-b9fa-4f8f-ab6f-f6c7fb47d4cd"
-                        )
-                        .unwrap(),
-                        dataset_id: "geonode_ortho_muf_1m:2".to_owned()
-                    }),
-                    name: "MOF Luftbild".to_owned(),
-                    description: "Band 2: band2".to_owned(),
-                    tags: vec!["natur40".to_owned()],
-                    source_operator: "GdalSource".to_owned(),
-                    result_descriptor: TypedResultDescriptor::Raster(RasterResultDescriptor {
-                        data_type: RasterDataType::F32,
-                        spatial_reference: SpatialReference::new(
-                            SpatialReferenceAuthority::Epsg,
-                            3044
-                        )
-                        .into(),
-                        measurement: Measurement::Unitless,
-                        no_data_value: None
-                    }),
-                    symbology: None
-                },
-                DatasetListing {
-                    id: DatasetId::External(ExternalDatasetId {
-                        provider_id: DatasetProviderId::from_str(
-                            "2cb964d5-b9fa-4f8f-ab6f-f6c7fb47d4cd"
-                        )
-                        .unwrap(),
-                        dataset_id: "geonode_ortho_muf_1m:3".to_owned()
-                    }),
-                    name: "MOF Luftbild".to_owned(),
-                    description: "Band 3: band3".to_owned(),
-                    tags: vec!["natur40".to_owned()],
-                    source_operator: "GdalSource".to_owned(),
-                    result_descriptor: TypedResultDescriptor::Raster(RasterResultDescriptor {
-                        data_type: RasterDataType::F32,
-                        spatial_reference: SpatialReference::new(
-                            SpatialReferenceAuthority::Epsg,
-                            3044
-                        )
-                        .into(),
-                        measurement: Measurement::Unitless,
-                        no_data_value: None
-                    }),
-                    symbology: None
-                },
-                DatasetListing {
-                    id: DatasetId::External(ExternalDatasetId {
-                        provider_id: DatasetProviderId::from_str(
-                            "2cb964d5-b9fa-4f8f-ab6f-f6c7fb47d4cd"
-                        )
-                        .unwrap(),
-                        dataset_id: "lidar_2018_wetness_1m:1".to_owned()
-                    }),
-                    name: "Topografic Wetness index".to_owned(),
-                    description: "Band 1: wetness".to_owned(),
-                    tags: vec!["natur40".to_owned()],
-                    source_operator: "GdalSource".to_owned(),
-                    result_descriptor: TypedResultDescriptor::Raster(RasterResultDescriptor {
-                        data_type: RasterDataType::F32,
-                        spatial_reference: SpatialReference::new(
-                            SpatialReferenceAuthority::Epsg,
-                            25832
-                        )
-                        .into(),
-                        measurement: Measurement::Unitless,
-                        no_data_value: None
-                    }),
-                    symbology: None
-                }
-            ]
-        );
+            assert_eq!(
+                listing,
+                vec![
+                    DatasetListing {
+                        id: DatasetId::External(ExternalDatasetId {
+                            provider_id: DatasetProviderId::from_str(
+                                "2cb964d5-b9fa-4f8f-ab6f-f6c7fb47d4cd"
+                            )
+                            .unwrap(),
+                            dataset_id: "geonode_ortho_muf_1m:1".to_owned()
+                        }),
+                        name: "MOF Luftbild".to_owned(),
+                        description: "Band 1: band1".to_owned(),
+                        tags: vec!["natur40".to_owned()],
+                        source_operator: "GdalSource".to_owned(),
+                        result_descriptor: TypedResultDescriptor::Raster(RasterResultDescriptor {
+                            data_type: RasterDataType::F32,
+                            spatial_reference: SpatialReference::new(
+                                SpatialReferenceAuthority::Epsg,
+                                3044
+                            )
+                            .into(),
+                            measurement: Measurement::Unitless,
+                            no_data_value: None
+                        }),
+                        symbology: None
+                    },
+                    DatasetListing {
+                        id: DatasetId::External(ExternalDatasetId {
+                            provider_id: DatasetProviderId::from_str(
+                                "2cb964d5-b9fa-4f8f-ab6f-f6c7fb47d4cd"
+                            )
+                            .unwrap(),
+                            dataset_id: "geonode_ortho_muf_1m:2".to_owned()
+                        }),
+                        name: "MOF Luftbild".to_owned(),
+                        description: "Band 2: band2".to_owned(),
+                        tags: vec!["natur40".to_owned()],
+                        source_operator: "GdalSource".to_owned(),
+                        result_descriptor: TypedResultDescriptor::Raster(RasterResultDescriptor {
+                            data_type: RasterDataType::F32,
+                            spatial_reference: SpatialReference::new(
+                                SpatialReferenceAuthority::Epsg,
+                                3044
+                            )
+                            .into(),
+                            measurement: Measurement::Unitless,
+                            no_data_value: None
+                        }),
+                        symbology: None
+                    },
+                    DatasetListing {
+                        id: DatasetId::External(ExternalDatasetId {
+                            provider_id: DatasetProviderId::from_str(
+                                "2cb964d5-b9fa-4f8f-ab6f-f6c7fb47d4cd"
+                            )
+                            .unwrap(),
+                            dataset_id: "geonode_ortho_muf_1m:3".to_owned()
+                        }),
+                        name: "MOF Luftbild".to_owned(),
+                        description: "Band 3: band3".to_owned(),
+                        tags: vec!["natur40".to_owned()],
+                        source_operator: "GdalSource".to_owned(),
+                        result_descriptor: TypedResultDescriptor::Raster(RasterResultDescriptor {
+                            data_type: RasterDataType::F32,
+                            spatial_reference: SpatialReference::new(
+                                SpatialReferenceAuthority::Epsg,
+                                3044
+                            )
+                            .into(),
+                            measurement: Measurement::Unitless,
+                            no_data_value: None
+                        }),
+                        symbology: None
+                    },
+                    DatasetListing {
+                        id: DatasetId::External(ExternalDatasetId {
+                            provider_id: DatasetProviderId::from_str(
+                                "2cb964d5-b9fa-4f8f-ab6f-f6c7fb47d4cd"
+                            )
+                            .unwrap(),
+                            dataset_id: "lidar_2018_wetness_1m:1".to_owned()
+                        }),
+                        name: "Topografic Wetness index".to_owned(),
+                        description: "Band 1: wetness".to_owned(),
+                        tags: vec!["natur40".to_owned()],
+                        source_operator: "GdalSource".to_owned(),
+                        result_descriptor: TypedResultDescriptor::Raster(RasterResultDescriptor {
+                            data_type: RasterDataType::F32,
+                            spatial_reference: SpatialReference::new(
+                                SpatialReferenceAuthority::Epsg,
+                                25832
+                            )
+                            .into(),
+                            measurement: Measurement::Unitless,
+                            no_data_value: None
+                        }),
+                        symbology: None
+                    },
+                    DatasetListing {
+                        id: DatasetId::External(ExternalDatasetId {
+                            provider_id: DatasetProviderId::from_str(
+                                "2cb964d5-b9fa-4f8f-ab6f-f6c7fb47d4cd"
+                            )
+                            .unwrap(),
+                            dataset_id: "uas_orthomosaics_2020:1:0".to_owned()
+                        }),
+                        name: "UAS Orthomosaics Fall 2020".to_owned(),
+                        description: "Band 1: red".to_owned(),
+                        tags: vec!["UAV".to_owned(), "natur40".to_owned()],
+                        source_operator: "GdalSource".to_owned(),
+                        result_descriptor: TypedResultDescriptor::Raster(RasterResultDescriptor {
+                            data_type: RasterDataType::F32,
+                            spatial_reference: SpatialReference::new(
+                                SpatialReferenceAuthority::Epsg,
+                                25832
+                            )
+                            .into(),
+                            measurement: Measurement::Unitless,
+                            no_data_value: None
+                        }),
+                        symbology: None
+                    },
+                    DatasetListing {
+                        id: DatasetId::External(ExternalDatasetId {
+                            provider_id: DatasetProviderId::from_str(
+                                "2cb964d5-b9fa-4f8f-ab6f-f6c7fb47d4cd"
+                            )
+                            .unwrap(),
+                            dataset_id: "uas_orthomosaics_2020:2:0".to_owned()
+                        }),
+                        name: "UAS Orthomosaics Fall 2020".to_owned(),
+                        description: "Band 2: green".to_owned(),
+                        tags: vec!["UAV".to_owned(), "natur40".to_owned()],
+                        source_operator: "GdalSource".to_owned(),
+                        result_descriptor: TypedResultDescriptor::Raster(RasterResultDescriptor {
+                            data_type: RasterDataType::F32,
+                            spatial_reference: SpatialReference::new(
+                                SpatialReferenceAuthority::Epsg,
+                                25832
+                            )
+                            .into(),
+                            measurement: Measurement::Unitless,
+                            no_data_value: None
+                        }),
+                        symbology: None
+                    },
+                    DatasetListing {
+                        id: DatasetId::External(ExternalDatasetId {
+                            provider_id: DatasetProviderId::from_str(
+                                "2cb964d5-b9fa-4f8f-ab6f-f6c7fb47d4cd"
+                            )
+                            .unwrap(),
+                            dataset_id: "uas_orthomosaics_2020:3:0".to_owned()
+                        }),
+                        name: "UAS Orthomosaics Fall 2020".to_owned(),
+                        description: "Band 3: blue".to_owned(),
+                        tags: vec!["UAV".to_owned(), "natur40".to_owned()],
+                        source_operator: "GdalSource".to_owned(),
+                        result_descriptor: TypedResultDescriptor::Raster(RasterResultDescriptor {
+                            data_type: RasterDataType::F32,
+                            spatial_reference: SpatialReference::new(
+                                SpatialReferenceAuthority::Epsg,
+                                25832
+                            )
+                            .into(),
+                            measurement: Measurement::Unitless,
+                            no_data_value: None
+                        }),
+                        symbology: None
+                    },
+                    DatasetListing {
+                        id: DatasetId::External(ExternalDatasetId {
+                            provider_id: DatasetProviderId::from_str(
+                                "2cb964d5-b9fa-4f8f-ab6f-f6c7fb47d4cd"
+                            )
+                            .unwrap(),
+                            dataset_id: "uas_orthomosaics_2020:1:1".to_owned()
+                        }),
+                        name: "UAS Orthomosaics Fall 2020".to_owned(),
+                        description: "Band 1: red".to_owned(),
+                        tags: vec!["UAV".to_owned(), "natur40".to_owned()],
+                        source_operator: "GdalSource".to_owned(),
+                        result_descriptor: TypedResultDescriptor::Raster(RasterResultDescriptor {
+                            data_type: RasterDataType::F32,
+                            spatial_reference: SpatialReference::new(
+                                SpatialReferenceAuthority::Epsg,
+                                25832
+                            )
+                            .into(),
+                            measurement: Measurement::Unitless,
+                            no_data_value: None
+                        }),
+                        symbology: None
+                    },
+                    DatasetListing {
+                        id: DatasetId::External(ExternalDatasetId {
+                            provider_id: DatasetProviderId::from_str(
+                                "2cb964d5-b9fa-4f8f-ab6f-f6c7fb47d4cd"
+                            )
+                            .unwrap(),
+                            dataset_id: "uas_orthomosaics_2020:2:1".to_owned()
+                        }),
+                        name: "UAS Orthomosaics Fall 2020".to_owned(),
+                        description: "Band 2: green".to_owned(),
+                        tags: vec!["UAV".to_owned(), "natur40".to_owned()],
+                        source_operator: "GdalSource".to_owned(),
+                        result_descriptor: TypedResultDescriptor::Raster(RasterResultDescriptor {
+                            data_type: RasterDataType::F32,
+                            spatial_reference: SpatialReference::new(
+                                SpatialReferenceAuthority::Epsg,
+                                25832
+                            )
+                            .into(),
+                            measurement: Measurement::Unitless,
+                            no_data_value: None
+                        }),
+                        symbology: None
+                    },
+                    DatasetListing {
+                        id: DatasetId::External(ExternalDatasetId {
+                            provider_id: DatasetProviderId::from_str(
+                                "2cb964d5-b9fa-4f8f-ab6f-f6c7fb47d4cd"
+                            )
+                            .unwrap(),
+                            dataset_id: "uas_orthomosaics_2020:3:1".to_owned()
+                        }),
+                        name: "UAS Orthomosaics Fall 2020".to_owned(),
+                        description: "Band 3: blue".to_owned(),
+                        tags: vec!["UAV".to_owned(), "natur40".to_owned()],
+                        source_operator: "GdalSource".to_owned(),
+                        result_descriptor: TypedResultDescriptor::Raster(RasterResultDescriptor {
+                            data_type: RasterDataType::F32,
+                            spatial_reference: SpatialReference::new(
+                                SpatialReferenceAuthority::Epsg,
+                                25832
+                            )
+                            .into(),
+                            measurement: Measurement::Unitless,
+                            no_data_value: None
+                        }),
+                        symbology: None
+                    }
+                ]
+            );
     }
 
     #[allow(clippy::eq_op)]
