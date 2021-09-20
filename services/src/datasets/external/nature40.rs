@@ -14,9 +14,11 @@ use crate::{
 };
 use async_trait::async_trait;
 use futures::future::join_all;
+use chrono::NaiveDateTime;
 use gdal::DatasetOptions;
 use gdal::Metadata;
 use geoengine_datatypes::dataset::{DatasetId, DatasetProviderId, ExternalDatasetId};
+use geoengine_datatypes::primitives::{TimeInstance, TimeInterval};
 use geoengine_operators::engine::TypedResultDescriptor;
 use geoengine_operators::source::GdalMetaDataStatic;
 use geoengine_operators::util::gdal::{
@@ -374,10 +376,22 @@ impl MetaDataProvider<GdalLoadingInfo, RasterResultDescriptor, RasterQueryRectan
             })?;
         let split: Vec<_> = dataset.dataset_id.split(':').collect();
 
-        let (db_name, band_index) = match *split.as_slice() {
+        let (db_name, band_index, time_index_option) = match *split.as_slice() {
+            [db, band_index, time_index] => {
+                if let (Ok(band_index), Ok(time_index)) =
+                    (band_index.parse::<usize>(), time_index.parse::<usize>())
+                {
+                    (db, band_index, Some(time_index))
+                } else {
+                    return Err(geoengine_operators::error::Error::LoadingInfo {
+                        source: Box::new(Error::InvalidExternalDatasetId { provider: self.id }),
+                    });
+                }
+            }
+
             [db, band_index] => {
                 if let Ok(band_index) = band_index.parse::<usize>() {
-                    (db, band_index)
+                    (db, band_index, None)
                 } else {
                     return Err(geoengine_operators::error::Error::LoadingInfo {
                         source: Box::new(Error::InvalidExternalDatasetId { provider: self.id }),
@@ -402,8 +416,17 @@ impl MetaDataProvider<GdalLoadingInfo, RasterResultDescriptor, RasterQueryRectan
             }
         })?;
 
+        let (dataset, time_positions) = self.get_time_positions(dataset).await.unwrap();
+        let mut time: Option<TimeInterval> = None;
+
+        if let Some(time_index) = time_index_option {
+            let time_position = &time_positions[time_index];
+            let date_time = NaiveDateTime::parse_from_str(time_position, "%Y-%m-%dT%H:%M")?;
+            time = Some(TimeInterval::new_instant(TimeInstance::from(date_time))?);
+        }
+
         Ok(Box::new(GdalMetaDataStatic {
-            time: None,
+            time,
             params: gdal_parameters_from_dataset(
                 &dataset,
                 band_index,
@@ -1194,6 +1217,94 @@ mod tests {
                         },
                         width: 4295,
                         height: 3294,
+                        file_not_found_handling: FileNotFoundHandling::Error,
+                        no_data_value: None,
+                        properties_mapping: None,
+                        gdal_open_options: Some(vec!["UserPwd=geoengine:pwd".to_owned(), "HttpAuth=BASIC".to_owned()]),
+                        gdal_config_options: None,
+                    }
+                }
+            );
+
+            assert_eq!(parts.next(), None);
+        } else {
+            panic!();
+        }
+    }
+
+    #[allow(clippy::eq_op)]
+    #[tokio::test]
+    async fn it_loads_time_layer() {
+        let mut server = Server::run();
+
+        expect_uas_requests(&mut server);
+
+        let provider = Box::new(Nature40DataProviderDefinition {
+            id: DatasetProviderId::from_str("2cb964d5-b9fa-4f8f-ab6f-f6c7fb47d4cd").unwrap(),
+            name: "Nature40".to_owned(),
+            base_url: Url::parse(&server.url_str("")).unwrap(),
+            user: "geoengine".to_owned(),
+            password: "pwd".to_owned(),
+        })
+        .initialize()
+        .await
+        .unwrap();
+
+        let meta: Box<dyn MetaData<GdalLoadingInfo, RasterResultDescriptor, RasterQueryRectangle>> =
+            provider
+                .meta_data(&DatasetId::External(ExternalDatasetId {
+                    provider_id: DatasetProviderId::from_str(
+                        "2cb964d5-b9fa-4f8f-ab6f-f6c7fb47d4cd",
+                    )
+                    .unwrap(),
+                    dataset_id: "uas_orthomosaics_2020:1:1".to_owned(),
+                }))
+                .await
+                .unwrap();
+
+        assert_eq!(
+            meta.result_descriptor().await.unwrap(),
+            RasterResultDescriptor {
+                data_type: RasterDataType::F32,
+                spatial_reference: SpatialReference::new(SpatialReferenceAuthority::Epsg, 25832)
+                    .into(),
+                measurement: Measurement::Unitless,
+                no_data_value: None
+            }
+        );
+
+        let loading_info = meta
+            .loading_info(QueryRectangle {
+                spatial_bounds: SpatialPartition2D::new_unchecked(
+                    (473_922.500, 5_634_057.500).into(),
+                    (473_924.500, 5_634_055.50).into(),
+                ),
+                time_interval: TimeInterval::default(),
+                spatial_resolution: SpatialResolution::new_unchecked(
+                    (473_924.500 - 473_922.500) / 2.,
+                    (5_634_057.500 - 5_634_055.50) / 2.,
+                ),
+            })
+            .await
+            .unwrap();
+
+        if let GdalLoadingInfoPartIterator::Static { mut parts } = loading_info.info {
+            let params: GdalLoadingInfoPart = parts.next().unwrap();
+
+            assert_eq!(
+                params,
+                GdalLoadingInfoPart {
+                    time: TimeInterval::new_instant(TimeInstance::from(NaiveDateTime::parse_from_str("2020-09-15T00:00", "%Y-%m-%dT%H:%M").unwrap())).unwrap(),
+                    params: GdalDatasetParameters {
+                        file_path: PathBuf::from(format!("WCS:{}rasterdb/uas_orthomosaics_2020/wcs?VERSION=1.0.0&COVERAGE=uas_orthomosaics_2020", server.url_str(""))),
+                        rasterband_channel: 1,
+                        geo_transform: GdalDatasetGeoTransform {
+                            origin_coordinate: (477626.573700128, 5632531.105652681).into(),
+                            x_pixel_size: 0.07,
+                            y_pixel_size: -0.07,
+                        },                        
+                        width: 7938,
+                        height: 6680,
                         file_not_found_handling: FileNotFoundHandling::Error,
                         no_data_value: None,
                         properties_mapping: None,
