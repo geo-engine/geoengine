@@ -1,13 +1,12 @@
-use std::result;
-
 use futures::StreamExt;
 use geoengine_datatypes::{primitives::{SpatialPartition2D}, raster::{GridOrEmpty, Pixel}};
 use crate::{engine::{QueryContext, QueryRectangle, RasterQueryProcessor}};
 use crate::util::Result;
 use pyo3::{types::{PyModule, PyUnicode}};
-use ndarray::{Array2, Axis,stack, ArrayBase, OwnedRepr, Dim};
-use numpy::{PyArray, PyArray4};
+use ndarray::{Array2, Axis,stack, ArrayBase, OwnedRepr, Dim, concatenate, ViewRepr};
+use numpy::{PyArray, PyArray4, PyArrayDyn};
 use eval_metrics::classification::{MultiConfusionMatrix, Averaging};
+//use std::alloc::Global;
 
 #[allow(clippy::too_many_arguments)]
 pub async fn imseg_fit<T, U, C: QueryContext>(
@@ -52,90 +51,158 @@ where
     
     let mut final_stream = tile_stream_ir_016.zip(tile_stream_ir_039.zip(tile_stream_ir_087.zip(tile_stream_ir_097.zip(tile_stream_ir_108.zip(tile_stream_ir_120.zip(tile_stream_ir_134.zip(tile_stream_truth)))))));
 
+    let mut chunked_stream = final_stream.chunks(batch_size);
+
     let mut counts: Vec<Vec<usize>> = vec![vec![0,0,0,0], vec![0,0,0,0], vec![0,0,0,0], vec![0,0,0,0]];
 
-    while let Some((ir_016, (ir_039, (ir_087, (ir_097, (ir_108, (ir_120, (ir_134, truth)))))))) = final_stream.next().await {
-        match (ir_016, ir_039, ir_087, ir_097, ir_108, ir_120, ir_134, truth) {
-            (Ok(ir_016), Ok(ir_039), Ok(ir_087), Ok(ir_097), Ok(ir_108), Ok(ir_120), Ok(ir_134), Ok(truth)) => {
-                match (ir_016.grid_array, ir_039.grid_array, ir_087.grid_array, ir_097.grid_array, ir_108.grid_array, ir_120.grid_array, ir_134.grid_array, truth.grid_array) {
-                    (GridOrEmpty::Grid(grid_016), GridOrEmpty::Grid(grid_039),  GridOrEmpty::Grid(grid_087),  GridOrEmpty::Grid(grid_097), GridOrEmpty::Grid(grid_108), GridOrEmpty::Grid(grid_120), GridOrEmpty::Grid(grid_134), GridOrEmpty::Grid(grid_truth)) => {
-                        let tile_size = grid_016.shape.shape_array;
-                        let ndv = grid_truth.data.contains(&0);
+    while let Some(mut vctr) = chunked_stream.next().await {
+        let mut buffer: Vec<(Vec<T>, Vec<T>, Vec<T>, Vec<T>, Vec<T>, Vec<T>, Vec<T>, Vec<u8>)> = Vec::new();
+        let mut tile_size: [usize;2] = [0,0];
+
+        let vctr_len = vctr.len();
+
+        for _ in 0..vctr_len {
+            let (ir_016, (ir_039, (ir_087, (ir_097, (ir_108, (ir_120, (ir_137, truth))))))) = vctr.remove(0);
+
+            match (ir_016, ir_039, ir_087, ir_097, ir_108, ir_120, ir_137, truth) {
+                (Ok(ir_016), Ok(ir_039), Ok(ir_087), Ok(ir_097), Ok(ir_108), Ok(ir_120), Ok(ir_134), Ok(truth)) => {
+                    match (ir_016.grid_array, ir_039.grid_array, ir_087.grid_array, ir_097.grid_array, ir_108.grid_array, ir_120.grid_array, ir_134.grid_array, truth.grid_array) {
+                        (GridOrEmpty::Grid(grid_016), GridOrEmpty::Grid(grid_039),  GridOrEmpty::Grid(grid_087),  GridOrEmpty::Grid(grid_097), GridOrEmpty::Grid(grid_108), GridOrEmpty::Grid(grid_120), GridOrEmpty::Grid(grid_134), GridOrEmpty::Grid(grid_truth)) => {
+                            let ndv = grid_truth.data.contains(&0);
+
+                            if !ndv {
+                                tile_size = grid_016.shape.shape_array;
+                                buffer.push((grid_016.data, grid_039.data, grid_087.data, grid_097.data, grid_108.data, grid_120.data, grid_134.data, grid_truth.data.iter().map(|x| x - 1).collect()));
+                            }
+                        }, 
+                        _ => {
+
+                        }
+                    }
+                },
+                _ => {
+
+                }
+            }
+
+        }
+
+        let number_of_images = buffer.len();
+        let (data_016_init, data_039_init, data_087_init, data_097_init, data_108_init, data_120_init, data_134_init, data_truth_init) = buffer.remove(0);
+        let (mut arr_img_batch, mut arr_truth_batch) = create_arrays_from_data(data_016_init, data_039_init, data_087_init, data_097_init, data_108_init, data_120_init, data_134_init, data_truth_init, tile_size);
+        
+
+        for _ in 0..number_of_images - 1 {
+            let (data_016, data_039, data_087, data_097, data_108, data_120, data_134, data_truth) = buffer.remove(0);
+            let (arr_img, arr_truth) = create_arrays_from_data(data_016, data_039, data_087, data_097, data_108, data_120, data_134, data_truth, tile_size);
+        
+            arr_img_batch = concatenate(Axis(0), &[arr_img_batch.view(), arr_img.view()]).unwrap();
+                   
+            arr_truth_batch = concatenate(Axis(0), &[arr_truth_batch.view(), arr_truth.view()]).unwrap();
+
+        }
+
+        let py_img = PyArray::from_owned_array(py, arr_img_batch);
+        
+        //TODO change depreciated function
+        let result_img = py_mod.call("predict", (py_img,number_of_images), None)
+        .unwrap()
+        .downcast::<PyArrayDyn<f32, >>()
+        .unwrap()
+        .to_owned_array();
+
+        for i in 0..number_of_images {
+            let result = result_img.slice(ndarray::s![i,..,..,..]);
+            let truth= arr_truth_batch.slice(ndarray::s![i,..,..,0]);
+
+            counts = counts_from_predictions(result, truth, counts, &tile_size);
+        }
+
+    }
+
+    // while let Some((ir_016, (ir_039, (ir_087, (ir_097, (ir_108, (ir_120, (ir_134, truth)))))))) = final_stream.next().await {
+    //     match (ir_016, ir_039, ir_087, ir_097, ir_108, ir_120, ir_134, truth) {
+    //         (Ok(ir_016), Ok(ir_039), Ok(ir_087), Ok(ir_097), Ok(ir_108), Ok(ir_120), Ok(ir_134), Ok(truth)) => {
+    //             match (ir_016.grid_array, ir_039.grid_array, ir_087.grid_array, ir_097.grid_array, ir_108.grid_array, ir_120.grid_array, ir_134.grid_array, truth.grid_array) {
+    //                 (GridOrEmpty::Grid(grid_016), GridOrEmpty::Grid(grid_039),  GridOrEmpty::Grid(grid_087),  GridOrEmpty::Grid(grid_097), GridOrEmpty::Grid(grid_108), GridOrEmpty::Grid(grid_120), GridOrEmpty::Grid(grid_134), GridOrEmpty::Grid(grid_truth)) => {
+    //                     let tile_size = grid_016.shape.shape_array;
+    //                     let ndv = grid_truth.data.contains(&0);
                         
-                        if !ndv {
+    //                     if !ndv {
 
-                            let (arr_img_batch, arr_truth_batch) = create_arrays_from_data(grid_016.data, grid_039.data, grid_087.data, grid_097.data, grid_108.data, grid_120.data, grid_134.data, grid_truth.data, tile_size);
-                        // dbg!(&arr_img_batch.shape());
-                        // dbg!(&arr_truth_batch.shape());
+    //                         let (arr_img_batch, arr_truth_batch) = create_arrays_from_data(grid_016.data, grid_039.data, grid_087.data, grid_097.data, grid_108.data, grid_120.data, grid_134.data, grid_truth.data, tile_size);
+    //                     // dbg!(&arr_img_batch.shape());
+    //                     // dbg!(&arr_truth_batch.shape());
 
-                        let py_img = PyArray::from_owned_array(py, arr_img_batch);
-                        //TODO change depreciated function
-                        let result_img = py_mod.call("predict", (py_img,), None)
-                        .unwrap()
-                        .downcast::<PyArray4<f32>>()
-                        .unwrap()
-                        .to_owned_array();
+    //                     let py_img = PyArray::from_owned_array(py, arr_img_batch);
+    //                     //TODO change depreciated function
+    //                     let result_img = py_mod.call("predict", (py_img,), None)
+    //                     .unwrap()
+    //                     .downcast::<PyArray4<f32>>()
+    //                     .unwrap()
+    //                     .to_owned_array();
 
-                        println!("{}", arr_truth_batch);
+    //                     //println!("{}", arr_truth_batch);
                         
 
         
 
-                        let mut segmap = Array2::<u8>::from_elem((512,512), 0);
-                        let result = result_img.slice(ndarray::s![0,..,..,..]);
+    //                     let mut segmap = Array2::<u8>::from_elem((512,512), 0);
+    //                     let result = result_img.slice(ndarray::s![0,..,..,..]);
                 
-                        for i in 0..512 {
-                            for j in 0..512 {
-                                let view = result.slice(ndarray::s![i,j,..]);
-                                let mut max: f32 = 0.0;
-                                let mut max_class = 0;
-                                //println!("{:?}", view);
+    //                     for i in 0..512 {
+    //                         for j in 0..512 {
+    //                             let view = result.slice(ndarray::s![i,j,..]);
+    //                             let mut max: f32 = 0.0;
+    //                             let mut max_class = 0;
+    //                             //println!("{:?}", view);
                                 
                                 
-                                for t in 0..3 {
-                                    //println!("predited: {:?}", view[t as usize]);
+    //                             for t in 0..3 {
+    //                                 //println!("predited: {:?}", view[t as usize]);
                                 
-                                    if max <= view[t as usize] {
-                                        max = view[t as usize];
-                                        max_class = t as u8;
-                                    }
-                                }
-                                segmap[[i as usize, j as usize]] = max_class;
-                            }
-                        }
+    //                                 if max <= view[t as usize] {
+    //                                     max = view[t as usize];
+    //                                     max_class = t as u8;
+    //                                 }
+    //                             }
+    //                             segmap[[i as usize, j as usize]] = max_class;
+    //                         }
+    //                     }
 
 
-                        for i in 0..tile_size[0] {
-                            for j in 0 .. tile_size[1] {
+    //                     for i in 0..tile_size[0] {
+    //                         for j in 0 .. tile_size[1] {
                                 
                                 
-                                counts[segmap[[i, j]] as usize][(arr_truth_batch[[i, j ]] - 1) as usize] = counts[segmap[[i, j]] as usize][(arr_truth_batch[[i, j ]] - 1) as usize] + 1;
-                            }
-                        }
+    //                             counts[segmap[[i, j]] as usize][(arr_truth_batch[[i, j ]] - 1) as usize] = counts[segmap[[i, j]] as usize][(arr_truth_batch[[i, j ]] - 1) as usize] + 1;
+    //                         }
+    //                     }
                          
 
-                        } else {
-                            println!("No-data detected");
+    //                     } else {
+    //                         println!("No-data detected");
                             
-                        }
+    //                     }
                            
-                    }, 
-                    _ => {
+    //                 }, 
+    //                 _ => {
                        
-                    }
-                }
-            },
-             _ => {
+    //                 }
+    //             }
+    //         },
+    //          _ => {
                  
-            }
-        }
+    //         }
+    //     }
         
-    }
+    // }
 
     let matrix = MultiConfusionMatrix::with_counts(counts).unwrap();
     println!("{}", matrix);
     println!("{:?}", matrix.accuracy().unwrap());
-    //problem that one row and one column is all zero
+    println!("{:?}", matrix.precision(&Averaging::Macro));
+    //problem that one row is all zero
     println!("{:?}", matrix.recall(&Averaging::Macro));
     println!("{:?}", matrix.f1(&Averaging::Macro));
     
@@ -143,11 +210,46 @@ where
     Ok(())
     
 }
+
+fn counts_from_predictions(prediction: ArrayBase<ViewRepr<&f32>, Dim<[usize; 3]>>
+, truth: ArrayBase<ViewRepr<&u8>, Dim<[usize; 2]>>, mut counts: Vec<Vec<usize, >, >, tile_size: &[usize;2]) -> Vec<Vec<usize, >, > {
+    let mut segmap = Array2::<u8>::from_elem((512,512), 0);
+
+    for i in 0..512 {
+        for j in 0..512 {
+            let view = prediction.slice(ndarray::s![i,j,..]);
+            let mut max: f32 = 0.0;
+            let mut max_class = 0;
+            //println!("{:?}", view);
+            
+            
+            for t in 0..3 {
+                //println!("predited: {:?}", view[t as usize]);
+            
+                if max <= view[t as usize] {
+                    max = view[t as usize];
+                    max_class = t as u8;
+                }
+            }
+            segmap[[i as usize, j as usize]] = max_class;
+        }
+    }
+
+
+    for i in 0..tile_size[0] {
+        for j in 0 .. tile_size[1] {
+            
+            
+            counts[segmap[[i, j]] as usize][(truth[[i, j ]]) as usize] = counts[segmap[[i, j]] as usize][(truth[[i, j ]]) as usize] + 1;
+        }
+    }
+
+    counts
+}
 /// Creates batches used for training the model from the vectors of the rasterbands
-fn create_arrays_from_data<T, U>(data_1: Vec<T>, data_2: Vec<T>, data_3: Vec<T>, data_4: Vec<T>, data_5: Vec<T>, data_6: Vec<T>, data_7: Vec<T>, data_8: Vec<U>, tile_size: [usize;2]) -> (ArrayBase<OwnedRepr<T>, Dim<[usize; 4]>>, ArrayBase<OwnedRepr<U>, Dim<[usize; 2]>>) 
+fn create_arrays_from_data<T>(data_1: Vec<T>, data_2: Vec<T>, data_3: Vec<T>, data_4: Vec<T>, data_5: Vec<T>, data_6: Vec<T>, data_7: Vec<T>, data_8: Vec<u8>, tile_size: [usize;2]) -> (ArrayBase<OwnedRepr<T>, Dim<[usize; 4]>>, ArrayBase<OwnedRepr<u8>, Dim<[usize; 4]>>) 
 where 
-T: Clone + std::marker::Copy, 
-U: Clone {
+T: Clone + std::marker::Copy{
 
     let arr_1: ndarray::Array2<T> = 
             Array2::from_shape_vec((tile_size[0], tile_size[1]), data_1)
@@ -174,8 +276,10 @@ U: Clone {
             Array2::from_shape_vec((tile_size[0], tile_size[1]), data_7)
             .unwrap()
             .to_owned();
-            let arr_8: ndarray::Array2<U> = 
-            Array2::from_shape_vec((tile_size[0], tile_size[1]), data_8).unwrap();
+            let arr_8: ndarray::Array4<u8> = 
+            Array2::from_shape_vec((tile_size[0], tile_size[1]), data_8)
+            .unwrap()
+            .to_owned().insert_axis(Axis(0)).insert_axis(Axis(3));
             let arr_res: ndarray::Array<T, _> = stack(Axis(2), &[arr_1.view(),arr_2.view(),arr_3.view(), arr_4.view(), arr_5.view(), arr_6.view(), arr_7.view()]).unwrap().insert_axis(Axis(0));
 
             (arr_res, arr_8)
@@ -553,20 +657,20 @@ mod tests {
             }
         });
 
-        let exp_ir_016 = RasterOperator::boxed(Expression{
-            params: ExpressionParams { expression: "(A-0.15282721917305925)/0.040190788161123925".to_string(), output_type: RasterDataType::F32, output_no_data_value: no_data_value.unwrap(), output_measurement: Some(Measurement::Continuous{
-                measurement: "raw".to_string(),
-                unit: None,
-            })
-        },
-        sources: ExpressionSources{
-            a: ref_ir_016.clone(),
-            b: Some(ref_ir_016),
-            c: None,
-        }
-        });
+        // let exp_ir_016 = RasterOperator::boxed(Expression{
+        //     params: ExpressionParams { expression: "(A-0.15282721917305925)/0.040190788161123925".to_string(), output_type: RasterDataType::F32, output_no_data_value: no_data_value.unwrap(), output_measurement: Some(Measurement::Continuous{
+        //         measurement: "raw".to_string(),
+        //         unit: None,
+        //     })
+        // },
+        // sources: ExpressionSources{
+        //     a: ref_ir_016.clone(),
+        //     b: Some(ref_ir_016),
+        //     c: None,
+        // }
+        // });
         
-        let proc_ir_016 = exp_ir_016
+        let proc_ir_016 = ref_ir_016
         .initialize(&mc).await.unwrap().query_processor().unwrap().get_f32().unwrap();
 
         let id_ir_039 = DatasetId::Internal{
@@ -801,7 +905,7 @@ mod tests {
                 .unwrap(),
             spatial_resolution: query_spatial_resolution,
         }, ctx,
-    10 as usize,
+    24 as usize,
 -1 as i16).await.unwrap();
     }
 }

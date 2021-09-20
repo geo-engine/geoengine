@@ -2,6 +2,7 @@ import tensorflow as tf
 from tensorflow import keras
 import numpy as np
 from tensorflow.keras import layers
+from tensorflow.python.keras import callbacks
 from tensorflow.python.keras.backend import dropout
 
 
@@ -75,8 +76,8 @@ def initUnet(num_classes, id, batch_size):
     global model 
     model = keras.Model(inputs, outputs)
 
-    optimizer=keras.optimizers.Adam(lr=0.01) 
-    model.compile(optimizer=optimizer, loss="sparse_categorical_crossentropy")
+    #optimizer=keras.optimizers.Adam(lr=0.01) 
+    model.compile(optimizer="adam", loss="sparse_categorical_crossentropy", metrics=['accuracy'])
     model.summary()
     model.save('saved_model/{}'.format(id))
     print("Saved model under saved_model/{}".format(id))
@@ -86,6 +87,7 @@ def load(id):
     model = keras.models.load_model('saved_model/{}'.format(id))
     print('Loaded model from saved_model/{}'.format(id))
 
+call = callbacks.CSVLogger('logs.csv', ';', append=True)
 
 def fit(X, y, batch_size):    
     global model
@@ -95,19 +97,19 @@ def fit(X, y, batch_size):
     #print("contains NaN's: {}".format(np.isnan(np.sum(X))))
     #print("contains inf's: {}".format(~np.all(~np.isinf(X))))
     #X = np.nan_to_num(X)
-    
-    model.fit(X, y, batch_size = batch_size)
+    global call
+    model.fit(X, y, batch_size = batch_size, callbacks=[call])
 
 
-def predict(X):
+def predict(X, batchsize):
     global model
-    result = model.predict(X, batch_size=1)
+    result = model.predict(X, batch_size = batchsize)
     #model.summary()
-    print(result.shape)
-    print(result[0][0][0])
-    print(result[0][0][1])
-    print(result[0][0][2])
-    print(result[0][0][3])
+    #print(result.shape)
+    #print(result[0][0][0])
+    #print(result[0][0][1])
+    #print(result[0][0][2])
+    #print(result[0][0][3])
     return result
 
 def validate(X, y, batch_size):

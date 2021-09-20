@@ -1,11 +1,12 @@
-use futures::{StreamExt, Stream};
-use geoengine_datatypes::{primitives::{SpatialPartition2D, TimeInstance, TimeInterval}, raster::{GridOrEmpty, Pixel, BaseTile, GridShape}};
+use futures::{StreamExt};
+use geoengine_datatypes::{primitives::{SpatialPartition2D, TimeInstance, TimeInterval}, raster::{GridOrEmpty, Pixel}};
 use crate::engine::{QueryContext, QueryRectangle, RasterQueryProcessor};
-use pyo3::{types::{PyModule, PyUnicode, PyList}};
+use pyo3::{types::{PyModule, PyUnicode}};
 use ndarray::{Array2, Axis,concatenate, stack, ArrayBase, OwnedRepr, Dim};
 use numpy::{PyArray};
 use rand::prelude::*;
 use crate::util::Result;
+use std::time::{Instant};
 
 #[allow(clippy::too_many_arguments)]
 pub async fn imseg_fit<T, C: QueryContext>(
@@ -62,6 +63,16 @@ where
         
     }
     let mut rand_index: usize; 
+    let mut number_of_grids: u64 = 0;
+    let mut number_of_discarded_batches: u32 = 0;
+    let mut error_count: u32 = 0;
+    let mut empty_grid_count: u32 = 0;
+    let mut no_data_claas_count: u32 = 0;
+    let mut time_general_processing: u128 = 0;
+    let mut time_waiting: u128 = 0;
+    let mut time_data_processing: u128 = 0;
+    let mut time_python: u128 = 0;
+    let mut time = Instant::now();
     while !queries.is_empty() {
         let queries_left = queries.len();
         println!("queries left: {:?}", queries_left);
@@ -84,128 +95,113 @@ where
         let final_stream = tile_stream_ir_016.zip(tile_stream_ir_039.zip(tile_stream_ir_087.zip(tile_stream_ir_097.zip(tile_stream_ir_108.zip(tile_stream_ir_120.zip(tile_stream_ir_134.zip(tile_stream_truth)))))));
 
         let mut chunked_stream = final_stream.chunks(batch_size);
+        time_general_processing = time_general_processing + time.elapsed().as_millis();
+        time = Instant::now();
         while let Some(mut vctr) = chunked_stream.next().await {
-        let mut buffer: Vec<(Vec<T>, Vec<T>, Vec<T>, Vec<T>, Vec<T>, Vec<T>, Vec<T>, Vec<u8>)> = Vec::new();
-        let mut tile_size: [usize;2] = [0,0];
-        let mut missing_elements: usize = 0;
+            time_waiting = time_waiting + time.elapsed().as_millis();
+            time = Instant::now();
+            let mut buffer: Vec<(Vec<T>, Vec<T>, Vec<T>, Vec<T>, Vec<T>, Vec<T>, Vec<T>, Vec<u8>)> = Vec::new();
+            let mut tile_size: [usize;2] = [0,0];
+            let missing_elements: usize;
         
-             //TODO What if number of elements less than batch size?
         
-        for _ in 0..batch_size {
-            let (ir_016, (ir_039, (ir_087, (ir_097, (ir_108, (ir_120, (ir_137, truth))))))) = vctr.remove(0);
-            // let a = ir_016.unwrap();
-            // let b = ir_039.unwrap();
-            // let c = ir_087.unwrap();
-            // let d = ir_097.unwrap();
-            // let e = ir_108.unwrap();
-            // let f = ir_120.unwrap();
-            // let g = ir_137.unwrap();
-            match (ir_016, ir_039, ir_087, ir_097, ir_108, ir_120, ir_137, truth) {
-                (Ok(ir_016), Ok(ir_039), Ok(ir_087), Ok(ir_097), Ok(ir_108), Ok(ir_120), Ok(ir_134), Ok(truth)) => {
-                    match (ir_016.grid_array, ir_039.grid_array, ir_087.grid_array, ir_097.grid_array, ir_108.grid_array, ir_120.grid_array, ir_134.grid_array, truth.grid_array) {
-                        (GridOrEmpty::Grid(grid_016), GridOrEmpty::Grid(grid_039),  GridOrEmpty::Grid(grid_087),  GridOrEmpty::Grid(grid_097), GridOrEmpty::Grid(grid_108), GridOrEmpty::Grid(grid_120), GridOrEmpty::Grid(grid_134), GridOrEmpty::Grid(grid_truth)) => {
-                            // println!("016: {:?}", grid_016.data[131000]);
-                            // println!("039: {:?}", grid_039.data[131000]);
-                            // println!("087: {:?}", grid_087.data[131000]);
-                            // println!("097: {:?}", grid_097.data[131000]);
-                            // println!("108: {:?}", grid_108.data[131000]);
-                            // println!("120: {:?}", grid_120.data[131000]);
-                            // println!("134: {:?}", grid_134.data[131000]);
-                            let ndv = grid_truth.data.contains(&0);
-                            if !ndv {
-                                tile_size = grid_016.shape.shape_array;
-                                buffer.push((grid_016.data, grid_039.data, grid_087.data, grid_097.data, grid_108.data, grid_120.data, grid_134.data, grid_truth.data.iter().map(|x| x - 1).collect()));
-                            } else {
-                                println!("No-data value detected");
-                                
+            //TODO What if number of elements less than batch size?
+        
+            for _ in 0..batch_size {
+                let (ir_016, (ir_039, (ir_087, (ir_097, (ir_108, (ir_120, (ir_137, truth))))))) = vctr.remove(0);
+                number_of_grids = number_of_grids + 1;
+                match (ir_016, ir_039, ir_087, ir_097, ir_108, ir_120, ir_137, truth) {
+                    (Ok(ir_016), Ok(ir_039), Ok(ir_087), Ok(ir_097), Ok(ir_108), Ok(ir_120), Ok(ir_134), Ok(truth)) => {
+                        match (ir_016.grid_array, ir_039.grid_array, ir_087.grid_array, ir_097.grid_array, ir_108.grid_array, ir_120.grid_array, ir_134.grid_array, truth.grid_array) {
+                            (GridOrEmpty::Grid(grid_016), GridOrEmpty::Grid(grid_039),  GridOrEmpty::Grid(grid_087),  GridOrEmpty::Grid(grid_097), GridOrEmpty::Grid(grid_108), GridOrEmpty::Grid(grid_120), GridOrEmpty::Grid(grid_134), GridOrEmpty::Grid(grid_truth)) => {
+                            
+                                let ndv = grid_truth.data.contains(&no_data_value);
+                                if !ndv {
+                                    tile_size = grid_016.shape.shape_array;
+                                    buffer.push((grid_016.data, grid_039.data, grid_087.data, grid_097.data, grid_108.data, grid_120.data, grid_134.data, grid_truth.data.iter().map(|x| x - 1).collect()));
+                                } else {
+                                    //println!("No-data value detected");
+                                    no_data_claas_count = no_data_claas_count + 1;
+                                }
+                            
+                            
+                            }, 
+                            _ => {
+                                //println!("SOME ARE EMPTY");
+                                empty_grid_count = empty_grid_count + 1;
                             }
-                            
-                            
-                        }, 
-                        _ => {
-                            println!("SOME ARE EMPTY");
-                            
-                            //if batch is not full we fill it with copies of randomnly selected elements already present(not ideal, just first idea I had)
-                            // buffer.push(buffer[rng.gen_range(0..buffer.len() - 1)].clone());
-                            // missing_elements = missing_elements + 1;
-                            
                         }
+                    },
+                    _ => {
+                        //println!("AN ERROR OCCURED");       
+                        error_count = error_count + 1;
                     }
-                },
-                (Err(e1), Err(e2), Err(e3), Err(e4), Err(e5), Err(e6), Err(e7), Ok(truth)) => {
-                    dbg!(e1);
-                },
-                (Err(e1), Err(e2), Err(e3), Err(e4), Err(e5), Err(e6), Err(e7), Err(truth)) => {
-                    dbg!(e1);
-                },
-                (Ok(e1), Ok(e2), Ok(e3), Ok(e4), Ok(e5), Ok(e6), Ok(e7), Err(truth)) => {
-                    dbg!(truth);
-                },
-                (Err(e1), Ok(e2), Ok(e3), Ok(e4), Ok(e5), Ok(e6), Ok(e7), Ok(truth)) => {
-                    dbg!(e1);
-                },
-                _ => {
-                    println!("AN ERROR OCCURED");
-                            
-                    //if batch is not full we fill it with copies of randomnly selected elements already  present(not ideal, just first idea I had)
-                    // buffer.push(buffer[rng.gen_range(0..buffer.len() - 1)].clone());
-                    // missing_elements = missing_elements + 1;
                 }
             }
-        }
     
         let number_of_elements = buffer.len();
+        missing_elements = batch_size - number_of_elements;
 
-        if number_of_elements != batch_size && number_of_elements > 0{
+        if missing_elements <= batch_size/2 {
             
-            //Filling up missing elements
-            let diff = batch_size - number_of_elements;
-            for _ in 0..diff {
-                
-                buffer.push(buffer[rng.gen_range(0..number_of_elements - 1)].clone());
-                missing_elements = missing_elements + 1;
+            if number_of_elements != batch_size && number_of_elements > 1{
+            
+                //Filling up missing elements
+                let diff = batch_size - number_of_elements;
+                for _ in 0..diff {
+
+                    
+                    buffer.push(buffer[rng.gen_range(0..number_of_elements - 1)].clone());
+                }
             }
-        }
-        //if more than 10% of the batch are copies we discard it alltogether
-        if missing_elements <= batch_size/10 && buffer.len() == batch_size {
+            
+
             let (data_016_init, data_039_init, data_087_init, data_097_init, data_108_init, data_120_init, data_134_init, data_truth_init) = buffer.remove(0);
 
-        let (mut arr_img_batch, mut arr_truth_batch) = create_arrays_from_data(data_016_init, data_039_init, data_087_init, data_097_init, data_108_init, data_120_init, data_134_init, data_truth_init, tile_size);
-        
-        let num_elements = buffer.len();
+            time_general_processing = time_general_processing + time.elapsed().as_millis();
+            time = Instant::now();
 
-        
-        let mut rand_index: usize;
-        for i in 0..(batch_size - 1) {
+            let (mut arr_img_batch, mut arr_truth_batch) = create_arrays_from_data(data_016_init, data_039_init, data_087_init, data_097_init, data_108_init, data_120_init, data_134_init, data_truth_init, tile_size);
             
-            rand_index = 0;
-            if num_elements - i > 0 {
-                rand_index = rng.gen_range(0..num_elements-i);
+            let num_elements = buffer.len();
+        
+                
+            let mut rand_index: usize;
+            for i in 0..(batch_size - 1) {
+                    
+                rand_index = 0;
+                if num_elements - i > 0 {
+                    rand_index = rng.gen_range(0..num_elements-i);
+                }
+                let (data_016, data_039, data_087, data_097, data_108, data_120, data_134, data_truth) = buffer.remove(rand_index);
+                time_general_processing = time_general_processing + time.elapsed().as_millis();
+                time = Instant::now();
+                let (arr_img, arr_truth) = create_arrays_from_data(data_016, data_039, data_087, data_097, data_108, data_120, data_134, data_truth, tile_size);
+        
+                arr_img_batch = concatenate(Axis(0), &[arr_img_batch.view(), arr_img.view()]).unwrap();
+                   
+                arr_truth_batch = concatenate(Axis(0), &[arr_truth_batch.view(), arr_truth.view()]).unwrap();
+                    
+                    
             }
-            let (data_016, data_039, data_087, data_097, data_108, data_120, data_134, data_truth) = buffer.remove(rand_index);
-            let (arr_img, arr_truth) = create_arrays_from_data(data_016, data_039, data_087, data_097, data_108, data_120, data_134, data_truth, tile_size);
-
-            arr_img_batch = concatenate(Axis(0), &[arr_img_batch.view(), arr_img.view()]).unwrap();
-           
-            arr_truth_batch = concatenate(Axis(0), &[arr_truth_batch.view(), arr_truth.view()]).unwrap();
-            
-            
-        }
-
-        //dbg!(&arr_img_batch.shape());
-        //dbg!(&arr_truth_batch.shape());
-
-        let py_img = PyArray::from_owned_array(py, arr_img_batch);
-        let py_truth = PyArray::from_owned_array(py, arr_truth_batch );
-        //TODO change depreciated function
-        let _result = py_mod.call("fit", (py_img, py_truth, batch_size), None).unwrap();
         
+            //dbg!(&arr_img_batch.shape());
+            //dbg!(&arr_truth_batch.shape());
+        
+            let py_img = PyArray::from_owned_array(py, arr_img_batch);
+            let py_truth = PyArray::from_owned_array(py, arr_truth_batch );
+            time_data_processing = time_data_processing + time.elapsed().as_millis();
+            time = Instant::now();
+            //TODO change depreciated function
+            let _result = py_mod.call("fit", (py_img, py_truth, batch_size), None).unwrap();
+            time_python = time_python + time.elapsed().as_millis();
+            time = Instant::now();
+
         } else {
-            println!("Too many missing values!");
+            number_of_discarded_batches = number_of_discarded_batches + 1;
+            //println!("Too many missing values!");
         }
-        
-        
-        
+                
        }
     }
        
@@ -215,6 +211,22 @@ where
     
     //TODO change depreciated function
     let _save = py_mod.call("save", (name, ), None).unwrap();
+    println!("Number of total tiles: {}", number_of_grids);
+    println!("Number of discarded batches: {}", number_of_discarded_batches);
+    println!("Errors: {}", error_count);
+    println!("Empty grids: {}", empty_grid_count);
+    println!("Claas files with no data: {}", no_data_claas_count);
+    println!("Time general processing: {}", time_general_processing);
+    println!("Time waiting for data: {}", time_waiting);
+    println!("Time data processing: {}", time_data_processing);
+    println!("Time python: {}", time_python);
+    
+    
+    
+    
+    
+    
+    
 
     Ok(())
     
@@ -269,22 +281,16 @@ mod tests {
     };
  
 
-    use geoengine_datatypes::{util::Identifier, raster::{RasterPropertiesEntryType, RasterPropertiesEntry}};
-    use std::{borrow::Borrow, path::PathBuf};
-    use crate::{engine::{ExecutionContext, MockExecutionContext,MockQueryContext, RasterOperator, RasterResultDescriptor}, source::{FileNotFoundHandling, GdalDatasetParameters, GdalMetaDataRegular, GdalSource, GdalSourceParameters, GdalSourceProcessor, GdalMetadataMapping}};
-    use crate::processing::meteosat::radiance::{Radiance, RadianceProcessor};
-    use crate::processing::meteosat::{offset_key, slope_key, satellite_key, channel_key};
-    use crate::processing::meteosat::temperature::{Temperature, TemperatureProcessor};
-    use crate::processing::meteosat::radiance::RadianceParams;
-    use crate::processing::meteosat::temperature::TemperatureParams;
-    use crate::processing::meteosat::reflectance::{Reflectance, ReflectanceParams};
-    use crate::processing::expression::{Expression, ExpressionParams, ExpressionSources};
+    use geoengine_datatypes::{util::Identifier, raster::{RasterPropertiesEntryType}};
+    use std::{path::PathBuf};
+    use crate::{engine::{MockExecutionContext,MockQueryContext, RasterOperator, RasterResultDescriptor}, source::{FileNotFoundHandling, GdalDatasetParameters, GdalMetaDataRegular, GdalSource, GdalSourceParameters, GdalMetadataMapping}};
+    use crate::processing::{expression::{Expression, ExpressionParams, ExpressionSources}, meteosat::{offset_key, slope_key, satellite_key, channel_key, radiance::{Radiance, RadianceParams}, temperature::{Temperature, TemperatureParams}, reflectance::{Reflectance, ReflectanceParams}}};
     use crate::engine::SingleRasterSource;
 
     use super::*;
 
     #[tokio::test]
-    async fn imseg_meaningless() {
+    async fn imseg_fit_test() {
         let ctx = MockQueryContext::default();
         //tile size has to be a power of 2
         let tiling_specification =
@@ -634,7 +640,7 @@ mod tests {
         });
 
         let exp_ir_016 = RasterOperator::boxed(Expression{
-            params: ExpressionParams { expression: "(A-0.15282721917305925)/0.040190788161123925".to_string(), output_type: RasterDataType::F32, output_no_data_value: no_data_value.unwrap(), output_measurement: Some(Measurement::Continuous{
+            params: ExpressionParams { expression: "(A-0.15282721917305925)/0.20047640300325603".to_string(), output_type: RasterDataType::F32, output_no_data_value: no_data_value.unwrap(), output_measurement: Some(Measurement::Continuous{
                 measurement: "raw".to_string(),
                 unit: None,
             })
@@ -670,7 +676,7 @@ mod tests {
         });
 
         let exp_ir_039 = RasterOperator::boxed(Expression{
-            params: ExpressionParams { expression: "(A-276.72667474831303)/255.45368321180788".to_string(), output_type: RasterDataType::F32, output_no_data_value: no_data_value.unwrap(), output_measurement: Some(Measurement::Continuous{
+            params: ExpressionParams { expression: "(A-276.72667474831303)/15.982918482298778".to_string(), output_type: RasterDataType::F32, output_no_data_value: no_data_value.unwrap(), output_measurement: Some(Measurement::Continuous{
                 measurement: "raw".to_string(),
                 unit: None,
             })
@@ -705,7 +711,7 @@ mod tests {
         });
 
         let exp_ir_087 = RasterOperator::boxed(Expression{
-            params: ExpressionParams { expression: "(A-267.92274094012157)/248.48508230328764".to_string(), output_type: RasterDataType::F32, output_no_data_value: no_data_value.unwrap(), output_measurement: Some(Measurement::Continuous{
+            params: ExpressionParams { expression: "(A-267.92274094012157)/15.763409602725156".to_string(), output_type: RasterDataType::F32, output_no_data_value: no_data_value.unwrap(), output_measurement: Some(Measurement::Continuous{
                 measurement: "raw".to_string(),
                 unit: None,
             })
@@ -740,7 +746,7 @@ mod tests {
         });
 
         let exp_ir_097 = RasterOperator::boxed(Expression{
-            params: ExpressionParams { expression: "(A-245.4006454137375)/93.02522861255343".to_string(), output_type: RasterDataType::F32, output_no_data_value: no_data_value.unwrap(), output_measurement: Some(Measurement::Continuous{
+            params: ExpressionParams { expression: "(A-245.4006454137375)/9.644958714922186".to_string(), output_type: RasterDataType::F32, output_no_data_value: no_data_value.unwrap(), output_measurement: Some(Measurement::Continuous{
                 measurement: "raw".to_string(),
                 unit: None,
             })
@@ -775,7 +781,7 @@ mod tests {
         });
 
         let exp_ir_108 = RasterOperator::boxed(Expression{
-            params: ExpressionParams { expression: "(A-269.95727803541155)/286.4454521514864".to_string(), output_type: RasterDataType::F32, output_no_data_value: no_data_value.unwrap(), output_measurement: Some(Measurement::Continuous{
+            params: ExpressionParams { expression: "(A-269.95727803541155)/16.92469947004928".to_string(), output_type: RasterDataType::F32, output_no_data_value: no_data_value.unwrap(), output_measurement: Some(Measurement::Continuous{
                 measurement: "raw".to_string(),
                 unit: None,
             })
@@ -810,7 +816,7 @@ mod tests {
             }
         });
         let exp_ir_120 = RasterOperator::boxed(Expression{
-            params: ExpressionParams { expression: "(A-268.69063154766155)/287.7463867786664".to_string(), output_type: RasterDataType::F32, output_no_data_value: no_data_value.unwrap(), output_measurement: Some(Measurement::Continuous{
+            params: ExpressionParams { expression: "(A-268.69063154766155)/16.963088951563815".to_string(), output_type: RasterDataType::F32, output_no_data_value: no_data_value.unwrap(), output_measurement: Some(Measurement::Continuous{
                 measurement: "raw".to_string(),
                 unit: None,
             })
@@ -844,7 +850,7 @@ mod tests {
             }
         });
         let exp_ir_134 = RasterOperator::boxed(Expression{
-            params: ExpressionParams { expression: "(A-252.1465931705522)/124.80137314828508".to_string(), output_type: RasterDataType::F32, output_no_data_value: no_data_value.unwrap(), output_measurement: Some(Measurement::Continuous{
+            params: ExpressionParams { expression: "(A-252.1465931705522)/11.171453493090551".to_string(), output_type: RasterDataType::F32, output_no_data_value: no_data_value.unwrap(), output_measurement: Some(Measurement::Continuous{
                 measurement: "raw".to_string(),
                 unit: None,
             })
@@ -886,12 +892,13 @@ mod tests {
 
         let x = imseg_fit(proc_ir_016, proc_ir_039, proc_ir_087, proc_ir_097, proc_ir_108, proc_ir_120, proc_ir_134,proc_claas, QueryRectangle {
             spatial_bounds: query_bbox,
-            time_interval: TimeInterval::new(1_388_574_000_000, 1_388_574_000_000 + 900_000_000)
+            time_interval: TimeInterval::new(1_356_994_800_000, 1_388_444_400_000)
                 .unwrap(),
             spatial_resolution: query_spatial_resolution,
         }, ctx,
-    16 as usize,
-1 as usize,
+    24 as usize,
+64 as usize,
 0 as u8).await.unwrap();
     }
 }
+//1_388_444_400_000
