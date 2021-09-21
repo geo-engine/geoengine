@@ -27,7 +27,7 @@ where
                     .route(web::delete().to(remove_permission_handler::<C>)),
             )
             .service(
-                web::resource("/")
+                web::resource("")
                     .route(web::post().to(handlers::projects::create_project_handler::<C>)),
             )
             .service(
