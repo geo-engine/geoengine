@@ -1,0 +1,26 @@
+file format : Idrisi Raster A.1
+file title  : 
+data type   : byte
+file type   : binary
+columns     : 450
+rows        : 450
+ref. system : MOD13A2_M_NDVI_2014-04-01_tile-20
+ref. units  : m
+unit dist.  : 1
+min. X      : 0.0
+max. X      : 5000000.0
+min. Y      : 5000000.0
+max. Y      : 10000000.0
+pos'n error : unspecified
+resolution  : 11111.111111111111
+min. value  : 1
+max. value  : 255
+display min : 1
+display max : 255
+value units : unspecified
+value error : unspecified
+flag value  : 0
+flag def'n  : missing data
+legend cats : 0
+lineage     : 
+comment     : 
