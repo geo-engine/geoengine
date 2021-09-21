@@ -39,6 +39,7 @@ where
     let name = PyUnicode::new(py, "second");
     //TODO change depreciated function
     let _init = py_mod.call("initUnet", (4,name, batch_size), None).unwrap();
+    let _check_model_size = py_mod.call("get_model_memory_usage", (batch_size, ), None).unwrap();
     //since every 15 minutes an image is available...
     let step: i64 = (batch_size as i64 * 900_000) * batches_per_query as i64;
     println!("Step: {}", step);
@@ -83,6 +84,8 @@ where
         }
         
         let the_chosen_one = queries.remove(rand_index);
+        println!("{:?}", the_chosen_one.time_interval.start().as_naive_date_time().unwrap());
+        
         let tile_stream_ir_016 = processor_ir_016.raster_query(the_chosen_one, &query_ctx).await?;
         let tile_stream_ir_039 = processor_ir_039.raster_query(the_chosen_one, &query_ctx).await?;
         let tile_stream_ir_087 = processor_ir_087.raster_query(the_chosen_one, &query_ctx).await?;
@@ -144,7 +147,7 @@ where
 
         if missing_elements <= batch_size/2 {
             
-            if number_of_elements != batch_size && number_of_elements > 1{
+            if number_of_elements != batch_size && number_of_elements > 1 {
             
                 //Filling up missing elements
                 let diff = batch_size - number_of_elements;
@@ -298,7 +301,7 @@ mod tests {
 
         let query_spatial_resolution = SpatialResolution::new(3000.4, 3000.4).unwrap();
 
-        let query_bbox = SpatialPartition2D::new((0.0, 30000.0).into(), (30000.0, 0.0).into()).unwrap();
+        let query_bbox = SpatialPartition2D::new((-802607.8468561172485352, 5108186.3898038864135742).into(), (1498701.3813257217407227, 3577980.7752370834350586).into()).unwrap();
         let no_data_value = Some(0.);
         let ir_016 = GdalMetaDataRegular{
             result_descriptor: RasterResultDescriptor{
@@ -897,7 +900,7 @@ mod tests {
             spatial_resolution: query_spatial_resolution,
         }, ctx,
     24 as usize,
-64 as usize,
+1 as usize,
 0 as u8).await.unwrap();
     }
 }

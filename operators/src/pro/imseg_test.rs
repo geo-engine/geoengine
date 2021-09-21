@@ -1,10 +1,9 @@
-use futures::{StreamExt, Stream};
-use geoengine_datatypes::{primitives::{SpatialPartition2D, TimeInstance, TimeInterval}, raster::{BaseTile, GridOrEmpty, GridShape, Pixel, grid_idx_iter_2d}};
+use futures::{StreamExt};
+use geoengine_datatypes::{primitives::{SpatialPartition2D}, raster::{GridOrEmpty}};
 use crate::engine::{QueryContext, QueryRectangle, RasterQueryProcessor};
-use pyo3::{types::{PyModule, PyUnicode, PyList}};
-use ndarray::{Array2, Axis,concatenate, stack, ArrayBase, OwnedRepr, Dim};
+use pyo3::{types::{PyModule}};
+use ndarray::{Array2, Axis, stack, ArrayBase, OwnedRepr, Dim};
 use numpy::{PyArray};
-use rand::prelude::*;
 use crate::util::Result;
 
 #[allow(clippy::too_many_arguments)]
@@ -16,36 +15,20 @@ pub async fn imseg_fit<C: QueryContext>(
     processor_ir_108: Box<dyn RasterQueryProcessor<RasterType = f32>>,
     processor_ir_120: Box<dyn RasterQueryProcessor<RasterType = f32>>,
     processor_ir_134: Box<dyn RasterQueryProcessor<RasterType = f32>>,
+    processor_truth: Box<dyn RasterQueryProcessor<RasterType = u8>>,
     query_rect: QueryRectangle<SpatialPartition2D>,
     query_ctx: C,
 ) -> Result<()>
 {
 
-    let mut counter_016: f64 = 0.0;
-    let mut counter_039: f64 = 0.0;
-    let mut counter_087: f64 = 0.0;
-    let mut counter_097: f64 = 0.0;
-    let mut counter_108: f64 = 0.0;
-    let mut counter_120: f64 = 0.0;
-    let mut counter_134: f64 = 0.0;
-    // let mut counter_max_016: f32 = 0.0;
-    // let mut counter_max_039: f32 = 0.0;
-    // let mut counter_max_087: f32 = 0.0;
-    // let mut counter_max_097: f32 = 0.0;
-    // let mut counter_max_108: f32 = 0.0;
-    // let mut counter_max_120: f32 = 0.0;
-    // let mut counter_max_134: f32 = 0.0;
-    // let mut counter_min_016: f32 = 0.0;
-    // let mut counter_min_039: f32 = 0.0;
-    // let mut counter_min_087: f32 = 0.0;
-    // let mut counter_min_097: f32 = 0.0;
-    // let mut counter_min_108: f32 = 0.0;
-    // let mut counter_min_120: f32 = 0.0;
-    // let mut counter_min_134: f32 = 0.0;
-    let mut counter: f64 = 0.0;
+    //For some reason we need that now...
+    pyo3::prepare_freethreaded_python();
+    let gil = pyo3::Python::acquire_gil();
+    let py = gil.python();
 
-    
-    
+
+    let py_mod = PyModule::from_code(py, include_str!("tf_v2.py"),"filename.py", "modulename").unwrap();
+
         
     let tile_stream_ir_016 = processor_ir_016.raster_query(query_rect, &query_ctx).await?;
     let tile_stream_ir_039 = processor_ir_039.raster_query(query_rect, &query_ctx).await?;
@@ -54,82 +37,40 @@ pub async fn imseg_fit<C: QueryContext>(
     let tile_stream_ir_108 = processor_ir_108.raster_query(query_rect, &query_ctx).await?;
     let tile_stream_ir_120 = processor_ir_120.raster_query(query_rect, &query_ctx).await?;
     let tile_stream_ir_134 = processor_ir_134.raster_query(query_rect, &query_ctx).await?;
+    let tile_stream_truth = processor_truth.raster_query(query_rect, &query_ctx).await?;
 
-    let mut final_stream = tile_stream_ir_016.zip(tile_stream_ir_039.zip(tile_stream_ir_087.zip(tile_stream_ir_097.zip(tile_stream_ir_108.zip(tile_stream_ir_120.zip(tile_stream_ir_134))))));
-    
-    while let Some((ir_016, (ir_039, (ir_087, (ir_097, (ir_108, (ir_120, ir_134 ))))))) = final_stream.next().await {
-        match (ir_016, ir_039, ir_087, ir_097, ir_108, ir_120, ir_134) {
-            (Ok(ir_016), Ok(ir_039), Ok(ir_087), Ok(ir_097), Ok(ir_108), Ok(ir_120), Ok(ir_134)) => {
-                match (ir_016.grid_array, ir_039.grid_array, ir_087.grid_array, ir_097.grid_array, ir_108.grid_array, ir_120.grid_array, ir_134.grid_array) {
-                    (GridOrEmpty::Grid(grid_016), GridOrEmpty::Grid(grid_039),  GridOrEmpty::Grid(grid_087),  GridOrEmpty::Grid(grid_097), GridOrEmpty::Grid(grid_108), GridOrEmpty::Grid(grid_120), GridOrEmpty::Grid(grid_134)) => {
+    let mut final_stream = tile_stream_ir_016.zip(tile_stream_ir_039.zip(tile_stream_ir_087.zip(tile_stream_ir_097.zip(tile_stream_ir_108.zip(tile_stream_ir_120.zip(tile_stream_ir_134.zip(tile_stream_truth)))))));
+    let mut i = 0;
+    while let Some((ir_016, (ir_039, (ir_087, (ir_097, (ir_108, (ir_120, (ir_134, truth)))))))) = final_stream.next().await {
+        match (ir_016, ir_039, ir_087, ir_097, ir_108, ir_120, ir_134, truth) {
+            (Ok(ir_016), Ok(ir_039), Ok(ir_087), Ok(ir_097), Ok(ir_108), Ok(ir_120), Ok(ir_134), Ok(truth)) => {
+                match (ir_016.grid_array, ir_039.grid_array, ir_087.grid_array, ir_097.grid_array, ir_108.grid_array, ir_120.grid_array, ir_134.grid_array, truth.grid_array) {
+                    (GridOrEmpty::Grid(grid_016), GridOrEmpty::Grid(grid_039),  GridOrEmpty::Grid(grid_087),  GridOrEmpty::Grid(grid_097), GridOrEmpty::Grid(grid_108), GridOrEmpty::Grid(grid_120), GridOrEmpty::Grid(grid_134), GridOrEmpty::Grid(grid_truth)) => {
 
-                        let data_016: Vec<f32> = grid_016.data;
-                        let data_039: Vec<f32> = grid_039.data;
-                        let data_087: Vec<f32> = grid_087.data;
-                        let data_097: Vec<f32> = grid_097.data;
-                        let data_108: Vec<f32> = grid_108.data;
-                        let data_120: Vec<f32> = grid_120.data;
-                        let data_134: Vec<f32> = grid_134.data;
+                
+                        let tile_size = grid_016.shape.shape_array;
 
-                        counter = counter + data_016.len() as f64;
+                        let (arr_img, arr_truth) = create_arrays_from_data(grid_016.data, grid_039.data, grid_087.data, grid_097.data, grid_108.data, grid_120.data, grid_134.data, grid_truth.data, tile_size);
 
-                        let sum_016: f64 = data_016.iter().sum::<f32>() as f64;
-                        let sum_039: f64 = data_039.iter().sum::<f32>() as f64;
-                        let sum_087: f64 = data_087.iter().sum::<f32>() as f64;
-                        let sum_097: f64 = data_097.iter().sum::<f32>() as f64;
-                        let sum_108: f64 = data_108.iter().sum::<f32>() as f64;
-                        let sum_120: f64 = data_120.iter().sum::<f32>() as f64;
-                        let sum_134: f64 = data_134.iter().sum::<f32>() as f64;
-
-                        // for element in grid_016.data.iter() {
-                        //     counter_016 = counter_016 + (*element as f64 - 0.06765334339613764).powi(2);
-                        // }
-
-                        // for element in grid_039.data.iter() {
-                        //     counter_039 = counter_039 + (*element as f64 - 291.27181289672853).powi(2);
-                        // }
-
-                        // for element in grid_087.data.iter() {
-                        //     counter_087 = counter_087 + (*element as f64 - 287.8494892578125).powi(2);
-                        // }
-
-                        // for element in grid_097.data.iter() {
-                        //     counter_097 = counter_097 + (*element as f64 - 270.32399737548826).powi(2);
-                        // }
-
-                        // for element in grid_108.data.iter() {
-                        //     counter_108 = counter_108 + (*element as f64 - 289.4745503845215).powi(2);
-                        // }
-
-                        // for element in grid_120.data.iter() {
-                        //     counter_120 = counter_120 + (*element as f64 - 287.6195733337402).powi(2);
-                        // }
-
-                        // for element in grid_134.data.iter() {
-                        //     counter_134 = counter_134 + (*element as f64 - 266.97426583862307).powi(2);
-                        // }
+                        let py_img = PyArray::from_owned_array(py, arr_img);
+                        let py_truth = PyArray::from_owned_array(py, arr_truth);
+                        let _result = py_mod.call("test", (py_img, py_truth, i), None).unwrap();
+                        i = i + 1;
+                        
                         
                     },
                     _ => {
-
+                        println!("Some were empty");
+                        
                     }
                 }
             },
             _ => {
-
+                println!("An error occured!");
             }
         }
 
     }
-        
-    
-    println!("IR-016 mean: {}", counter_016/counter);
-    println!("IR-039 mean: {}", counter_039/counter);
-    println!("IR-087 mean: {}", counter_087/counter);
-    println!("IR-097 mean: {}", counter_097/counter);
-    println!("IR-108 mean: {}", counter_108/counter);
-    println!("IR-120 mean: {}", counter_120/counter);
-    println!("IR-134 mean: {}", counter_134/counter);
 
     
     
@@ -187,16 +128,10 @@ mod tests {
     };
  
 
-    use geoengine_datatypes::{util::Identifier, raster::{RasterPropertiesEntryType, RasterPropertiesEntry}};
-    use std::{borrow::Borrow, path::PathBuf};
-    use crate::{engine::{ExecutionContext, MockExecutionContext,MockQueryContext, RasterOperator, RasterResultDescriptor}, source::{FileNotFoundHandling, GdalDatasetParameters, GdalMetaDataRegular, GdalSource, GdalSourceParameters, GdalSourceProcessor, GdalMetadataMapping}};
-    use crate::processing::meteosat::radiance::{Radiance, RadianceProcessor};
-    use crate::processing::meteosat::{offset_key, slope_key, satellite_key, channel_key};
-    use crate::processing::meteosat::temperature::{Temperature, TemperatureProcessor};
-    use crate::processing::meteosat::radiance::RadianceParams;
-    use crate::processing::meteosat::temperature::TemperatureParams;
-    use crate::processing::meteosat::reflectance::{Reflectance, ReflectanceParams};
-    use crate::processing::expression::{Expression, ExpressionParams, ExpressionSources};
+    use geoengine_datatypes::{util::Identifier, raster::{RasterPropertiesEntryType}};
+    use std::{path::PathBuf};
+    use crate::{engine::{MockExecutionContext,MockQueryContext, RasterOperator, RasterResultDescriptor}, source::{FileNotFoundHandling, GdalDatasetParameters, GdalMetaDataRegular, GdalSource, GdalSourceParameters,GdalMetadataMapping}};
+    use crate::processing::{expression::{Expression, ExpressionParams, ExpressionSources}, meteosat::{offset_key, slope_key, satellite_key, channel_key, radiance::{Radiance, RadianceParams}, temperature::{Temperature, TemperatureParams}, reflectance::{Reflectance, ReflectanceParams}}};
     use crate::engine::SingleRasterSource;
 
     use super::*;
@@ -210,7 +145,7 @@ mod tests {
 
         let query_spatial_resolution = SpatialResolution::new(3000.4, 3000.4).unwrap();
 
-        let query_bbox = SpatialPartition2D::new((0.0, 30000.0).into(), (30000.0, 0.0).into()).unwrap();
+        let query_bbox = SpatialPartition2D::new((-802607.8468561172485352, 5108186.3898038864135742).into(), (1498701.3813257217407227, 3577980.7752370834350586).into()).unwrap();
         let no_data_value = Some(0.);
         
         let ir_016 = GdalMetaDataRegular{
@@ -777,28 +712,29 @@ mod tests {
         let proc_ir_134 = exp_ir_134
         .initialize(&mc).await.unwrap().query_processor().unwrap().get_f32().unwrap();
 
+        let id_claas = DatasetId::Internal{
+            dataset_id: InternalDatasetId::new(),
+        };
 
-        let x = imseg_fit(proc_ir_016, proc_ir_039,proc_ir_087, proc_ir_097, proc_ir_108, proc_ir_120, proc_ir_134, QueryRectangle {
+        let op_claas = Box::new(GdalSource{
+            params: GdalSourceParameters{
+                dataset: id_claas.clone(),
+            }
+        });
+
+        mc.add_meta_data(id_claas, Box::new(claas.clone()));
+
+        
+        let proc_claas = op_claas
+        .initialize(&mc).await.unwrap().query_processor().unwrap().get_u8().unwrap();
+
+
+        let _x = imseg_fit(proc_ir_016, proc_ir_039,proc_ir_087, proc_ir_097, proc_ir_108, proc_ir_120, proc_ir_134, proc_claas, QueryRectangle {
             spatial_bounds: query_bbox,
-            time_interval: TimeInterval::new(1_356_994_800_000, 1_388_444_400_000)
+            time_interval: TimeInterval::new(1_401_618_600_000, 1_401_618_600_000 + 1000)
                 .unwrap(),
             spatial_resolution: query_spatial_resolution,
         }, ctx,
     ).await.unwrap();
     }
 }
-// IR-016 mean: 0.06765334339613764                                                                                               │
-// IR-039 mean: 291.27181289672853                                                                                                │
-// IR-087 mean: 287.8494892578125                                                                                                 │
-// IR-097 mean: 270.32399737548826                                                                                                │
-// IR-108 mean: 289.4745503845215                                                                                                 │
-// IR-120 mean: 287.6195733337402                                                                                                 │
-// IR-134 mean: 266.97426583862307 
-
-// IR-016 variance: 0.010938498825106679
-// IR-039 variance: 123.95758108622225
-// IR-087 variance: 136.4260473501378
-// IR-097 variance: 72.12720347396392
-// IR-108 variance: 163.895403511383
-// IR-120 variance: 173.17902432402406
-// IR-134 mean: 79.90338647057509
