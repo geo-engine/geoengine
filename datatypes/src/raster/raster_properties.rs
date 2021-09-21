@@ -8,7 +8,7 @@ use std::convert::TryFrom;
 use std::fmt;
 use std::fmt::{Display, Formatter};
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Default)]
 pub struct RasterProperties {
     pub scale: Option<f64>,
     pub offset: Option<f64>,
@@ -42,17 +42,6 @@ impl RasterProperties {
             })?
             .to_string();
         Ok(s)
-    }
-}
-
-impl Default for RasterProperties {
-    fn default() -> Self {
-        RasterProperties {
-            band_name: None,
-            scale: None,
-            offset: None,
-            properties_map: HashMap::new(),
-        }
     }
 }
 

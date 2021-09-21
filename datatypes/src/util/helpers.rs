@@ -1,4 +1,4 @@
-/// This macro allows comparing float slices using [float_cmp::approx_eq].
+/// This macro allows comparing float slices using [`float_cmp::approx_eq`].
 #[macro_export]
 macro_rules! assert_approx_eq {
     ($left:expr, $right:expr $(,)?) => ({

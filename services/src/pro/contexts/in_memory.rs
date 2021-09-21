@@ -25,7 +25,6 @@ pub struct ProInMemoryContext {
     project_db: Db<ProHashMapProjectDb>,
     workflow_registry: Db<HashMapRegistry>,
     dataset_db: Db<ProHashMapDatasetDb>,
-    session: Option<UserSession>,
     thread_pool: Arc<ThreadPool>,
 }
 

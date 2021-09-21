@@ -314,8 +314,8 @@ pub struct Distribution {
 #[derive(Deserialize, Debug, Clone)]
 #[serde(rename_all = "camelCase")]
 pub struct Author {
-    family_name: String,
-    given_name: String,
+    pub family_name: String,
+    pub given_name: String,
 }
 
 /// Describes the spatial property of a dataset

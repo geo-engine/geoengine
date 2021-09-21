@@ -12,7 +12,6 @@ pub struct Grid<C: CircleRadiusModel> {
     offset: Coordinate2D,
     cell_width: f64,
     number_of_horizontal_cells: usize,
-    number_of_vertical_cells: usize,
     cells: SeparateChainingHashMap<u16, CircleOfPoints>,
     radius_model: C,
 }
@@ -27,12 +26,13 @@ impl<C: CircleRadiusModel> Grid<C> {
         let map_height = bbox.size_y();
 
         let mut number_of_horizontal_cells = (map_width / cell_width).ceil() as usize;
-        let mut number_of_vertical_cells = (map_height / cell_width).ceil() as usize;
+        let number_of_vertical_cells = (map_height / cell_width).ceil() as usize;
 
         if (number_of_horizontal_cells * number_of_vertical_cells) > 256 * 256 {
             // cap the number of cells to fit in a u16
             number_of_horizontal_cells = number_of_horizontal_cells.max(256);
-            number_of_vertical_cells = number_of_vertical_cells.max(256);
+
+            // since we don't store `number_of_vertical_cells`, we don't need to update it
         }
 
         let offset_x = (bbox.lower_left().x / cell_width).floor() * cell_width;
@@ -45,7 +45,6 @@ impl<C: CircleRadiusModel> Grid<C> {
             },
             cell_width,
             number_of_horizontal_cells,
-            number_of_vertical_cells,
             cells: SeparateChainingHashMap::new(),
             radius_model,
         }

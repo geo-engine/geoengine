@@ -106,9 +106,9 @@ impl RasterDb {
 #[derive(Deserialize, Debug)]
 struct RasterDbs {
     rasterdbs: Vec<RasterDb>,
-    #[serde(deserialize_with = "string_or_string_array", default)]
-    tags: Vec<String>,
-    session: String,
+    // #[serde(deserialize_with = "string_or_string_array", default)]
+    // tags: Vec<String>, // TODO: use
+    // session: String, // TODO: incorporate into requests
 }
 
 #[async_trait]

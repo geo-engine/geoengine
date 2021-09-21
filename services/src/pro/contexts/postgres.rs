@@ -38,7 +38,6 @@ where
     user_db: Db<PostgresUserDb<Tls>>,
     project_db: Db<PostgresProjectDb<Tls>>,
     workflow_registry: Db<PostgresWorkflowRegistry<Tls>>,
-    session: Option<UserSession>,
 }
 
 impl<Tls> PostgresContext<Tls>
@@ -59,7 +58,6 @@ where
             user_db: Arc::new(RwLock::new(PostgresUserDb::new(pool.clone()))),
             project_db: Arc::new(RwLock::new(PostgresProjectDb::new(pool.clone()))),
             workflow_registry: Arc::new(RwLock::new(PostgresWorkflowRegistry::new(pool.clone()))),
-            session: None,
         })
     }
 

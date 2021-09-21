@@ -283,7 +283,6 @@ impl Add<OgrSourceDurationSpec> for TimeInstance {
 pub struct OgrSourceState {
     dataset_information:
         Box<dyn MetaData<OgrSourceDataset, VectorResultDescriptor, VectorQueryRectangle>>,
-    params: OgrSourceParameters,
 }
 
 pub struct InitializedOgrSource {
@@ -308,7 +307,6 @@ impl VectorOperator for OgrSource {
             result_descriptor: info.result_descriptor().await?,
             state: OgrSourceState {
                 dataset_information: info,
-                params: self.params,
             },
         };
 
