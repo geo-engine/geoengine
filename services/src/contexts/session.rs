@@ -82,9 +82,11 @@ impl FromRequest for SimpleSession {
             Ok(token) => token,
             Err(error) => return Box::pin(err(error)),
         };
-        let ctx = req.app_data::<web::Data<InMemoryContext>>().expect(
-            "InMemoryContext must be available",
-        ).get_ref().clone();
+        let ctx = req
+            .app_data::<web::Data<InMemoryContext>>()
+            .expect("InMemoryContext must be available")
+            .get_ref()
+            .clone();
         async move { ctx.session_by_id(token).await.map_err(Into::into) }.boxed_local()
     }
 }
