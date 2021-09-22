@@ -130,52 +130,36 @@ impl DatasetProvider for Nature40DataProvider {
 
         for (db, dataset) in raster_dbs.rasterdbs.iter().zip(datasets) {
             if let Ok(dataset) = dataset {
-                let (dataset, band_labels, time_positions) =
+                let (dataset, band_labels, _time_positions) =
                     self.get_band_labels_and_time_positions(dataset).await?;
 
-                let mut time_indexes = 1;
-                let mut time_layer = false;
-
-                if !time_positions.is_empty() {
-                    time_indexes = time_positions.len();
-                    time_layer = true;
-                }
-
-                for time_index in 0..time_indexes {
-                    for band_index in 1..=dataset.raster_count() {
-                        let dataset_id = if time_layer {
-                            format!("{}:{}:{}", db.name.clone(), band_index, time_index)
-                        } else {
-                            format!("{}:{}", db.name.clone(), band_index)
-                        };
-
-                        if let Ok(result_descriptor) =
-                            raster_descriptor_from_dataset(&dataset, band_index, None)
-                        {
-                            listing.push(Ok(DatasetListing {
-                                id: DatasetId::External(ExternalDatasetId {
-                                    provider_id: self.id,
-                                    dataset_id: dataset_id.to_string(),
-                                }),
-                                name: db.title.clone(),
-                                description: format!(
-                                    "Band {}: {}",
-                                    band_index,
-                                    band_labels
-                                        .get((band_index - 1) as usize)
-                                        .unwrap_or(&"".to_owned())
-                                ),
-                                tags: db.tags.clone(),
-                                source_operator: "GdalSource".to_owned(),
-                                result_descriptor: TypedResultDescriptor::Raster(result_descriptor),
-                                symbology: None, // TODO: build symbology
-                            }));
-                        } else {
-                            info!(
-                                "Could not create restult descriptor for band {} of {}",
-                                band_index, db.name
-                            );
-                        }
+                for band_index in 1..=dataset.raster_count() {
+                    if let Ok(result_descriptor) =
+                        raster_descriptor_from_dataset(&dataset, band_index, None)
+                    {
+                        listing.push(Ok(DatasetListing {
+                            id: DatasetId::External(ExternalDatasetId {
+                                provider_id: self.id,
+                                dataset_id: format!("{}:{}", db.name.clone(), band_index),
+                            }),
+                            name: db.title.clone(),
+                            description: format!(
+                                "Band {}: {}",
+                                band_index,
+                                band_labels
+                                    .get((band_index - 1) as usize)
+                                    .unwrap_or(&"".to_owned())
+                            ),
+                            tags: db.tags.clone(),
+                            source_operator: "GdalSource".to_owned(),
+                            result_descriptor: TypedResultDescriptor::Raster(result_descriptor),
+                            symbology: None, // TODO: build symbology
+                        }));
+                    } else {
+                        info!(
+                            "Could not create restult descriptor for band {} of {}",
+                            band_index, db.name
+                        );
                     }
                 }
             } else {
@@ -980,7 +964,7 @@ mod tests {
                             "2cb964d5-b9fa-4f8f-ab6f-f6c7fb47d4cd"
                         )
                         .unwrap(),
-                        dataset_id: "uas_orthomosaics_2020:1:0".to_owned()
+                        dataset_id: "uas_orthomosaics_2020:1".to_owned()
                     }),
                     name: "UAS Orthomosaics Fall 2020".to_owned(),
                     description: "Band 1: red".to_owned(),
@@ -1004,7 +988,7 @@ mod tests {
                             "2cb964d5-b9fa-4f8f-ab6f-f6c7fb47d4cd"
                         )
                         .unwrap(),
-                        dataset_id: "uas_orthomosaics_2020:2:0".to_owned()
+                        dataset_id: "uas_orthomosaics_2020:2".to_owned()
                     }),
                     name: "UAS Orthomosaics Fall 2020".to_owned(),
                     description: "Band 2: green".to_owned(),
@@ -1028,79 +1012,7 @@ mod tests {
                             "2cb964d5-b9fa-4f8f-ab6f-f6c7fb47d4cd"
                         )
                         .unwrap(),
-                        dataset_id: "uas_orthomosaics_2020:3:0".to_owned()
-                    }),
-                    name: "UAS Orthomosaics Fall 2020".to_owned(),
-                    description: "Band 3: blue".to_owned(),
-                    tags: vec!["UAV".to_owned(), "natur40".to_owned()],
-                    source_operator: "GdalSource".to_owned(),
-                    result_descriptor: TypedResultDescriptor::Raster(RasterResultDescriptor {
-                        data_type: RasterDataType::F32,
-                        spatial_reference: SpatialReference::new(
-                            SpatialReferenceAuthority::Epsg,
-                            25832
-                        )
-                        .into(),
-                        measurement: Measurement::Unitless,
-                        no_data_value: None
-                    }),
-                    symbology: None
-                },
-                DatasetListing {
-                    id: DatasetId::External(ExternalDatasetId {
-                        provider_id: DatasetProviderId::from_str(
-                            "2cb964d5-b9fa-4f8f-ab6f-f6c7fb47d4cd"
-                        )
-                        .unwrap(),
-                        dataset_id: "uas_orthomosaics_2020:1:1".to_owned()
-                    }),
-                    name: "UAS Orthomosaics Fall 2020".to_owned(),
-                    description: "Band 1: red".to_owned(),
-                    tags: vec!["UAV".to_owned(), "natur40".to_owned()],
-                    source_operator: "GdalSource".to_owned(),
-                    result_descriptor: TypedResultDescriptor::Raster(RasterResultDescriptor {
-                        data_type: RasterDataType::F32,
-                        spatial_reference: SpatialReference::new(
-                            SpatialReferenceAuthority::Epsg,
-                            25832
-                        )
-                        .into(),
-                        measurement: Measurement::Unitless,
-                        no_data_value: None
-                    }),
-                    symbology: None
-                },
-                DatasetListing {
-                    id: DatasetId::External(ExternalDatasetId {
-                        provider_id: DatasetProviderId::from_str(
-                            "2cb964d5-b9fa-4f8f-ab6f-f6c7fb47d4cd"
-                        )
-                        .unwrap(),
-                        dataset_id: "uas_orthomosaics_2020:2:1".to_owned()
-                    }),
-                    name: "UAS Orthomosaics Fall 2020".to_owned(),
-                    description: "Band 2: green".to_owned(),
-                    tags: vec!["UAV".to_owned(), "natur40".to_owned()],
-                    source_operator: "GdalSource".to_owned(),
-                    result_descriptor: TypedResultDescriptor::Raster(RasterResultDescriptor {
-                        data_type: RasterDataType::F32,
-                        spatial_reference: SpatialReference::new(
-                            SpatialReferenceAuthority::Epsg,
-                            25832
-                        )
-                        .into(),
-                        measurement: Measurement::Unitless,
-                        no_data_value: None
-                    }),
-                    symbology: None
-                },
-                DatasetListing {
-                    id: DatasetId::External(ExternalDatasetId {
-                        provider_id: DatasetProviderId::from_str(
-                            "2cb964d5-b9fa-4f8f-ab6f-f6c7fb47d4cd"
-                        )
-                        .unwrap(),
-                        dataset_id: "uas_orthomosaics_2020:3:1".to_owned()
+                        dataset_id: "uas_orthomosaics_2020:3".to_owned()
                     }),
                     name: "UAS Orthomosaics Fall 2020".to_owned(),
                     description: "Band 3: blue".to_owned(),
