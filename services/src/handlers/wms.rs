@@ -1,7 +1,5 @@
-use log::debug;
+use actix_web::{web, FromRequest, HttpResponse};
 use snafu::ResultExt;
-use warp::reply::Reply;
-use warp::{http::Response, Filter, Rejection};
 
 use geoengine_datatypes::primitives::{AxisAlignedRectangle, SpatialPartition2D};
 use geoengine_datatypes::{
@@ -18,6 +16,7 @@ use crate::handlers::Context;
 use crate::ogc::wms::request::{GetCapabilities, GetLegendGraphic, GetMap, WmsRequest};
 use crate::util::config;
 use crate::util::config::get_config_element;
+use crate::util::user_input::QueryEx;
 use crate::workflows::registry::WorkflowRegistry;
 use crate::workflows::workflow::WorkflowId;
 
@@ -28,45 +27,26 @@ use geoengine_operators::{
     call_on_generic_raster_processor, util::raster_stream_to_png::raster_stream_to_png_bytes,
 };
 use num_traits::AsPrimitive;
-
 use std::str::FromStr;
 
-pub(crate) fn wms_handler<C: Context>(
-    ctx: C,
-) -> impl Filter<Extract = impl warp::Reply, Error = warp::Rejection> + Clone {
-    warp::path!("wms")
-        .and(warp::get())
-        .and(
-            warp::query::raw().and_then(|query_string: String| async move {
-                debug!("{}", query_string);
-
-                // TODO: make case insensitive by using serde-aux instead
-                let query_string = query_string.replace("REQUEST", "request");
-
-                serde_urlencoded::from_str::<WmsRequest>(&query_string)
-                    .context(error::UnableToParseQueryString)
-                    .map_err(Rejection::from)
-            }),
-        )
-        // .and(warp::query::<WMSRequest>())
-        .and(warp::any().map(move || ctx.clone()))
-        .and_then(wms)
+pub(crate) fn init_wms_routes<C>(cfg: &mut web::ServiceConfig)
+where
+    C: Context,
+    C::Session: FromRequest,
+{
+    cfg.service(web::resource("/wms").route(web::get().to(wms_handler::<C>)));
 }
 
-// TODO: move into handler once async closures are available?
-async fn wms<C: Context>(
-    request: WmsRequest,
-    ctx: C,
-) -> Result<Box<dyn warp::Reply>, warp::Rejection> {
-    // TODO: authentication
-    // TODO: more useful error output than "invalid query string"
-    match request {
+async fn wms_handler<C: Context>(
+    request: QueryEx<WmsRequest>,
+    ctx: web::Data<C>,
+    _session: C::Session,
+) -> Result<HttpResponse> {
+    match request.into_inner() {
         WmsRequest::GetCapabilities(request) => get_capabilities(&request),
-        WmsRequest::GetMap(request) => get_map(&request, &ctx).await,
-        WmsRequest::GetLegendGraphic(request) => get_legend_graphic(&request, &ctx),
-        _ => Ok(Box::new(
-            warp::http::StatusCode::NOT_IMPLEMENTED.into_response(),
-        )),
+        WmsRequest::GetMap(request) => get_map(&request, ctx.get_ref()).await,
+        WmsRequest::GetLegendGraphic(request) => get_legend_graphic(&request, ctx.get_ref()),
+        _ => Ok(HttpResponse::NotImplemented().finish()),
     }
 }
 
@@ -129,7 +109,7 @@ async fn wms<C: Context>(
 /// </WMS_Capabilities>
 /// ```
 #[allow(clippy::unnecessary_wraps)] // TODO: remove line once implemented fully
-fn get_capabilities(_request: &GetCapabilities) -> Result<Box<dyn warp::Reply>, warp::Rejection> {
+fn get_capabilities(_request: &GetCapabilities) -> Result<HttpResponse> {
     // TODO: implement
     // TODO: inject correct url of the instance and return data for the default layer
     let wms_url = "http://localhost/wms".to_string();
@@ -185,7 +165,7 @@ fn get_capabilities(_request: &GetCapabilities) -> Result<Box<dyn warp::Reply>, 
         wms_url = wms_url
     );
 
-    Ok(Box::new(warp::reply::html(mock)))
+    Ok(HttpResponse::Ok().content_type(mime::TEXT_XML).body(mock))
 }
 
 /// Renders a map as raster image.
@@ -197,10 +177,7 @@ fn get_capabilities(_request: &GetCapabilities) -> Result<Box<dyn warp::Reply>, 
 /// ```
 /// Response:
 /// PNG image
-async fn get_map<C: Context>(
-    request: &GetMap,
-    ctx: &C,
-) -> Result<Box<dyn warp::Reply>, warp::Rejection> {
+async fn get_map<C: Context>(request: &GetMap, ctx: &C) -> Result<HttpResponse> {
     // TODO: validate request?
     if request.layers == "mock_raster" {
         return get_map_mock(request);
@@ -278,12 +255,9 @@ async fn get_map<C: Context>(
             raster_stream_to_png_bytes(p, query_rect, query_ctx, request.width, request.height, request.time, colorizer, no_data_value.map(AsPrimitive::as_)).await
     ).map_err(error::Error::from)?;
 
-    Ok(Box::new(
-        Response::builder()
-            .header("Content-Type", "image/png")
-            .body(image_bytes)
-            .context(error::Http)?,
-    ))
+    Ok(HttpResponse::Ok()
+        .content_type(mime::IMAGE_PNG)
+        .body(image_bytes))
 }
 
 fn colorizer_from_style(styles: &str) -> Result<Option<Colorizer>> {
@@ -294,17 +268,12 @@ fn colorizer_from_style(styles: &str) -> Result<Option<Colorizer>> {
 }
 
 #[allow(clippy::unnecessary_wraps)] // TODO: remove line once implemented fully
-fn get_legend_graphic<C: Context>(
-    _request: &GetLegendGraphic,
-    _ctx: &C,
-) -> Result<Box<dyn warp::Reply>, warp::Rejection> {
+fn get_legend_graphic<C: Context>(_request: &GetLegendGraphic, _ctx: &C) -> Result<HttpResponse> {
     // TODO: implement
-    Ok(Box::new(
-        warp::http::StatusCode::INTERNAL_SERVER_ERROR.into_response(),
-    ))
+    Ok(HttpResponse::InternalServerError().finish())
 }
 
-fn get_map_mock(request: &GetMap) -> Result<Box<dyn warp::Reply>, warp::Rejection> {
+fn get_map_mock(request: &GetMap) -> Result<HttpResponse> {
     let raster = Grid2D::new(
         [2, 2].into(),
         vec![
@@ -322,12 +291,9 @@ fn get_map_mock(request: &GetMap) -> Result<Box<dyn warp::Reply>, warp::Rejectio
         .to_png(request.width, request.height, &colorizer)
         .context(error::DataType)?;
 
-    Ok(Box::new(
-        Response::builder()
-            .header("Content-Type", "image/png")
-            .body(image_bytes)
-            .context(error::Http)?,
-    ))
+    Ok(HttpResponse::Ok()
+        .content_type(mime::IMAGE_PNG)
+        .body(image_bytes))
 }
 
 fn default_time_from_config() -> TimeInterval {
@@ -354,9 +320,15 @@ fn default_time_from_config() -> TimeInterval {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::contexts::{InMemoryContext, SimpleSession};
-    use crate::handlers::{handle_rejection, ErrorResponse};
-    use crate::util::tests::{check_allowed_http_methods, register_ndvi_workflow_helper};
+    use crate::contexts::{InMemoryContext, Session, SimpleContext, SimpleSession};
+    use crate::handlers::ErrorResponse;
+    use crate::util::tests::{
+        check_allowed_http_methods, register_ndvi_workflow_helper, send_test_request,
+    };
+    use actix_web::dev::ServiceResponse;
+    use actix_web::http::header;
+    use actix_web::{http::Method, test};
+    use actix_web_httpauth::headers::authorization::Bearer;
     use geoengine_datatypes::operations::image::RgbaColor;
     use geoengine_datatypes::primitives::SpatialPartition2D;
     use geoengine_operators::engine::{
@@ -365,77 +337,80 @@ mod tests {
     use geoengine_operators::source::GdalSourceProcessor;
     use geoengine_operators::util::gdal::create_ndvi_meta_data;
     use std::convert::TryInto;
-    use warp::hyper::body::Bytes;
     use xml::ParserConfig;
 
-    async fn test_test_helper(method: &str, path: Option<&str>) -> Response<Bytes> {
+    async fn test_test_helper(method: Method, path: Option<&str>) -> ServiceResponse {
         let ctx = InMemoryContext::default();
+        let session_id = ctx.default_session_ref().await.id();
 
-        warp::test::request()
+        let req = test::TestRequest::default()
             .method(method)
-            .path(path.unwrap_or("/wms?request=GetMap&service=WMS&version=1.3.0&layers=mock_raster&bbox=1,2,3,4&width=100&height=100&crs=EPSG:4326&styles=ssss&format=image/png"))
-            .reply(&wms_handler(ctx).recover(handle_rejection))
-            .await
+            .uri(path.unwrap_or("/wms?request=GetMap&service=WMS&version=1.3.0&layers=mock_raster&bbox=1,2,3,4&width=100&height=100&crs=EPSG:4326&styles=ssss&format=image/png"))
+            .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())));
+        send_test_request(req, ctx).await
     }
 
     #[tokio::test]
     async fn test() {
-        let res = test_test_helper("GET", None).await;
+        let res = test_test_helper(Method::GET, None).await;
 
         assert_eq!(res.status(), 200);
         assert_eq!(
             include_bytes!("../../../test_data/colorizer/rgba.png") as &[u8],
-            res.body().to_vec().as_slice()
+            test::read_body(res).await
         );
     }
 
     #[tokio::test]
     async fn test_invalid_method() {
-        check_allowed_http_methods(|method| test_test_helper(method, None), &["GET"]).await;
+        check_allowed_http_methods(|method| test_test_helper(method, None), &[Method::GET]).await;
     }
 
     #[tokio::test]
     async fn test_missing_fields() {
-        let res = test_test_helper("GET", Some("/wms?service=WMS&version=1.3.0&layers=mock_raster&bbox=1,2,3,4&width=100&height=100&crs=foo&styles=ssss&format=image/png")).await;
+        let res = test_test_helper(Method::GET, Some("/wms?service=WMS&version=1.3.0&layers=mock_raster&bbox=1,2,3,4&width=100&height=100&crs=foo&styles=ssss&format=image/png")).await;
 
         ErrorResponse::assert(
-            &res,
+            res,
             400,
             "UnableToParseQueryString",
             "Unable to parse query string: missing field `request`",
-        );
+        )
+        .await;
     }
 
     #[tokio::test]
     async fn test_invalid_fields() {
-        let res = test_test_helper("GET", Some("/wms?request=GetMap&service=WMS&version=1.3.0&layers=mock_raster&bbox=1,2,3,4&width=XYZ&height=100&crs=EPSG:4326&styles=ssss&format=image/png")).await;
+        let res = test_test_helper(Method::GET, Some("/wms?request=GetMap&service=WMS&version=1.3.0&layers=mock_raster&bbox=1,2,3,4&width=XYZ&height=100&crs=EPSG:4326&styles=ssss&format=image/png")).await;
 
         ErrorResponse::assert(
-            &res,
+            res,
             400,
             "UnableToParseQueryString",
             "Unable to parse query string: could not parse string",
-        );
+        )
+        .await;
     }
 
-    async fn get_capabilities_test_helper(method: &str) -> Response<Bytes> {
+    async fn get_capabilities_test_helper(method: Method) -> ServiceResponse {
         let ctx = InMemoryContext::default();
+        let session_id = ctx.default_session_ref().await.id();
 
-        warp::test::request()
+        let req = test::TestRequest::with_uri("/wms?request=GetCapabilities&service=WMS")
             .method(method)
-            .path("/wms?request=GetCapabilities&service=WMS")
-            .reply(&wms_handler(ctx).recover(handle_rejection))
-            .await
+            .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())));
+        send_test_request(req, ctx).await
     }
 
     #[tokio::test]
     async fn get_capabilities() {
-        let res = get_capabilities_test_helper("GET").await;
+        let res = get_capabilities_test_helper(Method::GET).await;
 
         assert_eq!(res.status(), 200);
 
         // TODO: validate against schema
-        let reader = ParserConfig::default().create_reader(res.body().as_ref());
+        let body = test::read_body(res).await;
+        let reader = ParserConfig::default().create_reader(body.as_ref());
 
         for event in reader {
             assert!(event.is_ok());
@@ -444,7 +419,7 @@ mod tests {
 
     #[tokio::test]
     async fn get_capabilities_invalid_method() {
-        check_allowed_http_methods(get_capabilities_test_helper, &["GET"]).await;
+        check_allowed_http_methods(get_capabilities_test_helper, &[Method::GET]).await;
     }
 
     #[tokio::test]
@@ -485,88 +460,93 @@ mod tests {
         );
     }
 
-    async fn get_map_test_helper(method: &str, path: Option<&str>) -> Response<Bytes> {
+    async fn get_map_test_helper(method: Method, path: Option<&str>) -> ServiceResponse {
         let ctx = InMemoryContext::default();
+        let session_id = ctx.default_session_ref().await.id();
 
         let (_, id) = register_ndvi_workflow_helper(&ctx).await;
 
-        warp::test::request()
+        let req = test::TestRequest::with_uri(path.unwrap_or(&format!("/wms?request=GetMap&service=WMS&version=1.3.0&layers={}&bbox=20,-10,80,50&width=600&height=600&crs=EPSG:4326&styles=ssss&format=image/png&time=2014-01-01T00:00:00.0Z", id.to_string())))
             .method(method)
-            .path(path.unwrap_or(&format!("/wms?request=GetMap&service=WMS&version=1.3.0&layers={}&bbox=20,-10,80,50&width=600&height=600&crs=EPSG:4326&styles=ssss&format=image/png&time=2014-01-01T00:00:00.0Z", id.to_string())))
-            .reply(&wms_handler(ctx).recover(handle_rejection))
-            .await
+            .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())));
+        send_test_request(req, ctx).await
     }
 
     #[tokio::test]
     async fn get_map() {
-        let res = get_map_test_helper("GET", None).await;
+        let res = get_map_test_helper(Method::GET, None).await;
 
         assert_eq!(res.status(), 200);
         assert_eq!(
             include_bytes!("../../../test_data/wms/get_map.png") as &[u8],
-            res.body().to_vec().as_slice()
+            test::read_body(res).await
         );
     }
 
     #[tokio::test]
     async fn get_map_ndvi() {
         let ctx = InMemoryContext::default();
+        let session_id = ctx.default_session_ref().await.id();
 
         let (_, id) = register_ndvi_workflow_helper(&ctx).await;
 
-        let response = warp::test::request()
-            .method("GET")
-            .path(&format!("/wms?service=WMS&version=1.3.0&request=GetMap&layers={}&styles=&width=335&height=168&crs=EPSG:4326&bbox=-90.0,-180.0,90.0,180.0&format=image/png&transparent=FALSE&bgcolor=0xFFFFFF&exceptions=XML&time=2014-04-01T12%3A00%3A00.000%2B00%3A00", id.to_string()))
-            .reply(&wms_handler(ctx).recover(handle_rejection))
-            .await;
+        let req = test::TestRequest::get().uri(&format!("/wms?service=WMS&version=1.3.0&request=GetMap&layers={}&styles=&width=335&height=168&crs=EPSG:4326&bbox=-90.0,-180.0,90.0,180.0&format=image/png&transparent=FALSE&bgcolor=0xFFFFFF&exceptions=XML&time=2014-04-01T12%3A00%3A00.000%2B00%3A00", id.to_string())).append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())));
+        let response = send_test_request(req, ctx).await;
 
-        assert_eq!(response.status(), 200, "{:?}", response.body());
+        assert_eq!(
+            response.status(),
+            200,
+            "{:?}",
+            test::read_body(response).await
+        );
 
         assert_eq!(
             include_bytes!("../../../test_data/wms/get_map_ndvi.png") as &[u8],
-            response.body().to_vec().as_slice()
+            test::read_body(response).await
         );
     }
 
+    ///Actix uses serde_urlencoded inside web::Query which does not support this
     #[tokio::test]
     async fn get_map_uppercase() {
         let ctx = InMemoryContext::default();
+        let session_id = ctx.default_session_ref().await.id();
 
         let (_, id) = register_ndvi_workflow_helper(&ctx).await;
 
-        let res = warp::test::request()
-            .method("GET")
-            .path(&format!("/wms?SERVICE=WMS&VERSION=1.3.0&REQUEST=GetMap&FORMAT=image%2Fpng&TRANSPARENT=true&LAYERS={}&CRS=EPSG:4326&STYLES=&WIDTH=600&HEIGHT=600&BBOX=20,-10,80,50&time=2014-01-01T00:00:00.0Z", id.to_string()))
-            .reply(&wms_handler(ctx))
-            .await;
+        let req = test::TestRequest::get().uri(&format!("/wms?SERVICE=WMS&VERSION=1.3.0&REQUEST=GetMap&FORMAT=image%2Fpng&TRANSPARENT=true&LAYERS={}&CRS=EPSG:4326&STYLES=&WIDTH=600&HEIGHT=600&BBOX=20,-10,80,50&time=2014-01-01T00:00:00.0Z", id.to_string())).append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())));
+        let res = send_test_request(req, ctx).await;
 
         assert_eq!(res.status(), 200);
         assert_eq!(
             include_bytes!("../../../test_data/wms/get_map.png") as &[u8],
-            res.body().to_vec().as_slice()
+            test::read_body(res).await
         );
     }
 
     #[tokio::test]
     async fn get_map_invalid_method() {
-        check_allowed_http_methods(|method| get_map_test_helper(method, None), &["GET"]).await;
+        check_allowed_http_methods(|method| get_map_test_helper(method, None), &[Method::GET])
+            .await;
     }
 
     #[tokio::test]
     async fn get_map_missing_fields() {
-        let res = get_map_test_helper("GET", Some("/wms?request=GetMap&service=WMS&version=1.3.0&bbox=20,-10,80,50&width=600&height=600&crs=EPSG:4326&styles=ssss&format=image/png&time=2014-01-01T00:00:00.0Z")).await;
+        let res = get_map_test_helper(Method::GET, Some("/wms?request=GetMap&service=WMS&version=1.3.0&bbox=20,-10,80,50&width=600&height=600&crs=EPSG:4326&styles=ssss&format=image/png&time=2014-01-01T00:00:00.0Z")).await;
 
         ErrorResponse::assert(
-            &res,
+            res,
             400,
             "UnableToParseQueryString",
             "Unable to parse query string: missing field `layers`",
-        );
+        )
+        .await;
     }
 
     #[tokio::test]
     async fn get_map_colorizer() {
         let ctx = InMemoryContext::default();
+        let session_id = ctx.default_session_ref().await.id();
 
         let (_, id) = register_ndvi_workflow_helper(&ctx).await;
 
@@ -597,25 +577,25 @@ mod tests {
             ("time", "2014-01-01T00:00:00.0Z"),
         ];
 
-        let res = warp::test::request()
-            .method("GET")
-            .path(&format!(
+        let req = test::TestRequest::get()
+            .uri(&format!(
                 "/wms?{}",
                 serde_urlencoded::to_string(params).unwrap()
             ))
-            .reply(&wms_handler(ctx))
-            .await;
+            .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())));
+        let res = send_test_request(req, ctx).await;
 
         assert_eq!(res.status(), 200);
         assert_eq!(
             include_bytes!("../../../test_data/wms/get_map_colorizer.png") as &[u8],
-            res.body().to_vec().as_slice()
+            test::read_body(res).await
         );
     }
 
     #[tokio::test]
     async fn it_zoomes_very_far() {
         let ctx = InMemoryContext::default();
+        let session_id = ctx.default_session_ref().await.id();
 
         let (_, id) = register_ndvi_workflow_helper(&ctx).await;
 
@@ -649,14 +629,13 @@ mod tests {
             ("time", "2014-04-01T12:00:00.0Z"),
         ];
 
-        let res = warp::test::request()
-            .method("GET")
-            .path(&format!(
+        let req = test::TestRequest::get()
+            .uri(&format!(
                 "/wms?{}",
                 serde_urlencoded::to_string(params).unwrap()
             ))
-            .reply(&wms_handler(ctx))
-            .await;
+            .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())));
+        let res = send_test_request(req, ctx).await;
 
         assert_eq!(res.status(), 200);
     }

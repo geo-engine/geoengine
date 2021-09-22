@@ -1,28 +1,23 @@
 use crate::error::{Error, Result};
 use crate::handlers;
-use crate::handlers::handle_rejection;
 use crate::pro;
 #[cfg(feature = "postgres")]
 use crate::pro::contexts::PostgresContext;
 use crate::pro::contexts::{ProContext, ProInMemoryContext};
-use crate::server::{serve_static_directory, show_version_handler};
 use crate::util::config::{self, get_config_element, Backend};
-use crate::{combine, error};
 
+use super::projects::ProProjectDb;
+use crate::server::{configure_extractors, render_404, render_405, show_version_handler};
+use actix_files::Files;
+use actix_web::{http, middleware, web, App, HttpServer};
 #[cfg(feature = "postgres")]
 use bb8_postgres::tokio_postgres::NoTls;
 use log::info;
-use snafu::ResultExt;
 use std::net::SocketAddr;
 use std::path::PathBuf;
-use tokio::sync::oneshot::Receiver;
 use url::Url;
-use warp::Filter;
-
-use super::projects::ProProjectDb;
 
 async fn start<C>(
-    shutdown_rx: Option<Receiver<()>>,
     static_files_dir: Option<PathBuf>,
     bind_address: SocketAddr,
     ctx: C,
@@ -31,65 +26,43 @@ where
     C: ProContext,
     C::ProjectDB: ProProjectDb,
 {
-    let filter = combine!(
-        handlers::workflows::register_workflow_handler(ctx.clone()),
-        handlers::workflows::load_workflow_handler(ctx.clone()),
-        handlers::workflows::get_workflow_metadata_handler(ctx.clone()),
-        handlers::workflows::get_workflow_provenance_handler(ctx.clone()),
-        handlers::workflows::dataset_from_workflow_handler(ctx.clone()),
-        pro::handlers::users::register_user_handler(ctx.clone()),
-        pro::handlers::users::anonymous_handler(ctx.clone()),
-        pro::handlers::users::login_handler(ctx.clone()),
-        pro::handlers::users::logout_handler(ctx.clone()),
-        handlers::session::session_handler(ctx.clone()),
-        pro::handlers::users::session_project_handler(ctx.clone()),
-        pro::handlers::users::session_view_handler(ctx.clone()),
-        pro::handlers::projects::add_permission_handler(ctx.clone()),
-        pro::handlers::projects::remove_permission_handler(ctx.clone()),
-        pro::handlers::projects::list_permissions_handler(ctx.clone()),
-        handlers::projects::create_project_handler(ctx.clone()),
-        handlers::projects::list_projects_handler(ctx.clone()),
-        handlers::projects::update_project_handler(ctx.clone()),
-        handlers::projects::delete_project_handler(ctx.clone()),
-        pro::handlers::projects::load_project_handler(ctx.clone()),
-        pro::handlers::projects::project_versions_handler(ctx.clone()),
-        handlers::datasets::list_external_datasets_handler(ctx.clone()),
-        handlers::datasets::list_datasets_handler(ctx.clone()),
-        handlers::datasets::list_providers_handler(ctx.clone()),
-        handlers::datasets::get_dataset_handler(ctx.clone()),
-        handlers::datasets::auto_create_dataset_handler(ctx.clone()),
-        handlers::datasets::create_dataset_handler(ctx.clone()),
-        handlers::datasets::suggest_meta_data_handler(ctx.clone()),
-        handlers::wcs::wcs_handler(ctx.clone()),
-        handlers::wms::wms_handler(ctx.clone()),
-        handlers::wfs::wfs_handler(ctx.clone()),
-        handlers::plots::get_plot_handler(ctx.clone()),
-        handlers::upload::upload_handler(ctx.clone()),
-        handlers::spatial_references::get_spatial_reference_specification_handler(ctx.clone()),
-        show_version_handler() // TODO: allow disabling this function via config or feature flag
-    );
+    let wrapped_ctx = web::Data::new(ctx);
 
-    #[cfg(feature = "odm")]
-    let filter = combine!(
-        filter,
-        pro::handlers::drone_mapping::start_task_handler(ctx.clone()),
-        pro::handlers::drone_mapping::dataset_from_drone_mapping_handler(ctx.clone())
-    );
-
-    let handler =
-        combine!(filter, serve_static_directory(static_files_dir)).recover(handle_rejection);
-
-    let task = if let Some(receiver) = shutdown_rx {
-        let (_, server) = warp::serve(handler).bind_with_graceful_shutdown(bind_address, async {
-            receiver.await.ok();
-        });
-        tokio::task::spawn(server)
-    } else {
-        let server = warp::serve(handler).bind(bind_address);
-        tokio::task::spawn(server)
-    };
-
-    task.await.context(error::TokioJoin)
+    HttpServer::new(move || {
+        let mut app = App::new()
+            .app_data(wrapped_ctx.clone())
+            .wrap(
+                middleware::ErrorHandlers::default()
+                    .handler(http::StatusCode::NOT_FOUND, render_404)
+                    .handler(http::StatusCode::METHOD_NOT_ALLOWED, render_405),
+            )
+            .wrap(middleware::Logger::default())
+            .wrap(middleware::NormalizePath::default())
+            .configure(configure_extractors)
+            .configure(handlers::datasets::init_dataset_routes::<C>)
+            .configure(handlers::plots::init_plot_routes::<C>)
+            .configure(pro::handlers::projects::init_project_routes::<C>)
+            .configure(pro::handlers::users::init_user_routes::<C>)
+            .configure(handlers::spatial_references::init_spatial_reference_routes::<C>)
+            .configure(handlers::upload::init_upload_routes::<C>)
+            .configure(handlers::wcs::init_wcs_routes::<C>)
+            .configure(handlers::wfs::init_wfs_routes::<C>)
+            .configure(handlers::wms::init_wms_routes::<C>)
+            .configure(handlers::workflows::init_workflow_routes::<C>)
+            .route("/version", web::get().to(show_version_handler)); // TODO: allow disabling this function via config or feature flag
+        #[cfg(feature = "odm")]
+        {
+            app = app.configure(pro::handlers::drone_mapping::init_drone_mapping_routes::<C>);
+        }
+        if let Some(static_files_dir) = static_files_dir.clone() {
+            app = app.service(Files::new("/static", static_files_dir));
+        }
+        app
+    })
+    .bind(bind_address)?
+    .run()
+    .await
+    .map_err(Into::into)
 }
 
 /// Starts the webserver for the Geo Engine API.
@@ -98,10 +71,7 @@ where
 ///  * may panic if the `Postgres` backend is chosen without compiling the `postgres` feature
 ///
 ///
-pub async fn start_pro_server(
-    shutdown_rx: Option<Receiver<()>>,
-    static_files_dir: Option<PathBuf>,
-) -> Result<()> {
+pub async fn start_pro_server(static_files_dir: Option<PathBuf>) -> Result<()> {
     println!("|===========================================================================|");
     println!("| Welcome to Geo Engine Pro Version: Please refer to our license agreement. |");
     println!("| If you have any question: Visit https://www.geoengine.io.                 |");
@@ -120,9 +90,8 @@ pub async fn start_pro_server(
 
     match web_config.backend {
         Backend::InMemory => {
-            info!("Using in memory backend"); // TODO: log
+            info!("Using in memory backend");
             start(
-                shutdown_rx,
                 static_files_dir,
                 web_config.bind_address,
                 ProInMemoryContext::new_with_data(
@@ -136,7 +105,7 @@ pub async fn start_pro_server(
         Backend::Postgres => {
             #[cfg(feature = "postgres")]
             {
-                eprintln!("Using Postgres backend"); // TODO: log
+                info!("Using Postgres backend");
 
                 let db_config = config::get_config_element::<config::Postgres>()?;
                 let mut pg_config = bb8_postgres::tokio_postgres::Config::new();
@@ -150,7 +119,7 @@ pub async fn start_pro_server(
 
                 let ctx = PostgresContext::new(pg_config, NoTls).await?;
 
-                start(shutdown_rx, static_files_dir, web_config.bind_address, ctx).await
+                start(static_files_dir, web_config.bind_address, ctx).await
             }
             #[cfg(not(feature = "postgres"))]
             panic!("Postgres backend was selected but the postgres feature wasn't activated during compilation")

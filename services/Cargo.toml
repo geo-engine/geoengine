@@ -57,8 +57,14 @@ tokio-util = "0.6"
 typetag = "0.1"
 url = { version = "2.2", features = ["serde"] }
 uuid = { version = "0.8", features = ["serde", "v4", "v5"] }
-warp = "0.3"
 zip = "0.5"
+actix-files = "0.6.0-beta.6"
+actix-http = "=3.0.0-beta.8"
+actix-rt = "2.2"
+actix-service = "2.0"
+actix-web = "=4.0.0-beta.8"
+actix-web-httpauth = "0.6.0-beta.2"
+actix-multipart = "0.4.0-beta.5"
 
 [dev-dependencies]
 clap = "3.0.0-beta.2"

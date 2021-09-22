@@ -1,7 +1,9 @@
+use crate::handlers::ErrorResponse;
+use actix_web::http::StatusCode;
+use actix_web::HttpResponse;
 use geoengine_datatypes::{dataset::DatasetProviderId, spatial_reference::SpatialReferenceOption};
 use snafu::Snafu;
 use strum::IntoStaticStr;
-use warp::reject::Reject;
 
 pub type Result<T, E = Error> = std::result::Result<T, E>;
 #[derive(Debug, Snafu, IntoStaticStr)]
@@ -12,9 +14,6 @@ pub enum Error {
     },
     Operator {
         source: geoengine_operators::error::Error,
-    },
-    Http {
-        source: warp::http::Error,
     },
     Uuid {
         source: uuid::Error,
@@ -153,7 +152,9 @@ pub enum Error {
     UploadFieldMissingFileName,
     UnknownUploadId,
     PathIsNotAFile,
-    MultiPartBoundaryMissing,
+    Multipart {
+        source: actix_multipart::MultipartError,
+    },
     InvalidUploadFileName,
     InvalidDatasetName,
     DatasetHasNoAutoImportableLayer,
@@ -230,7 +231,27 @@ pub enum Error {
     },
 }
 
-impl Reject for Error {}
+impl actix_web::error::ResponseError for Error {
+    fn error_response(&self) -> HttpResponse {
+        let (error, message) = match self {
+            Error::Authorization { source } => (
+                Into::<&str>::into(source.as_ref()).to_string(),
+                source.to_string(),
+            ),
+            _ => (Into::<&str>::into(self).to_string(), self.to_string()),
+        };
+
+        HttpResponse::build(self.status_code()).json(ErrorResponse { error, message })
+    }
+
+    fn status_code(&self) -> StatusCode {
+        match self {
+            Error::Authorization { source: _ } => StatusCode::UNAUTHORIZED,
+            Error::Duplicate { reason: _ } => StatusCode::CONFLICT,
+            _ => StatusCode::BAD_REQUEST,
+        }
+    }
+}
 
 impl From<geoengine_datatypes::error::Error> for Error {
     fn from(e: geoengine_datatypes::error::Error) -> Self {
@@ -282,6 +303,12 @@ impl From<gdal::errors::GdalError> for Error {
 impl From<reqwest::Error> for Error {
     fn from(source: reqwest::Error) -> Self {
         Self::Reqwest { source }
+    }
+}
+
+impl From<actix_multipart::MultipartError> for Error {
+    fn from(source: actix_multipart::MultipartError) -> Self {
+        Self::Multipart { source }
     }
 }
 

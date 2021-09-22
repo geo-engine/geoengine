@@ -1,9 +1,24 @@
-use crate::handlers::{authenticate, Context};
+use crate::error::Result;
+use crate::handlers::Context;
 use crate::projects::{CreateProject, ProjectDb, ProjectId, ProjectListOptions, UpdateProject};
 use crate::util::user_input::UserInput;
 use crate::util::IdResponse;
-use uuid::Uuid;
-use warp::Filter;
+use actix_web::{web, FromRequest, HttpResponse, Responder};
+
+pub(crate) fn init_project_routes<C>(cfg: &mut web::ServiceConfig)
+where
+    C: Context,
+    C::Session: FromRequest,
+{
+    cfg.service(web::resource("/project").route(web::post().to(create_project_handler::<C>)))
+        .service(web::resource("/projects").route(web::get().to(list_projects_handler::<C>)))
+        .service(
+            web::resource("/project/{project}")
+                .route(web::get().to(load_project_handler::<C>))
+                .route(web::patch().to(update_project_handler::<C>))
+                .route(web::delete().to(delete_project_handler::<C>)),
+        );
+}
 
 /// Create a new project for the user by providing [`CreateProject`].
 ///
@@ -39,30 +54,18 @@ use warp::Filter;
 ///   "id": "df4ad02e-0d61-4e29-90eb-dc1259c1f5b9"
 /// }
 /// ```
-pub(crate) fn create_project_handler<C: Context>(
-    ctx: C,
-) -> impl Filter<Extract = (impl warp::Reply,), Error = warp::Rejection> + Clone {
-    warp::path("project")
-        .and(warp::post())
-        .and(authenticate(ctx.clone()))
-        .and(warp::any().map(move || ctx.clone()))
-        .and(warp::body::json())
-        .and_then(create_project)
-}
-
-// TODO: move into handler once async closures are available?
-async fn create_project<C: Context>(
+pub(crate) async fn create_project_handler<C: Context>(
     session: C::Session,
-    ctx: C,
-    create: CreateProject,
-) -> Result<impl warp::Reply, warp::Rejection> {
-    let create = create.validated()?;
+    ctx: web::Data<C>,
+    create: web::Json<CreateProject>,
+) -> Result<impl Responder> {
+    let create = create.into_inner().validated()?;
     let id = ctx
         .project_db_ref_mut()
         .await
         .create(&session, create)
         .await?;
-    Ok(warp::reply::json(&IdResponse::from(id)))
+    Ok(web::Json(IdResponse::from(id)))
 }
 
 /// List all projects accessible to the user that match the [`ProjectListOptions`].
@@ -86,35 +89,22 @@ async fn create_project<C: Context>(
 ///   }
 /// ]
 /// ```
-pub(crate) fn list_projects_handler<C: Context>(
-    ctx: C,
-) -> impl Filter<Extract = (impl warp::Reply,), Error = warp::Rejection> + Clone {
-    warp::path("projects")
-        .and(warp::get())
-        .and(authenticate(ctx.clone()))
-        .and(warp::any().map(move || ctx.clone()))
-        .and(warp::query::<ProjectListOptions>())
-        .and_then(list_projects)
-}
-
-// TODO: move into handler once async closures are available?
-async fn list_projects<C: Context>(
+pub(crate) async fn list_projects_handler<C: Context>(
     session: C::Session,
-    ctx: C,
-    options: ProjectListOptions,
-) -> Result<impl warp::Reply, warp::Rejection> {
-    let options = options.validated()?;
+    ctx: web::Data<C>,
+    options: web::Query<ProjectListOptions>,
+) -> Result<impl Responder> {
+    let options = options.into_inner().validated()?;
     let listing = ctx.project_db_ref().await.list(&session, options).await?;
-    Ok(warp::reply::json(&listing))
+    Ok(web::Json(listing))
 }
 
-/// Retrieves details about a [project](crate::projects::project::Project).
-/// If no version is specified, it loads the latest version.
+/// Retrieves details about the latest version of a [project](crate::projects::project::Project).
 ///
 /// # Example
 ///
 /// ```text
-/// GET /project/df4ad02e-0d61-4e29-90eb-dc1259c1f5b9/[version]
+/// GET /project/df4ad02e-0d61-4e29-90eb-dc1259c1f5b9
 /// Authorization: Bearer fc9b5dc2-a1eb-400f-aeed-a7845d9935c9
 /// ```
 /// Response:
@@ -153,29 +143,17 @@ async fn list_projects<C: Context>(
 ///   }
 /// }
 /// ```
-pub(crate) fn load_project_handler<C: Context>(
-    ctx: C,
-) -> impl Filter<Extract = (impl warp::Reply,), Error = warp::Rejection> + Clone {
-    warp::path!("project" / Uuid)
-        .map(ProjectId)
-        .and(warp::get())
-        .and(authenticate(ctx.clone()))
-        .and(warp::any().map(move || ctx.clone()))
-        .and_then(load_project)
-}
-
-// TODO: move into handler once async closures are available?
-async fn load_project<C: Context>(
-    project_id: ProjectId,
+async fn load_project_handler<C: Context>(
+    project: web::Path<ProjectId>,
     session: C::Session,
-    ctx: C,
-) -> Result<impl warp::Reply, warp::Rejection> {
+    ctx: web::Data<C>,
+) -> Result<impl Responder> {
     let id = ctx
         .project_db_ref()
         .await
-        .load(&session, project_id)
+        .load(&session, project.into_inner())
         .await?;
-    Ok(warp::reply::json(&id))
+    Ok(web::Json(id))
 }
 
 /// Updates a project.
@@ -208,32 +186,19 @@ async fn load_project<C: Context>(
 ///   ]
 /// }
 /// ```
-pub(crate) fn update_project_handler<C: Context>(
-    ctx: C,
-) -> impl Filter<Extract = (impl warp::Reply,), Error = warp::Rejection> + Clone {
-    warp::path!("project" / Uuid)
-        .map(ProjectId)
-        .and(warp::patch())
-        .and(authenticate(ctx.clone()))
-        .and(warp::any().map(move || ctx.clone()))
-        .and(warp::body::json())
-        .and_then(update_project)
-}
-
-// TODO: move into handler once async closures are available?
-async fn update_project<C: Context>(
-    project: ProjectId,
+pub(crate) async fn update_project_handler<C: Context>(
+    project: web::Path<ProjectId>,
     session: C::Session,
-    ctx: C,
-    mut update: UpdateProject,
-) -> Result<impl warp::Reply, warp::Rejection> {
-    update.id = project; // TODO: avoid passing project id in path AND body
-    let update = update.validated()?;
+    ctx: web::Data<C>,
+    mut update: web::Json<UpdateProject>,
+) -> Result<impl Responder> {
+    update.id = project.into_inner(); // TODO: avoid passing project id in path AND body
+    let update = update.into_inner().validated()?;
     ctx.project_db_ref_mut()
         .await
         .update(&session, update)
         .await?;
-    Ok(warp::reply())
+    Ok(HttpResponse::Ok())
 }
 
 /// Deletes a project.
@@ -244,59 +209,47 @@ async fn update_project<C: Context>(
 /// DELETE /project/df4ad02e-0d61-4e29-90eb-dc1259c1f5b9
 /// Authorization: Bearer fc9b5dc2-a1eb-400f-aeed-a7845d9935c9
 /// ```
-pub(crate) fn delete_project_handler<C: Context>(
-    ctx: C,
-) -> impl Filter<Extract = (impl warp::Reply,), Error = warp::Rejection> + Clone {
-    warp::path!("project" / Uuid)
-        .map(ProjectId)
-        .and(warp::delete())
-        .and(authenticate(ctx.clone()))
-        .and(warp::any().map(move || ctx.clone()))
-        .and_then(delete_project)
-}
-
-// TODO: move into handler once async closures are available?
-async fn delete_project<C: Context>(
-    project: ProjectId,
+pub(crate) async fn delete_project_handler<C: Context>(
+    project: web::Path<ProjectId>,
     session: C::Session,
-    ctx: C,
-) -> Result<impl warp::Reply, warp::Rejection> {
+    ctx: web::Data<C>,
+) -> Result<impl Responder> {
     ctx.project_db_ref_mut()
         .await
-        .delete(&session, project)
+        .delete(&session, *project)
         .await?;
-    Ok(warp::reply())
+    Ok(HttpResponse::Ok())
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::contexts::{Session, SimpleContext, SimpleSession};
-    use crate::handlers::{handle_rejection, ErrorResponse};
-    use crate::projects::{
-        LayerUpdate, LayerVisibility, Plot, PlotUpdate, RasterSymbology, Symbology,
-    };
+    use crate::handlers::ErrorResponse;
     use crate::util::tests::{
-        check_allowed_http_methods, check_allowed_http_methods2, create_project_helper,
-        update_project_helper,
+        check_allowed_http_methods, create_project_helper, send_test_request, update_project_helper,
     };
     use crate::util::Identifier;
     use crate::workflows::workflow::WorkflowId;
     use crate::{
         contexts::InMemoryContext,
-        projects::{Layer, Project, ProjectId, ProjectListing, STRectangle, UpdateProject},
+        projects::{
+            Layer, LayerUpdate, LayerVisibility, Plot, PlotUpdate, Project, ProjectId,
+            ProjectListing, RasterSymbology, STRectangle, Symbology, UpdateProject,
+        },
     };
+    use actix_web::dev::ServiceResponse;
+    use actix_web::{http::header, http::Method, test};
+    use actix_web_httpauth::headers::authorization::Bearer;
     use geoengine_datatypes::operations::image::Colorizer;
     use geoengine_datatypes::primitives::{TimeGranularity, TimeStep};
     use geoengine_datatypes::spatial_reference::SpatialReference;
     use serde_json::json;
-    use warp::http::Response;
-    use warp::hyper::body::Bytes;
 
-    async fn create_test_helper(method: &str) -> Response<Bytes> {
+    async fn create_test_helper(method: Method) -> ServiceResponse {
         let ctx = InMemoryContext::default();
 
-        let session = ctx.default_session_ref().await;
+        let session_id = ctx.default_session_ref().await.id();
 
         let create = CreateProject {
             name: "Test".to_string(),
@@ -308,32 +261,27 @@ mod tests {
             }),
         };
 
-        warp::test::request()
+        let req = test::TestRequest::default()
             .method(method)
-            .path("/project/create")
-            .header("Content-Length", "0")
-            .header(
-                "Authorization",
-                format!("Bearer {}", session.id().to_string()),
-            )
-            .json(&create)
-            .reply(&create_project_handler(ctx.clone()).recover(handle_rejection))
-            .await
+            .uri("/project")
+            .append_header((header::CONTENT_LENGTH, 0))
+            .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())))
+            .set_json(&create);
+        send_test_request(req, ctx).await
     }
 
     #[tokio::test]
     async fn create() {
-        let res = create_test_helper("POST").await;
+        let res = create_test_helper(Method::POST).await;
 
         assert_eq!(res.status(), 200);
 
-        let body: String = String::from_utf8(res.body().to_vec()).unwrap();
-        assert!(serde_json::from_str::<IdResponse<ProjectId>>(&body).is_ok());
+        let _project: IdResponse<ProjectId> = test::read_body_json(res).await;
     }
 
     #[tokio::test]
     async fn create_invalid_method() {
-        check_allowed_http_methods(create_test_helper, &["POST"]).await;
+        check_allowed_http_methods(create_test_helper, &[Method::POST]).await;
     }
 
     #[tokio::test]
@@ -342,24 +290,20 @@ mod tests {
 
         let session_id = ctx.default_session_ref().await.id();
 
-        let res = warp::test::request()
-            .method("POST")
-            .path("/project/create")
-            .header("Content-Length", "0")
-            .header(
-                "Authorization",
-                format!("Bearer {}", session_id.to_string()),
-            )
-            .body("no json")
-            .reply(&create_project_handler(ctx).recover(handle_rejection))
-            .await;
+        let req = test::TestRequest::post()
+            .uri("/project")
+            .append_header((header::CONTENT_LENGTH, 0))
+            .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())))
+            .set_payload("no json");
+        let res = send_test_request(req, ctx).await;
 
         ErrorResponse::assert(
-            &res,
-            400,
-            "BodyDeserializeError",
-            "expected ident at line 1 column 2",
-        );
+            res,
+            415,
+            "UnsupportedMediaType",
+            "Unsupported content type header.",
+        )
+        .await;
     }
 
     #[tokio::test]
@@ -373,24 +317,19 @@ mod tests {
             "bounds": STRectangle::new(SpatialReference::epsg_4326(), 0., 0., 1., 1., 0, 1).unwrap(),
         });
 
-        let res = warp::test::request()
-            .method("POST")
-            .path("/project/create")
-            .header("Content-Length", "0")
-            .header(
-                "Authorization",
-                format!("Bearer {}", session_id.to_string()),
-            )
-            .json(&create)
-            .reply(&create_project_handler(ctx).recover(handle_rejection))
-            .await;
+        let req = test::TestRequest::post()
+            .uri("/project")
+            .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())))
+            .set_json(&create);
+        let res = send_test_request(req, ctx).await;
 
         ErrorResponse::assert(
-            &res,
+            res,
             400,
             "BodyDeserializeError",
             "missing field `name` at line 1 column 195",
-        );
+        )
+        .await;
     }
 
     #[tokio::test]
@@ -402,30 +341,26 @@ mod tests {
             "bounds": STRectangle::new(SpatialReference::epsg_4326(), 0., 0., 1., 1., 0, 1).unwrap(),
         });
 
-        let res = warp::test::request()
-            .method("POST")
-            .path("/project/create")
-            .header("Content-Length", "0")
-            .json(&create)
-            .reply(&create_project_handler(ctx).recover(handle_rejection))
-            .await;
+        let req = test::TestRequest::post().uri("/project").set_json(&create);
+        let res = send_test_request(req, ctx).await;
 
         ErrorResponse::assert(
-            &res,
+            res,
             401,
             "MissingAuthorizationHeader",
             "Header with authorization token not provided.",
-        );
+        )
+        .await;
     }
 
-    async fn list_test_helper(method: &str) -> Response<Bytes> {
+    async fn list_test_helper(method: Method) -> ServiceResponse {
         let ctx = InMemoryContext::default();
 
         let (session, _) = create_project_helper(&ctx).await;
 
-        warp::test::request()
+        let req = test::TestRequest::default()
             .method(method)
-            .path(&format!(
+            .uri(&format!(
                 "/projects?{}",
                 &serde_urlencoded::to_string([
                     (
@@ -441,30 +376,24 @@ mod tests {
                 ])
                 .unwrap()
             ))
-            .header("Content-Length", "0")
-            .header(
-                "Authorization",
-                format!("Bearer {}", session.id().to_string()),
-            )
-            .reply(&list_projects_handler(ctx).recover(handle_rejection))
-            .await
+            .append_header((header::CONTENT_LENGTH, 0))
+            .append_header((header::AUTHORIZATION, Bearer::new(session.id().to_string())));
+        send_test_request(req, ctx).await
     }
 
     #[tokio::test]
     async fn list() {
-        let res = list_test_helper("GET").await;
+        let res = list_test_helper(Method::GET).await;
 
         assert_eq!(res.status(), 200);
 
-        let body: String = String::from_utf8(res.body().to_vec()).unwrap();
-        let result = serde_json::from_str::<Vec<ProjectListing>>(&body);
-        assert!(result.is_ok());
-        assert_eq!(result.unwrap().len(), 1);
+        let result: Vec<ProjectListing> = test::read_body_json(res).await;
+        assert_eq!(result.len(), 1);
     }
 
     #[tokio::test]
     async fn list_invalid_method() {
-        check_allowed_http_methods(list_test_helper, &["GET"]).await;
+        check_allowed_http_methods(list_test_helper, &[Method::GET]).await;
     }
 
     #[tokio::test]
@@ -473,9 +402,8 @@ mod tests {
 
         create_project_helper(&ctx).await;
 
-        let res = warp::test::request()
-            .method("GET")
-            .path(&format!(
+        let req = test::TestRequest::get()
+            .uri(&format!(
                 "/projects?{}",
                 &serde_urlencoded::to_string([
                     (
@@ -491,48 +419,47 @@ mod tests {
                 ])
                 .unwrap()
             ))
-            .header("Content-Length", "0")
-            .reply(&list_projects_handler(ctx).recover(handle_rejection))
-            .await;
+            .append_header((header::CONTENT_LENGTH, 0));
+        let res = send_test_request(req, ctx).await;
 
         ErrorResponse::assert(
-            &res,
+            res,
             401,
             "MissingAuthorizationHeader",
             "Header with authorization token not provided.",
-        );
+        )
+        .await;
     }
 
-    async fn load_test_helper(method: &str) -> Response<Bytes> {
+    async fn load_test_helper(method: Method) -> ServiceResponse {
         let ctx = InMemoryContext::default();
 
         let (session, project) = create_project_helper(&ctx).await;
 
-        warp::test::request()
+        let req = test::TestRequest::default()
             .method(method)
-            .path(&format!("/project/{}", project.to_string()))
-            .header("Content-Length", "0")
-            .header(
-                "Authorization",
-                format!("Bearer {}", session.id().to_string()),
-            )
-            .reply(&load_project_handler(ctx).recover(handle_rejection))
-            .await
+            .uri(&format!("/project/{}", project.to_string()))
+            .append_header((header::CONTENT_LENGTH, 0))
+            .append_header((header::AUTHORIZATION, Bearer::new(session.id().to_string())));
+        send_test_request(req, ctx).await
     }
 
     #[tokio::test]
     async fn load() {
-        let res = load_test_helper("GET").await;
+        let res = load_test_helper(Method::GET).await;
 
         assert_eq!(res.status(), 200);
 
-        let body: String = String::from_utf8(res.body().to_vec()).unwrap();
-        assert!(serde_json::from_str::<Project>(&body).is_ok());
+        let _project: Project = test::read_body_json(res).await;
     }
 
     #[tokio::test]
     async fn load_invalid_method() {
-        check_allowed_http_methods(load_test_helper, &["GET"]).await;
+        check_allowed_http_methods(
+            load_test_helper,
+            &[Method::GET, Method::PATCH, Method::DELETE],
+        )
+        .await;
     }
 
     #[tokio::test]
@@ -541,19 +468,18 @@ mod tests {
 
         let (_, project) = create_project_helper(&ctx).await;
 
-        let res = warp::test::request()
-            .method("GET")
-            .path(&format!("/project/{}", project.to_string()))
-            .header("Content-Length", "0")
-            .reply(&load_project_handler(ctx).recover(handle_rejection))
-            .await;
+        let req = test::TestRequest::get()
+            .uri(&format!("/project/{}", project.to_string()))
+            .append_header((header::CONTENT_LENGTH, 0));
+        let res = send_test_request(req, ctx).await;
 
         ErrorResponse::assert(
-            &res,
+            res,
             401,
             "MissingAuthorizationHeader",
             "Header with authorization token not provided.",
-        );
+        )
+        .await;
     }
 
     #[tokio::test]
@@ -562,47 +488,38 @@ mod tests {
 
         let session_id = ctx.default_session_ref().await.id();
 
-        let res = warp::test::request()
-            .method("GET")
-            .path("/project")
-            .header("Content-Length", "0")
-            .header(
-                "Authorization",
-                format!("Bearer {}", session_id.to_string()),
-            )
-            .reply(&load_project_handler(ctx).recover(handle_rejection))
-            .await;
+        let req = test::TestRequest::get()
+            .uri("/project")
+            .append_header((header::CONTENT_LENGTH, 0))
+            .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())));
+        let res = send_test_request(req, ctx).await;
 
-        ErrorResponse::assert(&res, 404, "NotFound", "Not Found");
+        ErrorResponse::assert(res, 405, "MethodNotAllowed", "HTTP method not allowed.").await;
     }
 
     async fn update_test_helper(
-        method: &str,
-    ) -> (InMemoryContext, SimpleSession, ProjectId, Response<Bytes>) {
+        method: Method,
+    ) -> (InMemoryContext, SimpleSession, ProjectId, ServiceResponse) {
         let ctx = InMemoryContext::default();
 
         let (session, project) = create_project_helper(&ctx).await;
 
         let update = update_project_helper(project);
 
-        let res = warp::test::request()
+        let req = test::TestRequest::default()
             .method(method)
-            .path(&format!("/project/{}", project.to_string()))
-            .header("Content-Length", "0")
-            .header(
-                "Authorization",
-                format!("Bearer {}", session.id().to_string()),
-            )
-            .json(&update)
-            .reply(&update_project_handler(ctx.clone()).recover(handle_rejection))
-            .await;
+            .uri(&format!("/project/{}", project.to_string()))
+            .append_header((header::CONTENT_LENGTH, 0))
+            .append_header((header::AUTHORIZATION, Bearer::new(session.id().to_string())))
+            .set_json(&update);
+        let res = send_test_request(req, ctx.clone()).await;
 
         (ctx, session, project, res)
     }
 
     #[tokio::test]
     async fn update() {
-        let (ctx, session, project, res) = update_test_helper("PATCH").await;
+        let (ctx, session, project, res) = update_test_helper(Method::PATCH).await;
 
         assert_eq!(res.status(), 200);
 
@@ -618,34 +535,26 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn update_invalid_method() {
-        check_allowed_http_methods2(update_test_helper, &["PATCH"], |(_, _, _, res)| res).await;
-    }
-
-    #[tokio::test]
     async fn update_invalid_body() {
         let ctx = InMemoryContext::default();
 
         let (session, project) = create_project_helper(&ctx).await;
 
-        let res = warp::test::request()
-            .method("PATCH")
-            .path(&format!("/project/{}", project.to_string()))
-            .header("Content-Length", "0")
-            .header(
-                "Authorization",
-                format!("Bearer {}", session.id().to_string()),
-            )
-            .body("no json")
-            .reply(&update_project_handler(ctx).recover(handle_rejection))
-            .await;
+        let req = test::TestRequest::patch()
+            .uri(&format!("/project/{}", project.to_string()))
+            .append_header((header::CONTENT_LENGTH, 0))
+            .append_header((header::CONTENT_TYPE, mime::APPLICATION_JSON))
+            .append_header((header::AUTHORIZATION, Bearer::new(session.id().to_string())))
+            .set_payload("no json");
+        let res = send_test_request(req, ctx).await;
 
         ErrorResponse::assert(
-            &res,
+            res,
             400,
             "BodyDeserializeError",
             "expected ident at line 1 column 2",
-        );
+        )
+        .await;
     }
 
     #[tokio::test]
@@ -670,24 +579,19 @@ mod tests {
             "time_step": None::<String>,
         });
 
-        let res = warp::test::request()
-            .method("PATCH")
-            .path(&format!("/project/{}", project.to_string()))
-            .header("Content-Length", "0")
-            .header(
-                "Authorization",
-                format!("Bearer {}", session.id().to_string()),
-            )
-            .json(&update)
-            .reply(&update_project_handler(ctx).recover(handle_rejection))
-            .await;
+        let req = test::TestRequest::patch()
+            .uri(&format!("/project/{}", project.to_string()))
+            .append_header((header::AUTHORIZATION, Bearer::new(session.id().to_string())))
+            .set_json(&update);
+        let res = send_test_request(req, ctx).await;
 
         ErrorResponse::assert(
-            &res,
+            res,
             400,
             "BodyDeserializeError",
             "missing field `id` at line 1 column 260",
-        );
+        )
+        .await;
     }
 
     #[tokio::test]
@@ -699,17 +603,11 @@ mod tests {
             project_id: ProjectId,
             update: UpdateProject,
         ) -> Vec<Layer> {
-            let res = warp::test::request()
-                .method("PATCH")
-                .path(&format!("/project/{}", project_id.to_string()))
-                .header("Content-Length", "0")
-                .header(
-                    "Authorization",
-                    format!("Bearer {}", session.id().to_string()),
-                )
-                .json(&update)
-                .reply(&update_project_handler(ctx.clone()))
-                .await;
+            let req = test::TestRequest::patch()
+                .uri(&format!("/project/{}", project_id.to_string()))
+                .append_header((header::AUTHORIZATION, Bearer::new(session.id().to_string())))
+                .set_json(&update);
+            let res = send_test_request(req, ctx.clone()).await;
 
             assert_eq!(res.status(), 200);
 
@@ -850,17 +748,11 @@ mod tests {
             project_id: ProjectId,
             update: UpdateProject,
         ) -> Vec<Plot> {
-            let res = warp::test::request()
-                .method("PATCH")
-                .path(&format!("/project/{}", project_id.to_string()))
-                .header("Content-Length", "0")
-                .header(
-                    "Authorization",
-                    format!("Bearer {}", session.id().to_string()),
-                )
-                .json(&update)
-                .reply(&update_project_handler(ctx.clone()))
-                .await;
+            let req = test::TestRequest::patch()
+                .uri(&format!("/project/{}", project_id.to_string()))
+                .append_header((header::AUTHORIZATION, Bearer::new(session.id().to_string())))
+                .set_json(&update);
+            let res = send_test_request(req, ctx.clone()).await;
 
             assert_eq!(res.status(), 200);
 
@@ -982,16 +874,11 @@ mod tests {
 
         let (session, project) = create_project_helper(&ctx).await;
 
-        let res = warp::test::request()
-            .method("DELETE")
-            .path(&format!("/project/{}", project.to_string()))
-            .header("Content-Length", "0")
-            .header(
-                "Authorization",
-                format!("Bearer {}", session.id().to_string()),
-            )
-            .reply(&delete_project_handler(ctx.clone()))
-            .await;
+        let req = test::TestRequest::delete()
+            .uri(&format!("/project/{}", project.to_string()))
+            .append_header((header::CONTENT_LENGTH, 0))
+            .append_header((header::AUTHORIZATION, Bearer::new(session.id().to_string())));
+        let res = send_test_request(req, ctx.clone()).await;
 
         assert_eq!(res.status(), 200);
 
@@ -1003,22 +890,18 @@ mod tests {
             .await
             .is_err());
 
-        let res = warp::test::request()
-            .method("DELETE")
-            .path(&format!("/project/{}", project.to_string()))
-            .header("Content-Length", "0")
-            .header(
-                "Authorization",
-                format!("Bearer {}", session.id().to_string()),
-            )
-            .reply(&delete_project_handler(ctx).recover(handle_rejection))
-            .await;
+        let req = test::TestRequest::delete()
+            .uri(&format!("/project/{}", project.to_string()))
+            .append_header((header::CONTENT_LENGTH, 0))
+            .append_header((header::AUTHORIZATION, Bearer::new(session.id().to_string())));
+        let res = send_test_request(req, ctx).await;
 
         ErrorResponse::assert(
-            &res,
+            res,
             400,
             "ProjectDeleteFailed",
             "Failed to delete the project.",
-        );
+        )
+        .await;
     }
 }

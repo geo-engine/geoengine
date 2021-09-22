@@ -1,18 +1,26 @@
-use std::str::FromStr;
-
-use crate::error::Result;
-use geoengine_datatypes::spatial_reference::SpatialReferenceAuthority;
-use geoengine_datatypes::{primitives::BoundingBox2D, spatial_reference::SpatialReference};
+use actix_web::{web, FromRequest, Responder};
+use geoengine_datatypes::{
+    primitives::BoundingBox2D,
+    spatial_reference::{SpatialReference, SpatialReferenceAuthority},
+};
 use proj_sys::PJ_PROJ_STRING_TYPE_PJ_PROJ_4;
 use serde::{Deserialize, Serialize};
 use snafu::ResultExt;
-use warp::Filter;
+use std::str::FromStr;
 
-use crate::{contexts::Session, error};
-use crate::{
-    error::Error,
-    handlers::{authenticate, Context},
-};
+use crate::handlers::Context;
+use crate::{error, error::Error, error::Result};
+
+pub(crate) fn init_spatial_reference_routes<C>(cfg: &mut web::ServiceConfig)
+where
+    C: Context,
+    C::Session: FromRequest,
+{
+    cfg.service(
+        web::resource("/spatialReferenceSpecification/{srs_string}")
+            .route(web::get().to(get_spatial_reference_specification_handler::<C>)),
+    );
+}
 
 /// The specification of a spatial reference, where extent and axis labels are given
 /// in natural order (x, y) = (east, north)
@@ -144,22 +152,12 @@ fn proj_proj_string(srs_string: &str) -> Option<String> {
     }
 }
 
-pub(crate) fn get_spatial_reference_specification_handler<C: Context>(
-    ctx: C,
-) -> impl Filter<Extract = (impl warp::Reply,), Error = warp::Rejection> + Clone {
-    warp::path!("spatialReferenceSpecification" / String)
-        .and(warp::get())
-        .and(authenticate(ctx))
-        .and_then(get_spatial_reference_specification)
-}
-
-#[allow(clippy::unused_async)] // the function signature of `Filter`'s `and_then` requires it
-async fn get_spatial_reference_specification<S: Session>(
-    srs_string: String,
-    _session: S,
-) -> Result<impl warp::Reply, warp::Rejection> {
-    let spec = spatial_reference_specification(&srs_string)?;
-    Ok(warp::reply::json(&spec))
+#[allow(clippy::unused_async)] // the function signature of request handlers requires it
+pub(crate) async fn get_spatial_reference_specification_handler<C: Context>(
+    srs_string: web::Path<String>,
+    _session: C::Session,
+) -> Result<impl Responder> {
+    spatial_reference_specification(&srs_string).map(web::Json)
 }
 
 /// custom spatial references not known by proj or that shall be overriden
@@ -221,35 +219,29 @@ fn spatial_reference_specification(srs_string: &str) -> Result<SpatialReferenceS
 
 #[cfg(test)]
 mod tests {
-
     use super::*;
-    use crate::contexts::InMemoryContext;
     use crate::contexts::SimpleContext;
-    use crate::handlers::handle_rejection;
+    use crate::contexts::{InMemoryContext, Session};
+    use crate::util::tests::send_test_request;
+    use actix_web::{http::header, test};
+    use actix_web_httpauth::headers::authorization::Bearer;
     use geoengine_datatypes::spatial_reference::SpatialReference;
     use geoengine_datatypes::spatial_reference::SpatialReferenceAuthority;
-    use serde_json;
 
     #[tokio::test]
     async fn get_spatial_reference() {
         let ctx = InMemoryContext::default();
         let session_id = ctx.default_session_ref().await.id();
 
-        let response = warp::test::request()
-            .method("GET")
-            .path("/spatialReferenceSpecification/EPSG:4326")
-            .header("Content-Length", "0")
-            .header(
-                "Authorization",
-                format!("Bearer {}", session_id.to_string()),
-            )
-            .reply(&get_spatial_reference_specification_handler(ctx).recover(handle_rejection))
-            .await;
+        let req = test::TestRequest::get()
+            .uri("/spatialReferenceSpecification/EPSG:4326")
+            .append_header((header::CONTENT_LENGTH, 0))
+            .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())));
+        let res = send_test_request(req, ctx).await;
 
-        assert_eq!(response.status(), 200);
+        assert_eq!(res.status(), 200);
 
-        let body: String = String::from_utf8(response.body().to_vec()).unwrap();
-        let spec: SpatialReferenceSpecification = serde_json::from_str(&body).unwrap();
+        let spec: SpatialReferenceSpecification = test::read_body_json(res).await;
         assert_eq!(
             SpatialReferenceSpecification {
                 name: "WGS 84".to_owned(),
