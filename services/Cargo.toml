@@ -59,7 +59,7 @@ url = { version = "2.2", features = ["serde"] }
 uuid = { version = "0.8", features = ["serde", "v4", "v5"] }
 zip = "0.5"
 actix-files = "0.6.0-beta.6"
-actix-http = "=3.0.0-beta.8"
+actix-http = "=3.0.0-beta.10"
 actix-rt = "2.2"
 actix-service = "2.0"
 actix-web = "=4.0.0-beta.8"
