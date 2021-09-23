@@ -65,7 +65,7 @@ where
                     .handler(http::StatusCode::METHOD_NOT_ALLOWED, render_405),
             )
             .wrap(middleware::Logger::default())
-            .wrap(middleware::NormalizePath::default())
+            .wrap(middleware::NormalizePath::trim())
             .configure(configure_extractors)
             .configure(handlers::datasets::init_dataset_routes::<C>)
             .configure(handlers::plots::init_plot_routes::<C>)
