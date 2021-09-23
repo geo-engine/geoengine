@@ -117,7 +117,13 @@ pub async fn start_pro_server(static_files_dir: Option<PathBuf>) -> Result<()> {
                     // fix schema by providing `search_path` option
                     .options(&format!("-c search_path={}", db_config.schema));
 
-                let ctx = PostgresContext::new(pg_config, NoTls).await?;
+                let ctx = PostgresContext::new_with_data(
+                    pg_config,
+                    NoTls,
+                    data_path_config.dataset_defs_path,
+                    data_path_config.provider_defs_path,
+                )
+                .await?;
 
                 start(static_files_dir, web_config.bind_address, ctx).await
             }

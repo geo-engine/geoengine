@@ -1,9 +1,13 @@
+use crate::datasets::add_from_directory::{
+    add_datasets_from_directory, add_providers_from_directory,
+};
 use crate::error::{self, Result};
-use crate::pro::datasets::PostgresDatasetDb;
+use crate::pro::datasets::ProHashMapDatasetDb;
 use crate::pro::projects::ProjectPermission;
 use crate::pro::users::{UserDb, UserId, UserSession};
+use crate::pro::workflows::postgres_workflow_registry::PostgresWorkflowRegistry;
 use crate::projects::ProjectId;
-use crate::workflows::postgres_workflow_registry::PostgresWorkflowRegistry;
+use crate::util::config;
 use crate::{
     contexts::{Context, Db},
     pro::users::PostgresUserDb,
@@ -19,12 +23,16 @@ use bb8_postgres::{
     tokio_postgres::{error::SqlState, tls::MakeTlsConnect, tls::TlsConnect, Config, Socket},
     PostgresConnectionManager,
 };
+use geoengine_operators::concurrency::{ThreadPool, ThreadPoolContextCreator};
 use log::{debug, warn};
 use snafu::ResultExt;
+use std::path::PathBuf;
 use std::sync::Arc;
 use tokio::sync::{RwLock, RwLockReadGuard, RwLockWriteGuard};
 
 use super::ProContext;
+
+// TODO: do not report postgres error details to user
 
 /// A contex with references to Postgres backends of the dbs. Automatically migrates schema on instantiation
 #[derive(Clone)]
@@ -38,6 +46,8 @@ where
     user_db: Db<PostgresUserDb<Tls>>,
     project_db: Db<PostgresProjectDb<Tls>>,
     workflow_registry: Db<PostgresWorkflowRegistry<Tls>>,
+    dataset_db: Db<ProHashMapDatasetDb>, // TODO: implement postgres version
+    thread_pool: Arc<ThreadPool>,
 }
 
 impl<Tls> PostgresContext<Tls>
@@ -58,6 +68,34 @@ where
             user_db: Arc::new(RwLock::new(PostgresUserDb::new(pool.clone()))),
             project_db: Arc::new(RwLock::new(PostgresProjectDb::new(pool.clone()))),
             workflow_registry: Arc::new(RwLock::new(PostgresWorkflowRegistry::new(pool.clone()))),
+            dataset_db: Default::default(),
+            thread_pool: Default::default(),
+        })
+    }
+
+    pub async fn new_with_data(
+        config: Config,
+        tls: Tls,
+        dataset_defs_path: PathBuf,
+        provider_defs_path: PathBuf,
+    ) -> Result<Self> {
+        let pg_mgr = PostgresConnectionManager::new(config, tls);
+
+        let pool = Pool::builder().build(pg_mgr).await?;
+
+        Self::update_schema(pool.get().await?).await?;
+
+        let mut dataset_db = ProHashMapDatasetDb::default();
+        add_datasets_from_directory(&mut dataset_db, dataset_defs_path).await;
+        add_providers_from_directory(&mut dataset_db, provider_defs_path.clone()).await;
+        add_providers_from_directory(&mut dataset_db, provider_defs_path.join("pro")).await;
+
+        Ok(Self {
+            user_db: Arc::new(RwLock::new(PostgresUserDb::new(pool.clone()))),
+            project_db: Arc::new(RwLock::new(PostgresProjectDb::new(pool.clone()))),
+            workflow_registry: Arc::new(RwLock::new(PostgresWorkflowRegistry::new(pool.clone()))),
+            dataset_db: Arc::new(RwLock::new(dataset_db)),
+            thread_pool: Default::default(),
         })
     }
 
@@ -194,7 +232,7 @@ where
                             workflow_id UUID NOT NULL, -- TODO: REFERENCES workflows(id)
                             symbology json,
                             visibility "LayerVisibility" NOT NULL,
-                            PRIMARY KEY (project_id, layer_index)            
+                            PRIMARY KEY (project_id, project_version_id, layer_index)            
                         );
                         
                         CREATE TABLE project_version_plots (
@@ -297,9 +335,9 @@ where
     type Session = UserSession;
     type ProjectDB = PostgresProjectDb<Tls>;
     type WorkflowRegistry = PostgresWorkflowRegistry<Tls>;
-    type DatasetDB = PostgresDatasetDb;
+    type DatasetDB = ProHashMapDatasetDb; // TODO: implement postgres version
     type QueryContext = QueryContextImpl;
-    type ExecutionContext = ExecutionContextImpl<UserSession, PostgresDatasetDb>;
+    type ExecutionContext = ExecutionContextImpl<UserSession, ProHashMapDatasetDb>; // TODO: use postgres version of dataset db
 
     fn project_db(&self) -> Db<Self::ProjectDB> {
         self.project_db.clone()
@@ -322,23 +360,33 @@ where
     }
 
     fn dataset_db(&self) -> Db<Self::DatasetDB> {
-        todo!()
+        self.dataset_db.clone()
     }
 
     async fn dataset_db_ref(&self) -> RwLockReadGuard<'_, Self::DatasetDB> {
-        todo!()
+        self.dataset_db.read().await
     }
 
     async fn dataset_db_ref_mut(&self) -> RwLockWriteGuard<'_, Self::DatasetDB> {
-        todo!()
+        self.dataset_db.write().await
     }
 
     fn query_context(&self) -> Result<Self::QueryContext> {
-        todo!()
+        // TODO: load config only once
+        Ok(QueryContextImpl {
+            chunk_byte_size: config::get_config_element::<config::QueryContext>()?.chunk_byte_size,
+            thread_pool: self.thread_pool.create_context(),
+        })
     }
 
-    fn execution_context(&self, _session: UserSession) -> Result<Self::ExecutionContext> {
-        todo!()
+    fn execution_context(&self, session: UserSession) -> Result<Self::ExecutionContext> {
+        Ok(
+            ExecutionContextImpl::<UserSession, ProHashMapDatasetDb>::new(
+                self.dataset_db.clone(),
+                self.thread_pool.create_context(),
+                session,
+            ),
+        )
     }
 
     async fn session_by_id(&self, session_id: crate::contexts::SessionId) -> Result<Self::Session> {
