@@ -466,7 +466,10 @@ mod tests {
 
     async fn with_temp_context<F, Fut>(f: F)
     where
-        F: FnOnce(PostgresContext<NoTls>) -> Fut + std::panic::UnwindSafe + Send + 'static,
+        F: FnOnce(PostgresContext<NoTls>, tokio_postgres::Config) -> Fut
+            + std::panic::UnwindSafe
+            + Send
+            + 'static,
         Fut: Future<Output = ()> + Send,
     {
         let (pg_config, schema) = setup_db().await;
@@ -477,10 +480,10 @@ mod tests {
             std::panic::catch_unwind(move || {
                 tokio::task::block_in_place(move || {
                     Handle::current().block_on(async move {
-                        let ctx = PostgresContext::new(pg_config, tokio_postgres::NoTls)
+                        let ctx = PostgresContext::new(pg_config.clone(), tokio_postgres::NoTls)
                             .await
                             .unwrap();
-                        f(ctx).await
+                        f(ctx, pg_config.clone()).await
                     })
                 })
             })
@@ -496,7 +499,7 @@ mod tests {
 
     #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
     async fn test() {
-        with_temp_context(|ctx| async move {
+        with_temp_context(|ctx, _| async move {
             anonymous(&ctx).await;
 
             let _user_id = user_reg_login(&ctx).await;
@@ -811,5 +814,40 @@ mod tests {
         db.logout(session.id).await.unwrap();
 
         assert!(db.session(session.id).await.is_err());
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
+    async fn it_persists_workflows() {
+        with_temp_context(|ctx, pg_config| async move {
+            let workflow = Workflow {
+                operator: TypedOperator::Vector(
+                    MockPointSource {
+                        params: MockPointSourceParams {
+                            points: vec![Coordinate2D::new(1., 2.); 3],
+                        },
+                    }
+                    .boxed(),
+                ),
+            };
+
+            let id = ctx
+                .workflow_registry_ref_mut()
+                .await
+                .register(workflow)
+                .await
+                .unwrap();
+
+            drop(ctx);
+
+            let ctx = PostgresContext::new(pg_config.clone(), tokio_postgres::NoTls)
+                .await
+                .unwrap();
+
+            let workflow = ctx.workflow_registry_ref().await.load(&id).await.unwrap();
+
+            let json = serde_json::to_string(&workflow).unwrap();
+            assert_eq!(json, r#"{"type":"Vector","operator":{"type":"MockPointSource","params":{"points":[{"x":1.0,"y":2.0},{"x":1.0,"y":2.0},{"x":1.0,"y":2.0}]}}}"#);
+        })
+        .await;
     }
 }
