@@ -40,6 +40,7 @@ pub enum Error {
         source: geoengine_datatypes::error::Error,
     },
     QueryProcessor,
+    InvalidTimeIntervalforQueryRectangle,
 
     #[snafu(display(
         "InvalidSpatialReferenceError: expected \"{}\" found \"{}\"",

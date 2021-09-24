@@ -370,6 +370,55 @@ impl MetaData<GdalLoadingInfo, RasterResultDescriptor, RasterQueryRectangle>
     }
 }
 
+#[derive(PartialEq, Serialize, Deserialize, Debug, Clone)]
+#[serde(rename_all = "camelCase")]
+pub struct GdalMetadataFixedTimes {
+    pub time_steps: Vec<TimeInstance>,
+    pub params: GdalDatasetParameters,
+    pub result_descriptor: RasterResultDescriptor,
+}
+
+#[async_trait]
+impl MetaData<GdalLoadingInfo, RasterResultDescriptor, RasterQueryRectangle>
+    for GdalMetadataFixedTimes
+{
+    async fn loading_info(&self, query: RasterQueryRectangle) -> Result<GdalLoadingInfo> {
+        if !query.time_interval.is_instant() {
+            return Err(Error::InvalidTimeIntervalforQueryRectangle);
+        }
+
+        let time_valid = TimeInterval::new(
+            self.time_steps[0],
+            self.time_steps[self.time_steps.len() - 1],
+        )
+        .unwrap();
+
+        let parts = if time_valid.contains(&query.time_interval) {
+            vec![GdalLoadingInfoPart {
+                time: query.time_interval,
+                params: self.params.clone(),
+            }]
+            .into_iter()
+        } else {
+            vec![].into_iter()
+        };
+
+        Ok(GdalLoadingInfo {
+            info: GdalLoadingInfoPartIterator::Static { parts },
+        })
+    }
+
+    async fn result_descriptor(&self) -> Result<RasterResultDescriptor> {
+        Ok(self.result_descriptor.clone())
+    }
+
+    fn box_clone(
+        &self,
+    ) -> Box<dyn MetaData<GdalLoadingInfo, RasterResultDescriptor, RasterQueryRectangle>> {
+        Box::new(self.clone())
+    }
+}
+
 /// Meta data for a regular time series that begins (is anchored) at `start` with multiple gdal data
 /// sets `step` time apart. The `time_placeholders` in the file path of the dataset are replaced with the
 /// specified time `reference` in specified time `format`.
@@ -1299,6 +1348,85 @@ mod tests {
                 "/foo/bar_011000000.tiff",
                 "/foo/bar_022000000.tiff"
             ]
+        );
+    }
+
+    #[allow(clippy::suspicious_map)]
+    #[tokio::test]
+    async fn test_step_meta_data() {
+        let no_data_value = Some(0.);
+
+        let meta_data = GdalMetadataFixedTimes {
+            result_descriptor: RasterResultDescriptor {
+                data_type: RasterDataType::U8,
+                spatial_reference: SpatialReference::epsg_4326().into(),
+                measurement: Measurement::Unitless,
+                no_data_value,
+            },
+            params: GdalDatasetParameters {
+                file_path: "/foo/bar_step.tiff".into(),
+                rasterband_channel: 0,
+                geo_transform: TestDefault::test_default(),
+                width: 360,
+                height: 180,
+                file_not_found_handling: FileNotFoundHandling::NoData,
+                no_data_value,
+                properties_mapping: None,
+                gdal_open_options: None,
+                gdal_config_options: None,
+            },
+            time_steps: vec![
+                TimeInstance::from_millis_unchecked(0),
+                TimeInstance::from_millis_unchecked(5),
+                TimeInstance::from_millis_unchecked(10),
+                TimeInstance::from_millis_unchecked(15),
+            ],
+        };
+
+        assert_eq!(
+            meta_data.result_descriptor().await.unwrap(),
+            RasterResultDescriptor {
+                data_type: RasterDataType::U8,
+                spatial_reference: SpatialReference::epsg_4326().into(),
+                measurement: Measurement::Unitless,
+                no_data_value: Some(0.)
+            }
+        );
+
+        assert_eq!(
+            meta_data
+                .loading_info(RasterQueryRectangle {
+                    spatial_bounds: SpatialPartition2D::new_unchecked(
+                        (0., 1.).into(),
+                        (1., 0.).into()
+                    ),
+                    time_interval: TimeInterval::new_instant(5).unwrap(),
+                    spatial_resolution: SpatialResolution::one(),
+                })
+                .await
+                .unwrap()
+                .info
+                .map(|p| p.unwrap().params.file_path.to_str().unwrap().to_owned())
+                .collect::<Vec<_>>(),
+            &["/foo/bar_step.tiff"]
+        );
+
+        assert_eq!(
+            meta_data
+                .loading_info(RasterQueryRectangle {
+                    spatial_bounds: SpatialPartition2D::new_unchecked(
+                        (0., 1.).into(),
+                        (1., 0.).into()
+                    ),
+                    time_interval: TimeInterval::new_instant(25).unwrap(),
+                    spatial_resolution: SpatialResolution::one(),
+                })
+                .await
+                .unwrap()
+                .info
+                .map(|p| p.unwrap().params.file_path.to_str().unwrap().to_owned())
+                .count(),
+            0
         );
     }
 
