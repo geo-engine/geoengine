@@ -15,7 +15,7 @@ use geoengine_datatypes::operations::reproject::{
 use geoengine_datatypes::primitives::{
     AxisAlignedRectangle, BoundingBox2D, Measurement, SpatialPartitioned, TimeInterval,
 };
-use geoengine_datatypes::raster::{GeoTransform, RasterDataType};
+use geoengine_datatypes::raster::RasterDataType;
 use geoengine_datatypes::spatial_reference::{SpatialReference, SpatialReferenceAuthority};
 use geoengine_operators::engine::{
     MetaData, MetaDataProvider, RasterQueryRectangle, RasterResultDescriptor, VectorQueryRectangle,
@@ -23,8 +23,8 @@ use geoengine_operators::engine::{
 };
 use geoengine_operators::mock::MockDatasetDataSourceLoadingInfo;
 use geoengine_operators::source::{
-    GdalDatasetParameters, GdalLoadingInfo, GdalLoadingInfoPart, GdalLoadingInfoPartIterator,
-    OgrSourceDataset,
+    GdalDatasetGeoTransform, GdalDatasetParameters, GdalLoadingInfo, GdalLoadingInfoPart,
+    GdalLoadingInfoPartIterator, OgrSourceDataset,
 };
 use log::debug;
 use serde::{Deserialize, Serialize};
@@ -40,6 +40,8 @@ pub struct SentinelS2L2ACogsProviderDefinition {
     name: String,
     id: DatasetProviderId,
     api_url: String,
+    bands: Vec<Band>,
+    zones: Vec<Zone>,
 }
 
 #[typetag::serde]
@@ -51,6 +53,8 @@ impl DatasetProviderDefinition for SentinelS2L2ACogsProviderDefinition {
         Ok(Box::new(SentinelS2L2aCogsDataProvider::new(
             self.id,
             self.api_url,
+            &self.bands,
+            &self.zones,
         )))
     }
 
@@ -67,39 +71,18 @@ impl DatasetProviderDefinition for SentinelS2L2ACogsProviderDefinition {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct Band {
     pub name: String,
     pub no_data_value: Option<f64>,
     pub data_type: RasterDataType,
 }
 
-impl Band {
-    pub fn new(name: String, no_data_value: Option<f64>, data_type: RasterDataType) -> Self {
-        Self {
-            name,
-            no_data_value,
-            data_type,
-        }
-    }
-}
-
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct Zone {
     pub name: String,
     pub epsg: u32,
-}
-
-impl Zone {
-    pub fn new(name: String, epsg: u32) -> Self {
-        Self { name, epsg }
-    }
-}
-
-#[derive(Debug, Clone)]
-pub struct SentinelMetaData {
-    bands: Vec<Band>,
-    zones: Vec<Zone>,
 }
 
 #[derive(Debug, Clone)]
@@ -116,41 +99,22 @@ pub struct SentinelS2L2aCogsDataProvider {
 }
 
 impl SentinelS2L2aCogsDataProvider {
-    pub fn new(id: DatasetProviderId, api_url: String) -> Self {
-        let meta_data = Self::load_metadata();
+    pub fn new(id: DatasetProviderId, api_url: String, bands: &[Band], zones: &[Zone]) -> Self {
         Self {
             api_url,
-            datasets: Self::create_datasets(&id, &meta_data),
-        }
-    }
-
-    fn load_metadata() -> SentinelMetaData {
-        // TODO: fetch dataset metadata from config or remote
-        SentinelMetaData {
-            bands: vec![
-                Band::new("B01".to_owned(), Some(0.), RasterDataType::U16),
-                Band::new("B02".to_owned(), Some(0.), RasterDataType::U16),
-                Band::new("B03".to_owned(), Some(0.), RasterDataType::U16),
-                Band::new("B04".to_owned(), Some(0.), RasterDataType::U16),
-                Band::new("B08".to_owned(), Some(0.), RasterDataType::U16),
-                Band::new("SCL".to_owned(), Some(0.), RasterDataType::U8),
-            ],
-            zones: vec![
-                Zone::new("UTM32N".to_owned(), 32632),
-                Zone::new("UTM36S".to_owned(), 32736),
-            ],
+            datasets: Self::create_datasets(&id, bands, zones),
         }
     }
 
     fn create_datasets(
         id: &DatasetProviderId,
-        meta_data: &SentinelMetaData,
+        bands: &[Band],
+        zones: &[Zone],
     ) -> HashMap<DatasetId, SentinelDataset> {
-        meta_data
-            .zones
+        zones
             .iter()
             .flat_map(|zone| {
-                meta_data.bands.iter().map(move |band| {
+                bands.iter().map(move |band| {
                     let dataset_id: DatasetId = ExternalDatasetId {
                         provider_id: *id,
                         dataset_id: format!("{}:{}", zone.name, band.name),
@@ -316,7 +280,7 @@ impl SentinelS2L2aCogsMetaData {
             params: GdalDatasetParameters {
                 file_path: PathBuf::from(format!("/vsicurl/{}", asset.href)),
                 rasterband_channel: 1,
-                geo_transform: GeoTransform::from(
+                geo_transform: GdalDatasetGeoTransform::from(
                     asset
                         .gdal_geotransform()
                         .ok_or(error::Error::StacInvalidGeoTransform)?,
@@ -327,6 +291,7 @@ impl SentinelS2L2aCogsMetaData {
                 no_data_value: self.band.no_data_value,
                 properties_mapping: None,
                 gdal_open_options: None,
+                gdal_config_options: None,
             },
         })
     }
@@ -542,6 +507,7 @@ impl MetaDataProvider<OgrSourceDataset, VectorResultDescriptor, VectorQueryRecta
 mod tests {
     use std::{fs::File, io::BufReader, str::FromStr};
 
+    use crate::test_data;
     use futures::StreamExt;
     use geoengine_datatypes::primitives::{SpatialPartition2D, SpatialResolution};
     use geoengine_operators::{
@@ -556,7 +522,7 @@ mod tests {
         // TODO: mock STAC endpoint
 
         let def: Box<dyn DatasetProviderDefinition> = serde_json::from_reader(BufReader::new(
-            File::open("services/test-data/provider_defs/pro/sentinel_s2_l2a_cogs.json")?,
+            File::open(test_data!("provider_defs/pro/sentinel_s2_l2a_cogs.json"))?,
         ))?;
 
         let provider = def.initialize().await?;
@@ -596,7 +562,7 @@ mod tests {
             params: GdalDatasetParameters {
                 file_path: "/vsicurl/https://sentinel-cogs.s3.us-west-2.amazonaws.com/sentinel-s2-l2a-cogs/32/R/PU/2021/1/S2B_32RPU_20210102_0_L2A/B01.tif".into(),
                 rasterband_channel: 1,
-                geo_transform: GeoTransform {
+                geo_transform: GdalDatasetGeoTransform {
                     origin_coordinate: (600_000.0, 3_400_020.0).into(),
                     x_pixel_size: 60.,
                     y_pixel_size: -60.,
@@ -607,6 +573,7 @@ mod tests {
                 no_data_value: Some(0.),
                 properties_mapping: None,
                 gdal_open_options: None,
+                gdal_config_options: None,
             },
         }];
 
@@ -630,7 +597,7 @@ mod tests {
         let mut exe = MockExecutionContext::default();
 
         let def: Box<dyn DatasetProviderDefinition> = serde_json::from_reader(BufReader::new(
-            File::open("services/test-data/provider_defs/pro/sentinel_s2_l2a_cogs.json")?,
+            File::open(test_data!("provider_defs/pro/sentinel_s2_l2a_cogs.json"))?,
         ))?;
 
         let provider = def.initialize().await?;

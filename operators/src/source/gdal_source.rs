@@ -14,13 +14,14 @@ use futures::{
 
 use async_trait::async_trait;
 use gdal::raster::{GdalType, RasterBand as GdalRasterBand};
-use gdal::{Dataset as GdalDataset, DatasetOptions, Metadata as GdalMetadata};
+use gdal::{Dataset as GdalDataset, DatasetOptions, GdalOpenFlags, Metadata as GdalMetadata};
 use geoengine_datatypes::primitives::{Coordinate2D, SpatialPartition2D, SpatialPartitioned};
 use geoengine_datatypes::raster::{
     EmptyGrid, GeoTransform, Grid2D, GridOrEmpty2D, GridShapeAccess, Pixel, RasterDataType,
     RasterProperties, RasterPropertiesEntry, RasterPropertiesEntryType, RasterPropertiesKey,
     RasterTile2D,
 };
+use geoengine_datatypes::util::test::TestDefault;
 use geoengine_datatypes::{dataset::DatasetId, raster::TileInformation};
 use geoengine_datatypes::{
     primitives::{TimeInstance, TimeInterval, TimeStep, TimeStepIter},
@@ -29,9 +30,11 @@ use geoengine_datatypes::{
         TilingSpecification,
     },
 };
-use log::debug;
+use log::{debug, info};
 use serde::{Deserialize, Serialize};
-use snafu::ResultExt;
+use snafu::{ensure, ResultExt};
+use std::collections::HashMap;
+use std::convert::{TryFrom, TryInto};
 use std::{marker::PhantomData, path::PathBuf};
 //use gdal::metadata::Metadata; // TODO: handle metadata
 
@@ -85,20 +88,64 @@ pub struct GdalLoadingInfo {
     pub info: GdalLoadingInfoPartIterator,
 }
 
+#[derive(Debug, Clone)]
+pub struct DynamicGdalLoadingInfoPartIterator {
+    time_step_iter: TimeStepIter,
+    params: GdalDatasetParameters,
+    time_placeholders: HashMap<String, GdalSourceTimePlaceholder>,
+    step: TimeStep,
+    max_t2: TimeInstance,
+}
+
+impl DynamicGdalLoadingInfoPartIterator {
+    fn new(
+        time_step_iter: TimeStepIter,
+        params: GdalDatasetParameters,
+        time_placeholders: HashMap<String, GdalSourceTimePlaceholder>,
+        step: TimeStep,
+        max_t2: TimeInstance,
+    ) -> Result<Self> {
+        // TODO: maybe fail on deserialization
+        if time_placeholders.is_empty()
+            || time_placeholders.keys().any(String::is_empty)
+            || time_placeholders
+                .values()
+                .any(|value| value.format.is_empty())
+        {
+            return Err(Error::DynamicGdalSourceSpecHasEmptyTimePlaceholders);
+        }
+
+        Ok(Self {
+            time_step_iter,
+            params,
+            time_placeholders,
+            step,
+            max_t2,
+        })
+    }
+}
+
 #[allow(clippy::large_enum_variant)]
 #[derive(Debug, Clone)]
 pub enum GdalLoadingInfoPartIterator {
     Static {
         parts: std::vec::IntoIter<GdalLoadingInfoPart>,
     },
-    Dynamic {
-        time_step_iter: TimeStepIter,
-        params: GdalDatasetParameters,
-        placeholder: String,
-        time_format: String,
-        step: TimeStep,
-        max_t2: TimeInstance,
-    },
+    Dynamic(DynamicGdalLoadingInfoPartIterator),
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct GdalSourceTimePlaceholder {
+    pub format: String,
+    pub reference: TimeReference,
+}
+
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub enum TimeReference {
+    Start,
+    End,
 }
 
 impl Iterator for GdalLoadingInfoPartIterator {
@@ -107,14 +154,13 @@ impl Iterator for GdalLoadingInfoPartIterator {
     fn next(&mut self) -> Option<Self::Item> {
         match self {
             GdalLoadingInfoPartIterator::Static { parts } => parts.next().map(Result::Ok),
-            GdalLoadingInfoPartIterator::Dynamic {
+            GdalLoadingInfoPartIterator::Dynamic(DynamicGdalLoadingInfoPartIterator {
                 time_step_iter,
                 params,
-                placeholder,
-                time_format,
+                time_placeholders,
                 step,
                 max_t2,
-            } => {
+            }) => {
                 let t1 = time_step_iter.next()?;
 
                 let t2 = t1 + *step;
@@ -123,7 +169,7 @@ impl Iterator for GdalLoadingInfoPartIterator {
                 let time_interval = TimeInterval::new_unchecked(t1, t2);
 
                 let loading_info_part = params
-                    .replace_time_placeholder(placeholder, time_format, time_interval.start())
+                    .replace_time_placeholders(time_placeholders, time_interval)
                     .map(|loading_info_part_params| GdalLoadingInfoPart {
                         time: time_interval,
                         params: loading_info_part_params,
@@ -142,19 +188,116 @@ pub struct GdalLoadingInfoPart {
     pub params: GdalDatasetParameters,
 }
 
+/// Parameters for loading data using Gdal
 #[derive(PartialEq, Serialize, Deserialize, Debug, Clone)]
 #[serde(rename_all = "camelCase")]
 pub struct GdalDatasetParameters {
     pub file_path: PathBuf,
     pub rasterband_channel: usize,
-    #[serde(deserialize_with = "GeoTransform::deserialize_with_check")]
-    pub geo_transform: GeoTransform,
+    pub geo_transform: GdalDatasetGeoTransform,
     pub width: usize,
     pub height: usize,
     pub file_not_found_handling: FileNotFoundHandling,
     pub no_data_value: Option<f64>,
     pub properties_mapping: Option<Vec<GdalMetadataMapping>>,
+    // Dataset open option as strings, e.g. `vec!["UserPwd=geoengine:pwd".to_owned(), "HttpAuth=BASIC".to_owned()]`
     pub gdal_open_options: Option<Vec<String>>,
+    // Configs as key, value pairs that will be set as thread local config options, e.g.
+    // `vec!["AWS_REGION".to_owned(), "eu-central-1".to_owned()]` and unset afterwards
+    // TODO: validate the config options: only allow specific keys and specific values
+    pub gdal_config_options: Option<Vec<(String, String)>>,
+}
+
+/// A user friendly representation of Gdal's geo transform. In contrast to [`GeoTransform`] this
+/// geo transform allows arbitrary pixel sizes and can thus also represent rasters where the origin is not located
+/// in the upper left corner. It should only be used for loading rasters with Gdal and not internally.
+#[derive(Copy, Clone, PartialEq, Debug, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct GdalDatasetGeoTransform {
+    pub origin_coordinate: Coordinate2D,
+    pub x_pixel_size: f64,
+    pub y_pixel_size: f64,
+}
+
+/// Default implementation for testing purposes where geo transform doesn't matter
+impl TestDefault for GdalDatasetGeoTransform {
+    fn test_default() -> Self {
+        Self {
+            origin_coordinate: (0.0, 0.0).into(),
+            x_pixel_size: 1.0,
+            y_pixel_size: -1.0,
+        }
+    }
+}
+
+/// Direct conversion from `GdalDatasetGeoTransform` to [`GeoTransform`] only works if origin is located in the upper left corner.
+impl TryFrom<GdalDatasetGeoTransform> for GeoTransform {
+    type Error = Error;
+
+    fn try_from(dataset_geo_transform: GdalDatasetGeoTransform) -> Result<Self> {
+        ensure!(
+            dataset_geo_transform.x_pixel_size > 0.0 && dataset_geo_transform.y_pixel_size < 0.0,
+            error::GeoTransformOrigin
+        );
+
+        Ok(GeoTransform::new(
+            dataset_geo_transform.origin_coordinate,
+            dataset_geo_transform.x_pixel_size,
+            dataset_geo_transform.y_pixel_size,
+        ))
+    }
+}
+
+impl From<gdal::GeoTransform> for GdalDatasetGeoTransform {
+    fn from(gdal_geo_transform: gdal::GeoTransform) -> Self {
+        Self {
+            origin_coordinate: (gdal_geo_transform[0], gdal_geo_transform[3]).into(),
+            x_pixel_size: gdal_geo_transform[1],
+            y_pixel_size: gdal_geo_transform[5],
+        }
+    }
+}
+
+/// Set thread local gdal options and revert them on drop
+struct TemporaryGdalThreadLocalConfigOptions {
+    original_configs: Vec<(String, Option<String>)>,
+}
+
+impl TemporaryGdalThreadLocalConfigOptions {
+    /// Set thread local gdal options and revert them on drop
+    fn new(configs: &[(String, String)]) -> Result<Self> {
+        let mut original_configs = vec![];
+
+        for (key, value) in configs {
+            let old = gdal::config::get_thread_local_config_option(key, "").map(|value| {
+                if value.is_empty() {
+                    None
+                } else {
+                    Some(value)
+                }
+            })?;
+
+            // TODO: check if overriding existing config (local & global) is ok for the given key
+            gdal::config::set_thread_local_config_option(key, value)?;
+            info!("set {}={}", key, value);
+
+            original_configs.push((key.clone(), old));
+        }
+
+        Ok(Self { original_configs })
+    }
+}
+
+impl Drop for TemporaryGdalThreadLocalConfigOptions {
+    fn drop(&mut self) {
+        for (key, value) in &self.original_configs {
+            if let Some(value) = value {
+                let _result = gdal::config::set_thread_local_config_option(key, value);
+            } else {
+                let _result = gdal::config::clear_thread_local_config_option(key);
+            }
+        }
+    }
 }
 
 impl SpatialPartitioned for GdalDatasetParameters {
@@ -180,7 +323,7 @@ impl GridShapeAccess for GdalDatasetParameters {
 }
 
 /// How to handle file not found errors
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
+#[derive(Serialize, Deserialize, Debug, Clone, Copy, PartialEq)]
 pub enum FileNotFoundHandling {
     NoData, // output tiles filled with nodata
     Error,  // return error tile
@@ -198,15 +341,21 @@ pub struct GdalMetaDataStatic {
 impl MetaData<GdalLoadingInfo, RasterResultDescriptor, RasterQueryRectangle>
     for GdalMetaDataStatic
 {
-    async fn loading_info(&self, _query: RasterQueryRectangle) -> Result<GdalLoadingInfo> {
+    async fn loading_info(&self, query: RasterQueryRectangle) -> Result<GdalLoadingInfo> {
+        let valid = self.time.unwrap_or_default();
+
+        let parts = if valid.intersects(&query.time_interval) {
+            vec![GdalLoadingInfoPart {
+                time: valid,
+                params: self.params.clone(),
+            }]
+            .into_iter()
+        } else {
+            vec![].into_iter()
+        };
+
         Ok(GdalLoadingInfo {
-            info: GdalLoadingInfoPartIterator::Static {
-                parts: vec![GdalLoadingInfoPart {
-                    time: self.time.unwrap_or_default(),
-                    params: self.params.clone(),
-                }]
-                .into_iter(),
-            },
+            info: GdalLoadingInfoPartIterator::Static { parts },
         })
     }
 
@@ -222,8 +371,8 @@ impl MetaData<GdalLoadingInfo, RasterResultDescriptor, RasterQueryRectangle>
 }
 
 /// Meta data for a regular time series that begins (is anchored) at `start` with multiple gdal data
-/// sets `step` time apart. The `placeholder` in the file path of the dataset is replaced with the
-/// queried time in specified `time_format`.
+/// sets `step` time apart. The `time_placeholders` in the file path of the dataset are replaced with the
+/// specified time `reference` in specified time `format`.
 // TODO: `start` is actually more a reference time, because the time series also goes in
 //        negative direction. Maybe it would be better to have a real start and end time, then
 //        everything before start and after end is just one big nodata raster instead of many
@@ -232,8 +381,7 @@ impl MetaData<GdalLoadingInfo, RasterResultDescriptor, RasterQueryRectangle>
 pub struct GdalMetaDataRegular {
     pub result_descriptor: RasterResultDescriptor,
     pub params: GdalDatasetParameters,
-    pub placeholder: String,
-    pub time_format: String,
+    pub time_placeholders: HashMap<String, GdalSourceTimePlaceholder>,
     pub start: TimeInstance,
     pub step: TimeStep,
 }
@@ -254,14 +402,13 @@ impl MetaData<GdalLoadingInfo, RasterResultDescriptor, RasterQueryRectangle>
             TimeStepIter::new_with_interval_incl_start(snapped_interval, self.step)?;
 
         Ok(GdalLoadingInfo {
-            info: GdalLoadingInfoPartIterator::Dynamic {
-                time_step_iter: time_iterator,
-                params: self.params.clone(),
-                placeholder: self.placeholder.clone(),
-                time_format: self.time_format.clone(),
-                step: self.step,
-                max_t2: query.time_interval.end(),
-            },
+            info: GdalLoadingInfoPartIterator::Dynamic(DynamicGdalLoadingInfoPartIterator::new(
+                time_iterator,
+                self.params.clone(),
+                self.time_placeholders.clone(),
+                self.step,
+                query.time_interval.end(),
+            )?),
         })
     }
 
@@ -277,28 +424,36 @@ impl MetaData<GdalLoadingInfo, RasterResultDescriptor, RasterQueryRectangle>
 }
 
 impl GdalDatasetParameters {
-    pub fn replace_time_placeholder(
+    /// Placeholders are replaced by formatted time value.
+    /// E.g. `%my_placeholder%` could be replaced by `2014-04-01` depending on the format and time input.
+    pub fn replace_time_placeholders(
         &self,
-        placeholder: &str,
-        time_format: &str,
-        time: TimeInstance,
+        placeholders: &HashMap<String, GdalSourceTimePlaceholder>,
+        time: TimeInterval,
     ) -> Result<Self> {
-        let time_string = time
-            .as_naive_date_time()
-            .ok_or(Error::TimeInstanceNotDisplayable)?
-            .format(time_format)
-            .to_string();
-        let file_path = self
-            .file_path
-            .to_str()
-            .ok_or(Error::FilePathNotRepresentableAsString)?
-            .replace(placeholder, &time_string);
+        let mut file_path: String = self.file_path.to_string_lossy().into();
+
+        for (placeholder, time_placeholder) in placeholders {
+            let time = match time_placeholder.reference {
+                TimeReference::Start => time.start(),
+                TimeReference::End => time.end(),
+            };
+            let time_string = time
+                .as_naive_date_time()
+                .ok_or(Error::TimeInstanceNotDisplayable)?
+                .format(&time_placeholder.format)
+                .to_string();
+
+            // TODO: use more efficient algorithm for replacing multiple placeholders, e.g. aho-corasick
+            file_path = file_path.replace(placeholder, &time_string);
+        }
 
         Ok(Self {
-            file_not_found_handling: FileNotFoundHandling::NoData,
+            file_not_found_handling: self.file_not_found_handling,
             file_path: file_path.into(),
             properties_mapping: self.properties_mapping.clone(),
             gdal_open_options: self.gdal_open_options.clone(),
+            gdal_config_options: self.gdal_config_options.clone(),
             ..*self
         })
     }
@@ -383,7 +538,8 @@ where
         tile_information: &TileInformation,
     ) -> Result<GridWithProperties<T>> {
         let dataset_bounds = dataset_params.spatial_partition();
-        let geo_transform = dataset_params.geo_transform;
+        // TODO: handle datasets where origin is not in the upper left corner
+        let geo_transform: GeoTransform = dataset_params.geo_transform.try_into()?;
         let output_bounds = tile_information.spatial_partition();
         let output_shape = tile_information.tile_size_in_pixels();
         let output_geo_transform = tile_information.tile_geo_transform();
@@ -399,9 +555,16 @@ where
             .as_ref()
             .map(|o| o.iter().map(String::as_str).collect::<Vec<_>>());
 
+        // reverts the thread local configs on drop
+        let _thread_local_configs = dataset_params
+            .gdal_config_options
+            .as_ref()
+            .map(|config_options| TemporaryGdalThreadLocalConfigOptions::new(config_options));
+
         let dataset_result = GdalDataset::open_ex(
             &dataset_params.file_path,
             DatasetOptions {
+                open_flags: GdalOpenFlags::GDAL_OF_RASTER,
                 open_options: options.as_deref(),
                 ..DatasetOptions::default()
             },
@@ -775,8 +938,10 @@ fn properties_from_band(properties: &mut RasterProperties, gdal_dataset: &GdalRa
 mod tests {
     use super::*;
     use crate::engine::{MockExecutionContext, MockQueryContext};
-    use crate::util::gdal::{add_ndvi_dataset, raster_dir};
+    use crate::test_data;
+    use crate::util::gdal::add_ndvi_dataset;
     use crate::util::Result;
+    use geoengine_datatypes::hashmap;
     use geoengine_datatypes::primitives::{AxisAlignedRectangle, SpatialPartition2D};
     use geoengine_datatypes::raster::{TileInformation, TilingStrategy};
     use geoengine_datatypes::{
@@ -831,9 +996,9 @@ mod tests {
     ) -> Result<GridWithProperties<u8>> {
         GdalSourceProcessor::<u8>::load_tile_data(
             &GdalDatasetParameters {
-                file_path: raster_dir().join("modis_ndvi/MOD13A2_M_NDVI_2014-01-01.TIFF"),
+                file_path: test_data!("raster/modis_ndvi/MOD13A2_M_NDVI_2014-01-01.TIFF").into(),
                 rasterband_channel: 1,
-                geo_transform: GeoTransform {
+                geo_transform: GdalDatasetGeoTransform {
                     origin_coordinate: (-180., 90.).into(),
                     x_pixel_size: 0.1,
                     y_pixel_size: -0.1,
@@ -867,6 +1032,7 @@ mod tests {
                     },
                 ]),
                 gdal_open_options: None,
+                gdal_config_options: None,
             },
             &TileInformation::with_partition_and_shape(output_bounds, output_shape),
         )
@@ -1032,16 +1198,25 @@ mod tests {
         let params = GdalDatasetParameters {
             file_path: "/foo/bar_%TIME%.tiff".into(),
             rasterband_channel: 0,
-            geo_transform: Default::default(),
+            geo_transform: TestDefault::test_default(),
             width: 360,
             height: 180,
             file_not_found_handling: FileNotFoundHandling::NoData,
             no_data_value: Some(0.),
             properties_mapping: None,
             gdal_open_options: None,
+            gdal_config_options: None,
         };
         let replaced = params
-            .replace_time_placeholder("%TIME%", "%f", TimeInstance::from_millis_unchecked(22))
+            .replace_time_placeholders(
+                &hashmap! {
+                    "%TIME%".to_string() => GdalSourceTimePlaceholder {
+                        format: "%f".to_string(),
+                        reference: TimeReference::Start,
+                    },
+                },
+                TimeInterval::new_instant(TimeInstance::from_millis_unchecked(22)).unwrap(),
+            )
             .unwrap();
         assert_eq!(
             replaced.file_path.to_string_lossy(),
@@ -1072,16 +1247,21 @@ mod tests {
             params: GdalDatasetParameters {
                 file_path: "/foo/bar_%TIME%.tiff".into(),
                 rasterband_channel: 0,
-                geo_transform: Default::default(),
+                geo_transform: TestDefault::test_default(),
                 width: 360,
                 height: 180,
                 file_not_found_handling: FileNotFoundHandling::NoData,
                 no_data_value,
                 properties_mapping: None,
                 gdal_open_options: None,
+                gdal_config_options: None,
             },
-            placeholder: "%TIME%".to_string(),
-            time_format: "%f".to_string(),
+            time_placeholders: hashmap! {
+                "%TIME%".to_string() => GdalSourceTimePlaceholder {
+                    format: "%f".to_string(),
+                    reference: TimeReference::Start,
+                },
+            },
             start: TimeInstance::from_millis_unchecked(11),
             step: TimeStep {
                 granularity: TimeGranularity::Millis,
@@ -1335,5 +1515,25 @@ mod tests {
         );
 
         assert!(tile_1.is_empty());
+    }
+
+    #[test]
+    fn it_reverts_config_options() {
+        let config_options = vec![("foo".to_owned(), "bar".to_owned())];
+
+        {
+            let _config =
+                TemporaryGdalThreadLocalConfigOptions::new(config_options.as_slice()).unwrap();
+
+            assert_eq!(
+                gdal::config::get_config_option("foo", "default").unwrap(),
+                "bar".to_owned()
+            );
+        }
+
+        assert_eq!(
+            gdal::config::get_config_option("foo", "").unwrap(),
+            "".to_owned()
+        );
     }
 }

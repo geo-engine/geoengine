@@ -1,0 +1,35 @@
+{
+  "properties": {
+    "id": {
+      "type": "internal",
+      "datasetId": "b6191257-6d61-4c6b-90a4-ebfb1b23899d"
+    },
+    "name": "Germany",
+    "description": "Boundaries of Germany",
+    "sourceOperator": "OgrSource"
+  },
+  "metaData": {
+    "type": "OgrMetaData",
+    "loadingInfo": {
+      "fileName": "test_data/vector/data/germany_polygon.gpkg",
+      "layerName": "test_germany",
+      "dataType": "MultiPolygon",
+      "time": {
+        "type": "none"
+      },
+      "columns": {
+        "x": "",
+        "float": [],
+        "int": [],
+        "text": []
+      },
+      "onError": "abort"
+    },
+    "resultDescriptor": {
+      "type": "vector",
+      "dataType": "MultiPolygon",
+      "spatialReference": "EPSG:4326",
+      "columns": {}
+    }
+  }
+}

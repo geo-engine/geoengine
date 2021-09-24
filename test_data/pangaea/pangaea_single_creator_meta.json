@@ -1,0 +1,774 @@
+{
+  "@context": "http://schema.org/",
+  "@id": "https://doi.org/10.1594/PANGAEA.909550",
+  "@type": "Dataset",
+  "identifier": "https://doi.org/10.1594/PANGAEA.909550",
+  "url": "https://doi.pangaea.de/10.1594/PANGAEA.909550",
+  "creator": {
+      "@id": "https://orcid.org/0000-0002-5388-6453",
+      "@type": "Person",
+      "name": "Fouzia Haider",
+      "familyName": "Haider",
+      "givenName": "Fouzia",
+      "identifier": "https://orcid.org/0000-0002-5388-6453",
+      "email": "fouzia.haider@uni-rostock.de"
+  },
+  "name": "Effects of hypoxia and reoxygenation on the intermediary metabolites in the gill tissue of Crassostrea gigas and Mytilus edulis",
+  "publisher": {
+    "@type": "Organization",
+    "name": "PANGAEA",
+    "disambiguatingDescription": "Data Publisher for Earth & Environmental Science",
+    "url": "https://www.pangaea.de/"
+  },
+  "includedInDataCatalog": {
+    "@type": "DataCatalog",
+    "name": "PANGAEA",
+    "disambiguatingDescription": "Data Publisher for Earth & Environmental Science",
+    "url": "https://www.pangaea.de/"
+  },
+  "datePublished": "2019-12-05",
+  "isPartOf": "https://doi.org/10.1594/PANGAEA.909581",
+  "description": "This dataset is about: Effects of hypoxia and reoxygenation on the intermediary metabolites in the gill tissue of Crassostrea gigas and Mytilus edulis. Please consult parent dataset @ https://doi.org/10.1594/PANGAEA.909581 for more information.",
+  "citation": {
+    "@type": "CreativeWork",
+    "creator": [
+      {
+        "@id": "https://orcid.org/0000-0002-5388-6453",
+        "@type": "Person",
+        "name": "Fouzia Haider",
+        "familyName": "Haider",
+        "givenName": "Fouzia",
+        "identifier": "https://orcid.org/0000-0002-5388-6453",
+        "email": "fouzia.haider@uni-rostock.de"
+      },
+      {
+        "@id": "https://orcid.org/0000-0003-3058-4919",
+        "@type": "Person",
+        "name": "Halina Falfushynska",
+        "familyName": "Falfushynska",
+        "givenName": "Halina",
+        "identifier": "https://orcid.org/0000-0003-3058-4919"
+      },
+      {
+        "@id": "https://orcid.org/0000-0003-3105-6296",
+        "@type": "Person",
+        "name": "Stefan Timm",
+        "familyName": "Timm",
+        "givenName": "Stefan",
+        "identifier": "https://orcid.org/0000-0003-3105-6296"
+      },
+      {
+        "@id": "https://orcid.org/0000-0002-2068-4302",
+        "@type": "Person",
+        "name": "Inna M Sokolova",
+        "familyName": "Sokolova",
+        "givenName": "Inna M",
+        "identifier": "https://orcid.org/0000-0002-2068-4302",
+        "email": "inna.sokolova@uni-rostock.de"
+      }
+    ],
+    "name": "Effects of hypoxia and reoxygenation on intermediary metabolite homeostasis of marine bivalves Mytilus edulis and Crassostrea gigas",
+    "datePublished": "2020"
+  },
+  "variableMeasured": [
+    {
+      "@type": "PropertyValue",
+      "name": "Species",
+      "url": "https://en.wikipedia.org/wiki/Species",
+      "subjectOf": {
+        "@type": "DefinedTermSet",
+        "hasDefinedTerm": {
+          "@type": "DefinedTerm",
+          "name": "species"
+        }
+      }
+    },
+    {
+      "@type": "PropertyValue",
+      "name": "Experimental treatment",
+      "description": "Oxic conditions"
+    },
+    {
+      "@type": "PropertyValue",
+      "name": "Tissues"
+    },
+    {
+      "@type": "PropertyValue",
+      "name": "Sample ID"
+    },
+    {
+      "@type": "PropertyValue",
+      "name": "4-Hydroxyproline",
+      "unitText": "arbitrary units/mg",
+      "description": "wet mass",
+      "subjectOf": {
+        "@type": "DefinedTermSet",
+        "hasDefinedTerm": {
+          "@id": "http://purl.obolibrary.org/obo/CHEBI_20392",
+          "@type": "DefinedTerm",
+          "identifier": "http://purl.obolibrary.org/obo/CHEBI_20392",
+          "name": "4-hydroxyproline",
+          "url": "http://purl.obolibrary.org/obo/CHEBI_20392"
+        }
+      }
+    },
+    {
+      "@type": "PropertyValue",
+      "name": "Adenine",
+      "unitText": "arbitrary units/mg",
+      "description": "wet mass",
+      "subjectOf": {
+        "@type": "DefinedTermSet",
+        "hasDefinedTerm": {
+          "@id": "http://purl.obolibrary.org/obo/CHEBI_16708",
+          "@type": "DefinedTerm",
+          "identifier": "http://purl.obolibrary.org/obo/CHEBI_16708",
+          "name": "adenine",
+          "url": "http://purl.obolibrary.org/obo/CHEBI_16708"
+        }
+      }
+    },
+    {
+      "@type": "PropertyValue",
+      "name": "Adenosine",
+      "unitText": "arbitrary units/mg",
+      "description": "wet mass",
+      "subjectOf": {
+        "@type": "DefinedTermSet",
+        "hasDefinedTerm": {
+          "@id": "http://purl.obolibrary.org/obo/CHEBI_16335",
+          "@type": "DefinedTerm",
+          "identifier": "http://purl.obolibrary.org/obo/CHEBI_16335",
+          "name": "adenosine",
+          "url": "http://purl.obolibrary.org/obo/CHEBI_16335"
+        }
+      }
+    },
+    {
+      "@type": "PropertyValue",
+      "name": "Alanine",
+      "unitText": "µg/mg",
+      "description": "wet mass",
+      "subjectOf": {
+        "@type": "DefinedTermSet",
+        "hasDefinedTerm": {
+          "@id": "http://purl.obolibrary.org/obo/CHEBI_16449",
+          "@type": "DefinedTerm",
+          "identifier": "http://purl.obolibrary.org/obo/CHEBI_16449",
+          "name": "alanine",
+          "url": "http://purl.obolibrary.org/obo/CHEBI_16449"
+        }
+      }
+    },
+    {
+      "@type": "PropertyValue",
+      "name": "Adenosine monophosphate",
+      "unitText": "µg/mg",
+      "description": "wet mass",
+      "subjectOf": {
+        "@type": "DefinedTermSet",
+        "hasDefinedTerm": {
+          "@id": "http://purl.obolibrary.org/obo/CHEBI_16027",
+          "@type": "DefinedTerm",
+          "identifier": "http://purl.obolibrary.org/obo/CHEBI_16027",
+          "name": "adenosine monophosphate",
+          "alternateName": "AMP",
+          "url": "https://www.ebi.ac.uk/chebi/searchId.do?chebiId=CHEBI:16027"
+        }
+      }
+    },
+    {
+      "@type": "PropertyValue",
+      "name": "Arginine",
+      "unitText": "µg/mg",
+      "description": "wet mass",
+      "subjectOf": {
+        "@type": "DefinedTermSet",
+        "hasDefinedTerm": {
+          "@id": "http://purl.obolibrary.org/obo/CHEBI_29016",
+          "@type": "DefinedTerm",
+          "identifier": "http://purl.obolibrary.org/obo/CHEBI_29016",
+          "name": "arginine",
+          "url": "http://purl.obolibrary.org/obo/CHEBI_29016"
+        }
+      }
+    },
+    {
+      "@type": "PropertyValue",
+      "name": "Argininosuccinic acid",
+      "unitText": "arbitrary units/mg",
+      "description": "wet mass"
+    },
+    {
+      "@type": "PropertyValue",
+      "name": "Asparagine",
+      "unitText": "µg/mg",
+      "description": "wet mass",
+      "subjectOf": {
+        "@type": "DefinedTermSet",
+        "hasDefinedTerm": {
+          "@id": "http://purl.obolibrary.org/obo/CHEBI_22653",
+          "@type": "DefinedTerm",
+          "identifier": "http://purl.obolibrary.org/obo/CHEBI_22653",
+          "name": "asparagine",
+          "url": "http://purl.obolibrary.org/obo/CHEBI_22653"
+        }
+      }
+    },
+    {
+      "@type": "PropertyValue",
+      "name": "Aspartic acid",
+      "unitText": "µg/mg",
+      "description": "wet mass (Aspartate)",
+      "subjectOf": {
+        "@type": "DefinedTermSet",
+        "hasDefinedTerm": {
+          "@id": "http://purl.obolibrary.org/obo/CHEBI_22660",
+          "@type": "DefinedTerm",
+          "identifier": "http://purl.obolibrary.org/obo/CHEBI_22660",
+          "name": "aspartic acid",
+          "url": "http://purl.obolibrary.org/obo/CHEBI_22660"
+        }
+      }
+    },
+    {
+      "@type": "PropertyValue",
+      "name": "Carnitine",
+      "unitText": "µg/mg",
+      "description": "wet mass",
+      "subjectOf": {
+        "@type": "DefinedTermSet",
+        "hasDefinedTerm": {
+          "@id": "http://purl.obolibrary.org/obo/CHEBI_17126",
+          "@type": "DefinedTerm",
+          "identifier": "http://purl.obolibrary.org/obo/CHEBI_17126",
+          "name": "carnitine",
+          "url": "http://purl.obolibrary.org/obo/CHEBI_17126"
+        }
+      }
+    },
+    {
+      "@type": "PropertyValue",
+      "name": "Choline",
+      "unitText": "arbitrary units/mg",
+      "description": "wet mass",
+      "subjectOf": {
+        "@type": "DefinedTermSet",
+        "hasDefinedTerm": {
+          "@id": "http://purl.obolibrary.org/obo/CHEBI_15354",
+          "@type": "DefinedTerm",
+          "identifier": "http://purl.obolibrary.org/obo/CHEBI_15354",
+          "name": "choline",
+          "url": "http://purl.obolibrary.org/obo/CHEBI_15354"
+        }
+      }
+    },
+    {
+      "@type": "PropertyValue",
+      "name": "Citrate/Isocitrate",
+      "unitText": "µg/mg",
+      "description": "wet mass"
+    },
+    {
+      "@type": "PropertyValue",
+      "name": "Cytidine",
+      "unitText": "arbitrary units/mg",
+      "description": "wet mass",
+      "subjectOf": {
+        "@type": "DefinedTermSet",
+        "hasDefinedTerm": {
+          "@id": "http://purl.obolibrary.org/obo/CHEBI_17562",
+          "@type": "DefinedTerm",
+          "identifier": "http://purl.obolibrary.org/obo/CHEBI_17562",
+          "name": "cytidine",
+          "url": "http://purl.obolibrary.org/obo/CHEBI_17562"
+        }
+      }
+    },
+    {
+      "@type": "PropertyValue",
+      "name": "Cytidine monophosphate",
+      "unitText": "arbitrary units/mg",
+      "description": "wet mass"
+    },
+    {
+      "@type": "PropertyValue",
+      "name": "Cystine",
+      "unitText": "µg/mg",
+      "description": "wet mass",
+      "subjectOf": {
+        "@type": "DefinedTermSet",
+        "hasDefinedTerm": {
+          "@id": "http://purl.obolibrary.org/obo/CHEBI_17376",
+          "@type": "DefinedTerm",
+          "identifier": "http://purl.obolibrary.org/obo/CHEBI_17376",
+          "name": "cystine",
+          "url": "http://purl.obolibrary.org/obo/CHEBI_17376"
+        }
+      }
+    },
+    {
+      "@type": "PropertyValue",
+      "name": "gamma-Aminobutyric acid",
+      "unitText": "µg/mg",
+      "url": "https://en.wikipedia.org/wiki/Gamma-Aminobutyric_acid",
+      "description": "wet mass",
+      "subjectOf": {
+        "@type": "DefinedTermSet",
+        "hasDefinedTerm": {
+          "@id": "http://purl.obolibrary.org/obo/CHEBI_16865",
+          "@type": "DefinedTerm",
+          "identifier": "http://purl.obolibrary.org/obo/CHEBI_16865",
+          "name": "gamma-aminobutyric acid",
+          "url": "http://purl.obolibrary.org/obo/CHEBI_16865"
+        }
+      }
+    },
+    {
+      "@type": "PropertyValue",
+      "name": "Glutamic acid",
+      "unitText": "µg/mg",
+      "description": "wet mass (Glutamate)",
+      "subjectOf": {
+        "@type": "DefinedTermSet",
+        "hasDefinedTerm": {
+          "@id": "http://purl.obolibrary.org/obo/CHEBI_18237",
+          "@type": "DefinedTerm",
+          "identifier": "http://purl.obolibrary.org/obo/CHEBI_18237",
+          "name": "glutamic acid",
+          "url": "http://purl.obolibrary.org/obo/CHEBI_18237"
+        }
+      }
+    },
+    {
+      "@type": "PropertyValue",
+      "name": "Glutamine",
+      "unitText": "µg/mg",
+      "description": "wet mass",
+      "subjectOf": {
+        "@type": "DefinedTermSet",
+        "hasDefinedTerm": {
+          "@id": "http://purl.obolibrary.org/obo/CHEBI_28300",
+          "@type": "DefinedTerm",
+          "identifier": "http://purl.obolibrary.org/obo/CHEBI_28300",
+          "name": "glutamine",
+          "url": "http://purl.obolibrary.org/obo/CHEBI_28300"
+        }
+      }
+    },
+    {
+      "@type": "PropertyValue",
+      "name": "Glycine",
+      "unitText": "µg/mg",
+      "description": "wet mass",
+      "subjectOf": {
+        "@type": "DefinedTermSet",
+        "hasDefinedTerm": {
+          "@id": "http://purl.obolibrary.org/obo/CHEBI_15428",
+          "@type": "DefinedTerm",
+          "identifier": "http://purl.obolibrary.org/obo/CHEBI_15428",
+          "name": "glycine",
+          "url": "http://purl.obolibrary.org/obo/CHEBI_15428"
+        }
+      }
+    },
+    {
+      "@type": "PropertyValue",
+      "name": "Guanosine monophosphate",
+      "unitText": "arbitrary units/mg",
+      "description": "wet mass"
+    },
+    {
+      "@type": "PropertyValue",
+      "name": "Histamine",
+      "unitText": "arbitrary units/mg",
+      "description": "wet mass",
+      "subjectOf": {
+        "@type": "DefinedTermSet",
+        "hasDefinedTerm": {
+          "@id": "http://purl.obolibrary.org/obo/CHEBI_18295",
+          "@type": "DefinedTerm",
+          "identifier": "http://purl.obolibrary.org/obo/CHEBI_18295",
+          "name": "histamine",
+          "url": "http://purl.obolibrary.org/obo/CHEBI_18295"
+        }
+      }
+    },
+    {
+      "@type": "PropertyValue",
+      "name": "Histidine",
+      "unitText": "µg/mg",
+      "description": "wet mass",
+      "subjectOf": {
+        "@type": "DefinedTermSet",
+        "hasDefinedTerm": {
+          "@id": "http://purl.obolibrary.org/obo/CHEBI_27570",
+          "@type": "DefinedTerm",
+          "identifier": "http://purl.obolibrary.org/obo/CHEBI_27570",
+          "name": "histidine",
+          "url": "http://purl.obolibrary.org/obo/CHEBI_27570"
+        }
+      }
+    },
+    {
+      "@type": "PropertyValue",
+      "name": "Homocysteine",
+      "unitText": "arbitrary units/mg",
+      "description": "wet mass",
+      "subjectOf": {
+        "@type": "DefinedTermSet",
+        "hasDefinedTerm": {
+          "@id": "http://purl.obolibrary.org/obo/CHEBI_17230",
+          "@type": "DefinedTerm",
+          "identifier": "http://purl.obolibrary.org/obo/CHEBI_17230",
+          "name": "homocysteine",
+          "url": "http://purl.obolibrary.org/obo/CHEBI_17230"
+        }
+      }
+    },
+    {
+      "@type": "PropertyValue",
+      "name": "Homocystine",
+      "unitText": "arbitrary units/mg",
+      "description": "wet mass",
+      "subjectOf": {
+        "@type": "DefinedTermSet",
+        "hasDefinedTerm": {
+          "@id": "http://purl.obolibrary.org/obo/CHEBI_17485",
+          "@type": "DefinedTerm",
+          "identifier": "http://purl.obolibrary.org/obo/CHEBI_17485",
+          "name": "homocystine",
+          "url": "http://purl.obolibrary.org/obo/CHEBI_17485"
+        }
+      }
+    },
+    {
+      "@type": "PropertyValue",
+      "name": "Hypoxanthine",
+      "unitText": "arbitrary units/mg",
+      "description": "wet mass",
+      "subjectOf": {
+        "@type": "DefinedTermSet",
+        "hasDefinedTerm": {
+          "@id": "http://purl.obolibrary.org/obo/CHEBI_17368",
+          "@type": "DefinedTerm",
+          "identifier": "http://purl.obolibrary.org/obo/CHEBI_17368",
+          "name": "hypoxanthine",
+          "url": "http://purl.obolibrary.org/obo/CHEBI_17368"
+        }
+      }
+    },
+    {
+      "@type": "PropertyValue",
+      "name": "Inosine",
+      "unitText": "arbitrary units/mg",
+      "description": "wet mass",
+      "subjectOf": {
+        "@type": "DefinedTermSet",
+        "hasDefinedTerm": {
+          "@id": "http://purl.obolibrary.org/obo/CHEBI_17596",
+          "@type": "DefinedTerm",
+          "identifier": "http://purl.obolibrary.org/obo/CHEBI_17596",
+          "name": "inosine",
+          "url": "http://purl.obolibrary.org/obo/CHEBI_17596"
+        }
+      }
+    },
+    {
+      "@type": "PropertyValue",
+      "name": "Isoleucine",
+      "unitText": "µg/mg",
+      "description": "wet mass",
+      "subjectOf": {
+        "@type": "DefinedTermSet",
+        "hasDefinedTerm": {
+          "@id": "http://purl.obolibrary.org/obo/CHEBI_24898",
+          "@type": "DefinedTerm",
+          "identifier": "http://purl.obolibrary.org/obo/CHEBI_24898",
+          "name": "isoleucine",
+          "url": "http://purl.obolibrary.org/obo/CHEBI_24898"
+        }
+      }
+    },
+    {
+      "@type": "PropertyValue",
+      "name": "Leucine",
+      "unitText": "µg/mg",
+      "description": "wet mass",
+      "subjectOf": {
+        "@type": "DefinedTermSet",
+        "hasDefinedTerm": {
+          "@id": "http://purl.obolibrary.org/obo/CHEBI_25017",
+          "@type": "DefinedTerm",
+          "identifier": "http://purl.obolibrary.org/obo/CHEBI_25017",
+          "name": "leucine",
+          "url": "http://purl.obolibrary.org/obo/CHEBI_25017"
+        }
+      }
+    },
+    {
+      "@type": "PropertyValue",
+      "name": "Lysine",
+      "unitText": "µg/mg",
+      "description": "wet mass",
+      "subjectOf": {
+        "@type": "DefinedTermSet",
+        "hasDefinedTerm": {
+          "@id": "http://purl.obolibrary.org/obo/CHEBI_25094",
+          "@type": "DefinedTerm",
+          "identifier": "http://purl.obolibrary.org/obo/CHEBI_25094",
+          "name": "lysine",
+          "url": "http://purl.obolibrary.org/obo/CHEBI_25094"
+        }
+      }
+    },
+    {
+      "@type": "PropertyValue",
+      "name": "Malate",
+      "unitText": "µg/mg",
+      "description": "wet mass",
+      "subjectOf": {
+        "@type": "DefinedTermSet",
+        "hasDefinedTerm": {
+          "@id": "http://purl.obolibrary.org/obo/CHEBI_25115",
+          "@type": "DefinedTerm",
+          "identifier": "http://purl.obolibrary.org/obo/CHEBI_25115",
+          "name": "malate",
+          "url": "http://purl.obolibrary.org/obo/CHEBI_25115"
+        }
+      }
+    },
+    {
+      "@type": "PropertyValue",
+      "name": "Methionine",
+      "unitText": "µg/mg",
+      "description": "wet mass",
+      "subjectOf": {
+        "@type": "DefinedTermSet",
+        "hasDefinedTerm": {
+          "@id": "http://purl.obolibrary.org/obo/CHEBI_16811",
+          "@type": "DefinedTerm",
+          "identifier": "http://purl.obolibrary.org/obo/CHEBI_16811",
+          "name": "methionine",
+          "url": "http://purl.obolibrary.org/obo/CHEBI_16811"
+        }
+      }
+    },
+    {
+      "@type": "PropertyValue",
+      "name": "Methionine sulfoxide",
+      "unitText": "arbitrary units/mg",
+      "description": "wet mass"
+    },
+    {
+      "@type": "PropertyValue",
+      "name": "Nicotinic acid",
+      "unitText": "arbitrary units/mg",
+      "description": "wet mass",
+      "subjectOf": {
+        "@type": "DefinedTermSet",
+        "hasDefinedTerm": {
+          "@id": "http://purl.obolibrary.org/obo/CHEBI_15940",
+          "@type": "DefinedTerm",
+          "identifier": "http://purl.obolibrary.org/obo/CHEBI_15940",
+          "name": "nicotinic acid",
+          "url": "http://purl.obolibrary.org/obo/CHEBI_15940"
+        }
+      }
+    },
+    {
+      "@type": "PropertyValue",
+      "name": "Ornithine",
+      "unitText": "arbitrary units/mg",
+      "description": "wet mass"
+    },
+    {
+      "@type": "PropertyValue",
+      "name": "Phenylalanine",
+      "unitText": "µg/mg",
+      "description": "wet mass",
+      "subjectOf": {
+        "@type": "DefinedTermSet",
+        "hasDefinedTerm": {
+          "@id": "http://purl.obolibrary.org/obo/CHEBI_28044",
+          "@type": "DefinedTerm",
+          "identifier": "http://purl.obolibrary.org/obo/CHEBI_28044",
+          "name": "phenylalanine",
+          "url": "http://purl.obolibrary.org/obo/CHEBI_28044"
+        }
+      }
+    },
+    {
+      "@type": "PropertyValue",
+      "name": "Proline",
+      "unitText": "µg/mg",
+      "description": "wet mass",
+      "subjectOf": {
+        "@type": "DefinedTermSet",
+        "hasDefinedTerm": {
+          "@id": "http://purl.obolibrary.org/obo/CHEBI_26271",
+          "@type": "DefinedTerm",
+          "identifier": "http://purl.obolibrary.org/obo/CHEBI_26271",
+          "name": "proline",
+          "url": "http://purl.obolibrary.org/obo/CHEBI_26271"
+        }
+      }
+    },
+    {
+      "@type": "PropertyValue",
+      "name": "S-Adenosylhomocysteine",
+      "unitText": "arbitrary units/mg",
+      "description": "wet mass"
+    },
+    {
+      "@type": "PropertyValue",
+      "name": "Serine",
+      "unitText": "µg/mg",
+      "description": "wet mass",
+      "subjectOf": {
+        "@type": "DefinedTermSet",
+        "hasDefinedTerm": {
+          "@id": "http://purl.obolibrary.org/obo/CHEBI_17822",
+          "@type": "DefinedTerm",
+          "identifier": "http://purl.obolibrary.org/obo/CHEBI_17822",
+          "name": "serine",
+          "url": "http://purl.obolibrary.org/obo/CHEBI_17822"
+        }
+      }
+    },
+    {
+      "@type": "PropertyValue",
+      "name": "Succinate",
+      "unitText": "µg/mg",
+      "description": "wet mass",
+      "subjectOf": {
+        "@type": "DefinedTermSet",
+        "hasDefinedTerm": {
+          "@id": "http://purl.obolibrary.org/obo/CHEBI_26806",
+          "@type": "DefinedTerm",
+          "identifier": "http://purl.obolibrary.org/obo/CHEBI_26806",
+          "name": "succinate",
+          "url": "http://purl.obolibrary.org/obo/CHEBI_26806"
+        }
+      }
+    },
+    {
+      "@type": "PropertyValue",
+      "name": "Taurine",
+      "unitText": "µg/mg",
+      "description": "wet mass",
+      "subjectOf": {
+        "@type": "DefinedTermSet",
+        "hasDefinedTerm": {
+          "@id": "http://purl.obolibrary.org/obo/CHEBI_15891",
+          "@type": "DefinedTerm",
+          "identifier": "http://purl.obolibrary.org/obo/CHEBI_15891",
+          "name": "taurine",
+          "url": "http://purl.obolibrary.org/obo/CHEBI_15891"
+        }
+      }
+    },
+    {
+      "@type": "PropertyValue",
+      "name": "Threonine",
+      "unitText": "µg/mg",
+      "description": "wet mass",
+      "subjectOf": {
+        "@type": "DefinedTermSet",
+        "hasDefinedTerm": {
+          "@id": "http://purl.obolibrary.org/obo/CHEBI_26986",
+          "@type": "DefinedTerm",
+          "identifier": "http://purl.obolibrary.org/obo/CHEBI_26986",
+          "name": "threonine",
+          "url": "http://purl.obolibrary.org/obo/CHEBI_26986"
+        }
+      }
+    },
+    {
+      "@type": "PropertyValue",
+      "name": "Tryptophan",
+      "unitText": "µg/mg",
+      "description": "wet mass",
+      "subjectOf": {
+        "@type": "DefinedTermSet",
+        "hasDefinedTerm": {
+          "@id": "http://purl.obolibrary.org/obo/CHEBI_27897",
+          "@type": "DefinedTerm",
+          "identifier": "http://purl.obolibrary.org/obo/CHEBI_27897",
+          "name": "tryptophan",
+          "url": "http://purl.obolibrary.org/obo/CHEBI_27897"
+        }
+      }
+    },
+    {
+      "@type": "PropertyValue",
+      "name": "Tyrosine",
+      "unitText": "µg/mg",
+      "description": "wet mass",
+      "subjectOf": {
+        "@type": "DefinedTermSet",
+        "hasDefinedTerm": {
+          "@id": "http://purl.obolibrary.org/obo/CHEBI_18186",
+          "@type": "DefinedTerm",
+          "identifier": "http://purl.obolibrary.org/obo/CHEBI_18186",
+          "name": "tyrosine",
+          "url": "http://purl.obolibrary.org/obo/CHEBI_18186"
+        }
+      }
+    },
+    {
+      "@type": "PropertyValue",
+      "name": "Uracil",
+      "unitText": "arbitrary units/mg",
+      "description": "wet mass",
+      "subjectOf": {
+        "@type": "DefinedTermSet",
+        "hasDefinedTerm": {
+          "@id": "http://purl.obolibrary.org/obo/CHEBI_17568",
+          "@type": "DefinedTerm",
+          "identifier": "http://purl.obolibrary.org/obo/CHEBI_17568",
+          "name": "uracil",
+          "url": "http://purl.obolibrary.org/obo/CHEBI_17568"
+        }
+      }
+    },
+    {
+      "@type": "PropertyValue",
+      "name": "Valine",
+      "unitText": "µg/mg",
+      "description": "wet mass",
+      "subjectOf": {
+        "@type": "DefinedTermSet",
+        "hasDefinedTerm": {
+          "@id": "http://purl.obolibrary.org/obo/CHEBI_27266",
+          "@type": "DefinedTerm",
+          "identifier": "http://purl.obolibrary.org/obo/CHEBI_27266",
+          "name": "valine",
+          "url": "http://purl.obolibrary.org/obo/CHEBI_27266"
+        }
+      }
+    }
+  ],
+  "inLanguage": "en",
+  "license": "https://creativecommons.org/licenses/by/4.0/",
+  "conditionsOfAccess": "unrestricted",
+  "isAccessibleForFree": true,
+  "keywords": "hypoxia; intertidal bivalves; metabolites; reoxygenation",
+  "size": {
+    "@type": "QuantitativeValue",
+    "value": 2940,
+    "unitText": "data points"
+  },
+  "distribution": [
+    {
+      "@type": "DataDownload",
+      "encodingFormat": "text/html",
+      "contentUrl": "https://doi.pangaea.de/10.1594/PANGAEA.909550?format=html"
+    },
+    {
+      "@type": "DataDownload",
+      "encodingFormat": "text/tab-separated-values",
+      "contentUrl": "https://doi.pangaea.de/10.1594/PANGAEA.909550?format=textfile"
+    }
+  ]
+}

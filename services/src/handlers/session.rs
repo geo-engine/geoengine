@@ -1,11 +1,25 @@
-use uuid::Uuid;
-use warp::Filter;
+use actix_web::{web, HttpResponse, Responder};
 
 use crate::{
-    contexts::{Context, Session, SimpleContext},
-    handlers::authenticate,
+    contexts::{Context, SimpleContext},
     projects::{ProjectId, STRectangle},
 };
+
+pub(crate) fn init_session_routes<C>(cfg: &mut web::ServiceConfig)
+where
+    C: SimpleContext,
+{
+    cfg.service(web::resource("/anonymous").route(web::post().to(anonymous_handler::<C>)))
+        .service(
+            web::scope("/session")
+                .service(web::resource("").route(web::get().to(session_handler::<C>)))
+                .service(
+                    web::resource("/project/{project}")
+                        .route(web::post().to(session_project_handler::<C>)),
+                )
+                .service(web::resource("/view").route(web::post().to(session_view_handler::<C>))),
+        );
+}
 
 /// Creates session for anonymous user.
 ///
@@ -29,18 +43,8 @@ use crate::{
 ///   "view": null
 /// }
 /// ```
-pub(crate) fn anonymous_handler<C: SimpleContext>(
-    ctx: C,
-) -> impl Filter<Extract = impl warp::Reply, Error = warp::Rejection> + Clone {
-    warp::path!("anonymous")
-        .and(warp::post())
-        .and(warp::any().map(move || ctx.clone()))
-        .and_then(anonymous)
-}
-
-// TODO: move into handler once async closures are available?
-async fn anonymous<C: SimpleContext>(ctx: C) -> Result<impl warp::Reply, warp::Rejection> {
-    Ok(warp::reply::json(&*ctx.default_session_ref().await))
+async fn anonymous_handler<C: SimpleContext>(ctx: web::Data<C>) -> impl Responder {
+    web::Json(ctx.default_session_ref().await.clone())
 }
 
 /// Retrieves details about the [Session].
@@ -70,19 +74,9 @@ async fn anonymous<C: SimpleContext>(ctx: C) -> Result<impl warp::Reply, warp::R
 /// # Errors
 ///
 /// This call fails if the session is invalid.
-pub(crate) fn session_handler<C: Context>(
-    ctx: C,
-) -> impl Filter<Extract = impl warp::Reply, Error = warp::Rejection> + Clone {
-    warp::path("session")
-        .and(warp::get())
-        .and(authenticate(ctx))
-        .map(session)
-}
-
-// TODO: move into handler once async closures are available?
-#[allow(clippy::needless_pass_by_value)]
-fn session<S: Session>(session: S) -> impl warp::Reply {
-    warp::reply::json(&session)
+#[allow(clippy::unused_async)] // the function signature of request handlers requires it
+pub(crate) async fn session_handler<C: Context>(session: C::Session) -> impl Responder {
+    web::Json(session)
 }
 
 /// Sets the active project of the session.
@@ -97,26 +91,14 @@ fn session<S: Session>(session: S) -> impl warp::Reply {
 /// # Errors
 ///
 /// This call fails if the session is invalid.
-pub(crate) fn session_project_handler<C: SimpleContext>(
-    ctx: C,
-) -> impl Filter<Extract = (impl warp::Reply,), Error = warp::Rejection> + Clone {
-    warp::path!("session" / "project" / Uuid)
-        .map(ProjectId)
-        .and(warp::post())
-        .and(authenticate(ctx.clone()))
-        .and(warp::any().map(move || ctx.clone()))
-        .and_then(session_project)
-}
-
-// TODO: move into handler once async closures are available?
-async fn session_project<C: SimpleContext>(
-    project: ProjectId,
+async fn session_project_handler<C: SimpleContext>(
+    project: web::Path<ProjectId>,
     _session: C::Session,
-    ctx: C,
-) -> Result<impl warp::Reply, warp::Rejection> {
-    ctx.default_session_ref_mut().await.project = Some(project);
+    ctx: web::Data<C>,
+) -> impl Responder {
+    ctx.default_session_ref_mut().await.project = Some(project.into_inner());
 
-    Ok(warp::reply())
+    HttpResponse::Ok()
 }
 
 // TODO: /view instead of /session/view
@@ -144,62 +126,44 @@ async fn session_project<C: SimpleContext>(
 /// # Errors
 ///
 /// This call fails if the session is invalid.
-pub(crate) fn session_view_handler<C: SimpleContext>(
-    ctx: C,
-) -> impl Filter<Extract = (impl warp::Reply,), Error = warp::Rejection> + Clone {
-    warp::path!("session" / "view")
-        .and(warp::post())
-        .and(authenticate(ctx.clone()))
-        .and(warp::any().map(move || ctx.clone()))
-        .and(warp::body::json())
-        .and_then(session_view)
-}
-
-// TODO: move into handler once async closures are available?
-async fn session_view<C: SimpleContext>(
+async fn session_view_handler<C: SimpleContext>(
     _session: C::Session,
-    ctx: C,
-    view: STRectangle,
-) -> Result<impl warp::Reply, warp::Rejection> {
-    ctx.default_session_ref_mut().await.view = Some(view);
+    ctx: web::Data<C>,
+    view: web::Json<STRectangle>,
+) -> impl Responder {
+    ctx.default_session_ref_mut().await.view = Some(view.into_inner());
 
-    Ok(warp::reply())
+    HttpResponse::Ok()
 }
 
 #[cfg(test)]
 mod tests {
+    use actix_web::dev::ServiceResponse;
+    use actix_web::{http::header, http::Method, test};
+    use actix_web_httpauth::headers::authorization::Bearer;
     use geoengine_datatypes::spatial_reference::SpatialReferenceOption;
-    use warp::http::Response;
-    use warp::hyper::body::Bytes;
 
     use crate::{
         contexts::{InMemoryContext, SimpleSession},
-        handlers::handle_rejection,
-        util::tests::{check_allowed_http_methods, create_project_helper},
+        util::tests::{check_allowed_http_methods, create_project_helper, send_test_request},
     };
 
     use super::*;
+    use crate::contexts::Session;
 
     #[tokio::test]
     async fn session() {
         let ctx = InMemoryContext::default();
 
-        let session = ctx.default_session_ref().await;
+        let session = ctx.default_session_ref().await.clone();
 
-        let res = warp::test::request()
-            .method("GET")
-            .path("/session")
-            .header(
-                "Authorization",
-                format!("Bearer {}", session.id().to_string()),
-            )
-            .reply(&session_handler(ctx.clone()).recover(handle_rejection))
-            .await;
+        let req = test::TestRequest::get()
+            .uri("/session")
+            .append_header((header::AUTHORIZATION, Bearer::new(session.id().to_string())));
+        let res = send_test_request(req, ctx).await;
+        let deserialized_session: SimpleSession = test::read_body_json(res).await;
 
-        let body = std::str::from_utf8(res.body()).unwrap();
-        let deserialized_session: SimpleSession = serde_json::from_str(body).unwrap();
-
-        assert_eq!(*session, deserialized_session);
+        assert_eq!(session, deserialized_session);
     }
 
     #[tokio::test]
@@ -208,15 +172,10 @@ mod tests {
 
         let (session, project) = create_project_helper(&ctx).await;
 
-        let res = warp::test::request()
-            .method("POST")
-            .path(&format!("/session/project/{}", project.to_string()))
-            .header(
-                "Authorization",
-                format!("Bearer {}", session.id().to_string()),
-            )
-            .reply(&session_project_handler(ctx.clone()).recover(handle_rejection))
-            .await;
+        let req = test::TestRequest::post()
+            .uri(&format!("/session/project/{}", project.to_string()))
+            .append_header((header::AUTHORIZATION, Bearer::new(session.id().to_string())));
+        let res = send_test_request(req, ctx.clone()).await;
 
         assert_eq!(res.status(), 200);
 
@@ -224,45 +183,38 @@ mod tests {
 
         let rect =
             STRectangle::new_unchecked(SpatialReferenceOption::Unreferenced, 0., 0., 1., 1., 0, 1);
-        let res = warp::test::request()
-            .method("POST")
-            .header("Content-Length", "0")
-            .path("/session/view")
-            .header(
-                "Authorization",
-                format!("Bearer {}", session.id().to_string()),
-            )
-            .json(&rect)
-            .reply(&session_view_handler(ctx.clone()).recover(handle_rejection))
-            .await;
+        let req = test::TestRequest::post()
+            .uri("/session/view")
+            .append_header((header::CONTENT_LENGTH, 0))
+            .append_header((header::AUTHORIZATION, Bearer::new(session.id().to_string())))
+            .set_json(&rect);
+        let res = send_test_request(req, ctx.clone()).await;
 
         assert_eq!(res.status(), 200);
 
         assert_eq!(ctx.default_session_ref().await.view(), Some(rect).as_ref());
     }
 
-    async fn anonymous_test_helper(method: &str) -> Response<Bytes> {
+    async fn anonymous_test_helper(method: Method) -> ServiceResponse {
         let ctx = InMemoryContext::default();
 
-        warp::test::request()
+        let req = test::TestRequest::default()
             .method(method)
-            .path("/anonymous")
-            .reply(&anonymous_handler(ctx).recover(handle_rejection))
-            .await
+            .uri("/anonymous");
+        send_test_request(req, ctx).await
     }
 
     #[tokio::test]
     async fn anonymous() {
-        let res = anonymous_test_helper("POST").await;
+        let res = anonymous_test_helper(Method::POST).await;
 
         assert_eq!(res.status(), 200);
 
-        let body = std::str::from_utf8(res.body()).unwrap();
-        let _session = serde_json::from_str::<SimpleSession>(body).unwrap();
+        let _session: SimpleSession = test::read_body_json(res).await;
     }
 
     #[tokio::test]
     async fn anonymous_invalid_method() {
-        check_allowed_http_methods(anonymous_test_helper, &["POST"]).await;
+        check_allowed_http_methods(anonymous_test_helper, &[Method::POST]).await;
     }
 }

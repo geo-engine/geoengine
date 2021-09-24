@@ -9,11 +9,12 @@ use crate::workflows::registry::HashMapRegistry;
 use crate::{
     datasets::add_from_directory::{add_datasets_from_directory, add_providers_from_directory},
     error::Result,
-    util::{dataset_defs_dir, provider_defs_dir},
 };
 use async_trait::async_trait;
 use geoengine_operators::concurrency::ThreadPool;
+use geoengine_operators::concurrency::ThreadPoolContextCreator;
 use snafu::ResultExt;
+use std::path::PathBuf;
 use std::sync::Arc;
 use tokio::sync::{RwLock, RwLockReadGuard, RwLockWriteGuard};
 
@@ -24,17 +25,16 @@ pub struct ProInMemoryContext {
     project_db: Db<ProHashMapProjectDb>,
     workflow_registry: Db<HashMapRegistry>,
     dataset_db: Db<ProHashMapDatasetDb>,
-    session: Option<UserSession>,
     thread_pool: Arc<ThreadPool>,
 }
 
 impl ProInMemoryContext {
     #[allow(clippy::too_many_lines)]
-    pub async fn new_with_data() -> Self {
+    pub async fn new_with_data(dataset_defs_path: PathBuf, provider_defs_path: PathBuf) -> Self {
         let mut db = ProHashMapDatasetDb::default();
-        add_datasets_from_directory(&mut db, dataset_defs_dir()).await;
-        add_providers_from_directory(&mut db, provider_defs_dir()).await;
-        add_providers_from_directory(&mut db, provider_defs_dir().join("pro")).await;
+        add_datasets_from_directory(&mut db, dataset_defs_path).await;
+        add_providers_from_directory(&mut db, provider_defs_path.clone()).await;
+        add_providers_from_directory(&mut db, provider_defs_path.join("pro")).await;
 
         Self {
             dataset_db: Arc::new(RwLock::new(db)),
@@ -99,16 +99,17 @@ impl Context for ProInMemoryContext {
 
     fn query_context(&self) -> Result<Self::QueryContext> {
         // TODO: load config only once
-        Ok(QueryContextImpl::new(
-            config::get_config_element::<config::QueryContext>()?.chunk_byte_size,
-        ))
+        Ok(QueryContextImpl {
+            chunk_byte_size: config::get_config_element::<config::QueryContext>()?.chunk_byte_size,
+            thread_pool: self.thread_pool.create_context(),
+        })
     }
 
     fn execution_context(&self, session: UserSession) -> Result<Self::ExecutionContext> {
         Ok(
             ExecutionContextImpl::<UserSession, ProHashMapDatasetDb>::new(
                 self.dataset_db.clone(),
-                self.thread_pool.clone(),
+                self.thread_pool.create_context(),
                 session,
             ),
         )

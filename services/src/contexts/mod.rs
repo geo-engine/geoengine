@@ -16,7 +16,7 @@ use geoengine_datatypes::dataset::DatasetId;
 use geoengine_datatypes::primitives::Coordinate2D;
 use geoengine_datatypes::raster::GridShape2D;
 use geoengine_datatypes::raster::TilingSpecification;
-use geoengine_operators::concurrency::{ThreadPool, ThreadPoolContext};
+use geoengine_operators::concurrency::ThreadPoolContext;
 use geoengine_operators::engine::{
     ExecutionContext, MetaData, MetaDataProvider, QueryContext, RasterQueryRectangle,
     RasterResultDescriptor, VectorQueryRectangle, VectorResultDescriptor,
@@ -35,7 +35,7 @@ pub type Db<T> = Arc<RwLock<T>>;
 // TODO: avoid locking the individual DBs here IF they are already thread safe (e.g. guaranteed by postgres)
 #[async_trait]
 pub trait Context: 'static + Send + Sync + Clone {
-    type Session: MockableSession; // TODO: change to `[Session]` when workarounds are gone
+    type Session: MockableSession + Clone; // TODO: change to `[Session]` when workarounds are gone
     type ProjectDB: ProjectDb<Self::Session>;
     type WorkflowRegistry: WorkflowRegistry;
     type DatasetDB: DatasetDb<Self::Session>;
@@ -62,18 +62,17 @@ pub trait Context: 'static + Send + Sync + Clone {
 }
 
 pub struct QueryContextImpl {
-    chunk_byte_size: usize,
-}
-
-impl QueryContextImpl {
-    pub fn new(chunk_byte_size: usize) -> Self {
-        Self { chunk_byte_size }
-    }
+    pub chunk_byte_size: usize,
+    pub thread_pool: ThreadPoolContext,
 }
 
 impl QueryContext for QueryContextImpl {
     fn chunk_byte_size(&self) -> usize {
         self.chunk_byte_size
+    }
+
+    fn thread_pool_context(&self) -> &ThreadPoolContext {
+        &self.thread_pool
     }
 }
 
@@ -83,7 +82,7 @@ where
     S: Session,
 {
     dataset_db: Db<D>,
-    thread_pool: Arc<ThreadPool>,
+    thread_pool: ThreadPoolContext,
     session: S,
 }
 
@@ -92,7 +91,7 @@ where
     D: DatasetDb<S>,
     S: Session,
 {
-    pub fn new(dataset_db: Db<D>, thread_pool: Arc<ThreadPool>, session: S) -> Self {
+    pub fn new(dataset_db: Db<D>, thread_pool: ThreadPoolContext, session: S) -> Self {
         Self {
             dataset_db,
             thread_pool,
@@ -112,8 +111,8 @@ where
         + MetaDataProvider<GdalLoadingInfo, RasterResultDescriptor, RasterQueryRectangle>,
     S: Session,
 {
-    fn thread_pool(&self) -> ThreadPoolContext {
-        self.thread_pool.create_context()
+    fn thread_pool_context(&self) -> ThreadPoolContext {
+        self.thread_pool.clone()
     }
 
     fn tiling_specification(&self) -> TilingSpecification {

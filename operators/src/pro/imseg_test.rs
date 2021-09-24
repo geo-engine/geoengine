@@ -44,6 +44,12 @@ pub async fn imseg_fit<C: QueryContext>(
     while let Some((ir_016, (ir_039, (ir_087, (ir_097, (ir_108, (ir_120, (ir_134, truth)))))))) = final_stream.next().await {
         match (ir_016, ir_039, ir_087, ir_097, ir_108, ir_120, ir_134, truth) {
             (Ok(ir_016), Ok(ir_039), Ok(ir_087), Ok(ir_097), Ok(ir_108), Ok(ir_120), Ok(ir_134), Ok(truth)) => {
+                dbg!(&ir_016.time);
+                dbg!(&truth.time);
+                dbg!(&ir_016.global_geo_transform);
+                dbg!(&truth.global_geo_transform);
+                dbg!(&ir_016.tile_position);
+                dbg!(&truth.tile_position);
                 match (ir_016.grid_array, ir_039.grid_array, ir_087.grid_array, ir_097.grid_array, ir_108.grid_array, ir_120.grid_array, ir_134.grid_array, truth.grid_array) {
                     (GridOrEmpty::Grid(grid_016), GridOrEmpty::Grid(grid_039),  GridOrEmpty::Grid(grid_087),  GridOrEmpty::Grid(grid_097), GridOrEmpty::Grid(grid_108), GridOrEmpty::Grid(grid_120), GridOrEmpty::Grid(grid_134), GridOrEmpty::Grid(grid_truth)) => {
 
@@ -121,15 +127,12 @@ U: Clone {
 
 #[cfg(test)]
 mod tests {
-    use geoengine_datatypes::{dataset::{DatasetId, InternalDatasetId},raster::{GeoTransform, RasterDataType}, spatial_reference::{SpatialReference, SpatialReferenceAuthority, SpatialReferenceOption}, 
-        primitives::{Coordinate2D, TimeInterval, SpatialResolution,  Measurement, TimeGranularity, TimeInstance, TimeStep},
-        raster::{TilingSpecification}
-    };
+    use geoengine_datatypes::{dataset::{DatasetId, InternalDatasetId}, hashmap, primitives::{Coordinate2D, TimeInterval, SpatialResolution,  Measurement, TimeGranularity, TimeInstance, TimeStep}, raster::{GeoTransform, RasterDataType}, raster::{TilingSpecification}, spatial_reference::{SpatialReference, SpatialReferenceAuthority, SpatialReferenceOption}};
  
 
     use geoengine_datatypes::{util::Identifier, raster::{RasterPropertiesEntryType}};
     use std::{path::PathBuf};
-    use crate::{engine::{MockExecutionContext,MockQueryContext, RasterOperator, RasterResultDescriptor}, source::{FileNotFoundHandling, GdalDatasetParameters, GdalMetaDataRegular, GdalSource, GdalSourceParameters,GdalMetadataMapping}};
+    use crate::{engine::{MockExecutionContext,MockQueryContext, RasterOperator, RasterResultDescriptor}, source::{FileNotFoundHandling, GdalDatasetParameters, GdalMetaDataRegular, GdalSource, GdalSourceParameters,GdalMetadataMapping, GdalSourceTimePlaceholder, TimeReference, GdalDatasetGeoTransform}};
     use crate::processing::{expression::{Expression, ExpressionParams, ExpressionSources}, meteosat::{offset_key, slope_key, satellite_key, channel_key, radiance::{Radiance, RadianceParams}, temperature::{Temperature, TemperatureParams}, reflectance::{Reflectance, ReflectanceParams}}};
     use crate::engine::SingleRasterSource;
 
@@ -148,6 +151,13 @@ mod tests {
         let no_data_value = Some(0.);
         
         let ir_016 = GdalMetaDataRegular{
+            time_placeholders: hashmap! {
+                "%%%_TIME_FORMATED_%%%".to_string() => GdalSourceTimePlaceholder {
+                    format: "%Y/%m/%d/%Y%m%d_%H%M/H-000-MSG3__-MSG3________-IR_016___-000001___-%Y%m%d%H%M-C_".to_string(),
+                    reference: TimeReference::Start,
+
+                }
+            },
             result_descriptor: RasterResultDescriptor{
                 data_type: RasterDataType::I16,
                 spatial_reference: SpatialReferenceOption::
@@ -164,7 +174,7 @@ mod tests {
             params: GdalDatasetParameters{
                 file_path: PathBuf::from("/mnt/panq/dbs_geo_data/satellite_data/msg_seviri/%%%_TIME_FORMATED_%%%"),
                 rasterband_channel: 1,
-                geo_transform: GeoTransform{
+                geo_transform: GdalDatasetGeoTransform{
                     origin_coordinate: (-5570248.477339744567871,5570248.477339744567871).into(),
                     x_pixel_size: 3000.403165817260742,
                     y_pixel_size: -3000.403165817260742, 
@@ -175,9 +185,10 @@ mod tests {
                 no_data_value,
                 properties_mapping: Some(vec![GdalMetadataMapping::identity(offset_key(), RasterPropertiesEntryType::Number), GdalMetadataMapping::identity(slope_key(), RasterPropertiesEntryType::Number), GdalMetadataMapping::identity(channel_key(), RasterPropertiesEntryType::Number), GdalMetadataMapping::identity(satellite_key(), RasterPropertiesEntryType::Number)]),
                 gdal_open_options: None,
+                gdal_config_options: None,
             },
-            placeholder: "%%%_TIME_FORMATED_%%%".to_string(),
-            time_format: "%Y/%m/%d/%Y%m%d_%H%M/H-000-MSG3__-MSG3________-IR_016___-000001___-%Y%m%d%H%M-C_".to_string(),
+            //placeholder: "%%%_TIME_FORMATED_%%%".to_string(),
+            //time_format: "%Y/%m/%d/%Y%m%d_%H%M/H-000-MSG3__-MSG3________-IR_016___-000001___-%Y%m%d%H%M-C_".to_string(),
             start: TimeInstance::from_millis(1072917000000).unwrap(),
             step: TimeStep{
                 granularity: TimeGranularity::Minutes,
@@ -185,6 +196,13 @@ mod tests {
             }
         };
         let ir_039 = GdalMetaDataRegular{
+            time_placeholders: hashmap! {
+                "%%%_TIME_FORMATED_%%%".to_string() => GdalSourceTimePlaceholder {
+                    format: "%Y/%m/%d/%Y%m%d_%H%M/H-000-MSG3__-MSG3________-IR_039___-000001___-%Y%m%d%H%M-C_".to_string(),
+                    reference: TimeReference::Start,
+
+                }
+            },
              result_descriptor: RasterResultDescriptor{
                  data_type: RasterDataType::I16,
                  spatial_reference: SpatialReferenceOption::
@@ -201,7 +219,7 @@ mod tests {
              params: GdalDatasetParameters{
                  file_path: PathBuf::from("/mnt/panq/dbs_geo_data/satellite_data/msg_seviri/%%%_TIME_FORMATED_%%%"),
                  rasterband_channel: 1,
-                 geo_transform: GeoTransform{
+                 geo_transform: GdalDatasetGeoTransform{
                      origin_coordinate: (-5570248.477339744567871,5570248.477339744567871).into(),
                      x_pixel_size: 3000.403165817260742,
                      y_pixel_size: -3000.403165817260742, 
@@ -211,19 +229,27 @@ mod tests {
                  file_not_found_handling: FileNotFoundHandling::NoData,
                  no_data_value,
                  properties_mapping: Some(vec![GdalMetadataMapping::identity(offset_key(), RasterPropertiesEntryType::Number), GdalMetadataMapping::identity(slope_key(), RasterPropertiesEntryType::Number), GdalMetadataMapping::identity(channel_key(), RasterPropertiesEntryType::Number), GdalMetadataMapping::identity(satellite_key(), RasterPropertiesEntryType::Number)]),
-                 gdal_open_options: None
+                 gdal_open_options: None,
+                 gdal_config_options: None,
              },
-             placeholder: "%%%_TIME_FORMATED_%%%".to_string(),
-             time_format: "%Y/%m/%d/%Y%m%d_%H%M/H-000-MSG3__-MSG3________-IR_039___-000001___-%Y%m%d%H%M-C_".to_string(),
+             //placeholder: "%%%_TIME_FORMATED_%%%".to_string(),
+             //time_format: "%Y/%m/%d/%Y%m%d_%H%M/H-000-MSG3__-MSG3________-IR_039___-000001___-%Y%m%d%H%M-C_".to_string(),
              start: TimeInstance::from_millis(1072917000000).unwrap(),
              step: TimeStep{
                  granularity: TimeGranularity::Minutes,
                 step: 15,
-            }
+            },
 
         };
 
         let ir_087 = GdalMetaDataRegular{
+            time_placeholders: hashmap! {
+                "%%%_TIME_FORMATED_%%%".to_string() => GdalSourceTimePlaceholder {
+                    format: "%Y/%m/%d/%Y%m%d_%H%M/H-000-MSG3__-MSG3________-IR_087___-000001___-%Y%m%d%H%M-C_".to_string(),
+                    reference: TimeReference::Start,
+
+                }
+            },
             result_descriptor: RasterResultDescriptor{
                 data_type: RasterDataType::I16,
                 spatial_reference: SpatialReferenceOption::
@@ -240,7 +266,7 @@ mod tests {
             params: GdalDatasetParameters{
                 file_path: PathBuf::from("/mnt/panq/dbs_geo_data/satellite_data/msg_seviri/%%%_TIME_FORMATED_%%%"),
                 rasterband_channel: 1,
-                geo_transform: GeoTransform{
+                geo_transform: GdalDatasetGeoTransform{
                     origin_coordinate: (-5570248.477, 5570248.477).into(),
                     x_pixel_size: 3000.403165817260742,
                     y_pixel_size: -3000.403165817260742, 
@@ -251,9 +277,10 @@ mod tests {
                 no_data_value,
                 properties_mapping: Some(vec![GdalMetadataMapping::identity(offset_key(), RasterPropertiesEntryType::Number), GdalMetadataMapping::identity(slope_key(), RasterPropertiesEntryType::Number), GdalMetadataMapping::identity(channel_key(), RasterPropertiesEntryType::Number), GdalMetadataMapping::identity(satellite_key(), RasterPropertiesEntryType::Number)]),
                 gdal_open_options: None,
+                gdal_config_options: None,
             },
-            placeholder: "%%%_TIME_FORMATED_%%%".to_string(),
-            time_format: "%Y/%m/%d/%Y%m%d_%H%M/H-000-MSG3__-MSG3________-IR_087___-000001___-%Y%m%d%H%M-C_".to_string(),
+            //placeholder: "%%%_TIME_FORMATED_%%%".to_string(),
+            //time_format: "%Y/%m/%d/%Y%m%d_%H%M/H-000-MSG3__-MSG3________-IR_087___-000001___-%Y%m%d%H%M-C_".to_string(),
             start: TimeInstance::from_millis(1072917000000).unwrap(),
             step: TimeStep{
                 granularity: TimeGranularity::Minutes,
@@ -263,6 +290,13 @@ mod tests {
         };
 
         let ir_097 = GdalMetaDataRegular{
+            time_placeholders: hashmap! {
+                "%%%_TIME_FORMATED_%%%".to_string() => GdalSourceTimePlaceholder {
+                    format: "%Y/%m/%d/%Y%m%d_%H%M/H-000-MSG3__-MSG3________-IR_097___-000001___-%Y%m%d%H%M-C_".to_string(),
+                    reference: TimeReference::Start,
+
+                }
+            },
             result_descriptor: RasterResultDescriptor{
                 data_type: RasterDataType::I16,
                 spatial_reference: SpatialReferenceOption::
@@ -279,7 +313,7 @@ mod tests {
             params: GdalDatasetParameters{
                 file_path: PathBuf::from("/mnt/panq/dbs_geo_data/satellite_data/msg_seviri/%%%_TIME_FORMATED_%%%"),
                 rasterband_channel: 1,
-                geo_transform: GeoTransform{
+                geo_transform: GdalDatasetGeoTransform{
                     origin_coordinate: (-5570248.477, 5570248.477).into(),
                     x_pixel_size: 3000.403165817260742,
                     y_pixel_size: -3000.403165817260742, 
@@ -290,9 +324,10 @@ mod tests {
                 no_data_value,
                 properties_mapping: Some(vec![GdalMetadataMapping::identity(offset_key(), RasterPropertiesEntryType::Number), GdalMetadataMapping::identity(slope_key(), RasterPropertiesEntryType::Number), GdalMetadataMapping::identity(channel_key(), RasterPropertiesEntryType::Number), GdalMetadataMapping::identity(satellite_key(), RasterPropertiesEntryType::Number)]),
                 gdal_open_options: None,
+                gdal_config_options: None,
             },
-            placeholder: "%%%_TIME_FORMATED_%%%".to_string(),
-            time_format: "%Y/%m/%d/%Y%m%d_%H%M/H-000-MSG3__-MSG3________-IR_097___-000001___-%Y%m%d%H%M-C_".to_string(),
+            //placeholder: "%%%_TIME_FORMATED_%%%".to_string(),
+            //time_format: "%Y/%m/%d/%Y%m%d_%H%M/H-000-MSG3__-MSG3________-IR_097___-000001___-%Y%m%d%H%M-C_".to_string(),
             start: TimeInstance::from_millis(1072917000000).unwrap(),
             step: TimeStep{
                 granularity: TimeGranularity::Minutes,
@@ -303,6 +338,13 @@ mod tests {
 
 
         let ir_108 = GdalMetaDataRegular{
+            time_placeholders: hashmap! {
+                "%%%_TIME_FORMATED_%%%".to_string() => GdalSourceTimePlaceholder {
+                    format: "%Y/%m/%d/%Y%m%d_%H%M/H-000-MSG3__-MSG3________-IR_108___-000001___-%Y%m%d%H%M-C_".to_string(),
+                    reference: TimeReference::Start,
+
+                }
+            },
             result_descriptor: RasterResultDescriptor{
                 data_type: RasterDataType::I16,
                 spatial_reference: SpatialReferenceOption::
@@ -319,7 +361,7 @@ mod tests {
             params: GdalDatasetParameters{
                 file_path: PathBuf::from("/mnt/panq/dbs_geo_data/satellite_data/msg_seviri/%%%_TIME_FORMATED_%%%"),
                 rasterband_channel: 1,
-                geo_transform: GeoTransform{
+                geo_transform: GdalDatasetGeoTransform{
                     origin_coordinate: (-5570248.477, 5570248.477).into(),
                     x_pixel_size: 3000.403165817260742,
                     y_pixel_size: -3000.403165817260742, 
@@ -330,9 +372,10 @@ mod tests {
                 no_data_value,
                 properties_mapping: Some(vec![GdalMetadataMapping::identity(offset_key(), RasterPropertiesEntryType::Number), GdalMetadataMapping::identity(slope_key(), RasterPropertiesEntryType::Number), GdalMetadataMapping::identity(channel_key(), RasterPropertiesEntryType::Number), GdalMetadataMapping::identity(satellite_key(), RasterPropertiesEntryType::Number)]),
                 gdal_open_options: None,
+                gdal_config_options: None,
             },
-            placeholder: "%%%_TIME_FORMATED_%%%".to_string(),
-            time_format: "%Y/%m/%d/%Y%m%d_%H%M/H-000-MSG3__-MSG3________-IR_108___-000001___-%Y%m%d%H%M-C_".to_string(),
+            //placeholder: "%%%_TIME_FORMATED_%%%".to_string(),
+            //time_format: "%Y/%m/%d/%Y%m%d_%H%M/H-000-MSG3__-MSG3________-IR_108___-000001___-%Y%m%d%H%M-C_".to_string(),
             start: TimeInstance::from_millis(1072917000000).unwrap(),
             step: TimeStep{
                 granularity: TimeGranularity::Minutes,
@@ -342,6 +385,13 @@ mod tests {
         };
 
         let ir_120 = GdalMetaDataRegular{
+            time_placeholders: hashmap! {
+                "%%%_TIME_FORMATED_%%%".to_string() => GdalSourceTimePlaceholder {
+                    format: "%Y/%m/%d/%Y%m%d_%H%M/H-000-MSG3__-MSG3________-IR_120___-000001___-%Y%m%d%H%M-C_".to_string(),
+                    reference: TimeReference::Start,
+
+                }
+            },
             result_descriptor: RasterResultDescriptor{
                 data_type: RasterDataType::I16,
                 spatial_reference: SpatialReferenceOption::
@@ -358,7 +408,7 @@ mod tests {
             params: GdalDatasetParameters{
                 file_path: PathBuf::from("/mnt/panq/dbs_geo_data/satellite_data/msg_seviri/%%%_TIME_FORMATED_%%%"),
                 rasterband_channel: 1,
-                geo_transform: GeoTransform{
+                geo_transform: GdalDatasetGeoTransform{
                     origin_coordinate: (-5570248.477, 5570248.477).into(),
                     x_pixel_size: 3000.403165817260742,
                     y_pixel_size: -3000.403165817260742, 
@@ -369,9 +419,11 @@ mod tests {
                 no_data_value,
                 properties_mapping: Some(vec![GdalMetadataMapping::identity(offset_key(), RasterPropertiesEntryType::Number), GdalMetadataMapping::identity(slope_key(), RasterPropertiesEntryType::Number), GdalMetadataMapping::identity(channel_key(), RasterPropertiesEntryType::Number), GdalMetadataMapping::identity(satellite_key(), RasterPropertiesEntryType::Number)]),
                 gdal_open_options: None,
+                gdal_config_options: None,
             },
-            placeholder: "%%%_TIME_FORMATED_%%%".to_string(),
-            time_format: "%Y/%m/%d/%Y%m%d_%H%M/H-000-MSG3__-MSG3________-IR_120___-000001___-%Y%m%d%H%M-C_".to_string(),
+            
+            //placeholder: "%%%_TIME_FORMATED_%%%".to_string(),
+            //time_format: "%Y/%m/%d/%Y%m%d_%H%M/H-000-MSG3__-MSG3________-IR_120___-000001___-%Y%m%d%H%M-C_".to_string(),
             start: TimeInstance::from_millis(1072917000000).unwrap(),
             step: TimeStep{
                 granularity: TimeGranularity::Minutes,
@@ -381,6 +433,13 @@ mod tests {
         };
 
         let ir_134 = GdalMetaDataRegular{
+            time_placeholders: hashmap! {
+                "%%%_TIME_FORMATED_%%%".to_string() => GdalSourceTimePlaceholder {
+                    format: "%Y/%m/%d/%Y%m%d_%H%M/H-000-MSG3__-MSG3________-IR_134___-000001___-%Y%m%d%H%M-C_".to_string(),
+                    reference: TimeReference::Start,
+
+                }
+            },
             result_descriptor: RasterResultDescriptor{
                 data_type: RasterDataType::I16,
                 spatial_reference: SpatialReferenceOption::
@@ -397,7 +456,7 @@ mod tests {
             params: GdalDatasetParameters{
                 file_path: PathBuf::from("/mnt/panq/dbs_geo_data/satellite_data/msg_seviri/%%%_TIME_FORMATED_%%%"),
                 rasterband_channel: 1,
-                geo_transform: GeoTransform{
+                geo_transform: GdalDatasetGeoTransform{
                     origin_coordinate: (-5570248.477, 5570248.477).into(),
                     x_pixel_size: 3000.403165817260742,
                     y_pixel_size: -3000.403165817260742, 
@@ -408,9 +467,10 @@ mod tests {
                 no_data_value,
                 properties_mapping: Some(vec![GdalMetadataMapping::identity(offset_key(), RasterPropertiesEntryType::Number), GdalMetadataMapping::identity(slope_key(), RasterPropertiesEntryType::Number), GdalMetadataMapping::identity(channel_key(), RasterPropertiesEntryType::Number), GdalMetadataMapping::identity(satellite_key(), RasterPropertiesEntryType::Number)]),
                 gdal_open_options: None,
+                gdal_config_options: None,
             },
-            placeholder: "%%%_TIME_FORMATED_%%%".to_string(),
-            time_format: "%Y/%m/%d/%Y%m%d_%H%M/H-000-MSG3__-MSG3________-IR_134___-000001___-%Y%m%d%H%M-C_".to_string(),
+            //placeholder: "%%%_TIME_FORMATED_%%%".to_string(),
+            //time_format: "%Y/%m/%d/%Y%m%d_%H%M/H-000-MSG3__-MSG3________-IR_134___-000001___-%Y%m%d%H%M-C_".to_string(),
             start: TimeInstance::from_millis(1072917000000).unwrap(),
             step: TimeStep{
                 granularity: TimeGranularity::Minutes,
@@ -420,6 +480,13 @@ mod tests {
         };
 
         let claas = GdalMetaDataRegular{
+            time_placeholders: hashmap! {
+                "%%%_TIME_FORMATED_%%%".to_string() => GdalSourceTimePlaceholder {
+                    format: "%Y/%m/%d/CMAin%Y%m%d%H%M00305SVMSG01MD".to_string(),
+                    reference: TimeReference::Start,
+
+                }
+            },
             result_descriptor: RasterResultDescriptor{
                 data_type: RasterDataType::U8,
                 spatial_reference: SpatialReferenceOption::
@@ -433,7 +500,7 @@ mod tests {
             params: GdalDatasetParameters{
                 file_path: PathBuf::from("NETCDF:\"/mnt/panq/dbs_geo_data/satellite_data/CLAAS-2/level2/%%%_TIME_FORMATED_%%%.nc\":cma"),
                 rasterband_channel: 1,
-                geo_transform: GeoTransform{
+                geo_transform: GdalDatasetGeoTransform{
                     origin_coordinate: ( -5456233.41938636, 5456233.41938636).into(),
                     x_pixel_size: 3000.403165817260742,
                     y_pixel_size: -3000.403165817260742, 
@@ -444,9 +511,10 @@ mod tests {
                 no_data_value,
                 properties_mapping: None,
                 gdal_open_options: None,
+                gdal_config_options: None,
             },
-            placeholder: "%%%_TIME_FORMATED_%%%".to_string(),
-            time_format: "%Y/%m/%d/CMAin%Y%m%d%H%M00305SVMSG01MD".to_string(),
+            //placeholder: "%%%_TIME_FORMATED_%%%".to_string(),
+            //time_format: "%Y/%m/%d/CMAin%Y%m%d%H%M00305SVMSG01MD".to_string(),
             start: TimeInstance::from_millis(1356994800000).unwrap(),
             step: TimeStep{
                 granularity: TimeGranularity::Minutes,
@@ -730,7 +798,7 @@ mod tests {
 
         let _x = imseg_fit(proc_ir_016, proc_ir_039,proc_ir_087, proc_ir_097, proc_ir_108, proc_ir_120, proc_ir_134, proc_claas, QueryRectangle {
             spatial_bounds: query_bbox,
-            time_interval: TimeInterval::new(1370086200000, 1370086200000 + 1000)
+            time_interval: TimeInterval::new(1370037600000, 1370037600000 + 1000)
                 .unwrap(),
             spatial_resolution: query_spatial_resolution,
         }, ctx,

@@ -1,7 +1,9 @@
+use crate::handlers::ErrorResponse;
+use actix_web::http::StatusCode;
+use actix_web::HttpResponse;
 use geoengine_datatypes::{dataset::DatasetProviderId, spatial_reference::SpatialReferenceOption};
 use snafu::Snafu;
 use strum::IntoStaticStr;
-use warp::reject::Reject;
 
 pub type Result<T, E = Error> = std::result::Result<T, E>;
 #[derive(Debug, Snafu, IntoStaticStr)]
@@ -12,9 +14,6 @@ pub enum Error {
     },
     Operator {
         source: geoengine_operators::error::Error,
-    },
-    Http {
-        source: warp::http::Error,
     },
     Uuid {
         source: uuid::Error,
@@ -37,9 +36,16 @@ pub enum Error {
         source: reqwest::Error,
     },
 
+    Url {
+        source: url::ParseError,
+    },
+
     #[cfg(feature = "xml")]
     QuickXml {
         source: quick_xml::Error,
+    },
+    Proj {
+        source: proj::ProjError,
     },
 
     TokioChannelSend,
@@ -146,7 +152,9 @@ pub enum Error {
     UploadFieldMissingFileName,
     UnknownUploadId,
     PathIsNotAFile,
-    MultiPartBoundaryMissing,
+    Multipart {
+        source: actix_multipart::MultipartError,
+    },
     InvalidUploadFileName,
     InvalidDatasetName,
     DatasetHasNoAutoImportableLayer,
@@ -187,6 +195,7 @@ pub enum Error {
 
     InvalidDatasetId,
 
+    PangaeaNoTsv,
     GfbioMissingAbcdField,
     ExpectedExternalDatasetId,
     InvalidExternalDatasetId {
@@ -212,9 +221,37 @@ pub enum Error {
     },
     #[cfg(feature = "odm")]
     OdmMissingContentTypeHeader,
+
+    UnknownSrsString {
+        srs_string: String,
+    },
+
+    AxisOrderingNotKnownForSrs {
+        srs_string: String,
+    },
 }
 
-impl Reject for Error {}
+impl actix_web::error::ResponseError for Error {
+    fn error_response(&self) -> HttpResponse {
+        let (error, message) = match self {
+            Error::Authorization { source } => (
+                Into::<&str>::into(source.as_ref()).to_string(),
+                source.to_string(),
+            ),
+            _ => (Into::<&str>::into(self).to_string(), self.to_string()),
+        };
+
+        HttpResponse::build(self.status_code()).json(ErrorResponse { error, message })
+    }
+
+    fn status_code(&self) -> StatusCode {
+        match self {
+            Error::Authorization { source: _ } => StatusCode::UNAUTHORIZED,
+            Error::Duplicate { reason: _ } => StatusCode::CONFLICT,
+            _ => StatusCode::BAD_REQUEST,
+        }
+    }
+}
 
 impl From<geoengine_datatypes::error::Error> for Error {
     fn from(e: geoengine_datatypes::error::Error) -> Self {
@@ -269,6 +306,18 @@ impl From<reqwest::Error> for Error {
     }
 }
 
+impl From<actix_multipart::MultipartError> for Error {
+    fn from(source: actix_multipart::MultipartError) -> Self {
+        Self::Multipart { source }
+    }
+}
+
+impl From<url::ParseError> for Error {
+    fn from(source: url::ParseError) -> Self {
+        Self::Url { source }
+    }
+}
+
 #[cfg(feature = "xml")]
 impl From<quick_xml::Error> for Error {
     fn from(source: quick_xml::Error) -> Self {
@@ -279,5 +328,11 @@ impl From<quick_xml::Error> for Error {
 impl From<flexi_logger::FlexiLoggerError> for Error {
     fn from(source: flexi_logger::FlexiLoggerError) -> Self {
         Self::Logger { source }
+    }
+}
+
+impl From<proj::ProjError> for Error {
+    fn from(source: proj::ProjError) -> Self {
+        Self::Proj { source }
     }
 }

@@ -1,4 +1,5 @@
 mod bounding_box;
+mod circle;
 mod coordinate;
 pub(self) mod error;
 mod feature_data;
@@ -17,6 +18,7 @@ mod time_interval;
 mod time_step;
 
 pub use bounding_box::BoundingBox2D;
+pub use circle::Circle;
 pub use coordinate::Coordinate2D;
 pub(crate) use error::PrimitivesError;
 pub use feature_data::{
@@ -33,7 +35,6 @@ pub use no_geometry::NoGeometry;
 pub use spatial_partition::{AxisAlignedRectangle, SpatialPartition2D, SpatialPartitioned};
 pub use spatial_resolution::SpatialResolution;
 pub use spatio_temporal_bounded::{SpatialBounded, TemporalBounded};
-
 pub use time_instance::TimeInstance;
 pub use time_interval::TimeInterval;
 pub use time_step::{TimeGranularity, TimeStep, TimeStepIter};

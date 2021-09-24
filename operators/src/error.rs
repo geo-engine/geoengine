@@ -3,6 +3,7 @@ use geoengine_datatypes::dataset::DatasetId;
 use geoengine_datatypes::primitives::FeatureDataType;
 use snafu::Snafu;
 use std::ops::Range;
+use std::path::PathBuf;
 
 #[derive(Debug, Snafu)]
 #[snafu(visibility = "pub(crate)")]
@@ -162,6 +163,10 @@ pub enum Error {
 
     TimeInstanceNotDisplayable,
 
+    InvalidTimeStringPlaceholder {
+        name: String,
+    },
+
     DatasetMetaData {
         source: Box<dyn std::error::Error + Send + Sync>,
     },
@@ -239,6 +244,36 @@ pub enum Error {
     OgrSqlQuery,
 
     GdalRasterDataTypeNotSupported,
+
+    DynamicGdalSourceSpecHasEmptyTimePlaceholders,
+
+    #[snafu(display("Input `{}` must be greater than zero at `{}`", name, scope))]
+    InputMustBeGreaterThanZero {
+        scope: &'static str,
+        name: &'static str,
+    },
+
+    #[snafu(display("Input `{}` must be zero or positive at `{}`", name, scope))]
+    InputMustBeZeroOrPositive {
+        scope: &'static str,
+        name: &'static str,
+    },
+
+    DuplicateOutputColumns,
+
+    #[snafu(display("Input column `{:}` is missing", name))]
+    MissingInputColumn {
+        name: String,
+    },
+
+    InvalidGdalFilePath {
+        file_path: PathBuf,
+    },
+
+    #[snafu(display(
+        "Raster data sets with a different origin than upper left are currently not supported"
+    ))]
+    GeoTransformOrigin,
 }
 
 impl From<geoengine_datatypes::error::Error> for Error {

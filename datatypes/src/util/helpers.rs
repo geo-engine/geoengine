@@ -1,4 +1,4 @@
-/// This macro allows comparing float slices using [float_cmp::approx_eq].
+/// This macro allows comparing float slices using [`float_cmp::approx_eq`].
 #[macro_export]
 macro_rules! assert_approx_eq {
     ($left:expr, $right:expr $(,)?) => ({
@@ -31,6 +31,25 @@ pub fn approx_eq_floats(left: &[f64], right: &[f64]) -> bool {
     }
 
     true
+}
+
+/// Create hash maps by specifying key-value pairs
+#[macro_export]
+macro_rules! hashmap {
+    (@void $($x:tt)*) => (());
+    (@count $($tts:expr),*) => (<[()]>::len(&[$(hashmap!(@void $tts)),*]));
+
+    ($($key:expr => $value:expr,)+) => { hashmap!($($key => $value),+) };
+    ($($key:expr => $value:expr),*) => {
+        {
+            let capacity = hashmap!(@count $($key),*);
+            let mut map = ::std::collections::HashMap::with_capacity(capacity);
+            $(
+                let _ = map.insert($key, $value);
+            )*
+            map
+        }
+    };
 }
 
 /// Converts an `Iterator<Item=T>` to an `Iterator<Item=Option<T>>`
@@ -76,6 +95,8 @@ pub fn snap_next(start: f64, step: f64, value: f64) -> f64 {
 
 #[cfg(test)]
 mod tests {
+    use std::collections::HashMap;
+
     use super::*;
 
     #[test]
@@ -95,5 +116,17 @@ mod tests {
     #[allow(clippy::float_cmp)]
     fn it_snaps_left() {
         assert_eq!(snap_prev(1., 2., 4.5), 3.);
+    }
+
+    #[test]
+    fn create_hash_map() {
+        let _single: HashMap<&str, u32> = hashmap!(
+            "foo" => 23,
+        );
+
+        let _multiple: HashMap<&str, u32> = hashmap!(
+            "foo" => 23,
+            "bar" => 42,
+        );
     }
 }

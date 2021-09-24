@@ -14,18 +14,18 @@ use crate::datasets::{
 };
 use crate::error;
 use crate::error::Result;
-use crate::handlers::authenticate;
 use crate::util::user_input::UserInput;
 use crate::{contexts::Context, datasets::storage::AutoCreateDataset};
 use crate::{
     datasets::{listing::DatasetListOptions, upload::UploadDb},
     util::IdResponse,
 };
+use actix_web::{web, FromRequest, Responder};
 use gdal::{vector::Layer, Dataset};
 use gdal::{vector::OGRFieldType, DatasetOptions};
 use geoengine_datatypes::{
     collections::VectorDataType,
-    dataset::{DatasetId, DatasetProviderId, InternalDatasetId},
+    dataset::{DatasetProviderId, InternalDatasetId},
     primitives::FeatureDataType,
     spatial_reference::{SpatialReference, SpatialReferenceOption},
 };
@@ -38,63 +38,59 @@ use geoengine_operators::{
     util::gdal::{gdal_open_dataset, gdal_open_dataset_ex},
 };
 use snafu::ResultExt;
-use uuid::Uuid;
-use warp::Filter;
 
-pub(crate) fn list_providers_handler<C: Context>(
-    ctx: C,
-) -> impl Filter<Extract = (impl warp::Reply,), Error = warp::Rejection> + Clone {
-    warp::path("providers")
-        .and(warp::get())
-        .and(authenticate(ctx.clone()))
-        .and(warp::any().map(move || ctx.clone()))
-        .and(warp::query())
-        .and_then(list_providers)
+pub(crate) fn init_dataset_routes<C>(cfg: &mut web::ServiceConfig)
+where
+    C: Context,
+    C::Session: FromRequest,
+{
+    cfg.service(
+        web::scope("/dataset")
+            .service(web::resource("").route(web::post().to(create_dataset_handler::<C>)))
+            .service(web::resource("/auto").route(web::post().to(auto_create_dataset_handler::<C>)))
+            .service(
+                web::resource("/internal/{dataset}").route(web::get().to(get_dataset_handler::<C>)),
+            )
+            .service(
+                web::resource("/suggest").route(web::get().to(suggest_meta_data_handler::<C>)),
+            ),
+    )
+    .service(web::resource("/providers").route(web::get().to(list_providers_handler::<C>)))
+    .service(web::resource("/datasets").route(web::get().to(list_datasets_handler::<C>)))
+    .service(
+        web::resource("/datasets/external/{provider}")
+            .route(web::get().to(list_external_datasets_handler::<C>)),
+    );
 }
 
-// TODO: move into handler once async closures are available?
-async fn list_providers<C: Context>(
+async fn list_providers_handler<C: Context>(
     session: C::Session,
-    ctx: C,
-    options: DatasetProviderListOptions,
-) -> Result<impl warp::Reply, warp::Rejection> {
+    ctx: web::Data<C>,
+    options: web::Query<DatasetProviderListOptions>,
+) -> Result<impl Responder> {
     let list = ctx
         .dataset_db_ref()
         .await
-        .list_dataset_providers(&session, options.validated()?)
+        .list_dataset_providers(&session, options.into_inner().validated()?)
         .await?;
-    Ok(warp::reply::json(&list))
+    Ok(web::Json(list))
 }
 
-pub(crate) fn list_external_datasets_handler<C: Context>(
-    ctx: C,
-) -> impl Filter<Extract = (impl warp::Reply,), Error = warp::Rejection> + Clone {
-    warp::path!("datasets" / "external" / Uuid)
-        .map(DatasetProviderId)
-        .and(warp::get())
-        .and(authenticate(ctx.clone()))
-        .and(warp::any().map(move || ctx.clone()))
-        .and(warp::query())
-        .and_then(list_external_datasets)
-}
-
-// TODO: move into handler once async closures are available?
-async fn list_external_datasets<C: Context>(
-    provider: DatasetProviderId,
+async fn list_external_datasets_handler<C: Context>(
+    provider: web::Path<DatasetProviderId>,
     session: C::Session,
-    ctx: C,
-    options: DatasetListOptions,
-) -> Result<impl warp::Reply, warp::Rejection> {
-    let options = options.validated()?;
+    ctx: web::Data<C>,
+    options: web::Query<DatasetListOptions>,
+) -> Result<impl Responder> {
+    let options = options.into_inner().validated()?;
     let list = ctx
         .dataset_db_ref()
         .await
-        .dataset_provider(&session, provider)
+        .dataset_provider(&session, provider.into_inner())
         .await?
         .list(options)
         .await?;
-    // TODO: it appears errors here lead to the internal datasets being listed because the route also matches /datasets,
-    Ok(warp::reply::json(&list))
+    Ok(web::Json(list))
 }
 
 /// Lists available [Datasets](crate::datasets::listing::DatasetListing).
@@ -126,26 +122,14 @@ async fn list_external_datasets<C: Context>(
 ///   }
 /// ]
 /// ```
-pub(crate) fn list_datasets_handler<C: Context>(
-    ctx: C,
-) -> impl Filter<Extract = (impl warp::Reply,), Error = warp::Rejection> + Clone {
-    warp::path("datasets")
-        .and(warp::get())
-        .and(authenticate(ctx.clone()))
-        .and(warp::any().map(move || ctx.clone()))
-        .and(warp::query())
-        .and_then(list_datasets)
-}
-
-// TODO: move into handler once async closures are available?
-async fn list_datasets<C: Context>(
+async fn list_datasets_handler<C: Context>(
     _session: C::Session,
-    ctx: C,
-    options: DatasetListOptions,
-) -> Result<impl warp::Reply, warp::Rejection> {
-    let options = options.validated()?;
+    ctx: web::Data<C>,
+    options: web::Query<DatasetListOptions>,
+) -> Result<impl Responder> {
+    let options = options.into_inner().validated()?;
     let list = ctx.dataset_db_ref().await.list(options).await?;
-    Ok(warp::reply::json(&list))
+    Ok(web::Json(list))
 }
 
 /// Retrieves details about a [Dataset](crate::datasets::listing::DatasetListing) using the internal id.
@@ -174,27 +158,17 @@ async fn list_datasets<C: Context>(
 ///   "sourceOperator": "OgrSource"
 /// }
 /// ```
-pub(crate) fn get_dataset_handler<C: Context>(
-    ctx: C,
-) -> impl Filter<Extract = (impl warp::Reply,), Error = warp::Rejection> + Clone {
-    warp::path!("dataset" / "internal" / Uuid)
-        .map(|id: Uuid| DatasetId::Internal {
-            dataset_id: InternalDatasetId(id),
-        })
-        .and(warp::get())
-        .and(authenticate(ctx.clone()))
-        .and(warp::any().map(move || ctx.clone()))
-        .and_then(get_dataset)
-}
-
-// TODO: move into handler once async closures are available?
-async fn get_dataset<C: Context>(
-    dataset: DatasetId,
+async fn get_dataset_handler<C: Context>(
+    dataset: web::Path<InternalDatasetId>,
     _session: C::Session,
-    ctx: C,
-) -> Result<impl warp::Reply, warp::Rejection> {
-    let dataset = ctx.dataset_db_ref().await.load(&dataset).await?;
-    Ok(warp::reply::json(&dataset))
+    ctx: web::Data<C>,
+) -> Result<impl Responder> {
+    let dataset = ctx
+        .dataset_db_ref()
+        .await
+        .load(&dataset.into_inner().into())
+        .await?;
+    Ok(web::Json(dataset))
 }
 
 /// Creates a new [Dataset](CreateDataset) using previously uploaded files.
@@ -249,30 +223,18 @@ async fn get_dataset<C: Context>(
 ///   }
 /// }
 /// ```
-pub(crate) fn create_dataset_handler<C: Context>(
-    ctx: C,
-) -> impl Filter<Extract = (impl warp::Reply,), Error = warp::Rejection> + Clone {
-    warp::path("dataset")
-        .and(warp::post())
-        .and(authenticate(ctx.clone()))
-        .and(warp::any().map(move || ctx.clone()))
-        .and(warp::body::json())
-        .and_then(create_dataset)
-}
-
-// TODO: move into handler once async closures are available?
-async fn create_dataset<C: Context>(
+async fn create_dataset_handler<C: Context>(
     session: C::Session,
-    ctx: C,
-    create: CreateDataset,
-) -> Result<impl warp::Reply, warp::Rejection> {
+    ctx: web::Data<C>,
+    create: web::Json<CreateDataset>,
+) -> Result<impl Responder> {
     let upload = ctx
         .dataset_db_ref()
         .await
         .get_upload(&session, create.upload)
         .await?;
 
-    let mut definition = create.definition;
+    let mut definition = create.into_inner().definition;
 
     adjust_user_path_to_upload_path(&mut definition.meta_data, &upload)?;
 
@@ -282,7 +244,7 @@ async fn create_dataset<C: Context>(
         .add_dataset(&session, definition.properties.validated()?, meta_data)
         .await?;
 
-    Ok(warp::reply::json(&IdResponse::from(id)))
+    Ok(web::Json(IdResponse::from(id)))
 }
 
 fn adjust_user_path_to_upload_path(meta: &mut MetaDataDefinition, upload: &Upload) -> Result<()> {
@@ -325,30 +287,18 @@ fn adjust_user_path_to_upload_path(meta: &mut MetaDataDefinition, upload: &Uploa
 ///   }
 /// }
 /// ```
-pub(crate) fn auto_create_dataset_handler<C: Context>(
-    ctx: C,
-) -> impl Filter<Extract = (impl warp::Reply,), Error = warp::Rejection> + Clone {
-    warp::path!("dataset" / "auto")
-        .and(warp::post())
-        .and(authenticate(ctx.clone()))
-        .and(warp::any().map(move || ctx.clone()))
-        .and(warp::body::json())
-        .and_then(auto_create_dataset)
-}
-
-// TODO: move into handler once async closures are available?
-async fn auto_create_dataset<C: Context>(
+async fn auto_create_dataset_handler<C: Context>(
     session: C::Session,
-    ctx: C,
-    create: AutoCreateDataset,
-) -> Result<impl warp::Reply, warp::Rejection> {
+    ctx: web::Data<C>,
+    create: web::Json<AutoCreateDataset>,
+) -> Result<impl Responder> {
     let upload = ctx
         .dataset_db_ref()
         .await
         .get_upload(&session, create.upload)
         .await?;
 
-    let create = create.validated()?.user_input;
+    let create = create.into_inner().validated()?.user_input;
 
     let main_file_path = upload.id.root_path()?.join(&create.main_file);
     let meta_data = auto_detect_meta_data_definition(&main_file_path)?;
@@ -368,26 +318,14 @@ async fn auto_create_dataset<C: Context>(
         .add_dataset(&session, properties.validated()?, meta_data)
         .await?;
 
-    Ok(warp::reply::json(&IdResponse::from(id)))
+    Ok(web::Json(IdResponse::from(id)))
 }
 
-pub(crate) fn suggest_meta_data_handler<C: Context>(
-    ctx: C,
-) -> impl Filter<Extract = (impl warp::Reply,), Error = warp::Rejection> + Clone {
-    warp::path!("dataset" / "suggest")
-        .and(warp::get())
-        .and(authenticate(ctx.clone()))
-        .and(warp::any().map(move || ctx.clone()))
-        .and(warp::query())
-        .and_then(suggest_meta_data)
-}
-
-// TODO: move into handler once async closures are available?
-async fn suggest_meta_data<C: Context>(
+async fn suggest_meta_data_handler<C: Context>(
     session: C::Session,
-    ctx: C,
-    suggest: SuggestMetaData,
-) -> Result<impl warp::Reply, warp::Rejection> {
+    ctx: web::Data<C>,
+    suggest: web::Query<SuggestMetaData>,
+) -> Result<impl Responder> {
     let upload = ctx
         .dataset_db_ref()
         .await
@@ -395,6 +333,7 @@ async fn suggest_meta_data<C: Context>(
         .await?;
 
     let main_file = suggest
+        .into_inner()
         .main_file
         .or_else(|| suggest_main_file(&upload))
         .ok_or(error::Error::NoMainFileCandidateFound)?;
@@ -403,7 +342,7 @@ async fn suggest_meta_data<C: Context>(
 
     let meta_data = auto_detect_meta_data_definition(&main_file_path)?;
 
-    Ok(warp::reply::json(&MetaDataSuggestion {
+    Ok(web::Json(MetaDataSuggestion {
         main_file,
         meta_data,
     }))
@@ -468,7 +407,9 @@ fn auto_detect_meta_data_definition(main_file_path: &Path) -> Result<MetaDataDef
             layer_name: geometry.layer_name.unwrap_or_else(|| layer.name()),
             data_type: Some(geometry.data_type),
             time,
+            default_geometry: None,
             columns: Some(OgrSourceColumnSpec {
+                format_specifics: None,
                 x,
                 y,
                 int: columns_vecs.int,
@@ -761,18 +702,22 @@ fn column_map_to_column_vecs(columns: &HashMap<String, ColumnDataType>) -> Colum
 
 #[cfg(test)]
 mod tests {
-    use std::{path::PathBuf, str::FromStr};
-
     use super::*;
     use crate::contexts::{InMemoryContext, Session, SimpleContext, SimpleSession};
     use crate::datasets::storage::{AddDataset, DatasetStore};
     use crate::error::Result;
     use crate::projects::{PointSymbology, Symbology};
+    use crate::test_data;
+    use crate::util::tests::{read_body_string, send_test_request};
+    use actix_web::{http::header, test};
+    use actix_web_httpauth::headers::authorization::Bearer;
     use geoengine_datatypes::collections::VectorDataType;
+    use geoengine_datatypes::dataset::{DatasetId, InternalDatasetId};
     use geoengine_datatypes::spatial_reference::SpatialReferenceOption;
     use geoengine_operators::engine::{StaticMetaData, VectorResultDescriptor};
     use geoengine_operators::source::{OgrSourceDataset, OgrSourceErrorSpec};
     use serde_json::json;
+    use std::str::FromStr;
 
     #[tokio::test]
     #[allow(clippy::too_many_lines)]
@@ -806,6 +751,7 @@ mod tests {
                 layer_name: "".to_string(),
                 data_type: None,
                 time: Default::default(),
+                default_geometry: None,
                 columns: None,
                 force_ogr_time_filter: false,
                 force_ogr_spatial_filter: false,
@@ -842,6 +788,7 @@ mod tests {
                 layer_name: "".to_string(),
                 data_type: None,
                 time: Default::default(),
+                default_geometry: None,
                 columns: None,
                 force_ogr_time_filter: false,
                 force_ogr_spatial_filter: false,
@@ -859,9 +806,8 @@ mod tests {
             .add_dataset(&SimpleSession::default(), ds.validated()?, Box::new(meta))
             .await?;
 
-        let res = warp::test::request()
-            .method("GET")
-            .path(&format!(
+        let req = test::TestRequest::get()
+            .uri(&format!(
                 "/datasets?{}",
                 &serde_urlencoded::to_string([
                     ("order", "NameDesc"),
@@ -870,20 +816,14 @@ mod tests {
                 ])
                 .unwrap()
             ))
-            .header("Content-Length", "0")
-            .header(
-                "Authorization",
-                format!("Bearer {}", session_id.to_string()),
-            )
-            .reply(&list_datasets_handler(ctx))
-            .await;
+            .append_header((header::CONTENT_LENGTH, 0))
+            .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())));
+        let res = send_test_request(req, ctx).await;
 
         assert_eq!(res.status(), 200);
 
-        let body: String = String::from_utf8(res.body().to_vec()).unwrap();
-
         assert_eq!(
-            body,
+            read_body_string(res).await,
             json!([{
                 "id": {
                     "type": "internal",
@@ -962,7 +902,7 @@ mod tests {
                 "metaData": {
                     "type": "OgrMetaData",
                     "loadingInfo": {
-                        "fileName": "operators/test-data/vector/data/ne_10m_ports/ne_10m_ports.shp",
+                        "fileName": "test_data/vector/data/ne_10m_ports/ne_10m_ports.shp",
                         "layerName": "ne_10m_ports",
                         "dataType": "MultiPoint",
                         "time": {
@@ -989,34 +929,29 @@ mod tests {
                             "scalerank": "int",
                             "featurecla": "text"
                         }
-                    }                    
+                    }
                 }
             }
         }"#;
 
-        let res = warp::test::request()
-            .method("POST")
-            .path("/dataset")
-            .header("Content-Length", "0")
-            .header(
-                "Authorization",
-                format!("Bearer {}", session_id.to_string()),
-            )
-            .body(s)
-            .reply(&create_dataset_handler(ctx))
-            .await;
+        let req = test::TestRequest::post()
+            .uri("/dataset")
+            .append_header((header::CONTENT_LENGTH, 0))
+            .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())))
+            .append_header((header::CONTENT_TYPE, "application/json"))
+            .set_payload(s);
+        let res = send_test_request(req, ctx).await;
 
-        assert_eq!(res.status(), 500, "{:?}", res.body());
+        assert_eq!(res.status(), 400, "{:?}", read_body_string(res).await);
 
         // TODO: add a success test case once it is clear how to upload data from within a test
     }
 
     #[test]
     fn it_auto_detects() {
-        let mut meta_data = auto_detect_meta_data_definition(
-            &PathBuf::from_str("../operators/test-data/vector/data/ne_10m_ports/ne_10m_ports.shp")
-                .unwrap(),
-        )
+        let mut meta_data = auto_detect_meta_data_definition(test_data!(
+            "vector/data/ne_10m_ports/ne_10m_ports.shp"
+        ))
         .unwrap();
 
         if let MetaDataDefinition::OgrMetaData(meta_data) = &mut meta_data {
@@ -1029,12 +964,13 @@ mod tests {
             meta_data,
             MetaDataDefinition::OgrMetaData(StaticMetaData {
                 loading_info: OgrSourceDataset {
-                    file_name: "../operators/test-data/vector/data/ne_10m_ports/ne_10m_ports.shp"
-                        .into(),
+                    file_name: test_data!("vector/data/ne_10m_ports/ne_10m_ports.shp").into(),
                     layer_name: "ne_10m_ports".to_string(),
                     data_type: Some(VectorDataType::MultiPoint),
                     time: OgrSourceDatasetTimeType::None,
+                    default_geometry: None,
                     columns: Some(OgrSourceColumnSpec {
+                        format_specifics: None,
                         x: "".to_string(),
                         y: None,
                         int: vec!["scalerank".to_string()],
@@ -1073,11 +1009,9 @@ mod tests {
 
     #[test]
     fn it_detects_time_json() {
-        let mut meta_data = auto_detect_meta_data_definition(
-            &PathBuf::from_str("../operators/test-data/vector/data/points_with_iso_time.json")
-                .unwrap(),
-        )
-        .unwrap();
+        let mut meta_data =
+            auto_detect_meta_data_definition(test_data!("vector/data/points_with_iso_time.json"))
+                .unwrap();
 
         if let MetaDataDefinition::OgrMetaData(meta_data) = &mut meta_data {
             if let Some(columns) = &mut meta_data.loading_info.columns {
@@ -1089,8 +1023,7 @@ mod tests {
             meta_data,
             MetaDataDefinition::OgrMetaData(StaticMetaData {
                 loading_info: OgrSourceDataset {
-                    file_name: "../operators/test-data/vector/data/points_with_iso_time.json"
-                        .into(),
+                    file_name: test_data!("vector/data/points_with_iso_time.json").into(),
                     layer_name: "points_with_iso_time".to_string(),
                     data_type: Some(VectorDataType::MultiPoint),
                     time: OgrSourceDatasetTimeType::StartEnd {
@@ -1099,7 +1032,9 @@ mod tests {
                         end_field: "time_end".to_owned(),
                         end_format: OgrSourceTimeFormat::Auto,
                     },
+                    default_geometry: None,
                     columns: Some(OgrSourceColumnSpec {
+                        format_specifics: None,
                         x: "".to_string(),
                         y: None,
                         float: vec![],
@@ -1125,10 +1060,9 @@ mod tests {
 
     #[test]
     fn it_detects_time_gpkg() {
-        let mut meta_data = auto_detect_meta_data_definition(
-            &PathBuf::from_str("../operators/test-data/vector/data/points_with_time.gpkg").unwrap(),
-        )
-        .unwrap();
+        let mut meta_data =
+            auto_detect_meta_data_definition(test_data!("vector/data/points_with_time.gpkg"))
+                .unwrap();
 
         if let MetaDataDefinition::OgrMetaData(meta_data) = &mut meta_data {
             if let Some(columns) = &mut meta_data.loading_info.columns {
@@ -1140,7 +1074,7 @@ mod tests {
             meta_data,
             MetaDataDefinition::OgrMetaData(StaticMetaData {
                 loading_info: OgrSourceDataset {
-                    file_name: "../operators/test-data/vector/data/points_with_time.gpkg".into(),
+                    file_name: test_data!("vector/data/points_with_time.gpkg").into(),
                     layer_name: "points_with_time".to_string(),
                     data_type: Some(VectorDataType::MultiPoint),
                     time: OgrSourceDatasetTimeType::StartEnd {
@@ -1149,7 +1083,9 @@ mod tests {
                         end_field: "time_end".to_owned(),
                         end_format: OgrSourceTimeFormat::Auto,
                     },
+                    default_geometry: None,
                     columns: Some(OgrSourceColumnSpec {
+                        format_specifics: None,
                         x: "".to_string(),
                         y: None,
                         float: vec![],
@@ -1175,10 +1111,9 @@ mod tests {
 
     #[test]
     fn it_detects_time_shp() {
-        let mut meta_data = auto_detect_meta_data_definition(
-            &PathBuf::from_str("../operators/test-data/vector/data/points_with_date.shp").unwrap(),
-        )
-        .unwrap();
+        let mut meta_data =
+            auto_detect_meta_data_definition(test_data!("vector/data/points_with_date.shp"))
+                .unwrap();
 
         if let MetaDataDefinition::OgrMetaData(meta_data) = &mut meta_data {
             if let Some(columns) = &mut meta_data.loading_info.columns {
@@ -1190,7 +1125,7 @@ mod tests {
             meta_data,
             MetaDataDefinition::OgrMetaData(StaticMetaData {
                 loading_info: OgrSourceDataset {
-                    file_name: "../operators/test-data/vector/data/points_with_date.shp".into(),
+                    file_name: test_data!("vector/data/points_with_date.shp").into(),
                     layer_name: "points_with_date".to_string(),
                     data_type: Some(VectorDataType::MultiPoint),
                     time: OgrSourceDatasetTimeType::StartEnd {
@@ -1199,7 +1134,9 @@ mod tests {
                         end_field: "time_end".to_owned(),
                         end_format: OgrSourceTimeFormat::Auto,
                     },
+                    default_geometry: None,
                     columns: Some(OgrSourceColumnSpec {
+                        format_specifics: None,
                         x: "".to_string(),
                         y: None,
                         float: vec![],
@@ -1225,12 +1162,9 @@ mod tests {
 
     #[test]
     fn it_detects_time_start_duration() {
-        let mut meta_data = auto_detect_meta_data_definition(
-            &PathBuf::from_str(
-                "../operators/test-data/vector/data/points_with_iso_start_duration.json",
-            )
-            .unwrap(),
-        )
+        let mut meta_data = auto_detect_meta_data_definition(test_data!(
+            "vector/data/points_with_iso_start_duration.json"
+        ))
         .unwrap();
 
         if let MetaDataDefinition::OgrMetaData(meta_data) = &mut meta_data {
@@ -1243,9 +1177,7 @@ mod tests {
             meta_data,
             MetaDataDefinition::OgrMetaData(StaticMetaData {
                 loading_info: OgrSourceDataset {
-                    file_name:
-                        "../operators/test-data/vector/data/points_with_iso_start_duration.json"
-                            .into(),
+                    file_name: test_data!("vector/data/points_with_iso_start_duration.json").into(),
                     layer_name: "points_with_iso_start_duration".to_string(),
                     data_type: Some(VectorDataType::MultiPoint),
                     time: OgrSourceDatasetTimeType::StartDuration {
@@ -1253,7 +1185,9 @@ mod tests {
                         start_format: OgrSourceTimeFormat::Auto,
                         duration_field: "duration".to_owned(),
                     },
+                    default_geometry: None,
                     columns: Some(OgrSourceColumnSpec {
+                        format_specifics: None,
                         x: "".to_string(),
                         y: None,
                         float: vec![],
@@ -1282,10 +1216,8 @@ mod tests {
 
     #[test]
     fn it_detects_csv() {
-        let mut meta_data = auto_detect_meta_data_definition(
-            &PathBuf::from_str("../operators/test-data/vector/data/lonlat.csv").unwrap(),
-        )
-        .unwrap();
+        let mut meta_data =
+            auto_detect_meta_data_definition(test_data!("vector/data/lonlat.csv")).unwrap();
 
         if let MetaDataDefinition::OgrMetaData(meta_data) = &mut meta_data {
             if let Some(columns) = &mut meta_data.loading_info.columns {
@@ -1297,11 +1229,13 @@ mod tests {
             meta_data,
             MetaDataDefinition::OgrMetaData(StaticMetaData {
                 loading_info: OgrSourceDataset {
-                    file_name: "../operators/test-data/vector/data/lonlat.csv".into(),
+                    file_name: test_data!("vector/data/lonlat.csv").into(),
                     layer_name: "lonlat".to_string(),
                     data_type: Some(VectorDataType::MultiPoint),
                     time: OgrSourceDatasetTimeType::None,
+                    default_geometry: None,
                     columns: Some(OgrSourceColumnSpec {
+                        format_specifics: None,
                         x: "Longitude".to_string(),
                         y: Some("Latitude".to_string()),
                         float: vec![],
@@ -1363,6 +1297,7 @@ mod tests {
                 layer_name: "".to_string(),
                 data_type: None,
                 time: Default::default(),
+                default_geometry: None,
                 columns: None,
                 force_ogr_time_filter: false,
                 force_ogr_spatial_filter: false,
@@ -1384,23 +1319,18 @@ mod tests {
             )
             .await?;
 
-        let res = warp::test::request()
-            .method("GET")
-            .path(&format!("/dataset/internal/{}", id.internal().unwrap()))
-            .header("Content-Length", "0")
-            .header(
-                "Authorization",
-                format!("Bearer {}", session_id.to_string()),
-            )
-            .reply(&get_dataset_handler(ctx))
-            .await;
+        let req = test::TestRequest::get()
+            .uri(&format!("/dataset/internal/{}", id.internal().unwrap()))
+            .append_header((header::CONTENT_LENGTH, 0))
+            .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())));
+        let res = send_test_request(req, ctx).await;
 
-        assert_eq!(res.status(), 200);
-
-        let body: String = String::from_utf8(res.body().to_vec()).unwrap();
+        let res_status = res.status();
+        let res_body = read_body_string(res).await;
+        assert_eq!(res_status, 200, "{}", res_body);
 
         assert_eq!(
-            body,
+            res_body,
             json!({
                 "id": {
                     "type": "internal",

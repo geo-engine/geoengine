@@ -6,14 +6,14 @@ authors = [
     "Johannes Drönner <droenner@mathematik.uni-marburg.de>",
     "Michael Mattig <mattig@mathematik.uni-marburg.de>"
 ]
-edition = "2018"
+edition = "2021"
 
 [features]
 # This compiles Geo Engine Pro
 pro = ["geoengine-datatypes/pro"]
 
 [dependencies]
-arrow = { version = "5.0", features = ["simd"] }
+arrow = { version = "5.4", features = ["simd"] }
 async-trait = "0.1"
 chrono = "0.4"
 crossbeam = "0.8"
@@ -28,8 +28,10 @@ log = "0.4"
 num_cpus = "1.13" # TODO: remove and switch to std::thread::available_concurrency() when it is available
 num-traits = "0.2"
 ocl = { git = "https://github.com/michaelmattig/ocl", branch = "tentative_master" }  # TODO: use crates.io version once it builds again
+ouroboros = "0.10"
 paste = "1.0"
 pin-project = "1.0"
+rustc-hash = { version = "1.0", default-features = false }
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 snafu = "0.6"
@@ -38,13 +40,24 @@ typetag = "0.1"
 uuid = { version = "0.8", features = ["serde", "v4", "v5"] }
 pyo3 = "0.14.1"
 numpy = "0.14.1"
-ndarray = "0.14" # still don't go higher 🤦 (01.08.2021)
+ndarray = "0.15.3" # 0.14 
 rand = "0.8.4"
 eval-metrics = "0.1.0"
 [dev-dependencies]
 criterion = {version = "0.3", features =["async_futures", "async_tokio"]}
+geo-rand = { git = "https://github.com/lelongg/geo-rand", tag = "v0.3.0" }
+rand = "0.8"
 tempfile = "3.1"
+
 
 [[bench]]
 name = "workflows"
+harness = false
+
+[[bench]]
+name = "thread_pool"
+harness = false
+
+[[bench]]
+name = "pip"
 harness = false

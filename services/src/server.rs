@@ -1,30 +1,18 @@
 use crate::contexts::{InMemoryContext, SimpleContext};
-use crate::error;
 use crate::error::{Error, Result};
 use crate::handlers;
-use crate::handlers::handle_rejection;
+use crate::handlers::ErrorResponse;
 use crate::util::config;
 use crate::util::config::get_config_element;
 
-use log::info;
-use snafu::ResultExt;
+use actix_files::Files;
+use actix_web::dev::{Body, ServiceResponse};
+use actix_web::error::{InternalError, JsonPayloadError, QueryPayloadError};
+use actix_web::{http, middleware, web, App, HttpResponse, HttpServer, Responder};
+use log::{debug, info};
 use std::net::SocketAddr;
 use std::path::PathBuf;
-use tokio::signal;
-use tokio::sync::oneshot::{Receiver, Sender};
-use warp::fs::File;
-use warp::{Filter, Rejection};
-
-/// Combine filters by boxing them
-/// TODO: avoid boxing while still achieving acceptable compile time
-#[macro_export]
-macro_rules! combine {
-  ($x:expr, $($y:expr),+) => {{
-      let filter = $x.boxed();
-      $( let filter = filter.or($y).boxed(); )+
-      filter
-  }}
-}
+use url::Url;
 
 /// Starts the webserver for the Geo Engine API.
 ///
@@ -32,39 +20,33 @@ macro_rules! combine {
 ///  * may panic if the `Postgres` backend is chosen without compiling the `postgres` feature
 ///
 ///
-pub async fn start_server(
-    shutdown_rx: Option<Receiver<()>>,
-    static_files_dir: Option<PathBuf>,
-) -> Result<()> {
+pub async fn start_server(static_files_dir: Option<PathBuf>) -> Result<()> {
     let web_config: config::Web = get_config_element()?;
-    let bind_address = web_config
-        .bind_address
-        .parse::<SocketAddr>()
-        .context(error::AddrParse)?;
 
     info!(
         "Starting server… {}",
-        format!(
-            "http://{}/",
-            web_config
-                .external_address
-                .unwrap_or(web_config.bind_address)
-        )
+        web_config
+            .external_address
+            .unwrap_or(Url::parse(&format!("http://{}/", web_config.bind_address))?)
     );
 
     info!("Using in memory backend");
 
+    let data_path_config: config::DataProvider = get_config_element()?;
+
     start(
-        shutdown_rx,
         static_files_dir,
-        bind_address,
-        InMemoryContext::new_with_data().await,
+        web_config.bind_address,
+        InMemoryContext::new_with_data(
+            data_path_config.dataset_defs_path,
+            data_path_config.provider_defs_path,
+        )
+        .await,
     )
     .await
 }
 
 async fn start<C>(
-    shutdown_rx: Option<Receiver<()>>,
     static_files_dir: Option<PathBuf>,
     bind_address: SocketAddr,
     ctx: C,
@@ -72,49 +54,117 @@ async fn start<C>(
 where
     C: SimpleContext,
 {
-    let handler = combine!(
-        handlers::workflows::register_workflow_handler(ctx.clone()),
-        handlers::workflows::load_workflow_handler(ctx.clone()),
-        handlers::workflows::get_workflow_metadata_handler(ctx.clone()),
-        handlers::workflows::get_workflow_provenance_handler(ctx.clone()),
-        handlers::session::anonymous_handler(ctx.clone()),
-        handlers::session::session_handler(ctx.clone()),
-        handlers::session::session_project_handler(ctx.clone()),
-        handlers::session::session_view_handler(ctx.clone()),
-        handlers::projects::create_project_handler(ctx.clone()),
-        handlers::projects::list_projects_handler(ctx.clone()),
-        handlers::projects::update_project_handler(ctx.clone()),
-        handlers::projects::delete_project_handler(ctx.clone()),
-        handlers::projects::load_project_handler(ctx.clone()),
-        handlers::datasets::get_dataset_handler(ctx.clone()),
-        handlers::datasets::auto_create_dataset_handler(ctx.clone()),
-        handlers::datasets::create_dataset_handler(ctx.clone()),
-        handlers::datasets::suggest_meta_data_handler(ctx.clone()),
-        handlers::datasets::list_providers_handler(ctx.clone()),
-        handlers::datasets::list_external_datasets_handler(ctx.clone()),
-        handlers::datasets::list_datasets_handler(ctx.clone()), // must come after `list_external_datasets_handler`
-        handlers::wcs::wcs_handler(ctx.clone()),
-        handlers::wms::wms_handler(ctx.clone()),
-        handlers::wfs::wfs_handler(ctx.clone()),
-        handlers::plots::get_plot_handler(ctx.clone()),
-        handlers::upload::upload_handler(ctx.clone()),
-        handlers::spatial_references::get_spatial_reference_specification_handler(ctx.clone()),
-        show_version_handler(), // TODO: allow disabling this function via config or feature flag
-        serve_static_directory(static_files_dir)
-    )
-    .recover(handle_rejection);
+    let wrapped_ctx = web::Data::new(ctx);
 
-    let task = if let Some(receiver) = shutdown_rx {
-        let (_, server) = warp::serve(handler).bind_with_graceful_shutdown(bind_address, async {
-            receiver.await.ok();
-        });
-        tokio::task::spawn(server)
-    } else {
-        let server = warp::serve(handler).bind(bind_address);
-        tokio::task::spawn(server)
-    };
+    HttpServer::new(move || {
+        let app = App::new()
+            .app_data(wrapped_ctx.clone())
+            .wrap(
+                middleware::ErrorHandlers::default()
+                    .handler(http::StatusCode::NOT_FOUND, render_404)
+                    .handler(http::StatusCode::METHOD_NOT_ALLOWED, render_405),
+            )
+            .wrap(middleware::Logger::default())
+            .wrap(middleware::NormalizePath::trim())
+            .configure(configure_extractors)
+            .configure(handlers::datasets::init_dataset_routes::<C>)
+            .configure(handlers::plots::init_plot_routes::<C>)
+            .configure(handlers::projects::init_project_routes::<C>)
+            .configure(handlers::session::init_session_routes::<C>)
+            .configure(handlers::spatial_references::init_spatial_reference_routes::<C>)
+            .configure(handlers::upload::init_upload_routes::<C>)
+            .configure(handlers::wcs::init_wcs_routes::<C>)
+            .configure(handlers::wfs::init_wfs_routes::<C>)
+            .configure(handlers::wms::init_wms_routes::<C>)
+            .configure(handlers::workflows::init_workflow_routes::<C>)
+            .route("/version", web::get().to(show_version_handler)); // TODO: allow disabling this function via config or feature flag
 
-    task.await.context(error::TokioJoin)
+        if let Some(static_files_dir) = static_files_dir.clone() {
+            app.service(Files::new("/static", static_files_dir))
+        } else {
+            app
+        }
+    })
+    .bind(bind_address)?
+    .run()
+    .await
+    .map_err(Into::into)
+}
+
+pub(crate) fn configure_extractors(cfg: &mut web::ServiceConfig) {
+    cfg.app_data(web::JsonConfig::default().error_handler(|err, _req| {
+        match err {
+            JsonPayloadError::ContentType => InternalError::from_response(
+                err,
+                HttpResponse::UnsupportedMediaType().json(ErrorResponse {
+                    error: "UnsupportedMediaType".to_string(),
+                    message: "Unsupported content type header.".to_string(),
+                }),
+            )
+            .into(),
+            JsonPayloadError::Overflow { limit } => InternalError::from_response(
+                err,
+                HttpResponse::PayloadTooLarge().json(ErrorResponse {
+                    error: "Overflow".to_string(),
+                    message: format!("JSON payload has exceeded limit ({} bytes).", limit),
+                }),
+            )
+            .into(),
+            JsonPayloadError::OverflowKnownLength { length, limit } => {
+                InternalError::from_response(
+                    err,
+                    HttpResponse::PayloadTooLarge().json(ErrorResponse {
+                        error: "Overflow".to_string(),
+                        message: format!(
+                            "JSON payload ({} bytes) is larger than allowed (limit: {} bytes).",
+                            length, limit
+                        ),
+                    }),
+                )
+                .into()
+            }
+            JsonPayloadError::Payload(err) => ErrorResponse {
+                error: "Payload".to_string(),
+                message: err.to_string(),
+            }
+            .into(),
+            JsonPayloadError::Deserialize(err) => ErrorResponse {
+                error: "BodyDeserializeError".to_string(),
+                message: err.to_string(),
+            }
+            .into(),
+            JsonPayloadError::Serialize(err) => ErrorResponse {
+                error: "BodySerializeError".to_string(),
+                message: err.to_string(),
+            }
+            .into(),
+            _ => {
+                debug!("Unknown JsonPayloadError variant");
+                ErrorResponse {
+                    error: "UnknownError".to_string(),
+                    message: "Unknown Error".to_string(),
+                }
+                .into()
+            }
+        }
+    }));
+    cfg.app_data(web::QueryConfig::default().error_handler(|err, _req| {
+        match err {
+            QueryPayloadError::Deserialize(err) => ErrorResponse {
+                error: "UnableToParseQueryString".to_string(),
+                message: format!("Unable to parse query string: {}", err),
+            }
+            .into(),
+            _ => {
+                debug!("Unknown QueryPayloadError variant");
+                ErrorResponse {
+                    error: "UnknownError".to_string(),
+                    message: "Unknown Error".to_string(),
+                }
+                .into()
+            }
+        }
+    }));
 }
 
 /// Shows information about the server software version.
@@ -131,57 +181,58 @@ where
 ///   "commitHash": "16cd0881a79b6f03bb5f1f6ef2b2711e570b9865"
 /// }
 /// ```
-fn show_version_handler() -> impl Filter<Extract = impl warp::Reply, Error = warp::Rejection> + Clone
-{
-    warp::path("version")
-        .and(warp::get())
-        .and_then(show_version)
-}
-
-// TODO: move into handler once async closures are available?
-#[allow(clippy::unused_async)] // the function signature of `Filter`'s `and_then` requires it
-async fn show_version() -> Result<impl warp::Reply, warp::Rejection> {
+#[allow(clippy::unused_async)] // the function signature of request handlers requires it
+pub(crate) async fn show_version_handler() -> impl Responder {
     #[derive(serde::Serialize)]
     #[serde(rename_all = "camelCase")]
     struct VersionInfo<'a> {
         build_date: Option<&'a str>,
         commit_hash: Option<&'a str>,
     }
-
-    Ok(warp::reply::json(&VersionInfo {
+    web::Json(&VersionInfo {
         build_date: option_env!("VERGEN_BUILD_DATE"),
         commit_hash: option_env!("VERGEN_GIT_SHA"),
-    }))
+    })
 }
 
-pub fn serve_static_directory(
-    path: Option<PathBuf>,
-) -> impl Filter<Extract = (File,), Error = Rejection> + Clone {
-    let has_path = path.is_some();
-
-    warp::path("static")
-        .and(warp::get())
-        .and_then(move || async move {
-            if has_path {
-                Ok(())
-            } else {
-                Err(warp::reject::not_found())
-            }
-        })
-        .and(warp::fs::dir(path.unwrap_or_default()))
-        .map(|_, dir| dir)
+#[allow(clippy::unnecessary_wraps)]
+pub(crate) fn render_404(
+    mut res: ServiceResponse,
+) -> actix_web::Result<middleware::ErrorHandlerResponse<Body>> {
+    res.headers_mut().insert(
+        http::header::CONTENT_TYPE,
+        http::HeaderValue::from_static("application/json"),
+    );
+    let res = res.map_body(|_, _| {
+        Body::from(
+            serde_json::to_string(&ErrorResponse {
+                error: "NotFound".to_string(),
+                message: "Not Found".to_string(),
+            })
+            .unwrap(),
+        )
+    });
+    Ok(middleware::ErrorHandlerResponse::Response(res))
 }
 
-pub async fn interrupt_handler(shutdown_tx: Sender<()>, callback: Option<fn()>) -> Result<()> {
-    signal::ctrl_c().await.context(error::TokioSignal)?;
-
-    if let Some(callback) = callback {
-        callback();
-    }
-
-    shutdown_tx
-        .send(())
-        .map_err(|_error| Error::TokioChannelSend)
+#[allow(clippy::unnecessary_wraps)]
+pub(crate) fn render_405(
+    mut res: ServiceResponse,
+) -> actix_web::Result<middleware::ErrorHandlerResponse<Body>> {
+    res.headers_mut().insert(
+        http::header::CONTENT_TYPE,
+        http::HeaderValue::from_static("application/json"),
+    );
+    let res = res.map_body(|_, _| {
+        Body::from(
+            serde_json::to_string(&ErrorResponse {
+                error: "MethodNotAllowed".to_string(),
+                message: "HTTP method not allowed.".to_string(),
+            })
+            .unwrap(),
+        )
+    });
+    Ok(middleware::ErrorHandlerResponse::Response(res))
 }
 
 #[cfg(test)]
@@ -189,33 +240,31 @@ mod tests {
     use super::*;
     use crate::contexts::{Session, SimpleSession};
     use crate::handlers::ErrorResponse;
-    use tokio::sync::oneshot;
 
-    /// Test the webserver startup to ensure that `tokio` and `warp` are working properly
-    #[tokio::test]
+    /// Test the webserver startup to ensure that `tokio` and `actix` are working properly
+    #[actix_rt::test]
     async fn webserver_start() {
-        let (shutdown_tx, shutdown_rx) = oneshot::channel();
-
-        let (server, _) =
-            tokio::join!(start_server(Some(shutdown_rx), None), queries(shutdown_tx),);
-        server.expect("server run");
+        tokio::select! {
+            server = start_server(None) => {
+                server.expect("server run");
+            }
+            _ = queries() => {}
+        }
     }
 
-    async fn queries(shutdown_tx: Sender<()>) {
+    async fn queries() {
         let web_config: config::Web = get_config_element().unwrap();
-        let base_url = format!("http://{}", web_config.bind_address);
+        let base_url = Url::parse(&format!("http://{}", web_config.bind_address)).unwrap();
 
         assert!(wait_for_server(&base_url).await);
         issue_queries(&base_url).await;
-
-        shutdown_tx.send(()).unwrap();
     }
 
-    async fn issue_queries(base_url: &str) {
+    async fn issue_queries(base_url: &Url) {
         let client = reqwest::Client::new();
 
         let body = client
-            .post(&format!("{}/{}", base_url, "anonymous"))
+            .post(base_url.join("anonymous").unwrap())
             .send()
             .await
             .unwrap()
@@ -226,8 +275,9 @@ mod tests {
         let session: SimpleSession = serde_json::from_str(&body).unwrap();
 
         let body = client
-            .post(&format!("{}/{}", base_url, "project"))
+            .post(base_url.join("project").unwrap())
             .header("Authorization", format!("Bearer {}", session.id()))
+            .header("Content-Type", "application/json")
             .body("no json")
             .send()
             .await
@@ -248,9 +298,9 @@ mod tests {
     const WAIT_SERVER_RETRIES: i32 = 5;
     const WAIT_SERVER_RETRY_INTERVAL: u64 = 1;
 
-    async fn wait_for_server(base_url: &str) -> bool {
+    async fn wait_for_server(base_url: &Url) -> bool {
         for _ in 0..WAIT_SERVER_RETRIES {
-            if reqwest::get(base_url).await.is_ok() {
+            if reqwest::get(base_url.clone()).await.is_ok() {
                 return true;
             }
             std::thread::sleep(std::time::Duration::from_secs(WAIT_SERVER_RETRY_INTERVAL));

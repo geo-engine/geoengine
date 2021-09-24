@@ -314,7 +314,9 @@ impl MetaDataProvider<OgrSourceDataset, VectorResultDescriptor, VectorQueryRecta
                 layer_name: "".to_owned(),
                 data_type: Some(VectorDataType::MultiPoint),
                 time: OgrSourceDatasetTimeType::None, // TODO
+                default_geometry: None,
                 columns: Some(OgrSourceColumnSpec {
+                    format_specifics: None,
                     x: "".to_owned(),
                     y: None,
                     int: vec![],
@@ -405,6 +407,7 @@ mod tests {
     use geoengine_operators::{engine::MockQueryContext, source::OgrSourceProcessor};
     use rand::RngCore;
 
+    use crate::test_data;
     use crate::{
         datasets::listing::OrderBy,
         util::{config, user_input::UserInput},
@@ -425,7 +428,7 @@ mod tests {
         let conn = pg_mgr.connect().await.unwrap();
 
         let mut sql = String::new();
-        File::open("test-data/gfbio/test_data.sql")
+        File::open(test_data!("gfbio/test_data.sql"))
             .unwrap()
             .read_to_string(&mut sql)
             .unwrap();
@@ -647,7 +650,9 @@ mod tests {
                 layer_name: "".to_owned(),
                 data_type: Some(VectorDataType::MultiPoint),
                 time: OgrSourceDatasetTimeType::None,
+                default_geometry: None,
                 columns: Some(OgrSourceColumnSpec {
+                    format_specifics: None,
                     x: "".to_owned(),
                     y: None,
                     int: vec![],

@@ -27,18 +27,10 @@ const OUT_NO_DATA_VALUE: PixelOut = PixelOut::NAN;
 
 /// Parameters for the `Temperature` operator.
 /// * `force_satellite` forces the use of the satellite with the given name.
-#[derive(Debug, Serialize, Deserialize, PartialEq, Clone)]
+#[derive(Debug, Serialize, Deserialize, PartialEq, Clone, Default)]
 #[serde(rename_all = "camelCase")]
 pub struct TemperatureParams {
     force_satellite: Option<u8>,
-}
-
-impl Default for TemperatureParams {
-    fn default() -> Self {
-        TemperatureParams {
-            force_satellite: None,
-        }
-    }
 }
 
 /// The temperature operator approximates BT from

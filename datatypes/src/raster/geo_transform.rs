@@ -1,7 +1,8 @@
 use std::cmp::max;
 
-use crate::primitives::{
-    AxisAlignedRectangle, Coordinate2D, SpatialPartition2D, SpatialResolution,
+use crate::{
+    primitives::{AxisAlignedRectangle, Coordinate2D, SpatialPartition2D, SpatialResolution},
+    util::test::TestDefault,
 };
 use serde::{de, Deserialize, Deserializer, Serialize};
 
@@ -10,13 +11,16 @@ use super::{GridBoundingBox2D, GridIdx, GridIdx2D};
 /// This is a typedef for the `GDAL GeoTransform`. It represents an affine transformation matrix.
 pub type GdalGeoTransform = [f64; 6];
 
-/// The `GeoTransform` is a more user friendly representation of the `GDAL GeoTransform` affine transformation matrix.
+/// The `GeoTransform` specifies the relation between pixel coordinates and geographic coordinates.
+/// In Geo Engine x pixel size is always postive and y pixel size is always negative. For raster tiles
+/// the origin is always the upper left corner. In the global grid for the `TilingStrategy` the origin
+/// is always located at (0, 0).
 #[derive(Copy, Clone, PartialEq, Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct GeoTransform {
     pub origin_coordinate: Coordinate2D,
-    pub x_pixel_size: f64,
-    pub y_pixel_size: f64,
+    x_pixel_size: f64,
+    y_pixel_size: f64,
 }
 
 impl GeoTransform {
@@ -32,6 +36,9 @@ impl GeoTransform {
     ///
     #[inline]
     pub fn new(origin_coordinate: Coordinate2D, x_pixel_size: f64, y_pixel_size: f64) -> Self {
+        debug_assert!(x_pixel_size > 0.0);
+        debug_assert!(y_pixel_size < 0.0);
+
         Self {
             origin_coordinate,
             x_pixel_size,
@@ -55,11 +62,22 @@ impl GeoTransform {
         origin_coordinate_y: f64,
         y_pixel_size: f64,
     ) -> Self {
+        debug_assert!(x_pixel_size > 0.0);
+        debug_assert!(y_pixel_size < 0.0);
+
         Self {
             origin_coordinate: (origin_coordinate_x, origin_coordinate_y).into(),
             x_pixel_size,
             y_pixel_size,
         }
+    }
+
+    pub fn x_pixel_size(&self) -> f64 {
+        self.x_pixel_size
+    }
+
+    pub fn y_pixel_size(&self) -> f64 {
+        self.y_pixel_size
     }
 
     /// Transforms a grid coordinate (row, column) ~ (y, x) into a SRS coordinate (x,y)
@@ -108,8 +126,10 @@ impl GeoTransform {
     ///
     #[inline]
     pub fn coordinate_to_grid_idx_2d(&self, coord: Coordinate2D) -> GridIdx2D {
-        let grid_x_index = ((coord.x - self.origin_coordinate.x) / self.x_pixel_size) as isize;
-        let grid_y_index = ((coord.y - self.origin_coordinate.y) / self.y_pixel_size) as isize;
+        let grid_x_index =
+            ((coord.x - self.origin_coordinate.x) / self.x_pixel_size).floor() as isize;
+        let grid_y_index =
+            ((coord.y - self.origin_coordinate.y) / self.y_pixel_size).floor() as isize;
         [grid_y_index, grid_x_index].into()
     }
 
@@ -171,8 +191,8 @@ impl GeoTransform {
     }
 }
 
-impl Default for GeoTransform {
-    fn default() -> Self {
+impl TestDefault for GeoTransform {
+    fn test_default() -> Self {
         GeoTransform::new_with_coordinate_x_y(0.0, 1.0, 0.0, -1.0)
     }
 }
@@ -270,6 +290,48 @@ mod tests {
         assert_eq!(
             geo_transform.coordinate_to_grid_idx_2d((4.0, 6.0).into()),
             GridIdx2D::new([-1, -1])
+        );
+    }
+
+    #[test]
+    fn geo_transform_coordinate_2d_to_global_grid_2d() {
+        let geo_transform = GeoTransform::new_with_coordinate_x_y(0.0, 1.0, 0.0, -1.0);
+        assert_eq!(
+            geo_transform.coordinate_to_grid_idx_2d((0.0, 0.0).into()),
+            GridIdx2D::new([0, 0])
+        );
+        assert_eq!(
+            geo_transform.coordinate_to_grid_idx_2d((0.5, 0.0).into()),
+            GridIdx2D::new([0, 0])
+        );
+        assert_eq!(
+            geo_transform.coordinate_to_grid_idx_2d((0.5, 0.5).into()),
+            GridIdx2D::new([-1, 0])
+        );
+        assert_eq!(
+            geo_transform.coordinate_to_grid_idx_2d((0.0, 0.5).into()),
+            GridIdx2D::new([-1, 0])
+        );
+        assert_eq!(
+            geo_transform.coordinate_to_grid_idx_2d((0.5, -0.5).into()),
+            GridIdx2D::new([0, 0])
+        );
+        assert_eq!(
+            geo_transform.coordinate_to_grid_idx_2d((-0.5, 0.5).into()),
+            GridIdx2D::new([-1, -1])
+        );
+        assert_eq!(
+            geo_transform.coordinate_to_grid_idx_2d((-0.5, -0.5).into()),
+            GridIdx2D::new([0, -1])
+        );
+
+        assert_eq!(
+            geo_transform.coordinate_to_grid_idx_2d((1.5, -0.5).into()),
+            GridIdx2D::new([0, 1])
+        );
+        assert_eq!(
+            geo_transform.coordinate_to_grid_idx_2d((-1.5, 1.5).into()),
+            GridIdx2D::new([-2, -2])
         );
     }
 

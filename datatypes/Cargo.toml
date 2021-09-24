@@ -6,7 +6,7 @@ authors = [
     "Johannes Drönner <droenner@mathematik.uni-marburg.de>",
     "Michael Mattig <mattig@mathematik.uni-marburg.de>"
 ]
-edition = "2018"
+edition = "2021"
 
 [features]
 postgres = ["postgres-types"]
@@ -14,7 +14,7 @@ postgres = ["postgres-types"]
 pro = ["postgres"]
 
 [dependencies]
-arrow = { version = "5.0", features = ["simd"] }
+arrow = { version = "5.4", features = ["simd"] }
 chrono = "0.4"
 float-cmp = "0.9"
 gdal = { version = "^0.9", features = ["datetime"] }
@@ -34,7 +34,7 @@ uuid = { version = "0.8", features = ["serde", "v4", "v5"] }
 
 [dev-dependencies]
 criterion = "0.3"
-ndarray = "0.14"
+ndarray = "0.15"
 vega_lite_4 = { version = "0.6", features = ["ndarray", "show_vega"]}
 
 [[bench]]

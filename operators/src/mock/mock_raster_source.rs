@@ -124,6 +124,7 @@ mod tests {
     use crate::engine::MockExecutionContext;
     use geoengine_datatypes::primitives::Measurement;
     use geoengine_datatypes::raster::RasterDataType;
+    use geoengine_datatypes::util::test::TestDefault;
     use geoengine_datatypes::{
         primitives::TimeInterval,
         raster::{Grid2D, TileInformation},
@@ -138,7 +139,7 @@ mod tests {
         let raster_tile = RasterTile2D::new_with_tile_info(
             TimeInterval::default(),
             TileInformation {
-                global_geo_transform: Default::default(),
+                global_geo_transform: TestDefault::test_default(),
                 global_tile_position: [0, 0].into(),
                 tile_size_in_pixels: [3, 2].into(),
             },

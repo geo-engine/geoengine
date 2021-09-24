@@ -3,36 +3,28 @@ use flexi_logger::{
     LoggerHandle, Naming, WriteMode,
 };
 use geoengine_services::error::{Error, Result};
-use geoengine_services::server;
 use geoengine_services::util::config;
 use geoengine_services::util::config::get_config_element;
-use log::{info, Record};
-use tokio::sync::oneshot;
-use tokio::sync::oneshot::Receiver;
+use log::Record;
 
-#[tokio::main]
+#[actix_web::main]
 async fn main() -> Result<(), Error> {
     let logger = initialize_logging()?;
 
-    let (shutdown_tx, shutdown_rx) = oneshot::channel();
-
-    let (server, interrupt_success) = tokio::join!(
-        start_server(shutdown_rx),
-        server::interrupt_handler(shutdown_tx, Some(|| info!("Shutting down server…"))),
-    );
+    let res = start_server().await;
 
     logger.shutdown();
-    server.and(interrupt_success)
+    res
 }
 
 #[cfg(not(feature = "pro"))]
-pub async fn start_server(shutdown_rx: Receiver<()>) -> Result<()> {
-    server::start_server(Some(shutdown_rx), None).await
+pub async fn start_server() -> Result<()> {
+    geoengine_services::server::start_server(None).await
 }
 
 #[cfg(feature = "pro")]
-pub async fn start_server(shutdown_rx: Receiver<()>) -> Result<()> {
-    geoengine_services::pro::server::start_pro_server(Some(shutdown_rx), None).await
+pub async fn start_server() -> Result<()> {
+    geoengine_services::pro::server::start_pro_server(None).await
 }
 
 fn initialize_logging() -> Result<LoggerHandle> {
@@ -97,12 +89,13 @@ fn colored_custom_log_format(
     record: &Record,
 ) -> Result<(), std::io::Error> {
     let level = record.level();
+    let style = style(level);
     write!(
         w,
         "[{}] {} [{}] {}",
-        style(level, now.now().format("%Y-%m-%d %H:%M:%S %:z")),
-        style(level, level),
+        style.paint(now.now().format("%Y-%m-%d %H:%M:%S %:z").to_string()),
+        style.paint(level.to_string()),
         record.module_path().unwrap_or("<unnamed>"),
-        style(level, &record.args())
+        style.paint(&record.args().to_string())
     )
 }
