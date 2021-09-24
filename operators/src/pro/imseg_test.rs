@@ -47,7 +47,6 @@ pub async fn imseg_fit<C: QueryContext>(
                 match (ir_016.grid_array, ir_039.grid_array, ir_087.grid_array, ir_097.grid_array, ir_108.grid_array, ir_120.grid_array, ir_134.grid_array, truth.grid_array) {
                     (GridOrEmpty::Grid(grid_016), GridOrEmpty::Grid(grid_039),  GridOrEmpty::Grid(grid_087),  GridOrEmpty::Grid(grid_097), GridOrEmpty::Grid(grid_108), GridOrEmpty::Grid(grid_120), GridOrEmpty::Grid(grid_134), GridOrEmpty::Grid(grid_truth)) => {
 
-                
                         let tile_size = grid_016.shape.shape_array;
 
                         let (arr_img, arr_truth) = create_arrays_from_data(grid_016.data, grid_039.data, grid_087.data, grid_097.data, grid_108.data, grid_120.data, grid_134.data, grid_truth.data, tile_size);
@@ -448,7 +447,7 @@ mod tests {
             },
             placeholder: "%%%_TIME_FORMATED_%%%".to_string(),
             time_format: "%Y/%m/%d/CMAin%Y%m%d%H%M00305SVMSG01MD".to_string(),
-            start: TimeInstance::from_millis(1072917000000).unwrap(),
+            start: TimeInstance::from_millis(1356994800000).unwrap(),
             step: TimeStep{
                 granularity: TimeGranularity::Minutes,
                 step: 15,
@@ -488,7 +487,7 @@ mod tests {
         });
 
         let exp_ir_016 = RasterOperator::boxed(Expression{
-            params: ExpressionParams { expression: "A".to_string(), output_type: RasterDataType::F32, output_no_data_value: no_data_value.unwrap(), output_measurement: Some(Measurement::Continuous{
+            params: ExpressionParams { expression: "(A-0.15282721917305925)/0.20047640300325603".to_string(), output_type: RasterDataType::F32, output_no_data_value: no_data_value.unwrap(), output_measurement: Some(Measurement::Continuous{
                 measurement: "raw".to_string(),
                 unit: None,
             })
@@ -524,7 +523,7 @@ mod tests {
         });
 
         let exp_ir_039 = RasterOperator::boxed(Expression{
-            params: ExpressionParams { expression: "A".to_string(), output_type: RasterDataType::F32, output_no_data_value: no_data_value.unwrap(), output_measurement: Some(Measurement::Continuous{
+            params: ExpressionParams { expression: "(A-276.72667474831303)/15.982918482298778".to_string(), output_type: RasterDataType::F32, output_no_data_value: no_data_value.unwrap(), output_measurement: Some(Measurement::Continuous{
                 measurement: "raw".to_string(),
                 unit: None,
             })
@@ -559,7 +558,7 @@ mod tests {
         });
 
         let exp_ir_087 = RasterOperator::boxed(Expression{
-            params: ExpressionParams { expression: "A".to_string(), output_type: RasterDataType::F32, output_no_data_value: no_data_value.unwrap(), output_measurement: Some(Measurement::Continuous{
+            params: ExpressionParams { expression: "(A-267.92274094012157)/15.763409602725156".to_string(), output_type: RasterDataType::F32, output_no_data_value: no_data_value.unwrap(), output_measurement: Some(Measurement::Continuous{
                 measurement: "raw".to_string(),
                 unit: None,
             })
@@ -594,7 +593,7 @@ mod tests {
         });
 
         let exp_ir_097 = RasterOperator::boxed(Expression{
-            params: ExpressionParams { expression: "A".to_string(), output_type: RasterDataType::F32, output_no_data_value: no_data_value.unwrap(), output_measurement: Some(Measurement::Continuous{
+            params: ExpressionParams { expression: "(A-245.4006454137375)/9.644958714922186".to_string(), output_type: RasterDataType::F32, output_no_data_value: no_data_value.unwrap(), output_measurement: Some(Measurement::Continuous{
                 measurement: "raw".to_string(),
                 unit: None,
             })
@@ -629,7 +628,7 @@ mod tests {
         });
 
         let exp_ir_108 = RasterOperator::boxed(Expression{
-            params: ExpressionParams { expression: "A".to_string(), output_type: RasterDataType::F32, output_no_data_value: no_data_value.unwrap(), output_measurement: Some(Measurement::Continuous{
+            params: ExpressionParams { expression: "(A-269.95727803541155)/16.92469947004928".to_string(), output_type: RasterDataType::F32, output_no_data_value: no_data_value.unwrap(), output_measurement: Some(Measurement::Continuous{
                 measurement: "raw".to_string(),
                 unit: None,
             })
@@ -664,7 +663,7 @@ mod tests {
             }
         });
         let exp_ir_120 = RasterOperator::boxed(Expression{
-            params: ExpressionParams { expression: "A".to_string(), output_type: RasterDataType::F32, output_no_data_value: no_data_value.unwrap(), output_measurement: Some(Measurement::Continuous{
+            params: ExpressionParams { expression: "(A-268.69063154766155)/16.963088951563815".to_string(), output_type: RasterDataType::F32, output_no_data_value: no_data_value.unwrap(), output_measurement: Some(Measurement::Continuous{
                 measurement: "raw".to_string(),
                 unit: None,
             })
@@ -698,7 +697,7 @@ mod tests {
             }
         });
         let exp_ir_134 = RasterOperator::boxed(Expression{
-            params: ExpressionParams { expression: "A".to_string(), output_type: RasterDataType::F32, output_no_data_value: no_data_value.unwrap(), output_measurement: Some(Measurement::Continuous{
+            params: ExpressionParams { expression: "(A-252.1465931705522)/11.171453493090551".to_string(), output_type: RasterDataType::F32, output_no_data_value: no_data_value.unwrap(), output_measurement: Some(Measurement::Continuous{
                 measurement: "raw".to_string(),
                 unit: None,
             })
@@ -731,7 +730,7 @@ mod tests {
 
         let _x = imseg_fit(proc_ir_016, proc_ir_039,proc_ir_087, proc_ir_097, proc_ir_108, proc_ir_120, proc_ir_134, proc_claas, QueryRectangle {
             spatial_bounds: query_bbox,
-            time_interval: TimeInterval::new(1_401_618_600_000, 1_401_618_600_000 + 1000)
+            time_interval: TimeInterval::new(1370086200000, 1370086200000 + 1000)
                 .unwrap(),
             spatial_resolution: query_spatial_resolution,
         }, ctx,
