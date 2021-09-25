@@ -18,9 +18,9 @@ use futures::future::join_all;
 use gdal::DatasetOptions;
 use gdal::Metadata;
 use geoengine_datatypes::dataset::{DatasetId, DatasetProviderId, ExternalDatasetId};
-use geoengine_datatypes::primitives::{TimeInstance, TimeInterval};
+use geoengine_datatypes::primitives::TimeInstance;
 use geoengine_operators::engine::TypedResultDescriptor;
-use geoengine_operators::source::GdalMetaDataStatic;
+use geoengine_operators::source::{GdalMetaDataStatic, GdalMetadataFixedTimes};
 use geoengine_operators::util::gdal::{
     gdal_open_dataset_ex, gdal_parameters_from_dataset, raster_descriptor_from_dataset,
 };
@@ -334,22 +334,10 @@ impl MetaDataProvider<GdalLoadingInfo, RasterResultDescriptor, RasterQueryRectan
             })?;
         let split: Vec<_> = dataset.dataset_id.split(':').collect();
 
-        let (db_name, band_index, time_index_option) = match *split.as_slice() {
-            [db, band_index, time_index] => {
-                if let (Ok(band_index), Ok(time_index)) =
-                    (band_index.parse::<usize>(), time_index.parse::<usize>())
-                {
-                    (db, band_index, Some(time_index))
-                } else {
-                    return Err(geoengine_operators::error::Error::LoadingInfo {
-                        source: Box::new(Error::InvalidExternalDatasetId { provider: self.id }),
-                    });
-                }
-            }
-
+        let (db_name, band_index) = match *split.as_slice() {
             [db, band_index] => {
                 if let Ok(band_index) = band_index.parse::<usize>() {
-                    (db, band_index, None)
+                    (db, band_index)
                 } else {
                     return Err(geoengine_operators::error::Error::LoadingInfo {
                         source: Box::new(Error::InvalidExternalDatasetId { provider: self.id }),
@@ -377,26 +365,42 @@ impl MetaDataProvider<GdalLoadingInfo, RasterResultDescriptor, RasterQueryRectan
         let (dataset, _band_labels, time_positions) = self
             .get_band_labels_and_time_positions(dataset)
             .await
-            .unwrap();
-        let mut time: Option<TimeInterval> = None;
+            .map_err(|e| geoengine_operators::error::Error::LoadingInfo {
+                source: Box::new(e),
+            })?;
 
-        if let Some(time_index) = time_index_option {
-            let time_position = &time_positions[time_index];
-            let date_time = NaiveDateTime::parse_from_str(time_position, "%Y-%m-%dT%H:%M")?;
-            time = Some(TimeInterval::new_instant(TimeInstance::from(date_time))?);
+        let params = gdal_parameters_from_dataset(
+            &dataset,
+            band_index,
+            Path::new(&db_url),
+            None,
+            Some(self.auth().to_vec()),
+        )?;
+
+        let result_descriptor =
+            raster_descriptor_from_dataset(&dataset, band_index as isize, None)?;
+
+        if time_positions.is_empty() {
+            Ok(Box::new(GdalMetaDataStatic {
+                time: None,
+                params,
+                result_descriptor,
+            }))
+        } else {
+            let time_steps = time_positions
+                .iter()
+                .map(|time_position| {
+                    NaiveDateTime::parse_from_str(time_position, "%Y-%m-%dT%H:%M").unwrap()
+                })
+                .map(TimeInstance::from)
+                .collect::<Vec<_>>();
+
+            Ok(Box::new(GdalMetadataFixedTimes {
+                time_steps,
+                params,
+                result_descriptor,
+            }))
         }
-
-        Ok(Box::new(GdalMetaDataStatic {
-            time,
-            params: gdal_parameters_from_dataset(
-                &dataset,
-                band_index,
-                Path::new(&db_url),
-                None,
-                Some(self.auth().to_vec()),
-            )?,
-            result_descriptor: raster_descriptor_from_dataset(&dataset, band_index as isize, None)?,
-        }))
     }
 }
 
@@ -1147,7 +1151,7 @@ mod tests {
                         "2cb964d5-b9fa-4f8f-ab6f-f6c7fb47d4cd",
                     )
                     .unwrap(),
-                    dataset_id: "uas_orthomosaics_2020:1:1".to_owned(),
+                    dataset_id: "uas_orthomosaics_2020:1".to_owned(),
                 }))
                 .await
                 .unwrap();
@@ -1169,7 +1173,10 @@ mod tests {
                     (473_922.500, 5_634_057.500).into(),
                     (473_924.500, 5_634_055.50).into(),
                 ),
-                time_interval: TimeInterval::default(),
+                time_interval: TimeInterval::new_instant(TimeInstance::from(
+                    NaiveDateTime::parse_from_str("2020-09-15T00:00", "%Y-%m-%dT%H:%M").unwrap(),
+                ))
+                .unwrap(),
                 spatial_resolution: SpatialResolution::new_unchecked(
                     (473_924.500 - 473_922.500) / 2.,
                     (5_634_057.500 - 5_634_055.50) / 2.,
