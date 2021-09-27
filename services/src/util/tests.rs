@@ -22,6 +22,7 @@ use crate::{
 };
 use actix_web::dev::ServiceResponse;
 use actix_web::{http, http::Method, middleware, test, web, App};
+use flexi_logger::Logger;
 use geoengine_datatypes::dataset::DatasetId;
 use geoengine_datatypes::operations::image::Colorizer;
 use geoengine_datatypes::spatial_reference::SpatialReferenceOption;
@@ -227,4 +228,14 @@ impl Drop for TestDataUploads {
             }
         }
     }
+}
+
+/// Initialize a basic logger within tests.
+/// You should only use this for debugging.
+///
+/// # Panics
+/// This function will panic if the logger cannot be initialized.
+///
+pub fn initialize_debugging_in_test() {
+    Logger::try_with_str("debug").unwrap().start().unwrap();
 }
