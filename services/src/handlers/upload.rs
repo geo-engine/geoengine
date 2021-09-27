@@ -103,7 +103,6 @@ mod tests {
     use actix_web_httpauth::headers::authorization::Bearer;
 
     #[tokio::test]
-    #[ignore]
     async fn upload() {
         let ctx = InMemoryContext::default();
 
@@ -121,7 +120,7 @@ Content-Type: text/plain
 foo
 -----------------------------10196671711503402186283068890--
 "#
-        .to_string();
+        .replace("\n", "\r\n");
 
         let req = test::TestRequest::post()
             .uri("/upload")
@@ -129,18 +128,13 @@ foo
             .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())))
             .append_header((header::CONTENT_TYPE, "multipart/form-data; boundary=---------------------------10196671711503402186283068890"))
             .set_payload(body);
-
         let res = send_test_request(req, ctx).await;
 
-        let res_status = res.status();
-        let res_body = read_body_string(res).await;
-        assert_eq!(res_status, 200, "{}", res_body);
+        assert_eq!(res.status(), 200);
 
-        let _upload: IdResponse<UploadId> = serde_json::from_str(&res_body).unwrap();
-
-        // TODO: fix: body doesn't arrive at handler in test
-        // let root = upload.id.root_path().unwrap();
-        // assert!(root.join("foo.txt").exists() && root.join("bar.txt").exists());
+        let upload: IdResponse<UploadId> = test::read_body_json(res).await;
+        let root = upload.id.root_path().unwrap();
+        assert!(root.join("foo.txt").exists() && root.join("bar.txt").exists());
 
         // TODO: delete upload directory or configure test settings to use temp dir
     }
