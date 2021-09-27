@@ -2,7 +2,7 @@ use crate::datasets::add_from_directory::{
     add_datasets_from_directory, add_providers_from_directory,
 };
 use crate::error::{self, Result};
-use crate::pro::datasets::ProHashMapDatasetDb;
+use crate::pro::datasets::PostgresDatasetDb;
 use crate::pro::projects::ProjectPermission;
 use crate::pro::users::{UserDb, UserId, UserSession};
 use crate::pro::workflows::postgres_workflow_registry::PostgresWorkflowRegistry;
@@ -46,7 +46,7 @@ where
     user_db: Db<PostgresUserDb<Tls>>,
     project_db: Db<PostgresProjectDb<Tls>>,
     workflow_registry: Db<PostgresWorkflowRegistry<Tls>>,
-    dataset_db: Db<ProHashMapDatasetDb>, // TODO: implement postgres version
+    dataset_db: Db<PostgresDatasetDb<Tls>>,
     thread_pool: Arc<ThreadPool>,
 }
 
@@ -68,7 +68,7 @@ where
             user_db: Arc::new(RwLock::new(PostgresUserDb::new(pool.clone()))),
             project_db: Arc::new(RwLock::new(PostgresProjectDb::new(pool.clone()))),
             workflow_registry: Arc::new(RwLock::new(PostgresWorkflowRegistry::new(pool.clone()))),
-            dataset_db: Default::default(),
+            dataset_db: Arc::new(RwLock::new(PostgresDatasetDb::new(pool.clone()))),
             thread_pool: Default::default(),
         })
     }
@@ -85,7 +85,7 @@ where
 
         Self::update_schema(pool.get().await?).await?;
 
-        let mut dataset_db = ProHashMapDatasetDb::default();
+        let mut dataset_db = PostgresDatasetDb::new(pool.clone());
         add_datasets_from_directory(&mut dataset_db, dataset_defs_path).await;
         add_providers_from_directory(&mut dataset_db, provider_defs_path.clone()).await;
         add_providers_from_directory(&mut dataset_db, provider_defs_path.join("pro")).await;
@@ -257,6 +257,26 @@ where
                             id UUID PRIMARY KEY,
                             workflow json NOT NULL
                         );
+
+                        CREATE TABLE datasets (
+                            id UUID PRIMARY KEY,
+                            name text NOT NULL,
+                            description text NOT NULL, 
+                            tags text[], 
+                            source_operator text NOT NULL,
+
+                            result_descriptor json NOT NULL,
+                            meta_data json NOT NULL,
+
+                            symbology json,
+                            provenance json
+                        );
+
+                        -- TODO: uploads
+
+                        -- TOOD: providers
+
+                        -- TODO: datasets, uploads, providers permissions
                         "#,
                     )
                     .await?;
@@ -335,9 +355,9 @@ where
     type Session = UserSession;
     type ProjectDB = PostgresProjectDb<Tls>;
     type WorkflowRegistry = PostgresWorkflowRegistry<Tls>;
-    type DatasetDB = ProHashMapDatasetDb; // TODO: implement postgres version
+    type DatasetDB = PostgresDatasetDb<Tls>;
     type QueryContext = QueryContextImpl;
-    type ExecutionContext = ExecutionContextImpl<UserSession, ProHashMapDatasetDb>; // TODO: use postgres version of dataset db
+    type ExecutionContext = ExecutionContextImpl<UserSession, PostgresDatasetDb<Tls>>;
 
     fn project_db(&self) -> Db<Self::ProjectDB> {
         self.project_db.clone()
@@ -381,7 +401,7 @@ where
 
     fn execution_context(&self, session: UserSession) -> Result<Self::ExecutionContext> {
         Ok(
-            ExecutionContextImpl::<UserSession, ProHashMapDatasetDb>::new(
+            ExecutionContextImpl::<UserSession, PostgresDatasetDb<Tls>>::new(
                 self.dataset_db.clone(),
                 self.thread_pool.create_context(),
                 session,

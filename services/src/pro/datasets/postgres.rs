@@ -5,29 +5,73 @@ use crate::datasets::storage::{
     MetaDataDefinition,
 };
 use crate::datasets::upload::{Upload, UploadDb, UploadId};
-use crate::error::Result;
+use crate::error::{Error, Result};
 use crate::util::user_input::Validated;
 use crate::{
     datasets::listing::{DatasetListOptions, DatasetListing, DatasetProvider},
     pro::users::UserSession,
 };
 use async_trait::async_trait;
-use geoengine_datatypes::dataset::{DatasetId, DatasetProviderId};
-use geoengine_operators::engine::{MetaData, MetaDataProvider, ResultDescriptor};
+use bb8_postgres::bb8::Pool;
+use bb8_postgres::tokio_postgres::tls::{MakeTlsConnect, TlsConnect};
+use bb8_postgres::tokio_postgres::Socket;
+use bb8_postgres::PostgresConnectionManager;
+use geoengine_datatypes::dataset::{DatasetId, DatasetProviderId, InternalDatasetId};
+use geoengine_datatypes::util::Identifier;
+use geoengine_operators::engine::{
+    MetaData, MetaDataProvider, RasterQueryRectangle, RasterResultDescriptor, StaticMetaData,
+    TypedResultDescriptor, VectorQueryRectangle, VectorResultDescriptor,
+};
+use geoengine_operators::mock::MockDatasetDataSourceLoadingInfo;
+use geoengine_operators::source::{
+    GdalLoadingInfo, GdalMetaDataRegular, GdalMetaDataStatic, OgrSourceDataset,
+};
 
-// TODO: implement in separate PR, need placeholder here to satisfy bounds of `Context`
-pub struct PostgresDatasetDb {}
+pub struct PostgresDatasetDb<Tls>
+where
+    Tls: MakeTlsConnect<Socket> + Clone + Send + Sync + 'static,
+    <Tls as MakeTlsConnect<Socket>>::Stream: Send + Sync,
+    <Tls as MakeTlsConnect<Socket>>::TlsConnect: Send,
+    <<Tls as MakeTlsConnect<Socket>>::TlsConnect as TlsConnect<Socket>>::Future: Send,
+{
+    conn_pool: Pool<PostgresConnectionManager<Tls>>,
+}
 
-impl DatasetDb<UserSession> for PostgresDatasetDb {}
+impl<Tls> PostgresDatasetDb<Tls>
+where
+    Tls: MakeTlsConnect<Socket> + Clone + Send + Sync + 'static,
+    <Tls as MakeTlsConnect<Socket>>::Stream: Send + Sync,
+    <Tls as MakeTlsConnect<Socket>>::TlsConnect: Send,
+    <<Tls as MakeTlsConnect<Socket>>::TlsConnect as TlsConnect<Socket>>::Future: Send,
+{
+    pub fn new(conn_pool: Pool<PostgresConnectionManager<Tls>>) -> Self {
+        Self { conn_pool }
+    }
+}
+
+impl<Tls> DatasetDb<UserSession> for PostgresDatasetDb<Tls>
+where
+    Tls: MakeTlsConnect<Socket> + Clone + Send + Sync + 'static,
+    <Tls as MakeTlsConnect<Socket>>::Stream: Send + Sync,
+    <Tls as MakeTlsConnect<Socket>>::TlsConnect: Send,
+    <<Tls as MakeTlsConnect<Socket>>::TlsConnect as TlsConnect<Socket>>::Future: Send,
+{
+}
 
 #[async_trait]
-impl DatasetProviderDb<UserSession> for PostgresDatasetDb {
+impl<Tls> DatasetProviderDb<UserSession> for PostgresDatasetDb<Tls>
+where
+    Tls: MakeTlsConnect<Socket> + Clone + Send + Sync + 'static,
+    <Tls as MakeTlsConnect<Socket>>::Stream: Send + Sync,
+    <Tls as MakeTlsConnect<Socket>>::TlsConnect: Send,
+    <<Tls as MakeTlsConnect<Socket>>::TlsConnect as TlsConnect<Socket>>::Future: Send,
+{
     async fn add_dataset_provider(
         &mut self,
         _session: &UserSession,
         _provider: Box<dyn DatasetProviderDefinition>,
     ) -> Result<DatasetProviderId> {
-        todo!()
+        Err(Error::NotYetImplemented)
     }
 
     async fn list_dataset_providers(
@@ -35,7 +79,7 @@ impl DatasetProviderDb<UserSession> for PostgresDatasetDb {
         _session: &UserSession,
         _options: Validated<DatasetProviderListOptions>,
     ) -> Result<Vec<DatasetProviderListing>> {
-        todo!()
+        Err(Error::NotYetImplemented)
     }
 
     async fn dataset_provider(
@@ -43,18 +87,61 @@ impl DatasetProviderDb<UserSession> for PostgresDatasetDb {
         _session: &UserSession,
         _provider: DatasetProviderId,
     ) -> Result<Box<dyn DatasetProvider>> {
-        todo!()
+        Err(Error::NotYetImplemented)
     }
 }
 
 #[async_trait]
-impl DatasetProvider for PostgresDatasetDb {
+impl<Tls> DatasetProvider for PostgresDatasetDb<Tls>
+where
+    Tls: MakeTlsConnect<Socket> + Clone + Send + Sync + 'static,
+    <Tls as MakeTlsConnect<Socket>>::Stream: Send + Sync,
+    <Tls as MakeTlsConnect<Socket>>::TlsConnect: Send,
+    <<Tls as MakeTlsConnect<Socket>>::TlsConnect as TlsConnect<Socket>>::Future: Send,
+{
     async fn list(
         &self,
         // _session: &UserSession,
         _options: Validated<DatasetListOptions>,
     ) -> Result<Vec<DatasetListing>> {
-        todo!()
+        // TODO: permission
+        // TODO: use options
+
+        let conn = self.conn_pool.get().await?;
+        let stmt = conn
+            .prepare(
+                "
+            SELECT 
+                id, 
+                name, 
+                description,
+                tags,
+                source_operator,
+                result_descriptor,
+                symbology
+            FROM datasets;",
+            )
+            .await?;
+
+        let rows = conn.query(&stmt, &[]).await?;
+
+        Ok(rows
+            .iter()
+            .map(|row| {
+                Result::<DatasetListing>::Ok(DatasetListing {
+                    id: DatasetId::Internal {
+                        dataset_id: row.get(0),
+                    },
+                    name: row.get(1),
+                    description: row.get(2),
+                    tags: row.get::<_, Option<_>>(3).unwrap_or_default(),
+                    source_operator: row.get(4),
+                    result_descriptor: serde_json::from_value(row.get(5)).unwrap(),
+                    symbology: serde_json::from_value(row.get(6)).unwrap(),
+                })
+            })
+            .filter_map(Result::ok)
+            .collect())
     }
 
     async fn load(
@@ -62,57 +149,312 @@ impl DatasetProvider for PostgresDatasetDb {
         //  _session: &UserSession,
         _dataset: &DatasetId,
     ) -> Result<Dataset> {
-        todo!()
+        // this method seems to be redundant
+        Err(Error::NotYetImplemented)
     }
 }
 
 #[async_trait]
-impl<L, R, Q> MetaDataProvider<L, R, Q> for PostgresDatasetDb
+impl<Tls>
+    MetaDataProvider<MockDatasetDataSourceLoadingInfo, VectorResultDescriptor, VectorQueryRectangle>
+    for PostgresDatasetDb<Tls>
 where
-    R: ResultDescriptor,
+    Tls: MakeTlsConnect<Socket> + Clone + Send + Sync + 'static,
+    <Tls as MakeTlsConnect<Socket>>::Stream: Send + Sync,
+    <Tls as MakeTlsConnect<Socket>>::TlsConnect: Send,
+    <<Tls as MakeTlsConnect<Socket>>::TlsConnect as TlsConnect<Socket>>::Future: Send,
 {
     async fn meta_data(
         &self,
         _dataset: &DatasetId,
-    ) -> std::result::Result<Box<dyn MetaData<L, R, Q>>, geoengine_operators::error::Error> {
+    ) -> Result<
+        Box<
+            dyn MetaData<
+                MockDatasetDataSourceLoadingInfo,
+                VectorResultDescriptor,
+                VectorQueryRectangle,
+            >,
+        >,
+        geoengine_operators::error::Error,
+    > {
         todo!()
     }
 }
 
-impl DatasetStorer for PostgresDatasetDb {
-    type StorageType = i32; // placeholder
+#[async_trait]
+impl<Tls> MetaDataProvider<OgrSourceDataset, VectorResultDescriptor, VectorQueryRectangle>
+    for PostgresDatasetDb<Tls>
+where
+    Tls: MakeTlsConnect<Socket> + Clone + Send + Sync + 'static,
+    <Tls as MakeTlsConnect<Socket>>::Stream: Send + Sync,
+    <Tls as MakeTlsConnect<Socket>>::TlsConnect: Send,
+    <<Tls as MakeTlsConnect<Socket>>::TlsConnect as TlsConnect<Socket>>::Future: Send,
+{
+    async fn meta_data(
+        &self,
+        dataset: &DatasetId,
+    ) -> Result<
+        Box<dyn MetaData<OgrSourceDataset, VectorResultDescriptor, VectorQueryRectangle>>,
+        geoengine_operators::error::Error,
+    > {
+        let id = dataset
+            .internal()
+            .ok_or(geoengine_operators::error::Error::LoadingInfo {
+                source: Box::new(Error::InvalidDatasetId),
+            })?;
+
+        let conn = self.conn_pool.get().await.map_err(|e| {
+            geoengine_operators::error::Error::LoadingInfo {
+                source: Box::new(e),
+            }
+        })?;
+        let stmt = conn
+            .prepare(
+                "
+        SELECT 
+            meta_data
+        FROM 
+            datasets 
+        WHERE 
+            id = $1;",
+            )
+            .await
+            .map_err(|e| geoengine_operators::error::Error::LoadingInfo {
+                source: Box::new(e),
+            })?;
+
+        let row = conn.query_one(&stmt, &[&id]).await.map_err(|e| {
+            geoengine_operators::error::Error::LoadingInfo {
+                source: Box::new(e),
+            }
+        })?;
+
+        let meta_data: StaticMetaData<
+            OgrSourceDataset,
+            VectorResultDescriptor,
+            VectorQueryRectangle,
+        > = serde_json::from_value(row.get(0))?;
+
+        Ok(Box::new(meta_data))
+    }
 }
 
 #[async_trait]
-impl DatasetStore<UserSession> for PostgresDatasetDb {
+impl<Tls> MetaDataProvider<GdalLoadingInfo, RasterResultDescriptor, RasterQueryRectangle>
+    for PostgresDatasetDb<Tls>
+where
+    Tls: MakeTlsConnect<Socket> + Clone + Send + Sync + 'static,
+    <Tls as MakeTlsConnect<Socket>>::Stream: Send + Sync,
+    <Tls as MakeTlsConnect<Socket>>::TlsConnect: Send,
+    <<Tls as MakeTlsConnect<Socket>>::TlsConnect as TlsConnect<Socket>>::Future: Send,
+{
+    async fn meta_data(
+        &self,
+        dataset: &DatasetId,
+    ) -> Result<
+        Box<dyn MetaData<GdalLoadingInfo, RasterResultDescriptor, RasterQueryRectangle>>,
+        geoengine_operators::error::Error,
+    > {
+        let id = dataset
+            .internal()
+            .ok_or(geoengine_operators::error::Error::LoadingInfo {
+                source: Box::new(Error::InvalidDatasetId),
+            })?;
+
+        let conn = self.conn_pool.get().await.map_err(|e| {
+            geoengine_operators::error::Error::LoadingInfo {
+                source: Box::new(e),
+            }
+        })?;
+        let stmt = conn
+            .prepare(
+                "
+        SELECT 
+            meta_data
+        FROM 
+            datasets 
+        WHERE 
+            id = $1;",
+            )
+            .await
+            .map_err(|e| geoengine_operators::error::Error::LoadingInfo {
+                source: Box::new(e),
+            })?;
+
+        let row = conn.query_one(&stmt, &[&id]).await.map_err(|e| {
+            geoengine_operators::error::Error::LoadingInfo {
+                source: Box::new(e),
+            }
+        })?;
+
+        // try if meta data is regular...
+        let meta_data: Result<GdalMetaDataRegular, _> = serde_json::from_value(row.get(0));
+
+        if let Ok(meta_data) = meta_data {
+            return Ok(Box::new(meta_data));
+        }
+
+        // ... or static.
+        let meta_data: GdalMetaDataStatic = serde_json::from_value(row.get(0))?;
+        dbg!(&meta_data);
+        Ok(Box::new(meta_data))
+    }
+}
+
+#[async_trait]
+pub trait PostgresStorable<Tls>: Send + Sync
+where
+    Tls: MakeTlsConnect<Socket> + Clone + Send + Sync + 'static,
+    <Tls as MakeTlsConnect<Socket>>::Stream: Send + Sync,
+    <Tls as MakeTlsConnect<Socket>>::TlsConnect: Send,
+    <<Tls as MakeTlsConnect<Socket>>::TlsConnect as TlsConnect<Socket>>::Future: Send,
+{
+    fn to_json(&self) -> Result<DatasetMetaDataJson>;
+}
+
+pub struct DatasetMetaDataJson {
+    meta_data: serde_json::Value,
+    result_descriptor: serde_json::Value,
+}
+
+impl<Tls> DatasetStorer for PostgresDatasetDb<Tls>
+where
+    Tls: MakeTlsConnect<Socket> + Clone + Send + Sync + 'static,
+    <Tls as MakeTlsConnect<Socket>>::Stream: Send + Sync,
+    <Tls as MakeTlsConnect<Socket>>::TlsConnect: Send,
+    <<Tls as MakeTlsConnect<Socket>>::TlsConnect as TlsConnect<Socket>>::Future: Send,
+{
+    type StorageType = Box<dyn PostgresStorable<Tls>>;
+}
+
+impl<Tls> PostgresStorable<Tls> for MetaDataDefinition
+where
+    Tls: MakeTlsConnect<Socket> + Clone + Send + Sync + 'static,
+    <Tls as MakeTlsConnect<Socket>>::Stream: Send + Sync,
+    <Tls as MakeTlsConnect<Socket>>::TlsConnect: Send,
+    <<Tls as MakeTlsConnect<Socket>>::TlsConnect as TlsConnect<Socket>>::Future: Send,
+{
+    fn to_json(&self) -> Result<DatasetMetaDataJson> {
+        match self {
+            MetaDataDefinition::MockMetaData(d) => Ok(DatasetMetaDataJson {
+                meta_data: serde_json::to_value(self)?,
+                result_descriptor: serde_json::to_value(&TypedResultDescriptor::from(
+                    d.result_descriptor.clone(),
+                ))?,
+            }),
+            MetaDataDefinition::OgrMetaData(d) => Ok(DatasetMetaDataJson {
+                meta_data: serde_json::to_value(self)?,
+                result_descriptor: serde_json::to_value(&TypedResultDescriptor::from(
+                    d.result_descriptor.clone(),
+                ))?,
+            }),
+            MetaDataDefinition::GdalMetaDataRegular(d) => Ok(DatasetMetaDataJson {
+                meta_data: serde_json::to_value(self)?,
+                result_descriptor: serde_json::to_value(&TypedResultDescriptor::from(
+                    d.result_descriptor.clone(),
+                ))?,
+            }),
+            MetaDataDefinition::GdalStatic(d) => Ok(DatasetMetaDataJson {
+                meta_data: serde_json::to_value(self)?,
+                result_descriptor: serde_json::to_value(&TypedResultDescriptor::from(
+                    d.result_descriptor.clone(),
+                ))?,
+            }),
+        }
+    }
+}
+
+#[async_trait]
+impl<Tls> DatasetStore<UserSession> for PostgresDatasetDb<Tls>
+where
+    Tls: MakeTlsConnect<Socket> + Clone + Send + Sync + 'static,
+    <Tls as MakeTlsConnect<Socket>>::Stream: Send + Sync,
+    <Tls as MakeTlsConnect<Socket>>::TlsConnect: Send,
+    <<Tls as MakeTlsConnect<Socket>>::TlsConnect as TlsConnect<Socket>>::Future: Send,
+{
     async fn add_dataset(
         &mut self,
         _session: &UserSession,
-        _dataset: Validated<AddDataset>,
-        _meta_data: i32,
+        dataset: Validated<AddDataset>,
+        meta_data: Box<dyn PostgresStorable<Tls>>,
     ) -> Result<DatasetId> {
-        todo!()
+        // TODO: permissions
+        let dataset = dataset.user_input;
+        let id = dataset
+            .id
+            .unwrap_or_else(|| InternalDatasetId::new().into());
+        let internal_id = id.internal().ok_or(Error::InvalidDatasetId)?;
+
+        let meta_data_json = meta_data.to_json()?;
+
+        let conn = self.conn_pool.get().await?;
+
+        let stmt = conn
+            .prepare(
+                "
+                INSERT INTO datasets (
+                    id,
+                    name,
+                    description,
+                    source_operator,
+                    result_descriptor,
+                    meta_data,
+                    symbology,
+                    provenance
+                )
+                VALUES ($1, $2, $3, $4, $5, $6, $7, $8);",
+            )
+            .await?;
+
+        conn.execute(
+            &stmt,
+            &[
+                &internal_id,
+                &dataset.name,
+                &dataset.description,
+                &dataset.source_operator,
+                &meta_data_json.result_descriptor,
+                &meta_data_json.meta_data,
+                &serde_json::to_value(&dataset.symbology)?,
+                &serde_json::to_value(&dataset.provenance)?,
+            ],
+        )
+        .await?;
+
+        Ok(id)
     }
 
-    fn wrap_meta_data(&self, _meta: MetaDataDefinition) -> Self::StorageType {
-        todo!()
+    fn wrap_meta_data(&self, meta: MetaDataDefinition) -> Self::StorageType {
+        Box::new(meta)
     }
 }
 
 #[async_trait]
-impl UploadDb<UserSession> for PostgresDatasetDb {
+impl<Tls> UploadDb<UserSession> for PostgresDatasetDb<Tls>
+where
+    Tls: MakeTlsConnect<Socket> + Clone + Send + Sync + 'static,
+    <Tls as MakeTlsConnect<Socket>>::Stream: Send + Sync,
+    <Tls as MakeTlsConnect<Socket>>::TlsConnect: Send,
+    <<Tls as MakeTlsConnect<Socket>>::TlsConnect as TlsConnect<Socket>>::Future: Send,
+{
     async fn get_upload(&self, _session: &UserSession, _upload: UploadId) -> Result<Upload> {
-        todo!()
+        Err(Error::NotYetImplemented)
     }
 
     async fn create_upload(&mut self, _session: &UserSession, _upload: Upload) -> Result<()> {
-        todo!()
+        Err(Error::NotYetImplemented)
     }
 }
 
 #[async_trait]
-impl ProvenanceProvider for PostgresDatasetDb {
+impl<Tls> ProvenanceProvider for PostgresDatasetDb<Tls>
+where
+    Tls: MakeTlsConnect<Socket> + Clone + Send + Sync + 'static,
+    <Tls as MakeTlsConnect<Socket>>::Stream: Send + Sync,
+    <Tls as MakeTlsConnect<Socket>>::TlsConnect: Send,
+    <<Tls as MakeTlsConnect<Socket>>::TlsConnect as TlsConnect<Socket>>::Future: Send,
+{
     async fn provenance(&self, _dataset: &DatasetId) -> Result<ProvenanceOutput> {
-        todo!()
+        Err(Error::NotYetImplemented)
     }
 }
