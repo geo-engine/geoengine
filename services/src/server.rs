@@ -8,7 +8,7 @@ use crate::util::config::get_config_element;
 use actix_files::Files;
 use actix_web::dev::{Body, ServiceResponse};
 use actix_web::error::{InternalError, JsonPayloadError, QueryPayloadError};
-use actix_web::{http, middleware, web, App, HttpResponse, HttpServer, Responder};
+use actix_web::{http, middleware, web, App, HttpResponse, HttpServer};
 use log::{debug, info};
 use std::net::SocketAddr;
 use std::path::PathBuf;
@@ -57,7 +57,8 @@ where
     let wrapped_ctx = web::Data::new(ctx);
 
     HttpServer::new(move || {
-        let app = App::new()
+        #[allow(unused_mut)]
+        let mut app = App::new()
             .app_data(wrapped_ctx.clone())
             .wrap(
                 middleware::ErrorHandlers::default()
@@ -76,9 +77,11 @@ where
             .configure(handlers::wcs::init_wcs_routes::<C>)
             .configure(handlers::wfs::init_wfs_routes::<C>)
             .configure(handlers::wms::init_wms_routes::<C>)
-            .configure(handlers::workflows::init_workflow_routes::<C>)
-            .route("/version", web::get().to(show_version_handler)); // TODO: allow disabling this function via config or feature flag
-
+            .configure(handlers::workflows::init_workflow_routes::<C>);
+        #[cfg(feature = "version-api")]
+        {
+            app = app.route("/version", web::get().to(show_version_handler));
+        }
         if let Some(static_files_dir) = static_files_dir.clone() {
             app.service(Files::new("/static", static_files_dir))
         } else {
@@ -181,8 +184,9 @@ pub(crate) fn configure_extractors(cfg: &mut web::ServiceConfig) {
 ///   "commitHash": "16cd0881a79b6f03bb5f1f6ef2b2711e570b9865"
 /// }
 /// ```
+#[cfg(feature = "version-api")]
 #[allow(clippy::unused_async)] // the function signature of request handlers requires it
-pub(crate) async fn show_version_handler() -> impl Responder {
+pub(crate) async fn show_version_handler() -> impl actix_web::Responder {
     #[derive(serde::Serialize)]
     #[serde(rename_all = "camelCase")]
     struct VersionInfo<'a> {

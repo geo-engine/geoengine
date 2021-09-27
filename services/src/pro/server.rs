@@ -7,7 +7,7 @@ use crate::pro::contexts::{ProContext, ProInMemoryContext};
 use crate::util::config::{self, get_config_element, Backend};
 
 use super::projects::ProProjectDb;
-use crate::server::{configure_extractors, render_404, render_405, show_version_handler};
+use crate::server::{configure_extractors, render_404, render_405};
 use actix_files::Files;
 use actix_web::{http, middleware, web, App, HttpServer};
 #[cfg(feature = "postgres")]
@@ -48,11 +48,17 @@ where
             .configure(handlers::wcs::init_wcs_routes::<C>)
             .configure(handlers::wfs::init_wfs_routes::<C>)
             .configure(handlers::wms::init_wms_routes::<C>)
-            .configure(handlers::workflows::init_workflow_routes::<C>)
-            .route("/version", web::get().to(show_version_handler)); // TODO: allow disabling this function via config or feature flag
+            .configure(handlers::workflows::init_workflow_routes::<C>);
         #[cfg(feature = "odm")]
         {
             app = app.configure(pro::handlers::drone_mapping::init_drone_mapping_routes::<C>);
+        }
+        #[cfg(feature = "version-api")]
+        {
+            app = app.route(
+                "/version",
+                web::get().to(crate::server::show_version_handler),
+            );
         }
         if let Some(static_files_dir) = static_files_dir.clone() {
             app = app.service(Files::new("/static", static_files_dir));
