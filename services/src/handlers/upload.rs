@@ -76,7 +76,7 @@ async fn upload_handler<C: Context>(
         files.push(FileUpload {
             id: file_id,
             name: file_name,
-            byte_size,
+            byte_size: byte_size as i64,
         });
     }
 

@@ -5,7 +5,7 @@ use crate::datasets::storage::{
     MetaDataDefinition,
 };
 use crate::datasets::upload::{Upload, UploadDb, UploadId};
-use crate::error::{Error, Result};
+use crate::error::{self, Error, Result};
 use crate::util::user_input::Validated;
 use crate::{
     datasets::listing::{DatasetListOptions, DatasetListing, DatasetProvider},
@@ -26,6 +26,7 @@ use geoengine_operators::mock::MockDatasetDataSourceLoadingInfo;
 use geoengine_operators::source::{
     GdalLoadingInfo, GdalMetaDataRegular, GdalMetaDataStatic, OgrSourceDataset,
 };
+use snafu::ResultExt;
 
 pub struct PostgresDatasetDb<Tls>
 where
@@ -69,9 +70,36 @@ where
     async fn add_dataset_provider(
         &mut self,
         _session: &UserSession,
-        _provider: Box<dyn DatasetProviderDefinition>,
+        provider: Box<dyn DatasetProviderDefinition>,
     ) -> Result<DatasetProviderId> {
-        Err(Error::NotYetImplemented)
+        // TODO: permissions
+        let conn = self.conn_pool.get().await?;
+
+        let stmt = conn
+            .prepare(
+                "
+            INSERT INTO dataset_providers (
+                id, 
+                type_name, 
+                name,
+                definition
+            )
+            VALUES ($1, $2, $3, $4)",
+            )
+            .await?;
+
+        let id = provider.id();
+        conn.execute(
+            &stmt,
+            &[
+                &id,
+                &provider.type_name(),
+                &provider.name(),
+                &serde_json::to_value(provider)?,
+            ],
+        )
+        .await?;
+        Ok(id)
     }
 
     async fn list_dataset_providers(
@@ -79,15 +107,59 @@ where
         _session: &UserSession,
         _options: Validated<DatasetProviderListOptions>,
     ) -> Result<Vec<DatasetProviderListing>> {
-        Err(Error::NotYetImplemented)
+        // TODO: options
+        // TODO: permission
+        let conn = self.conn_pool.get().await?;
+
+        let stmt = conn
+            .prepare(
+                "
+            SELECT 
+                id, 
+                type_name, 
+                name
+            FROM 
+                dataset_providers",
+            )
+            .await?;
+
+        let rows = conn.query(&stmt, &[]).await?;
+
+        Ok(rows
+            .iter()
+            .map(|row| DatasetProviderListing {
+                id: row.get(0),
+                type_name: row.get(1),
+                name: row.get(2),
+            })
+            .collect())
     }
 
     async fn dataset_provider(
         &self,
         _session: &UserSession,
-        _provider: DatasetProviderId,
+        provider: DatasetProviderId,
     ) -> Result<Box<dyn DatasetProvider>> {
-        Err(Error::NotYetImplemented)
+        // TODO: permissions
+        let conn = self.conn_pool.get().await?;
+
+        let stmt = conn
+            .prepare(
+                "
+            SELECT 
+                definition
+            FROM 
+                dataset_providers
+            WHERE
+                id = $1",
+            )
+            .await?;
+
+        let row = conn.query_one(&stmt, &[&provider]).await?;
+
+        let definition = serde_json::from_value::<Box<dyn DatasetProviderDefinition>>(row.get(0))?;
+
+        definition.initialize().await
     }
 }
 
@@ -119,7 +191,8 @@ where
                 source_operator,
                 result_descriptor,
                 symbology
-            FROM datasets;",
+            FROM 
+                datasets",
             )
             .await?;
 
@@ -136,8 +209,8 @@ where
                     description: row.get(2),
                     tags: row.get::<_, Option<_>>(3).unwrap_or_default(),
                     source_operator: row.get(4),
-                    result_descriptor: serde_json::from_value(row.get(5)).unwrap(),
-                    symbology: serde_json::from_value(row.get(6)).unwrap(),
+                    result_descriptor: serde_json::from_value(row.get(5))?,
+                    symbology: serde_json::from_value(row.get(6))?,
                 })
             })
             .filter_map(Result::ok)
@@ -147,10 +220,44 @@ where
     async fn load(
         &self,
         //  _session: &UserSession,
-        _dataset: &DatasetId,
+        dataset: &DatasetId,
     ) -> Result<Dataset> {
-        // this method seems to be redundant
-        Err(Error::NotYetImplemented)
+        // TODO: permissions
+
+        let id = dataset.internal().ok_or(Error::InvalidDatasetId)?;
+
+        let conn = self.conn_pool.get().await?;
+        let stmt = conn
+            .prepare(
+                "
+            SELECT 
+                id, 
+                name, 
+                description,
+                result_descriptor,
+                source_operator,
+                symbology,
+                provenance
+            FROM 
+                datasets
+            WHERE 
+                id = $1",
+            )
+            .await?;
+
+        let row = conn.query_one(&stmt, &[&id]).await?;
+
+        Ok(Dataset {
+            id: DatasetId::Internal {
+                dataset_id: row.get(0),
+            },
+            name: row.get(1),
+            description: row.get(2),
+            result_descriptor: serde_json::from_value(row.get(3))?,
+            source_operator: row.get(4),
+            symbology: serde_json::from_value(row.get(5))?,
+            provenance: serde_json::from_value(row.get(6))?,
+        })
     }
 }
 
@@ -177,7 +284,9 @@ where
         >,
         geoengine_operators::error::Error,
     > {
-        todo!()
+        Err(geoengine_operators::error::Error::LoadingInfo {
+            source: Box::new(Error::NotYetImplemented),
+        })
     }
 }
 
@@ -216,7 +325,7 @@ where
         FROM 
             datasets 
         WHERE 
-            id = $1;",
+            id = $1",
             )
             .await
             .map_err(|e| geoengine_operators::error::Error::LoadingInfo {
@@ -274,7 +383,7 @@ where
         FROM 
             datasets 
         WHERE 
-            id = $1;",
+            id = $1",
             )
             .await
             .map_err(|e| geoengine_operators::error::Error::LoadingInfo {
@@ -402,7 +511,7 @@ where
                     symbology,
                     provenance
                 )
-                VALUES ($1, $2, $3, $4, $5, $6, $7, $8);",
+                VALUES ($1, $2, $3, $4, $5, $6, $7, $8)",
             )
             .await?;
 
@@ -437,12 +546,32 @@ where
     <Tls as MakeTlsConnect<Socket>>::TlsConnect: Send,
     <<Tls as MakeTlsConnect<Socket>>::TlsConnect as TlsConnect<Socket>>::Future: Send,
 {
-    async fn get_upload(&self, _session: &UserSession, _upload: UploadId) -> Result<Upload> {
-        Err(Error::NotYetImplemented)
+    async fn get_upload(&self, _session: &UserSession, upload: UploadId) -> Result<Upload> {
+        // TODO: permissions
+        let conn = self.conn_pool.get().await?;
+
+        let stmt = conn
+            .prepare("SELECT id, files FROM uploads WHERE id = $1")
+            .await?;
+
+        let row = conn.query_one(&stmt, &[&upload]).await?;
+
+        Ok(Upload {
+            id: row.get(0),
+            files: row.get(1),
+        })
     }
 
-    async fn create_upload(&mut self, _session: &UserSession, _upload: Upload) -> Result<()> {
-        Err(Error::NotYetImplemented)
+    async fn create_upload(&mut self, _session: &UserSession, upload: Upload) -> Result<()> {
+        // TODO permission, user
+        let conn = self.conn_pool.get().await?;
+
+        let stmt = conn
+            .prepare("INSERT INTO uploads (id, files) VALUES ($1, $2)")
+            .await?;
+
+        conn.execute(&stmt, &[&upload.id, &upload.files]).await?;
+        Ok(())
     }
 }
 
@@ -454,7 +583,21 @@ where
     <Tls as MakeTlsConnect<Socket>>::TlsConnect: Send,
     <<Tls as MakeTlsConnect<Socket>>::TlsConnect as TlsConnect<Socket>>::Future: Send,
 {
-    async fn provenance(&self, _dataset: &DatasetId) -> Result<ProvenanceOutput> {
-        Err(Error::NotYetImplemented)
+    async fn provenance(&self, dataset: &DatasetId) -> Result<ProvenanceOutput> {
+        let id = dataset.internal().ok_or(Error::InvalidDatasetId)?;
+
+        // TODO: permissions
+        let conn = self.conn_pool.get().await?;
+
+        let stmt = conn
+            .prepare("SELECT provenance FROM datasets WHERE id = $1")
+            .await?;
+
+        let row = conn.query_one(&stmt, &[&id]).await?;
+
+        Ok(ProvenanceOutput {
+            dataset: dataset.clone(),
+            provenance: serde_json::from_value(row.get(0)).context(error::SerdeJson)?,
+        })
     }
 }

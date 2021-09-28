@@ -272,9 +272,30 @@ where
                             provenance json
                         );
 
-                        -- TODO: uploads
+                        -- TODO: should name be unique (per user)?
+                        CREATE TABLE dataset_providers (
+                            id UUID PRIMARY KEY,
+                            type_name text NOT NULL,
+                            name text NOT NULL,
 
-                        -- TOOD: providers
+                            definition json NOT NULL
+                        );
+
+                        CREATE TYPE "FileUpload" AS (
+                            id UUID,
+                            name text,
+                            byte_size bigint
+                        );
+
+                        -- TODO: store user
+                        -- TODO: time of creation and last update
+                        -- TODO: upload directory that is not directly derived from id
+                        CREATE TABLE uploads (
+                            id UUID PRIMARY KEY,
+                            files "FileUpload"[] NOT NULL
+                        );
+
+                        -- TODO: relationship between uploads and datasets?
 
                         -- TODO: datasets, uploads, providers permissions
                         "#,
