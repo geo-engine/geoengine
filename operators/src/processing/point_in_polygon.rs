@@ -133,6 +133,10 @@ impl PointInPolygonFilterProcessor {
         polygons: &MultiPolygonCollection,
         thread_pool: &ThreadPoolContext,
     ) -> Vec<bool> {
+        if points.is_empty() {
+            return vec![];
+        }
+
         // TODO: parallelize over coordinate rather than features
 
         let tester = Arc::new(PointInPolygonTester::new(polygons)); // TODO: multithread
@@ -259,14 +263,14 @@ where
 
 #[cfg(test)]
 mod tests {
+    use super::*;
+
     use geoengine_datatypes::primitives::{
         BoundingBox2D, Coordinate2D, MultiPoint, MultiPolygon, SpatialResolution, TimeInterval,
     };
 
-    use crate::{engine::VectorQueryRectangle, mock::MockFeatureCollectionSource};
-
-    use super::*;
-    use crate::engine::{MockExecutionContext, MockQueryContext};
+    use crate::engine::{MockExecutionContext, MockQueryContext, VectorQueryRectangle};
+    use crate::mock::MockFeatureCollectionSource;
 
     #[test]
     fn point_in_polygon_boundary_conditions() {
@@ -592,5 +596,60 @@ mod tests {
         );
 
         Ok(())
+    }
+
+
+    #[tokio::test]
+    async fn empty_points() {
+        let point_collection =
+            MultiPointCollection::from_data(vec![], vec![], Default::default()).unwrap();
+
+        let polygon_collection = MultiPolygonCollection::from_data(
+            vec![MultiPolygon::new(vec![vec![vec![
+                (0.0, 0.0).into(),
+                (10.0, 0.0).into(),
+                (10.0, 10.0).into(),
+                (0.0, 10.0).into(),
+                (0.0, 0.0).into(),
+            ]]])
+            .unwrap()],
+            vec![TimeInterval::default()],
+            Default::default(),
+        )
+        .unwrap();
+
+        let operator = PointInPolygonFilter {
+            params: PointInPolygonFilterParams {},
+            sources: PointInPolygonFilterSource {
+                points: MockFeatureCollectionSource::single(point_collection).boxed(),
+                polygons: MockFeatureCollectionSource::single(polygon_collection).boxed(),
+            },
+        }
+        .boxed()
+        .initialize(&MockExecutionContext::default())
+        .await
+        .unwrap();
+
+        let query_rectangle = VectorQueryRectangle {
+            spatial_bounds: BoundingBox2D::new((-10., -10.).into(), (10., 10.).into()).unwrap(),
+            time_interval: TimeInterval::default(),
+            spatial_resolution: SpatialResolution::zero_point_one(),
+        };
+
+        let query_processor = operator.query_processor().unwrap().multi_point().unwrap();
+
+        let query_context = MockQueryContext::default();
+
+        let query = query_processor
+            .query(query_rectangle, &query_context)
+            .await
+            .unwrap();
+
+        let result = query
+            .map(Result::unwrap)
+            .collect::<Vec<MultiPointCollection>>()
+            .await;
+
+        assert_eq!(result.len(), 0);
     }
 }
