@@ -133,9 +133,7 @@ impl PointInPolygonFilterProcessor {
         polygons: &MultiPolygonCollection,
         thread_pool: &ThreadPoolContext,
     ) -> Vec<bool> {
-        if points.is_empty() {
-            return vec![];
-        }
+        debug_assert!(!points.is_empty());
 
         // TODO: parallelize over coordinate rather than features
 
@@ -217,6 +215,10 @@ impl VectorQueryProcessor for PointInPolygonFilterProcessor {
                 .query(query, ctx)
                 .await?
                 .and_then(move |points| async move {
+                    if points.is_empty() {
+                        return Ok(points);
+                    }
+
                     let initial_filter = BooleanArray::from(vec![false; points.len()]);
                     let arc_points = Arc::new(points);
 
