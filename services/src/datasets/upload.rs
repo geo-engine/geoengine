@@ -26,7 +26,7 @@ impl UploadRootPath for UploadId {
     }
 }
 
-#[derive(Debug, Serialize, Deserialize, Clone)]
+#[derive(Debug, Serialize, Deserialize, Clone, PartialEq)]
 pub struct Upload {
     pub id: UploadId,
     pub files: Vec<FileUpload>,
@@ -41,7 +41,7 @@ impl Upload {
     }
 }
 
-#[derive(Debug, Serialize, Deserialize, Clone)]
+#[derive(Debug, Serialize, Deserialize, Clone, PartialEq)]
 #[cfg_attr(feature = "postgres", derive(ToSql, FromSql))]
 pub struct FileUpload {
     pub id: FileId,

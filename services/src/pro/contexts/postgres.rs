@@ -446,9 +446,15 @@ mod tests {
 
     use super::*;
     use crate::contexts::MockableSession;
+    use crate::datasets::external::mock::MockExternalDataProviderDefinition;
     use crate::datasets::listing::{DatasetListOptions, DatasetListing, DatasetProvider};
     use crate::datasets::provenance::{Provenance, ProvenanceOutput, ProvenanceProvider};
-    use crate::datasets::storage::{AddDataset, DatasetStore, MetaDataDefinition};
+    use crate::datasets::storage::{
+        AddDataset, DatasetDefinition, DatasetProviderDb, DatasetProviderListOptions,
+        DatasetProviderListing, DatasetStore, MetaDataDefinition,
+    };
+    use crate::datasets::upload::{FileId, UploadId};
+    use crate::datasets::upload::{FileUpload, Upload, UploadDb};
     use crate::pro::projects::{LoadVersion, ProProjectDb, UserProjectPermission};
     use crate::pro::users::{UserCredentials, UserDb, UserRegistration};
     use crate::projects::{
@@ -463,7 +469,9 @@ mod tests {
     use bb8_postgres::tokio_postgres::{self, NoTls};
     use futures::Future;
     use geoengine_datatypes::collections::VectorDataType;
-    use geoengine_datatypes::dataset::{DatasetId, InternalDatasetId};
+    use geoengine_datatypes::dataset::{
+        DatasetId, DatasetProviderId, ExternalDatasetId, InternalDatasetId,
+    };
     use geoengine_datatypes::primitives::{
         BoundingBox2D, Coordinate2D, FeatureDataType, SpatialResolution, TimeInterval,
     };
@@ -910,7 +918,7 @@ mod tests {
 
     #[allow(clippy::too_many_lines)]
     #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
-    async fn it_handles_datasets() {
+    async fn it_persists_datasets() {
         with_temp_context(|ctx, _| async move {
             let db_ = ctx.dataset_db();
             let mut db = db_.write().await;
@@ -1052,6 +1060,155 @@ mod tests {
                     .unwrap(),
                 loading_info
             );
+        })
+        .await;
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
+    async fn it_persists_uploads() {
+        with_temp_context(|ctx, _| async move {
+            let db_ = ctx.dataset_db();
+            let mut db = db_.write().await;
+
+            let id = UploadId::from_str("2de18cd8-4a38-4111-a445-e3734bc18a80").unwrap();
+            let input = Upload {
+                id,
+                files: vec![FileUpload {
+                    id: FileId::from_str("e80afab0-831d-4d40-95d6-1e4dfd277e72").unwrap(),
+                    name: "test.csv".to_owned(),
+                    byte_size: 1337,
+                }],
+            };
+            db.create_upload(&UserSession::mock(), input.clone())
+                .await
+                .unwrap();
+
+            let upload = db.get_upload(&UserSession::mock(), id).await.unwrap();
+
+            assert_eq!(upload, input);
+        })
+        .await;
+    }
+
+    #[allow(clippy::too_many_lines)]
+    #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
+    async fn it_persists_dataset_providers() {
+        with_temp_context(|ctx, _| async move {
+            let db_ = ctx.dataset_db();
+            let mut db = db_.write().await;
+
+            let session = UserSession::mock();
+
+            let provider_id =
+                DatasetProviderId::from_str("7b20c8d7-d754-4f8f-ad44-dddd25df22d2").unwrap();
+
+            let loading_info = OgrSourceDataset {
+                file_name: PathBuf::from("test.csv"),
+                layer_name: "test.csv".to_owned(),
+                data_type: Some(VectorDataType::MultiPoint),
+                time: OgrSourceDatasetTimeType::Start {
+                    start_field: "start".to_owned(),
+                    start_format: OgrSourceTimeFormat::Auto,
+                    duration: OgrSourceDurationSpec::Zero,
+                },
+                default_geometry: None,
+                columns: Some(OgrSourceColumnSpec {
+                    format_specifics: Some(FormatSpecifics::Csv {
+                        header: CsvHeader::Auto,
+                    }),
+                    x: "x".to_owned(),
+                    y: None,
+                    int: vec![],
+                    float: vec![],
+                    text: vec![],
+                    rename: None,
+                }),
+                force_ogr_time_filter: false,
+                force_ogr_spatial_filter: false,
+                on_error: OgrSourceErrorSpec::Ignore,
+                sql_query: None,
+                attribute_query: None,
+            };
+
+            let meta_data = MetaDataDefinition::OgrMetaData(StaticMetaData::<
+                OgrSourceDataset,
+                VectorResultDescriptor,
+                VectorQueryRectangle,
+            > {
+                loading_info: loading_info.clone(),
+                result_descriptor: VectorResultDescriptor {
+                    data_type: VectorDataType::MultiPoint,
+                    spatial_reference: SpatialReference::epsg_4326().into(),
+                    columns: [("foo".to_owned(), FeatureDataType::Float)]
+                        .into_iter()
+                        .collect(),
+                },
+                phantom: Default::default(),
+            });
+
+            let provider = MockExternalDataProviderDefinition {
+                id: provider_id,
+                datasets: vec![DatasetDefinition {
+                    properties: AddDataset {
+                        id: Some(DatasetId::External(ExternalDatasetId {
+                            provider_id,
+                            dataset_id: "test".to_owned(),
+                        })),
+                        name: "test".to_owned(),
+                        description: "desc".to_owned(),
+                        source_operator: "MockPointSource".to_owned(),
+                        symbology: None,
+                        provenance: None,
+                    },
+                    meta_data,
+                }],
+            };
+
+            db.add_dataset_provider(&session, Box::new(provider))
+                .await
+                .unwrap();
+
+            let providers = db
+                .list_dataset_providers(
+                    &session,
+                    DatasetProviderListOptions {
+                        offset: 0,
+                        limit: 10,
+                    }
+                    .validated()
+                    .unwrap(),
+                )
+                .await
+                .unwrap();
+
+            assert_eq!(providers.len(), 1);
+
+            assert_eq!(
+                providers[0],
+                DatasetProviderListing {
+                    id: provider_id,
+                    type_name: "MockType".to_owned(),
+                    name: "MockName".to_owned(),
+                }
+            );
+
+            let provider = db.dataset_provider(&session, provider_id).await.unwrap();
+
+            let datasets = provider
+                .list(
+                    DatasetListOptions {
+                        filter: None,
+                        order: crate::datasets::listing::OrderBy::NameAsc,
+                        offset: 0,
+                        limit: 10,
+                    }
+                    .validated()
+                    .unwrap(),
+                )
+                .await
+                .unwrap();
+
+            assert_eq!(datasets.len(), 1);
         })
         .await;
     }
