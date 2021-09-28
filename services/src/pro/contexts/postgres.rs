@@ -447,7 +447,7 @@ mod tests {
     use super::*;
     use crate::contexts::MockableSession;
     use crate::datasets::listing::{DatasetListOptions, DatasetListing, DatasetProvider};
-    use crate::datasets::provenance::Provenance;
+    use crate::datasets::provenance::{Provenance, ProvenanceOutput, ProvenanceProvider};
     use crate::datasets::storage::{AddDataset, DatasetStore, MetaDataDefinition};
     use crate::pro::projects::{LoadVersion, ProProjectDb, UserProjectPermission};
     use crate::pro::users::{UserCredentials, UserDb, UserRegistration};
@@ -464,11 +464,14 @@ mod tests {
     use futures::Future;
     use geoengine_datatypes::collections::VectorDataType;
     use geoengine_datatypes::dataset::{DatasetId, InternalDatasetId};
-    use geoengine_datatypes::primitives::{Coordinate2D, FeatureDataType};
+    use geoengine_datatypes::primitives::{
+        BoundingBox2D, Coordinate2D, FeatureDataType, SpatialResolution, TimeInterval,
+    };
     use geoengine_datatypes::spatial_reference::{SpatialReference, SpatialReferenceOption};
     use geoengine_operators::engine::{
-        MultipleRasterSources, PlotOperator, StaticMetaData, TypedOperator, TypedResultDescriptor,
-        VectorOperator, VectorQueryRectangle, VectorResultDescriptor,
+        MetaData, MetaDataProvider, MultipleRasterSources, PlotOperator, StaticMetaData,
+        TypedOperator, TypedResultDescriptor, VectorOperator, VectorQueryRectangle,
+        VectorResultDescriptor,
     };
     use geoengine_operators::mock::{MockPointSource, MockPointSourceParams};
     use geoengine_operators::plot::{Statistics, StatisticsParams};
@@ -917,38 +920,40 @@ mod tests {
                     .unwrap(),
             };
 
+            let loading_info = OgrSourceDataset {
+                file_name: PathBuf::from("test.csv"),
+                layer_name: "test.csv".to_owned(),
+                data_type: Some(VectorDataType::MultiPoint),
+                time: OgrSourceDatasetTimeType::Start {
+                    start_field: "start".to_owned(),
+                    start_format: OgrSourceTimeFormat::Auto,
+                    duration: OgrSourceDurationSpec::Zero,
+                },
+                default_geometry: None,
+                columns: Some(OgrSourceColumnSpec {
+                    format_specifics: Some(FormatSpecifics::Csv {
+                        header: CsvHeader::Auto,
+                    }),
+                    x: "x".to_owned(),
+                    y: None,
+                    int: vec![],
+                    float: vec![],
+                    text: vec![],
+                    rename: None,
+                }),
+                force_ogr_time_filter: false,
+                force_ogr_spatial_filter: false,
+                on_error: OgrSourceErrorSpec::Ignore,
+                sql_query: None,
+                attribute_query: None,
+            };
+
             let meta_data = MetaDataDefinition::OgrMetaData(StaticMetaData::<
                 OgrSourceDataset,
                 VectorResultDescriptor,
                 VectorQueryRectangle,
             > {
-                loading_info: OgrSourceDataset {
-                    file_name: PathBuf::from("test.csv"),
-                    layer_name: "test.csv".to_owned(),
-                    data_type: Some(VectorDataType::MultiPoint),
-                    time: OgrSourceDatasetTimeType::Start {
-                        start_field: "start".to_owned(),
-                        start_format: OgrSourceTimeFormat::Auto,
-                        duration: OgrSourceDurationSpec::Zero,
-                    },
-                    default_geometry: None,
-                    columns: Some(OgrSourceColumnSpec {
-                        format_specifics: Some(FormatSpecifics::Csv {
-                            header: CsvHeader::Auto,
-                        }),
-                        x: "x".to_owned(),
-                        y: None,
-                        int: vec![],
-                        float: vec![],
-                        text: vec![],
-                        rename: None,
-                    }),
-                    force_ogr_time_filter: false,
-                    force_ogr_spatial_filter: false,
-                    on_error: OgrSourceErrorSpec::Ignore,
-                    sql_query: None,
-                    attribute_query: None,
-                },
+                loading_info: loading_info.clone(),
                 result_descriptor: VectorResultDescriptor {
                     data_type: VectorDataType::MultiPoint,
                     spatial_reference: SpatialReference::epsg_4326().into(),
@@ -1000,7 +1005,7 @@ mod tests {
             assert_eq!(
                 datasets[0],
                 DatasetListing {
-                    id: dataset_id,
+                    id: dataset_id.clone(),
                     name: "Ogr Test".to_owned(),
                     description: "desc".to_owned(),
                     source_operator: "OgrSource".to_owned(),
@@ -1014,6 +1019,38 @@ mod tests {
                             .collect(),
                     }),
                 },
+            );
+
+            let provenance = db.provenance(&dataset_id).await.unwrap();
+
+            assert_eq!(
+                provenance,
+                ProvenanceOutput {
+                    dataset: dataset_id.clone(),
+                    provenance: Some(Provenance {
+                        citation: "citation".to_owned(),
+                        license: "license".to_owned(),
+                        uri: "uri".to_owned(),
+                    })
+                }
+            );
+
+            let meta_data: Box<dyn MetaData<OgrSourceDataset, _, _>> =
+                db.meta_data(&dataset_id).await.unwrap();
+
+            assert_eq!(
+                meta_data
+                    .loading_info(VectorQueryRectangle {
+                        spatial_bounds: BoundingBox2D::new_unchecked(
+                            (-180., -90.).into(),
+                            (180., 90.).into()
+                        ),
+                        time_interval: TimeInterval::default(),
+                        spatial_resolution: SpatialResolution::zero_point_one(),
+                    })
+                    .await
+                    .unwrap(),
+                loading_info
             );
         })
         .await;
