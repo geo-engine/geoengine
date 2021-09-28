@@ -7,6 +7,7 @@ pub use geoengine_datatypes::util::Identifier;
 
 pub mod config;
 pub mod parsing;
+pub mod retry;
 pub mod tests;
 pub mod user_input;
 
