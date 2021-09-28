@@ -442,7 +442,13 @@ where
 
 #[cfg(test)]
 mod tests {
+    use std::str::FromStr;
+
     use super::*;
+    use crate::contexts::MockableSession;
+    use crate::datasets::listing::{DatasetListOptions, DatasetListing, DatasetProvider};
+    use crate::datasets::provenance::Provenance;
+    use crate::datasets::storage::{AddDataset, DatasetStore, MetaDataDefinition};
     use crate::pro::projects::{LoadVersion, ProProjectDb, UserProjectPermission};
     use crate::pro::users::{UserCredentials, UserDb, UserRegistration};
     use crate::projects::{
@@ -456,13 +462,20 @@ mod tests {
     use bb8_postgres::bb8::ManageConnection;
     use bb8_postgres::tokio_postgres::{self, NoTls};
     use futures::Future;
-    use geoengine_datatypes::primitives::Coordinate2D;
+    use geoengine_datatypes::collections::VectorDataType;
+    use geoengine_datatypes::dataset::{DatasetId, InternalDatasetId};
+    use geoengine_datatypes::primitives::{Coordinate2D, FeatureDataType};
     use geoengine_datatypes::spatial_reference::{SpatialReference, SpatialReferenceOption};
     use geoengine_operators::engine::{
-        MultipleRasterSources, PlotOperator, TypedOperator, VectorOperator,
+        MultipleRasterSources, PlotOperator, StaticMetaData, TypedOperator, TypedResultDescriptor,
+        VectorOperator, VectorQueryRectangle, VectorResultDescriptor,
     };
     use geoengine_operators::mock::{MockPointSource, MockPointSourceParams};
     use geoengine_operators::plot::{Statistics, StatisticsParams};
+    use geoengine_operators::source::{
+        CsvHeader, FormatSpecifics, OgrSourceColumnSpec, OgrSourceDataset,
+        OgrSourceDatasetTimeType, OgrSourceDurationSpec, OgrSourceErrorSpec, OgrSourceTimeFormat,
+    };
     use rand::RngCore;
     use tokio::runtime::Handle;
 
@@ -888,6 +901,120 @@ mod tests {
 
             let json = serde_json::to_string(&workflow).unwrap();
             assert_eq!(json, r#"{"type":"Vector","operator":{"type":"MockPointSource","params":{"points":[{"x":1.0,"y":2.0},{"x":1.0,"y":2.0},{"x":1.0,"y":2.0}]}}}"#);
+        })
+        .await;
+    }
+
+    #[allow(clippy::too_many_lines)]
+    #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
+    async fn it_handles_datasets() {
+        with_temp_context(|ctx, _| async move {
+            let db_ = ctx.dataset_db();
+            let mut db = db_.write().await;
+
+            let dataset_id = DatasetId::Internal {
+                dataset_id: InternalDatasetId::from_str("2e8af98d-3b98-4e2c-a35b-e487bffad7b6")
+                    .unwrap(),
+            };
+
+            let meta_data = MetaDataDefinition::OgrMetaData(StaticMetaData::<
+                OgrSourceDataset,
+                VectorResultDescriptor,
+                VectorQueryRectangle,
+            > {
+                loading_info: OgrSourceDataset {
+                    file_name: PathBuf::from("test.csv"),
+                    layer_name: "test.csv".to_owned(),
+                    data_type: Some(VectorDataType::MultiPoint),
+                    time: OgrSourceDatasetTimeType::Start {
+                        start_field: "start".to_owned(),
+                        start_format: OgrSourceTimeFormat::Auto,
+                        duration: OgrSourceDurationSpec::Zero,
+                    },
+                    default_geometry: None,
+                    columns: Some(OgrSourceColumnSpec {
+                        format_specifics: Some(FormatSpecifics::Csv {
+                            header: CsvHeader::Auto,
+                        }),
+                        x: "x".to_owned(),
+                        y: None,
+                        int: vec![],
+                        float: vec![],
+                        text: vec![],
+                        rename: None,
+                    }),
+                    force_ogr_time_filter: false,
+                    force_ogr_spatial_filter: false,
+                    on_error: OgrSourceErrorSpec::Ignore,
+                    sql_query: None,
+                    attribute_query: None,
+                },
+                result_descriptor: VectorResultDescriptor {
+                    data_type: VectorDataType::MultiPoint,
+                    spatial_reference: SpatialReference::epsg_4326().into(),
+                    columns: [("foo".to_owned(), FeatureDataType::Float)]
+                        .into_iter()
+                        .collect(),
+                },
+                phantom: Default::default(),
+            });
+
+            let wrap = db.wrap_meta_data(meta_data);
+            db.add_dataset(
+                &UserSession::mock(),
+                AddDataset {
+                    id: Some(dataset_id.clone()),
+                    name: "Ogr Test".to_owned(),
+                    description: "desc".to_owned(),
+                    source_operator: "OgrSource".to_owned(),
+                    symbology: None,
+                    provenance: Some(Provenance {
+                        citation: "citation".to_owned(),
+                        license: "license".to_owned(),
+                        uri: "uri".to_owned(),
+                    }),
+                }
+                .validated()
+                .unwrap(),
+                wrap,
+            )
+            .await
+            .unwrap();
+
+            let datasets = db
+                .list(
+                    DatasetListOptions {
+                        filter: None,
+                        order: crate::datasets::listing::OrderBy::NameAsc,
+                        offset: 0,
+                        limit: 10,
+                    }
+                    .validated()
+                    .unwrap(),
+                )
+                .await
+                .unwrap();
+
+            assert_eq!(datasets.len(), 1);
+
+            assert_eq!(
+                datasets[0],
+                DatasetListing {
+                    id: dataset_id,
+                    name: "Ogr Test".to_owned(),
+                    description: "desc".to_owned(),
+                    source_operator: "OgrSource".to_owned(),
+                    symbology: None,
+                    tags: vec![],
+                    result_descriptor: TypedResultDescriptor::Vector(VectorResultDescriptor {
+                        data_type: VectorDataType::MultiPoint,
+                        spatial_reference: SpatialReference::epsg_4326().into(),
+                        columns: [("foo".to_owned(), FeatureDataType::Float)]
+                            .into_iter()
+                            .collect(),
+                    }),
+                },
+            );
         })
         .await;
     }
