@@ -44,6 +44,27 @@ pub struct SentinelS2L2ACogsProviderDefinition {
     api_url: String,
     bands: Vec<Band>,
     zones: Vec<Zone>,
+    #[serde(default)]
+    stac_api_retires: StacApiRetries,
+}
+
+#[derive(Clone, Copy, Debug, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct StacApiRetries {
+    number_of_retries: usize,
+    initial_delay_ms: u64,
+    exponential_backoff_factor: f64,
+}
+
+impl Default for StacApiRetries {
+    // TODO: find good defaults
+    fn default() -> Self {
+        Self {
+            number_of_retries: 3,
+            initial_delay_ms: 125,
+            exponential_backoff_factor: 2.,
+        }
+    }
 }
 
 #[typetag::serde]
@@ -57,6 +78,7 @@ impl DatasetProviderDefinition for SentinelS2L2ACogsProviderDefinition {
             self.api_url,
             &self.bands,
             &self.zones,
+            self.stac_api_retires,
         )))
     }
 
@@ -98,13 +120,22 @@ pub struct SentinelS2L2aCogsDataProvider {
     api_url: String,
 
     datasets: HashMap<DatasetId, SentinelDataset>,
+
+    stac_api_retires: StacApiRetries,
 }
 
 impl SentinelS2L2aCogsDataProvider {
-    pub fn new(id: DatasetProviderId, api_url: String, bands: &[Band], zones: &[Zone]) -> Self {
+    pub fn new(
+        id: DatasetProviderId,
+        api_url: String,
+        bands: &[Band],
+        zones: &[Zone],
+        stac_api_retires: StacApiRetries,
+    ) -> Self {
         Self {
             api_url,
             datasets: Self::create_datasets(&id, bands, zones),
+            stac_api_retires,
         }
     }
 
@@ -203,6 +234,7 @@ pub struct SentinelS2L2aCogsMetaData {
     api_url: String,
     zone: Zone,
     band: Band,
+    stac_api_retires: StacApiRetries,
 }
 
 impl SentinelS2L2aCogsMetaData {
@@ -364,27 +396,31 @@ impl SentinelS2L2aCogsMetaData {
     ) -> Result<StacCollection> {
         let client = Client::builder().build()?;
 
-        // TODO: configure max retries and delay, also find good defaults
-        retry(3, 125, 2., async || -> Result<StacCollection> {
-            let text = client
-                .get(&self.api_url)
-                .query(&params)
-                .query(&[("page", &page.to_string())])
-                .send()
-                .await
-                .context(error::Reqwest)?
-                .text()
-                .await
-                .context(error::Reqwest)?;
+        retry(
+            self.stac_api_retires.number_of_retries,
+            self.stac_api_retires.initial_delay_ms,
+            self.stac_api_retires.exponential_backoff_factor,
+            async || -> Result<StacCollection> {
+                let text = client
+                    .get(&self.api_url)
+                    .query(&params)
+                    .query(&[("page", &page.to_string())])
+                    .send()
+                    .await
+                    .context(error::Reqwest)?
+                    .text()
+                    .await
+                    .context(error::Reqwest)?;
 
-            serde_json::from_str::<StacCollection>(&text).map_err(|error| {
-                error::Error::StacJsonResponse {
-                    url: self.api_url.clone(),
-                    response: text,
-                    error,
-                }
-            })
-        })
+                serde_json::from_str::<StacCollection>(&text).map_err(|error| {
+                    error::Error::StacJsonResponse {
+                        url: self.api_url.clone(),
+                        response: text,
+                        error,
+                    }
+                })
+            },
+        )
         .await
     }
 
@@ -471,6 +507,7 @@ impl MetaDataProvider<GdalLoadingInfo, RasterResultDescriptor, RasterQueryRectan
             api_url: self.api_url.clone(),
             zone: dataset.zone.clone(),
             band: dataset.band.clone(),
+            stac_api_retires: self.stac_api_retires,
         }))
     }
 }
@@ -742,6 +779,7 @@ mod tests {
                     name: "UTM36S".into(),
                     epsg: 32736,
                 }],
+                stac_api_retires: Default::default(),
             });
 
         let provider = provider_def.initialize().await.unwrap();
