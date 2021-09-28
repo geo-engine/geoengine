@@ -263,6 +263,7 @@ where
 
 #[cfg(test)]
 mod tests {
+
     use super::*;
 
     use geoengine_datatypes::primitives::{
@@ -597,7 +598,6 @@ mod tests {
 
         Ok(())
     }
-
 
     #[tokio::test]
     async fn empty_points() {
