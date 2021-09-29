@@ -23,9 +23,7 @@ use geoengine_operators::engine::{
     TypedResultDescriptor, VectorQueryRectangle, VectorResultDescriptor,
 };
 use geoengine_operators::mock::MockDatasetDataSourceLoadingInfo;
-use geoengine_operators::source::{
-    GdalLoadingInfo, GdalMetaDataRegular, GdalMetaDataStatic, OgrSourceDataset,
-};
+use geoengine_operators::source::{GdalLoadingInfo, OgrSourceDataset};
 use snafu::ResultExt;
 
 pub struct PostgresDatasetDb<Tls>
@@ -396,17 +394,17 @@ where
             }
         })?;
 
-        // try if meta data is regular...
-        let meta_data: Result<GdalMetaDataRegular, _> = serde_json::from_value(row.get(0));
+        let meta_data: MetaDataDefinition = serde_json::from_value(row.get(0))?;
 
-        if let Ok(meta_data) = meta_data {
-            return Ok(Box::new(meta_data));
-        }
-
-        // ... or static.
-        let meta_data: GdalMetaDataStatic = serde_json::from_value(row.get(0))?;
-        dbg!(&meta_data);
-        Ok(Box::new(meta_data))
+        Ok(match meta_data {
+            MetaDataDefinition::GdalMetaDataRegular(m) => Box::new(m),
+            MetaDataDefinition::GdalStatic(m) => Box::new(m),
+            _ => {
+                return Err(geoengine_operators::error::Error::LoadingInfo {
+                    source: Box::new(Error::DatasetIdTypeMissMatch),
+                })
+            }
+        })
     }
 }
 
