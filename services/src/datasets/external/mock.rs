@@ -23,8 +23,8 @@ use serde::{Deserialize, Serialize};
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct MockExternalDataProviderDefinition {
-    id: DatasetProviderId,
-    datasets: Vec<DatasetDefinition>,
+    pub id: DatasetProviderId,
+    pub datasets: Vec<DatasetDefinition>,
 }
 
 #[typetag::serde]
