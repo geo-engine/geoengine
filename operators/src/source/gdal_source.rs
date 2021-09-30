@@ -373,7 +373,7 @@ impl MetaData<GdalLoadingInfo, RasterResultDescriptor, RasterQueryRectangle>
 #[derive(PartialEq, Serialize, Deserialize, Debug, Clone)]
 #[serde(rename_all = "camelCase")]
 pub struct GdalMetadataFixedTimes {
-    pub time_steps: Vec<TimeInstance>,
+    pub time_steps: Vec<TimeInterval>,
     pub params: GdalDatasetParameters,
     pub result_descriptor: RasterResultDescriptor,
 }
@@ -388,8 +388,8 @@ impl MetaData<GdalLoadingInfo, RasterResultDescriptor, RasterQueryRectangle>
         }
 
         let time_valid = TimeInterval::new(
-            self.time_steps[0],
-            self.time_steps[self.time_steps.len() - 1],
+            self.time_steps[0].start(),
+            self.time_steps[self.time_steps.len() - 1].start(),
         )
         .unwrap();
 
@@ -1376,10 +1376,10 @@ mod tests {
                 gdal_config_options: None,
             },
             time_steps: vec![
-                TimeInstance::from_millis_unchecked(0),
-                TimeInstance::from_millis_unchecked(5),
-                TimeInstance::from_millis_unchecked(10),
-                TimeInstance::from_millis_unchecked(15),
+                TimeInterval::new_instant(0).unwrap(),
+                TimeInterval::new_instant(5).unwrap(),
+                TimeInterval::new_instant(10).unwrap(),
+                TimeInterval::new_instant(15).unwrap(),
             ],
         };
 
