@@ -66,11 +66,11 @@ async fn upload_handler<C: Context>(
             .await
             .context(error::Io)?;
 
-        let mut byte_size = 0;
+        let mut byte_size = 0_u64;
         while let Some(chunk) = field.next().await {
             let bytes = chunk?;
             file.write_all(&bytes).await.context(error::Io)?;
-            byte_size += bytes.len();
+            byte_size += bytes.len() as u64;
         }
 
         files.push(FileUpload {

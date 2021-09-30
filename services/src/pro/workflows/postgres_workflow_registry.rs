@@ -1,14 +1,12 @@
-use crate::error;
 use crate::error::Result;
-use crate::workflows::workflow::WorkflowId;
+use crate::workflows::workflow::{Workflow, WorkflowId};
+use crate::{error, workflows::registry::WorkflowRegistry};
 use async_trait::async_trait;
 use bb8_postgres::{
     bb8::Pool, tokio_postgres::tls::MakeTlsConnect, tokio_postgres::tls::TlsConnect,
     tokio_postgres::Socket, PostgresConnectionManager,
 };
 use snafu::ResultExt;
-
-use super::{registry::WorkflowRegistry, workflow::Workflow};
 
 pub struct PostgresWorkflowRegistry<Tls>
 where

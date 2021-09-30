@@ -1,5 +1,6 @@
 mod external;
 mod in_memory;
+#[cfg(feature = "postgres")]
 mod postgres;
 mod storage;
 
