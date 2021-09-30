@@ -8,8 +8,6 @@ use crate::{
 };
 use async_trait::async_trait;
 use geoengine_datatypes::identifier;
-#[cfg(feature = "postgres")]
-use postgres_types::{FromSql, ToSql};
 use serde::{Deserialize, Serialize};
 
 identifier!(UploadId);
@@ -42,11 +40,10 @@ impl Upload {
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone, PartialEq)]
-#[cfg_attr(feature = "postgres", derive(ToSql, FromSql))]
 pub struct FileUpload {
     pub id: FileId,
     pub name: String,
-    pub byte_size: i64,
+    pub byte_size: u64,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]

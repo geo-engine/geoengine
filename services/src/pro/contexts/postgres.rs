@@ -281,6 +281,8 @@ where
                             definition json NOT NULL
                         );
 
+                        -- TODO: add constraint not null
+                        -- TODO: add constaint byte_size >= 0
                         CREATE TYPE "FileUpload" AS (
                             id UUID,
                             name text,

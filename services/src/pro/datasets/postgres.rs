@@ -4,6 +4,7 @@ use crate::datasets::storage::{
     DatasetProviderListOptions, DatasetProviderListing, DatasetStore, DatasetStorer,
     MetaDataDefinition,
 };
+use crate::datasets::upload::FileId;
 use crate::datasets::upload::{Upload, UploadDb, UploadId};
 use crate::error::{self, Error, Result};
 use crate::util::user_input::Validated;
@@ -24,6 +25,7 @@ use geoengine_operators::engine::{
 };
 use geoengine_operators::mock::MockDatasetDataSourceLoadingInfo;
 use geoengine_operators::source::{GdalLoadingInfo, OgrSourceDataset};
+use postgres_types::{FromSql, ToSql};
 use snafu::ResultExt;
 
 pub struct PostgresDatasetDb<Tls>
@@ -556,7 +558,11 @@ where
 
         Ok(Upload {
             id: row.get(0),
-            files: row.get(1),
+            files: row
+                .get::<_, Vec<FileUpload>>(1)
+                .into_iter()
+                .map(|v| v.into())
+                .collect(),
         })
     }
 
@@ -568,7 +574,18 @@ where
             .prepare("INSERT INTO uploads (id, files) VALUES ($1, $2)")
             .await?;
 
-        conn.execute(&stmt, &[&upload.id, &upload.files]).await?;
+        conn.execute(
+            &stmt,
+            &[
+                &upload.id,
+                &upload
+                    .files
+                    .iter()
+                    .map(FileUpload::from)
+                    .collect::<Vec<_>>(),
+            ],
+        )
+        .await?;
         Ok(())
     }
 }
@@ -597,5 +614,42 @@ where
             dataset: dataset.clone(),
             provenance: serde_json::from_value(row.get(0)).context(error::SerdeJson)?,
         })
+    }
+}
+
+#[derive(Debug, Clone, ToSql, FromSql)]
+pub struct FileUpload {
+    pub id: FileId,
+    pub name: String,
+    pub byte_size: i64,
+}
+
+impl From<crate::datasets::upload::FileUpload> for FileUpload {
+    fn from(upload: crate::datasets::upload::FileUpload) -> Self {
+        Self {
+            id: upload.id,
+            name: upload.name,
+            byte_size: upload.byte_size as i64,
+        }
+    }
+}
+
+impl From<&crate::datasets::upload::FileUpload> for FileUpload {
+    fn from(upload: &crate::datasets::upload::FileUpload) -> Self {
+        Self {
+            id: upload.id,
+            name: upload.name.clone(),
+            byte_size: upload.byte_size as i64,
+        }
+    }
+}
+
+impl From<FileUpload> for crate::datasets::upload::FileUpload {
+    fn from(upload: FileUpload) -> Self {
+        Self {
+            id: upload.id,
+            name: upload.name,
+            byte_size: upload.byte_size as u64,
+        }
     }
 }
