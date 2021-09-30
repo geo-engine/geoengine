@@ -101,6 +101,17 @@ pub trait GridSpaceToLinearSpace: GridSize {
     /// # Errors
     /// This method fails if the index is out of bounds
     fn linear_space_index<I: Into<GridIdx<Self::IndexArray>>>(&self, index: I) -> Result<usize>;
+
+    /// Returns the GridIdx of the lineaar_idx-th cell in the Grid.
+    fn grid_idx_unchecked(&self, linear_idx: usize) -> GridIdx<Self::IndexArray>;
+
+    /// Returns the GridIdx of the lineaar_idx-th cell in the Grid.
+    fn grid_idx(&self, linear_idx: usize) -> Option<GridIdx<Self::IndexArray>> {
+        if linear_idx >= self.number_of_elements() {
+            return None;
+        }
+        Some(self.grid_idx_unchecked(linear_idx))
+    }
 }
 
 /// Mutate elements stored in a Grid
@@ -177,6 +188,50 @@ where
 
     /// set new bounds. will fail if the axis sizes do not match.
     fn set_grid_bounds(self, bounds: GridBoundingBox<I>) -> Result<Self::Output>;
+}
+
+pub trait GridStep<I>: GridSpaceToLinearSpace<IndexArray = I>
+where
+    I: AsRef<[isize]> + Into<GridIdx<I>> + Clone,
+    GridBoundingBox<I>: GridSize,
+{
+    // TODO: implement safe methods?
+
+    /// Move a GridIdx along the positive axis directions
+    fn fwd_idx_unchecked<Idx: Into<GridIdx<I>>>(
+        &self,
+        idx: Idx,
+        step: usize,
+    ) -> Option<GridIdx<I>> {
+        let l = self.linear_space_index_unchecked(idx);
+        if l >= self.number_of_elements() {
+            return None;
+        }
+        let l = l + step;
+        self.grid_idx(l)
+    }
+
+    /// Move a GridIdx along the negative axis directions
+    fn rev_idx_unckecked<Idx: Into<GridIdx<I>>>(
+        &self,
+        idx: Idx,
+        step: usize,
+    ) -> Option<GridIdx<I>> {
+        let l = self.linear_space_index_unchecked(idx);
+        if l >= self.number_of_elements() || step > l {
+            return None;
+        }
+        let l = l - step;
+        self.grid_idx(l)
+    }
+}
+
+impl<G, I> GridStep<I> for G
+where
+    G: GridSpaceToLinearSpace<IndexArray = I>,
+    I: AsRef<[isize]> + Into<GridIdx<I>> + Clone,
+    GridBoundingBox<I>: GridSize,
+{
 }
 
 #[cfg(test)]
