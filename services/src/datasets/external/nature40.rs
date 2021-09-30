@@ -236,8 +236,7 @@ impl Nature40DataProvider {
         &self,
         dataset: gdal::Dataset,
     ) -> Result<(gdal::Dataset, Vec<String>, Vec<String>)> {
-        let labels = Self::parse_band_labels(&dataset)?;
-        let time_positions = Self::parse_time_positions(&dataset)?;
+        let (labels, time_positions) = Self::parse_band_labels_and_time_positions(&dataset)?;
 
         if labels.is_empty() {
             // no labels found during parsing, try to reopen the dataset to flush the cache and try again
@@ -251,18 +250,21 @@ impl Nature40DataProvider {
                 .load_dataset(RasterDb::url_from_name(&self.base_url, &name)?)
                 .await?;
 
-            let labels = Self::parse_band_labels(&dataset)?;
-            let time_positions = Self::parse_time_positions(&dataset)?;
+            let (labels, time_positions) = Self::parse_band_labels_and_time_positions(&dataset)?;
+
             Ok((dataset, labels, time_positions))
         } else {
             Ok((dataset, labels, time_positions))
         }
     }
 
-    fn parse_band_labels(dataset: &gdal::Dataset) -> Result<Vec<String>> {
+    fn parse_band_labels_and_time_positions(
+        dataset: &gdal::Dataset,
+    ) -> Result<(Vec<String>, Vec<String>)> {
         let mut reader = Reader::from_file(&dataset.description()?)?;
         reader.trim_text(true);
-        let mut txt = Vec::new();
+        let mut labels = Vec::new();
+        let mut time_positions = Vec::new();
         let mut buf = Vec::new();
 
         let mut first = true;
@@ -274,33 +276,15 @@ impl Nature40DataProvider {
                         if first {
                             first = false; // skip first label which is the coverage label
                         } else {
-                            txt.push(
+                            labels.push(
                                 reader
                                     .read_text(e.name(), &mut Vec::new())
                                     .unwrap_or_else(|_| "".to_owned()),
                             );
                         }
                     }
-                }
-                Ok(Event::Eof) => break,
-                _ => (),
-            }
-            buf.clear();
-        }
-        Ok(txt)
-    }
-
-    fn parse_time_positions(dataset: &gdal::Dataset) -> Result<Vec<String>> {
-        let mut reader = Reader::from_file(&dataset.description()?)?;
-        reader.trim_text(true);
-        let mut txt = Vec::new();
-        let mut buf = Vec::new();
-
-        loop {
-            match reader.read_event(&mut buf) {
-                Ok(Event::Start(ref e)) => {
                     if e.name() == b"timePosition" {
-                        txt.push(
+                        time_positions.push(
                             reader
                                 .read_text(e.name(), &mut Vec::new())
                                 .unwrap_or_else(|_| "".to_owned()),
@@ -312,7 +296,7 @@ impl Nature40DataProvider {
             }
             buf.clear();
         }
-        Ok(txt)
+        Ok((labels, time_positions))
     }
 }
 
