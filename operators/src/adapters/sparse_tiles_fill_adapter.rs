@@ -4,8 +4,8 @@ use futures::{ready, Stream};
 use geoengine_datatypes::{
     primitives::TimeInterval,
     raster::{
-        EmptyGrid2D, GeoTransform, Grid2D, GridBoundingBox2D, GridBounds, GridIdx2D, GridOrEmpty,
-        GridShape2D, GridShapeAccess, GridSize, GridStep, NoDataValue, Pixel, RasterTile2D,
+        EmptyGrid2D, GeoTransform, GridBoundingBox2D, GridBounds, GridIdx2D, GridShape2D, GridStep,
+        Pixel, RasterTile2D,
     },
     util::Result,
 };
@@ -44,18 +44,11 @@ where
     }
 
     pub fn poll(&self) -> bool {
-        match self.state {
-            StateInner::Initial => true,
-            StateInner::BetweenTiles => true,
-            _ => false,
-        }
+        matches!(self.state, StateInner::Initial | StateInner::BetweenTiles)
     }
 
     pub fn ended(&self) -> bool {
-        match self.state {
-            StateInner::Ended => true,
-            _ => false,
-        }
+        matches!(self.state, StateInner::Ended)
     }
 
     pub fn emergency_break(&mut self) {
@@ -111,12 +104,11 @@ where
                 // take the tile (replace in state with NONE)
                 let next_tile = self.next_tile.take().expect("checked by case");
                 // calculate the next idx
-                let next_tile_idx = maybe_next_idx.unwrap_or(self.grid_bounds.min_index());
+                let next_tile_idx = maybe_next_idx.unwrap_or_else(|| self.grid_bounds.min_index());
 
                 debug_assert!(self.current_time == next_tile.time);
                 debug_assert!(self.current_idx == next_tile.tile_position);
                 self.current_idx = next_tile_idx;
-                self.current_time = self.current_time;
                 self.state = StateInner::BetweenTiles;
 
                 next_tile

@@ -11,6 +11,8 @@ pub use raster_subquery_adapter::{
 };
 pub use raster_time::RasterTimeAdapter;
 
+pub use sparse_tiles_fill_adapter::SparseTilesFillAdapter;
+
 use self::raster_time_substream::RasterTimeMultiFold;
 use crate::util::Result;
 use futures::{stream::Fuse, Future, Stream, StreamExt};
