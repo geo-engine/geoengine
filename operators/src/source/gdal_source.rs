@@ -374,6 +374,7 @@ impl MetaData<GdalLoadingInfo, RasterResultDescriptor, RasterQueryRectangle>
 #[serde(rename_all = "camelCase")]
 pub struct GdalMetadataFixedTimes {
     pub time_steps: Vec<TimeInterval>,
+    pub minimum_step: TimeStep,
     pub time_placeholders: HashMap<String, GdalSourceTimePlaceholder>,
     pub params: GdalDatasetParameters,
     pub result_descriptor: RasterResultDescriptor,
@@ -387,24 +388,38 @@ impl MetaData<GdalLoadingInfo, RasterResultDescriptor, RasterQueryRectangle>
         let valid_duration = TimeInterval::new(
             self.time_steps[0].start(),
             self.time_steps[self.time_steps.len() - 1].start(),
-        )
-        .unwrap_or_default();
+        )?;
 
         let parts = match valid_duration.intersect(&query.time_interval) {
             Some(time_interval) => {
                 let mut loading_info_parts: Vec<GdalLoadingInfoPart> = Vec::new();
 
-                for time_position in &self.time_steps {
+                for (index, time_position) in self.time_steps.iter().enumerate() {
                     if time_interval.contains(time_position) {
-                        let loading_info_part = self
-                            .params
-                            .replace_time_placeholders(&self.time_placeholders, *time_position)
-                            .map(|loading_info_part_params| GdalLoadingInfoPart {
-                                time: *time_position,
-                                params: loading_info_part_params,
-                            })?;
+                        loading_info_parts.push(
+                            self.params
+                                .replace_time_placeholders(&self.time_placeholders, *time_position)
+                                .map(|loading_info_part_params| GdalLoadingInfoPart {
+                                    time: *time_position,
+                                    params: loading_info_part_params,
+                                })?,
+                        );
 
-                        loading_info_parts.push(loading_info_part);
+                        if index < self.time_steps.len() - 1 {
+                            let time_gap = TimeInterval::new(
+                                (time_position.end() + self.minimum_step)?,
+                                (self.time_steps[index + 1].start() - self.minimum_step)?,
+                            )?;
+
+                            loading_info_parts.push(
+                                self.params
+                                    .replace_time_placeholders(&self.time_placeholders, time_gap)
+                                    .map(|loading_info_part_params| GdalLoadingInfoPart {
+                                        time: time_gap,
+                                        params: loading_info_part_params,
+                                    })?,
+                            );
+                        }
                     }
                 }
 
@@ -1399,6 +1414,10 @@ mod tests {
                     reference: TimeReference::Start,
                 },
             },
+            minimum_step: TimeStep {
+                granularity: TimeGranularity::Millis,
+                step: 1,
+            },
         };
 
         assert_eq!(
@@ -1418,7 +1437,7 @@ mod tests {
                         (0., 1.).into(),
                         (1., 0.).into()
                     ),
-                    time_interval: TimeInterval::new_unchecked(5, 10),
+                    time_interval: TimeInterval::new_unchecked(4, 10),
                     spatial_resolution: SpatialResolution::one(),
                 })
                 .await
@@ -1428,7 +1447,9 @@ mod tests {
                 .collect::<Vec<_>>(),
             &[
                 "/foo/bar_step_005000000.tiff",
-                "/foo/bar_step_010000000.tiff"
+                "/foo/bar_step_006000000.tiff",
+                "/foo/bar_step_010000000.tiff",
+                "/foo/bar_step_011000000.tiff"
             ]
         );
 
