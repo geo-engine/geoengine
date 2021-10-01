@@ -405,7 +405,9 @@ impl MetaData<GdalLoadingInfo, RasterResultDescriptor, RasterQueryRectangle>
                                 })?,
                         );
 
-                        if index < self.time_steps.len() - 1 {
+                        if index < self.time_steps.len() - 1
+                            && time_interval.contains(&self.time_steps[index + 1])
+                        {
                             let time_gap = TimeInterval::new(
                                 (time_position.end() + self.minimum_step)?,
                                 (self.time_steps[index + 1].start() - self.minimum_step)?,
@@ -1437,7 +1439,7 @@ mod tests {
                         (0., 1.).into(),
                         (1., 0.).into()
                     ),
-                    time_interval: TimeInterval::new_unchecked(4, 10),
+                    time_interval: TimeInterval::new_unchecked(4, 12),
                     spatial_resolution: SpatialResolution::one(),
                 })
                 .await
@@ -1448,8 +1450,7 @@ mod tests {
             &[
                 "/foo/bar_step_005000000.tiff",
                 "/foo/bar_step_006000000.tiff",
-                "/foo/bar_step_010000000.tiff",
-                "/foo/bar_step_011000000.tiff"
+                "/foo/bar_step_010000000.tiff"
             ]
         );
 
