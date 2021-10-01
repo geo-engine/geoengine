@@ -44,25 +44,8 @@ where
     let step: i64 = (batch_size as i64 * 900_000) * batches_per_query as i64;
     println!("Step: {}", step);
     
-    let mut start = query_rect.time_interval.start();
-    let mut inter_end = query_rect.time_interval.start();
-    let end = query_rect.time_interval.end();
-    
-    let mut queries: Vec<QueryRectangle<SpatialPartition2D>> = Vec::new();
-    while start.as_utc_date_time().unwrap().timestamp() * 1000 <= (end.as_utc_date_time().unwrap().timestamp() * 1000) + step {
-        let end_time_new = (inter_end.as_utc_date_time().unwrap().timestamp() * 1000) + step;
-        inter_end = TimeInstance::from_millis(end_time_new)?;
-        
-        let new_rect = QueryRectangle{
-            spatial_bounds: query_rect.spatial_bounds,
-            time_interval: TimeInterval::new(start, inter_end)?,
-            spatial_resolution: query_rect.spatial_resolution
-        };
-        queries.push(new_rect);
-        let start_time_new = (start.as_utc_date_time().unwrap().timestamp() * 1000) + step;
-        start = TimeInstance::from_millis(start_time_new)?;
-        
-    }
+    let mut queries = split_time_intervals(query_rect, step)?;
+
     let mut rand_index: usize; 
     let mut number_of_grids: u64 = 0;
     let mut number_of_discarded_batches: u32 = 0;
@@ -74,6 +57,7 @@ where
     let mut time_data_processing: u128 = 0;
     let mut time_python: u128 = 0;
     let mut time = Instant::now();
+    
     while !queries.is_empty() {
         let queries_left = queries.len();
         println!("queries left: {:?}", queries_left);
@@ -82,7 +66,6 @@ where
             //println!("{:?}", queries_left - 1);
             rand_index = rng.gen_range(0..queries_left-1);
         }
-        
         let the_chosen_one = queries.remove(rand_index);
         println!("{:?}", the_chosen_one.time_interval.start().as_naive_date_time().unwrap());
         
@@ -96,7 +79,6 @@ where
         let tile_stream_truth = processor_truth.raster_query(the_chosen_one, &query_ctx).await?;
 
         let final_stream = tile_stream_ir_016.zip(tile_stream_ir_039.zip(tile_stream_ir_087.zip(tile_stream_ir_097.zip(tile_stream_ir_108.zip(tile_stream_ir_120.zip(tile_stream_ir_134.zip(tile_stream_truth)))))));
-
         let mut chunked_stream = final_stream.chunks(batch_size);
         time_general_processing = time_general_processing + time.elapsed().as_millis();
         time = Instant::now();
@@ -118,6 +100,7 @@ where
                         match (ir_016.grid_array, ir_039.grid_array, ir_087.grid_array, ir_097.grid_array, ir_108.grid_array, ir_120.grid_array, ir_134.grid_array, truth.grid_array) {
                             (GridOrEmpty::Grid(grid_016), GridOrEmpty::Grid(grid_039),  GridOrEmpty::Grid(grid_087),  GridOrEmpty::Grid(grid_097), GridOrEmpty::Grid(grid_108), GridOrEmpty::Grid(grid_120), GridOrEmpty::Grid(grid_134), GridOrEmpty::Grid(grid_truth)) => {
                             
+                        
                                 let ndv = grid_truth.data.contains(&no_data_value);
                                 if !ndv {
                                     tile_size = grid_016.shape.shape_array;
@@ -169,6 +152,7 @@ where
             let num_elements = buffer.len();
         
                 
+            
             let mut rand_index: usize;
             for i in 0..(batch_size - 1) {
                     
@@ -273,6 +257,28 @@ T: Clone + std::marker::Copy{
 
             (arr_res, arr_8)
 }
+/// Splits time intervals into smaller intervalls of length step.
+fn split_time_intervals(query_rect: QueryRectangle<SpatialPartition2D>, step: i64 ) -> Result<Vec<QueryRectangle<SpatialPartition2D>>> {
+    let mut start = query_rect.time_interval.start();
+    let mut inter_end = query_rect.time_interval.start();
+    let end = query_rect.time_interval.end();
+    let mut queries: Vec<QueryRectangle<SpatialPartition2D>> = Vec::new();
+    while start.as_utc_date_time().unwrap().timestamp() * 1000 <= (end.as_utc_date_time().unwrap().timestamp() * 1000) + step {
+        let end_time_new = (inter_end.as_utc_date_time().unwrap().timestamp() * 1000) + step;
+        inter_end = TimeInstance::from_millis(end_time_new)?;
+        
+        let new_rect = QueryRectangle{
+            spatial_bounds: query_rect.spatial_bounds,
+            time_interval: TimeInterval::new(start, inter_end)?,
+            spatial_resolution: query_rect.spatial_resolution
+        };
+        queries.push(new_rect);
+        let start_time_new = (start.as_utc_date_time().unwrap().timestamp() * 1000) + step;
+        start = TimeInstance::from_millis(start_time_new)?;
+        
+    }
+    Ok(queries)
+}
 
 
 
@@ -329,8 +335,8 @@ mod tests {
                     x_pixel_size: 3000.403165817260742,
                     y_pixel_size: -3000.403165817260742, 
                 },
-                width: 11136,
-                height: 11136,
+                width: 3712,
+                height: 3712,
                 file_not_found_handling: FileNotFoundHandling::NoData,
                 no_data_value,
                 properties_mapping: Some(vec![GdalMetadataMapping::identity(offset_key(), RasterPropertiesEntryType::Number), GdalMetadataMapping::identity(slope_key(), RasterPropertiesEntryType::Number), GdalMetadataMapping::identity(channel_key(), RasterPropertiesEntryType::Number), GdalMetadataMapping::identity(satellite_key(), RasterPropertiesEntryType::Number)]),
@@ -374,8 +380,8 @@ mod tests {
                      x_pixel_size: 3000.403165817260742,
                      y_pixel_size: -3000.403165817260742, 
                  },
-                 width: 11136,
-                 height: 11136,
+                 width: 3712,
+                 height: 3712,
                  file_not_found_handling: FileNotFoundHandling::NoData,
                  no_data_value,
                  properties_mapping: Some(vec![GdalMetadataMapping::identity(offset_key(), RasterPropertiesEntryType::Number), GdalMetadataMapping::identity(slope_key(), RasterPropertiesEntryType::Number), GdalMetadataMapping::identity(channel_key(), RasterPropertiesEntryType::Number), GdalMetadataMapping::identity(satellite_key(), RasterPropertiesEntryType::Number)]),
@@ -421,8 +427,8 @@ mod tests {
                     x_pixel_size: 3000.403165817260742,
                     y_pixel_size: -3000.403165817260742, 
                 },
-                width: 11136,
-                height: 11136,
+                width: 3712,
+                height: 3712,
                 file_not_found_handling: FileNotFoundHandling::NoData,
                 no_data_value,
                 properties_mapping: Some(vec![GdalMetadataMapping::identity(offset_key(), RasterPropertiesEntryType::Number), GdalMetadataMapping::identity(slope_key(), RasterPropertiesEntryType::Number), GdalMetadataMapping::identity(channel_key(), RasterPropertiesEntryType::Number), GdalMetadataMapping::identity(satellite_key(), RasterPropertiesEntryType::Number)]),
@@ -468,8 +474,8 @@ mod tests {
                     x_pixel_size: 3000.403165817260742,
                     y_pixel_size: -3000.403165817260742, 
                 },
-                width: 11136,
-                height: 11136,
+                width: 3712,
+                height: 3712,
                 file_not_found_handling: FileNotFoundHandling::NoData,
                 no_data_value,
                 properties_mapping: Some(vec![GdalMetadataMapping::identity(offset_key(), RasterPropertiesEntryType::Number), GdalMetadataMapping::identity(slope_key(), RasterPropertiesEntryType::Number), GdalMetadataMapping::identity(channel_key(), RasterPropertiesEntryType::Number), GdalMetadataMapping::identity(satellite_key(), RasterPropertiesEntryType::Number)]),
@@ -516,8 +522,8 @@ mod tests {
                     x_pixel_size: 3000.403165817260742,
                     y_pixel_size: -3000.403165817260742, 
                 },
-                width: 11136,
-                height: 11136,
+                width: 3712,
+                height: 3712,
                 file_not_found_handling: FileNotFoundHandling::NoData,
                 no_data_value,
                 properties_mapping: Some(vec![GdalMetadataMapping::identity(offset_key(), RasterPropertiesEntryType::Number), GdalMetadataMapping::identity(slope_key(), RasterPropertiesEntryType::Number), GdalMetadataMapping::identity(channel_key(), RasterPropertiesEntryType::Number), GdalMetadataMapping::identity(satellite_key(), RasterPropertiesEntryType::Number)]),
@@ -563,8 +569,8 @@ mod tests {
                     x_pixel_size: 3000.403165817260742,
                     y_pixel_size: -3000.403165817260742, 
                 },
-                width: 11136,
-                height: 11136,
+                width: 3712,
+                height: 3712,
                 file_not_found_handling: FileNotFoundHandling::NoData,
                 no_data_value,
                 properties_mapping: Some(vec![GdalMetadataMapping::identity(offset_key(), RasterPropertiesEntryType::Number), GdalMetadataMapping::identity(slope_key(), RasterPropertiesEntryType::Number), GdalMetadataMapping::identity(channel_key(), RasterPropertiesEntryType::Number), GdalMetadataMapping::identity(satellite_key(), RasterPropertiesEntryType::Number)]),
@@ -611,8 +617,8 @@ mod tests {
                     x_pixel_size: 3000.403165817260742,
                     y_pixel_size: -3000.403165817260742, 
                 },
-                width: 11136,
-                height: 11136,
+                width: 3712,
+                height: 3712,
                 file_not_found_handling: FileNotFoundHandling::NoData,
                 no_data_value,
                 properties_mapping: Some(vec![GdalMetadataMapping::identity(offset_key(), RasterPropertiesEntryType::Number), GdalMetadataMapping::identity(slope_key(), RasterPropertiesEntryType::Number), GdalMetadataMapping::identity(channel_key(), RasterPropertiesEntryType::Number), GdalMetadataMapping::identity(satellite_key(), RasterPropertiesEntryType::Number)]),
@@ -655,8 +661,8 @@ mod tests {
                     x_pixel_size: 3000.403165817260742,
                     y_pixel_size: -3000.403165817260742, 
                 },
-                width: 11136,
-                height: 11136,
+                width: 3636,
+                height: 3636,
                 file_not_found_handling: FileNotFoundHandling::NoData,
                 no_data_value,
                 properties_mapping: None,

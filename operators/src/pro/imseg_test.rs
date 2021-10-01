@@ -56,6 +56,8 @@ pub async fn imseg_fit<C: QueryContext>(
                         let tile_size = grid_016.shape.shape_array;
 
                         let (arr_img, arr_truth) = create_arrays_from_data(grid_016.data, grid_039.data, grid_087.data, grid_097.data, grid_108.data, grid_120.data, grid_134.data, grid_truth.data, tile_size);
+                        
+                        
 
                         let py_img = PyArray::from_owned_array(py, arr_img);
                         let py_truth = PyArray::from_owned_array(py, arr_truth);
@@ -179,8 +181,8 @@ mod tests {
                     x_pixel_size: 3000.403165817260742,
                     y_pixel_size: -3000.403165817260742, 
                 },
-                width: 11136,
-                height: 11136,
+                width: 3712,
+                height: 3712,
                 file_not_found_handling: FileNotFoundHandling::NoData,
                 no_data_value,
                 properties_mapping: Some(vec![GdalMetadataMapping::identity(offset_key(), RasterPropertiesEntryType::Number), GdalMetadataMapping::identity(slope_key(), RasterPropertiesEntryType::Number), GdalMetadataMapping::identity(channel_key(), RasterPropertiesEntryType::Number), GdalMetadataMapping::identity(satellite_key(), RasterPropertiesEntryType::Number)]),
@@ -224,8 +226,8 @@ mod tests {
                      x_pixel_size: 3000.403165817260742,
                      y_pixel_size: -3000.403165817260742, 
                  },
-                 width: 11136,
-                 height: 11136,
+                 width: 3712,
+                 height: 3712,
                  file_not_found_handling: FileNotFoundHandling::NoData,
                  no_data_value,
                  properties_mapping: Some(vec![GdalMetadataMapping::identity(offset_key(), RasterPropertiesEntryType::Number), GdalMetadataMapping::identity(slope_key(), RasterPropertiesEntryType::Number), GdalMetadataMapping::identity(channel_key(), RasterPropertiesEntryType::Number), GdalMetadataMapping::identity(satellite_key(), RasterPropertiesEntryType::Number)]),
@@ -271,8 +273,8 @@ mod tests {
                     x_pixel_size: 3000.403165817260742,
                     y_pixel_size: -3000.403165817260742, 
                 },
-                width: 11136,
-                height: 11136,
+                width: 3712,
+                height: 3712,
                 file_not_found_handling: FileNotFoundHandling::NoData,
                 no_data_value,
                 properties_mapping: Some(vec![GdalMetadataMapping::identity(offset_key(), RasterPropertiesEntryType::Number), GdalMetadataMapping::identity(slope_key(), RasterPropertiesEntryType::Number), GdalMetadataMapping::identity(channel_key(), RasterPropertiesEntryType::Number), GdalMetadataMapping::identity(satellite_key(), RasterPropertiesEntryType::Number)]),
@@ -318,8 +320,8 @@ mod tests {
                     x_pixel_size: 3000.403165817260742,
                     y_pixel_size: -3000.403165817260742, 
                 },
-                width: 11136,
-                height: 11136,
+                width: 3712,
+                height: 3712,
                 file_not_found_handling: FileNotFoundHandling::NoData,
                 no_data_value,
                 properties_mapping: Some(vec![GdalMetadataMapping::identity(offset_key(), RasterPropertiesEntryType::Number), GdalMetadataMapping::identity(slope_key(), RasterPropertiesEntryType::Number), GdalMetadataMapping::identity(channel_key(), RasterPropertiesEntryType::Number), GdalMetadataMapping::identity(satellite_key(), RasterPropertiesEntryType::Number)]),
@@ -366,8 +368,8 @@ mod tests {
                     x_pixel_size: 3000.403165817260742,
                     y_pixel_size: -3000.403165817260742, 
                 },
-                width: 11136,
-                height: 11136,
+                width: 3712,
+                height: 3712,
                 file_not_found_handling: FileNotFoundHandling::NoData,
                 no_data_value,
                 properties_mapping: Some(vec![GdalMetadataMapping::identity(offset_key(), RasterPropertiesEntryType::Number), GdalMetadataMapping::identity(slope_key(), RasterPropertiesEntryType::Number), GdalMetadataMapping::identity(channel_key(), RasterPropertiesEntryType::Number), GdalMetadataMapping::identity(satellite_key(), RasterPropertiesEntryType::Number)]),
@@ -413,8 +415,8 @@ mod tests {
                     x_pixel_size: 3000.403165817260742,
                     y_pixel_size: -3000.403165817260742, 
                 },
-                width: 11136,
-                height: 11136,
+                width: 3712,
+                height: 3712,
                 file_not_found_handling: FileNotFoundHandling::NoData,
                 no_data_value,
                 properties_mapping: Some(vec![GdalMetadataMapping::identity(offset_key(), RasterPropertiesEntryType::Number), GdalMetadataMapping::identity(slope_key(), RasterPropertiesEntryType::Number), GdalMetadataMapping::identity(channel_key(), RasterPropertiesEntryType::Number), GdalMetadataMapping::identity(satellite_key(), RasterPropertiesEntryType::Number)]),
@@ -461,8 +463,8 @@ mod tests {
                     x_pixel_size: 3000.403165817260742,
                     y_pixel_size: -3000.403165817260742, 
                 },
-                width: 11136,
-                height: 11136,
+                width: 3712,
+                height: 3712,
                 file_not_found_handling: FileNotFoundHandling::NoData,
                 no_data_value,
                 properties_mapping: Some(vec![GdalMetadataMapping::identity(offset_key(), RasterPropertiesEntryType::Number), GdalMetadataMapping::identity(slope_key(), RasterPropertiesEntryType::Number), GdalMetadataMapping::identity(channel_key(), RasterPropertiesEntryType::Number), GdalMetadataMapping::identity(satellite_key(), RasterPropertiesEntryType::Number)]),
@@ -505,8 +507,8 @@ mod tests {
                     x_pixel_size: 3000.403165817260742,
                     y_pixel_size: -3000.403165817260742, 
                 },
-                width: 11136,
-                height: 11136,
+                width: 3636,
+                height: 3636,
                 file_not_found_handling: FileNotFoundHandling::NoData,
                 no_data_value,
                 properties_mapping: None,
@@ -798,7 +800,7 @@ mod tests {
 
         let _x = imseg_fit(proc_ir_016, proc_ir_039,proc_ir_087, proc_ir_097, proc_ir_108, proc_ir_120, proc_ir_134, proc_claas, QueryRectangle {
             spatial_bounds: query_bbox,
-            time_interval: TimeInterval::new(1370037600000, 1370037600000 + 1000)
+            time_interval: TimeInterval::new(1357048800000, 1357048800000 + 1000)
                 .unwrap(),
             spatial_resolution: query_spatial_resolution,
         }, ctx,
