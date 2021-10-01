@@ -614,7 +614,7 @@ mod tests {
             },
         ];
 
-        let result_data = data.into_iter().map(|d| Ok(d));
+        let result_data = data.into_iter().map(Ok);
 
         let in_stream = stream::iter(result_data);
         let grid_bounding_box = GridBoundingBox2D::new([-1, 0], [0, 1]).unwrap();
@@ -658,7 +658,7 @@ mod tests {
     async fn test_empty() {
         let data = vec![];
 
-        let result_data = data.into_iter().map(|d| Ok(d));
+        let result_data = data.into_iter().map(Ok);
 
         let in_stream = stream::iter(result_data);
         let grid_bounding_box = GridBoundingBox2D::new([-1, 0], [0, 1]).unwrap();

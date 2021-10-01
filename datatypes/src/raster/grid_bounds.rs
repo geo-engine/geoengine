@@ -428,9 +428,9 @@ mod tests {
         assert_eq!(l, 0);
         assert_eq!(a.grid_idx_unchecked(l), [1, 1].into());
 
-        let l = a.linear_space_index_unchecked([2, 2]);
-        assert_eq!(l, 43);
-        assert_eq!(a.grid_idx_unchecked(l), [2, 2].into());
+        let l2 = a.linear_space_index_unchecked([2, 2]);
+        assert_eq!(l2, 43);
+        assert_eq!(a.grid_idx_unchecked(l2), [2, 2].into());
     }
 
     #[test]
@@ -441,8 +441,8 @@ mod tests {
         assert_eq!(l, 0);
         assert_eq!(a.grid_idx_unchecked(l), [1, 1, 1].into());
 
-        let l = a.linear_space_index_unchecked([2, 2, 2]);
-        assert_eq!(l, 1 * 42 * 42 + 1 * 42 + 1);
-        assert_eq!(a.grid_idx_unchecked(l), [2, 2, 2].into());
+        let l2 = a.linear_space_index_unchecked([2, 2, 2]);
+        assert_eq!(l2, 1 * 42 * 42 + 1 * 42 + 1);
+        assert_eq!(a.grid_idx_unchecked(l2), [2, 2, 2].into());
     }
 }
