@@ -374,6 +374,7 @@ impl MetaData<GdalLoadingInfo, RasterResultDescriptor, RasterQueryRectangle>
 #[serde(rename_all = "camelCase")]
 pub struct GdalMetadataFixedTimes {
     pub time_steps: Vec<TimeInterval>,
+    pub time_placeholders: HashMap<String, GdalSourceTimePlaceholder>,
     pub params: GdalDatasetParameters,
     pub result_descriptor: RasterResultDescriptor,
 }
@@ -383,24 +384,35 @@ impl MetaData<GdalLoadingInfo, RasterResultDescriptor, RasterQueryRectangle>
     for GdalMetadataFixedTimes
 {
     async fn loading_info(&self, query: RasterQueryRectangle) -> Result<GdalLoadingInfo> {
-        if !query.time_interval.is_instant() {
-            return Err(Error::InvalidTimeIntervalforQueryRectangle);
-        }
-
-        let time_valid = TimeInterval::new(
+        let valid_duration = TimeInterval::new(
             self.time_steps[0].start(),
             self.time_steps[self.time_steps.len() - 1].start(),
         )
-        .unwrap();
+        .unwrap_or_default();
 
-        let parts = if time_valid.contains(&query.time_interval) {
-            vec![GdalLoadingInfoPart {
-                time: query.time_interval,
-                params: self.params.clone(),
-            }]
-            .into_iter()
-        } else {
-            vec![].into_iter()
+        let parts = match valid_duration.intersect(&query.time_interval) {
+            Some(time_interval) => {
+                let mut loading_info_parts: Vec<GdalLoadingInfoPart> = Vec::new();
+
+                for time_position in &self.time_steps {
+                    if time_interval.contains(time_position) {
+                        let loading_info_part = self
+                            .params
+                            .replace_time_placeholders(&self.time_placeholders, *time_position)
+                            .map(|loading_info_part_params| GdalLoadingInfoPart {
+                                time: *time_position,
+                                params: loading_info_part_params,
+                            })?;
+
+                        loading_info_parts.push(loading_info_part);
+                    }
+                }
+
+                loading_info_parts
+            }
+            .into_iter(),
+
+            None => vec![].into_iter(),
         };
 
         Ok(GdalLoadingInfo {
@@ -1364,7 +1376,7 @@ mod tests {
                 no_data_value,
             },
             params: GdalDatasetParameters {
-                file_path: "/foo/bar_step.tiff".into(),
+                file_path: "/foo/bar_step_%TIME%.tiff".into(),
                 rasterband_channel: 0,
                 geo_transform: TestDefault::test_default(),
                 width: 360,
@@ -1381,6 +1393,12 @@ mod tests {
                 TimeInterval::new_instant(10).unwrap(),
                 TimeInterval::new_instant(15).unwrap(),
             ],
+            time_placeholders: hashmap! {
+                "%TIME%".to_string() => GdalSourceTimePlaceholder {
+                    format: "%f".to_string(),
+                    reference: TimeReference::Start,
+                },
+            },
         };
 
         assert_eq!(
@@ -1400,7 +1418,7 @@ mod tests {
                         (0., 1.).into(),
                         (1., 0.).into()
                     ),
-                    time_interval: TimeInterval::new_instant(5).unwrap(),
+                    time_interval: TimeInterval::new_unchecked(5, 10),
                     spatial_resolution: SpatialResolution::one(),
                 })
                 .await
@@ -1408,7 +1426,10 @@ mod tests {
                 .info
                 .map(|p| p.unwrap().params.file_path.to_str().unwrap().to_owned())
                 .collect::<Vec<_>>(),
-            &["/foo/bar_step.tiff"]
+            &[
+                "/foo/bar_step_005000000.tiff",
+                "/foo/bar_step_010000000.tiff"
+            ]
         );
 
         assert_eq!(
