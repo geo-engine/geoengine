@@ -18,9 +18,11 @@ use futures::future::join_all;
 use gdal::DatasetOptions;
 use gdal::Metadata;
 use geoengine_datatypes::dataset::{DatasetId, DatasetProviderId, ExternalDatasetId};
-use geoengine_datatypes::primitives::TimeInstance;
+use geoengine_datatypes::primitives::{TimeGranularity, TimeInstance, TimeInterval, TimeStep};
 use geoengine_operators::engine::TypedResultDescriptor;
-use geoengine_operators::source::{GdalMetaDataStatic, GdalMetadataFixedTimes};
+use geoengine_operators::source::{
+    GdalMetaDataStatic, GdalMetadataFixedTimes, GdalSourceTimePlaceholder, TimeReference,
+};
 use geoengine_operators::util::gdal::{
     gdal_open_dataset_ex, gdal_parameters_from_dataset, raster_descriptor_from_dataset,
 };
@@ -38,6 +40,9 @@ use quick_xml::Reader;
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
 use snafu::ResultExt;
+//use std::collections::HashMap;
+
+use geoengine_datatypes::hashmap;
 use url::Url;
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -377,12 +382,23 @@ impl MetaDataProvider<GdalLoadingInfo, RasterResultDescriptor, RasterQueryRectan
                     NaiveDateTime::parse_from_str(time_position, "%Y-%m-%dT%H:%M").unwrap()
                 })
                 .map(TimeInstance::from)
+                .map(|time_istance| TimeInterval::new_instant(time_istance).unwrap())
                 .collect::<Vec<_>>();
 
             Ok(Box::new(GdalMetadataFixedTimes {
                 time_steps,
                 params,
                 result_descriptor,
+                time_placeholders: hashmap! {
+                    "%TIME%".to_string() => GdalSourceTimePlaceholder {
+                        format: "%f".to_string(),
+                        reference: TimeReference::Start,
+                    },
+                },
+                minimum_step: TimeStep {
+                    granularity: TimeGranularity::Days,
+                    step: 1,
+                },
             }))
         }
     }
@@ -1157,10 +1173,17 @@ mod tests {
                     (473_922.500, 5_634_057.500).into(),
                     (473_924.500, 5_634_055.50).into(),
                 ),
-                time_interval: TimeInterval::new_instant(TimeInstance::from(
-                    NaiveDateTime::parse_from_str("2020-09-15T00:00", "%Y-%m-%dT%H:%M").unwrap(),
-                ))
-                .unwrap(),
+                time_interval: TimeInterval::new_unchecked(
+                    TimeInstance::from(
+                        NaiveDateTime::parse_from_str("2020-09-01T00:00", "%Y-%m-%dT%H:%M")
+                            .unwrap(),
+                    ),
+                    TimeInstance::from(
+                        NaiveDateTime::parse_from_str("2020-09-05T00:00", "%Y-%m-%dT%H:%M")
+                            .unwrap(),
+                    ),
+                ),
+
                 spatial_resolution: SpatialResolution::new_unchecked(
                     (473_924.500 - 473_922.500) / 2.,
                     (5_634_057.500 - 5_634_055.50) / 2.,
@@ -1175,7 +1198,7 @@ mod tests {
             assert_eq!(
                 params,
                 GdalLoadingInfoPart {
-                    time: TimeInterval::new_instant(TimeInstance::from(NaiveDateTime::parse_from_str("2020-09-15T00:00", "%Y-%m-%dT%H:%M").unwrap())).unwrap(),
+                    time: TimeInterval::new_instant(TimeInstance::from(NaiveDateTime::parse_from_str("2020-09-02T00:00", "%Y-%m-%dT%H:%M").unwrap())).unwrap(),
                     params: GdalDatasetParameters {
                         file_path: PathBuf::from(format!("WCS:{}rasterdb/uas_orthomosaics_2020/wcs?VERSION=1.0.0&COVERAGE=uas_orthomosaics_2020", server.url_str(""))),
                         rasterband_channel: 1,
