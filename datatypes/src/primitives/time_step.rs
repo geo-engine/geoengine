@@ -3,6 +3,7 @@ use std::{cmp::max, convert::TryInto, ops::Add, ops::Sub};
 use chrono::{Datelike, Duration, NaiveDate};
 use error::Error::NoDateTimeValid;
 use serde::{Deserialize, Serialize};
+use std::cmp::Ordering;
 
 #[cfg(feature = "postgres")]
 use postgres_types::{FromSql, ToSql};
@@ -294,13 +295,13 @@ impl Sub<TimeStep> for TimeInstance {
             TimeGranularity::Hours => date_time - Duration::hours(i64::from(rhs.step)),
             TimeGranularity::Days => date_time - Duration::days(i64::from(rhs.step)),
             TimeGranularity::Months => {
-                let (month, year) = if rhs.step > date_time.month() {
-                    (
+                let (month, year) = match rhs.step.cmp(&date_time.month()) {
+                    Ordering::Greater => (
                         date_time.month() - (rhs.step % 12),
                         date_time.year() - (rhs.step / 12) as i32,
-                    )
-                } else {
-                    (date_time.month() - rhs.step, date_time.year())
+                    ),
+                    Ordering::Less => (date_time.month() - rhs.step, date_time.year()),
+                    Ordering::Equal => (date_time.month() + 12 - rhs.step, date_time.year() - 1),
                 };
                 let day = date_time.day();
                 NaiveDate::from_ymd_opt(year, month, day)
@@ -749,8 +750,8 @@ mod tests {
         test_sub(
             TimeGranularity::Months,
             1,
-            "2000-02-01T00:00:00.0",
             "2000-01-01T00:00:00.0",
+            "1999-12-01T00:00:00.0",
         );
     }
 
@@ -789,8 +790,8 @@ mod tests {
         test_sub(
             TimeGranularity::Days,
             1,
-            "2000-01-02T00:00:00.0",
-            "2000-01-01T00:00:00.0",
+            "2000-02-01T00:00:00.0",
+            "2000-01-31T00:00:00.0",
         );
     }
 
