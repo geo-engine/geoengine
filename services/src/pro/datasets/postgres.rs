@@ -561,7 +561,7 @@ where
             files: row
                 .get::<_, Vec<FileUpload>>(1)
                 .into_iter()
-                .map(|v| v.into())
+                .map(Into::into)
                 .collect(),
         })
     }
