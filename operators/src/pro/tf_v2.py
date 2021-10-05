@@ -110,6 +110,7 @@ def predict(X, batchsize):
     #print(result[0][0][1])
     #print(result[0][0][2])
     #print(result[0][0][3])
+    
     return result
 
 def validate(X, y, batch_size):

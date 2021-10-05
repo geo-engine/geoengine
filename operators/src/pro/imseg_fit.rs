@@ -963,7 +963,7 @@ mod tests {
 
         let x = imseg_fit(proc_ir_016, proc_ir_039, proc_ir_087, proc_ir_097, proc_ir_108, proc_ir_120, proc_ir_134,proc_claas, QueryRectangle {
             spatial_bounds: query_bbox,
-            time_interval: TimeInterval::new(1_356_994_800_000, 1_388_444_400_000)
+            time_interval: TimeInterval::new(1_356_994_800_000, 1_356_994_800_000 + 45_000_000)
                 .unwrap(),
             spatial_resolution: query_spatial_resolution,
         }, ctx,
