@@ -105,7 +105,7 @@ pub trait GridSpaceToLinearSpace: GridSize {
     /// Returns the `GridIdx` of the linear_idx-th cell in the Grid.
     fn grid_idx_unchecked(&self, linear_idx: usize) -> GridIdx<Self::IndexArray>;
 
-    /// Returns the `GridIdx` of the `linear_idx`-th cell in the Grid. Returns none if linear_idx` is out of bounds.
+    /// Returns the `GridIdx` of the `linear_idx`-th cell in the Grid. Returns none if `linear_idx` is out of bounds.
     fn grid_idx(&self, linear_idx: usize) -> Option<GridIdx<Self::IndexArray>> {
         if linear_idx >= self.number_of_elements() {
             return None;
