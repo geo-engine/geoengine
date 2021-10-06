@@ -25,6 +25,7 @@ use geoengine_datatypes::{
     spatial_reference::SpatialReference,
 };
 use geoengine_datatypes::{primitives::Coordinate2D, raster::EmptyGrid2D};
+use log::debug;
 use num_traits::AsPrimitive;
 use serde::{Deserialize, Serialize};
 use snafu::ResultExt;
@@ -385,14 +386,17 @@ impl InitializedRasterOperator for InitializedRasterReprojection {
 /// that align with the intersection of source and target area of use.
 fn query_source_resolution<A: AxisAlignedRectangle>(
     query_resolution: SpatialResolution,
-    projector_source_target: &CoordinateProjector,
-    projector_target_source: &CoordinateProjector,
+    from: SpatialReference,
+    to: SpatialReference,
     rows: usize,
     cols: usize,
 ) -> Result<SpatialResolution> {
+    let projector_source_target = CoordinateProjector::from_known_srs(from, to)?;
+    let projector_target_source = CoordinateProjector::from_known_srs(to, from)?;
+
     let use_area = projector_source_target.to.area_of_use_projected::<A>()?;
-    let source_use_area_clipped = use_area.reproject_clipped(projector_target_source)?;
-    let use_area_clipped = source_use_area_clipped.reproject_clipped(projector_source_target)?;
+    let source_use_area_clipped = use_area.reproject_clipped(&projector_target_source)?;
+    let use_area_clipped = source_use_area_clipped.reproject_clipped(&projector_source_target)?;
 
     let width = use_area_clipped.size_x() / cols as f64;
     let height = use_area_clipped.size_y() / rows as f64;
@@ -406,7 +410,7 @@ fn query_source_resolution<A: AxisAlignedRectangle>(
                     + Coordinate2D::new((col + 1) as f64 * width, (row + 1) as f64 * height),
             )?;
 
-            let source_bbox = target_bbox.reproject_clipped(projector_target_source)?;
+            let source_bbox = target_bbox.reproject_clipped(&projector_target_source)?;
 
             let tile_resolution = suggest_pixel_size_from_diag_cross_projected(
                 target_bbox,
@@ -461,22 +465,21 @@ where
         }
     }
 
-    /// clip query s.th. it is valid in the source projection
-    fn clip_query<T: AxisAlignedRectangle>(
-        query: QueryRectangle<T>,
-        projector_source_target: &CoordinateProjector,
-        projector_target_source: &CoordinateProjector,
-    ) -> Result<QueryRectangle<T>> {
-        let p_bbox = query
-            .spatial_bounds
-            .reproject_clipped(projector_target_source)?;
-        let s_bbox = p_bbox.reproject(projector_source_target)?;
+    fn valid_bounds<T>(source_proj: SpatialReference, target_proj: SpatialReference) -> Result<T>
+    where
+        T: AxisAlignedRectangle,
+    {
+        // generate a projector which transforms wgs84 into the projection we want to produce.
+        let valid_bounds_proj =
+            CoordinateProjector::from_known_srs(SpatialReference::epsg_4326(), target_proj)?;
 
-        Ok(QueryRectangle {
-            spatial_bounds: s_bbox,
-            time_interval: query.time_interval,
-            spatial_resolution: query.spatial_resolution,
-        })
+        // transform the bounds of the input srs (coordinates are in wgs84) into the output projection.
+        // TODO check if  there is a better / smarter way to check if the coordinates are valid.
+        let valid_bounds = source_proj
+            .area_of_use::<T>()?
+            .reproject_clipped(&valid_bounds_proj)?;
+
+        Ok(valid_bounds)
     }
 
     /// create a stream of `EmptyTile`s for the given query rectangle
@@ -513,24 +516,28 @@ where
         query: RasterQueryRectangle,
         ctx: &'a dyn QueryContext,
     ) -> Result<BoxStream<'a, Result<Self::Output>>> {
-        let projector_source_target = CoordinateProjector::from_known_srs(self.from, self.to)?;
-        let projector_target_source = CoordinateProjector::from_known_srs(self.to, self.from)?;
+        let srs_query_intersection = Self::valid_bounds::<SpatialPartition2D>(self.from, self.to)
+            .map(|bounds| (bounds, bounds.intersection(&query.spatial_bounds)));
 
         // if query does not intersect with source area of use, return stream with `EmptyTile`s
-        let query_rect =
-            match Self::clip_query(query, &projector_source_target, &projector_target_source) {
-                Ok(query_rect) => query_rect,
-                Err(Error::DataType {
-                    source: geoengine_datatypes::error::Error::SpatialBoundsDoNotIntersect { .. },
-                }) => {
-                    return Ok(Self::no_data_stream(
-                        query,
-                        self.tiling_spec,
-                        self.no_data_and_fill_value,
-                    ))
-                }
-                Err(e) => return Err(e),
-            };
+        let (valid_bounds, valid_qrect_bounds) = match srs_query_intersection {
+            Ok((srs_intersection, Some(qrect_intersection))) => {
+                (srs_intersection, qrect_intersection)
+            }
+            Ok((_, None))
+            | Err(Error::DataType {
+                source: geoengine_datatypes::error::Error::SpatialBoundsDoNotIntersect { .. },
+            }) => {
+                debug!("query not in valid srs bounds");
+
+                return Ok(Self::no_data_stream(
+                    query,
+                    self.tiling_spec,
+                    self.no_data_and_fill_value,
+                ));
+            }
+            Err(e) => return Err(e),
+        };
 
         let sub_query_spec = TileReprojectionSubQuery {
             in_srs: self.from,
@@ -539,15 +546,20 @@ where
             fold_fn: fold_by_coordinate_lookup_future,
             in_spatial_res: query_source_resolution::<SpatialPartition2D>(
                 query.spatial_resolution,
-                &projector_source_target,
-                &projector_target_source,
+                self.from,
+                self.to,
                 1, // TODO: use a configurable number of rows and cols, but only a resolution computed on a single tile seems to not lead to over estimates
                 1,
             )?,
+            valid_bounds,
         };
         let s = RasterSubQueryAdapter::<'a, P, _, _>::new(
             &self.source,
-            query_rect,
+            QueryRectangle {
+                spatial_bounds: valid_qrect_bounds,
+                time_interval: query.time_interval,
+                spatial_resolution: query.spatial_resolution,
+            },
             self.tiling_spec,
             ctx,
             sub_query_spec,
@@ -958,6 +970,8 @@ mod tests {
         let spatial_resolution =
             SpatialResolution::new_unchecked(x_query_resolution, y_query_resolution);
 
+        dbg!(&spatial_resolution);
+
         let qp = initialized_operator
             .query_processor()
             .unwrap()
@@ -1129,11 +1143,6 @@ mod tests {
         let epsg_4326 = SpatialReference::epsg_4326();
         let epsg_3857 = SpatialReference::new(SpatialReferenceAuthority::Epsg, 3857);
 
-        let projector_source_target =
-            CoordinateProjector::from_known_srs(epsg_4326, epsg_3857).unwrap();
-        let projector_target_source =
-            CoordinateProjector::from_known_srs(epsg_3857, epsg_4326).unwrap();
-
         // use ndvi dataset that was reprojected using gdal as ground truth
         let dataset_4326 = Dataset::open(test_data!(
             "raster/modis_ndvi/MOD13A2_M_NDVI_2014-04-01.TIFF"
@@ -1151,14 +1160,9 @@ mod tests {
 
         // ndvi was projected from 4326 to 3857. The calculated source_resolution for getting the raster in 3857 with `res_3857`
         // should thus roughly be like the original `res_4326`
-        let result_res = query_source_resolution::<SpatialPartition2D>(
-            res_3857,
-            &projector_source_target,
-            &projector_target_source,
-            1,
-            1,
-        )
-        .unwrap();
+        let result_res =
+            query_source_resolution::<SpatialPartition2D>(res_3857, epsg_3857, epsg_4326, 1, 1)
+                .unwrap();
         assert!(1. - (result_res.x / res_4326.x).abs() < 0.02);
         assert!(1. - (result_res.y / res_4326.y).abs() < 0.02);
     }

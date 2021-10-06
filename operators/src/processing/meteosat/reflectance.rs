@@ -31,23 +31,13 @@ const OUT_NO_DATA_VALUE: PixelOut = PixelOut::NAN;
 /// * `solar_correction` switch to enable solar correction.
 /// * `force_hrv` switch to force the use of the hrv channel.
 /// * `force_satellite` forces the use of the satellite with the given name.
-#[derive(Debug, Serialize, Deserialize, PartialEq, Clone)]
+#[derive(Debug, Serialize, Deserialize, PartialEq, Clone, Default)]
 #[serde(rename_all = "camelCase")]
 pub struct ReflectanceParams {
     pub solar_correction: bool,
     #[serde(rename = "forceHRV")]
     pub force_hrv: bool,
     pub force_satellite: Option<u8>,
-}
-
-impl Default for ReflectanceParams {
-    fn default() -> Self {
-        ReflectanceParams {
-            solar_correction: false,
-            force_hrv: false,
-            force_satellite: None,
-        }
-    }
 }
 
 /// The reflectance operator consumes an MSG image preprocessed

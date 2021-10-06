@@ -3,8 +3,15 @@ use geoengine_datatypes::identifier;
 use geoengine_datatypes::util::Identifier;
 use serde::{Deserialize, Serialize};
 
+use crate::contexts::{Context, InMemoryContext};
+use crate::error;
+use crate::handlers::get_token;
 use crate::projects::ProjectId;
 use crate::projects::STRectangle;
+use actix_http::Payload;
+use actix_web::{web, FromRequest, HttpRequest};
+use futures::future::{err, LocalBoxFuture};
+use futures_util::FutureExt;
 
 identifier!(SessionId);
 
@@ -62,5 +69,24 @@ impl Session for SimpleSession {
 impl MockableSession for SimpleSession {
     fn mock() -> Self {
         Self::default()
+    }
+}
+
+impl FromRequest for SimpleSession {
+    type Config = ();
+    type Error = error::Error;
+    type Future = LocalBoxFuture<'static, Result<Self, Self::Error>>;
+
+    fn from_request(req: &HttpRequest, _payload: &mut Payload) -> Self::Future {
+        let token = match get_token(req) {
+            Ok(token) => token,
+            Err(error) => return Box::pin(err(error)),
+        };
+        let ctx = req
+            .app_data::<web::Data<InMemoryContext>>()
+            .expect("InMemoryContext must be available")
+            .get_ref()
+            .clone();
+        async move { ctx.session_by_id(token).await.map_err(Into::into) }.boxed_local()
     }
 }

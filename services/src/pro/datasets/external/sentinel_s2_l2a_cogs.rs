@@ -4,6 +4,7 @@ use crate::datasets::storage::DatasetProviderDefinition;
 use crate::error::{self, Result};
 use crate::projects::{RasterSymbology, Symbology};
 use crate::stac::{Feature as StacFeature, FeatureCollection as StacCollection, StacAsset};
+use crate::util::retry::retry;
 use crate::util::user_input::Validated;
 use async_trait::async_trait;
 use chrono::{DateTime, Duration, Utc};
@@ -27,6 +28,7 @@ use geoengine_operators::source::{
     GdalLoadingInfoPartIterator, OgrSourceDataset,
 };
 use log::debug;
+use reqwest::Client;
 use serde::{Deserialize, Serialize};
 use snafu::ResultExt;
 use std::collections::HashMap;
@@ -42,6 +44,27 @@ pub struct SentinelS2L2ACogsProviderDefinition {
     api_url: String,
     bands: Vec<Band>,
     zones: Vec<Zone>,
+    #[serde(default)]
+    stac_api_retires: StacApiRetries,
+}
+
+#[derive(Clone, Copy, Debug, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct StacApiRetries {
+    number_of_retries: usize,
+    initial_delay_ms: u64,
+    exponential_backoff_factor: f64,
+}
+
+impl Default for StacApiRetries {
+    // TODO: find good defaults
+    fn default() -> Self {
+        Self {
+            number_of_retries: 3,
+            initial_delay_ms: 125,
+            exponential_backoff_factor: 2.,
+        }
+    }
 }
 
 #[typetag::serde]
@@ -55,6 +78,7 @@ impl DatasetProviderDefinition for SentinelS2L2ACogsProviderDefinition {
             self.api_url,
             &self.bands,
             &self.zones,
+            self.stac_api_retires,
         )))
     }
 
@@ -96,13 +120,22 @@ pub struct SentinelS2L2aCogsDataProvider {
     api_url: String,
 
     datasets: HashMap<DatasetId, SentinelDataset>,
+
+    stac_api_retires: StacApiRetries,
 }
 
 impl SentinelS2L2aCogsDataProvider {
-    pub fn new(id: DatasetProviderId, api_url: String, bands: &[Band], zones: &[Zone]) -> Self {
+    pub fn new(
+        id: DatasetProviderId,
+        api_url: String,
+        bands: &[Band],
+        zones: &[Zone],
+        stac_api_retires: StacApiRetries,
+    ) -> Self {
         Self {
             api_url,
             datasets: Self::create_datasets(&id, bands, zones),
+            stac_api_retires,
         }
     }
 
@@ -201,6 +234,7 @@ pub struct SentinelS2L2aCogsMetaData {
     api_url: String,
     zone: Zone,
     band: Band,
+    stac_api_retires: StacApiRetries,
 }
 
 impl SentinelS2L2aCogsMetaData {
@@ -360,23 +394,34 @@ impl SentinelS2L2aCogsMetaData {
         params: &T,
         page: u32,
     ) -> Result<StacCollection> {
-        let client = reqwest::Client::new();
-        let text = client
-            .get(&self.api_url)
-            .query(&params)
-            .query(&[("page", &page.to_string())])
-            .send()
-            .await
-            .context(error::Reqwest)?
-            .text()
-            .await
-            .context(error::Reqwest)?;
+        let client = Client::builder().build()?;
 
-        serde_json::from_str(&text).map_err(|error| error::Error::StacJsonResponse {
-            url: self.api_url.clone(),
-            response: text,
-            error,
-        })
+        retry(
+            self.stac_api_retires.number_of_retries,
+            self.stac_api_retires.initial_delay_ms,
+            self.stac_api_retires.exponential_backoff_factor,
+            async || -> Result<StacCollection> {
+                let text = client
+                    .get(&self.api_url)
+                    .query(&params)
+                    .query(&[("page", &page.to_string())])
+                    .send()
+                    .await
+                    .context(error::Reqwest)?
+                    .text()
+                    .await
+                    .context(error::Reqwest)?;
+
+                serde_json::from_str::<StacCollection>(&text).map_err(|error| {
+                    error::Error::StacJsonResponse {
+                        url: self.api_url.clone(),
+                        response: text,
+                        error,
+                    }
+                })
+            },
+        )
+        .await
     }
 
     fn time_range_request(time: &TimeInterval) -> Result<(DateTime<Utc>, DateTime<Utc>)> {
@@ -462,6 +507,7 @@ impl MetaDataProvider<GdalLoadingInfo, RasterResultDescriptor, RasterQueryRectan
             api_url: self.api_url.clone(),
             zone: dataset.zone.clone(),
             band: dataset.band.clone(),
+            stac_api_retires: self.stac_api_retires,
         }))
     }
 }
@@ -513,6 +559,12 @@ mod tests {
     use geoengine_operators::{
         engine::{MockExecutionContext, MockQueryContext, RasterOperator},
         source::{FileNotFoundHandling, GdalSource, GdalSourceParameters},
+    };
+    use httptest::{
+        all_of,
+        matchers::{contains, request, url_decoded},
+        responders::{self},
+        Expectation, Server,
     };
 
     use super::*;
@@ -670,5 +722,122 @@ mod tests {
         assert_eq!(result.len(), 2);
 
         Ok(())
+    }
+
+    #[tokio::test]
+    #[allow(clippy::too_many_lines)]
+    async fn query_data_with_failing_requests() {
+        // util::tests::initialize_debugging_in_test; // use for debugging
+
+        let server = Server::run();
+        server.expect(
+            Expectation::matching(all_of![
+                request::method_path("GET", "/v0/collections/sentinel-s2-l2a-cogs/items",),
+                request::query(url_decoded(contains((
+                    "collections[]",
+                    "sentinel-s2-l2a-cogs"
+                )))),
+                request::query(url_decoded(contains(("page", "1")))),
+                request::query(url_decoded(contains(("limit", "500")))),
+                request::query(url_decoded(contains((
+                    "bbox",
+                    "[33.899332958586406,-2.261536424319933,33.900232774450984,-2.2606312588790414]"
+                )))),
+                request::query(url_decoded(contains((
+                    "datetime",
+                    // TODO: why do we request with one minute earlier?
+                    "2021-09-23T08:09:44+00:00/2021-09-23T08:10:44+00:00"
+                )))),
+            ])
+            .times(2)
+            .respond_with(responders::cycle![
+                // first fail
+                responders::status_code(404),
+                // then succeed
+                responders::status_code(200)
+                    .append_header("Content-Type", "application/json")
+                    .body(include_str!(
+                        "../../../../../test_data/pro/stac_responses/items_page_1_limit_500.json"
+                    )),
+            ]),
+        );
+
+        let provider_id: DatasetProviderId =
+            "5779494c-f3a2-48b3-8a2d-5fbba8c5b6c5".parse().unwrap();
+
+        let provider_def: Box<dyn DatasetProviderDefinition> =
+            Box::new(SentinelS2L2ACogsProviderDefinition {
+                name: "Element 84 AWS STAC".into(),
+                id: provider_id,
+                api_url: server.url_str("/v0/collections/sentinel-s2-l2a-cogs/items"),
+                bands: vec![Band {
+                    name: "B04".into(),
+                    no_data_value: Some(0.),
+                    data_type: RasterDataType::U16,
+                }],
+                zones: vec![Zone {
+                    name: "UTM36S".into(),
+                    epsg: 32736,
+                }],
+                stac_api_retires: Default::default(),
+            });
+
+        let provider = provider_def.initialize().await.unwrap();
+
+        let meta: Box<dyn MetaData<GdalLoadingInfo, RasterResultDescriptor, RasterQueryRectangle>> =
+            provider
+                .meta_data(
+                    &ExternalDatasetId {
+                        provider_id,
+                        dataset_id: "UTM36S:B04".to_owned(),
+                    }
+                    .into(),
+                )
+                .await
+                .unwrap();
+
+        let query = RasterQueryRectangle {
+            spatial_bounds: SpatialPartition2D::new_unchecked(
+                (600_000.00, 9_750_100.).into(),
+                (600_100.0, 9_750_000.).into(),
+            ),
+            time_interval: TimeInterval::new_instant(
+                DateTime::parse_from_rfc3339("2021-09-23T08:10:44Z")
+                    .unwrap()
+                    .timestamp_millis(),
+            )
+            .unwrap(),
+            spatial_resolution: SpatialResolution::new_unchecked(10., 10.),
+        };
+
+        let loading_info = meta.loading_info(query).await.unwrap();
+        let parts = if let GdalLoadingInfoPartIterator::Static { parts } = loading_info.info {
+            parts.collect::<Vec<_>>()
+        } else {
+            panic!("expected static parts");
+        };
+
+        assert_eq!(
+            parts,
+            vec![GdalLoadingInfoPart {
+                time: TimeInterval::new_unchecked(1_632_384_644_000, 1_632_384_645_000),
+                params: GdalDatasetParameters {
+                    file_path: "/vsicurl/https://sentinel-cogs.s3.us-west-2.amazonaws.com/sentinel-s2-l2a-cogs/36/M/WC/2021/9/S2B_36MWC_20210923_0_L2A/B04.tif".into(),
+                    rasterband_channel: 1,
+                    geo_transform: GdalDatasetGeoTransform {
+                        origin_coordinate: (499_980.0,9_800_020.00).into(),
+                        x_pixel_size: 10.,
+                        y_pixel_size: -10.,
+                    },
+                    width: 10980,
+                    height: 10980,
+                    file_not_found_handling: FileNotFoundHandling::NoData,
+                    no_data_value: Some(0.),
+                    properties_mapping: None,
+                    gdal_open_options: None,
+                    gdal_config_options: None,
+                },
+            }]
+        );
     }
 }

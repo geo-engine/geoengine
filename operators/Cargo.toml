@@ -6,14 +6,14 @@ authors = [
     "Johannes Drönner <droenner@mathematik.uni-marburg.de>",
     "Michael Mattig <mattig@mathematik.uni-marburg.de>"
 ]
-edition = "2018"
+edition = "2021"
 
 [features]
 # This compiles Geo Engine Pro
 pro = ["geoengine-datatypes/pro"]
 
 [dependencies]
-arrow = { version = "5.0", features = ["simd"] }
+arrow = { version = "5.4", features = ["simd"] }
 async-trait = "0.1"
 chrono = "0.4"
 crossbeam = "0.8"
@@ -28,7 +28,7 @@ log = "0.4"
 num_cpus = "1.13" # TODO: remove and switch to std::thread::available_concurrency() when it is available
 num-traits = "0.2"
 ocl = { git = "https://github.com/michaelmattig/ocl", branch = "tentative_master" }  # TODO: use crates.io version once it builds again
-ouroboros = "0.10"
+ouroboros = "0.12"
 paste = "1.0"
 pin-project = "1.0"
 rustc-hash = { version = "1.0", default-features = false }
@@ -38,7 +38,6 @@ snafu = "0.6"
 tokio = { version = "1.1", features = ["macros", "signal", "sync", "rt-multi-thread"] }
 typetag = "0.1"
 uuid = { version = "0.8", features = ["serde", "v4", "v5"] }
-packed_simd_2 = "=0.3.5" # TODO: remove once packed_simd_2 workes in CI
 
 [dev-dependencies]
 criterion = {version = "0.3", features =["async_futures", "async_tokio"]}

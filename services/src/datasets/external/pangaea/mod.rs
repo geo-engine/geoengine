@@ -578,7 +578,7 @@ mod tests {
 
         assert_eq!(3, result.len());
 
-        let total_results: usize = result.iter().map(|c| c.len()).sum();
+        let total_results: usize = result.iter().map(FeatureCollectionInfos::len).sum();
 
         assert_eq!(432, total_results);
     }

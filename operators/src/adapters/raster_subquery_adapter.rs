@@ -13,9 +13,7 @@ use geoengine_datatypes::primitives::{SpatialPartition2D, SpatialPartitioned};
 use geoengine_datatypes::raster::{EmptyGrid2D, GridOrEmpty};
 use geoengine_datatypes::{
     error::Error::{GridIndexOutOfBounds, InvalidGridIndex},
-    operations::reproject::{
-        project_coordinates_fail_tolerant, CoordinateProjection, CoordinateProjector, Reproject,
-    },
+    operations::reproject::{CoordinateProjection, CoordinateProjector, Reproject},
     primitives::{SpatialResolution, TimeInterval},
     raster::{
         grid_idx_iter_2d, BoundedGrid, EmptyGrid, Grid2D, MaterializedRasterTile2D, NoDataValue,
@@ -580,6 +578,7 @@ pub struct TileReprojectionSubQuery<T, F> {
     pub no_data_and_fill_value: T,
     pub fold_fn: F,
     pub in_spatial_res: SpatialResolution,
+    pub valid_bounds: SpatialPartition2D,
 }
 
 impl<T, FoldM, FoldF> SubQueryTileAggregator<T> for TileReprojectionSubQuery<T, FoldM>
@@ -602,7 +601,6 @@ where
         self.no_data_and_fill_value
     }
 
-    #[allow(clippy::type_complexity)] // TODO: move Result-type into struct
     fn new_fold_accu(
         &self,
         tile_info: TileInformation,
@@ -611,24 +609,49 @@ where
         let output_raster =
             EmptyGrid::new(tile_info.tile_size_in_pixels, self.no_data_and_fill_value);
 
+        // get all pixel idxs and coordinates.
         let idxs: Vec<GridIdx2D> = grid_idx_iter_2d(&output_raster.bounding_box()).collect();
-        let coords: Vec<Coordinate2D> = idxs
+        let idx_coords: Vec<(GridIdx2D, Coordinate2D)> = idxs
             .iter()
             .map(|&i| {
-                tile_info
-                    .tile_geo_transform()
-                    .grid_idx_to_upper_left_coordinate_2d(i)
+                (
+                    i,
+                    tile_info
+                        .tile_geo_transform()
+                        .grid_idx_to_upper_left_coordinate_2d(i),
+                )
             })
             .collect();
 
-        let proj = CoordinateProjector::from_known_srs(self.out_srs, self.in_srs)?;
-        let projected_coords = project_coordinates_fail_tolerant(&coords, &proj);
+        // check if the tile to fill is contained by the valid bounds of the input projection
+        let idx_coords = if self.valid_bounds.contains(&tile_info.spatial_partition()) {
+            debug!("reproject whole tile");
+            // use all pixel coordinates
+            idx_coords
+        } else if self.valid_bounds.intersects(&tile_info.spatial_partition()) {
+            debug!("reproject part of tile");
+            // filter the coordinates to only contain valid ones
+            idx_coords
+                .into_iter()
+                .filter(|(_, c)| self.valid_bounds.contains_coordinate(c))
+                .collect()
+        } else {
+            debug!("reproject empty tile");
+            // fastpath to skip filter
+            vec![]
+        };
 
-        let coords: Vec<(GridIdx2D, Coordinate2D)> = idxs
-            .into_iter()
-            .zip(projected_coords.into_iter())
-            .filter_map(|(i, c)| c.map(|c| (i, c)))
-            .collect();
+        // unzip to use batch projection
+        let (idxs, coords): (Vec<_>, Vec<_>) = idx_coords.into_iter().unzip();
+        debug!("reproject {} pixels", idxs.len());
+
+        // project
+        let proj = CoordinateProjector::from_known_srs(self.out_srs, self.in_srs)?; // TODO: check if we can store it in self. Maybe not because send/sync.
+        let projected_coords = proj.project_coordinates(&coords)?;
+
+        // zip idx and projected coordinates
+        let coords: Vec<(GridIdx2D, Coordinate2D)> =
+            idxs.into_iter().zip(projected_coords.into_iter()).collect();
 
         Ok(TileWithProjectionCoordinates {
             accu_tile: RasterTile2D::new_with_tile_info(
@@ -859,12 +882,15 @@ mod tests {
 
         let qp = op.query_processor().unwrap().get_u8().unwrap();
 
+        let valid_bounds = projection.area_of_use_projected().unwrap();
+
         let state_gen = TileReprojectionSubQuery {
             in_srs: projection,
             out_srs: projection,
             no_data_and_fill_value: no_data_v,
             fold_fn: fold_by_coordinate_lookup_future,
             in_spatial_res: query_rect.spatial_resolution,
+            valid_bounds,
         };
         let a = RasterSubQueryAdapter::new(
             &qp,

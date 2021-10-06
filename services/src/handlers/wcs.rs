@@ -1,13 +1,11 @@
 use std::str::FromStr;
 
+use actix_web::{web, FromRequest, HttpResponse, Responder};
 use geoengine_operators::call_on_generic_raster_processor_gdal_types;
 use geoengine_operators::util::raster_stream_to_geotiff::raster_stream_to_geotiff_bytes;
 use log::info;
 use snafu::{ensure, ResultExt};
 use url::Url;
-use uuid::Uuid;
-use warp::Rejection;
-use warp::{http::Response, Filter};
 
 use geoengine_datatypes::primitives::{AxisAlignedRectangle, SpatialPartition2D};
 use geoengine_datatypes::{primitives::SpatialResolution, spatial_reference::SpatialReference};
@@ -19,6 +17,7 @@ use crate::handlers::Context;
 use crate::ogc::wcs::request::{DescribeCoverage, GetCapabilities, GetCoverage, WcsRequest};
 use crate::util::config;
 use crate::util::config::get_config_element;
+use crate::util::user_input::QueryEx;
 use crate::workflows::registry::WorkflowRegistry;
 use crate::workflows::workflow::WorkflowId;
 
@@ -27,38 +26,28 @@ use geoengine_operators::engine::ResultDescriptor;
 use geoengine_operators::engine::{RasterOperator, RasterQueryRectangle};
 use geoengine_operators::processing::{Reprojection, ReprojectionParams};
 
-pub(crate) fn wcs_handler<C: Context>(
-    ctx: C,
-) -> impl Filter<Extract = impl warp::Reply, Error = warp::Rejection> + Clone {
-    warp::path!("wcs" / Uuid)
-        .map(WorkflowId)
-        .and(warp::get())
-        .and(
-            warp::query::raw().and_then(|query_string: String| async move {
-                // TODO: make case insensitive by using serde-aux instead
-                let query_string = query_string.replace("REQUEST", "request");
-                info!("{}", query_string);
-
-                serde_urlencoded::from_str::<WcsRequest>(&query_string)
-                    .context(error::UnableToParseQueryString)
-                    .map_err(Rejection::from)
-            }),
-        )
-        .and(warp::any().map(move || ctx.clone()))
-        .and_then(wcs)
+pub(crate) fn init_wcs_routes<C>(cfg: &mut web::ServiceConfig)
+where
+    C: Context,
+    C::Session: FromRequest,
+{
+    cfg.service(web::resource("/wcs/{workflow}").route(web::get().to(wcs_handler::<C>)));
 }
 
-// TODO: move into handler once async closures are available?
-async fn wcs<C: Context>(
-    workflow: WorkflowId,
-    request: WcsRequest,
-    ctx: C,
-) -> Result<Box<dyn warp::Reply>, warp::Rejection> {
-    // TODO: authentication
-    match request {
-        WcsRequest::GetCapabilities(request) => get_capabilities(&request, &ctx, workflow).await,
-        WcsRequest::DescribeCoverage(request) => describe_coverage(&request, &ctx, workflow).await,
-        WcsRequest::GetCoverage(request) => get_coverage(&request, &ctx).await,
+async fn wcs_handler<C: Context>(
+    workflow: web::Path<WorkflowId>,
+    request: QueryEx<WcsRequest>,
+    ctx: web::Data<C>,
+    _session: C::Session,
+) -> Result<impl Responder> {
+    match request.into_inner() {
+        WcsRequest::GetCapabilities(request) => {
+            get_capabilities(&request, ctx.get_ref(), workflow.into_inner()).await
+        }
+        WcsRequest::DescribeCoverage(request) => {
+            describe_coverage(&request, ctx.get_ref(), workflow.into_inner()).await
+        }
+        WcsRequest::GetCoverage(request) => get_coverage(&request, ctx.get_ref()).await,
     }
 }
 
@@ -77,7 +66,7 @@ async fn get_capabilities<C: Context>(
     request: &GetCapabilities,
     _ctx: &C,
     workflow: WorkflowId,
-) -> Result<Box<dyn warp::Reply>, warp::Rejection> {
+) -> Result<HttpResponse> {
     info!("{:?}", request);
 
     // TODO: workflow bounding box
@@ -142,19 +131,14 @@ async fn get_capabilities<C: Context>(
         workflow = workflow
     );
 
-    Ok(Box::new(
-        Response::builder()
-            .header("Content-Type", "application/xml")
-            .body(mock)
-            .context(error::Http)?,
-    ))
+    Ok(HttpResponse::Ok().content_type(mime::TEXT_XML).body(mock))
 }
 
 async fn describe_coverage<C: Context>(
     request: &DescribeCoverage,
     ctx: &C,
     workflow_id: WorkflowId,
-) -> Result<Box<dyn warp::Reply>, warp::Rejection> {
+) -> Result<HttpResponse> {
     info!("{:?}", request);
 
     // TODO: validate request (version)?
@@ -242,19 +226,11 @@ async fn describe_coverage<C: Context>(
         bbox_ur_1 = bbox_ur_1,
     );
 
-    Ok(Box::new(
-        Response::builder()
-            .header("Content-Type", "application/xml")
-            .body(mock)
-            .context(error::Http)?,
-    ))
+    Ok(HttpResponse::Ok().content_type(mime::TEXT_XML).body(mock))
 }
 
 #[allow(clippy::too_many_lines)]
-async fn get_coverage<C: Context>(
-    request: &GetCoverage,
-    ctx: &C,
-) -> Result<Box<dyn warp::Reply>, warp::Rejection> {
+async fn get_coverage<C: Context>(request: &GetCoverage, ctx: &C) -> Result<HttpResponse> {
     info!("{:?}", request);
     ensure!(
         request.version == "1.1.1" || request.version == "1.1.0",
@@ -342,7 +318,7 @@ async fn get_coverage<C: Context>(
 
     let query_ctx = ctx.query_context()?;
 
-    let bytes = call_on_generic_raster_processor_gdal_types!(processor, p => 
+    let bytes = call_on_generic_raster_processor_gdal_types!(processor, p =>
         raster_stream_to_geotiff_bytes(
             p,
             query_rect,
@@ -354,12 +330,7 @@ async fn get_coverage<C: Context>(
         .await)?
     .map_err(error::Error::from)?;
 
-    Ok(Box::new(
-        Response::builder()
-            .header("Content-Type", "image/tiff")
-            .body(bytes)
-            .context(error::Http)?,
-    ))
+    Ok(HttpResponse::Ok().content_type("image/tiff").body(bytes))
 }
 
 fn default_time_from_config() -> TimeInterval {
@@ -385,13 +356,16 @@ fn default_time_from_config() -> TimeInterval {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
-    use crate::contexts::InMemoryContext;
-    use crate::util::tests::register_ndvi_workflow_helper;
+    use crate::contexts::{InMemoryContext, Session, SimpleContext};
+    use crate::util::tests::{read_body_string, register_ndvi_workflow_helper, send_test_request};
+    use actix_web::http::header;
+    use actix_web::test;
+    use actix_web_httpauth::headers::authorization::Bearer;
 
     #[tokio::test]
     async fn get_capabilities() {
         let ctx = InMemoryContext::default();
+        let session_id = ctx.default_session_ref().await.id();
 
         let (_, id) = register_ndvi_workflow_helper(&ctx).await;
 
@@ -401,18 +375,17 @@ mod tests {
             ("version", "1.1.1"),
         ];
 
-        let res = warp::test::request()
-            .method("GET")
-            .path(&format!(
+        let req = test::TestRequest::get()
+            .uri(&format!(
                 "/wcs/{}?{}",
                 &id.to_string(),
                 serde_urlencoded::to_string(params).unwrap()
             ))
-            .reply(&wcs_handler(ctx))
-            .await;
+            .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())));
+        let res = send_test_request(req, ctx).await;
 
         assert_eq!(res.status(), 200);
-        let body = std::str::from_utf8(res.body()).unwrap();
+        let body = read_body_string(res).await;
         assert_eq!(
             format!(
                 r#"<?xml version="1.0" encoding="UTF-8"?>
@@ -476,6 +449,7 @@ mod tests {
     #[tokio::test]
     async fn describe_coverage() {
         let ctx = InMemoryContext::default();
+        let session_id = ctx.default_session_ref().await.id();
 
         let (_, id) = register_ndvi_workflow_helper(&ctx).await;
 
@@ -486,18 +460,17 @@ mod tests {
             ("identifiers", &id.to_string()),
         ];
 
-        let res = warp::test::request()
-            .method("GET")
-            .path(&format!(
+        let req = test::TestRequest::get()
+            .uri(&format!(
                 "/wcs/{}?{}",
                 &id.to_string(),
                 serde_urlencoded::to_string(params).unwrap()
             ))
-            .reply(&wcs_handler(ctx))
-            .await;
+            .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())));
+        let res = send_test_request(req, ctx).await;
 
         assert_eq!(res.status(), 200);
-        let body = std::str::from_utf8(res.body()).unwrap();
+        let body = read_body_string(res).await;
         eprintln!("{}", body);
         assert_eq!(
             format!(
@@ -539,6 +512,7 @@ mod tests {
     #[tokio::test]
     async fn get_coverage() {
         let ctx = InMemoryContext::default();
+        let session_id = ctx.default_session_ref().await.id();
 
         let (_, id) = register_ndvi_workflow_helper(&ctx).await;
 
@@ -557,21 +531,20 @@ mod tests {
             ("time", "2014-01-01T00:00:00.0Z"),
         ];
 
-        let res = warp::test::request()
-            .method("GET")
-            .path(&format!(
+        let req = test::TestRequest::get()
+            .uri(&format!(
                 "/wcs/{}?{}",
                 &id.to_string(),
                 serde_urlencoded::to_string(params).unwrap()
             ))
-            .reply(&wcs_handler(ctx))
-            .await;
+            .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())));
+        let res = send_test_request(req, ctx).await;
 
         assert_eq!(res.status(), 200);
         assert_eq!(
             include_bytes!("../../../test_data/raster/geotiff_from_stream_compressed.tiff")
                 as &[u8],
-            res.body().to_vec().as_slice()
+            test::read_body(res).await.as_ref()
         );
     }
 }
