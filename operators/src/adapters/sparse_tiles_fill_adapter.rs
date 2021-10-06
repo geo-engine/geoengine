@@ -75,6 +75,7 @@ where
         }
     }
 
+    #[allow(clippy::too_many_lines)]
     pub fn next_step(
         self: Pin<&mut Self>,
         cx: &mut std::task::Context<'_>,
@@ -88,11 +89,9 @@ where
         let is_next_tile_stored = self.is_next_tile_stored();
         let current_no_data_tile = self.current_no_data_tile();
 
-        dbg!(self.state, self.current_idx, self.current_time);
-
         let mut this = self.project();
 
-        let result = match this.state {
+        match this.state {
             State::Initial => {
                 // poll for a first (input) tile
                 let res = match ready!(this.stream.as_mut().poll_next(cx)) {
@@ -227,10 +226,7 @@ where
                 Poll::Ready(Some(Ok(current_no_data_tile)))
             }
             State::Ended => Poll::Ready(None),
-        };
-        dbg!(*this.state, *this.current_idx, this.current_time.clone());
-
-        dbg!(result)
+        }
     }
 }
 
@@ -250,9 +246,7 @@ where
             return Poll::Ready(None);
         }
 
-        let res = self.next_step(cx);
-
-        res
+        self.next_step(cx)
     }
 }
 
