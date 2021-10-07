@@ -1542,7 +1542,7 @@ mod tests {
     #[allow(clippy::too_many_lines)]
     fn deserialize_dataset_parameters() {
         let dataset_parameters = GdalDatasetParameters {
-            file_path: test_data!("raster/modis_ndvi/MOD13A2_M_NDVI_2014-01-01.TIFF").into(),
+            file_path: "path-to-data.tiff",
             rasterband_channel: 1,
             geo_transform: GdalDatasetGeoTransform {
                 origin_coordinate: (-180., 90.).into(),
@@ -1586,7 +1586,7 @@ mod tests {
         assert_eq!(
             dataset_parameters_json,
             serde_json::json!({
-                "filePath": "/home/beilschmidt/git/geoengine/test_data/raster/modis_ndvi/MOD13A2_M_NDVI_2014-01-01.TIFF",
+                "filePath": "path-to-data.tiff",
                 "rasterbandChannel": 1,
                 "geoTransform": {
                     "originCoordinate": {
