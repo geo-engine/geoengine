@@ -305,6 +305,8 @@ mod tests {
     use futures::{stream, StreamExt};
     use geoengine_datatypes::{primitives::TimeInterval, raster::Grid, util::test::TestDefault};
 
+    use crate::error;
+
     use super::*;
 
     #[tokio::test]
@@ -846,5 +848,43 @@ mod tests {
         ];
 
         assert_eq!(tile_time_positions, expected_positions)
+    }
+
+    #[tokio::test]
+    async fn test_error() {
+        let data = vec![
+            Ok(RasterTile2D {
+                time: TimeInterval::new_unchecked(0, 5),
+                tile_position: [-1, 0].into(),
+                global_geo_transform: TestDefault::test_default(),
+                grid_array: Grid::new([2, 2].into(), vec![1, 2, 3, 4], Some(0))
+                    .unwrap()
+                    .into(),
+                properties: Default::default(),
+            }),
+            Err(geoengine_datatypes::error::Error::InvalidTypedGridConversion),
+        ];
+
+        let result_data = data.into_iter();
+
+        let in_stream = stream::iter(result_data);
+        let grid_bounding_box = GridBoundingBox2D::new([-1, 0], [0, 1]).unwrap();
+        let global_geo_transform = GeoTransform::test_default();
+        let tile_shape = [2, 2].into();
+        let no_data_value = 0;
+
+        let adapter = SparseTilesFillAdapter::new(
+            in_stream,
+            grid_bounding_box,
+            global_geo_transform,
+            tile_shape,
+            no_data_value,
+        );
+
+        let tiles: Vec<Result<RasterTile2D<i32>>> = adapter.collect().await;
+
+        assert_eq!(tiles.len(), 2);
+        assert!(tiles[0].is_ok());
+        assert!(tiles[1].is_err());
     }
 }
