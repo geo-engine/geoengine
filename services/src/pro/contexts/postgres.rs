@@ -1,9 +1,13 @@
+use crate::datasets::add_from_directory::{
+    add_datasets_from_directory, add_providers_from_directory,
+};
 use crate::error::{self, Result};
 use crate::pro::datasets::PostgresDatasetDb;
 use crate::pro::projects::ProjectPermission;
 use crate::pro::users::{UserDb, UserId, UserSession};
+use crate::pro::workflows::postgres_workflow_registry::PostgresWorkflowRegistry;
 use crate::projects::ProjectId;
-use crate::workflows::postgres_workflow_registry::PostgresWorkflowRegistry;
+use crate::util::config;
 use crate::{
     contexts::{Context, Db},
     pro::users::PostgresUserDb,
@@ -19,12 +23,16 @@ use bb8_postgres::{
     tokio_postgres::{error::SqlState, tls::MakeTlsConnect, tls::TlsConnect, Config, Socket},
     PostgresConnectionManager,
 };
+use geoengine_operators::concurrency::{ThreadPool, ThreadPoolContextCreator};
 use log::{debug, warn};
 use snafu::ResultExt;
+use std::path::PathBuf;
 use std::sync::Arc;
 use tokio::sync::{RwLock, RwLockReadGuard, RwLockWriteGuard};
 
 use super::ProContext;
+
+// TODO: do not report postgres error details to user
 
 /// A contex with references to Postgres backends of the dbs. Automatically migrates schema on instantiation
 #[derive(Clone)]
@@ -38,6 +46,8 @@ where
     user_db: Db<PostgresUserDb<Tls>>,
     project_db: Db<PostgresProjectDb<Tls>>,
     workflow_registry: Db<PostgresWorkflowRegistry<Tls>>,
+    dataset_db: Db<PostgresDatasetDb<Tls>>,
+    thread_pool: Arc<ThreadPool>,
 }
 
 impl<Tls> PostgresContext<Tls>
@@ -58,6 +68,34 @@ where
             user_db: Arc::new(RwLock::new(PostgresUserDb::new(pool.clone()))),
             project_db: Arc::new(RwLock::new(PostgresProjectDb::new(pool.clone()))),
             workflow_registry: Arc::new(RwLock::new(PostgresWorkflowRegistry::new(pool.clone()))),
+            dataset_db: Arc::new(RwLock::new(PostgresDatasetDb::new(pool.clone()))),
+            thread_pool: Default::default(),
+        })
+    }
+
+    pub async fn new_with_data(
+        config: Config,
+        tls: Tls,
+        dataset_defs_path: PathBuf,
+        provider_defs_path: PathBuf,
+    ) -> Result<Self> {
+        let pg_mgr = PostgresConnectionManager::new(config, tls);
+
+        let pool = Pool::builder().build(pg_mgr).await?;
+
+        Self::update_schema(pool.get().await?).await?;
+
+        let mut dataset_db = PostgresDatasetDb::new(pool.clone());
+        add_datasets_from_directory(&mut dataset_db, dataset_defs_path).await;
+        add_providers_from_directory(&mut dataset_db, provider_defs_path.clone()).await;
+        add_providers_from_directory(&mut dataset_db, provider_defs_path.join("pro")).await;
+
+        Ok(Self {
+            user_db: Arc::new(RwLock::new(PostgresUserDb::new(pool.clone()))),
+            project_db: Arc::new(RwLock::new(PostgresProjectDb::new(pool.clone()))),
+            workflow_registry: Arc::new(RwLock::new(PostgresWorkflowRegistry::new(pool.clone()))),
+            dataset_db: Arc::new(RwLock::new(dataset_db)),
+            thread_pool: Default::default(),
         })
     }
 
@@ -194,7 +232,7 @@ where
                             workflow_id UUID NOT NULL, -- TODO: REFERENCES workflows(id)
                             symbology json,
                             visibility "LayerVisibility" NOT NULL,
-                            PRIMARY KEY (project_id, layer_index)            
+                            PRIMARY KEY (project_id, project_version_id, layer_index)            
                         );
                         
                         CREATE TABLE project_version_plots (
@@ -219,6 +257,49 @@ where
                             id UUID PRIMARY KEY,
                             workflow json NOT NULL
                         );
+
+                        CREATE TABLE datasets (
+                            id UUID PRIMARY KEY,
+                            name text NOT NULL,
+                            description text NOT NULL, 
+                            tags text[], 
+                            source_operator text NOT NULL,
+
+                            result_descriptor json NOT NULL,
+                            meta_data json NOT NULL,
+
+                            symbology json,
+                            provenance json
+                        );
+
+                        -- TODO: should name be unique (per user)?
+                        CREATE TABLE dataset_providers (
+                            id UUID PRIMARY KEY,
+                            type_name text NOT NULL,
+                            name text NOT NULL,
+
+                            definition json NOT NULL
+                        );
+
+                        -- TODO: add constraint not null
+                        -- TODO: add constaint byte_size >= 0
+                        CREATE TYPE "FileUpload" AS (
+                            id UUID,
+                            name text,
+                            byte_size bigint
+                        );
+
+                        -- TODO: store user
+                        -- TODO: time of creation and last update
+                        -- TODO: upload directory that is not directly derived from id
+                        CREATE TABLE uploads (
+                            id UUID PRIMARY KEY,
+                            files "FileUpload"[] NOT NULL
+                        );
+
+                        -- TODO: relationship between uploads and datasets?
+
+                        -- TODO: datasets, uploads, providers permissions
                         "#,
                     )
                     .await?;
@@ -297,9 +378,9 @@ where
     type Session = UserSession;
     type ProjectDB = PostgresProjectDb<Tls>;
     type WorkflowRegistry = PostgresWorkflowRegistry<Tls>;
-    type DatasetDB = PostgresDatasetDb;
+    type DatasetDB = PostgresDatasetDb<Tls>;
     type QueryContext = QueryContextImpl;
-    type ExecutionContext = ExecutionContextImpl<UserSession, PostgresDatasetDb>;
+    type ExecutionContext = ExecutionContextImpl<UserSession, PostgresDatasetDb<Tls>>;
 
     fn project_db(&self) -> Db<Self::ProjectDB> {
         self.project_db.clone()
@@ -322,23 +403,33 @@ where
     }
 
     fn dataset_db(&self) -> Db<Self::DatasetDB> {
-        todo!()
+        self.dataset_db.clone()
     }
 
     async fn dataset_db_ref(&self) -> RwLockReadGuard<'_, Self::DatasetDB> {
-        todo!()
+        self.dataset_db.read().await
     }
 
     async fn dataset_db_ref_mut(&self) -> RwLockWriteGuard<'_, Self::DatasetDB> {
-        todo!()
+        self.dataset_db.write().await
     }
 
     fn query_context(&self) -> Result<Self::QueryContext> {
-        todo!()
+        // TODO: load config only once
+        Ok(QueryContextImpl {
+            chunk_byte_size: config::get_config_element::<config::QueryContext>()?.chunk_byte_size,
+            thread_pool: self.thread_pool.create_context(),
+        })
     }
 
-    fn execution_context(&self, _session: UserSession) -> Result<Self::ExecutionContext> {
-        todo!()
+    fn execution_context(&self, session: UserSession) -> Result<Self::ExecutionContext> {
+        Ok(
+            ExecutionContextImpl::<UserSession, PostgresDatasetDb<Tls>>::new(
+                self.dataset_db.clone(),
+                self.thread_pool.create_context(),
+                session,
+            ),
+        )
     }
 
     async fn session_by_id(&self, session_id: crate::contexts::SessionId) -> Result<Self::Session> {
@@ -353,7 +444,19 @@ where
 
 #[cfg(test)]
 mod tests {
+    use std::str::FromStr;
+
     use super::*;
+    use crate::contexts::MockableSession;
+    use crate::datasets::external::mock::MockExternalDataProviderDefinition;
+    use crate::datasets::listing::{DatasetListOptions, DatasetListing, DatasetProvider};
+    use crate::datasets::provenance::{Provenance, ProvenanceOutput, ProvenanceProvider};
+    use crate::datasets::storage::{
+        AddDataset, DatasetDefinition, DatasetProviderDb, DatasetProviderListOptions,
+        DatasetProviderListing, DatasetStore, MetaDataDefinition,
+    };
+    use crate::datasets::upload::{FileId, UploadId};
+    use crate::datasets::upload::{FileUpload, Upload, UploadDb};
     use crate::pro::projects::{LoadVersion, ProProjectDb, UserProjectPermission};
     use crate::pro::users::{UserCredentials, UserDb, UserRegistration};
     use crate::projects::{
@@ -367,13 +470,25 @@ mod tests {
     use bb8_postgres::bb8::ManageConnection;
     use bb8_postgres::tokio_postgres::{self, NoTls};
     use futures::Future;
-    use geoengine_datatypes::primitives::Coordinate2D;
+    use geoengine_datatypes::collections::VectorDataType;
+    use geoengine_datatypes::dataset::{
+        DatasetId, DatasetProviderId, ExternalDatasetId, InternalDatasetId,
+    };
+    use geoengine_datatypes::primitives::{
+        BoundingBox2D, Coordinate2D, FeatureDataType, SpatialResolution, TimeInterval,
+    };
     use geoengine_datatypes::spatial_reference::{SpatialReference, SpatialReferenceOption};
     use geoengine_operators::engine::{
-        MultipleRasterSources, PlotOperator, TypedOperator, VectorOperator,
+        MetaData, MetaDataProvider, MultipleRasterSources, PlotOperator, StaticMetaData,
+        TypedOperator, TypedResultDescriptor, VectorOperator, VectorQueryRectangle,
+        VectorResultDescriptor,
     };
     use geoengine_operators::mock::{MockPointSource, MockPointSourceParams};
     use geoengine_operators::plot::{Statistics, StatisticsParams};
+    use geoengine_operators::source::{
+        CsvHeader, FormatSpecifics, OgrSourceColumnSpec, OgrSourceDataset,
+        OgrSourceDatasetTimeType, OgrSourceDurationSpec, OgrSourceErrorSpec, OgrSourceTimeFormat,
+    };
     use rand::RngCore;
     use tokio::runtime::Handle;
 
@@ -418,7 +533,10 @@ mod tests {
 
     async fn with_temp_context<F, Fut>(f: F)
     where
-        F: FnOnce(PostgresContext<NoTls>) -> Fut + std::panic::UnwindSafe + Send + 'static,
+        F: FnOnce(PostgresContext<NoTls>, tokio_postgres::Config) -> Fut
+            + std::panic::UnwindSafe
+            + Send
+            + 'static,
         Fut: Future<Output = ()> + Send,
     {
         let (pg_config, schema) = setup_db().await;
@@ -429,10 +547,10 @@ mod tests {
             std::panic::catch_unwind(move || {
                 tokio::task::block_in_place(move || {
                     Handle::current().block_on(async move {
-                        let ctx = PostgresContext::new(pg_config, tokio_postgres::NoTls)
+                        let ctx = PostgresContext::new(pg_config.clone(), tokio_postgres::NoTls)
                             .await
                             .unwrap();
-                        f(ctx).await
+                        f(ctx, pg_config.clone()).await
                     })
                 })
             })
@@ -448,7 +566,7 @@ mod tests {
 
     #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
     async fn test() {
-        with_temp_context(|ctx| async move {
+        with_temp_context(|ctx, _| async move {
             anonymous(&ctx).await;
 
             let _user_id = user_reg_login(&ctx).await;
@@ -763,5 +881,337 @@ mod tests {
         db.logout(session.id).await.unwrap();
 
         assert!(db.session(session.id).await.is_err());
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
+    async fn it_persists_workflows() {
+        with_temp_context(|ctx, pg_config| async move {
+            let workflow = Workflow {
+                operator: TypedOperator::Vector(
+                    MockPointSource {
+                        params: MockPointSourceParams {
+                            points: vec![Coordinate2D::new(1., 2.); 3],
+                        },
+                    }
+                    .boxed(),
+                ),
+            };
+
+            let id = ctx
+                .workflow_registry_ref_mut()
+                .await
+                .register(workflow)
+                .await
+                .unwrap();
+
+            drop(ctx);
+
+            let ctx = PostgresContext::new(pg_config.clone(), tokio_postgres::NoTls)
+                .await
+                .unwrap();
+
+            let workflow = ctx.workflow_registry_ref().await.load(&id).await.unwrap();
+
+            let json = serde_json::to_string(&workflow).unwrap();
+            assert_eq!(json, r#"{"type":"Vector","operator":{"type":"MockPointSource","params":{"points":[{"x":1.0,"y":2.0},{"x":1.0,"y":2.0},{"x":1.0,"y":2.0}]}}}"#);
+        })
+        .await;
+    }
+
+    #[allow(clippy::too_many_lines)]
+    #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
+    async fn it_persists_datasets() {
+        with_temp_context(|ctx, _| async move {
+            let db_ = ctx.dataset_db();
+            let mut db = db_.write().await;
+
+            let dataset_id = DatasetId::Internal {
+                dataset_id: InternalDatasetId::from_str("2e8af98d-3b98-4e2c-a35b-e487bffad7b6")
+                    .unwrap(),
+            };
+
+            let loading_info = OgrSourceDataset {
+                file_name: PathBuf::from("test.csv"),
+                layer_name: "test.csv".to_owned(),
+                data_type: Some(VectorDataType::MultiPoint),
+                time: OgrSourceDatasetTimeType::Start {
+                    start_field: "start".to_owned(),
+                    start_format: OgrSourceTimeFormat::Auto,
+                    duration: OgrSourceDurationSpec::Zero,
+                },
+                default_geometry: None,
+                columns: Some(OgrSourceColumnSpec {
+                    format_specifics: Some(FormatSpecifics::Csv {
+                        header: CsvHeader::Auto,
+                    }),
+                    x: "x".to_owned(),
+                    y: None,
+                    int: vec![],
+                    float: vec![],
+                    text: vec![],
+                    rename: None,
+                }),
+                force_ogr_time_filter: false,
+                force_ogr_spatial_filter: false,
+                on_error: OgrSourceErrorSpec::Ignore,
+                sql_query: None,
+                attribute_query: None,
+            };
+
+            let meta_data = MetaDataDefinition::OgrMetaData(StaticMetaData::<
+                OgrSourceDataset,
+                VectorResultDescriptor,
+                VectorQueryRectangle,
+            > {
+                loading_info: loading_info.clone(),
+                result_descriptor: VectorResultDescriptor {
+                    data_type: VectorDataType::MultiPoint,
+                    spatial_reference: SpatialReference::epsg_4326().into(),
+                    columns: [("foo".to_owned(), FeatureDataType::Float)]
+                        .into_iter()
+                        .collect(),
+                },
+                phantom: Default::default(),
+            });
+
+            let wrap = db.wrap_meta_data(meta_data);
+            db.add_dataset(
+                &UserSession::mock(),
+                AddDataset {
+                    id: Some(dataset_id.clone()),
+                    name: "Ogr Test".to_owned(),
+                    description: "desc".to_owned(),
+                    source_operator: "OgrSource".to_owned(),
+                    symbology: None,
+                    provenance: Some(Provenance {
+                        citation: "citation".to_owned(),
+                        license: "license".to_owned(),
+                        uri: "uri".to_owned(),
+                    }),
+                }
+                .validated()
+                .unwrap(),
+                wrap,
+            )
+            .await
+            .unwrap();
+
+            let datasets = db
+                .list(
+                    DatasetListOptions {
+                        filter: None,
+                        order: crate::datasets::listing::OrderBy::NameAsc,
+                        offset: 0,
+                        limit: 10,
+                    }
+                    .validated()
+                    .unwrap(),
+                )
+                .await
+                .unwrap();
+
+            assert_eq!(datasets.len(), 1);
+
+            assert_eq!(
+                datasets[0],
+                DatasetListing {
+                    id: dataset_id.clone(),
+                    name: "Ogr Test".to_owned(),
+                    description: "desc".to_owned(),
+                    source_operator: "OgrSource".to_owned(),
+                    symbology: None,
+                    tags: vec![],
+                    result_descriptor: TypedResultDescriptor::Vector(VectorResultDescriptor {
+                        data_type: VectorDataType::MultiPoint,
+                        spatial_reference: SpatialReference::epsg_4326().into(),
+                        columns: [("foo".to_owned(), FeatureDataType::Float)]
+                            .into_iter()
+                            .collect(),
+                    }),
+                },
+            );
+
+            let provenance = db.provenance(&dataset_id).await.unwrap();
+
+            assert_eq!(
+                provenance,
+                ProvenanceOutput {
+                    dataset: dataset_id.clone(),
+                    provenance: Some(Provenance {
+                        citation: "citation".to_owned(),
+                        license: "license".to_owned(),
+                        uri: "uri".to_owned(),
+                    })
+                }
+            );
+
+            let meta_data: Box<dyn MetaData<OgrSourceDataset, _, _>> =
+                db.meta_data(&dataset_id).await.unwrap();
+
+            assert_eq!(
+                meta_data
+                    .loading_info(VectorQueryRectangle {
+                        spatial_bounds: BoundingBox2D::new_unchecked(
+                            (-180., -90.).into(),
+                            (180., 90.).into()
+                        ),
+                        time_interval: TimeInterval::default(),
+                        spatial_resolution: SpatialResolution::zero_point_one(),
+                    })
+                    .await
+                    .unwrap(),
+                loading_info
+            );
+        })
+        .await;
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
+    async fn it_persists_uploads() {
+        with_temp_context(|ctx, _| async move {
+            let db_ = ctx.dataset_db();
+            let mut db = db_.write().await;
+
+            let id = UploadId::from_str("2de18cd8-4a38-4111-a445-e3734bc18a80").unwrap();
+            let input = Upload {
+                id,
+                files: vec![FileUpload {
+                    id: FileId::from_str("e80afab0-831d-4d40-95d6-1e4dfd277e72").unwrap(),
+                    name: "test.csv".to_owned(),
+                    byte_size: 1337,
+                }],
+            };
+            db.create_upload(&UserSession::mock(), input.clone())
+                .await
+                .unwrap();
+
+            let upload = db.get_upload(&UserSession::mock(), id).await.unwrap();
+
+            assert_eq!(upload, input);
+        })
+        .await;
+    }
+
+    #[allow(clippy::too_many_lines)]
+    #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
+    async fn it_persists_dataset_providers() {
+        with_temp_context(|ctx, _| async move {
+            let db_ = ctx.dataset_db();
+            let mut db = db_.write().await;
+
+            let session = UserSession::mock();
+
+            let provider_id =
+                DatasetProviderId::from_str("7b20c8d7-d754-4f8f-ad44-dddd25df22d2").unwrap();
+
+            let loading_info = OgrSourceDataset {
+                file_name: PathBuf::from("test.csv"),
+                layer_name: "test.csv".to_owned(),
+                data_type: Some(VectorDataType::MultiPoint),
+                time: OgrSourceDatasetTimeType::Start {
+                    start_field: "start".to_owned(),
+                    start_format: OgrSourceTimeFormat::Auto,
+                    duration: OgrSourceDurationSpec::Zero,
+                },
+                default_geometry: None,
+                columns: Some(OgrSourceColumnSpec {
+                    format_specifics: Some(FormatSpecifics::Csv {
+                        header: CsvHeader::Auto,
+                    }),
+                    x: "x".to_owned(),
+                    y: None,
+                    int: vec![],
+                    float: vec![],
+                    text: vec![],
+                    rename: None,
+                }),
+                force_ogr_time_filter: false,
+                force_ogr_spatial_filter: false,
+                on_error: OgrSourceErrorSpec::Ignore,
+                sql_query: None,
+                attribute_query: None,
+            };
+
+            let meta_data = MetaDataDefinition::OgrMetaData(StaticMetaData::<
+                OgrSourceDataset,
+                VectorResultDescriptor,
+                VectorQueryRectangle,
+            > {
+                loading_info: loading_info.clone(),
+                result_descriptor: VectorResultDescriptor {
+                    data_type: VectorDataType::MultiPoint,
+                    spatial_reference: SpatialReference::epsg_4326().into(),
+                    columns: [("foo".to_owned(), FeatureDataType::Float)]
+                        .into_iter()
+                        .collect(),
+                },
+                phantom: Default::default(),
+            });
+
+            let provider = MockExternalDataProviderDefinition {
+                id: provider_id,
+                datasets: vec![DatasetDefinition {
+                    properties: AddDataset {
+                        id: Some(DatasetId::External(ExternalDatasetId {
+                            provider_id,
+                            dataset_id: "test".to_owned(),
+                        })),
+                        name: "test".to_owned(),
+                        description: "desc".to_owned(),
+                        source_operator: "MockPointSource".to_owned(),
+                        symbology: None,
+                        provenance: None,
+                    },
+                    meta_data,
+                }],
+            };
+
+            db.add_dataset_provider(&session, Box::new(provider))
+                .await
+                .unwrap();
+
+            let providers = db
+                .list_dataset_providers(
+                    &session,
+                    DatasetProviderListOptions {
+                        offset: 0,
+                        limit: 10,
+                    }
+                    .validated()
+                    .unwrap(),
+                )
+                .await
+                .unwrap();
+
+            assert_eq!(providers.len(), 1);
+
+            assert_eq!(
+                providers[0],
+                DatasetProviderListing {
+                    id: provider_id,
+                    type_name: "MockType".to_owned(),
+                    name: "MockName".to_owned(),
+                }
+            );
+
+            let provider = db.dataset_provider(&session, provider_id).await.unwrap();
+
+            let datasets = provider
+                .list(
+                    DatasetListOptions {
+                        filter: None,
+                        order: crate::datasets::listing::OrderBy::NameAsc,
+                        offset: 0,
+                        limit: 10,
+                    }
+                    .validated()
+                    .unwrap(),
+                )
+                .await
+                .unwrap();
+
+            assert_eq!(datasets.len(), 1);
+        })
+        .await;
     }
 }

@@ -370,8 +370,8 @@ pub enum OrderBy {
 impl OrderBy {
     pub fn to_sql_string(&self) -> &'static str {
         match self {
-            OrderBy::DateAsc => "time ASC",
-            OrderBy::DateDesc => "time DESC",
+            OrderBy::DateAsc => "changed ASC",
+            OrderBy::DateDesc => "changed DESC",
             OrderBy::NameAsc => "name ASC",
             OrderBy::NameDesc => "name DESC",
         }

@@ -7,3 +7,4 @@ pub mod projects;
 pub mod server;
 pub mod users;
 pub mod util;
+pub mod workflows;
