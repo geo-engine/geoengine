@@ -56,7 +56,7 @@ impl<T: Pixel> StateContainer<T> {
     fn wrapped_next_idx(&self) -> GridIdx2D {
         self.grid_bounds
             .inc_idx_unchecked(self.current_idx, 1)
-            .unwrap_or(self.min_index())
+            .unwrap_or_else(|| self.min_index())
     }
 
     fn min_index(&self) -> GridIdx2D {
@@ -667,6 +667,7 @@ mod tests {
         assert_eq!(tile_time_positions, expected_positions)
     }
 
+    #[allow(clippy::too_many_lines)]
     #[tokio::test]
     async fn test_no_gaps() {
         let no_data_value = Some(0);
