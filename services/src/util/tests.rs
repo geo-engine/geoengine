@@ -268,7 +268,6 @@ impl SetMultipartBody for test::TestRequest {
         let mut body: Vec<u8> = Vec::new();
 
         for (file_name, content) in parts {
-            println!("{}", file_name);
             write!(body, "--10196671711503402186283068890\r\n").unwrap();
             write!(
                 body,
