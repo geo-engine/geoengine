@@ -1542,7 +1542,7 @@ mod tests {
     #[allow(clippy::too_many_lines)]
     fn deserialize_dataset_parameters() {
         let dataset_parameters = GdalDatasetParameters {
-            file_path: "path-to-data.tiff",
+            file_path: "path-to-data.tiff".into(),
             rasterband_channel: 1,
             geo_transform: GdalDatasetGeoTransform {
                 origin_coordinate: (-180., 90.).into(),
