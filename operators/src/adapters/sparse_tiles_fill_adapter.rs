@@ -95,7 +95,7 @@ where
             State::Initial => {
                 // poll for a first (input) tile
                 let res = match ready!(this.stream.as_mut().poll_next(cx)) {
-                    // this is a the first tile ever and the first inthe grid. Return it!
+                    // this is a the first tile ever and the first in the grid. Return it!
                     Some(Ok(tile)) if *this.current_idx == tile.tile_position => {
                         debug_assert!(*this.current_idx == min_idx);
                         debug_assert!(this.next_tile.is_none());
