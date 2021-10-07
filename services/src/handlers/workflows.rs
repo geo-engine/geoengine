@@ -334,6 +334,7 @@ async fn dataset_from_workflow_handler<C: Context>(
             no_data_value,
             request_spatial_ref,
             tile_limit,
+            true, // TODO: make configurable
         ).await)?
     .map_err(error::Error::from)?;
 
@@ -972,6 +973,7 @@ mod tests {
             Some(0.),
             SpatialReference::epsg_4326(),
             None,
+            false,
         )
         .await
         .unwrap();

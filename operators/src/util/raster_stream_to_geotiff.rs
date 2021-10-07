@@ -1,7 +1,7 @@
 use futures::StreamExt;
 use gdal::{
     raster::{Buffer, GdalType, RasterCreationOption},
-    Driver,
+    Dataset, Driver,
 };
 use geoengine_datatypes::{
     primitives::{AxisAlignedRectangle, SpatialPartitioned},
@@ -30,6 +30,7 @@ pub async fn raster_stream_to_geotiff_bytes<T, C: QueryContext + 'static>(
     no_data_value: Option<f64>,
     spatial_reference: SpatialReference,
     tile_limit: Option<usize>,
+    as_cog: bool,
 ) -> Result<Vec<u8>>
 where
     T: Pixel + GdalType,
@@ -44,6 +45,7 @@ where
         no_data_value,
         spatial_reference,
         tile_limit,
+        as_cog,
     )
     .await?;
 
@@ -52,6 +54,7 @@ where
     Ok(bytes)
 }
 
+#[allow(clippy::too_many_arguments)] // TODO: refactor
 pub async fn raster_stream_to_geotiff<T, C: QueryContext + 'static>(
     file_path: &Path,
     processor: Box<dyn RasterQueryProcessor<RasterType = T>>,
@@ -60,6 +63,7 @@ pub async fn raster_stream_to_geotiff<T, C: QueryContext + 'static>(
     no_data_value: Option<f64>,
     spatial_reference: SpatialReference,
     tile_limit: Option<usize>,
+    as_cog: bool,
 ) -> Result<()>
 where
     T: Pixel + GdalType,
@@ -77,6 +81,7 @@ where
             query_rect,
             no_data_value,
             spatial_reference,
+            as_cog,
         )
     });
 
@@ -109,6 +114,7 @@ fn gdal_writer<T: Pixel + GdalType>(
     query_rect: RasterQueryRectangle,
     no_data_value: Option<f64>,
     spatial_reference: SpatialReference,
+    as_cog: bool,
 ) -> Result<()> {
     let x_pixel_size = query_rect.spatial_resolution.x;
     let y_pixel_size = query_rect.spatial_resolution.y;
@@ -123,7 +129,7 @@ fn gdal_writer<T: Pixel + GdalType>(
     let output_bounds = query_rect.spatial_bounds;
 
     let driver = Driver::get("GTiff")?;
-    let options = [
+    let mut options = vec![
         RasterCreationOption {
             key: "COMPRESS",
             value: "LZW",
@@ -133,6 +139,20 @@ fn gdal_writer<T: Pixel + GdalType>(
             value: "YES",
         },
     ];
+    if as_cog {
+        // options.push(RasterCreationOption {
+        //     key: "COPY_SRC_OVERVIEWS",
+        //     value: "YES",
+        // });
+        options.push(RasterCreationOption {
+            key: "BLOCKXSIZE",
+            value: "512",
+        });
+        options.push(RasterCreationOption {
+            key: "BLOCKYSIZE",
+            value: "512",
+        });
+    }
 
     let mut dataset = driver.create_with_band_type_with_options::<T>(
         file_path.to_str().ok_or(Error::InvalidGdalFilePath {
@@ -205,6 +225,62 @@ fn gdal_writer<T: Pixel + GdalType>(
         band.write(window, window_size, &buffer)?;
     }
 
+    if as_cog {
+        // TODO: remove
+        // build_cog_overviews(&mut dataset)?;
+
+        // override file with COG driver
+        dataset.create_copy(
+            &Driver::get("COG")?,
+            file_path.to_str().ok_or(Error::InvalidGdalFilePath {
+                file_path: file_path.to_owned(),
+            })?,
+            // TODO: same creation options as before
+        )?;
+    }
+
+    Ok(())
+}
+
+// TODO: decide if to delete
+fn build_cog_overviews(dataset: &mut Dataset) -> Result<()> {
+    const COG_BLOCK_SIZE: f64 = 512.;
+
+    // we need to create overview levels until the tile size is <= 512x512 pixels
+
+    let (number_of_x_pixels, number_of_y_pixels) = dataset.raster_size();
+    let (number_of_x_pixels, number_of_y_pixels) =
+        (number_of_x_pixels as f64, number_of_y_pixels as f64);
+
+    if number_of_x_pixels <= COG_BLOCK_SIZE && number_of_y_pixels <= COG_BLOCK_SIZE {
+        // no need to create overviews for a small raster
+        return Ok(());
+    }
+
+    let number_of_levels_x = f64::ceil(f64::log2(number_of_x_pixels / COG_BLOCK_SIZE)) as usize;
+    let number_of_levels_y = f64::ceil(f64::log2(number_of_y_pixels / COG_BLOCK_SIZE)) as usize;
+    let number_of_levels = usize::max(number_of_levels_x, number_of_levels_y);
+    let overviews = (1..)
+        .into_iter()
+        .map(|x| 2_i32.pow(x))
+        .take(number_of_levels)
+        .collect::<Vec<_>>();
+
+    dbg!(
+        number_of_x_pixels,
+        number_of_y_pixels,
+        number_of_levels_x,
+        number_of_levels_y,
+        number_of_levels,
+        &overviews
+    ); // TODO: remove
+
+    dataset.build_overviews(
+        "nearest", // TODO: make configurable
+        &overviews,
+        &[], // build for all bands, we currently store only one band
+    )?;
+
     Ok(())
 }
 
@@ -250,6 +326,7 @@ mod tests {
             Some(0.),
             SpatialReference::epsg_4326(),
             None,
+            false,
         )
         .await
         .unwrap();
@@ -259,6 +336,54 @@ mod tests {
                 as &[u8],
             bytes.as_slice()
         );
+    }
+
+    #[tokio::test]
+    async fn cloud_optimized_geotiff_from_stream() {
+        let ctx = MockQueryContext::default();
+        let tiling_specification =
+            TilingSpecification::new(Coordinate2D::default(), [600, 600].into());
+
+        let gdal_source = GdalSourceProcessor::<u8> {
+            tiling_specification,
+            meta_data: Box::new(create_ndvi_meta_data()),
+            phantom_data: Default::default(),
+        };
+
+        let query_bbox = SpatialPartition2D::new((-10., 80.).into(), (50., 20.).into()).unwrap();
+
+        let bytes = raster_stream_to_geotiff_bytes(
+            gdal_source.boxed(),
+            RasterQueryRectangle {
+                spatial_bounds: query_bbox,
+                time_interval: TimeInterval::new(1_388_534_400_000, 1_388_534_400_000 + 1000)
+                    .unwrap(),
+                spatial_resolution: SpatialResolution::new_unchecked(
+                    query_bbox.size_x() / 600.,
+                    query_bbox.size_y() / 600.,
+                ),
+            },
+            ctx,
+            Some(0.),
+            SpatialReference::epsg_4326(),
+            None,
+            true,
+        )
+        .await
+        .unwrap();
+
+        // TODO: write once and assert bytes
+        use std::io::Write;
+        std::fs::File::create("cloud_optimized_geotiff_from_stream.tiff")
+            .unwrap()
+            .write_all(bytes.as_slice())
+            .unwrap();
+
+        // assert_eq!(
+        //     include_bytes!("../../../test_data/raster/geotiff_from_stream_compressed.tiff")
+        //         as &[u8],
+        //     bytes.as_slice()
+        // );
     }
 
     #[tokio::test]
@@ -290,6 +415,7 @@ mod tests {
             Some(0.),
             SpatialReference::epsg_4326(),
             Some(1),
+            false,
         )
         .await;
 
@@ -327,6 +453,7 @@ mod tests {
             Some(0.),
             SpatialReference::epsg_4326(),
             None,
+            false,
         )
         .await;
 
