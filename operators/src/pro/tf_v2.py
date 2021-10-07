@@ -76,8 +76,8 @@ def initUnet(num_classes, id, batch_size):
     global model 
     model = keras.Model(inputs, outputs)
 
-    #optimizer=keras.optimizers.Adam(lr=0.01) 
-    model.compile(optimizer="adam", loss="sparse_categorical_crossentropy", metrics=['accuracy'])
+    optimizer=keras.optimizers.Adam(lr=0.01) 
+    model.compile(optimizer='rmsprop', loss="sparse_categorical_crossentropy", metrics=['sparse_categorical_accuracy'])
     model.summary()
     model.save('saved_model/{}'.format(id))
     print("Saved model under saved_model/{}".format(id))
@@ -88,9 +88,15 @@ def load(id):
     print('Loaded model from saved_model/{}'.format(id))
 
 call = callbacks.CSVLogger('logs.csv', ';', append=True)
-
+class_weight = {0: 1.0,
+                1: 50.0,
+                2: 50.0,
+                3: 50.0,
+                4: 50.0}
 def fit(X, y, batch_size):    
     global model
+    matplotlib.pyplot.imsave('ir-number.png', X[0][:,:,0])
+    matplotlib.pyplot.imsave('fake_claas.png', y[0][:,:,0], vmin=0,vmax=3)
     #print(y.shape)
     #print(X.shape)
     #TODO check wether nan's present?
@@ -98,12 +104,36 @@ def fit(X, y, batch_size):
     #print("contains inf's: {}".format(~np.all(~np.isinf(X))))
     #X = np.nan_to_num(X)
     global call
-    model.fit(X, y, batch_size = batch_size, callbacks=[call])
+    history = model.fit(X, y, batch_size = batch_size, callbacks=[call])
+    result = model.predict(X, batch_size = batch_size)
+    result = result[0]
+    classes = np.zeros((512,512))
+    for i in range(0,512):
+        for j in range(0,512):
+            max = np.argmax(result[i,j,:], axis=0)
+            classes[i,j]=max
+
+    #classes = result[0][:,:,0].argmax()
+    matplotlib.pyplot.imsave('prediction.png', classes, vmin=0,vmax=4)
 
 
-def predict(X, batchsize):
+def predict(X, y, batchsize):
     global model
+    
     result = model.predict(X, batch_size = batchsize)
+    result_a = result[0]
+    classes = np.zeros((512,512))
+    for i in range(0,512):
+        for j in range(0,512):
+            if result_a[i,j,0] >= result_a[i,j,1]:
+                classes[i,j] = 0
+            else:
+                classes[i,j] = 1
+    #classes = result[0][:,:,0].argmax()
+    matplotlib.pyplot.imsave('prediction_val.png', classes, vmin=0,vmax=3)
+    matplotlib.pyplot.imsave('groundtruth_val.png', y[0][:,:,0], vmin=0,vmax=3)
+    matplotlib.pyplot.imsave('ir_val.png', X[0][:,:,0])
+    
     #model.summary()
     #print(result.shape)
     #print(result[0][0][0])

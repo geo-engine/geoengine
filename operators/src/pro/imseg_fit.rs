@@ -38,7 +38,7 @@ where
     let py_mod = PyModule::from_code(py, include_str!("tf_v2.py"),"filename.py", "modulename").unwrap();
     let name = PyUnicode::new(py, "second");
     //TODO change depreciated function
-    let _init = py_mod.call("initUnet", (4,name, batch_size), None).unwrap();
+    let _init = py_mod.call("initUnet", (5,name, batch_size), None).unwrap();
     let _check_model_size = py_mod.call("get_model_memory_usage", (batch_size, ), None).unwrap();
     //since every 15 minutes an image is available...
     let step: i64 = (batch_size as i64 * 900_000) * batches_per_query as i64;
@@ -101,10 +101,11 @@ where
                             (GridOrEmpty::Grid(grid_016), GridOrEmpty::Grid(grid_039),  GridOrEmpty::Grid(grid_087),  GridOrEmpty::Grid(grid_097), GridOrEmpty::Grid(grid_108), GridOrEmpty::Grid(grid_120), GridOrEmpty::Grid(grid_134), GridOrEmpty::Grid(grid_truth)) => {
                             
                         
-                                let ndv = grid_truth.data.contains(&no_data_value);
+                                //let ndv = grid_truth.data.contains(&no_data_value);
+                                let ndv = false;
                                 if !ndv {
                                     tile_size = grid_016.shape.shape_array;
-                                    buffer.push((grid_016.data, grid_039.data, grid_087.data, grid_097.data, grid_108.data, grid_120.data, grid_134.data, grid_truth.data.iter().map(|x| x - 1).collect()));
+                                    buffer.push((grid_016.data, grid_039.data, grid_087.data, grid_097.data, grid_108.data, grid_120.data, grid_134.data, grid_truth.data));
                                 } else {
                                     //println!("No-data value detected");
                                     no_data_claas_count = no_data_claas_count + 1;
@@ -113,13 +114,16 @@ where
                             
                             }, 
                             _ => {
-                                //println!("SOME ARE EMPTY");
+                                println!("SOME ARE EMPTY");
                                 empty_grid_count = empty_grid_count + 1;
                             }
                         }
                     },
+                    (Ok(a), Ok(b), Ok(c), Ok(d), Ok(e), Ok(f), Ok(g), Err(claas)) => {
+                        dbg!(&claas);
+                    },
                     _ => {
-                        //println!("AN ERROR OCCURED");       
+                        println!("AN ERROR OCCURED");       
                         error_count = error_count + 1;
                     }
                 }
@@ -304,7 +308,7 @@ mod tests {
 
         let query_spatial_resolution = SpatialResolution::new(3000.4, 3000.4).unwrap();
 
-        let query_bbox = SpatialPartition2D::new((-802607.8468561172485352, 5108186.3898038864135742).into(), (1498701.3813257217407227, 3577980.7752370834350586).into()).unwrap();
+        let query_bbox = SpatialPartition2D::new((-804098.175, 3576662.252).into(), (1500160.112, 5106867.373).into()).unwrap();
         let no_data_value = Some(0.);
         let ir_016 = GdalMetaDataRegular{
             time_placeholders: hashmap! {
@@ -638,7 +642,7 @@ mod tests {
         let claas = GdalMetaDataRegular{
             time_placeholders: hashmap! {
                 "%%%_TIME_FORMATED_%%%".to_string() => GdalSourceTimePlaceholder {
-                    format: "%Y/%m/%d/CMAin%Y%m%d%H%M00305SVMSG01MD".to_string(),
+                    format: "%Y/CFCin%Y%m%d%H%M".to_string(),
                     reference: TimeReference::Start,
 
                 }
@@ -654,15 +658,15 @@ mod tests {
                 no_data_value,
             },
             params: GdalDatasetParameters{
-                file_path: PathBuf::from("NETCDF:\"/mnt/panq/dbs_geo_data/satellite_data/CLAAS-2/level2/%%%_TIME_FORMATED_%%%.nc\":cma"),
+                file_path: PathBuf::from("hdf5:/mnt/panq/dbs_geo_data/satellite_data/CLAAS-2/pre_2013/ORD19112/%%%_TIME_FORMATED_%%%002050016001MA.hdf://CMa"),
                 rasterband_channel: 1,
                 geo_transform: GdalDatasetGeoTransform{
                     origin_coordinate: ( -5456233.41938636, 5456233.41938636).into(),
                     x_pixel_size: 3000.403165817260742,
                     y_pixel_size: -3000.403165817260742, 
                 },
-                width: 3636,
-                height: 3636,
+                width: 3712,
+                height: 3712,
                 file_not_found_handling: FileNotFoundHandling::NoData,
                 no_data_value,
                 properties_mapping: None,
@@ -671,7 +675,7 @@ mod tests {
             },
             //placeholder: "%%%_TIME_FORMATED_%%%".to_string(),
             //time_format: "%Y/%m/%d/CMAin%Y%m%d%H%M00305SVMSG01MD".to_string(),
-            start: TimeInstance::from_millis(1356994800000).unwrap(),
+            start: TimeInstance::from_millis(1072911600000).unwrap(),
             step: TimeStep{
                 granularity: TimeGranularity::Minutes,
                 step: 15,
@@ -963,7 +967,7 @@ mod tests {
 
         let x = imseg_fit(proc_ir_016, proc_ir_039, proc_ir_087, proc_ir_097, proc_ir_108, proc_ir_120, proc_ir_134,proc_claas, QueryRectangle {
             spatial_bounds: query_bbox,
-            time_interval: TimeInterval::new(1_356_994_800_000, 1_356_994_800_000 + 45_000_000)
+            time_interval: TimeInterval::new(1167606000000, 1167606000000 + 9_000_000_000)
                 .unwrap(),
             spatial_resolution: query_spatial_resolution,
         }, ctx,

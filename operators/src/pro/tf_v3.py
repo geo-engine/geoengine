@@ -17,7 +17,7 @@ model = keras.models.Sequential()
 
 def initUnet(num_classes, id, batch_size):
     start_neurons = 32
-    inputs = keras.Input(shape=(512, 512, 7), batch_size=batch_size)
+    inputs = keras.Input(shape=(512, 512, 1), batch_size=batch_size)
 
     conv1 = layers.Conv2D(start_neurons, (3,3), activation="relu", padding='same')(inputs)
     conv1 = layers.Conv2D(start_neurons, (3,3), activation='relu', padding='same')(conv1)
@@ -72,9 +72,9 @@ def initUnet(num_classes, id, batch_size):
     global model
     model = keras.Model(inputs, output_layer)
 
-    optimizer=keras.optimizers.Adam(lr=0.1)
+    optimizer=keras.optimizers.Adam(lr=0.01)
 
-    model.compile(optimizer=optimizer, loss="sparse_categorical_crossentropy", metrics=['accuracy'])
+    model.compile(optimizer='adam', loss="sparse_categorical_crossentropy", metrics=['accuracy'])
 
     model.summary()
     model.save('saved_model/{}'.format(id))
@@ -122,3 +122,39 @@ def save(id):
     model.save('saved_model/{}'.format(id))
     print("Saved model under saved_model/{}".format(id))
 
+
+def get_model_memory_usage(batch_size):
+    global model
+    try:
+        from keras import backend as K
+    except:
+        from tensorflow.keras import backend as K
+
+    shapes_mem_count = 0
+    internal_model_mem_count = 0
+    for l in model.layers:
+        layer_type = l.__class__.__name__
+        if layer_type == 'Model':
+            internal_model_mem_count += get_model_memory_usage(batch_size, l)
+        single_layer_mem = 1
+        out_shape = l.output_shape
+        if type(out_shape) is list:
+            out_shape = out_shape[0]
+        for s in out_shape:
+            if s is None:
+                continue
+            single_layer_mem *= s
+        shapes_mem_count += single_layer_mem
+
+    trainable_count = np.sum([K.count_params(p) for p in model.trainable_weights])
+    non_trainable_count = np.sum([K.count_params(p) for p in model.non_trainable_weights])
+
+    number_size = 4.0
+    if K.floatx() == 'float16':
+        number_size = 2.0
+    if K.floatx() == 'float64':
+        number_size = 8.0
+
+    total_memory = number_size * (batch_size * shapes_mem_count + trainable_count + non_trainable_count)
+    gbytes = np.round(total_memory / (1024.0 ** 3), 3) + internal_model_mem_count
+    print("Model needs {} GB's of Memory".format(gbytes))

@@ -21,7 +21,7 @@ use serde::{Deserialize, Serialize};
 
 use async_trait::async_trait;
 
-use ndarray::{Array2, stack, Axis};
+use ndarray::{Array2, stack, Axis, ArrayBase, OwnedRepr, Dim};
 use numpy::{PyArray, PyArray4};
 use pyo3::prelude::*;
 use pyo3::{types::{PyModule, PyUnicode}, Py, Python };
@@ -92,7 +92,6 @@ impl InitializedRasterOperator for InitializedImsegOperator {
     }
 
     fn query_processor(&self) -> Result<TypedRasterQueryProcessor> {
-        let number_of_processors = self.raster_sources.len();
         let typed_raster_processor_ir016 = self.raster_sources[0].query_processor()?;
         let typed_raster_processor_ir039 = self.raster_sources[1].query_processor()?;
         let typed_raster_processor_ir087 = self.raster_sources[2].query_processor()?;
@@ -160,8 +159,6 @@ U: Pixel + numpy::Element,
         let time = ir016.time;
         let position = ir016.tile_position;
         let geo = ir016.geo_transform();
-        //let ndv = ir_016.grid_array.no_data_value();
-        let tile_size = ir016.grid_array.grid_shape_array();
         let shape = ir016.grid_array.grid_shape();
         match (ir016.grid_array, ir039.grid_array, ir087.grid_array, ir097.grid_array, ir108.grid_array, ir120.grid_array, ir134.grid_array) {
         
@@ -179,39 +176,7 @@ U: Pixel + numpy::Element,
                 let data_137 = grid_137.data;
 
                 let tile_size = grid_016.shape.shape_array;
-
-                let arr_016: ndarray::Array2<T> = 
-                Array2::from_shape_vec((tile_size[0], tile_size[1]), data_016)
-                .unwrap();
-                let arr_039: ndarray::Array2<T> = 
-                Array2::from_shape_vec((tile_size[0], tile_size[1]), data_039)
-                .unwrap();
-                let arr_087: ndarray::Array2<T> = 
-                Array2::from_shape_vec((tile_size[0], tile_size[1]), data_087)
-                .unwrap();
-                let arr_097: ndarray::Array2<T> = 
-                Array2::from_shape_vec((tile_size[0], tile_size[1]), data_097)
-                .unwrap()
-                .to_owned();
-                let arr_108: ndarray::Array2<T> = 
-                Array2::from_shape_vec((tile_size[0], tile_size[1]), data_108)
-                .unwrap()
-                .to_owned();
-                let arr_120: ndarray::Array2<T> = 
-                Array2::from_shape_vec((tile_size[0], tile_size[1]), data_120)
-                .unwrap()
-                .to_owned();
-                let arr_134: ndarray::Array2<T> = 
-                Array2::from_shape_vec((tile_size[0], tile_size[1]), data_137)
-                .unwrap()
-                .to_owned();
-
-                let arr_img: ndarray::Array<T, _> = stack(Axis(2), &[arr_016.view(),arr_039.view(),arr_087.view(), arr_097.view(), arr_108.view(), arr_120.view(), arr_134.view()]).unwrap();
-                                        
-                let arr_img_batch = arr_img.insert_axis(Axis(0)); // add a leading axis for the batches!
-
-                dbg!(&arr_img_batch.shape());
-                        
+                let arr_img_batch = create_arrays_from_data(data_016, data_039, data_087, data_097, data_108, data_120, data_137, tile_size);
                 let py_img_batch = PyArray::from_owned_array(py, arr_img_batch);
 
                 let result_img = self.pymod_tf.as_ref(py).call("predict", (py_img_batch,1), None)
@@ -226,8 +191,7 @@ U: Pixel + numpy::Element,
                     for j in 0..512 {
                         let view = result.slice(ndarray::s![i,j,..]);
                         let mut max: f32 = 0.0;
-                        let mut max_class = self.classes[0];
-                                
+                        let mut max_class = self.classes[0]; 
                             for t in 0..3 {
                                 //println!("predited: {:?}", view[t as usize]);
                                 
@@ -295,7 +259,41 @@ U: Pixel + numpy::Element,
 
     }
 }
+/// Creates batches used for training the model from the vectors of the rasterbands
+fn create_arrays_from_data<T>(data_1: Vec<T>, data_2: Vec<T>, data_3: Vec<T>, data_4: Vec<T>, data_5: Vec<T>, data_6: Vec<T>, data_7: Vec<T>, tile_size: [usize;2]) -> (ArrayBase<OwnedRepr<T>, Dim<[usize; 4]>>) 
+where 
+T: Clone + std::marker::Copy{
 
+    let arr_1: ndarray::Array2<T> = 
+            Array2::from_shape_vec((tile_size[0], tile_size[1]), data_1)
+            .unwrap();
+            let arr_2: ndarray::Array2<T> = 
+            Array2::from_shape_vec((tile_size[0], tile_size[1]), data_2)
+            .unwrap();
+            let arr_3: ndarray::Array2<T> = 
+            Array2::from_shape_vec((tile_size[0], tile_size[1]), data_3)
+            .unwrap();
+            let arr_4: ndarray::Array2<T> = 
+            Array2::from_shape_vec((tile_size[0], tile_size[1]), data_4)
+            .unwrap()
+            .to_owned();
+            let arr_5: ndarray::Array2<T> = 
+            Array2::from_shape_vec((tile_size[0], tile_size[1]), data_5)
+            .unwrap()
+            .to_owned();
+            let arr_6: ndarray::Array2<T> = 
+            Array2::from_shape_vec((tile_size[0], tile_size[1]), data_6)
+            .unwrap()
+            .to_owned();
+            let arr_7: ndarray::Array2<T> = 
+            Array2::from_shape_vec((tile_size[0], tile_size[1]), data_7)
+            .unwrap()
+            .to_owned();
+            
+            let arr_res: ndarray::Array<T, _> = stack(Axis(2), &[arr_1.view(),arr_2.view(),arr_3.view(), arr_4.view(), arr_5.view(), arr_6.view(), arr_7.view()]).unwrap().insert_axis(Axis(0));
+
+            (arr_res)
+}
 #[cfg(test)]
 mod tests {
     use geoengine_datatypes::{dataset::{DatasetId, InternalDatasetId}, hashmap, primitives::{Coordinate2D, TimeInterval, SpatialResolution,  Measurement, TimeGranularity, TimeInstance, TimeStep}, raster::{GeoTransform, RasterDataType}, raster::{TilingSpecification}, spatial_reference::{SpatialReference, SpatialReferenceAuthority, SpatialReferenceOption}};
