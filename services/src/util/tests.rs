@@ -21,7 +21,7 @@ use crate::{
     handlers,
 };
 use actix_web::dev::ServiceResponse;
-use actix_web::{http, http::Method, middleware, test, web, App};
+use actix_web::{http, http::header, http::Method, middleware, test, web, App};
 use flexi_logger::Logger;
 use geoengine_datatypes::dataset::DatasetId;
 use geoengine_datatypes::operations::image::Colorizer;
@@ -29,6 +29,8 @@ use geoengine_datatypes::spatial_reference::SpatialReferenceOption;
 use geoengine_operators::engine::{RasterOperator, TypedOperator};
 use geoengine_operators::source::{GdalSource, GdalSourceParameters};
 use geoengine_operators::util::gdal::create_ndvi_meta_data;
+use std::io::Write;
+use std::path::PathBuf;
 
 #[allow(clippy::missing_panics_doc)]
 pub async fn create_project_helper<C: SimpleContext>(ctx: &C) -> (SimpleSession, ProjectId) {
@@ -238,4 +240,52 @@ impl Drop for TestDataUploads {
 ///
 pub fn initialize_debugging_in_test() {
     Logger::try_with_str("debug").unwrap().start().unwrap();
+}
+
+pub trait SetMultipartBody {
+    fn set_multipart<B: Into<Vec<u8>>>(self, parts: Vec<(&str, B)>) -> Self;
+
+    fn set_multipart_files(self, file_paths: Vec<PathBuf>) -> Self
+    where
+        Self: Sized,
+    {
+        self.set_multipart(
+            file_paths
+                .iter()
+                .map(|o| {
+                    (
+                        o.file_name().unwrap().to_str().unwrap(),
+                        std::fs::read(o).unwrap(),
+                    )
+                })
+                .collect(),
+        )
+    }
+}
+
+impl SetMultipartBody for test::TestRequest {
+    fn set_multipart<B: Into<Vec<u8>>>(self, parts: Vec<(&str, B)>) -> Self {
+        let mut body: Vec<u8> = Vec::new();
+
+        for (file_name, content) in parts {
+            println!("{}", file_name);
+            write!(body, "--10196671711503402186283068890\r\n").unwrap();
+            write!(
+                body,
+                "Content-Disposition: form-data; name=\"files[]\"; filename=\"{}\"\r\n\r\n",
+                file_name
+            )
+            .unwrap();
+            body.append(&mut content.into());
+            write!(body, "\r\n").unwrap();
+        }
+        write!(body, "--10196671711503402186283068890--\r\n").unwrap();
+
+        self.append_header((header::CONTENT_LENGTH, body.len()))
+            .append_header((
+                header::CONTENT_TYPE,
+                "multipart/form-data; boundary=10196671711503402186283068890",
+            ))
+            .set_payload(body)
+    }
 }

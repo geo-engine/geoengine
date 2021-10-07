@@ -705,10 +705,11 @@ mod tests {
     use super::*;
     use crate::contexts::{InMemoryContext, Session, SimpleContext, SimpleSession};
     use crate::datasets::storage::{AddDataset, DatasetStore};
+    use crate::datasets::upload::UploadId;
     use crate::error::Result;
     use crate::projects::{PointSymbology, Symbology};
     use crate::test_data;
-    use crate::util::tests::{read_body_string, send_test_request};
+    use crate::util::tests::{read_body_string, send_test_request, SetMultipartBody};
     use actix_web::{http::header, test};
     use actix_web_httpauth::headers::authorization::Bearer;
     use geoengine_datatypes::collections::VectorDataType;
@@ -887,12 +888,26 @@ mod tests {
     #[tokio::test]
     async fn create_dataset() {
         let ctx = InMemoryContext::default();
-
         let session_id = ctx.default_session_ref().await.id();
 
-        let s = r#"{
-            "upload": "1f7e3e75-4d20-4c91-9497-7f4df7604b62",
-            "definition": {
+        let files = vec![
+            test_data!("vector/data/ne_10m_ports/ne_10m_ports.shp").to_path_buf(),
+            test_data!("vector/data/ne_10m_ports/ne_10m_ports.shx").to_path_buf(),
+            test_data!("vector/data/ne_10m_ports/ne_10m_ports.prj").to_path_buf(),
+            test_data!("vector/data/ne_10m_ports/ne_10m_ports.dbf").to_path_buf(),
+            test_data!("vector/data/ne_10m_ports/ne_10m_ports.cpg").to_path_buf(),
+        ];
+
+        let req = test::TestRequest::post()
+            .uri("/upload")
+            .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())))
+            .set_multipart_files(files);
+        let res = send_test_request(req, ctx.clone()).await;
+        assert_eq!(res.status(), 200);
+
+        let id: IdResponse<UploadId> = test::read_body_json(res).await;
+        let s = format!("{{\"upload\": \"{}\",", id.id)
+            + r#""definition": {
                 "properties": {
                     "id": null,
                     "name": "Uploaded Natural Earth 10m Ports",
@@ -902,7 +917,7 @@ mod tests {
                 "metaData": {
                     "type": "OgrMetaData",
                     "loadingInfo": {
-                        "fileName": "test_data/vector/data/ne_10m_ports/ne_10m_ports.shp",
+                        "fileName": "ne_10m_ports.shp",
                         "layerName": "ne_10m_ports",
                         "dataType": "MultiPoint",
                         "time": {
@@ -942,9 +957,7 @@ mod tests {
             .set_payload(s);
         let res = send_test_request(req, ctx).await;
 
-        assert_eq!(res.status(), 400, "{:?}", read_body_string(res).await);
-
-        // TODO: add a success test case once it is clear how to upload data from within a test
+        assert_eq!(res.status(), 200);
     }
 
     #[test]
