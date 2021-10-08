@@ -166,7 +166,7 @@ impl InitializedVectorOperator for InitializedRasterVectorJoin {
         let typed_raster_processors = self
             .raster_sources
             .iter()
-            .map(|r| r.query_processor())
+            .map(InitializedRasterOperator::query_processor)
             .collect::<Result<Vec<_>>>()?;
 
         Ok(match self.vector_source.query_processor()? {

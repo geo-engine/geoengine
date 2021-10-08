@@ -1433,19 +1433,19 @@ impl CompiledClProgram {
         self.set_generic_argument_placeholders(kernel);
     }
 
-    fn set_raster_argument_placeholders(&mut self, mut kernel: &mut KernelBuilder) {
+    fn set_raster_argument_placeholders(&mut self, kernel: &mut KernelBuilder) {
         for (idx, raster) in self.input_raster_types.iter().enumerate() {
-            Self::add_data_buffer_placeholder(&mut kernel, format!("IN{}", idx), raster.data_type);
+            Self::add_data_buffer_placeholder(kernel, format!("IN{}", idx), raster.data_type);
             kernel.arg_named(format!("IN_INFO{}", idx), None::<&Buffer<RasterInfo>>);
         }
 
         for (idx, raster) in self.output_raster_types.iter().enumerate() {
-            Self::add_data_buffer_placeholder(&mut kernel, format!("OUT{}", idx), raster.data_type);
+            Self::add_data_buffer_placeholder(kernel, format!("OUT{}", idx), raster.data_type);
             kernel.arg_named(format!("OUT_INFO{}", idx), None::<&Buffer<RasterInfo>>);
         }
     }
 
-    fn set_input_vector_argument_placeholders(&mut self, mut kernel: &mut KernelBuilder) {
+    fn set_input_vector_argument_placeholders(&mut self, kernel: &mut KernelBuilder) {
         for (idx, features) in self.input_feature_types.iter().enumerate() {
             if features.include_geo {
                 kernel.arg_named(
@@ -1507,17 +1507,12 @@ impl CompiledClProgram {
             for column in &features.columns {
                 let name = format!("IN_COLLECTION{}_COLUMN_{}", idx, column.name);
                 let null_name = format!("IN_COLLECTION{}_NULLS_{}", idx, column.name);
-                Self::set_column_argument_placeholder(
-                    &mut kernel,
-                    column.data_type,
-                    name,
-                    null_name,
-                );
+                Self::set_column_argument_placeholder(kernel, column.data_type, name, null_name);
             }
         }
     }
 
-    fn set_output_vector_argument_placeholders(&mut self, mut kernel: &mut KernelBuilder) {
+    fn set_output_vector_argument_placeholders(&mut self, kernel: &mut KernelBuilder) {
         for (idx, features) in self.output_feature_types.iter().enumerate() {
             if features.include_geo {
                 kernel.arg_named(
@@ -1582,20 +1577,15 @@ impl CompiledClProgram {
             for column in &features.columns {
                 let name = format!("OUT_COLLECTION{}_COLUMN_{}", idx, column.name);
                 let null_name = format!("OUT_COLLECTION{}_NULLS_{}", idx, column.name);
-                Self::set_column_argument_placeholder(
-                    &mut kernel,
-                    column.data_type,
-                    name,
-                    null_name,
-                );
+                Self::set_column_argument_placeholder(kernel, column.data_type, name, null_name);
             }
         }
     }
 
-    fn set_generic_argument_placeholders(&mut self, mut kernel: &mut KernelBuilder) {
+    fn set_generic_argument_placeholders(&mut self, kernel: &mut KernelBuilder) {
         for (idx, argument) in self.generic_input_types.iter().enumerate() {
             Self::add_data_buffer_placeholder(
-                &mut kernel,
+                kernel,
                 format!("IN_GENERIC{}", idx),
                 argument.data_type,
             );
@@ -1604,7 +1594,7 @@ impl CompiledClProgram {
 
         for (idx, argument) in self.generic_working_memory_types.iter().enumerate() {
             Self::add_data_buffer_placeholder(
-                &mut kernel,
+                kernel,
                 format!("WORKING_GENERIC{}", idx),
                 argument.data_type,
             );
@@ -1613,7 +1603,7 @@ impl CompiledClProgram {
 
         for (idx, raster) in self.generic_output_types.iter().enumerate() {
             Self::add_data_buffer_placeholder(
-                &mut kernel,
+                kernel,
                 format!("OUT_GENERIC{}", idx),
                 raster.data_type,
             );
