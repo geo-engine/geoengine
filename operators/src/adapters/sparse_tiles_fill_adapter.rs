@@ -67,10 +67,6 @@ impl<T: Pixel> StateContainer<T> {
         self.grid_bounds.max_index()
     }
 
-    fn set_time(&mut self, time: TimeInterval) {
-        self.current_time = time;
-    }
-
     fn is_any_tile_stored(&self) -> bool {
         self.next_tile.is_some()
     }
@@ -304,8 +300,6 @@ where
 mod tests {
     use futures::{stream, StreamExt};
     use geoengine_datatypes::{primitives::TimeInterval, raster::Grid, util::test::TestDefault};
-
-    use crate::error;
 
     use super::*;
 
