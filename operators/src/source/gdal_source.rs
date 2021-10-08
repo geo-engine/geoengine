@@ -15,7 +15,9 @@ use futures::{
 use async_trait::async_trait;
 use gdal::raster::{GdalType, RasterBand as GdalRasterBand};
 use gdal::{Dataset as GdalDataset, DatasetOptions, GdalOpenFlags, Metadata as GdalMetadata};
-use geoengine_datatypes::primitives::{Coordinate2D, SpatialPartition2D, SpatialPartitioned};
+use geoengine_datatypes::primitives::{
+    Coordinate2D, SpatialPartition2D, SpatialPartitioned, TimeGranularity,
+};
 use geoengine_datatypes::raster::{
     EmptyGrid, GeoTransform, Grid2D, GridOrEmpty2D, GridShapeAccess, Pixel, RasterDataType,
     RasterProperties, RasterPropertiesEntry, RasterPropertiesEntryType, RasterPropertiesKey,
@@ -374,10 +376,35 @@ impl MetaData<GdalLoadingInfo, RasterResultDescriptor, RasterQueryRectangle>
 #[serde(rename_all = "camelCase")]
 pub struct GdalMetadataFixedTimes {
     pub time_steps: Vec<TimeInterval>,
-    pub minimum_step: TimeStep,
-    pub time_placeholders: HashMap<String, GdalSourceTimePlaceholder>,
     pub params: GdalDatasetParameters,
     pub result_descriptor: RasterResultDescriptor,
+    pub time_placeholders: HashMap<String, GdalSourceTimePlaceholder>,
+}
+
+impl GdalMetadataFixedTimes {
+    #[allow(dead_code)]
+    fn new(
+        time_steps: Vec<TimeInterval>,
+        params: GdalDatasetParameters,
+        result_descriptor: RasterResultDescriptor,
+        time_placeholders: HashMap<String, GdalSourceTimePlaceholder>,
+    ) -> Self {
+        let mut sorted_time_steps = time_steps;
+        sorted_time_steps.sort_by(|a, b| a.start().partial_cmp(&b.start()).unwrap());
+
+        GdalMetadataFixedTimes {
+            time_steps: sorted_time_steps,
+            params,
+            result_descriptor,
+            time_placeholders,
+        }
+    }
+
+    fn time_steps_are_sorted(&self) -> bool {
+        self.time_steps
+            .windows(2)
+            .all(|w| w[0].start() <= w[1].start())
+    }
 }
 
 #[async_trait]
@@ -385,10 +412,25 @@ impl MetaData<GdalLoadingInfo, RasterResultDescriptor, RasterQueryRectangle>
     for GdalMetadataFixedTimes
 {
     async fn loading_info(&self, query: RasterQueryRectangle) -> Result<GdalLoadingInfo> {
-        let valid_duration = TimeInterval::new(
-            self.time_steps[0].start(),
-            self.time_steps[self.time_steps.len() - 1].start(),
-        )?;
+        let minimum_step = TimeStep {
+            granularity: TimeGranularity::Millis,
+            step: 1,
+        };
+
+        let valid_duration = if self.time_steps_are_sorted() {
+            TimeInterval::new(
+                self.time_steps[0].start(),
+                self.time_steps[self.time_steps.len() - 1].start(),
+            )?
+        } else {
+            let mut sorted_time_steps = self.time_steps.clone();
+            sorted_time_steps.sort_by(|a, b| a.start().partial_cmp(&b.start()).unwrap());
+
+            TimeInterval::new(
+                sorted_time_steps[0].start(),
+                sorted_time_steps[sorted_time_steps.len() - 1].start(),
+            )?
+        };
 
         let parts = match valid_duration.intersect(&query.time_interval) {
             Some(time_interval) => {
@@ -409,8 +451,8 @@ impl MetaData<GdalLoadingInfo, RasterResultDescriptor, RasterQueryRectangle>
                             && time_interval.contains(&self.time_steps[index + 1])
                         {
                             let time_gap = TimeInterval::new(
-                                (time_position.end() + self.minimum_step)?,
-                                (self.time_steps[index + 1].start() - self.minimum_step)?,
+                                (time_position.end() + minimum_step)?,
+                                (self.time_steps[index + 1].start() - minimum_step)?,
                             )?;
 
                             loading_info_parts.push(
@@ -1383,44 +1425,39 @@ mod tests {
     #[allow(clippy::suspicious_map)]
     #[tokio::test]
     async fn test_step_meta_data() {
-        let no_data_value = Some(0.);
-
-        let meta_data = GdalMetadataFixedTimes {
-            result_descriptor: RasterResultDescriptor {
-                data_type: RasterDataType::U8,
-                spatial_reference: SpatialReference::epsg_4326().into(),
-                measurement: Measurement::Unitless,
-                no_data_value,
-            },
-            params: GdalDatasetParameters {
-                file_path: "/foo/bar_step_%TIME%.tiff".into(),
-                rasterband_channel: 0,
-                geo_transform: TestDefault::test_default(),
-                width: 360,
-                height: 180,
-                file_not_found_handling: FileNotFoundHandling::NoData,
-                no_data_value,
-                properties_mapping: None,
-                gdal_open_options: None,
-                gdal_config_options: None,
-            },
-            time_steps: vec![
-                TimeInterval::new_instant(0).unwrap(),
-                TimeInterval::new_instant(5).unwrap(),
-                TimeInterval::new_instant(10).unwrap(),
-                TimeInterval::new_instant(15).unwrap(),
-            ],
-            time_placeholders: hashmap! {
-                "%TIME%".to_string() => GdalSourceTimePlaceholder {
-                    format: "%f".to_string(),
-                    reference: TimeReference::Start,
-                },
-            },
-            minimum_step: TimeStep {
-                granularity: TimeGranularity::Millis,
-                step: 1,
+        let result_descriptor = RasterResultDescriptor {
+            data_type: RasterDataType::U8,
+            spatial_reference: SpatialReference::epsg_4326().into(),
+            measurement: Measurement::Unitless,
+            no_data_value: Some(0.),
+        };
+        let params = GdalDatasetParameters {
+            file_path: "/foo/bar_step_%TIME%.tiff".into(),
+            rasterband_channel: 0,
+            geo_transform: TestDefault::test_default(),
+            width: 360,
+            height: 180,
+            file_not_found_handling: FileNotFoundHandling::NoData,
+            no_data_value: Some(0.),
+            properties_mapping: None,
+            gdal_open_options: None,
+            gdal_config_options: None,
+        };
+        let time_steps = vec![
+            TimeInterval::new_instant(0).unwrap(),
+            TimeInterval::new_instant(5).unwrap(),
+            TimeInterval::new_instant(10).unwrap(),
+            TimeInterval::new_instant(25).unwrap(),
+        ];
+        let time_placeholders = hashmap! {
+            "%TIME%".to_string() => GdalSourceTimePlaceholder {
+                format: "%f".to_string(),
+                reference: TimeReference::Start,
             },
         };
+
+        let meta_data =
+            GdalMetadataFixedTimes::new(time_steps, params, result_descriptor, time_placeholders);
 
         assert_eq!(
             meta_data.result_descriptor().await.unwrap(),
