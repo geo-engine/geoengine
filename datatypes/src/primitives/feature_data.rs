@@ -18,6 +18,7 @@ pub enum FeatureDataType {
     Int,
     Float,
     Text,
+    Bool
 }
 
 impl FeatureDataType {
@@ -26,6 +27,7 @@ impl FeatureDataType {
             OGRFieldType::OFTInteger | OGRFieldType::OFTInteger64 => Self::Int,
             OGRFieldType::OFTReal => Self::Float,
             OGRFieldType::OFTString => Self::Text,
+            OGRFieldType::OFTBinary => Self::Bool,
             _ => return Err(error::Error::NoMatchingFeatureDataTypeForOgrFieldType),
         })
     }
@@ -45,6 +47,8 @@ pub enum FeatureData {
     NullableFloat(Vec<Option<f64>>),
     Text(Vec<String>),
     NullableText(Vec<Option<String>>),
+    Bool(Vec<bool>),
+    NullableBool(Vec<Option<bool>>)
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize, PartialEq)]
@@ -57,6 +61,8 @@ pub enum FeatureDataValue {
     NullableFloat(Option<f64>),
     Text(String),
     NullableText(Option<String>),
+    Bool(bool),
+    NullableBool(Option<bool>)
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -65,6 +71,7 @@ pub enum FeatureDataRef<'f> {
     Int(IntDataRef<'f>),
     Float(FloatDataRef<'f>),
     Text(TextDataRef<'f>),
+    Bool(BoolDataRef<'f>),
 }
 
 impl<'f> FeatureDataRef<'f> {
@@ -75,6 +82,7 @@ impl<'f> FeatureDataRef<'f> {
             FeatureDataRef::Float(data_ref) => data_ref.json_values(),
             FeatureDataRef::Int(data_ref) => data_ref.json_values(),
             FeatureDataRef::Category(data_ref) => data_ref.json_values(),
+            FeatureDataRef::Bool(data_ref) => data_ref.json_values()
         }
     }
 
@@ -85,6 +93,7 @@ impl<'f> FeatureDataRef<'f> {
             FeatureDataRef::Float(data_ref) => data_ref.nulls(),
             FeatureDataRef::Int(data_ref) => data_ref.nulls(),
             FeatureDataRef::Category(data_ref) => data_ref.nulls(),
+            FeatureDataRef::Bool(data_ref) => data_ref.nulls()
         }
     }
 
@@ -95,6 +104,7 @@ impl<'f> FeatureDataRef<'f> {
             FeatureDataRef::Float(data_ref) => data_ref.has_nulls(),
             FeatureDataRef::Int(data_ref) => data_ref.has_nulls(),
             FeatureDataRef::Category(data_ref) => data_ref.has_nulls(),
+            FeatureDataRef::Bool(data_ref) => data_ref.has_nulls(),
         }
     }
 
@@ -105,6 +115,7 @@ impl<'f> FeatureDataRef<'f> {
             FeatureDataRef::Float(data_ref) => data_ref.get_unchecked(i),
             FeatureDataRef::Int(data_ref) => data_ref.get_unchecked(i),
             FeatureDataRef::Category(data_ref) => data_ref.get_unchecked(i),
+            FeatureDataRef::Bool(data_ref) => data_ref.get_unchecked(i),
         }
     }
 
@@ -116,6 +127,7 @@ impl<'f> FeatureDataRef<'f> {
             FeatureDataRef::Float(data_ref) => Box::new(data_ref.strings_iter()),
             FeatureDataRef::Int(data_ref) => Box::new(data_ref.strings_iter()),
             FeatureDataRef::Category(data_ref) => Box::new(data_ref.strings_iter()),
+            FeatureDataRef::Bool(data_ref) => Box::new(data_ref.strings_iter()),
         }
     }
 
@@ -127,6 +139,7 @@ impl<'f> FeatureDataRef<'f> {
             FeatureDataRef::Float(data_ref) => Box::new(data_ref.float_options_iter()),
             FeatureDataRef::Int(data_ref) => Box::new(data_ref.float_options_iter()),
             FeatureDataRef::Category(data_ref) => Box::new(data_ref.float_options_iter()),
+            FeatureDataRef::Bool(data_ref) => Box::new(data_ref.float_options_iter()),
         }
     }
 }
@@ -781,6 +794,7 @@ impl FeatureDataType {
             Self::Float => arrow::datatypes::DataType::Float64,
             Self::Int => arrow::datatypes::DataType::Int64,
             Self::Category => arrow::datatypes::DataType::UInt8,
+            Self::Bool => arrow::datatypes::DataType::Boolean,
         }
     }
 
@@ -795,6 +809,7 @@ impl FeatureDataType {
             Self::Float => Box::new(arrow::array::Float64Builder::new(len)),
             Self::Int => Box::new(arrow::array::Int64Builder::new(len)),
             Self::Category => Box::new(arrow::array::UInt8Builder::new(len)),
+            Self::Bool => Box::new(arrow::array::BooleanBuilder::new(len)),
         }
     }
 }
@@ -818,6 +833,8 @@ impl FeatureData {
             FeatureData::NullableInt(v) => v.len(),
             FeatureData::Category(v) => v.len(),
             FeatureData::NullableCategory(v) => v.len(),
+            FeatureData::Bool(v) => v.len(),
+            FeatureData::NullableBool(v) => v.len()
         }
     }
 
@@ -889,6 +906,18 @@ impl FeatureData {
                 }
                 Box::new(builder)
             }
+            FeatureData::Bool(v) => {
+                let mut builder = arrow::array::BooleanBuilder::new(v.len());
+                builder.append_slice(v)?;
+                Box::new(builder)
+            }
+            FeatureData::NullableBool(v) => {
+                let mut builder = arrow::array::BooleanBuilder::new(v.len());
+                for &bool_option in v {
+                    builder.append_option(bool_option)?;
+                }
+                Box::new(builder)
+            }
         })
     }
 }
@@ -900,6 +929,7 @@ impl From<&FeatureData> for FeatureDataType {
             FeatureData::Float(_) | FeatureData::NullableFloat(_) => Self::Float,
             FeatureData::Int(_) | FeatureData::NullableInt(_) => Self::Int,
             FeatureData::Category(_) | FeatureData::NullableCategory(_) => Self::Category,
+            FeatureData::Bool(_) | FeatureData::NullableBool(_) => Self::Bool
         }
     }
 }
@@ -911,6 +941,7 @@ impl From<&FeatureDataValue> for FeatureDataType {
             FeatureDataValue::Float(_) | FeatureDataValue::NullableFloat(_) => Self::Float,
             FeatureDataValue::Int(_) | FeatureDataValue::NullableInt(_) => Self::Int,
             FeatureDataValue::Category(_) | FeatureDataValue::NullableCategory(_) => Self::Category,
+            FeatureDataValue::Bool(_) | FeatureDataValue::NullableBool(_) => Self::Bool
         }
     }
 }
