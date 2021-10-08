@@ -1,8 +1,10 @@
 mod area_line_plot;
+mod box_plot;
 mod histogram;
 mod multi_line_plot;
 
 pub use area_line_plot::AreaLineChart;
+pub use box_plot::{BoxPlot, BoxPlotAttribute};
 pub use histogram::{Histogram, HistogramBuilder};
 pub use multi_line_plot::{DataPoint, MultiLineChart};
 
