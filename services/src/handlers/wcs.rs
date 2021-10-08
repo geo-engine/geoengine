@@ -326,6 +326,7 @@ async fn get_coverage<C: Context>(request: &GetCoverage, ctx: &C) -> Result<Http
             no_data_value,
             request_spatial_ref,
             Some(get_config_element::<crate::util::config::Wcs>()?.tile_limit),
+            false
         )
         .await)?
     .map_err(error::Error::from)?;
@@ -471,7 +472,6 @@ mod tests {
 
         assert_eq!(res.status(), 200);
         let body = read_body_string(res).await;
-        eprintln!("{}", body);
         assert_eq!(
             format!(
                 r#"<?xml version="1.0" encoding="UTF-8"?>

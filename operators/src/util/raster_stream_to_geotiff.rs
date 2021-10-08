@@ -1,20 +1,14 @@
 use futures::StreamExt;
-use gdal::{
-    raster::{Buffer, GdalType, RasterCreationOption},
-    Dataset, Driver,
+use gdal::raster::{Buffer, GdalType, RasterCreationOption};
+use gdal::Driver;
+use geoengine_datatypes::primitives::{AxisAlignedRectangle, SpatialPartitioned};
+use geoengine_datatypes::raster::{
+    ChangeGridBounds, GeoTransform, Grid2D, GridBlit, GridIdx, GridSize, Pixel, RasterTile2D,
 };
-use geoengine_datatypes::{
-    primitives::{AxisAlignedRectangle, SpatialPartitioned},
-    raster::{
-        ChangeGridBounds, GeoTransform, Grid2D, GridBlit, GridIdx, GridSize, Pixel, RasterTile2D,
-    },
-    spatial_reference::SpatialReference,
-};
-use std::{
-    convert::TryInto,
-    path::PathBuf,
-    sync::mpsc::{Receiver, Sender},
-};
+use geoengine_datatypes::spatial_reference::SpatialReference;
+use std::convert::TryInto;
+use std::path::PathBuf;
+use std::sync::mpsc::{Receiver, Sender};
 use std::{path::Path, sync::mpsc};
 
 use crate::{engine::RasterQueryRectangle, util::Result};
@@ -54,7 +48,7 @@ where
     Ok(bytes)
 }
 
-#[allow(clippy::too_many_arguments)] // TODO: refactor
+#[allow(clippy::too_many_arguments)] // TODO: refactor parameters
 pub async fn raster_stream_to_geotiff<T, C: QueryContext + 'static>(
     file_path: &Path,
     processor: Box<dyn RasterQueryProcessor<RasterType = T>>,
@@ -140,10 +134,7 @@ fn gdal_writer<T: Pixel + GdalType>(
         },
     ];
     if as_cog {
-        // options.push(RasterCreationOption {
-        //     key: "COPY_SRC_OVERVIEWS",
-        //     value: "YES",
-        // });
+        // COGs require a block size of 512x512, so we enforce it now so that we do the work only once.
         options.push(RasterCreationOption {
             key: "BLOCKXSIZE",
             value: "512",
@@ -154,10 +145,12 @@ fn gdal_writer<T: Pixel + GdalType>(
         });
     }
 
+    let output_file_path = file_path.to_str().ok_or(Error::InvalidGdalFilePath {
+        file_path: file_path.to_owned(),
+    })?;
+
     let mut dataset = driver.create_with_band_type_with_options::<T>(
-        file_path.to_str().ok_or(Error::InvalidGdalFilePath {
-            file_path: file_path.to_owned(),
-        })?,
+        output_file_path,
         width as isize,
         height as isize,
         1,
@@ -226,60 +219,14 @@ fn gdal_writer<T: Pixel + GdalType>(
     }
 
     if as_cog {
-        // TODO: remove
-        // build_cog_overviews(&mut dataset)?;
+        // Override file with COG driver.
 
-        // override file with COG driver
-        dataset.create_copy(
-            &Driver::get("COG")?,
-            file_path.to_str().ok_or(Error::InvalidGdalFilePath {
-                file_path: file_path.to_owned(),
-            })?,
-            // TODO: same creation options as before
-        )?;
+        // Since COGs are written "overviews first, data second", we cannot generate a GeoTiff (where we first have to
+        // write the data in order to generate overviews) that fulfills this property. So, we have to do it as a
+        // separate step.
+
+        dataset.create_copy(&Driver::get("COG")?, output_file_path, &options)?;
     }
-
-    Ok(())
-}
-
-// TODO: decide if to delete
-fn build_cog_overviews(dataset: &mut Dataset) -> Result<()> {
-    const COG_BLOCK_SIZE: f64 = 512.;
-
-    // we need to create overview levels until the tile size is <= 512x512 pixels
-
-    let (number_of_x_pixels, number_of_y_pixels) = dataset.raster_size();
-    let (number_of_x_pixels, number_of_y_pixels) =
-        (number_of_x_pixels as f64, number_of_y_pixels as f64);
-
-    if number_of_x_pixels <= COG_BLOCK_SIZE && number_of_y_pixels <= COG_BLOCK_SIZE {
-        // no need to create overviews for a small raster
-        return Ok(());
-    }
-
-    let number_of_levels_x = f64::ceil(f64::log2(number_of_x_pixels / COG_BLOCK_SIZE)) as usize;
-    let number_of_levels_y = f64::ceil(f64::log2(number_of_y_pixels / COG_BLOCK_SIZE)) as usize;
-    let number_of_levels = usize::max(number_of_levels_x, number_of_levels_y);
-    let overviews = (1..)
-        .into_iter()
-        .map(|x| 2_i32.pow(x))
-        .take(number_of_levels)
-        .collect::<Vec<_>>();
-
-    dbg!(
-        number_of_x_pixels,
-        number_of_y_pixels,
-        number_of_levels_x,
-        number_of_levels_y,
-        number_of_levels,
-        &overviews
-    ); // TODO: remove
-
-    dataset.build_overviews(
-        "nearest", // TODO: make configurable
-        &overviews,
-        &[], // build for all bands, we currently store only one band
-    )?;
 
     Ok(())
 }
@@ -372,18 +319,12 @@ mod tests {
         .await
         .unwrap();
 
-        // TODO: write once and assert bytes
-        use std::io::Write;
-        std::fs::File::create("cloud_optimized_geotiff_from_stream.tiff")
-            .unwrap()
-            .write_all(bytes.as_slice())
-            .unwrap();
-
-        // assert_eq!(
-        //     include_bytes!("../../../test_data/raster/geotiff_from_stream_compressed.tiff")
-        //         as &[u8],
-        //     bytes.as_slice()
-        // );
+        assert_eq!(
+            include_bytes!(
+                "../../../test_data/raster/cloud_optimized_geotiff_from_stream_compressed.tiff"
+            ) as &[u8],
+            bytes.as_slice()
+        );
     }
 
     #[tokio::test]

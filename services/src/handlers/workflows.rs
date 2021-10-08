@@ -236,6 +236,14 @@ struct RasterDatasetFromWorkflow {
     name: String,
     description: Option<String>,
     query: RasterQueryRectangle,
+    #[serde(default = "default_as_cog")]
+    as_cog: bool,
+}
+
+/// By default, we set [`RasterDatasetFromWorkflow::as_cog`] to true to produce cloud-optmized `GeoTiff`s.
+#[inline]
+const fn default_as_cog() -> bool {
+    true
 }
 
 /// response of the dataset from workflow handler
@@ -334,7 +342,7 @@ async fn dataset_from_workflow_handler<C: Context>(
             no_data_value,
             request_spatial_ref,
             tile_limit,
-            true, // TODO: make configurable
+            info.as_cog,
         ).await)?
     .map_err(error::Error::from)?;
 
