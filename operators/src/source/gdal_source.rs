@@ -390,7 +390,7 @@ impl GdalMetadataFixedTimes {
         time_placeholders: HashMap<String, GdalSourceTimePlaceholder>,
     ) -> Self {
         let mut sorted_time_steps = time_steps;
-        sorted_time_steps.sort_by(|a, b| a.start().partial_cmp(&b.start()).unwrap());
+        sorted_time_steps.sort_by(|a, b| a.end().partial_cmp(&b.start()).unwrap());
 
         GdalMetadataFixedTimes {
             time_steps: sorted_time_steps,
@@ -398,12 +398,6 @@ impl GdalMetadataFixedTimes {
             result_descriptor,
             time_placeholders,
         }
-    }
-
-    fn time_steps_are_sorted(&self) -> bool {
-        self.time_steps
-            .windows(2)
-            .all(|w| w[0].start() <= w[1].start())
     }
 }
 
@@ -417,54 +411,84 @@ impl MetaData<GdalLoadingInfo, RasterResultDescriptor, RasterQueryRectangle>
             step: 1,
         };
 
-        let valid_duration = if self.time_steps_are_sorted() {
-            TimeInterval::new(
-                self.time_steps[0].start(),
-                self.time_steps[self.time_steps.len() - 1].start(),
-            )?
+        let sorted_time_steps = if self
+            .time_steps
+            .windows(2)
+            .all(|w| w[0].end() <= w[1].start())
+        {
+            self.time_steps.clone()
         } else {
             let mut sorted_time_steps = self.time_steps.clone();
-            sorted_time_steps.sort_by(|a, b| a.start().partial_cmp(&b.start()).unwrap());
-
-            TimeInterval::new(
-                sorted_time_steps[0].start(),
-                sorted_time_steps[sorted_time_steps.len() - 1].start(),
-            )?
+            sorted_time_steps.sort_by(|a, b| a.end().partial_cmp(&b.start()).unwrap());
+            sorted_time_steps
         };
+
+        let mut time_steps_no_gaps = sorted_time_steps.clone();
+
+        for (index, time) in sorted_time_steps.iter().enumerate() {
+            if index < sorted_time_steps.len() - 1 {
+                if time.is_instant() {
+                    time_steps_no_gaps.push(TimeInterval::new(
+                        (time.end() + minimum_step)?,
+                        sorted_time_steps[index + 1].start(),
+                    )?);
+                } else {
+                    time_steps_no_gaps.push(TimeInterval::new(
+                        time.end(),
+                        sorted_time_steps[index + 1].start(),
+                    )?);
+                }
+            }
+        }
+
+        time_steps_no_gaps.sort_by(|a, b| a.start().partial_cmp(&b.start()).unwrap());
+
+        let valid_duration = TimeInterval::new(
+            time_steps_no_gaps[0].start(),
+            time_steps_no_gaps[time_steps_no_gaps.len() - 1].start(),
+        )?;
 
         let parts = match valid_duration.intersect(&query.time_interval) {
             Some(time_interval) => {
                 let mut loading_info_parts: Vec<GdalLoadingInfoPart> = Vec::new();
 
-                for (index, time_position) in self.time_steps.iter().enumerate() {
-                    if time_interval.contains(time_position) {
+                if query.time_interval.start() < time_interval.start() {
+                    let gap =
+                        TimeInterval::new(query.time_interval.start(), time_interval.start())?;
+
+                    loading_info_parts.push(
+                        self.params
+                            .replace_time_placeholders(&self.time_placeholders, gap)
+                            .map(|loading_info_part_params| GdalLoadingInfoPart {
+                                time: gap,
+                                params: loading_info_part_params,
+                            })?,
+                    );
+                }
+                for time_position in &time_steps_no_gaps {
+                    if let Some(step_interval) = time_interval.intersect(time_position) {
                         loading_info_parts.push(
                             self.params
-                                .replace_time_placeholders(&self.time_placeholders, *time_position)
+                                .replace_time_placeholders(&self.time_placeholders, step_interval)
                                 .map(|loading_info_part_params| GdalLoadingInfoPart {
-                                    time: *time_position,
+                                    time: step_interval,
                                     params: loading_info_part_params,
                                 })?,
                         );
-
-                        if index < self.time_steps.len() - 1
-                            && time_interval.contains(&self.time_steps[index + 1])
-                        {
-                            let time_gap = TimeInterval::new(
-                                (time_position.end() + minimum_step)?,
-                                (self.time_steps[index + 1].start() - minimum_step)?,
-                            )?;
-
-                            loading_info_parts.push(
-                                self.params
-                                    .replace_time_placeholders(&self.time_placeholders, time_gap)
-                                    .map(|loading_info_part_params| GdalLoadingInfoPart {
-                                        time: time_gap,
-                                        params: loading_info_part_params,
-                                    })?,
-                            );
-                        }
                     }
+                }
+
+                if query.time_interval.end() > time_interval.end() {
+                    let gap = TimeInterval::new(time_interval.end(), query.time_interval.end())?;
+
+                    loading_info_parts.push(
+                        self.params
+                            .replace_time_placeholders(&self.time_placeholders, gap)
+                            .map(|loading_info_part_params| GdalLoadingInfoPart {
+                                time: gap,
+                                params: loading_info_part_params,
+                            })?,
+                    );
                 }
 
                 loading_info_parts
@@ -1430,8 +1454,9 @@ mod tests {
     }
 
     #[allow(clippy::suspicious_map)]
+    #[allow(clippy::too_many_lines)]
     #[tokio::test]
-    async fn test_step_meta_data() {
+    async fn test_step_time_instance() {
         let result_descriptor = RasterResultDescriptor {
             data_type: RasterDataType::U8,
             spatial_reference: SpatialReference::epsg_4326().into(),
@@ -1454,7 +1479,8 @@ mod tests {
             TimeInterval::new_instant(30).unwrap(),
             TimeInterval::new_instant(5).unwrap(),
             TimeInterval::new_instant(10).unwrap(),
-            TimeInterval::new_instant(25).unwrap(),
+            TimeInterval::new_instant(20).unwrap(),
+            TimeInterval::new_instant(15).unwrap(),
         ];
         let time_placeholders = hashmap! {
             "%TIME%".to_string() => GdalSourceTimePlaceholder {
@@ -1483,7 +1509,7 @@ mod tests {
                         (0., 1.).into(),
                         (1., 0.).into()
                     ),
-                    time_interval: TimeInterval::new_unchecked(4, 12),
+                    time_interval: TimeInterval::new_unchecked(6, 18),
                     spatial_resolution: SpatialResolution::one(),
                 })
                 .await
@@ -1492,9 +1518,11 @@ mod tests {
                 .map(|p| p.unwrap().params.file_path.to_str().unwrap().to_owned())
                 .collect::<Vec<_>>(),
             &[
-                "/foo/bar_step_005000000.tiff",
                 "/foo/bar_step_006000000.tiff",
-                "/foo/bar_step_010000000.tiff"
+                "/foo/bar_step_010000000.tiff",
+                "/foo/bar_step_011000000.tiff",
+                "/foo/bar_step_015000000.tiff",
+                "/foo/bar_step_016000000.tiff"
             ]
         );
 
@@ -1505,7 +1533,7 @@ mod tests {
                         (0., 1.).into(),
                         (1., 0.).into()
                     ),
-                    time_interval: TimeInterval::new_instant(50).unwrap(),
+                    time_interval: TimeInterval::new_unchecked(22, 32),
                     spatial_resolution: SpatialResolution::one(),
                 })
                 .await
@@ -1513,7 +1541,136 @@ mod tests {
                 .info
                 .map(|p| p.unwrap().params.file_path.to_str().unwrap().to_owned())
                 .collect::<Vec<_>>(),
-            &["/foo/bar_step_050000000.tiff"]
+            &[
+                "/foo/bar_step_022000000.tiff",
+                "/foo/bar_step_030000000.tiff"
+            ]
+        );
+
+        assert_eq!(
+            meta_data
+                .loading_info(RasterQueryRectangle {
+                    spatial_bounds: SpatialPartition2D::new_unchecked(
+                        (0., 1.).into(),
+                        (1., 0.).into()
+                    ),
+                    time_interval: TimeInterval::new_unchecked(40, 50),
+                    spatial_resolution: SpatialResolution::one(),
+                })
+                .await
+                .unwrap()
+                .info
+                .map(|p| p.unwrap().params.file_path.to_str().unwrap().to_owned())
+                .collect::<Vec<_>>(),
+            &["/foo/bar_step_040000000.tiff"]
+        );
+    }
+
+    #[allow(clippy::suspicious_map)]
+    #[tokio::test]
+    async fn test_step_time_interval() {
+        let result_descriptor = RasterResultDescriptor {
+            data_type: RasterDataType::U8,
+            spatial_reference: SpatialReference::epsg_4326().into(),
+            measurement: Measurement::Unitless,
+            no_data_value: Some(0.),
+        };
+        let params = GdalDatasetParameters {
+            file_path: "/foo/bar_step_%TIME%.tiff".into(),
+            rasterband_channel: 0,
+            geo_transform: TestDefault::test_default(),
+            width: 360,
+            height: 180,
+            file_not_found_handling: FileNotFoundHandling::NoData,
+            no_data_value: Some(0.),
+            properties_mapping: None,
+            gdal_open_options: None,
+            gdal_config_options: None,
+        };
+        let time_steps = vec![
+            TimeInterval::new_instant(30).unwrap(),
+            TimeInterval::new_unchecked(10, 20),
+            TimeInterval::new_unchecked(22, 25),
+        ];
+        let time_placeholders = hashmap! {
+            "%TIME%".to_string() => GdalSourceTimePlaceholder {
+                format: "%f".to_string(),
+                reference: TimeReference::Start,
+            },
+        };
+
+        let meta_data =
+            GdalMetadataFixedTimes::new(time_steps, params, result_descriptor, time_placeholders);
+
+        assert_eq!(
+            meta_data.result_descriptor().await.unwrap(),
+            RasterResultDescriptor {
+                data_type: RasterDataType::U8,
+                spatial_reference: SpatialReference::epsg_4326().into(),
+                measurement: Measurement::Unitless,
+                no_data_value: Some(0.)
+            }
+        );
+
+        assert_eq!(
+            meta_data
+                .loading_info(RasterQueryRectangle {
+                    spatial_bounds: SpatialPartition2D::new_unchecked(
+                        (0., 1.).into(),
+                        (1., 0.).into()
+                    ),
+                    time_interval: TimeInterval::new_unchecked(14, 18),
+                    spatial_resolution: SpatialResolution::one(),
+                })
+                .await
+                .unwrap()
+                .info
+                .map(|p| p.unwrap().params.file_path.to_str().unwrap().to_owned())
+                .collect::<Vec<_>>(),
+            &["/foo/bar_step_014000000.tiff"]
+        );
+
+        assert_eq!(
+            meta_data
+                .loading_info(RasterQueryRectangle {
+                    spatial_bounds: SpatialPartition2D::new_unchecked(
+                        (0., 1.).into(),
+                        (1., 0.).into()
+                    ),
+                    time_interval: TimeInterval::new_unchecked(15, 24),
+                    spatial_resolution: SpatialResolution::one(),
+                })
+                .await
+                .unwrap()
+                .info
+                .map(|p| p.unwrap().params.file_path.to_str().unwrap().to_owned())
+                .collect::<Vec<_>>(),
+            &[
+                "/foo/bar_step_015000000.tiff",
+                "/foo/bar_step_020000000.tiff",
+                "/foo/bar_step_022000000.tiff"
+            ]
+        );
+
+        assert_eq!(
+            meta_data
+                .loading_info(RasterQueryRectangle {
+                    spatial_bounds: SpatialPartition2D::new_unchecked(
+                        (0., 1.).into(),
+                        (1., 0.).into()
+                    ),
+                    time_interval: TimeInterval::new_unchecked(5, 15),
+                    spatial_resolution: SpatialResolution::one(),
+                })
+                .await
+                .unwrap()
+                .info
+                .map(|p| p.unwrap().params.file_path.to_str().unwrap().to_owned())
+                .collect::<Vec<_>>(),
+            &[
+                "/foo/bar_step_005000000.tiff",
+                "/foo/bar_step_010000000.tiff"
+            ]
         );
     }
 
