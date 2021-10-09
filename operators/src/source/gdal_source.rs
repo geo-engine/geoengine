@@ -471,7 +471,14 @@ impl MetaData<GdalLoadingInfo, RasterResultDescriptor, RasterQueryRectangle>
             }
             .into_iter(),
 
-            None => vec![].into_iter(),
+            None => vec![self
+                .params
+                .replace_time_placeholders(&self.time_placeholders, query.time_interval)
+                .map(|loading_info_part_params| GdalLoadingInfoPart {
+                    time: query.time_interval,
+                    params: loading_info_part_params,
+                })?]
+            .into_iter(),
         };
 
         Ok(GdalLoadingInfo {
@@ -1444,7 +1451,7 @@ mod tests {
             gdal_config_options: None,
         };
         let time_steps = vec![
-            TimeInterval::new_instant(0).unwrap(),
+            TimeInterval::new_instant(30).unwrap(),
             TimeInterval::new_instant(5).unwrap(),
             TimeInterval::new_instant(10).unwrap(),
             TimeInterval::new_instant(25).unwrap(),
@@ -1498,15 +1505,15 @@ mod tests {
                         (0., 1.).into(),
                         (1., 0.).into()
                     ),
-                    time_interval: TimeInterval::new_instant(25).unwrap(),
+                    time_interval: TimeInterval::new_instant(50).unwrap(),
                     spatial_resolution: SpatialResolution::one(),
                 })
                 .await
                 .unwrap()
                 .info
                 .map(|p| p.unwrap().params.file_path.to_str().unwrap().to_owned())
-                .count(),
-            0
+                .collect::<Vec<_>>(),
+            &["/foo/bar_step_050000000.tiff"]
         );
     }
 
