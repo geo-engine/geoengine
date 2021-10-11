@@ -4,6 +4,7 @@ use crate::util::Result;
 use serde::{Deserialize, Serialize};
 use snafu::ensure;
 
+/// A box plot consists of multiple boxes (`BoxPlotAttribute`)
 #[derive(Debug, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct BoxPlot {
@@ -11,10 +12,12 @@ pub struct BoxPlot {
 }
 
 impl BoxPlot {
+    /// Creates a new box plot without any boxes.
     pub fn new() -> BoxPlot {
         BoxPlot { values: vec![] }
     }
 
+    /// Adds a new box/attribute to this box plot.
     pub fn add_attribute(&mut self, value: BoxPlotAttribute) {
         self.values.push(value);
     }
@@ -26,6 +29,7 @@ impl Default for BoxPlot {
     }
 }
 
+/// Represents a single box of a box plot including whiskers
 #[derive(Debug, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct BoxPlotAttribute {
@@ -51,7 +55,7 @@ impl BoxPlotAttribute {
         ensure!(
             !min.is_nan() && !max.is_nan() && !median.is_nan() && !q1.is_nan() && !q3.is_nan(),
             error::Plot {
-                details: "Box plots must have finite values"
+                details: "NaN values not allowed in box plots."
             }
         );
 
