@@ -37,6 +37,7 @@ pub async fn start_server(static_files_dir: Option<PathBuf>) -> Result<()> {
     start(
         static_files_dir,
         web_config.bind_address,
+        web_config.version_api,
         InMemoryContext::new_with_data(
             data_path_config.dataset_defs_path,
             data_path_config.provider_defs_path,
@@ -49,6 +50,7 @@ pub async fn start_server(static_files_dir: Option<PathBuf>) -> Result<()> {
 async fn start<C>(
     static_files_dir: Option<PathBuf>,
     bind_address: SocketAddr,
+    version_api: bool,
     ctx: C,
 ) -> Result<(), Error>
 where
@@ -78,8 +80,7 @@ where
             .configure(handlers::wfs::init_wfs_routes::<C>)
             .configure(handlers::wms::init_wms_routes::<C>)
             .configure(handlers::workflows::init_workflow_routes::<C>);
-        #[cfg(feature = "version-api")]
-        {
+        if version_api {
             app = app.route("/version", web::get().to(show_version_handler));
         }
         if let Some(static_files_dir) = static_files_dir.clone() {
@@ -184,7 +185,6 @@ pub(crate) fn configure_extractors(cfg: &mut web::ServiceConfig) {
 ///   "commitHash": "16cd0881a79b6f03bb5f1f6ef2b2711e570b9865"
 /// }
 /// ```
-#[cfg(feature = "version-api")]
 #[allow(clippy::unused_async)] // the function signature of request handlers requires it
 pub(crate) async fn show_version_handler() -> impl actix_web::Responder {
     #[derive(serde::Serialize)]
