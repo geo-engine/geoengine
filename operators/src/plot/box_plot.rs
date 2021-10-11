@@ -1,18 +1,20 @@
 use async_trait::async_trait;
 use futures::StreamExt;
+use num_traits::AsPrimitive;
 use serde::{Deserialize, Serialize};
 
 use geoengine_datatypes::collections::FeatureCollectionInfos;
 use geoengine_datatypes::plots::{BoxPlotAttribute, Plot, PlotData};
+use geoengine_datatypes::raster::{GridOrEmpty, NoDataValue};
 
-use crate::engine::VectorQueryRectangle;
 use crate::engine::{
-    ExecutionContext, InitializedPlotOperator, InitializedVectorOperator, Operator, PlotOperator,
-    PlotQueryProcessor, PlotResultDescriptor, QueryContext, TypedPlotQueryProcessor,
-    TypedVectorQueryProcessor,
+    ExecutionContext, InitializedPlotOperator, InitializedRasterOperator,
+    InitializedVectorOperator, Operator, PlotOperator, PlotQueryProcessor, PlotResultDescriptor,
+    QueryContext, QueryProcessor, SingleRasterOrVectorSource, TypedPlotQueryProcessor,
+    TypedRasterQueryProcessor, TypedVectorQueryProcessor, VectorQueryRectangle,
 };
-use crate::engine::{QueryProcessor, SingleVectorSource};
 use crate::error::Error;
+use crate::util::input::RasterOrVectorOperator;
 use crate::util::statistics::PSquareQuantileEstimator;
 use crate::util::Result;
 
@@ -20,7 +22,7 @@ pub const BOXPLOT_OPERATOR_NAME: &str = "BoxPlot";
 const EXACT_CALC_BOUND: usize = 10_000;
 
 /// A box plot about vector data attribute values
-pub type BoxPlot = Operator<BoxPlotParams, SingleVectorSource>;
+pub type BoxPlot = Operator<BoxPlotParams, SingleRasterOrVectorSource>;
 
 /// The parameter spec for `BoxPlot`
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -41,32 +43,48 @@ impl PlotOperator for BoxPlot {
         self: Box<Self>,
         context: &dyn ExecutionContext,
     ) -> Result<Box<dyn InitializedPlotOperator>> {
-        if self.params.column_names.is_empty() {
-            return Err(Error::InvalidOperatorSpec {
-                reason: "BoxPlot requires at least one numeric column ('column_names' parameter)."
-                    .to_string(),
-            });
-        }
-
-        let source = self.sources.vector.initialize(context).await?;
-        for cn in &self.params.column_names {
-            match source.result_descriptor().columns.get(cn.as_str()) {
-                Some(column) if !column.is_numeric() => {
+        match self.sources.source {
+            RasterOrVectorOperator::Raster(raster_source) => {
+                if !self.params.column_names.is_empty() {
                     return Err(Error::InvalidOperatorSpec {
-                        reason: format!("Column '{}' is not numeric.", cn),
+                        reason: "BoxPlot on raster data must not contain a column selection ('column_names' parameter)."
+                            .to_string(),
                     });
                 }
-                Some(_) => {
-                    // OK
-                }
-                None => {
-                    return Err(Error::ColumnDoesNotExist {
-                        column: cn.to_string(),
+
+                let source = raster_source.initialize(context).await?;
+
+                Ok(InitializedBoxPlot::new(PlotResultDescriptor {}, self.params, source).boxed())
+            }
+            RasterOrVectorOperator::Vector(vector_source) => {
+                if self.params.column_names.is_empty() {
+                    return Err(Error::InvalidOperatorSpec {
+                        reason: "BoxPlot on vector data requires the selection of at least one numeric column ('column_names' parameter)."
+                            .to_string(),
                     });
                 }
+
+                let source = vector_source.initialize(context).await?;
+                for cn in &self.params.column_names {
+                    match source.result_descriptor().columns.get(cn.as_str()) {
+                        Some(column) if !column.is_numeric() => {
+                            return Err(Error::InvalidOperatorSpec {
+                                reason: format!("Column '{}' is not numeric.", cn),
+                            });
+                        }
+                        Some(_) => {
+                            // OK
+                        }
+                        None => {
+                            return Err(Error::ColumnDoesNotExist {
+                                column: cn.to_string(),
+                            });
+                        }
+                    }
+                }
+                Ok(InitializedBoxPlot::new(PlotResultDescriptor {}, self.params, source).boxed())
             }
         }
-        Ok(InitializedBoxPlot::new(PlotResultDescriptor {}, self.params, source).boxed())
     }
 }
 
@@ -94,7 +112,7 @@ impl InitializedPlotOperator for InitializedBoxPlot<Box<dyn InitializedVectorOpe
     }
 
     fn query_processor(&self) -> Result<TypedPlotQueryProcessor> {
-        let processor = BoxPlotQueryProcessor {
+        let processor = BoxPlotVectorQueryProcessor {
             input: self.source.query_processor()?,
             column_names: self.column_names.clone(),
             interactive: self.interactive,
@@ -104,15 +122,29 @@ impl InitializedPlotOperator for InitializedBoxPlot<Box<dyn InitializedVectorOpe
     }
 }
 
-/// A query processor that calculates the boxplots about its vector inputs.
-pub struct BoxPlotQueryProcessor {
+impl InitializedPlotOperator for InitializedBoxPlot<Box<dyn InitializedRasterOperator>> {
+    fn result_descriptor(&self) -> &PlotResultDescriptor {
+        &self.result_descriptor
+    }
+
+    fn query_processor(&self) -> Result<TypedPlotQueryProcessor> {
+        let processor = BoxPlotRasterQueryProcessor {
+            input: self.source.query_processor()?,
+            interactive: self.interactive,
+        };
+        Ok(TypedPlotQueryProcessor::JsonVega(processor.boxed()))
+    }
+}
+
+/// A query processor that calculates the boxplots about its vector input.
+pub struct BoxPlotVectorQueryProcessor {
     input: TypedVectorQueryProcessor,
     column_names: Vec<String>,
     interactive: bool,
 }
 
 #[async_trait]
-impl PlotQueryProcessor for BoxPlotQueryProcessor {
+impl PlotQueryProcessor for BoxPlotVectorQueryProcessor {
     type OutputFormat = PlotData;
 
     fn plot_type(&self) -> &'static str {
@@ -155,6 +187,57 @@ impl PlotQueryProcessor for BoxPlotQueryProcessor {
         Ok(chart.to_vega_embeddable(self.interactive)?)
     }
 }
+
+/// A query processor that calculates the boxplots about its raster input.
+pub struct BoxPlotRasterQueryProcessor {
+    input: TypedRasterQueryProcessor,
+    interactive: bool,
+}
+
+#[async_trait]
+impl PlotQueryProcessor for BoxPlotRasterQueryProcessor {
+    type OutputFormat = PlotData;
+
+    fn plot_type(&self) -> &'static str {
+        BOXPLOT_OPERATOR_NAME
+    }
+
+    async fn plot_query<'p>(
+        &'p self,
+        query: VectorQueryRectangle,
+        ctx: &'p dyn QueryContext,
+    ) -> Result<Self::OutputFormat> {
+        let mut accum = BoxPlotAccum::new("value".to_owned());
+
+        call_on_generic_raster_processor!(&self.input, processor => {
+            let mut stream = processor.query(query.into(), ctx).await?;
+
+            while let Some(tile) = stream.next().await {
+                let tile = tile?;
+
+                // Ignore empty tiles
+                if let GridOrEmpty::Grid(grid) = tile.grid_array {
+                    let iter = grid
+                        .data
+                        .iter()
+                        .filter(|&x| !grid.is_no_data(*x))
+                        .map(|x| (*x).as_());
+                    accum.update(iter)?;
+                }
+            }
+        });
+
+        let mut chart = geoengine_datatypes::plots::BoxPlot::new();
+        if let Some(attrib) = accum.finish()? {
+            chart.add_attribute(attrib)
+        }
+        Ok(chart.to_vega_embeddable(self.interactive)?)
+    }
+}
+
+//
+// AUX Structures
+//
 
 struct BoxPlotAccum {
     name: String,
@@ -236,14 +319,23 @@ mod tests {
     use serde_json::json;
 
     use geoengine_datatypes::primitives::{
-        BoundingBox2D, FeatureData, NoGeometry, SpatialResolution, TimeInterval,
+        BoundingBox2D, FeatureData, Measurement, NoGeometry, SpatialResolution, TimeInterval,
     };
+    use geoengine_datatypes::raster::{
+        EmptyGrid2D, Grid2D, RasterDataType, RasterTile2D, TileInformation,
+    };
+    use geoengine_datatypes::spatial_reference::SpatialReference;
+    use geoengine_datatypes::util::test::TestDefault;
     use geoengine_datatypes::{collections::DataCollection, primitives::MultiPoint};
 
-    use crate::engine::{MockExecutionContext, MockQueryContext, VectorOperator};
-    use crate::mock::MockFeatureCollectionSource;
+    use crate::engine::{
+        MockExecutionContext, MockQueryContext, RasterOperator, RasterResultDescriptor,
+        VectorOperator,
+    };
+    use crate::mock::{MockFeatureCollectionSource, MockRasterSource, MockRasterSourceParams};
 
     use super::*;
+    use chrono::NaiveDate;
 
     #[test]
     fn serialization() {
@@ -264,7 +356,7 @@ mod tests {
                 "interactive": false,
             },
             "sources": {
-                "vector": {
+                "source": {
                     "type": "MockFeatureCollectionSourceMultiPoint",
                     "params": {
                         "collections": []
@@ -296,7 +388,7 @@ mod tests {
             "params": {
             },
             "sources": {
-                "vector": {
+                "source": {
                     "type": "MockFeatureCollectionSourceMultiPoint",
                     "params": {
                         "collections": []
@@ -664,147 +756,265 @@ mod tests {
         assert_eq!(expected.to_vega_embeddable(false).unwrap(), result);
     }
 
-    // #[tokio::test]
-    // async fn no_data_raster() {
-    //     let no_data_value = Some(0);
-    //     let histogram = Histogram {
-    //         params: HistogramParams {
-    //             column_name: None,
-    //             bounds: HistogramBounds::Data(Data::default()),
-    //             buckets: None,
-    //             interactive: false,
-    //         },
-    //         sources: MockRasterSource {
-    //             params: MockRasterSourceParams {
-    //                 data: vec![RasterTile2D::new_with_tile_info(
-    //                     TimeInterval::default(),
-    //                     TileInformation {
-    //                         global_geo_transform: TestDefault::test_default(),
-    //                         global_tile_position: [0, 0].into(),
-    //                         tile_size_in_pixels: [3, 2].into(),
-    //                     },
-    //                     Grid2D::new([3, 2].into(), vec![0, 0, 0, 0, 0, 0], no_data_value)
-    //                         .unwrap()
-    //                         .into(),
-    //                 )],
-    //                 result_descriptor: RasterResultDescriptor {
-    //                     data_type: RasterDataType::U8,
-    //                     spatial_reference: SpatialReference::epsg_4326().into(),
-    //                     measurement: Measurement::Unitless,
-    //                     no_data_value: no_data_value.map(AsPrimitive::as_),
-    //                 },
-    //             },
-    //         }
-    //         .boxed()
-    //         .into(),
-    //     };
-    //
-    //     let execution_context = MockExecutionContext::default();
-    //
-    //     let query_processor = histogram
-    //         .boxed()
-    //         .initialize(&execution_context)
-    //         .await
-    //         .unwrap()
-    //         .query_processor()
-    //         .unwrap()
-    //         .json_vega()
-    //         .unwrap();
-    //
-    //     let result = query_processor
-    //         .plot_query(
-    //             VectorQueryRectangle {
-    //                 spatial_bounds: BoundingBox2D::new((-180., -90.).into(), (180., 90.).into())
-    //                     .unwrap(),
-    //                 time_interval: TimeInterval::default(),
-    //                 spatial_resolution: SpatialResolution::one(),
-    //             },
-    //             &MockQueryContext::new(0),
-    //         )
-    //         .await
-    //         .unwrap();
-    //
-    //     assert_eq!(
-    //         result,
-    //         geoengine_datatypes::plots::Histogram::builder(1, 0., 0., Measurement::Unitless)
-    //             .build()
-    //             .unwrap()
-    //             .to_vega_embeddable(false)
-    //             .unwrap()
-    //     );
-    // }
-    //
-    // #[tokio::test]
-    // async fn single_value_raster_stream() {
-    //     let execution_context = MockExecutionContext::default();
-    //
-    //     let no_data_value = None;
-    //     let histogram = Histogram {
-    //         params: HistogramParams {
-    //             column_name: None,
-    //             bounds: HistogramBounds::Data(Data::default()),
-    //             buckets: None,
-    //             interactive: false,
-    //         },
-    //         sources: MockRasterSource {
-    //             params: MockRasterSourceParams {
-    //                 data: vec![RasterTile2D::new_with_tile_info(
-    //                     TimeInterval::default(),
-    //                     TileInformation {
-    //                         global_geo_transform: TestDefault::test_default(),
-    //                         global_tile_position: [0, 0].into(),
-    //                         tile_size_in_pixels: [3, 2].into(),
-    //                     },
-    //                     Grid2D::new([3, 2].into(), vec![4; 6], no_data_value)
-    //                         .unwrap()
-    //                         .into(),
-    //                 )],
-    //                 result_descriptor: RasterResultDescriptor {
-    //                     data_type: RasterDataType::U8,
-    //                     spatial_reference: SpatialReference::epsg_4326().into(),
-    //                     measurement: Measurement::Unitless,
-    //                     no_data_value: no_data_value.map(AsPrimitive::as_),
-    //                 },
-    //             },
-    //         }
-    //         .boxed()
-    //         .into(),
-    //     };
-    //
-    //     let query_processor = histogram
-    //         .boxed()
-    //         .initialize(&execution_context)
-    //         .await
-    //         .unwrap()
-    //         .query_processor()
-    //         .unwrap()
-    //         .json_vega()
-    //         .unwrap();
-    //
-    //     let result = query_processor
-    //         .plot_query(
-    //             VectorQueryRectangle {
-    //                 spatial_bounds: BoundingBox2D::new((-180., -90.).into(), (180., 90.).into())
-    //                     .unwrap(),
-    //                 time_interval: TimeInterval::new_instant(
-    //                     NaiveDate::from_ymd(2013, 12, 1).and_hms(12, 0, 0),
-    //                 )
-    //                 .unwrap(),
-    //                 spatial_resolution: SpatialResolution::one(),
-    //             },
-    //             &MockQueryContext::default(),
-    //         )
-    //         .await
-    //         .unwrap();
-    //
-    //     assert_eq!(
-    //         result,
-    //         geoengine_datatypes::plots::Histogram::builder(1, 4., 4., Measurement::Unitless)
-    //             .counts(vec![6])
-    //             .build()
-    //             .unwrap()
-    //             .to_vega_embeddable(false)
-    //             .unwrap()
-    //     );
-    // }
+    #[tokio::test]
+    async fn no_data_raster() {
+        let no_data_value = Some(0);
+        let box_plot = BoxPlot {
+            params: BoxPlotParams {
+                column_names: vec![],
+                interactive: false,
+            },
+            sources: MockRasterSource {
+                params: MockRasterSourceParams {
+                    data: vec![RasterTile2D::new_with_tile_info(
+                        TimeInterval::default(),
+                        TileInformation {
+                            global_geo_transform: TestDefault::test_default(),
+                            global_tile_position: [0, 0].into(),
+                            tile_size_in_pixels: [3, 2].into(),
+                        },
+                        Grid2D::new([3, 2].into(), vec![0, 0, 0, 0, 0, 0], no_data_value)
+                            .unwrap()
+                            .into(),
+                    )],
+                    result_descriptor: RasterResultDescriptor {
+                        data_type: RasterDataType::U8,
+                        spatial_reference: SpatialReference::epsg_4326().into(),
+                        measurement: Measurement::Unitless,
+                        no_data_value: no_data_value.map(AsPrimitive::as_),
+                    },
+                },
+            }
+            .boxed()
+            .into(),
+        };
+
+        let execution_context = MockExecutionContext::default();
+
+        let query_processor = box_plot
+            .boxed()
+            .initialize(&execution_context)
+            .await
+            .unwrap()
+            .query_processor()
+            .unwrap()
+            .json_vega()
+            .unwrap();
+
+        let result = query_processor
+            .plot_query(
+                VectorQueryRectangle {
+                    spatial_bounds: BoundingBox2D::new((-180., -90.).into(), (180., 90.).into())
+                        .unwrap(),
+                    time_interval: TimeInterval::default(),
+                    spatial_resolution: SpatialResolution::one(),
+                },
+                &MockQueryContext::new(0),
+            )
+            .await
+            .unwrap();
+
+        let expected = geoengine_datatypes::plots::BoxPlot::new();
+
+        assert_eq!(expected.to_vega_embeddable(false).unwrap(), result);
+    }
+
+    #[tokio::test]
+    async fn empty_tile_raster() {
+        let no_data_value = Some(0_u8);
+        let box_plot = BoxPlot {
+            params: BoxPlotParams {
+                column_names: vec![],
+                interactive: false,
+            },
+            sources: MockRasterSource {
+                params: MockRasterSourceParams {
+                    data: vec![RasterTile2D::new_with_tile_info(
+                        TimeInterval::default(),
+                        TileInformation {
+                            global_geo_transform: TestDefault::test_default(),
+                            global_tile_position: [0, 0].into(),
+                            tile_size_in_pixels: [3, 2].into(),
+                        },
+                        EmptyGrid2D::new([3, 2].into(), no_data_value.unwrap()).into(),
+                    )],
+                    result_descriptor: RasterResultDescriptor {
+                        data_type: RasterDataType::U8,
+                        spatial_reference: SpatialReference::epsg_4326().into(),
+                        measurement: Measurement::Unitless,
+                        no_data_value: no_data_value.map(AsPrimitive::as_),
+                    },
+                },
+            }
+            .boxed()
+            .into(),
+        };
+
+        let execution_context = MockExecutionContext::default();
+
+        let query_processor = box_plot
+            .boxed()
+            .initialize(&execution_context)
+            .await
+            .unwrap()
+            .query_processor()
+            .unwrap()
+            .json_vega()
+            .unwrap();
+
+        let result = query_processor
+            .plot_query(
+                VectorQueryRectangle {
+                    spatial_bounds: BoundingBox2D::new((-180., -90.).into(), (180., 90.).into())
+                        .unwrap(),
+                    time_interval: TimeInterval::default(),
+                    spatial_resolution: SpatialResolution::one(),
+                },
+                &MockQueryContext::new(0),
+            )
+            .await
+            .unwrap();
+
+        let expected = geoengine_datatypes::plots::BoxPlot::new();
+
+        assert_eq!(expected.to_vega_embeddable(false).unwrap(), result);
+    }
+
+    #[tokio::test]
+    async fn single_value_raster_stream() {
+        let execution_context = MockExecutionContext::default();
+
+        let no_data_value = None;
+        let histogram = BoxPlot {
+            params: BoxPlotParams {
+                column_names: vec![],
+                interactive: false,
+            },
+            sources: MockRasterSource {
+                params: MockRasterSourceParams {
+                    data: vec![RasterTile2D::new_with_tile_info(
+                        TimeInterval::default(),
+                        TileInformation {
+                            global_geo_transform: TestDefault::test_default(),
+                            global_tile_position: [0, 0].into(),
+                            tile_size_in_pixels: [3, 2].into(),
+                        },
+                        Grid2D::new([3, 2].into(), vec![4; 6], no_data_value)
+                            .unwrap()
+                            .into(),
+                    )],
+                    result_descriptor: RasterResultDescriptor {
+                        data_type: RasterDataType::U8,
+                        spatial_reference: SpatialReference::epsg_4326().into(),
+                        measurement: Measurement::Unitless,
+                        no_data_value: no_data_value.map(AsPrimitive::as_),
+                    },
+                },
+            }
+            .boxed()
+            .into(),
+        };
+
+        let query_processor = histogram
+            .boxed()
+            .initialize(&execution_context)
+            .await
+            .unwrap()
+            .query_processor()
+            .unwrap()
+            .json_vega()
+            .unwrap();
+
+        let result = query_processor
+            .plot_query(
+                VectorQueryRectangle {
+                    spatial_bounds: BoundingBox2D::new((-180., -90.).into(), (180., 90.).into())
+                        .unwrap(),
+                    time_interval: TimeInterval::new_instant(
+                        NaiveDate::from_ymd(2013, 12, 1).and_hms(12, 0, 0),
+                    )
+                    .unwrap(),
+                    spatial_resolution: SpatialResolution::one(),
+                },
+                &MockQueryContext::default(),
+            )
+            .await
+            .unwrap();
+
+        let mut expected = geoengine_datatypes::plots::BoxPlot::new();
+        expected.add_attribute(
+            BoxPlotAttribute::new("value".to_owned(), 4.0, 4.0, 4.0, 4.0, 4.0, true).unwrap(),
+        );
+
+        assert_eq!(expected.to_vega_embeddable(false).unwrap(), result);
+    }
+
+    #[tokio::test]
+    async fn raster_with_no_data() {
+        let execution_context = MockExecutionContext::default();
+
+        let no_data_value = Some(0);
+        let histogram = BoxPlot {
+            params: BoxPlotParams {
+                column_names: vec![],
+                interactive: false,
+            },
+            sources: MockRasterSource {
+                params: MockRasterSourceParams {
+                    data: vec![RasterTile2D::new_with_tile_info(
+                        TimeInterval::default(),
+                        TileInformation {
+                            global_geo_transform: TestDefault::test_default(),
+                            global_tile_position: [0, 0].into(),
+                            tile_size_in_pixels: [4, 2].into(),
+                        },
+                        Grid2D::new([4, 2].into(), vec![1, 2, 0, 4, 0, 6, 7, 0], no_data_value)
+                            .unwrap()
+                            .into(),
+                    )],
+                    result_descriptor: RasterResultDescriptor {
+                        data_type: RasterDataType::U8,
+                        spatial_reference: SpatialReference::epsg_4326().into(),
+                        measurement: Measurement::Unitless,
+                        no_data_value: no_data_value.map(AsPrimitive::as_),
+                    },
+                },
+            }
+            .boxed()
+            .into(),
+        };
+
+        let query_processor = histogram
+            .boxed()
+            .initialize(&execution_context)
+            .await
+            .unwrap()
+            .query_processor()
+            .unwrap()
+            .json_vega()
+            .unwrap();
+
+        let result = query_processor
+            .plot_query(
+                VectorQueryRectangle {
+                    spatial_bounds: BoundingBox2D::new((-180., -90.).into(), (180., 90.).into())
+                        .unwrap(),
+                    time_interval: TimeInterval::new_instant(
+                        NaiveDate::from_ymd(2013, 12, 1).and_hms(12, 0, 0),
+                    )
+                    .unwrap(),
+                    spatial_resolution: SpatialResolution::one(),
+                },
+                &MockQueryContext::default(),
+            )
+            .await
+            .unwrap();
+
+        let mut expected = geoengine_datatypes::plots::BoxPlot::new();
+        expected.add_attribute(
+            BoxPlotAttribute::new("value".to_string(), 1.0, 7.0, 4.0, 2.0, 6.0, true).unwrap(),
+        );
+
+        assert_eq!(expected.to_vega_embeddable(false).unwrap(), result);
+    }
 }
