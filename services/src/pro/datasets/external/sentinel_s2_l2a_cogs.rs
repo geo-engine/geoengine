@@ -45,7 +45,7 @@ pub struct SentinelS2L2ACogsProviderDefinition {
     bands: Vec<Band>,
     zones: Vec<Zone>,
     #[serde(default)]
-    stac_api_retires: StacApiRetries,
+    stac_api_retries: StacApiRetries,
 }
 
 #[derive(Clone, Copy, Debug, Serialize, Deserialize)]
@@ -78,7 +78,7 @@ impl DatasetProviderDefinition for SentinelS2L2ACogsProviderDefinition {
             self.api_url,
             &self.bands,
             &self.zones,
-            self.stac_api_retires,
+            self.stac_api_retries,
         )))
     }
 
@@ -121,7 +121,7 @@ pub struct SentinelS2L2aCogsDataProvider {
 
     datasets: HashMap<DatasetId, SentinelDataset>,
 
-    stac_api_retires: StacApiRetries,
+    stac_api_retries: StacApiRetries,
 }
 
 impl SentinelS2L2aCogsDataProvider {
@@ -130,12 +130,12 @@ impl SentinelS2L2aCogsDataProvider {
         api_url: String,
         bands: &[Band],
         zones: &[Zone],
-        stac_api_retires: StacApiRetries,
+        stac_api_retries: StacApiRetries,
     ) -> Self {
         Self {
             api_url,
             datasets: Self::create_datasets(&id, bands, zones),
-            stac_api_retires,
+            stac_api_retries,
         }
     }
 
@@ -507,7 +507,7 @@ impl MetaDataProvider<GdalLoadingInfo, RasterResultDescriptor, RasterQueryRectan
             api_url: self.api_url.clone(),
             zone: dataset.zone.clone(),
             band: dataset.band.clone(),
-            stac_api_retires: self.stac_api_retires,
+            stac_api_retires: self.stac_api_retries,
         }))
     }
 }
@@ -779,7 +779,7 @@ mod tests {
                     name: "UTM36S".into(),
                     epsg: 32736,
                 }],
-                stac_api_retires: Default::default(),
+                stac_api_retries: Default::default(),
             });
 
         let provider = provider_def.initialize().await.unwrap();
