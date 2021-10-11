@@ -709,7 +709,7 @@ mod tests {
     use crate::error::Result;
     use crate::projects::{PointSymbology, Symbology};
     use crate::test_data;
-    use crate::util::tests::{read_body_string, send_test_request, SetMultipartBody};
+    use crate::util::tests::{read_body_string, send_test_request, SetMultipartBody, TestDataUploads};
     use actix_web::{http::header, test};
     use actix_web_httpauth::headers::authorization::Bearer;
     use geoengine_datatypes::collections::VectorDataType;
@@ -887,6 +887,8 @@ mod tests {
 
     #[tokio::test]
     async fn create_dataset() {
+        let mut test_data = TestDataUploads::default(); // remember created folder and remove them on drop
+
         let ctx = InMemoryContext::default();
         let session_id = ctx.default_session_ref().await.id();
 
@@ -901,12 +903,14 @@ mod tests {
         let req = test::TestRequest::post()
             .uri("/upload")
             .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())))
-            .set_multipart_files(files);
+            .set_multipart_files(&files);
         let res = send_test_request(req, ctx.clone()).await;
         assert_eq!(res.status(), 200);
 
-        let id: IdResponse<UploadId> = test::read_body_json(res).await;
-        let s = format!("{{\"upload\": \"{}\",", id.id)
+        let upload: IdResponse<UploadId> = test::read_body_json(res).await;
+        test_data.uploads.push(upload.id);
+
+        let s = format!("{{\"upload\": \"{}\",", upload.id)
             + r#""definition": {
                 "properties": {
                     "id": null,
@@ -958,6 +962,13 @@ mod tests {
         let res = send_test_request(req, ctx).await;
 
         assert_eq!(res.status(), 200);
+
+        let root = upload.id.root_path().unwrap();
+
+        for file in files {
+            let file_name = file.file_name().unwrap();
+            assert!(root.join(file_name).exists());
+        }
     }
 
     #[test]

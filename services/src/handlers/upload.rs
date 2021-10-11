@@ -98,12 +98,14 @@ async fn upload_handler<C: Context>(
 mod tests {
     use super::*;
     use crate::contexts::{InMemoryContext, Session, SimpleContext};
-    use crate::util::tests::{send_test_request, SetMultipartBody};
+    use crate::util::tests::{send_test_request, SetMultipartBody, TestDataUploads};
     use actix_web::{http::header, test};
     use actix_web_httpauth::headers::authorization::Bearer;
 
     #[tokio::test]
     async fn upload() {
+        let mut test_data = TestDataUploads::default(); // remember created folder and remove them on drop
+
         let ctx = InMemoryContext::default();
         let session_id = ctx.default_session_ref().await.id();
 
@@ -119,9 +121,9 @@ mod tests {
         assert_eq!(res.status(), 200);
 
         let upload: IdResponse<UploadId> = test::read_body_json(res).await;
+        test_data.uploads.push(upload.id);
+
         let root = upload.id.root_path().unwrap();
         assert!(root.join("foo.txt").exists() && root.join("bar.txt").exists());
-
-        // TODO: delete upload directory or configure test settings to use temp dir
     }
 }
