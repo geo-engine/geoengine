@@ -170,8 +170,7 @@ mod tests {
     #[test]
     fn illegal_order() {
         assert!(
-            BoxPlotAttribute::new("A1".to_string(), f64::NAN, 35.0, 83.0, 20.0, 55.0, true)
-                .is_err()
+            BoxPlotAttribute::new("A1".to_string(), 12.0, 35.0, 83.0, 20.0, 55.0, true).is_err()
         );
     }
 }
