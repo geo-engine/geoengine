@@ -14,7 +14,7 @@ use num_traits::AsPrimitive;
 use serde::{Deserialize, Serialize};
 use snafu::ensure;
 
-#[derive(Debug, Eq, PartialEq, Clone, Serialize, Deserialize)]
+#[derive(Debug, Eq, PartialEq, Clone, Copy, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct EmptyGrid<D, T> {
     pub shape: D,
