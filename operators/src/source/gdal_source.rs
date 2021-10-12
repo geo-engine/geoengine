@@ -1,4 +1,5 @@
 use crate::engine::{MetaData, OperatorDatasets, QueryProcessor, RasterQueryRectangle};
+use crate::util::input::float_option_with_nan;
 use crate::{
     engine::{
         InitializedRasterOperator, RasterOperator, RasterQueryProcessor, RasterResultDescriptor,
@@ -7,12 +8,11 @@ use crate::{
     error::{self, Error},
     util::Result,
 };
+use async_trait::async_trait;
 use futures::{
     stream::{self, BoxStream, StreamExt},
     Stream,
 };
-
-use async_trait::async_trait;
 use gdal::raster::{GdalType, RasterBand as GdalRasterBand};
 use gdal::{Dataset as GdalDataset, DatasetOptions, GdalOpenFlags, Metadata as GdalMetadata};
 use geoengine_datatypes::primitives::{Coordinate2D, SpatialPartition2D, SpatialPartitioned};
@@ -198,6 +198,7 @@ pub struct GdalDatasetParameters {
     pub width: usize,
     pub height: usize,
     pub file_not_found_handling: FileNotFoundHandling,
+    #[serde(with = "float_option_with_nan")]
     pub no_data_value: Option<f64>,
     pub properties_mapping: Option<Vec<GdalMetadataMapping>>,
     // Dataset open option as strings, e.g. `vec!["UserPwd=geoengine:pwd".to_owned(), "HttpAuth=BASIC".to_owned()]`
@@ -1705,6 +1706,137 @@ mod tests {
         assert_eq!(
             gdal::config::get_config_option("foo", "").unwrap(),
             "".to_owned()
+        );
+    }
+
+    #[test]
+    #[allow(clippy::too_many_lines)]
+    fn deserialize_dataset_parameters() {
+        let dataset_parameters = GdalDatasetParameters {
+            file_path: "path-to-data.tiff".into(),
+            rasterband_channel: 1,
+            geo_transform: GdalDatasetGeoTransform {
+                origin_coordinate: (-180., 90.).into(),
+                x_pixel_size: 0.1,
+                y_pixel_size: -0.1,
+            },
+            width: 3600,
+            height: 1800,
+            file_not_found_handling: FileNotFoundHandling::NoData,
+            no_data_value: Some(f64::NAN),
+            properties_mapping: Some(vec![
+                GdalMetadataMapping {
+                    source_key: RasterPropertiesKey {
+                        domain: None,
+                        key: "AREA_OR_POINT".to_string(),
+                    },
+                    target_type: RasterPropertiesEntryType::String,
+                    target_key: RasterPropertiesKey {
+                        domain: None,
+                        key: "AREA_OR_POINT".to_string(),
+                    },
+                },
+                GdalMetadataMapping {
+                    source_key: RasterPropertiesKey {
+                        domain: Some("IMAGE_STRUCTURE".to_string()),
+                        key: "COMPRESSION".to_string(),
+                    },
+                    target_type: RasterPropertiesEntryType::String,
+                    target_key: RasterPropertiesKey {
+                        domain: Some("IMAGE_STRUCTURE_INFO".to_string()),
+                        key: "COMPRESSION".to_string(),
+                    },
+                },
+            ]),
+            gdal_open_options: None,
+            gdal_config_options: None,
+        };
+
+        let dataset_parameters_json = serde_json::to_value(&dataset_parameters).unwrap();
+
+        assert_eq!(
+            dataset_parameters_json,
+            serde_json::json!({
+                "filePath": "path-to-data.tiff",
+                "rasterbandChannel": 1,
+                "geoTransform": {
+                    "originCoordinate": {
+                        "x": -180.,
+                        "y": 90.
+                    },
+                    "xPixelSize": 0.1,
+                    "yPixelSize": -0.1
+                },
+                "width": 3600,
+                "height": 1800,
+                "fileNotFoundHandling": "NoData",
+                "noDataValue": "nan",
+                "propertiesMapping": [{
+                        "source_key": {
+                            "domain": null,
+                            "key": "AREA_OR_POINT"
+                        },
+                        "target_key": {
+                            "domain": null,
+                            "key": "AREA_OR_POINT"
+                        },
+                        "target_type": "String"
+                    },
+                    {
+                        "source_key": {
+                            "domain": "IMAGE_STRUCTURE",
+                            "key": "COMPRESSION"
+                        },
+                        "target_key": {
+                            "domain": "IMAGE_STRUCTURE_INFO",
+                            "key": "COMPRESSION"
+                        },
+                        "target_type": "String"
+                    }
+                ],
+                "gdalOpenOptions": null,
+                "gdalConfigOptions": null
+            })
+        );
+
+        let deserialized_parameters =
+            serde_json::from_value::<GdalDatasetParameters>(dataset_parameters_json).unwrap();
+
+        // since there is NaN in the data, we can't check for equality on the whole object
+
+        assert_eq!(
+            deserialized_parameters.file_path,
+            dataset_parameters.file_path,
+        );
+        assert_eq!(
+            deserialized_parameters.rasterband_channel,
+            dataset_parameters.rasterband_channel,
+        );
+        assert_eq!(
+            deserialized_parameters.geo_transform,
+            dataset_parameters.geo_transform,
+        );
+        assert_eq!(deserialized_parameters.width, dataset_parameters.width);
+        assert_eq!(deserialized_parameters.height, dataset_parameters.height);
+        assert_eq!(
+            deserialized_parameters.file_not_found_handling,
+            dataset_parameters.file_not_found_handling,
+        );
+        assert!(
+            deserialized_parameters.no_data_value.unwrap().is_nan()
+                && dataset_parameters.no_data_value.unwrap().is_nan()
+        );
+        assert_eq!(
+            deserialized_parameters.properties_mapping,
+            dataset_parameters.properties_mapping,
+        );
+        assert_eq!(
+            deserialized_parameters.gdal_open_options,
+            dataset_parameters.gdal_open_options,
+        );
+        assert_eq!(
+            deserialized_parameters.gdal_config_options,
+            dataset_parameters.gdal_config_options,
         );
     }
 }
