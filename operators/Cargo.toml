@@ -20,7 +20,7 @@ crossbeam = "0.8"
 csv = "1.1"
 float-cmp = "0.9"
 futures = "0.3"
-gdal = { version = "^0.9", features = ["datetime"] }
+gdal = { version = "^0.10", features = ["datetime"] }
 geo = "0.18"
 geoengine-datatypes = { path = "../datatypes" }
 lazy_static = "1.4"
@@ -28,7 +28,7 @@ log = "0.4"
 num_cpus = "1.13" # TODO: remove and switch to std::thread::available_concurrency() when it is available
 num-traits = "0.2"
 ocl = { git = "https://github.com/michaelmattig/ocl", branch = "tentative_master" }  # TODO: use crates.io version once it builds again
-ouroboros = "0.12"
+ouroboros = "0.13"
 paste = "1.0"
 pin-project = "1.0"
 rustc-hash = { version = "1.0", default-features = false }
