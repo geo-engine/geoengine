@@ -146,15 +146,14 @@ impl PlotQueryProcessor for ScatterPlotQueryProcessor {
                 let data_y = collection.data(&self.column_y).expect("checked in param");
 
                 let valid_points = data_x.float_options_iter().zip(data_y.float_options_iter()).filter(|(a,b)|
-                    match (a,b) {
-                        (Some(x), Some(y)) if !x.is_nan() && !y.is_nan() => true,
-                        _ => false
-                    }
+                    matches!((a,b), (Some(x), Some(y)) if !x.is_nan() && !y.is_nan())
                 ).map(|(a,b)| Coordinate2D::new(a.expect("Ensured by filter"),b.expect("Ensured by filter")) );
                 collector = collector.add_batch(valid_points)?;
             }
         });
-        Ok(collector.to_plot()?.to_vega_embeddable(self.interactive)?)
+        Ok(collector
+            .into_plot()?
+            .to_vega_embeddable(self.interactive)?)
     }
 }
 
@@ -254,7 +253,7 @@ impl CollectorKind {
         }
     }
 
-    fn to_plot(self) -> Result<Box<dyn Plot>> {
+    fn into_plot(self) -> Result<Box<dyn Plot>> {
         match self {
             Self::Histogram(h) => Ok(Box::new(h)),
             Self::Values(v) if v.element_count() <= SCATTER_PLOT_THRESHOLD => Ok(Box::new(
@@ -413,7 +412,7 @@ mod tests {
         let mut expected =
             geoengine_datatypes::plots::ScatterPlot::new("foo".to_string(), "bar".to_string());
         for i in 1..=8 {
-            expected.update(Coordinate2D::new(i as f64, i as f64));
+            expected.update(Coordinate2D::new(f64::from(i), f64::from(i)));
         }
         assert_eq!(expected.to_vega_embeddable(false).unwrap(), result);
     }
@@ -886,9 +885,9 @@ mod tests {
         let cy = "y".to_string();
 
         let c = CollectorKind::Values(Collector::new(cx.clone(), cy.clone()));
-        let res = c.to_plot().unwrap().to_vega_embeddable(false).unwrap();
+        let res = c.into_plot().unwrap().to_vega_embeddable(false).unwrap();
 
-        let expected = geoengine_datatypes::plots::ScatterPlot::new(cx.clone(), cy.clone())
+        let expected = geoengine_datatypes::plots::ScatterPlot::new(cx, cy)
             .to_vega_embeddable(false)
             .unwrap();
 
@@ -908,14 +907,11 @@ mod tests {
         let mut c = CollectorKind::Values(Collector::new(cx.clone(), cy.clone()));
         c = c.add_batch(values.clone().into_iter()).unwrap();
 
-        assert!(match c {
-            CollectorKind::Values(_) => true,
-            CollectorKind::Histogram(_) => false,
-        });
+        assert!(matches!(c, CollectorKind::Values(_)));
 
-        let res = c.to_plot().unwrap().to_vega_embeddable(false).unwrap();
+        let res = c.into_plot().unwrap().to_vega_embeddable(false).unwrap();
 
-        let mut expected = geoengine_datatypes::plots::ScatterPlot::new(cx.clone(), cy.clone());
+        let mut expected = geoengine_datatypes::plots::ScatterPlot::new(cx, cy);
         expected.update_batch(values.into_iter());
 
         assert_eq!(expected.to_vega_embeddable(false).unwrap(), res);
@@ -936,22 +932,17 @@ mod tests {
         let mut c = CollectorKind::Values(Collector::new(cx.clone(), cy.clone()));
         c = c.add_batch(values.clone().into_iter()).unwrap();
 
-        assert!(match c {
-            CollectorKind::Values(_) => true,
-            CollectorKind::Histogram(_) => false,
-        });
+        assert!(matches!(c, CollectorKind::Values(_)));
 
-        let res = c.to_plot().unwrap().to_vega_embeddable(false).unwrap();
+        let res = c.into_plot().unwrap().to_vega_embeddable(false).unwrap();
 
         // expected
         let bucket_count = std::cmp::min(100, f64::sqrt(element_count as f64) as usize);
         let dimx =
-            HistogramDimension::new(cx.clone(), 0.0, (element_count - 1) as f64, bucket_count)
-                .unwrap();
+            HistogramDimension::new(cx, 0.0, (element_count - 1) as f64, bucket_count).unwrap();
 
         let dimy =
-            HistogramDimension::new(cy.clone(), 0.0, (element_count - 1) as f64, bucket_count)
-                .unwrap();
+            HistogramDimension::new(cy, 0.0, (element_count - 1) as f64, bucket_count).unwrap();
 
         let mut expected = geoengine_datatypes::plots::Histogram2D::new(dimx, dimy);
         expected.update_batch(values.into_iter());
@@ -973,22 +964,17 @@ mod tests {
         let mut c = CollectorKind::Values(Collector::new(cx.clone(), cy.clone()));
         c = c.add_batch(values.clone().into_iter()).unwrap();
 
-        assert!(match c {
-            CollectorKind::Values(_) => false,
-            CollectorKind::Histogram(_) => true,
-        });
+        assert!(matches!(c, CollectorKind::Histogram(_)));
 
-        let res = c.to_plot().unwrap().to_vega_embeddable(false).unwrap();
+        let res = c.into_plot().unwrap().to_vega_embeddable(false).unwrap();
 
         // expected
         let bucket_count = std::cmp::min(100, f64::sqrt(element_count as f64) as usize);
         let dimx =
-            HistogramDimension::new(cx.clone(), 0.0, (element_count - 1) as f64, bucket_count)
-                .unwrap();
+            HistogramDimension::new(cx, 0.0, (element_count - 1) as f64, bucket_count).unwrap();
 
         let dimy =
-            HistogramDimension::new(cy.clone(), 0.0, (element_count - 1) as f64, bucket_count)
-                .unwrap();
+            HistogramDimension::new(cy, 0.0, (element_count - 1) as f64, bucket_count).unwrap();
 
         let mut expected = geoengine_datatypes::plots::Histogram2D::new(dimx, dimy);
         expected.update_batch(values.into_iter());
@@ -1011,10 +997,7 @@ mod tests {
         let mut c = CollectorKind::Values(Collector::new(cx.clone(), cy.clone()));
         c = c.add_batch(values.clone().into_iter()).unwrap();
 
-        assert!(match c {
-            CollectorKind::Values(_) => false,
-            CollectorKind::Histogram(_) => true,
-        });
+        assert!(matches!(c, CollectorKind::Histogram(_)));
 
         // This value should be skipped
         c = c
@@ -1027,17 +1010,15 @@ mod tests {
             )
             .unwrap();
 
-        let res = c.to_plot().unwrap().to_vega_embeddable(false).unwrap();
+        let res = c.into_plot().unwrap().to_vega_embeddable(false).unwrap();
 
         // expected
         let bucket_count = std::cmp::min(100, f64::sqrt(element_count as f64) as usize);
         let dimx =
-            HistogramDimension::new(cx.clone(), 0.0, (element_count - 1) as f64, bucket_count)
-                .unwrap();
+            HistogramDimension::new(cx, 0.0, (element_count - 1) as f64, bucket_count).unwrap();
 
         let dimy =
-            HistogramDimension::new(cy.clone(), 0.0, (element_count - 1) as f64, bucket_count)
-                .unwrap();
+            HistogramDimension::new(cy, 0.0, (element_count - 1) as f64, bucket_count).unwrap();
 
         let mut expected = geoengine_datatypes::plots::Histogram2D::new(dimx, dimy);
         expected.update_batch(values.into_iter());
@@ -1060,27 +1041,22 @@ mod tests {
         let mut c = CollectorKind::Values(Collector::new(cx.clone(), cy.clone()));
         c = c.add_batch(values.clone().into_iter()).unwrap();
 
-        assert!(match c {
-            CollectorKind::Values(_) => false,
-            CollectorKind::Histogram(_) => true,
-        });
+        assert!(matches!(c, CollectorKind::Histogram(_)));
 
         // This value should be skipped
         c = c
             .add_batch([Coordinate2D::new(f64::NAN, f64::NAN)].into_iter())
             .unwrap();
 
-        let res = c.to_plot().unwrap().to_vega_embeddable(false).unwrap();
+        let res = c.into_plot().unwrap().to_vega_embeddable(false).unwrap();
 
         // expected
         let bucket_count = std::cmp::min(100, f64::sqrt(element_count as f64) as usize);
         let dimx =
-            HistogramDimension::new(cx.clone(), 0.0, (element_count - 1) as f64, bucket_count)
-                .unwrap();
+            HistogramDimension::new(cx, 0.0, (element_count - 1) as f64, bucket_count).unwrap();
 
         let dimy =
-            HistogramDimension::new(cy.clone(), 0.0, (element_count - 1) as f64, bucket_count)
-                .unwrap();
+            HistogramDimension::new(cy, 0.0, (element_count - 1) as f64, bucket_count).unwrap();
 
         let mut expected = geoengine_datatypes::plots::Histogram2D::new(dimx, dimy);
         expected.update_batch(values.into_iter());

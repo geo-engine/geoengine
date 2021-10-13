@@ -155,7 +155,7 @@ impl Plot for Histogram2D {
                     "x": x,
                     "y": y,
                     "frequency": count,
-                }))
+                }));
             }
         }
 
@@ -242,7 +242,7 @@ mod tests {
 
         for i in 0..10 {
             for _ in 0..=i {
-                hist.update(Coordinate2D::new(i as f64, i as f64));
+                hist.update(Coordinate2D::new(f64::from(i), f64::from(i)));
             }
         }
 

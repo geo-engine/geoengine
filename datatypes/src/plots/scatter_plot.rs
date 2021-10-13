@@ -75,7 +75,7 @@ mod tests {
     fn test_ser() {
         let mut sp = ScatterPlot::new("X-Axis".to_string(), "Y-Axis".to_string());
         for i in 1..=5 {
-            sp.update(Coordinate2D::new(i as f64, i as f64));
+            sp.update(Coordinate2D::new(f64::from(i), f64::from(i)));
         }
 
         let ser = serde_json::to_string(&sp).unwrap();
@@ -95,7 +95,7 @@ mod tests {
     fn test_vega() {
         let mut sp = ScatterPlot::new("X-Axis".to_string(), "Y-Axis".to_string());
         for i in 1..=5 {
-            sp.update(Coordinate2D::new(i as f64, i as f64));
+            sp.update(Coordinate2D::new(f64::from(i), f64::from(i)));
         }
 
         let ser = sp.to_vega_embeddable(false).unwrap().vega_string;
