@@ -13,7 +13,7 @@ use futures::{
 use futures::{stream::FusedStream, Future};
 use geoengine_datatypes::primitives::{SpatialPartition2D, SpatialPartitioned};
 use geoengine_datatypes::raster::{
-    EmptyGrid2D, GridBoundingBox2D, GridBounds, GridOrEmpty, GridSize, GridStep,
+    EmptyGrid2D, GridBoundingBox2D, GridBounds, GridOrEmpty, GridStep,
 };
 use geoengine_datatypes::{
     error::Error::{GridIndexOutOfBounds, InvalidGridIndex},
@@ -320,15 +320,26 @@ where
     }
 }
 
+#[pin_project(project=StateInnerProjection)]
 #[derive(Debug, Clone)]
-enum StateInner<A, B> {
+enum StateInner<A, B, C> {
     CreateNextQuery,
-    RunningQuery(A),
-    CreateAccu,
-    RunningFold(B),
+    RunningQuery {
+        #[pin]
+        query: A,
+        query_rect: QueryRectangle<SpatialPartition2D>,
+    },
+    RunningFold(#[pin] B),
+    ReturnResult(Option<C>),
     Ended,
     Error,
 }
+
+type StateInnerForClippy<'a, P, FoldFuture, FoldMethod, TileAccu> = StateInner<
+    QueryFuture<'a, P>,
+    RasterFold<'a, P, FoldFuture, FoldMethod, TileAccu>,
+    RasterTile2D<P>,
+>;
 
 /// This adapter allows to generate a tile stream using sub-querys.
 /// This is done using a `TileSubQuery`.
@@ -353,17 +364,19 @@ where
     sub_query: SubQuery,
 
     /// This `TimeInterval` is the time currently worked on
-    current_time: TimeInterval,
+    current_time_start: TimeInstance,
+    current_time_end: Option<TimeInstance>,
     /// The `GridIdx2D` currently worked on
     current_tile_spec: TileInformation,
-    /// Current tile qrect
-    current_subquery_rect: QueryRectangle<SpatialPartition2D>, // TODO: state?
 
     /// This current state of the adapter
     #[pin]
-    state: StateInner<
-        QueryFuture<'a, PixelType>,
-        RasterFold<'a, PixelType, SubQuery::FoldFuture, SubQuery::FoldMethod, SubQuery::TileAccu>,
+    state: StateInnerForClippy<
+        'a,
+        PixelType,
+        SubQuery::FoldFuture,
+        SubQuery::FoldMethod,
+        SubQuery::TileAccu,
     >,
 }
 
@@ -374,108 +387,164 @@ where
     RasterProcessor: RasterQueryProcessor<RasterType = PixelType>,
     SubQuery: SubQueryTileAggregator<PixelType>,
 {
-    fn create_query(
-        &self,
-        tile_query_rectangle: QueryRectangle<SpatialPartition2D>,
-    ) -> StateInner<
-        QueryFuture<'a, PixelType>,
-        RasterFold<'a, PixelType, SubQuery::FoldFuture, SubQuery::FoldMethod, SubQuery::TileAccu>,
-    > {
-        match self.state {
-            StateInner::CreateNextQuery => {}
-            _ => panic!("invalid state NextTile"),
-        }
-
-        debug!("New running_query for: {:?}", &self.current_subquery_rect);
-
-        let tile_query_stream = self
-            .source_processor
-            .raster_query(tile_query_rectangle, self.query_ctx)
-            .boxed();
-
-        // return new state
-        StateInner::RunningQuery(tile_query_stream)
-    }
-
-    fn create_fold(
-        self: Pin<&mut Self>,
-        query_result: Result<BoxStream<'a, Result<RasterTile2D<PixelType>>>>,
-        tile_query_rectangle: QueryRectangle<SpatialPartition2D>,
-    ) {
-        let mut this = self.project();
-
-        let tile_query_stream = if let Ok(s) = query_result {
-            s
-        } else {
-            this.state.set(StateInner::Error);
-            return;
-        };
-
-        let tile_folding_accu = this
-            .sub_query
-            .new_fold_accu(this.current_tile_spec.clone(), tile_query_rectangle)
-            .unwrap();
-
-        let tile_folding_stream =
-            tile_query_stream.try_fold(tile_folding_accu, this.sub_query.fold_method());
-
-        this.state.set(StateInner::RunningFold(tile_folding_stream));
-    }
-
-    fn maybe_next_idx(&self) -> Option<GridIdx2D> {
-        self.grid_bounds
-            .inc_idx_unchecked(self.current_tile_spec.global_tile_position, 1)
-    }
-
-    fn wrapped_next_idx(&self) -> GridIdx2D {
-        self.grid_bounds
-            .inc_idx_unchecked(self.current_tile_spec.global_tile_position, 1)
-            .unwrap_or_else(|| self.min_index())
-    }
-
-    fn min_index(&self) -> GridIdx2D {
-        self.grid_bounds.min_index()
-    }
-
-    fn max_index(&self) -> GridIdx2D {
-        self.grid_bounds.max_index()
-    }
-
+    #[allow(clippy::too_many_lines)]
     fn next_step(
         self: Pin<&mut Self>,
         cx: &mut std::task::Context<'_>,
-    ) -> std::task::Poll<Option<Result<RasterTile2D<PixelType>>>> {
+    ) -> std::task::Poll<Option<Result<Option<RasterTile2D<PixelType>>>>> {
         let mut this = self.project();
 
+        // check if we ended in a previous call
         if matches!(*this.state, StateInner::Ended) {
             return Poll::Ready(None);
         }
 
+        // first generate a new query
         if matches!(*this.state, StateInner::CreateNextQuery) {
-            if let Some(tile_query_rectangle) = this.sub_query.tile_query_rectangle(
+            match this.sub_query.tile_query_rectangle(
                 *this.current_tile_spec,
                 *this.query_rect_to_answer,
-                this.current_time.start(), // TODO: current time? should prob. be last seen time?
+                *this.current_time_start,
             ) {
-                let tile_query_stream = this
-                    .source_processor
-                    .raster_query(tile_query_rectangle, *this.query_ctx)
-                    .boxed();
+                Ok(Some(tile_query_rectangle)) => {
+                    let tile_query_stream = this
+                        .source_processor
+                        .raster_query(tile_query_rectangle, *this.query_ctx)
+                        .boxed();
 
-                // return new state
-                this.state.set(StateInner::RunningQuery(tile_query_stream));
+                    this.state.set(StateInner::RunningQuery {
+                        query: tile_query_stream,
+                        query_rect: tile_query_rectangle,
+                    });
+                }
+                Ok(None) => this.state.set(StateInner::ReturnResult(None)),
+                Err(e) => {
+                    this.state.set(StateInner::Ended);
+                    return Poll::Ready(Some(Err(e)));
+                }
+            }
+        }
+
+        // the previous case returns or generates a running query
+        if matches!(
+            *this.state,
+            StateInner::RunningQuery {
+                query: _,
+                query_rect: _
+            }
+        ) {
+            let rq_res = if let StateInnerProjection::RunningQuery { query, query_rect } =
+                this.state.as_mut().project()
+            {
+                ready!(query.poll(cx)).map(|q_res| (q_res, query_rect))
+            } else {
+                unreachable!()
+            };
+
+            match rq_res {
+                Ok((query, query_rect)) => {
+                    // TODO: generation of the folding accu should be a future
+                    let tile_folding_accu = this
+                        .sub_query
+                        .new_fold_accu(*this.current_tile_spec, *query_rect)?;
+
+                    let tile_folding_stream =
+                        query.try_fold(tile_folding_accu, this.sub_query.fold_method());
+
+                    this.state.set(StateInner::RunningFold(tile_folding_stream));
+                }
+                Err(e) => {
+                    this.state.set(StateInner::Error);
+                    return Poll::Ready(Some(Err(e)));
+                }
             };
         }
 
-        if let StateInner::RunningQuery(rq) = *this.state {}
+        // the previous case returns or generates a running fold
+        if matches!(*this.state, StateInner::RunningFold(_)) {
+            let rf_res =
+                if let StateInnerProjection::RunningFold(fold) = this.state.as_mut().project() {
+                    ready!(fold.poll(cx))
+                } else {
+                    unreachable!()
+                };
 
-        if let StateInner::RunningFold(rq) = *this.state {}
-
-        if let StateInner::Error = *this.state {
-            this.state.set(StateInner::Ended);
+            match rf_res {
+                Ok(tile_accu) => {
+                    let tile = tile_accu.into_tile();
+                    this.state.set(StateInner::ReturnResult(Some(tile)));
+                }
+                Err(e) => {
+                    this.state.set(StateInner::Error);
+                    return Poll::Ready(Some(Err(e)));
+                }
+            }
         }
 
-        Poll::Ready(None)
+        // at this stage we must be in ReturnResult state. Either from a running fold or because the tiel query rectangel was not valid.
+        // upack the return value.
+        let tile_option = if let StateInnerProjection::ReturnResult(tile_option) =
+            this.state.as_mut().project()
+        {
+            tile_option.take()
+        } else {
+            unreachable!()
+        };
+        // in the next poll we need to produce a new tile (if nothing else happens)
+        this.state.set(StateInner::CreateNextQuery);
+
+        // if there is a tile, set the current_time_end option.
+        if let Some(tile) = &tile_option {
+            debug_assert!(*this.current_time_start == tile.time.start());
+            *this.current_time_end = Some(tile.time.end());
+        };
+
+        // now do progress
+        // move idx by 1
+        // if the grid idx wraps around set the ne query time instance to the end time instance of the last round
+        match (
+            this.grid_bounds
+                .inc_idx_unchecked(this.current_tile_spec.global_tile_position, 1),
+            *this.current_time_end,
+        ) {
+            (Some(idx), _) => {
+                // this case moves the idx further
+                this.current_tile_spec.global_tile_position = idx;
+            }
+            (None, None) => {
+                // this case ends the stream since we never recieved a tile from any subquery. Should only happen if we end the first grid iteration.
+                // NOTE: this assumes that the input operator produces no data tiles for querys there time and space are valid but no data is avalable.
+                debug_assert!(&tile_option.is_none());
+                debug_assert!(
+                    *this.current_time_start == this.query_rect_to_answer.time_interval.start()
+                );
+                this.state.set(StateInner::Ended);
+            }
+            (None, Some(end_time)) if end_time == *this.current_time_start => {
+                // this is the case where the tiles are produced for instances. Add 1 to move it further.
+                this.current_tile_spec.global_tile_position = this.grid_bounds.min_index();
+                *this.current_time_start = end_time + 1;
+                *this.current_time_end = None;
+
+                // check if the next time to request is inside the bounds we are want to answer.
+                if *this.current_time_start >= this.query_rect_to_answer.time_interval.end() {
+                    this.state.set(StateInner::Ended);
+                }
+            }
+            (None, Some(end_time)) => {
+                // this is the case where the tiles are produced for intervals
+                this.current_tile_spec.global_tile_position = this.grid_bounds.min_index();
+                *this.current_time_start = end_time;
+                *this.current_time_end = None;
+
+                // check if the next time to request is inside the bounds we are want to answer.
+                if *this.current_time_start >= this.query_rect_to_answer.time_interval.end() {
+                    this.state.set(StateInner::Ended);
+                }
+            }
+        };
+
+        Poll::Ready(Some(Ok(tile_option)))
     }
 }
 
@@ -500,14 +569,14 @@ where
         QueryProcessor<Output = RasterTile2D<PixelType>, SpatialBounds = SpatialPartition2D>,
     SubQuery: SubQueryTileAggregator<PixelType>,
 {
-    type Item = Result<RasterTile2D<PixelType>>;
+    type Item = Result<Option<RasterTile2D<PixelType>>>;
 
     #[allow(clippy::too_many_lines)]
     fn poll_next(
         self: Pin<&mut Self>,
         cx: &mut std::task::Context<'_>,
     ) -> std::task::Poll<Option<Self::Item>> {
-        Poll::Ready(None)
+        self.next_step(cx)
     }
 }
 
