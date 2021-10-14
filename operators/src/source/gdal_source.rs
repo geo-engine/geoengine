@@ -1,4 +1,5 @@
 use crate::engine::{MetaData, OperatorDatasets, QueryProcessor, RasterQueryRectangle};
+use crate::util::gdal::gdal_open_dataset_ex;
 use crate::util::input::float_option_with_nan;
 use crate::{
     engine::{
@@ -14,7 +15,7 @@ use futures::{
     Stream,
 };
 use gdal::raster::{GdalType, RasterBand as GdalRasterBand};
-use gdal::{Dataset as GdalDataset, DatasetOptions, GdalOpenFlags, Metadata as GdalMetadata};
+use gdal::{DatasetOptions, GdalOpenFlags, Metadata as GdalMetadata};
 use geoengine_datatypes::primitives::{Coordinate2D, SpatialPartition2D, SpatialPartitioned};
 use geoengine_datatypes::raster::{
     EmptyGrid, GeoTransform, Grid2D, GridOrEmpty2D, GridShapeAccess, Pixel, RasterDataType,
@@ -562,7 +563,7 @@ where
             .as_ref()
             .map(|config_options| TemporaryGdalThreadLocalConfigOptions::new(config_options));
 
-        let dataset_result = GdalDataset::open_ex(
+        let dataset_result = gdal_open_dataset_ex(
             &dataset_params.file_path,
             DatasetOptions {
                 open_flags: GdalOpenFlags::GDAL_OF_RASTER,

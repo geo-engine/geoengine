@@ -583,9 +583,8 @@ mod tests {
             GdalSourceTimePlaceholder, TimeReference,
         },
         test_data,
-        util::gdal::add_ndvi_dataset,
+        util::gdal::{add_ndvi_dataset, gdal_open_dataset},
     };
-    use gdal::Dataset;
     use geoengine_datatypes::{
         collections::{
             GeometryCollection, MultiLineStringCollection, MultiPointCollection,
@@ -1144,14 +1143,14 @@ mod tests {
         let epsg_3857 = SpatialReference::new(SpatialReferenceAuthority::Epsg, 3857);
 
         // use ndvi dataset that was reprojected using gdal as ground truth
-        let dataset_4326 = Dataset::open(test_data!(
+        let dataset_4326 = gdal_open_dataset(test_data!(
             "raster/modis_ndvi/MOD13A2_M_NDVI_2014-04-01.TIFF"
         ))
         .unwrap();
         let geotransform_4326 = dataset_4326.geo_transform().unwrap();
         let res_4326 = SpatialResolution::new(geotransform_4326[1], -geotransform_4326[5]).unwrap();
 
-        let dataset_3857 = Dataset::open(test_data!(
+        let dataset_3857 = gdal_open_dataset(test_data!(
             "raster/modis_ndvi/projected_3857/MOD13A2_M_NDVI_2014-04-01.TIFF"
         ))
         .unwrap();
