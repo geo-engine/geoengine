@@ -184,7 +184,7 @@ impl<T, FoldM, FoldF> SubQueryTileAggregator<T> for TemporalRasterMeanAggregatio
 where
     T: Pixel,
     FoldM: Send + Clone + Fn(TemporalMeanTileAccu<T>, RasterTile2D<T>) -> FoldF,
-    FoldF: TryFuture<Ok = TemporalMeanTileAccu<T>, Error = crate::error::Error>,
+    FoldF: Send + TryFuture<Ok = TemporalMeanTileAccu<T>, Error = crate::error::Error>,
 {
     type TileAccu = TemporalMeanTileAccu<T>;
 

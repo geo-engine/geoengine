@@ -11,7 +11,6 @@ use crate::{
     util::Result,
 };
 use async_trait::async_trait;
-use futures::StreamExt;
 use geoengine_datatypes::primitives::SpatialPartition2D;
 use geoengine_datatypes::raster::{Pixel, RasterTile2D};
 use geoengine_datatypes::{primitives::TimeStep, raster::TilingSpecification};
@@ -169,7 +168,7 @@ where
     ) -> TemporalRasterMeanAggregationSubQuery<F, P> {
         TemporalRasterMeanAggregationSubQuery {
             fold_fn,
-            no_data_value: self.no_data_value.expect("mus have nodata"),
+            no_data_value: self.no_data_value.expect("must have nodata"),
             step: self.window,
             ignore_no_data,
         }
@@ -199,26 +198,14 @@ where
                     no_data_ignoring_fold_future::<P, MinIgnoreNoDataAccFunction>,
                     P::max_value(),
                 )
-                .into_raster_overlap_adapter(
-                    &self.source,
-                    query,
-                    ctx,
-                    self.tiling_specification,
-                    self.no_data_value,
-                )
-                .boxed()),
+                .into_raster_subquery_adapter(&self.source, query, ctx, self.tiling_specification)
+                .filter_and_fill(self.no_data_value.unwrap_or(P::from_(0)))),
             Aggregation::Min {
                 ignore_no_data: false,
             } => Ok(self
                 .create_subquery(fold_future::<P, MinAccFunction>, P::max_value())
-                .into_raster_overlap_adapter(
-                    &self.source,
-                    query,
-                    ctx,
-                    self.tiling_specification,
-                    self.no_data_value,
-                )
-                .boxed()),
+                .into_raster_subquery_adapter(&self.source, query, ctx, self.tiling_specification)
+                .filter_and_fill(self.no_data_value.unwrap_or(P::from_(0)))),
             Aggregation::Max {
                 ignore_no_data: true,
             } => Ok(self
@@ -226,26 +213,15 @@ where
                     no_data_ignoring_fold_future::<P, MaxIgnoreNoDataAccFunction>,
                     P::min_value(),
                 )
-                .into_raster_overlap_adapter(
-                    &self.source,
-                    query,
-                    ctx,
-                    self.tiling_specification,
-                    self.no_data_value,
-                )
-                .boxed()),
+                .into_raster_subquery_adapter(&self.source, query, ctx, self.tiling_specification)
+                .filter_and_fill(self.no_data_value.unwrap_or(P::from_(0)))),
             Aggregation::Max {
                 ignore_no_data: false,
             } => Ok(self
                 .create_subquery(fold_future::<P, MaxAccFunction>, P::min_value())
-                .into_raster_overlap_adapter(
-                    &self.source,
-                    query,
-                    ctx,
-                    self.tiling_specification,
-                    self.no_data_value,
-                )
-                .boxed()),
+                .into_raster_subquery_adapter(&self.source, query, ctx, self.tiling_specification)
+                .filter_and_fill(self.no_data_value.unwrap_or(P::from_(0)))),
+
             Aggregation::First {
                 ignore_no_data: true,
             } => {
@@ -257,14 +233,13 @@ where
                         no_data_ignoring_fold_future::<P, FirstValidAccFunction>,
                         no_data_value,
                     )
-                    .into_raster_overlap_adapter(
+                    .into_raster_subquery_adapter(
                         &self.source,
                         query,
                         ctx,
                         self.tiling_specification,
-                        self.no_data_value,
                     )
-                    .boxed())
+                    .filter_and_fill(self.no_data_value.unwrap_or(P::from_(0))))
             }
             Aggregation::First {
                 ignore_no_data: false,
@@ -274,14 +249,13 @@ where
                     .ok_or(error::Error::TemporalRasterAggregationFirstValidRequiresNoData)?;
                 Ok(self
                     .create_subquery(first_tile_fold_future::<P>, no_data_value)
-                    .into_raster_overlap_adapter(
+                    .into_raster_subquery_adapter(
                         &self.source,
                         query,
                         ctx,
                         self.tiling_specification,
-                        self.no_data_value,
                     )
-                    .boxed())
+                    .filter_and_fill(self.no_data_value.unwrap_or(P::from_(0))))
             }
             Aggregation::Last {
                 ignore_no_data: true,
@@ -294,14 +268,13 @@ where
                         no_data_ignoring_fold_future::<P, LastValidAccFunction>,
                         no_data_value,
                     )
-                    .into_raster_overlap_adapter(
+                    .into_raster_subquery_adapter(
                         &self.source,
                         query,
                         ctx,
                         self.tiling_specification,
-                        self.no_data_value,
                     )
-                    .boxed())
+                    .filter_and_fill(self.no_data_value.unwrap_or(P::from_(0))))
             }
 
             Aggregation::Last {
@@ -312,14 +285,13 @@ where
                     .ok_or(error::Error::TemporalRasterAggregationLastValidRequiresNoData)?;
                 Ok(self
                     .create_subquery(last_tile_fold_future::<P>, no_data_value)
-                    .into_raster_overlap_adapter(
+                    .into_raster_subquery_adapter(
                         &self.source,
                         query,
                         ctx,
                         self.tiling_specification,
-                        self.no_data_value,
                     )
-                    .boxed())
+                    .filter_and_fill(self.no_data_value.unwrap_or(P::from_(0))))
             }
 
             Aggregation::Mean { ignore_no_data } => {
@@ -328,14 +300,13 @@ where
                     .ok_or(error::Error::TemporalRasterAggregationLastValidRequiresNoData)?;
                 Ok(self
                     .create_subquery_mean(mean_tile_fold_future::<P>, ignore_no_data)
-                    .into_raster_overlap_adapter(
+                    .into_raster_subquery_adapter(
                         &self.source,
                         query,
                         ctx,
                         self.tiling_specification,
-                        self.no_data_value,
                     )
-                    .boxed())
+                    .filter_and_fill(self.no_data_value.unwrap_or(P::from_(0))))
             }
         }
     }
@@ -343,6 +314,7 @@ where
 
 #[cfg(test)]
 mod tests {
+    use futures::stream::StreamExt;
     use geoengine_datatypes::{
         primitives::{Measurement, SpatialResolution, TimeInterval},
         raster::{EmptyGrid, EmptyGrid2D, Grid2D, GridOrEmpty, RasterDataType, TileInformation},
