@@ -231,7 +231,6 @@ async fn get_map<C: Context>(request: &GetMap, ctx: &C) -> Result<HttpResponse> 
 
     let processor = initialized.query_processor().context(error::Operator)?;
 
-    // TODO: use proj for determining axis order
     let query_bbox: SpatialPartition2D = request.bbox.bounds(request_spatial_ref)?;
     let x_query_resolution = query_bbox.size_x() / f64::from(request.width);
     let y_query_resolution = query_bbox.size_y() / f64::from(request.height);

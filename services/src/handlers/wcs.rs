@@ -13,6 +13,7 @@ use geoengine_datatypes::{primitives::SpatialResolution, spatial_reference::Spat
 use crate::contexts::MockableSession;
 use crate::error::Result;
 use crate::error::{self, Error};
+use crate::handlers::spatial_references::{spatial_reference_specification, AxisOrder};
 use crate::handlers::Context;
 use crate::ogc::wcs::request::{DescribeCoverage, GetCapabilities, GetCoverage, WcsRequest};
 use crate::util::config;
@@ -166,22 +167,24 @@ async fn describe_coverage<C: Context>(
         .area_of_use_projected()
         .context(error::DataType)?;
 
-    // TODO: handle axis ordering properly
     let (bbox_ll_0, bbox_ll_1, bbox_ur_0, bbox_ur_1) =
-        if spatial_reference == SpatialReference::epsg_4326() {
-            (
-                area_of_use.lower_left().y,
-                area_of_use.lower_left().x,
-                area_of_use.upper_right().y,
-                area_of_use.upper_right().x,
-            )
-        } else {
-            (
+        match spatial_reference_specification(&spatial_reference.proj_string()?)?
+            .axis_order
+            .ok_or(Error::AxisOrderingNotKnownForSrs {
+                srs_string: spatial_reference.srs_string(),
+            })? {
+            AxisOrder::EastNorth => (
                 area_of_use.lower_left().x,
                 area_of_use.lower_left().y,
                 area_of_use.upper_right().x,
                 area_of_use.upper_right().y,
-            )
+            ),
+            AxisOrder::NorthEast => (
+                area_of_use.lower_left().y,
+                area_of_use.lower_left().x,
+                area_of_use.upper_right().y,
+                area_of_use.upper_right().x,
+            ),
         };
 
     let mock = format!(
@@ -241,7 +244,7 @@ async fn get_coverage<C: Context>(request: &GetCoverage, ctx: &C) -> Result<Http
 
     if let Some(gridorigin) = request.gridorigin {
         ensure!(
-            gridorigin.coordinate(request.gridbasecrs) == request_partition.upper_left(),
+            gridorigin.coordinate(request.gridbasecrs)? == request_partition.upper_left(),
             error::WcsGridOriginMustEqualBoundingboxUpperLeft
         );
     }
