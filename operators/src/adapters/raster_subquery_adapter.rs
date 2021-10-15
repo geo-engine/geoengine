@@ -271,6 +271,7 @@ where
         }
 
         // A query was issued, so we check whether it is finished
+        // To work in this scope we first check if the state is the one we expect. We want to set the state in this scope so we can not borrow it here!
         if matches!(
             *this.state,
             StateInner::RunningQuery {
@@ -278,11 +279,13 @@ where
                 query_rect: _
             }
         ) {
+            // The state is pinned. Project it to get access to the query stored in the context.
             let rq_res = if let StateInnerProjection::RunningQuery { query, query_rect } =
                 this.state.as_mut().project()
             {
                 ready!(query.poll(cx)).map(|q_res| (q_res, query_rect))
             } else {
+                // we already checked that the state is `StateInner::RunningQuery` so this case can not happen.
                 unreachable!()
             };
 
