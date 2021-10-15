@@ -376,7 +376,7 @@ mod tests {
 
         let req = test::TestRequest::default()
             .method(method)
-            .uri(path.unwrap_or("/wms/df756642-c5a3-4d72-8ad7-629d312ae993?request=GetMap&service=WMS&version=1.3.0&layers=mock_raster&bbox=1,2,3,4&width=100&height=100&crs=EPSG:4326&styles=ssss&format=image/png"))
+            .uri(path.unwrap_or("/wms/df756642-c5a3-4d72-8ad7-629d312ae993?request=GetMap&service=WMS&version=1.3.0&layers=df756642-c5a3-4d72-8ad7-629d312ae993&bbox=1,2,3,4&width=100&height=100&crs=EPSG:4326&styles=ssss&format=image/png"))
             .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())));
         send_test_request(req, ctx).await
     }
@@ -612,7 +612,7 @@ mod tests {
 
         let req = test::TestRequest::get()
             .uri(&format!(
-                "/wms{}?{}",
+                "/wms/{}?{}",
                 id,
                 serde_urlencoded::to_string(params).unwrap()
             ))
