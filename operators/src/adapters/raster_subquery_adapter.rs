@@ -225,7 +225,7 @@ where
      *  a) CreateNextQuery -> ReturnResult
      *  b) CreateNextQuery -> RunningQuery -> RunningFold -> ReturnResult
      *
-     * In case a) a valid `QueryRectangle` for rhe target tile is produced and a stream is queryed and folded to produce a new tile.
+     * In case a) a valid `QueryRectangle` for the target tile is produced and a stream is queryed and folded to produce a new tile.
      * In case b) no valid `QueryRectange` is produced. Therefore, all async steps are skipped and None is produced instead of a tile.
      *
      * When all tiles are queried the state transitions from ReturnResult to Ended.
