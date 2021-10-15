@@ -88,7 +88,7 @@ type StateInnerType<'a, P, FoldFuture, FoldMethod, TileAccu> = StateInner<
 /// This adapter allows to generate a tile stream using sub-querys.
 /// This is done using a `TileSubQuery`.
 /// The sub-query is resolved for each produced tile.
-#[pin_project(project = RasterSubQueryAdapterProjection2)]
+#[pin_project(project = RasterSubQueryAdapterProjection)]
 pub struct RasterSubQueryAdapter<'a, PixelType, RasterProcessorType, SubQuery>
 where
     PixelType: Pixel,
