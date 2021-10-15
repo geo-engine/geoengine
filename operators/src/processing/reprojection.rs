@@ -1,9 +1,6 @@
 use super::map_query::MapQueryProcessor;
 use crate::{
-    adapters::{
-        fold_by_coordinate_lookup_future, RasterSubQueryAdapter, SparseTilesFillAdapter,
-        TileReprojectionSubQuery,
-    },
+    adapters::{fold_by_coordinate_lookup_future, RasterSubQueryAdapter, TileReprojectionSubQuery},
     engine::{
         ExecutionContext, InitializedRasterOperator, InitializedVectorOperator, Operator,
         QueryContext, QueryProcessor, QueryRectangle, RasterOperator, RasterQueryProcessor,
@@ -562,26 +559,14 @@ where
             spatial_resolution: query.spatial_resolution,
         };
 
-        let s = RasterSubQueryAdapter::<'a, P, _, _>::new(
+        Ok(RasterSubQueryAdapter::<'a, P, _, _>::new(
             &self.source,
             valid_query_rectangle,
             self.tiling_spec,
             ctx,
             sub_query_spec,
         )
-        .filter_map(async move |x| match x {
-            Ok(Some(t)) => Some(Ok(t)),
-            Ok(None) => None,
-            Err(e) => Some(Err(e)),
-        });
-        let s_filled = SparseTilesFillAdapter::new_like_subquery(
-            s,
-            query,
-            self.tiling_spec,
-            self.no_data_and_fill_value,
-        );
-
-        Ok(s_filled.boxed())
+        .filter_and_fill(self.no_data_and_fill_value))
     }
 }
 

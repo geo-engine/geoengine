@@ -308,7 +308,8 @@ where
             };
         }
 
-        // We are waiting for/expecting the result of the fold
+        // We are waiting for/expecting the result of the fold.
+        // This block uses the same check and project pattern as above.
         if matches!(*this.state, StateInner::RunningFold(_)) {
             let rf_res =
                 if let StateInnerProjection::RunningFold(fold) = this.state.as_mut().project() {
@@ -329,7 +330,8 @@ where
             }
         }
 
-        // at this stage we are in ReturnResult state. Either from a running fold or because the tile query rect was not valid.
+        // At this stage we are in ReturnResult state. Either from a running fold or because the tile query rect was not valid.
+        // This block uses the check and project pattern as above.
         let tile_option = if let StateInnerProjection::ReturnResult(tile_option) =
             this.state.as_mut().project()
         {
@@ -337,10 +339,10 @@ where
         } else {
             unreachable!()
         };
-        // in the next poll we need to produce a new tile (if nothing else happens)
+        // In the next poll we need to produce a new tile (if nothing else happens)
         this.state.set(StateInner::CreateNextQuery);
 
-        // if there is a tile, set the current_time_end option.
+        // If there is a tile, set the current_time_end option.
         if let Some(tile) = &tile_option {
             debug_assert!(*this.current_time_start >= tile.time.start());
             *this.current_time_end = Some(tile.time.end());
