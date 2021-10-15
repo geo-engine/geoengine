@@ -166,6 +166,7 @@ where
         }
     }
 
+    /// Wrap the `RasterSubQueryAdapter` with a filter and a `SparseTilesFillAdapter` to produce a `Stream` compatible with `RasterQueryProcessor`.
     pub fn filter_and_fill(
         self,
         no_data_value: PixelType,
