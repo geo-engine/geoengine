@@ -1,5 +1,6 @@
 use actix_web::{web, FromRequest, HttpResponse};
-use snafu::ResultExt;
+use reqwest::Url;
+use snafu::{ensure, ResultExt};
 
 use geoengine_datatypes::primitives::{AxisAlignedRectangle, SpatialPartition2D};
 use geoengine_datatypes::{
@@ -10,8 +11,8 @@ use geoengine_datatypes::{
 };
 
 use crate::contexts::MockableSession;
-use crate::error;
 use crate::error::Result;
+use crate::error::{self, Error};
 use crate::handlers::Context;
 use crate::ogc::wms::request::{GetCapabilities, GetLegendGraphic, GetMap, WmsRequest};
 use crate::util::config;
@@ -34,18 +35,23 @@ where
     C: Context,
     C::Session: FromRequest,
 {
-    cfg.service(web::resource("/wms").route(web::get().to(wms_handler::<C>)));
+    cfg.service(web::resource("/wms/{workflow}").route(web::get().to(wms_handler::<C>)));
 }
 
 async fn wms_handler<C: Context>(
+    workflow: web::Path<WorkflowId>,
     request: QueryEx<WmsRequest>,
     ctx: web::Data<C>,
     _session: C::Session,
 ) -> Result<HttpResponse> {
     match request.into_inner() {
-        WmsRequest::GetCapabilities(request) => get_capabilities(&request),
-        WmsRequest::GetMap(request) => get_map(&request, ctx.get_ref()).await,
-        WmsRequest::GetLegendGraphic(request) => get_legend_graphic(&request, ctx.get_ref()),
+        WmsRequest::GetCapabilities(request) => get_capabilities(&request, workflow.into_inner()),
+        WmsRequest::GetMap(request) => {
+            get_map(&request, ctx.get_ref(), workflow.into_inner()).await
+        }
+        WmsRequest::GetLegendGraphic(request) => {
+            get_legend_graphic(&request, ctx.get_ref(), workflow.into_inner())
+        }
         _ => Ok(HttpResponse::NotImplemented().finish()),
     }
 }
@@ -72,7 +78,7 @@ async fn wms_handler<C: Context>(
 ///       <DCPType>
 ///         <HTTP>
 ///           <Get>
-///             <OnlineResource xlink:href="http://localhost/wms"/>
+///             <OnlineResource xlink:href="http://localhost/wms/df756642-c5a3-4d72-8ad7-629d312ae993"/>
 ///           </Get>
 ///         </HTTP>
 ///       </DCPType>
@@ -82,7 +88,7 @@ async fn wms_handler<C: Context>(
 ///       <DCPType>
 ///         <HTTP>
 ///           <Get>
-///             <OnlineResource xlink:href="http://localhost/wms"/>
+///             <OnlineResource xlink:href="http://localhost/wms/df756642-c5a3-4d72-8ad7-629d312ae993"/>
 ///           </Get>
 ///         </HTTP>
 ///       </DCPType>
@@ -94,8 +100,8 @@ async fn wms_handler<C: Context>(
 ///     <Format>BLANK</Format>
 ///   </Exception>
 ///   <Layer queryable="1">
-///     <Name>Test</Name>
-///     <Title>Test</Title>
+///     <Name>Workflow df756642-c5a3-4d72-8ad7-629d312ae993</Name>
+///     <Title>Workflow df756642-c5a3-4d72-8ad7-629d312ae993</Title>
 ///     <CRS>EPSG:4326</CRS>
 ///     <EX_GeographicBoundingBox>
 ///       <westBoundLongitude>-180</westBoundLongitude>
@@ -109,10 +115,9 @@ async fn wms_handler<C: Context>(
 /// </WMS_Capabilities>
 /// ```
 #[allow(clippy::unnecessary_wraps)] // TODO: remove line once implemented fully
-fn get_capabilities(_request: &GetCapabilities) -> Result<HttpResponse> {
-    // TODO: implement
-    // TODO: inject correct url of the instance and return data for the default layer
-    let wms_url = "http://localhost/wms".to_string();
+fn get_capabilities(_request: &GetCapabilities, workflow: WorkflowId) -> Result<HttpResponse> {
+    let wms_url = wms_url(workflow)?;
+    // TODO: create result descriptor for workflow and set the "CRS" in the layer accordingly? Depends on the semantics of this attribute
     let mock = format!(
         r#"<WMS_Capabilities xmlns="http://www.opengis.net/wms" xmlns:sld="http://www.opengis.net/sld" xmlns:xlink="http://www.w3.org/1999/xlink" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" version="1.3.0" xsi:schemaLocation="http://www.opengis.net/wms http://schemas.opengis.net/wms/1.3.0/capabilities_1_3_0.xsd http://www.opengis.net/sld http://schemas.opengis.net/sld/1.1.0/sld_capabilities.xsd">
     <Service>
@@ -149,9 +154,8 @@ fn get_capabilities(_request: &GetCapabilities) -> Result<HttpResponse> {
             <Format>BLANK</Format>
         </Exception>
         <Layer queryable="1">
-            <Name>Test</Name>
-            <Title>Test</Title>
-            <CRS>EPSG:4326</CRS>
+            <Name>Workflow {workflow}</Name>
+            <Title>Workflow {workflow}</Title>
             <EX_GeographicBoundingBox>
                 <westBoundLongitude>-180</westBoundLongitude>
                 <eastBoundLongitude>180</eastBoundLongitude>
@@ -162,10 +166,21 @@ fn get_capabilities(_request: &GetCapabilities) -> Result<HttpResponse> {
         </Layer>
     </Capability>
 </WMS_Capabilities>"#,
-        wms_url = wms_url
+        wms_url = wms_url,
+        workflow = workflow
     );
 
     Ok(HttpResponse::Ok().content_type(mime::TEXT_XML).body(mock))
+}
+
+fn wms_url(workflow: WorkflowId) -> Result<Url> {
+    let base = crate::util::config::get_config_element::<crate::util::config::Web>()?
+        .external_address
+        .ok_or(Error::ExternalAddressNotConfigured)?;
+
+    base.join("/wms/")?
+        .join(&workflow.to_string())
+        .map_err(Into::into)
 }
 
 /// Renders a map as raster image.
@@ -173,13 +188,25 @@ fn get_capabilities(_request: &GetCapabilities) -> Result<HttpResponse> {
 /// # Example
 ///
 /// ```text
-/// GET /wms?request=GetMap&service=WMS&version=2.0.0&layers=mock_raster&bbox=1,2,3,4&width=100&height=100&crs=EPSG%3A4326&styles=ssss&format=image%2Fpng
+/// GET /wms/df756642-c5a3-4d72-8ad7-629d312ae993?request=GetMap&service=WMS&version=2.0.0&layers=df756642-c5a3-4d72-8ad7-629d312ae993&bbox=1,2,3,4&width=100&height=100&crs=EPSG%3A4326&styles=ssss&format=image%2Fpng
 /// ```
 /// Response:
 /// PNG image
-async fn get_map<C: Context>(request: &GetMap, ctx: &C) -> Result<HttpResponse> {
-    // TODO: validate request?
-    if request.layers == "mock_raster" {
+async fn get_map<C: Context>(
+    request: &GetMap,
+    ctx: &C,
+    endpoint: WorkflowId,
+) -> Result<HttpResponse> {
+    let layer = WorkflowId::from_str(&request.layers)?;
+
+    ensure!(
+        endpoint == layer,
+        error::WMSEndpointLayerMissmatch { endpoint, layer }
+    );
+
+    // TODO: validate request further
+
+    if request.layers == "df756642-c5a3-4d72-8ad7-629d312ae993" {
         return get_map_mock(request);
     }
 
@@ -268,7 +295,11 @@ fn colorizer_from_style(styles: &str) -> Result<Option<Colorizer>> {
 }
 
 #[allow(clippy::unnecessary_wraps)] // TODO: remove line once implemented fully
-fn get_legend_graphic<C: Context>(_request: &GetLegendGraphic, _ctx: &C) -> Result<HttpResponse> {
+fn get_legend_graphic<C: Context>(
+    _request: &GetLegendGraphic,
+    _ctx: &C,
+    _endpoint: WorkflowId,
+) -> Result<HttpResponse> {
     // TODO: implement
     Ok(HttpResponse::InternalServerError().finish())
 }
@@ -345,7 +376,7 @@ mod tests {
 
         let req = test::TestRequest::default()
             .method(method)
-            .uri(path.unwrap_or("/wms?request=GetMap&service=WMS&version=1.3.0&layers=mock_raster&bbox=1,2,3,4&width=100&height=100&crs=EPSG:4326&styles=ssss&format=image/png"))
+            .uri(path.unwrap_or("/wms/df756642-c5a3-4d72-8ad7-629d312ae993?request=GetMap&service=WMS&version=1.3.0&layers=mock_raster&bbox=1,2,3,4&width=100&height=100&crs=EPSG:4326&styles=ssss&format=image/png"))
             .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())));
         send_test_request(req, ctx).await
     }
@@ -368,7 +399,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_missing_fields() {
-        let res = test_test_helper(Method::GET, Some("/wms?service=WMS&version=1.3.0&layers=mock_raster&bbox=1,2,3,4&width=100&height=100&crs=foo&styles=ssss&format=image/png")).await;
+        let res = test_test_helper(Method::GET, Some("/wms/df756642-c5a3-4d72-8ad7-629d312ae993?service=WMS&version=1.3.0&layers=df756642-c5a3-4d72-8ad7-629d312ae993&bbox=1,2,3,4&width=100&height=100&crs=foo&styles=ssss&format=image/png")).await;
 
         ErrorResponse::assert(
             res,
@@ -381,7 +412,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_invalid_fields() {
-        let res = test_test_helper(Method::GET, Some("/wms?request=GetMap&service=WMS&version=1.3.0&layers=mock_raster&bbox=1,2,3,4&width=XYZ&height=100&crs=EPSG:4326&styles=ssss&format=image/png")).await;
+        let res = test_test_helper(Method::GET, Some("/wms/df756642-c5a3-4d72-8ad7-629d312ae993?request=GetMap&service=WMS&version=1.3.0&layers=df756642-c5a3-4d72-8ad7-629d312ae993&bbox=1,2,3,4&width=XYZ&height=100&crs=EPSG:4326&styles=ssss&format=image/png")).await;
 
         ErrorResponse::assert(
             res,
@@ -396,9 +427,11 @@ mod tests {
         let ctx = InMemoryContext::default();
         let session_id = ctx.default_session_ref().await.id();
 
-        let req = test::TestRequest::with_uri("/wms?request=GetCapabilities&service=WMS")
-            .method(method)
-            .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())));
+        let req = test::TestRequest::with_uri(
+            "/wms/df756642-c5a3-4d72-8ad7-629d312ae993?request=GetCapabilities&service=WMS",
+        )
+        .method(method)
+        .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())));
         send_test_request(req, ctx).await
     }
 
@@ -466,7 +499,7 @@ mod tests {
 
         let (_, id) = register_ndvi_workflow_helper(&ctx).await;
 
-        let req = test::TestRequest::with_uri(path.unwrap_or(&format!("/wms?request=GetMap&service=WMS&version=1.3.0&layers={}&bbox=20,-10,80,50&width=600&height=600&crs=EPSG:4326&styles=ssss&format=image/png&time=2014-01-01T00:00:00.0Z", id.to_string())))
+        let req = test::TestRequest::with_uri(path.unwrap_or(&format!("/wms/{id}?request=GetMap&service=WMS&version=1.3.0&layers={id}&bbox=20,-10,80,50&width=600&height=600&crs=EPSG:4326&styles=ssss&format=image/png&time=2014-01-01T00:00:00.0Z", id = id.to_string())))
             .method(method)
             .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())));
         send_test_request(req, ctx).await
@@ -490,7 +523,7 @@ mod tests {
 
         let (_, id) = register_ndvi_workflow_helper(&ctx).await;
 
-        let req = test::TestRequest::get().uri(&format!("/wms?service=WMS&version=1.3.0&request=GetMap&layers={}&styles=&width=335&height=168&crs=EPSG:4326&bbox=-90.0,-180.0,90.0,180.0&format=image/png&transparent=FALSE&bgcolor=0xFFFFFF&exceptions=XML&time=2014-04-01T12%3A00%3A00.000%2B00%3A00", id.to_string())).append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())));
+        let req = test::TestRequest::get().uri(&format!("/wms/{id}?service=WMS&version=1.3.0&request=GetMap&layers={id}&styles=&width=335&height=168&crs=EPSG:4326&bbox=-90.0,-180.0,90.0,180.0&format=image/png&transparent=FALSE&bgcolor=0xFFFFFF&exceptions=XML&time=2014-04-01T12%3A00%3A00.000%2B00%3A00", id = id.to_string())).append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())));
         let response = send_test_request(req, ctx).await;
 
         assert_eq!(
@@ -514,7 +547,7 @@ mod tests {
 
         let (_, id) = register_ndvi_workflow_helper(&ctx).await;
 
-        let req = test::TestRequest::get().uri(&format!("/wms?SERVICE=WMS&VERSION=1.3.0&REQUEST=GetMap&FORMAT=image%2Fpng&TRANSPARENT=true&LAYERS={}&CRS=EPSG:4326&STYLES=&WIDTH=600&HEIGHT=600&BBOX=20,-10,80,50&time=2014-01-01T00:00:00.0Z", id.to_string())).append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())));
+        let req = test::TestRequest::get().uri(&format!("/wms/{id}?SERVICE=WMS&VERSION=1.3.0&REQUEST=GetMap&FORMAT=image%2Fpng&TRANSPARENT=true&LAYERS={id}&CRS=EPSG:4326&STYLES=&WIDTH=600&HEIGHT=600&BBOX=20,-10,80,50&time=2014-01-01T00:00:00.0Z", id = id.to_string())).append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())));
         let res = send_test_request(req, ctx).await;
 
         assert_eq!(res.status(), 200);
@@ -532,7 +565,7 @@ mod tests {
 
     #[tokio::test]
     async fn get_map_missing_fields() {
-        let res = get_map_test_helper(Method::GET, Some("/wms?request=GetMap&service=WMS&version=1.3.0&bbox=20,-10,80,50&width=600&height=600&crs=EPSG:4326&styles=ssss&format=image/png&time=2014-01-01T00:00:00.0Z")).await;
+        let res = get_map_test_helper(Method::GET, Some("/wms/df756642-c5a3-4d72-8ad7-629d312ae993?request=GetMap&service=WMS&version=1.3.0&bbox=20,-10,80,50&width=600&height=600&crs=EPSG:4326&styles=ssss&format=image/png&time=2014-01-01T00:00:00.0Z")).await;
 
         ErrorResponse::assert(
             res,
@@ -579,7 +612,8 @@ mod tests {
 
         let req = test::TestRequest::get()
             .uri(&format!(
-                "/wms?{}",
+                "/wms{}?{}",
+                id,
                 serde_urlencoded::to_string(params).unwrap()
             ))
             .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())));
@@ -631,7 +665,8 @@ mod tests {
 
         let req = test::TestRequest::get()
             .uri(&format!(
-                "/wms?{}",
+                "/wms/{}?{}",
+                id,
                 serde_urlencoded::to_string(params).unwrap()
             ))
             .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())));
