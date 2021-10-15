@@ -361,3 +361,60 @@ where
         self.fold_fn.clone()
     }
 }
+
+#[derive(Debug, Clone)]
+pub struct TemporalRasterAggregationSubQueryNoDataOnly<F, T: Pixel> {
+    pub fold_fn: F,
+    pub no_data_value: T,
+    pub initial_value: T,
+    pub step: TimeStep,
+}
+
+impl<T, FoldM, FoldF> SubQueryTileAggregator<T>
+    for TemporalRasterAggregationSubQueryNoDataOnly<FoldM, T>
+where
+    T: Pixel,
+    FoldM: Send + Clone + Fn(TemporalRasterAggregationTileAccu<T>, RasterTile2D<T>) -> FoldF,
+    FoldF: Send + TryFuture<Ok = TemporalRasterAggregationTileAccu<T>, Error = crate::error::Error>,
+{
+    type TileAccu = TemporalRasterAggregationTileAccu<T>;
+
+    type FoldFuture = FoldF;
+
+    type FoldMethod = FoldM;
+
+    fn new_fold_accu(
+        &self,
+        tile_info: TileInformation,
+        query_rect: RasterQueryRectangle,
+    ) -> Result<Self::TileAccu> {
+        let output_raster =
+            EmptyGrid2D::new(tile_info.tile_size_in_pixels, self.no_data_value).into();
+
+        Ok(TemporalRasterAggregationTileAccu {
+            accu_tile: RasterTile2D::new_with_tile_info(
+                query_rect.time_interval,
+                tile_info,
+                output_raster,
+            ),
+            initial_state: true,
+        })
+    }
+
+    fn tile_query_rectangle(
+        &self,
+        tile_info: TileInformation,
+        query_rect: RasterQueryRectangle,
+        start_time: TimeInstance,
+    ) -> Result<Option<RasterQueryRectangle>> {
+        Ok(Some(QueryRectangle {
+            spatial_bounds: tile_info.spatial_partition(),
+            spatial_resolution: query_rect.spatial_resolution,
+            time_interval: TimeInterval::new(start_time, (start_time + self.step)?)?,
+        }))
+    }
+
+    fn fold_method(&self) -> Self::FoldMethod {
+        self.fold_fn.clone()
+    }
+}

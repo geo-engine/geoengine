@@ -193,6 +193,16 @@ where
         );
         s_filled.boxed()
     }
+
+    /// Wrap `RasterSubQueryAdapter` to flatten the inner option.
+    ///
+    /// SAFETY: This call will cause panics if there is a None result!
+    pub(crate) fn expect(self, msg: &'static str) -> BoxStream<'a, Result<RasterTile2D<PixelType>>>
+    where
+        Self: Stream<Item = Result<Option<RasterTile2D<PixelType>>>> + 'a,
+    {
+        self.map(|r| r.map(|o| o.expect(msg))).boxed()
+    }
 }
 
 impl<PixelType, RasterProcessorType, SubQuery> FusedStream

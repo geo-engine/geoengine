@@ -222,6 +222,7 @@ pub enum Error {
 
     TemporalRasterAggregationLastValidRequiresNoData,
     TemporalRasterAggregationFirstValidRequiresNoData,
+    TemporalRasterAggregationMeanRequiresNoData,
 
     NoSpatialBoundsAvailable,
 
