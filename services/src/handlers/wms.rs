@@ -100,7 +100,7 @@ async fn wms_handler<C: Context>(
 ///     <Format>BLANK</Format>
 ///   </Exception>
 ///   <Layer queryable="1">
-///     <Name>Workflow df756642-c5a3-4d72-8ad7-629d312ae993</Name>
+///     <Name>df756642-c5a3-4d72-8ad7-629d312ae993</Name>
 ///     <Title>Workflow df756642-c5a3-4d72-8ad7-629d312ae993</Title>
 ///     <CRS>EPSG:4326</CRS>
 ///     <EX_GeographicBoundingBox>
@@ -154,7 +154,7 @@ fn get_capabilities(_request: &GetCapabilities, workflow: WorkflowId) -> Result<
             <Format>BLANK</Format>
         </Exception>
         <Layer queryable="1">
-            <Name>Workflow {workflow}</Name>
+            <Name>{workflow}</Name>
             <Title>Workflow {workflow}</Title>
             <EX_GeographicBoundingBox>
                 <westBoundLongitude>-180</westBoundLongitude>

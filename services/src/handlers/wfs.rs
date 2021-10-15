@@ -140,7 +140,7 @@ async fn wfs_handler<C: Context>(
 /// </ows:OperationsMetadata>
 /// <FeatureTypeList>
 ///   <FeatureType>
-///     <Name>Workflow 93d6785e-5eea-4e0e-8074-e7f78733d988</Name>
+///     <Name>93d6785e-5eea-4e0e-8074-e7f78733d988</Name>
 ///     <Title>Wofklow 93d6785e-5eea-4e0e-8074-e7f78733d988</Title>
 ///     <DefaultCRS>urn:ogc:def:crs:EPSG::4326</DefaultCRS>
 ///     <ows:WGS84BoundingBox>
@@ -231,7 +231,7 @@ fn get_capabilities(_request: &GetCapabilities, workflow: WorkflowId) -> Result<
     </ows:OperationsMetadata>
     <FeatureTypeList>
         <FeatureType>
-            <Name>Workflow {workflow}</Name>
+            <Name>{workflow}</Name>
             <Title>Workflow {workflow}</Title>
             <DefaultCRS>urn:ogc:def:crs:EPSG::4326</DefaultCRS>
             <ows:WGS84BoundingBox>
