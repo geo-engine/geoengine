@@ -63,7 +63,7 @@ impl InitializedPlotOperator for InitializedStatistics {
                 rasters: self
                     .rasters
                     .iter()
-                    .map(|source| source.query_processor())
+                    .map(InitializedRasterOperator::query_processor)
                     .collect::<Result<Vec<_>>>()?,
             }
             .boxed(),

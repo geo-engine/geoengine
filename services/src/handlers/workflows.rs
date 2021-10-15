@@ -259,7 +259,7 @@ struct RasterDatasetFromWorkflowResult {
 ///     "name": "foo",
 ///     "description": null,
 ///     "query": {
-///         "spatial_bounds": {
+///         "spatialBounds": {
 ///             "upperLeftCoordinate": {
 ///                 "x": -10.0,
 ///                 "y": 80.0
@@ -269,11 +269,11 @@ struct RasterDatasetFromWorkflowResult {
 ///                 "y": 20.0
 ///             }
 ///         },
-///         "time_interval": {
+///         "timeInterval": {
 ///             "start": 1388534400000,
 ///             "end": 1388534401000
 ///         },
-///         "spatial_resolution": {
+///         "spatialResolution": {
 ///             "x": 0.1,
 ///             "y": 0.1
 ///         }
@@ -912,7 +912,7 @@ mod tests {
                 "name": "foo",
                 "description": null,
                 "query": {
-                    "spatial_bounds": {
+                    "spatialBounds": {
                         "upperLeftCoordinate": {
                             "x": -10.0,
                             "y": 80.0
@@ -922,11 +922,11 @@ mod tests {
                             "y": 20.0
                         }
                     },
-                    "time_interval": {
+                    "timeInterval": {
                         "start": 1388534400000,
                         "end": 1388534401000
                     },
-                    "spatial_resolution": {
+                    "spatialResolution": {
                         "x": 0.1,
                         "y": 0.1
                     }

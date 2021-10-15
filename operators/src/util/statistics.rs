@@ -1,6 +1,7 @@
 use num_traits::AsPrimitive;
 use snafu::Snafu;
 use std::marker::PhantomData;
+use std::ops::Range;
 
 /// Enum for any errors encountered while creating statistics.
 #[derive(Debug, Snafu)]
@@ -246,9 +247,232 @@ where
     }
 }
 
+/// Single quantile estimation with the P^2 algorithm
+///
+/// The P^2 algorithm computes an approximate equi-probable b-bucket histogram with. Instead of
+/// storing the whole sample cumulative distribution, only b+1 (markers) are stored. The heights
+/// of these markers are the minimum and the maximum of the samples and the current estimates of the
+/// 1/b, 2/b, ..., (b-1)/b-quantiles. Their positions are equal to the number
+/// of samples that are smaller or equal to the markers. Each time a new sample is recorded, the
+/// positions of the markers are updated and if necessary their heights are adjusted using a piecewise-
+/// parabolic formula.
+///
+/// For further details, see
+///
+/// R. Jain and I. Chlamtac, The P^2 algorithm for dynamic calculation of quantiles and
+/// histograms without storing observations, Communications of the ACM,
+/// Volume 28 (October), Number 10, 1985, p. 1076-1085.
+/// <https://www.cse.wustl.edu/~jain/papers/ftp/psqr.pdf>
+///
+#[derive(Debug)]
+pub struct PSquareHistogram<T>
+where
+    T: AsPrimitive<f64>,
+{
+    markers: Vec<Marker>,
+    bucket_count: usize,
+    sample_count: u64,
+    _phantom: PhantomData<T>,
+}
+
+impl<T> PSquareHistogram<T>
+where
+    T: AsPrimitive<f64>,
+{
+    /// Creates a new histogram with `bucket_count` buckets. The
+    /// histogram is updated with all valid values from the given
+    /// `initial_samples`.
+    /// The initial samples must at least contain (`bucket_count`+1) valid elements
+    /// (i.e., elements that do not translate to `f64::NAN`).
+    ///
+    /// # Panics
+    /// If the given `bucket_count` is 0.
+    ///
+    /// # Errors
+    /// If the `initial_samples` contain less than (`bucket_count`+1) valid elements.
+    pub fn new(
+        bucket_count: usize,
+        initial_samples: &[T],
+    ) -> Result<PSquareHistogram<T>, StatisticsError> {
+        assert!(bucket_count > 0, "bucket_count must be > 0");
+
+        let mut values = Vec::with_capacity(bucket_count + 1);
+        let mut iter = initial_samples.iter();
+        let mut sample_count = 0;
+
+        for v in &mut iter {
+            let v: f64 = v.as_();
+            if !v.is_nan() {
+                values.push(v);
+                sample_count += 1;
+            }
+            if sample_count > bucket_count {
+                break;
+            }
+        }
+
+        // We require at least 5 valid initial samples
+        if sample_count <= bucket_count {
+            return Err(StatisticsError::Initialization {
+                reason: "Insufficient valid samples.".to_owned(),
+            });
+        }
+        values.sort_unstable_by(|a, b| a.partial_cmp(b).expect("impossible"));
+
+        // Create markers
+        let mut markers = Vec::with_capacity(values.len());
+        for (idx, v) in values.into_iter().enumerate() {
+            markers.push(Marker {
+                marker: v,
+                position: idx as i64 + 1,
+            });
+        }
+
+        let mut result = PSquareHistogram {
+            markers,
+            bucket_count,
+            sample_count: sample_count as u64,
+            _phantom: PhantomData {},
+        };
+
+        // Add remaining values
+
+        for v in &mut iter {
+            result.update(*v)
+        }
+        Ok(result)
+    }
+
+    /// Updates the histogram with the given sample.
+    pub fn update(&mut self, sample: T) {
+        let val: f64 = sample.as_();
+
+        // Ignore NANs
+        if val.is_nan() {
+            return;
+        }
+
+        self.sample_count += 1;
+
+        let k = self.find_k(val);
+
+        for m in &mut self.markers[k + 1..] {
+            m.position += 1;
+        }
+
+        for i in 1..self.bucket_count {
+            let window = &mut self.markers[i - 1..=i + 1];
+
+            let desired_pos =
+                1.0 + (i as f64) * (self.sample_count as f64 - 1.0) / self.bucket_count as f64;
+            let delta = desired_pos - window[1].position as f64;
+
+            if delta >= 1.0 && window[2].position - window[1].position > 1
+                || delta <= -1.0 && window[0].position - window[1].position < -1
+            {
+                let sign = delta.signum();
+
+                // Apply p^2 formula
+                let mut val = Self::estimate_marker_psquare(window, sign);
+
+                // Apply linear estimation if value is invalid
+                if window[0].marker >= val || val >= window[2].marker {
+                    val = Self::estimate_marker_linear(window, sign);
+                }
+                window[1].marker = val;
+                window[1].position += delta as i64;
+            }
+        }
+    }
+
+    /// Returns the histogram for the samples seen so far.
+    pub fn histogram(&self) -> Vec<PSquareHistogramBucket> {
+        let mut result = Vec::with_capacity(self.bucket_count);
+
+        for w in self.markers.windows(2) {
+            result.push(PSquareHistogramBucket {
+                bounds: (w[0].marker..w[1].marker),
+                frequency: (w[1].position - w[0].position) as u64,
+            })
+        }
+        result[0].frequency += 1;
+        result
+    }
+
+    /// Returns the number of samples seen so far
+    pub fn sample_count(&self) -> u64 {
+        self.sample_count
+    }
+
+    /// Finds the bucket for the given value
+    fn find_k(&mut self, v: f64) -> usize {
+        for (idx, m) in self.markers.iter_mut().enumerate() {
+            if v < m.marker {
+                // New minimum
+                if idx == 0 {
+                    m.marker = v;
+                    return idx;
+                }
+                return idx - 1;
+            }
+        }
+        // New maximum
+        self.markers.last_mut().expect("Impossible").marker = v;
+        self.markers.len() - 2
+    }
+
+    /// Estimates the new value of the marker at `window[1]` linearly
+    fn estimate_marker_linear(window: &[Marker], delta: f64) -> f64 {
+        let neighbor_idx = (delta + 1.0) as usize;
+        window[1].marker
+            + delta
+                * ((window[neighbor_idx].marker - window[1].marker)
+                    / (window[neighbor_idx].position - window[1].position) as f64)
+    }
+
+    /// Estimates the new value of the marker at `window[1]` using the p^2 method
+    fn estimate_marker_psquare(window: &[Marker], sign: f64) -> f64 {
+        let pos = window[1].position as f64;
+        let pos_prev = window[0].position as f64;
+        let pos_next = window[2].position as f64;
+
+        let base = sign / (pos_next - pos_prev);
+        let left =
+            (pos - pos_prev + sign) * ((window[2].marker - window[1].marker) / (pos_next - pos));
+        let right =
+            (pos_next - pos - sign) * ((window[1].marker - window[0].marker) / (pos - pos_prev));
+        window[1].marker + base * (left + right) //* pos
+    }
+}
+
+#[derive(Debug)]
+struct Marker {
+    position: i64,
+    marker: f64,
+}
+
+/// Represents a single bucket of a `PSquareHistogram`
+#[derive(Debug)]
+pub struct PSquareHistogramBucket {
+    bounds: Range<f64>,
+    frequency: u64,
+}
+
+impl PSquareHistogramBucket {
+    /// Returns the bounds of this bucket.
+    pub fn bounds(&self) -> Range<f64> {
+        self.bounds.clone()
+    }
+
+    /// Returns the number of elements within this bucket.
+    pub fn frequency(&self) -> u64 {
+        self.frequency
+    }
+}
+
 #[cfg(test)]
 mod tests {
-    use crate::util::statistics::PSquareQuantileEstimator;
+    use crate::util::statistics::{PSquareHistogram, PSquareQuantileEstimator};
     use rand::seq::SliceRandom;
 
     #[test]
@@ -440,5 +664,60 @@ mod tests {
     fn test_bad_quantile2() {
         let initial = vec![0.02, 0.15, 0.74, 3.39, 0.83];
         PSquareQuantileEstimator::new(-1.0, initial.as_slice()).unwrap();
+    }
+
+    #[test]
+    fn test_histogram() {
+        let data = vec![
+            0.02, 0.15, 0.74, 3.39, 0.83, 22.37, 10.15, 15.43, 38.62, 15.92, 34.60, 10.28, 1.47,
+            0.40, 0.05, 11.39, 0.27, 0.42, 0.09, 11.37,
+        ];
+
+        let mut hist = PSquareHistogram::new(4, &data[..5]).unwrap();
+        for v in &data[5..] {
+            hist.update(*v);
+        }
+
+        // The quantile estimator is tested, so we compare our histogram with it to verify correctness
+        let mut quant = PSquareQuantileEstimator::new(0.5, &data[..5]).unwrap();
+        for v in &data[5..] {
+            quant.update(*v);
+        }
+
+        let res = hist.histogram();
+
+        float_cmp::assert_approx_eq!(f64, quant.min(), res[0].bounds.start);
+        float_cmp::assert_approx_eq!(f64, quant.marker2(), res[1].bounds.start);
+        float_cmp::assert_approx_eq!(f64, quant.quantile_estimate(), res[2].bounds.start);
+        float_cmp::assert_approx_eq!(f64, quant.marker4(), res[3].bounds.start);
+        float_cmp::assert_approx_eq!(f64, quant.max(), res[3].bounds.end);
+
+        let fc: u64 = res.iter().map(|b| b.frequency).sum();
+
+        assert_eq!(data.len() as u64, fc);
+    }
+
+    #[test]
+    fn test_histogram_bad_initial_value() {
+        let initial = vec![0.02, 0.15, f64::NAN, 3.39, 0.83];
+        let estimator = PSquareHistogram::new(4, initial.as_slice());
+        assert!(estimator.is_err());
+    }
+
+    #[test]
+    fn test_histogram_bad_value() {
+        let initial = vec![0.02, 0.15, 0.74, 3.39, 0.83];
+
+        let mut estimator = PSquareHistogram::new(4, initial.as_slice()).unwrap();
+
+        let samples = estimator.sample_count();
+
+        estimator.update(f64::NAN);
+
+        assert_eq!(samples, estimator.sample_count());
+
+        estimator.update(42.0);
+
+        assert_eq!(samples + 1, estimator.sample_count());
     }
 }
