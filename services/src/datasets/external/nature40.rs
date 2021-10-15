@@ -3,6 +3,7 @@ use std::path::Path;
 use crate::datasets::provenance::{ProvenanceOutput, ProvenanceProvider};
 use crate::error::Error;
 use crate::util::parsing::{deserialize_base_url, string_or_string_array};
+use crate::util::retry::retry;
 use crate::{datasets::listing::DatasetListOptions, error::Result};
 use crate::{
     datasets::{
@@ -47,6 +48,27 @@ pub struct Nature40DataProviderDefinition {
     base_url: Url,
     user: String,
     password: String,
+    #[serde(default)]
+    request_retries: RequestRetries,
+}
+
+#[derive(Clone, Copy, Debug, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RequestRetries {
+    number_of_retries: usize,
+    initial_delay_ms: u64,
+    exponential_backoff_factor: f64,
+}
+
+impl Default for RequestRetries {
+    // TODO: find good defaults
+    fn default() -> Self {
+        Self {
+            number_of_retries: 3,
+            initial_delay_ms: 125,
+            exponential_backoff_factor: 2.,
+        }
+    }
 }
 
 #[typetag::serde]
@@ -58,6 +80,7 @@ impl DatasetProviderDefinition for Nature40DataProviderDefinition {
             base_url: self.base_url,
             user: self.user,
             password: self.password,
+            request_retries: self.request_retries,
         }))
     }
 
@@ -79,6 +102,7 @@ pub struct Nature40DataProvider {
     base_url: Url,
     user: String,
     password: String,
+    request_retries: RequestRetries,
 }
 
 #[derive(Deserialize, Debug)]
@@ -199,6 +223,16 @@ impl Nature40DataProvider {
     }
 
     async fn load_dataset(&self, db_url: String) -> Result<gdal::Dataset> {
+        retry(
+            self.request_retries.number_of_retries,
+            self.request_retries.initial_delay_ms,
+            self.request_retries.exponential_backoff_factor,
+            async || self.try_load_dataset(db_url.clone()).await,
+        )
+        .await
+    }
+
+    async fn try_load_dataset(&self, db_url: String) -> Result<gdal::Dataset> {
         let auth = self.auth();
         tokio::task::spawn_blocking(move || {
             let dataset = gdal_open_dataset_ex(
@@ -665,6 +699,7 @@ mod tests {
             base_url: Url::parse(&server.url_str("")).unwrap(),
             user: "geoengine".to_owned(),
             password: "pwd".to_owned(),
+            request_retries: Default::default(),
         })
         .initialize()
         .await
@@ -800,6 +835,7 @@ mod tests {
             base_url: Url::parse(&server.url_str("")).unwrap(),
             user: "geoengine".to_owned(),
             password: "pwd".to_owned(),
+            request_retries: Default::default(),
         })
         .initialize()
         .await

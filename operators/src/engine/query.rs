@@ -11,6 +11,7 @@ use serde::{Deserialize, Serialize};
 
 /// A spatio-temporal rectangle for querying data with a bounding box
 #[derive(Copy, Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct QueryRectangle<SpatialBounds: AxisAlignedRectangle> {
     pub spatial_bounds: SpatialBounds,
     pub time_interval: TimeInterval,
