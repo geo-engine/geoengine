@@ -192,14 +192,6 @@ where
 
     type FoldMethod = FoldM;
 
-    fn result_no_data_value(&self) -> Option<T> {
-        Some(self.no_data_value)
-    }
-
-    fn initial_fill_value(&self) -> T {
-        T::from_(0)
-    }
-
     fn new_fold_accu(
         &self,
         tile_info: TileInformation,

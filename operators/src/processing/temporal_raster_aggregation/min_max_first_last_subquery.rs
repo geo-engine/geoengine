@@ -319,26 +319,18 @@ where
 
     type FoldMethod = FoldM;
 
-    fn result_no_data_value(&self) -> Option<T> {
-        self.no_data_value
-    }
-
-    fn initial_fill_value(&self) -> T {
-        self.initial_value
-    }
-
     fn new_fold_accu(
         &self,
         tile_info: TileInformation,
         query_rect: RasterQueryRectangle,
     ) -> Result<Self::TileAccu> {
-        let output_raster = if let Some(no_data_value) = self.result_no_data_value() {
+        let output_raster = if let Some(no_data_value) = self.no_data_value {
             EmptyGrid2D::new(tile_info.tile_size_in_pixels, no_data_value).into()
         } else {
             Grid2D::new_filled(
                 tile_info.tile_size_in_pixels,
-                self.initial_fill_value(),
-                self.result_no_data_value(),
+                self.initial_value,
+                self.no_data_value,
             )
             .into()
         };

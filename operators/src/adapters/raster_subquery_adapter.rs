@@ -13,13 +13,13 @@ use futures::{
 use futures::{stream::FusedStream, Future};
 use futures::{Stream, StreamExt};
 use geoengine_datatypes::primitives::{SpatialPartition2D, SpatialPartitioned};
-use geoengine_datatypes::raster::{GridBoundingBox2D, GridBounds, GridStep};
+use geoengine_datatypes::raster::{EmptyGrid2D, GridBoundingBox2D, GridBounds, GridStep};
 use geoengine_datatypes::{
     error::Error::{GridIndexOutOfBounds, InvalidGridIndex},
     operations::reproject::{CoordinateProjection, CoordinateProjector, Reproject},
     primitives::{SpatialResolution, TimeInterval},
     raster::{
-        grid_idx_iter_2d, BoundedGrid, EmptyGrid, Grid2D, MaterializedRasterTile2D, NoDataValue,
+        grid_idx_iter_2d, BoundedGrid, EmptyGrid, MaterializedRasterTile2D, NoDataValue,
         TilingSpecification,
     },
     spatial_reference::SpatialReference,
@@ -525,11 +525,6 @@ where
     type FoldMethod: Send + Clone + Fn(Self::TileAccu, RasterTile2D<T>) -> Self::FoldFuture;
     type TileAccu: FoldTileAccu<RasterType = T> + Clone + Send;
 
-    /// The no-data-value to use in the resulting `RasterTile2D`
-    fn result_no_data_value(&self) -> Option<T>;
-    /// The initial fill-value of the accumulator (`RasterTile2D`).
-    fn initial_fill_value(&self) -> T;
-
     /// This method generates a new accumulator which is used to fold the `Stream` of `RasterTile2D` of a sub-query.
     fn new_fold_accu(
         &self,
@@ -565,11 +560,12 @@ where
 }
 
 #[derive(Debug, Clone)]
-pub struct TileSubQueryIdentity<F> {
+pub struct TileSubQueryIdentity<F, T> {
     fold_fn: F,
+    no_data_value: T,
 }
 
-impl<T, FoldM, FoldF> SubQueryTileAggregator<T> for TileSubQueryIdentity<FoldM>
+impl<T, FoldM, FoldF> SubQueryTileAggregator<T> for TileSubQueryIdentity<FoldM, T>
 where
     T: Pixel,
     FoldM: Send + Clone + Fn(RasterTile2D<T>, RasterTile2D<T>) -> FoldF,
@@ -581,28 +577,17 @@ where
 
     type TileAccu = RasterTile2D<T>;
 
-    fn result_no_data_value(&self) -> Option<T> {
-        Some(T::from_(0))
-    }
-
-    fn initial_fill_value(&self) -> T {
-        T::from_(0)
-    }
-
     fn new_fold_accu(
         &self,
         tile_info: TileInformation,
         query_rect: RasterQueryRectangle,
     ) -> Result<Self::TileAccu> {
-        let output_raster = Grid2D::new_filled(
-            tile_info.tile_size_in_pixels,
-            self.initial_fill_value(),
-            self.result_no_data_value(),
-        );
+        let output_raster =
+            EmptyGrid2D::new(tile_info.tile_size_in_pixels, T::from_(self.no_data_value)).into();
         Ok(RasterTile2D::new_with_tile_info(
             query_rect.time_interval,
             tile_info,
-            output_raster.into(),
+            output_raster,
         ))
     }
 
@@ -665,14 +650,6 @@ where
     type FoldMethod = FoldM;
 
     type TileAccu = TileWithProjectionCoordinates<T>;
-
-    fn result_no_data_value(&self) -> Option<T> {
-        Some(self.no_data_and_fill_value)
-    }
-
-    fn initial_fill_value(&self) -> T {
-        self.no_data_and_fill_value
-    }
 
     fn new_fold_accu(
         &self,
@@ -863,6 +840,7 @@ mod tests {
             &query_ctx,
             TileSubQueryIdentity {
                 fold_fn: fold_by_blit_future,
+                no_data_value: 0,
             },
         );
         let res = a
