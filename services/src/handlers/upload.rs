@@ -98,50 +98,32 @@ async fn upload_handler<C: Context>(
 mod tests {
     use super::*;
     use crate::contexts::{InMemoryContext, Session, SimpleContext};
-    use crate::util::tests::{read_body_string, send_test_request};
+    use crate::util::tests::{send_test_request, SetMultipartBody, TestDataUploads};
     use actix_web::{http::header, test};
     use actix_web_httpauth::headers::authorization::Bearer;
 
     #[tokio::test]
-    #[ignore]
     async fn upload() {
-        let ctx = InMemoryContext::default();
+        let mut test_data = TestDataUploads::default(); // remember created folder and remove them on drop
 
+        let ctx = InMemoryContext::default();
         let session_id = ctx.default_session_ref().await.id();
 
-        let body = r#"-----------------------------10196671711503402186283068890
-Content-Disposition: form-data; name="files[]"; filename="bar.txt"
-Content-Type: text/plain
-
-bar
------------------------------10196671711503402186283068890
-Content-Disposition: form-data; name="files[]"; filename="foo.txt"
-Content-Type: text/plain
-
-foo
------------------------------10196671711503402186283068890--
-"#
-        .to_string();
+        let body = vec![("bar.txt", "bar"), ("foo.txt", "foo")];
 
         let req = test::TestRequest::post()
             .uri("/upload")
-            .append_header((header::CONTENT_LENGTH, body.len()))
             .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())))
-            .append_header((header::CONTENT_TYPE, "multipart/form-data; boundary=---------------------------10196671711503402186283068890"))
-            .set_payload(body);
+            .set_multipart(body);
 
         let res = send_test_request(req, ctx).await;
 
-        let res_status = res.status();
-        let res_body = read_body_string(res).await;
-        assert_eq!(res_status, 200, "{}", res_body);
+        assert_eq!(res.status(), 200);
 
-        let _upload: IdResponse<UploadId> = serde_json::from_str(&res_body).unwrap();
+        let upload: IdResponse<UploadId> = test::read_body_json(res).await;
+        test_data.uploads.push(upload.id);
 
-        // TODO: fix: body doesn't arrive at handler in test
-        // let root = upload.id.root_path().unwrap();
-        // assert!(root.join("foo.txt").exists() && root.join("bar.txt").exists());
-
-        // TODO: delete upload directory or configure test settings to use temp dir
+        let root = upload.id.root_path().unwrap();
+        assert!(root.join("foo.txt").exists() && root.join("bar.txt").exists());
     }
 }

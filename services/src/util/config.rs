@@ -107,6 +107,7 @@ pub struct Web {
     #[serde(deserialize_with = "deserialize_base_url_option", default)]
     pub external_address: Option<url::Url>,
     pub backend: Backend,
+    pub version_api: bool,
 }
 
 impl ConfigElement for Web {

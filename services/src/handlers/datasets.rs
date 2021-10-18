@@ -703,19 +703,31 @@ fn column_map_to_column_vecs(columns: &HashMap<String, ColumnDataType>) -> Colum
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::contexts::{InMemoryContext, Session, SimpleContext, SimpleSession};
+    use crate::contexts::{InMemoryContext, Session, SessionId, SimpleContext, SimpleSession};
     use crate::datasets::storage::{AddDataset, DatasetStore};
+    use crate::datasets::upload::UploadId;
     use crate::error::Result;
     use crate::projects::{PointSymbology, Symbology};
     use crate::test_data;
-    use crate::util::tests::{read_body_string, send_test_request};
+    use crate::util::tests::{
+        read_body_string, send_test_request, SetMultipartBody, TestDataUploads,
+    };
     use actix_web::{http::header, test};
     use actix_web_httpauth::headers::authorization::Bearer;
-    use geoengine_datatypes::collections::VectorDataType;
+    use futures::TryStreamExt;
+    use geoengine_datatypes::collections::{
+        GeometryCollection, MultiPointCollection, VectorDataType,
+    };
     use geoengine_datatypes::dataset::{DatasetId, InternalDatasetId};
+    use geoengine_datatypes::primitives::{BoundingBox2D, SpatialResolution};
     use geoengine_datatypes::spatial_reference::SpatialReferenceOption;
-    use geoengine_operators::engine::{StaticMetaData, VectorResultDescriptor};
-    use geoengine_operators::source::{OgrSourceDataset, OgrSourceErrorSpec};
+    use geoengine_operators::engine::{
+        InitializedVectorOperator, QueryProcessor, StaticMetaData, VectorOperator,
+        VectorResultDescriptor,
+    };
+    use geoengine_operators::source::{
+        OgrSource, OgrSourceDataset, OgrSourceErrorSpec, OgrSourceParameters,
+    };
     use serde_json::json;
     use std::str::FromStr;
 
@@ -884,15 +896,43 @@ mod tests {
         Ok(())
     }
 
-    #[tokio::test]
-    async fn create_dataset() {
-        let ctx = InMemoryContext::default();
+    async fn upload_ne_10m_ports_files<C: SimpleContext>(
+        ctx: C,
+        session_id: SessionId,
+    ) -> Result<UploadId> {
+        let files = vec![
+            test_data!("vector/data/ne_10m_ports/ne_10m_ports.shp").to_path_buf(),
+            test_data!("vector/data/ne_10m_ports/ne_10m_ports.shx").to_path_buf(),
+            test_data!("vector/data/ne_10m_ports/ne_10m_ports.prj").to_path_buf(),
+            test_data!("vector/data/ne_10m_ports/ne_10m_ports.dbf").to_path_buf(),
+            test_data!("vector/data/ne_10m_ports/ne_10m_ports.cpg").to_path_buf(),
+        ];
 
-        let session_id = ctx.default_session_ref().await.id();
+        let req = test::TestRequest::post()
+            .uri("/upload")
+            .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())))
+            .set_multipart_files(&files);
+        let res = send_test_request(req, ctx).await;
+        assert_eq!(res.status(), 200);
 
-        let s = r#"{
-            "upload": "1f7e3e75-4d20-4c91-9497-7f4df7604b62",
-            "definition": {
+        let upload: IdResponse<UploadId> = test::read_body_json(res).await;
+        let root = upload.id.root_path()?;
+
+        for file in files {
+            let file_name = file.file_name().unwrap();
+            assert!(root.join(file_name).exists());
+        }
+
+        Ok(upload.id)
+    }
+
+    async fn construct_dataset_from_upload<C: SimpleContext>(
+        ctx: C,
+        upload_id: UploadId,
+        session_id: SessionId,
+    ) -> DatasetId {
+        let s = format!("{{\"upload\": \"{}\",", upload_id)
+            + r#""definition": {
                 "properties": {
                     "id": null,
                     "name": "Uploaded Natural Earth 10m Ports",
@@ -902,7 +942,7 @@ mod tests {
                 "metaData": {
                     "type": "OgrMetaData",
                     "loadingInfo": {
-                        "fileName": "test_data/vector/data/ne_10m_ports/ne_10m_ports.shp",
+                        "fileName": "ne_10m_ports.shp",
                         "layerName": "ne_10m_ports",
                         "dataType": "MultiPoint",
                         "time": {
@@ -941,10 +981,81 @@ mod tests {
             .append_header((header::CONTENT_TYPE, "application/json"))
             .set_payload(s);
         let res = send_test_request(req, ctx).await;
+        assert_eq!(res.status(), 200);
 
-        assert_eq!(res.status(), 400, "{:?}", read_body_string(res).await);
+        let dataset: IdResponse<DatasetId> = test::read_body_json(res).await;
+        dataset.id
+    }
 
-        // TODO: add a success test case once it is clear how to upload data from within a test
+    async fn make_ogr_source<C: Context>(
+        ctx: &C,
+        dataset_id: DatasetId,
+        session: C::Session,
+    ) -> Result<Box<dyn InitializedVectorOperator>> {
+        let exe_ctx = ctx.execution_context(session.clone())?;
+
+        OgrSource {
+            params: OgrSourceParameters {
+                dataset: dataset_id,
+                attribute_projection: None,
+            },
+        }
+        .boxed()
+        .initialize(&exe_ctx)
+        .await
+        .map_err(Into::into)
+    }
+
+    #[tokio::test]
+    async fn create_dataset() -> Result<()> {
+        let mut test_data = TestDataUploads::default(); // remember created folder and remove them on drop
+
+        let ctx = InMemoryContext::default();
+        let session = ctx.default_session_ref().await;
+        let session_id = session.id();
+
+        let upload_id = upload_ne_10m_ports_files(ctx.clone(), session_id).await?;
+        test_data.uploads.push(upload_id);
+
+        let dataset_id = construct_dataset_from_upload(ctx.clone(), upload_id, session_id).await;
+
+        let source = make_ogr_source(&ctx, dataset_id, session.clone()).await?;
+
+        let query_processor = source.query_processor()?.multi_point().unwrap();
+        let query_ctx = ctx.query_context()?;
+        let query = query_processor
+            .query(
+                VectorQueryRectangle {
+                    spatial_bounds: BoundingBox2D::new((1.85, 50.88).into(), (4.82, 52.95).into())?,
+                    time_interval: Default::default(),
+                    spatial_resolution: SpatialResolution::new(1., 1.)?,
+                },
+                &query_ctx,
+            )
+            .await
+            .unwrap();
+
+        let result: Vec<MultiPointCollection> = query.try_collect().await?;
+
+        let coords = result[0].coordinates();
+        assert_eq!(coords.len(), 10);
+        assert_eq!(
+            coords,
+            &[
+                [2.933_686_69, 51.23].into(),
+                [3.204_593_64_f64, 51.336_388_89].into(),
+                [4.651_413_428, 51.805_833_33].into(),
+                [4.11, 51.95].into(),
+                [4.386_160_188, 50.886_111_11].into(),
+                [3.767_373_38, 51.114_444_44].into(),
+                [4.293_757_362, 51.297_777_78].into(),
+                [1.850_176_678, 50.965_833_33].into(),
+                [2.170_906_949, 51.021_666_67].into(),
+                [4.292_873_969, 51.927_222_22].into(),
+            ]
+        );
+
+        Ok(())
     }
 
     #[test]
