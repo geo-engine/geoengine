@@ -126,12 +126,23 @@ pub enum Error {
 
     InvalidNoDataValueValueForOutputDataType,
 
+    #[snafu(display("Invalid type: expected {} found {}", expected, found))]
     InvalidType {
         expected: String,
         found: String,
     },
 
-    InvalidOperatorType,
+    #[snafu(display("Invalid operator type: expected {} found {}", expected, found))]
+    InvalidOperatorType {
+        expected: String,
+        found: String,
+    },
+
+    #[snafu(display("Invalid vector type: expected {} found {}", expected, found))]
+    InvalidVectorType {
+        expected: String,
+        found: String,
+    },
 
     #[snafu(display("Column types do not match: {:?} - {:?}", left, right))]
     ColumnTypeMismatch {

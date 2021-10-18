@@ -78,14 +78,29 @@ where
 /// }
 /// ```
 async fn register_workflow_handler<C: Context>(
-    _session: C::Session,
+    session: C::Session,
     ctx: web::Data<C>,
     workflow: web::Json<Workflow>,
 ) -> Result<impl Responder> {
+    let workflow = workflow.into_inner();
+
+    // ensure the workflow is valid by initializing it
+    let operator = workflow
+        .clone()
+        .operator
+        .get_raster()
+        .context(error::Operator)?;
+    let execution_context = ctx.execution_context(session)?;
+    let _initialized = operator
+        .clone()
+        .initialize(&execution_context)
+        .await
+        .context(error::Operator)?;
+
     let id = ctx
         .workflow_registry_ref_mut()
         .await
-        .register(workflow.into_inner())
+        .register(workflow)
         .await?;
     Ok(web::Json(IdResponse::from(id)))
 }
@@ -980,6 +995,48 @@ mod tests {
             include_bytes!("../../../test_data/raster/geotiff_from_stream_compressed.tiff")
                 as &[u8],
             result
+        );
+    }
+
+    #[tokio::test]
+    async fn it_does_not_register_invalid_workflow() {
+        let ctx = InMemoryContext::default();
+        let session_id = ctx.default_session_ref().await.id();
+
+        let workflow = json!({
+          "type": "Vector",
+          "operator": {
+            "type": "Reprojection",
+            "params": {
+              "targetSpatialReference": "EPSG:4326"
+            },
+            "sources": {
+              "source": {
+                "type": "GdalSource",
+                "params": {
+                  "dataset": {
+                    "type": "internal",
+                    "datasetId": "36574dc3-560a-4b09-9d22-d5945f2b8093"
+                  }
+                }
+              }
+            }
+          }
+        });
+
+        let req = test::TestRequest::post()
+            .uri("/workflow")
+            .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())))
+            .append_header((header::CONTENT_TYPE, mime::APPLICATION_JSON))
+            .set_payload(workflow.to_string());
+        let res = send_test_request(req, ctx.clone()).await;
+
+        assert_eq!(res.status(), 400);
+
+        let res_body = read_body_string(res).await;
+        assert_eq!(
+            res_body,
+            json!({"error": "Operator", "message": "Operator: Invalid operator type: expected Raster found Vector"}).to_string()
         );
     }
 }

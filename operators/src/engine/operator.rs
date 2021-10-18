@@ -174,21 +174,38 @@ impl TypedOperator {
         if let TypedOperator::Vector(o) = self {
             return Ok(o);
         }
-        Err(error::Error::InvalidOperatorType)
+        Err(error::Error::InvalidOperatorType {
+            expected: "Vector".to_owned(),
+            found: self.type_name(),
+        })
     }
 
     pub fn get_raster(self) -> Result<Box<dyn RasterOperator>> {
         if let TypedOperator::Raster(o) = self {
             return Ok(o);
         }
-        Err(error::Error::InvalidOperatorType)
+        Err(error::Error::InvalidOperatorType {
+            expected: "Raster".to_owned(),
+            found: self.type_name(),
+        })
     }
 
     pub fn get_plot(self) -> Result<Box<dyn PlotOperator>> {
         if let TypedOperator::Plot(o) = self {
             return Ok(o);
         }
-        Err(error::Error::InvalidOperatorType)
+        Err(error::Error::InvalidOperatorType {
+            expected: "Plot".to_owned(),
+            found: self.type_name(),
+        })
+    }
+
+    fn type_name(&self) -> String {
+        match self {
+            TypedOperator::Vector(_) => "Vector".to_owned(),
+            TypedOperator::Raster(_) => "Raster".to_owned(),
+            TypedOperator::Plot(_) => "Plot".to_owned(),
+        }
     }
 }
 
