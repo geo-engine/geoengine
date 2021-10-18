@@ -16,7 +16,9 @@ use geoengine_datatypes::dataset::{DatasetId, InternalDatasetId};
 use geoengine_datatypes::primitives::AxisAlignedRectangle;
 use geoengine_datatypes::spatial_reference::SpatialReference;
 use geoengine_datatypes::util::Identifier;
-use geoengine_operators::engine::{OperatorDatasets, RasterQueryRectangle, TypedResultDescriptor};
+use geoengine_operators::engine::{
+    OperatorDatasets, RasterQueryRectangle, TypedOperator, TypedResultDescriptor,
+};
 use geoengine_operators::source::{
     FileNotFoundHandling, GdalDatasetGeoTransform, GdalDatasetParameters, GdalMetaDataStatic,
 };
@@ -85,17 +87,24 @@ async fn register_workflow_handler<C: Context>(
     let workflow = workflow.into_inner();
 
     // ensure the workflow is valid by initializing it
-    let operator = workflow
-        .clone()
-        .operator
-        .get_raster()
-        .context(error::Operator)?;
     let execution_context = ctx.execution_context(session)?;
-    let _initialized = operator
-        .clone()
-        .initialize(&execution_context)
-        .await
-        .context(error::Operator)?;
+    match workflow.clone().operator {
+        TypedOperator::Vector(o) => {
+            o.initialize(&execution_context)
+                .await
+                .context(error::Operator)?;
+        }
+        TypedOperator::Raster(o) => {
+            o.initialize(&execution_context)
+                .await
+                .context(error::Operator)?;
+        }
+        TypedOperator::Plot(o) => {
+            o.initialize(&execution_context)
+                .await
+                .context(error::Operator)?;
+        }
+    }
 
     let id = ctx
         .workflow_registry_ref_mut()
@@ -1036,7 +1045,7 @@ mod tests {
         let res_body = read_body_string(res).await;
         assert_eq!(
             res_body,
-            json!({"error": "Operator", "message": "Operator: Invalid operator type: expected Raster found Vector"}).to_string()
+            json!({"error": "Operator", "message": "Operator: Invalid operator type: expected Vector found Raster"}).to_string()
         );
     }
 }
