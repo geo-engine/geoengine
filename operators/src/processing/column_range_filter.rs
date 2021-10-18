@@ -131,10 +131,12 @@ where
                         .cloned()
                         .map(|range| range.into_int_range().map(Into::into))
                         .collect(),
-                    FeatureDataType::Category => Err(error::Error::InvalidType {
-                        expected: "text, float, or int".to_string(),
-                        found: "category".to_string(),
-                    }),
+                    FeatureDataType::Category | FeatureDataType::Bool => {
+                        Err(error::Error::InvalidType {
+                            expected: "text, float, or int".to_string(),
+                            found: "category".to_string(),
+                        })
+                    }
                 };
 
             collection

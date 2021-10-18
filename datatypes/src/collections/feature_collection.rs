@@ -458,7 +458,7 @@ where
                     arrow::compute::lt_utf8_scalar,
                 )?;
             }
-            FeatureDataType::Category => {
+            FeatureDataType::Category | FeatureDataType::Bool => {
                 return Err(error::FeatureCollectionError::WrongDataType.into());
             }
         }
@@ -997,6 +997,11 @@ where
                 FeatureDataType::Category => {
                     let array: &arrow::array::UInt8Array = downcast_array(column);
                     CategoryDataRef::new(array.values(), array.data_ref().null_bitmap()).into()
+                }
+                FeatureDataType::Bool => {
+                    let _array: &arrow::array::BooleanArray = downcast_array(column);
+                    //BoolDataRef::new(array.values(), array.data_ref().null_bitmap().into())
+                    todo!("BooleanArray::values returns Buffer instead of [bool]")
                 }
             },
         )

@@ -1030,6 +1030,23 @@ where
                         Err(e) => error_spec.on_error(Error::Gdal { source: e })?,
                     };
                 }
+                FeatureDataType::Bool => {
+                    #[allow(clippy::match_same_arms)]
+                    let value_option = match field {
+                        Ok(Some(FieldValue::IntegerValue(v))) => Some(v != 0),
+                        Ok(Some(FieldValue::Integer64Value(v))) => Some(v != 0),
+                        Ok(Some(FieldValue::StringValue(s))) => bool::from_str(&s).ok(),
+                        Ok(Some(FieldValue::RealValue(v))) => Some(v != 0.0),
+                        Ok(None) => None,
+                        Ok(Some(v)) => error_spec.on_error(Error::OgrColumnFieldTypeMismatch {
+                            expected: "Bool".to_string(),
+                            field_value: v,
+                        })?, // TODO: handle other types
+                        Err(e) => error_spec.on_error(Error::Gdal { source: e })?,
+                    };
+
+                    builder.push_data(column, FeatureDataValue::NullableBool(value_option))?;
+                }
             }
         }
 

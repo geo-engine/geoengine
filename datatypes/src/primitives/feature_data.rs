@@ -18,7 +18,7 @@ pub enum FeatureDataType {
     Int,
     Float,
     Text,
-    Bool
+    Bool,
 }
 
 impl FeatureDataType {
@@ -48,7 +48,7 @@ pub enum FeatureData {
     Text(Vec<String>),
     NullableText(Vec<Option<String>>),
     Bool(Vec<bool>),
-    NullableBool(Vec<Option<bool>>)
+    NullableBool(Vec<Option<bool>>),
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize, PartialEq)]
@@ -62,7 +62,7 @@ pub enum FeatureDataValue {
     Text(String),
     NullableText(Option<String>),
     Bool(bool),
-    NullableBool(Option<bool>)
+    NullableBool(Option<bool>),
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -82,7 +82,7 @@ impl<'f> FeatureDataRef<'f> {
             FeatureDataRef::Float(data_ref) => data_ref.json_values(),
             FeatureDataRef::Int(data_ref) => data_ref.json_values(),
             FeatureDataRef::Category(data_ref) => data_ref.json_values(),
-            FeatureDataRef::Bool(data_ref) => data_ref.json_values()
+            FeatureDataRef::Bool(data_ref) => data_ref.json_values(),
         }
     }
 
@@ -93,7 +93,7 @@ impl<'f> FeatureDataRef<'f> {
             FeatureDataRef::Float(data_ref) => data_ref.nulls(),
             FeatureDataRef::Int(data_ref) => data_ref.nulls(),
             FeatureDataRef::Category(data_ref) => data_ref.nulls(),
-            FeatureDataRef::Bool(data_ref) => data_ref.nulls()
+            FeatureDataRef::Bool(data_ref) => data_ref.nulls(),
         }
     }
 
@@ -453,6 +453,111 @@ fn null_bitmap_to_bools(null_bitmap: &Option<Bitmap>, len: usize) -> Vec<bool> {
         (0..len).map(|i| !nulls.is_set(i)).collect()
     } else {
         vec![false; len]
+    }
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub struct BoolDataRef<'f> {
+    buffer: &'f [bool],
+    valid_bitmap: &'f Option<arrow::bitmap::Bitmap>,
+}
+
+impl<'f> BoolDataRef<'f> {
+    pub fn new(buffer: &'f [bool], null_bitmap: &'f Option<arrow::bitmap::Bitmap>) -> Self {
+        Self {
+            buffer,
+            valid_bitmap: null_bitmap,
+        }
+    }
+}
+
+impl<'f> DataRef<'f, bool> for BoolDataRef<'f> {
+    fn json_value(value: &bool) -> serde_json::Value {
+        (*value).into()
+    }
+
+    fn nulls(&self) -> Vec<bool> {
+        null_bitmap_to_bools(self.valid_bitmap, self.as_ref().len())
+    }
+
+    fn is_valid(&self, i: usize) -> bool {
+        self.valid_bitmap
+            .as_ref()
+            .map_or(true, |bitmap| bitmap.is_set(i))
+    }
+
+    fn has_nulls(&self) -> bool {
+        self.valid_bitmap.is_some()
+    }
+
+    fn get_unchecked(&self, i: usize) -> FeatureDataValue {
+        if self.has_nulls() {
+            FeatureDataValue::NullableBool(if self.is_null(i) {
+                None
+            } else {
+                Some(self.as_ref()[i])
+            })
+        } else {
+            FeatureDataValue::Bool(self.as_ref()[i])
+        }
+    }
+
+    type StringsIter = NumberDataRefStringIter<'f, Self, bool>;
+
+    fn strings_iter(&'f self) -> Self::StringsIter {
+        NumberDataRefStringIter::new(self)
+    }
+
+    fn len(&self) -> usize {
+        self.buffer.len()
+    }
+
+    type FloatOptionsIter = BoolDataRefFloatOptionIter<'f>;
+
+    fn float_options_iter(&'f self) -> Self::FloatOptionsIter {
+        BoolDataRefFloatOptionIter::new(self)
+    }
+}
+
+impl AsRef<[bool]> for BoolDataRef<'_> {
+    fn as_ref(&self) -> &[bool] {
+        self.buffer
+    }
+}
+
+impl<'f> From<BoolDataRef<'f>> for FeatureDataRef<'f> {
+    fn from(data_ref: BoolDataRef<'f>) -> Self {
+        FeatureDataRef::Bool(data_ref)
+    }
+}
+
+pub struct BoolDataRefFloatOptionIter<'f> {
+    data_ref: &'f BoolDataRef<'f>,
+    i: usize,
+}
+
+impl<'f> BoolDataRefFloatOptionIter<'f> {
+    pub fn new(data_ref: &'f BoolDataRef<'f>) -> Self {
+        Self { data_ref, i: 0 }
+    }
+}
+
+impl<'f> Iterator for BoolDataRefFloatOptionIter<'f> {
+    type Item = Option<f64>;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        if self.i >= self.data_ref.len() {
+            return None;
+        }
+
+        let i = self.i;
+        self.i += 1;
+
+        Some(if self.data_ref.is_null(i) {
+            None
+        } else {
+            Some(f64::from(self.data_ref.as_ref()[i] as u8))
+        })
     }
 }
 
@@ -834,7 +939,7 @@ impl FeatureData {
             FeatureData::Category(v) => v.len(),
             FeatureData::NullableCategory(v) => v.len(),
             FeatureData::Bool(v) => v.len(),
-            FeatureData::NullableBool(v) => v.len()
+            FeatureData::NullableBool(v) => v.len(),
         }
     }
 
@@ -929,7 +1034,7 @@ impl From<&FeatureData> for FeatureDataType {
             FeatureData::Float(_) | FeatureData::NullableFloat(_) => Self::Float,
             FeatureData::Int(_) | FeatureData::NullableInt(_) => Self::Int,
             FeatureData::Category(_) | FeatureData::NullableCategory(_) => Self::Category,
-            FeatureData::Bool(_) | FeatureData::NullableBool(_) => Self::Bool
+            FeatureData::Bool(_) | FeatureData::NullableBool(_) => Self::Bool,
         }
     }
 }
@@ -941,7 +1046,7 @@ impl From<&FeatureDataValue> for FeatureDataType {
             FeatureDataValue::Float(_) | FeatureDataValue::NullableFloat(_) => Self::Float,
             FeatureDataValue::Int(_) | FeatureDataValue::NullableInt(_) => Self::Int,
             FeatureDataValue::Category(_) | FeatureDataValue::NullableCategory(_) => Self::Category,
-            FeatureDataValue::Bool(_) | FeatureDataValue::NullableBool(_) => Self::Bool
+            FeatureDataValue::Bool(_) | FeatureDataValue::NullableBool(_) => Self::Bool,
         }
     }
 }
@@ -953,6 +1058,7 @@ impl<'f> From<&'f FeatureDataRef<'f>> for FeatureDataType {
             FeatureDataRef::Float(..) => Self::Float,
             FeatureDataRef::Int(_) => Self::Int,
             FeatureDataRef::Category(_) => Self::Category,
+            FeatureDataRef::Bool(_) => Self::Bool,
         }
     }
 }

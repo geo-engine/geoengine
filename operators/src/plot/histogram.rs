@@ -112,7 +112,7 @@ impl PlotOperator for Histogram {
                             reason: format!("column `{}` must be numerical", column_name),
                         });
                     }
-                    Some(FeatureDataType::Int | FeatureDataType::Float) => {
+                    Some(FeatureDataType::Int | FeatureDataType::Float | FeatureDataType::Bool) => {
                         // okay
                     }
                 }
@@ -551,6 +551,9 @@ impl HistogramMetadataInProgress {
                 add_data_ref(self, &values);
             }
             FeatureDataRef::Float(values) => {
+                add_data_ref(self, &values);
+            }
+            FeatureDataRef::Bool(values) => {
                 add_data_ref(self, &values);
             }
             FeatureDataRef::Category(_) | FeatureDataRef::Text(_) => {
