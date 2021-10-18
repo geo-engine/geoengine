@@ -179,7 +179,7 @@ fn custom_spatial_reference_specification(
                 (5_568_748.276, 5_568_748.276).into(),
             ),
             axis_labels: None,
-            axis_order: None, // TODO: find out
+            axis_order: Some(AxisOrder::EastNorth),
         }),
         _ => None,
     }
@@ -330,7 +330,7 @@ mod tests {
                     (5_568_748.276, 5_568_748.276).into()
                 ),
                 axis_labels: None,
-                axis_order: None, // TODO: figure out
+                axis_order: Some(AxisOrder::EastNorth),
             },
             spec
         );
