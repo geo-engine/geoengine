@@ -19,7 +19,7 @@ pub use self::grid_index::{GridIdx, GridIdx1D, GridIdx2D, GridIdx3D};
 pub use self::grid_or_empty::{GridOrEmpty, GridOrEmpty1D, GridOrEmpty2D, GridOrEmpty3D};
 pub use self::grid_traits::{
     BoundedGrid, GridBounds, GridContains, GridIndexAccess, GridIndexAccessMut, GridIntersection,
-    GridSize, GridSpaceToLinearSpace,
+    GridSize, GridSpaceToLinearSpace, GridStep,
 };
 pub use self::grid_typed::{TypedGrid, TypedGrid2D, TypedGrid3D};
 pub use self::operations::{blit::Blit, grid_blit::GridBlit};

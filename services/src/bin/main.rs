@@ -60,7 +60,34 @@ fn initialize_logging() -> Result<LoggerHandle> {
             .duplicate_to_stderr(Duplicate::All);
     }
 
+    reroute_gdal_logging();
+
     Ok(logger.start()?)
+}
+
+/// We install a GDAL error handler that logs all messages with our log macros.
+fn reroute_gdal_logging() {
+    gdal::config::set_error_handler(|error_type, error_num, error_msg| {
+        let target = "GDAL";
+        match error_type {
+            gdal::errors::CplErrType::None => {
+                // should never log anything
+                log::info!(target: target, "GDAL None {}: {}", error_num, error_msg)
+            }
+            gdal::errors::CplErrType::Debug => {
+                log::debug!(target: target, "GDAL Debug {}: {}", error_num, error_msg)
+            }
+            gdal::errors::CplErrType::Warning => {
+                log::warn!(target: target, "GDAL Warning {}: {}", error_num, error_msg)
+            }
+            gdal::errors::CplErrType::Failure => {
+                log::error!(target: target, "GDAL Failure {}: {}", error_num, error_msg)
+            }
+            gdal::errors::CplErrType::Fatal => {
+                log::error!(target: target, "GDAL Fatal {}: {}", error_num, error_msg)
+            }
+        };
+    });
 }
 
 /// A logline-formatter that produces log lines like
