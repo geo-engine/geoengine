@@ -102,6 +102,7 @@ where
     Ok(())
 }
 
+#[allow(clippy::too_many_lines)]
 fn gdal_writer<T: Pixel + GdalType>(
     rx: &Receiver<RasterTile2D<T>>,
     file_path: &Path,
@@ -110,6 +111,19 @@ fn gdal_writer<T: Pixel + GdalType>(
     spatial_reference: SpatialReference,
     as_cog: bool,
 ) -> Result<()> {
+    const INTERMEDIATE_FILE_SUFFIX: &str = "GEO-ENGINE-TMP";
+
+    let intermediate_file_path = file_path.with_extension(INTERMEDIATE_FILE_SUFFIX);
+    let intermediate_file_path_str =
+        intermediate_file_path
+            .to_str()
+            .ok_or(Error::InvalidGdalFilePath {
+                file_path: file_path.to_owned(),
+            })?;
+    let output_file_path = file_path.to_str().ok_or(Error::InvalidGdalFilePath {
+        file_path: file_path.to_owned(),
+    })?;
+
     let x_pixel_size = query_rect.spatial_resolution.x;
     let y_pixel_size = query_rect.spatial_resolution.y;
     let width = (query_rect.spatial_bounds.size_x() / x_pixel_size).ceil() as u32;
@@ -145,12 +159,12 @@ fn gdal_writer<T: Pixel + GdalType>(
         });
     }
 
-    let output_file_path = file_path.to_str().ok_or(Error::InvalidGdalFilePath {
-        file_path: file_path.to_owned(),
-    })?;
-
     let mut dataset = driver.create_with_band_type_with_options::<T>(
-        output_file_path,
+        if as_cog {
+            intermediate_file_path_str
+        } else {
+            output_file_path
+        },
         width as isize,
         height as isize,
         1,
@@ -225,7 +239,12 @@ fn gdal_writer<T: Pixel + GdalType>(
         // write the data in order to generate overviews) that fulfills this property. So, we have to do it as a
         // separate step.
 
+        // TODO: use different options - with compression but without unsupported options TILED, BLOCKXSIZE, BLOCKYSIZE
         dataset.create_copy(&Driver::get("COG")?, output_file_path, &options)?;
+
+        // TODO: remove intermediate file
+        drop(dataset);
+        // driver.delete(intermediate_file_path)?;
     }
 
     Ok(())
