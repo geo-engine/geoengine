@@ -8,7 +8,7 @@ use crate::{
         TypedVectorQueryProcessor, VectorOperator, VectorQueryProcessor, VectorQueryRectangle,
         VectorResultDescriptor,
     },
-    error::{self, Error},
+    error,
     util::{input::RasterOrVectorOperator, Result},
 };
 use async_trait::async_trait;
@@ -71,7 +71,12 @@ impl VectorOperator for Reprojection {
     ) -> Result<Box<dyn InitializedVectorOperator>> {
         let vector_operator = match self.sources.source {
             RasterOrVectorOperator::Vector(operator) => operator,
-            RasterOrVectorOperator::Raster(_) => return Err(Error::InvalidOperatorType),
+            RasterOrVectorOperator::Raster(_) => {
+                return Err(error::Error::InvalidOperatorType {
+                    expected: "Vector".to_owned(),
+                    found: "Raster".to_owned(),
+                })
+            }
         };
 
         let vector_operator = vector_operator.initialize(context).await?;
@@ -228,7 +233,12 @@ impl RasterOperator for Reprojection {
     ) -> Result<Box<dyn InitializedRasterOperator>> {
         let raster_operator = match self.sources.source {
             RasterOrVectorOperator::Raster(operator) => operator,
-            RasterOrVectorOperator::Vector(_) => return Err(Error::InvalidOperatorType),
+            RasterOrVectorOperator::Vector(_) => {
+                return Err(error::Error::InvalidOperatorType {
+                    expected: "Raster".to_owned(),
+                    found: "Vector".to_owned(),
+                })
+            }
         };
 
         let raster_operator = raster_operator.initialize(context).await?;
