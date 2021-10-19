@@ -4,6 +4,7 @@ use actix_web::HttpResponse;
 use geoengine_datatypes::{dataset::DatasetProviderId, spatial_reference::SpatialReferenceOption};
 use snafu::Snafu;
 use strum::IntoStaticStr;
+use tonic::Status;
 
 pub type Result<T, E = Error> = std::result::Result<T, E>;
 #[derive(Debug, Snafu, IntoStaticStr)]
@@ -229,6 +230,22 @@ pub enum Error {
     AxisOrderingNotKnownForSrs {
         srs_string: String,
     },
+
+    Tonic {
+        source: tonic::Status,
+    },
+
+    TonicTransport {
+        source: tonic::transport::Error,
+    },
+
+    InvalidUri {
+        uri_string: String,
+    },
+
+    InvalidAPIToken {
+        message: String,
+    },
 }
 
 impl actix_web::error::ResponseError for Error {
@@ -334,5 +351,17 @@ impl From<flexi_logger::FlexiLoggerError> for Error {
 impl From<proj::ProjError> for Error {
     fn from(source: proj::ProjError) -> Self {
         Self::Proj { source }
+    }
+}
+
+impl From<tonic::Status> for Error {
+    fn from(source: Status) -> Self {
+        Self::Tonic { source }
+    }
+}
+
+impl From<tonic::transport::Error> for Error {
+    fn from(source: tonic::transport::Error) -> Self {
+        Self::TonicTransport { source }
     }
 }
