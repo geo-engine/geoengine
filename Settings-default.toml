@@ -3,6 +3,8 @@ bind_address = "127.0.0.1:3030"
 external_address = "http://localhost:3030"
 backend = "in_memory" # TODO: remove option
 version_api = true
+anonymous_access = true # only for pro version
+user_registration = true # only for pro version
 
 [project_service]
 list_limit = 20

@@ -108,6 +108,12 @@ pub struct Web {
     pub external_address: Option<url::Url>,
     pub backend: Backend,
     pub version_api: bool,
+    #[cfg(feature = "pro")]
+    #[serde(default)]
+    pub anonymous_access: bool,
+    #[cfg(feature = "pro")]
+    #[serde(default)]
+    pub user_registration: bool,
 }
 
 impl ConfigElement for Web {

@@ -8,10 +8,12 @@ use crate::pro::users::UserRegistration;
 use crate::pro::users::UserSession;
 use crate::projects::ProjectId;
 use crate::projects::STRectangle;
+use crate::util::config;
 use crate::util::user_input::UserInput;
 use crate::util::IdResponse;
 
 use actix_web::{web, HttpResponse, Responder};
+use snafu::ensure;
 use snafu::ResultExt;
 
 pub(crate) fn init_user_routes<C>(cfg: &mut web::ServiceConfig)
@@ -60,6 +62,11 @@ pub(crate) async fn register_user_handler<C: ProContext>(
     user: web::Json<UserRegistration>,
     ctx: web::Data<C>,
 ) -> Result<impl Responder> {
+    ensure!(
+        config::get_config_element::<config::Web>()?.user_registration,
+        error::UserRegistrationDisabled
+    );
+
     let user = user.into_inner().validated()?;
     let id = ctx.user_db_ref_mut().await.register(user).await?;
     Ok(web::Json(IdResponse::from(id)))
@@ -153,6 +160,12 @@ pub(crate) async fn logout_handler<C: ProContext>(
 /// }
 /// ```
 pub(crate) async fn anonymous_handler<C: ProContext>(ctx: web::Data<C>) -> Result<impl Responder> {
+    if !config::get_config_element::<config::Web>()?.anonymous_access {
+        return Err(error::Error::Authorization {
+            source: Box::new(error::Error::AnonymousAccessDisabled),
+        });
+    }
+
     let session = ctx.user_db_ref_mut().await.anonymous().await?;
     Ok(web::Json(session))
 }

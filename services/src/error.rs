@@ -229,6 +229,12 @@ pub enum Error {
     AxisOrderingNotKnownForSrs {
         srs_string: String,
     },
+
+    #[snafu(display("Anonymous access is disabled, please log in"))]
+    AnonymousAccessDisabled,
+
+    #[snafu(display("User registration is disabled"))]
+    UserRegistrationDisabled,
 }
 
 impl actix_web::error::ResponseError for Error {
