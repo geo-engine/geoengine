@@ -176,7 +176,7 @@ impl TypedOperator {
         }
         Err(error::Error::InvalidOperatorType {
             expected: "Vector".to_owned(),
-            found: self.type_name(),
+            found: self.type_name().to_owned(),
         })
     }
 
@@ -186,7 +186,7 @@ impl TypedOperator {
         }
         Err(error::Error::InvalidOperatorType {
             expected: "Raster".to_owned(),
-            found: self.type_name(),
+            found: self.type_name().to_owned(),
         })
     }
 
@@ -196,15 +196,15 @@ impl TypedOperator {
         }
         Err(error::Error::InvalidOperatorType {
             expected: "Plot".to_owned(),
-            found: self.type_name(),
+            found: self.type_name().to_owned(),
         })
     }
 
-    fn type_name(&self) -> String {
+    fn type_name(&self) -> &str {
         match self {
-            TypedOperator::Vector(_) => "Vector".to_owned(),
-            TypedOperator::Raster(_) => "Raster".to_owned(),
-            TypedOperator::Plot(_) => "Plot".to_owned(),
+            TypedOperator::Vector(_) => "Vector",
+            TypedOperator::Raster(_) => "Raster",
+            TypedOperator::Plot(_) => "Plot",
         }
     }
 }
