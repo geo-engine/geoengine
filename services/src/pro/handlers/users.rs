@@ -691,4 +691,70 @@ mod tests {
             Some(rect)
         );
     }
+
+    #[tokio::test]
+    async fn it_disables_anonymous_access() {
+        let ctx = ProInMemoryContext::default();
+
+        let req = test::TestRequest::post().uri("/anonymous");
+        let res = send_pro_test_request(req, ctx.clone()).await;
+
+        assert_eq!(res.status(), 200);
+
+        config::set_config("web.anonymous_access", false).unwrap();
+
+        let ctx = ProInMemoryContext::default();
+
+        let req = test::TestRequest::post().uri("/anonymous");
+        let res = send_pro_test_request(req, ctx.clone()).await;
+
+        config::set_config("web.anonymous_access", true).unwrap();
+
+        ErrorResponse::assert(
+            res,
+            401,
+            "AnonymousAccessDisabled",
+            "Anonymous access is disabled, please log in",
+        )
+        .await;
+    }
+
+    #[tokio::test]
+    async fn it_disables_user_registration() {
+        let ctx = ProInMemoryContext::default();
+
+        let user_reg = UserRegistration {
+            email: "foo@bar.de".to_owned(),
+            password: "secret123".to_owned(),
+            real_name: "Foo Bar".to_owned(),
+        };
+
+        let req = test::TestRequest::post()
+            .append_header((header::CONTENT_LENGTH, 0))
+            .uri("/user")
+            .set_json(&user_reg);
+        let res = send_pro_test_request(req, ctx.clone()).await;
+
+        assert_eq!(res.status(), 200);
+
+        config::set_config("web.user_registration", false).unwrap();
+
+        let ctx = ProInMemoryContext::default();
+
+        let req = test::TestRequest::post()
+            .append_header((header::CONTENT_LENGTH, 0))
+            .uri("/user")
+            .set_json(&user_reg);
+        let res = send_pro_test_request(req, ctx.clone()).await;
+
+        config::set_config("web.user_registration", true).unwrap();
+
+        ErrorResponse::assert(
+            res,
+            400,
+            "UserRegistrationDisabled",
+            "User registration is disabled",
+        )
+        .await;
+    }
 }
