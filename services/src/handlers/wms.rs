@@ -4,9 +4,7 @@ use snafu::{ensure, ResultExt};
 
 use geoengine_datatypes::primitives::{AxisAlignedRectangle, SpatialPartition2D};
 use geoengine_datatypes::{
-    operations::image::{Colorizer, ToPng},
-    primitives::SpatialResolution,
-    raster::Grid2D,
+    operations::image::Colorizer, primitives::SpatialResolution,
     spatial_reference::SpatialReference,
 };
 
@@ -205,10 +203,6 @@ async fn get_map<C: Context>(
 
     // TODO: validate request further
 
-    if request.layers == "df756642-c5a3-4d72-8ad7-629d312ae993" {
-        return get_map_mock(request);
-    }
-
     let workflow = ctx
         .workflow_registry_ref()
         .await
@@ -303,29 +297,6 @@ fn get_legend_graphic<C: Context>(
     Ok(HttpResponse::InternalServerError().finish())
 }
 
-fn get_map_mock(request: &GetMap) -> Result<HttpResponse> {
-    let raster = Grid2D::new(
-        [2, 2].into(),
-        vec![
-            0xFF00_00FF_u32,
-            0x0000_00FF_u32,
-            0x00FF_00FF_u32,
-            0x0000_00FF_u32,
-        ],
-        None,
-    )
-    .context(error::DataType)?;
-
-    let colorizer = Colorizer::rgba();
-    let image_bytes = raster
-        .to_png(request.width, request.height, &colorizer)
-        .context(error::DataType)?;
-
-    Ok(HttpResponse::Ok()
-        .content_type(mime::IMAGE_PNG)
-        .body(image_bytes))
-}
-
 fn default_time_from_config() -> TimeInterval {
     get_config_element::<config::Wms>()
         .ok()
@@ -378,17 +349,6 @@ mod tests {
             .uri(path.unwrap_or("/wms/df756642-c5a3-4d72-8ad7-629d312ae993?request=GetMap&service=WMS&version=1.3.0&layers=df756642-c5a3-4d72-8ad7-629d312ae993&bbox=1,2,3,4&width=100&height=100&crs=EPSG:4326&styles=ssss&format=image/png"))
             .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())));
         send_test_request(req, ctx).await
-    }
-
-    #[tokio::test]
-    async fn test() {
-        let res = test_test_helper(Method::GET, None).await;
-
-        assert_eq!(res.status(), 200);
-        assert_eq!(
-            include_bytes!("../../../test_data/colorizer/rgba.png") as &[u8],
-            test::read_body(res).await
-        );
     }
 
     #[tokio::test]
