@@ -102,7 +102,6 @@ async fn wms_handler<C: Context>(
 ///   <Layer queryable="1">
 ///     <Name>df756642-c5a3-4d72-8ad7-629d312ae993</Name>
 ///     <Title>Workflow df756642-c5a3-4d72-8ad7-629d312ae993</Title>
-///     <CRS>EPSG:4326</CRS>
 ///     <EX_GeographicBoundingBox>
 ///       <westBoundLongitude>-180</westBoundLongitude>
 ///       <eastBoundLongitude>180</eastBoundLongitude>

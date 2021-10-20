@@ -43,10 +43,12 @@ async fn wfs_handler<C: Context>(
     workflow: web::Path<WorkflowId>,
     request: QueryEx<WfsRequest>,
     ctx: web::Data<C>,
-    _session: C::Session,
+    session: C::Session,
 ) -> Result<HttpResponse> {
     match request.into_inner() {
-        WfsRequest::GetCapabilities(request) => get_capabilities(&request, workflow.into_inner()),
+        WfsRequest::GetCapabilities(request) => {
+            get_capabilities(&request, ctx.get_ref(), session, workflow.into_inner()).await
+        }
         WfsRequest::GetFeature(request) => {
             get_feature(&request, ctx.get_ref(), workflow.into_inner()).await
         }
@@ -151,9 +153,34 @@ async fn wfs_handler<C: Context>(
 /// </FeatureTypeList>
 /// </wfs:WFS_Capabilities>
 /// ```
-#[allow(clippy::unnecessary_wraps)] // TODO: remove line once implemented fully
-fn get_capabilities(_request: &GetCapabilities, workflow: WorkflowId) -> Result<HttpResponse> {
-    let wfs_url = wfs_url(workflow)?;
+#[allow(clippy::unnecessary_wraps, clippy::too_many_lines)] // TODO: remove line once implemented fully
+async fn get_capabilities<C>(
+    _request: &GetCapabilities,
+    ctx: &C,
+    session: C::Session,
+    workflow_id: WorkflowId,
+) -> Result<HttpResponse>
+where
+    C: Context,
+{
+    let wfs_url = wfs_url(workflow_id)?;
+
+    let workflow = ctx.workflow_registry_ref().await.load(&workflow_id).await?;
+
+    let exe_ctx = ctx.execution_context(session)?;
+    let operator = workflow
+        .operator
+        .get_vector()
+        .context(error::Operator)?
+        .initialize(&exe_ctx)
+        .await
+        .context(error::Operator)?;
+
+    let result_descriptor = operator.result_descriptor();
+
+    let spatial_reference: Option<SpatialReference> = result_descriptor.spatial_reference.into();
+    let spatial_reference = spatial_reference.ok_or(error::Error::MissingSpatialReference)?;
+
     let mock = format!(
         r#"<?xml version="1.0" encoding="UTF-8"?>
 <wfs:WFS_Capabilities version="2.0.0"
@@ -233,7 +260,7 @@ fn get_capabilities(_request: &GetCapabilities, workflow: WorkflowId) -> Result<
         <FeatureType>
             <Name>{workflow}</Name>
             <Title>Workflow {workflow}</Title>
-            <DefaultCRS>urn:ogc:def:crs:EPSG::4326</DefaultCRS>
+            <DefaultCRS>urn:ogc:def:crs:{srs_authority}::{srs_code}</DefaultCRS>
             <ows:WGS84BoundingBox>
                 <ows:LowerCorner>-90 -180</ows:LowerCorner>
                 <ows:UpperCorner>90 180</ows:UpperCorner>
@@ -242,7 +269,9 @@ fn get_capabilities(_request: &GetCapabilities, workflow: WorkflowId) -> Result<
     </FeatureTypeList>
 </wfs:WFS_Capabilities>"#,
         wfs_url = wfs_url,
-        workflow = workflow
+        workflow = workflow_id,
+        srs_authority = spatial_reference.authority(),
+        srs_code = spatial_reference.code(),
     );
 
     Ok(HttpResponse::Ok()
@@ -265,7 +294,7 @@ fn wfs_url(workflow: WorkflowId) -> Result<Url> {
 ///  # Example
 ///
 /// ```text
-/// GET /wfs/93d6785e-5eea-4e0e-8074-e7f78733d988?request=GetFeature&version=2.0.0&typeNames=registry:93d6785e-5eea-4e0e-8074-e7f78733d988&bbox=1,2,3,4
+/// GET /wfs/93d6785e-5eea-4e0e-8074-e7f78733d988?request=GetFeature&version=2.0.0&typeNames=93d6785e-5eea-4e0e-8074-e7f78733d988&bbox=1,2,3,4
 /// ```
 /// Response:
 /// ```text
@@ -371,12 +400,9 @@ async fn get_feature<C: Context>(
     endpoint: WorkflowId,
 ) -> Result<HttpResponse> {
     let type_names = match request.type_names.namespace.as_deref() {
-        Some("registry") => WorkflowId::from_str(&request.type_names.feature_type)?,
+        None => WorkflowId::from_str(&request.type_names.feature_type)?,
         Some(_) => {
             return Err(error::Error::InvalidNamespace);
-        }
-        None => {
-            return Err(error::Error::InvalidWfsTypeNames);
         }
     };
 
@@ -592,7 +618,7 @@ mod tests {
         let session_id = ctx.default_session_ref().await.id();
 
         let req = test::TestRequest::get()
-            .uri("/wfs/93d6785e-5eea-4e0e-8074-e7f78733d988?request=GetFeature&service=WFS&version=2.0.0&typeNames=registry:93d6785e-5eea-4e0e-8074-e7f78733d988&bbox=1,2,3,4")
+            .uri("/wfs/93d6785e-5eea-4e0e-8074-e7f78733d988?request=GetFeature&service=WFS&version=2.0.0&typeNames=93d6785e-5eea-4e0e-8074-e7f78733d988&bbox=1,2,3,4")
             .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())));
         let res = send_test_request(req, ctx).await;
         assert_eq!(res.status(), 200);
@@ -679,12 +705,48 @@ mod tests {
     }
 
     async fn get_capabilities_test_helper(method: Method) -> ServiceResponse {
+        let mut temp_file = tempfile::NamedTempFile::new().unwrap();
+        write!(
+            temp_file,
+            "
+x;y
+0;1
+2;3
+4;5
+"
+        )
+        .unwrap();
+        temp_file.seek(SeekFrom::Start(0)).unwrap();
+
         let ctx = InMemoryContext::default();
         let session_id = ctx.default_session_ref().await.id();
 
-        let req = test::TestRequest::with_uri(
-            "/wfs/93d6785e-5eea-4e0e-8074-e7f78733d988?request=GetCapabilities&service=WFS",
-        )
+        let workflow = Workflow {
+            operator: TypedOperator::Vector(Box::new(CsvSource {
+                params: CsvSourceParameters {
+                    file_path: temp_file.path().into(),
+                    field_separator: ';',
+                    geometry: CsvGeometrySpecification::XY {
+                        x: "x".into(),
+                        y: "y".into(),
+                    },
+                    time: CsvTimeSpecification::None,
+                },
+            })),
+        };
+
+        let workflow_id = ctx
+            .workflow_registry()
+            .write()
+            .await
+            .register(workflow)
+            .await
+            .unwrap();
+
+        let req = test::TestRequest::with_uri(&format!(
+            "/wfs/{}?request=GetCapabilities&service=WFS",
+            workflow_id
+        ))
         .method(method)
         .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())));
         send_test_request(req, ctx).await
@@ -749,7 +811,7 @@ x;y
             .await
             .unwrap();
 
-        let req = test::TestRequest::with_uri(&format!("/wfs/{id}?request=GetFeature&service=WFS&version=2.0.0&typeNames=registry:{id}&bbox=-90,-180,90,180&srsName=EPSG:4326", id = id.to_string())).method(method).append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())));
+        let req = test::TestRequest::with_uri(&format!("/wfs/{id}?request=GetFeature&service=WFS&version=2.0.0&typeNames={id}&bbox=-90,-180,90,180&srsName=EPSG:4326", id = id.to_string())).method(method).append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())));
         send_test_request(req, ctx).await
     }
 
@@ -871,7 +933,7 @@ x;y
             ("request", "GetFeature"),
             ("service", "WFS"),
             ("version", "2.0.0"),
-            ("typeNames", &format!("registry:{}", workflow_id)),
+            ("typeNames", &workflow_id.to_string()),
             ("bbox", "-90,-180,90,180"),
             ("srsName", "EPSG:4326"),
         ];
@@ -1057,7 +1119,7 @@ x;y
             ("request", "GetFeature"),
             ("service", "WFS"),
             ("version", "2.0.0"),
-            ("typeNames", &format!("registry:{}", workflow_id)),
+            ("typeNames", &workflow_id.to_string()),
             ("bbox", "-90,-180,90,180"),
             ("srsName", "EPSG:4326"),
             ("time", "2014-04-01T12:00:00.000Z/2014-04-01T12:00:00.000Z"),
