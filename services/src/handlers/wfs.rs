@@ -153,7 +153,7 @@ async fn wfs_handler<C: Context>(
 /// </FeatureTypeList>
 /// </wfs:WFS_Capabilities>
 /// ```
-#[allow(clippy::unnecessary_wraps, clippy::too_many_lines)] // TODO: remove line once implemented fully
+#[allow(clippy::too_many_lines)]
 async fn get_capabilities<C>(
     _request: &GetCapabilities,
     ctx: &C,
@@ -181,7 +181,7 @@ where
     let spatial_reference: Option<SpatialReference> = result_descriptor.spatial_reference.into();
     let spatial_reference = spatial_reference.ok_or(error::Error::MissingSpatialReference)?;
 
-    let mock = format!(
+    let response = format!(
         r#"<?xml version="1.0" encoding="UTF-8"?>
 <wfs:WFS_Capabilities version="2.0.0"
     xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
@@ -276,7 +276,7 @@ where
 
     Ok(HttpResponse::Ok()
         .content_type(mime::TEXT_HTML_UTF_8)
-        .body(mock))
+        .body(response))
 }
 
 fn wfs_url(workflow: WorkflowId) -> Result<Url> {

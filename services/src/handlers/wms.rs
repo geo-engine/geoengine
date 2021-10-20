@@ -8,7 +8,6 @@ use geoengine_datatypes::{
     spatial_reference::SpatialReference,
 };
 
-use crate::contexts::MockableSession;
 use crate::error::Result;
 use crate::error::{self, Error};
 use crate::handlers::Context;
@@ -40,12 +39,14 @@ async fn wms_handler<C: Context>(
     workflow: web::Path<WorkflowId>,
     request: QueryEx<WmsRequest>,
     ctx: web::Data<C>,
-    _session: C::Session,
+    session: C::Session,
 ) -> Result<HttpResponse> {
     match request.into_inner() {
-        WmsRequest::GetCapabilities(request) => get_capabilities(&request, workflow.into_inner()),
+        WmsRequest::GetCapabilities(request) => {
+            get_capabilities(&request, ctx.get_ref(), session, workflow.into_inner()).await
+        }
         WmsRequest::GetMap(request) => {
-            get_map(&request, ctx.get_ref(), workflow.into_inner()).await
+            get_map(&request, ctx.get_ref(), session, workflow.into_inner()).await
         }
         WmsRequest::GetLegendGraphic(request) => {
             get_legend_graphic(&request, ctx.get_ref(), workflow.into_inner())
@@ -100,6 +101,7 @@ async fn wms_handler<C: Context>(
 ///   <Layer queryable="1">
 ///     <Name>df756642-c5a3-4d72-8ad7-629d312ae993</Name>
 ///     <Title>Workflow df756642-c5a3-4d72-8ad7-629d312ae993</Title>
+///     <CRS>EPSG:4326</CRS>
 ///     <EX_GeographicBoundingBox>
 ///       <westBoundLongitude>-180</westBoundLongitude>
 ///       <eastBoundLongitude>180</eastBoundLongitude>
@@ -111,11 +113,34 @@ async fn wms_handler<C: Context>(
 /// </Capability>
 /// </WMS_Capabilities>
 /// ```
-#[allow(clippy::unnecessary_wraps)] // TODO: remove line once implemented fully
-fn get_capabilities(_request: &GetCapabilities, workflow: WorkflowId) -> Result<HttpResponse> {
-    let wms_url = wms_url(workflow)?;
-    // TODO: create result descriptor for workflow and set the "CRS" in the layer accordingly? Depends on the semantics of this attribute
-    let mock = format!(
+async fn get_capabilities<C>(
+    _request: &GetCapabilities,
+    ctx: &C,
+    session: C::Session,
+    workflow_id: WorkflowId,
+) -> Result<HttpResponse>
+where
+    C: Context,
+{
+    let wms_url = wms_url(workflow_id)?;
+
+    let workflow = ctx.workflow_registry_ref().await.load(&workflow_id).await?;
+
+    let exe_ctx = ctx.execution_context(session)?;
+    let operator = workflow
+        .operator
+        .get_raster()
+        .context(error::Operator)?
+        .initialize(&exe_ctx)
+        .await
+        .context(error::Operator)?;
+
+    let result_descriptor = operator.result_descriptor();
+
+    let spatial_reference: Option<SpatialReference> = result_descriptor.spatial_reference.into();
+    let spatial_reference = spatial_reference.ok_or(error::Error::MissingSpatialReference)?;
+
+    let response = format!(
         r#"<WMS_Capabilities xmlns="http://www.opengis.net/wms" xmlns:sld="http://www.opengis.net/sld" xmlns:xlink="http://www.w3.org/1999/xlink" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" version="1.3.0" xsi:schemaLocation="http://www.opengis.net/wms http://schemas.opengis.net/wms/1.3.0/capabilities_1_3_0.xsd http://www.opengis.net/sld http://schemas.opengis.net/sld/1.1.0/sld_capabilities.xsd">
     <Service>
         <Name>WMS</Name>
@@ -153,6 +178,7 @@ fn get_capabilities(_request: &GetCapabilities, workflow: WorkflowId) -> Result<
         <Layer queryable="1">
             <Name>{workflow}</Name>
             <Title>Workflow {workflow}</Title>
+            <CRS>{srs_authority}:{srs_code}</CRS>
             <EX_GeographicBoundingBox>
                 <westBoundLongitude>-180</westBoundLongitude>
                 <eastBoundLongitude>180</eastBoundLongitude>
@@ -164,10 +190,14 @@ fn get_capabilities(_request: &GetCapabilities, workflow: WorkflowId) -> Result<
     </Capability>
 </WMS_Capabilities>"#,
         wms_url = wms_url,
-        workflow = workflow
+        workflow = workflow_id,
+        srs_authority = spatial_reference.authority(),
+        srs_code = spatial_reference.code()
     );
 
-    Ok(HttpResponse::Ok().content_type(mime::TEXT_XML).body(mock))
+    Ok(HttpResponse::Ok()
+        .content_type(mime::TEXT_XML)
+        .body(response))
 }
 
 fn wms_url(workflow: WorkflowId) -> Result<Url> {
@@ -192,6 +222,7 @@ fn wms_url(workflow: WorkflowId) -> Result<Url> {
 async fn get_map<C: Context>(
     request: &GetMap,
     ctx: &C,
+    session: C::Session,
     endpoint: WorkflowId,
 ) -> Result<HttpResponse> {
     let layer = WorkflowId::from_str(&request.layers)?;
@@ -211,8 +242,7 @@ async fn get_map<C: Context>(
 
     let operator = workflow.operator.get_raster().context(error::Operator)?;
 
-    // TODO: use correct session when WMS uses authenticated access
-    let execution_context = ctx.execution_context(C::Session::mock())?;
+    let execution_context = ctx.execution_context(session)?;
 
     let initialized = operator
         .clone()
@@ -386,9 +416,12 @@ mod tests {
         let ctx = InMemoryContext::default();
         let session_id = ctx.default_session_ref().await.id();
 
-        let req = test::TestRequest::with_uri(
-            "/wms/df756642-c5a3-4d72-8ad7-629d312ae993?request=GetCapabilities&service=WMS",
-        )
+        let (_, id) = register_ndvi_workflow_helper(&ctx).await;
+
+        let req = test::TestRequest::with_uri(&format!(
+            "/wms/{}?request=GetCapabilities&service=WMS",
+            id
+        ))
         .method(method)
         .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())));
         send_test_request(req, ctx).await
