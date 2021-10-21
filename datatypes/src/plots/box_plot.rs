@@ -86,7 +86,6 @@ impl Plot for BoxPlot {
         let vega_spec = serde_json::json!({
             "$schema": "https://vega.github.io/schema/vega-lite/v5.json",
             "width": "container",
-            "height": "container",
             "data": self,
             "encoding": {"x": {"field": "name", "type": "nominal" }},
             "layer": [
