@@ -311,7 +311,7 @@ mod tests {
         let res = test_util::process(
             || {
                 let props = test_util::create_properties(Some(4), Some(1), Some(0.0), Some(1.0));
-                let src = test_util::create_mock_source(props, Some(vec![]), None);
+                let src = test_util::create_mock_source::<u8>(props, Some(vec![]), None);
 
                 RasterOperator::boxed(Temperature {
                     params: TemperatureParams::default(),
@@ -338,7 +338,7 @@ mod tests {
         let res = test_util::process(
             || {
                 let props = test_util::create_properties(Some(4), Some(1), Some(0.0), Some(1.0));
-                let src = test_util::create_mock_source(props, None, None);
+                let src = test_util::create_mock_source::<u8>(props, None, None);
 
                 RasterOperator::boxed(Temperature {
                     params: TemperatureParams::default(),
@@ -378,7 +378,7 @@ mod tests {
         let res = test_util::process(
             || {
                 let props = test_util::create_properties(Some(4), Some(1), Some(0.0), Some(1.0));
-                let src = test_util::create_mock_source(props, None, None);
+                let src = test_util::create_mock_source::<u8>(props, None, None);
 
                 RasterOperator::boxed(Temperature {
                     params: TemperatureParams {
@@ -414,14 +414,33 @@ mod tests {
         ));
     }
 
-    // TODO: Cannot be tested, as the whole u8 range is a valid input. Think about making mock source u16
-    // #[tokio::test]
-    // async fn test_fail_illegal_input() {
-    //     let props = create_properties(Some(4), Some(1), Some(0.0), Some(1.0));
-    //     let mut params = TemperatureParams::default();
-    //     let res = process(props, params, None, Some(vec![1, 2, 3, 4, 1024, 0])).await;
-    //     assert!(res.is_err());
-    // }
+    #[tokio::test]
+    async fn test_fail_illegal_input() {
+        let ctx = MockExecutionContext::default();
+
+        let res = test_util::process(
+            || {
+                let props = test_util::create_properties(Some(4), Some(1), Some(0.0), Some(1.0));
+                let src = test_util::create_mock_source::<u16>(
+                    props,
+                    Some(vec![1, 2, 3, 4, 1024, 0]),
+                    None,
+                );
+
+                RasterOperator::boxed(Temperature {
+                    params: TemperatureParams::default(),
+                    sources: SingleRasterSource {
+                        raster: src.boxed(),
+                    },
+                })
+            },
+            test_util::create_mock_query(),
+            &ctx,
+        )
+        .await;
+
+        assert!(res.is_err());
+    }
 
     #[tokio::test]
     async fn test_invalid_force_satellite() {
@@ -429,7 +448,7 @@ mod tests {
         let res = test_util::process(
             || {
                 let props = test_util::create_properties(Some(4), Some(1), Some(0.0), Some(1.0));
-                let src = test_util::create_mock_source(props, None, None);
+                let src = test_util::create_mock_source::<u8>(props, None, None);
 
                 RasterOperator::boxed(Temperature {
                     params: TemperatureParams {
@@ -453,7 +472,7 @@ mod tests {
         let res = test_util::process(
             || {
                 let props = test_util::create_properties(Some(4), None, Some(0.0), Some(1.0));
-                let src = test_util::create_mock_source(props, None, None);
+                let src = test_util::create_mock_source::<u8>(props, None, None);
 
                 RasterOperator::boxed(Temperature {
                     params: TemperatureParams::default(),
@@ -475,7 +494,7 @@ mod tests {
         let res = test_util::process(
             || {
                 let props = test_util::create_properties(Some(4), Some(42), Some(0.0), Some(1.0));
-                let src = test_util::create_mock_source(props, None, None);
+                let src = test_util::create_mock_source::<u8>(props, None, None);
 
                 RasterOperator::boxed(Temperature {
                     params: TemperatureParams::default(),
@@ -497,7 +516,7 @@ mod tests {
         let res = test_util::process(
             || {
                 let props = test_util::create_properties(None, Some(1), Some(0.0), Some(1.0));
-                let src = test_util::create_mock_source(props, None, None);
+                let src = test_util::create_mock_source::<u8>(props, None, None);
 
                 RasterOperator::boxed(Temperature {
                     params: TemperatureParams::default(),
@@ -519,7 +538,7 @@ mod tests {
         let res = test_util::process(
             || {
                 let props = test_util::create_properties(Some(1), Some(1), Some(0.0), Some(1.0));
-                let src = test_util::create_mock_source(props, None, None);
+                let src = test_util::create_mock_source::<u8>(props, None, None);
 
                 RasterOperator::boxed(Temperature {
                     params: TemperatureParams::default(),
@@ -541,7 +560,7 @@ mod tests {
         let res = test_util::process(
             || {
                 let props = test_util::create_properties(Some(4), Some(1), Some(0.0), None);
-                let src = test_util::create_mock_source(props, None, None);
+                let src = test_util::create_mock_source::<u8>(props, None, None);
 
                 RasterOperator::boxed(Temperature {
                     params: TemperatureParams::default(),
@@ -563,7 +582,7 @@ mod tests {
         let res = test_util::process(
             || {
                 let props = test_util::create_properties(Some(4), Some(1), None, Some(1.0));
-                let src = test_util::create_mock_source(props, None, None);
+                let src = test_util::create_mock_source::<u8>(props, None, None);
 
                 RasterOperator::boxed(Temperature {
                     params: TemperatureParams::default(),
@@ -585,7 +604,8 @@ mod tests {
         let res = test_util::process(
             || {
                 let props = test_util::create_properties(Some(4), Some(1), Some(0.0), Some(1.0));
-                let src = test_util::create_mock_source(props, None, Some(Measurement::Unitless));
+                let src =
+                    test_util::create_mock_source::<u8>(props, None, Some(Measurement::Unitless));
 
                 RasterOperator::boxed(Temperature {
                     params: TemperatureParams::default(),
@@ -607,7 +627,7 @@ mod tests {
         let res = test_util::process(
             || {
                 let props = test_util::create_properties(Some(4), Some(1), Some(0.0), Some(1.0));
-                let src = test_util::create_mock_source(
+                let src = test_util::create_mock_source::<u8>(
                     props,
                     None,
                     Some(Measurement::Continuous {
@@ -637,7 +657,7 @@ mod tests {
         let res = test_util::process(
             || {
                 let props = test_util::create_properties(Some(4), Some(1), Some(0.0), Some(1.0));
-                let src = test_util::create_mock_source(
+                let src = test_util::create_mock_source::<u8>(
                     props,
                     None,
                     Some(Measurement::Classification {

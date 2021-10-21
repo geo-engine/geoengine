@@ -48,7 +48,9 @@ async fn wcs_handler<C: Context>(
         WcsRequest::DescribeCoverage(request) => {
             describe_coverage(&request, ctx.get_ref(), workflow.into_inner()).await
         }
-        WcsRequest::GetCoverage(request) => get_coverage(&request, ctx.get_ref()).await,
+        WcsRequest::GetCoverage(request) => {
+            get_coverage(&request, ctx.get_ref(), workflow.into_inner()).await
+        }
     }
 }
 
@@ -138,15 +140,25 @@ async fn get_capabilities<C: Context>(
 async fn describe_coverage<C: Context>(
     request: &DescribeCoverage,
     ctx: &C,
-    workflow_id: WorkflowId,
+    endpoint: WorkflowId,
 ) -> Result<HttpResponse> {
     info!("{:?}", request);
 
+    let identifiers = WorkflowId::from_str(&request.identifiers)?;
+
+    ensure!(
+        endpoint == identifiers,
+        error::WCSEndpointIdentifiersMissmatch {
+            endpoint,
+            identifiers
+        }
+    );
+
     // TODO: validate request (version)?
 
-    let wcs_url = wcs_url(workflow_id)?;
+    let wcs_url = wcs_url(identifiers)?;
 
-    let workflow = ctx.workflow_registry_ref().await.load(&workflow_id).await?;
+    let workflow = ctx.workflow_registry_ref().await.load(&identifiers).await?;
 
     let exe_ctx = ctx.execution_context(C::Session::mock())?; // TODO: use real session
     let operator = workflow
@@ -218,7 +230,7 @@ async fn describe_coverage<C: Context>(
         </wcs:CoverageDescription>
     </wcs:CoverageDescriptions>"#,
         wcs_url = wcs_url,
-        workflow_id = workflow_id,
+        workflow_id = identifiers,
         srs_authority = spatial_reference.authority(),
         srs_code = spatial_reference.code(),
         origin_x = area_of_use.upper_left().x,
@@ -233,8 +245,23 @@ async fn describe_coverage<C: Context>(
 }
 
 #[allow(clippy::too_many_lines)]
-async fn get_coverage<C: Context>(request: &GetCoverage, ctx: &C) -> Result<HttpResponse> {
+async fn get_coverage<C: Context>(
+    request: &GetCoverage,
+    ctx: &C,
+    endpoint: WorkflowId,
+) -> Result<HttpResponse> {
     info!("{:?}", request);
+
+    let identifier = WorkflowId::from_str(&request.identifier)?;
+
+    ensure!(
+        endpoint == identifier,
+        error::WCSEndpointIdentifierMissmatch {
+            endpoint,
+            identifier
+        }
+    );
+
     ensure!(
         request.version == "1.1.1" || request.version == "1.1.0",
         error::WcsVersionNotSupported
@@ -256,11 +283,7 @@ async fn get_coverage<C: Context>(request: &GetCoverage, ctx: &C) -> Result<Http
         );
     }
 
-    let workflow = ctx
-        .workflow_registry_ref()
-        .await
-        .load(&WorkflowId::from_str(&request.identifier)?)
-        .await?;
+    let workflow = ctx.workflow_registry_ref().await.load(&identifier).await?;
 
     let operator = workflow.operator.get_raster().context(error::Operator)?;
 
