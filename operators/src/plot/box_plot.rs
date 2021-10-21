@@ -31,9 +31,6 @@ pub struct BoxPlotParams {
     /// Name of the (numeric) attributes to compute the box plots on.
     #[serde(default)]
     pub column_names: Vec<String>,
-    /// Whether to create an interactive output (`false` by default)
-    #[serde(default)]
-    pub interactive: bool,
 }
 
 #[typetag::serde]
@@ -92,7 +89,6 @@ impl PlotOperator for BoxPlot {
 pub struct InitializedBoxPlot<Op> {
     result_descriptor: PlotResultDescriptor,
     column_names: Vec<String>,
-    interactive: bool,
     source: Op,
 }
 
@@ -101,7 +97,6 @@ impl<Op> InitializedBoxPlot<Op> {
         Self {
             result_descriptor,
             column_names: params.column_names,
-            interactive: params.interactive,
             source,
         }
     }
@@ -115,7 +110,6 @@ impl InitializedPlotOperator for InitializedBoxPlot<Box<dyn InitializedVectorOpe
         let processor = BoxPlotVectorQueryProcessor {
             input: self.source.query_processor()?,
             column_names: self.column_names.clone(),
-            interactive: self.interactive,
         };
 
         Ok(TypedPlotQueryProcessor::JsonVega(processor.boxed()))
@@ -130,7 +124,6 @@ impl InitializedPlotOperator for InitializedBoxPlot<Box<dyn InitializedRasterOpe
     fn query_processor(&self) -> Result<TypedPlotQueryProcessor> {
         let processor = BoxPlotRasterQueryProcessor {
             input: self.source.query_processor()?,
-            interactive: self.interactive,
         };
         Ok(TypedPlotQueryProcessor::JsonVega(processor.boxed()))
     }
@@ -140,7 +133,6 @@ impl InitializedPlotOperator for InitializedBoxPlot<Box<dyn InitializedRasterOpe
 pub struct BoxPlotVectorQueryProcessor {
     input: TypedVectorQueryProcessor,
     column_names: Vec<String>,
-    interactive: bool,
 }
 
 #[async_trait]
@@ -184,14 +176,13 @@ impl PlotQueryProcessor for BoxPlotVectorQueryProcessor {
                 chart.add_attribute(attrib)
             }
         }
-        Ok(chart.to_vega_embeddable(self.interactive)?)
+        Ok(chart.to_vega_embeddable(false)?)
     }
 }
 
 /// A query processor that calculates the boxplots about its raster input.
 pub struct BoxPlotRasterQueryProcessor {
     input: TypedRasterQueryProcessor,
-    interactive: bool,
 }
 
 #[async_trait]
@@ -231,7 +222,7 @@ impl PlotQueryProcessor for BoxPlotRasterQueryProcessor {
         if let Some(attrib) = accum.finish()? {
             chart.add_attribute(attrib)
         }
-        Ok(chart.to_vega_embeddable(self.interactive)?)
+        Ok(chart.to_vega_embeddable(false)?)
     }
 }
 
@@ -342,7 +333,6 @@ mod tests {
         let histogram = BoxPlot {
             params: BoxPlotParams {
                 column_names: vec!["foobar".to_string()],
-                interactive: false,
             },
             sources: MockFeatureCollectionSource::<MultiPoint>::multiple(vec![])
                 .boxed()
@@ -376,7 +366,6 @@ mod tests {
         let histogram = BoxPlot {
             params: BoxPlotParams {
                 column_names: vec![],
-                interactive: false,
             },
             sources: MockFeatureCollectionSource::<MultiPoint>::multiple(vec![])
                 .boxed()
@@ -430,7 +419,6 @@ mod tests {
         let box_plot = BoxPlot {
             params: BoxPlotParams {
                 column_names: vec!["foo".to_string(), "bar".to_string()],
-                interactive: true,
             },
             sources: vector_source.into(),
         };
@@ -497,7 +485,6 @@ mod tests {
         let box_plot = BoxPlot {
             params: BoxPlotParams {
                 column_names: vec!["foo".to_string()],
-                interactive: false,
             },
             sources: vector_source.into(),
         };
@@ -550,7 +537,6 @@ mod tests {
         let box_plot = BoxPlot {
             params: BoxPlotParams {
                 column_names: vec!["foo".to_string()],
-                interactive: false,
             },
             sources: vector_source.into(),
         };
@@ -577,7 +563,6 @@ mod tests {
         let box_plot = BoxPlot {
             params: BoxPlotParams {
                 column_names: vec![],
-                interactive: false,
             },
             sources: vector_source.into(),
         };
@@ -603,7 +588,6 @@ mod tests {
         let box_plot = BoxPlot {
             params: BoxPlotParams {
                 column_names: vec!["foo".to_string()],
-                interactive: true,
             },
             sources: vector_source.into(),
         };
@@ -655,7 +639,6 @@ mod tests {
         let box_plot = BoxPlot {
             params: BoxPlotParams {
                 column_names: vec!["foo".to_string()],
-                interactive: true,
             },
             sources: vector_source.into(),
         };
@@ -709,7 +692,6 @@ mod tests {
         let box_plot = BoxPlot {
             params: BoxPlotParams {
                 column_names: vec!["foo".to_string()],
-                interactive: true,
             },
             sources: vector_source.into(),
         };
@@ -762,7 +744,6 @@ mod tests {
         let box_plot = BoxPlot {
             params: BoxPlotParams {
                 column_names: vec![],
-                interactive: false,
             },
             sources: MockRasterSource {
                 params: MockRasterSourceParams {
@@ -825,7 +806,6 @@ mod tests {
         let box_plot = BoxPlot {
             params: BoxPlotParams {
                 column_names: vec![],
-                interactive: false,
             },
             sources: MockRasterSource {
                 params: MockRasterSourceParams {
@@ -888,7 +868,6 @@ mod tests {
         let histogram = BoxPlot {
             params: BoxPlotParams {
                 column_names: vec![],
-                interactive: false,
             },
             sources: MockRasterSource {
                 params: MockRasterSourceParams {
@@ -957,7 +936,6 @@ mod tests {
         let histogram = BoxPlot {
             params: BoxPlotParams {
                 column_names: vec![],
-                interactive: false,
             },
             sources: MockRasterSource {
                 params: MockRasterSourceParams {
