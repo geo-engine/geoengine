@@ -88,7 +88,7 @@ impl PlotOperator for BoxPlot {
     }
 }
 
-/// The initialization of `Histogram`
+/// The initialization of `BoxPlot`
 pub struct InitializedBoxPlot<Op> {
     result_descriptor: PlotResultDescriptor,
     column_names: Vec<String>,
