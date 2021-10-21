@@ -712,7 +712,8 @@ mod tests {
     use crate::util::tests::{
         read_body_string, send_test_request, SetMultipartBody, TestDataUploads,
     };
-    use actix_web::{http::header, test};
+    use actix_web;
+    use actix_web::http::header;
     use actix_web_httpauth::headers::authorization::Bearer;
     use futures::TryStreamExt;
     use geoengine_datatypes::collections::{
@@ -818,7 +819,7 @@ mod tests {
             .add_dataset(&SimpleSession::default(), ds.validated()?, Box::new(meta))
             .await?;
 
-        let req = test::TestRequest::get()
+        let req = actix_web::test::TestRequest::get()
             .uri(&format!(
                 "/datasets?{}",
                 &serde_urlencoded::to_string([
@@ -908,14 +909,14 @@ mod tests {
             test_data!("vector/data/ne_10m_ports/ne_10m_ports.cpg").to_path_buf(),
         ];
 
-        let req = test::TestRequest::post()
+        let req = actix_web::test::TestRequest::post()
             .uri("/upload")
             .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())))
             .set_multipart_files(&files);
         let res = send_test_request(req, ctx).await;
         assert_eq!(res.status(), 200);
 
-        let upload: IdResponse<UploadId> = test::read_body_json(res).await;
+        let upload: IdResponse<UploadId> = actix_web::test::read_body_json(res).await;
         let root = upload.id.root_path()?;
 
         for file in files {
@@ -974,7 +975,7 @@ mod tests {
             }
         }"#;
 
-        let req = test::TestRequest::post()
+        let req = actix_web::test::TestRequest::post()
             .uri("/dataset")
             .append_header((header::CONTENT_LENGTH, 0))
             .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())))
@@ -983,7 +984,7 @@ mod tests {
         let res = send_test_request(req, ctx).await;
         assert_eq!(res.status(), 200);
 
-        let dataset: IdResponse<DatasetId> = test::read_body_json(res).await;
+        let dataset: IdResponse<DatasetId> = actix_web::test::read_body_json(res).await;
         dataset.id
     }
 
@@ -1430,7 +1431,7 @@ mod tests {
             )
             .await?;
 
-        let req = test::TestRequest::get()
+        let req = actix_web::test::TestRequest::get()
             .uri(&format!("/dataset/internal/{}", id.internal().unwrap()))
             .append_header((header::CONTENT_LENGTH, 0))
             .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())));
