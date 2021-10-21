@@ -709,8 +709,8 @@ mod tests {
         let session_id = ctx.default_session_ref().await.id();
 
         let workflow = Workflow {
-            operator: MockRasterSource {
-                params: MockRasterSourceParams {
+            operator: MockRasterSource::<u8> {
+                params: MockRasterSourceParams::<u8> {
                     data: vec![],
                     result_descriptor: RasterResultDescriptor {
                         data_type: RasterDataType::U8,
