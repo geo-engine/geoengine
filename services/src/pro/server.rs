@@ -92,13 +92,15 @@ pub async fn start_pro_server(static_files_dir: Option<PathBuf>) -> Result<()> {
             .unwrap_or(Url::parse(&format!("http://{}/", web_config.bind_address))?)
     );
 
-    if web_config.anonymous_access {
+    let user_config: crate::pro::util::config::User = get_config_element()?;
+
+    if user_config.anonymous_access {
         info!("Anonymous access is enabled");
     } else {
         info!("Anonymous access is disabled");
     }
 
-    if web_config.user_registration {
+    if user_config.user_registration {
         info!("User registration is enabled");
     } else {
         info!("User registration is disabled");

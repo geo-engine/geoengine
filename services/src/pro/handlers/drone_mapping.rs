@@ -7,7 +7,8 @@ use crate::error;
 use crate::error::Result;
 use crate::pro::contexts::ProContext;
 use crate::pro::projects::ProProjectDb;
-use crate::util::config::{get_config_element, Odm};
+use crate::pro::util::config::Odm;
+use crate::util::config::get_config_element;
 use crate::util::user_input::UserInput;
 use crate::util::IdResponse;
 
