@@ -105,7 +105,8 @@ where
             });
         }
 
-        markers.sort_unstable_by(|a, b| a.partial_cmp(b).expect("impossible"));
+        markers
+            .sort_unstable_by(|a, b| a.partial_cmp(b).expect("Infinite values are filtered out"));
 
         let mut result = PSquareQuantileEstimator {
             quantile,
@@ -326,7 +327,7 @@ where
                 reason: "Insufficient valid samples.".to_owned(),
             });
         }
-        values.sort_unstable_by(|a, b| a.partial_cmp(b).expect("impossible"));
+        values.sort_unstable_by(|a, b| a.partial_cmp(b).expect("Infinite values are filtered out"));
 
         // Create markers
         let mut markers = Vec::with_capacity(values.len());
