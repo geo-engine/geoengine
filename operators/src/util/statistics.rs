@@ -49,8 +49,10 @@ where
 {
     /// Creates a new estimator for the given quantile. The estimator is
     /// update with all valid values from the given `initial_samples`.
+    ///
+    /// # Note
     /// The initial samples must at least contain 5 valid elements
-    /// (i.e., 5 elements that do not translate to `f64::NAN`).
+    /// (i.e., 5 elements that satisfy `f64::is_finite`).
     ///
     /// # Panics
     /// If the given quantile is not within the interval (0,1).
@@ -82,17 +84,17 @@ where
 
         // Initialize marker values
         let mut markers = [0.0; 5];
-        let mut iter = initial_samples.iter();
+        let mut iter = initial_samples
+            .iter()
+            .map(|v| v.as_())
+            .filter(|v| v.is_finite());
         let mut sample_count = 0;
 
         for v in &mut iter {
-            let v: f64 = v.as_();
-            if !v.is_nan() {
-                markers[sample_count] = v;
-                sample_count += 1;
-                if sample_count > 4 {
-                    break;
-                }
+            markers[sample_count] = v;
+            sample_count += 1;
+            if sample_count > 4 {
+                break;
             }
         }
 
@@ -115,10 +117,9 @@ where
             _phantom: PhantomData {},
         };
 
-        // Add remaining values
-
-        for v in &mut iter {
-            result.update(*v)
+        // Add remaining values that are not required for the initialization
+        for v in iter {
+            result.update_f64(v)
         }
         Ok(result)
     }
@@ -163,11 +164,17 @@ where
     }
 
     /// Updates the estimator with the given sample.
+    /// # Note
+    ///
+    /// A `sample` that does not satisfy `f64::is_finite` is silently ignored.
     pub fn update(&mut self, sample: T) {
-        let val: f64 = sample.as_();
+        self.update_f64(sample.as_());
+    }
 
-        // Ignore NANs
-        if val.is_nan() {
+    /// Updates the estimator with the given sample.
+    fn update_f64(&mut self, val: f64) {
+        // Ignore infinite values
+        if !val.is_finite() {
             return;
         }
 
@@ -282,8 +289,10 @@ where
     /// Creates a new histogram with `bucket_count` buckets. The
     /// histogram is updated with all valid values from the given
     /// `initial_samples`.
+    ///
+    /// # Note
     /// The initial samples must at least contain (`bucket_count`+1) valid elements
-    /// (i.e., elements that do not translate to `f64::NAN`).
+    /// (i.e., elements that satisfy `f64::is_finite`).
     ///
     /// # Panics
     /// If the given `bucket_count` is 0.
@@ -297,15 +306,15 @@ where
         assert!(bucket_count > 0, "bucket_count must be > 0");
 
         let mut values = Vec::with_capacity(bucket_count + 1);
-        let mut iter = initial_samples.iter();
+        let mut iter = initial_samples
+            .iter()
+            .map(|v| v.as_())
+            .filter(|v| v.is_finite());
         let mut sample_count = 0;
 
         for v in &mut iter {
-            let v: f64 = v.as_();
-            if !v.is_nan() {
-                values.push(v);
-                sample_count += 1;
-            }
+            values.push(v);
+            sample_count += 1;
             if sample_count > bucket_count {
                 break;
             }
@@ -336,19 +345,24 @@ where
         };
 
         // Add remaining values
-
-        for v in &mut iter {
-            result.update(*v)
+        for v in iter {
+            result.update_f64(v)
         }
         Ok(result)
     }
 
-    /// Updates the histogram with the given sample.
+    /// Updates the estimator with the given sample.
+    ///
+    /// # Note
+    /// A `sample` that does not satisfy `f64::is_finite` is silently ignored.
     pub fn update(&mut self, sample: T) {
-        let val: f64 = sample.as_();
+        self.update_f64(sample.as_());
+    }
 
-        // Ignore NANs
-        if val.is_nan() {
+    /// Updates the histogram with the given sample.
+    fn update_f64(&mut self, val: f64) {
+        // Ignore infinite values
+        if !val.is_finite() {
             return;
         }
 
