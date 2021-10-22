@@ -230,50 +230,43 @@ impl PlotQueryProcessor for BoxPlotRasterQueryProcessor {
 // AUX Structures
 //
 
-struct BoxPlotAccum {
-    name: String,
-    values: Vec<f64>,
-    estimator: Option<PSquareQuantileEstimator<f64>>,
+enum BoxPlotAccumKind {
+    Exact(Vec<f64>),
+    Estimated(PSquareQuantileEstimator<f64>),
 }
 
-impl BoxPlotAccum {
-    fn new(name: String) -> BoxPlotAccum {
-        BoxPlotAccum {
-            name,
-            values: Vec::new(),
-            estimator: None,
-        }
-    }
-
-    fn update(&mut self, mut values: impl Iterator<Item = f64>) -> crate::util::Result<()> {
-        match self.estimator.as_mut() {
-            None => {
+impl BoxPlotAccumKind {
+    fn update(self, mut values: impl Iterator<Item = f64>) -> crate::util::Result<Self> {
+        match self {
+            Self::Exact(mut x) => {
                 for v in &mut values {
                     if !v.is_nan() {
-                        self.values.push(v);
+                        x.push(v);
                     }
                 }
+                if x.len() > EXACT_CALC_BOUND {
+                    let est = PSquareQuantileEstimator::new(0.5, x.as_slice())?;
+                    Ok(Self::Estimated(est))
+                } else {
+                    Ok(Self::Exact(x))
+                }
             }
-            Some(est) => {
+            Self::Estimated(mut est) => {
                 for v in &mut values {
                     est.update(v);
                 }
+                Ok(Self::Estimated(est))
             }
         }
-
-        // Turn into estimator
-        if self.estimator.is_none() && self.values.len() >= EXACT_CALC_BOUND {
-            let values = self.values.as_slice();
-            self.estimator
-                .replace(PSquareQuantileEstimator::new(0.5, values)?);
-        }
-        Ok(())
     }
 
-    fn finish(&mut self) -> Result<Option<geoengine_datatypes::plots::BoxPlotAttribute>> {
-        match self.estimator.as_ref() {
-            Some(est) => Ok(Some(BoxPlotAttribute::new(
-                self.name.clone(),
+    fn create_plot(
+        &mut self,
+        name: String,
+    ) -> Result<Option<geoengine_datatypes::plots::BoxPlotAttribute>> {
+        match self {
+            Self::Estimated(est) => Ok(Some(BoxPlotAttribute::new(
+                name,
                 est.min(),
                 est.max(),
                 est.quantile_estimate(),
@@ -281,27 +274,47 @@ impl BoxPlotAccum {
                 est.marker4(),
                 false,
             )?)),
-            None if self.values.is_empty() => Ok(None),
-            None => {
-                self.values
-                    .sort_unstable_by(|a, b| a.partial_cmp(b).expect("Impossible"));
-                let min = self.values[0];
-                let max = self.values[self.values.len() - 1];
-                let median = self.values[self.values.len() / 2];
-                let q1 = self.values[(self.values.len() as f64 * 0.25) as usize];
-                let q3 = self.values[(self.values.len() as f64 * 0.75) as usize];
+            Self::Exact(v) if !v.is_empty() => {
+                v.sort_unstable_by(|a, b| a.partial_cmp(b).expect("Impossible"));
+                let min = v[0];
+                let max = v[v.len() - 1];
+                let median = v[v.len() / 2];
+                let q1 = v[(v.len() as f64 * 0.25) as usize];
+                let q3 = v[(v.len() as f64 * 0.75) as usize];
 
                 Ok(Some(BoxPlotAttribute::new(
-                    self.name.clone(),
-                    min,
-                    max,
-                    median,
-                    q1,
-                    q3,
-                    true,
+                    name, min, max, median, q1, q3, true,
                 )?))
             }
+            _ => Ok(None),
         }
+    }
+}
+
+struct BoxPlotAccum {
+    name: String,
+    accum: Option<BoxPlotAccumKind>,
+}
+
+impl BoxPlotAccum {
+    fn new(name: String) -> BoxPlotAccum {
+        BoxPlotAccum {
+            name,
+            accum: Some(BoxPlotAccumKind::Exact(Vec::new())),
+        }
+    }
+
+    fn update(&mut self, values: impl Iterator<Item = f64>) -> crate::util::Result<()> {
+        let x = self.accum.take().expect("Impossible").update(values)?;
+        self.accum.replace(x);
+        Ok(())
+    }
+
+    fn finish(&mut self) -> Result<Option<geoengine_datatypes::plots::BoxPlotAttribute>> {
+        self.accum
+            .as_mut()
+            .expect("Impossible")
+            .create_plot(self.name.clone())
     }
 }
 
