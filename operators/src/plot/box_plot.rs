@@ -270,6 +270,27 @@ impl BoxPlotAccumKind {
         }
     }
 
+    fn median(values: &[f64]) -> f64 {
+        if values.len() % 2 == 0 {
+            let i = values.len() / 2;
+            (values[i] + values[i - 1]) / 2.0
+        } else {
+            values[values.len() / 2]
+        }
+    }
+
+    fn split(values: &[f64]) -> (&[f64], &[f64]) {
+        let idx = values.len() / 2;
+
+        let s = values.split_at(idx);
+
+        if values.len() % 2 == 0 {
+            s
+        } else {
+            (s.0, &s.1[1..])
+        }
+    }
+
     fn create_plot(
         &mut self,
         name: String,
@@ -284,19 +305,30 @@ impl BoxPlotAccumKind {
                 est.marker4(),
                 false,
             )?)),
-            Self::Exact(v) if !v.is_empty() => {
-                v.sort_unstable_by(|a, b| a.partial_cmp(b).expect("Infinite values were filtered"));
-                let min = v[0];
-                let max = v[v.len() - 1];
-                let median = v[v.len() / 2];
-                let q1 = v[(v.len() as f64 * 0.25) as usize];
-                let q3 = v[(v.len() as f64 * 0.75) as usize];
-
-                Ok(Some(BoxPlotAttribute::new(
-                    name, min, max, median, q1, q3, true,
-                )?))
+            Self::Exact(v) => {
+                match v.len() {
+                    0 => Ok(None),
+                    1 => {
+                        let x = v[0];
+                        Ok(Some(BoxPlotAttribute::new(name, x, x, x, x, x, true)?))
+                    }
+                    l => {
+                        v.sort_unstable_by(|a, b| {
+                            a.partial_cmp(b).expect("Infinite values were filtered")
+                        });
+                        let min = v[0];
+                        let max = v[l - 1];
+                        // We compute the quartiles accodring to https://en.wikipedia.org/wiki/Quartile#Method_1
+                        let median = Self::median(&v);
+                        let (low, high) = Self::split(&v);
+                        let q1 = Self::median(low);
+                        let q3 = Self::median(high);
+                        Ok(Some(BoxPlotAttribute::new(
+                            name, min, max, median, q1, q3, true,
+                        )?))
+                    }
+                }
             }
-            Self::Exact(_) => Ok(None),
         }
     }
 }
@@ -476,10 +508,10 @@ mod tests {
 
         let mut expected = geoengine_datatypes::plots::BoxPlot::new();
         expected.add_attribute(
-            BoxPlotAttribute::new("foo".to_string(), 1.0, 8.0, 4.0, 2.0, 6.0, true).unwrap(),
+            BoxPlotAttribute::new("foo".to_string(), 1.0, 8.0, 3.5, 2.0, 5.5, true).unwrap(),
         );
         expected.add_attribute(
-            BoxPlotAttribute::new("bar".to_string(), 1.0, 8.0, 4.0, 2.0, 6.0, true).unwrap(),
+            BoxPlotAttribute::new("bar".to_string(), 1.0, 8.0, 3.5, 2.0, 5.5, true).unwrap(),
         );
 
         assert_eq!(expected.to_vega_embeddable(false).unwrap(), result);
@@ -543,7 +575,7 @@ mod tests {
 
         let mut expected = geoengine_datatypes::plots::BoxPlot::new();
         expected.add_attribute(
-            BoxPlotAttribute::new("foo".to_string(), 1.0, 7.0, 4.0, 2.0, 6.0, true).unwrap(),
+            BoxPlotAttribute::new("foo".to_string(), 1.0, 7.0, 4.0, 1.5, 6.5, true).unwrap(),
         );
 
         assert_eq!(expected.to_vega_embeddable(false).unwrap(), result);
@@ -1156,7 +1188,7 @@ mod tests {
 
         let mut expected = geoengine_datatypes::plots::BoxPlot::new();
         expected.add_attribute(
-            BoxPlotAttribute::new("value".to_string(), 1.0, 7.0, 4.0, 2.0, 6.0, true).unwrap(),
+            BoxPlotAttribute::new("value".to_string(), 1.0, 7.0, 4.0, 1.5, 6.5, true).unwrap(),
         );
 
         assert_eq!(expected.to_vega_embeddable(false).unwrap(), result);
@@ -1225,7 +1257,7 @@ mod tests {
 
         let mut expected = geoengine_datatypes::plots::BoxPlot::new();
         expected.add_attribute(
-            BoxPlotAttribute::new("value".to_string(), 0.0, 7.0, 2.0, 0.0, 6.0, true).unwrap(),
+            BoxPlotAttribute::new("value".to_string(), 0.0, 7.0, 1.5, 0.0, 5.0, true).unwrap(),
         );
 
         assert_eq!(expected.to_vega_embeddable(false).unwrap(), result);
