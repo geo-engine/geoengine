@@ -1,7 +1,7 @@
 use crate::datasets::provenance::{ProvenanceOutput, ProvenanceProvider};
 use crate::datasets::storage::{
-    AddDataset, Dataset, DatasetDb, DatasetProviderDb, DatasetProviderDefinition,
-    DatasetProviderListOptions, DatasetProviderListing, DatasetStore, DatasetStorer,
+    AddDataset, Dataset, DatasetDb, DatasetProviderDb, DatasetProviderListOptions,
+    DatasetProviderListing, DatasetStore, DatasetStorer, ExternalDatasetProviderDefinition,
     MetaDataDefinition,
 };
 use crate::datasets::upload::FileId;
@@ -9,7 +9,9 @@ use crate::datasets::upload::{Upload, UploadDb, UploadId};
 use crate::error::{self, Error, Result};
 use crate::util::user_input::Validated;
 use crate::{
-    datasets::listing::{DatasetListOptions, DatasetListing, DatasetProvider},
+    datasets::listing::{
+        DatasetListOptions, DatasetListing, DatasetProvider, ExternalDatasetProvider,
+    },
     pro::users::UserSession,
 };
 use async_trait::async_trait;
@@ -70,7 +72,7 @@ where
     async fn add_dataset_provider(
         &mut self,
         _session: &UserSession,
-        provider: Box<dyn DatasetProviderDefinition>,
+        provider: Box<dyn ExternalDatasetProviderDefinition>,
     ) -> Result<DatasetProviderId> {
         // TODO: permissions
         let conn = self.conn_pool.get().await?;
@@ -139,7 +141,7 @@ where
         &self,
         _session: &UserSession,
         provider: DatasetProviderId,
-    ) -> Result<Box<dyn DatasetProvider>> {
+    ) -> Result<Box<dyn ExternalDatasetProvider>> {
         // TODO: permissions
         let conn = self.conn_pool.get().await?;
 
@@ -157,14 +159,15 @@ where
 
         let row = conn.query_one(&stmt, &[&provider]).await?;
 
-        let definition = serde_json::from_value::<Box<dyn DatasetProviderDefinition>>(row.get(0))?;
+        let definition =
+            serde_json::from_value::<Box<dyn ExternalDatasetProviderDefinition>>(row.get(0))?;
 
         definition.initialize().await
     }
 }
 
 #[async_trait]
-impl<Tls> DatasetProvider for PostgresDatasetDb<Tls>
+impl<Tls> DatasetProvider<UserSession> for PostgresDatasetDb<Tls>
 where
     Tls: MakeTlsConnect<Socket> + Clone + Send + Sync + 'static,
     <Tls as MakeTlsConnect<Socket>>::Stream: Send + Sync,
@@ -173,7 +176,7 @@ where
 {
     async fn list(
         &self,
-        // _session: &UserSession,
+        _session: &UserSession,
         _options: Validated<DatasetListOptions>,
     ) -> Result<Vec<DatasetListing>> {
         // TODO: permission
@@ -217,11 +220,7 @@ where
             .collect())
     }
 
-    async fn load(
-        &self,
-        //  _session: &UserSession,
-        dataset: &DatasetId,
-    ) -> Result<Dataset> {
+    async fn load(&self, _session: &UserSession, dataset: &DatasetId) -> Result<Dataset> {
         // TODO: permissions
 
         let id = dataset.internal().ok_or(Error::InvalidDatasetId)?;

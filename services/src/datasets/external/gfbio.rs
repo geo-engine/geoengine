@@ -6,8 +6,8 @@ use crate::error::Error;
 use crate::{datasets::listing::DatasetListOptions, error::Result};
 use crate::{
     datasets::{
-        listing::{DatasetListing, DatasetProvider},
-        storage::DatasetProviderDefinition,
+        listing::{DatasetListing, ExternalDatasetProvider},
+        storage::ExternalDatasetProviderDefinition,
     },
     error,
     util::user_input::Validated,
@@ -73,8 +73,8 @@ pub struct GfbioDataProviderDefinition {
 
 #[typetag::serde]
 #[async_trait]
-impl DatasetProviderDefinition for GfbioDataProviderDefinition {
-    async fn initialize(self: Box<Self>) -> Result<Box<dyn DatasetProvider>> {
+impl ExternalDatasetProviderDefinition for GfbioDataProviderDefinition {
+    async fn initialize(self: Box<Self>) -> Result<Box<dyn ExternalDatasetProvider>> {
         Ok(Box::new(
             GfbioDataProvider::new(self.id, self.db_config).await?,
         ))
@@ -175,8 +175,12 @@ impl GfbioDataProvider {
 }
 
 #[async_trait]
-impl DatasetProvider for GfbioDataProvider {
-    async fn list(&self, _options: Validated<DatasetListOptions>) -> Result<Vec<DatasetListing>> {
+impl ExternalDatasetProvider for GfbioDataProvider {
+    async fn list(
+        &self,
+        _authorization: &HashMap<String, String>,
+        _options: Validated<DatasetListOptions>,
+    ) -> Result<Vec<DatasetListing>> {
         let conn = self.pool.get().await?;
 
         let stmt = conn
@@ -228,6 +232,7 @@ impl DatasetProvider for GfbioDataProvider {
 
     async fn load(
         &self,
+        _authorization: &HashMap<String, String>,
         _dataset: &geoengine_datatypes::dataset::DatasetId,
     ) -> crate::error::Result<crate::datasets::storage::Dataset> {
         Err(error::Error::NotYetImplemented)
@@ -488,6 +493,7 @@ mod tests {
 
         let listing = provider
             .list(
+                &HashMap::default(),
                 DatasetListOptions {
                     filter: None,
                     order: OrderBy::NameAsc,

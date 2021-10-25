@@ -444,12 +444,14 @@ where
 
 #[cfg(test)]
 mod tests {
+    use std::collections::HashMap;
     use std::str::FromStr;
 
     use super::*;
     use crate::contexts::MockableSession;
     use crate::datasets::external::mock::MockExternalDataProviderDefinition;
-    use crate::datasets::listing::{DatasetListOptions, DatasetListing, DatasetProvider};
+    use crate::datasets::listing::DatasetProvider;
+    use crate::datasets::listing::{DatasetListOptions, DatasetListing};
     use crate::datasets::provenance::{Provenance, ProvenanceOutput, ProvenanceProvider};
     use crate::datasets::storage::{
         AddDataset, DatasetDefinition, DatasetProviderDb, DatasetProviderListOptions,
@@ -998,6 +1000,7 @@ mod tests {
 
             let datasets = db
                 .list(
+                    &UserSession::mock(),
                     DatasetListOptions {
                         filter: None,
                         order: crate::datasets::listing::OrderBy::NameAsc,
@@ -1198,6 +1201,7 @@ mod tests {
 
             let datasets = provider
                 .list(
+                    &HashMap::default(),
                     DatasetListOptions {
                         filter: None,
                         order: crate::datasets::listing::OrderBy::NameAsc,

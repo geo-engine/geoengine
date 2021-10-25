@@ -1,14 +1,17 @@
 use crate::contexts::MockableSession;
-use crate::datasets::listing::{DatasetListOptions, DatasetListing, DatasetProvider, OrderBy};
+use crate::datasets::listing::{
+    DatasetListOptions, DatasetListing, DatasetProvider, ExternalDatasetProvider, OrderBy,
+};
 use crate::datasets::provenance::{ProvenanceOutput, ProvenanceProvider};
 use crate::datasets::storage::{
-    AddDataset, Dataset, DatasetDb, DatasetProviderDb, DatasetProviderDefinition,
-    DatasetProviderListOptions, DatasetProviderListing, DatasetStore, DatasetStorer,
+    AddDataset, Dataset, DatasetDb, DatasetProviderDb, DatasetProviderListOptions,
+    DatasetProviderListing, DatasetStore, DatasetStorer, ExternalDatasetProviderDefinition,
     MetaDataDefinition,
 };
 use crate::datasets::upload::{Upload, UploadDb, UploadId};
 use crate::error;
 use crate::error::Result;
+use crate::pro::datasets::Permission;
 use crate::pro::users::UserSession;
 use crate::util::user_input::Validated;
 use async_trait::async_trait;
@@ -24,9 +27,12 @@ use geoengine_operators::source::{GdalLoadingInfo, GdalMetaDataRegular, OgrSourc
 use geoengine_operators::{mock::MockDatasetDataSourceLoadingInfo, source::GdalMetaDataStatic};
 use std::collections::HashMap;
 
+use super::DatasetPermission;
+
 #[derive(Default)]
 pub struct ProHashMapDatasetDb {
     datasets: Vec<Dataset>,
+    dataset_permissions: HashMap<DatasetId, Vec<DatasetPermission>>,
     ogr_datasets: HashMap<
         InternalDatasetId,
         StaticMetaData<OgrSourceDataset, VectorResultDescriptor, VectorQueryRectangle>,
@@ -44,7 +50,7 @@ pub struct ProHashMapDatasetDb {
         Box<dyn MetaData<GdalLoadingInfo, RasterResultDescriptor, RasterQueryRectangle>>,
     >,
     uploads: HashMap<UploadId, Upload>,
-    external_providers: HashMap<DatasetProviderId, Box<dyn DatasetProviderDefinition>>,
+    external_providers: HashMap<DatasetProviderId, Box<dyn ExternalDatasetProviderDefinition>>,
 }
 
 impl DatasetDb<UserSession> for ProHashMapDatasetDb {}
@@ -54,7 +60,7 @@ impl DatasetProviderDb<UserSession> for ProHashMapDatasetDb {
     async fn add_dataset_provider(
         &mut self,
         _session: &UserSession,
-        provider: Box<dyn DatasetProviderDefinition>,
+        provider: Box<dyn ExternalDatasetProviderDefinition>,
     ) -> Result<DatasetProviderId> {
         let id = provider.id();
         self.external_providers.insert(id, provider);
@@ -82,7 +88,7 @@ impl DatasetProviderDb<UserSession> for ProHashMapDatasetDb {
         &self,
         _session: &UserSession,
         provider: DatasetProviderId,
-    ) -> Result<Box<dyn DatasetProvider>> {
+    ) -> Result<Box<dyn ExternalDatasetProvider>> {
         self.external_providers
             .get(&provider)
             .cloned()
@@ -151,7 +157,7 @@ impl ProHashMapStorable for GdalMetaDataStatic {
 impl DatasetStore<UserSession> for ProHashMapDatasetDb {
     async fn add_dataset(
         &mut self,
-        _session: &UserSession,
+        session: &UserSession,
         dataset: Validated<AddDataset>,
         meta_data: Box<dyn ProHashMapStorable>,
     ) -> Result<DatasetId> {
@@ -172,6 +178,15 @@ impl DatasetStore<UserSession> for ProHashMapDatasetDb {
         };
         self.datasets.push(d);
 
+        self.dataset_permissions.insert(
+            id.clone(),
+            vec![DatasetPermission {
+                role: session.user.id.into(),
+                dataset: id.clone(),
+                permission: Permission::Owner,
+            }],
+        );
+
         Ok(id)
     }
 
@@ -181,10 +196,10 @@ impl DatasetStore<UserSession> for ProHashMapDatasetDb {
 }
 
 #[async_trait]
-impl DatasetProvider for ProHashMapDatasetDb {
+impl DatasetProvider<UserSession> for ProHashMapDatasetDb {
     async fn list(
         &self,
-        // _session: &UserSession,
+        _session: &UserSession,
         options: Validated<DatasetListOptions>,
     ) -> Result<Vec<DatasetListing>> {
         // TODO: permissions
@@ -216,11 +231,7 @@ impl DatasetProvider for ProHashMapDatasetDb {
         Ok(list)
     }
 
-    async fn load(
-        &self,
-        //  _session: &UserSession,
-        dataset: &DatasetId,
-    ) -> Result<Dataset> {
+    async fn load(&self, _session: &UserSession, dataset: &DatasetId) -> Result<Dataset> {
         // TODO: permissions
 
         self.datasets
@@ -415,6 +426,7 @@ mod tests {
             .dataset_db_ref()
             .await
             .list(
+                &session,
                 DatasetListOptions {
                     filter: None,
                     order: OrderBy::NameAsc,

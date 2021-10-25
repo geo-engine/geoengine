@@ -6,7 +6,4 @@ mod storage;
 
 pub use in_memory::{ProHashMapDatasetDb, ProHashMapStorable};
 pub use postgres::PostgresDatasetDb;
-pub use storage::{
-    DatasetPermission, DatasetProviderPermission, UserDatasetPermission,
-    UserDatasetProviderPermission,
-};
+pub use storage::{DatasetPermission, DatasetProviderPermission, Permission, Role, RoleId};

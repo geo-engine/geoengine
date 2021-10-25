@@ -1,5 +1,7 @@
 use crate::contexts::{MockableSession, SimpleSession};
-use crate::datasets::listing::{DatasetListOptions, DatasetListing, DatasetProvider, OrderBy};
+use crate::datasets::listing::{
+    DatasetListOptions, DatasetListing, DatasetProvider, ExternalDatasetProvider, OrderBy,
+};
 use crate::datasets::storage::{
     AddDataset, Dataset, DatasetDb, DatasetProviderDb, DatasetProviderListOptions,
     DatasetProviderListing, DatasetStore, DatasetStorer,
@@ -22,7 +24,7 @@ use std::collections::HashMap;
 
 use super::provenance::{ProvenanceOutput, ProvenanceProvider};
 use super::{
-    storage::{DatasetProviderDefinition, MetaDataDefinition},
+    storage::{ExternalDatasetProviderDefinition, MetaDataDefinition},
     upload::{Upload, UploadDb, UploadId},
 };
 
@@ -46,7 +48,7 @@ pub struct HashMapDatasetDb {
         Box<dyn MetaData<GdalLoadingInfo, RasterResultDescriptor, RasterQueryRectangle>>,
     >,
     uploads: HashMap<UploadId, Upload>,
-    external_providers: HashMap<DatasetProviderId, Box<dyn DatasetProviderDefinition>>,
+    external_providers: HashMap<DatasetProviderId, Box<dyn ExternalDatasetProviderDefinition>>,
 }
 
 impl DatasetDb<SimpleSession> for HashMapDatasetDb {}
@@ -56,7 +58,7 @@ impl DatasetProviderDb<SimpleSession> for HashMapDatasetDb {
     async fn add_dataset_provider(
         &mut self,
         _session: &SimpleSession,
-        provider: Box<dyn DatasetProviderDefinition>,
+        provider: Box<dyn ExternalDatasetProviderDefinition>,
     ) -> Result<DatasetProviderId> {
         let id = provider.id();
         self.external_providers.insert(id, provider);
@@ -84,7 +86,7 @@ impl DatasetProviderDb<SimpleSession> for HashMapDatasetDb {
         &self,
         _session: &SimpleSession,
         provider: DatasetProviderId,
-    ) -> Result<Box<dyn DatasetProvider>> {
+    ) -> Result<Box<dyn ExternalDatasetProvider>> {
         self.external_providers
             .get(&provider)
             .cloned()
@@ -183,10 +185,10 @@ impl DatasetStore<SimpleSession> for HashMapDatasetDb {
 }
 
 #[async_trait]
-impl DatasetProvider for HashMapDatasetDb {
+impl DatasetProvider<SimpleSession> for HashMapDatasetDb {
     async fn list(
         &self,
-        // _session: &SimpleSession,
+        _session: &SimpleSession,
         options: Validated<DatasetListOptions>,
     ) -> Result<Vec<DatasetListing>> {
         // TODO: permissions
@@ -218,11 +220,7 @@ impl DatasetProvider for HashMapDatasetDb {
         Ok(list)
     }
 
-    async fn load(
-        &self,
-        // _session: &SimpleSession,
-        dataset: &DatasetId,
-    ) -> Result<Dataset> {
+    async fn load(&self, _session: &SimpleSession, dataset: &DatasetId) -> Result<Dataset> {
         // TODO: permissions
 
         self.datasets
@@ -416,6 +414,7 @@ mod tests {
             .dataset_db_ref()
             .await
             .list(
+                &session,
                 DatasetListOptions {
                     filter: None,
                     order: OrderBy::NameAsc,

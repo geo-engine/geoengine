@@ -1,3 +1,6 @@
+use std::collections::HashMap;
+
+use crate::contexts::Session;
 use crate::datasets::storage::Dataset;
 use crate::error;
 use crate::error::Result;
@@ -72,7 +75,7 @@ pub enum OrderBy {
 
 /// Listing of stored datasets
 #[async_trait]
-pub trait DatasetProvider: Send
+pub trait DatasetProvider<S: Session>: Send
     + Sync
     + MetaDataProvider<MockDatasetDataSourceLoadingInfo, VectorResultDescriptor, VectorQueryRectangle>
     + MetaDataProvider<OgrSourceDataset, VectorResultDescriptor, VectorQueryRectangle>
@@ -82,14 +85,32 @@ pub trait DatasetProvider: Send
     // TODO: filter, paging
     async fn list(
         &self,
-        // session: &S, // TODO: authorization
+        session: &S,
+        options: Validated<DatasetListOptions>,
+    ) -> Result<Vec<DatasetListing>>;
+
+    async fn load(&self, session: &S, dataset: &DatasetId) -> Result<Dataset>;
+}
+
+#[async_trait]
+pub trait ExternalDatasetProvider: Send
+    + Sync
+    + MetaDataProvider<MockDatasetDataSourceLoadingInfo, VectorResultDescriptor, VectorQueryRectangle>
+    + MetaDataProvider<OgrSourceDataset, VectorResultDescriptor, VectorQueryRectangle>
+    + MetaDataProvider<GdalLoadingInfo, RasterResultDescriptor, RasterQueryRectangle>
+    + ProvenanceProvider
+{
+    // TODO: filter, paging
+    async fn list(
+        &self,
+        authorization: &HashMap<String, String>,
         options: Validated<DatasetListOptions>,
     ) -> Result<Vec<DatasetListing>>;
 
     // TODO: is this method useful?
     async fn load(
         &self,
-        // session: &S, // TODO: authorization
+        authorization: &HashMap<String, String>,
         dataset: &DatasetId,
     ) -> Result<Dataset>;
 }
