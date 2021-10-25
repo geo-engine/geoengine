@@ -1,5 +1,4 @@
 use super::{RasterQueryRectangle, VectorQueryRectangle};
-use crate::concurrency::{ThreadPool, ThreadPoolContext, ThreadPoolContextCreator};
 use crate::engine::{RasterResultDescriptor, ResultDescriptor, VectorResultDescriptor};
 use crate::error::Error;
 use crate::mock::MockDatasetDataSourceLoadingInfo;
@@ -14,7 +13,6 @@ use std::any::Any;
 use std::collections::HashMap;
 use std::fmt::Debug;
 use std::marker::PhantomData;
-use std::sync::Arc;
 
 /// A context that provides certain utility access during operator initialization
 pub trait ExecutionContext: Send
@@ -23,7 +21,6 @@ pub trait ExecutionContext: Send
     + MetaDataProvider<OgrSourceDataset, VectorResultDescriptor, VectorQueryRectangle>
     + MetaDataProvider<GdalLoadingInfo, RasterResultDescriptor, RasterQueryRectangle>
 {
-    fn thread_pool_context(&self) -> ThreadPoolContext;
     fn tiling_specification(&self) -> TilingSpecification;
 }
 
@@ -56,7 +53,6 @@ where
 }
 
 pub struct MockExecutionContext {
-    pub thread_pool: ThreadPoolContext,
     pub meta_data: HashMap<DatasetId, Box<dyn Any + Send + Sync>>,
     pub tiling_specification: TilingSpecification,
 }
@@ -64,7 +60,6 @@ pub struct MockExecutionContext {
 impl Default for MockExecutionContext {
     fn default() -> Self {
         Self {
-            thread_pool: Arc::new(ThreadPool::default()).create_context(),
             meta_data: HashMap::default(),
             tiling_specification: TilingSpecification {
                 origin_coordinate: Default::default(),
@@ -92,10 +87,6 @@ impl MockExecutionContext {
 }
 
 impl ExecutionContext for MockExecutionContext {
-    fn thread_pool_context(&self) -> ThreadPoolContext {
-        self.thread_pool.clone()
-    }
-
     fn tiling_specification(&self) -> TilingSpecification {
         self.tiling_specification
     }

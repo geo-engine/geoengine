@@ -1,21 +1,22 @@
 #![feature(bench_black_box)]
-use std::{hint::black_box, sync::Arc, time::Instant};
-
-use geoengine_operators::concurrency::{ThreadPool, ThreadPoolContextCreator};
+use std::{hint::black_box, time::Instant};
 
 fn work(num_threads: usize) {
-    let thread_pool = Arc::new(ThreadPool::new(num_threads));
+    let thread_pool = rayon::ThreadPoolBuilder::new()
+        .num_threads(num_threads)
+        .build()
+        .unwrap();
 
-    let context = thread_pool.create_context();
-
-    context.scope(|scope| {
-        for _ in 0..num_threads {
-            scope.compute(move || {
-                for i in 0..100_000_000 / num_threads {
-                    black_box(i + 1);
-                }
-            });
-        }
+    thread_pool.install(|| {
+        rayon::scope(|scope| {
+            for _ in 0..num_threads {
+                scope.spawn(move |_| {
+                    for i in 0..100_000_000 / num_threads {
+                        black_box(i + 1);
+                    }
+                });
+            }
+        })
     })
 }
 

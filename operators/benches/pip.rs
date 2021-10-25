@@ -16,7 +16,7 @@ use rand::prelude::StdRng;
 use rand::{Rng, SeedableRng};
 use std::time::Instant;
 
-async fn pip(points: MultiPointCollection, polygons: MultiPolygonCollection, num_threads: usize) {
+async fn pip(points: MultiPointCollection, polygons: MultiPolygonCollection) {
     let point_source = MockFeatureCollectionSource::single(points).boxed();
 
     let polygon_source = MockFeatureCollectionSource::single(polygons).boxed();
@@ -40,7 +40,7 @@ async fn pip(points: MultiPointCollection, polygons: MultiPolygonCollection, num
         time_interval: TimeInterval::default(),
         spatial_resolution: SpatialResolution::zero_point_one(),
     };
-    let ctx = MockQueryContext::with_chunk_size_and_thread_count(usize::MAX, num_threads);
+    let ctx = MockQueryContext::with_chunk_size_and_thread_count(usize::MAX);
 
     let query = query_processor.query(query_rectangle, &ctx).await.unwrap();
 
@@ -88,8 +88,7 @@ fn random_multi_polygons<T: Rng>(
         .collect()
 }
 
-#[tokio::main]
-async fn main() {
+fn main() {
     const POLYGONS_PER_MULTIPOLYGON: usize = 10;
     const MULTI_POLYGONS: usize = 100;
 
@@ -104,8 +103,24 @@ async fn main() {
 
     println!("num_threads,time");
     for num_threads in [1, 2, 4] {
-        let start = Instant::now();
-        pip(points.clone(), polygons.clone(), num_threads).await;
-        println!("{},{:?}", num_threads, start.elapsed());
+        let thread_pool = rayon::ThreadPoolBuilder::new()
+            .num_threads(num_threads)
+            .build()
+            .unwrap();
+
+        // TODO: tokio's context, although executed within install and on the current thread, uses the global thread pool
+        let elapsed = thread_pool.install(|| {
+            let tokio_runtime = tokio::runtime::Builder::new_current_thread()
+                .build()
+                .unwrap();
+
+            let start = Instant::now();
+
+            tokio_runtime.block_on(async { pip(points.clone(), polygons.clone()).await });
+
+            start.elapsed()
+        });
+
+        println!("{},{:?}", num_threads, elapsed);
     }
 }

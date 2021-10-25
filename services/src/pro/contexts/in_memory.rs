@@ -11,8 +11,6 @@ use crate::{
     error::Result,
 };
 use async_trait::async_trait;
-use geoengine_operators::concurrency::ThreadPool;
-use geoengine_operators::concurrency::ThreadPoolContextCreator;
 use snafu::ResultExt;
 use std::path::PathBuf;
 use std::sync::Arc;
@@ -25,7 +23,6 @@ pub struct ProInMemoryContext {
     project_db: Db<ProHashMapProjectDb>,
     workflow_registry: Db<HashMapRegistry>,
     dataset_db: Db<ProHashMapDatasetDb>,
-    thread_pool: Arc<ThreadPool>,
 }
 
 impl ProInMemoryContext {
@@ -101,7 +98,6 @@ impl Context for ProInMemoryContext {
         // TODO: load config only once
         Ok(QueryContextImpl {
             chunk_byte_size: config::get_config_element::<config::QueryContext>()?.chunk_byte_size,
-            thread_pool: self.thread_pool.create_context(),
         })
     }
 
@@ -109,7 +105,6 @@ impl Context for ProInMemoryContext {
         Ok(
             ExecutionContextImpl::<UserSession, ProHashMapDatasetDb>::new(
                 self.dataset_db.clone(),
-                self.thread_pool.create_context(),
                 session,
             ),
         )

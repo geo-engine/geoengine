@@ -3,7 +3,8 @@ use std::{
     path::{Path, PathBuf},
 };
 
-use gdal::{raster::GDALDataType, Dataset, DatasetOptions, GdalOpenFlags};
+use gdal::raster::GDALDataType;
+use gdal::{Dataset, DatasetOptions};
 use geoengine_datatypes::{
     dataset::{DatasetId, InternalDatasetId},
     hashmap,
@@ -81,11 +82,13 @@ pub fn gdal_open_dataset(path: &Path) -> Result<Dataset> {
 
 /// Opens a Gdal Dataset with the given `path` and `dataset_options`.
 /// Other crates should use this method for Gdal Dataset access as a workaround to avoid strange errors.
-pub fn gdal_open_dataset_ex(path: &Path, mut dataset_options: DatasetOptions) -> Result<Dataset> {
+pub fn gdal_open_dataset_ex(path: &Path, dataset_options: DatasetOptions) -> Result<Dataset> {
     #[cfg(debug_assertions)]
-    {
-        dataset_options.open_flags |= GdalOpenFlags::GDAL_OF_VERBOSE_ERROR;
-    }
+    let dataset_options = {
+        let mut dataset_options = dataset_options;
+        dataset_options.open_flags |= gdal::GdalOpenFlags::GDAL_OF_VERBOSE_ERROR;
+        dataset_options
+    };
     Dataset::open_ex(path, dataset_options).context(error::Gdal)
 }
 

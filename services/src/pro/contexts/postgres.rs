@@ -23,7 +23,6 @@ use bb8_postgres::{
     tokio_postgres::{error::SqlState, tls::MakeTlsConnect, tls::TlsConnect, Config, Socket},
     PostgresConnectionManager,
 };
-use geoengine_operators::concurrency::{ThreadPool, ThreadPoolContextCreator};
 use log::{debug, warn};
 use snafu::ResultExt;
 use std::path::PathBuf;
@@ -47,7 +46,6 @@ where
     project_db: Db<PostgresProjectDb<Tls>>,
     workflow_registry: Db<PostgresWorkflowRegistry<Tls>>,
     dataset_db: Db<PostgresDatasetDb<Tls>>,
-    thread_pool: Arc<ThreadPool>,
 }
 
 impl<Tls> PostgresContext<Tls>
@@ -69,7 +67,6 @@ where
             project_db: Arc::new(RwLock::new(PostgresProjectDb::new(pool.clone()))),
             workflow_registry: Arc::new(RwLock::new(PostgresWorkflowRegistry::new(pool.clone()))),
             dataset_db: Arc::new(RwLock::new(PostgresDatasetDb::new(pool.clone()))),
-            thread_pool: Default::default(),
         })
     }
 
@@ -95,7 +92,6 @@ where
             project_db: Arc::new(RwLock::new(PostgresProjectDb::new(pool.clone()))),
             workflow_registry: Arc::new(RwLock::new(PostgresWorkflowRegistry::new(pool.clone()))),
             dataset_db: Arc::new(RwLock::new(dataset_db)),
-            thread_pool: Default::default(),
         })
     }
 
@@ -418,7 +414,6 @@ where
         // TODO: load config only once
         Ok(QueryContextImpl {
             chunk_byte_size: config::get_config_element::<config::QueryContext>()?.chunk_byte_size,
-            thread_pool: self.thread_pool.create_context(),
         })
     }
 
@@ -426,7 +421,6 @@ where
         Ok(
             ExecutionContextImpl::<UserSession, PostgresDatasetDb<Tls>>::new(
                 self.dataset_db.clone(),
-                self.thread_pool.create_context(),
                 session,
             ),
         )

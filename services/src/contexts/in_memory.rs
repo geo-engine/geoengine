@@ -15,7 +15,6 @@ use super::{Session, SimpleContext};
 use crate::contexts::{ExecutionContextImpl, QueryContextImpl, SessionId};
 use crate::datasets::in_memory::HashMapDatasetDb;
 use crate::util::config;
-use geoengine_operators::concurrency::{ThreadPool, ThreadPoolContextCreator};
 
 /// A context with references to in-memory versions of the individual databases.
 #[derive(Clone, Default)]
@@ -24,7 +23,6 @@ pub struct InMemoryContext {
     workflow_registry: Db<HashMapRegistry>,
     dataset_db: Db<HashMapDatasetDb>,
     session: Db<SimpleSession>,
-    thread_pool: Arc<ThreadPool>,
 }
 
 impl InMemoryContext {
@@ -84,14 +82,12 @@ impl Context for InMemoryContext {
         // TODO: load config only once
         Ok(QueryContextImpl {
             chunk_byte_size: config::get_config_element::<config::QueryContext>()?.chunk_byte_size,
-            thread_pool: self.thread_pool.create_context(),
         })
     }
 
     fn execution_context(&self, session: SimpleSession) -> Result<Self::ExecutionContext> {
         Ok(ExecutionContextImpl::<SimpleSession, HashMapDatasetDb> {
             dataset_db: self.dataset_db.clone(),
-            thread_pool: self.thread_pool.create_context(),
             session,
         })
     }

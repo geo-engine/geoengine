@@ -11,7 +11,6 @@ use serde::{Deserialize, Serialize};
 use snafu::ensure;
 
 use crate::adapters::FeatureCollectionChunkMerger;
-use crate::concurrency::ThreadPoolContext;
 use crate::engine::{
     ExecutionContext, InitializedVectorOperator, Operator, QueryContext, TypedVectorQueryProcessor,
     VectorOperator, VectorQueryProcessor, VectorQueryRectangle, VectorResultDescriptor,
@@ -131,7 +130,6 @@ impl PointInPolygonFilterProcessor {
     fn filter_parallel(
         points: &Arc<MultiPointCollection>,
         polygons: &MultiPolygonCollection,
-        thread_pool: &ThreadPoolContext,
     ) -> Vec<bool> {
         debug_assert!(!points.is_empty());
 
@@ -139,12 +137,12 @@ impl PointInPolygonFilterProcessor {
 
         let tester = Arc::new(PointInPolygonTester::new(polygons)); // TODO: multithread
 
-        let parallelism = thread_pool.degree_of_parallelism();
+        let parallelism = rayon::current_num_threads();
         let chunk_size = (points.len() as f64 / parallelism as f64).ceil() as usize;
 
         let mut result = vec![false; points.len()];
 
-        thread_pool.scope(|scope| {
+        rayon::scope(|scope| {
             let num_features = points.len();
             let feature_offsets = points.feature_offsets();
             let time_intervals = points.time_intervals();
@@ -155,7 +153,7 @@ impl PointInPolygonFilterProcessor {
                 let features_index_end = min(feature_index_start + chunk_size, num_features);
                 let tester = tester.clone();
 
-                scope.compute(move || {
+                scope.spawn(move |_| {
                     for (
                         feature_index,
                         ((coordinates_start_index, coordinates_end_index), time_interval),
@@ -184,18 +182,15 @@ impl PointInPolygonFilterProcessor {
     }
 
     async fn filter_points(
-        ctx: &dyn QueryContext,
+        _ctx: &dyn QueryContext,
         points: Arc<MultiPointCollection>,
         polygons: MultiPolygonCollection,
         initial_filter: &BooleanArray,
     ) -> Result<BooleanArray> {
-        let thread_pool = ctx.thread_pool_context().clone();
-
         let thread_points = points.clone();
-        let filter = tokio::task::spawn_blocking(move || {
-            Self::filter_parallel(&thread_points, &polygons, &thread_pool)
-        })
-        .await?;
+        let filter =
+            tokio::task::spawn_blocking(move || Self::filter_parallel(&thread_points, &polygons))
+                .await?;
 
         arrow::compute::or(initial_filter, &filter.into()).map_err(Into::into)
     }
