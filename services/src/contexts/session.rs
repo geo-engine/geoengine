@@ -73,7 +73,6 @@ impl MockableSession for SimpleSession {
 }
 
 impl FromRequest for SimpleSession {
-    type Config = ();
     type Error = error::Error;
     type Future = LocalBoxFuture<'static, Result<Self, Self::Error>>;
 

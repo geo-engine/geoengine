@@ -46,7 +46,6 @@ impl<T> FromRequest for QueryEx<T>
 where
     T: de::DeserializeOwned,
 {
-    type Config = ();
     type Error = error::Error;
     type Future = Ready<Result<Self, Self::Error>>;
 
