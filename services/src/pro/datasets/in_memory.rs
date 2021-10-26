@@ -25,6 +25,7 @@ use geoengine_operators::engine::{
 };
 use geoengine_operators::source::{GdalLoadingInfo, GdalMetaDataRegular, OgrSourceDataset};
 use geoengine_operators::{mock::MockDatasetDataSourceLoadingInfo, source::GdalMetaDataStatic};
+use snafu::ensure;
 use std::collections::HashMap;
 
 use super::DatasetPermission;
@@ -62,6 +63,7 @@ impl DatasetProviderDb<UserSession> for ProHashMapDatasetDb {
         _session: &UserSession,
         provider: Box<dyn ExternalDatasetProviderDefinition>,
     ) -> Result<DatasetProviderId> {
+        // TODO: authorization
         let id = provider.id();
         self.external_providers.insert(id, provider);
         Ok(id)
@@ -72,6 +74,7 @@ impl DatasetProviderDb<UserSession> for ProHashMapDatasetDb {
         _session: &UserSession,
         _options: Validated<DatasetProviderListOptions>,
     ) -> Result<Vec<DatasetProviderListing>> {
+        // TODO: authorization
         // TODO: use options
         Ok(self
             .external_providers
@@ -89,6 +92,7 @@ impl DatasetProviderDb<UserSession> for ProHashMapDatasetDb {
         _session: &UserSession,
         provider: DatasetProviderId,
     ) -> Result<Box<dyn ExternalDatasetProvider>> {
+        // TODO: authorization
         self.external_providers
             .get(&provider)
             .cloned()
@@ -199,7 +203,6 @@ impl DatasetProvider<UserSession> for ProHashMapDatasetDb {
         session: &UserSession,
         options: Validated<DatasetListOptions>,
     ) -> Result<Vec<DatasetListing>> {
-        // TODO: include datasets from external dataset providers
         let options = options.user_input;
 
         let iter = self
@@ -234,8 +237,15 @@ impl DatasetProvider<UserSession> for ProHashMapDatasetDb {
         Ok(list)
     }
 
-    async fn load(&self, _session: &UserSession, dataset: &DatasetId) -> Result<Dataset> {
-        // TODO: permissions
+    async fn load(&self, session: &UserSession, dataset: &DatasetId) -> Result<Dataset> {
+        ensure!(
+            self.dataset_permissions
+                .iter()
+                .any(|p| p.role == session.user.id.into()),
+            error::DatasetPermissionDenied {
+                dataset: dataset.clone(),
+            }
+        );
 
         self.datasets
             .get(dataset)
@@ -245,21 +255,30 @@ impl DatasetProvider<UserSession> for ProHashMapDatasetDb {
 
     async fn provenance(
         &self,
-        _session: &UserSession,
+        session: &UserSession,
         dataset: &DatasetId,
     ) -> Result<ProvenanceOutput> {
-        // TODO: permissions
         match dataset {
-            DatasetId::Internal { dataset_id: _ } => self
-                .datasets
-                .get(dataset)
-                .map(|d| ProvenanceOutput {
-                    dataset: d.id.clone(),
-                    provenance: d.provenance.clone(),
-                })
-                .ok_or(error::Error::UnknownDatasetId),
+            DatasetId::Internal { dataset_id: _ } => {
+                ensure!(
+                    self.dataset_permissions
+                        .iter()
+                        .any(|p| p.role == session.user.id.into()),
+                    error::DatasetPermissionDenied {
+                        dataset: dataset.clone(),
+                    }
+                );
+
+                self.datasets
+                    .get(dataset)
+                    .map(|d| ProvenanceOutput {
+                        dataset: d.id.clone(),
+                        provenance: d.provenance.clone(),
+                    })
+                    .ok_or(error::Error::UnknownDatasetId)
+            }
             DatasetId::External(id) => {
-                self.dataset_provider(&UserSession::mock(), id.provider_id) // TODO: get correct session into dataset provider
+                self.dataset_provider(&UserSession::mock(), id.provider_id)
                     .await?
                     .provenance(dataset)
                     .await
@@ -351,6 +370,23 @@ impl MetaDataProvider<GdalLoadingInfo, RasterResultDescriptor, RasterQueryRectan
                 source: Box::new(error::Error::UnknownDatasetId),
             })?
             .clone())
+    }
+}
+
+#[async_trait]
+impl UploadDb<UserSession> for ProHashMapDatasetDb {
+    async fn get_upload(&self, _session: &UserSession, upload: UploadId) -> Result<Upload> {
+        // TODO: user permission
+        self.uploads
+            .get(&upload)
+            .map(Clone::clone)
+            .ok_or(error::Error::UnknownUploadId)
+    }
+
+    async fn create_upload(&mut self, _session: &UserSession, upload: Upload) -> Result<()> {
+        // TODO: user permission
+        self.uploads.insert(upload.id, upload);
+        Ok(())
     }
 }
 
@@ -457,21 +493,150 @@ mod tests {
 
         Ok(())
     }
-}
 
-#[async_trait]
-impl UploadDb<UserSession> for ProHashMapDatasetDb {
-    async fn get_upload(&self, _session: &UserSession, upload: UploadId) -> Result<Upload> {
-        // TODO: user permission
-        self.uploads
-            .get(&upload)
-            .map(Clone::clone)
-            .ok_or(error::Error::UnknownUploadId)
+    #[tokio::test]
+    async fn it_lists_only_permitted_datasets() -> Result<()> {
+        let ctx = ProInMemoryContext::default();
+
+        let session1 = UserSession::mock();
+        let session2 = UserSession::mock();
+
+        let descriptor = VectorResultDescriptor {
+            data_type: VectorDataType::Data,
+            spatial_reference: SpatialReferenceOption::Unreferenced,
+            columns: Default::default(),
+        };
+
+        let ds = AddDataset {
+            id: None,
+            name: "OgrDataset".to_string(),
+            description: "My Ogr dataset".to_string(),
+            source_operator: "OgrSource".to_string(),
+            symbology: None,
+            provenance: None,
+        };
+
+        let meta = StaticMetaData {
+            loading_info: OgrSourceDataset {
+                file_name: Default::default(),
+                layer_name: "".to_string(),
+                data_type: None,
+                time: Default::default(),
+                default_geometry: None,
+                columns: None,
+                force_ogr_time_filter: false,
+                force_ogr_spatial_filter: false,
+                on_error: OgrSourceErrorSpec::Ignore,
+                sql_query: None,
+                attribute_query: None,
+            },
+            result_descriptor: descriptor.clone(),
+            phantom: Default::default(),
+        };
+
+        let _id = ctx
+            .dataset_db_ref_mut()
+            .await
+            .add_dataset(&session1, ds.validated()?, Box::new(meta))
+            .await?;
+
+        let list1 = ctx
+            .dataset_db_ref()
+            .await
+            .list(
+                &session1,
+                DatasetListOptions {
+                    filter: None,
+                    order: OrderBy::NameAsc,
+                    offset: 0,
+                    limit: 1,
+                }
+                .validated()?,
+            )
+            .await?;
+
+        assert_eq!(list1.len(), 1);
+
+        let list2 = ctx
+            .dataset_db_ref()
+            .await
+            .list(
+                &session2,
+                DatasetListOptions {
+                    filter: None,
+                    order: OrderBy::NameAsc,
+                    offset: 0,
+                    limit: 1,
+                }
+                .validated()?,
+            )
+            .await?;
+
+        assert_eq!(list2.len(), 0);
+
+        Ok(())
     }
 
-    async fn create_upload(&mut self, _session: &UserSession, upload: Upload) -> Result<()> {
-        // TODO: user permission
-        self.uploads.insert(upload.id, upload);
+    #[tokio::test]
+    async fn it_shows_only_permitted_provenance() -> Result<()> {
+        let ctx = ProInMemoryContext::default();
+
+        let session1 = UserSession::mock();
+        let session2 = UserSession::mock();
+
+        let descriptor = VectorResultDescriptor {
+            data_type: VectorDataType::Data,
+            spatial_reference: SpatialReferenceOption::Unreferenced,
+            columns: Default::default(),
+        };
+
+        let ds = AddDataset {
+            id: None,
+            name: "OgrDataset".to_string(),
+            description: "My Ogr dataset".to_string(),
+            source_operator: "OgrSource".to_string(),
+            symbology: None,
+            provenance: None,
+        };
+
+        let meta = StaticMetaData {
+            loading_info: OgrSourceDataset {
+                file_name: Default::default(),
+                layer_name: "".to_string(),
+                data_type: None,
+                time: Default::default(),
+                default_geometry: None,
+                columns: None,
+                force_ogr_time_filter: false,
+                force_ogr_spatial_filter: false,
+                on_error: OgrSourceErrorSpec::Ignore,
+                sql_query: None,
+                attribute_query: None,
+            },
+            result_descriptor: descriptor.clone(),
+            phantom: Default::default(),
+        };
+
+        let id = ctx
+            .dataset_db_ref_mut()
+            .await
+            .add_dataset(&session1, ds.validated()?, Box::new(meta))
+            .await?;
+
+        assert!(ctx
+            .dataset_db_ref()
+            .await
+            .provenance(&session1, &id)
+            .await
+            .is_ok());
+
+        assert!(ctx
+            .dataset_db_ref()
+            .await
+            .provenance(&session2, &id)
+            .await
+            .is_err());
+
         Ok(())
     }
 }

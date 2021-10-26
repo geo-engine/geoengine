@@ -2,7 +2,10 @@ use crate::handlers::ErrorResponse;
 use crate::workflows::workflow::WorkflowId;
 use actix_web::http::StatusCode;
 use actix_web::HttpResponse;
-use geoengine_datatypes::{dataset::DatasetProviderId, spatial_reference::SpatialReferenceOption};
+use geoengine_datatypes::{
+    dataset::{DatasetId, DatasetProviderId},
+    spatial_reference::SpatialReferenceOption,
+};
 use snafu::Snafu;
 use strum::IntoStaticStr;
 
@@ -137,6 +140,11 @@ pub enum Error {
     UnknownDatasetId,
     UnknownProviderId,
     MissingDatasetId,
+
+    #[snafu(display("Permission denied for dataset with id {:?}", dataset))]
+    DatasetPermissionDenied {
+        dataset: DatasetId,
+    },
 
     #[snafu(display("Parameter {} must have length between {} and {}", parameter, min, max))]
     InvalidStringLength {
