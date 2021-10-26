@@ -1,4 +1,4 @@
-use crate::datasets::provenance::{ProvenanceOutput, ProvenanceProvider};
+use crate::datasets::listing::ProvenanceOutput;
 use crate::datasets::storage::{
     AddDataset, Dataset, DatasetDb, DatasetProviderDb, DatasetProviderListOptions,
     DatasetProviderListing, DatasetStore, DatasetStorer, ExternalDatasetProviderDefinition,
@@ -256,6 +256,28 @@ where
             source_operator: row.get(4),
             symbology: serde_json::from_value(row.get(5))?,
             provenance: serde_json::from_value(row.get(6))?,
+        })
+    }
+
+    async fn provenance(
+        &self,
+        _session: &UserSession,
+        dataset: &DatasetId,
+    ) -> Result<ProvenanceOutput> {
+        let id = dataset.internal().ok_or(Error::InvalidDatasetId)?;
+
+        // TODO: permissions
+        let conn = self.conn_pool.get().await?;
+
+        let stmt = conn
+            .prepare("SELECT provenance FROM datasets WHERE id = $1")
+            .await?;
+
+        let row = conn.query_one(&stmt, &[&id]).await?;
+
+        Ok(ProvenanceOutput {
+            dataset: dataset.clone(),
+            provenance: serde_json::from_value(row.get(0)).context(error::SerdeJson)?,
         })
     }
 }
@@ -586,33 +608,6 @@ where
         )
         .await?;
         Ok(())
-    }
-}
-
-#[async_trait]
-impl<Tls> ProvenanceProvider for PostgresDatasetDb<Tls>
-where
-    Tls: MakeTlsConnect<Socket> + Clone + Send + Sync + 'static,
-    <Tls as MakeTlsConnect<Socket>>::Stream: Send + Sync,
-    <Tls as MakeTlsConnect<Socket>>::TlsConnect: Send,
-    <<Tls as MakeTlsConnect<Socket>>::TlsConnect as TlsConnect<Socket>>::Future: Send,
-{
-    async fn provenance(&self, dataset: &DatasetId) -> Result<ProvenanceOutput> {
-        let id = dataset.internal().ok_or(Error::InvalidDatasetId)?;
-
-        // TODO: permissions
-        let conn = self.conn_pool.get().await?;
-
-        let stmt = conn
-            .prepare("SELECT provenance FROM datasets WHERE id = $1")
-            .await?;
-
-        let row = conn.query_one(&stmt, &[&id]).await?;
-
-        Ok(ProvenanceOutput {
-            dataset: dataset.clone(),
-            provenance: serde_json::from_value(row.get(0)).context(error::SerdeJson)?,
-        })
     }
 }
 

@@ -1,6 +1,6 @@
 use crate::contexts::SimpleContext;
 use crate::contexts::SimpleSession;
-use crate::datasets::provenance::Provenance;
+use crate::datasets::listing::Provenance;
 use crate::datasets::storage::AddDataset;
 use crate::datasets::storage::DatasetStore;
 use crate::datasets::upload::UploadId;

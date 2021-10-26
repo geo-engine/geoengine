@@ -1,8 +1,8 @@
 use crate::contexts::MockableSession;
 use crate::datasets::listing::{
     DatasetListOptions, DatasetListing, DatasetProvider, ExternalDatasetProvider, OrderBy,
+    ProvenanceOutput,
 };
-use crate::datasets::provenance::{ProvenanceOutput, ProvenanceProvider};
 use crate::datasets::storage::{
     AddDataset, Dataset, DatasetDb, DatasetProviderDb, DatasetProviderListOptions,
     DatasetProviderListing, DatasetStore, DatasetStorer, ExternalDatasetProviderDefinition,
@@ -31,8 +31,8 @@ use super::DatasetPermission;
 
 #[derive(Default)]
 pub struct ProHashMapDatasetDb {
-    datasets: Vec<Dataset>,
-    dataset_permissions: HashMap<DatasetId, Vec<DatasetPermission>>,
+    datasets: HashMap<DatasetId, Dataset>,
+    dataset_permissions: Vec<DatasetPermission>,
     ogr_datasets: HashMap<
         InternalDatasetId,
         StaticMetaData<OgrSourceDataset, VectorResultDescriptor, VectorQueryRectangle>,
@@ -176,16 +176,13 @@ impl DatasetStore<UserSession> for ProHashMapDatasetDb {
             symbology: dataset.symbology,
             provenance: dataset.provenance,
         };
-        self.datasets.push(d);
+        self.datasets.insert(id.clone(), d);
 
-        self.dataset_permissions.insert(
-            id.clone(),
-            vec![DatasetPermission {
-                role: session.user.id.into(),
-                dataset: id.clone(),
-                permission: Permission::Owner,
-            }],
-        );
+        self.dataset_permissions.push(DatasetPermission {
+            role: session.user.id.into(),
+            dataset: id.clone(),
+            permission: Permission::Owner,
+        });
 
         Ok(id)
     }
@@ -199,21 +196,27 @@ impl DatasetStore<UserSession> for ProHashMapDatasetDb {
 impl DatasetProvider<UserSession> for ProHashMapDatasetDb {
     async fn list(
         &self,
-        _session: &UserSession,
+        session: &UserSession,
         options: Validated<DatasetListOptions>,
     ) -> Result<Vec<DatasetListing>> {
-        // TODO: permissions
-
         // TODO: include datasets from external dataset providers
         let options = options.user_input;
 
+        let iter = self
+            .dataset_permissions
+            .iter()
+            .filter(|p| p.role == session.user.id.into())
+            .map(|p| {
+                self.datasets
+                    .get(&p.dataset)
+                    .expect("a dataset has at least one permission")
+            });
+
         let mut list: Vec<_> = if let Some(filter) = &options.filter {
-            self.datasets
-                .iter()
-                .filter(|d| d.name.contains(filter) || d.description.contains(filter))
+            iter.filter(|d| d.name.contains(filter) || d.description.contains(filter))
                 .collect()
         } else {
-            self.datasets.iter().collect()
+            iter.collect()
         };
 
         match options.order {
@@ -235,10 +238,33 @@ impl DatasetProvider<UserSession> for ProHashMapDatasetDb {
         // TODO: permissions
 
         self.datasets
-            .iter()
-            .find(|d| d.id == *dataset)
-            .cloned()
+            .get(dataset)
+            .map(Clone::clone)
             .ok_or(error::Error::UnknownDatasetId)
+    }
+
+    async fn provenance(
+        &self,
+        _session: &UserSession,
+        dataset: &DatasetId,
+    ) -> Result<ProvenanceOutput> {
+        // TODO: permissions
+        match dataset {
+            DatasetId::Internal { dataset_id: _ } => self
+                .datasets
+                .get(dataset)
+                .map(|d| ProvenanceOutput {
+                    dataset: d.id.clone(),
+                    provenance: d.provenance.clone(),
+                })
+                .ok_or(error::Error::UnknownDatasetId),
+            DatasetId::External(id) => {
+                self.dataset_provider(&UserSession::mock(), id.provider_id) // TODO: get correct session into dataset provider
+                    .await?
+                    .provenance(dataset)
+                    .await
+            }
+        }
     }
 }
 
@@ -325,29 +351,6 @@ impl MetaDataProvider<GdalLoadingInfo, RasterResultDescriptor, RasterQueryRectan
                 source: Box::new(error::Error::UnknownDatasetId),
             })?
             .clone())
-    }
-}
-
-#[async_trait]
-impl ProvenanceProvider for ProHashMapDatasetDb {
-    async fn provenance(&self, dataset: &DatasetId) -> Result<ProvenanceOutput> {
-        match dataset {
-            DatasetId::Internal { dataset_id: _ } => self
-                .datasets
-                .iter()
-                .find(|d| d.id == *dataset)
-                .map(|d| ProvenanceOutput {
-                    dataset: d.id.clone(),
-                    provenance: d.provenance.clone(),
-                })
-                .ok_or(error::Error::UnknownDatasetId),
-            DatasetId::External(id) => {
-                self.dataset_provider(&UserSession::mock(), id.provider_id) // TODO: get correct session into dataset provider
-                    .await?
-                    .provenance(dataset)
-                    .await
-            }
-        }
     }
 }
 

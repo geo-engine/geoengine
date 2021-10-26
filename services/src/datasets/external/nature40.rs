@@ -1,6 +1,6 @@
 use std::path::Path;
 
-use crate::datasets::provenance::{ProvenanceOutput, ProvenanceProvider};
+use crate::datasets::listing::ProvenanceOutput;
 use crate::error::Error;
 use crate::util::parsing::{deserialize_base_url, string_or_string_array};
 use crate::util::retry::retry;
@@ -202,10 +202,7 @@ impl ExternalDatasetProvider for Nature40DataProvider {
     ) -> crate::error::Result<crate::datasets::storage::Dataset> {
         Err(error::Error::NotYetImplemented)
     }
-}
 
-#[async_trait]
-impl ProvenanceProvider for Nature40DataProvider {
     async fn provenance(&self, dataset: &DatasetId) -> Result<ProvenanceOutput> {
         Ok(ProvenanceOutput {
             dataset: dataset.clone(),

@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 use std::marker::PhantomData;
 
-use crate::datasets::provenance::{Provenance, ProvenanceOutput, ProvenanceProvider};
+use crate::datasets::listing::{Provenance, ProvenanceOutput};
 use crate::error::Error;
 use crate::{datasets::listing::DatasetListOptions, error::Result};
 use crate::{
@@ -232,10 +232,7 @@ impl ExternalDatasetProvider for GfbioDataProvider {
     ) -> crate::error::Result<crate::datasets::storage::Dataset> {
         Err(error::Error::NotYetImplemented)
     }
-}
 
-#[async_trait]
-impl ProvenanceProvider for GfbioDataProvider {
     async fn provenance(&self, dataset: &DatasetId) -> Result<ProvenanceOutput> {
         let surrogate_key: i32 = dataset
             .external()

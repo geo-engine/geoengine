@@ -22,7 +22,7 @@ use geoengine_operators::source::{GdalLoadingInfo, GdalMetaDataRegular, OgrSourc
 use geoengine_operators::{mock::MockDatasetDataSourceLoadingInfo, source::GdalMetaDataStatic};
 use std::collections::HashMap;
 
-use super::provenance::{ProvenanceOutput, ProvenanceProvider};
+use super::listing::ProvenanceOutput;
 use super::{
     storage::{ExternalDatasetProviderDefinition, MetaDataDefinition},
     upload::{Upload, UploadDb, UploadId},
@@ -229,6 +229,30 @@ impl DatasetProvider<SimpleSession> for HashMapDatasetDb {
             .cloned()
             .ok_or(error::Error::UnknownDatasetId)
     }
+
+    async fn provenance(
+        &self,
+        _session: &SimpleSession,
+        dataset: &DatasetId,
+    ) -> Result<ProvenanceOutput> {
+        match dataset {
+            DatasetId::Internal { dataset_id: _ } => self
+                .datasets
+                .iter()
+                .find(|d| d.id == *dataset)
+                .map(|d| ProvenanceOutput {
+                    dataset: d.id.clone(),
+                    provenance: d.provenance.clone(),
+                })
+                .ok_or(error::Error::UnknownDatasetId),
+            DatasetId::External(id) => {
+                self.dataset_provider(&SimpleSession::mock(), id.provider_id) // TODO: get correct session into dataset provider
+                    .await?
+                    .provenance(dataset)
+                    .await
+            }
+        }
+    }
 }
 
 #[async_trait]
@@ -314,29 +338,6 @@ impl MetaDataProvider<GdalLoadingInfo, RasterResultDescriptor, RasterQueryRectan
                 source: Box::new(error::Error::UnknownDatasetId),
             })?
             .clone())
-    }
-}
-
-#[async_trait]
-impl ProvenanceProvider for HashMapDatasetDb {
-    async fn provenance(&self, dataset: &DatasetId) -> Result<ProvenanceOutput> {
-        match dataset {
-            DatasetId::Internal { dataset_id: _ } => self
-                .datasets
-                .iter()
-                .find(|d| d.id == *dataset)
-                .map(|d| ProvenanceOutput {
-                    dataset: d.id.clone(),
-                    provenance: d.provenance.clone(),
-                })
-                .ok_or(error::Error::UnknownDatasetId),
-            DatasetId::External(id) => {
-                self.dataset_provider(&SimpleSession::mock(), id.provider_id) // TODO: get correct session into dataset provider
-                    .await?
-                    .provenance(dataset)
-                    .await
-            }
-        }
     }
 }
 

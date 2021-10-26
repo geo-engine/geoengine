@@ -19,7 +19,7 @@ use serde::{Deserialize, Serialize};
 use snafu::{ensure, ResultExt};
 use std::fmt::Debug;
 
-use super::provenance::{Provenance, ProvenanceProvider};
+use super::listing::Provenance;
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 #[serde(rename_all = "camelCase")]
@@ -211,13 +211,7 @@ impl MetaDataDefinition {
 /// Handling of datasets provided by geo engine internally, staged and by external providers
 #[async_trait]
 pub trait DatasetDb<S: Session>:
-    DatasetStore<S>
-    + DatasetProvider<S>
-    + DatasetProviderDb<S>
-    + UploadDb<S>
-    + ProvenanceProvider
-    + Send
-    + Sync
+    DatasetStore<S> + DatasetProvider<S> + DatasetProviderDb<S> + UploadDb<S> + Send + Sync
 {
 }
 
@@ -246,8 +240,6 @@ pub trait DatasetProviderDb<S: Session> {
         provider: DatasetProviderId,
     ) -> Result<Box<dyn ExternalDatasetProvider>>;
 }
-
-pub trait DatasetAndProvenanceProvider: ExternalDatasetProvider + ProvenanceProvider {}
 
 /// Defines the type of meta data a `DatasetDB` is able to store
 pub trait DatasetStorer: Send + Sync {

@@ -1,6 +1,6 @@
 use std::collections::HashSet;
 
-use crate::datasets::provenance::ProvenanceProvider;
+use crate::datasets::listing::DatasetProvider;
 use crate::datasets::storage::{AddDataset, DatasetDefinition, DatasetStore, MetaDataDefinition};
 use crate::datasets::upload::{UploadId, UploadRootPath};
 use crate::error;
@@ -231,7 +231,7 @@ async fn get_workflow_metadata_handler<C: Context>(
 /// ```
 async fn get_workflow_provenance_handler<C: Context>(
     id: web::Path<WorkflowId>,
-    _session: C::Session,
+    session: C::Session,
     ctx: web::Data<C>,
 ) -> Result<impl Responder> {
     let workflow = ctx
@@ -244,7 +244,10 @@ async fn get_workflow_provenance_handler<C: Context>(
 
     let db = ctx.dataset_db_ref().await;
 
-    let provenance: Vec<_> = datasets.iter().map(|id| db.provenance(id)).collect();
+    let provenance: Vec<_> = datasets
+        .iter()
+        .map(|id| db.provenance(&session, id))
+        .collect();
     let provenance: Result<Vec<_>> = join_all(provenance).await.into_iter().collect();
 
     // filter duplicates

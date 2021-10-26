@@ -449,9 +449,8 @@ mod tests {
     use super::*;
     use crate::contexts::MockableSession;
     use crate::datasets::external::mock::MockExternalDataProviderDefinition;
-    use crate::datasets::listing::DatasetProvider;
-    use crate::datasets::listing::{DatasetListOptions, DatasetListing};
-    use crate::datasets::provenance::{Provenance, ProvenanceOutput, ProvenanceProvider};
+    use crate::datasets::listing::{DatasetListOptions, DatasetListing, ProvenanceOutput};
+    use crate::datasets::listing::{DatasetProvider, Provenance};
     use crate::datasets::storage::{
         AddDataset, DatasetDefinition, DatasetProviderDb, DatasetProviderListOptions,
         DatasetProviderListing, DatasetStore, MetaDataDefinition,
@@ -1033,7 +1032,10 @@ mod tests {
                 },
             );
 
-            let provenance = db.provenance(&dataset_id).await.unwrap();
+            let provenance = db
+                .provenance(&UserSession::mock(), &dataset_id)
+                .await
+                .unwrap();
 
             assert_eq!(
                 provenance,

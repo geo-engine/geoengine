@@ -16,8 +16,6 @@ use geoengine_operators::source::{GdalLoadingInfo, OgrSourceDataset};
 use serde::{Deserialize, Serialize};
 use snafu::ensure;
 
-use super::provenance::ProvenanceProvider;
-
 #[derive(Debug, Serialize, Deserialize, Clone, PartialEq)]
 #[serde(rename_all = "camelCase")]
 pub struct DatasetListing {
@@ -78,7 +76,6 @@ pub trait DatasetProvider<S: Session>: Send
     + MetaDataProvider<MockDatasetDataSourceLoadingInfo, VectorResultDescriptor, VectorQueryRectangle>
     + MetaDataProvider<OgrSourceDataset, VectorResultDescriptor, VectorQueryRectangle>
     + MetaDataProvider<GdalLoadingInfo, RasterResultDescriptor, RasterQueryRectangle>
-    + ProvenanceProvider
 {
     // TODO: filter, paging
     async fn list(
@@ -88,6 +85,8 @@ pub trait DatasetProvider<S: Session>: Send
     ) -> Result<Vec<DatasetListing>>;
 
     async fn load(&self, session: &S, dataset: &DatasetId) -> Result<Dataset>;
+
+    async fn provenance(&self, session: &S, dataset: &DatasetId) -> Result<ProvenanceOutput>;
 }
 
 #[async_trait]
@@ -96,7 +95,6 @@ pub trait ExternalDatasetProvider: Send
     + MetaDataProvider<MockDatasetDataSourceLoadingInfo, VectorResultDescriptor, VectorQueryRectangle>
     + MetaDataProvider<OgrSourceDataset, VectorResultDescriptor, VectorQueryRectangle>
     + MetaDataProvider<GdalLoadingInfo, RasterResultDescriptor, RasterQueryRectangle>
-    + ProvenanceProvider
 {
     // TODO: authorization, filter, paging
     async fn list(&self, options: Validated<DatasetListOptions>) -> Result<Vec<DatasetListing>>;
@@ -104,4 +102,19 @@ pub trait ExternalDatasetProvider: Send
     // TODO: authorization
     // TODOis this method useful?
     async fn load(&self, dataset: &DatasetId) -> Result<Dataset>;
+
+    async fn provenance(&self, dataset: &DatasetId) -> Result<ProvenanceOutput>;
+}
+
+#[derive(Debug, Serialize, Deserialize, PartialEq, Eq, Hash)]
+pub struct ProvenanceOutput {
+    pub dataset: DatasetId,
+    pub provenance: Option<Provenance>,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone, PartialEq, Eq, Hash)]
+pub struct Provenance {
+    pub citation: String,
+    pub license: String,
+    pub uri: String,
 }

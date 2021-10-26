@@ -1,5 +1,7 @@
 use crate::datasets::external::pangaea::meta::PangeaMetaData;
-use crate::datasets::listing::{DatasetListOptions, DatasetListing, ExternalDatasetProvider};
+use crate::datasets::listing::{
+    DatasetListOptions, DatasetListing, ExternalDatasetProvider, Provenance, ProvenanceOutput,
+};
 use crate::datasets::storage::{Dataset, ExternalDatasetProviderDefinition};
 use async_trait::async_trait;
 use geoengine_datatypes::dataset::{DatasetId, DatasetProviderId};
@@ -10,7 +12,6 @@ use geoengine_operators::engine::{
 use geoengine_operators::source::{GdalLoadingInfo, OgrSourceDataset};
 use reqwest::Client;
 
-use crate::datasets::provenance::{Provenance, ProvenanceOutput, ProvenanceProvider};
 use crate::error::{Error, Result};
 use crate::util::user_input::Validated;
 use geoengine_operators::mock::MockDatasetDataSourceLoadingInfo;
@@ -71,10 +72,7 @@ impl ExternalDatasetProvider for PangaeaDataProvider {
     async fn load(&self, _dataset: &DatasetId) -> Result<Dataset> {
         Err(Error::NotYetImplemented)
     }
-}
 
-#[async_trait]
-impl ProvenanceProvider for PangaeaDataProvider {
     async fn provenance(&self, dataset: &DatasetId) -> Result<ProvenanceOutput> {
         let doi = dataset
             .external()

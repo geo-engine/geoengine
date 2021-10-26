@@ -1,5 +1,6 @@
-use crate::datasets::listing::{DatasetListOptions, DatasetListing, ExternalDatasetProvider};
-use crate::datasets::provenance::{ProvenanceOutput, ProvenanceProvider};
+use crate::datasets::listing::{
+    DatasetListOptions, DatasetListing, ExternalDatasetProvider, ProvenanceOutput,
+};
 use crate::datasets::storage::ExternalDatasetProviderDefinition;
 use crate::error::{self, Result};
 use crate::projects::{RasterSymbology, Symbology};
@@ -217,10 +218,7 @@ impl ExternalDatasetProvider for SentinelS2L2aCogsDataProvider {
     ) -> crate::error::Result<crate::datasets::storage::Dataset> {
         Err(error::Error::NotYetImplemented)
     }
-}
 
-#[async_trait]
-impl ProvenanceProvider for SentinelS2L2aCogsDataProvider {
     async fn provenance(&self, dataset: &DatasetId) -> Result<ProvenanceOutput> {
         Ok(ProvenanceOutput {
             dataset: dataset.clone(),

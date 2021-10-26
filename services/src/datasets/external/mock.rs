@@ -1,5 +1,4 @@
-use crate::datasets::listing::ExternalDatasetProvider;
-use crate::datasets::provenance::{ProvenanceOutput, ProvenanceProvider};
+use crate::datasets::listing::{ExternalDatasetProvider, ProvenanceOutput};
 use crate::{datasets::listing::DatasetListOptions, error::Result};
 use crate::{
     datasets::{
@@ -87,10 +86,7 @@ impl ExternalDatasetProvider for MockExternalDataProvider {
     ) -> crate::error::Result<crate::datasets::storage::Dataset> {
         Err(error::Error::NotYetImplemented)
     }
-}
 
-#[async_trait]
-impl ProvenanceProvider for MockExternalDataProvider {
     async fn provenance(&self, dataset: &DatasetId) -> Result<ProvenanceOutput> {
         Ok(ProvenanceOutput {
             dataset: dataset.clone(),
