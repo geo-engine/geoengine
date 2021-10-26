@@ -444,7 +444,6 @@ where
 
 #[cfg(test)]
 mod tests {
-    use std::collections::HashMap;
     use std::str::FromStr;
 
     use super::*;
@@ -1201,7 +1200,6 @@ mod tests {
 
             let datasets = provider
                 .list(
-                    &HashMap::default(),
                     DatasetListOptions {
                         filter: None,
                         order: crate::datasets::listing::OrderBy::NameAsc,

@@ -176,11 +176,7 @@ impl GfbioDataProvider {
 
 #[async_trait]
 impl ExternalDatasetProvider for GfbioDataProvider {
-    async fn list(
-        &self,
-        _authorization: &HashMap<String, String>,
-        _options: Validated<DatasetListOptions>,
-    ) -> Result<Vec<DatasetListing>> {
+    async fn list(&self, _options: Validated<DatasetListOptions>) -> Result<Vec<DatasetListing>> {
         let conn = self.pool.get().await?;
 
         let stmt = conn
@@ -232,7 +228,6 @@ impl ExternalDatasetProvider for GfbioDataProvider {
 
     async fn load(
         &self,
-        _authorization: &HashMap<String, String>,
         _dataset: &geoengine_datatypes::dataset::DatasetId,
     ) -> crate::error::Result<crate::datasets::storage::Dataset> {
         Err(error::Error::NotYetImplemented)
@@ -493,7 +488,6 @@ mod tests {
 
         let listing = provider
             .list(
-                &HashMap::default(),
                 DatasetListOptions {
                     filter: None,
                     order: OrderBy::NameAsc,

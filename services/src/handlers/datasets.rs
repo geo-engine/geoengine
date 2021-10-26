@@ -88,7 +88,7 @@ async fn list_external_datasets_handler<C: Context>(
         .await
         .dataset_provider(&session, provider.into_inner())
         .await?
-        .list(&HashMap::default(), options) // TODO: authorization
+        .list(options) // TODO: authorization
         .await?;
     Ok(web::Json(list))
 }

@@ -1,5 +1,3 @@
-use std::collections::HashMap;
-
 use crate::datasets::external::pangaea::meta::PangeaMetaData;
 use crate::datasets::listing::{DatasetListOptions, DatasetListing, ExternalDatasetProvider};
 use crate::datasets::storage::{Dataset, ExternalDatasetProviderDefinition};
@@ -66,19 +64,11 @@ impl PangaeaDataProvider {
 
 #[async_trait]
 impl ExternalDatasetProvider for PangaeaDataProvider {
-    async fn list(
-        &self,
-        _authorization: &HashMap<String, String>,
-        _options: Validated<DatasetListOptions>,
-    ) -> Result<Vec<DatasetListing>> {
+    async fn list(&self, _options: Validated<DatasetListOptions>) -> Result<Vec<DatasetListing>> {
         Ok(vec![])
     }
 
-    async fn load(
-        &self,
-        _authorization: &HashMap<String, String>,
-        _dataset: &DatasetId,
-    ) -> Result<Dataset> {
+    async fn load(&self, _dataset: &DatasetId) -> Result<Dataset> {
         Err(Error::NotYetImplemented)
     }
 }

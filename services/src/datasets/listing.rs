@@ -1,5 +1,3 @@
-use std::collections::HashMap;
-
 use crate::contexts::Session;
 use crate::datasets::storage::Dataset;
 use crate::error;
@@ -100,17 +98,10 @@ pub trait ExternalDatasetProvider: Send
     + MetaDataProvider<GdalLoadingInfo, RasterResultDescriptor, RasterQueryRectangle>
     + ProvenanceProvider
 {
-    // TODO: filter, paging
-    async fn list(
-        &self,
-        authorization: &HashMap<String, String>,
-        options: Validated<DatasetListOptions>,
-    ) -> Result<Vec<DatasetListing>>;
+    // TODO: authorization, filter, paging
+    async fn list(&self, options: Validated<DatasetListOptions>) -> Result<Vec<DatasetListing>>;
 
-    // TODO: is this method useful?
-    async fn load(
-        &self,
-        authorization: &HashMap<String, String>,
-        dataset: &DatasetId,
-    ) -> Result<Dataset>;
+    // TODO: authorization
+    // TODOis this method useful?
+    async fn load(&self, dataset: &DatasetId) -> Result<Dataset>;
 }

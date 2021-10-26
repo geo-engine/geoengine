@@ -1,4 +1,3 @@
-use std::collections::HashMap;
 use std::path::Path;
 
 use crate::datasets::provenance::{ProvenanceOutput, ProvenanceProvider};
@@ -138,11 +137,7 @@ struct RasterDbs {
 
 #[async_trait]
 impl ExternalDatasetProvider for Nature40DataProvider {
-    async fn list(
-        &self,
-        _authorization: &HashMap<String, String>,
-        _options: Validated<DatasetListOptions>,
-    ) -> Result<Vec<DatasetListing>> {
+    async fn list(&self, _options: Validated<DatasetListOptions>) -> Result<Vec<DatasetListing>> {
         // TODO: query the other dbs as well
         let raster_dbs = self.load_raster_dbs().await?;
 
@@ -203,7 +198,6 @@ impl ExternalDatasetProvider for Nature40DataProvider {
 
     async fn load(
         &self,
-        _authorization: &HashMap<String, String>,
         _dataset: &geoengine_datatypes::dataset::DatasetId,
     ) -> crate::error::Result<crate::datasets::storage::Dataset> {
         Err(error::Error::NotYetImplemented)
@@ -713,7 +707,6 @@ mod tests {
 
         let listing = provider
             .list(
-                &HashMap::default(),
                 DatasetListOptions {
                     filter: None,
                     order: OrderBy::NameAsc,

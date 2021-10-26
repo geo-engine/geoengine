@@ -1,5 +1,3 @@
-use std::collections::HashMap;
-
 use crate::datasets::listing::ExternalDatasetProvider;
 use crate::datasets::provenance::{ProvenanceOutput, ProvenanceProvider};
 use crate::{datasets::listing::DatasetListOptions, error::Result};
@@ -57,11 +55,7 @@ pub struct MockExternalDataProvider {
 
 #[async_trait]
 impl ExternalDatasetProvider for MockExternalDataProvider {
-    async fn list(
-        &self,
-        _authorization: &HashMap<String, String>,
-        _options: Validated<DatasetListOptions>,
-    ) -> Result<Vec<DatasetListing>> {
+    async fn list(&self, _options: Validated<DatasetListOptions>) -> Result<Vec<DatasetListing>> {
         // TODO: user right management
         // TODO: options
         let mut listing = vec![];
@@ -89,7 +83,6 @@ impl ExternalDatasetProvider for MockExternalDataProvider {
 
     async fn load(
         &self,
-        _authorization: &HashMap<String, String>,
         _dataset: &geoengine_datatypes::dataset::DatasetId,
     ) -> crate::error::Result<crate::datasets::storage::Dataset> {
         Err(error::Error::NotYetImplemented)

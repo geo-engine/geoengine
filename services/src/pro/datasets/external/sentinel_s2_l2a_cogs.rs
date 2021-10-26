@@ -203,11 +203,7 @@ impl SentinelS2L2aCogsDataProvider {
 
 #[async_trait]
 impl ExternalDatasetProvider for SentinelS2L2aCogsDataProvider {
-    async fn list(
-        &self,
-        _authorization: &HashMap<String, String>,
-        _options: Validated<DatasetListOptions>,
-    ) -> Result<Vec<DatasetListing>> {
+    async fn list(&self, _options: Validated<DatasetListOptions>) -> Result<Vec<DatasetListing>> {
         // TODO: options
         let mut x: Vec<DatasetListing> =
             self.datasets.values().map(|d| d.listing.clone()).collect();
@@ -217,7 +213,6 @@ impl ExternalDatasetProvider for SentinelS2L2aCogsDataProvider {
 
     async fn load(
         &self,
-        _authorization: &HashMap<String, String>,
         _dataset: &geoengine_datatypes::dataset::DatasetId,
     ) -> crate::error::Result<crate::datasets::storage::Dataset> {
         Err(error::Error::NotYetImplemented)
