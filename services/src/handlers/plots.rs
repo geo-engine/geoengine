@@ -192,28 +192,26 @@ struct WrappedPlotOutput {
 
 #[cfg(test)]
 mod tests {
+    use super::*;
+    use crate::contexts::{InMemoryContext, Session, SimpleContext};
+    use crate::util::tests::{check_allowed_http_methods, read_body_string, send_test_request};
+    use crate::workflows::workflow::Workflow;
+    use actix_web;
+    use actix_web::dev::ServiceResponse;
+    use actix_web::http::{header, Method};
+    use actix_web_httpauth::headers::authorization::Bearer;
     use chrono::NaiveDate;
-    use geoengine_datatypes::util::test::TestDefault;
-    use num_traits::AsPrimitive;
-    use serde_json::json;
-
     use geoengine_datatypes::primitives::Measurement;
     use geoengine_datatypes::raster::{Grid2D, RasterDataType, RasterTile2D, TileInformation};
     use geoengine_datatypes::spatial_reference::SpatialReference;
+    use geoengine_datatypes::util::test::TestDefault;
     use geoengine_operators::engine::{PlotOperator, RasterOperator, RasterResultDescriptor};
     use geoengine_operators::mock::{MockRasterSource, MockRasterSourceParams};
     use geoengine_operators::plot::{
         Histogram, HistogramBounds, HistogramParams, Statistics, StatisticsParams,
     };
-
-    use crate::contexts::{InMemoryContext, Session, SimpleContext};
-    use crate::workflows::workflow::Workflow;
-
-    use super::*;
-    use crate::util::tests::{check_allowed_http_methods, read_body_string, send_test_request};
-    use actix_web::dev::ServiceResponse;
-    use actix_web::{http::header, http::Method, test};
-    use actix_web_httpauth::headers::authorization::Bearer;
+    use num_traits::AsPrimitive;
+    use serde_json::json;
 
     fn example_raster_source() -> Box<dyn RasterOperator> {
         let no_data_value = None;
@@ -269,7 +267,7 @@ mod tests {
             ("time", "2020-01-01T00:00:00.0Z"),
             ("spatialResolution", "0.1,0.1"),
         ];
-        let req = test::TestRequest::get()
+        let req = actix_web::test::TestRequest::get()
             .uri(&format!(
                 "/plot/{}/?{}",
                 id,
@@ -333,7 +331,7 @@ mod tests {
             ("time", "2020-01-01T00:00:00.0Z"),
             ("spatialResolution", "0.1,0.1"),
         ];
-        let req = test::TestRequest::get()
+        let req = actix_web::test::TestRequest::get()
             .uri(&format!(
                 "/plot/{}/?{}",
                 id,
@@ -409,7 +407,7 @@ mod tests {
                 ("time", "2020-01-01T00:00:00.0Z"),
                 ("spatial_resolution", "0.1,0.1"),
             ];
-            let req = test::TestRequest::default()
+            let req = actix_web::test::TestRequest::default()
                 .method(method)
                 .uri(&format!(
                     "/plot/{}/?{}",

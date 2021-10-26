@@ -9,6 +9,7 @@ use std::str::FromStr;
 
 use super::wcs::request::WcsBoundingbox;
 use crate::error::{self, Result};
+use crate::handlers::spatial_references::{spatial_reference_specification, AxisOrder};
 
 #[derive(PartialEq, Debug, Deserialize, Serialize, Clone, Copy)]
 pub struct OgcBoundingBox {
@@ -229,21 +230,33 @@ pub fn rectangle_from_ogc_params<A: AxisAlignedRectangle>(
     spatial_reference: SpatialReference,
 ) -> Result<A> {
     let [a, b, c, d] = values;
-    // TODO: properly handle axis order
-    if spatial_reference == SpatialReference::epsg_4326() {
-        A::from_min_max((b, a).into(), (d, c).into()).context(error::DataType)
-    } else {
-        A::from_min_max((a, b).into(), (c, d).into()).context(error::DataType)
+    match spatial_reference_specification(&spatial_reference.proj_string()?)?
+        .axis_order
+        .ok_or(error::Error::AxisOrderingNotKnownForSrs {
+            srs_string: spatial_reference.srs_string(),
+        })? {
+        AxisOrder::EastNorth => {
+            A::from_min_max((a, b).into(), (c, d).into()).context(error::DataType)
+        }
+        AxisOrder::NorthEast => {
+            A::from_min_max((b, a).into(), (d, c).into()).context(error::DataType)
+        }
     }
 }
 
 /// reorders the given tuple of coordinates, resolutions, etc. using the axis ordering for `spatial_reference` to give (x, y)
-pub fn tuple_from_ogc_params(a: f64, b: f64, spatial_reference: SpatialReference) -> (f64, f64) {
-    // TODO: properly handle axis order
-    if spatial_reference == SpatialReference::epsg_4326() {
-        (b, a)
-    } else {
-        (a, b)
+pub fn tuple_from_ogc_params(
+    a: f64,
+    b: f64,
+    spatial_reference: SpatialReference,
+) -> Result<(f64, f64)> {
+    match spatial_reference_specification(&spatial_reference.proj_string()?)?
+        .axis_order
+        .ok_or(error::Error::AxisOrderingNotKnownForSrs {
+            srs_string: spatial_reference.srs_string(),
+        })? {
+        AxisOrder::EastNorth => Ok((a, b)),
+        AxisOrder::NorthEast => Ok((b, a)),
     }
 }
 

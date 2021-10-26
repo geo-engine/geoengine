@@ -309,7 +309,7 @@ where
         }
 
         Ok(Self::new_from_internals(
-            struct_array_from_data(columns, column_values, self.table.len()),
+            struct_array_from_data(columns, column_values, self.table.len())?,
             types,
         ))
     }
@@ -394,7 +394,7 @@ where
         }
 
         Ok(Self::new_from_internals(
-            struct_array_from_data(columns, column_values, self.table.len()),
+            struct_array_from_data(columns, column_values, self.table.len())?,
             types,
         ))
     }
@@ -622,7 +622,7 @@ where
         }
 
         Ok(Self::new_from_internals(
-            struct_array_from_data(columns, column_values, self.table.len()),
+            struct_array_from_data(columns, column_values, self.table.len())?,
             types,
         ))
     }
@@ -705,7 +705,7 @@ where
         }
 
         Ok(Self::new_from_internals(
-            struct_array_from_data(columns, column_values, self.table.len()),
+            struct_array_from_data(columns, column_values, self.table.len())?,
             self.types.clone(),
         ))
     }
@@ -1183,7 +1183,7 @@ where
         }
 
         Ok(Self::new_from_internals(
-            struct_array_from_data(columns, arrays, number_of_rows),
+            struct_array_from_data(columns, arrays, number_of_rows)?,
             types,
         ))
     }
@@ -1282,8 +1282,8 @@ pub fn struct_array_from_data(
     columns: Vec<Field>,
     column_values: Vec<ArrayRef>,
     number_of_features: usize,
-) -> StructArray {
-    StructArray::from(
+) -> Result<StructArray> {
+    Ok(StructArray::from(
         ArrayData::builder(arrow::datatypes::DataType::Struct(columns))
             .child_data(
                 column_values
@@ -1292,8 +1292,8 @@ pub fn struct_array_from_data(
                     .collect(),
             )
             .len(number_of_features)
-            .build(),
-    )
+            .build()?,
+    ))
 }
 
 /// Types that are suitable to act as filters
@@ -1506,7 +1506,7 @@ where
             .column_by_name(Self::GEOMETRY_COLUMN_NAME)
             .expect("There must exist a geometry column");
 
-        let feature_array = Self::replace_raw_coords(geometries_ref, coords_buffer);
+        let feature_array = Self::replace_raw_coords(geometries_ref, coords_buffer)?;
 
         let mut columns = Vec::<arrow::datatypes::Field>::with_capacity(self.table.num_columns());
         let mut column_values =
@@ -1551,7 +1551,7 @@ where
         }
 
         Ok(Self::new_from_internals(
-            struct_array_from_data(columns, column_values, self.table.len()),
+            struct_array_from_data(columns, column_values, self.table.len())?,
             self.types.clone(),
         ))
     }

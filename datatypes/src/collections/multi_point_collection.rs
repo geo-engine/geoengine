@@ -191,7 +191,7 @@ impl GeometryCollection for MultiPointCollection {
 }
 
 impl ReplaceRawArrayCoords for MultiPointCollection {
-    fn replace_raw_coords(array_ref: &Arc<dyn Array>, new_coords: Buffer) -> ArrayData {
+    fn replace_raw_coords(array_ref: &Arc<dyn Array>, new_coords: Buffer) -> Result<ArrayData> {
         let geometries: &ListArray = downcast_array(array_ref);
         let offset_array = geometries.data();
         let offsets_buffer = &offset_array.buffers()[0];
@@ -200,7 +200,7 @@ impl ReplaceRawArrayCoords for MultiPointCollection {
         let num_coords = new_coords.len() / std::mem::size_of::<Coordinate2D>();
         let num_floats = num_coords * 2;
 
-        ArrayData::builder(MultiPoint::arrow_data_type())
+        Ok(ArrayData::builder(MultiPoint::arrow_data_type())
             .len(num_features)
             .add_buffer(offsets_buffer.clone())
             .add_child_data(
@@ -210,11 +210,11 @@ impl ReplaceRawArrayCoords for MultiPointCollection {
                         ArrayData::builder(DataType::Float64)
                             .len(num_floats)
                             .add_buffer(new_coords)
-                            .build(),
+                            .build()?,
                     )
-                    .build(),
+                    .build()?,
             )
-            .build()
+            .build()?)
     }
 }
 
