@@ -1000,7 +1000,7 @@ mod tests {
 
         let mut expected = geoengine_datatypes::plots::BoxPlot::new();
         expected.add_attribute(
-            BoxPlotAttribute::new("value".to_owned(), 0.0, 0.0, 0.0, 0.0, 0.0, true).unwrap(),
+            BoxPlotAttribute::new("Raster-1".to_owned(), 0.0, 0.0, 0.0, 0.0, 0.0, true).unwrap(),
         );
 
         assert_eq!(expected.to_vega_embeddable(false).unwrap(), result);
@@ -1125,7 +1125,7 @@ mod tests {
 
         let mut expected = geoengine_datatypes::plots::BoxPlot::new();
         expected.add_attribute(
-            BoxPlotAttribute::new("value".to_owned(), 0.0, 0.0, 0.0, 0.0, 0.0, true).unwrap(),
+            BoxPlotAttribute::new("Raster-1".to_owned(), 0.0, 0.0, 0.0, 0.0, 0.0, true).unwrap(),
         );
 
         assert_eq!(expected.to_vega_embeddable(false).unwrap(), result);
@@ -1194,7 +1194,7 @@ mod tests {
 
         let mut expected = geoengine_datatypes::plots::BoxPlot::new();
         expected.add_attribute(
-            BoxPlotAttribute::new("value".to_owned(), 4.0, 4.0, 4.0, 4.0, 4.0, true).unwrap(),
+            BoxPlotAttribute::new("Raster-1".to_owned(), 4.0, 4.0, 4.0, 4.0, 4.0, true).unwrap(),
         );
 
         assert_eq!(expected.to_vega_embeddable(false).unwrap(), result);
@@ -1263,7 +1263,7 @@ mod tests {
 
         let mut expected = geoengine_datatypes::plots::BoxPlot::new();
         expected.add_attribute(
-            BoxPlotAttribute::new("value".to_string(), 1.0, 7.0, 4.0, 1.5, 6.5, true).unwrap(),
+            BoxPlotAttribute::new("Raster-1".to_string(), 1.0, 7.0, 4.0, 1.5, 6.5, true).unwrap(),
         );
 
         assert_eq!(expected.to_vega_embeddable(false).unwrap(), result);
@@ -1332,7 +1332,7 @@ mod tests {
 
         let mut expected = geoengine_datatypes::plots::BoxPlot::new();
         expected.add_attribute(
-            BoxPlotAttribute::new("value".to_string(), 0.0, 7.0, 1.5, 0.0, 5.0, true).unwrap(),
+            BoxPlotAttribute::new("Raster-1".to_string(), 0.0, 7.0, 1.5, 0.0, 5.0, true).unwrap(),
         );
 
         assert_eq!(expected.to_vega_embeddable(false).unwrap(), result);
@@ -1406,13 +1406,13 @@ mod tests {
 
         let mut expected = geoengine_datatypes::plots::BoxPlot::new();
         expected.add_attribute(
-            BoxPlotAttribute::new("value".to_string(), 1.0, 7.0, 4.0, 1.5, 6.5, true).unwrap(),
+            BoxPlotAttribute::new("Raster-1".to_string(), 1.0, 7.0, 4.0, 1.5, 6.5, true).unwrap(),
         );
         expected.add_attribute(
-            BoxPlotAttribute::new("value".to_string(), 1.0, 7.0, 4.0, 1.5, 6.5, true).unwrap(),
+            BoxPlotAttribute::new("Raster-2".to_string(), 1.0, 7.0, 4.0, 1.5, 6.5, true).unwrap(),
         );
         expected.add_attribute(
-            BoxPlotAttribute::new("value".to_string(), 1.0, 7.0, 4.0, 1.5, 6.5, true).unwrap(),
+            BoxPlotAttribute::new("Raster-3".to_string(), 1.0, 7.0, 4.0, 1.5, 6.5, true).unwrap(),
         );
 
         assert_eq!(expected.to_vega_embeddable(false).unwrap(), result);
