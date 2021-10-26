@@ -1,5 +1,4 @@
 use crate::handlers::ErrorResponse;
-use crate::pro::datasets::DatasetPermission;
 use crate::workflows::workflow::WorkflowId;
 use actix_web::http::StatusCode;
 use actix_web::HttpResponse;
@@ -147,14 +146,18 @@ pub enum Error {
         dataset: DatasetId,
     },
 
-    #[snafu(display("Updating permission {:?} denied", permission))]
+    #[snafu(display("Updating permission ({}, {:?}, {}) denied", role, dataset, permission))]
     UpateDatasetPermission {
-        permission: DatasetPermission,
+        role: String,
+        dataset: DatasetId,
+        permission: String,
     },
 
-    #[snafu(display("Permission {:?} already exists", permission))]
+    #[snafu(display("Permission ({}, {:?}, {}) already exists", role, dataset, permission))]
     DuplicateDatasetPermission {
-        permission: DatasetPermission,
+        role: String,
+        dataset: DatasetId,
+        permission: String,
     },
 
     #[snafu(display("Parameter {} must have length between {} and {}", parameter, min, max))]

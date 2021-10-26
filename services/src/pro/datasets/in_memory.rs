@@ -306,12 +306,20 @@ impl UpdateDatasetPermissions for ProHashMapDatasetDb {
                 .any(|p| p.role == session.user.id.into()
                     && p.dataset == permission.dataset
                     && p.permission == Permission::Owner),
-            error::UpateDatasetPermission { permission }
+            error::UpateDatasetPermission {
+                role: session.user.id.to_string(),
+                dataset: permission.dataset,
+                permission: format!("{:?}", permission.permission),
+            }
         );
 
         ensure!(
             !self.dataset_permissions.contains(&permission),
-            error::DuplicateDatasetPermission { permission }
+            error::DuplicateDatasetPermission {
+                role: session.user.id.to_string(),
+                dataset: permission.dataset,
+                permission: format!("{:?}", permission.permission),
+            }
         );
 
         self.dataset_permissions.push(permission);
