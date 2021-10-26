@@ -1,15 +1,12 @@
 use crate::contexts::{ExecutionContextImpl, QueryContextImpl};
 use crate::error;
 use crate::pro::contexts::{Context, Db, ProContext};
-use crate::pro::datasets::ProHashMapDatasetDb;
+use crate::pro::datasets::{add_datasets_from_directory, ProHashMapDatasetDb};
 use crate::pro::projects::ProHashMapProjectDb;
 use crate::pro::users::{HashMapUserDb, UserDb, UserSession};
 use crate::util::config;
 use crate::workflows::registry::HashMapRegistry;
-use crate::{
-    datasets::add_from_directory::{add_datasets_from_directory, add_providers_from_directory},
-    error::Result,
-};
+use crate::{datasets::add_from_directory::add_providers_from_directory, error::Result};
 use async_trait::async_trait;
 use geoengine_operators::concurrency::ThreadPool;
 use geoengine_operators::concurrency::ThreadPoolContextCreator;

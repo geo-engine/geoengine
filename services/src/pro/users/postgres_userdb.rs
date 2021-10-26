@@ -115,6 +115,7 @@ where
             valid_until: row.get(1),
             project: None,
             view: None,
+            roles: vec![], // TODO
         })
     }
 
@@ -168,6 +169,7 @@ where
                 valid_until: row.get(1),
                 project: None,
                 view: None,
+                roles: vec![], // TODO
             })
         } else {
             Err(error::Error::LoginFailed)
@@ -220,6 +222,7 @@ where
             valid_until: row.get(4),
             project: row.get::<usize, Option<Uuid>>(5).map(ProjectId),
             view: row.get(6),
+            roles: vec![], // TODO
         })
     }
 

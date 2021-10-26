@@ -4,6 +4,7 @@ use crate::contexts::{Context, MockableSession, Session, SessionId};
 use crate::error;
 use crate::handlers::get_token;
 use crate::pro::contexts::{PostgresContext, ProInMemoryContext};
+use crate::pro::datasets::{Role, RoleId};
 use crate::pro::users::UserId;
 use crate::projects::{ProjectId, STRectangle};
 use crate::util::Identifier;
@@ -32,6 +33,25 @@ pub struct UserSession {
     pub valid_until: DateTime<Utc>,
     pub project: Option<ProjectId>,
     pub view: Option<STRectangle>,
+    pub roles: Vec<RoleId>,
+}
+
+impl UserSession {
+    pub fn system_session() -> UserSession {
+        Self {
+            id: SessionId::new(),
+            user: UserInfo {
+                id: UserId::new(), // TODO: make this fix
+                email: None,
+                real_name: None,
+            },
+            created: chrono::Utc::now(),
+            valid_until: chrono::Utc::now(),
+            project: None,
+            view: None,
+            roles: vec![Role::user_role_id()],
+        }
+    }
 }
 
 impl MockableSession for UserSession {
@@ -47,6 +67,7 @@ impl MockableSession for UserSession {
             valid_until: chrono::Utc::now(),
             project: None,
             view: None,
+            roles: vec![Role::user_role_id()],
         }
     }
 }

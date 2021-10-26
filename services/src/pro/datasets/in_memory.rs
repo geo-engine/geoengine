@@ -25,9 +25,11 @@ use geoengine_operators::engine::{
 };
 use geoengine_operators::source::{GdalLoadingInfo, GdalMetaDataRegular, OgrSourceDataset};
 use geoengine_operators::{mock::MockDatasetDataSourceLoadingInfo, source::GdalMetaDataStatic};
+use log::info;
 use snafu::ensure;
 use std::collections::HashMap;
 
+use super::storage::UpdateDatasetPermissions;
 use super::DatasetPermission;
 
 #[derive(Default)]
@@ -165,6 +167,8 @@ impl DatasetStore<UserSession> for ProHashMapDatasetDb {
         dataset: Validated<AddDataset>,
         meta_data: Box<dyn ProHashMapStorable>,
     ) -> Result<DatasetId> {
+        info!("Add dataset {:?}", dataset.user_input.name);
+
         let dataset = dataset.user_input;
         let id = dataset
             .id
@@ -284,6 +288,35 @@ impl DatasetProvider<UserSession> for ProHashMapDatasetDb {
                     .await
             }
         }
+    }
+}
+
+#[async_trait]
+impl UpdateDatasetPermissions for ProHashMapDatasetDb {
+    async fn add_dataset_permission(
+        &mut self,
+        session: &UserSession,
+        permission: DatasetPermission,
+    ) -> Result<()> {
+        info!("Add dataset permission {:?}", permission);
+
+        ensure!(
+            self.dataset_permissions
+                .iter()
+                .any(|p| p.role == session.user.id.into()
+                    && p.dataset == permission.dataset
+                    && p.permission == Permission::Owner),
+            error::UpateDatasetPermission { permission }
+        );
+
+        ensure!(
+            !self.dataset_permissions.contains(&permission),
+            error::DuplicateDatasetPermission { permission }
+        );
+
+        self.dataset_permissions.push(permission);
+
+        Ok(())
     }
 }
 
