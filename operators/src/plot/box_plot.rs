@@ -9,20 +9,23 @@ use geoengine_datatypes::raster::{GridOrEmpty, GridSize, NoDataValue};
 
 use crate::engine::{
     ExecutionContext, InitializedPlotOperator, InitializedRasterOperator,
-    InitializedVectorOperator, Operator, PlotOperator, PlotQueryProcessor, PlotResultDescriptor,
-    QueryContext, QueryProcessor, SingleRasterOrVectorSource, TypedPlotQueryProcessor,
-    TypedRasterQueryProcessor, TypedVectorQueryProcessor, VectorQueryRectangle,
+    InitializedVectorOperator, MultipleRasterOrSingleVectorSource, Operator, PlotOperator,
+    PlotQueryProcessor, PlotQueryRectangle, PlotResultDescriptor, QueryContext, QueryProcessor,
+    TypedPlotQueryProcessor, TypedRasterQueryProcessor, TypedVectorQueryProcessor,
+    VectorQueryRectangle,
 };
-use crate::error::Error;
-use crate::util::input::RasterOrVectorOperator;
+use crate::error::{self, Error};
+use crate::util::input::MultiRasterOrVectorOperator;
 use crate::util::statistics::PSquareQuantileEstimator;
 use crate::util::Result;
+use snafu::ensure;
 
 pub const BOXPLOT_OPERATOR_NAME: &str = "BoxPlot";
 const EXACT_CALC_BOUND: usize = 10_000;
+const MAX_NUMBER_OF_RASTER_INPUTS: usize = 8;
 
 /// A box plot about vector data attribute values
-pub type BoxPlot = Operator<BoxPlotParams, SingleRasterOrVectorSource>;
+pub type BoxPlot = Operator<BoxPlotParams, MultipleRasterOrSingleVectorSource>;
 
 /// The parameter spec for `BoxPlot`
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -45,24 +48,50 @@ impl PlotOperator for BoxPlot {
         context: &dyn ExecutionContext,
     ) -> Result<Box<dyn InitializedPlotOperator>> {
         match self.sources.source {
-            RasterOrVectorOperator::Raster(raster_source) => {
-                if !self.params.column_names.is_empty() {
-                    return Err(Error::InvalidOperatorSpec {
-                        reason: "BoxPlot on raster data must not contain a column selection ('column_names' parameter)."
+            MultiRasterOrVectorOperator::Raster(raster_sources) => {
+                ensure!(
+                    (1..=MAX_NUMBER_OF_RASTER_INPUTS).contains(&raster_sources.len()),
+                    error::InvalidNumberOfRasterInputs {
+                        expected: 1..MAX_NUMBER_OF_RASTER_INPUTS,
+                        found: raster_sources.len()
+                    }
+                );
+                ensure!( self.params.column_names.is_empty() || self.params.column_names.len() == raster_sources.len(),
+                    error::InvalidOperatorSpec {
+                        reason: "BoxPlot on raster data must either contain a name/alias for every input ('column_names' parameter) or no names at all."
                             .to_string(),
-                    });
-                }
-                let source = raster_source.initialize(context).await?;
+                });
 
-                Ok(InitializedBoxPlot::new(PlotResultDescriptor {}, self.params, source).boxed())
+                let output_names = if self.params.column_names.is_empty() {
+                    (1..=raster_sources.len())
+                        .map(|i| format!("Raster-{}", i))
+                        .collect::<Vec<_>>()
+                } else {
+                    self.params.column_names.clone()
+                };
+
+                let initialized = futures::future::join_all(
+                    raster_sources.into_iter().map(|op| op.initialize(context)),
+                )
+                .await
+                .into_iter()
+                .collect::<Result<Vec<_>>>()?;
+
+                Ok(InitializedBoxPlot::new(
+                    PlotResultDescriptor {},
+                    output_names,
+                    self.params.include_no_data,
+                    initialized,
+                )
+                .boxed())
             }
-            RasterOrVectorOperator::Vector(vector_source) => {
-                if self.params.column_names.is_empty() {
-                    return Err(Error::InvalidOperatorSpec {
+            MultiRasterOrVectorOperator::Vector(vector_source) => {
+                ensure!( !self.params.column_names.is_empty(),
+                    error::InvalidOperatorSpec {
                         reason: "BoxPlot on vector data requires the selection of at least one numeric column ('column_names' parameter)."
                             .to_string(),
-                    });
-                }
+                    }
+                );
 
                 let source = vector_source.initialize(context).await?;
                 for cn in &self.params.column_names {
@@ -82,7 +111,13 @@ impl PlotOperator for BoxPlot {
                         }
                     }
                 }
-                Ok(InitializedBoxPlot::new(PlotResultDescriptor {}, self.params, source).boxed())
+                Ok(InitializedBoxPlot::new(
+                    PlotResultDescriptor {},
+                    self.params.column_names.clone(),
+                    self.params.include_no_data,
+                    source,
+                )
+                .boxed())
             }
         }
     }
@@ -91,17 +126,22 @@ impl PlotOperator for BoxPlot {
 /// The initialization of `BoxPlot`
 pub struct InitializedBoxPlot<Op> {
     result_descriptor: PlotResultDescriptor,
-    column_names: Vec<String>,
+    names: Vec<String>,
     include_no_data: bool,
     source: Op,
 }
 
 impl<Op> InitializedBoxPlot<Op> {
-    pub fn new(result_descriptor: PlotResultDescriptor, params: BoxPlotParams, source: Op) -> Self {
+    pub fn new(
+        result_descriptor: PlotResultDescriptor,
+        names: Vec<String>,
+        include_no_data: bool,
+        source: Op,
+    ) -> Self {
         Self {
             result_descriptor,
-            column_names: params.column_names,
-            include_no_data: params.include_no_data,
+            names,
+            include_no_data,
             source,
         }
     }
@@ -114,21 +154,28 @@ impl InitializedPlotOperator for InitializedBoxPlot<Box<dyn InitializedVectorOpe
     fn query_processor(&self) -> Result<TypedPlotQueryProcessor> {
         let processor = BoxPlotVectorQueryProcessor {
             input: self.source.query_processor()?,
-            column_names: self.column_names.clone(),
+            column_names: self.names.clone(),
         };
 
         Ok(TypedPlotQueryProcessor::JsonVega(processor.boxed()))
     }
 }
 
-impl InitializedPlotOperator for InitializedBoxPlot<Box<dyn InitializedRasterOperator>> {
+impl InitializedPlotOperator for InitializedBoxPlot<Vec<Box<dyn InitializedRasterOperator>>> {
     fn result_descriptor(&self) -> &PlotResultDescriptor {
         &self.result_descriptor
     }
 
     fn query_processor(&self) -> Result<TypedPlotQueryProcessor> {
+        let input = self
+            .source
+            .iter()
+            .map(InitializedRasterOperator::query_processor)
+            .collect::<Result<Vec<_>>>()?;
+
         let processor = BoxPlotRasterQueryProcessor {
-            input: self.source.query_processor()?,
+            input,
+            names: self.names.clone(),
             include_no_data: self.include_no_data,
         };
         Ok(TypedPlotQueryProcessor::JsonVega(processor.boxed()))
@@ -188,8 +235,47 @@ impl PlotQueryProcessor for BoxPlotVectorQueryProcessor {
 
 /// A query processor that calculates the boxplots about its raster input.
 pub struct BoxPlotRasterQueryProcessor {
-    input: TypedRasterQueryProcessor,
+    input: Vec<TypedRasterQueryProcessor>,
+    names: Vec<String>,
     include_no_data: bool,
+}
+
+impl BoxPlotRasterQueryProcessor {
+    async fn process_raster(
+        name: String,
+        include_no_data: bool,
+        input: &TypedRasterQueryProcessor,
+        query: PlotQueryRectangle,
+        ctx: &dyn QueryContext,
+    ) -> Result<Option<BoxPlotAttribute>> {
+        call_on_generic_raster_processor!(input, processor => {
+
+
+            let mut stream = processor.query(query.into(), ctx).await?;
+            let mut accum = BoxPlotAccum::new(name);
+
+            while let Some(tile) = stream.next().await {
+                let tile = tile?;
+
+                match tile.grid_array {
+                    GridOrEmpty::Empty(grid) if include_no_data => {
+                        let v:f64 = grid.no_data_value().expect("Empty grids always have a no-data value").as_();
+                        let iter = std::iter::repeat(v).take(grid.number_of_elements());
+                        accum.update(iter)?;
+                    },
+                    // Ignore empty grids if no_data should not be included
+                    GridOrEmpty::Empty(_) => {},
+                    GridOrEmpty::Grid(grid) if include_no_data => {
+                        accum.update(grid.data.iter().map(|x| (*x).as_()))?;
+                    },
+                    GridOrEmpty::Grid(grid) => {
+                        accum.update(grid.data.iter().filter(|&x| !grid.is_no_data(*x)).map(|x| (*x).as_()))?;
+                    }
+                }
+            }
+            accum.finish()
+        })
+    }
 }
 
 #[async_trait]
@@ -202,39 +288,28 @@ impl PlotQueryProcessor for BoxPlotRasterQueryProcessor {
 
     async fn plot_query<'p>(
         &'p self,
-        query: VectorQueryRectangle,
+        query: PlotQueryRectangle,
         ctx: &'p dyn QueryContext,
     ) -> Result<Self::OutputFormat> {
-        let mut accum = BoxPlotAccum::new("value".to_owned());
+        let results: Vec<_> = self
+            .input
+            .iter()
+            .zip(self.names.iter())
+            .map(|(proc, name)| {
+                Self::process_raster(name.clone(), self.include_no_data, proc, query, ctx)
+            })
+            .collect();
 
-        call_on_generic_raster_processor!(&self.input, processor => {
-            let mut stream = processor.query(query.into(), ctx).await?;
-
-            while let Some(tile) = stream.next().await {
-                let tile = tile?;
-
-                match tile.grid_array {
-                    GridOrEmpty::Empty(grid) if self.include_no_data => {
-                        let v:f64 = grid.no_data_value().expect("Empty grids always have a no-data value").as_();
-                        let iter = std::iter::repeat(v).take(grid.number_of_elements());
-                        accum.update(iter)?;
-                    },
-                    // Ignore empty grids if no_data should not be included
-                    GridOrEmpty::Empty(_) => {},
-                    GridOrEmpty::Grid(grid) if self.include_no_data => {
-                        accum.update(grid.data.iter().map(|x| (*x).as_()))?;
-                    },
-                    GridOrEmpty::Grid(grid) => {
-                        accum.update(grid.data.iter().filter(|&x| !grid.is_no_data(*x)).map(|x| (*x).as_()))?;
-                    }
-                }
-            }
-        });
+        let results = futures::future::join_all(results)
+            .await
+            .into_iter()
+            .collect::<Result<Vec<_>>>();
 
         let mut chart = geoengine_datatypes::plots::BoxPlot::new();
-        if let Some(attrib) = accum.finish()? {
-            chart.add_attribute(attrib)
-        }
+        results?
+            .into_iter()
+            .flatten()
+            .for_each(|a| chart.add_attribute(a));
         Ok(chart.to_vega_embeddable(false)?)
     }
 }
@@ -319,8 +394,8 @@ impl BoxPlotAccumKind {
                         let min = v[0];
                         let max = v[l - 1];
                         // We compute the quartiles accodring to https://en.wikipedia.org/wiki/Quartile#Method_1
-                        let median = Self::median(&v);
-                        let (low, high) = Self::split(&v);
+                        let median = Self::median(v);
+                        let (low, high) = Self::split(v);
                         let q1 = Self::median(low);
                         let q3 = Self::median(high);
                         Ok(Some(BoxPlotAttribute::new(
@@ -1258,6 +1333,86 @@ mod tests {
         let mut expected = geoengine_datatypes::plots::BoxPlot::new();
         expected.add_attribute(
             BoxPlotAttribute::new("value".to_string(), 0.0, 7.0, 1.5, 0.0, 5.0, true).unwrap(),
+        );
+
+        assert_eq!(expected.to_vega_embeddable(false).unwrap(), result);
+    }
+
+    #[tokio::test]
+    async fn multiple_rasters_with_no_data_exclude_no_data() {
+        let execution_context = MockExecutionContext::default();
+        let no_data_value = Some(0);
+
+        let src = MockRasterSource {
+            params: MockRasterSourceParams {
+                data: vec![RasterTile2D::new_with_tile_info(
+                    TimeInterval::default(),
+                    TileInformation {
+                        global_geo_transform: TestDefault::test_default(),
+                        global_tile_position: [0, 0].into(),
+                        tile_size_in_pixels: [4, 2].into(),
+                    },
+                    Grid2D::new([4, 2].into(), vec![1, 2, 0, 4, 0, 6, 7, 0], no_data_value)
+                        .unwrap()
+                        .into(),
+                )],
+                result_descriptor: RasterResultDescriptor {
+                    data_type: RasterDataType::U8,
+                    spatial_reference: SpatialReference::epsg_4326().into(),
+                    measurement: Measurement::Unitless,
+                    no_data_value: no_data_value.map(AsPrimitive::as_),
+                },
+            },
+        };
+
+        let histogram = BoxPlot {
+            params: BoxPlotParams {
+                column_names: vec![],
+                include_no_data: false,
+            },
+            sources: vec![
+                src.clone().boxed(),
+                src.clone().boxed(),
+                src.clone().boxed(),
+            ]
+            .into(),
+        };
+
+        let query_processor = histogram
+            .boxed()
+            .initialize(&execution_context)
+            .await
+            .unwrap()
+            .query_processor()
+            .unwrap()
+            .json_vega()
+            .unwrap();
+
+        let result = query_processor
+            .plot_query(
+                VectorQueryRectangle {
+                    spatial_bounds: BoundingBox2D::new((-180., -90.).into(), (180., 90.).into())
+                        .unwrap(),
+                    time_interval: TimeInterval::new_instant(
+                        NaiveDate::from_ymd(2013, 12, 1).and_hms(12, 0, 0),
+                    )
+                    .unwrap(),
+                    spatial_resolution: SpatialResolution::one(),
+                },
+                &MockQueryContext::default(),
+            )
+            .await
+            .unwrap();
+
+        let mut expected = geoengine_datatypes::plots::BoxPlot::new();
+        expected.add_attribute(
+            BoxPlotAttribute::new("value".to_string(), 1.0, 7.0, 4.0, 1.5, 6.5, true).unwrap(),
+        );
+        expected.add_attribute(
+            BoxPlotAttribute::new("value".to_string(), 1.0, 7.0, 4.0, 1.5, 6.5, true).unwrap(),
+        );
+        expected.add_attribute(
+            BoxPlotAttribute::new("value".to_string(), 1.0, 7.0, 4.0, 1.5, 6.5, true).unwrap(),
         );
 
         assert_eq!(expected.to_vega_embeddable(false).unwrap(), result);
