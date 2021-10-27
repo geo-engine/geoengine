@@ -212,7 +212,7 @@ impl DatasetProvider<UserSession> for ProHashMapDatasetDb {
         let iter = self
             .dataset_permissions
             .iter()
-            .filter(|p| p.role == session.user.id.into())
+            .filter(|p| session.roles.contains(&p.role))
             .map(|p| {
                 self.datasets
                     .get(&p.dataset)
@@ -245,7 +245,7 @@ impl DatasetProvider<UserSession> for ProHashMapDatasetDb {
         ensure!(
             self.dataset_permissions
                 .iter()
-                .any(|p| p.role == session.user.id.into()),
+                .any(|p| session.roles.contains(&p.role)),
             error::DatasetPermissionDenied {
                 dataset: dataset.clone(),
             }
@@ -267,7 +267,7 @@ impl DatasetProvider<UserSession> for ProHashMapDatasetDb {
                 ensure!(
                     self.dataset_permissions
                         .iter()
-                        .any(|p| p.role == session.user.id.into()),
+                        .any(|p| session.roles.contains(&p.role)),
                     error::DatasetPermissionDenied {
                         dataset: dataset.clone(),
                     }
@@ -303,9 +303,7 @@ impl UpdateDatasetPermissions for ProHashMapDatasetDb {
         ensure!(
             self.dataset_permissions
                 .iter()
-                .any(|p| p.role == session.user.id.into()
-                    && p.dataset == permission.dataset
-                    && p.permission == Permission::Owner),
+                .any(|p| session.roles.contains(&p.role) && p.permission == Permission::Owner),
             error::UpateDatasetPermission {
                 role: session.user.id.to_string(),
                 dataset: permission.dataset,
@@ -437,6 +435,7 @@ mod tests {
     use crate::contexts::{Context, MockableSession};
     use crate::datasets::listing::OrderBy;
     use crate::pro::contexts::ProInMemoryContext;
+    use crate::pro::datasets::Role;
     use crate::util::user_input::UserInput;
     use geoengine_datatypes::collections::VectorDataType;
     use geoengine_datatypes::spatial_reference::SpatialReferenceOption;
@@ -677,6 +676,175 @@ mod tests {
             .provenance(&session2, &id)
             .await
             .is_err());
+
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn it_updates_permissions() -> Result<()> {
+        let ctx = ProInMemoryContext::default();
+
+        let session1 = UserSession::mock();
+        let session2 = UserSession::mock();
+
+        let descriptor = VectorResultDescriptor {
+            data_type: VectorDataType::Data,
+            spatial_reference: SpatialReferenceOption::Unreferenced,
+            columns: Default::default(),
+        };
+
+        let ds = AddDataset {
+            id: None,
+            name: "OgrDataset".to_string(),
+            description: "My Ogr dataset".to_string(),
+            source_operator: "OgrSource".to_string(),
+            symbology: None,
+            provenance: None,
+        };
+
+        let meta = StaticMetaData {
+            loading_info: OgrSourceDataset {
+                file_name: Default::default(),
+                layer_name: "".to_string(),
+                data_type: None,
+                time: Default::default(),
+                default_geometry: None,
+                columns: None,
+                force_ogr_time_filter: false,
+                force_ogr_spatial_filter: false,
+                on_error: OgrSourceErrorSpec::Ignore,
+                sql_query: None,
+                attribute_query: None,
+            },
+            result_descriptor: descriptor.clone(),
+            phantom: Default::default(),
+        };
+
+        let id = ctx
+            .dataset_db_ref_mut()
+            .await
+            .add_dataset(&session1, ds.validated()?, Box::new(meta))
+            .await?;
+
+        assert!(ctx
+            .dataset_db_ref()
+            .await
+            .load(&session1, &id)
+            .await
+            .is_ok());
+
+        assert!(ctx
+            .dataset_db_ref()
+            .await
+            .load(&session2, &id)
+            .await
+            .is_err());
+
+        ctx.dataset_db_ref_mut()
+            .await
+            .add_dataset_permission(
+                &session1,
+                DatasetPermission {
+                    role: session2.user.id.into(),
+                    dataset: id.clone(),
+                    permission: Permission::Read,
+                },
+            )
+            .await?;
+
+        assert!(ctx
+            .dataset_db_ref()
+            .await
+            .load(&session2, &id)
+            .await
+            .is_ok());
+
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn it_uses_roles_for_permissions() -> Result<()> {
+        let ctx = ProInMemoryContext::default();
+
+        let session1 = UserSession::mock();
+        let session2 = UserSession::mock();
+
+        let descriptor = VectorResultDescriptor {
+            data_type: VectorDataType::Data,
+            spatial_reference: SpatialReferenceOption::Unreferenced,
+            columns: Default::default(),
+        };
+
+        let ds = AddDataset {
+            id: None,
+            name: "OgrDataset".to_string(),
+            description: "My Ogr dataset".to_string(),
+            source_operator: "OgrSource".to_string(),
+            symbology: None,
+            provenance: None,
+        };
+
+        let meta = StaticMetaData {
+            loading_info: OgrSourceDataset {
+                file_name: Default::default(),
+                layer_name: "".to_string(),
+                data_type: None,
+                time: Default::default(),
+                default_geometry: None,
+                columns: None,
+                force_ogr_time_filter: false,
+                force_ogr_spatial_filter: false,
+                on_error: OgrSourceErrorSpec::Ignore,
+                sql_query: None,
+                attribute_query: None,
+            },
+            result_descriptor: descriptor.clone(),
+            phantom: Default::default(),
+        };
+
+        let id = ctx
+            .dataset_db_ref_mut()
+            .await
+            .add_dataset(&session1, ds.validated()?, Box::new(meta))
+            .await?;
+
+        assert!(ctx
+            .dataset_db_ref()
+            .await
+            .load(&session1, &id)
+            .await
+            .is_ok());
+
+        assert!(ctx
+            .dataset_db_ref()
+            .await
+            .load(&session2, &id)
+            .await
+            .is_err());
+
+        ctx.dataset_db_ref_mut()
+            .await
+            .add_dataset_permission(
+                &session1,
+                DatasetPermission {
+                    role: Role::user_role_id(),
+                    dataset: id.clone(),
+                    permission: Permission::Read,
+                },
+            )
+            .await?;
+
+        ctx.dataset_db_ref()
+            .await
+            .load(&session2, &id)
+            .await
+            .unwrap();
+        assert!(ctx
+            .dataset_db_ref()
+            .await
+            .load(&session2, &id)
+            .await
+            .is_ok());
 
         Ok(())
     }

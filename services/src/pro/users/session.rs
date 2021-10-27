@@ -38,10 +38,12 @@ pub struct UserSession {
 
 impl UserSession {
     pub fn system_session() -> UserSession {
+        let role = Role::user_role_id();
+        let user_id = UserId(role.0);
         Self {
             id: SessionId::new(),
             user: UserInfo {
-                id: UserId::new(), // TODO: make this fix
+                id: user_id,
                 email: None,
                 real_name: None,
             },
@@ -49,17 +51,18 @@ impl UserSession {
             valid_until: chrono::Utc::now(),
             project: None,
             view: None,
-            roles: vec![Role::user_role_id()],
+            roles: vec![role],
         }
     }
 }
 
 impl MockableSession for UserSession {
     fn mock() -> Self {
+        let user_id = UserId::new();
         Self {
             id: SessionId::new(),
             user: UserInfo {
-                id: UserId::new(),
+                id: user_id,
                 email: None,
                 real_name: None,
             },
@@ -67,7 +70,7 @@ impl MockableSession for UserSession {
             valid_until: chrono::Utc::now(),
             project: None,
             view: None,
-            roles: vec![Role::user_role_id()],
+            roles: vec![user_id.into(), Role::user_role_id()],
         }
     }
 }

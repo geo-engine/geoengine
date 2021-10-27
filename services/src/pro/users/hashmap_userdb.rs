@@ -61,7 +61,7 @@ impl UserDb for HashMapUserDb {
             valid_until: chrono::Utc::now() + chrono::Duration::minutes(60),
             project: None,
             view: None,
-            roles: vec![Role::anonymous_role_id()],
+            roles: vec![id.into(), Role::anonymous_role_id()],
         };
 
         self.sessions.insert(session.id, session.clone());
@@ -84,7 +84,7 @@ impl UserDb for HashMapUserDb {
                     valid_until: chrono::Utc::now() + chrono::Duration::minutes(60),
                     project: None,
                     view: None,
-                    roles: vec![Role::user_role_id()],
+                    roles: vec![user.id.into(), Role::user_role_id()],
                 };
 
                 self.sessions.insert(session.id, session.clone());

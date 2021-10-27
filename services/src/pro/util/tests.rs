@@ -59,7 +59,7 @@ pub fn create_random_user_session_helper() -> UserSession {
         valid_until: MAX_DATETIME,
         project: None,
         view: None,
-        roles: vec![Role::user_role_id()],
+        roles: vec![user_id.into(), Role::user_role_id()],
     }
 }
 
