@@ -1,5 +1,6 @@
 use crate::contexts::SessionId;
 use crate::error::Result;
+use crate::pro::datasets::{Role, RoleId};
 use crate::pro::projects::ProjectPermission;
 use crate::pro::users::{
     User, UserCredentials, UserDb, UserId, UserInfo, UserRegistration, UserSession,
@@ -50,15 +51,18 @@ where
     // TODO: clean up expired sessions?
 
     async fn register(&mut self, user: Validated<UserRegistration>) -> Result<UserId> {
-        let conn = self.conn_pool.get().await?;
-        let stmt = conn
+        let mut conn = self.conn_pool.get().await?;
+
+        let tx = conn.build_transaction().start().await?;
+
+        let stmt = tx
             .prepare(
                 "INSERT INTO users (id, email, password_hash, real_name, active) VALUES ($1, $2, $3, $4, $5);",
             )
             .await?;
 
         let user = User::from(user.user_input);
-        conn.execute(
+        tx.execute(
             &stmt,
             &[
                 &user.id,
@@ -70,20 +74,60 @@ where
         )
         .await?;
 
+        let stmt = tx
+            .prepare("INSERT INTO roles (id, name) VALUES ($1, $2);")
+            .await?;
+        tx.execute(&stmt, &[&RoleId::from(user.id), &user.email])
+            .await?;
+
+        let stmt = tx
+            .prepare("INSERT INTO user_roles (user_id, role_id) VALUES ($1, $2);")
+            .await?;
+        tx.execute(&stmt, &[&user.id, &RoleId::from(user.id)])
+            .await?;
+
+        let stmt = tx
+            .prepare("INSERT INTO user_roles (user_id, role_id) VALUES ($1, $2);")
+            .await?;
+        tx.execute(&stmt, &[&user.id, &Role::user_role_id()])
+            .await?;
+
+        tx.commit().await?;
+
         Ok(user.id)
     }
 
     async fn anonymous(&mut self) -> Result<UserSession> {
-        let conn = self.conn_pool.get().await?;
-        let stmt = conn
+        let mut conn = self.conn_pool.get().await?;
+
+        let tx = conn.build_transaction().start().await?;
+
+        let stmt = tx
             .prepare("INSERT INTO users (id, active) VALUES ($1, TRUE);")
             .await?;
-
         let user_id = UserId::new();
-        conn.execute(&stmt, &[&user_id]).await?;
+        tx.execute(&stmt, &[&user_id]).await?;
+
+        let stmt = tx
+            .prepare("INSERT INTO roles (id, name) VALUES ($1, $2);")
+            .await?;
+        tx.execute(&stmt, &[&RoleId::from(user_id), &"anonymous_user"])
+            .await?;
+
+        let stmt = tx
+            .prepare("INSERT INTO user_roles (user_id, role_id) VALUES ($1, $2);")
+            .await?;
+        tx.execute(&stmt, &[&user_id, &RoleId::from(user_id)])
+            .await?;
+
+        let stmt = tx
+            .prepare("INSERT INTO user_roles (user_id, role_id) VALUES ($1, $2);")
+            .await?;
+        tx.execute(&stmt, &[&user_id, &Role::anonymous_role_id()])
+            .await?;
 
         let session_id = SessionId::new();
-        let stmt = conn
+        let stmt = tx
             .prepare(
                 "
                 INSERT INTO sessions (id, user_id, created, valid_until)
@@ -94,7 +138,7 @@ where
 
         // TODO: load from config
         let session_duration = chrono::Duration::days(30);
-        let row = conn
+        let row = tx
             .query_one(
                 &stmt,
                 &[
@@ -104,6 +148,9 @@ where
                 ],
             )
             .await?;
+
+        tx.commit().await?;
+
         Ok(UserSession {
             id: session_id,
             user: UserInfo {

@@ -7,6 +7,8 @@ use geoengine_datatypes::{
     dataset::{DatasetId, DatasetProviderId},
     identifier,
 };
+#[cfg(feature = "postgres")]
+use postgres_types::{FromSql, ToSql};
 use serde::{Deserialize, Serialize};
 
 identifier!(RoleId);
@@ -38,6 +40,7 @@ impl Role {
 }
 
 #[derive(Debug, PartialEq, Eq, Serialize, Deserialize, Clone, Hash)]
+#[cfg_attr(feature = "postgres", derive(ToSql, FromSql))]
 pub enum Permission {
     Read,
     Write,

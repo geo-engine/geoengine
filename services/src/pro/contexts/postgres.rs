@@ -1,8 +1,6 @@
-use crate::datasets::add_from_directory::{
-    add_datasets_from_directory, add_providers_from_directory,
-};
+use crate::datasets::add_from_directory::add_providers_from_directory;
 use crate::error::{self, Result};
-use crate::pro::datasets::PostgresDatasetDb;
+use crate::pro::datasets::{add_datasets_from_directory, PostgresDatasetDb};
 use crate::pro::projects::ProjectPermission;
 use crate::pro::users::{UserDb, UserId, UserSession};
 use crate::pro::workflows::postgres_workflow_registry::PostgresWorkflowRegistry;
@@ -73,6 +71,7 @@ where
         })
     }
 
+    // TODO: check if the datasets exist already and don't output warnings when skipping them
     pub async fn new_with_data(
         config: Config,
         tls: Tls,
@@ -147,6 +146,20 @@ where
                                (email IS NOT NULL AND password_hash IS NOT NULL AND 
                                 real_name IS NOT NULL) 
                             )
+                        );
+
+                        INSERT INTO users (
+                            id, 
+                            email,
+                            password_hash,
+                            real_name,
+                            active)
+                        VALUES (
+                            'd5328854-6190-4af9-ad69-4e74b0961ac9', 
+                            'system@geoengine.io',
+                            '',
+                            'system',
+                            true
                         );
 
                         CREATE TYPE "SpatialReferenceAuthority" AS ENUM (
@@ -297,9 +310,57 @@ where
                             files "FileUpload"[] NOT NULL
                         );
 
+                        CREATE TYPE "Permission" AS ENUM (
+                            'Read', 'Write', 'Owner'
+                        );
+
+                        -- TODO: add constraint that there is an equivalent role for each user
+                        CREATE TABLE roles (
+                            id UUID PRIMARY KEY,
+                            name text NOT NULL
+                        );
+
+                        INSERT INTO roles (id, name) VALUES
+                            ('d5328854-6190-4af9-ad69-4e74b0961ac9', 'system'),
+                            ('4e8081b6-8aa6-4275-af0c-2fa2da557d28', 'user'),
+                            ('fd8e87bf-515c-4f36-8da6-1a53702ff102', 'anonymous');
+
+                        CREATE TABLE user_roles (
+                            user_id UUID REFERENCES users(id) ON DELETE CASCADE NOT NULL,
+                            role_id UUID REFERENCES roles(id) ON DELETE CASCADE NOT NULL,
+                            PRIMARY KEY (user_id, role_id)
+                        );
+
+                        -- system user role
+                        INSERT INTO user_roles 
+                            (user_id, role_id)
+                        VALUES 
+                            ('d5328854-6190-4af9-ad69-4e74b0961ac9', 
+                            'd5328854-6190-4af9-ad69-4e74b0961ac9');
+
+
+                        -- TODO: add indexes
+                        CREATE TABLE dataset_permissions (
+                            role_id UUID REFERENCES roles(id) ON DELETE CASCADE NOT NULL,
+                            dataset_id UUID REFERENCES datasets(id) ON DELETE CASCADE NOT NULL,
+                            permission "Permission" NOT NULL,
+                            PRIMARY KEY (role_id, dataset_id)
+                        );
+
+                        CREATE VIEW user_permitted_datasets AS
+                            SELECT 
+                                u.id as user_id,
+                                p.dataset_id,
+                                p.permission
+                            FROM 
+                                users u JOIN user_roles r ON (u.id = r.user_id)
+                                    JOIN dataset_permissions p ON (r.role_id = p.role_id);
+
+                        -- TODO: uploads, providers permissions
+
                         -- TODO: relationship between uploads and datasets?
 
-                        -- TODO: datasets, uploads, providers permissions
+                        
                         "#,
                     )
                     .await?;

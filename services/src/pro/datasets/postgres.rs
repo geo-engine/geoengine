@@ -7,6 +7,8 @@ use crate::datasets::storage::{
 use crate::datasets::upload::FileId;
 use crate::datasets::upload::{Upload, UploadDb, UploadId};
 use crate::error::{self, Error, Result};
+use crate::pro::datasets::storage::UpdateDatasetPermissions;
+use crate::pro::datasets::RoleId;
 use crate::util::user_input::Validated;
 use crate::{
     datasets::listing::{
@@ -27,8 +29,11 @@ use geoengine_operators::engine::{
 };
 use geoengine_operators::mock::MockDatasetDataSourceLoadingInfo;
 use geoengine_operators::source::{GdalLoadingInfo, OgrSourceDataset};
+use log::info;
 use postgres_types::{FromSql, ToSql};
-use snafu::ResultExt;
+use snafu::{ensure, ResultExt};
+
+use super::{DatasetPermission, Permission};
 
 pub struct PostgresDatasetDb<Tls>
 where
@@ -176,10 +181,9 @@ where
 {
     async fn list(
         &self,
-        _session: &UserSession,
+        session: &UserSession,
         _options: Validated<DatasetListOptions>,
     ) -> Result<Vec<DatasetListing>> {
-        // TODO: permission
         // TODO: use options
 
         let conn = self.conn_pool.get().await?;
@@ -187,19 +191,22 @@ where
             .prepare(
                 "
             SELECT 
-                id, 
-                name, 
-                description,
-                tags,
-                source_operator,
-                result_descriptor,
-                symbology
+                d.id, 
+                d.name, 
+                d.description,
+                d.tags,
+                d.source_operator,
+                d.result_descriptor,
+                d.symbology
             FROM 
-                datasets",
+                user_permitted_datasets u JOIN datasets d 
+                    ON (u.dataset_id = d.id)
+            WHERE 
+                u.user_id = $1",
             )
             .await?;
 
-        let rows = conn.query(&stmt, &[]).await?;
+        let rows = conn.query(&stmt, &[&session.user.id]).await?;
 
         Ok(rows
             .iter()
@@ -220,31 +227,33 @@ where
             .collect())
     }
 
-    async fn load(&self, _session: &UserSession, dataset: &DatasetId) -> Result<Dataset> {
-        // TODO: permissions
-
+    async fn load(&self, session: &UserSession, dataset: &DatasetId) -> Result<Dataset> {
         let id = dataset.internal().ok_or(Error::InvalidDatasetId)?;
 
         let conn = self.conn_pool.get().await?;
         let stmt = conn
             .prepare(
                 "
-            SELECT 
-                id, 
-                name, 
-                description,
-                result_descriptor,
-                source_operator,
-                symbology,
-                provenance
+            SELECT
+                d.id,
+                d.name,
+                d.description,
+                d.result_descriptor,
+                d.source_operator,
+                d.symbology,
+                d.provenance
             FROM 
-                datasets
+                user_permitted_datasets u JOIN datasets d 
+                    ON (u.dataset_id = d.id)
             WHERE 
-                id = $1",
+                u.user_id = $1 AND d.id = $2
+            LIMIT 
+                1",
             )
             .await?;
 
-        let row = conn.query_one(&stmt, &[&id]).await?;
+        // TODO: throw proper dataset does not exist/no permission error
+        let row = conn.query_one(&stmt, &[&session.user.id, &id]).await?;
 
         Ok(Dataset {
             id: DatasetId::Internal {
@@ -261,19 +270,27 @@ where
 
     async fn provenance(
         &self,
-        _session: &UserSession,
+        session: &UserSession,
         dataset: &DatasetId,
     ) -> Result<ProvenanceOutput> {
         let id = dataset.internal().ok_or(Error::InvalidDatasetId)?;
 
-        // TODO: permissions
         let conn = self.conn_pool.get().await?;
 
         let stmt = conn
-            .prepare("SELECT provenance FROM datasets WHERE id = $1")
+            .prepare(
+                "
+            SELECT 
+                provenance 
+            FROM 
+                user_permitted_dataset u JOIN datasets
+                    ON(u.dataset_id = d.id)
+            WHERE 
+                u.user_id = $1 AND d.id = $2",
+            )
             .await?;
 
-        let row = conn.query_one(&stmt, &[&id]).await?;
+        let row = conn.query_one(&stmt, &[&session.user.id, &id]).await?;
 
         Ok(ProvenanceOutput {
             dataset: dataset.clone(),
@@ -504,11 +521,10 @@ where
 {
     async fn add_dataset(
         &mut self,
-        _session: &UserSession,
+        session: &UserSession,
         dataset: Validated<AddDataset>,
         meta_data: Box<dyn PostgresStorable<Tls>>,
     ) -> Result<DatasetId> {
-        // TODO: permissions
         let dataset = dataset.user_input;
         let id = dataset
             .id
@@ -517,9 +533,11 @@ where
 
         let meta_data_json = meta_data.to_json()?;
 
-        let conn = self.conn_pool.get().await?;
+        let mut conn = self.conn_pool.get().await?;
 
-        let stmt = conn
+        let tx = conn.build_transaction().start().await?;
+
+        let stmt = tx
             .prepare(
                 "
                 INSERT INTO datasets (
@@ -536,7 +554,7 @@ where
             )
             .await?;
 
-        conn.execute(
+        tx.execute(
             &stmt,
             &[
                 &internal_id,
@@ -551,11 +569,147 @@ where
         )
         .await?;
 
+        let stmt = tx
+            .prepare(
+                "
+            INSERT INTO dataset_permissions (
+                role_id,
+                dataset_id,
+                permission
+            )
+            VALUES ($1, $2, $3)",
+            )
+            .await?;
+
+        tx.execute(
+            &stmt,
+            &[
+                &RoleId::from(session.user.id),
+                &internal_id,
+                &Permission::Owner,
+            ],
+        )
+        .await?;
+
+        tx.commit().await?;
+
         Ok(id)
     }
 
     fn wrap_meta_data(&self, meta: MetaDataDefinition) -> Self::StorageType {
         Box::new(meta)
+    }
+}
+
+#[async_trait]
+impl<Tls> UpdateDatasetPermissions for PostgresDatasetDb<Tls>
+where
+    Tls: MakeTlsConnect<Socket> + Clone + Send + Sync + 'static,
+    <Tls as MakeTlsConnect<Socket>>::Stream: Send + Sync,
+    <Tls as MakeTlsConnect<Socket>>::TlsConnect: Send,
+    <<Tls as MakeTlsConnect<Socket>>::TlsConnect as TlsConnect<Socket>>::Future: Send,
+{
+    async fn add_dataset_permission(
+        &mut self,
+        session: &UserSession,
+        permission: DatasetPermission,
+    ) -> Result<()> {
+        info!(
+            "Add dataset permission session: {:?} permission: {:?}",
+            session, permission
+        );
+
+        let internal_id = permission.dataset.internal().ok_or(
+            geoengine_operators::error::Error::DatasetMetaData {
+                source: Box::new(error::Error::DatasetIdTypeMissMatch),
+            },
+        )?;
+
+        let mut conn = self.conn_pool.get().await?;
+
+        let tx = conn.build_transaction().start().await?;
+
+        let stmt = tx
+            .prepare(
+                "
+            SELECT
+                user_id 
+            FROM 
+                user_permitted_datasets 
+            WHERE
+                user_id = $1 AND dataset_id = $2 AND permission = $3",
+            )
+            .await?;
+
+        let auth = tx
+            .query_one(
+                &stmt,
+                &[
+                    &RoleId::from(session.user.id),
+                    &internal_id,
+                    &Permission::Owner,
+                ],
+            )
+            .await;
+
+        ensure!(
+            auth.is_ok(),
+            error::UpateDatasetPermission {
+                role: session.user.id.to_string(),
+                dataset: permission.dataset,
+                permission: format!("{:?}", permission.permission),
+            }
+        );
+
+        let stmt = tx
+            .prepare(
+                "
+            SELECT 
+                COUNT(role_id) 
+            FROM 
+                dataset_permissions 
+            WHERE 
+                role_id = $1 AND dataset_id = $2 and permission = $3",
+            )
+            .await?;
+
+        let duplicate = tx
+            .query_one(
+                &stmt,
+                &[&permission.role, &internal_id, &permission.permission],
+            )
+            .await?;
+
+        ensure!(
+            duplicate.get::<usize, i64>(0) == 0,
+            error::DuplicateDatasetPermission {
+                role: session.user.id.to_string(),
+                dataset: permission.dataset,
+                permission: format!("{:?}", permission.permission),
+            }
+        );
+
+        let stmt = tx
+            .prepare(
+                "
+            INSERT INTO dataset_permissions (
+                role_id,
+                dataset_id,
+                permission
+            )
+            VALUES ($1, $2, $3)",
+            )
+            .await?;
+
+        tx.execute(
+            &stmt,
+            &[&permission.role, &internal_id, &permission.permission],
+        )
+        .await?;
+
+        tx.commit().await?;
+
+        Ok(())
     }
 }
 

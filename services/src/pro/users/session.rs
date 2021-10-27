@@ -38,7 +38,7 @@ pub struct UserSession {
 
 impl UserSession {
     pub fn system_session() -> UserSession {
-        let role = Role::user_role_id();
+        let role = Role::system_role_id();
         let user_id = UserId(role.0);
         Self {
             id: SessionId::new(),
