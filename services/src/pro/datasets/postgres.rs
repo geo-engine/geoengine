@@ -281,9 +281,9 @@ where
             .prepare(
                 "
             SELECT 
-                provenance 
+                d.provenance 
             FROM 
-                user_permitted_dataset u JOIN datasets
+                user_permitted_datasets u JOIN datasets d
                     ON(u.dataset_id = d.id)
             WHERE 
                 u.user_id = $1 AND d.id = $2",

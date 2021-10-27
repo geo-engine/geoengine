@@ -1035,9 +1035,11 @@ mod tests {
                 phantom: Default::default(),
             });
 
+            let session = ctx.user_db_ref_mut().await.anonymous().await.unwrap();
+
             let wrap = db.wrap_meta_data(meta_data);
             db.add_dataset(
-                &UserSession::mock(),
+                &session,
                 AddDataset {
                     id: Some(dataset_id.clone()),
                     name: "Ogr Test".to_owned(),
@@ -1059,7 +1061,7 @@ mod tests {
 
             let datasets = db
                 .list(
-                    &UserSession::mock(),
+                    &session,
                     DatasetListOptions {
                         filter: None,
                         order: crate::datasets::listing::OrderBy::NameAsc,
@@ -1093,10 +1095,7 @@ mod tests {
                 },
             );
 
-            let provenance = db
-                .provenance(&UserSession::mock(), &dataset_id)
-                .await
-                .unwrap();
+            let provenance = db.provenance(&session, &dataset_id).await.unwrap();
 
             assert_eq!(
                 provenance,
