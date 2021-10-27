@@ -309,7 +309,7 @@ mod tests {
                     })
                 });
 
-                let src = test_util::create_mock_source(props, cc, m);
+                let src = test_util::create_mock_source::<u8>(props, cc, m);
 
                 RasterOperator::boxed(Reflectance {
                     params,

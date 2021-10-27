@@ -2461,7 +2461,8 @@ __kernel void nop(__global int* buffer) {
         let data = ArrayData::builder(DataType::Int32)
             .len(len)
             .add_buffer(arrow_buffer)
-            .build();
+            .build()
+            .unwrap();
 
         let array = Arc::new(PrimitiveArray::<Int32Type>::from(data));
 

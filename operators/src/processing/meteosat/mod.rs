@@ -47,8 +47,8 @@ mod test_util {
         TimeInterval, TimeStep,
     };
     use geoengine_datatypes::raster::{
-        EmptyGrid2D, Grid2D, GridOrEmpty, RasterDataType, RasterProperties, RasterPropertiesEntry,
-        RasterPropertiesEntryType, RasterTile2D, TileInformation,
+        EmptyGrid2D, Grid2D, GridOrEmpty, Pixel, RasterDataType, RasterProperties,
+        RasterPropertiesEntry, RasterPropertiesEntryType, RasterTile2D, TileInformation,
     };
     use geoengine_datatypes::spatial_reference::{SpatialReference, SpatialReferenceAuthority};
     use geoengine_datatypes::util::Identifier;
@@ -150,12 +150,12 @@ mod test_util {
         }
     }
 
-    pub(crate) fn create_mock_source(
+    pub(crate) fn create_mock_source<P: Pixel>(
         props: RasterProperties,
-        custom_data: Option<Vec<u8>>,
+        custom_data: Option<Vec<P>>,
         measurement: Option<Measurement>,
-    ) -> MockRasterSource {
-        let no_data_value = Some(0);
+    ) -> MockRasterSource<P> {
+        let no_data_value = Some(P::zero());
 
         let raster = match custom_data {
             Some(v) if v.is_empty() => {
@@ -163,9 +163,16 @@ mod test_util {
             }
             Some(v) => GridOrEmpty::Grid(Grid2D::new([3, 2].into(), v, no_data_value).unwrap()),
             None => GridOrEmpty::Grid(
-                Grid2D::new(
+                Grid2D::<P>::new(
                     [3, 2].into(),
-                    vec![1, 2, 3, 4, 5, no_data_value.unwrap()],
+                    vec![
+                        P::from_(1),
+                        P::from_(2),
+                        P::from_(3),
+                        P::from_(4),
+                        P::from_(5),
+                        no_data_value.unwrap(),
+                    ],
                     no_data_value,
                 )
                 .unwrap(),

@@ -228,7 +228,8 @@ mod tests {
     use crate::contexts::SimpleContext;
     use crate::contexts::{InMemoryContext, Session};
     use crate::util::tests::send_test_request;
-    use actix_web::{http::header, test};
+    use actix_web;
+    use actix_web::http::header;
     use actix_web_httpauth::headers::authorization::Bearer;
     use geoengine_datatypes::spatial_reference::SpatialReference;
     use geoengine_datatypes::spatial_reference::SpatialReferenceAuthority;
@@ -238,7 +239,7 @@ mod tests {
         let ctx = InMemoryContext::default();
         let session_id = ctx.default_session_ref().await.id();
 
-        let req = test::TestRequest::get()
+        let req = actix_web::test::TestRequest::get()
             .uri("/spatialReferenceSpecification/EPSG:4326")
             .append_header((header::CONTENT_LENGTH, 0))
             .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())));
@@ -246,7 +247,7 @@ mod tests {
 
         assert_eq!(res.status(), 200);
 
-        let spec: SpatialReferenceSpecification = test::read_body_json(res).await;
+        let spec: SpatialReferenceSpecification = actix_web::test::read_body_json(res).await;
         assert_eq!(
             SpatialReferenceSpecification {
                 name: "WGS 84".to_owned(),

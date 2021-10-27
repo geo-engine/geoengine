@@ -98,7 +98,6 @@ impl Session for UserSession {
 }
 
 impl FromRequest for UserSession {
-    type Config = ();
     type Error = error::Error;
     type Future = LocalBoxFuture<'static, Result<Self, Self::Error>>;
 
