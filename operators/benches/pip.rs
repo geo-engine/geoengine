@@ -1,6 +1,12 @@
+#![feature(test)]
+
+extern crate test;
+
+mod util;
+
 use futures::StreamExt;
 use geo_rand::{GeoRand, GeoRandParameters};
-use geoengine_datatypes::collections::{FeatureCollectionInfos, MultiPolygonCollection};
+use geoengine_datatypes::collections::MultiPolygonCollection;
 use geoengine_datatypes::primitives::{BoundingBox2D, MultiPoint, SpatialResolution};
 use geoengine_datatypes::{collections::MultiPointCollection, primitives::TimeInterval};
 use geoengine_operators::engine::QueryProcessor;
@@ -88,39 +94,44 @@ fn random_multi_polygons<T: Rng>(
         .collect()
 }
 
-fn main() {
+fn benchmark<const NUM_THREADS: usize>() {
     const POLYGONS_PER_MULTIPOLYGON: usize = 10;
     const MULTI_POLYGONS: usize = 100;
+
+    rayon::ThreadPoolBuilder::new()
+        .num_threads(NUM_THREADS)
+        .build_global()
+        .unwrap();
+
+    let tokio_runtime = tokio::runtime::Builder::new_current_thread()
+        .build()
+        .unwrap();
 
     let mut rng = StdRng::seed_from_u64(1337);
 
     let points = random_points(&mut rng, 10_000_000);
-    dbg!(points.len());
+    // dbg!(points.len());
 
     let polygons = random_multi_polygons(&mut rng, POLYGONS_PER_MULTIPOLYGON, MULTI_POLYGONS);
     let polygons: MultiPolygonCollection = polygons.into();
-    dbg!(polygons.len());
+    // dbg!(polygons.len());
 
-    println!("num_threads,time");
-    for num_threads in [1, 2, 4] {
-        let thread_pool = rayon::ThreadPoolBuilder::new()
-            .num_threads(num_threads)
-            .build()
-            .unwrap();
+    let start = Instant::now();
 
-        // TODO: tokio's context, although executed within install and on the current thread, uses the global thread pool
-        let elapsed = thread_pool.install(|| {
-            let tokio_runtime = tokio::runtime::Builder::new_current_thread()
-                .build()
-                .unwrap();
+    tokio_runtime.block_on(async { pip(points.clone(), polygons.clone()).await });
 
-            let start = Instant::now();
+    let elapsed = start.elapsed();
 
-            tokio_runtime.block_on(async { pip(points.clone(), polygons.clone()).await });
+    print!("{},{:?}", NUM_THREADS, elapsed);
+}
 
-            start.elapsed()
-        });
+fn header() {
+    print!("num_threads,time");
+}
 
-        println!("{},{:?}", num_threads, elapsed);
-    }
+forked_run! {
+    header
+    benchmark::<1>
+    benchmark::<2>
+    benchmark::<4>
 }

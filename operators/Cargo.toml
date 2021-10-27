@@ -44,6 +44,7 @@ uuid = { version = "0.8", features = ["serde", "v4", "v5"] }
 criterion = {version = "0.3", features =["async_futures", "async_tokio"]}
 geo-rand = { git = "https://github.com/lelongg/geo-rand", tag = "v0.3.0" }
 rand = "0.8"
+rusty-fork = "0.3"
 tempfile = "3.1"
 
 
@@ -57,4 +58,8 @@ harness = false
 
 [[bench]]
 name = "pip"
+harness = false
+
+[[bench]]
+name = "thread_pool_forked"
 harness = false
