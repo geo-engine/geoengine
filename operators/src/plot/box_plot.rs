@@ -22,6 +22,7 @@ use snafu::ensure;
 
 pub const BOXPLOT_OPERATOR_NAME: &str = "BoxPlot";
 const EXACT_CALC_BOUND: usize = 10_000;
+const BATCH_SIZE: usize = 1_000;
 const MAX_NUMBER_OF_RASTER_INPUTS: usize = 8;
 
 /// A box plot about vector data attribute values
@@ -324,23 +325,22 @@ enum BoxPlotAccumKind {
 }
 
 impl BoxPlotAccumKind {
-    fn update(self, values: impl Iterator<Item = f64>) -> crate::util::Result<Self> {
+    fn update(&mut self, values: impl Iterator<Item = f64>) -> crate::util::Result<()> {
         match self {
-            Self::Exact(mut x) => {
+            Self::Exact(ref mut x) => {
                 x.extend(values.filter(|x| x.is_finite()));
 
                 if x.len() > EXACT_CALC_BOUND {
                     let est = PSquareQuantileEstimator::new(0.5, x.as_slice())?;
-                    Ok(Self::Estimated(est))
-                } else {
-                    Ok(Self::Exact(x))
+                    *self = Self::Estimated(est);
                 }
+                Ok(())
             }
-            Self::Estimated(mut est) => {
+            Self::Estimated(ref mut est) => {
                 for v in values {
                     est.update(v);
                 }
-                Ok(Self::Estimated(est))
+                Ok(())
             }
         }
     }
@@ -410,28 +410,26 @@ impl BoxPlotAccumKind {
 
 struct BoxPlotAccum {
     name: String,
-    accum: Option<BoxPlotAccumKind>,
+    accum: BoxPlotAccumKind,
 }
 
 impl BoxPlotAccum {
     fn new(name: String) -> BoxPlotAccum {
         BoxPlotAccum {
             name,
-            accum: Some(BoxPlotAccumKind::Exact(Vec::new())),
+            accum: BoxPlotAccumKind::Exact(Vec::new()),
         }
     }
 
     fn update(&mut self, values: impl Iterator<Item = f64>) -> crate::util::Result<()> {
-        let x = self.accum.take().expect("Impossible").update(values)?;
-        self.accum.replace(x);
+        for chunk in &itertools::Itertools::chunks(values, BATCH_SIZE) {
+            self.accum.update(chunk)?;
+        }
         Ok(())
     }
 
     fn finish(&mut self) -> Result<Option<geoengine_datatypes::plots::BoxPlotAttribute>> {
-        self.accum
-            .as_mut()
-            .expect("Impossible")
-            .create_plot(self.name.clone())
+        self.accum.create_plot(self.name.clone())
     }
 }
 
