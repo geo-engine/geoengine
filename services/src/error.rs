@@ -1,4 +1,5 @@
 use crate::handlers::ErrorResponse;
+use crate::workflows::workflow::WorkflowId;
 use actix_web::http::StatusCode;
 use actix_web::HttpResponse;
 use geoengine_datatypes::{dataset::DatasetProviderId, spatial_reference::SpatialReferenceOption};
@@ -229,6 +230,39 @@ pub enum Error {
 
     AxisOrderingNotKnownForSrs {
         srs_string: String,
+    },
+
+    #[snafu(display(
+        "WCS request endpoint {} must match identifier {}",
+        endpoint,
+        identifier
+    ))]
+    WCSEndpointIdentifierMissmatch {
+        endpoint: WorkflowId,
+        identifier: WorkflowId,
+    },
+    #[snafu(display(
+        "WCS request endpoint {} must match identifiers {}",
+        endpoint,
+        identifiers
+    ))]
+    WCSEndpointIdentifiersMissmatch {
+        endpoint: WorkflowId,
+        identifiers: WorkflowId,
+    },
+    #[snafu(display("WMS request endpoint {} must match layer {}", endpoint, layer))]
+    WMSEndpointLayerMissmatch {
+        endpoint: WorkflowId,
+        layer: WorkflowId,
+    },
+    #[snafu(display(
+        "WFS request endpoint {} must match type_names {}",
+        endpoint,
+        type_names
+    ))]
+    WFSEndpointTypeNamesMissmatch {
+        endpoint: WorkflowId,
+        type_names: WorkflowId,
     },
 
     Tonic {

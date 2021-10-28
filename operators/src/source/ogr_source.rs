@@ -41,6 +41,7 @@ use geoengine_datatypes::util::arrow::ArrowTyped;
 
 use crate::engine::{OperatorDatasets, QueryProcessor, VectorQueryRectangle};
 use crate::error::Error;
+use crate::util::gdal::gdal_open_dataset_ex;
 use crate::util::Result;
 use crate::{
     engine::{
@@ -549,7 +550,7 @@ where
                 // "AUTODETECT_TYPE=YES", // This breaks tests
             ];
             dataset_options.open_options = Some(open_opts);
-            return Ok(Dataset::open_ex(&dataset_info.file_name, dataset_options)?);
+            return gdal_open_dataset_ex(&dataset_info.file_name, dataset_options);
         }
 
         if let Some(y) = &columns.y {
@@ -560,7 +561,7 @@ where
                 "AUTODETECT_TYPE=YES",
             ];
             dataset_options.open_options = Some(open_opts);
-            return Ok(Dataset::open_ex(&dataset_info.file_name, dataset_options)?);
+            return gdal_open_dataset_ex(&dataset_info.file_name, dataset_options);
         }
 
         let open_opts = &[
@@ -569,7 +570,7 @@ where
             "AUTODETECT_TYPE=YES",
         ];
         dataset_options.open_options = Some(open_opts);
-        Ok(Dataset::open_ex(&dataset_info.file_name, dataset_options)?)
+        gdal_open_dataset_ex(&dataset_info.file_name, dataset_options)
     }
 
     fn is_csv(dataset_info: &OgrSourceDataset) -> bool {
@@ -584,13 +585,13 @@ where
         if Self::is_csv(dataset_info) {
             Self::open_csv_dataset(dataset_info)
         } else {
-            Ok(Dataset::open_ex(
+            gdal_open_dataset_ex(
                 &dataset_info.file_name,
                 DatasetOptions {
                     open_flags: GdalOpenFlags::GDAL_OF_VECTOR,
                     ..Default::default()
                 },
-            )?)
+            )
         }
     }
 

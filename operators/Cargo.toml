@@ -13,7 +13,7 @@ edition = "2021"
 pro = ["geoengine-datatypes/pro"]
 
 [dependencies]
-arrow = { version = "5.4", features = ["simd"] }
+arrow = { version = "6.0", features = ["simd"] }
 async-trait = "0.1"
 chrono = "0.4"
 crossbeam = "0.8"
@@ -23,6 +23,7 @@ futures = "0.3"
 gdal = { version = "^0.10", features = ["datetime"] }
 geo = "0.18"
 geoengine-datatypes = { path = "../datatypes" }
+itertools = "0.10"
 lazy_static = "1.4"
 log = "0.4"
 num_cpus = "1.13" # TODO: remove and switch to std::thread::available_concurrency() when it is available

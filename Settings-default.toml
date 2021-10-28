@@ -2,6 +2,7 @@
 bind_address = "127.0.0.1:3030"
 external_address = "http://localhost:3030"
 backend = "in_memory" # TODO: remove option
+version_api = true
 
 [project_service]
 list_limit = 20
