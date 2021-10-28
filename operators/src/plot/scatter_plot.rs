@@ -13,12 +13,14 @@ use crate::engine::{
 use crate::error::Error;
 use crate::util::Result;
 use geoengine_datatypes::primitives::Coordinate2D;
-use std::convert::{TryFrom, TryInto};
 
 pub const BOXPLOT_OPERATOR_NAME: &str = "ScatterPlot";
 
 /// The maximum number of elements for a scatter plot
 const SCATTER_PLOT_THRESHOLD: usize = 500;
+
+/// The number of elements to process at once (i.e., without switching from scatter-plot to histogram)
+const BATCH_SIZE: usize = 1000;
 
 /// The maximum number of elements before we turn the collector into a histogram.
 /// At this point, the bounds of the histogram are fixed (i.e., further values exceeding
@@ -38,9 +40,6 @@ pub struct ScatterPlotParams {
     pub column_x: String,
     /// Name of the (numeric) attribute for the y-axis.
     pub column_y: String,
-    /// Whether to create an interactive output (`false` by default)
-    #[serde(default)]
-    pub interactive: bool,
 }
 
 #[typetag::serde]
@@ -77,7 +76,6 @@ pub struct InitializedScatterPlot<Op> {
     result_descriptor: PlotResultDescriptor,
     column_x: String,
     column_y: String,
-    interactive: bool,
     source: Op,
 }
 
@@ -91,7 +89,6 @@ impl<Op> InitializedScatterPlot<Op> {
             result_descriptor,
             column_x: params.column_x,
             column_y: params.column_y,
-            interactive: params.interactive,
             source,
         }
     }
@@ -106,7 +103,6 @@ impl InitializedPlotOperator for InitializedScatterPlot<Box<dyn InitializedVecto
             input: self.source.query_processor()?,
             column_x: self.column_x.clone(),
             column_y: self.column_y.clone(),
-            interactive: self.interactive,
         };
 
         Ok(TypedPlotQueryProcessor::JsonVega(processor.boxed()))
@@ -118,7 +114,6 @@ pub struct ScatterPlotQueryProcessor {
     input: TypedVectorQueryProcessor,
     column_x: String,
     column_y: String,
-    interactive: bool,
 }
 
 #[async_trait]
@@ -145,15 +140,17 @@ impl PlotQueryProcessor for ScatterPlotQueryProcessor {
                 let data_x = collection.data(&self.column_x).expect("checked in param");
                 let data_y = collection.data(&self.column_y).expect("checked in param");
 
-                let valid_points = data_x.float_options_iter().zip(data_y.float_options_iter()).filter(|(a,b)|
-                    matches!((a,b), (Some(x), Some(y)) if !x.is_nan() && !y.is_nan())
-                ).map(|(a,b)| Coordinate2D::new(a.expect("Ensured by filter"),b.expect("Ensured by filter")) );
-                collector = collector.add_batch(valid_points)?;
+                let valid_points = data_x.float_options_iter().zip(data_y.float_options_iter()).filter_map(|(a,b)| match (a,b) {
+                    (Some(x),Some(y)) if x.is_finite() && y.is_finite() => Some(Coordinate2D::new(x,y)),
+                    _ => None
+                });
+
+                for chunk in &itertools::Itertools::chunks(valid_points, BATCH_SIZE) {
+                    collector.add_batch( chunk )?;
+                }
             }
         });
-        Ok(collector
-            .into_plot()?
-            .to_vega_embeddable(self.interactive)?)
+        Ok(collector.into_plot()?.to_vega_embeddable(false)?)
     }
 }
 
@@ -205,52 +202,46 @@ impl Collector {
     }
 }
 
-impl TryFrom<Collector> for Histogram2D {
-    type Error = crate::error::Error;
-
-    fn try_from(value: Collector) -> Result<Self> {
-        let bucket_count = std::cmp::min(100, f64::sqrt(value.element_count() as f64) as usize);
-
-        let dim_x = HistogramDimension::new(
-            value.column_x,
-            value.bounds_x.0,
-            value.bounds_x.1,
-            bucket_count,
-        )?;
-        let dim_y = HistogramDimension::new(
-            value.column_y,
-            value.bounds_y.0,
-            value.bounds_y.1,
-            bucket_count,
-        )?;
-
-        let mut result = Histogram2D::new(dim_x, dim_y);
-        result.update_batch(value.elements.into_iter());
-        Ok(result)
-    }
-}
-
 enum CollectorKind {
     Values(Collector),
     Histogram(Histogram2D),
 }
 
 impl CollectorKind {
-    fn add_batch(self, values: impl Iterator<Item = Coordinate2D>) -> Result<CollectorKind> {
+    fn histogram_from_collector(value: &Collector) -> Result<Histogram2D> {
+        let bucket_count = std::cmp::min(100, f64::sqrt(value.element_count() as f64) as usize);
+
+        let dim_x = HistogramDimension::new(
+            value.column_x.clone(),
+            value.bounds_x.0,
+            value.bounds_x.1,
+            bucket_count,
+        )?;
+        let dim_y = HistogramDimension::new(
+            value.column_y.clone(),
+            value.bounds_y.0,
+            value.bounds_y.1,
+            bucket_count,
+        )?;
+
+        let mut result = Histogram2D::new(dim_x, dim_y);
+        result.update_batch(value.elements.iter().copied());
+        Ok(result)
+    }
+
+    fn add_batch(&mut self, values: impl Iterator<Item = Coordinate2D>) -> Result<()> {
         match self {
-            Self::Values(mut c) => {
+            Self::Values(ref mut c) => {
                 c.add_batch(values);
-                if c.element_count() <= COLLECTOR_TO_HISTOGRAM_THRESHOLD {
-                    Ok(Self::Values(c))
-                } else {
-                    Ok(Self::Histogram(c.try_into()?))
+                if c.element_count() > COLLECTOR_TO_HISTOGRAM_THRESHOLD {
+                    *self = Self::Histogram(Self::histogram_from_collector(c)?)
                 }
             }
-            Self::Histogram(mut h) => {
+            Self::Histogram(ref mut h) => {
                 h.update_batch(values);
-                Ok(Self::Histogram(h))
             }
         }
+        Ok(())
     }
 
     fn into_plot(self) -> Result<Box<dyn Plot>> {
@@ -261,7 +252,7 @@ impl CollectorKind {
                     v.column_x, v.column_y, v.elements,
                 ),
             )),
-            Self::Values(v) => Ok(Box::new(Histogram2D::try_from(v)?)),
+            Self::Values(v) => Ok(Box::new(Self::histogram_from_collector(&v)?)),
         }
     }
 }
@@ -286,43 +277,6 @@ mod tests {
             params: ScatterPlotParams {
                 column_x: "foo".to_owned(),
                 column_y: "bar".to_owned(),
-                interactive: false,
-            },
-            sources: MockFeatureCollectionSource::<MultiPoint>::multiple(vec![])
-                .boxed()
-                .into(),
-        };
-
-        let serialized = json!({
-            "type": "ScatterPlot",
-            "params": {
-                "columnX": "foo",
-                "columnY": "bar",
-                "interactive": false,
-            },
-            "sources": {
-                "vector": {
-                    "type": "MockFeatureCollectionSourceMultiPoint",
-                    "params": {
-                        "collections": []
-                    }
-                }
-            }
-        })
-        .to_string();
-
-        let deserialized: ScatterPlot = serde_json::from_str(&serialized).unwrap();
-
-        assert_eq!(deserialized.params, scatter_plot.params);
-    }
-
-    #[test]
-    fn serialization_alt() {
-        let scatter_plot = ScatterPlot {
-            params: ScatterPlotParams {
-                column_x: "foo".to_owned(),
-                column_y: "bar".to_owned(),
-                interactive: false,
             },
             sources: MockFeatureCollectionSource::<MultiPoint>::multiple(vec![])
                 .boxed()
@@ -379,7 +333,6 @@ mod tests {
             params: ScatterPlotParams {
                 column_x: "foo".to_string(),
                 column_y: "bar".to_string(),
-                interactive: true,
             },
             sources: vector_source.into(),
         };
@@ -457,7 +410,6 @@ mod tests {
             params: ScatterPlotParams {
                 column_x: "foo".to_string(),
                 column_y: "bar".to_string(),
-                interactive: true,
             },
             sources: vector_source.into(),
         };
@@ -512,7 +464,6 @@ mod tests {
             params: ScatterPlotParams {
                 column_x: "foo".to_string(),
                 column_y: "bar".to_string(),
-                interactive: true,
             },
             sources: vector_source.into(),
         };
@@ -543,7 +494,6 @@ mod tests {
             params: ScatterPlotParams {
                 column_x: "bar".to_string(),
                 column_y: "foo".to_string(),
-                interactive: true,
             },
             sources: vector_source.into(),
         };
@@ -574,7 +524,6 @@ mod tests {
             params: ScatterPlotParams {
                 column_x: "fo".to_string(),
                 column_y: "bar".to_string(),
-                interactive: false,
             },
             sources: vector_source.into(),
         };
@@ -605,7 +554,6 @@ mod tests {
             params: ScatterPlotParams {
                 column_x: "foo".to_string(),
                 column_y: "ba".to_string(),
-                interactive: false,
             },
             sources: vector_source.into(),
         };
@@ -635,7 +583,6 @@ mod tests {
             params: ScatterPlotParams {
                 column_x: "foo".to_string(),
                 column_y: "bar".to_string(),
-                interactive: true,
             },
             sources: vector_source.into(),
         };
@@ -689,7 +636,6 @@ mod tests {
             params: ScatterPlotParams {
                 column_x: "foo".to_string(),
                 column_y: "bar".to_string(),
-                interactive: true,
             },
             sources: vector_source.into(),
         };
@@ -745,7 +691,6 @@ mod tests {
             params: ScatterPlotParams {
                 column_x: "foo".to_string(),
                 column_y: "bar".to_string(),
-                interactive: true,
             },
             sources: vector_source.into(),
         };
@@ -827,7 +772,6 @@ mod tests {
             params: ScatterPlotParams {
                 column_x: "foo".to_string(),
                 column_y: "bar".to_string(),
-                interactive: true,
             },
             sources: vector_source.into(),
         };
@@ -905,7 +849,8 @@ mod tests {
         }
 
         let mut c = CollectorKind::Values(Collector::new(cx.clone(), cy.clone()));
-        c = c.add_batch(values.clone().into_iter()).unwrap();
+
+        c.add_batch(values.clone().into_iter()).unwrap();
 
         assert!(matches!(c, CollectorKind::Values(_)));
 
@@ -930,7 +875,7 @@ mod tests {
         }
 
         let mut c = CollectorKind::Values(Collector::new(cx.clone(), cy.clone()));
-        c = c.add_batch(values.clone().into_iter()).unwrap();
+        c.add_batch(values.clone().into_iter()).unwrap();
 
         assert!(matches!(c, CollectorKind::Values(_)));
 
@@ -962,7 +907,7 @@ mod tests {
         }
 
         let mut c = CollectorKind::Values(Collector::new(cx.clone(), cy.clone()));
-        c = c.add_batch(values.clone().into_iter()).unwrap();
+        c.add_batch(values.clone().into_iter()).unwrap();
 
         assert!(matches!(c, CollectorKind::Histogram(_)));
 
@@ -995,20 +940,19 @@ mod tests {
         }
 
         let mut c = CollectorKind::Values(Collector::new(cx.clone(), cy.clone()));
-        c = c.add_batch(values.clone().into_iter()).unwrap();
+        c.add_batch(values.clone().into_iter()).unwrap();
 
         assert!(matches!(c, CollectorKind::Histogram(_)));
 
         // This value should be skipped
-        c = c
-            .add_batch(
-                [Coordinate2D::new(
-                    element_count as f64,
-                    element_count as f64,
-                )]
-                .into_iter(),
-            )
-            .unwrap();
+        c.add_batch(
+            [Coordinate2D::new(
+                element_count as f64,
+                element_count as f64,
+            )]
+            .into_iter(),
+        )
+        .unwrap();
 
         let res = c.into_plot().unwrap().to_vega_embeddable(false).unwrap();
 
@@ -1039,13 +983,12 @@ mod tests {
         }
 
         let mut c = CollectorKind::Values(Collector::new(cx.clone(), cy.clone()));
-        c = c.add_batch(values.clone().into_iter()).unwrap();
+        c.add_batch(values.clone().into_iter()).unwrap();
 
         assert!(matches!(c, CollectorKind::Histogram(_)));
 
         // This value should be skipped
-        c = c
-            .add_batch([Coordinate2D::new(f64::NAN, f64::NAN)].into_iter())
+        c.add_batch([Coordinate2D::new(f64::NAN, f64::NAN)].into_iter())
             .unwrap();
 
         let res = c.into_plot().unwrap().to_vega_embeddable(false).unwrap();
