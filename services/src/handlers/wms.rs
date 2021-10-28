@@ -361,6 +361,7 @@ mod tests {
     use actix_web_httpauth::headers::authorization::Bearer;
     use geoengine_datatypes::operations::image::RgbaColor;
     use geoengine_datatypes::primitives::SpatialPartition2D;
+    use geoengine_datatypes::raster::TilingSpecification;
     use geoengine_operators::engine::{
         ExecutionContext, RasterQueryProcessor, RasterQueryRectangle,
     };
@@ -485,7 +486,12 @@ mod tests {
     }
 
     async fn get_map_test_helper(method: Method, path: Option<&str>) -> ServiceResponse {
-        let ctx = InMemoryContext::default();
+        let mut ctx = InMemoryContext::default();
+        ctx.set_tiling_spec(TilingSpecification {
+            tile_size_in_pixels: [600, 600].into(),
+            ..Default::default()
+        });
+
         let session_id = ctx.default_session_ref().await.id();
 
         let (_, id) = register_ndvi_workflow_helper(&ctx).await;
@@ -533,7 +539,12 @@ mod tests {
     ///Actix uses serde_urlencoded inside web::Query which does not support this
     #[tokio::test]
     async fn get_map_uppercase() {
-        let ctx = InMemoryContext::default();
+        let mut ctx = InMemoryContext::default();
+        ctx.set_tiling_spec(TilingSpecification {
+            tile_size_in_pixels: [600, 600].into(),
+            ..Default::default()
+        });
+
         let session_id = ctx.default_session_ref().await.id();
 
         let (_, id) = register_ndvi_workflow_helper(&ctx).await;
@@ -569,7 +580,12 @@ mod tests {
 
     #[tokio::test]
     async fn get_map_colorizer() {
-        let ctx = InMemoryContext::default();
+        let mut ctx = InMemoryContext::default();
+        ctx.set_tiling_spec(TilingSpecification {
+            tile_size_in_pixels: [600, 600].into(),
+            ..Default::default()
+        });
+
         let session_id = ctx.default_session_ref().await.id();
 
         let (_, id) = register_ndvi_workflow_helper(&ctx).await;

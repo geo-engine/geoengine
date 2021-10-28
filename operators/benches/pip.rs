@@ -3,7 +3,7 @@ use geo_rand::{GeoRand, GeoRandParameters};
 use geoengine_datatypes::collections::{FeatureCollectionInfos, MultiPolygonCollection};
 use geoengine_datatypes::primitives::{BoundingBox2D, MultiPoint, SpatialResolution};
 use geoengine_datatypes::{collections::MultiPointCollection, primitives::TimeInterval};
-use geoengine_operators::engine::QueryProcessor;
+use geoengine_operators::engine::{ChunkByteSize, QueryProcessor};
 use geoengine_operators::engine::{
     MockExecutionContext, MockQueryContext, QueryRectangle, VectorOperator,
 };
@@ -40,7 +40,7 @@ async fn pip(points: MultiPointCollection, polygons: MultiPolygonCollection, num
         time_interval: TimeInterval::default(),
         spatial_resolution: SpatialResolution::zero_point_one(),
     };
-    let ctx = MockQueryContext::with_chunk_size_and_thread_count(usize::MAX.into(), num_threads);
+    let ctx = MockQueryContext::with_chunk_size_and_thread_count(ChunkByteSize::MAX, num_threads);
 
     let query = query_processor.query(query_rectangle, &ctx).await.unwrap();
 

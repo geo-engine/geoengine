@@ -280,7 +280,7 @@ mod tests {
     use super::*;
 
     use crate::engine::{
-        MockExecutionContext, MockQueryContext, QueryProcessor, RasterOperator,
+        ChunkByteSize, MockExecutionContext, MockQueryContext, QueryProcessor, RasterOperator,
         RasterResultDescriptor, VectorOperator, VectorQueryRectangle,
     };
     use crate::mock::{MockFeatureCollectionSource, MockRasterSource, MockRasterSourceParams};
@@ -361,7 +361,7 @@ mod tests {
                     time_interval: time_instant,
                     spatial_resolution: SpatialResolution::new(0.1, 0.1).unwrap(),
                 },
-                &MockQueryContext::new(usize::MAX.into()),
+                &MockQueryContext::new(ChunkByteSize::MAX),
             )
             .await
             .unwrap()
@@ -458,7 +458,7 @@ mod tests {
                     .unwrap(),
                     spatial_resolution: SpatialResolution::new(0.1, 0.1).unwrap(),
                 },
-                &MockQueryContext::new(usize::MAX.into()),
+                &MockQueryContext::new(ChunkByteSize::MAX),
             )
             .await
             .unwrap()
@@ -557,7 +557,7 @@ mod tests {
                     .unwrap(),
                     spatial_resolution: SpatialResolution::new(0.1, 0.1).unwrap(),
                 },
-                &MockQueryContext::new(usize::MAX.into()),
+                &MockQueryContext::new(ChunkByteSize::MAX),
             )
             .await
             .unwrap()
@@ -661,7 +661,7 @@ mod tests {
                     .unwrap(),
                     spatial_resolution: SpatialResolution::new(0.1, 0.1).unwrap(),
                 },
-                &MockQueryContext::new(usize::MAX.into()),
+                &MockQueryContext::new(ChunkByteSize::MAX),
             )
             .await
             .unwrap()
@@ -824,7 +824,7 @@ mod tests {
                     time_interval: TimeInterval::new_unchecked(0, 20),
                     spatial_resolution: SpatialResolution::new(1., 1.).unwrap(),
                 },
-                &MockQueryContext::new(usize::MAX.into()),
+                &MockQueryContext::new(ChunkByteSize::MAX),
             )
             .await
             .unwrap()
@@ -983,7 +983,7 @@ mod tests {
                     time_interval: TimeInterval::new_unchecked(0, 20),
                     spatial_resolution: SpatialResolution::new(1., 1.).unwrap(),
                 },
-                &MockQueryContext::new(usize::MAX.into()),
+                &MockQueryContext::new(ChunkByteSize::MAX),
             )
             .await
             .unwrap()

@@ -387,6 +387,7 @@ mod tests {
     use actix_web::http::header;
     use actix_web::test;
     use actix_web_httpauth::headers::authorization::Bearer;
+    use geoengine_datatypes::raster::TilingSpecification;
 
     #[tokio::test]
     async fn get_capabilities() {
@@ -537,7 +538,11 @@ mod tests {
 
     #[tokio::test]
     async fn get_coverage() {
-        let ctx = InMemoryContext::default();
+        let mut ctx = InMemoryContext::default();
+        ctx.set_tiling_spec(TilingSpecification {
+            tile_size_in_pixels: [600, 600].into(),
+            ..Default::default()
+        });
         let session_id = ctx.default_session_ref().await.id();
 
         let (_, id) = register_ndvi_workflow_helper(&ctx).await;

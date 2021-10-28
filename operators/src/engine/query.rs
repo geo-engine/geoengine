@@ -49,6 +49,9 @@ impl From<VectorQueryRectangle> for RasterQueryRectangle {
 pub struct ChunkByteSize(usize);
 
 impl ChunkByteSize {
+    pub const MIN: ChunkByteSize = ChunkByteSize(usize::MIN);
+    pub const MAX: ChunkByteSize = ChunkByteSize(usize::MAX);
+
     pub fn new(cbs: usize) -> Self {
         ChunkByteSize(cbs)
     }

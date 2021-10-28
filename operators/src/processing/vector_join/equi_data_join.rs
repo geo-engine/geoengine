@@ -396,7 +396,7 @@ mod tests {
         BoundingBox2D, FeatureData, MultiPoint, SpatialResolution, TimeInterval,
     };
 
-    use crate::engine::{MockExecutionContext, MockQueryContext, VectorOperator};
+    use crate::engine::{ChunkByteSize, MockExecutionContext, MockQueryContext, VectorOperator};
     use crate::mock::MockFeatureCollectionSource;
 
     use super::*;
@@ -435,7 +435,7 @@ mod tests {
             spatial_resolution: SpatialResolution::zero_point_one(),
         };
 
-        let ctx = MockQueryContext::new(usize::MAX.into());
+        let ctx = MockQueryContext::new(ChunkByteSize::MAX);
 
         let processor = EquiGeoToDataJoinProcessor::new(
             left_processor,

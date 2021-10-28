@@ -605,6 +605,7 @@ mod tests {
     use actix_web::{http::Method, test};
     use actix_web_httpauth::headers::authorization::Bearer;
     use geoengine_datatypes::dataset::DatasetId;
+    use geoengine_datatypes::raster::TilingSpecification;
     use geoengine_operators::engine::TypedOperator;
     use geoengine_operators::source::CsvSourceParameters;
     use geoengine_operators::source::{CsvGeometrySpecification, CsvSource, CsvTimeSpecification};
@@ -1060,7 +1061,12 @@ x;y
     async fn raster_vector_join() {
         dir_up();
 
-        let ctx = InMemoryContext::default();
+        let mut ctx = InMemoryContext::default();
+        ctx.set_tiling_spec(TilingSpecification {
+            tile_size_in_pixels: [600, 600].into(),
+            ..Default::default()
+        });
+
         let session_id = ctx.default_session_ref().await.id();
 
         let ndvi_id = add_dataset_definition_to_datasets(
