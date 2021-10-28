@@ -273,7 +273,7 @@ mod tests {
         let result = test_util::process(
             || {
                 let props = test_util::create_properties(None, None, Some(11.0), Some(2.0));
-                let src = test_util::create_mock_source(props, None, None);
+                let src = test_util::create_mock_source::<u8>(props, None, None);
                 RasterOperator::boxed(Radiance {
                     sources: SingleRasterSource {
                         raster: src.boxed(),
@@ -306,7 +306,7 @@ mod tests {
         let result = test_util::process(
             || {
                 let props = test_util::create_properties(None, None, Some(11.0), Some(2.0));
-                let src = test_util::create_mock_source(props, Some(vec![]), None);
+                let src = test_util::create_mock_source::<u8>(props, Some(vec![]), None);
                 RasterOperator::boxed(Radiance {
                     sources: SingleRasterSource {
                         raster: src.boxed(),
@@ -332,7 +332,7 @@ mod tests {
         let result = test_util::process(
             || {
                 let props = test_util::create_properties(None, None, None, Some(2.0));
-                let src = test_util::create_mock_source(props, None, None);
+                let src = test_util::create_mock_source::<u8>(props, None, None);
                 RasterOperator::boxed(Radiance {
                     sources: SingleRasterSource {
                         raster: src.boxed(),
@@ -355,7 +355,7 @@ mod tests {
         let result = test_util::process(
             || {
                 let props = test_util::create_properties(None, None, Some(11.0), None);
-                let src = test_util::create_mock_source(props, None, None);
+                let src = test_util::create_mock_source::<u8>(props, None, None);
                 RasterOperator::boxed(Radiance {
                     sources: SingleRasterSource {
                         raster: src.boxed(),
@@ -378,7 +378,8 @@ mod tests {
         let res = test_util::process(
             || {
                 let props = test_util::create_properties(None, None, Some(11.0), Some(2.0));
-                let src = test_util::create_mock_source(props, None, Some(Measurement::Unitless));
+                let src =
+                    test_util::create_mock_source::<u8>(props, None, Some(Measurement::Unitless));
 
                 RasterOperator::boxed(Radiance {
                     params: RadianceParams {},
@@ -401,7 +402,7 @@ mod tests {
         let res = test_util::process(
             || {
                 let props = test_util::create_properties(None, None, Some(11.0), Some(2.0));
-                let src = test_util::create_mock_source(
+                let src = test_util::create_mock_source::<u8>(
                     props,
                     None,
                     Some(Measurement::Continuous {
@@ -432,7 +433,7 @@ mod tests {
         let res = test_util::process(
             || {
                 let props = test_util::create_properties(None, None, Some(11.0), Some(2.0));
-                let src = test_util::create_mock_source(
+                let src = test_util::create_mock_source::<u8>(
                     props,
                     None,
                     Some(Measurement::Classification {

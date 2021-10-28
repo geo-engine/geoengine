@@ -1,7 +1,7 @@
 use geoengine_datatypes::dataset::DatasetId;
 use serde::{Deserialize, Serialize};
 
-use crate::util::input::RasterOrVectorOperator;
+use crate::util::input::{MultiRasterOrVectorOperator, RasterOrVectorOperator};
 
 use super::{OperatorDatasets, RasterOperator, VectorOperator};
 
@@ -34,6 +34,12 @@ pub struct SingleVectorSource {
 #[serde(rename_all = "camelCase")]
 pub struct SingleRasterOrVectorSource {
     pub source: RasterOrVectorOperator,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct MultipleRasterOrSingleVectorSource {
+    pub source: MultiRasterOrVectorOperator,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -95,6 +101,30 @@ impl From<Box<dyn RasterOperator>> for SingleRasterOrVectorSource {
     }
 }
 
+impl From<Box<dyn VectorOperator>> for MultipleRasterOrSingleVectorSource {
+    fn from(vector: Box<dyn VectorOperator>) -> Self {
+        Self {
+            source: MultiRasterOrVectorOperator::Vector(vector),
+        }
+    }
+}
+
+impl From<Box<dyn RasterOperator>> for MultipleRasterOrSingleVectorSource {
+    fn from(raster: Box<dyn RasterOperator>) -> Self {
+        Self {
+            source: MultiRasterOrVectorOperator::Raster(vec![raster]),
+        }
+    }
+}
+
+impl From<Vec<Box<dyn RasterOperator>>> for MultipleRasterOrSingleVectorSource {
+    fn from(raster: Vec<Box<dyn RasterOperator>>) -> Self {
+        Self {
+            source: MultiRasterOrVectorOperator::Raster(raster),
+        }
+    }
+}
+
 impl<Params, Sources> OperatorDatasets for Operator<Params, Sources>
 where
     Sources: OperatorDatasets,
@@ -114,6 +144,12 @@ where
 }
 
 impl OperatorDatasets for SingleRasterOrVectorSource {
+    fn datasets_collect(&self, datasets: &mut Vec<DatasetId>) {
+        self.source.datasets_collect(datasets)
+    }
+}
+
+impl OperatorDatasets for MultipleRasterOrSingleVectorSource {
     fn datasets_collect(&self, datasets: &mut Vec<DatasetId>) {
         self.source.datasets_collect(datasets)
     }

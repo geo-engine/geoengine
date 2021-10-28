@@ -236,7 +236,7 @@ impl GeoFeatureCollectionRowBuilder<MultiLineString>
 }
 
 impl ReplaceRawArrayCoords for MultiLineStringCollection {
-    fn replace_raw_coords(array_ref: &Arc<dyn Array>, new_coords: Buffer) -> ArrayData {
+    fn replace_raw_coords(array_ref: &Arc<dyn Array>, new_coords: Buffer) -> Result<ArrayData> {
         let geometries: &ListArray = downcast_array(array_ref);
 
         let feature_offset_array = geometries.data();
@@ -251,7 +251,7 @@ impl ReplaceRawArrayCoords for MultiLineStringCollection {
         let num_coords = new_coords.len() / std::mem::size_of::<Coordinate2D>();
         let num_floats = num_coords * 2;
 
-        ArrayData::builder(MultiLineString::arrow_data_type())
+        Ok(ArrayData::builder(MultiLineString::arrow_data_type())
             .len(num_features)
             .add_buffer(feature_offsets_buffer.clone())
             .add_child_data(
@@ -265,13 +265,13 @@ impl ReplaceRawArrayCoords for MultiLineStringCollection {
                                 ArrayData::builder(DataType::Float64)
                                     .len(num_floats)
                                     .add_buffer(new_coords)
-                                    .build(),
+                                    .build()?,
                             )
-                            .build(),
+                            .build()?,
                     )
-                    .build(),
+                    .build()?,
             )
-            .build()
+            .build()?)
     }
 }
 
