@@ -44,34 +44,69 @@ impl From<VectorQueryRectangle> for RasterQueryRectangle {
     }
 }
 
+/// Defines the size in bytes of a vector data chunk
+#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+pub struct ChunkByteSize(usize);
+
+impl ChunkByteSize {
+    pub fn new(cbs: usize) -> Self {
+        ChunkByteSize(cbs)
+    }
+
+    pub fn inner(self) -> usize {
+        self.0
+    }
+}
+
+impl From<usize> for ChunkByteSize {
+    fn from(size: usize) -> Self {
+        ChunkByteSize(size)
+    }
+}
+
+impl From<ChunkByteSize> for usize {
+    fn from(cbs: ChunkByteSize) -> Self {
+        cbs.0
+    }
+}
+
+impl Default for ChunkByteSize {
+    fn default() -> Self {
+        Self(1024 * 1024) // TODO: find reasonable default
+    }
+}
+
 pub trait QueryContext: Send + Sync {
-    fn chunk_byte_size(&self) -> usize;
+    fn chunk_byte_size(&self) -> ChunkByteSize;
     fn thread_pool_context(&self) -> &ThreadPoolContext;
 }
 
 pub struct MockQueryContext {
-    pub chunk_byte_size: usize,
+    pub chunk_byte_size: ChunkByteSize,
     pub thread_pool: ThreadPoolContext,
 }
 
 impl Default for MockQueryContext {
     fn default() -> Self {
         Self {
-            chunk_byte_size: 1024 * 1024,
+            chunk_byte_size: ChunkByteSize::default(),
             thread_pool: Arc::new(ThreadPool::default()).create_context(),
         }
     }
 }
 
 impl MockQueryContext {
-    pub fn new(chunk_byte_size: usize) -> Self {
+    pub fn new(chunk_byte_size: ChunkByteSize) -> Self {
         Self {
             chunk_byte_size,
             ..Default::default()
         }
     }
 
-    pub fn with_chunk_size_and_thread_count(chunk_byte_size: usize, num_threads: usize) -> Self {
+    pub fn with_chunk_size_and_thread_count(
+        chunk_byte_size: ChunkByteSize,
+        num_threads: usize,
+    ) -> Self {
         Self {
             chunk_byte_size,
             thread_pool: Arc::new(ThreadPool::new(num_threads)).create_context(),
@@ -80,7 +115,7 @@ impl MockQueryContext {
 }
 
 impl QueryContext for MockQueryContext {
-    fn chunk_byte_size(&self) -> usize {
+    fn chunk_byte_size(&self) -> ChunkByteSize {
         self.chunk_byte_size
     }
 

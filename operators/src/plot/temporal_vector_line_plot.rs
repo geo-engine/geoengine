@@ -325,7 +325,7 @@ mod tests {
                     time_interval: TimeInterval::default(),
                     spatial_resolution: SpatialResolution::new(0.1, 0.1).unwrap(),
                 },
-                &MockQueryContext::new(0),
+                &MockQueryContext::default(),
             )
             .await
             .unwrap();
@@ -425,7 +425,7 @@ mod tests {
                     time_interval: TimeInterval::default(),
                     spatial_resolution: SpatialResolution::new(0.1, 0.1).unwrap(),
                 },
-                &MockQueryContext::new(0),
+                &MockQueryContext::default(),
             )
             .await
             .unwrap();
@@ -513,7 +513,7 @@ mod tests {
                     time_interval: TimeInterval::default(),
                     spatial_resolution: SpatialResolution::new(0.1, 0.1).unwrap(),
                 },
-                &MockQueryContext::new(0),
+                &MockQueryContext::default(),
             )
             .await
             .unwrap();

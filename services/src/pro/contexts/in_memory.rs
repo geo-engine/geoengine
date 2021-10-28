@@ -4,15 +4,16 @@ use crate::pro::contexts::{Context, Db, ProContext};
 use crate::pro::datasets::ProHashMapDatasetDb;
 use crate::pro::projects::ProHashMapProjectDb;
 use crate::pro::users::{HashMapUserDb, UserDb, UserSession};
-use crate::util::config;
 use crate::workflows::registry::HashMapRegistry;
 use crate::{
     datasets::add_from_directory::{add_datasets_from_directory, add_providers_from_directory},
     error::Result,
 };
 use async_trait::async_trait;
+use geoengine_datatypes::raster::TilingSpecification;
 use geoengine_operators::concurrency::ThreadPool;
 use geoengine_operators::concurrency::ThreadPoolContextCreator;
+use geoengine_operators::engine::ChunkByteSize;
 use snafu::ResultExt;
 use std::path::PathBuf;
 use std::sync::Arc;
@@ -26,6 +27,8 @@ pub struct ProInMemoryContext {
     workflow_registry: Db<HashMapRegistry>,
     dataset_db: Db<ProHashMapDatasetDb>,
     thread_pool: Arc<ThreadPool>,
+    exe_ctx_tiling_spec: TilingSpecification,
+    query_ctx_chunk_size: ChunkByteSize,
 }
 
 impl ProInMemoryContext {
@@ -40,6 +43,14 @@ impl ProInMemoryContext {
             dataset_db: Arc::new(RwLock::new(db)),
             ..Default::default()
         }
+    }
+
+    pub fn set_tiling_spec(&mut self, tiling_spec: TilingSpecification) {
+        self.exe_ctx_tiling_spec = tiling_spec;
+    }
+
+    pub fn set_chunk_byte_size(&mut self, chunk_byte_size: ChunkByteSize) {
+        self.query_ctx_chunk_size = chunk_byte_size;
     }
 }
 
@@ -100,7 +111,7 @@ impl Context for ProInMemoryContext {
     fn query_context(&self) -> Result<Self::QueryContext> {
         // TODO: load config only once
         Ok(QueryContextImpl {
-            chunk_byte_size: config::get_config_element::<config::QueryContext>()?.chunk_byte_size,
+            chunk_byte_size: self.query_ctx_chunk_size,
             thread_pool: self.thread_pool.create_context(),
         })
     }
@@ -111,6 +122,7 @@ impl Context for ProInMemoryContext {
                 self.dataset_db.clone(),
                 self.thread_pool.create_context(),
                 session,
+                self.exe_ctx_tiling_spec,
             ),
         )
     }

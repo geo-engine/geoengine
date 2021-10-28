@@ -8,13 +8,14 @@ use crate::{
 };
 use crate::{projects::hashmap_projectdb::HashMapProjectDb, workflows::registry::HashMapRegistry};
 use async_trait::async_trait;
+use geoengine_datatypes::raster::TilingSpecification;
+use geoengine_operators::engine::ChunkByteSize;
 use tokio::sync::{RwLock, RwLockReadGuard, RwLockWriteGuard};
 
 use super::{Context, Db, SimpleSession};
 use super::{Session, SimpleContext};
 use crate::contexts::{ExecutionContextImpl, QueryContextImpl, SessionId};
 use crate::datasets::in_memory::HashMapDatasetDb;
-use crate::util::config;
 use geoengine_operators::concurrency::{ThreadPool, ThreadPoolContextCreator};
 
 /// A context with references to in-memory versions of the individual databases.
@@ -25,10 +26,11 @@ pub struct InMemoryContext {
     dataset_db: Db<HashMapDatasetDb>,
     session: Db<SimpleSession>,
     thread_pool: Arc<ThreadPool>,
+    exe_ctx_tiling_spec: TilingSpecification,
+    query_ctx_chunk_size: ChunkByteSize,
 }
 
 impl InMemoryContext {
-    #[allow(clippy::too_many_lines)]
     pub async fn new_with_data(dataset_defs_path: PathBuf, provider_defs_path: PathBuf) -> Self {
         let mut db = HashMapDatasetDb::default();
         add_datasets_from_directory(&mut db, dataset_defs_path).await;
@@ -38,6 +40,14 @@ impl InMemoryContext {
             dataset_db: Arc::new(RwLock::new(db)),
             ..Default::default()
         }
+    }
+
+    pub fn set_tiling_spec(&mut self, tiling_spec: TilingSpecification) {
+        self.exe_ctx_tiling_spec = tiling_spec;
+    }
+
+    pub fn set_chunk_byte_size(&mut self, chunk_byte_size: ChunkByteSize) {
+        self.query_ctx_chunk_size = chunk_byte_size;
     }
 }
 
@@ -81,19 +91,21 @@ impl Context for InMemoryContext {
     }
 
     fn query_context(&self) -> Result<Self::QueryContext> {
-        // TODO: load config only once
         Ok(QueryContextImpl {
-            chunk_byte_size: config::get_config_element::<config::QueryContext>()?.chunk_byte_size,
+            chunk_byte_size: self.query_ctx_chunk_size,
             thread_pool: self.thread_pool.create_context(),
         })
     }
 
     fn execution_context(&self, session: SimpleSession) -> Result<Self::ExecutionContext> {
-        Ok(ExecutionContextImpl::<SimpleSession, HashMapDatasetDb> {
-            dataset_db: self.dataset_db.clone(),
-            thread_pool: self.thread_pool.create_context(),
-            session,
-        })
+        Ok(
+            ExecutionContextImpl::<SimpleSession, HashMapDatasetDb>::new(
+                self.dataset_db.clone(),
+                self.thread_pool.create_context(),
+                session,
+                self.exe_ctx_tiling_spec,
+            ),
+        )
     }
 
     async fn session_by_id(&self, session_id: SessionId) -> Result<Self::Session> {

@@ -446,7 +446,7 @@ mod tests {
     use geoengine_datatypes::primitives::{
         FeatureData, Measurement, MultiPoint, SpatialPartition2D, SpatialResolution, TimeInterval,
     };
-    use geoengine_datatypes::raster::RasterDataType;
+    use geoengine_datatypes::raster::{GridShape, RasterDataType};
     use geoengine_datatypes::spatial_reference::SpatialReference;
     use geoengine_operators::engine::{MultipleRasterSources, PlotOperator, TypedOperator};
     use geoengine_operators::engine::{RasterOperator, RasterResultDescriptor, VectorOperator};
@@ -976,7 +976,9 @@ mod tests {
         .boxed();
 
         let session = ctx.default_session_ref().await.clone();
-        let exe_ctx = ctx.execution_context(session).unwrap();
+        let mut exe_ctx = ctx.execution_context(session).unwrap();
+        // override the pixel size since this test was designed for 600 x 600 pixel tiles
+        exe_ctx.tiling_specification.tile_size_in_pixels = GridShape::new([600, 600]);
 
         let o = op.initialize(&exe_ctx).await.unwrap();
 

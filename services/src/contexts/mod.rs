@@ -10,16 +10,13 @@ mod simple_context;
 
 use crate::datasets::storage::DatasetDb;
 
-use crate::util::config;
-use crate::util::config::get_config_element;
 use geoengine_datatypes::dataset::DatasetId;
-use geoengine_datatypes::primitives::Coordinate2D;
-use geoengine_datatypes::raster::GridShape2D;
+
 use geoengine_datatypes::raster::TilingSpecification;
 use geoengine_operators::concurrency::ThreadPoolContext;
 use geoengine_operators::engine::{
-    ExecutionContext, MetaData, MetaDataProvider, QueryContext, RasterQueryRectangle,
-    RasterResultDescriptor, VectorQueryRectangle, VectorResultDescriptor,
+    ChunkByteSize, ExecutionContext, MetaData, MetaDataProvider, QueryContext,
+    RasterQueryRectangle, RasterResultDescriptor, VectorQueryRectangle, VectorResultDescriptor,
 };
 use geoengine_operators::mock::MockDatasetDataSourceLoadingInfo;
 use geoengine_operators::source::{GdalLoadingInfo, OgrSourceDataset};
@@ -62,12 +59,12 @@ pub trait Context: 'static + Send + Sync + Clone {
 }
 
 pub struct QueryContextImpl {
-    pub chunk_byte_size: usize,
+    pub chunk_byte_size: ChunkByteSize,
     pub thread_pool: ThreadPoolContext,
 }
 
 impl QueryContext for QueryContextImpl {
-    fn chunk_byte_size(&self) -> usize {
+    fn chunk_byte_size(&self) -> ChunkByteSize {
         self.chunk_byte_size
     }
 
@@ -84,6 +81,7 @@ where
     dataset_db: Db<D>,
     thread_pool: ThreadPoolContext,
     session: S,
+    pub tiling_specification: TilingSpecification,
 }
 
 impl<S, D> ExecutionContextImpl<S, D>
@@ -91,11 +89,17 @@ where
     D: DatasetDb<S>,
     S: Session,
 {
-    pub fn new(dataset_db: Db<D>, thread_pool: ThreadPoolContext, session: S) -> Self {
+    pub fn new(
+        dataset_db: Db<D>,
+        thread_pool: ThreadPoolContext,
+        session: S,
+        tiling_specification: TilingSpecification,
+    ) -> Self {
         Self {
             dataset_db,
             thread_pool,
             session,
+            tiling_specification,
         }
     }
 }
@@ -116,19 +120,7 @@ where
     }
 
     fn tiling_specification(&self) -> TilingSpecification {
-        // TODO: load only once and handle error
-        let config_tiling_spec = get_config_element::<config::TilingSpecification>().unwrap();
-
-        TilingSpecification {
-            origin_coordinate: Coordinate2D::new(
-                config_tiling_spec.origin_coordinate_x,
-                config_tiling_spec.origin_coordinate_y,
-            ),
-            tile_size_in_pixels: GridShape2D::from([
-                config_tiling_spec.tile_shape_pixels_y,
-                config_tiling_spec.tile_shape_pixels_x,
-            ]),
-        }
+        self.tiling_specification
     }
 }
 

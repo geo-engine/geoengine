@@ -513,7 +513,7 @@ mod tests {
 
         let processor = o.query_processor().unwrap().get_i8().unwrap();
 
-        let ctx = MockQueryContext::new(1);
+        let ctx = MockQueryContext::new(1.into());
         let result_stream = processor
             .query(
                 RasterQueryRectangle {

@@ -241,8 +241,11 @@ impl VectorQueryProcessor for PointInPolygonFilterProcessor {
                 });
 
         Ok(
-            FeatureCollectionChunkMerger::new(filtered_stream.fuse(), ctx.chunk_byte_size())
-                .boxed(),
+            FeatureCollectionChunkMerger::new(
+                filtered_stream.fuse(),
+                ctx.chunk_byte_size().inner(),
+            )
+            .boxed(),
         )
     }
 }
@@ -372,7 +375,7 @@ mod tests {
             time_interval: TimeInterval::default(),
             spatial_resolution: SpatialResolution::zero_point_one(),
         };
-        let ctx = MockQueryContext::new(usize::MAX);
+        let ctx = MockQueryContext::new(usize::MAX.into());
 
         let query = query_processor.query(query_rectangle, &ctx).await.unwrap();
 
@@ -421,7 +424,7 @@ mod tests {
             time_interval: TimeInterval::default(),
             spatial_resolution: SpatialResolution::zero_point_one(),
         };
-        let ctx = MockQueryContext::new(usize::MAX);
+        let ctx = MockQueryContext::new(usize::MAX.into());
 
         let query = query_processor.query(query_rectangle, &ctx).await.unwrap();
 
@@ -483,7 +486,7 @@ mod tests {
             time_interval: TimeInterval::default(),
             spatial_resolution: SpatialResolution::zero_point_one(),
         };
-        let ctx = MockQueryContext::new(usize::MAX);
+        let ctx = MockQueryContext::new(usize::MAX.into());
 
         let query = query_processor.query(query_rectangle, &ctx).await.unwrap();
 
@@ -563,8 +566,8 @@ mod tests {
             spatial_resolution: SpatialResolution::zero_point_one(),
         };
 
-        let ctx_one_chunk = MockQueryContext::new(usize::MAX);
-        let ctx_minimal_chunks = MockQueryContext::new(0);
+        let ctx_one_chunk = MockQueryContext::new(usize::MAX.into());
+        let ctx_minimal_chunks = MockQueryContext::new(0.into());
 
         let query = query_processor
             .query(query_rectangle, &ctx_minimal_chunks)

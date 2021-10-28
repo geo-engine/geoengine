@@ -710,7 +710,7 @@ mod tests {
             ),
         };
 
-        let ctx = MockQueryContext::new(usize::MAX);
+        let ctx = MockQueryContext::new(usize::MAX.into());
 
         let result = processor
             .raster_query(query, &ctx)

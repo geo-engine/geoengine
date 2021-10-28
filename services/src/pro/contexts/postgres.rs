@@ -7,7 +7,6 @@ use crate::pro::projects::ProjectPermission;
 use crate::pro::users::{UserDb, UserId, UserSession};
 use crate::pro::workflows::postgres_workflow_registry::PostgresWorkflowRegistry;
 use crate::projects::ProjectId;
-use crate::util::config;
 use crate::{
     contexts::{Context, Db},
     pro::users::PostgresUserDb,
@@ -23,7 +22,9 @@ use bb8_postgres::{
     tokio_postgres::{error::SqlState, tls::MakeTlsConnect, tls::TlsConnect, Config, Socket},
     PostgresConnectionManager,
 };
+use geoengine_datatypes::raster::TilingSpecification;
 use geoengine_operators::concurrency::{ThreadPool, ThreadPoolContextCreator};
+use geoengine_operators::engine::ChunkByteSize;
 use log::{debug, warn};
 use snafu::ResultExt;
 use std::path::PathBuf;
@@ -48,6 +49,8 @@ where
     workflow_registry: Db<PostgresWorkflowRegistry<Tls>>,
     dataset_db: Db<PostgresDatasetDb<Tls>>,
     thread_pool: Arc<ThreadPool>,
+    exe_ctx_tiling_spec: TilingSpecification,
+    query_ctx_chunk_size: ChunkByteSize,
 }
 
 impl<Tls> PostgresContext<Tls>
@@ -70,6 +73,8 @@ where
             workflow_registry: Arc::new(RwLock::new(PostgresWorkflowRegistry::new(pool.clone()))),
             dataset_db: Arc::new(RwLock::new(PostgresDatasetDb::new(pool.clone()))),
             thread_pool: Default::default(),
+            exe_ctx_tiling_spec: Default::default(),
+            query_ctx_chunk_size: Default::default(),
         })
     }
 
@@ -96,6 +101,8 @@ where
             workflow_registry: Arc::new(RwLock::new(PostgresWorkflowRegistry::new(pool.clone()))),
             dataset_db: Arc::new(RwLock::new(dataset_db)),
             thread_pool: Default::default(),
+            exe_ctx_tiling_spec: Default::default(),
+            query_ctx_chunk_size: Default::default(),
         })
     }
 
@@ -344,6 +351,14 @@ where
 
         Ok(())
     }
+
+    pub fn set_tiling_spec(&mut self, tiling_spec: TilingSpecification) {
+        self.exe_ctx_tiling_spec = tiling_spec;
+    }
+
+    pub fn set_chunk_byte_size(&mut self, chunk_byte_size: ChunkByteSize) {
+        self.query_ctx_chunk_size = chunk_byte_size;
+    }
 }
 
 #[async_trait]
@@ -417,7 +432,7 @@ where
     fn query_context(&self) -> Result<Self::QueryContext> {
         // TODO: load config only once
         Ok(QueryContextImpl {
-            chunk_byte_size: config::get_config_element::<config::QueryContext>()?.chunk_byte_size,
+            chunk_byte_size: self.query_ctx_chunk_size,
             thread_pool: self.thread_pool.create_context(),
         })
     }
@@ -428,6 +443,7 @@ where
                 self.dataset_db.clone(),
                 self.thread_pool.create_context(),
                 session,
+                self.exe_ctx_tiling_spec,
             ),
         )
     }

@@ -7,7 +7,6 @@ use crate::source::{GdalLoadingInfo, OgrSourceDataset};
 use crate::util::Result;
 use async_trait::async_trait;
 use geoengine_datatypes::dataset::DatasetId;
-use geoengine_datatypes::raster::GridShape;
 use geoengine_datatypes::raster::TilingSpecification;
 use serde::{Deserialize, Serialize};
 use std::any::Any;
@@ -66,12 +65,7 @@ impl Default for MockExecutionContext {
         Self {
             thread_pool: Arc::new(ThreadPool::default()).create_context(),
             meta_data: HashMap::default(),
-            tiling_specification: TilingSpecification {
-                origin_coordinate: Default::default(),
-                tile_size_in_pixels: GridShape {
-                    shape_array: [600, 600],
-                },
-            },
+            tiling_specification: TilingSpecification::default(),
         }
     }
 }

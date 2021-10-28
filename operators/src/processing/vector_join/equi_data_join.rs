@@ -368,7 +368,7 @@ where
                             self.join(
                                 left_collection.clone(),
                                 right_collection,
-                                ctx.chunk_byte_size(),
+                                ctx.chunk_byte_size().inner(),
                             )
                         }) {
                             Ok(batch_iter) => stream::iter(batch_iter).boxed(),
@@ -380,7 +380,10 @@ where
             })
             .try_flatten();
 
-        Ok(FeatureCollectionChunkMerger::new(result_stream.fuse(), ctx.chunk_byte_size()).boxed())
+        Ok(
+            FeatureCollectionChunkMerger::new(result_stream.fuse(), ctx.chunk_byte_size().inner())
+                .boxed(),
+        )
     }
 }
 
@@ -432,7 +435,7 @@ mod tests {
             spatial_resolution: SpatialResolution::zero_point_one(),
         };
 
-        let ctx = MockQueryContext::new(usize::MAX);
+        let ctx = MockQueryContext::new(usize::MAX.into());
 
         let processor = EquiGeoToDataJoinProcessor::new(
             left_processor,

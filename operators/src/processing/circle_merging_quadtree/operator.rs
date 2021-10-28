@@ -415,7 +415,7 @@ impl QueryProcessor for VisualPointClusteringProcessor {
             )
         });
 
-        Ok(stream.merge_chunks(ctx.chunk_byte_size()).boxed())
+        Ok(stream.merge_chunks(ctx.chunk_byte_size().inner()).boxed())
     }
 }
 
