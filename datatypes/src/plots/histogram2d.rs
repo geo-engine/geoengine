@@ -176,25 +176,20 @@ impl Plot for Histogram2D {
                     "field": "x",
                     "type": "quantitative",
                     "axis": {
-                        "title": "x"
+                        "title": self.x.column
                     }
                 },
                 "y": {
                     "field": "y",
                     "type": "quantitative",
                     "axis": {
-                        "title": "y"
+                        "title": self.y.column
                     }
                 },
                 "size": {
                     "field": "frequency",
                     "bin": true
                 },
-                // "color": {
-                //     "bin": true,
-                //     "field": "frequency",
-                //     "scale": {"scheme": "rainbow"}
-                // },
             }
         });
 
