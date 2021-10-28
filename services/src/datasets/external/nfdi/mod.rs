@@ -39,7 +39,7 @@ pub struct NFDIDataProviderDefinition {
     id: DatasetProviderId,
     name: String,
     api_url: String,
-    project_id: u64,
+    project_id: String,
     api_token: String,
 }
 
@@ -47,7 +47,7 @@ pub struct NFDIDataProviderDefinition {
 #[async_trait::async_trait]
 impl DatasetProviderDefinition for NFDIDataProviderDefinition {
     async fn initialize(self: Box<Self>) -> Result<Box<dyn DatasetProvider>> {
-        Ok(Box::new(NFDIDataProvider::new(&self).await?))
+        Ok(Box::new(NFDIDataProvider::new(self).await?))
     }
 
     fn type_name(&self) -> String {
@@ -91,18 +91,17 @@ impl Interceptor for APITokenInterceptor {
 
 pub struct NFDIDataProvider {
     id: DatasetProviderId,
-    project_id: u64,
+    project_id: String,
     project_stub: ProjectServiceClient<InterceptedService<Channel, APITokenInterceptor>>,
     dataset_stub: DatasetServiceClient<InterceptedService<Channel, APITokenInterceptor>>,
     object_stub: ObjectLoadServiceClient<InterceptedService<Channel, APITokenInterceptor>>,
 }
 
 impl NFDIDataProvider {
-    async fn new(def: &NFDIDataProviderDefinition) -> Result<NFDIDataProvider> {
-        let channel = Endpoint::from_str(def.api_url.as_str())
-            .map_err(|_| Error::InvalidUri {
-                uri_string: def.api_url.clone(),
-            })?
+    async fn new(def: Box<NFDIDataProviderDefinition>) -> Result<NFDIDataProvider> {
+        let url = def.api_url;
+        let channel = Endpoint::from_str(url.as_str())
+            .map_err(|_| Error::InvalidUri { uri_string: url })?
             .connect()
             .await?;
 
@@ -116,7 +115,7 @@ impl NFDIDataProvider {
         let object_stub = ObjectLoadServiceClient::with_interceptor(channel, interceptor.clone());
 
         Ok(NFDIDataProvider {
-            id: def.id.clone(),
+            id: def.id,
             project_id: def.project_id,
             project_stub,
             dataset_stub,
@@ -124,9 +123,9 @@ impl NFDIDataProvider {
         })
     }
 
-    fn dataset_id(id: &DatasetId) -> Result<u64> {
+    fn dataset_id(id: &DatasetId) -> Result<String> {
         match id {
-            DatasetId::External(id) => id.dataset_id.parse().map_err(|_| Error::InvalidDatasetId),
+            DatasetId::External(id) => Ok(id.dataset_id.clone()),
             _ => Err(Error::InvalidDatasetId),
         }
     }
@@ -251,7 +250,10 @@ impl NFDIDataProvider {
         let mut object_stub = self.object_stub.clone();
 
         let link = object_stub
-            .create_download_link(CreateDownloadLinkRequest { id: object.id })
+            .create_download_link(CreateDownloadLinkRequest {
+                id: object.id,
+                range: None,
+            })
             .await?
             .into_inner()
             .download_link;
@@ -394,7 +396,7 @@ impl DatasetProvider for NFDIDataProvider {
 
         let resp = project_stub
             .get_project_datasets(GetProjectDatasetsRequest {
-                id: self.project_id,
+                id: self.project_id.clone(),
             })
             .await?
             .into_inner();
@@ -435,13 +437,13 @@ mod tests {
     async fn new_provider() -> NFDIDataProvider {
         let def = NFDIDataProviderDefinition {
             id: DatasetProviderId::from_str(PROVIDER_ID).unwrap(),
-            api_token: "T4M7LtGpTHQkMAs2v9f/QXOJCzxS6OueybfMqKXA3NZOTmrZ7PdT5vT14DLa".to_string(),
+            api_token: "nWBj01boksqYji8P+GzEei9zncNMJRhL1szTBsZHiIa8dYrzf+sW7CWI2tFs".to_string(),
             api_url: "https://api.core-server-dev.m1.k8s.computational.bio/".to_string(),
-            project_id: 701931538305253378,
+            project_id: "68e64847-fccd-4787-88fe-3f326f3622bc".to_string(),
             name: "NFDI".to_string(),
         };
 
-        NFDIDataProvider::new(&def).await.unwrap()
+        NFDIDataProvider::new(Box::new(def)).await.unwrap()
     }
 
     #[tokio::test]
