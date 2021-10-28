@@ -1,3 +1,4 @@
+use crate::util::statistics::StatisticsError;
 use chrono::ParseError;
 use geoengine_datatypes::dataset::DatasetId;
 use geoengine_datatypes::primitives::FeatureDataType;
@@ -286,6 +287,11 @@ pub enum Error {
         "Raster data sets with a different origin than upper left are currently not supported"
     ))]
     GeoTransformOrigin,
+
+    #[snafu(display("Statistics error: {}", source))]
+    Statistics {
+        source: crate::util::statistics::StatisticsError,
+    },
 }
 
 impl From<geoengine_datatypes::error::Error> for Error {
@@ -337,5 +343,11 @@ impl From<arrow::error::ArrowError> for Error {
 impl From<tokio::task::JoinError> for Error {
     fn from(source: tokio::task::JoinError) -> Self {
         Error::TokioJoin { source }
+    }
+}
+
+impl From<crate::util::statistics::StatisticsError> for Error {
+    fn from(source: StatisticsError) -> Self {
+        Error::Statistics { source }
     }
 }
