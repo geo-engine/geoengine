@@ -62,7 +62,7 @@ snafu = "0.6"
 strum = { version = "0.22", features = ["derive"] }
 tokio = { version = "1.1", features = ["macros", "signal", "sync", "rt-multi-thread"] }
 tokio-util = "0.6"
-tonic = { version = "0.5", features = ["tls", "tls-roots"] }
+tonic = { version = "0.6", features = ["tls", "tls-roots"] }
 typetag = "0.1"
 url = { version = "2.2", features = ["serde"] }
 uuid = { version = "0.8", features = ["serde", "v4", "v5"] }
