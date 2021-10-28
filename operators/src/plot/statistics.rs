@@ -179,8 +179,8 @@ mod tests {
 
     use super::*;
     use crate::engine::{
-        MockExecutionContext, MockQueryContext, RasterOperator, RasterResultDescriptor,
-        VectorQueryRectangle,
+        ChunkByteSize, MockExecutionContext, MockQueryContext, RasterOperator,
+        RasterResultDescriptor, VectorQueryRectangle,
     };
     use crate::mock::{MockRasterSource, MockRasterSourceParams};
     use geoengine_datatypes::primitives::{
@@ -260,7 +260,7 @@ mod tests {
                     time_interval: TimeInterval::default(),
                     spatial_resolution: SpatialResolution::one(),
                 },
-                &MockQueryContext::default(),
+                &MockQueryContext::new(ChunkByteSize::MIN),
             )
             .await
             .unwrap();
