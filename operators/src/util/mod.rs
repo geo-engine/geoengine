@@ -4,6 +4,7 @@ pub mod math;
 pub mod number_statistics;
 pub mod raster_stream_to_geotiff;
 pub mod raster_stream_to_png;
+pub mod statistics;
 pub mod string_token;
 pub mod sunpos;
 
