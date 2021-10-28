@@ -103,6 +103,7 @@ pub struct Histogram2D {
 }
 
 impl Histogram2D {
+    /// Creates a new empty `Histogram2D` with the given dimensions
     pub fn new(x: HistogramDimension, y: HistogramDimension) -> Self {
         let counts = vec![HashMap::new(); x.bucket_count];
         Self {
