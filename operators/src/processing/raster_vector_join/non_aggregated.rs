@@ -75,7 +75,7 @@ where
 
         stream
             .try_flatten()
-            .merge_chunks(ctx.chunk_byte_size().inner())
+            .merge_chunks(ctx.chunk_byte_size().into())
             .boxed()
     }
 

@@ -368,7 +368,7 @@ where
                             self.join(
                                 left_collection.clone(),
                                 right_collection,
-                                ctx.chunk_byte_size().inner(),
+                                ctx.chunk_byte_size().into(),
                             )
                         }) {
                             Ok(batch_iter) => stream::iter(batch_iter).boxed(),
@@ -381,7 +381,7 @@ where
             .try_flatten();
 
         Ok(
-            FeatureCollectionChunkMerger::new(result_stream.fuse(), ctx.chunk_byte_size().inner())
+            FeatureCollectionChunkMerger::new(result_stream.fuse(), ctx.chunk_byte_size().into())
                 .boxed(),
         )
     }

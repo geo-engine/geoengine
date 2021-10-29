@@ -241,11 +241,8 @@ impl VectorQueryProcessor for PointInPolygonFilterProcessor {
                 });
 
         Ok(
-            FeatureCollectionChunkMerger::new(
-                filtered_stream.fuse(),
-                ctx.chunk_byte_size().inner(),
-            )
-            .boxed(),
+            FeatureCollectionChunkMerger::new(filtered_stream.fuse(), ctx.chunk_byte_size().into())
+                .boxed(),
         )
     }
 }

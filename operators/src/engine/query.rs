@@ -55,10 +55,6 @@ impl ChunkByteSize {
     pub fn new(cbs: usize) -> Self {
         ChunkByteSize(cbs)
     }
-
-    pub fn inner(self) -> usize {
-        self.0
-    }
 }
 
 impl From<usize> for ChunkByteSize {

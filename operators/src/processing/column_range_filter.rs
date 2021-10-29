@@ -143,7 +143,7 @@ where
         });
 
         let merged_chunks_stream =
-            FeatureCollectionChunkMerger::new(filter_stream.fuse(), ctx.chunk_byte_size().inner());
+            FeatureCollectionChunkMerger::new(filter_stream.fuse(), ctx.chunk_byte_size().into());
 
         Ok(merged_chunks_stream.boxed())
     }

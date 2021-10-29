@@ -401,7 +401,7 @@ where
         Ok(OgrSourceStream::new(
             self.dataset_information.loading_info(query).await?,
             query,
-            ctx.chunk_byte_size().inner(),
+            ctx.chunk_byte_size().into(),
         )
         .boxed())
     }
