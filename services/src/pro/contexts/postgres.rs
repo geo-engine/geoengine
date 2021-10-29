@@ -434,10 +434,10 @@ where
 
     fn query_context(&self) -> Result<Self::QueryContext> {
         // TODO: load config only once
-        Ok(QueryContextImpl {
-            chunk_byte_size: self.query_ctx_chunk_size,
-            thread_pool: self.thread_pool.create_context(),
-        })
+        Ok(QueryContextImpl::new(
+            self.query_ctx_chunk_size,
+            self.thread_pool.create_context(),
+        ))
     }
 
     fn execution_context(&self, session: UserSession) -> Result<Self::ExecutionContext> {

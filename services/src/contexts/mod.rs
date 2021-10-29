@@ -59,8 +59,17 @@ pub trait Context: 'static + Send + Sync + Clone {
 }
 
 pub struct QueryContextImpl {
-    pub chunk_byte_size: ChunkByteSize,
-    pub thread_pool: ThreadPoolContext,
+    chunk_byte_size: ChunkByteSize,
+    thread_pool: ThreadPoolContext,
+}
+
+impl QueryContextImpl {
+    pub fn new(chunk_byte_size: ChunkByteSize, thread_pool: ThreadPoolContext) -> Self {
+        QueryContextImpl {
+            chunk_byte_size,
+            thread_pool,
+        }
+    }
 }
 
 impl QueryContext for QueryContextImpl {

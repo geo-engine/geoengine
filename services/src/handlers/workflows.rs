@@ -982,7 +982,7 @@ mod tests {
         .boxed();
 
         let session = ctx.default_session_ref().await.clone();
-        let mut exe_ctx = ctx.execution_context(session).unwrap();
+        let exe_ctx = ctx.execution_context(session).unwrap();
 
         let o = op.initialize(&exe_ctx).await.unwrap();
 
