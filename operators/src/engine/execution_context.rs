@@ -71,6 +71,13 @@ impl Default for MockExecutionContext {
 }
 
 impl MockExecutionContext {
+    pub fn new_with_tiling_spec(tiling_specification: TilingSpecification) -> Self {
+        MockExecutionContext {
+            tiling_specification,
+            ..Default::default()
+        }
+    }
+
     pub fn add_meta_data<L, R, Q>(
         &mut self,
         dataset: DatasetId,

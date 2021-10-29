@@ -81,7 +81,7 @@ where
     dataset_db: Db<D>,
     thread_pool: ThreadPoolContext,
     session: S,
-    pub tiling_specification: TilingSpecification,
+    tiling_specification: TilingSpecification,
 }
 
 impl<S, D> ExecutionContextImpl<S, D>

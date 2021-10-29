@@ -31,23 +31,33 @@ pub struct InMemoryContext {
 }
 
 impl InMemoryContext {
-    pub async fn new_with_data(dataset_defs_path: PathBuf, provider_defs_path: PathBuf) -> Self {
+    pub async fn new_with_data(
+        dataset_defs_path: PathBuf,
+        provider_defs_path: PathBuf,
+        exe_ctx_tiling_spec: TilingSpecification,
+        query_ctx_chunk_size: ChunkByteSize,
+    ) -> Self {
         let mut db = HashMapDatasetDb::default();
         add_datasets_from_directory(&mut db, dataset_defs_path).await;
         add_providers_from_directory(&mut db, provider_defs_path).await;
 
         InMemoryContext {
+            exe_ctx_tiling_spec,
+            query_ctx_chunk_size,
             dataset_db: Arc::new(RwLock::new(db)),
             ..Default::default()
         }
     }
 
-    pub fn set_tiling_spec(&mut self, tiling_spec: TilingSpecification) {
-        self.exe_ctx_tiling_spec = tiling_spec;
-    }
-
-    pub fn set_chunk_byte_size(&mut self, chunk_byte_size: ChunkByteSize) {
-        self.query_ctx_chunk_size = chunk_byte_size;
+    pub fn new_with_context_spec(
+        exe_ctx_tiling_spec: TilingSpecification,
+        query_ctx_chunk_size: ChunkByteSize,
+    ) -> Self {
+        InMemoryContext {
+            exe_ctx_tiling_spec,
+            query_ctx_chunk_size,
+            ..Default::default()
+        }
     }
 }
 

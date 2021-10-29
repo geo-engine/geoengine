@@ -1009,12 +1009,13 @@ mod tests {
     async fn create_dataset() -> Result<()> {
         let mut test_data = TestDataUploads::default(); // remember created folder and remove them on drop
 
-        let mut ctx = InMemoryContext::default();
-        // override the pixel size since this test was designed for 600 x 600 pixel tiles
-        ctx.set_tiling_spec(TilingSpecification {
+        let exe_ctx_tiling_spec = TilingSpecification {
             origin_coordinate: (0., 0.).into(),
             tile_size_in_pixels: GridShape2D::new([600, 600]),
-        });
+        };
+
+        // override the pixel size since this test was designed for 600 x 600 pixel tiles
+        let ctx = InMemoryContext::new_with_context_spec(exe_ctx_tiling_spec, Default::default());
 
         let session = ctx.default_session_ref().await;
         let session_id = session.id();

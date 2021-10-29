@@ -361,7 +361,7 @@ mod tests {
     use actix_web_httpauth::headers::authorization::Bearer;
     use geoengine_datatypes::operations::image::RgbaColor;
     use geoengine_datatypes::primitives::SpatialPartition2D;
-    use geoengine_datatypes::raster::TilingSpecification;
+    use geoengine_datatypes::raster::{GridShape2D, TilingSpecification};
     use geoengine_operators::engine::{
         ExecutionContext, RasterQueryProcessor, RasterQueryRectangle,
     };
@@ -486,11 +486,13 @@ mod tests {
     }
 
     async fn get_map_test_helper(method: Method, path: Option<&str>) -> ServiceResponse {
-        let mut ctx = InMemoryContext::default();
-        ctx.set_tiling_spec(TilingSpecification {
-            tile_size_in_pixels: [600, 600].into(),
-            ..Default::default()
-        });
+        let exe_ctx_tiling_spec = TilingSpecification {
+            origin_coordinate: (0., 0.).into(),
+            tile_size_in_pixels: GridShape2D::new([600, 600]),
+        };
+
+        // override the pixel size since this test was designed for 600 x 600 pixel tiles
+        let ctx = InMemoryContext::new_with_context_spec(exe_ctx_tiling_spec, Default::default());
 
         let session_id = ctx.default_session_ref().await.id();
 
@@ -539,11 +541,13 @@ mod tests {
     ///Actix uses serde_urlencoded inside web::Query which does not support this
     #[tokio::test]
     async fn get_map_uppercase() {
-        let mut ctx = InMemoryContext::default();
-        ctx.set_tiling_spec(TilingSpecification {
-            tile_size_in_pixels: [600, 600].into(),
-            ..Default::default()
-        });
+        let exe_ctx_tiling_spec = TilingSpecification {
+            origin_coordinate: (0., 0.).into(),
+            tile_size_in_pixels: GridShape2D::new([600, 600]),
+        };
+
+        // override the pixel size since this test was designed for 600 x 600 pixel tiles
+        let ctx = InMemoryContext::new_with_context_spec(exe_ctx_tiling_spec, Default::default());
 
         let session_id = ctx.default_session_ref().await.id();
 
@@ -580,11 +584,13 @@ mod tests {
 
     #[tokio::test]
     async fn get_map_colorizer() {
-        let mut ctx = InMemoryContext::default();
-        ctx.set_tiling_spec(TilingSpecification {
-            tile_size_in_pixels: [600, 600].into(),
-            ..Default::default()
-        });
+        let exe_ctx_tiling_spec = TilingSpecification {
+            origin_coordinate: (0., 0.).into(),
+            tile_size_in_pixels: GridShape2D::new([600, 600]),
+        };
+
+        // override the pixel size since this test was designed for 600 x 600 pixel tiles
+        let ctx = InMemoryContext::new_with_context_spec(exe_ctx_tiling_spec, Default::default());
 
         let session_id = ctx.default_session_ref().await.id();
 

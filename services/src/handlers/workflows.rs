@@ -902,11 +902,13 @@ mod tests {
 
     #[tokio::test]
     async fn dataset_from_workflow() {
-        let mut ctx = InMemoryContext::default();
-        ctx.set_tiling_spec(TilingSpecification {
-            tile_size_in_pixels: [600, 600].into(),
-            ..Default::default()
-        });
+        let exe_ctx_tiling_spec = TilingSpecification {
+            origin_coordinate: (0., 0.).into(),
+            tile_size_in_pixels: GridShape::new([600, 600]),
+        };
+
+        // override the pixel size since this test was designed for 600 x 600 pixel tiles
+        let ctx = InMemoryContext::new_with_context_spec(exe_ctx_tiling_spec, Default::default());
 
         let session_id = ctx.default_session_ref().await.id();
 
@@ -981,8 +983,6 @@ mod tests {
 
         let session = ctx.default_session_ref().await.clone();
         let mut exe_ctx = ctx.execution_context(session).unwrap();
-        // override the pixel size since this test was designed for 600 x 600 pixel tiles
-        exe_ctx.tiling_specification.tile_size_in_pixels = GridShape::new([600, 600]);
 
         let o = op.initialize(&exe_ctx).await.unwrap();
 

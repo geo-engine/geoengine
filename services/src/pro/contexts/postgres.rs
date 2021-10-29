@@ -61,6 +61,15 @@ where
     <<Tls as MakeTlsConnect<Socket>>::TlsConnect as TlsConnect<Socket>>::Future: Send,
 {
     pub async fn new(config: Config, tls: Tls) -> Result<Self> {
+        Self::new_with_context_spec(config, tls, Default::default(), Default::default()).await
+    }
+
+    pub async fn new_with_context_spec(
+        config: Config,
+        tls: Tls,
+        exe_ctx_tiling_spec: TilingSpecification,
+        query_ctx_chunk_size: ChunkByteSize,
+    ) -> Result<Self> {
         let pg_mgr = PostgresConnectionManager::new(config, tls);
 
         let pool = Pool::builder().build(pg_mgr).await?;
@@ -73,8 +82,8 @@ where
             workflow_registry: Arc::new(RwLock::new(PostgresWorkflowRegistry::new(pool.clone()))),
             dataset_db: Arc::new(RwLock::new(PostgresDatasetDb::new(pool.clone()))),
             thread_pool: Default::default(),
-            exe_ctx_tiling_spec: Default::default(),
-            query_ctx_chunk_size: Default::default(),
+            exe_ctx_tiling_spec,
+            query_ctx_chunk_size,
         })
     }
 
@@ -83,6 +92,8 @@ where
         tls: Tls,
         dataset_defs_path: PathBuf,
         provider_defs_path: PathBuf,
+        exe_ctx_tiling_spec: TilingSpecification,
+        query_ctx_chunk_size: ChunkByteSize,
     ) -> Result<Self> {
         let pg_mgr = PostgresConnectionManager::new(config, tls);
 
@@ -101,8 +112,8 @@ where
             workflow_registry: Arc::new(RwLock::new(PostgresWorkflowRegistry::new(pool.clone()))),
             dataset_db: Arc::new(RwLock::new(dataset_db)),
             thread_pool: Default::default(),
-            exe_ctx_tiling_spec: Default::default(),
-            query_ctx_chunk_size: Default::default(),
+            exe_ctx_tiling_spec,
+            query_ctx_chunk_size,
         })
     }
 
@@ -350,14 +361,6 @@ where
             .map_err(|_error| error::Error::ProjectDbUnauthorized)?;
 
         Ok(())
-    }
-
-    pub fn set_tiling_spec(&mut self, tiling_spec: TilingSpecification) {
-        self.exe_ctx_tiling_spec = tiling_spec;
-    }
-
-    pub fn set_chunk_byte_size(&mut self, chunk_byte_size: ChunkByteSize) {
-        self.query_ctx_chunk_size = chunk_byte_size;
     }
 }
 

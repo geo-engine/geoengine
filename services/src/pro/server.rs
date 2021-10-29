@@ -103,14 +103,13 @@ pub async fn start_pro_server(static_files_dir: Option<PathBuf>) -> Result<()> {
     match web_config.backend {
         Backend::InMemory => {
             info!("Using in memory backend");
-            let mut ctx = ProInMemoryContext::new_with_data(
+            let ctx = ProInMemoryContext::new_with_data(
                 data_path_config.dataset_defs_path,
                 data_path_config.provider_defs_path,
+                tiling_spec,
+                chunk_byte_size,
             )
             .await;
-
-            ctx.set_tiling_spec(tiling_spec);
-            ctx.set_chunk_byte_size(chunk_byte_size);
 
             start(
                 static_files_dir,
@@ -135,16 +134,15 @@ pub async fn start_pro_server(static_files_dir: Option<PathBuf>) -> Result<()> {
                     // fix schema by providing `search_path` option
                     .options(&format!("-c search_path={}", db_config.schema));
 
-                let mut ctx = PostgresContext::new_with_data(
+                let ctx = PostgresContext::new_with_data(
                     pg_config,
                     NoTls,
                     data_path_config.dataset_defs_path,
                     data_path_config.provider_defs_path,
+                    tiling_spec,
+                    chunk_byte_size,
                 )
                 .await?;
-
-                ctx.set_tiling_spec(tiling_spec);
-                ctx.set_chunk_byte_size(chunk_byte_size);
 
                 start(
                     static_files_dir,
