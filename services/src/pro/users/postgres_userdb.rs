@@ -162,7 +162,7 @@ where
             valid_until: row.get(1),
             project: None,
             view: None,
-            roles: vec![], // TODO
+            roles: vec![user_id.into(), Role::anonymous_role_id()],
         })
     }
 
@@ -205,6 +205,18 @@ where
                     ],
                 )
                 .await?;
+
+            let stmt = conn
+                .prepare("SELECT role_id FROM user_roles WHERE user_id = $1;")
+                .await?;
+
+            let rows = conn
+                .query(&stmt, &[&user_id])
+                .await
+                .map_err(|_error| error::Error::LoginFailed)?;
+
+            let roles = rows.into_iter().map(|row| row.get(0)).collect();
+
             Ok(UserSession {
                 id: session_id,
                 user: UserInfo {
@@ -216,7 +228,7 @@ where
                 valid_until: row.get(1),
                 project: None,
                 view: None,
-                roles: vec![], // TODO
+                roles,
             })
         } else {
             Err(error::Error::LoginFailed)
