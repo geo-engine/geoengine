@@ -1,3 +1,4 @@
+mod box_plot;
 mod histogram;
 mod statistics;
 mod temporal_raster_mean_plot;
