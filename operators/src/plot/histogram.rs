@@ -112,7 +112,12 @@ impl PlotOperator for Histogram {
                             reason: format!("column `{}` must be numerical", column_name),
                         });
                     }
-                    Some(FeatureDataType::Int | FeatureDataType::Float | FeatureDataType::Bool) => {
+                    Some(
+                        FeatureDataType::Int
+                        | FeatureDataType::Float
+                        | FeatureDataType::Bool
+                        | FeatureDataType::DateTime,
+                    ) => {
                         // okay
                     }
                 }
@@ -553,9 +558,12 @@ impl HistogramMetadataInProgress {
             FeatureDataRef::Float(values) => {
                 add_data_ref(self, &values);
             }
-            FeatureDataRef::Category(_) | FeatureDataRef::Text(_) | FeatureDataRef::Bool(_) => {
+            FeatureDataRef::Category(_)
+            | FeatureDataRef::Text(_)
+            | FeatureDataRef::Bool(_)
+            | FeatureDataRef::DateTime(_) => {
                 // do nothing since we don't support them
-                // TODO: fill with live once we support category, text and bool types
+                // TODO: fill with live once we support category, text, bool and datetime types
             }
         }
     }

@@ -187,6 +187,25 @@ impl Histogram {
                     self.handle_data_item(value, is_null);
                 }
             }
+            FeatureDataRef::DateTime(value_ref) if !value_ref.has_nulls() => {
+                for value in value_ref
+                    .as_ref()
+                    .iter()
+                    .map(|&v| v.timestamp_millis() as f64)
+                {
+                    self.handle_data_item(value, false);
+                }
+            }
+            FeatureDataRef::DateTime(value_ref) => {
+                for (value, is_null) in value_ref
+                    .as_ref()
+                    .iter()
+                    .map(|&v| v.timestamp_millis() as f64)
+                    .zip(value_ref.nulls())
+                {
+                    self.handle_data_item(value, is_null);
+                }
+            }
         }
 
         Ok(())

@@ -2,6 +2,7 @@ use crate::error;
 use crate::primitives::PrimitivesError;
 use crate::util::Result;
 use arrow::bitmap::Bitmap;
+use chrono::{DateTime, Utc};
 use gdal::vector::OGRFieldType;
 use num_traits::AsPrimitive;
 use serde::{Deserialize, Serialize};
@@ -19,6 +20,7 @@ pub enum FeatureDataType {
     Float,
     Text,
     Bool,
+    DateTime,
 }
 
 impl FeatureDataType {
@@ -28,6 +30,7 @@ impl FeatureDataType {
             OGRFieldType::OFTReal => Self::Float,
             OGRFieldType::OFTString => Self::Text,
             OGRFieldType::OFTBinary => Self::Bool,
+            OGRFieldType::OFTDateTime => Self::DateTime,
             _ => return Err(error::Error::NoMatchingFeatureDataTypeForOgrFieldType),
         })
     }
@@ -49,6 +52,8 @@ pub enum FeatureData {
     NullableText(Vec<Option<String>>),
     Bool(Vec<bool>),
     NullableBool(Vec<Option<bool>>),
+    DateTime(Vec<DateTime<Utc>>),
+    NullableDateTime(Vec<Option<DateTime<Utc>>>),
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize, PartialEq)]
@@ -63,6 +68,8 @@ pub enum FeatureDataValue {
     NullableText(Option<String>),
     Bool(bool),
     NullableBool(Option<bool>),
+    DateTime(DateTime<Utc>),
+    NullableDateTime(Option<DateTime<Utc>>),
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -72,6 +79,7 @@ pub enum FeatureDataRef<'f> {
     Float(FloatDataRef<'f>),
     Text(TextDataRef<'f>),
     Bool(BoolDataRef<'f>),
+    DateTime(DateTimeDataRef<'f>),
 }
 
 impl<'f> FeatureDataRef<'f> {
@@ -83,6 +91,7 @@ impl<'f> FeatureDataRef<'f> {
             FeatureDataRef::Int(data_ref) => data_ref.json_values(),
             FeatureDataRef::Category(data_ref) => data_ref.json_values(),
             FeatureDataRef::Bool(data_ref) => data_ref.json_values(),
+            FeatureDataRef::DateTime(data_ref) => data_ref.json_values(),
         }
     }
 
@@ -94,6 +103,7 @@ impl<'f> FeatureDataRef<'f> {
             FeatureDataRef::Int(data_ref) => data_ref.nulls(),
             FeatureDataRef::Category(data_ref) => data_ref.nulls(),
             FeatureDataRef::Bool(data_ref) => data_ref.nulls(),
+            FeatureDataRef::DateTime(data_ref) => data_ref.nulls(),
         }
     }
 
@@ -105,6 +115,7 @@ impl<'f> FeatureDataRef<'f> {
             FeatureDataRef::Int(data_ref) => data_ref.has_nulls(),
             FeatureDataRef::Category(data_ref) => data_ref.has_nulls(),
             FeatureDataRef::Bool(data_ref) => data_ref.has_nulls(),
+            FeatureDataRef::DateTime(data_ref) => data_ref.has_nulls(),
         }
     }
 
@@ -116,6 +127,7 @@ impl<'f> FeatureDataRef<'f> {
             FeatureDataRef::Int(data_ref) => data_ref.get_unchecked(i),
             FeatureDataRef::Category(data_ref) => data_ref.get_unchecked(i),
             FeatureDataRef::Bool(data_ref) => data_ref.get_unchecked(i),
+            FeatureDataRef::DateTime(data_ref) => data_ref.get_unchecked(i),
         }
     }
 
@@ -128,6 +140,7 @@ impl<'f> FeatureDataRef<'f> {
             FeatureDataRef::Int(data_ref) => Box::new(data_ref.strings_iter()),
             FeatureDataRef::Category(data_ref) => Box::new(data_ref.strings_iter()),
             FeatureDataRef::Bool(data_ref) => Box::new(data_ref.strings_iter()),
+            FeatureDataRef::DateTime(data_ref) => Box::new(data_ref.strings_iter()),
         }
     }
 
@@ -140,6 +153,7 @@ impl<'f> FeatureDataRef<'f> {
             FeatureDataRef::Int(data_ref) => Box::new(data_ref.float_options_iter()),
             FeatureDataRef::Category(data_ref) => Box::new(data_ref.float_options_iter()),
             FeatureDataRef::Bool(data_ref) => Box::new(data_ref.float_options_iter()),
+            FeatureDataRef::DateTime(data_ref) => Box::new(data_ref.float_options_iter()),
         }
     }
 }
@@ -562,6 +576,114 @@ impl<'f> Iterator for BoolDataRefFloatOptionIter<'f> {
 }
 
 #[derive(Clone, Debug, PartialEq)]
+pub struct DateTimeDataRef<'f> {
+    buffer: &'f [DateTime<Utc>],
+    valid_bitmap: &'f Option<arrow::bitmap::Bitmap>,
+}
+
+impl<'f> DateTimeDataRef<'f> {
+    pub fn new(
+        buffer: &'f [DateTime<Utc>],
+        null_bitmap: &'f Option<arrow::bitmap::Bitmap>,
+    ) -> Self {
+        Self {
+            buffer,
+            valid_bitmap: null_bitmap,
+        }
+    }
+}
+
+impl<'f> DataRef<'f, DateTime<Utc>> for DateTimeDataRef<'f> {
+    fn json_value(value: &DateTime<Utc>) -> serde_json::Value {
+        serde_json::to_value(value).expect("DateTime<Utc> can be serialized")
+    }
+
+    fn nulls(&self) -> Vec<bool> {
+        null_bitmap_to_bools(self.valid_bitmap, self.as_ref().len())
+    }
+
+    fn is_valid(&self, i: usize) -> bool {
+        self.valid_bitmap
+            .as_ref()
+            .map_or(true, |bitmap| bitmap.is_set(i))
+    }
+
+    fn has_nulls(&self) -> bool {
+        self.valid_bitmap.is_some()
+    }
+
+    fn get_unchecked(&self, i: usize) -> FeatureDataValue {
+        if self.has_nulls() {
+            FeatureDataValue::NullableDateTime(if self.is_null(i) {
+                None
+            } else {
+                Some(self.as_ref()[i])
+            })
+        } else {
+            FeatureDataValue::DateTime(self.as_ref()[i])
+        }
+    }
+
+    type StringsIter = NumberDataRefStringIter<'f, Self, DateTime<Utc>>;
+
+    fn strings_iter(&'f self) -> Self::StringsIter {
+        NumberDataRefStringIter::new(self)
+    }
+
+    fn len(&self) -> usize {
+        self.buffer.len()
+    }
+
+    type FloatOptionsIter = DateTimeDataRefFloatOptionIter<'f>;
+
+    fn float_options_iter(&'f self) -> Self::FloatOptionsIter {
+        Self::FloatOptionsIter::new(self)
+    }
+}
+
+impl AsRef<[DateTime<Utc>]> for DateTimeDataRef<'_> {
+    fn as_ref(&self) -> &[DateTime<Utc>] {
+        self.buffer
+    }
+}
+
+impl<'f> From<DateTimeDataRef<'f>> for FeatureDataRef<'f> {
+    fn from(data_ref: DateTimeDataRef<'f>) -> Self {
+        FeatureDataRef::DateTime(data_ref)
+    }
+}
+
+pub struct DateTimeDataRefFloatOptionIter<'f> {
+    data_ref: &'f DateTimeDataRef<'f>,
+    i: usize,
+}
+
+impl<'f> DateTimeDataRefFloatOptionIter<'f> {
+    pub fn new(data_ref: &'f DateTimeDataRef<'f>) -> Self {
+        Self { data_ref, i: 0 }
+    }
+}
+
+impl<'f> Iterator for DateTimeDataRefFloatOptionIter<'f> {
+    type Item = Option<f64>;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        if self.i >= self.data_ref.len() {
+            return None;
+        }
+
+        let i = self.i;
+        self.i += 1;
+
+        Some(if self.data_ref.is_null(i) {
+            None
+        } else {
+            Some(self.data_ref.as_ref()[i].timestamp_millis() as f64)
+        })
+    }
+}
+
+#[derive(Clone, Debug, PartialEq)]
 pub struct CategoryDataRef<'f> {
     buffer: &'f [u8],
     valid_bitmap: &'f Option<arrow::bitmap::Bitmap>,
@@ -900,6 +1022,7 @@ impl FeatureDataType {
             Self::Int => arrow::datatypes::DataType::Int64,
             Self::Category => arrow::datatypes::DataType::UInt8,
             Self::Bool => arrow::datatypes::DataType::Boolean,
+            Self::DateTime => arrow::datatypes::DataType::Date64,
         }
     }
 
@@ -915,6 +1038,7 @@ impl FeatureDataType {
             Self::Int => Box::new(arrow::array::Int64Builder::new(len)),
             Self::Category => Box::new(arrow::array::UInt8Builder::new(len)),
             Self::Bool => Box::new(arrow::array::BooleanBuilder::new(len)),
+            Self::DateTime => Box::new(arrow::array::Date64Builder::new(len)),
         }
     }
 }
@@ -940,6 +1064,8 @@ impl FeatureData {
             FeatureData::NullableCategory(v) => v.len(),
             FeatureData::Bool(v) => v.len(),
             FeatureData::NullableBool(v) => v.len(),
+            FeatureData::DateTime(v) => v.len(),
+            FeatureData::NullableDateTime(v) => v.len(),
         }
     }
 
@@ -1023,6 +1149,19 @@ impl FeatureData {
                 }
                 Box::new(builder)
             }
+            FeatureData::DateTime(v) => {
+                let mut builder = arrow::array::Date64Builder::new(v.len());
+                let x: Vec<_> = v.iter().map(DateTime::timestamp_millis).collect();
+                builder.append_slice(&x)?;
+                Box::new(builder)
+            }
+            FeatureData::NullableDateTime(v) => {
+                let mut builder = arrow::array::Date64Builder::new(v.len());
+                for &dt_option in v {
+                    builder.append_option(dt_option.map(|x| x.timestamp_millis()))?;
+                }
+                Box::new(builder)
+            }
         })
     }
 }
@@ -1035,6 +1174,7 @@ impl From<&FeatureData> for FeatureDataType {
             FeatureData::Int(_) | FeatureData::NullableInt(_) => Self::Int,
             FeatureData::Category(_) | FeatureData::NullableCategory(_) => Self::Category,
             FeatureData::Bool(_) | FeatureData::NullableBool(_) => Self::Bool,
+            FeatureData::DateTime(_) | FeatureData::NullableDateTime(_) => Self::DateTime,
         }
     }
 }
@@ -1047,6 +1187,7 @@ impl From<&FeatureDataValue> for FeatureDataType {
             FeatureDataValue::Int(_) | FeatureDataValue::NullableInt(_) => Self::Int,
             FeatureDataValue::Category(_) | FeatureDataValue::NullableCategory(_) => Self::Category,
             FeatureDataValue::Bool(_) | FeatureDataValue::NullableBool(_) => Self::Bool,
+            FeatureDataValue::DateTime(_) | FeatureDataValue::NullableDateTime(_) => Self::DateTime,
         }
     }
 }
@@ -1059,6 +1200,7 @@ impl<'f> From<&'f FeatureDataRef<'f>> for FeatureDataType {
             FeatureDataRef::Int(_) => Self::Int,
             FeatureDataRef::Category(_) => Self::Category,
             FeatureDataRef::Bool(_) => Self::Bool,
+            FeatureDataRef::DateTime(_) => Self::DateTime,
         }
     }
 }
@@ -1110,6 +1252,30 @@ impl<'s> TryFrom<&'s FeatureDataValue> for &'s str {
         Ok(match value {
             FeatureDataValue::Text(v) => v.as_ref(),
             FeatureDataValue::NullableText(v) if v.is_some() => v.as_ref().unwrap(),
+            _ => return Err(crate::collections::FeatureCollectionError::WrongDataType),
+        })
+    }
+}
+
+impl TryFrom<&FeatureDataValue> for bool {
+    type Error = crate::collections::FeatureCollectionError;
+
+    fn try_from(value: &FeatureDataValue) -> Result<bool, Self::Error> {
+        Ok(match value {
+            FeatureDataValue::Bool(v) => *v,
+            FeatureDataValue::NullableBool(v) if v.is_some() => v.unwrap(),
+            _ => return Err(crate::collections::FeatureCollectionError::WrongDataType),
+        })
+    }
+}
+
+impl TryFrom<&FeatureDataValue> for DateTime<Utc> {
+    type Error = crate::collections::FeatureCollectionError;
+
+    fn try_from(value: &FeatureDataValue) -> Result<DateTime<Utc>, Self::Error> {
+        Ok(match value {
+            FeatureDataValue::DateTime(v) => *v,
+            FeatureDataValue::NullableDateTime(v) if v.is_some() => v.unwrap(),
             _ => return Err(crate::collections::FeatureCollectionError::WrongDataType),
         })
     }

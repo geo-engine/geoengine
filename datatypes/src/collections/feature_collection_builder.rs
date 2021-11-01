@@ -4,8 +4,8 @@ use crate::primitives::{FeatureDataType, FeatureDataValue, Geometry, TimeInterva
 use crate::util::arrow::{downcast_mut_array, ArrowTyped};
 use crate::util::Result;
 use arrow::array::{
-    ArrayBuilder, BooleanBuilder, Float64Builder, Int64Builder, StringBuilder, StructBuilder,
-    UInt8Builder,
+    ArrayBuilder, BooleanBuilder, Date64Builder, Float64Builder, Int64Builder, StringBuilder,
+    StructBuilder, UInt8Builder,
 };
 use arrow::datatypes::Field;
 use snafu::ensure;
@@ -231,6 +231,14 @@ where
                 let bool_builder: &mut BooleanBuilder = downcast_mut_array(data_builder.as_mut());
                 bool_builder.append_option(value)?;
             }
+            FeatureDataValue::DateTime(value) => {
+                let dt_builder: &mut Date64Builder = downcast_mut_array(data_builder.as_mut());
+                dt_builder.append_value(value.timestamp_millis())?;
+            }
+            FeatureDataValue::NullableDateTime(value) => {
+                let dt_builder: &mut Date64Builder = downcast_mut_array(data_builder.as_mut());
+                dt_builder.append_option(value.map(|x| x.timestamp_millis()))?;
+            }
         }
 
         Ok(())
@@ -270,6 +278,10 @@ where
             FeatureDataType::Bool => {
                 let bool_builder: &mut BooleanBuilder = downcast_mut_array(data_builder.as_mut());
                 bool_builder.append_null()?;
+            }
+            FeatureDataType::DateTime => {
+                let dt_builder: &mut Date64Builder = downcast_mut_array(data_builder.as_mut());
+                dt_builder.append_null()?;
             }
         }
 

@@ -12,9 +12,9 @@ use std::{
 };
 use std::{ffi::OsStr, fmt::Debug};
 
-use chrono::DateTime;
 use chrono::NaiveDate;
 use chrono::NaiveDateTime;
+use chrono::{DateTime, Utc};
 use futures::stream::BoxStream;
 use futures::task::{Context, Waker};
 use futures::Stream;
@@ -1046,6 +1046,37 @@ where
                     };
 
                     builder.push_data(column, FeatureDataValue::NullableBool(value_option))?;
+                }
+                FeatureDataType::DateTime => {
+                    #[allow(clippy::match_same_arms)]
+                    let value_option = match field {
+                        Ok(Some(FieldValue::IntegerValue(v))) => Some(DateTime::from_utc(
+                            NaiveDateTime::from_timestamp(i64::from(v), 0),
+                            Utc,
+                        )),
+                        Ok(Some(FieldValue::Integer64Value(v))) => {
+                            Some(DateTime::from_utc(NaiveDateTime::from_timestamp(v, 0), Utc))
+                        }
+                        Ok(Some(FieldValue::StringValue(s))) => NaiveDateTime::from_str(&s)
+                            .ok()
+                            .map(|x| DateTime::from_utc(x, Utc)),
+                        Ok(Some(FieldValue::RealValue(v))) => Some(DateTime::from_utc(
+                            NaiveDateTime::from_timestamp(v as i64, 0),
+                            Utc,
+                        )),
+                        Ok(Some(FieldValue::DateTimeValue(v))) => Some(v.with_timezone(&Utc)),
+                        Ok(Some(FieldValue::DateValue(v))) => {
+                            Some(v.and_hms(0, 0, 0).with_timezone(&Utc))
+                        }
+                        Ok(None) => None,
+                        Ok(Some(v)) => error_spec.on_error(Error::OgrColumnFieldTypeMismatch {
+                            expected: "DateTime".to_string(),
+                            field_value: v,
+                        })?, // TODO: handle other types
+                        Err(e) => error_spec.on_error(Error::Gdal { source: e })?,
+                    };
+
+                    builder.push_data(column, FeatureDataValue::NullableDateTime(value_option))?;
                 }
             }
         }

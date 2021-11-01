@@ -23,7 +23,7 @@ use std::ops::{Bound, RangeBounds};
 use std::rc::Rc;
 use std::sync::Arc;
 
-use crate::primitives::Coordinate2D;
+use crate::primitives::{BoolDataRef, Coordinate2D, DateTimeDataRef};
 use crate::primitives::{
     CategoryDataRef, FeatureData, FeatureDataRef, FeatureDataType, FeatureDataValue, FloatDataRef,
     Geometry, IntDataRef, TextDataRef, TimeInterval,
@@ -39,6 +39,8 @@ use crate::{
     collections::{FeatureCollectionError, IntoGeometryOptionsIterator},
     operations::reproject::CoordinateProjection,
 };
+use arrow::datatypes::Date64Type;
+use chrono::{DateTime, NaiveDateTime, Utc};
 use std::iter::FromIterator;
 
 use super::{geo_feature_collection::ReplaceRawArrayCoords, GeometryCollection};
@@ -456,6 +458,17 @@ where
                     arrow::compute::gt_utf8_scalar,
                     arrow::compute::lt_eq_utf8_scalar,
                     arrow::compute::lt_utf8_scalar,
+                )?;
+            }
+            FeatureDataType::DateTime => {
+                apply_filters(
+                    as_primitive_array::<Date64Type>(column),
+                    &mut filter_array,
+                    ranges,
+                    arrow::compute::gt_eq_scalar,
+                    arrow::compute::gt_scalar,
+                    arrow::compute::lt_eq_scalar,
+                    arrow::compute::lt_scalar,
                 )?;
             }
             FeatureDataType::Category | FeatureDataType::Bool => {
@@ -999,9 +1012,20 @@ where
                     CategoryDataRef::new(array.values(), array.data_ref().null_bitmap()).into()
                 }
                 FeatureDataType::Bool => {
-                    let _array: &arrow::array::BooleanArray = downcast_array(column);
-                    //BoolDataRef::new(array.values(), array.data_ref().null_bitmap().into())
-                    todo!("BooleanArray::values returns Buffer instead of [bool]")
+                    let array: &arrow::array::BooleanArray = downcast_array(column);
+                    BoolDataRef::new(array.values(), array.data_ref().null_bitmap().into())
+                }
+                FeatureDataType::DateTime => {
+                    let array: &arrow::array::Date64Array = downcast_array(column);
+                    DateTimeDataRef::new(
+                        array
+                            .values()
+                            .iter()
+                            .map(|x| DateTime::from_utc(NaiveDateTime::from_timestamp(*x, 0), Utc))
+                            .collect(),
+                        array.data_ref().null_bitmap(),
+                    )
+                    .into()
                 }
             },
         )
