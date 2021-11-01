@@ -216,7 +216,7 @@ impl DatasetProvider<UserSession> for ProHashMapDatasetDb {
             .map(|p| {
                 self.datasets
                     .get(&p.dataset)
-                    .expect("a dataset has at least one permission")
+                    .expect("an existing permission implies existence of the dataset")
             });
 
         let mut list: Vec<_> = if let Some(filter) = &options.filter {

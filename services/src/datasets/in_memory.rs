@@ -1,4 +1,4 @@
-use crate::contexts::{MockableSession, SimpleSession};
+use crate::contexts::SimpleSession;
 use crate::datasets::listing::{
     DatasetListOptions, DatasetListing, DatasetProvider, ExternalDatasetProvider, OrderBy,
 };
@@ -232,7 +232,7 @@ impl DatasetProvider<SimpleSession> for HashMapDatasetDb {
 
     async fn provenance(
         &self,
-        _session: &SimpleSession,
+        session: &SimpleSession,
         dataset: &DatasetId,
     ) -> Result<ProvenanceOutput> {
         match dataset {
@@ -246,7 +246,7 @@ impl DatasetProvider<SimpleSession> for HashMapDatasetDb {
                 })
                 .ok_or(error::Error::UnknownDatasetId),
             DatasetId::External(id) => {
-                self.dataset_provider(&SimpleSession::mock(), id.provider_id) // TODO: get correct session into dataset provider
+                self.dataset_provider(session, id.provider_id)
                     .await?
                     .provenance(dataset)
                     .await
