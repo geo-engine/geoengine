@@ -605,11 +605,14 @@ mod tests {
     use actix_web::{http::Method, test};
     use actix_web_httpauth::headers::authorization::Bearer;
     use geoengine_datatypes::dataset::DatasetId;
+    use geoengine_datatypes::test_data;
     use geoengine_operators::engine::TypedOperator;
     use geoengine_operators::source::CsvSourceParameters;
     use geoengine_operators::source::{CsvGeometrySpecification, CsvSource, CsvTimeSpecification};
     use serde_json::json;
+    use std::fs;
     use std::io::{Seek, SeekFrom, Write};
+    use std::path::Path;
     use xml::ParserConfig;
 
     #[tokio::test]
@@ -1034,9 +1037,11 @@ x;y
 
     async fn add_dataset_definition_to_datasets(
         ctx: &InMemoryContext,
-        dataset_definition: &str,
+        dataset_definition_path: &Path,
     ) -> DatasetId {
-        let def: DatasetDefinition = serde_json::from_str(dataset_definition).unwrap();
+        let data = fs::read_to_string(dataset_definition_path).unwrap();
+        let data = data.replace("test_data/", test_data!("./").to_str().unwrap());
+        let def: DatasetDefinition = serde_json::from_str(&data).unwrap();
 
         let mut db = ctx.dataset_db_ref_mut().await;
 
@@ -1049,28 +1054,16 @@ x;y
         .unwrap()
     }
 
-    fn dir_up() {
-        let mut dir = std::env::current_dir().unwrap();
-        dir.pop();
-
-        std::env::set_current_dir(dir).unwrap();
-    }
-
     #[tokio::test]
     async fn raster_vector_join() {
-        dir_up();
-
         let ctx = InMemoryContext::default();
         let session_id = ctx.default_session_ref().await.id();
 
-        let ndvi_id = add_dataset_definition_to_datasets(
-            &ctx,
-            include_str!("../../../test_data/dataset_defs/ndvi.json"),
-        )
-        .await;
+        let ndvi_id =
+            add_dataset_definition_to_datasets(&ctx, test_data!("dataset_defs/ndvi.json")).await;
         let ne_10m_ports_id = add_dataset_definition_to_datasets(
             &ctx,
-            include_str!("../../../test_data/dataset_defs/points_with_time.json"),
+            test_data!("dataset_defs/points_with_time.json"),
         )
         .await;
 
