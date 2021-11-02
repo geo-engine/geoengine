@@ -51,7 +51,7 @@ fn setup_mock_source(tile_size: usize) -> MockRasterSourceProcessor<u8> {
             RasterTile2D::new(time, [0, 1].into(), geo_transform, grid.clone()),
             RasterTile2D::new(time, [1, -1].into(), geo_transform, grid.clone()),
             RasterTile2D::new(time, [1, 0].into(), geo_transform, grid.clone()),
-            RasterTile2D::new(time, [1, 1].into(), geo_transform, grid.clone()),
+            RasterTile2D::new(time, [1, 1].into(), geo_transform, grid),
         ],
     }
 }
