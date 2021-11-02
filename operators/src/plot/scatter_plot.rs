@@ -14,7 +14,7 @@ use crate::error::Error;
 use crate::util::Result;
 use geoengine_datatypes::primitives::Coordinate2D;
 
-pub const BOXPLOT_OPERATOR_NAME: &str = "ScatterPlot";
+pub const SCATTERPLOT_OPERATOR_NAME: &str = "ScatterPlot";
 
 /// The maximum number of elements for a scatter plot
 const SCATTER_PLOT_THRESHOLD: usize = 500;
