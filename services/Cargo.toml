@@ -52,6 +52,7 @@ proj = "0.22"
 proj-sys = "0.19"
 pwhash = "1.0"
 quick-xml = { version = "0.22", optional = true }
+rayon = "1.5"
 reqwest = { version = "0.11", features = ["json", "multipart", "stream"] }
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
@@ -59,6 +60,7 @@ serde_urlencoded = "0.7"
 serde_with = "1.9"
 snafu = "0.6"
 strum = { version = "0.22", features = ["derive"] }
+time = "0.3"
 tokio = { version = "1.1", features = ["macros", "signal", "sync", "rt-multi-thread"] }
 tokio-util = "0.6"
 typetag = "0.1"
