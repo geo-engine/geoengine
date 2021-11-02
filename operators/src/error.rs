@@ -52,6 +52,8 @@ pub enum Error {
         found: geoengine_datatypes::spatial_reference::SpatialReferenceOption,
     },
 
+    AllSourcesMustHaveSameSpatialReference,
+
     InvalidOperatorSpec {
         reason: String,
     },

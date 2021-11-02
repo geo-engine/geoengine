@@ -3,6 +3,7 @@ use crate::engine::{
     Operator, PlotOperator, PlotQueryProcessor, PlotResultDescriptor, QueryContext, QueryProcessor,
     TypedPlotQueryProcessor, TypedRasterQueryProcessor, VectorQueryRectangle,
 };
+use crate::error;
 use crate::util::number_statistics::NumberStatistics;
 use crate::util::Result;
 use async_trait::async_trait;
@@ -10,7 +11,9 @@ use futures::future::join_all;
 use futures::stream::select_all;
 use futures::{FutureExt, StreamExt};
 use geoengine_datatypes::raster::{Grid2D, GridOrEmpty, GridSize, NoDataValue};
+use geoengine_datatypes::spatial_reference::SpatialReferenceOption;
 use serde::{Deserialize, Serialize};
+use snafu::ensure;
 
 pub const STATISTICS_OPERATOR_NAME: &str = "Statistics";
 
@@ -40,10 +43,26 @@ impl PlotOperator for Statistics {
                 .map(|s| s.initialize(context)),
         )
         .await;
+        let rasters = rasters.into_iter().collect::<Result<Vec<_>>>()?;
+
+        if rasters.len() > 1 {
+            let srs = rasters[0].result_descriptor().spatial_reference;
+            ensure!(
+                rasters
+                    .iter()
+                    .all(|op| op.result_descriptor().spatial_reference == srs),
+                error::AllSourcesMustHaveSameSpatialReference
+            );
+        }
 
         let initialized_operator = InitializedStatistics {
-            result_descriptor: PlotResultDescriptor {},
-            rasters: rasters.into_iter().collect::<Result<Vec<_>>>()?,
+            result_descriptor: PlotResultDescriptor {
+                spatial_reference: rasters.get(0).map_or_else(
+                    || SpatialReferenceOption::Unreferenced,
+                    |r| r.result_descriptor().spatial_reference,
+                ),
+            },
+            rasters,
         };
 
         Ok(initialized_operator.boxed())
