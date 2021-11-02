@@ -27,7 +27,6 @@
 #![allow(clippy::semicolon_if_nothing_returned)]
 
 pub mod adapters;
-pub mod concurrency;
 #[macro_use]
 pub mod engine;
 pub mod error;

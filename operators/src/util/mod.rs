@@ -4,6 +4,7 @@ pub mod math;
 pub mod number_statistics;
 pub mod raster_stream_to_geotiff;
 pub mod raster_stream_to_png;
+mod rayon;
 pub mod statistics;
 pub mod string_token;
 pub mod sunpos;
@@ -11,6 +12,8 @@ pub mod sunpos;
 use crate::error::Error;
 use std::ops::Deref;
 use std::sync::{Mutex, MutexGuard};
+
+pub use self::rayon::create_rayon_thread_pool;
 
 pub type Result<T, E = Error> = std::result::Result<T, E>;
 

@@ -1,30 +1,42 @@
 use std::path::PathBuf;
 use std::sync::Arc;
 
+use super::{Context, Db, SimpleSession};
+use super::{Session, SimpleContext};
+use crate::contexts::{ExecutionContextImpl, QueryContextImpl, SessionId};
+use crate::datasets::in_memory::HashMapDatasetDb;
 use crate::error::Error;
+use crate::util::config;
 use crate::{
     datasets::add_from_directory::{add_datasets_from_directory, add_providers_from_directory},
     error::Result,
 };
 use crate::{projects::hashmap_projectdb::HashMapProjectDb, workflows::registry::HashMapRegistry};
 use async_trait::async_trait;
+use geoengine_operators::util::create_rayon_thread_pool;
+use rayon::ThreadPool;
 use tokio::sync::{RwLock, RwLockReadGuard, RwLockWriteGuard};
 
-use super::{Context, Db, SimpleSession};
-use super::{Session, SimpleContext};
-use crate::contexts::{ExecutionContextImpl, QueryContextImpl, SessionId};
-use crate::datasets::in_memory::HashMapDatasetDb;
-use crate::util::config;
-use geoengine_operators::concurrency::{ThreadPool, ThreadPoolContextCreator};
-
 /// A context with references to in-memory versions of the individual databases.
-#[derive(Clone, Default)]
+#[derive(Clone)]
 pub struct InMemoryContext {
     project_db: Db<HashMapProjectDb>,
     workflow_registry: Db<HashMapRegistry>,
     dataset_db: Db<HashMapDatasetDb>,
     session: Db<SimpleSession>,
     thread_pool: Arc<ThreadPool>,
+}
+
+impl Default for InMemoryContext {
+    fn default() -> Self {
+        Self {
+            project_db: Default::default(),
+            workflow_registry: Default::default(),
+            dataset_db: Default::default(),
+            session: Default::default(),
+            thread_pool: create_rayon_thread_pool(0),
+        }
+    }
 }
 
 impl InMemoryContext {
@@ -84,14 +96,14 @@ impl Context for InMemoryContext {
         // TODO: load config only once
         Ok(QueryContextImpl {
             chunk_byte_size: config::get_config_element::<config::QueryContext>()?.chunk_byte_size,
-            thread_pool: self.thread_pool.create_context(),
+            thread_pool: self.thread_pool.clone(),
         })
     }
 
     fn execution_context(&self, session: SimpleSession) -> Result<Self::ExecutionContext> {
         Ok(ExecutionContextImpl::<SimpleSession, HashMapDatasetDb> {
             dataset_db: self.dataset_db.clone(),
-            thread_pool: self.thread_pool.create_context(),
+            thread_pool: self.thread_pool.clone(),
             session,
         })
     }
