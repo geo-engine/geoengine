@@ -729,6 +729,9 @@ mod tests {
     async fn query_data_with_failing_requests() {
         // util::tests::initialize_debugging_in_test; // use for debugging
 
+        let stac_response =
+            std::fs::read_to_string(test_data!("pro/stac_responses/items_page_1_limit_500.json"))
+                .unwrap();
         let server = Server::run();
         server.expect(
             Expectation::matching(all_of![
@@ -756,9 +759,7 @@ mod tests {
                 // then succeed
                 responders::status_code(200)
                     .append_header("Content-Type", "application/json")
-                    .body(include_str!(
-                        "../../../../../test_data/pro/stac_responses/items_page_1_limit_500.json"
-                    )),
+                    .body(stac_response),
             ]),
         );
 
