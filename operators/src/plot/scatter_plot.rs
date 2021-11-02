@@ -25,7 +25,7 @@ const BATCH_SIZE: usize = 1000;
 /// The maximum number of elements before we turn the collector into a histogram.
 /// At this point, the bounds of the histogram are fixed (i.e., further values exceeding
 /// the min/max seen so far are ignored)
-const COLLECTOR_TO_HISTOGRAM_THRESHOLD: usize = 10_000;
+const COLLECTOR_TO_HISTOGRAM_THRESHOLD: usize = BATCH_SIZE * 10;
 
 /// A scatter plot about two attributes of a vector dataset. If the
 /// dataset contains more then `SCATTER_PLOT_THRESHOLD` elements, this
@@ -121,7 +121,7 @@ impl PlotQueryProcessor for ScatterPlotQueryProcessor {
     type OutputFormat = PlotData;
 
     fn plot_type(&self) -> &'static str {
-        BOXPLOT_OPERATOR_NAME
+        SCATTERPLOT_OPERATOR_NAME
     }
 
     async fn plot_query<'p>(
