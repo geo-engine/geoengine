@@ -1,6 +1,10 @@
 use std::path::PathBuf;
 use std::sync::Arc;
 
+use super::{Context, Db, SimpleSession};
+use super::{Session, SimpleContext};
+use crate::contexts::{ExecutionContextImpl, QueryContextImpl, SessionId};
+use crate::datasets::in_memory::HashMapDatasetDb;
 use crate::error::Error;
 use crate::{
     datasets::add_from_directory::{add_datasets_from_directory, add_providers_from_directory},
@@ -10,16 +14,12 @@ use crate::{projects::hashmap_projectdb::HashMapProjectDb, workflows::registry::
 use async_trait::async_trait;
 use geoengine_datatypes::raster::TilingSpecification;
 use geoengine_operators::engine::ChunkByteSize;
+use geoengine_operators::util::create_rayon_thread_pool;
+use rayon::ThreadPool;
 use tokio::sync::{RwLock, RwLockReadGuard, RwLockWriteGuard};
 
-use super::{Context, Db, SimpleSession};
-use super::{Session, SimpleContext};
-use crate::contexts::{ExecutionContextImpl, QueryContextImpl, SessionId};
-use crate::datasets::in_memory::HashMapDatasetDb;
-use geoengine_operators::concurrency::{ThreadPool, ThreadPoolContextCreator};
-
 /// A context with references to in-memory versions of the individual databases.
-#[derive(Clone, Default)]
+#[derive(Clone)]
 pub struct InMemoryContext {
     project_db: Db<HashMapProjectDb>,
     workflow_registry: Db<HashMapRegistry>,
@@ -28,6 +28,20 @@ pub struct InMemoryContext {
     thread_pool: Arc<ThreadPool>,
     exe_ctx_tiling_spec: TilingSpecification,
     query_ctx_chunk_size: ChunkByteSize,
+}
+
+impl Default for InMemoryContext {
+    fn default() -> Self {
+        Self {
+            project_db: Default::default(),
+            workflow_registry: Default::default(),
+            dataset_db: Default::default(),
+            session: Default::default(),
+            thread_pool: create_rayon_thread_pool(0),
+            exe_ctx_tiling_spec: Default::default(),
+            query_ctx_chunk_size: Default::default(),
+        }
+    }
 }
 
 impl InMemoryContext {
@@ -103,7 +117,7 @@ impl Context for InMemoryContext {
     fn query_context(&self) -> Result<Self::QueryContext> {
         Ok(QueryContextImpl {
             chunk_byte_size: self.query_ctx_chunk_size,
-            thread_pool: self.thread_pool.create_context(),
+            thread_pool: self.thread_pool.clone(),
         })
     }
 
@@ -111,7 +125,7 @@ impl Context for InMemoryContext {
         Ok(
             ExecutionContextImpl::<SimpleSession, HashMapDatasetDb>::new(
                 self.dataset_db.clone(),
-                self.thread_pool.create_context(),
+                self.thread_pool.clone(),
                 session,
                 self.exe_ctx_tiling_spec,
             ),

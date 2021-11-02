@@ -11,16 +11,16 @@ use crate::{
 };
 use async_trait::async_trait;
 use geoengine_datatypes::raster::TilingSpecification;
-use geoengine_operators::concurrency::ThreadPool;
-use geoengine_operators::concurrency::ThreadPoolContextCreator;
 use geoengine_operators::engine::ChunkByteSize;
+use geoengine_operators::util::create_rayon_thread_pool;
+use rayon::ThreadPool;
 use snafu::ResultExt;
 use std::path::PathBuf;
 use std::sync::Arc;
 use tokio::sync::{RwLock, RwLockReadGuard, RwLockWriteGuard};
 
 /// A context with references to in-memory versions of the individual databases.
-#[derive(Clone, Default)]
+#[derive(Clone)]
 pub struct ProInMemoryContext {
     user_db: Db<HashMapUserDb>,
     project_db: Db<ProHashMapProjectDb>,
@@ -29,6 +29,20 @@ pub struct ProInMemoryContext {
     thread_pool: Arc<ThreadPool>,
     exe_ctx_tiling_spec: TilingSpecification,
     query_ctx_chunk_size: ChunkByteSize,
+}
+
+impl Default for ProInMemoryContext {
+    fn default() -> Self {
+        Self {
+            user_db: Default::default(),
+            project_db: Default::default(),
+            workflow_registry: Default::default(),
+            dataset_db: Default::default(),
+            thread_pool: create_rayon_thread_pool(0),
+            exe_ctx_tiling_spec: Default::default(),
+            query_ctx_chunk_size: Default::default(),
+        }
+    }
 }
 
 impl ProInMemoryContext {
@@ -121,7 +135,7 @@ impl Context for ProInMemoryContext {
     fn query_context(&self) -> Result<Self::QueryContext> {
         Ok(QueryContextImpl::new(
             self.query_ctx_chunk_size,
-            self.thread_pool.create_context(),
+            self.thread_pool.clone(),
         ))
     }
 
@@ -129,7 +143,7 @@ impl Context for ProInMemoryContext {
         Ok(
             ExecutionContextImpl::<UserSession, ProHashMapDatasetDb>::new(
                 self.dataset_db.clone(),
-                self.thread_pool.create_context(),
+                self.thread_pool.clone(),
                 session,
                 self.exe_ctx_tiling_spec,
             ),

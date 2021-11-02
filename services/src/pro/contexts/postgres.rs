@@ -23,9 +23,10 @@ use bb8_postgres::{
     PostgresConnectionManager,
 };
 use geoengine_datatypes::raster::TilingSpecification;
-use geoengine_operators::concurrency::{ThreadPool, ThreadPoolContextCreator};
 use geoengine_operators::engine::ChunkByteSize;
+use geoengine_operators::util::create_rayon_thread_pool;
 use log::{debug, warn};
+use rayon::ThreadPool;
 use snafu::ResultExt;
 use std::path::PathBuf;
 use std::sync::Arc;
@@ -81,7 +82,7 @@ where
             project_db: Arc::new(RwLock::new(PostgresProjectDb::new(pool.clone()))),
             workflow_registry: Arc::new(RwLock::new(PostgresWorkflowRegistry::new(pool.clone()))),
             dataset_db: Arc::new(RwLock::new(PostgresDatasetDb::new(pool.clone()))),
-            thread_pool: Default::default(),
+            thread_pool: create_rayon_thread_pool(0),
             exe_ctx_tiling_spec,
             query_ctx_chunk_size,
         })
@@ -111,7 +112,7 @@ where
             project_db: Arc::new(RwLock::new(PostgresProjectDb::new(pool.clone()))),
             workflow_registry: Arc::new(RwLock::new(PostgresWorkflowRegistry::new(pool.clone()))),
             dataset_db: Arc::new(RwLock::new(dataset_db)),
-            thread_pool: Default::default(),
+            thread_pool: create_rayon_thread_pool(0),
             exe_ctx_tiling_spec,
             query_ctx_chunk_size,
         })
@@ -436,7 +437,7 @@ where
         // TODO: load config only once
         Ok(QueryContextImpl::new(
             self.query_ctx_chunk_size,
-            self.thread_pool.create_context(),
+            self.thread_pool.clone(),
         ))
     }
 
@@ -444,7 +445,7 @@ where
         Ok(
             ExecutionContextImpl::<UserSession, PostgresDatasetDb<Tls>>::new(
                 self.dataset_db.clone(),
-                self.thread_pool.create_context(),
+                self.thread_pool.clone(),
                 session,
                 self.exe_ctx_tiling_spec,
             ),

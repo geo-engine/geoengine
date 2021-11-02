@@ -1,13 +1,14 @@
 use std::sync::Arc;
 
-use crate::concurrency::{ThreadPool, ThreadPoolContext, ThreadPoolContextCreator};
-
 /// A spatio-temporal rectangle for querying data
 use geoengine_datatypes::primitives::{
     AxisAlignedRectangle, BoundingBox2D, SpatialPartition2D, SpatialPartitioned, SpatialResolution,
     TimeInterval,
 };
+use rayon::ThreadPool;
 use serde::{Deserialize, Serialize};
+
+use crate::util::create_rayon_thread_pool;
 
 /// A spatio-temporal rectangle for querying data with a bounding box
 #[derive(Copy, Clone, Debug, PartialEq, Serialize, Deserialize)]
@@ -77,19 +78,19 @@ impl Default for ChunkByteSize {
 
 pub trait QueryContext: Send + Sync {
     fn chunk_byte_size(&self) -> ChunkByteSize;
-    fn thread_pool_context(&self) -> &ThreadPoolContext;
+    fn thread_pool(&self) -> &Arc<ThreadPool>;
 }
 
 pub struct MockQueryContext {
     pub chunk_byte_size: ChunkByteSize,
-    pub thread_pool: ThreadPoolContext,
+    pub thread_pool: Arc<ThreadPool>,
 }
 
 impl Default for MockQueryContext {
     fn default() -> Self {
         Self {
             chunk_byte_size: ChunkByteSize::default(),
-            thread_pool: Arc::new(ThreadPool::default()).create_context(),
+            thread_pool: create_rayon_thread_pool(0),
         }
     }
 }
@@ -108,7 +109,7 @@ impl MockQueryContext {
     ) -> Self {
         Self {
             chunk_byte_size,
-            thread_pool: Arc::new(ThreadPool::new(num_threads)).create_context(),
+            thread_pool: create_rayon_thread_pool(num_threads),
         }
     }
 }
@@ -118,7 +119,7 @@ impl QueryContext for MockQueryContext {
         self.chunk_byte_size
     }
 
-    fn thread_pool_context(&self) -> &ThreadPoolContext {
+    fn thread_pool(&self) -> &Arc<ThreadPool> {
         &self.thread_pool
     }
 }

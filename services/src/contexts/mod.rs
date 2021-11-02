@@ -1,6 +1,7 @@
 use crate::error::Result;
 use crate::{projects::ProjectDb, workflows::registry::WorkflowRegistry};
 use async_trait::async_trait;
+use rayon::ThreadPool;
 use std::sync::Arc;
 use tokio::sync::{RwLock, RwLockReadGuard, RwLockWriteGuard};
 
@@ -13,7 +14,6 @@ use crate::datasets::storage::DatasetDb;
 use geoengine_datatypes::dataset::DatasetId;
 
 use geoengine_datatypes::raster::TilingSpecification;
-use geoengine_operators::concurrency::ThreadPoolContext;
 use geoengine_operators::engine::{
     ChunkByteSize, ExecutionContext, MetaData, MetaDataProvider, QueryContext,
     RasterQueryRectangle, RasterResultDescriptor, VectorQueryRectangle, VectorResultDescriptor,
@@ -60,11 +60,11 @@ pub trait Context: 'static + Send + Sync + Clone {
 
 pub struct QueryContextImpl {
     chunk_byte_size: ChunkByteSize,
-    thread_pool: ThreadPoolContext,
+    pub thread_pool: Arc<ThreadPool>,
 }
 
 impl QueryContextImpl {
-    pub fn new(chunk_byte_size: ChunkByteSize, thread_pool: ThreadPoolContext) -> Self {
+    pub fn new(chunk_byte_size: ChunkByteSize, thread_pool: Arc<ThreadPool>) -> Self {
         QueryContextImpl {
             chunk_byte_size,
             thread_pool,
@@ -77,7 +77,7 @@ impl QueryContext for QueryContextImpl {
         self.chunk_byte_size
     }
 
-    fn thread_pool_context(&self) -> &ThreadPoolContext {
+    fn thread_pool(&self) -> &Arc<ThreadPool> {
         &self.thread_pool
     }
 }
@@ -88,7 +88,7 @@ where
     S: Session,
 {
     dataset_db: Db<D>,
-    thread_pool: ThreadPoolContext,
+    thread_pool: Arc<ThreadPool>,
     session: S,
     tiling_specification: TilingSpecification,
 }
@@ -100,7 +100,7 @@ where
 {
     pub fn new(
         dataset_db: Db<D>,
-        thread_pool: ThreadPoolContext,
+        thread_pool: Arc<ThreadPool>,
         session: S,
         tiling_specification: TilingSpecification,
     ) -> Self {
@@ -124,8 +124,8 @@ where
         + MetaDataProvider<GdalLoadingInfo, RasterResultDescriptor, RasterQueryRectangle>,
     S: Session,
 {
-    fn thread_pool_context(&self) -> ThreadPoolContext {
-        self.thread_pool.clone()
+    fn thread_pool(&self) -> &Arc<ThreadPool> {
+        &self.thread_pool
     }
 
     fn tiling_specification(&self) -> TilingSpecification {
