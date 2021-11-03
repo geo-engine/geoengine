@@ -147,7 +147,9 @@ async fn get_plot_handler<C: Context>(
         initialized.result_descriptor().spatial_reference().into();
     let workflow_spatial_ref = workflow_spatial_ref.ok_or(error::Error::InvalidSpatialReference)?;
 
-    let request_spatial_ref: SpatialReference = params.crs.unwrap_or(workflow_spatial_ref);
+    // TODO: use a default spatial reference if it is not set?
+    let request_spatial_ref: SpatialReference =
+        params.crs.ok_or(error::Error::MissingSpatialReference)?;
 
     let spatial_bounds = if request_spatial_ref == workflow_spatial_ref {
         params.bbox
@@ -287,6 +289,7 @@ mod tests {
 
         let params = &[
             ("bbox", "-180,-90,180,90"),
+            ("crs", "EPSG:4326"),
             ("time", "2020-01-01T00:00:00.0Z"),
             ("spatialResolution", "0.1,0.1"),
         ];
@@ -351,6 +354,7 @@ mod tests {
 
         let params = &[
             ("bbox", "-180,-90,180,90"),
+            ("crs", "EPSG:4326"),
             ("time", "2020-01-01T00:00:00.0Z"),
             ("spatialResolution", "0.1,0.1"),
         ];
