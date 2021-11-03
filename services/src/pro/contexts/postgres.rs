@@ -511,6 +511,7 @@ mod tests {
     use super::*;
     use crate::contexts::MockableSession;
     use crate::datasets::external::mock::MockExternalDataProviderDefinition;
+    use crate::datasets::listing::SessionMetaDataProvider;
     use crate::datasets::listing::{DatasetListOptions, DatasetListing, ProvenanceOutput};
     use crate::datasets::listing::{DatasetProvider, Provenance};
     use crate::datasets::storage::{
@@ -541,9 +542,8 @@ mod tests {
     };
     use geoengine_datatypes::spatial_reference::{SpatialReference, SpatialReferenceOption};
     use geoengine_operators::engine::{
-        MetaData, MetaDataProvider, MultipleRasterSources, PlotOperator, StaticMetaData,
-        TypedOperator, TypedResultDescriptor, VectorOperator, VectorQueryRectangle,
-        VectorResultDescriptor,
+        MetaData, MultipleRasterSources, PlotOperator, StaticMetaData, TypedOperator,
+        TypedResultDescriptor, VectorOperator, VectorQueryRectangle, VectorResultDescriptor,
     };
     use geoengine_operators::mock::{MockPointSource, MockPointSourceParams};
     use geoengine_operators::plot::{Statistics, StatisticsParams};
@@ -1111,7 +1111,7 @@ mod tests {
             );
 
             let meta_data: Box<dyn MetaData<OgrSourceDataset, _, _>> =
-                db.meta_data(&dataset_id).await.unwrap();
+                db.session_meta_data(&session, &dataset_id).await.unwrap();
 
             assert_eq!(
                 meta_data

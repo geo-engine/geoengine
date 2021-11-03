@@ -1,4 +1,5 @@
 use crate::datasets::listing::ProvenanceOutput;
+use crate::datasets::listing::SessionMetaDataProvider;
 use crate::datasets::storage::{
     AddDataset, Dataset, DatasetDb, DatasetProviderDb, DatasetProviderListOptions,
     DatasetProviderListing, DatasetStore, DatasetStorer, ExternalDatasetProviderDefinition,
@@ -24,8 +25,8 @@ use bb8_postgres::PostgresConnectionManager;
 use geoengine_datatypes::dataset::{DatasetId, DatasetProviderId, InternalDatasetId};
 use geoengine_datatypes::util::Identifier;
 use geoengine_operators::engine::{
-    MetaData, MetaDataProvider, RasterQueryRectangle, RasterResultDescriptor, StaticMetaData,
-    TypedResultDescriptor, VectorQueryRectangle, VectorResultDescriptor,
+    MetaData, RasterQueryRectangle, RasterResultDescriptor, StaticMetaData, TypedResultDescriptor,
+    VectorQueryRectangle, VectorResultDescriptor,
 };
 use geoengine_operators::mock::MockDatasetDataSourceLoadingInfo;
 use geoengine_operators::source::{GdalLoadingInfo, OgrSourceDataset};
@@ -301,16 +302,21 @@ where
 
 #[async_trait]
 impl<Tls>
-    MetaDataProvider<MockDatasetDataSourceLoadingInfo, VectorResultDescriptor, VectorQueryRectangle>
-    for PostgresDatasetDb<Tls>
+    SessionMetaDataProvider<
+        UserSession,
+        MockDatasetDataSourceLoadingInfo,
+        VectorResultDescriptor,
+        VectorQueryRectangle,
+    > for PostgresDatasetDb<Tls>
 where
     Tls: MakeTlsConnect<Socket> + Clone + Send + Sync + 'static,
     <Tls as MakeTlsConnect<Socket>>::Stream: Send + Sync,
     <Tls as MakeTlsConnect<Socket>>::TlsConnect: Send,
     <<Tls as MakeTlsConnect<Socket>>::TlsConnect as TlsConnect<Socket>>::Future: Send,
 {
-    async fn meta_data(
+    async fn session_meta_data(
         &self,
+        _session: &UserSession,
         _dataset: &DatasetId,
     ) -> Result<
         Box<
@@ -320,41 +326,34 @@ where
                 VectorQueryRectangle,
             >,
         >,
-        geoengine_operators::error::Error,
     > {
-        Err(geoengine_operators::error::Error::LoadingInfo {
-            source: Box::new(Error::NotYetImplemented),
-        })
+        Err(Error::NotYetImplemented)
     }
 }
 
 #[async_trait]
-impl<Tls> MetaDataProvider<OgrSourceDataset, VectorResultDescriptor, VectorQueryRectangle>
-    for PostgresDatasetDb<Tls>
+impl<Tls>
+    SessionMetaDataProvider<
+        UserSession,
+        OgrSourceDataset,
+        VectorResultDescriptor,
+        VectorQueryRectangle,
+    > for PostgresDatasetDb<Tls>
 where
     Tls: MakeTlsConnect<Socket> + Clone + Send + Sync + 'static,
     <Tls as MakeTlsConnect<Socket>>::Stream: Send + Sync,
     <Tls as MakeTlsConnect<Socket>>::TlsConnect: Send,
     <<Tls as MakeTlsConnect<Socket>>::TlsConnect as TlsConnect<Socket>>::Future: Send,
 {
-    async fn meta_data(
+    async fn session_meta_data(
         &self,
+        _session: &UserSession,
         dataset: &DatasetId,
-    ) -> Result<
-        Box<dyn MetaData<OgrSourceDataset, VectorResultDescriptor, VectorQueryRectangle>>,
-        geoengine_operators::error::Error,
-    > {
-        let id = dataset
-            .internal()
-            .ok_or(geoengine_operators::error::Error::LoadingInfo {
-                source: Box::new(Error::InvalidDatasetId),
-            })?;
+    ) -> Result<Box<dyn MetaData<OgrSourceDataset, VectorResultDescriptor, VectorQueryRectangle>>>
+    {
+        let id = dataset.internal().ok_or(Error::InvalidDatasetId)?;
 
-        let conn = self.conn_pool.get().await.map_err(|e| {
-            geoengine_operators::error::Error::LoadingInfo {
-                source: Box::new(e),
-            }
-        })?;
+        let conn = self.conn_pool.get().await?;
         let stmt = conn
             .prepare(
                 "
@@ -365,16 +364,9 @@ where
         WHERE 
             id = $1",
             )
-            .await
-            .map_err(|e| geoengine_operators::error::Error::LoadingInfo {
-                source: Box::new(e),
-            })?;
+            .await?;
 
-        let row = conn.query_one(&stmt, &[&id]).await.map_err(|e| {
-            geoengine_operators::error::Error::LoadingInfo {
-                source: Box::new(e),
-            }
-        })?;
+        let row = conn.query_one(&stmt, &[&id]).await?;
 
         let meta_data: StaticMetaData<
             OgrSourceDataset,
@@ -387,32 +379,28 @@ where
 }
 
 #[async_trait]
-impl<Tls> MetaDataProvider<GdalLoadingInfo, RasterResultDescriptor, RasterQueryRectangle>
-    for PostgresDatasetDb<Tls>
+impl<Tls>
+    SessionMetaDataProvider<
+        UserSession,
+        GdalLoadingInfo,
+        RasterResultDescriptor,
+        RasterQueryRectangle,
+    > for PostgresDatasetDb<Tls>
 where
     Tls: MakeTlsConnect<Socket> + Clone + Send + Sync + 'static,
     <Tls as MakeTlsConnect<Socket>>::Stream: Send + Sync,
     <Tls as MakeTlsConnect<Socket>>::TlsConnect: Send,
     <<Tls as MakeTlsConnect<Socket>>::TlsConnect as TlsConnect<Socket>>::Future: Send,
 {
-    async fn meta_data(
+    async fn session_meta_data(
         &self,
+        _session: &UserSession,
         dataset: &DatasetId,
-    ) -> Result<
-        Box<dyn MetaData<GdalLoadingInfo, RasterResultDescriptor, RasterQueryRectangle>>,
-        geoengine_operators::error::Error,
-    > {
-        let id = dataset
-            .internal()
-            .ok_or(geoengine_operators::error::Error::LoadingInfo {
-                source: Box::new(Error::InvalidDatasetId),
-            })?;
+    ) -> Result<Box<dyn MetaData<GdalLoadingInfo, RasterResultDescriptor, RasterQueryRectangle>>>
+    {
+        let id = dataset.internal().ok_or(Error::InvalidDatasetId)?;
 
-        let conn = self.conn_pool.get().await.map_err(|e| {
-            geoengine_operators::error::Error::LoadingInfo {
-                source: Box::new(e),
-            }
-        })?;
+        let conn = self.conn_pool.get().await?;
         let stmt = conn
             .prepare(
                 "
@@ -428,22 +416,14 @@ where
                 source: Box::new(e),
             })?;
 
-        let row = conn.query_one(&stmt, &[&id]).await.map_err(|e| {
-            geoengine_operators::error::Error::LoadingInfo {
-                source: Box::new(e),
-            }
-        })?;
+        let row = conn.query_one(&stmt, &[&id]).await?;
 
         let meta_data: MetaDataDefinition = serde_json::from_value(row.get(0))?;
 
         Ok(match meta_data {
             MetaDataDefinition::GdalMetaDataRegular(m) => Box::new(m),
             MetaDataDefinition::GdalStatic(m) => Box::new(m),
-            _ => {
-                return Err(geoengine_operators::error::Error::LoadingInfo {
-                    source: Box::new(Error::DatasetIdTypeMissMatch),
-                })
-            }
+            _ => return Err(Error::DatasetIdTypeMissMatch),
         })
     }
 }

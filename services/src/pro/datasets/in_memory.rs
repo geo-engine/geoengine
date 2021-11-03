@@ -1,4 +1,5 @@
 use crate::contexts::MockableSession;
+use crate::datasets::listing::SessionMetaDataProvider;
 use crate::datasets::listing::{
     DatasetListOptions, DatasetListing, DatasetProvider, ExternalDatasetProvider, OrderBy,
     ProvenanceOutput,
@@ -20,8 +21,8 @@ use geoengine_datatypes::{
     util::Identifier,
 };
 use geoengine_operators::engine::{
-    MetaData, MetaDataProvider, RasterQueryRectangle, RasterResultDescriptor, StaticMetaData,
-    TypedResultDescriptor, VectorQueryRectangle, VectorResultDescriptor,
+    MetaData, RasterQueryRectangle, RasterResultDescriptor, StaticMetaData, TypedResultDescriptor,
+    VectorQueryRectangle, VectorResultDescriptor,
 };
 use geoengine_operators::source::{GdalLoadingInfo, GdalMetaDataRegular, OgrSourceDataset};
 use geoengine_operators::{mock::MockDatasetDataSourceLoadingInfo, source::GdalMetaDataStatic};
@@ -331,11 +332,16 @@ impl UpdateDatasetPermissions for ProHashMapDatasetDb {
 
 #[async_trait]
 impl
-    MetaDataProvider<MockDatasetDataSourceLoadingInfo, VectorResultDescriptor, VectorQueryRectangle>
-    for ProHashMapDatasetDb
+    SessionMetaDataProvider<
+        UserSession,
+        MockDatasetDataSourceLoadingInfo,
+        VectorResultDescriptor,
+        VectorQueryRectangle,
+    > for ProHashMapDatasetDb
 {
-    async fn meta_data(
+    async fn session_meta_data(
         &self,
+        _session: &UserSession,
         dataset: &DatasetId,
     ) -> Result<
         Box<
@@ -345,72 +351,71 @@ impl
                 VectorQueryRectangle,
             >,
         >,
-        geoengine_operators::error::Error,
     > {
         Ok(Box::new(
             self.mock_datasets
-                .get(&dataset.internal().ok_or(
-                    geoengine_operators::error::Error::DatasetMetaData {
-                        source: Box::new(error::Error::DatasetIdTypeMissMatch),
-                    },
-                )?)
-                .ok_or(geoengine_operators::error::Error::DatasetMetaData {
-                    source: Box::new(error::Error::UnknownDatasetId),
-                })?
+                .get(
+                    &dataset
+                        .internal()
+                        .ok_or(error::Error::DatasetIdTypeMissMatch)?,
+                )
+                .ok_or(error::Error::UnknownDatasetId)?
                 .clone(),
         ))
     }
 }
 
 #[async_trait]
-impl MetaDataProvider<OgrSourceDataset, VectorResultDescriptor, VectorQueryRectangle>
-    for ProHashMapDatasetDb
+impl
+    SessionMetaDataProvider<
+        UserSession,
+        OgrSourceDataset,
+        VectorResultDescriptor,
+        VectorQueryRectangle,
+    > for ProHashMapDatasetDb
 {
-    async fn meta_data(
+    async fn session_meta_data(
         &self,
+        _session: &UserSession,
         dataset: &DatasetId,
-    ) -> Result<
-        Box<dyn MetaData<OgrSourceDataset, VectorResultDescriptor, VectorQueryRectangle>>,
-        geoengine_operators::error::Error,
-    > {
+    ) -> Result<Box<dyn MetaData<OgrSourceDataset, VectorResultDescriptor, VectorQueryRectangle>>>
+    {
         Ok(Box::new(
             self.ogr_datasets
-                .get(&dataset.internal().ok_or(
-                    geoengine_operators::error::Error::DatasetMetaData {
-                        source: Box::new(error::Error::DatasetIdTypeMissMatch),
-                    },
-                )?)
-                .ok_or(geoengine_operators::error::Error::DatasetMetaData {
-                    source: Box::new(error::Error::UnknownDatasetId),
-                })?
+                .get(
+                    &dataset
+                        .internal()
+                        .ok_or(error::Error::DatasetIdTypeMissMatch)?,
+                )
+                .ok_or(error::Error::UnknownDatasetId)?
                 .clone(),
         ))
     }
 }
 
 #[async_trait]
-impl MetaDataProvider<GdalLoadingInfo, RasterResultDescriptor, RasterQueryRectangle>
-    for ProHashMapDatasetDb
+impl
+    SessionMetaDataProvider<
+        UserSession,
+        GdalLoadingInfo,
+        RasterResultDescriptor,
+        RasterQueryRectangle,
+    > for ProHashMapDatasetDb
 {
-    async fn meta_data(
+    async fn session_meta_data(
         &self,
+        _session: &UserSession,
         dataset: &DatasetId,
-    ) -> Result<
-        Box<dyn MetaData<GdalLoadingInfo, RasterResultDescriptor, RasterQueryRectangle>>,
-        geoengine_operators::error::Error,
-    > {
+    ) -> Result<Box<dyn MetaData<GdalLoadingInfo, RasterResultDescriptor, RasterQueryRectangle>>>
+    {
         let id = dataset
             .internal()
-            .ok_or(geoengine_operators::error::Error::DatasetMetaData {
-                source: Box::new(error::Error::DatasetIdTypeMissMatch),
-            })?;
+            .ok_or(error::Error::DatasetIdTypeMissMatch)?;
 
         Ok(self
             .gdal_datasets
             .get(&id)
-            .ok_or(geoengine_operators::error::Error::DatasetMetaData {
-                source: Box::new(error::Error::UnknownDatasetId),
-            })?
+            .ok_or(error::Error::UnknownDatasetId)?
             .clone())
     }
 }
@@ -443,6 +448,7 @@ mod tests {
     use crate::util::user_input::UserInput;
     use geoengine_datatypes::collections::VectorDataType;
     use geoengine_datatypes::spatial_reference::SpatialReferenceOption;
+    use geoengine_operators::engine::MetaDataProvider;
     use geoengine_operators::source::OgrSourceErrorSpec;
 
     #[tokio::test]

@@ -8,8 +8,8 @@ use crate::util::user_input::{UserInput, Validated};
 use async_trait::async_trait;
 use geoengine_datatypes::dataset::DatasetId;
 use geoengine_operators::engine::{
-    MetaDataProvider, RasterQueryRectangle, RasterResultDescriptor, TypedResultDescriptor,
-    VectorQueryRectangle, VectorResultDescriptor,
+    MetaData, MetaDataProvider, RasterQueryRectangle, RasterResultDescriptor, ResultDescriptor,
+    TypedResultDescriptor, VectorQueryRectangle, VectorResultDescriptor,
 };
 use geoengine_operators::mock::MockDatasetDataSourceLoadingInfo;
 use geoengine_operators::source::{GdalLoadingInfo, OgrSourceDataset};
@@ -69,13 +69,32 @@ pub enum OrderBy {
     NameDesc,
 }
 
+/// This is like the `MetaDataProvider` trait but also accepts a session
+#[async_trait]
+pub trait SessionMetaDataProvider<S, L, R, Q>
+where
+    S: Session,
+    R: ResultDescriptor,
+{
+    async fn session_meta_data(
+        &self,
+        session: &S,
+        dataset: &DatasetId,
+    ) -> Result<Box<dyn MetaData<L, R, Q>>>;
+}
+
 /// Listing of stored datasets
 #[async_trait]
-pub trait DatasetProvider<S: Session>: Send
+pub trait DatasetProvider<S: Session>:
+    Send
     + Sync
-    + MetaDataProvider<MockDatasetDataSourceLoadingInfo, VectorResultDescriptor, VectorQueryRectangle>
-    + MetaDataProvider<OgrSourceDataset, VectorResultDescriptor, VectorQueryRectangle>
-    + MetaDataProvider<GdalLoadingInfo, RasterResultDescriptor, RasterQueryRectangle>
+    + SessionMetaDataProvider<
+        S,
+        MockDatasetDataSourceLoadingInfo,
+        VectorResultDescriptor,
+        VectorQueryRectangle,
+    > + SessionMetaDataProvider<S, OgrSourceDataset, VectorResultDescriptor, VectorQueryRectangle>
+    + SessionMetaDataProvider<S, GdalLoadingInfo, RasterResultDescriptor, RasterQueryRectangle>
 {
     // TODO: filter, paging
     async fn list(
