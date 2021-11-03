@@ -97,6 +97,25 @@ Inspect the container:
 
 `docker exec -it geoengine bash`
 
+## Troubleshooting
+
+### Running out of memory map areas
+
+Problem: When running Geo Engine or its tests you encounter one of the following (or similar) errors:
+
+- `Cannot allocate Memory (OS Error 12)`
+- `Os { code: 11, kind: WouldBlock, message: "Resource temporarily unavailable" }`
+
+Solution: Adjust the system's `max_map_count` parameter:
+
+- Temporary configuration:
+  - `sudo sysctl -w vm.max_map_count=262144`
+- Permanent configuration:
+  - Add the following line to /etc/sysctl.d/local.conf
+    - `vm.max_map_count=262144`
+  - Reload the system config:
+    - `sudo sysctl --system`
+
 ## Contributing
 
 We are grateful for any contributions.
