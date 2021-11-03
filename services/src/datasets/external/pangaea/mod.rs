@@ -2,7 +2,7 @@ use crate::datasets::external::pangaea::meta::PangeaMetaData;
 use crate::datasets::listing::{
     DatasetListOptions, DatasetListing, ExternalDatasetProvider, Provenance, ProvenanceOutput,
 };
-use crate::datasets::storage::{Dataset, ExternalDatasetProviderDefinition};
+use crate::datasets::storage::ExternalDatasetProviderDefinition;
 use async_trait::async_trait;
 use geoengine_datatypes::dataset::{DatasetId, DatasetProviderId};
 use geoengine_operators::engine::{
@@ -67,10 +67,6 @@ impl PangaeaDataProvider {
 impl ExternalDatasetProvider for PangaeaDataProvider {
     async fn list(&self, _options: Validated<DatasetListOptions>) -> Result<Vec<DatasetListing>> {
         Ok(vec![])
-    }
-
-    async fn load(&self, _dataset: &DatasetId) -> Result<Dataset> {
-        Err(Error::NotYetImplemented)
     }
 
     async fn provenance(&self, dataset: &DatasetId) -> Result<ProvenanceOutput> {

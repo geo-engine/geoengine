@@ -9,7 +9,6 @@ use crate::{
         listing::{DatasetListing, ExternalDatasetProvider},
         storage::ExternalDatasetProviderDefinition,
     },
-    error,
     util::user_input::Validated,
 };
 use async_trait::async_trait;
@@ -224,13 +223,6 @@ impl ExternalDatasetProvider for GfbioDataProvider {
             .collect();
 
         Ok(listings)
-    }
-
-    async fn load(
-        &self,
-        _dataset: &geoengine_datatypes::dataset::DatasetId,
-    ) -> crate::error::Result<crate::datasets::storage::Dataset> {
-        Err(error::Error::NotYetImplemented)
     }
 
     async fn provenance(&self, dataset: &DatasetId) -> Result<ProvenanceOutput> {

@@ -105,10 +105,6 @@ pub trait ExternalDatasetProvider: Send
     // TODO: authorization, filter, paging
     async fn list(&self, options: Validated<DatasetListOptions>) -> Result<Vec<DatasetListing>>;
 
-    // TODO: authorization
-    // TODOis this method useful?
-    async fn load(&self, dataset: &DatasetId) -> Result<Dataset>;
-
     async fn provenance(&self, dataset: &DatasetId) -> Result<ProvenanceOutput>;
 }
 

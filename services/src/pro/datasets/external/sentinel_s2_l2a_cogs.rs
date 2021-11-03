@@ -212,13 +212,6 @@ impl ExternalDatasetProvider for SentinelS2L2aCogsDataProvider {
         Ok(x)
     }
 
-    async fn load(
-        &self,
-        _dataset: &geoengine_datatypes::dataset::DatasetId,
-    ) -> crate::error::Result<crate::datasets::storage::Dataset> {
-        Err(error::Error::NotYetImplemented)
-    }
-
     async fn provenance(&self, dataset: &DatasetId) -> Result<ProvenanceOutput> {
         Ok(ProvenanceOutput {
             dataset: dataset.clone(),
