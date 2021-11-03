@@ -1,8 +1,7 @@
 use crate::error;
-use crate::primitives::PrimitivesError;
+use crate::primitives::{PrimitivesError, TimeInstance};
 use crate::util::Result;
 use arrow::bitmap::Bitmap;
-use chrono::{DateTime, Utc};
 use gdal::vector::OGRFieldType;
 use num_traits::AsPrimitive;
 use serde::{Deserialize, Serialize};
@@ -30,7 +29,7 @@ impl FeatureDataType {
             OGRFieldType::OFTReal => Self::Float,
             OGRFieldType::OFTString => Self::Text,
             OGRFieldType::OFTBinary => Self::Bool,
-            OGRFieldType::OFTDateTime => Self::DateTime,
+            OGRFieldType::OFTDateTime | OGRFieldType::OFTDate => Self::DateTime,
             _ => return Err(error::Error::NoMatchingFeatureDataTypeForOgrFieldType),
         })
     }
@@ -52,8 +51,8 @@ pub enum FeatureData {
     NullableText(Vec<Option<String>>),
     Bool(Vec<bool>),
     NullableBool(Vec<Option<bool>>),
-    DateTime(Vec<DateTime<Utc>>),
-    NullableDateTime(Vec<Option<DateTime<Utc>>>),
+    DateTime(Vec<TimeInstance>),
+    NullableDateTime(Vec<Option<TimeInstance>>),
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize, PartialEq)]
@@ -68,8 +67,8 @@ pub enum FeatureDataValue {
     NullableText(Option<String>),
     Bool(bool),
     NullableBool(Option<bool>),
-    DateTime(DateTime<Utc>),
-    NullableDateTime(Option<DateTime<Utc>>),
+    DateTime(TimeInstance),
+    NullableDateTime(Option<TimeInstance>),
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -472,12 +471,12 @@ fn null_bitmap_to_bools(null_bitmap: &Option<Bitmap>, len: usize) -> Vec<bool> {
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct BoolDataRef<'f> {
-    buffer: &'f [bool],
+    buffer: Vec<bool>,
     valid_bitmap: &'f Option<arrow::bitmap::Bitmap>,
 }
 
 impl<'f> BoolDataRef<'f> {
-    pub fn new(buffer: &'f [bool], null_bitmap: &'f Option<arrow::bitmap::Bitmap>) -> Self {
+    pub fn new(buffer: Vec<bool>, null_bitmap: &'f Option<arrow::bitmap::Bitmap>) -> Self {
         Self {
             buffer,
             valid_bitmap: null_bitmap,
@@ -535,7 +534,7 @@ impl<'f> DataRef<'f, bool> for BoolDataRef<'f> {
 
 impl AsRef<[bool]> for BoolDataRef<'_> {
     fn as_ref(&self) -> &[bool] {
-        self.buffer
+        &self.buffer
     }
 }
 
@@ -577,15 +576,12 @@ impl<'f> Iterator for BoolDataRefFloatOptionIter<'f> {
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct DateTimeDataRef<'f> {
-    buffer: &'f [DateTime<Utc>],
+    buffer: Vec<TimeInstance>,
     valid_bitmap: &'f Option<arrow::bitmap::Bitmap>,
 }
 
 impl<'f> DateTimeDataRef<'f> {
-    pub fn new(
-        buffer: &'f [DateTime<Utc>],
-        null_bitmap: &'f Option<arrow::bitmap::Bitmap>,
-    ) -> Self {
+    pub fn new(buffer: Vec<TimeInstance>, null_bitmap: &'f Option<arrow::bitmap::Bitmap>) -> Self {
         Self {
             buffer,
             valid_bitmap: null_bitmap,
@@ -593,9 +589,9 @@ impl<'f> DateTimeDataRef<'f> {
     }
 }
 
-impl<'f> DataRef<'f, DateTime<Utc>> for DateTimeDataRef<'f> {
-    fn json_value(value: &DateTime<Utc>) -> serde_json::Value {
-        serde_json::to_value(value).expect("DateTime<Utc> can be serialized")
+impl<'f> DataRef<'f, TimeInstance> for DateTimeDataRef<'f> {
+    fn json_value(value: &TimeInstance) -> serde_json::Value {
+        serde_json::to_value(value).expect("TimeInstance can be serialized")
     }
 
     fn nulls(&self) -> Vec<bool> {
@@ -624,7 +620,7 @@ impl<'f> DataRef<'f, DateTime<Utc>> for DateTimeDataRef<'f> {
         }
     }
 
-    type StringsIter = NumberDataRefStringIter<'f, Self, DateTime<Utc>>;
+    type StringsIter = NumberDataRefStringIter<'f, Self, TimeInstance>;
 
     fn strings_iter(&'f self) -> Self::StringsIter {
         NumberDataRefStringIter::new(self)
@@ -641,9 +637,9 @@ impl<'f> DataRef<'f, DateTime<Utc>> for DateTimeDataRef<'f> {
     }
 }
 
-impl AsRef<[DateTime<Utc>]> for DateTimeDataRef<'_> {
-    fn as_ref(&self) -> &[DateTime<Utc>] {
-        self.buffer
+impl AsRef<[TimeInstance]> for DateTimeDataRef<'_> {
+    fn as_ref(&self) -> &[TimeInstance] {
+        &self.buffer
     }
 }
 
@@ -678,7 +674,7 @@ impl<'f> Iterator for DateTimeDataRefFloatOptionIter<'f> {
         Some(if self.data_ref.is_null(i) {
             None
         } else {
-            Some(self.data_ref.as_ref()[i].timestamp_millis() as f64)
+            Some(self.data_ref.as_ref()[i].inner() as f64)
         })
     }
 }
@@ -1151,14 +1147,14 @@ impl FeatureData {
             }
             FeatureData::DateTime(v) => {
                 let mut builder = arrow::array::Date64Builder::new(v.len());
-                let x: Vec<_> = v.iter().map(DateTime::timestamp_millis).collect();
+                let x: Vec<_> = v.iter().map(|x| x.inner()).collect();
                 builder.append_slice(&x)?;
                 Box::new(builder)
             }
             FeatureData::NullableDateTime(v) => {
                 let mut builder = arrow::array::Date64Builder::new(v.len());
                 for &dt_option in v {
-                    builder.append_option(dt_option.map(|x| x.timestamp_millis()))?;
+                    builder.append_option(dt_option.map(TimeInstance::inner))?;
                 }
                 Box::new(builder)
             }
@@ -1269,10 +1265,10 @@ impl TryFrom<&FeatureDataValue> for bool {
     }
 }
 
-impl TryFrom<&FeatureDataValue> for DateTime<Utc> {
+impl TryFrom<&FeatureDataValue> for TimeInstance {
     type Error = crate::collections::FeatureCollectionError;
 
-    fn try_from(value: &FeatureDataValue) -> Result<DateTime<Utc>, Self::Error> {
+    fn try_from(value: &FeatureDataValue) -> Result<TimeInstance, Self::Error> {
         Ok(match value {
             FeatureDataValue::DateTime(v) => *v,
             FeatureDataValue::NullableDateTime(v) if v.is_some() => v.unwrap(),

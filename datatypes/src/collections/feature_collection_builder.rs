@@ -1,6 +1,6 @@
 use crate::collections::batch_builder::RawFeatureCollectionBuilder;
 use crate::collections::{error, FeatureCollection, FeatureCollectionError};
-use crate::primitives::{FeatureDataType, FeatureDataValue, Geometry, TimeInterval};
+use crate::primitives::{FeatureDataType, FeatureDataValue, Geometry, TimeInstance, TimeInterval};
 use crate::util::arrow::{downcast_mut_array, ArrowTyped};
 use crate::util::Result;
 use arrow::array::{
@@ -233,11 +233,11 @@ where
             }
             FeatureDataValue::DateTime(value) => {
                 let dt_builder: &mut Date64Builder = downcast_mut_array(data_builder.as_mut());
-                dt_builder.append_value(value.timestamp_millis())?;
+                dt_builder.append_value(value.inner())?;
             }
             FeatureDataValue::NullableDateTime(value) => {
                 let dt_builder: &mut Date64Builder = downcast_mut_array(data_builder.as_mut());
-                dt_builder.append_option(value.map(|x| x.timestamp_millis()))?;
+                dt_builder.append_option(value.map(TimeInstance::inner))?;
             }
         }
 

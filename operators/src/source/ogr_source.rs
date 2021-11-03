@@ -917,6 +917,126 @@ where
         builder.build().map_err(Into::into)
     }
 
+    #[allow(clippy::too_many_lines)]
+    fn convert_field_value(
+        data_type: FeatureDataType,
+        field: Result<Option<FieldValue>, GdalError>,
+        error_spec: OgrSourceErrorSpec,
+    ) -> Result<FeatureDataValue> {
+        match data_type {
+            FeatureDataType::Text => {
+                #[allow(clippy::match_same_arms)]
+                let text_option = match field {
+                    Ok(Some(FieldValue::IntegerValue(v))) => Some(v.to_string()),
+                    Ok(Some(FieldValue::Integer64Value(v))) => Some(v.to_string()),
+                    Ok(Some(FieldValue::StringValue(s))) => Some(s),
+                    Ok(Some(FieldValue::RealValue(v))) => Some(v.to_string()),
+                    Ok(Some(FieldValue::DateTimeValue(v))) => Some(v.to_string()), //TODO: allow multiple date columns
+                    Ok(Some(FieldValue::DateValue(v))) => Some(v.to_string()),
+                    Ok(None) => None,
+                    Ok(Some(v)) => error_spec.on_error(Error::OgrColumnFieldTypeMismatch {
+                        expected: "Text".to_string(),
+                        field_value: v,
+                    })?, // TODO: handle other types
+                    Err(e) => error_spec.on_error(Error::Gdal { source: e })?,
+                };
+
+                Ok(FeatureDataValue::NullableText(text_option))
+            }
+            FeatureDataType::Float => {
+                #[allow(clippy::match_same_arms)]
+                let value_option = match field {
+                    Ok(Some(FieldValue::IntegerValue(v))) => Some(f64::from(v)),
+                    Ok(Some(FieldValue::StringValue(s))) => f64::from_str(&s).ok(),
+                    Ok(Some(FieldValue::RealValue(v))) => Some(v),
+                    Ok(None) => None,
+                    Ok(Some(v)) => error_spec.on_error(Error::OgrColumnFieldTypeMismatch {
+                        expected: "Float".to_string(),
+                        field_value: v,
+                    })?, // TODO: handle other types
+                    Err(e) => error_spec.on_error(Error::Gdal { source: e })?,
+                };
+
+                Ok(FeatureDataValue::NullableFloat(value_option))
+            }
+            FeatureDataType::Int => {
+                #[allow(clippy::match_same_arms)]
+                let value_option = match field {
+                    Ok(Some(FieldValue::IntegerValue(v))) => Some(i64::from(v)),
+                    Ok(Some(FieldValue::Integer64Value(v))) => Some(v),
+                    Ok(Some(FieldValue::StringValue(s))) => i64::from_str(&s).ok(),
+                    Ok(Some(FieldValue::RealValue(v))) => Some(v as i64),
+                    Ok(None) => None,
+                    Ok(Some(v)) => error_spec.on_error(Error::OgrColumnFieldTypeMismatch {
+                        expected: "Int".to_string(),
+                        field_value: v,
+                    })?, // TODO: handle other types
+                    Err(e) => error_spec.on_error(Error::Gdal { source: e })?,
+                };
+
+                Ok(FeatureDataValue::NullableInt(value_option))
+            }
+            FeatureDataType::Category => {
+                #[allow(clippy::match_same_arms)]
+                let _value_option: Option<u8> = match field {
+                    Ok(None) => None,
+                    Ok(Some(v)) => error_spec.on_error(Error::OgrColumnFieldTypeMismatch {
+                        expected: "Category".to_string(),
+                        field_value: v,
+                    })?, // TODO: handle other types
+                    Err(e) => error_spec.on_error(Error::Gdal { source: e })?,
+                };
+
+                Err(Error::InvalidFeatureDataType) // TODO: ?
+            }
+            FeatureDataType::Bool => {
+                #[allow(clippy::match_same_arms)]
+                let value_option = match field {
+                    Ok(Some(FieldValue::IntegerValue(v))) => Some(v != 0),
+                    Ok(Some(FieldValue::Integer64Value(v))) => Some(v != 0),
+                    Ok(Some(FieldValue::StringValue(s))) => bool::from_str(&s).ok(),
+                    Ok(Some(FieldValue::RealValue(v))) => Some(v != 0.0),
+                    Ok(None) => None,
+                    Ok(Some(v)) => error_spec.on_error(Error::OgrColumnFieldTypeMismatch {
+                        expected: "Bool".to_string(),
+                        field_value: v,
+                    })?, // TODO: handle other types
+                    Err(e) => error_spec.on_error(Error::Gdal { source: e })?,
+                };
+
+                Ok(FeatureDataValue::NullableBool(value_option))
+            }
+            FeatureDataType::DateTime => {
+                #[allow(clippy::match_same_arms)]
+                let value_option = match field {
+                    Ok(Some(FieldValue::IntegerValue(v))) => {
+                        Some(TimeInstance::from_millis(i64::from(v))?)
+                    }
+                    Ok(Some(FieldValue::Integer64Value(v))) => Some(TimeInstance::from_millis(v)?),
+                    Ok(Some(FieldValue::StringValue(s))) => s
+                        .parse::<i64>()
+                        .ok()
+                        .and_then(|x| TimeInstance::from_millis(x).ok()),
+                    Ok(Some(FieldValue::RealValue(v))) => {
+                        Some(TimeInstance::from_millis(v as i64)?)
+                    }
+                    Ok(Some(FieldValue::DateTimeValue(v))) => Some(v.with_timezone(&Utc).into()),
+                    Ok(Some(FieldValue::DateValue(v))) => {
+                        Some(v.and_hms(0, 0, 0).with_timezone(&Utc).into())
+                    }
+                    Ok(None) => None,
+                    Ok(Some(v)) => error_spec.on_error(Error::OgrColumnFieldTypeMismatch {
+                        expected: "DateTime".to_string(),
+                        field_value: v,
+                    })?, // TODO: handle other types
+                    Err(e) => error_spec.on_error(Error::Gdal { source: e })?,
+                };
+
+                Ok(FeatureDataValue::NullableDateTime(value_option))
+            }
+        }
+    }
+
     #[allow(clippy::too_many_arguments)]
     fn add_feature_to_batch(
         error_spec: OgrSourceErrorSpec,
@@ -965,120 +1085,8 @@ where
 
         for (column, data_type) in data_types {
             let field = feature.field(&column);
-
-            match data_type {
-                FeatureDataType::Text => {
-                    #[allow(clippy::match_same_arms)]
-                    let text_option = match field {
-                        Ok(Some(FieldValue::IntegerValue(v))) => Some(v.to_string()),
-                        Ok(Some(FieldValue::Integer64Value(v))) => Some(v.to_string()),
-                        Ok(Some(FieldValue::StringValue(s))) => Some(s),
-                        Ok(Some(FieldValue::RealValue(v))) => Some(v.to_string()),
-                        Ok(Some(FieldValue::DateTimeValue(v))) => Some(v.to_string()), //TODO: allow multiple date columns
-                        Ok(Some(FieldValue::DateValue(v))) => Some(v.to_string()),
-                        Ok(None) => None,
-                        Ok(Some(v)) => error_spec.on_error(Error::OgrColumnFieldTypeMismatch {
-                            expected: "Text".to_string(),
-                            field_value: v,
-                        })?, // TODO: handle other types
-                        Err(e) => error_spec.on_error(Error::Gdal { source: e })?,
-                    };
-
-                    builder.push_data(column, FeatureDataValue::NullableText(text_option))?;
-                }
-                FeatureDataType::Float => {
-                    #[allow(clippy::match_same_arms)]
-                    let value_option = match field {
-                        Ok(Some(FieldValue::IntegerValue(v))) => Some(f64::from(v)),
-                        Ok(Some(FieldValue::StringValue(s))) => f64::from_str(&s).ok(),
-                        Ok(Some(FieldValue::RealValue(v))) => Some(v),
-                        Ok(None) => None,
-                        Ok(Some(v)) => error_spec.on_error(Error::OgrColumnFieldTypeMismatch {
-                            expected: "Float".to_string(),
-                            field_value: v,
-                        })?, // TODO: handle other types
-                        Err(e) => error_spec.on_error(Error::Gdal { source: e })?,
-                    };
-
-                    builder.push_data(column, FeatureDataValue::NullableFloat(value_option))?;
-                }
-                FeatureDataType::Int => {
-                    #[allow(clippy::match_same_arms)]
-                    let value_option = match field {
-                        Ok(Some(FieldValue::IntegerValue(v))) => Some(i64::from(v)),
-                        Ok(Some(FieldValue::Integer64Value(v))) => Some(v),
-                        Ok(Some(FieldValue::StringValue(s))) => i64::from_str(&s).ok(),
-                        Ok(Some(FieldValue::RealValue(v))) => Some(v as i64),
-                        Ok(None) => None,
-                        Ok(Some(v)) => error_spec.on_error(Error::OgrColumnFieldTypeMismatch {
-                            expected: "Int".to_string(),
-                            field_value: v,
-                        })?, // TODO: handle other types
-                        Err(e) => error_spec.on_error(Error::Gdal { source: e })?,
-                    };
-
-                    builder.push_data(column, FeatureDataValue::NullableInt(value_option))?;
-                }
-                FeatureDataType::Category => {
-                    #[allow(clippy::match_same_arms)]
-                    let _value_option: Option<u8> = match field {
-                        Ok(None) => None,
-                        Ok(Some(v)) => error_spec.on_error(Error::OgrColumnFieldTypeMismatch {
-                            expected: "Category".to_string(),
-                            field_value: v,
-                        })?, // TODO: handle other types
-                        Err(e) => error_spec.on_error(Error::Gdal { source: e })?,
-                    };
-                }
-                FeatureDataType::Bool => {
-                    #[allow(clippy::match_same_arms)]
-                    let value_option = match field {
-                        Ok(Some(FieldValue::IntegerValue(v))) => Some(v != 0),
-                        Ok(Some(FieldValue::Integer64Value(v))) => Some(v != 0),
-                        Ok(Some(FieldValue::StringValue(s))) => bool::from_str(&s).ok(),
-                        Ok(Some(FieldValue::RealValue(v))) => Some(v != 0.0),
-                        Ok(None) => None,
-                        Ok(Some(v)) => error_spec.on_error(Error::OgrColumnFieldTypeMismatch {
-                            expected: "Bool".to_string(),
-                            field_value: v,
-                        })?, // TODO: handle other types
-                        Err(e) => error_spec.on_error(Error::Gdal { source: e })?,
-                    };
-
-                    builder.push_data(column, FeatureDataValue::NullableBool(value_option))?;
-                }
-                FeatureDataType::DateTime => {
-                    #[allow(clippy::match_same_arms)]
-                    let value_option = match field {
-                        Ok(Some(FieldValue::IntegerValue(v))) => Some(DateTime::from_utc(
-                            NaiveDateTime::from_timestamp(i64::from(v), 0),
-                            Utc,
-                        )),
-                        Ok(Some(FieldValue::Integer64Value(v))) => {
-                            Some(DateTime::from_utc(NaiveDateTime::from_timestamp(v, 0), Utc))
-                        }
-                        Ok(Some(FieldValue::StringValue(s))) => NaiveDateTime::from_str(&s)
-                            .ok()
-                            .map(|x| DateTime::from_utc(x, Utc)),
-                        Ok(Some(FieldValue::RealValue(v))) => Some(DateTime::from_utc(
-                            NaiveDateTime::from_timestamp(v as i64, 0),
-                            Utc,
-                        )),
-                        Ok(Some(FieldValue::DateTimeValue(v))) => Some(v.with_timezone(&Utc)),
-                        Ok(Some(FieldValue::DateValue(v))) => {
-                            Some(v.and_hms(0, 0, 0).with_timezone(&Utc))
-                        }
-                        Ok(None) => None,
-                        Ok(Some(v)) => error_spec.on_error(Error::OgrColumnFieldTypeMismatch {
-                            expected: "DateTime".to_string(),
-                            field_value: v,
-                        })?, // TODO: handle other types
-                        Err(e) => error_spec.on_error(Error::Gdal { source: e })?,
-                    };
-
-                    builder.push_data(column, FeatureDataValue::NullableDateTime(value_option))?;
-                }
-            }
+            let value = Self::convert_field_value(*data_type, field, error_spec)?;
+            builder.push_data(column, value)?;
         }
 
         builder.finish_row();

@@ -23,7 +23,7 @@ use std::ops::{Bound, RangeBounds};
 use std::rc::Rc;
 use std::sync::Arc;
 
-use crate::primitives::{BoolDataRef, Coordinate2D, DateTimeDataRef};
+use crate::primitives::{BoolDataRef, Coordinate2D, DateTimeDataRef, TimeInstance};
 use crate::primitives::{
     CategoryDataRef, FeatureData, FeatureDataRef, FeatureDataType, FeatureDataValue, FloatDataRef,
     Geometry, IntDataRef, TextDataRef, TimeInterval,
@@ -40,7 +40,6 @@ use crate::{
     operations::reproject::CoordinateProjection,
 };
 use arrow::datatypes::Date64Type;
-use chrono::{DateTime, NaiveDateTime, Utc};
 use std::iter::FromIterator;
 
 use super::{geo_feature_collection::ReplaceRawArrayCoords, GeometryCollection};
@@ -1013,19 +1012,17 @@ where
                 }
                 FeatureDataType::Bool => {
                     let array: &arrow::array::BooleanArray = downcast_array(column);
-                    BoolDataRef::new(array.values(), array.data_ref().null_bitmap().into())
+                    let transformed: Vec<_> = array.iter().map(|x| x.unwrap_or(false)).collect();
+                    BoolDataRef::new(transformed, array.data_ref().null_bitmap()).into()
                 }
                 FeatureDataType::DateTime => {
                     let array: &arrow::array::Date64Array = downcast_array(column);
-                    DateTimeDataRef::new(
-                        array
-                            .values()
-                            .iter()
-                            .map(|x| DateTime::from_utc(NaiveDateTime::from_timestamp(*x, 0), Utc))
-                            .collect(),
-                        array.data_ref().null_bitmap(),
-                    )
-                    .into()
+                    let transformed: Vec<_> = array
+                        .values()
+                        .iter()
+                        .map(|x| TimeInstance::from_millis_unchecked(*x))
+                        .collect();
+                    DateTimeDataRef::new(transformed, array.data_ref().null_bitmap()).into()
                 }
             },
         )
