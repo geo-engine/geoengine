@@ -1146,11 +1146,11 @@ mod tests {
                     byte_size: 1337,
                 }],
             };
-            db.create_upload(&UserSession::mock(), input.clone())
-                .await
-                .unwrap();
 
-            let upload = db.get_upload(&UserSession::mock(), id).await.unwrap();
+            let session = ctx.user_db_ref_mut().await.anonymous().await.unwrap();
+            db.create_upload(&session, input.clone()).await.unwrap();
+
+            let upload = db.get_upload(&session, id).await.unwrap();
 
             assert_eq!(upload, input);
         })
