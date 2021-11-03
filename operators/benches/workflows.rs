@@ -56,6 +56,7 @@ fn setup_mock_source(tile_size: usize) -> MockRasterSourceProcessor<u8> {
     }
 }
 
+#[inline(never)]
 fn bench_raster_processor<T: Pixel, S: RasterQueryProcessor<RasterType = T>, C: QueryContext>(
     list_of_named_querys: &[(&str, RasterQueryRectangle)],
     named_tile_producing_operator: (&str, S),
@@ -67,12 +68,16 @@ fn bench_raster_processor<T: Pixel, S: RasterQueryProcessor<RasterType = T>, C: 
         run_time.block_on(async {
             let start = Instant::now();
 
+            // query the operator
             let query = operator.raster_query(qrect, ctx).await.unwrap();
-
+            // drain the stream
             let res: Vec<Result<RasterTile2D<T>, _>> = query.collect().await;
-            let number_of_tiles = black_box(res.into_iter().map(Result::unwrap).count());
 
             let elapsed = start.elapsed();
+
+            // count elements in a black_box to avoid compiler optimization
+            let number_of_tiles = black_box(res.into_iter().map(Result::unwrap).count());
+
             println!(
                 "Bench \"{}\" with query \"{}\" produced {} tiles in {}s | {}ns",
                 operator_name,
