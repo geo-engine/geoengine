@@ -200,10 +200,10 @@ where
                 d.result_descriptor,
                 d.symbology
             FROM 
-                user_permitted_datasets u JOIN datasets d 
-                    ON (u.dataset_id = d.id)
+                user_permitted_datasets p JOIN datasets d 
+                    ON (p.dataset_id = d.id)
             WHERE 
-                u.user_id = $1",
+                p.user_id = $1",
             )
             .await?;
 
@@ -244,10 +244,10 @@ where
                 d.symbology,
                 d.provenance
             FROM 
-                user_permitted_datasets u JOIN datasets d 
-                    ON (u.dataset_id = d.id)
+                user_permitted_datasets p JOIN datasets d 
+                    ON (p.dataset_id = d.id)
             WHERE 
-                u.user_id = $1 AND d.id = $2
+                p.user_id = $1 AND d.id = $2
             LIMIT 
                 1",
             )
@@ -284,10 +284,10 @@ where
             SELECT 
                 d.provenance 
             FROM 
-                user_permitted_datasets u JOIN datasets d
-                    ON(u.dataset_id = d.id)
+                user_permitted_datasets p JOIN datasets d
+                    ON(p.dataset_id = d.id)
             WHERE 
-                u.user_id = $1 AND d.id = $2",
+                p.user_id = $1 AND d.id = $2",
             )
             .await?;
 
@@ -347,7 +347,7 @@ where
 {
     async fn session_meta_data(
         &self,
-        _session: &UserSession,
+        session: &UserSession,
         dataset: &DatasetId,
     ) -> Result<Box<dyn MetaData<OgrSourceDataset, VectorResultDescriptor, VectorQueryRectangle>>>
     {
@@ -358,15 +358,16 @@ where
             .prepare(
                 "
         SELECT 
-            meta_data
+            d.meta_data
         FROM 
-            datasets 
+            user_permitted_datasets p JOIN datasets d 
+                ON (p.dataset_id = d.id)
         WHERE 
-            id = $1",
+            d.id = $1 AND p.user_id = $2",
             )
             .await?;
 
-        let row = conn.query_one(&stmt, &[&id]).await?;
+        let row = conn.query_one(&stmt, &[&id, &session.user.id]).await?;
 
         let meta_data: StaticMetaData<
             OgrSourceDataset,
@@ -394,7 +395,7 @@ where
 {
     async fn session_meta_data(
         &self,
-        _session: &UserSession,
+        session: &UserSession,
         dataset: &DatasetId,
     ) -> Result<Box<dyn MetaData<GdalLoadingInfo, RasterResultDescriptor, RasterQueryRectangle>>>
     {
@@ -405,18 +406,16 @@ where
             .prepare(
                 "
         SELECT 
-            meta_data
+            d.meta_data
         FROM 
-            datasets 
+            user_permitted_datasets p JOIN datasets d 
+                ON (p.dataset_id = d.id)
         WHERE 
-            id = $1",
+            d.id = $1 AND p.user_id = $2",
             )
-            .await
-            .map_err(|e| geoengine_operators::error::Error::LoadingInfo {
-                source: Box::new(e),
-            })?;
+            .await?;
 
-        let row = conn.query_one(&stmt, &[&id]).await?;
+        let row = conn.query_one(&stmt, &[&id, &session.user.id]).await?;
 
         let meta_data: MetaDataDefinition = serde_json::from_value(row.get(0))?;
 

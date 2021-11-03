@@ -341,7 +341,7 @@ impl
 {
     async fn session_meta_data(
         &self,
-        _session: &UserSession,
+        session: &UserSession,
         dataset: &DatasetId,
     ) -> Result<
         Box<
@@ -352,6 +352,15 @@ impl
             >,
         >,
     > {
+        ensure!(
+            self.dataset_permissions
+                .iter()
+                .any(|p| p.dataset == *dataset && session.roles.contains(&p.role)),
+            error::DatasetPermissionDenied {
+                dataset: dataset.clone(),
+            }
+        );
+
         Ok(Box::new(
             self.mock_datasets
                 .get(
@@ -376,10 +385,21 @@ impl
 {
     async fn session_meta_data(
         &self,
-        _session: &UserSession,
+        session: &UserSession,
         dataset: &DatasetId,
     ) -> Result<Box<dyn MetaData<OgrSourceDataset, VectorResultDescriptor, VectorQueryRectangle>>>
     {
+        dbg!(&self.dataset_permissions);
+        dbg!(&session.roles);
+        ensure!(
+            self.dataset_permissions
+                .iter()
+                .any(|p| p.dataset == *dataset && session.roles.contains(&p.role)),
+            error::DatasetPermissionDenied {
+                dataset: dataset.clone(),
+            }
+        );
+
         Ok(Box::new(
             self.ogr_datasets
                 .get(
@@ -404,10 +424,19 @@ impl
 {
     async fn session_meta_data(
         &self,
-        _session: &UserSession,
+        session: &UserSession,
         dataset: &DatasetId,
     ) -> Result<Box<dyn MetaData<GdalLoadingInfo, RasterResultDescriptor, RasterQueryRectangle>>>
     {
+        ensure!(
+            self.dataset_permissions
+                .iter()
+                .any(|p| p.dataset == *dataset && session.roles.contains(&p.role)),
+            error::DatasetPermissionDenied {
+                dataset: dataset.clone(),
+            }
+        );
+
         let id = dataset
             .internal()
             .ok_or(error::Error::DatasetIdTypeMissMatch)?;
