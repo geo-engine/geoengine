@@ -11,8 +11,8 @@ use crate::engine::{
     ExecutionContext, InitializedPlotOperator, InitializedRasterOperator,
     InitializedVectorOperator, MultipleRasterOrSingleVectorSource, Operator, PlotOperator,
     PlotQueryProcessor, PlotQueryRectangle, PlotResultDescriptor, QueryContext, QueryProcessor,
-    TypedPlotQueryProcessor, TypedRasterQueryProcessor, TypedVectorQueryProcessor,
-    VectorQueryRectangle,
+    ResultDescriptor, TypedPlotQueryProcessor, TypedRasterQueryProcessor,
+    TypedVectorQueryProcessor, VectorQueryRectangle,
 };
 use crate::error::{self, Error};
 use crate::util::input::MultiRasterOrVectorOperator;
@@ -78,8 +78,20 @@ impl PlotOperator for BoxPlot {
                 .into_iter()
                 .collect::<Result<Vec<_>>>()?;
 
+                if initialized.len() > 1 {
+                    let srs = initialized[0].result_descriptor().spatial_reference;
+                    ensure!(
+                        initialized
+                            .iter()
+                            .all(|op| op.result_descriptor().spatial_reference == srs),
+                        error::AllSourcesMustHaveSameSpatialReference
+                    );
+                }
+
                 Ok(InitializedBoxPlot::new(
-                    PlotResultDescriptor {},
+                    PlotResultDescriptor {
+                        spatial_reference: initialized[0].result_descriptor().spatial_reference,
+                    },
                     output_names,
                     self.params.include_no_data,
                     initialized,
@@ -113,7 +125,9 @@ impl PlotOperator for BoxPlot {
                     }
                 }
                 Ok(InitializedBoxPlot::new(
-                    PlotResultDescriptor {},
+                    PlotResultDescriptor {
+                        spatial_reference: source.result_descriptor().spatial_reference(),
+                    },
                     self.params.column_names.clone(),
                     self.params.include_no_data,
                     source,
