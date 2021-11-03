@@ -112,7 +112,7 @@ Solution: Adjust the system's `max_map_count` parameter:
   - `sudo sysctl -w vm.max_map_count=262144`
 - Permanent configuration:
   - Add the following line to /etc/sysctl.d/local.conf
-    - `vm.max_map_count=209715`
+    - `vm.max_map_count=262144`
   - Reload the system config:
     - `sudo sysctl --system`
 
