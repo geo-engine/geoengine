@@ -4,8 +4,10 @@ use std::time::Instant;
 
 use futures::StreamExt;
 use geoengine_datatypes::{
-    primitives::{Coordinate2D, SpatialPartition2D, SpatialResolution, TimeInterval},
-    raster::{GeoTransform, Grid2D, GridOrEmpty2D, Pixel, RasterTile2D, TilingSpecification},
+    primitives::{SpatialPartition2D, SpatialResolution, TimeInterval},
+    raster::{
+        GeoTransform, Grid2D, GridOrEmpty2D, GridSize, Pixel, RasterTile2D, TilingSpecification,
+    },
     util::test::TestDefault,
 };
 use geoengine_operators::{
@@ -17,10 +19,10 @@ use geoengine_operators::{
     util::gdal::create_ndvi_meta_data,
 };
 
-fn setup_gdal_source(meta_data: GdalMetaDataRegular, tile_size: usize) -> GdalSourceProcessor<u8> {
-    let tiling_specification =
-        TilingSpecification::new(Coordinate2D::default(), [tile_size, tile_size].into());
-
+fn setup_gdal_source(
+    meta_data: GdalMetaDataRegular,
+    tiling_specification: TilingSpecification,
+) -> GdalSourceProcessor<u8> {
     GdalSourceProcessor::<u8> {
         tiling_specification,
         meta_data: Box::new(meta_data),
@@ -28,11 +30,11 @@ fn setup_gdal_source(meta_data: GdalMetaDataRegular, tile_size: usize) -> GdalSo
     }
 }
 
-fn setup_mock_source(tile_size: usize) -> MockRasterSourceProcessor<u8> {
+fn setup_mock_source(tiling_spec: TilingSpecification) -> MockRasterSourceProcessor<u8> {
     let no_data_value = Some(0);
     let grid: GridOrEmpty2D<u8> = Grid2D::new(
-        [tile_size, tile_size].into(),
-        vec![42; tile_size * tile_size],
+        tiling_spec.tile_size_in_pixels,
+        vec![42; tiling_spec.tile_size_in_pixels.number_of_elements()],
         no_data_value,
     )
     .unwrap()
@@ -57,40 +59,54 @@ fn setup_mock_source(tile_size: usize) -> MockRasterSourceProcessor<u8> {
 }
 
 #[inline(never)]
-fn bench_raster_processor<T: Pixel, S: RasterQueryProcessor<RasterType = T>, C: QueryContext>(
+fn bench_raster_processor<
+    T: Pixel,
+    F: Fn(TilingSpecification) -> S,
+    S: RasterQueryProcessor<RasterType = T>,
+    C: QueryContext,
+>(
     list_of_named_querys: &[(&str, RasterQueryRectangle)],
-    named_tile_producing_operator: (&str, S),
+    list_of_tiling_specs: &[TilingSpecification],
+    named_tile_producing_operator_builders: (&str, F),
     ctx: &C,
     run_time: &tokio::runtime::Runtime,
 ) {
-    let (operator_name, operator) = named_tile_producing_operator;
-    for &(qrect_name, qrect) in list_of_named_querys {
-        run_time.block_on(async {
-            let start = Instant::now();
+    let (operator_name, operator_builder) = named_tile_producing_operator_builders;
 
-            // query the operator
-            let query = operator.raster_query(qrect, ctx).await.unwrap();
-            // drain the stream
-            let res: Vec<Result<RasterTile2D<T>, _>> = query.collect().await;
+    for tiling_spec in list_of_tiling_specs {
+        let operator = (operator_builder)(*tiling_spec);
 
-            let elapsed = start.elapsed();
+        for &(qrect_name, qrect) in list_of_named_querys {
+            run_time.block_on(async {
+                let start = Instant::now();
 
-            // count elements in a black_box to avoid compiler optimization
-            let number_of_tiles = black_box(res.into_iter().map(Result::unwrap).count());
+                // query the operator
+                let query = operator.raster_query(qrect, ctx).await.unwrap();
+                // drain the stream
+                let res: Vec<Result<RasterTile2D<T>, _>> = query.collect().await;
 
-            println!(
-                "Bench \"{}\" with query \"{}\" produced {} tiles in {}s | {}ns",
-                operator_name,
-                qrect_name,
-                number_of_tiles,
-                elapsed.as_secs_f32(),
-                elapsed.as_nanos()
-            );
-        });
+                let elapsed = start.elapsed();
+
+                // count elements in a black_box to avoid compiler optimization
+                let number_of_tiles = black_box(res.into_iter().map(Result::unwrap).count());
+
+                println!(
+                    "Bench \"{}\" | tile size \"[{}, {}]\" | query \"{}\" | produced {} tiles ({} px) | in {} s  ({} ns)",
+                    operator_name,
+                    tiling_spec.tile_size_in_pixels.axis_size_y(),
+                    tiling_spec.tile_size_in_pixels.axis_size_x(),
+                    qrect_name,
+                    number_of_tiles,
+                    number_of_tiles as u128 * tiling_spec.tile_size_in_pixels.number_of_elements() as u128,
+                    elapsed.as_secs_f32(),
+                    elapsed.as_nanos()
+                );
+            });
+        }
     }
 }
 
-fn main() {
+fn bench_no_data_tiles() {
     let qrects = vec![
         (
             "1 tile",
@@ -144,53 +160,69 @@ fn main() {
         ),
     ];
 
+    let tiling_specs = vec![TilingSpecification::new((0., 0.).into(), [600, 600].into())];
+
     let run_time = tokio::runtime::Runtime::new().unwrap();
     let ctx = MockQueryContext::with_chunk_size_and_thread_count(ChunkByteSize::MAX, 8);
 
     bench_raster_processor(
         &qrects,
-        ("mock_source_600", setup_mock_source(600)),
+        &tiling_specs,
+        ("mock_source", setup_mock_source),
         &ctx,
         &run_time,
     );
     bench_raster_processor(
         &qrects,
-        ("mock_source_512", setup_mock_source(512)),
+        &tiling_specs,
+        ("gdal_source", |ts| {
+            setup_gdal_source(create_ndvi_meta_data(), ts)
+        }),
         &ctx,
         &run_time,
     );
-    bench_raster_processor(
-        &qrects,
-        ("mock_source_1024", setup_mock_source(1024)),
-        &ctx,
-        &run_time,
-    );
-    bench_raster_processor(
-        &qrects,
-        (
-            "gdal_source_600",
-            setup_gdal_source(create_ndvi_meta_data(), 600),
-        ),
-        &ctx,
-        &run_time,
-    );
-    bench_raster_processor(
-        &qrects,
-        (
-            "gdal_source_512",
-            setup_gdal_source(create_ndvi_meta_data(), 512),
-        ),
-        &ctx,
-        &run_time,
-    );
+}
+
+fn bench_tile_size() {
+    let qrects = vec![(
+        "World in 36000x18000 pixels",
+        RasterQueryRectangle {
+            spatial_bounds: SpatialPartition2D::new((-180., 90.).into(), (180., -90.).into())
+                .unwrap(),
+            time_interval: TimeInterval::new(1_388_534_400_000, 1_388_534_400_000 + 1000).unwrap(),
+            spatial_resolution: SpatialResolution::new(0.01, 0.01).unwrap(),
+        },
+    )];
+
+    let run_time = tokio::runtime::Runtime::new().unwrap();
+    let ctx = MockQueryContext::with_chunk_size_and_thread_count(ChunkByteSize::MAX, 8);
+
+    let tiling_specs = vec![
+        TilingSpecification::new((0., 0.).into(), [32, 32].into()),
+        TilingSpecification::new((0., 0.).into(), [64, 64].into()),
+        TilingSpecification::new((0., 0.).into(), [128, 128].into()),
+        TilingSpecification::new((0., 0.).into(), [256, 256].into()),
+        TilingSpecification::new((0., 0.).into(), [512, 512].into()),
+        TilingSpecification::new((0., 0.).into(), [600, 600].into()),
+        TilingSpecification::new((0., 0.).into(), [900, 900].into()),
+        TilingSpecification::new((0., 0.).into(), [1024, 1024].into()),
+        TilingSpecification::new((0., 0.).into(), [2048, 2048].into()),
+        TilingSpecification::new((0., 0.).into(), [4096, 4096].into()),
+        TilingSpecification::new((0., 0.).into(), [9000, 9000].into()),
+    ];
 
     bench_raster_processor(
         &qrects,
-        (
-            "gdal_source_1024",
-            setup_gdal_source(create_ndvi_meta_data(), 1024),
-        ),
+        &tiling_specs,
+        ("gdal_source", |ts| {
+            setup_gdal_source(create_ndvi_meta_data(), ts)
+        }),
         &ctx,
         &run_time,
     );
+}
+
+fn main() {
+    bench_no_data_tiles();
+    bench_tile_size();
 }
