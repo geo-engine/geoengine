@@ -1,12 +1,16 @@
 mod area_line_plot;
 mod box_plot;
 mod histogram;
+mod histogram2d;
 mod multi_line_plot;
+mod scatter_plot;
 
 pub use area_line_plot::AreaLineChart;
 pub use box_plot::{BoxPlot, BoxPlotAttribute};
 pub use histogram::{Histogram, HistogramBuilder};
+pub use histogram2d::{Histogram2D, HistogramDimension};
 pub use multi_line_plot::{DataPoint, MultiLineChart};
+pub use scatter_plot::ScatterPlot;
 
 use crate::util::Result;
 use serde::{Deserialize, Serialize};
