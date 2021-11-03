@@ -12,7 +12,7 @@ use crate::datasets::upload::{Upload, UploadDb, UploadId};
 use crate::error;
 use crate::error::Result;
 use crate::pro::datasets::Permission;
-use crate::pro::users::UserSession;
+use crate::pro::users::{UserId, UserSession};
 use crate::util::user_input::Validated;
 use async_trait::async_trait;
 use geoengine_datatypes::{
@@ -52,7 +52,7 @@ pub struct ProHashMapDatasetDb {
         InternalDatasetId,
         Box<dyn MetaData<GdalLoadingInfo, RasterResultDescriptor, RasterQueryRectangle>>,
     >,
-    uploads: HashMap<UploadId, Upload>,
+    uploads: HashMap<UserId, HashMap<UploadId, Upload>>,
     external_providers: HashMap<DatasetProviderId, Box<dyn ExternalDatasetProviderDefinition>>,
 }
 
@@ -414,17 +414,18 @@ impl MetaDataProvider<GdalLoadingInfo, RasterResultDescriptor, RasterQueryRectan
 
 #[async_trait]
 impl UploadDb<UserSession> for ProHashMapDatasetDb {
-    async fn get_upload(&self, _session: &UserSession, upload: UploadId) -> Result<Upload> {
-        // TODO: user permission
+    async fn get_upload(&self, session: &UserSession, upload: UploadId) -> Result<Upload> {
         self.uploads
-            .get(&upload)
-            .map(Clone::clone)
+            .get(&session.user.id)
+            .and_then(|u| u.get(&upload).map(Clone::clone))
             .ok_or(error::Error::UnknownUploadId)
     }
 
-    async fn create_upload(&mut self, _session: &UserSession, upload: Upload) -> Result<()> {
-        // TODO: user permission
-        self.uploads.insert(upload.id, upload);
+    async fn create_upload(&mut self, session: &UserSession, upload: Upload) -> Result<()> {
+        self.uploads
+            .entry(session.user.id)
+            .or_insert_with(HashMap::new)
+            .insert(upload.id, upload);
         Ok(())
     }
 }

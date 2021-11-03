@@ -341,6 +341,21 @@ impl MetaDataProvider<GdalLoadingInfo, RasterResultDescriptor, RasterQueryRectan
     }
 }
 
+#[async_trait]
+impl UploadDb<SimpleSession> for HashMapDatasetDb {
+    async fn get_upload(&self, _session: &SimpleSession, upload: UploadId) -> Result<Upload> {
+        self.uploads
+            .get(&upload)
+            .map(Clone::clone)
+            .ok_or(error::Error::UnknownUploadId)
+    }
+
+    async fn create_upload(&mut self, _session: &SimpleSession, upload: Upload) -> Result<()> {
+        self.uploads.insert(upload.id, upload);
+        Ok(())
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -441,23 +456,6 @@ mod tests {
             }
         );
 
-        Ok(())
-    }
-}
-
-#[async_trait]
-impl UploadDb<SimpleSession> for HashMapDatasetDb {
-    async fn get_upload(&self, _session: &SimpleSession, upload: UploadId) -> Result<Upload> {
-        // TODO: user permission
-        self.uploads
-            .get(&upload)
-            .map(Clone::clone)
-            .ok_or(error::Error::UnknownUploadId)
-    }
-
-    async fn create_upload(&mut self, _session: &SimpleSession, upload: Upload) -> Result<()> {
-        // TODO: user permission
-        self.uploads.insert(upload.id, upload);
         Ok(())
     }
 }

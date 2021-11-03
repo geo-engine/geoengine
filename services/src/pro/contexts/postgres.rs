@@ -332,6 +332,7 @@ where
                         -- TODO: upload directory that is not directly derived from id
                         CREATE TABLE uploads (
                             id UUID PRIMARY KEY,
+                            user_id UUID REFERENCES users(id) ON DELETE CASCADE NOT NULL,
                             files "FileUpload"[] NOT NULL
                         );
 

@@ -721,15 +721,14 @@ where
     <Tls as MakeTlsConnect<Socket>>::TlsConnect: Send,
     <<Tls as MakeTlsConnect<Socket>>::TlsConnect as TlsConnect<Socket>>::Future: Send,
 {
-    async fn get_upload(&self, _session: &UserSession, upload: UploadId) -> Result<Upload> {
-        // TODO: permissions
+    async fn get_upload(&self, session: &UserSession, upload: UploadId) -> Result<Upload> {
         let conn = self.conn_pool.get().await?;
 
         let stmt = conn
-            .prepare("SELECT id, files FROM uploads WHERE id = $1")
+            .prepare("SELECT id, files FROM uploads WHERE id = $1 AND user_id = $2")
             .await?;
 
-        let row = conn.query_one(&stmt, &[&upload]).await?;
+        let row = conn.query_one(&stmt, &[&upload, &session.user.id]).await?;
 
         Ok(Upload {
             id: row.get(0),
@@ -741,18 +740,18 @@ where
         })
     }
 
-    async fn create_upload(&mut self, _session: &UserSession, upload: Upload) -> Result<()> {
-        // TODO permission, user
+    async fn create_upload(&mut self, session: &UserSession, upload: Upload) -> Result<()> {
         let conn = self.conn_pool.get().await?;
 
         let stmt = conn
-            .prepare("INSERT INTO uploads (id, files) VALUES ($1, $2)")
+            .prepare("INSERT INTO uploads (id, user_id, files) VALUES ($1, $2, $3)")
             .await?;
 
         conn.execute(
             &stmt,
             &[
                 &upload.id,
+                &session.user.id,
                 &upload
                     .files
                     .iter()

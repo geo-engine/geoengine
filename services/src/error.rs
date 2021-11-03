@@ -331,6 +331,7 @@ impl From<bb8_postgres::bb8::RunError<<bb8_postgres::PostgresConnectionManager<b
     }
 }
 
+// TODO: remove automatic conversion to our Error because we do not want to leak database internals in the API
 #[cfg(feature = "postgres")]
 impl From<bb8_postgres::tokio_postgres::error::Error> for Error {
     fn from(e: bb8_postgres::tokio_postgres::error::Error) -> Self {
