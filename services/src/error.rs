@@ -253,6 +253,12 @@ pub enum Error {
         srs_string: String,
     },
 
+    #[snafu(display("Anonymous access is disabled, please log in"))]
+    AnonymousAccessDisabled,
+
+    #[snafu(display("User registration is disabled"))]
+    UserRegistrationDisabled,
+
     #[snafu(display(
         "WCS request endpoint {} must match identifier {}",
         endpoint,

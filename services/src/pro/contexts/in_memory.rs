@@ -8,21 +8,33 @@ use crate::util::config;
 use crate::workflows::registry::HashMapRegistry;
 use crate::{datasets::add_from_directory::add_providers_from_directory, error::Result};
 use async_trait::async_trait;
-use geoengine_operators::concurrency::ThreadPool;
-use geoengine_operators::concurrency::ThreadPoolContextCreator;
+use geoengine_operators::util::create_rayon_thread_pool;
+use rayon::ThreadPool;
 use snafu::ResultExt;
 use std::path::PathBuf;
 use std::sync::Arc;
 use tokio::sync::{RwLock, RwLockReadGuard, RwLockWriteGuard};
 
 /// A context with references to in-memory versions of the individual databases.
-#[derive(Clone, Default)]
+#[derive(Clone)]
 pub struct ProInMemoryContext {
     user_db: Db<HashMapUserDb>,
     project_db: Db<ProHashMapProjectDb>,
     workflow_registry: Db<HashMapRegistry>,
     dataset_db: Db<ProHashMapDatasetDb>,
     thread_pool: Arc<ThreadPool>,
+}
+
+impl Default for ProInMemoryContext {
+    fn default() -> Self {
+        Self {
+            user_db: Default::default(),
+            project_db: Default::default(),
+            workflow_registry: Default::default(),
+            dataset_db: Default::default(),
+            thread_pool: create_rayon_thread_pool(0),
+        }
+    }
 }
 
 impl ProInMemoryContext {
@@ -98,7 +110,7 @@ impl Context for ProInMemoryContext {
         // TODO: load config only once
         Ok(QueryContextImpl {
             chunk_byte_size: config::get_config_element::<config::QueryContext>()?.chunk_byte_size,
-            thread_pool: self.thread_pool.create_context(),
+            thread_pool: self.thread_pool.clone(),
         })
     }
 
@@ -106,7 +118,7 @@ impl Context for ProInMemoryContext {
         Ok(
             ExecutionContextImpl::<UserSession, ProHashMapDatasetDb>::new(
                 self.dataset_db.clone(),
-                self.thread_pool.create_context(),
+                self.thread_pool.clone(),
                 session,
             ),
         )
