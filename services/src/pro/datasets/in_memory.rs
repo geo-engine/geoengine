@@ -25,7 +25,7 @@ use geoengine_operators::engine::{
 };
 use geoengine_operators::source::{GdalLoadingInfo, GdalMetaDataRegular, OgrSourceDataset};
 use geoengine_operators::{mock::MockDatasetDataSourceLoadingInfo, source::GdalMetaDataStatic};
-use log::info;
+use log::{info, warn};
 use snafu::ensure;
 use std::collections::HashMap;
 
@@ -213,10 +213,13 @@ impl DatasetProvider<UserSession> for ProHashMapDatasetDb {
             .dataset_permissions
             .iter()
             .filter(|p| session.roles.contains(&p.role))
-            .map(|p| {
-                self.datasets
-                    .get(&p.dataset)
-                    .expect("an existing permission implies existence of the dataset")
+            .filter_map(|p| {
+                if let Some(d) = self.datasets.get(&p.dataset) {
+                    Some(d)
+                } else {
+                    warn!("Permission {:?} without a matching dataset", p);
+                    None
+                }
             });
 
         let mut list: Vec<_> = if let Some(filter) = &options.filter {
