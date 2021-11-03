@@ -33,7 +33,7 @@ pub struct UserSession {
     pub valid_until: DateTime<Utc>,
     pub project: Option<ProjectId>,
     pub view: Option<STRectangle>,
-    pub roles: Vec<RoleId>,
+    pub roles: Vec<RoleId>, // a user has a default role (= its user id) and other additonal roles
 }
 
 impl UserSession {

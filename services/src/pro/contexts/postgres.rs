@@ -1,6 +1,6 @@
 use crate::datasets::add_from_directory::add_providers_from_directory;
 use crate::error::{self, Result};
-use crate::pro::datasets::{add_datasets_from_directory, PostgresDatasetDb};
+use crate::pro::datasets::{add_datasets_from_directory, PostgresDatasetDb, Role};
 use crate::pro::projects::ProjectPermission;
 use crate::pro::users::{UserDb, UserId, UserSession};
 use crate::pro::workflows::postgres_workflow_registry::PostgresWorkflowRegistry;
@@ -129,14 +129,24 @@ where
             match version {
                 0 => {
                     conn.batch_execute(
-                        r#"
+                        &format!(r#"
                         CREATE TABLE version (
                             version INT
                         );
                         INSERT INTO version VALUES (1);
 
-                        CREATE TABLE users (
+                        CREATE TABLE roles (
                             id UUID PRIMARY KEY,
+                            name text NOT NULL
+                        );
+
+                        INSERT INTO roles (id, name) VALUES
+                            ('{system_role_id}', 'system'),
+                            ('{user_role_id}', 'user'),
+                            ('{anonymous_role_id}', 'anonymous');
+
+                        CREATE TABLE users (
+                            id UUID PRIMARY KEY REFERENCES roles(id),
                             email character varying (256) UNIQUE,
                             password_hash character varying (256),
                             real_name character varying (256),
@@ -155,12 +165,27 @@ where
                             real_name,
                             active)
                         VALUES (
-                            'd5328854-6190-4af9-ad69-4e74b0961ac9', 
+                            '{system_role_id}', 
                             'system@geoengine.io',
                             '',
                             'system',
                             true
                         );
+
+                        -- relation between users and roles
+                        -- all users have a default role where role_id = user_id
+                        CREATE TABLE user_roles (
+                            user_id UUID REFERENCES users(id) ON DELETE CASCADE NOT NULL,
+                            role_id UUID REFERENCES roles(id) ON DELETE CASCADE NOT NULL,
+                            PRIMARY KEY (user_id, role_id)
+                        );
+
+                        -- system user role
+                        INSERT INTO user_roles 
+                            (user_id, role_id)
+                        VALUES 
+                            ('{system_role_id}', 
+                            '{system_role_id}');
 
                         CREATE TYPE "SpatialReferenceAuthority" AS ENUM (
                             'Epsg', 'SrOrg', 'Iau2000', 'Esri'
@@ -314,31 +339,6 @@ where
                             'Read', 'Write', 'Owner'
                         );
 
-                        -- TODO: add constraint that there is an equivalent role for each user
-                        CREATE TABLE roles (
-                            id UUID PRIMARY KEY,
-                            name text NOT NULL
-                        );
-
-                        INSERT INTO roles (id, name) VALUES
-                            ('d5328854-6190-4af9-ad69-4e74b0961ac9', 'system'),
-                            ('4e8081b6-8aa6-4275-af0c-2fa2da557d28', 'user'),
-                            ('fd8e87bf-515c-4f36-8da6-1a53702ff102', 'anonymous');
-
-                        CREATE TABLE user_roles (
-                            user_id UUID REFERENCES users(id) ON DELETE CASCADE NOT NULL,
-                            role_id UUID REFERENCES roles(id) ON DELETE CASCADE NOT NULL,
-                            PRIMARY KEY (user_id, role_id)
-                        );
-
-                        -- system user role
-                        INSERT INTO user_roles 
-                            (user_id, role_id)
-                        VALUES 
-                            ('d5328854-6190-4af9-ad69-4e74b0961ac9', 
-                            'd5328854-6190-4af9-ad69-4e74b0961ac9');
-
-
                         -- TODO: add indexes
                         CREATE TABLE dataset_permissions (
                             role_id UUID REFERENCES roles(id) ON DELETE CASCADE NOT NULL,
@@ -349,20 +349,20 @@ where
 
                         CREATE VIEW user_permitted_datasets AS
                             SELECT 
-                                u.id as user_id,
+                                r.user_id,
                                 p.dataset_id,
                                 p.permission
                             FROM 
-                                users u JOIN user_roles r ON (u.id = r.user_id)
-                                    JOIN dataset_permissions p ON (r.role_id = p.role_id);
+                                user_roles r JOIN dataset_permissions p ON (r.role_id = p.role_id);
 
                         -- TODO: uploads, providers permissions
 
-                        -- TODO: relationship between uploads and datasets?
-
-                        
-                        "#,
-                    )
+                        -- TODO: relationship between uploads and datasets?                        
+                        "#
+                    ,
+                    system_role_id = Role::system_role_id(),
+                    user_role_id = Role::user_role_id(),
+                    anonymous_role_id = Role::anonymous_role_id()))
                     .await?;
                     debug!("Updated user database to schema version {}", version + 1);
                 }

@@ -1,6 +1,6 @@
 use crate::contexts::SessionId;
 use crate::error::Result;
-use crate::pro::datasets::{Role, RoleId};
+use crate::pro::datasets::Role;
 use crate::pro::projects::ProjectPermission;
 use crate::pro::users::{
     User, UserCredentials, UserDb, UserId, UserInfo, UserRegistration, UserSession,
@@ -55,13 +55,19 @@ where
 
         let tx = conn.build_transaction().start().await?;
 
+        let user = User::from(user.user_input);
+
+        let stmt = tx
+            .prepare("INSERT INTO roles (id, name) VALUES ($1, $2);")
+            .await?;
+        tx.execute(&stmt, &[&user.id, &user.email]).await?;
+
         let stmt = tx
             .prepare(
                 "INSERT INTO users (id, email, password_hash, real_name, active) VALUES ($1, $2, $3, $4, $5);",
             )
             .await?;
 
-        let user = User::from(user.user_input);
         tx.execute(
             &stmt,
             &[
@@ -75,16 +81,9 @@ where
         .await?;
 
         let stmt = tx
-            .prepare("INSERT INTO roles (id, name) VALUES ($1, $2);")
-            .await?;
-        tx.execute(&stmt, &[&RoleId::from(user.id), &user.email])
-            .await?;
-
-        let stmt = tx
             .prepare("INSERT INTO user_roles (user_id, role_id) VALUES ($1, $2);")
             .await?;
-        tx.execute(&stmt, &[&user.id, &RoleId::from(user.id)])
-            .await?;
+        tx.execute(&stmt, &[&user.id, &user.id]).await?;
 
         let stmt = tx
             .prepare("INSERT INTO user_roles (user_id, role_id) VALUES ($1, $2);")
@@ -102,23 +101,23 @@ where
 
         let tx = conn.build_transaction().start().await?;
 
-        let stmt = tx
-            .prepare("INSERT INTO users (id, active) VALUES ($1, TRUE);")
-            .await?;
         let user_id = UserId::new();
-        tx.execute(&stmt, &[&user_id]).await?;
 
         let stmt = tx
             .prepare("INSERT INTO roles (id, name) VALUES ($1, $2);")
             .await?;
-        tx.execute(&stmt, &[&RoleId::from(user_id), &"anonymous_user"])
+        tx.execute(&stmt, &[&user_id, &"anonymous_user"]).await?;
+
+        let stmt = tx
+            .prepare("INSERT INTO users (id, active) VALUES ($1, TRUE);")
             .await?;
+
+        tx.execute(&stmt, &[&user_id]).await?;
 
         let stmt = tx
             .prepare("INSERT INTO user_roles (user_id, role_id) VALUES ($1, $2);")
             .await?;
-        tx.execute(&stmt, &[&user_id, &RoleId::from(user_id)])
-            .await?;
+        tx.execute(&stmt, &[&user_id, &user_id]).await?;
 
         let stmt = tx
             .prepare("INSERT INTO user_roles (user_id, role_id) VALUES ($1, $2);")
