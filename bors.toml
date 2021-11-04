@@ -7,3 +7,4 @@ status = [
     "build (ubuntu-20.04, --all-features, --release)",
     "clippy"
 ]
+required_approvals = 1
