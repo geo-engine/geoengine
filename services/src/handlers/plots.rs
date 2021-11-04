@@ -1,11 +1,17 @@
 use actix_web::{web, FromRequest, Responder};
+use geoengine_datatypes::operations::reproject::{
+    CoordinateProjection, CoordinateProjector, ReprojectClipped,
+};
+use geoengine_datatypes::spatial_reference::SpatialReference;
 use serde::{Deserialize, Serialize};
 use snafu::ResultExt;
 use uuid::Uuid;
 
 use geoengine_datatypes::plots::PlotOutputFormat;
 use geoengine_datatypes::primitives::{BoundingBox2D, SpatialResolution, TimeInterval};
-use geoengine_operators::engine::{TypedPlotQueryProcessor, VectorQueryRectangle};
+use geoengine_operators::engine::{
+    ResultDescriptor, TypedPlotQueryProcessor, VectorQueryRectangle,
+};
 
 use crate::error;
 use crate::error::Result;
@@ -28,6 +34,7 @@ where
 pub(crate) struct GetPlot {
     #[serde(deserialize_with = "parse_bbox")]
     pub bbox: BoundingBox2D,
+    pub crs: Option<SpatialReference>,
     #[serde(deserialize_with = "parse_time")]
     pub time: TimeInterval,
     #[serde(deserialize_with = "parse_spatial_resolution")]
@@ -94,7 +101,7 @@ pub(crate) struct GetPlot {
 ///
 /// 2. Generate the plot.
 /// ```text
-/// GET /plot/504ed8a4-e0a4-5cef-9f91-b2ffd4a2b56b?bbox=-180,-90,180,90&time=2020-01-01T00%3A00%3A00.0Z&spatialResolution=0.1,0.1
+/// GET /plot/504ed8a4-e0a4-5cef-9f91-b2ffd4a2b56b?bbox=-180,-90,180,90&crs=EPSG:4326&time=2020-01-01T00%3A00%3A00.0Z&spatialResolution=0.1,0.1
 /// Authorization: Bearer 4f0d02f9-68e8-46fb-9362-80f862b7db54
 /// ```
 /// Response:
@@ -135,10 +142,28 @@ async fn get_plot_handler<C: Context>(
         .await
         .context(error::Operator)?;
 
+    // handle request and workflow crs matching
+    let workflow_spatial_ref: Option<SpatialReference> =
+        initialized.result_descriptor().spatial_reference().into();
+    let workflow_spatial_ref = workflow_spatial_ref.ok_or(error::Error::InvalidSpatialReference)?;
+
+    // TODO: use a default spatial reference if it is not set?
+    let request_spatial_ref: SpatialReference =
+        params.crs.ok_or(error::Error::MissingSpatialReference)?;
+
+    let spatial_bounds = if request_spatial_ref == workflow_spatial_ref {
+        params.bbox
+    } else {
+        let projector =
+            CoordinateProjector::from_known_srs(request_spatial_ref, workflow_spatial_ref)?;
+
+        params.bbox.reproject_clipped(&projector)?
+    };
+
     let processor = initialized.query_processor().context(error::Operator)?;
 
     let query_rect = VectorQueryRectangle {
-        spatial_bounds: params.bbox,
+        spatial_bounds,
         time_interval: params.time,
         spatial_resolution: params.spatial_resolution,
     };
@@ -264,6 +289,7 @@ mod tests {
 
         let params = &[
             ("bbox", "-180,-90,180,90"),
+            ("crs", "EPSG:4326"),
             ("time", "2020-01-01T00:00:00.0Z"),
             ("spatialResolution", "0.1,0.1"),
         ];
@@ -328,6 +354,7 @@ mod tests {
 
         let params = &[
             ("bbox", "-180,-90,180,90"),
+            ("crs", "EPSG:4326"),
             ("time", "2020-01-01T00:00:00.0Z"),
             ("spatialResolution", "0.1,0.1"),
         ];
@@ -360,6 +387,7 @@ mod tests {
     fn deserialize_get_plot() {
         let params = &[
             ("bbox", "-180,-90,180,90"),
+            ("crs", "EPSG:4326"),
             ("time", "2020-01-01T00:00:00.0Z"),
             ("spatialResolution", "0.1,0.1"),
         ];
@@ -369,6 +397,7 @@ mod tests {
                 .unwrap(),
             GetPlot {
                 bbox: BoundingBox2D::new((-180., -90.).into(), (180., 90.).into()).unwrap(),
+                crs: SpatialReference::epsg_4326().into(),
                 time: TimeInterval::new(
                     NaiveDate::from_ymd(2020, 1, 1).and_hms(0, 0, 0),
                     NaiveDate::from_ymd(2020, 1, 1).and_hms(0, 0, 0),
