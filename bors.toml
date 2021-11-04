@@ -1,0 +1,9 @@
+status = [
+    "build (ubuntu-20.04)"
+    "build (ubuntu-20.04, --release)"
+    "build (ubuntu-20.04, --features pro)"
+    "build (ubuntu-20.04, --features pro, --release)"
+    "build (ubuntu-20.04, --all-features)"
+    "build (ubuntu-20.04, --all-features, --release)"
+    "clippy"
+]
