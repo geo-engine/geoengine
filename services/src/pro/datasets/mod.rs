@@ -8,4 +8,7 @@ mod storage;
 pub use add_from_directory::add_datasets_from_directory;
 pub use in_memory::{ProHashMapDatasetDb, ProHashMapStorable};
 pub use postgres::PostgresDatasetDb;
-pub use storage::{DatasetPermission, DatasetProviderPermission, Permission, Role, RoleId};
+pub use storage::{
+    DatasetPermission, DatasetProviderPermission, Permission, Role, RoleId,
+    UpdateDatasetPermissions,
+};

@@ -389,8 +389,6 @@ impl
         dataset: &DatasetId,
     ) -> Result<Box<dyn MetaData<OgrSourceDataset, VectorResultDescriptor, VectorQueryRectangle>>>
     {
-        dbg!(&self.dataset_permissions);
-        dbg!(&session.roles);
         ensure!(
             self.dataset_permissions
                 .iter()
@@ -472,6 +470,7 @@ mod tests {
     use super::*;
     use crate::contexts::{Context, MockableSession};
     use crate::datasets::listing::OrderBy;
+    use crate::datasets::upload::{FileId, FileUpload};
     use crate::pro::contexts::ProInMemoryContext;
     use crate::pro::datasets::Role;
     use crate::util::user_input::UserInput;
@@ -873,17 +872,143 @@ mod tests {
             )
             .await?;
 
-        ctx.dataset_db_ref()
-            .await
-            .load(&session2, &id)
-            .await
-            .unwrap();
         assert!(ctx
             .dataset_db_ref()
             .await
             .load(&session2, &id)
             .await
             .is_ok());
+
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn it_secures_meta_data() -> Result<()> {
+        let ctx = ProInMemoryContext::default();
+
+        let session1 = UserSession::mock();
+        let session2 = UserSession::mock();
+
+        let descriptor = VectorResultDescriptor {
+            data_type: VectorDataType::Data,
+            spatial_reference: SpatialReferenceOption::Unreferenced,
+            columns: Default::default(),
+        };
+
+        let ds = AddDataset {
+            id: None,
+            name: "OgrDataset".to_string(),
+            description: "My Ogr dataset".to_string(),
+            source_operator: "OgrSource".to_string(),
+            symbology: None,
+            provenance: None,
+        };
+
+        let meta = StaticMetaData {
+            loading_info: OgrSourceDataset {
+                file_name: Default::default(),
+                layer_name: "".to_string(),
+                data_type: None,
+                time: Default::default(),
+                default_geometry: None,
+                columns: None,
+                force_ogr_time_filter: false,
+                force_ogr_spatial_filter: false,
+                on_error: OgrSourceErrorSpec::Ignore,
+                sql_query: None,
+                attribute_query: None,
+            },
+            result_descriptor: descriptor.clone(),
+            phantom: Default::default(),
+        };
+
+        let id = ctx
+            .dataset_db_ref_mut()
+            .await
+            .add_dataset(&session1, ds.validated()?, Box::new(meta))
+            .await?;
+
+        let meta: Result<
+            Box<dyn MetaData<OgrSourceDataset, VectorResultDescriptor, VectorQueryRectangle>>,
+        > = ctx
+            .dataset_db_ref()
+            .await
+            .session_meta_data(&session1, &id)
+            .await;
+
+        assert!(meta.is_ok());
+
+        let meta: Result<
+            Box<dyn MetaData<OgrSourceDataset, VectorResultDescriptor, VectorQueryRectangle>>,
+        > = ctx
+            .dataset_db_ref()
+            .await
+            .session_meta_data(&session2, &id)
+            .await;
+
+        assert!(meta.is_err());
+
+        ctx.dataset_db_ref_mut()
+            .await
+            .add_dataset_permission(
+                &session1,
+                DatasetPermission {
+                    role: Role::user_role_id(),
+                    dataset: id.clone(),
+                    permission: Permission::Read,
+                },
+            )
+            .await?;
+
+        let meta: Result<
+            Box<dyn MetaData<OgrSourceDataset, VectorResultDescriptor, VectorQueryRectangle>>,
+        > = ctx
+            .dataset_db_ref()
+            .await
+            .session_meta_data(&session2, &id)
+            .await;
+
+        assert!(meta.is_ok());
+
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn it_secures_uploads() -> Result<()> {
+        let ctx = ProInMemoryContext::default();
+
+        let session1 = UserSession::mock();
+        let session2 = UserSession::mock();
+
+        let upload_id = UploadId::new();
+
+        let upload = Upload {
+            id: upload_id,
+            files: vec![FileUpload {
+                id: FileId::new(),
+                name: "test.bin".to_owned(),
+                byte_size: 1024,
+            }],
+        };
+
+        ctx.dataset_db_ref_mut()
+            .await
+            .create_upload(&session1, upload)
+            .await?;
+
+        assert!(ctx
+            .dataset_db_ref()
+            .await
+            .get_upload(&session1, upload_id)
+            .await
+            .is_ok());
+
+        assert!(ctx
+            .dataset_db_ref()
+            .await
+            .get_upload(&session2, upload_id)
+            .await
+            .is_err());
 
         Ok(())
     }

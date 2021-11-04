@@ -510,7 +510,6 @@ mod tests {
     use std::str::FromStr;
 
     use super::*;
-    use crate::contexts::MockableSession;
     use crate::datasets::external::mock::MockExternalDataProviderDefinition;
     use crate::datasets::listing::SessionMetaDataProvider;
     use crate::datasets::listing::{DatasetListOptions, DatasetListing, ProvenanceOutput};
@@ -521,6 +520,7 @@ mod tests {
     };
     use crate::datasets::upload::{FileId, UploadId};
     use crate::datasets::upload::{FileUpload, Upload, UploadDb};
+    use crate::pro::datasets::{DatasetPermission, Permission, UpdateDatasetPermissions};
     use crate::pro::projects::{LoadVersion, ProProjectDb, UserProjectPermission};
     use crate::pro::users::{UserCredentials, UserDb, UserRegistration};
     use crate::projects::{
@@ -542,6 +542,7 @@ mod tests {
         BoundingBox2D, Coordinate2D, FeatureDataType, SpatialResolution, TimeInterval,
     };
     use geoengine_datatypes::spatial_reference::{SpatialReference, SpatialReferenceOption};
+    use geoengine_datatypes::util::Identifier;
     use geoengine_operators::engine::{
         MetaData, MultipleRasterSources, PlotOperator, StaticMetaData, TypedOperator,
         TypedResultDescriptor, VectorOperator, VectorQueryRectangle, VectorResultDescriptor,
@@ -1165,7 +1166,7 @@ mod tests {
             let db_ = ctx.dataset_db();
             let mut db = db_.write().await;
 
-            let session = UserSession::mock();
+            let session = ctx.user_db_ref_mut().await.anonymous().await.unwrap();
 
             let provider_id =
                 DatasetProviderId::from_str("7b20c8d7-d754-4f8f-ad44-dddd25df22d2").unwrap();
@@ -1277,6 +1278,479 @@ mod tests {
                 .unwrap();
 
             assert_eq!(datasets.len(), 1);
+        })
+        .await;
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
+    async fn it_lists_only_permitted_datasets() {
+        with_temp_context(|ctx, _| async move {
+            let session1 = ctx.user_db_ref_mut().await.anonymous().await.unwrap();
+            let session2 = ctx.user_db_ref_mut().await.anonymous().await.unwrap();
+
+            let descriptor = VectorResultDescriptor {
+                data_type: VectorDataType::Data,
+                spatial_reference: SpatialReferenceOption::Unreferenced,
+                columns: Default::default(),
+            };
+
+            let ds = AddDataset {
+                id: None,
+                name: "OgrDataset".to_string(),
+                description: "My Ogr dataset".to_string(),
+                source_operator: "OgrSource".to_string(),
+                symbology: None,
+                provenance: None,
+            };
+
+            let meta = StaticMetaData {
+                loading_info: OgrSourceDataset {
+                    file_name: Default::default(),
+                    layer_name: "".to_string(),
+                    data_type: None,
+                    time: Default::default(),
+                    default_geometry: None,
+                    columns: None,
+                    force_ogr_time_filter: false,
+                    force_ogr_spatial_filter: false,
+                    on_error: OgrSourceErrorSpec::Ignore,
+                    sql_query: None,
+                    attribute_query: None,
+                },
+                result_descriptor: descriptor.clone(),
+                phantom: Default::default(),
+            };
+
+            let meta = ctx
+                .dataset_db_ref_mut()
+                .await
+                .wrap_meta_data(MetaDataDefinition::OgrMetaData(meta));
+
+            let _id = ctx
+                .dataset_db_ref_mut()
+                .await
+                .add_dataset(&session1, ds.validated().unwrap(), meta)
+                .await
+                .unwrap();
+
+            let list1 = ctx
+                .dataset_db_ref()
+                .await
+                .list(
+                    &session1,
+                    DatasetListOptions {
+                        filter: None,
+                        order: crate::datasets::listing::OrderBy::NameAsc,
+                        offset: 0,
+                        limit: 1,
+                    }
+                    .validated()
+                    .unwrap(),
+                )
+                .await
+                .unwrap();
+
+            assert_eq!(list1.len(), 1);
+
+            let list2 = ctx
+                .dataset_db_ref()
+                .await
+                .list(
+                    &session2,
+                    DatasetListOptions {
+                        filter: None,
+                        order: crate::datasets::listing::OrderBy::NameAsc,
+                        offset: 0,
+                        limit: 1,
+                    }
+                    .validated()
+                    .unwrap(),
+                )
+                .await
+                .unwrap();
+
+            assert_eq!(list2.len(), 0);
+        })
+        .await;
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
+    async fn it_shows_only_permitted_provenance() {
+        with_temp_context(|ctx, _| async move {
+            let session1 = ctx.user_db_ref_mut().await.anonymous().await.unwrap();
+            let session2 = ctx.user_db_ref_mut().await.anonymous().await.unwrap();
+
+            let descriptor = VectorResultDescriptor {
+                data_type: VectorDataType::Data,
+                spatial_reference: SpatialReferenceOption::Unreferenced,
+                columns: Default::default(),
+            };
+
+            let ds = AddDataset {
+                id: None,
+                name: "OgrDataset".to_string(),
+                description: "My Ogr dataset".to_string(),
+                source_operator: "OgrSource".to_string(),
+                symbology: None,
+                provenance: None,
+            };
+
+            let meta = StaticMetaData {
+                loading_info: OgrSourceDataset {
+                    file_name: Default::default(),
+                    layer_name: "".to_string(),
+                    data_type: None,
+                    time: Default::default(),
+                    default_geometry: None,
+                    columns: None,
+                    force_ogr_time_filter: false,
+                    force_ogr_spatial_filter: false,
+                    on_error: OgrSourceErrorSpec::Ignore,
+                    sql_query: None,
+                    attribute_query: None,
+                },
+                result_descriptor: descriptor.clone(),
+                phantom: Default::default(),
+            };
+
+            let meta = ctx
+                .dataset_db_ref_mut()
+                .await
+                .wrap_meta_data(MetaDataDefinition::OgrMetaData(meta));
+
+            let id = ctx
+                .dataset_db_ref_mut()
+                .await
+                .add_dataset(&session1, ds.validated().unwrap(), meta)
+                .await
+                .unwrap();
+
+            assert!(ctx
+                .dataset_db_ref()
+                .await
+                .provenance(&session1, &id)
+                .await
+                .is_ok());
+
+            assert!(ctx
+                .dataset_db_ref()
+                .await
+                .provenance(&session2, &id)
+                .await
+                .is_err());
+        })
+        .await;
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
+    async fn it_updates_permissions() {
+        with_temp_context(|ctx, _| async move {
+            let session1 = ctx.user_db_ref_mut().await.anonymous().await.unwrap();
+            let session2 = ctx.user_db_ref_mut().await.anonymous().await.unwrap();
+
+            let descriptor = VectorResultDescriptor {
+                data_type: VectorDataType::Data,
+                spatial_reference: SpatialReferenceOption::Unreferenced,
+                columns: Default::default(),
+            };
+
+            let ds = AddDataset {
+                id: None,
+                name: "OgrDataset".to_string(),
+                description: "My Ogr dataset".to_string(),
+                source_operator: "OgrSource".to_string(),
+                symbology: None,
+                provenance: None,
+            };
+
+            let meta = StaticMetaData {
+                loading_info: OgrSourceDataset {
+                    file_name: Default::default(),
+                    layer_name: "".to_string(),
+                    data_type: None,
+                    time: Default::default(),
+                    default_geometry: None,
+                    columns: None,
+                    force_ogr_time_filter: false,
+                    force_ogr_spatial_filter: false,
+                    on_error: OgrSourceErrorSpec::Ignore,
+                    sql_query: None,
+                    attribute_query: None,
+                },
+                result_descriptor: descriptor.clone(),
+                phantom: Default::default(),
+            };
+
+            let meta = ctx
+                .dataset_db_ref_mut()
+                .await
+                .wrap_meta_data(MetaDataDefinition::OgrMetaData(meta));
+
+            let id = ctx
+                .dataset_db_ref_mut()
+                .await
+                .add_dataset(&session1, ds.validated().unwrap(), meta)
+                .await
+                .unwrap();
+
+            assert!(ctx
+                .dataset_db_ref()
+                .await
+                .load(&session1, &id)
+                .await
+                .is_ok());
+
+            assert!(ctx
+                .dataset_db_ref()
+                .await
+                .load(&session2, &id)
+                .await
+                .is_err());
+
+            ctx.dataset_db_ref_mut()
+                .await
+                .add_dataset_permission(
+                    &session1,
+                    DatasetPermission {
+                        role: session2.user.id.into(),
+                        dataset: id.clone(),
+                        permission: Permission::Read,
+                    },
+                )
+                .await
+                .unwrap();
+
+            assert!(ctx
+                .dataset_db_ref()
+                .await
+                .load(&session2, &id)
+                .await
+                .is_ok());
+        })
+        .await;
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
+    async fn it_uses_roles_for_permissions() {
+        with_temp_context(|ctx, _| async move {
+            let session1 = ctx.user_db_ref_mut().await.anonymous().await.unwrap();
+            let session2 = ctx.user_db_ref_mut().await.anonymous().await.unwrap();
+
+            let descriptor = VectorResultDescriptor {
+                data_type: VectorDataType::Data,
+                spatial_reference: SpatialReferenceOption::Unreferenced,
+                columns: Default::default(),
+            };
+
+            let ds = AddDataset {
+                id: None,
+                name: "OgrDataset".to_string(),
+                description: "My Ogr dataset".to_string(),
+                source_operator: "OgrSource".to_string(),
+                symbology: None,
+                provenance: None,
+            };
+
+            let meta = StaticMetaData {
+                loading_info: OgrSourceDataset {
+                    file_name: Default::default(),
+                    layer_name: "".to_string(),
+                    data_type: None,
+                    time: Default::default(),
+                    default_geometry: None,
+                    columns: None,
+                    force_ogr_time_filter: false,
+                    force_ogr_spatial_filter: false,
+                    on_error: OgrSourceErrorSpec::Ignore,
+                    sql_query: None,
+                    attribute_query: None,
+                },
+                result_descriptor: descriptor.clone(),
+                phantom: Default::default(),
+            };
+
+            let meta = ctx
+                .dataset_db_ref_mut()
+                .await
+                .wrap_meta_data(MetaDataDefinition::OgrMetaData(meta));
+
+            let id = ctx
+                .dataset_db_ref_mut()
+                .await
+                .add_dataset(&session1, ds.validated().unwrap(), meta)
+                .await
+                .unwrap();
+
+            assert!(ctx
+                .dataset_db_ref()
+                .await
+                .load(&session1, &id)
+                .await
+                .is_ok());
+
+            assert!(ctx
+                .dataset_db_ref()
+                .await
+                .load(&session2, &id)
+                .await
+                .is_err());
+
+            ctx.dataset_db_ref_mut()
+                .await
+                .add_dataset_permission(
+                    &session1,
+                    DatasetPermission {
+                        role: session2.user.id.into(),
+                        dataset: id.clone(),
+                        permission: Permission::Read,
+                    },
+                )
+                .await
+                .unwrap();
+
+            assert!(ctx
+                .dataset_db_ref()
+                .await
+                .load(&session2, &id)
+                .await
+                .is_ok());
+        })
+        .await;
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
+    async fn it_secures_meta_data() {
+        with_temp_context(|ctx, _| async move {
+            let session1 = ctx.user_db_ref_mut().await.anonymous().await.unwrap();
+            let session2 = ctx.user_db_ref_mut().await.anonymous().await.unwrap();
+
+            let descriptor = VectorResultDescriptor {
+                data_type: VectorDataType::Data,
+                spatial_reference: SpatialReferenceOption::Unreferenced,
+                columns: Default::default(),
+            };
+
+            let ds = AddDataset {
+                id: None,
+                name: "OgrDataset".to_string(),
+                description: "My Ogr dataset".to_string(),
+                source_operator: "OgrSource".to_string(),
+                symbology: None,
+                provenance: None,
+            };
+
+            let meta = StaticMetaData {
+                loading_info: OgrSourceDataset {
+                    file_name: Default::default(),
+                    layer_name: "".to_string(),
+                    data_type: None,
+                    time: Default::default(),
+                    default_geometry: None,
+                    columns: None,
+                    force_ogr_time_filter: false,
+                    force_ogr_spatial_filter: false,
+                    on_error: OgrSourceErrorSpec::Ignore,
+                    sql_query: None,
+                    attribute_query: None,
+                },
+                result_descriptor: descriptor.clone(),
+                phantom: Default::default(),
+            };
+
+            let meta = ctx
+                .dataset_db_ref_mut()
+                .await
+                .wrap_meta_data(MetaDataDefinition::OgrMetaData(meta));
+
+            let id = ctx
+                .dataset_db_ref_mut()
+                .await
+                .add_dataset(&session1, ds.validated().unwrap(), meta)
+                .await
+                .unwrap();
+
+            let meta: Result<
+                Box<dyn MetaData<OgrSourceDataset, VectorResultDescriptor, VectorQueryRectangle>>,
+            > = ctx
+                .dataset_db_ref()
+                .await
+                .session_meta_data(&session1, &id)
+                .await;
+
+            assert!(meta.is_ok());
+
+            let meta: Result<
+                Box<dyn MetaData<OgrSourceDataset, VectorResultDescriptor, VectorQueryRectangle>>,
+            > = ctx
+                .dataset_db_ref()
+                .await
+                .session_meta_data(&session2, &id)
+                .await;
+
+            assert!(meta.is_err());
+
+            ctx.dataset_db_ref_mut()
+                .await
+                .add_dataset_permission(
+                    &session1,
+                    DatasetPermission {
+                        role: session2.user.id.into(),
+                        dataset: id.clone(),
+                        permission: Permission::Read,
+                    },
+                )
+                .await
+                .unwrap();
+
+            let meta: Result<
+                Box<dyn MetaData<OgrSourceDataset, VectorResultDescriptor, VectorQueryRectangle>>,
+            > = ctx
+                .dataset_db_ref()
+                .await
+                .session_meta_data(&session2, &id)
+                .await;
+
+            assert!(meta.is_ok());
+        })
+        .await;
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
+    async fn it_secures_uploads() {
+        with_temp_context(|ctx, _| async move {
+            let session1 = ctx.user_db_ref_mut().await.anonymous().await.unwrap();
+            let session2 = ctx.user_db_ref_mut().await.anonymous().await.unwrap();
+
+            let upload_id = UploadId::new();
+
+            let upload = Upload {
+                id: upload_id,
+                files: vec![FileUpload {
+                    id: FileId::new(),
+                    name: "test.bin".to_owned(),
+                    byte_size: 1024,
+                }],
+            };
+
+            ctx.dataset_db_ref_mut()
+                .await
+                .create_upload(&session1, upload)
+                .await
+                .unwrap();
+
+            assert!(ctx
+                .dataset_db_ref()
+                .await
+                .get_upload(&session1, upload_id)
+                .await
+                .is_ok());
+
+            assert!(ctx
+                .dataset_db_ref()
+                .await
+                .get_upload(&session2, upload_id)
+                .await
+                .is_err());
         })
         .await;
     }
