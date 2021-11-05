@@ -1,7 +1,7 @@
 # CI tasks that are required to succeed
 # TODO: use only wildcard once it works
 status = [
-    "build %",
+    # "build %",
     "build (ubuntu-20.04)",
     "build (ubuntu-20.04, --release)",
     "build (ubuntu-20.04, --features pro)",
