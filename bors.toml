@@ -8,7 +8,8 @@ status = [
     "build (ubuntu-20.04, --features pro, --release)",
     "build (ubuntu-20.04, --all-features)",
     "build (ubuntu-20.04, --all-features, --release)",
-    "clippy"
+    "clippy",
+    "coverage"
 ]
 
 # One approval necessary for bors to work
