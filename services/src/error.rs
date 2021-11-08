@@ -286,6 +286,7 @@ pub enum Error {
     InvalidAPIToken {
         message: String,
     },
+    MissingNFDIMetaData,
 }
 
 impl actix_web::error::ResponseError for Error {
