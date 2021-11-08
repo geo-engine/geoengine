@@ -7,16 +7,19 @@ use numpy::{PyArray};
 use rand::prelude::*;
 use crate::util::Result;
 use std::time::{Instant};
+use std::cmp::Ordering;
 
 #[allow(clippy::too_many_arguments)]
-pub async fn imseg_fit<T, C: QueryContext>(
-    processor_ir_016: Box<dyn RasterQueryProcessor<RasterType = T>>,
-    processor_ir_039: Box<dyn RasterQueryProcessor<RasterType = T>>,
-    processor_ir_087: Box<dyn RasterQueryProcessor<RasterType = T>>,
-    processor_ir_097: Box<dyn RasterQueryProcessor<RasterType = T>>,
+pub async fn imseg_fit<C: QueryContext>(
+    processor_vis_006: Box<dyn RasterQueryProcessor<RasterType = f32>>,
+    processor_vis_008: Box<dyn RasterQueryProcessor<RasterType = f32>>,
+    processor_ir_016: Box<dyn RasterQueryProcessor<RasterType = f32>>,
+    processor_ir_039: Box<dyn RasterQueryProcessor<RasterType = f32>>,
+    processor_ir_087: Box<dyn RasterQueryProcessor<RasterType = f32>>,
+    processor_ir_097: Box<dyn RasterQueryProcessor<RasterType = f32>>,
     processor_ir_108: Box<dyn RasterQueryProcessor<RasterType = f32>>,
-    processor_ir_120: Box<dyn RasterQueryProcessor<RasterType = T>>,
-    processor_ir_134: Box<dyn RasterQueryProcessor<RasterType = T>>,
+    processor_ir_120: Box<dyn RasterQueryProcessor<RasterType = f32>>,
+    processor_ir_134: Box<dyn RasterQueryProcessor<RasterType = f32>>,
     processor_truth: Box<dyn RasterQueryProcessor<RasterType = u8>>,
     query_rect: QueryRectangle<SpatialPartition2D>,
     query_ctx: C,
@@ -24,8 +27,6 @@ pub async fn imseg_fit<T, C: QueryContext>(
     batches_per_query: usize,
     no_data_value: u8,
 ) -> Result<()>
-where
-    T: Pixel + numpy::Element,
 {
 
     //For some reason we need that now...
@@ -36,7 +37,7 @@ where
     let mut rng = rand::thread_rng();
 
     let py_mod = PyModule::from_code(py, include_str!("tf_v2.py"),"filename.py", "modulename").unwrap();
-    let name = PyUnicode::new(py, "test_3");
+    let name = PyUnicode::new(py, "model_3");
     //TODO change depreciated function
     let _init = py_mod.call("initUnet", (2,name, batch_size), None).unwrap();
     let _check_model_size = py_mod.call("get_model_memory_usage", (batch_size, ), None).unwrap();
@@ -69,6 +70,8 @@ where
         let the_chosen_one = queries.remove(rand_index);
         println!("{:?}", the_chosen_one.time_interval.start().as_naive_date_time().unwrap());
         
+        let tile_stream_vis_006 = processor_vis_006.raster_query(the_chosen_one, &query_ctx).await?;
+        let tile_stream_vis_008 = processor_vis_008.raster_query(the_chosen_one, &query_ctx).await?;
         let tile_stream_ir_016 = processor_ir_016.raster_query(the_chosen_one, &query_ctx).await?;
         let tile_stream_ir_039 = processor_ir_039.raster_query(the_chosen_one, &query_ctx).await?;
         let tile_stream_ir_087 = processor_ir_087.raster_query(the_chosen_one, &query_ctx).await?;
@@ -78,14 +81,14 @@ where
         let tile_stream_ir_134 = processor_ir_134.raster_query(the_chosen_one, &query_ctx).await?;
         let tile_stream_truth = processor_truth.raster_query(the_chosen_one, &query_ctx).await?;
 
-        let final_stream = tile_stream_ir_016.zip(tile_stream_ir_039.zip(tile_stream_ir_087.zip(tile_stream_ir_097.zip(tile_stream_ir_108.zip(tile_stream_ir_120.zip(tile_stream_ir_134.zip(tile_stream_truth)))))));
+        let final_stream = tile_stream_vis_006.zip(tile_stream_vis_008.zip(tile_stream_ir_016.zip(tile_stream_ir_039.zip(tile_stream_ir_087.zip(tile_stream_ir_097.zip(tile_stream_ir_108.zip(tile_stream_ir_120.zip(tile_stream_ir_134.zip(tile_stream_truth)))))))));
         let mut chunked_stream = final_stream.chunks(batch_size);
         time_general_processing = time_general_processing + time.elapsed().as_millis();
         time = Instant::now();
         while let Some(mut vctr) = chunked_stream.next().await {
             time_waiting = time_waiting + time.elapsed().as_millis();
             time = Instant::now();
-            let mut buffer: Vec<(Vec<T>, Vec<u8>)> = Vec::new();
+            let mut buffer: Vec<(Vec<f32>, Vec<f32>, Vec<f32>, Vec<f32>, Vec<f32>, Vec<f32>, Vec<f32>, Vec<f32>, Vec<f32>, Vec<u8>)> = Vec::new();
             let mut tile_size: [usize;2] = [0,0];
             let missing_elements: usize;
         
@@ -93,22 +96,18 @@ where
             //TODO What if number of elements less than batch size?
         
             for _ in 0..batch_size {
-                let (ir_016, (ir_039, (ir_087, (ir_097, (ir_108, (ir_120, (ir_137, truth))))))) = vctr.remove(0);
+                let (vis_006, (vis_008, (ir_016, (ir_039, (ir_087, (ir_097, (ir_108, (ir_120, (ir_137, truth))))))))) = vctr.remove(0);
                 number_of_grids = number_of_grids + 1;
-                match (ir_016, ir_039, ir_087, ir_097, ir_108, ir_120, ir_137, truth) {
-                    (Ok(ir_016), Ok(ir_039), Ok(ir_087), Ok(ir_097), Ok(ir_108), Ok(ir_120), Ok(ir_134), Ok(truth)) => {
-                        match (ir_016.grid_array, ir_039.grid_array, ir_087.grid_array, ir_097.grid_array, ir_108.grid_array, ir_120.grid_array, ir_134.grid_array, truth.grid_array) {
-                            (GridOrEmpty::Grid(grid_016), GridOrEmpty::Grid(grid_039),  GridOrEmpty::Grid(grid_087),  GridOrEmpty::Grid(grid_097), GridOrEmpty::Grid(grid_108), GridOrEmpty::Grid(grid_120), GridOrEmpty::Grid(grid_134), GridOrEmpty::Grid(grid_truth)) => {
-                            
-                        
+                match (vis_006, vis_008, ir_016, ir_039, ir_087, ir_097, ir_108, ir_120, ir_137, truth) {
+                    (Ok(vis_006), Ok(vis_008), Ok(ir_016), Ok(ir_039), Ok(ir_087), Ok(ir_097), Ok(ir_108), Ok(ir_120), Ok(ir_134), Ok(truth)) => {
+                        match (vis_006.grid_array, vis_008.grid_array, ir_016.grid_array, ir_039.grid_array, ir_087.grid_array, ir_097.grid_array, ir_108.grid_array, ir_120.grid_array, ir_134.grid_array, truth.grid_array) {
+                            (GridOrEmpty::Grid(grid_006), GridOrEmpty::Grid(grid_008), GridOrEmpty::Grid(grid_016), GridOrEmpty::Grid(grid_039),  GridOrEmpty::Grid(grid_087),  GridOrEmpty::Grid(grid_097), GridOrEmpty::Grid(grid_108), GridOrEmpty::Grid(grid_120), GridOrEmpty::Grid(grid_134), GridOrEmpty::Grid(grid_truth)) => {
+
+                                
                                 let ndv = grid_truth.data.contains(&no_data_value);
                                 if !ndv {
                                     tile_size = grid_016.shape.shape_array;
-                                    buffer.push((grid_016.data, grid_108.data.iter().map(|x| {if x >= &269.95727803541155 {
-                                        1 as u8
-                                    } else {
-                                        0 as u8
-                                    }}).collect()));
+                                    buffer.push((grid_006.data.iter().map(|x| x.abs()).collect(), grid_008.data.iter().map(|x| x.abs()).collect(), grid_016.data.iter().map(|x| x.abs()).collect(), grid_039.data, grid_087.data, grid_097.data, grid_108.data, grid_120.data, grid_134.data, grid_truth.data));
                                 } else {
                                     //println!("No-data value detected");
                                     no_data_claas_count = no_data_claas_count + 1;
@@ -146,12 +145,12 @@ where
             }
             
 
-            let (data_108_b_init, data_108_init) = buffer.remove(0);
+            let (data_006_init, data_008_init, data_016_init, data_039_init, data_087_init, data_097_init, data_108_init, data_120_init, data_134_init, data_truth_init) = buffer.remove(0);
 
             time_general_processing = time_general_processing + time.elapsed().as_millis();
             time = Instant::now();
 
-            let (mut arr_img_batch, mut arr_truth_batch) = create_arrays_from_data(data_108_b_init, data_108_init, tile_size);
+            let (mut arr_img_batch, mut arr_truth_batch) = create_arrays_from_data(data_006_init, data_008_init, data_016_init, data_039_init, data_087_init, data_097_init, data_108_init, data_120_init, data_134_init, data_truth_init, tile_size);
             
             let num_elements = buffer.len();
         
@@ -164,10 +163,10 @@ where
                 if num_elements - i > 0 {
                     rand_index = rng.gen_range(0..num_elements-i);
                 }
-                let (data_108_b, data_108) = buffer.remove(rand_index);
+                let (data_006, data_008, data_016, data_039, data_087, data_097, data_108, data_120, data_134, data_truth) = buffer.remove(rand_index);
                 time_general_processing = time_general_processing + time.elapsed().as_millis();
                 time = Instant::now();
-                let (arr_img, arr_truth) = create_arrays_from_data( data_108_b,data_108, tile_size);
+                let (arr_img, arr_truth) = create_arrays_from_data( data_006, data_008, data_016, data_039, data_087, data_097, data_108, data_120, data_134, data_truth, tile_size);
         
                 arr_img_batch = concatenate(Axis(0), &[arr_img_batch.view(), arr_img.view()]).unwrap();
                    
@@ -184,7 +183,7 @@ where
             time_data_processing = time_data_processing + time.elapsed().as_millis();
             time = Instant::now();
             //TODO change depreciated function
-            let _result = py_mod.call("fit", (py_img, py_truth, batch_size), None).unwrap();
+            let _result = py_mod.call("test", (py_img, py_truth, batch_size), None).unwrap();
             time_python = time_python + time.elapsed().as_millis();
             time = Instant::now();
 
@@ -201,7 +200,7 @@ where
     
     
     //TODO change depreciated function
-    let _save = py_mod.call("save", (name, ), None).unwrap();
+    //let _save = py_mod.call("save", (name, ), None).unwrap();
     println!("Number of total tiles: {}", number_of_grids);
     println!("Number of discarded batches: {}", number_of_discarded_batches);
     println!("Errors: {}", error_count);
@@ -224,22 +223,50 @@ where
 }
 
 /// Creates batches used for training the model from the vectors of the rasterbands
-fn create_arrays_from_data<T>(data_3: Vec<T>,data_8: Vec<u8>, tile_size: [usize;2]) -> (ArrayBase<OwnedRepr<T>, Dim<[usize; 4]>>, ArrayBase<OwnedRepr<u8>, Dim<[usize; 4]>>) 
+fn create_arrays_from_data<T>(data_1: Vec<T>, data_2: Vec<T>, data_3: Vec<T>, data_4: Vec<T>, data_5: Vec<T>, data_6: Vec<T>, data_7: Vec<T>, data_8: Vec<T>, data_9: Vec<T>, data_10: Vec<u8>, tile_size: [usize;2]) -> (ArrayBase<OwnedRepr<T>, Dim<[usize; 4]>>, ArrayBase<OwnedRepr<u8>, Dim<[usize; 4]>>) 
 where 
 T: Clone + std::marker::Copy{
 
-    
+    let arr_1: ndarray::Array2<T> = 
+            Array2::from_shape_vec((tile_size[0], tile_size[1]), data_1)
+            .unwrap();
+            let arr_2: ndarray::Array2<T> = 
+            Array2::from_shape_vec((tile_size[0], tile_size[1]), data_2)
+            .unwrap();
             let arr_3: ndarray::Array2<T> = 
             Array2::from_shape_vec((tile_size[0], tile_size[1]), data_3)
             .unwrap();
-            
-            let arr_8: ndarray::Array4<u8> = 
+            let arr_4: ndarray::Array2<T> = 
+            Array2::from_shape_vec((tile_size[0], tile_size[1]), data_4)
+            .unwrap()
+            .to_owned();
+            let arr_5: ndarray::Array2<T> = 
+            Array2::from_shape_vec((tile_size[0], tile_size[1]), data_5)
+            .unwrap()
+            .to_owned();
+            let arr_6: ndarray::Array2<T> = 
+            Array2::from_shape_vec((tile_size[0], tile_size[1]), data_6)
+            .unwrap()
+            .to_owned();
+            let arr_7: ndarray::Array2<T> = 
+            Array2::from_shape_vec((tile_size[0], tile_size[1]), data_7)
+            .unwrap()
+            .to_owned();
+            let arr_8: ndarray::Array2<T> = 
             Array2::from_shape_vec((tile_size[0], tile_size[1]), data_8)
             .unwrap()
+            .to_owned();
+            let arr_9: ndarray::Array2<T> = 
+            Array2::from_shape_vec((tile_size[0], tile_size[1]), data_9)
+            .unwrap()
+            .to_owned();
+            let arr_10: ndarray::Array4<u8> = 
+            Array2::from_shape_vec((tile_size[0], tile_size[1]), data_10)
+            .unwrap()
             .to_owned().insert_axis(Axis(0)).insert_axis(Axis(3));
-            let arr_res: ndarray::Array<T, _> = stack(Axis(2), &[arr_3.view()]).unwrap().insert_axis(Axis(0));
+            let arr_res: ndarray::Array<T, _> = stack(Axis(2), &[arr_1.view(),arr_2.view(),arr_3.view(), arr_4.view(), arr_5.view(), arr_6.view(), arr_7.view(), arr_8.view(), arr_9.view()]).unwrap().insert_axis(Axis(0));
 
-            (arr_res, arr_8)
+            (arr_res, arr_10)
 }
 /// Splits time intervals into smaller intervalls of length step.
 fn split_time_intervals(query_rect: QueryRectangle<SpatialPartition2D>, step: i64 ) -> Result<Vec<QueryRectangle<SpatialPartition2D>>> {
@@ -288,8 +315,98 @@ mod tests {
 
         let query_spatial_resolution = SpatialResolution::new(3000.4, 3000.4).unwrap();
 
-        let query_bbox = SpatialPartition2D::new((-802607.8468561172485352, 5108186.3898038864135742).into(), (1498701.3813257217407227, 3577980.7752370834350586).into()).unwrap();
+        let query_bbox = SpatialPartition2D::new((0.0, 3102413.6).into(), (30004.0, 3096412.8).into()).unwrap();
         let no_data_value = Some(0.);
+        let vis_06 = GdalMetaDataRegular{
+            time_placeholders: hashmap! {
+                "%%%_TIME_FORMATED_%%%".to_string() => GdalSourceTimePlaceholder {
+                    format: "%Y/%m/%d/%Y%m%d_%H%M/H-000-MSG3__-MSG3________-VIS006___-000001___-%Y%m%d%H%M-C_".to_string(),
+                    reference: TimeReference::Start,
+
+                }
+            },
+            result_descriptor: RasterResultDescriptor{
+                data_type: RasterDataType::I16,
+                spatial_reference: SpatialReferenceOption::
+                    SpatialReference(SpatialReference{
+                        authority: SpatialReferenceAuthority::SrOrg,
+                        code: 81,
+                    }),
+                measurement: Measurement::Continuous{
+                    measurement: "raw".to_string(),
+                    unit: None
+                },
+                no_data_value,
+            },
+            params: GdalDatasetParameters{
+                file_path: PathBuf::from("/mnt/panq/dbs_geo_data/satellite_data/msg_seviri/%%%_TIME_FORMATED_%%%"),
+                rasterband_channel: 1,
+                geo_transform: GdalDatasetGeoTransform{
+                    origin_coordinate: (-5570248.477339744567871,5570248.477339744567871).into(),
+                    x_pixel_size: 3000.403165817260742,
+                    y_pixel_size: -3000.403165817260742, 
+                },
+                width: 3712,
+                height: 3712,
+                file_not_found_handling: FileNotFoundHandling::NoData,
+                no_data_value,
+                properties_mapping: Some(vec![GdalMetadataMapping::identity(offset_key(), RasterPropertiesEntryType::Number), GdalMetadataMapping::identity(slope_key(), RasterPropertiesEntryType::Number), GdalMetadataMapping::identity(channel_key(), RasterPropertiesEntryType::Number), GdalMetadataMapping::identity(satellite_key(), RasterPropertiesEntryType::Number)]),
+                gdal_open_options: None,
+                gdal_config_options: None,
+            },
+            //placeholder: "%%%_TIME_FORMATED_%%%".to_string(),
+            //time_format: "%Y/%m/%d/%Y%m%d_%H%M/H-000-MSG3__-MSG3________-IR_016___-000001___-%Y%m%d%H%M-C_".to_string(),
+            start: TimeInstance::from_millis(1072917000000).unwrap(),
+            step: TimeStep{
+                granularity: TimeGranularity::Minutes,
+                step: 15,
+            }
+        };
+        let vis_08 = GdalMetaDataRegular{
+            time_placeholders: hashmap! {
+                "%%%_TIME_FORMATED_%%%".to_string() => GdalSourceTimePlaceholder {
+                    format: "%Y/%m/%d/%Y%m%d_%H%M/H-000-MSG3__-MSG3________-VIS008___-000001___-%Y%m%d%H%M-C_".to_string(),
+                    reference: TimeReference::Start,
+
+                }
+            },
+            result_descriptor: RasterResultDescriptor{
+                data_type: RasterDataType::I16,
+                spatial_reference: SpatialReferenceOption::
+                    SpatialReference(SpatialReference{
+                        authority: SpatialReferenceAuthority::SrOrg,
+                        code: 81,
+                    }),
+                measurement: Measurement::Continuous{
+                    measurement: "raw".to_string(),
+                    unit: None
+                },
+                no_data_value,
+            },
+            params: GdalDatasetParameters{
+                file_path: PathBuf::from("/mnt/panq/dbs_geo_data/satellite_data/msg_seviri/%%%_TIME_FORMATED_%%%"),
+                rasterband_channel: 1,
+                geo_transform: GdalDatasetGeoTransform{
+                    origin_coordinate: (-5570248.477339744567871,5570248.477339744567871).into(),
+                    x_pixel_size: 3000.403165817260742,
+                    y_pixel_size: -3000.403165817260742, 
+                },
+                width: 3712,
+                height: 3712,
+                file_not_found_handling: FileNotFoundHandling::NoData,
+                no_data_value,
+                properties_mapping: Some(vec![GdalMetadataMapping::identity(offset_key(), RasterPropertiesEntryType::Number), GdalMetadataMapping::identity(slope_key(), RasterPropertiesEntryType::Number), GdalMetadataMapping::identity(channel_key(), RasterPropertiesEntryType::Number), GdalMetadataMapping::identity(satellite_key(), RasterPropertiesEntryType::Number)]),
+                gdal_open_options: None,
+                gdal_config_options: None,
+            },
+            //placeholder: "%%%_TIME_FORMATED_%%%".to_string(),
+            //time_format: "%Y/%m/%d/%Y%m%d_%H%M/H-000-MSG3__-MSG3________-IR_016___-000001___-%Y%m%d%H%M-C_".to_string(),
+            start: TimeInstance::from_millis(1072917000000).unwrap(),
+            step: TimeStep{
+                granularity: TimeGranularity::Minutes,
+                step: 15,
+            }
+        };
         let ir_016 = GdalMetaDataRegular{
             time_placeholders: hashmap! {
                 "%%%_TIME_FORMATED_%%%".to_string() => GdalSourceTimePlaceholder {
@@ -622,7 +739,7 @@ mod tests {
         let claas = GdalMetaDataRegular{
             time_placeholders: hashmap! {
                 "%%%_TIME_FORMATED_%%%".to_string() => GdalSourceTimePlaceholder {
-                    format: "%Y/%m/%d/CMAin%Y%m%d%H%M00305SVMSG01MD".to_string(),
+                    format: "%Y/CFCin%Y%m%d%H%M".to_string(),
                     reference: TimeReference::Start,
 
                 }
@@ -638,15 +755,15 @@ mod tests {
                 no_data_value,
             },
             params: GdalDatasetParameters{
-                file_path: PathBuf::from("NETCDF:\"/mnt/panq/dbs_geo_data/satellite_data/CLAAS-2/level2/%%%_TIME_FORMATED_%%%.nc\":cma"),
+                file_path: PathBuf::from("hdf5:/mnt/panq/dbs_geo_data/satellite_data/CLAAS-2/pre_2013/ORD19112/%%%_TIME_FORMATED_%%%002050016001MA.hdf://CMa"),
                 rasterband_channel: 1,
                 geo_transform: GdalDatasetGeoTransform{
-                    origin_coordinate: ( -5456233.41938636, 5456233.41938636).into(),
+                    origin_coordinate: (-5570248.477, 5570248.477).into(),
                     x_pixel_size: 3000.403165817260742,
                     y_pixel_size: -3000.403165817260742, 
                 },
-                width: 3636,
-                height: 3636,
+                width: 3712,
+                height: 3712,
                 file_not_found_handling: FileNotFoundHandling::NoData,
                 no_data_value,
                 properties_mapping: None,
@@ -655,7 +772,7 @@ mod tests {
             },
             //placeholder: "%%%_TIME_FORMATED_%%%".to_string(),
             //time_format: "%Y/%m/%d/CMAin%Y%m%d%H%M00305SVMSG01MD".to_string(),
-            start: TimeInstance::from_millis(1356994800000).unwrap(),
+            start: TimeInstance::from_millis(1072911600000).unwrap(),
             step: TimeStep{
                 granularity: TimeGranularity::Minutes,
                 step: 15,
@@ -665,6 +782,95 @@ mod tests {
 
         let mut mc = MockExecutionContext::default();
         mc.tiling_specification = tiling_specification;
+
+        let id_vis_006 = DatasetId::Internal{
+            dataset_id: InternalDatasetId::new(),
+        };
+
+        let op_vis_006 = Box::new(GdalSource{
+            params: GdalSourceParameters{
+                dataset: id_vis_006.clone(),
+            }
+        });
+
+        
+        mc.add_meta_data(id_vis_006, Box::new(vis_06.clone()));
+
+        let rad_vis_006 = RasterOperator::boxed(Radiance{
+            params: RadianceParams{
+                
+            },
+            sources: SingleRasterSource{
+                raster: op_vis_006
+            }
+        });
+        let ref_vis_006 = RasterOperator::boxed(Reflectance {
+            params: ReflectanceParams::default(),
+            sources: SingleRasterSource{
+                raster: rad_vis_006,
+            }
+        });
+
+        let exp_vis_006 = RasterOperator::boxed(Expression{
+            params: ExpressionParams { expression: "(A)".to_string(), output_type: RasterDataType::F32, output_no_data_value: no_data_value.unwrap(), output_measurement: Some(Measurement::Continuous{
+                measurement: "raw".to_string(),
+                unit: None,
+            })
+        },
+        sources: ExpressionSources{
+            a: ref_vis_006.clone(),
+            b: Some(ref_vis_006),
+            c: None,
+        }
+        });
+        
+        let proc_vis_006 = exp_vis_006
+        .initialize(&mc).await.unwrap().query_processor().unwrap().get_f32().unwrap();
+
+        let id_vis_008 = DatasetId::Internal{
+            dataset_id: InternalDatasetId::new(),
+        };
+
+        let op_vis_008 = Box::new(GdalSource{
+            params: GdalSourceParameters{
+                dataset: id_vis_008.clone(),
+            }
+        });
+
+        
+        mc.add_meta_data(id_vis_008, Box::new(vis_08.clone()));
+
+        let rad_vis_008 = RasterOperator::boxed(Radiance{
+            params: RadianceParams{
+                
+            },
+            sources: SingleRasterSource{
+                raster: op_vis_008
+            }
+        });
+        let ref_vis_008 = RasterOperator::boxed(Reflectance {
+            params: ReflectanceParams::default(),
+            sources: SingleRasterSource{
+                raster: rad_vis_008,
+            }
+        });
+
+        let exp_vis_008 = RasterOperator::boxed(Expression{
+            params: ExpressionParams { expression: "(A)".to_string(), output_type: RasterDataType::F32, output_no_data_value: no_data_value.unwrap(), output_measurement: Some(Measurement::Continuous{
+                measurement: "raw".to_string(),
+                unit: None,
+            })
+        },
+        sources: ExpressionSources{
+            a: ref_vis_008.clone(),
+            b: Some(ref_vis_008),
+            c: None,
+        }
+        });
+        
+        let proc_vis_008 = exp_vis_008
+        .initialize(&mc).await.unwrap().query_processor().unwrap().get_f32().unwrap();
+
 
         let id_ir_016 = DatasetId::Internal{
             dataset_id: InternalDatasetId::new(),
@@ -695,7 +901,7 @@ mod tests {
         });
 
         let exp_ir_016 = RasterOperator::boxed(Expression{
-            params: ExpressionParams { expression: "(A-0.15282721917305925)/0.20047640300325603".to_string(), output_type: RasterDataType::F32, output_no_data_value: no_data_value.unwrap(), output_measurement: Some(Measurement::Continuous{
+            params: ExpressionParams { expression: "(A)".to_string(), output_type: RasterDataType::F32, output_no_data_value: no_data_value.unwrap(), output_measurement: Some(Measurement::Continuous{
                 measurement: "raw".to_string(),
                 unit: None,
             })
@@ -819,23 +1025,14 @@ mod tests {
             dataset_id: InternalDatasetId::new(),
         };
 
-        let id_ir_108_b = DatasetId::Internal{
-            dataset_id: InternalDatasetId::new(),
-        };
         let op_ir_108 = Box::new(GdalSource{
             params: GdalSourceParameters{
                 dataset: id_ir_108.clone(),
             }
         });
-        let op_ir_108_b = Box::new(GdalSource{
-            params: GdalSourceParameters{
-                dataset: id_ir_108_b.clone(),
-            }
-        });
 
         
         mc.add_meta_data(id_ir_108, Box::new(ir_108.clone()));
-        mc.add_meta_data(id_ir_108_b, Box::new(ir_108.clone()));
 
         let temp_ir_108 = RasterOperator::boxed(Temperature{
             params: TemperatureParams::default(),
@@ -843,28 +1040,20 @@ mod tests {
                 raster: op_ir_108
             }
         });
-        let temp_ir_108_b = RasterOperator::boxed(Temperature{
-            params: TemperatureParams::default(),
-            sources: SingleRasterSource{
-                raster: op_ir_108_b
-            }
-        });
 
-        // let exp_ir_108 = RasterOperator::boxed(Expression{
-        //     params: ExpressionParams { expression: "(A-269.95727803541155)/16.92469947004928".to_string(), output_type: RasterDataType::F32, output_no_data_value: no_data_value.unwrap(), output_measurement: Some(Measurement::Continuous{
-        //         measurement: "raw".to_string(),
-        //         unit: None,
-        //     })
-        // },
-        // sources: ExpressionSources{
-        //     a: temp_ir_108.clone(),
-        //     b: Some(temp_ir_108),
-        //     c: None,
-        // }
-        // });
-        let proc_ir_108_b = temp_ir_108_b
-        .initialize(&mc).await.unwrap().query_processor().unwrap().get_f32().unwrap();
-        let proc_ir_108 = temp_ir_108
+        let exp_ir_108 = RasterOperator::boxed(Expression{
+            params: ExpressionParams { expression: "(A-269.95727803541155)/16.92469947004928".to_string(), output_type: RasterDataType::F32, output_no_data_value: no_data_value.unwrap(), output_measurement: Some(Measurement::Continuous{
+                measurement: "raw".to_string(),
+                unit: None,
+            })
+        },
+        sources: ExpressionSources{
+            a: temp_ir_108.clone(),
+            b: Some(temp_ir_108),
+            c: None,
+        }
+        });
+        let proc_ir_108 = exp_ir_108
         .initialize(&mc).await.unwrap().query_processor().unwrap().get_f32().unwrap();
 
 
@@ -962,15 +1151,15 @@ mod tests {
         //     phantom_data: Default::default(),
         // };
 
-        let x = imseg_fit(proc_ir_108_b, proc_ir_039, proc_ir_087, proc_ir_097, proc_ir_108, proc_ir_120, proc_ir_134,proc_claas, QueryRectangle {
+        let x = imseg_fit(proc_vis_006, proc_vis_008,proc_ir_016, proc_ir_039, proc_ir_087, proc_ir_097, proc_ir_108, proc_ir_120, proc_ir_134,proc_claas, QueryRectangle {
             spatial_bounds: query_bbox,
-            time_interval: TimeInterval::new(1_356_994_800_000, 1_356_994_800_000 + 9_000_000_000)
+            time_interval: TimeInterval::new(1140433200000, 1140433200000 )
                 .unwrap(),
             spatial_resolution: query_spatial_resolution,
         }, ctx,
     1 as usize,
-1 as usize,
+    1 as usize,
 0 as u8).await.unwrap();
     }
 }
-//1_388_444_400_000
+//1140433200000

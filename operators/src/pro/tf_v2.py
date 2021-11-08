@@ -4,13 +4,13 @@ import numpy as np
 from tensorflow.keras import layers
 from tensorflow.python.keras import callbacks
 import matplotlib.pyplot
+import keras.backend as K
+
 
 
 physical_devices = tf.config.experimental.list_physical_devices('GPU')
 print(physical_devices)
 print("Num GPUs:", len(physical_devices))
-
-
 
 tf.config.experimental.set_memory_growth(physical_devices[0], True)
 
@@ -76,8 +76,7 @@ def initUnet(num_classes, id, batch_size):
     global model 
     model = keras.Model(inputs, outputs)
 
-    optimizer=keras.optimizers.Adam(lr=0.01) 
-    model.compile(optimizer='rmsprop', loss="sparse_categorical_crossentropy", metrics=['sparse_categorical_accuracy'])
+    model.compile(optimizer='adam', loss='sparse_categorical_crossentropy', metrics=['sparse_categorical_accuracy'])
     model.summary()
     model.save('saved_model/{}'.format(id))
     print("Saved model under saved_model/{}".format(id))
@@ -93,46 +92,54 @@ class_weight = {0: 1.0,
                 2: 50.0,
                 3: 50.0,
                 4: 50.0}
+def pauls_awesome_loss(y_true, y_pred):
+    return K.sqrt(K.sum(K.square(y_pred*K.cast(y_true>0, "float32") - y_pred)) / K.sum(K.cast(y_true>0, "float32") ))
 def fit(X, y, batch_size):    
     global model
-    matplotlib.pyplot.imsave('ir-number.png', X[0][:,:,0])
-    matplotlib.pyplot.imsave('fake_claas.png', y[0][:,:,0], vmin=0,vmax=3)
-    #print(y.shape)
-    #print(X.shape)
+    #matplotlib.pyplot.imsave('ir-number.png', X[0][:,:,0])
+    #matplotlib.pyplot.imsave('fake_claas.png', y[0][:,:,0], vmin=0,vmax=3)
+    print(y.shape)
+    print(X.shape)
     #TODO check wether nan's present?
     #print("contains NaN's: {}".format(np.isnan(np.sum(X))))
     #print("contains inf's: {}".format(~np.all(~np.isinf(X))))
     #X = np.nan_to_num(X)
+    matplotlib.pyplot.imsave('train_claas.png', y[0][:,:,0], vmin=0,vmax=3)
+    matplotlib.pyplot.imsave('train_msg.png', X[0][:,:,1])
+    
     global call
-    history = model.fit(X, y, batch_size = batch_size, callbacks=[call])
-    result = model.predict(X, batch_size = batch_size)
-    result = result[0]
-    classes = np.zeros((512,512))
-    for i in range(0,512):
-        for j in range(0,512):
-            max = np.argmax(result[i,j,:], axis=0)
-            classes[i,j]=max
-
-    #classes = result[0][:,:,0].argmax()
-    matplotlib.pyplot.imsave('prediction.png', classes, vmin=0,vmax=4)
+    model.fit(X, y, batch_size = batch_size, callbacks=[call])
+    # if update >= 499:
+    #     result = model.predict(X)
+    #     result = result[0]
+    #     classes = np.zeros((512,512))
+    #     for i in range(0,512):
+    #         for j in range(0,512):
+    #             max = np.argmax(result[i,j,:], axis=0)
+    #             classes[i,j]=max
+    #     matplotlib.pyplot.imsave('train_prediction.png', classes, vmin=0,vmax=3)
+    #     matplotlib.pyplot.imsave('train_claas.png', y[0][:,:,0], vmin=0,vmax=3)
+    #     matplotlib.pyplot.imsave('train_msg.png', X[0][:,:,1])
+    
+        
+    
+    
 
 
 def predict(X, y, batchsize):
     global model
-    
-    result = model.predict(X, batch_size = batchsize)
-    result_a = result[0]
-    classes = np.zeros((512,512))
-    for i in range(0,512):
-        for j in range(0,512):
-            if result_a[i,j,0] >= result_a[i,j,1]:
-                classes[i,j] = 0
-            else:
-                classes[i,j] = 1
+    result = model.predict(X, batch_size = batchsize, verbose=1)
+    #result_a = result[0]
+    #classes = np.zeros((512,512))
+    #for i in range(0,512):
+    #    for j in range(0,512):
+    #        max = np.argmax(result_a[i,j,:], axis=0)
+    #        classes[i,j]=max
+
     #classes = result[0][:,:,0].argmax()
-    matplotlib.pyplot.imsave('prediction_val.png', classes, vmin=0,vmax=3)
-    matplotlib.pyplot.imsave('groundtruth_val.png', y[0][:,:,0], vmin=0,vmax=3)
-    matplotlib.pyplot.imsave('ir_val.png', X[0][:,:,0])
+    #matplotlib.pyplot.imsave('prediction_val.png', classes, vmin=0,vmax=3)
+    #matplotlib.pyplot.imsave('groundtruth_val.png', y[0][:,:,0], vmin=0,vmax=3)
+    #matplotlib.pyplot.imsave('ir_val.png', X[0][:,:,0])
     
     #model.summary()
     #print(result.shape)
@@ -154,11 +161,26 @@ def save(id):
     print("Saved model under saved_model/{}".format(id))
 
 def test(X, y, t):
+    global model
     #print(y[0][:,:,0].shape)
+    r = X[0][:,:,0]
+    g = X[0][:,:,1]
+    b = X[0][:,:,2]
+    #r[r < 0] = 0
+    #g[g < 0] = 0
+    #b[b < 0] = 0
+    print(np.max(r))
+    print(np.max(g))
+    print(np.max(b))
+    print(np.min(r))
+    print(np.min(g))
+    print(np.min(b))
+    rgb = np.dstack((r, g ,b))
+    matplotlib.pyplot.imsave('{}-RGB.png'.format(t), rgb)
 
-    matplotlib.pyplot.imsave('{}-claas.png'.format(t), y[0][:,:,0], vmin=0,vmax=3)
-    for i in range(0,7):
-        matplotlib.pyplot.imsave('{}-ir-number{}.png'.format(t,i+1), X[0][:,:,i])
+    matplotlib.pyplot.imsave('{}-claas.png'.format(t), y[0][:,:,0], vmin=1,vmax=4)
+    #for i in range(0,7):
+    #    matplotlib.pyplot.imsave('{}-ir-number{}.png'.format(t,i+1), X[0][:,:,i])
 
 def get_model_memory_usage(batch_size):
     global model
@@ -195,3 +217,15 @@ def get_model_memory_usage(batch_size):
     total_memory = number_size * (batch_size * shapes_mem_count + trainable_count + non_trainable_count)
     gbytes = np.round(total_memory / (1024.0 ** 3), 3) + internal_model_mem_count
     print("Model needs {} GB's of Memory".format(gbytes))
+
+def test_predict(X, y, batchsize, counter):
+    global model
+    result = model.predict(X, batch_size = batchsize)
+    result = result[0]
+    classes = np.zeros((512,512))
+    for i in range(0,512):
+        for j in range(0,512):
+            max = np.argmax(result[i,j,:], axis=0)
+            classes[i,j]=max
+    matplotlib.pyplot.imsave('1-prediction.png', classes, vmin=0,vmax=3)
+    matplotlib.pyplot.imsave('1.1-claas.png', y[0][:,:,0], vmin=0,vmax=3)

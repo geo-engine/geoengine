@@ -1,22 +1,24 @@
 use futures::{StreamExt};
+use futures::SinkExt;
 use geoengine_datatypes::{primitives::{SpatialPartition2D, TimeInstance, TimeInterval}, raster::{GridOrEmpty, Pixel}};
 use crate::engine::{QueryContext, QueryRectangle, RasterQueryProcessor};
-use pyo3::{types::{PyModule, PyUnicode}};
+use pyo3::{Python, types::{PyModule, PyUnicode}};
 use ndarray::{Array2, Axis,concatenate, stack, ArrayBase, OwnedRepr, Dim};
 use numpy::{PyArray};
 use rand::prelude::*;
 use crate::util::Result;
 use std::time::{Instant};
+use futures::Stream;
+use core::pin::Pin;
+use geoengine_datatypes::raster::BaseTile;
+use geoengine_datatypes::raster::GridShape;
+use crate::error::Error;
+use futures::channel::mpsc::{channel, Sender, Receiver};
+use futures::stream::Zip;
 
 #[allow(clippy::too_many_arguments)]
 pub async fn imseg_fit<T, C: QueryContext>(
-    processor_ir_016: Box<dyn RasterQueryProcessor<RasterType = T>>,
-    processor_ir_039: Box<dyn RasterQueryProcessor<RasterType = T>>,
-    processor_ir_087: Box<dyn RasterQueryProcessor<RasterType = T>>,
-    processor_ir_097: Box<dyn RasterQueryProcessor<RasterType = T>>,
-    processor_ir_108: Box<dyn RasterQueryProcessor<RasterType = T>>,
-    processor_ir_120: Box<dyn RasterQueryProcessor<RasterType = T>>,
-    processor_ir_134: Box<dyn RasterQueryProcessor<RasterType = T>>,
+    processors: Vec<Box<dyn RasterQueryProcessor<RasterType=T>>>,
     processor_truth: Box<dyn RasterQueryProcessor<RasterType = u8>>,
     query_rect: QueryRectangle<SpatialPartition2D>,
     query_ctx: C,
@@ -36,9 +38,9 @@ where
     let mut rng = rand::thread_rng();
 
     let py_mod = PyModule::from_code(py, include_str!("tf_v2.py"),"filename.py", "modulename").unwrap();
-    let name = PyUnicode::new(py, "second");
+    let name = PyUnicode::new(py, "test_model_1");
     //TODO change depreciated function
-    let _init = py_mod.call("initUnet", (5,name, batch_size), None).unwrap();
+    let _init = py_mod.call("initUnet", (4,name, batch_size), None).unwrap();
     let _check_model_size = py_mod.call("get_model_memory_usage", (batch_size, ), None).unwrap();
     //since every 15 minutes an image is available...
     let step: i64 = (batch_size as i64 * 900_000) * batches_per_query as i64;
@@ -47,153 +49,58 @@ where
     let mut queries = split_time_intervals(query_rect, step)?;
 
     let mut rand_index: usize; 
-    let mut number_of_grids: u64 = 0;
-    let mut number_of_discarded_batches: u32 = 0;
-    let mut error_count: u32 = 0;
-    let mut empty_grid_count: u32 = 0;
-    let mut no_data_claas_count: u32 = 0;
-    let mut time_general_processing: u128 = 0;
-    let mut time_waiting: u128 = 0;
-    let mut time_data_processing: u128 = 0;
-    let mut time_python: u128 = 0;
-    let mut time = Instant::now();
     
+    let mut checkoint = 0;
+    let mut buffer: Vec<(Vec<T>, Vec<T>, Vec<T>, Vec<T>, Vec<T>, Vec<T>, Vec<T>, Vec<u8>)> = Vec::new();
     while !queries.is_empty() {
         let queries_left = queries.len();
         println!("queries left: {:?}", queries_left);
-        rand_index = 0;
-        if queries_left > 1 {
-            //println!("{:?}", queries_left - 1);
-            rand_index = rng.gen_range(0..queries_left-1);
-        }
-        let the_chosen_one = queries.remove(rand_index);
-        println!("{:?}", the_chosen_one.time_interval.start().as_naive_date_time().unwrap());
         
-        let tile_stream_ir_016 = processor_ir_016.raster_query(the_chosen_one, &query_ctx).await?;
-        let tile_stream_ir_039 = processor_ir_039.raster_query(the_chosen_one, &query_ctx).await?;
-        let tile_stream_ir_087 = processor_ir_087.raster_query(the_chosen_one, &query_ctx).await?;
-        let tile_stream_ir_097 = processor_ir_097.raster_query(the_chosen_one, &query_ctx).await?;
-        let tile_stream_ir_108 = processor_ir_108.raster_query(the_chosen_one, &query_ctx).await?;
-        let tile_stream_ir_120 = processor_ir_120.raster_query(the_chosen_one, &query_ctx).await?;
-        let tile_stream_ir_134 = processor_ir_134.raster_query(the_chosen_one, &query_ctx).await?;
-        let tile_stream_truth = processor_truth.raster_query(the_chosen_one, &query_ctx).await?;
+        if queries_left > 1 {
+            rand_index = rng.gen_range(0..queries_left-1);
+        } else {
+            rand_index = 0;
+        }           
+        let the_chosen_one = queries.remove(rand_index);
+        checkoint = checkoint + 1;
 
-        let final_stream = tile_stream_ir_016.zip(tile_stream_ir_039.zip(tile_stream_ir_087.zip(tile_stream_ir_097.zip(tile_stream_ir_108.zip(tile_stream_ir_120.zip(tile_stream_ir_134.zip(tile_stream_truth)))))));
-        let mut chunked_stream = final_stream.chunks(batch_size);
-        time_general_processing = time_general_processing + time.elapsed().as_millis();
-        time = Instant::now();
-        while let Some(mut vctr) = chunked_stream.next().await {
-            time_waiting = time_waiting + time.elapsed().as_millis();
-            time = Instant::now();
-            let mut buffer: Vec<(Vec<T>, Vec<T>, Vec<T>, Vec<T>, Vec<T>, Vec<T>, Vec<T>, Vec<u8>)> = Vec::new();
+        println!("{:?}", the_chosen_one.time_interval.start().as_naive_date_time().unwrap());
+
+        let mut bffr: Vec<Pin<Box<dyn Stream<Item = Result<BaseTile<GridOrEmpty<GridShape<[usize; 2]>, T>>, Error>> + Send, >>> = Vec::new();           
+        for element in processors.iter() {
+           bffr.push(element.raster_query(the_chosen_one, &query_ctx).await?)
+        }
+                                                    
+        let tile_stream_truth = processor_truth.raster_query(the_chosen_one, &query_ctx).await?;
+        
+        let mut final_stream = bffr.remove(0).zip(bffr.remove(0).zip(bffr.remove(0).zip(bffr.remove(0).zip(bffr.remove(0).zip(bffr.remove(0).zip(bffr.remove(0).zip(tile_stream_truth)))))));
+
+        // let (sx, rx) = channel(10);
+        // let send = sx.send_all(&mut bffr.remove(0));
+        // rx.for_each(|x| {
+            
+        // });
+        
+        while let Some((ir_016, (ir_039, (ir_087, (ir_097, (ir_108, (ir_120, (ir_137, truth)))))))) = final_stream.next().await {
+
             let mut tile_size: [usize;2] = [0,0];
             let missing_elements: usize;
-        
-        
-            //TODO What if number of elements less than batch size?
-        
-            for _ in 0..batch_size {
-                let (ir_016, (ir_039, (ir_087, (ir_097, (ir_108, (ir_120, (ir_137, truth))))))) = vctr.remove(0);
-                number_of_grids = number_of_grids + 1;
-                match (ir_016, ir_039, ir_087, ir_097, ir_108, ir_120, ir_137, truth) {
-                    (Ok(ir_016), Ok(ir_039), Ok(ir_087), Ok(ir_097), Ok(ir_108), Ok(ir_120), Ok(ir_134), Ok(truth)) => {
-                        match (ir_016.grid_array, ir_039.grid_array, ir_087.grid_array, ir_097.grid_array, ir_108.grid_array, ir_120.grid_array, ir_134.grid_array, truth.grid_array) {
-                            (GridOrEmpty::Grid(grid_016), GridOrEmpty::Grid(grid_039),  GridOrEmpty::Grid(grid_087),  GridOrEmpty::Grid(grid_097), GridOrEmpty::Grid(grid_108), GridOrEmpty::Grid(grid_120), GridOrEmpty::Grid(grid_134), GridOrEmpty::Grid(grid_truth)) => {
-                            
-                        
-                                //let ndv = grid_truth.data.contains(&no_data_value);
-                                let ndv = false;
-                                if !ndv {
-                                    tile_size = grid_016.shape.shape_array;
-                                    buffer.push((grid_016.data, grid_039.data, grid_087.data, grid_097.data, grid_108.data, grid_120.data, grid_134.data, grid_truth.data));
-                                } else {
-                                    //println!("No-data value detected");
-                                    no_data_claas_count = no_data_claas_count + 1;
-                                }
-                            
-                            
-                            }, 
-                            _ => {
-                                println!("SOME ARE EMPTY");
-                                empty_grid_count = empty_grid_count + 1;
-                            }
-                        }
-                    },
-                    (Ok(a), Ok(b), Ok(c), Ok(d), Ok(e), Ok(f), Ok(g), Err(claas)) => {
-                        dbg!(&claas);
-                    },
-                    _ => {
-                        println!("AN ERROR OCCURED");       
-                        error_count = error_count + 1;
-                    }
-                }
-            }
-    
-        let number_of_elements = buffer.len();
-        missing_elements = batch_size - number_of_elements;
-
-        if missing_elements <= batch_size/2 {
             
-            if number_of_elements != batch_size && number_of_elements > 1 {
-            
-                //Filling up missing elements
-                let diff = batch_size - number_of_elements;
-                for _ in 0..diff {
 
-                    
-                    buffer.push(buffer[rng.gen_range(0..number_of_elements - 1)].clone());
-                }
+            buffer = extract_data(ir_016, ir_039, ir_087, ir_097, ir_108, ir_120, ir_137, truth, buffer, no_data_value).await;
+
+            if buffer.len() == batch_size {
+                buffer = training(buffer, tile_size, batch_size, &py, py_mod);
             }
             
-
-            let (data_016_init, data_039_init, data_087_init, data_097_init, data_108_init, data_120_init, data_134_init, data_truth_init) = buffer.remove(0);
-
-            time_general_processing = time_general_processing + time.elapsed().as_millis();
-            time = Instant::now();
-
-            let (mut arr_img_batch, mut arr_truth_batch) = create_arrays_from_data(data_016_init, data_039_init, data_087_init, data_097_init, data_108_init, data_120_init, data_134_init, data_truth_init, tile_size);
-            
-            let num_elements = buffer.len();
-        
-                
-            
-            let mut rand_index: usize;
-            for i in 0..(batch_size - 1) {
-                    
-                rand_index = 0;
-                if num_elements - i > 0 {
-                    rand_index = rng.gen_range(0..num_elements-i);
-                }
-                let (data_016, data_039, data_087, data_097, data_108, data_120, data_134, data_truth) = buffer.remove(rand_index);
-                time_general_processing = time_general_processing + time.elapsed().as_millis();
-                time = Instant::now();
-                let (arr_img, arr_truth) = create_arrays_from_data(data_016, data_039, data_087, data_097, data_108, data_120, data_134, data_truth, tile_size);
-        
-                arr_img_batch = concatenate(Axis(0), &[arr_img_batch.view(), arr_img.view()]).unwrap();
-                   
-                arr_truth_batch = concatenate(Axis(0), &[arr_truth_batch.view(), arr_truth.view()]).unwrap();
-                    
-                    
+            if checkoint == 15000 {
+                let _checkpoint_save = py_mod.call("save", (name, ), None).unwrap();
+                checkoint = 0;
             }
-        
-            //dbg!(&arr_img_batch.shape());
-            //dbg!(&arr_truth_batch.shape());
-        
-            let py_img = PyArray::from_owned_array(py, arr_img_batch);
-            let py_truth = PyArray::from_owned_array(py, arr_truth_batch );
-            time_data_processing = time_data_processing + time.elapsed().as_millis();
-            time = Instant::now();
-            //TODO change depreciated function
-            let _result = py_mod.call("fit", (py_img, py_truth, batch_size), None).unwrap();
-            time_python = time_python + time.elapsed().as_millis();
-            time = Instant::now();
-
-        } else {
-            number_of_discarded_batches = number_of_discarded_batches + 1;
-            //println!("Too many missing values!");
+            
         }
-                
-       }
+
+   
     }
        
 
@@ -202,15 +109,6 @@ where
     
     //TODO change depreciated function
     let _save = py_mod.call("save", (name, ), None).unwrap();
-    println!("Number of total tiles: {}", number_of_grids);
-    println!("Number of discarded batches: {}", number_of_discarded_batches);
-    println!("Errors: {}", error_count);
-    println!("Empty grids: {}", empty_grid_count);
-    println!("Claas files with no data: {}", no_data_claas_count);
-    println!("Time general processing: {}", time_general_processing);
-    println!("Time waiting for data: {}", time_waiting);
-    println!("Time data processing: {}", time_data_processing);
-    println!("Time python: {}", time_python);
     
     
     
@@ -267,7 +165,7 @@ fn split_time_intervals(query_rect: QueryRectangle<SpatialPartition2D>, step: i6
     let mut inter_end = query_rect.time_interval.start();
     let end = query_rect.time_interval.end();
     let mut queries: Vec<QueryRectangle<SpatialPartition2D>> = Vec::new();
-    while start.as_utc_date_time().unwrap().timestamp() * 1000 <= (end.as_utc_date_time().unwrap().timestamp() * 1000) + step {
+    while start.as_utc_date_time().unwrap().timestamp() * 1000 + step<= (end.as_utc_date_time().unwrap().timestamp() * 1000){
         let end_time_new = (inter_end.as_utc_date_time().unwrap().timestamp() * 1000) + step;
         inter_end = TimeInstance::from_millis(end_time_new)?;
         
@@ -284,6 +182,74 @@ fn split_time_intervals(query_rect: QueryRectangle<SpatialPartition2D>, step: i6
     Ok(queries)
 }
 
+async fn extract_data<T>(ir_016: Result<BaseTile<GridOrEmpty<GridShape<[usize; 2]>, T>>, Error>, ir_039: Result<BaseTile<GridOrEmpty<GridShape<[usize; 2]>, T>>, Error>, ir_087: Result<BaseTile<GridOrEmpty<GridShape<[usize; 2]>, T>>, Error>, ir_097: Result<BaseTile<GridOrEmpty<GridShape<[usize; 2]>, T>>, Error>, ir_108: Result<BaseTile<GridOrEmpty<GridShape<[usize; 2]>, T>>, Error>, ir_120: Result<BaseTile<GridOrEmpty<GridShape<[usize; 2]>, T>>, Error>, ir_137: Result<BaseTile<GridOrEmpty<GridShape<[usize; 2]>, T>>, Error>, truth: Result<BaseTile<GridOrEmpty<GridShape<[usize; 2]>, u8>>, Error>,mut buffer: Vec<(Vec<T>, Vec<T>, Vec<T>, Vec<T>, Vec<T>, Vec<T>, Vec<T>, Vec<u8>)>, no_data_value: u8) -> Vec<(Vec<T>, Vec<T>, Vec<T>, Vec<T>, Vec<T>, Vec<T>, Vec<T>, Vec<u8>)> {
+    
+
+        let mut tile_size: [usize;2] = [0,0];
+        let missing_elements: usize;
+        
+
+        match (ir_016, ir_039, ir_087, ir_097, ir_108, ir_120, ir_137, truth) {
+            (Ok(ir_016), Ok(ir_039), Ok(ir_087), Ok(ir_097), Ok(ir_108), Ok(ir_120), Ok(ir_137), Ok(truth)) => {
+                match (ir_016.grid_array, ir_039.grid_array, ir_087.grid_array, ir_097.grid_array, ir_108.grid_array, ir_120.grid_array, ir_137.grid_array, truth.grid_array) {
+                    (GridOrEmpty::Grid(grid_016), GridOrEmpty::Grid(grid_039), GridOrEmpty::Grid(grid_087), GridOrEmpty::Grid(grid_097), GridOrEmpty::Grid(grid_108), GridOrEmpty::Grid(grid_120), GridOrEmpty::Grid(grid_134), GridOrEmpty::Grid(grid_truth)) => {
+
+                            let ndv = grid_truth.data.contains(&no_data_value);
+                            //let ndv = false;
+                            if !ndv {
+                                tile_size = grid_016.shape.shape_array;
+                                buffer.push((grid_016.data, grid_039.data, grid_087.data, grid_097.data, grid_108.data, grid_120.data, grid_134.data, grid_truth.data.iter().map(|x| x-1).collect()));
+                            } else {
+                                
+                            }
+                    },
+                    _ => {
+                        
+                    }
+                }
+            },
+            _ => {
+                
+            }
+        }
+        buffer
+    }
+fn training<T>(mut buffer: Vec<(Vec<T, >, Vec<T, >, Vec<T, >, Vec<T, >, Vec<T, >, Vec<T, >, Vec<T, >, Vec<u8, >), >, tile_size: [usize;2], batch_size: usize,  py: &Python, py_mod: &PyModule) ->   Vec<(Vec<T, >, Vec<T, >, Vec<T, >, Vec<T, >, Vec<T, >, Vec<T, >, Vec<T, >, Vec<u8, >,), >
+where T: Clone + std::marker::Copy + numpy::Element{
+    let (data_016_init, data_039_init, data_087_init, data_097_init, data_108_init, data_120_init, data_134_init, data_truth_init) = buffer.remove(0);
+
+    let (mut arr_img_batch, mut arr_truth_batch) = create_arrays_from_data(data_016_init, data_039_init, data_087_init, data_097_init, data_108_init, data_120_init, data_134_init, data_truth_init, tile_size);
+                    
+    let num_elements = buffer.len();
+                
+    let mut rng = rand::thread_rng();     
+                    
+    let mut rand_index: usize;
+
+    for i in 0..(batch_size - 1) {
+                            
+        rand_index = 0;
+        if num_elements - i > 0 {
+            rand_index = rng.gen_range(0..num_elements-i);
+        }
+        let (data_016, data_039, data_087, data_097, data_108, data_120, data_134, data_truth) = buffer.remove(rand_index);
+        let (arr_img, arr_truth) = create_arrays_from_data(data_016, data_039, data_087, data_097, data_108, data_120, data_134, data_truth, tile_size);
+    
+        arr_img_batch = concatenate(Axis(0), &[arr_img_batch.view(), arr_img.view()]).unwrap();
+               
+        arr_truth_batch = concatenate(Axis(0), &[arr_truth_batch.view(), arr_truth.view()]).unwrap();
+    }
+
+    let pool = unsafe {py.new_pool()};
+    let py = pool.python();
+                
+    let py_img = PyArray::from_owned_array(py, arr_img_batch);
+    let py_truth = PyArray::from_owned_array(py, arr_truth_batch );
+
+    let _result = py_mod.call("fit", (py_img, py_truth, batch_size), None).unwrap();
+    
+    buffer
+}
 
 
 #[cfg(test)]
@@ -308,7 +274,7 @@ mod tests {
 
         let query_spatial_resolution = SpatialResolution::new(3000.4, 3000.4).unwrap();
 
-        let query_bbox = SpatialPartition2D::new((-804098.175, 3576662.252).into(), (1500160.112, 5106867.373).into()).unwrap();
+        let query_bbox = SpatialPartition2D::new((0.0, 3102413.6).into(), (30004.0, 3096412.8).into()).unwrap();
         let no_data_value = Some(0.);
         let ir_016 = GdalMetaDataRegular{
             time_placeholders: hashmap! {
@@ -661,7 +627,7 @@ mod tests {
                 file_path: PathBuf::from("hdf5:/mnt/panq/dbs_geo_data/satellite_data/CLAAS-2/pre_2013/ORD19112/%%%_TIME_FORMATED_%%%002050016001MA.hdf://CMa"),
                 rasterband_channel: 1,
                 geo_transform: GdalDatasetGeoTransform{
-                    origin_coordinate: ( -5456233.41938636, 5456233.41938636).into(),
+                    origin_coordinate: (-5570248.477, 5570248.477).into(),
                     x_pixel_size: 3000.403165817260742,
                     y_pixel_size: -3000.403165817260742, 
                 },
@@ -965,14 +931,14 @@ mod tests {
         //     phantom_data: Default::default(),
         // };
 
-        let x = imseg_fit(proc_ir_016, proc_ir_039, proc_ir_087, proc_ir_097, proc_ir_108, proc_ir_120, proc_ir_134,proc_claas, QueryRectangle {
+        let x = imseg_fit(vec![proc_ir_016, proc_ir_039, proc_ir_087, proc_ir_097, proc_ir_108, proc_ir_120, proc_ir_134],proc_claas, QueryRectangle {
             spatial_bounds: query_bbox,
-            time_interval: TimeInterval::new(1167606000000, 1167606000000 + 9_000_000_000)
+            time_interval: TimeInterval::new(1104534000000, 1104534000000 + 45_000_000 )
                 .unwrap(),
             spatial_resolution: query_spatial_resolution,
         }, ctx,
-    24 as usize,
-1 as usize,
+    10 as usize,
+    1 as usize,
 0 as u8).await.unwrap();
     }
 }

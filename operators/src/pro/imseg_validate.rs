@@ -35,7 +35,7 @@ where
     let py = gil.python();
 
     let py_mod = PyModule::from_code(py, include_str!("tf_v2.py"),"filename.py", "modulename").unwrap();
-    let name = PyUnicode::new(py, "second");
+    let name = PyUnicode::new(py, "model_3");
     //TODO change depreciated function
     let _init = py_mod.call("load", (name, ), None).unwrap();
 
@@ -51,74 +51,81 @@ where
     
     let mut final_stream = tile_stream_ir_016.zip(tile_stream_ir_039.zip(tile_stream_ir_087.zip(tile_stream_ir_097.zip(tile_stream_ir_108.zip(tile_stream_ir_120.zip(tile_stream_ir_134.zip(tile_stream_truth)))))));
 
-    let mut chunked_stream = final_stream.chunks(batch_size);
+    //let mut chunked_stream = final_stream.chunks(batch_size);
 
     let mut counts: Vec<Vec<usize>> = vec![vec![0,0,0,0], vec![0,0,0,0], vec![0,0,0,0], vec![0,0,0,0]];
+    let mut buffer: Vec<(Vec<T>, Vec<T>, Vec<T>, Vec<T>, Vec<T>, Vec<T>, Vec<T>, Vec<u8>)> = Vec::new();
+    let mut tile_size: [usize;2] = [0,0];
+    while let Some((ir_016, (ir_039, (ir_087, (ir_097, (ir_108, (ir_120, (ir_137, truth)))))))) = final_stream.next().await {
+        
+        
 
-    while let Some(mut vctr) = chunked_stream.next().await {
-        let mut buffer: Vec<(Vec<T>, Vec<T>, Vec<T>, Vec<T>, Vec<T>, Vec<T>, Vec<T>, Vec<u8>)> = Vec::new();
-        let mut tile_size: [usize;2] = [0,0];
+     
 
-        let vctr_len = vctr.len();
+    match (ir_016, ir_039, ir_087, ir_097, ir_108, ir_120, ir_137, truth) {
+        (Ok(ir_016), Ok(ir_039), Ok(ir_087), Ok(ir_097), Ok(ir_108), Ok(ir_120), Ok(ir_134), Ok(truth)) => {
+            match (ir_016.grid_array, ir_039.grid_array, ir_087.grid_array, ir_097.grid_array, ir_108.grid_array, ir_120.grid_array, ir_134.grid_array, truth.grid_array) {
+                (GridOrEmpty::Grid(grid_016), GridOrEmpty::Grid(grid_039),  GridOrEmpty::Grid(grid_087),  GridOrEmpty::Grid(grid_097), GridOrEmpty::Grid(grid_108), GridOrEmpty::Grid(grid_120), GridOrEmpty::Grid(grid_134), GridOrEmpty::Grid(grid_truth)) => {
+                    let ndv = grid_truth.data.contains(&0);
 
-        for _ in 0..vctr_len {
-            let (ir_016, (ir_039, (ir_087, (ir_097, (ir_108, (ir_120, (ir_137, truth))))))) = vctr.remove(0);
+                        if !ndv {
+                            tile_size = grid_016.shape.shape_array;
+                            buffer.push((grid_016.data, grid_039.data, grid_087.data, grid_097.data, grid_108.data, grid_120.data, grid_134.data, grid_truth.data.iter().map(|x| x - 1).collect()));
+                         }
+                    }, 
+                _ => {
 
-            match (ir_016, ir_039, ir_087, ir_097, ir_108, ir_120, ir_137, truth) {
-                (Ok(ir_016), Ok(ir_039), Ok(ir_087), Ok(ir_097), Ok(ir_108), Ok(ir_120), Ok(ir_134), Ok(truth)) => {
-                    match (ir_016.grid_array, ir_039.grid_array, ir_087.grid_array, ir_097.grid_array, ir_108.grid_array, ir_120.grid_array, ir_134.grid_array, truth.grid_array) {
-                        (GridOrEmpty::Grid(grid_016), GridOrEmpty::Grid(grid_039),  GridOrEmpty::Grid(grid_087),  GridOrEmpty::Grid(grid_097), GridOrEmpty::Grid(grid_108), GridOrEmpty::Grid(grid_120), GridOrEmpty::Grid(grid_134), GridOrEmpty::Grid(grid_truth)) => {
-                            let ndv = grid_truth.data.contains(&0);
-
-                            if !ndv {
-                                tile_size = grid_016.shape.shape_array;
-                                buffer.push((grid_016.data, grid_039.data, grid_087.data, grid_097.data, grid_108.data, grid_120.data, grid_134.data, grid_truth.data.iter().map(|x| x - 1).collect()));
-                            }
-                        }, 
-                        _ => {
-
-                        }
                     }
+                }
                 },
                 _ => {
 
                 }
             }
 
-        }
-
-        let number_of_images = buffer.len();
-        let (data_016_init, data_039_init, data_087_init, data_097_init, data_108_init, data_120_init, data_134_init, data_truth_init) = buffer.remove(0);
-        let (mut arr_img_batch, mut arr_truth_batch) = create_arrays_from_data(data_016_init, data_039_init, data_087_init, data_097_init, data_108_init, data_120_init, data_134_init, data_truth_init, tile_size);
+        //println!("{:?}", buffer.len());
+        
+        if buffer.len() == batch_size {
+            let number_of_images = buffer.len();
+            let (data_016_init, data_039_init, data_087_init, data_097_init, data_108_init, data_120_init, data_134_init, data_truth_init) = buffer.remove(0);
+            let (mut arr_img_batch, mut arr_truth_batch) = create_arrays_from_data(data_016_init, data_039_init, data_087_init, data_097_init, data_108_init, data_120_init, data_134_init, data_truth_init, tile_size);
         
 
-        for _ in 0..number_of_images - 1 {
-            let (data_016, data_039, data_087, data_097, data_108, data_120, data_134, data_truth) = buffer.remove(0);
-            let (arr_img, arr_truth) = create_arrays_from_data(data_016, data_039, data_087, data_097, data_108, data_120, data_134, data_truth, tile_size);
+            for _ in 0..number_of_images - 1 {
+                let (data_016, data_039, data_087, data_097, data_108, data_120, data_134, data_truth) = buffer.remove(0);
+                let (arr_img, arr_truth) = create_arrays_from_data(data_016, data_039, data_087, data_097, data_108, data_120, data_134, data_truth, tile_size);
         
-            arr_img_batch = concatenate(Axis(0), &[arr_img_batch.view(), arr_img.view()]).unwrap();
+                arr_img_batch = concatenate(Axis(0), &[arr_img_batch.view(), arr_img.view()]).unwrap();
                    
-            arr_truth_batch = concatenate(Axis(0), &[arr_truth_batch.view(), arr_truth.view()]).unwrap();
+                arr_truth_batch = concatenate(Axis(0), &[arr_truth_batch.view(), arr_truth.view()]).unwrap();
 
-        }
+            }
 
-        let py_img = PyArray::from_owned_array(py, arr_img_batch);
+            let pool = unsafe {py.new_pool()};
+            let py = pool.python();
+            let py_img = PyArray::from_owned_array(py, arr_img_batch);
+            let py_truth = PyArray::from_owned_array(py, arr_truth_batch.clone() );
+            //TODO change depreciated function
+            //println!("{:?}", number_of_images);
         
-        //TODO change depreciated function
-        let result_img = py_mod.call("predict", (py_img,number_of_images), None)
-        .unwrap()
-        .downcast::<PyArrayDyn<f32, >>()
-        .unwrap()
-        .to_owned_array();
+            let result_img = py_mod.call("predict", (py_img,py_truth, number_of_images), None)
+            .unwrap()
+            .downcast::<PyArrayDyn<f32, >>()
+            .unwrap()
+            .to_owned_array();
 
-        for i in 0..number_of_images {
-            let result = result_img.slice(ndarray::s![i,..,..,..]);
-            let truth= arr_truth_batch.slice(ndarray::s![i,..,..,0]);
+            for i in 0..number_of_images {
+                let result = result_img.slice(ndarray::s![i,..,..,..]);
+                let truth= arr_truth_batch.slice(ndarray::s![i,..,..,0]);
 
-            counts = counts_from_predictions(result, truth, counts, &tile_size);
+                counts = counts_from_predictions(result, truth, counts, &tile_size);
+            }
         }
 
-    }
+        }
+        
+
+    
 
     // while let Some((ir_016, (ir_039, (ir_087, (ir_097, (ir_108, (ir_120, (ir_134, truth)))))))) = final_stream.next().await {
     //     match (ir_016, ir_039, ir_087, ir_097, ir_108, ir_120, ir_134, truth) {
@@ -311,6 +318,11 @@ mod tests {
 
         let query_bbox = SpatialPartition2D::new((0.0, 30000.0).into(), (30000.0, 0.0).into()).unwrap();
         let no_data_value = Some(5.);
+        
+
+        let mut mc = MockExecutionContext::default();
+        mc.tiling_specification = tiling_specification;
+
         let ir_016 = GdalMetaDataRegular{
             time_placeholders: hashmap! {
                 "%%%_TIME_FORMATED_%%%".to_string() => GdalSourceTimePlaceholder {
@@ -340,8 +352,8 @@ mod tests {
                     x_pixel_size: 3000.403165817260742,
                     y_pixel_size: -3000.403165817260742, 
                 },
-                width: 11136,
-                height: 11136,
+                width: 3712,
+                height: 3712,
                 file_not_found_handling: FileNotFoundHandling::NoData,
                 no_data_value,
                 properties_mapping: Some(vec![GdalMetadataMapping::identity(offset_key(), RasterPropertiesEntryType::Number), GdalMetadataMapping::identity(slope_key(), RasterPropertiesEntryType::Number), GdalMetadataMapping::identity(channel_key(), RasterPropertiesEntryType::Number), GdalMetadataMapping::identity(satellite_key(), RasterPropertiesEntryType::Number)]),
@@ -385,8 +397,8 @@ mod tests {
                      x_pixel_size: 3000.403165817260742,
                      y_pixel_size: -3000.403165817260742, 
                  },
-                 width: 11136,
-                 height: 11136,
+                 width: 3712,
+                 height: 3712,
                  file_not_found_handling: FileNotFoundHandling::NoData,
                  no_data_value,
                  properties_mapping: Some(vec![GdalMetadataMapping::identity(offset_key(), RasterPropertiesEntryType::Number), GdalMetadataMapping::identity(slope_key(), RasterPropertiesEntryType::Number), GdalMetadataMapping::identity(channel_key(), RasterPropertiesEntryType::Number), GdalMetadataMapping::identity(satellite_key(), RasterPropertiesEntryType::Number)]),
@@ -432,8 +444,8 @@ mod tests {
                     x_pixel_size: 3000.403165817260742,
                     y_pixel_size: -3000.403165817260742, 
                 },
-                width: 11136,
-                height: 11136,
+                width: 3712,
+                height: 3712,
                 file_not_found_handling: FileNotFoundHandling::NoData,
                 no_data_value,
                 properties_mapping: Some(vec![GdalMetadataMapping::identity(offset_key(), RasterPropertiesEntryType::Number), GdalMetadataMapping::identity(slope_key(), RasterPropertiesEntryType::Number), GdalMetadataMapping::identity(channel_key(), RasterPropertiesEntryType::Number), GdalMetadataMapping::identity(satellite_key(), RasterPropertiesEntryType::Number)]),
@@ -479,8 +491,8 @@ mod tests {
                     x_pixel_size: 3000.403165817260742,
                     y_pixel_size: -3000.403165817260742, 
                 },
-                width: 11136,
-                height: 11136,
+                width: 3712,
+                height: 3712,
                 file_not_found_handling: FileNotFoundHandling::NoData,
                 no_data_value,
                 properties_mapping: Some(vec![GdalMetadataMapping::identity(offset_key(), RasterPropertiesEntryType::Number), GdalMetadataMapping::identity(slope_key(), RasterPropertiesEntryType::Number), GdalMetadataMapping::identity(channel_key(), RasterPropertiesEntryType::Number), GdalMetadataMapping::identity(satellite_key(), RasterPropertiesEntryType::Number)]),
@@ -527,8 +539,8 @@ mod tests {
                     x_pixel_size: 3000.403165817260742,
                     y_pixel_size: -3000.403165817260742, 
                 },
-                width: 11136,
-                height: 11136,
+                width: 3712,
+                height: 3712,
                 file_not_found_handling: FileNotFoundHandling::NoData,
                 no_data_value,
                 properties_mapping: Some(vec![GdalMetadataMapping::identity(offset_key(), RasterPropertiesEntryType::Number), GdalMetadataMapping::identity(slope_key(), RasterPropertiesEntryType::Number), GdalMetadataMapping::identity(channel_key(), RasterPropertiesEntryType::Number), GdalMetadataMapping::identity(satellite_key(), RasterPropertiesEntryType::Number)]),
@@ -574,8 +586,8 @@ mod tests {
                     x_pixel_size: 3000.403165817260742,
                     y_pixel_size: -3000.403165817260742, 
                 },
-                width: 11136,
-                height: 11136,
+                width: 3712,
+                height: 3712,
                 file_not_found_handling: FileNotFoundHandling::NoData,
                 no_data_value,
                 properties_mapping: Some(vec![GdalMetadataMapping::identity(offset_key(), RasterPropertiesEntryType::Number), GdalMetadataMapping::identity(slope_key(), RasterPropertiesEntryType::Number), GdalMetadataMapping::identity(channel_key(), RasterPropertiesEntryType::Number), GdalMetadataMapping::identity(satellite_key(), RasterPropertiesEntryType::Number)]),
@@ -622,8 +634,8 @@ mod tests {
                     x_pixel_size: 3000.403165817260742,
                     y_pixel_size: -3000.403165817260742, 
                 },
-                width: 11136,
-                height: 11136,
+                width: 3712,
+                height: 3712,
                 file_not_found_handling: FileNotFoundHandling::NoData,
                 no_data_value,
                 properties_mapping: Some(vec![GdalMetadataMapping::identity(offset_key(), RasterPropertiesEntryType::Number), GdalMetadataMapping::identity(slope_key(), RasterPropertiesEntryType::Number), GdalMetadataMapping::identity(channel_key(), RasterPropertiesEntryType::Number), GdalMetadataMapping::identity(satellite_key(), RasterPropertiesEntryType::Number)]),
@@ -643,7 +655,7 @@ mod tests {
         let claas = GdalMetaDataRegular{
             time_placeholders: hashmap! {
                 "%%%_TIME_FORMATED_%%%".to_string() => GdalSourceTimePlaceholder {
-                    format: "%Y/%m/%d/CMAin%Y%m%d%H%M00305SVMSG01MD".to_string(),
+                    format: "%Y/CFCin%Y%m%d%H%M".to_string(),
                     reference: TimeReference::Start,
 
                 }
@@ -659,15 +671,15 @@ mod tests {
                 no_data_value,
             },
             params: GdalDatasetParameters{
-                file_path: PathBuf::from("NETCDF:\"/mnt/panq/dbs_geo_data/satellite_data/CLAAS-2/level2/%%%_TIME_FORMATED_%%%.nc\":cma"),
+                file_path: PathBuf::from("hdf5:/mnt/panq/dbs_geo_data/satellite_data/CLAAS-2/pre_2013/ORD19112/%%%_TIME_FORMATED_%%%002050016001MA.hdf://CMa"),
                 rasterband_channel: 1,
                 geo_transform: GdalDatasetGeoTransform{
-                    origin_coordinate: ( -5456233.41938636, 5456233.41938636).into(),
+                    origin_coordinate: (-5570248.477, 5570248.477).into(),
                     x_pixel_size: 3000.403165817260742,
                     y_pixel_size: -3000.403165817260742, 
                 },
-                width: 11136,
-                height: 11136,
+                width: 3712,
+                height: 3712,
                 file_not_found_handling: FileNotFoundHandling::NoData,
                 no_data_value,
                 properties_mapping: None,
@@ -676,7 +688,7 @@ mod tests {
             },
             //placeholder: "%%%_TIME_FORMATED_%%%".to_string(),
             //time_format: "%Y/%m/%d/CMAin%Y%m%d%H%M00305SVMSG01MD".to_string(),
-            start: TimeInstance::from_millis(1356994800000).unwrap(),
+            start: TimeInstance::from_millis(1072911600000).unwrap(),
             step: TimeStep{
                 granularity: TimeGranularity::Minutes,
                 step: 15,
@@ -715,20 +727,20 @@ mod tests {
             }
         });
 
-        // let exp_ir_016 = RasterOperator::boxed(Expression{
-        //     params: ExpressionParams { expression: "(A-0.15282721917305925)/0.040190788161123925".to_string(), output_type: RasterDataType::F32, output_no_data_value: no_data_value.unwrap(), output_measurement: Some(Measurement::Continuous{
-        //         measurement: "raw".to_string(),
-        //         unit: None,
-        //     })
-        // },
-        // sources: ExpressionSources{
-        //     a: ref_ir_016.clone(),
-        //     b: Some(ref_ir_016),
-        //     c: None,
-        // }
-        // });
+        let exp_ir_016 = RasterOperator::boxed(Expression{
+            params: ExpressionParams { expression: "(A-0.15282721917305925)/0.20047640300325603".to_string(), output_type: RasterDataType::F32, output_no_data_value: no_data_value.unwrap(), output_measurement: Some(Measurement::Continuous{
+                measurement: "raw".to_string(),
+                unit: None,
+            })
+        },
+        sources: ExpressionSources{
+            a: ref_ir_016.clone(),
+            b: Some(ref_ir_016),
+            c: None,
+        }
+        });
         
-        let proc_ir_016 = ref_ir_016
+        let proc_ir_016 = exp_ir_016
         .initialize(&mc).await.unwrap().query_processor().unwrap().get_f32().unwrap();
 
         let id_ir_039 = DatasetId::Internal{
@@ -752,7 +764,7 @@ mod tests {
         });
 
         let exp_ir_039 = RasterOperator::boxed(Expression{
-            params: ExpressionParams { expression: "(A-276.72667474831303)/255.45368321180788".to_string(), output_type: RasterDataType::F32, output_no_data_value: no_data_value.unwrap(), output_measurement: Some(Measurement::Continuous{
+            params: ExpressionParams { expression: "(A-276.72667474831303)/15.982918482298778".to_string(), output_type: RasterDataType::F32, output_no_data_value: no_data_value.unwrap(), output_measurement: Some(Measurement::Continuous{
                 measurement: "raw".to_string(),
                 unit: None,
             })
@@ -787,7 +799,7 @@ mod tests {
         });
 
         let exp_ir_087 = RasterOperator::boxed(Expression{
-            params: ExpressionParams { expression: "(A-267.92274094012157)/248.48508230328764".to_string(), output_type: RasterDataType::F32, output_no_data_value: no_data_value.unwrap(), output_measurement: Some(Measurement::Continuous{
+            params: ExpressionParams { expression: "(A-267.92274094012157)/15.763409602725156".to_string(), output_type: RasterDataType::F32, output_no_data_value: no_data_value.unwrap(), output_measurement: Some(Measurement::Continuous{
                 measurement: "raw".to_string(),
                 unit: None,
             })
@@ -822,7 +834,7 @@ mod tests {
         });
 
         let exp_ir_097 = RasterOperator::boxed(Expression{
-            params: ExpressionParams { expression: "(A-245.4006454137375)/93.02522861255343".to_string(), output_type: RasterDataType::F32, output_no_data_value: no_data_value.unwrap(), output_measurement: Some(Measurement::Continuous{
+            params: ExpressionParams { expression: "(A-245.4006454137375)/9.644958714922186".to_string(), output_type: RasterDataType::F32, output_no_data_value: no_data_value.unwrap(), output_measurement: Some(Measurement::Continuous{
                 measurement: "raw".to_string(),
                 unit: None,
             })
@@ -857,7 +869,7 @@ mod tests {
         });
 
         let exp_ir_108 = RasterOperator::boxed(Expression{
-            params: ExpressionParams { expression: "(A-269.95727803541155)/286.4454521514864".to_string(), output_type: RasterDataType::F32, output_no_data_value: no_data_value.unwrap(), output_measurement: Some(Measurement::Continuous{
+            params: ExpressionParams { expression: "(A-269.95727803541155)/16.92469947004928".to_string(), output_type: RasterDataType::F32, output_no_data_value: no_data_value.unwrap(), output_measurement: Some(Measurement::Continuous{
                 measurement: "raw".to_string(),
                 unit: None,
             })
@@ -892,7 +904,7 @@ mod tests {
             }
         });
         let exp_ir_120 = RasterOperator::boxed(Expression{
-            params: ExpressionParams { expression: "(A-268.69063154766155)/287.7463867786664".to_string(), output_type: RasterDataType::F32, output_no_data_value: no_data_value.unwrap(), output_measurement: Some(Measurement::Continuous{
+            params: ExpressionParams { expression: "(A-268.69063154766155)/16.963088951563815".to_string(), output_type: RasterDataType::F32, output_no_data_value: no_data_value.unwrap(), output_measurement: Some(Measurement::Continuous{
                 measurement: "raw".to_string(),
                 unit: None,
             })
@@ -926,7 +938,7 @@ mod tests {
             }
         });
         let exp_ir_134 = RasterOperator::boxed(Expression{
-            params: ExpressionParams { expression: "(A-252.1465931705522)/124.80137314828508".to_string(), output_type: RasterDataType::F32, output_no_data_value: no_data_value.unwrap(), output_measurement: Some(Measurement::Continuous{
+            params: ExpressionParams { expression: "(A-252.1465931705522)/11.171453493090551".to_string(), output_type: RasterDataType::F32, output_no_data_value: no_data_value.unwrap(), output_measurement: Some(Measurement::Continuous{
                 measurement: "raw".to_string(),
                 unit: None,
             })
@@ -953,17 +965,16 @@ mod tests {
         mc.add_meta_data(id_claas, Box::new(claas.clone()));
 
         
-
         let proc_claas = op_claas
         .initialize(&mc).await.unwrap().query_processor().unwrap().get_u8().unwrap();
 
         let x = imseg_fit(proc_ir_016, proc_ir_039, proc_ir_087, proc_ir_097, proc_ir_108, proc_ir_120, proc_ir_134,proc_claas, vec![0,1,2,3],QueryRectangle {
             spatial_bounds: query_bbox,
-            time_interval: TimeInterval::new(1_388_574_000_000, 1_388_574_000_000 + 1000)
+            time_interval: TimeInterval::new(1136070000000, 1149112800000)
                 .unwrap(),
             spatial_resolution: query_spatial_resolution,
         }, ctx,
-    24 as usize,
+    1 as usize,
 -1 as i16).await.unwrap();
     }
 }
