@@ -1,6 +1,7 @@
 use crate::error::Result;
 use crate::{projects::ProjectDb, workflows::registry::WorkflowRegistry};
 use async_trait::async_trait;
+use rayon::ThreadPool;
 use std::sync::Arc;
 use tokio::sync::{RwLock, RwLockReadGuard, RwLockWriteGuard};
 
@@ -16,7 +17,6 @@ use geoengine_datatypes::dataset::DatasetId;
 use geoengine_datatypes::primitives::Coordinate2D;
 use geoengine_datatypes::raster::GridShape2D;
 use geoengine_datatypes::raster::TilingSpecification;
-use geoengine_operators::concurrency::ThreadPoolContext;
 use geoengine_operators::engine::{
     ExecutionContext, MetaData, MetaDataProvider, QueryContext, RasterQueryRectangle,
     RasterResultDescriptor, VectorQueryRectangle, VectorResultDescriptor,
@@ -63,7 +63,7 @@ pub trait Context: 'static + Send + Sync + Clone {
 
 pub struct QueryContextImpl {
     pub chunk_byte_size: usize,
-    pub thread_pool: ThreadPoolContext,
+    pub thread_pool: Arc<ThreadPool>,
 }
 
 impl QueryContext for QueryContextImpl {
@@ -71,7 +71,7 @@ impl QueryContext for QueryContextImpl {
         self.chunk_byte_size
     }
 
-    fn thread_pool_context(&self) -> &ThreadPoolContext {
+    fn thread_pool(&self) -> &Arc<ThreadPool> {
         &self.thread_pool
     }
 }
@@ -82,7 +82,7 @@ where
     S: Session,
 {
     dataset_db: Db<D>,
-    thread_pool: ThreadPoolContext,
+    thread_pool: Arc<ThreadPool>,
     session: S,
 }
 
@@ -91,7 +91,7 @@ where
     D: DatasetDb<S>,
     S: Session,
 {
-    pub fn new(dataset_db: Db<D>, thread_pool: ThreadPoolContext, session: S) -> Self {
+    pub fn new(dataset_db: Db<D>, thread_pool: Arc<ThreadPool>, session: S) -> Self {
         Self {
             dataset_db,
             thread_pool,
@@ -111,8 +111,8 @@ where
         + MetaDataProvider<GdalLoadingInfo, RasterResultDescriptor, RasterQueryRectangle>,
     S: Session,
 {
-    fn thread_pool_context(&self) -> ThreadPoolContext {
-        self.thread_pool.clone()
+    fn thread_pool(&self) -> &Arc<ThreadPool> {
+        &self.thread_pool
     }
 
     fn tiling_specification(&self) -> TilingSpecification {

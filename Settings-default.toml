@@ -59,10 +59,16 @@ end = "2014-01-01T00:00:00Z"
 # max number of tiles to be produced for generating output tiff
 tile_limit = 4 
 
-[odm]
-endpoint = "http://localhost:3000/"
-# TODO: authentication
-
 [dataprovider]
 dataset_defs_path = "./test_data/dataset_defs"
 provider_defs_path = "./test_data/provider_defs"
+
+
+# Settings for Geo Engine Pro
+[user]
+anonymous_access = true
+user_registration = true
+
+[odm]
+endpoint = "http://localhost:3000/"
+# TODO: authentication

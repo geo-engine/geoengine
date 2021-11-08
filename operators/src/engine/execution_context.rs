@@ -1,14 +1,14 @@
 use super::{RasterQueryRectangle, VectorQueryRectangle};
-use crate::concurrency::{ThreadPool, ThreadPoolContext, ThreadPoolContextCreator};
 use crate::engine::{RasterResultDescriptor, ResultDescriptor, VectorResultDescriptor};
 use crate::error::Error;
 use crate::mock::MockDatasetDataSourceLoadingInfo;
 use crate::source::{GdalLoadingInfo, OgrSourceDataset};
-use crate::util::Result;
+use crate::util::{create_rayon_thread_pool, Result};
 use async_trait::async_trait;
 use geoengine_datatypes::dataset::DatasetId;
 use geoengine_datatypes::raster::GridShape;
 use geoengine_datatypes::raster::TilingSpecification;
+use rayon::ThreadPool;
 use serde::{Deserialize, Serialize};
 use std::any::Any;
 use std::collections::HashMap;
@@ -23,7 +23,7 @@ pub trait ExecutionContext: Send
     + MetaDataProvider<OgrSourceDataset, VectorResultDescriptor, VectorQueryRectangle>
     + MetaDataProvider<GdalLoadingInfo, RasterResultDescriptor, RasterQueryRectangle>
 {
-    fn thread_pool_context(&self) -> ThreadPoolContext;
+    fn thread_pool(&self) -> &Arc<ThreadPool>;
     fn tiling_specification(&self) -> TilingSpecification;
 }
 
@@ -56,7 +56,7 @@ where
 }
 
 pub struct MockExecutionContext {
-    pub thread_pool: ThreadPoolContext,
+    pub thread_pool: Arc<ThreadPool>,
     pub meta_data: HashMap<DatasetId, Box<dyn Any + Send + Sync>>,
     pub tiling_specification: TilingSpecification,
 }
@@ -64,7 +64,7 @@ pub struct MockExecutionContext {
 impl Default for MockExecutionContext {
     fn default() -> Self {
         Self {
-            thread_pool: Arc::new(ThreadPool::default()).create_context(),
+            thread_pool: create_rayon_thread_pool(0),
             meta_data: HashMap::default(),
             tiling_specification: TilingSpecification {
                 origin_coordinate: Default::default(),
@@ -92,8 +92,8 @@ impl MockExecutionContext {
 }
 
 impl ExecutionContext for MockExecutionContext {
-    fn thread_pool_context(&self) -> ThreadPoolContext {
-        self.thread_pool.clone()
+    fn thread_pool(&self) -> &Arc<ThreadPool> {
+        &self.thread_pool
     }
 
     fn tiling_specification(&self) -> TilingSpecification {

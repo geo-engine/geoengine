@@ -138,7 +138,10 @@ impl ResultDescriptor for VectorResultDescriptor {
 
 /// A `ResultDescriptor` for plot queries
 #[derive(Debug, Copy, Clone, Ord, PartialOrd, Eq, PartialEq, Serialize, Deserialize)]
-pub struct PlotResultDescriptor {}
+#[serde(rename_all = "camelCase")]
+pub struct PlotResultDescriptor {
+    pub spatial_reference: SpatialReferenceOption,
+}
 
 impl ResultDescriptor for PlotResultDescriptor {
     type DataType = (); // TODO: maybe distinguish between image, interactive plot, etc.
@@ -146,7 +149,7 @@ impl ResultDescriptor for PlotResultDescriptor {
     fn data_type(&self) -> Self::DataType {}
 
     fn spatial_reference(&self) -> SpatialReferenceOption {
-        SpatialReferenceOption::Unreferenced
+        self.spatial_reference
     }
 
     fn map_data_type<F>(&self, _f: F) -> Self

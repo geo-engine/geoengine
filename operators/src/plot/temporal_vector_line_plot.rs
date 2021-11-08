@@ -86,7 +86,9 @@ impl PlotOperator for FeatureAttributeValuesOverTime {
         );
 
         Ok(InitializedFeatureAttributeValuesOverTime {
-            result_descriptor: PlotResultDescriptor {},
+            result_descriptor: PlotResultDescriptor {
+                spatial_reference: source.result_descriptor().spatial_reference,
+            },
             vector_source: source,
             state: self.params,
         }
