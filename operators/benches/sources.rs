@@ -68,16 +68,15 @@ fn bench_raster_processor<
     bench_id: &'static str,
     list_of_named_querys: &[(&str, RasterQueryRectangle)],
     list_of_tiling_specs: &[TilingSpecification],
-    named_tile_producing_operator_builders: (&str, F),
+    tile_producing_operator_builderr: F,
     ctx: &C,
     run_time: &tokio::runtime::Runtime,
 ) {
-    println!("Bench_name, query_name, tilesize, query_time (ns), tiles_produced, pixels_produced, stream_collect_time (ns) ");
+    println!("Bench_name, query_name, tilesize_x, tilesize_y, query_time (ns), tiles_produced, pixels_produced, stream_collect_time (ns) ");
     
-    let (operator_name, operator_builder) = named_tile_producing_operator_builders;
 
     for tiling_spec in list_of_tiling_specs {
-        let operator = (operator_builder)(*tiling_spec);
+        let operator = (tile_producing_operator_builderr)(*tiling_spec);
 
         for &(qrect_name, qrect) in list_of_named_querys {
             run_time.block_on(async {               
@@ -97,7 +96,7 @@ fn bench_raster_processor<
                 let number_of_tiles = black_box(res.into_iter().map(Result::unwrap).count());
 
                 println!(
-                    "{}, {}, [{} x {}], {}, {}, {}, {}",
+                    "{}, {}, {}, {}, {}, {}, {}, {}",
                     bench_id,
                     qrect_name,
                     tiling_spec.tile_size_in_pixels.axis_size_y(),
@@ -176,7 +175,7 @@ fn bench_no_data_tiles() {
         "no_data_tiles",
         &qrects,
         &tiling_specs,
-        ("mock_source", setup_mock_source),
+        setup_mock_source,
         &ctx,
         &run_time,
     );
@@ -184,9 +183,8 @@ fn bench_no_data_tiles() {
         "no_data_tiles",
         &qrects,
         &tiling_specs,
-        ("gdal_source", |ts| {
-            setup_gdal_source(create_ndvi_meta_data(), ts)
-        }),
+         |ts| {
+            setup_gdal_source(create_ndvi_meta_data(), ts)},
         &ctx,
         &run_time,
     );
@@ -224,9 +222,9 @@ fn bench_tile_size() {
         "tile_size",
         &qrects,
         &tiling_specs,
-        ("gdal_source", |ts| {
+         |ts| {
             setup_gdal_source(create_ndvi_meta_data(), ts)
-        }),
+        },
         &ctx,
         &run_time,
     );

@@ -42,7 +42,7 @@ fn bench_raster_operator<'a, Q, T, F, C>(
     Q: IntoIterator<Item = &'a (&'static str, RasterQueryRectangle)> + Clone,
     T: IntoIterator<Item = &'a TilingSpecification>,
 {
-    println!("Bench_name, query_name, tilesize, query_time (ns), tiles_produced, pixels_produced, stream_collect_time (ns) ");
+    println!("Bench_name, query_name, tilesize_x, tilesize_y, query_time (ns), tiles_produced, pixels_produced, stream_collect_time (ns) ");
 
     for tiling_spec in tiling_specs.into_iter() {
         let exe_ctx = (context_builder)(*tiling_spec);
@@ -84,7 +84,7 @@ fn bench_raster_operator<'a, Q, T, F, C>(
                 let number_of_tiles = black_box(res.into_iter().map(Result::unwrap).count());
 
                 println!(
-                    "{}, {}, [{} x {}], {}, {}, {}, {}",
+                    "{}, {}, {}, {}, {}, {}, {}, {}",
                     bench_id,
                     qrect_name,
                     tiling_spec.tile_size_in_pixels.axis_size_y(),
