@@ -73,20 +73,18 @@ fn bench_raster_processor<
     run_time: &tokio::runtime::Runtime,
 ) {
     println!("Bench_name, query_name, tilesize_x, tilesize_y, query_time (ns), tiles_produced, pixels_produced, stream_collect_time (ns) ");
-    
 
     for tiling_spec in list_of_tiling_specs {
         let operator = (tile_producing_operator_builderr)(*tiling_spec);
 
         for &(qrect_name, qrect) in list_of_named_querys {
-            run_time.block_on(async {               
-
+            run_time.block_on(async {
                 // query the operator
                 let start_query = Instant::now();
                 let query = operator.raster_query(qrect, ctx).await.unwrap();
                 let query_elapsed = start_query.elapsed();
 
-                let start = Instant::now();                
+                let start = Instant::now();
                 // drain the stream
                 let res: Vec<Result<RasterTile2D<T>, _>> = query.collect().await;
 
@@ -100,13 +98,13 @@ fn bench_raster_processor<
                     bench_id,
                     qrect_name,
                     tiling_spec.tile_size_in_pixels.axis_size_y(),
-                    tiling_spec.tile_size_in_pixels.axis_size_x(),                    
+                    tiling_spec.tile_size_in_pixels.axis_size_x(),
                     query_elapsed.as_nanos(),
                     number_of_tiles,
-                    number_of_tiles as u128 * tiling_spec.tile_size_in_pixels.number_of_elements() as u128,
+                    number_of_tiles as u128
+                        * tiling_spec.tile_size_in_pixels.number_of_elements() as u128,
                     elapsed.as_nanos()
                 );
-
             });
         }
     }
@@ -183,8 +181,7 @@ fn bench_no_data_tiles() {
         "no_data_tiles",
         &qrects,
         &tiling_specs,
-         |ts| {
-            setup_gdal_source(create_ndvi_meta_data(), ts)},
+        |ts| setup_gdal_source(create_ndvi_meta_data(), ts),
         &ctx,
         &run_time,
     );
@@ -222,9 +219,7 @@ fn bench_tile_size() {
         "tile_size",
         &qrects,
         &tiling_specs,
-         |ts| {
-            setup_gdal_source(create_ndvi_meta_data(), ts)
-        },
+        |ts| setup_gdal_source(create_ndvi_meta_data(), ts),
         &ctx,
         &run_time,
     );

@@ -70,7 +70,10 @@ fn bench_raster_operator<'a, Q, T, F, C>(
             run_time.block_on(async {
                 let start_query = Instant::now();
                 // query the operator
-                let query = initialized_queryprocessor.raster_query(*qrect, ctx).await.unwrap();
+                let query = initialized_queryprocessor
+                    .raster_query(*qrect, ctx)
+                    .await
+                    .unwrap();
                 let query_elapsed = start_query.elapsed();
 
                 let start = Instant::now();
@@ -88,10 +91,11 @@ fn bench_raster_operator<'a, Q, T, F, C>(
                     bench_id,
                     qrect_name,
                     tiling_spec.tile_size_in_pixels.axis_size_y(),
-                    tiling_spec.tile_size_in_pixels.axis_size_x(),                    
+                    tiling_spec.tile_size_in_pixels.axis_size_x(),
                     query_elapsed.as_nanos(),
                     number_of_tiles,
-                    number_of_tiles as u128 * tiling_spec.tile_size_in_pixels.number_of_elements() as u128,
+                    number_of_tiles as u128
+                        * tiling_spec.tile_size_in_pixels.number_of_elements() as u128,
                     elapsed.as_nanos()
                 );
             });
