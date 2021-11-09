@@ -42,6 +42,8 @@ fn bench_raster_operator<'a, Q, T, F, C>(
     Q: IntoIterator<Item = &'a (&'static str, RasterQueryRectangle)> + Clone,
     T: IntoIterator<Item = &'a TilingSpecification>,
 {
+    println!("Bench_name, query_name, tilesize, query_time (ns), tiles_produced, pixels_produced, stream_collect_time (ns) ");
+
     for tiling_spec in tiling_specs.into_iter() {
         let exe_ctx = (context_builder)(*tiling_spec);
 
@@ -82,16 +84,14 @@ fn bench_raster_operator<'a, Q, T, F, C>(
                 let number_of_tiles = black_box(res.into_iter().map(Result::unwrap).count());
 
                 println!(
-                    "Bench \"{}\" | tile size \"[{}, {}]\" | query \"{}\" in {} s ({} ns) | produced {} tiles ({} px) | in {} s  ({} ns)",
+                    "{}, {}, [{} x {}], {}, {}, {}, {}",
                     bench_id,
-                    tiling_spec.tile_size_in_pixels.axis_size_y(),
-                    tiling_spec.tile_size_in_pixels.axis_size_x(),
                     qrect_name,
-                    query_elapsed.as_secs_f32(),
+                    tiling_spec.tile_size_in_pixels.axis_size_y(),
+                    tiling_spec.tile_size_in_pixels.axis_size_x(),                    
                     query_elapsed.as_nanos(),
                     number_of_tiles,
                     number_of_tiles as u128 * tiling_spec.tile_size_in_pixels.number_of_elements() as u128,
-                    elapsed.as_secs_f32(),
                     elapsed.as_nanos()
                 );
             });

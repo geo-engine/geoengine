@@ -65,23 +65,29 @@ fn bench_raster_processor<
     S: RasterQueryProcessor<RasterType = T>,
     C: QueryContext,
 >(
+    bench_id: &'static str,
     list_of_named_querys: &[(&str, RasterQueryRectangle)],
     list_of_tiling_specs: &[TilingSpecification],
     named_tile_producing_operator_builders: (&str, F),
     ctx: &C,
     run_time: &tokio::runtime::Runtime,
 ) {
+    println!("Bench_name, query_name, tilesize, query_time (ns), tiles_produced, pixels_produced, stream_collect_time (ns) ");
+    
     let (operator_name, operator_builder) = named_tile_producing_operator_builders;
 
     for tiling_spec in list_of_tiling_specs {
         let operator = (operator_builder)(*tiling_spec);
 
         for &(qrect_name, qrect) in list_of_named_querys {
-            run_time.block_on(async {
-                let start = Instant::now();
+            run_time.block_on(async {               
 
                 // query the operator
+                let start_query = Instant::now();
                 let query = operator.raster_query(qrect, ctx).await.unwrap();
+                let query_elapsed = start_query.elapsed();
+
+                let start = Instant::now();                
                 // drain the stream
                 let res: Vec<Result<RasterTile2D<T>, _>> = query.collect().await;
 
@@ -91,16 +97,17 @@ fn bench_raster_processor<
                 let number_of_tiles = black_box(res.into_iter().map(Result::unwrap).count());
 
                 println!(
-                    "Bench \"{}\" | tile size \"[{}, {}]\" | query \"{}\" | produced {} tiles ({} px) | in {} s  ({} ns)",
-                    operator_name,
-                    tiling_spec.tile_size_in_pixels.axis_size_y(),
-                    tiling_spec.tile_size_in_pixels.axis_size_x(),
+                    "{}, {}, [{} x {}], {}, {}, {}, {}",
+                    bench_id,
                     qrect_name,
+                    tiling_spec.tile_size_in_pixels.axis_size_y(),
+                    tiling_spec.tile_size_in_pixels.axis_size_x(),                    
+                    query_elapsed.as_nanos(),
                     number_of_tiles,
                     number_of_tiles as u128 * tiling_spec.tile_size_in_pixels.number_of_elements() as u128,
-                    elapsed.as_secs_f32(),
                     elapsed.as_nanos()
                 );
+
             });
         }
     }
@@ -166,6 +173,7 @@ fn bench_no_data_tiles() {
     let ctx = MockQueryContext::with_chunk_size_and_thread_count(ChunkByteSize::MAX, 8);
 
     bench_raster_processor(
+        "no_data_tiles",
         &qrects,
         &tiling_specs,
         ("mock_source", setup_mock_source),
@@ -173,6 +181,7 @@ fn bench_no_data_tiles() {
         &run_time,
     );
     bench_raster_processor(
+        "no_data_tiles",
         &qrects,
         &tiling_specs,
         ("gdal_source", |ts| {
@@ -212,6 +221,7 @@ fn bench_tile_size() {
     ];
 
     bench_raster_processor(
+        "tile_size",
         &qrects,
         &tiling_specs,
         ("gdal_source", |ts| {
