@@ -1305,6 +1305,18 @@ mod tests {
                         None,
                     ]),
                 ),
+                (
+                    "bools",
+                    FeatureData::NullableBool(vec![Some(true), Some(false), None]),
+                ),
+                (
+                    "dates",
+                    FeatureData::NullableDateTime(vec![
+                        Some(TimeInstance::from_millis_unchecked(946681200000)),
+                        None,
+                        Some(TimeInstance::from_millis_unchecked(1636448729000)),
+                    ]),
+                ),
             ],
         )
         .unwrap();
@@ -1321,6 +1333,21 @@ mod tests {
         let from_strings_cmp: Vec<String> =
             ["a", "b", ""].iter().map(ToString::to_string).collect();
         assert_eq!(from_strings, from_strings_cmp);
+
+        let from_bools: Vec<String> = collection.data("bools").unwrap().strings_iter().collect();
+        let from_bools_cmp: Vec<String> = ["true", "false", ""]
+            .iter()
+            .map(ToString::to_string)
+            .collect();
+        assert_eq!(from_bools, from_bools_cmp);
+
+        let from_dates: Vec<String> = collection.data("dates").unwrap().strings_iter().collect();
+        let from_dates_cmp: Vec<String> =
+            ["1999-12-31T23:00:00+00:00", "", "2021-11-09T09:05:29+00:00"]
+                .iter()
+                .map(ToString::to_string)
+                .collect();
+        assert_eq!(from_dates, from_dates_cmp);
     }
 
     #[test]
@@ -1340,6 +1367,18 @@ mod tests {
                         Some("1".to_owned()),
                         Some("f".to_owned()),
                         None,
+                    ]),
+                ),
+                (
+                    "bools",
+                    FeatureData::NullableBool(vec![Some(true), Some(false), None]),
+                ),
+                (
+                    "dates",
+                    FeatureData::NullableDateTime(vec![
+                        Some(TimeInstance::from_millis_unchecked(946681200000)),
+                        None,
+                        Some(TimeInstance::from_millis_unchecked(1636448729000)),
                     ]),
                 ),
             ],
@@ -1369,5 +1408,22 @@ mod tests {
             .collect();
         let from_strings_cmp: Vec<Option<f64>> = vec![Some(1.0), None, None];
         assert_eq!(from_strings, from_strings_cmp);
+
+        let from_bools: Vec<Option<f64>> = collection
+            .data("bools")
+            .unwrap()
+            .float_options_iter()
+            .collect();
+        let from_bools_cmp: Vec<Option<f64>> = vec![Some(1.0), Some(0.0), None];
+        assert_eq!(from_bools, from_bools_cmp);
+
+        let from_dates: Vec<Option<f64>> = collection
+            .data("dates")
+            .unwrap()
+            .float_options_iter()
+            .collect();
+        let from_dates_cmp: Vec<Option<f64>> =
+            vec![Some(946681200000.0), None, Some(1636448729000.0)];
+        assert_eq!(from_dates, from_dates_cmp);
     }
 }
