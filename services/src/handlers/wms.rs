@@ -257,7 +257,7 @@ async fn get_map<C: Context>(
 
     // TODO: use a default spatial reference if it is not set?
     let request_spatial_ref: SpatialReference =
-        request.crs.ok_or(error::Error::InvalidSpatialReference)?;
+        request.crs.ok_or(error::Error::MissingSpatialReference)?;
 
     // perform reprojection if necessary
     let initialized = if request_spatial_ref == workflow_spatial_ref {

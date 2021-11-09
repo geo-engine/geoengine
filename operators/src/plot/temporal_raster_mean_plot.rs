@@ -52,9 +52,12 @@ impl PlotOperator for MeanRasterPixelValuesOverTime {
         self: Box<Self>,
         context: &dyn ExecutionContext,
     ) -> Result<Box<dyn InitializedPlotOperator>> {
+        let raster = self.sources.raster.initialize(context).await?;
         let initialized_operator = InitializedMeanRasterPixelValuesOverTime {
-            result_descriptor: PlotResultDescriptor {},
-            raster: self.sources.raster.initialize(context).await?,
+            result_descriptor: PlotResultDescriptor {
+                spatial_reference: raster.result_descriptor().spatial_reference,
+            },
+            raster,
             state: self.params,
         };
 

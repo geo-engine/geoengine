@@ -844,6 +844,7 @@ mod tests {
             serde_json::from_str::<serde_json::Value>(&res_body).unwrap(),
             serde_json::json!({
                 "type": "plot",
+                "spatialReference": ""
             })
         );
     }

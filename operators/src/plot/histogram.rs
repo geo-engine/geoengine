@@ -81,10 +81,13 @@ impl PlotOperator for Histogram {
                     }
                 );
 
+                let initialized = raster_source.initialize(context).await?;
                 InitializedHistogram::new(
-                    PlotResultDescriptor {},
+                    PlotResultDescriptor {
+                        spatial_reference: initialized.result_descriptor().spatial_reference,
+                    },
                     self.params,
-                    raster_source.initialize(context).await?,
+                    initialized,
                 )
                 .boxed()
             }
@@ -117,8 +120,14 @@ impl PlotOperator for Histogram {
                     }
                 }
 
-                InitializedHistogram::new(PlotResultDescriptor {}, self.params, vector_source)
-                    .boxed()
+                InitializedHistogram::new(
+                    PlotResultDescriptor {
+                        spatial_reference: vector_source.result_descriptor().spatial_reference,
+                    },
+                    self.params,
+                    vector_source,
+                )
+                .boxed()
             }
         })
     }
