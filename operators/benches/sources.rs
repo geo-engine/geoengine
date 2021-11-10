@@ -72,8 +72,6 @@ fn bench_raster_processor<
     ctx: &C,
     run_time: &tokio::runtime::Runtime,
 ) {
-    println!("Bench_name, query_name, tilesize_x, tilesize_y, query_time (ns), tiles_produced, pixels_produced, stream_collect_time (ns) ");
-
     for tiling_spec in list_of_tiling_specs {
         let operator = (tile_producing_operator_builderr)(*tiling_spec);
 
@@ -226,6 +224,8 @@ fn bench_tile_size() {
 }
 
 fn main() {
+    println!("Bench_name, query_name, tilesize_x, tilesize_y, query_time (ns), tiles_produced, pixels_produced, stream_collect_time (ns) ");
+
     bench_no_data_tiles();
     bench_tile_size();
 }
