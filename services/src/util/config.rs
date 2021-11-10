@@ -156,6 +156,21 @@ pub struct TilingSpecification {
     pub tile_shape_pixels_y: usize,
 }
 
+impl From<TilingSpecification> for geoengine_datatypes::raster::TilingSpecification {
+    fn from(ts: TilingSpecification) -> geoengine_datatypes::raster::TilingSpecification {
+        geoengine_datatypes::raster::TilingSpecification {
+            origin_coordinate: geoengine_datatypes::primitives::Coordinate2D::new(
+                ts.origin_coordinate_x,
+                ts.origin_coordinate_y,
+            ),
+            tile_size_in_pixels: geoengine_datatypes::raster::GridShape2D::from([
+                ts.tile_shape_pixels_y,
+                ts.tile_shape_pixels_x,
+            ]),
+        }
+    }
+}
+
 impl ConfigElement for TilingSpecification {
     const KEY: &'static str = "raster.tiling_specification";
 }

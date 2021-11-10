@@ -446,7 +446,7 @@ mod tests {
     use geoengine_datatypes::primitives::{
         FeatureData, Measurement, MultiPoint, SpatialPartition2D, SpatialResolution, TimeInterval,
     };
-    use geoengine_datatypes::raster::RasterDataType;
+    use geoengine_datatypes::raster::{GridShape, RasterDataType, TilingSpecification};
     use geoengine_datatypes::spatial_reference::SpatialReference;
     use geoengine_operators::engine::{MultipleRasterSources, PlotOperator, TypedOperator};
     use geoengine_operators::engine::{RasterOperator, RasterResultDescriptor, VectorOperator};
@@ -903,7 +903,13 @@ mod tests {
 
     #[tokio::test]
     async fn dataset_from_workflow() {
-        let ctx = InMemoryContext::default();
+        let exe_ctx_tiling_spec = TilingSpecification {
+            origin_coordinate: (0., 0.).into(),
+            tile_size_in_pixels: GridShape::new([600, 600]),
+        };
+
+        // override the pixel size since this test was designed for 600 x 600 pixel tiles
+        let ctx = InMemoryContext::new_with_context_spec(exe_ctx_tiling_spec, Default::default());
 
         let session_id = ctx.default_session_ref().await.id();
 

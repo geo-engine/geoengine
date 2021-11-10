@@ -605,6 +605,7 @@ mod tests {
     use actix_web::{http::Method, test};
     use actix_web_httpauth::headers::authorization::Bearer;
     use geoengine_datatypes::dataset::DatasetId;
+    use geoengine_datatypes::raster::{GridShape2D, TilingSpecification};
     use geoengine_datatypes::test_data;
     use geoengine_operators::engine::TypedOperator;
     use geoengine_operators::source::CsvSourceParameters;
@@ -1056,7 +1057,14 @@ x;y
 
     #[tokio::test]
     async fn raster_vector_join() {
-        let ctx = InMemoryContext::default();
+        let exe_ctx_tiling_spec = TilingSpecification {
+            origin_coordinate: (0., 0.).into(),
+            tile_size_in_pixels: GridShape2D::new([600, 600]),
+        };
+
+        // override the pixel size since this test was designed for 600 x 600 pixel tiles
+        let ctx = InMemoryContext::new_with_context_spec(exe_ctx_tiling_spec, Default::default());
+
         let session_id = ctx.default_session_ref().await.id();
 
         let ndvi_id =

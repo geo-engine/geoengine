@@ -6,13 +6,14 @@ use super::{Session, SimpleContext};
 use crate::contexts::{ExecutionContextImpl, QueryContextImpl, SessionId};
 use crate::datasets::in_memory::HashMapDatasetDb;
 use crate::error::Error;
-use crate::util::config;
 use crate::{
     datasets::add_from_directory::{add_datasets_from_directory, add_providers_from_directory},
     error::Result,
 };
 use crate::{projects::hashmap_projectdb::HashMapProjectDb, workflows::registry::HashMapRegistry};
 use async_trait::async_trait;
+use geoengine_datatypes::raster::TilingSpecification;
+use geoengine_operators::engine::ChunkByteSize;
 use geoengine_operators::util::create_rayon_thread_pool;
 use rayon::ThreadPool;
 use tokio::sync::{RwLock, RwLockReadGuard, RwLockWriteGuard};
@@ -25,6 +26,8 @@ pub struct InMemoryContext {
     dataset_db: Db<HashMapDatasetDb>,
     session: Db<SimpleSession>,
     thread_pool: Arc<ThreadPool>,
+    exe_ctx_tiling_spec: TilingSpecification,
+    query_ctx_chunk_size: ChunkByteSize,
 }
 
 impl Default for InMemoryContext {
@@ -35,19 +38,38 @@ impl Default for InMemoryContext {
             dataset_db: Default::default(),
             session: Default::default(),
             thread_pool: create_rayon_thread_pool(0),
+            exe_ctx_tiling_spec: Default::default(),
+            query_ctx_chunk_size: Default::default(),
         }
     }
 }
 
 impl InMemoryContext {
-    #[allow(clippy::too_many_lines)]
-    pub async fn new_with_data(dataset_defs_path: PathBuf, provider_defs_path: PathBuf) -> Self {
+    pub async fn new_with_data(
+        dataset_defs_path: PathBuf,
+        provider_defs_path: PathBuf,
+        exe_ctx_tiling_spec: TilingSpecification,
+        query_ctx_chunk_size: ChunkByteSize,
+    ) -> Self {
         let mut db = HashMapDatasetDb::default();
         add_datasets_from_directory(&mut db, dataset_defs_path).await;
         add_providers_from_directory(&mut db, provider_defs_path).await;
 
         InMemoryContext {
+            exe_ctx_tiling_spec,
+            query_ctx_chunk_size,
             dataset_db: Arc::new(RwLock::new(db)),
+            ..Default::default()
+        }
+    }
+
+    pub fn new_with_context_spec(
+        exe_ctx_tiling_spec: TilingSpecification,
+        query_ctx_chunk_size: ChunkByteSize,
+    ) -> Self {
+        InMemoryContext {
+            exe_ctx_tiling_spec,
+            query_ctx_chunk_size,
             ..Default::default()
         }
     }
@@ -93,19 +115,21 @@ impl Context for InMemoryContext {
     }
 
     fn query_context(&self) -> Result<Self::QueryContext> {
-        // TODO: load config only once
         Ok(QueryContextImpl {
-            chunk_byte_size: config::get_config_element::<config::QueryContext>()?.chunk_byte_size,
+            chunk_byte_size: self.query_ctx_chunk_size,
             thread_pool: self.thread_pool.clone(),
         })
     }
 
     fn execution_context(&self, session: SimpleSession) -> Result<Self::ExecutionContext> {
-        Ok(ExecutionContextImpl::<SimpleSession, HashMapDatasetDb> {
-            dataset_db: self.dataset_db.clone(),
-            thread_pool: self.thread_pool.clone(),
-            session,
-        })
+        Ok(
+            ExecutionContextImpl::<SimpleSession, HashMapDatasetDb>::new(
+                self.dataset_db.clone(),
+                self.thread_pool.clone(),
+                session,
+                self.exe_ctx_tiling_spec,
+            ),
+        )
     }
 
     async fn session_by_id(&self, session_id: SessionId) -> Result<Self::Session> {

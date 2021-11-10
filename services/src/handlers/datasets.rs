@@ -721,10 +721,11 @@ mod tests {
     };
     use geoengine_datatypes::dataset::{DatasetId, InternalDatasetId};
     use geoengine_datatypes::primitives::{BoundingBox2D, SpatialResolution};
+    use geoengine_datatypes::raster::{GridShape2D, TilingSpecification};
     use geoengine_datatypes::spatial_reference::SpatialReferenceOption;
     use geoengine_operators::engine::{
-        InitializedVectorOperator, QueryProcessor, StaticMetaData, VectorOperator,
-        VectorResultDescriptor,
+        ExecutionContext, InitializedVectorOperator, QueryProcessor, StaticMetaData,
+        VectorOperator, VectorResultDescriptor,
     };
     use geoengine_operators::source::{
         OgrSource, OgrSourceDataset, OgrSourceErrorSpec, OgrSourceParameters,
@@ -988,13 +989,10 @@ mod tests {
         dataset.id
     }
 
-    async fn make_ogr_source<C: Context>(
-        ctx: &C,
+    async fn make_ogr_source<C: ExecutionContext>(
+        exe_ctx: &C,
         dataset_id: DatasetId,
-        session: C::Session,
     ) -> Result<Box<dyn InitializedVectorOperator>> {
-        let exe_ctx = ctx.execution_context(session.clone())?;
-
         OgrSource {
             params: OgrSourceParameters {
                 dataset: dataset_id,
@@ -1002,7 +1000,7 @@ mod tests {
             },
         }
         .boxed()
-        .initialize(&exe_ctx)
+        .initialize(exe_ctx)
         .await
         .map_err(Into::into)
     }
@@ -1011,7 +1009,14 @@ mod tests {
     async fn create_dataset() -> Result<()> {
         let mut test_data = TestDataUploads::default(); // remember created folder and remove them on drop
 
-        let ctx = InMemoryContext::default();
+        let exe_ctx_tiling_spec = TilingSpecification {
+            origin_coordinate: (0., 0.).into(),
+            tile_size_in_pixels: GridShape2D::new([600, 600]),
+        };
+
+        // override the pixel size since this test was designed for 600 x 600 pixel tiles
+        let ctx = InMemoryContext::new_with_context_spec(exe_ctx_tiling_spec, Default::default());
+
         let session = ctx.default_session_ref().await;
         let session_id = session.id();
 
@@ -1019,11 +1024,13 @@ mod tests {
         test_data.uploads.push(upload_id);
 
         let dataset_id = construct_dataset_from_upload(ctx.clone(), upload_id, session_id).await;
+        let exe_ctx = ctx.execution_context(session.clone())?;
 
-        let source = make_ogr_source(&ctx, dataset_id, session.clone()).await?;
+        let source = make_ogr_source(&exe_ctx, dataset_id).await?;
 
         let query_processor = source.query_processor()?.multi_point().unwrap();
         let query_ctx = ctx.query_context()?;
+
         let query = query_processor
             .query(
                 VectorQueryRectangle {

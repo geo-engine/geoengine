@@ -591,8 +591,8 @@ mod tests {
     use super::*;
 
     use crate::engine::{
-        MockExecutionContext, MockQueryContext, RasterOperator, RasterResultDescriptor,
-        StaticMetaData, VectorOperator, VectorResultDescriptor,
+        ChunkByteSize, MockExecutionContext, MockQueryContext, RasterOperator,
+        RasterResultDescriptor, StaticMetaData, VectorOperator, VectorResultDescriptor,
     };
     use crate::mock::{MockFeatureCollectionSource, MockRasterSource, MockRasterSourceParams};
     use crate::source::{
@@ -773,7 +773,7 @@ mod tests {
                     time_interval: TimeInterval::default(),
                     spatial_resolution: SpatialResolution::one(),
                 },
-                &MockQueryContext::new(0),
+                &MockQueryContext::new(ChunkByteSize::MIN),
             )
             .await
             .unwrap();
@@ -821,7 +821,7 @@ mod tests {
                     time_interval: TimeInterval::default(),
                     spatial_resolution: SpatialResolution::one(),
                 },
-                &MockQueryContext::new(0),
+                &MockQueryContext::new(ChunkByteSize::MIN),
             )
             .await
             .unwrap();
@@ -885,7 +885,7 @@ mod tests {
                     time_interval: TimeInterval::default(),
                     spatial_resolution: SpatialResolution::one(),
                 },
-                &MockQueryContext::new(0),
+                &MockQueryContext::new(ChunkByteSize::MIN),
             )
             .await
             .unwrap();
@@ -953,7 +953,7 @@ mod tests {
                     time_interval: TimeInterval::default(),
                     spatial_resolution: SpatialResolution::one(),
                 },
-                &MockQueryContext::new(0),
+                &MockQueryContext::new(ChunkByteSize::MIN),
             )
             .await
             .unwrap();
@@ -1105,7 +1105,7 @@ mod tests {
                     time_interval: TimeInterval::default(),
                     spatial_resolution: SpatialResolution::one(),
                 },
-                &MockQueryContext::new(0),
+                &MockQueryContext::new(ChunkByteSize::MIN),
             )
             .await
             .unwrap();
@@ -1162,7 +1162,7 @@ mod tests {
                     time_interval: TimeInterval::default(),
                     spatial_resolution: SpatialResolution::one(),
                 },
-                &MockQueryContext::new(0),
+                &MockQueryContext::new(ChunkByteSize::MIN),
             )
             .await
             .unwrap();
@@ -1219,7 +1219,7 @@ mod tests {
                     time_interval: TimeInterval::default(),
                     spatial_resolution: SpatialResolution::one(),
                 },
-                &MockQueryContext::new(0),
+                &MockQueryContext::new(ChunkByteSize::MIN),
             )
             .await
             .unwrap();
@@ -1293,7 +1293,7 @@ mod tests {
                     .unwrap(),
                     spatial_resolution: SpatialResolution::one(),
                 },
-                &MockQueryContext::default(),
+                &MockQueryContext::new(ChunkByteSize::MIN),
             )
             .await
             .unwrap();

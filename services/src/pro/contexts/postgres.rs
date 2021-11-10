@@ -7,7 +7,6 @@ use crate::pro::projects::ProjectPermission;
 use crate::pro::users::{UserDb, UserId, UserSession};
 use crate::pro::workflows::postgres_workflow_registry::PostgresWorkflowRegistry;
 use crate::projects::ProjectId;
-use crate::util::config;
 use crate::{
     contexts::{Context, Db},
     pro::users::PostgresUserDb,
@@ -23,6 +22,8 @@ use bb8_postgres::{
     tokio_postgres::{error::SqlState, tls::MakeTlsConnect, tls::TlsConnect, Config, Socket},
     PostgresConnectionManager,
 };
+use geoengine_datatypes::raster::TilingSpecification;
+use geoengine_operators::engine::ChunkByteSize;
 use geoengine_operators::util::create_rayon_thread_pool;
 use log::{debug, warn};
 use rayon::ThreadPool;
@@ -49,6 +50,8 @@ where
     workflow_registry: Db<PostgresWorkflowRegistry<Tls>>,
     dataset_db: Db<PostgresDatasetDb<Tls>>,
     thread_pool: Arc<ThreadPool>,
+    exe_ctx_tiling_spec: TilingSpecification,
+    query_ctx_chunk_size: ChunkByteSize,
 }
 
 impl<Tls> PostgresContext<Tls>
@@ -59,6 +62,15 @@ where
     <<Tls as MakeTlsConnect<Socket>>::TlsConnect as TlsConnect<Socket>>::Future: Send,
 {
     pub async fn new(config: Config, tls: Tls) -> Result<Self> {
+        Self::new_with_context_spec(config, tls, Default::default(), Default::default()).await
+    }
+
+    pub async fn new_with_context_spec(
+        config: Config,
+        tls: Tls,
+        exe_ctx_tiling_spec: TilingSpecification,
+        query_ctx_chunk_size: ChunkByteSize,
+    ) -> Result<Self> {
         let pg_mgr = PostgresConnectionManager::new(config, tls);
 
         let pool = Pool::builder().build(pg_mgr).await?;
@@ -71,6 +83,8 @@ where
             workflow_registry: Arc::new(RwLock::new(PostgresWorkflowRegistry::new(pool.clone()))),
             dataset_db: Arc::new(RwLock::new(PostgresDatasetDb::new(pool.clone()))),
             thread_pool: create_rayon_thread_pool(0),
+            exe_ctx_tiling_spec,
+            query_ctx_chunk_size,
         })
     }
 
@@ -79,6 +93,8 @@ where
         tls: Tls,
         dataset_defs_path: PathBuf,
         provider_defs_path: PathBuf,
+        exe_ctx_tiling_spec: TilingSpecification,
+        query_ctx_chunk_size: ChunkByteSize,
     ) -> Result<Self> {
         let pg_mgr = PostgresConnectionManager::new(config, tls);
 
@@ -97,6 +113,8 @@ where
             workflow_registry: Arc::new(RwLock::new(PostgresWorkflowRegistry::new(pool.clone()))),
             dataset_db: Arc::new(RwLock::new(dataset_db)),
             thread_pool: create_rayon_thread_pool(0),
+            exe_ctx_tiling_spec,
+            query_ctx_chunk_size,
         })
     }
 
@@ -417,10 +435,10 @@ where
 
     fn query_context(&self) -> Result<Self::QueryContext> {
         // TODO: load config only once
-        Ok(QueryContextImpl {
-            chunk_byte_size: config::get_config_element::<config::QueryContext>()?.chunk_byte_size,
-            thread_pool: self.thread_pool.clone(),
-        })
+        Ok(QueryContextImpl::new(
+            self.query_ctx_chunk_size,
+            self.thread_pool.clone(),
+        ))
     }
 
     fn execution_context(&self, session: UserSession) -> Result<Self::ExecutionContext> {
@@ -429,6 +447,7 @@ where
                 self.dataset_db.clone(),
                 self.thread_pool.clone(),
                 session,
+                self.exe_ctx_tiling_spec,
             ),
         )
     }

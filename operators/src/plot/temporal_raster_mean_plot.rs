@@ -245,7 +245,10 @@ mod tests {
     use super::*;
 
     use crate::{
-        engine::{MockExecutionContext, MockQueryContext, RasterOperator, RasterResultDescriptor},
+        engine::{
+            ChunkByteSize, MockExecutionContext, MockQueryContext, RasterOperator,
+            RasterResultDescriptor,
+        },
         source::GdalSource,
     };
     use crate::{
@@ -356,7 +359,7 @@ mod tests {
                     time_interval: TimeInterval::default(),
                     spatial_resolution: SpatialResolution::one(),
                 },
-                &MockQueryContext::new(0),
+                &MockQueryContext::new(ChunkByteSize::MIN),
             )
             .await
             .unwrap();
@@ -466,7 +469,7 @@ mod tests {
                     time_interval: TimeInterval::default(),
                     spatial_resolution: SpatialResolution::one(),
                 },
-                &MockQueryContext::new(0),
+                &MockQueryContext::new(ChunkByteSize::MIN),
             )
             .await
             .unwrap();

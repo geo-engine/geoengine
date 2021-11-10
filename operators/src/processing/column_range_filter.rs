@@ -143,7 +143,7 @@ where
         });
 
         let merged_chunks_stream =
-            FeatureCollectionChunkMerger::new(filter_stream.fuse(), ctx.chunk_byte_size());
+            FeatureCollectionChunkMerger::new(filter_stream.fuse(), ctx.chunk_byte_size().into());
 
         Ok(merged_chunks_stream.boxed())
     }
@@ -246,7 +246,7 @@ mod tests {
             spatial_resolution: SpatialResolution::zero_point_one(),
         };
 
-        let ctx = MockQueryContext::new(2 * std::mem::size_of::<Coordinate2D>());
+        let ctx = MockQueryContext::new((2 * std::mem::size_of::<Coordinate2D>()).into());
 
         let stream = point_processor.query(query_rectangle, &ctx).await.unwrap();
 

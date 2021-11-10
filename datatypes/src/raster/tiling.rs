@@ -30,6 +30,15 @@ impl TilingSpecification {
     }
 }
 
+impl Default for TilingSpecification {
+    fn default() -> Self {
+        Self {
+            origin_coordinate: Coordinate2D::new(0., 0.),
+            tile_size_in_pixels: GridShape2D::new([512, 512]),
+        }
+    }
+}
+
 /// A provider of tile (size) information for a raster/grid
 #[derive(Debug, Serialize, Deserialize, Clone, Copy)]
 pub struct TilingStrategy {

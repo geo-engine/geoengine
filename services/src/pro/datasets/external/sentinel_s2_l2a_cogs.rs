@@ -557,7 +557,7 @@ mod tests {
     use futures::StreamExt;
     use geoengine_datatypes::primitives::{SpatialPartition2D, SpatialResolution};
     use geoengine_operators::{
-        engine::{MockExecutionContext, MockQueryContext, RasterOperator},
+        engine::{ChunkByteSize, MockExecutionContext, MockQueryContext, RasterOperator},
         source::{FileNotFoundHandling, GdalSource, GdalSourceParameters},
     };
     use httptest::{
@@ -710,7 +710,7 @@ mod tests {
             ),
         };
 
-        let ctx = MockQueryContext::new(usize::MAX);
+        let ctx = MockQueryContext::new(ChunkByteSize::MAX);
 
         let result = processor
             .raster_query(query, &ctx)
