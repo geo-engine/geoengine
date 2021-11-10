@@ -4,11 +4,11 @@ use std::{
     path::Path,
 };
 
+use crate::datasets::listing::DatasetProvider;
 use crate::datasets::storage::{AddDataset, DatasetStore, MetaDataSuggestion, SuggestMetaData};
 use crate::datasets::storage::{DatasetProviderDb, DatasetProviderListOptions};
 use crate::datasets::upload::UploadRootPath;
 use crate::datasets::{
-    listing::DatasetProvider,
     storage::{CreateDataset, MetaDataDefinition},
     upload::Upload,
 };
@@ -88,7 +88,7 @@ async fn list_external_datasets_handler<C: Context>(
         .await
         .dataset_provider(&session, provider.into_inner())
         .await?
-        .list(options)
+        .list(options) // TODO: authorization
         .await?;
     Ok(web::Json(list))
 }
@@ -123,12 +123,12 @@ async fn list_external_datasets_handler<C: Context>(
 /// ]
 /// ```
 async fn list_datasets_handler<C: Context>(
-    _session: C::Session,
+    session: C::Session,
     ctx: web::Data<C>,
     options: web::Query<DatasetListOptions>,
 ) -> Result<impl Responder> {
     let options = options.into_inner().validated()?;
-    let list = ctx.dataset_db_ref().await.list(options).await?;
+    let list = ctx.dataset_db_ref().await.list(&session, options).await?;
     Ok(web::Json(list))
 }
 
@@ -160,13 +160,13 @@ async fn list_datasets_handler<C: Context>(
 /// ```
 async fn get_dataset_handler<C: Context>(
     dataset: web::Path<InternalDatasetId>,
-    _session: C::Session,
+    session: C::Session,
     ctx: web::Data<C>,
 ) -> Result<impl Responder> {
     let dataset = ctx
         .dataset_db_ref()
         .await
-        .load(&dataset.into_inner().into())
+        .load(&session, &dataset.into_inner().into())
         .await?;
     Ok(web::Json(dataset))
 }

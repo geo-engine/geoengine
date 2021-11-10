@@ -10,7 +10,6 @@ use url::Url;
 use geoengine_datatypes::primitives::{AxisAlignedRectangle, SpatialPartition2D};
 use geoengine_datatypes::{primitives::SpatialResolution, spatial_reference::SpatialReference};
 
-use crate::contexts::MockableSession;
 use crate::error::Result;
 use crate::error::{self, Error};
 use crate::handlers::spatial_references::{spatial_reference_specification, AxisOrder};
@@ -39,17 +38,17 @@ async fn wcs_handler<C: Context>(
     workflow: web::Path<WorkflowId>,
     request: QueryEx<WcsRequest>,
     ctx: web::Data<C>,
-    _session: C::Session,
+    session: C::Session,
 ) -> Result<impl Responder> {
     match request.into_inner() {
         WcsRequest::GetCapabilities(request) => {
             get_capabilities(&request, ctx.get_ref(), workflow.into_inner()).await
         }
         WcsRequest::DescribeCoverage(request) => {
-            describe_coverage(&request, ctx.get_ref(), workflow.into_inner()).await
+            describe_coverage(&request, ctx.get_ref(), session, workflow.into_inner()).await
         }
         WcsRequest::GetCoverage(request) => {
-            get_coverage(&request, ctx.get_ref(), workflow.into_inner()).await
+            get_coverage(&request, ctx.get_ref(), session, workflow.into_inner()).await
         }
     }
 }
@@ -140,6 +139,7 @@ async fn get_capabilities<C: Context>(
 async fn describe_coverage<C: Context>(
     request: &DescribeCoverage,
     ctx: &C,
+    session: C::Session,
     endpoint: WorkflowId,
 ) -> Result<HttpResponse> {
     info!("{:?}", request);
@@ -160,7 +160,7 @@ async fn describe_coverage<C: Context>(
 
     let workflow = ctx.workflow_registry_ref().await.load(&identifiers).await?;
 
-    let exe_ctx = ctx.execution_context(C::Session::mock())?; // TODO: use real session
+    let exe_ctx = ctx.execution_context(session)?;
     let operator = workflow
         .operator
         .get_raster()
@@ -248,6 +248,7 @@ async fn describe_coverage<C: Context>(
 async fn get_coverage<C: Context>(
     request: &GetCoverage,
     ctx: &C,
+    session: C::Session,
     endpoint: WorkflowId,
 ) -> Result<HttpResponse> {
     info!("{:?}", request);
@@ -287,8 +288,7 @@ async fn get_coverage<C: Context>(
 
     let operator = workflow.operator.get_raster().context(error::Operator)?;
 
-    // TODO: use correct session when WCS uses authenticated access
-    let execution_context = ctx.execution_context(C::Session::mock())?;
+    let execution_context = ctx.execution_context(session)?;
 
     let initialized = operator
         .clone()

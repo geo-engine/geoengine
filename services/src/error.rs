@@ -2,7 +2,10 @@ use crate::handlers::ErrorResponse;
 use crate::workflows::workflow::WorkflowId;
 use actix_web::http::StatusCode;
 use actix_web::HttpResponse;
-use geoengine_datatypes::{dataset::DatasetProviderId, spatial_reference::SpatialReferenceOption};
+use geoengine_datatypes::{
+    dataset::{DatasetId, DatasetProviderId},
+    spatial_reference::SpatialReferenceOption,
+};
 use snafu::Snafu;
 use strum::IntoStaticStr;
 
@@ -137,6 +140,25 @@ pub enum Error {
     UnknownDatasetId,
     UnknownProviderId,
     MissingDatasetId,
+
+    #[snafu(display("Permission denied for dataset with id {:?}", dataset))]
+    DatasetPermissionDenied {
+        dataset: DatasetId,
+    },
+
+    #[snafu(display("Updating permission ({}, {:?}, {}) denied", role, dataset, permission))]
+    UpateDatasetPermission {
+        role: String,
+        dataset: DatasetId,
+        permission: String,
+    },
+
+    #[snafu(display("Permission ({}, {:?}, {}) already exists", role, dataset, permission))]
+    DuplicateDatasetPermission {
+        role: String,
+        dataset: DatasetId,
+        permission: String,
+    },
 
     #[snafu(display("Parameter {} must have length between {} and {}", parameter, min, max))]
     InvalidStringLength {
@@ -315,6 +337,7 @@ impl From<bb8_postgres::bb8::RunError<<bb8_postgres::PostgresConnectionManager<b
     }
 }
 
+// TODO: remove automatic conversion to our Error because we do not want to leak database internals in the API
 #[cfg(feature = "postgres")]
 impl From<bb8_postgres::tokio_postgres::error::Error> for Error {
     fn from(e: bb8_postgres::tokio_postgres::error::Error) -> Self {
