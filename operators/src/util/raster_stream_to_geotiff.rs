@@ -47,7 +47,7 @@ where
     )
     .await?;
 
-    let bytes = gdal::vsi::get_vsi_mem_file_bytes_owned(&file_path.to_string_lossy())?;
+    let bytes = gdal::vsi::get_vsi_mem_file_bytes_owned(file_path)?;
 
     Ok(bytes)
 }
@@ -134,10 +134,8 @@ fn gdal_writer<T: Pixel + GdalType>(
         },
     ];
 
-    let mut dataset = driver.create_with_band_type_with_options::<T>(
-        file_path.to_str().ok_or(Error::InvalidGdalFilePath {
-            file_path: file_path.to_owned(),
-        })?,
+    let mut dataset = driver.create_with_band_type_with_options::<T, _>(
+        file_path,
         width as isize,
         height as isize,
         1,
