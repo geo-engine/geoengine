@@ -498,14 +498,13 @@ mod tests {
             .await
             .unwrap();
 
-        assert!(dbg!(
-            ctx.project_db()
-                .write()
-                .await
-                .load(&target_user_session, project)
-                .await
-        )
-        .is_err());
+        assert!(ctx
+            .project_db()
+            .write()
+            .await
+            .load(&target_user_session, project)
+            .await
+            .is_err());
     }
 
     #[tokio::test]

@@ -10,9 +10,9 @@ use url::Url;
 use geoengine_datatypes::primitives::{AxisAlignedRectangle, SpatialPartition2D};
 use geoengine_datatypes::{primitives::SpatialResolution, spatial_reference::SpatialReference};
 
-use crate::contexts::MockableSession;
 use crate::error::Result;
 use crate::error::{self, Error};
+use crate::handlers::spatial_references::{spatial_reference_specification, AxisOrder};
 use crate::handlers::Context;
 use crate::ogc::wcs::request::{DescribeCoverage, GetCapabilities, GetCoverage, WcsRequest};
 use crate::util::config;
@@ -38,16 +38,18 @@ async fn wcs_handler<C: Context>(
     workflow: web::Path<WorkflowId>,
     request: QueryEx<WcsRequest>,
     ctx: web::Data<C>,
-    _session: C::Session,
+    session: C::Session,
 ) -> Result<impl Responder> {
     match request.into_inner() {
         WcsRequest::GetCapabilities(request) => {
             get_capabilities(&request, ctx.get_ref(), workflow.into_inner()).await
         }
         WcsRequest::DescribeCoverage(request) => {
-            describe_coverage(&request, ctx.get_ref(), workflow.into_inner()).await
+            describe_coverage(&request, ctx.get_ref(), session, workflow.into_inner()).await
         }
-        WcsRequest::GetCoverage(request) => get_coverage(&request, ctx.get_ref()).await,
+        WcsRequest::GetCoverage(request) => {
+            get_coverage(&request, ctx.get_ref(), session, workflow.into_inner()).await
+        }
     }
 }
 
@@ -137,17 +139,28 @@ async fn get_capabilities<C: Context>(
 async fn describe_coverage<C: Context>(
     request: &DescribeCoverage,
     ctx: &C,
-    workflow_id: WorkflowId,
+    session: C::Session,
+    endpoint: WorkflowId,
 ) -> Result<HttpResponse> {
     info!("{:?}", request);
 
+    let identifiers = WorkflowId::from_str(&request.identifiers)?;
+
+    ensure!(
+        endpoint == identifiers,
+        error::WCSEndpointIdentifiersMissmatch {
+            endpoint,
+            identifiers
+        }
+    );
+
     // TODO: validate request (version)?
 
-    let wcs_url = wcs_url(workflow_id)?;
+    let wcs_url = wcs_url(identifiers)?;
 
-    let workflow = ctx.workflow_registry_ref().await.load(&workflow_id).await?;
+    let workflow = ctx.workflow_registry_ref().await.load(&identifiers).await?;
 
-    let exe_ctx = ctx.execution_context(C::Session::mock())?; // TODO: use real session
+    let exe_ctx = ctx.execution_context(session)?;
     let operator = workflow
         .operator
         .get_raster()
@@ -166,22 +179,24 @@ async fn describe_coverage<C: Context>(
         .area_of_use_projected()
         .context(error::DataType)?;
 
-    // TODO: handle axis ordering properly
     let (bbox_ll_0, bbox_ll_1, bbox_ur_0, bbox_ur_1) =
-        if spatial_reference == SpatialReference::epsg_4326() {
-            (
-                area_of_use.lower_left().y,
-                area_of_use.lower_left().x,
-                area_of_use.upper_right().y,
-                area_of_use.upper_right().x,
-            )
-        } else {
-            (
+        match spatial_reference_specification(&spatial_reference.proj_string()?)?
+            .axis_order
+            .ok_or(Error::AxisOrderingNotKnownForSrs {
+                srs_string: spatial_reference.srs_string(),
+            })? {
+            AxisOrder::EastNorth => (
                 area_of_use.lower_left().x,
                 area_of_use.lower_left().y,
                 area_of_use.upper_right().x,
                 area_of_use.upper_right().y,
-            )
+            ),
+            AxisOrder::NorthEast => (
+                area_of_use.lower_left().y,
+                area_of_use.lower_left().x,
+                area_of_use.upper_right().y,
+                area_of_use.upper_right().x,
+            ),
         };
 
     let mock = format!(
@@ -215,7 +230,7 @@ async fn describe_coverage<C: Context>(
         </wcs:CoverageDescription>
     </wcs:CoverageDescriptions>"#,
         wcs_url = wcs_url,
-        workflow_id = workflow_id,
+        workflow_id = identifiers,
         srs_authority = spatial_reference.authority(),
         srs_code = spatial_reference.code(),
         origin_x = area_of_use.upper_left().x,
@@ -230,8 +245,24 @@ async fn describe_coverage<C: Context>(
 }
 
 #[allow(clippy::too_many_lines)]
-async fn get_coverage<C: Context>(request: &GetCoverage, ctx: &C) -> Result<HttpResponse> {
+async fn get_coverage<C: Context>(
+    request: &GetCoverage,
+    ctx: &C,
+    session: C::Session,
+    endpoint: WorkflowId,
+) -> Result<HttpResponse> {
     info!("{:?}", request);
+
+    let identifier = WorkflowId::from_str(&request.identifier)?;
+
+    ensure!(
+        endpoint == identifier,
+        error::WCSEndpointIdentifierMissmatch {
+            endpoint,
+            identifier
+        }
+    );
+
     ensure!(
         request.version == "1.1.1" || request.version == "1.1.0",
         error::WcsVersionNotSupported
@@ -241,7 +272,7 @@ async fn get_coverage<C: Context>(request: &GetCoverage, ctx: &C) -> Result<Http
 
     if let Some(gridorigin) = request.gridorigin {
         ensure!(
-            gridorigin.coordinate(request.gridbasecrs) == request_partition.upper_left(),
+            gridorigin.coordinate(request.gridbasecrs)? == request_partition.upper_left(),
             error::WcsGridOriginMustEqualBoundingboxUpperLeft
         );
     }
@@ -253,16 +284,11 @@ async fn get_coverage<C: Context>(request: &GetCoverage, ctx: &C) -> Result<Http
         );
     }
 
-    let workflow = ctx
-        .workflow_registry_ref()
-        .await
-        .load(&WorkflowId::from_str(&request.identifier)?)
-        .await?;
+    let workflow = ctx.workflow_registry_ref().await.load(&identifier).await?;
 
     let operator = workflow.operator.get_raster().context(error::Operator)?;
 
-    // TODO: use correct session when WCS uses authenticated access
-    let execution_context = ctx.execution_context(C::Session::mock())?;
+    let execution_context = ctx.execution_context(session)?;
 
     let initialized = operator
         .clone()
@@ -362,6 +388,7 @@ mod tests {
     use actix_web::http::header;
     use actix_web::test;
     use actix_web_httpauth::headers::authorization::Bearer;
+    use geoengine_datatypes::raster::{GridShape2D, TilingSpecification};
 
     #[tokio::test]
     async fn get_capabilities() {
@@ -511,7 +538,13 @@ mod tests {
 
     #[tokio::test]
     async fn get_coverage() {
-        let ctx = InMemoryContext::default();
+        let exe_ctx_tiling_spec = TilingSpecification {
+            origin_coordinate: (0., 0.).into(),
+            tile_size_in_pixels: GridShape2D::new([600, 600]),
+        };
+
+        // override the pixel size since this test was designed for 600 x 600 pixel tiles
+        let ctx = InMemoryContext::new_with_context_spec(exe_ctx_tiling_spec, Default::default());
         let session_id = ctx.default_session_ref().await.id();
 
         let (_, id) = register_ndvi_workflow_helper(&ctx).await;

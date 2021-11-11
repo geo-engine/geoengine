@@ -107,6 +107,7 @@ pub struct Web {
     #[serde(deserialize_with = "deserialize_base_url_option", default)]
     pub external_address: Option<url::Url>,
     pub backend: Backend,
+    pub version_api: bool,
 }
 
 impl ConfigElement for Web {
@@ -153,6 +154,21 @@ pub struct TilingSpecification {
     pub origin_coordinate_y: f64,
     pub tile_shape_pixels_x: usize,
     pub tile_shape_pixels_y: usize,
+}
+
+impl From<TilingSpecification> for geoengine_datatypes::raster::TilingSpecification {
+    fn from(ts: TilingSpecification) -> geoengine_datatypes::raster::TilingSpecification {
+        geoengine_datatypes::raster::TilingSpecification {
+            origin_coordinate: geoengine_datatypes::primitives::Coordinate2D::new(
+                ts.origin_coordinate_x,
+                ts.origin_coordinate_y,
+            ),
+            tile_size_in_pixels: geoengine_datatypes::raster::GridShape2D::from([
+                ts.tile_shape_pixels_y,
+                ts.tile_shape_pixels_x,
+            ]),
+        }
+    }
 }
 
 impl ConfigElement for TilingSpecification {

@@ -3,17 +3,18 @@ use crate::{
     adapters::{fold_by_coordinate_lookup_future, RasterSubQueryAdapter, TileReprojectionSubQuery},
     engine::{
         ExecutionContext, InitializedRasterOperator, InitializedVectorOperator, Operator,
-        QueryContext, QueryProcessor, QueryRectangle, RasterOperator, RasterQueryProcessor,
-        RasterQueryRectangle, RasterResultDescriptor, SingleRasterOrVectorSource,
-        TypedRasterQueryProcessor, TypedVectorQueryProcessor, VectorOperator, VectorQueryProcessor,
-        VectorQueryRectangle, VectorResultDescriptor,
+        QueryContext, QueryProcessor, RasterOperator, RasterQueryProcessor, RasterQueryRectangle,
+        RasterResultDescriptor, SingleRasterOrVectorSource, TypedRasterQueryProcessor,
+        TypedVectorQueryProcessor, VectorOperator, VectorQueryProcessor, VectorQueryRectangle,
+        VectorResultDescriptor,
     },
-    error::{self, Error},
+    error,
     util::{input::RasterOrVectorOperator, Result},
 };
 use async_trait::async_trait;
-use futures::stream::{self, BoxStream};
+use futures::stream::BoxStream;
 use futures::StreamExt;
+use geoengine_datatypes::primitives::Coordinate2D;
 use geoengine_datatypes::{
     operations::reproject::{
         suggest_pixel_size_from_diag_cross_projected, CoordinateProjection, CoordinateProjector,
@@ -21,11 +22,9 @@ use geoengine_datatypes::{
     },
     primitives::{AxisAlignedRectangle, SpatialResolution},
     primitives::{BoundingBox2D, SpatialPartition2D},
-    raster::{GridOrEmpty, Pixel, RasterTile2D, TilingSpecification},
+    raster::{Pixel, RasterTile2D, TilingSpecification},
     spatial_reference::SpatialReference,
 };
-use geoengine_datatypes::{primitives::Coordinate2D, raster::EmptyGrid2D};
-use log::debug;
 use num_traits::AsPrimitive;
 use serde::{Deserialize, Serialize};
 use snafu::ResultExt;
@@ -72,7 +71,12 @@ impl VectorOperator for Reprojection {
     ) -> Result<Box<dyn InitializedVectorOperator>> {
         let vector_operator = match self.sources.source {
             RasterOrVectorOperator::Vector(operator) => operator,
-            RasterOrVectorOperator::Raster(_) => return Err(Error::InvalidOperatorType),
+            RasterOrVectorOperator::Raster(_) => {
+                return Err(error::Error::InvalidOperatorType {
+                    expected: "Vector".to_owned(),
+                    found: "Raster".to_owned(),
+                })
+            }
         };
 
         let vector_operator = vector_operator.initialize(context).await?;
@@ -229,7 +233,12 @@ impl RasterOperator for Reprojection {
     ) -> Result<Box<dyn InitializedRasterOperator>> {
         let raster_operator = match self.sources.source {
             RasterOrVectorOperator::Raster(operator) => operator,
-            RasterOrVectorOperator::Vector(_) => return Err(Error::InvalidOperatorType),
+            RasterOrVectorOperator::Vector(_) => {
+                return Err(error::Error::InvalidOperatorType {
+                    expected: "Raster".to_owned(),
+                    found: "Vector".to_owned(),
+                })
+            }
         };
 
         let raster_operator = raster_operator.initialize(context).await?;
@@ -481,25 +490,6 @@ where
 
         Ok(valid_bounds)
     }
-
-    /// create a stream of `EmptyTile`s for the given query rectangle
-    fn no_data_stream<'a>(
-        query: QueryRectangle<SpatialPartition2D>,
-        tiling_spec: TilingSpecification,
-        no_data_value: P,
-    ) -> BoxStream<'a, Result<RasterTile2D<P>>> {
-        let iter = tiling_spec
-            .strategy(query.spatial_resolution.x, -query.spatial_resolution.y)
-            .tile_information_iterator(query.spatial_bounds)
-            .map(move |tile| {
-                Ok(RasterTile2D::new_with_tile_info(
-                    query.time_interval,
-                    tile,
-                    GridOrEmpty::Empty(EmptyGrid2D::new(tile.tile_size_in_pixels, no_data_value)),
-                ))
-            });
-        stream::iter(iter).boxed()
-    }
 }
 
 #[async_trait]
@@ -516,29 +506,6 @@ where
         query: RasterQueryRectangle,
         ctx: &'a dyn QueryContext,
     ) -> Result<BoxStream<'a, Result<Self::Output>>> {
-        let srs_query_intersection = Self::valid_bounds::<SpatialPartition2D>(self.from, self.to)
-            .map(|bounds| (bounds, bounds.intersection(&query.spatial_bounds)));
-
-        // if query does not intersect with source area of use, return stream with `EmptyTile`s
-        let (valid_bounds, valid_qrect_bounds) = match srs_query_intersection {
-            Ok((srs_intersection, Some(qrect_intersection))) => {
-                (srs_intersection, qrect_intersection)
-            }
-            Ok((_, None))
-            | Err(Error::DataType {
-                source: geoengine_datatypes::error::Error::SpatialBoundsDoNotIntersect { .. },
-            }) => {
-                debug!("query not in valid srs bounds");
-
-                return Ok(Self::no_data_stream(
-                    query,
-                    self.tiling_spec,
-                    self.no_data_and_fill_value,
-                ));
-            }
-            Err(e) => return Err(e),
-        };
-
         let sub_query_spec = TileReprojectionSubQuery {
             in_srs: self.from,
             out_srs: self.to,
@@ -551,22 +518,17 @@ where
                 1, // TODO: use a configurable number of rows and cols, but only a resolution computed on a single tile seems to not lead to over estimates
                 1,
             )?,
-            valid_bounds,
+            valid_bounds: Self::valid_bounds(self.from, self.to)?,
         };
-        let s = RasterSubQueryAdapter::<'a, P, _, _>::new(
+
+        Ok(RasterSubQueryAdapter::<'a, P, _, _>::new(
             &self.source,
-            QueryRectangle {
-                spatial_bounds: valid_qrect_bounds,
-                time_interval: query.time_interval,
-                spatial_resolution: query.spatial_resolution,
-            },
+            query,
             self.tiling_spec,
             ctx,
             sub_query_spec,
-            Some(self.no_data_and_fill_value),
-        );
-
-        Ok(s.boxed())
+        )
+        .filter_and_fill(self.no_data_and_fill_value))
     }
 }
 
@@ -576,7 +538,7 @@ mod tests {
     use std::path::PathBuf;
 
     use crate::{
-        engine::{QueryRectangle, VectorOperator},
+        engine::{ChunkByteSize, QueryRectangle, VectorOperator},
         source::{
             FileNotFoundHandling, GdalDatasetGeoTransform, GdalDatasetParameters,
             GdalMetaDataRegular, GdalMetaDataStatic, GdalSource, GdalSourceParameters,
@@ -668,7 +630,7 @@ mod tests {
             time_interval: TimeInterval::default(),
             spatial_resolution: SpatialResolution::zero_point_one(),
         };
-        let ctx = MockQueryContext::new(usize::MAX);
+        let ctx = MockQueryContext::new(ChunkByteSize::MAX);
 
         let query = query_processor.query(query_rectangle, &ctx).await.unwrap();
 
@@ -737,7 +699,7 @@ mod tests {
             time_interval: TimeInterval::default(),
             spatial_resolution: SpatialResolution::zero_point_one(),
         };
-        let ctx = MockQueryContext::new(usize::MAX);
+        let ctx = MockQueryContext::new(ChunkByteSize::MAX);
 
         let query = query_processor.query(query_rectangle, &ctx).await.unwrap();
 
@@ -808,7 +770,7 @@ mod tests {
             time_interval: TimeInterval::default(),
             spatial_resolution: SpatialResolution::zero_point_one(),
         };
-        let ctx = MockQueryContext::new(usize::MAX);
+        let ctx = MockQueryContext::new(ChunkByteSize::MAX);
 
         let query = query_processor.query(query_rectangle, &ctx).await.unwrap();
 

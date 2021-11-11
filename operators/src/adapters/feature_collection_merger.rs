@@ -173,7 +173,7 @@ mod tests {
             time_interval: Default::default(),
             spatial_resolution: SpatialResolution::zero_point_one(),
         };
-        let cx = MockQueryContext::new(std::mem::size_of::<Coordinate2D>() * 2);
+        let cx = MockQueryContext::new((std::mem::size_of::<Coordinate2D>() * 2).into());
 
         let number_of_source_chunks = processor
             .query(qrect, &cx)
@@ -245,7 +245,7 @@ mod tests {
             time_interval: Default::default(),
             spatial_resolution: SpatialResolution::zero_point_one(),
         };
-        let cx = MockQueryContext::new(0);
+        let cx = MockQueryContext::new((0).into());
 
         let collections =
             FeatureCollectionChunkMerger::new(processor.query(qrect, &cx).await.unwrap().fuse(), 0)

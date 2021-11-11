@@ -1,5 +1,5 @@
 use crate::contexts::Session;
-use crate::datasets::listing::{DatasetListing, DatasetProvider};
+use crate::datasets::listing::{DatasetListing, DatasetProvider, ExternalDatasetProvider};
 use crate::datasets::upload::UploadDb;
 use crate::datasets::upload::UploadId;
 use crate::error;
@@ -19,7 +19,7 @@ use serde::{Deserialize, Serialize};
 use snafu::{ensure, ResultExt};
 use std::fmt::Debug;
 
-use super::provenance::{Provenance, ProvenanceProvider};
+use super::listing::Provenance;
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 #[serde(rename_all = "camelCase")]
@@ -211,13 +211,7 @@ impl MetaDataDefinition {
 /// Handling of datasets provided by geo engine internally, staged and by external providers
 #[async_trait]
 pub trait DatasetDb<S: Session>:
-    DatasetStore<S>
-    + DatasetProvider
-    + DatasetProviderDb<S>
-    + UploadDb<S>
-    + ProvenanceProvider
-    + Send
-    + Sync
+    DatasetStore<S> + DatasetProvider<S> + DatasetProviderDb<S> + UploadDb<S> + Send + Sync
 {
 }
 
@@ -229,7 +223,7 @@ pub trait DatasetProviderDb<S: Session> {
     async fn add_dataset_provider(
         &mut self,
         session: &S,
-        provider: Box<dyn DatasetProviderDefinition>,
+        provider: Box<dyn ExternalDatasetProviderDefinition>,
     ) -> Result<DatasetProviderId>;
 
     /// List available providers for `user` filtered by `options`
@@ -244,10 +238,8 @@ pub trait DatasetProviderDb<S: Session> {
         &self,
         session: &S,
         provider: DatasetProviderId,
-    ) -> Result<Box<dyn DatasetProvider>>;
+    ) -> Result<Box<dyn ExternalDatasetProvider>>;
 }
-
-pub trait DatasetAndProvenanceProvider: DatasetProvider + ProvenanceProvider {}
 
 /// Defines the type of meta data a `DatasetDB` is able to store
 pub trait DatasetStorer: Send + Sync {
@@ -272,11 +264,11 @@ pub trait DatasetStore<S: Session>: DatasetStorer {
 
 #[typetag::serde(tag = "type")]
 #[async_trait]
-pub trait DatasetProviderDefinition:
+pub trait ExternalDatasetProviderDefinition:
     CloneableDatasetProviderDefinition + Send + Sync + std::fmt::Debug
 {
     /// create the actual provider for data listing and access
-    async fn initialize(self: Box<Self>) -> Result<Box<dyn DatasetProvider>>;
+    async fn initialize(self: Box<Self>) -> Result<Box<dyn ExternalDatasetProvider>>;
 
     /// the type of the provider
     fn type_name(&self) -> String;
@@ -289,20 +281,20 @@ pub trait DatasetProviderDefinition:
 }
 
 pub trait CloneableDatasetProviderDefinition {
-    fn clone_boxed_provider(&self) -> Box<dyn DatasetProviderDefinition>;
+    fn clone_boxed_provider(&self) -> Box<dyn ExternalDatasetProviderDefinition>;
 }
 
 impl<T> CloneableDatasetProviderDefinition for T
 where
-    T: 'static + DatasetProviderDefinition + Clone,
+    T: 'static + ExternalDatasetProviderDefinition + Clone,
 {
-    fn clone_boxed_provider(&self) -> Box<dyn DatasetProviderDefinition> {
+    fn clone_boxed_provider(&self) -> Box<dyn ExternalDatasetProviderDefinition> {
         Box::new(self.clone())
     }
 }
 
-impl Clone for Box<dyn DatasetProviderDefinition> {
-    fn clone(&self) -> Box<dyn DatasetProviderDefinition> {
+impl Clone for Box<dyn ExternalDatasetProviderDefinition> {
+    fn clone(&self) -> Box<dyn ExternalDatasetProviderDefinition> {
         self.clone_boxed_provider()
     }
 }

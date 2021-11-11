@@ -1,6 +1,8 @@
 use crate::datasets::external::pangaea::meta::PangeaMetaData;
-use crate::datasets::listing::{DatasetListOptions, DatasetListing, DatasetProvider};
-use crate::datasets::storage::{Dataset, DatasetProviderDefinition};
+use crate::datasets::listing::{
+    DatasetListOptions, DatasetListing, ExternalDatasetProvider, Provenance, ProvenanceOutput,
+};
+use crate::datasets::storage::ExternalDatasetProviderDefinition;
 use async_trait::async_trait;
 use geoengine_datatypes::dataset::{DatasetId, DatasetProviderId};
 use geoengine_operators::engine::{
@@ -10,7 +12,6 @@ use geoengine_operators::engine::{
 use geoengine_operators::source::{GdalLoadingInfo, OgrSourceDataset};
 use reqwest::Client;
 
-use crate::datasets::provenance::{Provenance, ProvenanceOutput, ProvenanceProvider};
 use crate::error::{Error, Result};
 use crate::util::user_input::Validated;
 use geoengine_operators::mock::MockDatasetDataSourceLoadingInfo;
@@ -30,8 +31,8 @@ pub struct PangaeaDataProviderDefinition {
 
 #[typetag::serde]
 #[async_trait]
-impl DatasetProviderDefinition for PangaeaDataProviderDefinition {
-    async fn initialize(self: Box<Self>) -> Result<Box<dyn DatasetProvider>> {
+impl ExternalDatasetProviderDefinition for PangaeaDataProviderDefinition {
+    async fn initialize(self: Box<Self>) -> Result<Box<dyn ExternalDatasetProvider>> {
         Ok(Box::new(PangaeaDataProvider::new(self.base_url)))
     }
 
@@ -63,18 +64,11 @@ impl PangaeaDataProvider {
 }
 
 #[async_trait]
-impl DatasetProvider for PangaeaDataProvider {
+impl ExternalDatasetProvider for PangaeaDataProvider {
     async fn list(&self, _options: Validated<DatasetListOptions>) -> Result<Vec<DatasetListing>> {
         Ok(vec![])
     }
 
-    async fn load(&self, _dataset: &DatasetId) -> Result<Dataset> {
-        Err(Error::NotYetImplemented)
-    }
-}
-
-#[async_trait]
-impl ProvenanceProvider for PangaeaDataProvider {
     async fn provenance(&self, dataset: &DatasetId) -> Result<ProvenanceOutput> {
         let doi = dataset
             .external()
@@ -197,8 +191,8 @@ impl
 #[cfg(test)]
 mod tests {
     use crate::datasets::external::pangaea::PangaeaDataProviderDefinition;
-    use crate::datasets::listing::DatasetProvider;
-    use crate::datasets::storage::DatasetProviderDefinition;
+    use crate::datasets::listing::ExternalDatasetProvider;
+    use crate::datasets::storage::ExternalDatasetProviderDefinition;
     use crate::error::Error;
     use futures::StreamExt;
     use geoengine_datatypes::collections::{
@@ -233,7 +227,7 @@ mod tests {
         crate::test_data!(String::from("pangaea/") + file_name).into()
     }
 
-    async fn create_provider(server: &Server) -> Result<Box<dyn DatasetProvider>, Error> {
+    async fn create_provider(server: &Server) -> Result<Box<dyn ExternalDatasetProvider>, Error> {
         Box::new(PangaeaDataProviderDefinition {
             id: DatasetProviderId::from_str(PROVIDER_ID).unwrap(),
             name: "Pangaea".to_string(),

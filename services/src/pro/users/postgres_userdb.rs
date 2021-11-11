@@ -1,5 +1,6 @@
 use crate::contexts::SessionId;
 use crate::error::Result;
+use crate::pro::datasets::Role;
 use crate::pro::projects::ProjectPermission;
 use crate::pro::users::{
     User, UserCredentials, UserDb, UserId, UserInfo, UserRegistration, UserSession,
@@ -50,15 +51,24 @@ where
     // TODO: clean up expired sessions?
 
     async fn register(&mut self, user: Validated<UserRegistration>) -> Result<UserId> {
-        let conn = self.conn_pool.get().await?;
-        let stmt = conn
+        let mut conn = self.conn_pool.get().await?;
+
+        let tx = conn.build_transaction().start().await?;
+
+        let user = User::from(user.user_input);
+
+        let stmt = tx
+            .prepare("INSERT INTO roles (id, name) VALUES ($1, $2);")
+            .await?;
+        tx.execute(&stmt, &[&user.id, &user.email]).await?;
+
+        let stmt = tx
             .prepare(
                 "INSERT INTO users (id, email, password_hash, real_name, active) VALUES ($1, $2, $3, $4, $5);",
             )
             .await?;
 
-        let user = User::from(user.user_input);
-        conn.execute(
+        tx.execute(
             &stmt,
             &[
                 &user.id,
@@ -70,20 +80,53 @@ where
         )
         .await?;
 
+        let stmt = tx
+            .prepare("INSERT INTO user_roles (user_id, role_id) VALUES ($1, $2);")
+            .await?;
+        tx.execute(&stmt, &[&user.id, &user.id]).await?;
+
+        let stmt = tx
+            .prepare("INSERT INTO user_roles (user_id, role_id) VALUES ($1, $2);")
+            .await?;
+        tx.execute(&stmt, &[&user.id, &Role::user_role_id()])
+            .await?;
+
+        tx.commit().await?;
+
         Ok(user.id)
     }
 
     async fn anonymous(&mut self) -> Result<UserSession> {
-        let conn = self.conn_pool.get().await?;
-        let stmt = conn
+        let mut conn = self.conn_pool.get().await?;
+
+        let tx = conn.build_transaction().start().await?;
+
+        let user_id = UserId::new();
+
+        let stmt = tx
+            .prepare("INSERT INTO roles (id, name) VALUES ($1, $2);")
+            .await?;
+        tx.execute(&stmt, &[&user_id, &"anonymous_user"]).await?;
+
+        let stmt = tx
             .prepare("INSERT INTO users (id, active) VALUES ($1, TRUE);")
             .await?;
 
-        let user_id = UserId::new();
-        conn.execute(&stmt, &[&user_id]).await?;
+        tx.execute(&stmt, &[&user_id]).await?;
+
+        let stmt = tx
+            .prepare("INSERT INTO user_roles (user_id, role_id) VALUES ($1, $2);")
+            .await?;
+        tx.execute(&stmt, &[&user_id, &user_id]).await?;
+
+        let stmt = tx
+            .prepare("INSERT INTO user_roles (user_id, role_id) VALUES ($1, $2);")
+            .await?;
+        tx.execute(&stmt, &[&user_id, &Role::anonymous_role_id()])
+            .await?;
 
         let session_id = SessionId::new();
-        let stmt = conn
+        let stmt = tx
             .prepare(
                 "
                 INSERT INTO sessions (id, user_id, created, valid_until)
@@ -94,7 +137,7 @@ where
 
         // TODO: load from config
         let session_duration = chrono::Duration::days(30);
-        let row = conn
+        let row = tx
             .query_one(
                 &stmt,
                 &[
@@ -104,6 +147,9 @@ where
                 ],
             )
             .await?;
+
+        tx.commit().await?;
+
         Ok(UserSession {
             id: session_id,
             user: UserInfo {
@@ -115,6 +161,7 @@ where
             valid_until: row.get(1),
             project: None,
             view: None,
+            roles: vec![user_id.into(), Role::anonymous_role_id()],
         })
     }
 
@@ -157,6 +204,18 @@ where
                     ],
                 )
                 .await?;
+
+            let stmt = conn
+                .prepare("SELECT role_id FROM user_roles WHERE user_id = $1;")
+                .await?;
+
+            let rows = conn
+                .query(&stmt, &[&user_id])
+                .await
+                .map_err(|_error| error::Error::LoginFailed)?;
+
+            let roles = rows.into_iter().map(|row| row.get(0)).collect();
+
             Ok(UserSession {
                 id: session_id,
                 user: UserInfo {
@@ -168,6 +227,7 @@ where
                 valid_until: row.get(1),
                 project: None,
                 view: None,
+                roles,
             })
         } else {
             Err(error::Error::LoginFailed)
@@ -220,6 +280,7 @@ where
             valid_until: row.get(4),
             project: row.get::<usize, Option<Uuid>>(5).map(ProjectId),
             view: row.get(6),
+            roles: vec![], // TODO
         })
     }
 

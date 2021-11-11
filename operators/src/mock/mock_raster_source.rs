@@ -59,38 +59,89 @@ where
 
 #[derive(Debug, Serialize, Deserialize, PartialEq, Clone)]
 #[serde(rename_all = "camelCase")]
-pub struct MockRasterSourceParams {
-    pub data: Vec<RasterTile2D<u8>>,
+pub struct MockRasterSourceParams<T: Pixel> {
+    pub data: Vec<RasterTile2D<T>>,
     pub result_descriptor: RasterResultDescriptor,
 }
 
-pub type MockRasterSource = SourceOperator<MockRasterSourceParams>;
+pub type MockRasterSource<T> = SourceOperator<MockRasterSourceParams<T>>;
 
-impl OperatorDatasets for MockRasterSource {
+impl<T: Pixel> OperatorDatasets for MockRasterSource<T> {
     fn datasets_collect(&self, _datasets: &mut Vec<DatasetId>) {}
 }
 
-#[typetag::serde]
-#[async_trait]
-impl RasterOperator for MockRasterSource {
-    async fn initialize(
-        self: Box<Self>,
-        _context: &dyn crate::engine::ExecutionContext,
-    ) -> Result<Box<dyn InitializedRasterOperator>> {
-        Ok(InitializedMockRasterSource {
-            result_descriptor: self.params.result_descriptor,
-            data: self.params.data,
+/// Implement a mock raster source with typetag for a specific generic type
+///
+/// TODO: use single implementation once
+///      "deserialization of generic impls is not supported yet; use `#[typetag::serialize]` to generate serialization only"
+///      is solved
+///
+/// TODO: implementation is done with `paste!`, but we can use `core::concat_idents` once its stable
+///
+/// ```no_run
+/// #[typetag::serde]
+/// #[async_trait]
+/// impl<T: Pixel> RasterOperator for MockRasterSource<T> {
+///     async fn initialize(
+///         self: Box<Self>,
+///         _context: &dyn crate::engine::ExecutionContext,
+///     ) -> Result<Box<dyn InitializedRasterOperator>> {
+///         Ok(InitializedMockRasterSource {
+///             result_descriptor: self.params.result_descriptor,
+///             data: self.params.data,
+///         }
+///         .boxed())
+///     }
+/// }
+/// ```
+///
+macro_rules! impl_mock_raster_source {
+    ($pixel_type:ty) => {
+        paste::paste! {
+            impl_mock_raster_source!(
+                $pixel_type,
+                [<MockRasterSource$pixel_type>]
+            );
         }
-        .boxed())
-    }
+    };
+
+    ($pixel_type:ty, $newtype:ident) => {
+        type $newtype = MockRasterSource<$pixel_type>;
+
+        #[typetag::serde]
+        #[async_trait]
+        impl RasterOperator for $newtype {
+            async fn initialize(
+                self: Box<Self>,
+                _context: &dyn crate::engine::ExecutionContext,
+            ) -> Result<Box<dyn InitializedRasterOperator>> {
+                Ok(InitializedMockRasterSource {
+                    result_descriptor: self.params.result_descriptor,
+                    data: self.params.data,
+                }
+                .boxed())
+            }
+        }
+    };
 }
 
-pub struct InitializedMockRasterSource {
+impl_mock_raster_source!(u8);
+impl_mock_raster_source!(u16);
+impl_mock_raster_source!(u32);
+impl_mock_raster_source!(u64);
+impl_mock_raster_source!(i8);
+impl_mock_raster_source!(i16);
+impl_mock_raster_source!(i32);
+impl_mock_raster_source!(i64);
+impl_mock_raster_source!(f32);
+impl_mock_raster_source!(f64);
+
+pub struct InitializedMockRasterSource<T: Pixel> {
     result_descriptor: RasterResultDescriptor,
-    data: Vec<RasterTile2D<u8>>,
+    data: Vec<RasterTile2D<T>>,
 }
 
-impl InitializedRasterOperator for InitializedMockRasterSource {
+impl<T: Pixel> InitializedRasterOperator for InitializedMockRasterSource<T> {
     fn query_processor(&self) -> Result<TypedRasterQueryProcessor> {
         fn converted<From, To>(
             raster_tiles: &[RasterTile2D<From>],
@@ -134,7 +185,7 @@ mod tests {
     #[tokio::test]
     async fn serde() {
         let no_data_value = None;
-        let raster = Grid2D::new([3, 2].into(), vec![1, 2, 3, 4, 5, 6], no_data_value).unwrap();
+        let raster = Grid2D::new([3, 2].into(), vec![1_u8, 2, 3, 4, 5, 6], no_data_value).unwrap();
 
         let raster_tile = RasterTile2D::new_with_tile_info(
             TimeInterval::default(),
@@ -162,7 +213,7 @@ mod tests {
         let serialized = serde_json::to_string(&mrs).unwrap();
 
         let spec = serde_json::json!({
-            "type": "MockRasterSource",
+            "type": "MockRasterSourceu8",
             "params": {
                 "data": [{
                     "time": {

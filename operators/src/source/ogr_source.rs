@@ -401,7 +401,7 @@ where
         Ok(OgrSourceStream::new(
             self.dataset_information.loading_info(query).await?,
             query,
-            ctx.chunk_byte_size(),
+            ctx.chunk_byte_size().into(),
         )
         .boxed())
     }
@@ -1242,7 +1242,7 @@ impl FeatureCollectionBuilderGeometryHandler<NoGeometry>
 mod tests {
     use super::*;
 
-    use crate::engine::{MockExecutionContext, MockQueryContext, StaticMetaData};
+    use crate::engine::{ChunkByteSize, MockExecutionContext, MockQueryContext, StaticMetaData};
     use crate::source::ogr_source::FormatSpecifics::Csv;
     use crate::test_data;
     use futures::TryStreamExt;
@@ -1422,7 +1422,7 @@ mod tests {
 
         let query_processor = OgrSourceProcessor::<MultiPoint>::new(Box::new(info));
 
-        let context = MockQueryContext::new(usize::MAX);
+        let context = MockQueryContext::new(ChunkByteSize::MAX);
         let query = query_processor
             .query(
                 VectorQueryRectangle {
@@ -1471,7 +1471,7 @@ mod tests {
 
         let query_processor = OgrSourceProcessor::<MultiPoint>::new(Box::new(info));
 
-        let context = MockQueryContext::new(usize::MAX);
+        let context = MockQueryContext::new(ChunkByteSize::MAX);
         let query = query_processor
             .query(
                 VectorQueryRectangle {
@@ -1519,7 +1519,7 @@ mod tests {
 
         let query_processor = OgrSourceProcessor::<MultiPoint>::new(Box::new(info));
 
-        let context = MockQueryContext::new(usize::MAX);
+        let context = MockQueryContext::new(ChunkByteSize::MAX);
         let query = query_processor
             .query(
                 VectorQueryRectangle {
@@ -1600,7 +1600,7 @@ mod tests {
 
         let query_processor = source.query_processor()?.multi_point().unwrap();
 
-        let context = MockQueryContext::new(usize::MAX);
+        let context = MockQueryContext::new(ChunkByteSize::MAX);
         let query = query_processor
             .query(
                 VectorQueryRectangle {
@@ -1695,7 +1695,7 @@ mod tests {
 
         let query_processor = source.query_processor()?.multi_point().unwrap();
 
-        let context = MockQueryContext::new(usize::MAX);
+        let context = MockQueryContext::new(ChunkByteSize::MAX);
         let query = query_processor
             .query(
                 VectorQueryRectangle {
@@ -1793,7 +1793,7 @@ mod tests {
 
         let query_processor = source.query_processor()?.multi_point().unwrap();
 
-        let context = MockQueryContext::new(usize::MAX);
+        let context = MockQueryContext::new(ChunkByteSize::MAX);
         let query = query_processor
             .query(
                 VectorQueryRectangle {
@@ -1910,7 +1910,7 @@ mod tests {
 
         let query_processor = source.query_processor()?.multi_point().unwrap();
 
-        let context = MockQueryContext::new(usize::MAX);
+        let context = MockQueryContext::new(ChunkByteSize::MAX);
         let query = query_processor
             .query(
                 VectorQueryRectangle {
@@ -2080,7 +2080,7 @@ mod tests {
 
         let query_processor = source.query_processor()?.multi_point().unwrap();
 
-        let context = MockQueryContext::new(usize::MAX);
+        let context = MockQueryContext::new(ChunkByteSize::MAX);
         let query = query_processor
             .query(
                 VectorQueryRectangle {
@@ -3242,7 +3242,7 @@ mod tests {
 
         let query_processor = OgrSourceProcessor::<NoGeometry>::new(Box::new(info));
 
-        let context = MockQueryContext::new(usize::MAX);
+        let context = MockQueryContext::new(ChunkByteSize::MAX);
         let query = query_processor
             .query(
                 VectorQueryRectangle {
@@ -3337,7 +3337,7 @@ mod tests {
 
         let query_processor = OgrSourceProcessor::<MultiPoint>::new(Box::new(info));
 
-        let context = MockQueryContext::new(usize::MAX);
+        let context = MockQueryContext::new(ChunkByteSize::MAX);
         let query = query_processor
             .query(
                 VectorQueryRectangle {
@@ -3542,7 +3542,7 @@ mod tests {
             (4.824_087_161, 52.413_055_56),
         ])?;
 
-        let context1 = MockQueryContext::new(0);
+        let context1 = MockQueryContext::new(ChunkByteSize::MIN);
         let query = query_processor
             .query(
                 VectorQueryRectangle {
@@ -3576,7 +3576,7 @@ mod tests {
         assert!(!result.last().unwrap().is_empty());
 
         // LARGER CHUNK
-        let context = MockQueryContext::new(1_000);
+        let context = MockQueryContext::new((1_000).into());
         let query = query_processor
             .query(
                 VectorQueryRectangle {
@@ -3689,7 +3689,7 @@ mod tests {
         let query_bbox =
             BoundingBox2D::new((-180.0, -90.0).into(), (-180.00, -90.0).into()).unwrap();
 
-        let context = MockQueryContext::new(0);
+        let context = MockQueryContext::new(ChunkByteSize::MIN);
         let query = query_processor
             .query(
                 VectorQueryRectangle {
@@ -3772,7 +3772,7 @@ mod tests {
 
         let query_bbox = BoundingBox2D::new((-180.0, -90.0).into(), (180.00, 90.0).into()).unwrap();
 
-        let context = MockQueryContext::new(1024 * 1024);
+        let context = MockQueryContext::new((1024 * 1024).into());
         let query = query_processor
             .query(
                 VectorQueryRectangle {
@@ -3873,7 +3873,7 @@ mod tests {
 
         let query_bbox = BoundingBox2D::new((-180.0, -90.0).into(), (180.00, 90.0).into()).unwrap();
 
-        let context = MockQueryContext::new(1024 * 1024);
+        let context = MockQueryContext::new((1024 * 1024).into());
         let query = query_processor
             .query(
                 VectorQueryRectangle {
@@ -3986,7 +3986,7 @@ mod tests {
 
         let query_bbox = BoundingBox2D::new((-180.0, -90.0).into(), (180.00, 90.0).into()).unwrap();
 
-        let context = MockQueryContext::new(1024 * 1024);
+        let context = MockQueryContext::new((1024 * 1024).into());
         let query = query_processor
             .query(
                 VectorQueryRectangle {
@@ -4095,7 +4095,7 @@ mod tests {
 
         let query_bbox = BoundingBox2D::new((-180.0, -90.0).into(), (180.00, 90.0).into()).unwrap();
 
-        let context = MockQueryContext::new(1024 * 1024);
+        let context = MockQueryContext::new((1024 * 1024).into());
         let query = query_processor
             .query(
                 VectorQueryRectangle {
@@ -4204,7 +4204,7 @@ mod tests {
 
         let query_bbox = BoundingBox2D::new((-180.0, -90.0).into(), (180.00, 90.0).into()).unwrap();
 
-        let context = MockQueryContext::new(1024 * 1024);
+        let context = MockQueryContext::new((1024 * 1024).into());
         let query = query_processor
             .query(
                 VectorQueryRectangle {
@@ -4286,7 +4286,7 @@ mod tests {
 
         let query_processor = OgrSourceProcessor::<NoGeometry>::new(Box::new(info));
 
-        let context = MockQueryContext::new(usize::MAX);
+        let context = MockQueryContext::new(ChunkByteSize::MAX);
         let query = query_processor
             .query(
                 VectorQueryRectangle {

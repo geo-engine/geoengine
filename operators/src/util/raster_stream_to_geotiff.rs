@@ -43,7 +43,7 @@ where
     )
     .await?;
 
-    let bytes = gdal::vsi::get_vsi_mem_file_bytes_owned(&file_path.to_string_lossy())?;
+    let bytes = gdal::vsi::get_vsi_mem_file_bytes_owned(file_path)?;
 
     Ok(bytes)
 }
@@ -114,15 +114,7 @@ fn gdal_writer<T: Pixel + GdalType>(
     const INTERMEDIATE_FILE_SUFFIX: &str = "GEO-ENGINE-TMP";
 
     let intermediate_file_path = file_path.with_extension(INTERMEDIATE_FILE_SUFFIX);
-    let intermediate_file_path_str =
-        intermediate_file_path
-            .to_str()
-            .ok_or(Error::InvalidGdalFilePath {
-                file_path: file_path.to_owned(),
-            })?;
-    let output_file_path = file_path.to_str().ok_or(Error::InvalidGdalFilePath {
-        file_path: file_path.to_owned(),
-    })?;
+    let output_file_path = file_path;
 
     let x_pixel_size = query_rect.spatial_resolution.x;
     let y_pixel_size = query_rect.spatial_resolution.y;
@@ -159,9 +151,9 @@ fn gdal_writer<T: Pixel + GdalType>(
         });
     }
 
-    let mut dataset = driver.create_with_band_type_with_options::<T>(
+    let mut dataset = driver.create_with_band_type_with_options::<T, _>(
         if as_cog {
-            intermediate_file_path_str
+            &intermediate_file_path
         } else {
             output_file_path
         },

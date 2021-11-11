@@ -113,6 +113,12 @@ impl SpatialReference {
         let p = CoordinateProjector::from_known_srs(Self::epsg_4326(), self)?;
         self.area_of_use::<A>()?.reproject(&p)
     }
+
+    /// Return the srs-string "authority:code"
+    #[allow(clippy::trivially_copy_pass_by_ref)]
+    pub fn srs_string(&self) -> String {
+        format!("{}:{}", self.authority, self.code)
+    }
 }
 
 impl std::fmt::Display for SpatialReference {

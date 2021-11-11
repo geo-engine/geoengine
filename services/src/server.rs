@@ -8,7 +8,7 @@ use crate::util::config::get_config_element;
 use actix_files::Files;
 use actix_web::dev::{Body, ServiceResponse};
 use actix_web::error::{InternalError, JsonPayloadError, QueryPayloadError};
-use actix_web::{http, middleware, web, App, HttpResponse, HttpServer, Responder};
+use actix_web::{http, middleware, web, App, HttpResponse, HttpServer};
 use log::{debug, info};
 use std::net::SocketAddr;
 use std::path::PathBuf;
@@ -34,14 +34,25 @@ pub async fn start_server(static_files_dir: Option<PathBuf>) -> Result<()> {
 
     let data_path_config: config::DataProvider = get_config_element()?;
 
+    let chunk_byte_size = config::get_config_element::<config::QueryContext>()?
+        .chunk_byte_size
+        .into();
+
+    let tiling_spec = config::get_config_element::<config::TilingSpecification>()?.into();
+
+    let ctx = InMemoryContext::new_with_data(
+        data_path_config.dataset_defs_path,
+        data_path_config.provider_defs_path,
+        tiling_spec,
+        chunk_byte_size,
+    )
+    .await;
+
     start(
         static_files_dir,
         web_config.bind_address,
-        InMemoryContext::new_with_data(
-            data_path_config.dataset_defs_path,
-            data_path_config.provider_defs_path,
-        )
-        .await,
+        web_config.version_api,
+        ctx,
     )
     .await
 }
@@ -49,6 +60,7 @@ pub async fn start_server(static_files_dir: Option<PathBuf>) -> Result<()> {
 async fn start<C>(
     static_files_dir: Option<PathBuf>,
     bind_address: SocketAddr,
+    version_api: bool,
     ctx: C,
 ) -> Result<(), Error>
 where
@@ -57,7 +69,8 @@ where
     let wrapped_ctx = web::Data::new(ctx);
 
     HttpServer::new(move || {
-        let app = App::new()
+        #[allow(unused_mut)]
+        let mut app = App::new()
             .app_data(wrapped_ctx.clone())
             .wrap(
                 middleware::ErrorHandlers::default()
@@ -76,9 +89,10 @@ where
             .configure(handlers::wcs::init_wcs_routes::<C>)
             .configure(handlers::wfs::init_wfs_routes::<C>)
             .configure(handlers::wms::init_wms_routes::<C>)
-            .configure(handlers::workflows::init_workflow_routes::<C>)
-            .route("/version", web::get().to(show_version_handler)); // TODO: allow disabling this function via config or feature flag
-
+            .configure(handlers::workflows::init_workflow_routes::<C>);
+        if version_api {
+            app = app.route("/version", web::get().to(show_version_handler));
+        }
         if let Some(static_files_dir) = static_files_dir.clone() {
             app.service(Files::new("/static", static_files_dir))
         } else {
@@ -182,7 +196,7 @@ pub(crate) fn configure_extractors(cfg: &mut web::ServiceConfig) {
 /// }
 /// ```
 #[allow(clippy::unused_async)] // the function signature of request handlers requires it
-pub(crate) async fn show_version_handler() -> impl Responder {
+pub(crate) async fn show_version_handler() -> impl actix_web::Responder {
     #[derive(serde::Serialize)]
     #[serde(rename_all = "camelCase")]
     struct VersionInfo<'a> {
