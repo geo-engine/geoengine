@@ -112,6 +112,10 @@ fn gdal_writer<T: Pixel + GdalType>(
     as_cog: bool,
 ) -> Result<()> {
     const INTERMEDIATE_FILE_SUFFIX: &str = "GEO-ENGINE-TMP";
+    const COG_BLOCK_SIZE: &str = "512";
+    const COMPRESSION_FORMAT: &str = "LZW";
+    const COMPRESSION_LEVEL: &str = "9"; // maximum compression
+    const COMPRESSION_NUM_THREADS: &str = "ALL_CPUS"; // full power for compression
 
     let intermediate_file_path = file_path.with_extension(INTERMEDIATE_FILE_SUFFIX);
     let output_file_path = file_path;
@@ -132,22 +136,34 @@ fn gdal_writer<T: Pixel + GdalType>(
     let mut options = vec![
         RasterCreationOption {
             key: "COMPRESS",
-            value: "LZW",
+            value: COMPRESSION_FORMAT,
         },
         RasterCreationOption {
             key: "TILED",
             value: "YES",
+        },
+        RasterCreationOption {
+            key: "ZLEVEL",
+            value: COMPRESSION_LEVEL,
+        },
+        RasterCreationOption {
+            key: "NUM_THREADS",
+            value: COMPRESSION_NUM_THREADS,
+        },
+        RasterCreationOption {
+            key: "INTERLEAVE",
+            value: "BAND",
         },
     ];
     if as_cog {
         // COGs require a block size of 512x512, so we enforce it now so that we do the work only once.
         options.push(RasterCreationOption {
             key: "BLOCKXSIZE",
-            value: "512",
+            value: COG_BLOCK_SIZE,
         });
         options.push(RasterCreationOption {
             key: "BLOCKYSIZE",
-            value: "512",
+            value: COG_BLOCK_SIZE,
         });
     }
 
@@ -231,10 +247,29 @@ fn gdal_writer<T: Pixel + GdalType>(
         // write the data in order to generate overviews) that fulfills this property. So, we have to do it as a
         // separate step.
 
-        // TODO: use different options - with compression but without unsupported options TILED, BLOCKXSIZE, BLOCKYSIZE
-        dataset.create_copy(&Driver::get("COG")?, output_file_path, &options)?;
+        dataset.create_copy(
+            &Driver::get("COG")?,
+            output_file_path,
+            &[
+                RasterCreationOption {
+                    key: "COMPRESS",
+                    value: COMPRESSION_FORMAT,
+                },
+                RasterCreationOption {
+                    key: "LEVEL",
+                    value: COMPRESSION_LEVEL,
+                },
+                RasterCreationOption {
+                    key: "NUM_THREADS",
+                    value: COMPRESSION_NUM_THREADS,
+                },
+                RasterCreationOption {
+                    key: "BLOCKSIZE",
+                    value: COG_BLOCK_SIZE,
+                },
+            ],
+        )?;
 
-        // TODO: remove intermediate file
         drop(dataset);
         driver.delete(intermediate_file_path)?;
     }
@@ -336,6 +371,8 @@ mod tests {
             ) as &[u8],
             bytes.as_slice()
         );
+
+        // TODO: check programmatically that intermediate file is gone
     }
 
     #[tokio::test]
