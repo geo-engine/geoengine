@@ -236,7 +236,7 @@ fn gdal_writer<T: Pixel + GdalType>(
 
         // TODO: remove intermediate file
         drop(dataset);
-        // driver.delete(intermediate_file_path)?;
+        driver.delete(intermediate_file_path)?;
     }
 
     Ok(())
