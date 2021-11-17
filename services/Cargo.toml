@@ -23,7 +23,6 @@ actix-files = "0.6.0-beta.8"
 actix-http = "=3.0.0-beta.12"
 actix-multipart = "0.4.0-beta.7"
 actix-rt = "2.2"
-actix-service = "2.0"
 actix-web = "=4.0.0-beta.10"
 actix-web-httpauth = "0.6.0-beta.3"
 async-trait = "0.1"
@@ -44,7 +43,6 @@ image = "0.23"
 lazy_static = "1.4"
 log = "0.4"
 mime = "0.3"
-mpart-async = "0.5"
 num-traits = "0.2"
 paste = "1.0"
 postgres-types = { version = "0.2", features = ["derive"], optional = true }
@@ -61,7 +59,7 @@ serde_with = "1.9"
 snafu = "0.6"
 strum = { version = "0.22", features = ["derive"] }
 time = "0.3"
-tokio = { version = "1.1", features = ["macros", "signal", "sync", "rt-multi-thread"] }
+tokio = { version = "1.1", features = ["macros", "fs", "signal", "sync", "rt-multi-thread"] }
 tokio-util = "0.6"
 typetag = "0.1"
 url = { version = "2.2", features = ["serde"] }
@@ -69,7 +67,6 @@ uuid = { version = "0.8", features = ["serde", "v4", "v5"] }
 zip = "0.5"
 
 [dev-dependencies]
-clap = "3.0.0-beta.2"
 httptest = "0.15.2"
 rand = "0.8.4"
 tempfile = "3.1"

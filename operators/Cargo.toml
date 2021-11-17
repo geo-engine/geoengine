@@ -42,7 +42,6 @@ typetag = "0.1"
 uuid = { version = "0.8", features = ["serde", "v4", "v5"] }
 
 [dev-dependencies]
-criterion = {version = "0.3", features =["async_futures", "async_tokio"]}
 geo-rand = { git = "https://github.com/lelongg/geo-rand", tag = "v0.3.0" }
 rand = "0.8"
 tempfile = "3.1"
