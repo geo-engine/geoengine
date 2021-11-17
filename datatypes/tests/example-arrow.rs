@@ -342,7 +342,7 @@ fn ocl() {
     assert_eq!(ocl_buffer.len(), 5);
 
     let result = {
-        let buffer = MutableBuffer::new(ocl_buffer.len() * mem::size_of::<i32>());
+        let buffer = MutableBuffer::from_len_zeroed(ocl_buffer.len() * mem::size_of::<i32>());
         let buffer_raw: &mut [i32] =
             unsafe { slice::from_raw_parts_mut(buffer.as_ptr() as *mut i32, ocl_buffer.len()) };
         ocl_buffer.read(buffer_raw).enq().unwrap();

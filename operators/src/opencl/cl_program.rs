@@ -1238,8 +1238,7 @@ impl<'a> ClProgramRunnable<'a> {
         ocl_buffer: &Buffer<T>,
         len: usize,
     ) -> Result<arrow::buffer::Buffer> {
-        let mut arrow_buffer = MutableBuffer::new(len * std::mem::size_of::<T>());
-        arrow_buffer.resize(len * std::mem::size_of::<T>(), 0);
+        let mut arrow_buffer = MutableBuffer::from_len_zeroed(len * std::mem::size_of::<T>());
 
         let dest =
             unsafe { std::slice::from_raw_parts_mut(arrow_buffer.as_mut_ptr().cast::<T>(), len) };
@@ -2448,8 +2447,7 @@ __kernel void nop(__global int* buffer) {
 
         assert_eq!(vec, &[0, 1, 2, 3]);
 
-        let mut arrow_buffer = MutableBuffer::new(len * std::mem::size_of::<i32>());
-        arrow_buffer.resize(len * std::mem::size_of::<i32>(), 0);
+        let mut arrow_buffer = MutableBuffer::from_len_zeroed(len * std::mem::size_of::<i32>());
 
         let dest =
             unsafe { std::slice::from_raw_parts_mut(arrow_buffer.as_mut_ptr().cast::<i32>(), len) };
