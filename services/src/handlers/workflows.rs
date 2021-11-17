@@ -6,6 +6,7 @@ use crate::datasets::upload::{UploadId, UploadRootPath};
 use crate::error;
 use crate::error::Result;
 use crate::handlers::Context;
+use crate::util::config::get_config_element;
 use crate::util::user_input::UserInput;
 use crate::util::IdResponse;
 use crate::workflows::registry::WorkflowRegistry;
@@ -22,7 +23,9 @@ use geoengine_operators::engine::{
 use geoengine_operators::source::{
     FileNotFoundHandling, GdalDatasetGeoTransform, GdalDatasetParameters, GdalMetaDataStatic,
 };
-use geoengine_operators::util::raster_stream_to_geotiff::raster_stream_to_geotiff;
+use geoengine_operators::util::raster_stream_to_geotiff::{
+    raster_stream_to_geotiff, GdalGeoTiffDatasetMetadata, GdalGeoTiffOptions,
+};
 use geoengine_operators::{call_on_generic_raster_processor_gdal_types, call_on_typed_operator};
 use serde::{Deserialize, Serialize};
 use snafu::ResultExt;
@@ -366,10 +369,15 @@ async fn dataset_from_workflow_handler<C: Context>(
             p,
             query_rect,
             query_ctx,
-            no_data_value,
-            request_spatial_ref,
+            GdalGeoTiffDatasetMetadata {
+                no_data_value,
+                spatial_reference: request_spatial_ref,
+            },
+            GdalGeoTiffOptions {
+                compression_num_threads: get_config_element::<crate::util::config::Gdal>()?.compression_num_threads,
+                as_cog: info.as_cog,
+            },
             tile_limit,
-            info.as_cog,
         ).await)?
     .map_err(error::Error::from)?;
 
@@ -1012,10 +1020,17 @@ mod tests {
             processor,
             query_rect,
             query_ctx,
-            Some(0.),
-            SpatialReference::epsg_4326(),
+            GdalGeoTiffDatasetMetadata {
+                no_data_value: Some(0.),
+                spatial_reference: SpatialReference::epsg_4326(),
+            },
+            GdalGeoTiffOptions {
+                compression_num_threads: get_config_element::<crate::util::config::Gdal>()
+                    .unwrap()
+                    .compression_num_threads,
+                as_cog: false,
+            },
             None,
-            false,
         )
         .await
         .unwrap();
