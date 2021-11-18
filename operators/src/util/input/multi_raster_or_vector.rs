@@ -49,7 +49,7 @@ impl OperatorDatasets for MultiRasterOrVectorOperator {
         match self {
             Self::Raster(rs) => {
                 for r in rs {
-                    r.datasets_collect(datasets)
+                    r.datasets_collect(datasets);
                 }
             }
             Self::Vector(v) => v.datasets_collect(datasets),
