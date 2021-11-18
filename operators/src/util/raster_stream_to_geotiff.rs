@@ -546,6 +546,6 @@ mod tests {
         )
         .await;
 
-        assert!(bytes.is_ok())
+        assert!(bytes.is_ok());
     }
 }

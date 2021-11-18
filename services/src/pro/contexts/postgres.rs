@@ -633,9 +633,9 @@ mod tests {
                         let ctx = PostgresContext::new(pg_config.clone(), tokio_postgres::NoTls)
                             .await
                             .unwrap();
-                        f(ctx, pg_config.clone()).await
-                    })
-                })
+                        f(ctx, pg_config.clone()).await;
+                    });
+                });
             })
         };
 

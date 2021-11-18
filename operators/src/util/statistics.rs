@@ -120,7 +120,7 @@ where
 
         // Add remaining values that are not required for the initialization
         for v in iter {
-            result.update_f64(v)
+            result.update_f64(v);
         }
         Ok(result)
     }
@@ -347,7 +347,7 @@ where
 
         // Add remaining values
         for v in iter {
-            result.update_f64(v)
+            result.update_f64(v);
         }
         Ok(result)
     }
@@ -408,7 +408,7 @@ where
             result.push(PSquareHistogramBucket {
                 bounds: (w[0].marker..w[1].marker),
                 frequency: (w[1].position - w[0].position) as u64,
-            })
+            });
         }
         result[0].frequency += 1;
         result

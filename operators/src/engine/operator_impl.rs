@@ -145,25 +145,25 @@ where
 
 impl OperatorDatasets for SingleRasterOrVectorSource {
     fn datasets_collect(&self, datasets: &mut Vec<DatasetId>) {
-        self.source.datasets_collect(datasets)
+        self.source.datasets_collect(datasets);
     }
 }
 
 impl OperatorDatasets for MultipleRasterOrSingleVectorSource {
     fn datasets_collect(&self, datasets: &mut Vec<DatasetId>) {
-        self.source.datasets_collect(datasets)
+        self.source.datasets_collect(datasets);
     }
 }
 
 impl OperatorDatasets for SingleVectorSource {
     fn datasets_collect(&self, datasets: &mut Vec<DatasetId>) {
-        self.vector.datasets_collect(datasets)
+        self.vector.datasets_collect(datasets);
     }
 }
 
 impl OperatorDatasets for SingleRasterSource {
     fn datasets_collect(&self, datasets: &mut Vec<DatasetId>) {
-        self.raster.datasets_collect(datasets)
+        self.raster.datasets_collect(datasets);
     }
 }
 
