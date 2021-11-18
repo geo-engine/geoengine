@@ -1,7 +1,8 @@
-#![feature(bench_black_box)]
-use std::{hint::black_box, time::Instant};
+mod util;
 
 use geoengine_operators::util::create_rayon_thread_pool;
+use std::time::Instant;
+use util::black_box;
 
 fn work(num_threads: usize) {
     let thread_pool = create_rayon_thread_pool(num_threads);

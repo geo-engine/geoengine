@@ -1,6 +1,4 @@
-#![feature(bench_black_box)]
-use std::hint::black_box;
-use std::time::Instant;
+mod util;
 
 use futures::StreamExt;
 use geoengine_datatypes::dataset::DatasetId;
@@ -26,6 +24,8 @@ use geoengine_operators::{
     source::GdalSourceParameters,
     util::gdal::create_ndvi_meta_data,
 };
+use std::time::Instant;
+use util::black_box;
 
 #[inline(never)]
 fn bench_raster_operator<'a, Q, T, F, C>(

@@ -1,6 +1,4 @@
-#![feature(bench_black_box)]
-use std::hint::black_box;
-use std::time::Instant;
+mod util;
 
 use futures::StreamExt;
 use geoengine_datatypes::{
@@ -18,6 +16,8 @@ use geoengine_operators::{
     source::{GdalMetaDataRegular, GdalSourceProcessor},
     util::gdal::create_ndvi_meta_data,
 };
+use std::time::Instant;
+use util::black_box;
 
 fn setup_gdal_source(
     meta_data: GdalMetaDataRegular,
