@@ -181,6 +181,21 @@ where
             }
         }
     }
+
+    async fn loop_rasters_and_extract_values(
+        &self,
+        mut collection: FeatureCollection<G>,
+        query: VectorQueryRectangle,
+        ctx: &'_ dyn QueryContext,
+    ) -> Result<FeatureCollection<G>> {
+        for (raster, new_column_name) in self.raster_processors.iter().zip(&self.column_names) {
+            collection = call_on_generic_raster_processor!(raster, raster => {
+                Self::extract_raster_values(&collection, raster, new_column_name, self.feature_aggregation, self.temporal_aggregation, query, ctx).await?
+            });
+        }
+
+        Ok(collection)
+    }
 }
 
 #[async_trait]
@@ -197,17 +212,12 @@ where
         query: VectorQueryRectangle,
         ctx: &'a dyn QueryContext,
     ) -> Result<BoxStream<'a, Result<Self::Output>>> {
-        let stream = self.collection
-            .query(query, ctx).await?
-            .and_then(async move |mut collection| {
-
-                for (raster, new_column_name) in self.raster_processors.iter().zip(&self.column_names) {
-                    collection = call_on_generic_raster_processor!(raster, raster => {
-                        Self::extract_raster_values(&collection, raster, new_column_name, self.feature_aggregation, self.temporal_aggregation, query, ctx).await?
-                    });
-                }
-
-                Ok(collection)
+        let stream = self
+            .collection
+            .query(query, ctx)
+            .await?
+            .and_then(move |collection: FeatureCollection<G>| {
+                self.loop_rasters_and_extract_values(collection, query, ctx)
             })
             .boxed();
 

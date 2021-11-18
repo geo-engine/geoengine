@@ -380,6 +380,32 @@ impl SentinelS2L2aCogsMetaData {
         Ok(features)
     }
 
+    async fn stac_collection_query<T: Serialize + ?Sized + Debug>(
+        &self,
+        client: &Client,
+        params: &T,
+        page: u32,
+    ) -> Result<StacCollection> {
+        let text = client
+            .get(&self.api_url)
+            .query(&params)
+            .query(&[("page", &page.to_string())])
+            .send()
+            .await
+            .context(error::Reqwest)?
+            .text()
+            .await
+            .context(error::Reqwest)?;
+
+        serde_json::from_str::<StacCollection>(&text).map_err(|error| {
+            error::Error::StacJsonResponse {
+                url: self.api_url.clone(),
+                response: text,
+                error,
+            }
+        })
+    }
+
     async fn load_collection<T: Serialize + ?Sized + Debug>(
         &self,
         params: &T,
@@ -391,26 +417,7 @@ impl SentinelS2L2aCogsMetaData {
             self.stac_api_retires.number_of_retries,
             self.stac_api_retires.initial_delay_ms,
             self.stac_api_retires.exponential_backoff_factor,
-            async || -> Result<StacCollection> {
-                let text = client
-                    .get(&self.api_url)
-                    .query(&params)
-                    .query(&[("page", &page.to_string())])
-                    .send()
-                    .await
-                    .context(error::Reqwest)?
-                    .text()
-                    .await
-                    .context(error::Reqwest)?;
-
-                serde_json::from_str::<StacCollection>(&text).map_err(|error| {
-                    error::Error::StacJsonResponse {
-                        url: self.api_url.clone(),
-                        response: text,
-                        error,
-                    }
-                })
-            },
+            || self.stac_collection_query(&client, params, page),
         )
         .await
     }

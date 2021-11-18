@@ -1,4 +1,3 @@
-#![feature(async_closure)]
 // configure default clippy lints
 #![deny(clippy::correctness)]
 #![warn(clippy::complexity, clippy::style, clippy::perf, clippy::pedantic)]
