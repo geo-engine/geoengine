@@ -3867,7 +3867,7 @@ mod tests {
 
         let query_bbox = BoundingBox2D::new((-180.0, -90.0).into(), (180.00, 90.0).into()).unwrap();
 
-        let context = MockQueryContext::new((1024 * 1024).into());
+        let context = MockQueryContext::new(ChunkByteSize::default());
         let query = query_processor
             .query(
                 VectorQueryRectangle {
@@ -3970,7 +3970,7 @@ mod tests {
 
         let query_bbox = BoundingBox2D::new((-180.0, -90.0).into(), (180.00, 90.0).into()).unwrap();
 
-        let context = MockQueryContext::new((1024 * 1024).into());
+        let context = MockQueryContext::new(ChunkByteSize::default());
         let query = query_processor
             .query(
                 VectorQueryRectangle {
@@ -4085,7 +4085,7 @@ mod tests {
 
         let query_bbox = BoundingBox2D::new((-180.0, -90.0).into(), (180.00, 90.0).into()).unwrap();
 
-        let context = MockQueryContext::new((1024 * 1024).into());
+        let context = MockQueryContext::new(ChunkByteSize::default());
         let query = query_processor
             .query(
                 VectorQueryRectangle {
@@ -4196,7 +4196,7 @@ mod tests {
 
         let query_bbox = BoundingBox2D::new((-180.0, -90.0).into(), (180.00, 90.0).into()).unwrap();
 
-        let context = MockQueryContext::new((1024 * 1024).into());
+        let context = MockQueryContext::new(ChunkByteSize::default());
         let query = query_processor
             .query(
                 VectorQueryRectangle {
@@ -4307,7 +4307,7 @@ mod tests {
 
         let query_bbox = BoundingBox2D::new((-180.0, -90.0).into(), (180.00, 90.0).into()).unwrap();
 
-        let context = MockQueryContext::new((1024 * 1024).into());
+        let context = MockQueryContext::new(ChunkByteSize::default());
         let query = query_processor
             .query(
                 VectorQueryRectangle {
@@ -4422,7 +4422,7 @@ mod tests {
 
         let query_bbox = BoundingBox2D::new((-180.0, -90.0).into(), (180.00, 90.0).into()).unwrap();
 
-        let context = MockQueryContext::new(1024 * 1024);
+        let context = MockQueryContext::new(ChunkByteSize::default());
         let query = query_processor
             .query(
                 VectorQueryRectangle {
@@ -4530,7 +4530,7 @@ mod tests {
 
         let query_bbox = BoundingBox2D::new((-180.0, -90.0).into(), (180.00, 90.0).into()).unwrap();
 
-        let context = MockQueryContext::new(1024 * 1024);
+        let context = MockQueryContext::new(ChunkByteSize::default());
         let query = query_processor
             .query(
                 VectorQueryRectangle {
