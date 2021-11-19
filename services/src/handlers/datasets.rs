@@ -1167,7 +1167,7 @@ mod tests {
                         int: vec![],
                         text: vec![],
                         bool: vec![],
-                        datetime: vec![],
+                        datetime: vec!["time_end".to_owned(), "time_start".to_owned()],
                         rename: None,
                     }),
                     force_ogr_time_filter: false,
@@ -1179,7 +1179,13 @@ mod tests {
                 result_descriptor: VectorResultDescriptor {
                     data_type: VectorDataType::MultiPoint,
                     spatial_reference: SpatialReference::epsg_4326().into(),
-                    columns: [].iter().cloned().collect(),
+                    columns: [
+                        ("time_end".to_owned(), FeatureDataType::DateTime),
+                        ("time_start".to_owned(), FeatureDataType::DateTime)
+                    ]
+                    .iter()
+                    .cloned()
+                    .collect(),
                 },
                 phantom: Default::default()
             })
@@ -1220,7 +1226,7 @@ mod tests {
                         int: vec![],
                         text: vec![],
                         bool: vec![],
-                        datetime: vec![],
+                        datetime: vec!["time_start".to_owned(), "time_end".to_owned()],
                         rename: None,
                     }),
                     force_ogr_time_filter: false,
@@ -1232,7 +1238,13 @@ mod tests {
                 result_descriptor: VectorResultDescriptor {
                     data_type: VectorDataType::MultiPoint,
                     spatial_reference: SpatialReference::epsg_4326().into(),
-                    columns: [].iter().cloned().collect(),
+                    columns: [
+                        ("time_start".to_owned(), FeatureDataType::DateTime),
+                        ("time_end".to_owned(), FeatureDataType::DateTime)
+                    ]
+                    .iter()
+                    .cloned()
+                    .collect(),
                 },
                 phantom: Default::default(),
             })
@@ -1273,7 +1285,7 @@ mod tests {
                         int: vec![],
                         text: vec![],
                         bool: vec![],
-                        datetime: vec![],
+                        datetime: vec!["time_end".to_owned(), "time_start".to_owned()],
                         rename: None,
                     }),
                     force_ogr_time_filter: false,
@@ -1285,7 +1297,13 @@ mod tests {
                 result_descriptor: VectorResultDescriptor {
                     data_type: VectorDataType::MultiPoint,
                     spatial_reference: SpatialReference::epsg_4326().into(),
-                    columns: [].iter().cloned().collect(),
+                    columns: [
+                        ("time_end".to_owned(), FeatureDataType::DateTime),
+                        ("time_start".to_owned(), FeatureDataType::DateTime)
+                    ]
+                    .iter()
+                    .cloned()
+                    .collect(),
                 },
                 phantom: Default::default(),
             })
@@ -1326,7 +1344,7 @@ mod tests {
                         int: vec!["duration".to_owned()],
                         text: vec![],
                         bool: vec![],
-                        datetime: vec![],
+                        datetime: vec!["time_start".to_owned()],
                         rename: None,
                     }),
                     force_ogr_time_filter: false,
@@ -1338,10 +1356,13 @@ mod tests {
                 result_descriptor: VectorResultDescriptor {
                     data_type: VectorDataType::MultiPoint,
                     spatial_reference: SpatialReference::epsg_4326().into(),
-                    columns: [("duration".to_owned(), FeatureDataType::Int)]
-                        .iter()
-                        .cloned()
-                        .collect(),
+                    columns: [
+                        ("time_start".to_owned(), FeatureDataType::DateTime),
+                        ("duration".to_owned(), FeatureDataType::Int)
+                    ]
+                    .iter()
+                    .cloned()
+                    .collect(),
                 },
                 phantom: Default::default()
             })
