@@ -12,9 +12,9 @@ use std::{
 };
 use std::{ffi::OsStr, fmt::Debug};
 
+use chrono::DateTime;
 use chrono::NaiveDate;
 use chrono::NaiveDateTime;
-use chrono::{DateTime, Utc};
 use futures::stream::BoxStream;
 use futures::task::{Context, Waker};
 use futures::Stream;
@@ -179,6 +179,8 @@ impl Default for OgrSourceTimeFormat {
 ///  - float: an array of column names containing float values
 ///  - int: an array of column names containing int values
 ///  - text: an array of column names containing alpha-numeric values
+///  - bool: an array of column names containing boolean values
+///  - datetime: an array of column names containing timestamps or date strings
 ///  - rename: a. optional map of column names from data source to the name in the resulting collection
 #[derive(Clone, Debug, PartialEq, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -189,6 +191,8 @@ pub struct OgrSourceColumnSpec {
     pub int: Vec<String>,
     pub float: Vec<String>,
     pub text: Vec<String>,
+    pub bool: Vec<String>,
+    pub datetime: Vec<String>,
     pub rename: Option<HashMap<String, String>>,
 }
 
@@ -205,6 +209,9 @@ impl OgrSourceColumnSpec {
         self.float
             .retain(|attribute| attributes.contains(attribute));
         self.text.retain(|attribute| attributes.contains(attribute));
+        self.bool.retain(|attribute| attributes.contains(attribute));
+        self.datetime
+            .retain(|attribute| attributes.contains(attribute));
     }
 }
 
@@ -639,6 +646,7 @@ where
             Self::initialize_types_and_builder(dataset_information);
 
         let time_extractor = Self::initialize_time_extractors(dataset_information);
+        let time_attribute_parser = Self::initialize_time_attribute_parser(dataset_information);
 
         let mut features = features_provider.features().fuse().peekable();
 
@@ -671,6 +679,7 @@ where
                 &data_types,
                 query_rectangle,
                 &time_extractor,
+                &time_attribute_parser,
                 chunk_byte_size,
                 use_ogr_spatial_filter,
             );
@@ -840,6 +849,21 @@ where
         }
     }
 
+    fn initialize_time_attribute_parser(
+        dataset_information: &OgrSourceDataset,
+    ) -> Box<dyn Fn(FieldValue) -> Result<TimeInstance> + '_> {
+        match &dataset_information.time {
+            OgrSourceDatasetTimeType::None => {
+                Box::new(move |_field: FieldValue| Err(Error::OgrSourceColumnsSpecMissing))
+            }
+            OgrSourceDatasetTimeType::Start { start_format, .. }
+            | OgrSourceDatasetTimeType::StartEnd { start_format, .. }
+            | OgrSourceDatasetTimeType::StartDuration { start_format, .. } => {
+                Self::create_time_parser(start_format)
+            }
+        }
+    }
+
     fn initialize_types_and_builder(
         dataset_information: &OgrSourceDataset,
     ) -> (
@@ -869,6 +893,18 @@ where
                     .add_column(attribute.clone(), FeatureDataType::Text)
                     .unwrap();
             }
+            for attribute in &column_spec.bool {
+                data_types.insert(attribute.clone(), FeatureDataType::Bool);
+                feature_collection_builder
+                    .add_column(attribute.clone(), FeatureDataType::Bool)
+                    .unwrap();
+            }
+            for attribute in &column_spec.datetime {
+                data_types.insert(attribute.clone(), FeatureDataType::DateTime);
+                feature_collection_builder
+                    .add_column(attribute.clone(), FeatureDataType::DateTime)
+                    .unwrap();
+            }
         }
         (data_types, feature_collection_builder)
     }
@@ -881,6 +917,7 @@ where
         data_types: &HashMap<String, FeatureDataType>,
         query_rectangle: &VectorQueryRectangle,
         time_extractor: &dyn Fn(&Feature) -> Result<TimeInterval>,
+        time_attribute_parser: &dyn Fn(FieldValue) -> Result<TimeInstance>,
         chunk_byte_size: usize,
         was_spatial_filtered_by_ogr: bool,
     ) -> Result<FeatureCollection<G>> {
@@ -898,6 +935,7 @@ where
                 data_types,
                 query_rectangle,
                 time_extractor,
+                time_attribute_parser,
                 &mut builder,
                 &feature,
                 dataset_information.force_ogr_time_filter,
@@ -921,6 +959,7 @@ where
     fn convert_field_value(
         data_type: FeatureDataType,
         field: Result<Option<FieldValue>, GdalError>,
+        time_attribute_parser: &dyn Fn(FieldValue) -> Result<TimeInstance>,
         error_spec: OgrSourceErrorSpec,
     ) -> Result<FeatureDataValue> {
         match data_type {
@@ -1009,26 +1048,11 @@ where
             FeatureDataType::DateTime => {
                 #[allow(clippy::match_same_arms)]
                 let value_option = match field {
-                    Ok(Some(FieldValue::IntegerValue(v))) => {
-                        Some(TimeInstance::from_millis(i64::from(v))?)
-                    }
-                    Ok(Some(FieldValue::Integer64Value(v))) => Some(TimeInstance::from_millis(v)?),
-                    Ok(Some(FieldValue::StringValue(s))) => s
-                        .parse::<i64>()
-                        .ok()
-                        .and_then(|x| TimeInstance::from_millis(x).ok()),
-                    Ok(Some(FieldValue::RealValue(v))) => {
-                        Some(TimeInstance::from_millis(v as i64)?)
-                    }
-                    Ok(Some(FieldValue::DateTimeValue(v))) => Some(v.with_timezone(&Utc).into()),
-                    Ok(Some(FieldValue::DateValue(v))) => {
-                        Some(v.and_hms(0, 0, 0).with_timezone(&Utc).into())
-                    }
                     Ok(None) => None,
-                    Ok(Some(v)) => error_spec.on_error(Error::OgrColumnFieldTypeMismatch {
-                        expected: "DateTime".to_string(),
-                        field_value: v,
-                    })?, // TODO: handle other types
+                    Ok(Some(v)) => match time_attribute_parser(v) {
+                        Ok(parsed) => Ok(Some(parsed)),
+                        Err(e) => error_spec.on_error(e),
+                    }?,
                     Err(e) => error_spec.on_error(Error::Gdal { source: e })?,
                 };
 
@@ -1044,6 +1068,7 @@ where
         data_types: &HashMap<String, FeatureDataType>,
         query_rectangle: &VectorQueryRectangle,
         time_extractor: &dyn Fn(&Feature) -> Result<TimeInterval, Error>,
+        time_attribute_parser: &dyn Fn(FieldValue) -> Result<TimeInstance>,
         builder: &mut FeatureCollectionRowBuilder<G>,
         feature: &Feature,
         was_time_filtered_by_ogr: bool,
@@ -1085,7 +1110,8 @@ where
 
         for (column, data_type) in data_types {
             let field = feature.field(&column);
-            let value = Self::convert_field_value(*data_type, field, error_spec)?;
+            let value =
+                Self::convert_field_value(*data_type, field, time_attribute_parser, error_spec)?;
             builder.push_data(column, value)?;
         }
 
@@ -1341,6 +1367,8 @@ mod tests {
                 float: vec!["num".to_string()],
                 int: vec!["dec1".to_string(), "dec2".to_string()],
                 text: vec!["text".to_string()],
+                bool: vec![],
+                datetime: vec![],
                 rename: None,
             }),
             force_ogr_time_filter: false,
@@ -1387,6 +1415,8 @@ mod tests {
                     "int": ["dec1", "dec2"],
                     "float": ["num"],
                     "text": ["text"],
+                    "bool": [],
+                    "datetime": [],
                     "rename": null
                 },
                 "forceOgrTimeFilter": false,
@@ -1431,7 +1461,9 @@ mod tests {
                     "y": "y",
                     "int": ["dec1", "dec2"],
                     "float": ["num"],
-                    "text": ["text"]
+                    "text": ["text"],
+                    "bool": [],
+                    "datetime": []
                 },
                 "forceOgrTimeFilter": false,
                 "forceOgrSpatialFilter": false,
@@ -1445,7 +1477,6 @@ mod tests {
             .to_string(),
         )
         .unwrap();
-
         assert_eq!(deserialized_spec, spec);
     }
 
@@ -1918,6 +1949,8 @@ mod tests {
                             "name".to_string(),
                             "website".to_string(),
                         ],
+                        bool: vec![],
+                        datetime: vec![],
                         rename: None,
                     }),
                     force_ogr_time_filter: false,
@@ -3269,6 +3302,8 @@ mod tests {
                 float: vec!["b".to_string()],
                 int: vec!["a".to_string()],
                 text: vec!["c".to_string()],
+                bool: vec![],
+                datetime: vec![],
                 rename: None,
             }),
             force_ogr_time_filter: false,
@@ -3364,6 +3399,8 @@ mod tests {
                 float: vec!["b".to_string()],
                 int: vec!["a".to_string()],
                 text: vec!["c".to_string()],
+                bool: vec![],
+                datetime: vec![],
                 rename: None,
             }),
             force_ogr_time_filter: false,
@@ -3786,6 +3823,8 @@ mod tests {
                         int: vec![],
                         float: vec![],
                         text: vec![],
+                        bool: vec![],
+                        datetime: vec![],
                         rename: None,
                     }),
                     force_ogr_time_filter: false,
@@ -3881,6 +3920,8 @@ mod tests {
                         int: vec!["num".to_owned()],
                         float: vec![],
                         text: vec!["txt".to_owned()],
+                        bool: vec![],
+                        datetime: vec![],
                         rename: None,
                     }),
                     force_ogr_time_filter: false,
@@ -3997,6 +4038,8 @@ mod tests {
                         int: vec![],
                         float: vec![],
                         text: vec!["Name".to_owned()],
+                        bool: vec![],
+                        datetime: vec![],
                         rename: None,
                     }),
                     force_ogr_time_filter: false,
@@ -4106,6 +4149,8 @@ mod tests {
                         int: vec![],
                         float: vec![],
                         text: vec!["Name".to_owned()],
+                        bool: vec![],
+                        datetime: vec![],
                         rename: None,
                     }),
                     force_ogr_time_filter: false,
@@ -4215,6 +4260,8 @@ mod tests {
                         int: vec![],
                         float: vec![],
                         text: vec!["Name".to_owned()],
+                        bool: vec![],
+                        datetime: vec![],
                         rename: None,
                     }),
                     force_ogr_time_filter: false,
@@ -4292,6 +4339,127 @@ mod tests {
     }
 
     #[tokio::test]
+    #[allow(clippy::too_many_lines)]
+    async fn vector_date_time_csv() {
+        let dataset = DatasetId::Internal {
+            dataset_id: InternalDatasetId::new(),
+        };
+        let mut exe_ctx = MockExecutionContext::default();
+        exe_ctx.add_meta_data::<OgrSourceDataset, VectorResultDescriptor, VectorQueryRectangle>(
+            dataset.clone(),
+            Box::new(StaticMetaData {
+                loading_info: OgrSourceDataset {
+                    file_name: test_data!("vector/data/lonlat_date_time.csv").into(),
+                    layer_name: "lonlat_date_time".to_owned(),
+                    data_type: Some(VectorDataType::MultiPoint),
+                    time: OgrSourceDatasetTimeType::Start {
+                        start_field: "DateTime".to_owned(),
+                        start_format: OgrSourceTimeFormat::Custom {
+                            custom_format: "%d.%m.%Y %H:%M:%S".to_owned(),
+                        },
+                        duration: OgrSourceDurationSpec::Value(TimeStep {
+                            granularity: TimeGranularity::Seconds,
+                            step: 84,
+                        }),
+                    },
+                    default_geometry: None,
+                    columns: Some(OgrSourceColumnSpec {
+                        format_specifics: Some(Csv {
+                            header: CsvHeader::Yes,
+                        }),
+                        x: "Longitude".to_owned(),
+                        y: Some("Latitude".to_owned()),
+                        int: vec![],
+                        float: vec![],
+                        text: vec!["Name".to_owned()],
+                        bool: vec![],
+                        datetime: vec!["DateTime".to_owned()],
+                        rename: None,
+                    }),
+                    force_ogr_time_filter: false,
+                    force_ogr_spatial_filter: false,
+                    on_error: OgrSourceErrorSpec::Abort,
+                    sql_query: None,
+                    attribute_query: None,
+                },
+                result_descriptor: VectorResultDescriptor {
+                    data_type: VectorDataType::MultiPoint,
+                    spatial_reference: SpatialReference::epsg_4326().into(),
+                    columns: [
+                        ("Name".to_string(), FeatureDataType::Text),
+                        ("DateTime".to_string(), FeatureDataType::DateTime),
+                    ]
+                    .iter()
+                    .cloned()
+                    .collect(),
+                },
+                phantom: Default::default(),
+            }),
+        );
+
+        let source = OgrSource {
+            params: OgrSourceParameters {
+                dataset,
+                attribute_projection: None,
+            },
+        }
+        .boxed()
+        .initialize(&exe_ctx)
+        .await
+        .unwrap();
+
+        assert_eq!(
+            source.result_descriptor().data_type,
+            VectorDataType::MultiPoint
+        );
+        assert_eq!(
+            source.result_descriptor().spatial_reference,
+            SpatialReference::epsg_4326().into()
+        );
+
+        let query_processor = source.query_processor().unwrap().multi_point().unwrap();
+
+        let query_bbox = BoundingBox2D::new((-180.0, -90.0).into(), (180.00, 90.0).into()).unwrap();
+
+        let context = MockQueryContext::new(1024 * 1024);
+        let query = query_processor
+            .query(
+                VectorQueryRectangle {
+                    spatial_bounds: query_bbox,
+                    time_interval: Default::default(),
+                    spatial_resolution: SpatialResolution::new(1., 1.).unwrap(),
+                },
+                &context,
+            )
+            .await
+            .unwrap();
+
+        let result: Vec<MultiPointCollection> = query.try_collect().await.unwrap();
+        assert_eq!(result.len(), 1);
+
+        let result = result.into_iter().next().unwrap();
+
+        let pc = MultiPointCollection::from_data(
+            MultiPoint::many(vec![vec![(1.1, 2.2)]]).unwrap(),
+            vec![TimeInterval::new(819_828_000_000, 819_828_084_000).unwrap()],
+            {
+                let mut map = HashMap::new();
+                map.insert(
+                    "DateTime".into(),
+                    FeatureData::DateTime(vec![TimeInstance::from_millis_unchecked(
+                        819_828_000_000,
+                    )]),
+                );
+                map.insert("Name".into(), FeatureData::Text(vec!["foo".to_owned()]));
+                map
+            },
+        )
+        .unwrap();
+
+        assert_eq!(result, pc);
+    }
+
+    #[tokio::test]
     async fn rename() -> Result<()> {
         let dataset_information = OgrSourceDataset {
             file_name: test_data!("vector/data/plain_data.csv").into(),
@@ -4308,6 +4476,8 @@ mod tests {
                 float: vec!["b".to_string()],
                 int: vec!["a".to_string()],
                 text: vec!["c".to_string()],
+                bool: vec![],
+                datetime: vec![],
                 rename: Some(
                     [("a".to_owned(), "foo".to_owned())]
                         .iter()

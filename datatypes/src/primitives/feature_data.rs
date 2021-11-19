@@ -1312,9 +1312,9 @@ mod tests {
                 (
                     "dates",
                     FeatureData::NullableDateTime(vec![
-                        Some(TimeInstance::from_millis_unchecked(946681200000)),
+                        Some(TimeInstance::from_millis_unchecked(946_681_200_000)),
                         None,
-                        Some(TimeInstance::from_millis_unchecked(1636448729000)),
+                        Some(TimeInstance::from_millis_unchecked(1_636_448_729_000)),
                     ]),
                 ),
             ],
@@ -1376,9 +1376,9 @@ mod tests {
                 (
                     "dates",
                     FeatureData::NullableDateTime(vec![
-                        Some(TimeInstance::from_millis_unchecked(946681200000)),
+                        Some(TimeInstance::from_millis_unchecked(946_681_200_000)),
                         None,
-                        Some(TimeInstance::from_millis_unchecked(1636448729000)),
+                        Some(TimeInstance::from_millis_unchecked(1_636_448_729_000)),
                     ]),
                 ),
             ],
@@ -1423,7 +1423,7 @@ mod tests {
             .float_options_iter()
             .collect();
         let from_dates_cmp: Vec<Option<f64>> =
-            vec![Some(946681200000.0), None, Some(1636448729000.0)];
+            vec![Some(946_681_200_000.0), None, Some(1_636_448_729_000.0)];
         assert_eq!(from_dates, from_dates_cmp);
     }
 }

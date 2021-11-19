@@ -327,6 +327,8 @@ impl MetaDataProvider<OgrSourceDataset, VectorResultDescriptor, VectorQueryRecta
                         .filter(|(name, _)| name.starts_with("/DataSets/DataSet/Units/Unit/"))
                         .map(|(_, hash)| hash.clone())
                         .collect(),
+                    bool: vec![],
+                    datetime: vec![],
                     rename: Some(
                         self.column_hash_to_name
                             .iter()
@@ -680,6 +682,8 @@ mod tests {
                         "f2374ad051911a65bc0d0a46c13ada2625f55a10".to_owned(),                        
                         "f65b72bbbd0b17e7345821a34c1da49d317ca28b".to_owned()
                     ],
+                    bool: vec![],
+                    datetime: vec![],
                     rename: Some([
                         ("8003ddd80b42736ebf36b87018e51db3ee84efaf".to_owned(), "/DataSets/DataSet/Units/Unit/Gathering/Country/Name".to_owned()),
                         ("f2374ad051911a65bc0d0a46c13ada2625f55a10".to_owned(), "/DataSets/DataSet/Units/Unit/SourceID".to_owned()),

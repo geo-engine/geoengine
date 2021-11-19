@@ -110,6 +110,8 @@ impl PangeaMetaData {
                 .filter(|(_, p)| matches!(p, PangeaParam::String { .. }))
                 .map(|(idx, _)| format!("field_{}", (idx + 1)))
                 .collect(),
+            bool: vec![],
+            datetime: vec![],
         }
     }
 

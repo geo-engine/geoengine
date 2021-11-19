@@ -324,6 +324,10 @@ where
                     std::mem::size_of::<u8>()
                 } else if builder.as_any().is::<StringBuilder>() {
                     0 // TODO: how to get this dynamic value
+                } else if builder.as_any().is::<BooleanBuilder>() {
+                    std::mem::size_of::<bool>() // TODO: is this correct because of possible bit packing?
+                } else if builder.as_any().is::<Date64Builder>() {
+                    std::mem::size_of::<i64>()
                 } else {
                     unreachable!("This type is not an attribute type");
                 };

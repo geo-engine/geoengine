@@ -1014,6 +1014,8 @@ mod tests {
                             "name".to_string(),
                             "website".to_string(),
                         ],
+                        bool: vec![],
+                        datetime: vec![],
                         rename: None,
                     }),
                     force_ogr_time_filter: false,
