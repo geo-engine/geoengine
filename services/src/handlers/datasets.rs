@@ -958,7 +958,9 @@ mod tests {
                             "y": null,
                             "float": ["natlscale"],
                             "int": ["scalerank"],
-                            "text": ["featurecla", "name", "website"]
+                            "text": ["featurecla", "name", "website"],
+                            "bool": [],
+                            "datetime": []
                         },
                         "forceOgrTimeGilter": false,
                         "onError": "ignore",
