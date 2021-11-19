@@ -4496,9 +4496,7 @@ mod tests {
                 result_descriptor: VectorResultDescriptor {
                     data_type: VectorDataType::MultiPoint,
                     spatial_reference: SpatialReference::epsg_4326().into(),
-                    columns: [
-                        ("bool".to_string(), FeatureDataType::Bool),
-                    ]
+                    columns: [("bool".to_string(), FeatureDataType::Bool)]
                         .iter()
                         .cloned()
                         .collect(),
@@ -4513,10 +4511,10 @@ mod tests {
                 attribute_projection: None,
             },
         }
-            .boxed()
-            .initialize(&exe_ctx)
-            .await
-            .unwrap();
+        .boxed()
+        .initialize(&exe_ctx)
+        .await
+        .unwrap();
 
         assert_eq!(
             source.result_descriptor().data_type,
@@ -4554,14 +4552,11 @@ mod tests {
             vec![TimeInterval::default(), TimeInterval::default()],
             {
                 let mut map = HashMap::new();
-                map.insert(
-                    "bool".into(),
-                    FeatureData::Bool(vec![true, false]),
-                );
+                map.insert("bool".into(), FeatureData::Bool(vec![true, false]));
                 map
             },
         )
-            .unwrap();
+        .unwrap();
 
         assert_eq!(result, pc);
     }
