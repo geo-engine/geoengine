@@ -8,6 +8,7 @@ use crate::util::parsing::{deserialize_base_url, deserialize_base_url_option};
 use chrono::{DateTime, FixedOffset};
 use config::{Config, File};
 use geoengine_datatypes::primitives::{TimeInstance, TimeInterval};
+use geoengine_operators::util::raster_stream_to_geotiff::GdalCompressionNumThreads;
 use lazy_static::lazy_static;
 use serde::Deserialize;
 use snafu::ResultExt;
@@ -304,4 +305,13 @@ pub struct DataProvider {
 
 impl ConfigElement for DataProvider {
     const KEY: &'static str = "dataprovider";
+}
+
+#[derive(Debug, Deserialize)]
+pub struct Gdal {
+    pub compression_num_threads: GdalCompressionNumThreads,
+}
+
+impl ConfigElement for Gdal {
+    const KEY: &'static str = "gdal";
 }
