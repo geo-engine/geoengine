@@ -1,15 +1,14 @@
 use std::collections::HashMap;
 use std::marker::PhantomData;
 
-use crate::datasets::provenance::{Provenance, ProvenanceOutput, ProvenanceProvider};
+use crate::datasets::listing::{Provenance, ProvenanceOutput};
 use crate::error::Error;
 use crate::{datasets::listing::DatasetListOptions, error::Result};
 use crate::{
     datasets::{
-        listing::{DatasetListing, DatasetProvider},
-        storage::DatasetProviderDefinition,
+        listing::{DatasetListing, ExternalDatasetProvider},
+        storage::ExternalDatasetProviderDefinition,
     },
-    error,
     util::user_input::Validated,
 };
 use async_trait::async_trait;
@@ -73,8 +72,8 @@ pub struct GfbioDataProviderDefinition {
 
 #[typetag::serde]
 #[async_trait]
-impl DatasetProviderDefinition for GfbioDataProviderDefinition {
-    async fn initialize(self: Box<Self>) -> Result<Box<dyn DatasetProvider>> {
+impl ExternalDatasetProviderDefinition for GfbioDataProviderDefinition {
+    async fn initialize(self: Box<Self>) -> Result<Box<dyn ExternalDatasetProvider>> {
         Ok(Box::new(
             GfbioDataProvider::new(self.id, self.db_config).await?,
         ))
@@ -175,7 +174,7 @@ impl GfbioDataProvider {
 }
 
 #[async_trait]
-impl DatasetProvider for GfbioDataProvider {
+impl ExternalDatasetProvider for GfbioDataProvider {
     async fn list(&self, _options: Validated<DatasetListOptions>) -> Result<Vec<DatasetListing>> {
         let conn = self.pool.get().await?;
 
@@ -226,16 +225,6 @@ impl DatasetProvider for GfbioDataProvider {
         Ok(listings)
     }
 
-    async fn load(
-        &self,
-        _dataset: &geoengine_datatypes::dataset::DatasetId,
-    ) -> crate::error::Result<crate::datasets::storage::Dataset> {
-        Err(error::Error::NotYetImplemented)
-    }
-}
-
-#[async_trait]
-impl ProvenanceProvider for GfbioDataProvider {
     async fn provenance(&self, dataset: &DatasetId) -> Result<ProvenanceOutput> {
         let surrogate_key: i32 = dataset
             .external()

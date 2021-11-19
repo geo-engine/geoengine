@@ -4,6 +4,7 @@ use crate::engine::{
     TypedRasterQueryProcessor,
 };
 use crate::error::Error;
+use crate::util::input::float_with_nan;
 use crate::util::Result;
 use crate::{call_bi_generic_processor, call_generic_raster_processor};
 use crate::{
@@ -19,9 +20,7 @@ use geoengine_datatypes::raster::{
     EmptyGrid, Grid2D, GridShapeAccess, Pixel, RasterDataType, RasterTile2D,
 };
 use num_traits::AsPrimitive;
-use serde::Serializer;
 use serde::{Deserialize, Serialize};
-use serde_json::Value;
 use snafu::ensure;
 use std::collections::HashSet;
 use std::convert::TryFrom;
@@ -38,37 +37,9 @@ use std::marker::PhantomData;
 pub struct ExpressionParams {
     pub expression: String,
     pub output_type: RasterDataType,
-    #[serde(deserialize_with = "parse_no_data")]
-    #[serde(serialize_with = "write_no_data")]
+    #[serde(with = "float_with_nan")]
     pub output_no_data_value: f64, // TODO: check value is valid for given output type during deserialization
     pub output_measurement: Option<Measurement>,
-}
-
-/// Parse no data from either number or "nan"
-pub fn parse_no_data<'de, D>(deserializer: D) -> Result<f64, D::Error>
-where
-    D: serde::Deserializer<'de>,
-{
-    match Value::deserialize(deserializer)? {
-        Value::Number(n) => n
-            .as_f64()
-            .ok_or_else(|| serde::de::Error::custom("Invalid no data value")),
-        Value::String(s) if s.to_lowercase() == "nan" => Ok(f64::NAN),
-        _ => Err(serde::de::Error::custom("Invalid no data value")),
-    }
-}
-
-/// write no data as either number or "nan"
-#[allow(clippy::trivially_copy_pass_by_ref)]
-fn write_no_data<S>(x: &f64, s: S) -> Result<S::Ok, S::Error>
-where
-    S: Serializer,
-{
-    if x.is_nan() {
-        s.serialize_str("nan")
-    } else {
-        s.serialize_f64(*x)
-    }
 }
 
 // TODO: custom type or simple string?
@@ -130,6 +101,34 @@ impl OperatorDatasets for ExpressionSources {
 }
 
 impl ExpressionSources {
+    pub fn new_a(a: Box<dyn RasterOperator>) -> Self {
+        Self {
+            a,
+            b: None,
+            c: None,
+        }
+    }
+
+    pub fn new_a_b(a: Box<dyn RasterOperator>, b: Box<dyn RasterOperator>) -> Self {
+        Self {
+            a,
+            b: Some(b),
+            c: None,
+        }
+    }
+
+    pub fn new_a_b_c(
+        a: Box<dyn RasterOperator>,
+        b: Box<dyn RasterOperator>,
+        c: Box<dyn RasterOperator>,
+    ) -> Self {
+        Self {
+            a,
+            b: Some(b),
+            c: Some(c),
+        }
+    }
+
     fn number_of_sources(&self) -> usize {
         let a: usize = 1;
         let b: usize = self.b.is_some().into();
@@ -542,7 +541,7 @@ mod tests {
 
         let processor = o.query_processor().unwrap().get_i8().unwrap();
 
-        let ctx = MockQueryContext::new(1);
+        let ctx = MockQueryContext::new(1.into());
         let result_stream = processor
             .query(
                 RasterQueryRectangle {

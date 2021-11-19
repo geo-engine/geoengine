@@ -4,11 +4,11 @@ use std::{
     path::Path,
 };
 
+use crate::datasets::listing::DatasetProvider;
 use crate::datasets::storage::{AddDataset, DatasetStore, MetaDataSuggestion, SuggestMetaData};
 use crate::datasets::storage::{DatasetProviderDb, DatasetProviderListOptions};
 use crate::datasets::upload::UploadRootPath;
 use crate::datasets::{
-    listing::DatasetProvider,
     storage::{CreateDataset, MetaDataDefinition},
     upload::Upload,
 };
@@ -88,7 +88,7 @@ async fn list_external_datasets_handler<C: Context>(
         .await
         .dataset_provider(&session, provider.into_inner())
         .await?
-        .list(options)
+        .list(options) // TODO: authorization
         .await?;
     Ok(web::Json(list))
 }
@@ -123,12 +123,12 @@ async fn list_external_datasets_handler<C: Context>(
 /// ]
 /// ```
 async fn list_datasets_handler<C: Context>(
-    _session: C::Session,
+    session: C::Session,
     ctx: web::Data<C>,
     options: web::Query<DatasetListOptions>,
 ) -> Result<impl Responder> {
     let options = options.into_inner().validated()?;
-    let list = ctx.dataset_db_ref().await.list(options).await?;
+    let list = ctx.dataset_db_ref().await.list(&session, options).await?;
     Ok(web::Json(list))
 }
 
@@ -160,13 +160,13 @@ async fn list_datasets_handler<C: Context>(
 /// ```
 async fn get_dataset_handler<C: Context>(
     dataset: web::Path<InternalDatasetId>,
-    _session: C::Session,
+    session: C::Session,
     ctx: web::Data<C>,
 ) -> Result<impl Responder> {
     let dataset = ctx
         .dataset_db_ref()
         .await
-        .load(&dataset.into_inner().into())
+        .load(&session, &dataset.into_inner().into())
         .await?;
     Ok(web::Json(dataset))
 }
@@ -706,20 +706,33 @@ fn column_map_to_column_vecs(columns: &HashMap<String, ColumnDataType>) -> Colum
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::contexts::{InMemoryContext, Session, SimpleContext, SimpleSession};
+    use crate::contexts::{InMemoryContext, Session, SessionId, SimpleContext, SimpleSession};
     use crate::datasets::storage::{AddDataset, DatasetStore};
     use crate::datasets::upload::UploadId;
     use crate::error::Result;
     use crate::projects::{PointSymbology, Symbology};
     use crate::test_data;
-    use crate::util::tests::{read_body_string, send_test_request, SetMultipartBody};
-    use actix_web::{http::header, test};
+    use crate::util::tests::{
+        read_body_string, send_test_request, SetMultipartBody, TestDataUploads,
+    };
+    use actix_web;
+    use actix_web::http::header;
     use actix_web_httpauth::headers::authorization::Bearer;
-    use geoengine_datatypes::collections::VectorDataType;
+    use futures::TryStreamExt;
+    use geoengine_datatypes::collections::{
+        GeometryCollection, MultiPointCollection, VectorDataType,
+    };
     use geoengine_datatypes::dataset::{DatasetId, InternalDatasetId};
+    use geoengine_datatypes::primitives::{BoundingBox2D, SpatialResolution};
+    use geoengine_datatypes::raster::{GridShape2D, TilingSpecification};
     use geoengine_datatypes::spatial_reference::SpatialReferenceOption;
-    use geoengine_operators::engine::{StaticMetaData, VectorResultDescriptor};
-    use geoengine_operators::source::{OgrSourceDataset, OgrSourceErrorSpec};
+    use geoengine_operators::engine::{
+        ExecutionContext, InitializedVectorOperator, QueryProcessor, StaticMetaData,
+        VectorOperator, VectorResultDescriptor,
+    };
+    use geoengine_operators::source::{
+        OgrSource, OgrSourceDataset, OgrSourceErrorSpec, OgrSourceParameters,
+    };
     use serde_json::json;
     use std::str::FromStr;
 
@@ -810,7 +823,7 @@ mod tests {
             .add_dataset(&SimpleSession::default(), ds.validated()?, Box::new(meta))
             .await?;
 
-        let req = test::TestRequest::get()
+        let req = actix_web::test::TestRequest::get()
             .uri(&format!(
                 "/datasets?{}",
                 &serde_urlencoded::to_string([
@@ -888,11 +901,10 @@ mod tests {
         Ok(())
     }
 
-    #[tokio::test]
-    async fn create_dataset() {
-        let ctx = InMemoryContext::default();
-        let session_id = ctx.default_session_ref().await.id();
-
+    async fn upload_ne_10m_ports_files<C: SimpleContext>(
+        ctx: C,
+        session_id: SessionId,
+    ) -> Result<UploadId> {
         let files = vec![
             test_data!("vector/data/ne_10m_ports/ne_10m_ports.shp").to_path_buf(),
             test_data!("vector/data/ne_10m_ports/ne_10m_ports.shx").to_path_buf(),
@@ -901,15 +913,30 @@ mod tests {
             test_data!("vector/data/ne_10m_ports/ne_10m_ports.cpg").to_path_buf(),
         ];
 
-        let req = test::TestRequest::post()
+        let req = actix_web::test::TestRequest::post()
             .uri("/upload")
             .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())))
-            .set_multipart_files(files);
-        let res = send_test_request(req, ctx.clone()).await;
+            .set_multipart_files(&files);
+        let res = send_test_request(req, ctx).await;
         assert_eq!(res.status(), 200);
 
-        let id: IdResponse<UploadId> = test::read_body_json(res).await;
-        let s = format!("{{\"upload\": \"{}\",", id.id)
+        let upload: IdResponse<UploadId> = actix_web::test::read_body_json(res).await;
+        let root = upload.id.root_path()?;
+
+        for file in files {
+            let file_name = file.file_name().unwrap();
+            assert!(root.join(file_name).exists());
+        }
+
+        Ok(upload.id)
+    }
+
+    async fn construct_dataset_from_upload<C: SimpleContext>(
+        ctx: C,
+        upload_id: UploadId,
+        session_id: SessionId,
+    ) -> DatasetId {
+        let s = format!("{{\"upload\": \"{}\",", upload_id)
             + r#""definition": {
                 "properties": {
                     "id": null,
@@ -952,15 +979,94 @@ mod tests {
             }
         }"#;
 
-        let req = test::TestRequest::post()
+        let req = actix_web::test::TestRequest::post()
             .uri("/dataset")
             .append_header((header::CONTENT_LENGTH, 0))
             .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())))
             .append_header((header::CONTENT_TYPE, "application/json"))
             .set_payload(s);
         let res = send_test_request(req, ctx).await;
-
         assert_eq!(res.status(), 200);
+
+        let dataset: IdResponse<DatasetId> = actix_web::test::read_body_json(res).await;
+        dataset.id
+    }
+
+    async fn make_ogr_source<C: ExecutionContext>(
+        exe_ctx: &C,
+        dataset_id: DatasetId,
+    ) -> Result<Box<dyn InitializedVectorOperator>> {
+        OgrSource {
+            params: OgrSourceParameters {
+                dataset: dataset_id,
+                attribute_projection: None,
+            },
+        }
+        .boxed()
+        .initialize(exe_ctx)
+        .await
+        .map_err(Into::into)
+    }
+
+    #[tokio::test]
+    async fn create_dataset() -> Result<()> {
+        let mut test_data = TestDataUploads::default(); // remember created folder and remove them on drop
+
+        let exe_ctx_tiling_spec = TilingSpecification {
+            origin_coordinate: (0., 0.).into(),
+            tile_size_in_pixels: GridShape2D::new([600, 600]),
+        };
+
+        // override the pixel size since this test was designed for 600 x 600 pixel tiles
+        let ctx = InMemoryContext::new_with_context_spec(exe_ctx_tiling_spec, Default::default());
+
+        let session = ctx.default_session_ref().await;
+        let session_id = session.id();
+
+        let upload_id = upload_ne_10m_ports_files(ctx.clone(), session_id).await?;
+        test_data.uploads.push(upload_id);
+
+        let dataset_id = construct_dataset_from_upload(ctx.clone(), upload_id, session_id).await;
+        let exe_ctx = ctx.execution_context(session.clone())?;
+
+        let source = make_ogr_source(&exe_ctx, dataset_id).await?;
+
+        let query_processor = source.query_processor()?.multi_point().unwrap();
+        let query_ctx = ctx.query_context()?;
+
+        let query = query_processor
+            .query(
+                VectorQueryRectangle {
+                    spatial_bounds: BoundingBox2D::new((1.85, 50.88).into(), (4.82, 52.95).into())?,
+                    time_interval: Default::default(),
+                    spatial_resolution: SpatialResolution::new(1., 1.)?,
+                },
+                &query_ctx,
+            )
+            .await
+            .unwrap();
+
+        let result: Vec<MultiPointCollection> = query.try_collect().await?;
+
+        let coords = result[0].coordinates();
+        assert_eq!(coords.len(), 10);
+        assert_eq!(
+            coords,
+            &[
+                [2.933_686_69, 51.23].into(),
+                [3.204_593_64_f64, 51.336_388_89].into(),
+                [4.651_413_428, 51.805_833_33].into(),
+                [4.11, 51.95].into(),
+                [4.386_160_188, 50.886_111_11].into(),
+                [3.767_373_38, 51.114_444_44].into(),
+                [4.293_757_362, 51.297_777_78].into(),
+                [1.850_176_678, 50.965_833_33].into(),
+                [2.170_906_949, 51.021_666_67].into(),
+                [4.292_873_969, 51.927_222_22].into(),
+            ]
+        );
+
+        Ok(())
     }
 
     #[test]
@@ -1347,7 +1453,7 @@ mod tests {
             )
             .await?;
 
-        let req = test::TestRequest::get()
+        let req = actix_web::test::TestRequest::get()
             .uri(&format!("/dataset/internal/{}", id.internal().unwrap()))
             .append_header((header::CONTENT_LENGTH, 0))
             .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())));

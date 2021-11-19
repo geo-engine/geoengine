@@ -20,6 +20,7 @@ use url::Url;
 async fn start<C>(
     static_files_dir: Option<PathBuf>,
     bind_address: SocketAddr,
+    version_api: bool,
     ctx: C,
 ) -> Result<(), Error>
 where
@@ -53,8 +54,7 @@ where
         {
             app = app.configure(pro::handlers::drone_mapping::init_drone_mapping_routes::<C>);
         }
-        #[cfg(feature = "version-api")]
-        {
+        if version_api {
             app = app.route(
                 "/version",
                 web::get().to(crate::server::show_version_handler),
@@ -92,19 +92,44 @@ pub async fn start_pro_server(static_files_dir: Option<PathBuf>) -> Result<()> {
             .unwrap_or(Url::parse(&format!("http://{}/", web_config.bind_address))?)
     );
 
+    let user_config: crate::pro::util::config::User = get_config_element()?;
+
+    if user_config.anonymous_access {
+        info!("Anonymous access is enabled");
+    } else {
+        info!("Anonymous access is disabled");
+    }
+
+    if user_config.user_registration {
+        info!("User registration is enabled");
+    } else {
+        info!("User registration is disabled");
+    }
+
     let data_path_config: config::DataProvider = get_config_element()?;
+
+    let chunk_byte_size = config::get_config_element::<config::QueryContext>()?
+        .chunk_byte_size
+        .into();
+
+    let tiling_spec = config::get_config_element::<config::TilingSpecification>()?.into();
 
     match web_config.backend {
         Backend::InMemory => {
             info!("Using in memory backend");
+            let ctx = ProInMemoryContext::new_with_data(
+                data_path_config.dataset_defs_path,
+                data_path_config.provider_defs_path,
+                tiling_spec,
+                chunk_byte_size,
+            )
+            .await;
+
             start(
                 static_files_dir,
                 web_config.bind_address,
-                ProInMemoryContext::new_with_data(
-                    data_path_config.dataset_defs_path,
-                    data_path_config.provider_defs_path,
-                )
-                .await,
+                web_config.version_api,
+                ctx,
             )
             .await
         }
@@ -128,10 +153,18 @@ pub async fn start_pro_server(static_files_dir: Option<PathBuf>) -> Result<()> {
                     NoTls,
                     data_path_config.dataset_defs_path,
                     data_path_config.provider_defs_path,
+                    tiling_spec,
+                    chunk_byte_size,
                 )
                 .await?;
 
-                start(static_files_dir, web_config.bind_address, ctx).await
+                start(
+                    static_files_dir,
+                    web_config.bind_address,
+                    web_config.version_api,
+                    ctx,
+                )
+                .await
             }
             #[cfg(not(feature = "postgres"))]
             panic!("Postgres backend was selected but the postgres feature wasn't activated during compilation")

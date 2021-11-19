@@ -27,11 +27,12 @@ where
 #[derive(Deserialize, Serialize, Debug, Clone, PartialEq)]
 #[serde(rename_all = "camelCase")]
 pub struct SpatialReferenceSpecification {
-    name: String,
-    spatial_reference: SpatialReference,
-    proj_string: String,
-    extent: BoundingBox2D,
-    axis_labels: Option<(String, String)>,
+    pub name: String,
+    pub spatial_reference: SpatialReference,
+    pub proj_string: String,
+    pub extent: BoundingBox2D,
+    pub axis_labels: Option<(String, String)>,
+    pub axis_order: Option<AxisOrder>,
 }
 
 #[derive(Deserialize, Serialize, Debug, Clone, PartialEq)]
@@ -86,6 +87,8 @@ pub enum ProjJsonAxisDirection {
     North,
 }
 
+#[derive(Debug, Deserialize, Serialize, Clone, PartialEq)]
+#[serde(rename_all = "camelCase")]
 pub enum AxisOrder {
     NorthEast,
     EastNorth,
@@ -176,12 +179,13 @@ fn custom_spatial_reference_specification(
                 (5_568_748.276, 5_568_748.276).into(),
             ),
             axis_labels: None,
+            axis_order: Some(AxisOrder::EastNorth),
         }),
         _ => None,
     }
 }
 
-fn spatial_reference_specification(srs_string: &str) -> Result<SpatialReferenceSpecification> {
+pub fn spatial_reference_specification(srs_string: &str) -> Result<SpatialReferenceSpecification> {
     if let Some(sref) = custom_spatial_reference_specification(srs_string) {
         return Ok(sref);
     }
@@ -208,6 +212,7 @@ fn spatial_reference_specification(srs_string: &str) -> Result<SpatialReferenceS
         }
     });
     let spec = SpatialReferenceSpecification {
+        axis_order: json.axis_order(),
         name: json.name,
         spatial_reference,
         proj_string,
@@ -223,7 +228,8 @@ mod tests {
     use crate::contexts::SimpleContext;
     use crate::contexts::{InMemoryContext, Session};
     use crate::util::tests::send_test_request;
-    use actix_web::{http::header, test};
+    use actix_web;
+    use actix_web::http::header;
     use actix_web_httpauth::headers::authorization::Bearer;
     use geoengine_datatypes::spatial_reference::SpatialReference;
     use geoengine_datatypes::spatial_reference::SpatialReferenceAuthority;
@@ -233,7 +239,7 @@ mod tests {
         let ctx = InMemoryContext::default();
         let session_id = ctx.default_session_ref().await.id();
 
-        let req = test::TestRequest::get()
+        let req = actix_web::test::TestRequest::get()
             .uri("/spatialReferenceSpecification/EPSG:4326")
             .append_header((header::CONTENT_LENGTH, 0))
             .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())));
@@ -241,7 +247,7 @@ mod tests {
 
         assert_eq!(res.status(), 200);
 
-        let spec: SpatialReferenceSpecification = test::read_body_json(res).await;
+        let spec: SpatialReferenceSpecification = actix_web::test::read_body_json(res).await;
         assert_eq!(
             SpatialReferenceSpecification {
                 name: "WGS 84".to_owned(),
@@ -252,6 +258,7 @@ mod tests {
                     "Geodetic longitude".to_owned(),
                     "Geodetic latitude".to_owned()
                 )),
+                axis_order: Some(AxisOrder::NorthEast),
             },
             spec
         );
@@ -266,6 +273,7 @@ mod tests {
                 proj_string: "+proj=merc +a=6378137 +b=6378137 +lat_ts=0 +lon_0=0 +x_0=0 +y_0=0 +k=1 +units=m +nadgrids=@null +wktext +no_defs +type=crs".into(),
                 extent: BoundingBox2D::new_unchecked((-20_037_508.342_789_244, -20_048_966.104_014_6).into(),  (20_037_508.342_789_244, 20_048_966.104_014_594).into()),
                 axis_labels: Some(("Easting".to_owned(), "Northing".to_owned())),
+                axis_order: Some(AxisOrder::EastNorth),
             },
             spec
         );
@@ -284,6 +292,7 @@ mod tests {
                     "Geodetic longitude".to_owned(),
                     "Geodetic latitude".to_owned()
                 )),
+                axis_order: Some(AxisOrder::NorthEast),
             },
             spec
         );
@@ -302,6 +311,7 @@ mod tests {
                     (833_978.556_919_460_4, 9_329_005.182_447_437).into()
                 ),
                 axis_labels: Some(("Easting".to_owned(), "Northing".to_owned())),
+                axis_order: Some(AxisOrder::EastNorth),
             },
             spec
         );
@@ -321,6 +331,7 @@ mod tests {
                     (5_568_748.276, 5_568_748.276).into()
                 ),
                 axis_labels: None,
+                axis_order: Some(AxisOrder::EastNorth),
             },
             spec
         );

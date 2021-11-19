@@ -181,7 +181,18 @@ impl InitializedVectorOperator for InitializedVisualPointClustering {
                     .boxed(),
                 ))
             }
-            _ => Err(error::Error::InvalidOperatorType),
+            TypedVectorQueryProcessor::MultiLineString(_) => Err(error::Error::InvalidVectorType {
+                expected: "MultiPoint".to_owned(),
+                found: "MultiLineString".to_owned(),
+            }),
+            TypedVectorQueryProcessor::MultiPolygon(_) => Err(error::Error::InvalidVectorType {
+                expected: "MultiPoint".to_owned(),
+                found: "MultiPolygon".to_owned(),
+            }),
+            TypedVectorQueryProcessor::Data(_) => Err(error::Error::InvalidVectorType {
+                expected: "MultiPoint".to_owned(),
+                found: "Data".to_owned(),
+            }),
         }
     }
 
@@ -404,7 +415,7 @@ impl QueryProcessor for VisualPointClusteringProcessor {
             )
         });
 
-        Ok(stream.merge_chunks(ctx.chunk_byte_size()).boxed())
+        Ok(stream.merge_chunks(ctx.chunk_byte_size().into()).boxed())
     }
 }
 

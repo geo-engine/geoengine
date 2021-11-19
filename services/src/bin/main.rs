@@ -6,6 +6,7 @@ use geoengine_services::error::{Error, Result};
 use geoengine_services::util::config;
 use geoengine_services::util::config::get_config_element;
 use log::Record;
+use time::format_description;
 
 #[actix_web::main]
 async fn main() -> Result<(), Error> {
@@ -60,7 +61,42 @@ fn initialize_logging() -> Result<LoggerHandle> {
             .duplicate_to_stderr(Duplicate::All);
     }
 
+    reroute_gdal_logging();
+
     Ok(logger.start()?)
+}
+
+/// We install a GDAL error handler that logs all messages with our log macros.
+fn reroute_gdal_logging() {
+    gdal::config::set_error_handler(|error_type, error_num, error_msg| {
+        let target = "GDAL";
+        match error_type {
+            gdal::errors::CplErrType::None => {
+                // should never log anything
+                log::info!(target: target, "GDAL None {}: {}", error_num, error_msg)
+            }
+            gdal::errors::CplErrType::Debug => {
+                log::debug!(target: target, "GDAL Debug {}: {}", error_num, error_msg)
+            }
+            gdal::errors::CplErrType::Warning => {
+                log::warn!(target: target, "GDAL Warning {}: {}", error_num, error_msg)
+            }
+            gdal::errors::CplErrType::Failure => {
+                log::error!(target: target, "GDAL Failure {}: {}", error_num, error_msg)
+            }
+            gdal::errors::CplErrType::Fatal => {
+                log::error!(target: target, "GDAL Fatal {}: {}", error_num, error_msg)
+            }
+        };
+    });
+}
+
+const TIME_FORMAT_STR: &str = "[year]-[month]-[day] [hour]:[minute]:[second].[subsecond digits:6] \
+                [offset_hour sign:mandatory]:[offset_minute]";
+
+lazy_static::lazy_static! {
+    static ref TIME_FORMAT: Vec<format_description::FormatItem<'static>>
+        = format_description::parse(TIME_FORMAT_STR).expect("time format must be parsable");
 }
 
 /// A logline-formatter that produces log lines like
@@ -75,7 +111,9 @@ fn custom_log_format(
     write!(
         w,
         "[{}] {} [{}] {}",
-        now.now().format("%Y-%m-%d %H:%M:%S %:z"),
+        now.now()
+            .format(&TIME_FORMAT)
+            .unwrap_or_else(|_| "Timestamping failed".to_string()),
         record.level(),
         record.module_path().unwrap_or("<unnamed>"),
         &record.args()
@@ -90,10 +128,15 @@ fn colored_custom_log_format(
 ) -> Result<(), std::io::Error> {
     let level = record.level();
     let style = style(level);
+
     write!(
         w,
         "[{}] {} [{}] {}",
-        style.paint(now.now().format("%Y-%m-%d %H:%M:%S %:z").to_string()),
+        style.paint(
+            now.now()
+                .format(&TIME_FORMAT)
+                .unwrap_or_else(|_| "Timestamping failed".to_string()),
+        ),
         style.paint(level.to_string()),
         record.module_path().unwrap_or("<unnamed>"),
         style.paint(&record.args().to_string())

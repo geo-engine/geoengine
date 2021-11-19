@@ -1,4 +1,6 @@
+mod box_plot;
 mod histogram;
+mod scatter_plot;
 mod statistics;
 mod temporal_raster_mean_plot;
 mod temporal_vector_line_plot;

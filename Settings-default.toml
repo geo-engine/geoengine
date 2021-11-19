@@ -2,6 +2,7 @@
 bind_address = "127.0.0.1:3030"
 external_address = "http://localhost:3030"
 backend = "in_memory" # TODO: remove option
+version_api = true
 
 [project_service]
 list_limit = 20
@@ -20,8 +21,8 @@ password = "geoengine"
 [raster.tiling_specification]
 origin_coordinate_x = 0.0
 origin_coordinate_y = 0.0
-tile_shape_pixels_x = 600
-tile_shape_pixels_y = 600
+tile_shape_pixels_x = 512
+tile_shape_pixels_y = 512
 
 [query_context]
 chunk_byte_size = 1048576 # TODO: find reasonable default
@@ -58,10 +59,21 @@ end = "2014-01-01T00:00:00Z"
 # max number of tiles to be produced for generating output tiff
 tile_limit = 4 
 
-[odm]
-endpoint = "http://localhost:3000/"
-# TODO: authentication
-
 [dataprovider]
 dataset_defs_path = "./test_data/dataset_defs"
 provider_defs_path = "./test_data/provider_defs"
+
+[gdal]
+# TODO: find good default
+# Use 0 for `ALL_CPUS` option or a number >0 for a specific number of threads.
+compression_num_threads = 8
+
+
+# Settings for Geo Engine Pro
+[user]
+anonymous_access = true
+user_registration = true
+
+[odm]
+endpoint = "http://localhost:3000/"
+# TODO: authentication

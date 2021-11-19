@@ -52,9 +52,12 @@ impl PlotOperator for MeanRasterPixelValuesOverTime {
         self: Box<Self>,
         context: &dyn ExecutionContext,
     ) -> Result<Box<dyn InitializedPlotOperator>> {
+        let raster = self.sources.raster.initialize(context).await?;
         let initialized_operator = InitializedMeanRasterPixelValuesOverTime {
-            result_descriptor: PlotResultDescriptor {},
-            raster: self.sources.raster.initialize(context).await?,
+            result_descriptor: PlotResultDescriptor {
+                spatial_reference: raster.result_descriptor().spatial_reference,
+            },
+            raster,
             state: self.params,
         };
 
@@ -242,7 +245,10 @@ mod tests {
     use super::*;
 
     use crate::{
-        engine::{MockExecutionContext, MockQueryContext, RasterOperator, RasterResultDescriptor},
+        engine::{
+            ChunkByteSize, MockExecutionContext, MockQueryContext, RasterOperator,
+            RasterResultDescriptor,
+        },
         source::GdalSource,
     };
     use crate::{
@@ -353,7 +359,7 @@ mod tests {
                     time_interval: TimeInterval::default(),
                     spatial_resolution: SpatialResolution::one(),
                 },
-                &MockQueryContext::new(0),
+                &MockQueryContext::new(ChunkByteSize::MIN),
             )
             .await
             .unwrap();
@@ -463,7 +469,7 @@ mod tests {
                     time_interval: TimeInterval::default(),
                     spatial_resolution: SpatialResolution::one(),
                 },
-                &MockQueryContext::new(0),
+                &MockQueryContext::new(ChunkByteSize::MIN),
             )
             .await
             .unwrap();

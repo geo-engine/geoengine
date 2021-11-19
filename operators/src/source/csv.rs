@@ -559,7 +559,7 @@ x,y
             time_interval: TimeInterval::new_unchecked(0, 1),
             spatial_resolution: SpatialResolution::zero_point_one(),
         };
-        let ctx = MockQueryContext::new(10 * 8 * 2);
+        let ctx = MockQueryContext::new((10 * 8 * 2).into());
 
         let r: Vec<Result<MultiPointCollection>> =
             p.query(query, &ctx).await.unwrap().collect().await;

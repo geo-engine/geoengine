@@ -368,7 +368,7 @@ where
                             self.join(
                                 left_collection.clone(),
                                 right_collection,
-                                ctx.chunk_byte_size(),
+                                ctx.chunk_byte_size().into(),
                             )
                         }) {
                             Ok(batch_iter) => stream::iter(batch_iter).boxed(),
@@ -380,7 +380,10 @@ where
             })
             .try_flatten();
 
-        Ok(FeatureCollectionChunkMerger::new(result_stream.fuse(), ctx.chunk_byte_size()).boxed())
+        Ok(
+            FeatureCollectionChunkMerger::new(result_stream.fuse(), ctx.chunk_byte_size().into())
+                .boxed(),
+        )
     }
 }
 
@@ -393,7 +396,7 @@ mod tests {
         BoundingBox2D, FeatureData, MultiPoint, SpatialResolution, TimeInterval,
     };
 
-    use crate::engine::{MockExecutionContext, MockQueryContext, VectorOperator};
+    use crate::engine::{ChunkByteSize, MockExecutionContext, MockQueryContext, VectorOperator};
     use crate::mock::MockFeatureCollectionSource;
 
     use super::*;
@@ -432,7 +435,7 @@ mod tests {
             spatial_resolution: SpatialResolution::zero_point_one(),
         };
 
-        let ctx = MockQueryContext::new(usize::MAX);
+        let ctx = MockQueryContext::new(ChunkByteSize::MAX);
 
         let processor = EquiGeoToDataJoinProcessor::new(
             left_processor,

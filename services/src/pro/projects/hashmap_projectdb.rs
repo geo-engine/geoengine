@@ -446,7 +446,7 @@ mod test {
 
         let id = project_db.create(&session, create).await.unwrap();
 
-        assert!(project_db.load(&session, id).await.is_ok())
+        assert!(project_db.load(&session, id).await.is_ok());
     }
 
     #[tokio::test]

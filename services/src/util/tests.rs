@@ -1,6 +1,6 @@
 use crate::contexts::SimpleContext;
 use crate::contexts::SimpleSession;
-use crate::datasets::provenance::Provenance;
+use crate::datasets::listing::Provenance;
 use crate::datasets::storage::AddDataset;
 use crate::datasets::storage::DatasetStore;
 use crate::datasets::upload::UploadId;
@@ -245,7 +245,7 @@ pub fn initialize_debugging_in_test() {
 pub trait SetMultipartBody {
     fn set_multipart<B: Into<Vec<u8>>>(self, parts: Vec<(&str, B)>) -> Self;
 
-    fn set_multipart_files(self, file_paths: Vec<PathBuf>) -> Self
+    fn set_multipart_files(self, file_paths: &[PathBuf]) -> Self
     where
         Self: Sized,
     {
