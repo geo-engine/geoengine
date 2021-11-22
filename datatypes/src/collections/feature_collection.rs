@@ -1012,6 +1012,7 @@ where
                 }
                 FeatureDataType::Bool => {
                     let array: &arrow::array::BooleanArray = downcast_array(column);
+                    // TODO: This operation is quite expensive for getting a reference
                     let transformed: Vec<_> = array.iter().map(|x| x.unwrap_or(false)).collect();
                     BoolDataRef::new(transformed, array.data_ref().null_bitmap()).into()
                 }
