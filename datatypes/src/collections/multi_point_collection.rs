@@ -226,7 +226,7 @@ mod tests {
     use crate::operations::reproject::Reproject;
     use crate::primitives::{
         DataRef, FeatureData, FeatureDataRef, FeatureDataType, FeatureDataValue, MultiPointAccess,
-        TimeInterval,
+        TimeInstance, TimeInterval,
     };
     use float_cmp::approx_eq;
     use serde_json::{from_str, json};
@@ -907,6 +907,48 @@ mod tests {
                 .unwrap(),
             collection
                 .filter(vec![true, true, false, false, false])
+                .unwrap()
+        );
+    }
+
+    #[test]
+    fn range_filter_datetime() {
+        let collection = MultiPointCollection::from_data(
+            MultiPoint::many(vec![
+                (0.0, 0.1),
+                (1.0, 1.1),
+                (2.0, 3.1),
+                (3.0, 3.1),
+                (4.0, 4.1),
+            ])
+            .unwrap(),
+            vec![TimeInterval::new_unchecked(0, 1); 5],
+            [(
+                "foo".to_string(),
+                FeatureData::DateTime(vec![
+                    TimeInstance::from_millis_unchecked(0),
+                    TimeInstance::from_millis_unchecked(10),
+                    TimeInstance::from_millis_unchecked(20),
+                    TimeInstance::from_millis_unchecked(30),
+                    TimeInstance::from_millis_unchecked(40),
+                ]),
+            )]
+            .iter()
+            .cloned()
+            .collect(),
+        )
+        .unwrap();
+
+        assert_eq!(
+            collection
+                .column_range_filter(
+                    "foo",
+                    &[FeatureDataValue::DateTime(TimeInstance::from_millis_unchecked(15))..],
+                    false
+                )
+                .unwrap(),
+            collection
+                .filter(vec![false, false, true, true, true])
                 .unwrap()
         );
     }
