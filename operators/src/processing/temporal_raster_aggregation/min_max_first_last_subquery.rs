@@ -247,11 +247,11 @@ pub fn first_tile_fold_future<T>(
 where
     T: Pixel,
 {
-    tokio::task::spawn_blocking(|| first_tile_fold_fn(accu, tile)).then(move |x| {
-        futures::future::ready(match x {
+    tokio::task::spawn_blocking(|| first_tile_fold_fn(accu, tile)).then(move |x| async move {
+        match x {
             Ok(r) => Ok(r),
             Err(e) => Err(e.into()),
-        })
+        }
     })
 }
 
@@ -279,11 +279,11 @@ pub fn last_tile_fold_future<T>(
 where
     T: Pixel,
 {
-    tokio::task::spawn_blocking(|| last_tile_fold_fn(accu, tile)).then(move |x| {
-        futures::future::ready(match x {
+    tokio::task::spawn_blocking(|| last_tile_fold_fn(accu, tile)).then(move |x| async move {
+        match x {
             Ok(r) => Ok(r),
             Err(e) => Err(e.into()),
-        })
+        }
     })
 }
 
