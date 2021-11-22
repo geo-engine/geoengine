@@ -1034,7 +1034,7 @@ where
                 let value_option = match field {
                     Ok(Some(FieldValue::IntegerValue(v))) => Some(v != 0),
                     Ok(Some(FieldValue::Integer64Value(v))) => Some(v != 0),
-                    Ok(Some(FieldValue::StringValue(s))) => bool::from_str(&s).ok(),
+                    Ok(Some(FieldValue::StringValue(s))) => bool::from_str(&s.to_lowercase()).ok(),
                     Ok(Some(FieldValue::RealValue(v))) => Some(v != 0.0),
                     Ok(None) => None,
                     Ok(Some(v)) => error_spec.on_error(Error::OgrColumnFieldTypeMismatch {
