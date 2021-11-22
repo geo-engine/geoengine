@@ -179,7 +179,7 @@ mod tests {
             .query(qrect, &cx)
             .await
             .unwrap()
-            .fold(0_usize, move |i, _| futures::future::ready(i + 1))
+            .fold(0_usize, |i, _| async move { i + 1 })
             .await;
         assert_eq!(number_of_source_chunks, 5);
 

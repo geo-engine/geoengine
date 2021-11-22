@@ -26,11 +26,11 @@ where
         accu.add_tile(tile)?;
         Ok(accu)
     })
-    .then(move |x| {
-        futures::future::ready(match x {
+    .then(|x| async move {
+        match x {
             Ok(r) => r,
             Err(e) => Err(e.into()),
-        })
+        }
     })
 }
 

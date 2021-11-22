@@ -68,35 +68,6 @@ where
             chunk_byte_size,
         )
     }
-
-    async fn nested_loop_join<'a>(
-        &'a self,
-        left_collection: FeatureCollection<G>,
-        query: VectorQueryRectangle,
-        ctx: &'a dyn QueryContext,
-    ) -> Result<BoxStream<'a, Result<FeatureCollection<G>>>> {
-        // This implementation is a nested-loop join
-        let left_collection = Arc::new(left_collection);
-
-        let data_query = self.right_processor.query(query, ctx).await?;
-
-        let out = data_query
-            .flat_map(move |right_collection| {
-                match right_collection.and_then(|right_collection| {
-                    self.join(
-                        left_collection.clone(),
-                        right_collection,
-                        ctx.chunk_byte_size().into(),
-                    )
-                }) {
-                    Ok(batch_iter) => stream::iter(batch_iter).boxed(),
-                    Err(e) => stream::once(async { Err(e) }).boxed(),
-                }
-            })
-            .boxed();
-
-        Ok(out)
-    }
 }
 
 struct BatchBuilderIterator<G>
@@ -384,7 +355,28 @@ where
             .left_processor
             .query(query, ctx)
             .await?
-            .and_then(move |left_collection| self.nested_loop_join(left_collection, query, ctx))
+            .and_then(move |left_collection| async move {
+                // This implementation is a nested-loop join
+                let left_collection = Arc::new(left_collection);
+
+                let data_query = self.right_processor.query(query, ctx).await?;
+
+                let out = data_query
+                    .flat_map(move |right_collection| {
+                        match right_collection.and_then(|right_collection| {
+                            self.join(
+                                left_collection.clone(),
+                                right_collection,
+                                ctx.chunk_byte_size().into(),
+                            )
+                        }) {
+                            Ok(batch_iter) => stream::iter(batch_iter).boxed(),
+                            Err(e) => stream::once(async { Err(e) }).boxed(),
+                        }
+                    })
+                    .boxed();
+                Ok(out)
+            })
             .try_flatten();
 
         Ok(

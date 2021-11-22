@@ -178,12 +178,12 @@ where
         let global_geo_transform = self.current_tile_spec.global_geo_transform;
         let tile_shape = self.current_tile_spec.tile_size_in_pixels;
 
-        let s = self.filter_map(move |x| {
-            futures::future::ready(match x {
+        let s = self.filter_map(|x| async move {
+            match x {
                 Ok(Some(t)) => Some(Ok(t)),
                 Ok(None) => None,
                 Err(e) => Some(Err(e)),
-            })
+            }
         });
 
         let s_filled = SparseTilesFillAdapter::new(
@@ -445,11 +445,11 @@ pub fn fold_by_blit_future<T>(
 where
     T: Pixel,
 {
-    tokio::task::spawn_blocking(|| fold_by_blit_impl(accu, tile)).then(move |x| {
-        futures::future::ready(match x {
+    tokio::task::spawn_blocking(|| fold_by_blit_impl(accu, tile)).then(|x| async move {
+        match x {
             Ok(r) => r,
             Err(e) => Err(e.into()),
-        })
+        }
     })
 }
 
@@ -461,12 +461,14 @@ pub fn fold_by_coordinate_lookup_future<T>(
 where
     T: Pixel,
 {
-    tokio::task::spawn_blocking(|| fold_by_coordinate_lookup_impl(accu, tile)).then(move |x| {
-        futures::future::ready(match x {
-            Ok(r) => r,
-            Err(e) => Err(e.into()),
-        })
-    })
+    tokio::task::spawn_blocking(|| fold_by_coordinate_lookup_impl(accu, tile)).then(
+        |x| async move {
+            match x {
+                Ok(r) => r,
+                Err(e) => Err(e.into()),
+            }
+        },
+    )
 }
 
 #[allow(dead_code)]

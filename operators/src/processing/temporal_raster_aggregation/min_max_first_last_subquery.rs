@@ -194,11 +194,11 @@ where
     T: Pixel,
     C: AccFunction,
 {
-    tokio::task::spawn_blocking(|| fold_fn::<T, C>(accu, tile)).then(move |x| {
-        futures::future::ready(match x {
+    tokio::task::spawn_blocking(|| fold_fn::<T, C>(accu, tile)).then(|x| async move {
+        match x {
             Ok(r) => Ok(r),
             Err(e) => Err(e.into()),
-        })
+        }
     })
 }
 
@@ -210,12 +210,14 @@ where
     T: Pixel,
     C: NoDataIgnoringAccFunction,
 {
-    tokio::task::spawn_blocking(|| no_data_ignoring_fold_fn::<T, C>(accu, tile)).then(move |x| {
-        futures::future::ready(match x {
-            Ok(r) => Ok(r),
-            Err(e) => Err(e.into()),
-        })
-    })
+    tokio::task::spawn_blocking(|| no_data_ignoring_fold_fn::<T, C>(accu, tile)).then(
+        |x| async move {
+            match x {
+                Ok(r) => Ok(r),
+                Err(e) => Err(e.into()),
+            }
+        },
+    )
 }
 
 pub fn first_tile_fold_fn<T>(
