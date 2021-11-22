@@ -71,7 +71,7 @@ fn null_bytes() {
     assert_eq!(primitive_array.null_count(), 3);
 
     if let Some(null_bitmap) = primitive_array.data().null_bitmap() {
-        assert_eq!(null_bitmap.len(), 1);
+        assert_eq!(null_bitmap.len(), 8); // len returns number of bits
 
         assert_eq!(
             null_bitmap.clone().into_buffer().as_slice(), // must clone bitmap because there is no way to get a reference to the data
@@ -122,7 +122,8 @@ fn strings() {
             .len(offsets.len() - 1) // number of strings
             .add_buffer(Buffer::from(offsets.to_byte_slice()))
             .add_buffer(Buffer::from(strings.as_bytes()))
-            .build();
+            .build()
+            .unwrap();
 
         StringArray::from(data)
     };
@@ -341,7 +342,7 @@ fn ocl() {
     assert_eq!(ocl_buffer.len(), 5);
 
     let result = {
-        let buffer = MutableBuffer::new(ocl_buffer.len() * mem::size_of::<i32>());
+        let buffer = MutableBuffer::from_len_zeroed(ocl_buffer.len() * mem::size_of::<i32>());
         let buffer_raw: &mut [i32] =
             unsafe { slice::from_raw_parts_mut(buffer.as_ptr() as *mut i32, ocl_buffer.len()) };
         ocl_buffer.read(buffer_raw).enq().unwrap();
@@ -349,7 +350,8 @@ fn ocl() {
         let data = ArrayData::builder(DataType::Int32)
             .len(ocl_buffer.len())
             .add_buffer(buffer.into())
-            .build();
+            .build()
+            .unwrap();
 
         Int32Array::from(data)
     };
@@ -532,11 +534,14 @@ fn multipoints() {
                         ]
                         .to_byte_slice(),
                     ))
-                    .build(),
+                    .build()
+                    .unwrap(),
             )
-            .build(),
+            .build()
+            .unwrap(),
         )
-        .build();
+        .build()
+        .unwrap();
 
         ListArray::from(data)
     };

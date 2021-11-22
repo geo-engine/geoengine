@@ -8,10 +8,12 @@ use crate::pro::users::UserRegistration;
 use crate::pro::users::UserSession;
 use crate::projects::ProjectId;
 use crate::projects::STRectangle;
+use crate::util::config;
 use crate::util::user_input::UserInput;
 use crate::util::IdResponse;
 
 use actix_web::{web, HttpResponse, Responder};
+use snafu::ensure;
 use snafu::ResultExt;
 
 pub(crate) fn init_user_routes<C>(cfg: &mut web::ServiceConfig)
@@ -60,6 +62,11 @@ pub(crate) async fn register_user_handler<C: ProContext>(
     user: web::Json<UserRegistration>,
     ctx: web::Data<C>,
 ) -> Result<impl Responder> {
+    ensure!(
+        config::get_config_element::<crate::pro::util::config::User>()?.user_registration,
+        error::UserRegistrationDisabled
+    );
+
     let user = user.into_inner().validated()?;
     let id = ctx.user_db_ref_mut().await.register(user).await?;
     Ok(web::Json(IdResponse::from(id)))
@@ -153,6 +160,12 @@ pub(crate) async fn logout_handler<C: ProContext>(
 /// }
 /// ```
 pub(crate) async fn anonymous_handler<C: ProContext>(ctx: web::Data<C>) -> Result<impl Responder> {
+    if !config::get_config_element::<crate::pro::util::config::User>()?.anonymous_access {
+        return Err(error::Error::Authorization {
+            source: Box::new(error::Error::AnonymousAccessDisabled),
+        });
+    }
+
     let session = ctx.user_db_ref_mut().await.anonymous().await?;
     Ok(web::Json(session))
 }
@@ -263,6 +276,8 @@ mod tests {
     }
 
     #[tokio::test]
+    // TODO: remove when https://github.com/tokio-rs/tokio/issues/4245 is fixed
+    #[allow(clippy::semicolon_if_nothing_returned)]
     async fn register() {
         let ctx = ProInMemoryContext::default();
 
@@ -409,6 +424,8 @@ mod tests {
     }
 
     #[tokio::test]
+    // TODO: remove when https://github.com/tokio-rs/tokio/issues/4245 is fixed
+    #[allow(clippy::semicolon_if_nothing_returned)]
     async fn login() {
         let res = login_test_helper(Method::POST, "secret123").await;
 
@@ -677,5 +694,71 @@ mod tests {
                 .view,
             Some(rect)
         );
+    }
+
+    #[tokio::test]
+    async fn it_disables_anonymous_access() {
+        let ctx = ProInMemoryContext::default();
+
+        let req = test::TestRequest::post().uri("/anonymous");
+        let res = send_pro_test_request(req, ctx.clone()).await;
+
+        assert_eq!(res.status(), 200);
+
+        config::set_config("user.anonymous_access", false).unwrap();
+
+        let ctx = ProInMemoryContext::default();
+
+        let req = test::TestRequest::post().uri("/anonymous");
+        let res = send_pro_test_request(req, ctx.clone()).await;
+
+        config::set_config("user.anonymous_access", true).unwrap();
+
+        ErrorResponse::assert(
+            res,
+            401,
+            "AnonymousAccessDisabled",
+            "Anonymous access is disabled, please log in",
+        )
+        .await;
+    }
+
+    #[tokio::test]
+    async fn it_disables_user_registration() {
+        let ctx = ProInMemoryContext::default();
+
+        let user_reg = UserRegistration {
+            email: "foo@bar.de".to_owned(),
+            password: "secret123".to_owned(),
+            real_name: "Foo Bar".to_owned(),
+        };
+
+        let req = test::TestRequest::post()
+            .append_header((header::CONTENT_LENGTH, 0))
+            .uri("/user")
+            .set_json(&user_reg);
+        let res = send_pro_test_request(req, ctx.clone()).await;
+
+        assert_eq!(res.status(), 200);
+
+        config::set_config("user.user_registration", false).unwrap();
+
+        let ctx = ProInMemoryContext::default();
+
+        let req = test::TestRequest::post()
+            .append_header((header::CONTENT_LENGTH, 0))
+            .uri("/user")
+            .set_json(&user_reg);
+        let res = send_pro_test_request(req, ctx.clone()).await;
+
+        config::set_config("user.user_registration", true).unwrap();
+
+        ErrorResponse::assert(
+            res,
+            400,
+            "UserRegistrationDisabled",
+            "User registration is disabled",
+        )
+        .await;
     }
 }

@@ -588,12 +588,12 @@ mod tests {
 
     #[tokio::test]
     async fn satellite_by_msg_id_ok() {
-        assert!(Satellite::satellite_by_msg_id(1).is_ok())
+        assert!(Satellite::satellite_by_msg_id(1).is_ok());
     }
 
     #[tokio::test]
     async fn satellite_by_msg_id_fail() {
-        assert!(Satellite::satellite_by_msg_id(42).is_err())
+        assert!(Satellite::satellite_by_msg_id(42).is_err());
     }
 
     #[tokio::test]
@@ -601,7 +601,7 @@ mod tests {
         assert!(Satellite::satellite_by_msg_id(1)
             .unwrap()
             .channel(0)
-            .is_ok())
+            .is_ok());
     }
 
     #[tokio::test]
@@ -609,6 +609,6 @@ mod tests {
         assert!(Satellite::satellite_by_msg_id(1)
             .unwrap()
             .channel(42)
-            .is_err())
+            .is_err());
     }
 }

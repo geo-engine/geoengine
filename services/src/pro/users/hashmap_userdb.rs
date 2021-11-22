@@ -6,6 +6,7 @@ use snafu::ensure;
 
 use crate::contexts::SessionId;
 use crate::error::{self, Result};
+use crate::pro::datasets::Role;
 use crate::pro::users::{
     User, UserCredentials, UserDb, UserId, UserInfo, UserRegistration, UserSession,
 };
@@ -57,10 +58,10 @@ impl UserDb for HashMapUserDb {
                 real_name: None,
             },
             created: chrono::Utc::now(),
-            // TODO: make session length configurable
             valid_until: chrono::Utc::now() + chrono::Duration::minutes(60),
             project: None,
             view: None,
+            roles: vec![id.into(), Role::anonymous_role_id()],
         };
 
         self.sessions.insert(session.id, session.clone());
@@ -83,6 +84,7 @@ impl UserDb for HashMapUserDb {
                     valid_until: chrono::Utc::now() + chrono::Duration::minutes(60),
                     project: None,
                     view: None,
+                    roles: vec![user.id.into(), Role::user_role_id()],
                 };
 
                 self.sessions.insert(session.id, session.clone());

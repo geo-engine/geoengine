@@ -1,20 +1,15 @@
 use futures::StreamExt;
-use gdal::{
-    raster::{Buffer, GdalType, RasterCreationOption},
-    Driver,
+use gdal::raster::{Buffer, GdalType, RasterCreationOption};
+use gdal::{Dataset, Driver};
+use geoengine_datatypes::primitives::{AxisAlignedRectangle, SpatialPartitioned};
+use geoengine_datatypes::raster::{
+    ChangeGridBounds, GeoTransform, Grid2D, GridBlit, GridIdx, GridSize, Pixel, RasterTile2D,
 };
-use geoengine_datatypes::{
-    primitives::{AxisAlignedRectangle, SpatialPartitioned},
-    raster::{
-        ChangeGridBounds, GeoTransform, Grid2D, GridBlit, GridIdx, GridSize, Pixel, RasterTile2D,
-    },
-    spatial_reference::SpatialReference,
-};
-use std::{
-    convert::TryInto,
-    path::PathBuf,
-    sync::mpsc::{Receiver, Sender},
-};
+use geoengine_datatypes::spatial_reference::SpatialReference;
+use serde::{Deserialize, Serialize};
+use std::convert::TryInto;
+use std::path::PathBuf;
+use std::sync::mpsc::{Receiver, Sender};
 use std::{path::Path, sync::mpsc};
 
 use crate::{engine::RasterQueryRectangle, util::Result};
@@ -27,8 +22,8 @@ pub async fn raster_stream_to_geotiff_bytes<T, C: QueryContext + 'static>(
     processor: Box<dyn RasterQueryProcessor<RasterType = T>>,
     query_rect: RasterQueryRectangle,
     query_ctx: C,
-    no_data_value: Option<f64>,
-    spatial_reference: SpatialReference,
+    gdal_tiff_metadata: GdalGeoTiffDatasetMetadata,
+    gdal_tiff_options: GdalGeoTiffOptions,
     tile_limit: Option<usize>,
 ) -> Result<Vec<u8>>
 where
@@ -41,15 +36,21 @@ where
         processor,
         query_rect,
         query_ctx,
-        no_data_value,
-        spatial_reference,
+        gdal_tiff_metadata,
+        gdal_tiff_options,
         tile_limit,
     )
     .await?;
 
-    let bytes = gdal::vsi::get_vsi_mem_file_bytes_owned(&file_path.to_string_lossy())?;
+    let bytes = gdal::vsi::get_vsi_mem_file_bytes_owned(file_path)?;
 
     Ok(bytes)
+}
+
+#[derive(Debug, Clone, Copy)]
+pub struct GdalGeoTiffDatasetMetadata {
+    pub no_data_value: Option<f64>,
+    pub spatial_reference: SpatialReference,
 }
 
 pub async fn raster_stream_to_geotiff<T, C: QueryContext + 'static>(
@@ -57,8 +58,8 @@ pub async fn raster_stream_to_geotiff<T, C: QueryContext + 'static>(
     processor: Box<dyn RasterQueryProcessor<RasterType = T>>,
     query_rect: RasterQueryRectangle,
     query_ctx: C,
-    no_data_value: Option<f64>,
-    spatial_reference: SpatialReference,
+    gdal_tiff_metadata: GdalGeoTiffDatasetMetadata,
+    gdal_tiff_options: GdalGeoTiffOptions,
     tile_limit: Option<usize>,
 ) -> Result<()>
 where
@@ -75,8 +76,8 @@ where
             &rx,
             &file_path_clone,
             query_rect,
-            no_data_value,
-            spatial_reference,
+            gdal_tiff_metadata,
+            gdal_tiff_options,
         )
     });
 
@@ -103,13 +104,23 @@ where
     Ok(())
 }
 
+const COG_BLOCK_SIZE: &str = "512";
+const COMPRESSION_FORMAT: &str = "LZW";
+const COMPRESSION_LEVEL: &str = "9"; // maximum compression
+
 fn gdal_writer<T: Pixel + GdalType>(
     rx: &Receiver<RasterTile2D<T>>,
     file_path: &Path,
     query_rect: RasterQueryRectangle,
-    no_data_value: Option<f64>,
-    spatial_reference: SpatialReference,
+    gdal_tiff_metadata: GdalGeoTiffDatasetMetadata,
+    gdal_tiff_options: GdalGeoTiffOptions,
 ) -> Result<()> {
+    const INTERMEDIATE_FILE_SUFFIX: &str = "GEO-ENGINE-TMP";
+    let intermediate_file_path = file_path.with_extension(INTERMEDIATE_FILE_SUFFIX);
+    let output_file_path = file_path;
+
+    let compression_num_threads = gdal_tiff_options.compression_num_threads.to_string();
+
     let x_pixel_size = query_rect.spatial_resolution.x;
     let y_pixel_size = query_rect.spatial_resolution.y;
     let width = (query_rect.spatial_bounds.size_x() / x_pixel_size).ceil() as u32;
@@ -123,32 +134,25 @@ fn gdal_writer<T: Pixel + GdalType>(
     let output_bounds = query_rect.spatial_bounds;
 
     let driver = Driver::get("GTiff")?;
-    let options = [
-        RasterCreationOption {
-            key: "COMPRESS",
-            value: "LZW",
-        },
-        RasterCreationOption {
-            key: "TILED",
-            value: "YES",
-        },
-    ];
+    let options = create_gdal_tiff_options(&compression_num_threads, gdal_tiff_options.as_cog);
 
-    let mut dataset = driver.create_with_band_type_with_options::<T>(
-        file_path.to_str().ok_or(Error::InvalidGdalFilePath {
-            file_path: file_path.to_owned(),
-        })?,
+    let mut dataset = driver.create_with_band_type_with_options::<T, _>(
+        if gdal_tiff_options.as_cog {
+            &intermediate_file_path
+        } else {
+            output_file_path
+        },
         width as isize,
         height as isize,
         1,
         &options,
     )?;
 
-    dataset.set_spatial_ref(&spatial_reference.try_into()?)?;
+    dataset.set_spatial_ref(&gdal_tiff_metadata.spatial_reference.try_into()?)?;
     dataset.set_geo_transform(&output_geo_transform.into())?;
     let mut band = dataset.rasterband(1)?;
 
-    if let Some(no_data) = no_data_value {
+    if let Some(no_data) = gdal_tiff_metadata.no_data_value {
         band.set_no_data_value(no_data)?;
     }
 
@@ -174,8 +178,10 @@ fn gdal_writer<T: Pixel + GdalType>(
                     output_geo_transform.origin_coordinate,
                     output_geo_transform.spatial_resolution(),
                 ),
-                no_data_value.map_or_else(T::zero, T::from_),
-                no_data_value.map(T::from_),
+                gdal_tiff_metadata
+                    .no_data_value
+                    .map_or_else(T::zero, T::from_),
+                gdal_tiff_metadata.no_data_value.map(T::from_),
             );
 
             let offset = tile
@@ -204,6 +210,149 @@ fn gdal_writer<T: Pixel + GdalType>(
 
         band.write(window, window_size, &buffer)?;
     }
+
+    if gdal_tiff_options.as_cog {
+        geotiff_to_cog(
+            dataset,
+            &intermediate_file_path,
+            output_file_path,
+            gdal_tiff_options.compression_num_threads,
+        )?;
+    }
+
+    Ok(())
+}
+
+fn create_gdal_tiff_options(
+    compression_num_threads: &str,
+    as_cog: bool,
+) -> Vec<RasterCreationOption<'_>> {
+    let mut options = vec![
+        RasterCreationOption {
+            key: "COMPRESS",
+            value: COMPRESSION_FORMAT,
+        },
+        RasterCreationOption {
+            key: "TILED",
+            value: "YES",
+        },
+        RasterCreationOption {
+            key: "ZLEVEL",
+            value: COMPRESSION_LEVEL,
+        },
+        RasterCreationOption {
+            key: "NUM_THREADS",
+            value: compression_num_threads,
+        },
+        RasterCreationOption {
+            key: "INTERLEAVE",
+            value: "BAND",
+        },
+    ];
+    if as_cog {
+        // COGs require a block size of 512x512, so we enforce it now so that we do the work only once.
+        options.push(RasterCreationOption {
+            key: "BLOCKXSIZE",
+            value: COG_BLOCK_SIZE,
+        });
+        options.push(RasterCreationOption {
+            key: "BLOCKYSIZE",
+            value: COG_BLOCK_SIZE,
+        });
+    }
+    options
+}
+
+#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
+pub struct GdalGeoTiffOptions {
+    pub compression_num_threads: GdalCompressionNumThreads,
+    pub as_cog: bool,
+}
+
+/// Number of threads for GDAL to use when compressing files.
+#[derive(Debug, Clone, Copy)]
+pub enum GdalCompressionNumThreads {
+    AllCpus,
+    NumThreads(u16),
+}
+
+impl<'de> Deserialize<'de> for GdalCompressionNumThreads {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        let number_of_threads = u16::deserialize(deserializer)?;
+
+        if number_of_threads == 0 {
+            Ok(GdalCompressionNumThreads::AllCpus)
+        } else {
+            Ok(GdalCompressionNumThreads::NumThreads(number_of_threads))
+        }
+    }
+}
+
+impl Serialize for GdalCompressionNumThreads {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        match self {
+            Self::AllCpus => serializer.serialize_u16(0),
+            Self::NumThreads(number_of_threads) => serializer.serialize_u16(*number_of_threads),
+        }
+    }
+}
+
+impl std::fmt::Display for GdalCompressionNumThreads {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::AllCpus => write!(f, "ALL_CPUS"),
+            Self::NumThreads(n) => write!(f, "{}", n),
+        }
+    }
+}
+
+/// Override file with COG driver
+///
+/// Since COGs are written "overviews first, data second", we cannot generate a `GeoTiff` (where we first have to
+/// write the data in order to generate overviews) that fulfills this property. So, we have to do it as a
+/// separate step.
+///
+fn geotiff_to_cog(
+    input_dataset: Dataset,
+    input_file_path: &Path,
+    output_file_path: &Path,
+    compression_num_threads: GdalCompressionNumThreads,
+) -> Result<()> {
+    let input_driver = input_dataset.driver();
+    let output_driver = Driver::get("COG")?;
+
+    input_dataset.create_copy(
+        &output_driver,
+        output_file_path,
+        &[
+            RasterCreationOption {
+                key: "COMPRESS",
+                value: COMPRESSION_FORMAT,
+            },
+            RasterCreationOption {
+                key: "LEVEL",
+                value: COMPRESSION_LEVEL,
+            },
+            RasterCreationOption {
+                key: "NUM_THREADS",
+                value: &compression_num_threads.to_string(),
+            },
+            RasterCreationOption {
+                key: "BLOCKSIZE",
+                value: COG_BLOCK_SIZE,
+            },
+        ],
+    )?;
+
+    drop(input_dataset);
+
+    input_driver.delete(input_file_path)?;
 
     Ok(())
 }
@@ -247,8 +396,14 @@ mod tests {
                 ),
             },
             ctx,
-            Some(0.),
-            SpatialReference::epsg_4326(),
+            GdalGeoTiffDatasetMetadata {
+                no_data_value: Some(0.),
+                spatial_reference: SpatialReference::epsg_4326(),
+            },
+            GdalGeoTiffOptions {
+                as_cog: false,
+                compression_num_threads: GdalCompressionNumThreads::NumThreads(2),
+            },
             None,
         )
         .await
@@ -259,6 +414,55 @@ mod tests {
                 as &[u8],
             bytes.as_slice()
         );
+    }
+
+    #[tokio::test]
+    async fn cloud_optimized_geotiff_from_stream() {
+        let ctx = MockQueryContext::default();
+        let tiling_specification =
+            TilingSpecification::new(Coordinate2D::default(), [600, 600].into());
+
+        let gdal_source = GdalSourceProcessor::<u8> {
+            tiling_specification,
+            meta_data: Box::new(create_ndvi_meta_data()),
+            phantom_data: Default::default(),
+        };
+
+        let query_bbox = SpatialPartition2D::new((-10., 80.).into(), (50., 20.).into()).unwrap();
+
+        let bytes = raster_stream_to_geotiff_bytes(
+            gdal_source.boxed(),
+            RasterQueryRectangle {
+                spatial_bounds: query_bbox,
+                time_interval: TimeInterval::new(1_388_534_400_000, 1_388_534_400_000 + 1000)
+                    .unwrap(),
+                spatial_resolution: SpatialResolution::new_unchecked(
+                    query_bbox.size_x() / 600.,
+                    query_bbox.size_y() / 600.,
+                ),
+            },
+            ctx,
+            GdalGeoTiffDatasetMetadata {
+                no_data_value: Some(0.),
+                spatial_reference: SpatialReference::epsg_4326(),
+            },
+            GdalGeoTiffOptions {
+                as_cog: true,
+                compression_num_threads: GdalCompressionNumThreads::AllCpus,
+            },
+            None,
+        )
+        .await
+        .unwrap();
+
+        assert_eq!(
+            include_bytes!(
+                "../../../test_data/raster/cloud_optimized_geotiff_from_stream_compressed.tiff"
+            ) as &[u8],
+            bytes.as_slice()
+        );
+
+        // TODO: check programmatically that intermediate file is gone
     }
 
     #[tokio::test]
@@ -287,8 +491,14 @@ mod tests {
                 ),
             },
             ctx,
-            Some(0.),
-            SpatialReference::epsg_4326(),
+            GdalGeoTiffDatasetMetadata {
+                no_data_value: Some(0.),
+                spatial_reference: SpatialReference::epsg_4326(),
+            },
+            GdalGeoTiffOptions {
+                as_cog: false,
+                compression_num_threads: GdalCompressionNumThreads::NumThreads(1),
+            },
             Some(1),
         )
         .await;
@@ -324,12 +534,18 @@ mod tests {
                 ),
             },
             ctx,
-            Some(0.),
-            SpatialReference::epsg_4326(),
+            GdalGeoTiffDatasetMetadata {
+                no_data_value: Some(0.),
+                spatial_reference: SpatialReference::epsg_4326(),
+            },
+            GdalGeoTiffOptions {
+                as_cog: false,
+                compression_num_threads: GdalCompressionNumThreads::AllCpus,
+            },
             None,
         )
         .await;
 
-        assert!(bytes.is_ok())
+        assert!(bytes.is_ok());
     }
 }

@@ -7,11 +7,11 @@ use std::sync::Arc;
 use futures::stream::BoxStream;
 use futures::{StreamExt, TryStreamExt};
 use geoengine_datatypes::dataset::DatasetId;
+use rayon::ThreadPool;
 use serde::{Deserialize, Serialize};
 use snafu::ensure;
 
 use crate::adapters::FeatureCollectionChunkMerger;
-use crate::concurrency::ThreadPoolContext;
 use crate::engine::{
     ExecutionContext, InitializedVectorOperator, Operator, QueryContext, TypedVectorQueryProcessor,
     VectorOperator, VectorQueryProcessor, VectorQueryRectangle, VectorResultDescriptor,
@@ -131,7 +131,7 @@ impl PointInPolygonFilterProcessor {
     fn filter_parallel(
         points: &Arc<MultiPointCollection>,
         polygons: &MultiPolygonCollection,
-        thread_pool: &ThreadPoolContext,
+        thread_pool: &ThreadPool,
     ) -> Vec<bool> {
         debug_assert!(!points.is_empty());
 
@@ -139,7 +139,7 @@ impl PointInPolygonFilterProcessor {
 
         let tester = Arc::new(PointInPolygonTester::new(polygons)); // TODO: multithread
 
-        let parallelism = thread_pool.degree_of_parallelism();
+        let parallelism = thread_pool.current_num_threads();
         let chunk_size = (points.len() as f64 / parallelism as f64).ceil() as usize;
 
         let mut result = vec![false; points.len()];
@@ -155,7 +155,7 @@ impl PointInPolygonFilterProcessor {
                 let features_index_end = min(feature_index_start + chunk_size, num_features);
                 let tester = tester.clone();
 
-                scope.compute(move || {
+                scope.spawn(move |_| {
                     for (
                         feature_index,
                         ((coordinates_start_index, coordinates_end_index), time_interval),
@@ -189,7 +189,7 @@ impl PointInPolygonFilterProcessor {
         polygons: MultiPolygonCollection,
         initial_filter: &BooleanArray,
     ) -> Result<BooleanArray> {
-        let thread_pool = ctx.thread_pool_context().clone();
+        let thread_pool = ctx.thread_pool().clone();
 
         let thread_points = points.clone();
         let filter = tokio::task::spawn_blocking(move || {
@@ -241,7 +241,7 @@ impl VectorQueryProcessor for PointInPolygonFilterProcessor {
                 });
 
         Ok(
-            FeatureCollectionChunkMerger::new(filtered_stream.fuse(), ctx.chunk_byte_size())
+            FeatureCollectionChunkMerger::new(filtered_stream.fuse(), ctx.chunk_byte_size().into())
                 .boxed(),
         )
     }
@@ -272,7 +272,9 @@ mod tests {
         BoundingBox2D, Coordinate2D, MultiPoint, MultiPolygon, SpatialResolution, TimeInterval,
     };
 
-    use crate::engine::{MockExecutionContext, MockQueryContext, VectorQueryRectangle};
+    use crate::engine::{
+        ChunkByteSize, MockExecutionContext, MockQueryContext, VectorQueryRectangle,
+    };
     use crate::mock::MockFeatureCollectionSource;
 
     #[test]
@@ -372,7 +374,7 @@ mod tests {
             time_interval: TimeInterval::default(),
             spatial_resolution: SpatialResolution::zero_point_one(),
         };
-        let ctx = MockQueryContext::new(usize::MAX);
+        let ctx = MockQueryContext::new(ChunkByteSize::MAX);
 
         let query = query_processor.query(query_rectangle, &ctx).await.unwrap();
 
@@ -421,7 +423,7 @@ mod tests {
             time_interval: TimeInterval::default(),
             spatial_resolution: SpatialResolution::zero_point_one(),
         };
-        let ctx = MockQueryContext::new(usize::MAX);
+        let ctx = MockQueryContext::new(ChunkByteSize::MAX);
 
         let query = query_processor.query(query_rectangle, &ctx).await.unwrap();
 
@@ -483,7 +485,7 @@ mod tests {
             time_interval: TimeInterval::default(),
             spatial_resolution: SpatialResolution::zero_point_one(),
         };
-        let ctx = MockQueryContext::new(usize::MAX);
+        let ctx = MockQueryContext::new(ChunkByteSize::MAX);
 
         let query = query_processor.query(query_rectangle, &ctx).await.unwrap();
 
@@ -563,8 +565,8 @@ mod tests {
             spatial_resolution: SpatialResolution::zero_point_one(),
         };
 
-        let ctx_one_chunk = MockQueryContext::new(usize::MAX);
-        let ctx_minimal_chunks = MockQueryContext::new(0);
+        let ctx_one_chunk = MockQueryContext::new(ChunkByteSize::MAX);
+        let ctx_minimal_chunks = MockQueryContext::new(ChunkByteSize::MIN);
 
         let query = query_processor
             .query(query_rectangle, &ctx_minimal_chunks)

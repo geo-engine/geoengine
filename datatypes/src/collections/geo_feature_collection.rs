@@ -6,6 +6,7 @@ use arrow::{
 };
 
 use crate::primitives::{BoundingBox2D, Coordinate2D, GeometryRef};
+use crate::util::Result;
 
 /// This trait allows iterating over the geometries of a feature collection
 pub trait IntoGeometryIterator<'a> {
@@ -45,5 +46,8 @@ pub trait GeometryCollection {
 }
 
 pub trait ReplaceRawArrayCoords {
-    fn replace_raw_coords(array_ref: &Arc<dyn Array>, new_coord_buffer: Buffer) -> ArrayData;
+    fn replace_raw_coords(
+        array_ref: &Arc<dyn Array>,
+        new_coord_buffer: Buffer,
+    ) -> Result<ArrayData>;
 }
