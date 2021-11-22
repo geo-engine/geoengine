@@ -8,6 +8,7 @@ use crate::util::parsing::{deserialize_base_url, deserialize_base_url_option};
 use chrono::{DateTime, FixedOffset};
 use config::{Config, File};
 use geoengine_datatypes::primitives::{TimeInstance, TimeInterval};
+use geoengine_operators::util::raster_stream_to_geotiff::GdalCompressionNumThreads;
 use lazy_static::lazy_static;
 use serde::Deserialize;
 use snafu::ResultExt;
@@ -107,6 +108,7 @@ pub struct Web {
     #[serde(deserialize_with = "deserialize_base_url_option", default)]
     pub external_address: Option<url::Url>,
     pub backend: Backend,
+    pub version_api: bool,
 }
 
 impl ConfigElement for Web {
@@ -153,6 +155,21 @@ pub struct TilingSpecification {
     pub origin_coordinate_y: f64,
     pub tile_shape_pixels_x: usize,
     pub tile_shape_pixels_y: usize,
+}
+
+impl From<TilingSpecification> for geoengine_datatypes::raster::TilingSpecification {
+    fn from(ts: TilingSpecification) -> geoengine_datatypes::raster::TilingSpecification {
+        geoengine_datatypes::raster::TilingSpecification {
+            origin_coordinate: geoengine_datatypes::primitives::Coordinate2D::new(
+                ts.origin_coordinate_x,
+                ts.origin_coordinate_y,
+            ),
+            tile_size_in_pixels: geoengine_datatypes::raster::GridShape2D::from([
+                ts.tile_shape_pixels_y,
+                ts.tile_shape_pixels_x,
+            ]),
+        }
+    }
 }
 
 impl ConfigElement for TilingSpecification {
@@ -288,4 +305,13 @@ pub struct DataProvider {
 
 impl ConfigElement for DataProvider {
     const KEY: &'static str = "dataprovider";
+}
+
+#[derive(Debug, Deserialize)]
+pub struct Gdal {
+    pub compression_num_threads: GdalCompressionNumThreads,
+}
+
+impl ConfigElement for Gdal {
+    const KEY: &'static str = "gdal";
 }

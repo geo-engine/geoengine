@@ -1,3 +1,4 @@
+use crate::util::statistics::StatisticsError;
 use chrono::ParseError;
 use geoengine_datatypes::dataset::DatasetId;
 use geoengine_datatypes::primitives::FeatureDataType;
@@ -50,6 +51,8 @@ pub enum Error {
         expected: geoengine_datatypes::spatial_reference::SpatialReferenceOption,
         found: geoengine_datatypes::spatial_reference::SpatialReferenceOption,
     },
+
+    AllSourcesMustHaveSameSpatialReference,
 
     InvalidOperatorSpec {
         reason: String,
@@ -126,12 +129,23 @@ pub enum Error {
 
     InvalidNoDataValueValueForOutputDataType,
 
+    #[snafu(display("Invalid type: expected {} found {}", expected, found))]
     InvalidType {
         expected: String,
         found: String,
     },
 
-    InvalidOperatorType,
+    #[snafu(display("Invalid operator type: expected {} found {}", expected, found))]
+    InvalidOperatorType {
+        expected: String,
+        found: String,
+    },
+
+    #[snafu(display("Invalid vector type: expected {} found {}", expected, found))]
+    InvalidVectorType {
+        expected: String,
+        found: String,
+    },
 
     #[snafu(display("Column types do not match: {:?} - {:?}", left, right))]
     ColumnTypeMismatch {
@@ -222,6 +236,7 @@ pub enum Error {
 
     TemporalRasterAggregationLastValidRequiresNoData,
     TemporalRasterAggregationFirstValidRequiresNoData,
+    TemporalRasterAggregationMeanRequiresNoData,
 
     NoSpatialBoundsAvailable,
 
@@ -274,6 +289,11 @@ pub enum Error {
         "Raster data sets with a different origin than upper left are currently not supported"
     ))]
     GeoTransformOrigin,
+
+    #[snafu(display("Statistics error: {}", source))]
+    Statistics {
+        source: crate::util::statistics::StatisticsError,
+    },
 }
 
 impl From<geoengine_datatypes::error::Error> for Error {
@@ -325,5 +345,11 @@ impl From<arrow::error::ArrowError> for Error {
 impl From<tokio::task::JoinError> for Error {
     fn from(source: tokio::task::JoinError) -> Self {
         Error::TokioJoin { source }
+    }
+}
+
+impl From<crate::util::statistics::StatisticsError> for Error {
+    fn from(source: StatisticsError) -> Self {
+        Error::Statistics { source }
     }
 }

@@ -281,7 +281,7 @@ mod tests {
             time_interval: TimeInterval::default(),
             spatial_resolution: SpatialResolution::zero_point_one(),
         };
-        let ctx = MockQueryContext::new(2 * std::mem::size_of::<Coordinate2D>());
+        let ctx = MockQueryContext::new((2 * std::mem::size_of::<Coordinate2D>()).into());
 
         let stream = processor.query(query_rectangle, &ctx).await.unwrap();
 

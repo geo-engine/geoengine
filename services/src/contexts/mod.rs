@@ -1,6 +1,7 @@
 use crate::error::Result;
 use crate::{projects::ProjectDb, workflows::registry::WorkflowRegistry};
 use async_trait::async_trait;
+use rayon::ThreadPool;
 use std::sync::Arc;
 use tokio::sync::{RwLock, RwLockReadGuard, RwLockWriteGuard};
 
@@ -10,20 +11,17 @@ mod simple_context;
 
 use crate::datasets::storage::DatasetDb;
 
-use crate::util::config;
-use crate::util::config::get_config_element;
 use geoengine_datatypes::dataset::DatasetId;
-use geoengine_datatypes::primitives::Coordinate2D;
-use geoengine_datatypes::raster::GridShape2D;
+
 use geoengine_datatypes::raster::TilingSpecification;
-use geoengine_operators::concurrency::ThreadPoolContext;
 use geoengine_operators::engine::{
-    ExecutionContext, MetaData, MetaDataProvider, QueryContext, RasterQueryRectangle,
-    RasterResultDescriptor, VectorQueryRectangle, VectorResultDescriptor,
+    ChunkByteSize, ExecutionContext, MetaData, MetaDataProvider, QueryContext,
+    RasterQueryRectangle, RasterResultDescriptor, VectorQueryRectangle, VectorResultDescriptor,
 };
 use geoengine_operators::mock::MockDatasetDataSourceLoadingInfo;
 use geoengine_operators::source::{GdalLoadingInfo, OgrSourceDataset};
 
+use crate::datasets::listing::SessionMetaDataProvider;
 pub use in_memory::InMemoryContext;
 pub use session::{MockableSession, Session, SessionId, SimpleSession};
 pub use simple_context::SimpleContext;
@@ -62,16 +60,25 @@ pub trait Context: 'static + Send + Sync + Clone {
 }
 
 pub struct QueryContextImpl {
-    pub chunk_byte_size: usize,
-    pub thread_pool: ThreadPoolContext,
+    chunk_byte_size: ChunkByteSize,
+    pub thread_pool: Arc<ThreadPool>,
+}
+
+impl QueryContextImpl {
+    pub fn new(chunk_byte_size: ChunkByteSize, thread_pool: Arc<ThreadPool>) -> Self {
+        QueryContextImpl {
+            chunk_byte_size,
+            thread_pool,
+        }
+    }
 }
 
 impl QueryContext for QueryContextImpl {
-    fn chunk_byte_size(&self) -> usize {
+    fn chunk_byte_size(&self) -> ChunkByteSize {
         self.chunk_byte_size
     }
 
-    fn thread_pool_context(&self) -> &ThreadPoolContext {
+    fn thread_pool(&self) -> &Arc<ThreadPool> {
         &self.thread_pool
     }
 }
@@ -82,8 +89,9 @@ where
     S: Session,
 {
     dataset_db: Db<D>,
-    thread_pool: ThreadPoolContext,
+    thread_pool: Arc<ThreadPool>,
     session: S,
+    tiling_specification: TilingSpecification,
 }
 
 impl<S, D> ExecutionContextImpl<S, D>
@@ -91,11 +99,17 @@ where
     D: DatasetDb<S>,
     S: Session,
 {
-    pub fn new(dataset_db: Db<D>, thread_pool: ThreadPoolContext, session: S) -> Self {
+    pub fn new(
+        dataset_db: Db<D>,
+        thread_pool: Arc<ThreadPool>,
+        session: S,
+        tiling_specification: TilingSpecification,
+    ) -> Self {
         Self {
             dataset_db,
             thread_pool,
             session,
+            tiling_specification,
         }
     }
 }
@@ -103,32 +117,21 @@ where
 impl<S, D> ExecutionContext for ExecutionContextImpl<S, D>
 where
     D: DatasetDb<S>
-        + MetaDataProvider<
+        + SessionMetaDataProvider<
+            S,
             MockDatasetDataSourceLoadingInfo,
             VectorResultDescriptor,
             VectorQueryRectangle,
-        > + MetaDataProvider<OgrSourceDataset, VectorResultDescriptor, VectorQueryRectangle>
-        + MetaDataProvider<GdalLoadingInfo, RasterResultDescriptor, RasterQueryRectangle>,
+        > + SessionMetaDataProvider<S, OgrSourceDataset, VectorResultDescriptor, VectorQueryRectangle>
+        + SessionMetaDataProvider<S, GdalLoadingInfo, RasterResultDescriptor, RasterQueryRectangle>,
     S: Session,
 {
-    fn thread_pool_context(&self) -> ThreadPoolContext {
-        self.thread_pool.clone()
+    fn thread_pool(&self) -> &Arc<ThreadPool> {
+        &self.thread_pool
     }
 
     fn tiling_specification(&self) -> TilingSpecification {
-        // TODO: load only once and handle error
-        let config_tiling_spec = get_config_element::<config::TilingSpecification>().unwrap();
-
-        TilingSpecification {
-            origin_coordinate: Coordinate2D::new(
-                config_tiling_spec.origin_coordinate_x,
-                config_tiling_spec.origin_coordinate_y,
-            ),
-            tile_size_in_pixels: GridShape2D::from([
-                config_tiling_spec.tile_shape_pixels_y,
-                config_tiling_spec.tile_shape_pixels_x,
-            ]),
-        }
+        self.tiling_specification
     }
 }
 
@@ -139,14 +142,14 @@ impl<S, D>
     for ExecutionContextImpl<S, D>
 where
     D: DatasetDb<S>
-        + MetaDataProvider<
+        + SessionMetaDataProvider<
+            S,
             MockDatasetDataSourceLoadingInfo,
             VectorResultDescriptor,
             VectorQueryRectangle,
         >,
     S: Session,
 {
-    // TODO: make async
     async fn meta_data(
         &self,
         dataset_id: &DatasetId,
@@ -161,9 +164,15 @@ where
         geoengine_operators::error::Error,
     > {
         match dataset_id {
-            DatasetId::Internal { dataset_id: _ } => {
-                self.dataset_db.read().await.meta_data(dataset_id).await
-            }
+            DatasetId::Internal { dataset_id: _ } => self
+                .dataset_db
+                .read()
+                .await
+                .session_meta_data(&self.session, dataset_id)
+                .await
+                .map_err(|e| geoengine_operators::error::Error::LoadingInfo {
+                    source: Box::new(e),
+                }),
             DatasetId::External(external) => {
                 self.dataset_db
                     .read()
@@ -186,10 +195,9 @@ impl<S, D> MetaDataProvider<OgrSourceDataset, VectorResultDescriptor, VectorQuer
     for ExecutionContextImpl<S, D>
 where
     D: DatasetDb<S>
-        + MetaDataProvider<OgrSourceDataset, VectorResultDescriptor, VectorQueryRectangle>,
+        + SessionMetaDataProvider<S, OgrSourceDataset, VectorResultDescriptor, VectorQueryRectangle>,
     S: Session,
 {
-    // TODO: make async
     async fn meta_data(
         &self,
         dataset_id: &DatasetId,
@@ -198,9 +206,15 @@ where
         geoengine_operators::error::Error,
     > {
         match dataset_id {
-            DatasetId::Internal { dataset_id: _ } => {
-                self.dataset_db.read().await.meta_data(dataset_id).await
-            }
+            DatasetId::Internal { dataset_id: _ } => self
+                .dataset_db
+                .read()
+                .await
+                .session_meta_data(&self.session, dataset_id)
+                .await
+                .map_err(|e| geoengine_operators::error::Error::LoadingInfo {
+                    source: Box::new(e),
+                }),
             DatasetId::External(external) => {
                 self.dataset_db
                     .read()
@@ -223,10 +237,9 @@ impl<S, D> MetaDataProvider<GdalLoadingInfo, RasterResultDescriptor, RasterQuery
     for ExecutionContextImpl<S, D>
 where
     D: DatasetDb<S>
-        + MetaDataProvider<GdalLoadingInfo, RasterResultDescriptor, RasterQueryRectangle>,
+        + SessionMetaDataProvider<S, GdalLoadingInfo, RasterResultDescriptor, RasterQueryRectangle>,
     S: Session,
 {
-    // TODO: make async
     async fn meta_data(
         &self,
         dataset_id: &DatasetId,
@@ -235,9 +248,15 @@ where
         geoengine_operators::error::Error,
     > {
         match dataset_id {
-            DatasetId::Internal { dataset_id: _ } => {
-                self.dataset_db.read().await.meta_data(dataset_id).await
-            }
+            DatasetId::Internal { dataset_id: _ } => self
+                .dataset_db
+                .read()
+                .await
+                .session_meta_data(&self.session, dataset_id)
+                .await
+                .map_err(|e| geoengine_operators::error::Error::LoadingInfo {
+                    source: Box::new(e),
+                }),
             DatasetId::External(external) => {
                 self.dataset_db
                     .read()

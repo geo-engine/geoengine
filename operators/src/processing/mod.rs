@@ -9,6 +9,7 @@ mod reprojection;
 mod temporal_raster_aggregation;
 mod vector_join;
 
+pub use expression::{Expression, ExpressionParams, ExpressionSources};
 pub use point_in_polygon::{
     PointInPolygonFilter, PointInPolygonFilterParams, PointInPolygonFilterSource,
     PointInPolygonTester,

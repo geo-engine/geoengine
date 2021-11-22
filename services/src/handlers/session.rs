@@ -205,6 +205,8 @@ mod tests {
     }
 
     #[tokio::test]
+    // TODO: remove when https://github.com/tokio-rs/tokio/issues/4245 is fixed
+    #[allow(clippy::semicolon_if_nothing_returned)]
     async fn anonymous() {
         let res = anonymous_test_helper(Method::POST).await;
 

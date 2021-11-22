@@ -245,7 +245,7 @@ mod tests {
     use super::*;
 
     use crate::engine::{
-        MockExecutionContext, MockQueryContext, QueryProcessor, RasterOperator,
+        ChunkByteSize, MockExecutionContext, MockQueryContext, QueryProcessor, RasterOperator,
         VectorQueryRectangle,
     };
     use crate::mock::MockFeatureCollectionSource;
@@ -358,7 +358,7 @@ mod tests {
                     time_interval: TimeInterval::default(),
                     spatial_resolution: SpatialResolution::new(0.1, 0.1).unwrap(),
                 },
-                &MockQueryContext::new(0),
+                &MockQueryContext::new(ChunkByteSize::MIN),
             )
             .await
             .unwrap()
@@ -431,7 +431,7 @@ mod tests {
                     time_interval: TimeInterval::default(),
                     spatial_resolution: SpatialResolution::new(0.1, 0.1).unwrap(),
                 },
-                &MockQueryContext::new(0),
+                &MockQueryContext::new(ChunkByteSize::MIN),
             )
             .await
             .unwrap()
@@ -505,7 +505,7 @@ mod tests {
                     time_interval: TimeInterval::default(),
                     spatial_resolution: SpatialResolution::new(0.1, 0.1).unwrap(),
                 },
-                &MockQueryContext::new(0),
+                &MockQueryContext::new(ChunkByteSize::MIN),
             )
             .await
             .unwrap()

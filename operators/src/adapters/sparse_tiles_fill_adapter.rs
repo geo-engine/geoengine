@@ -2,14 +2,17 @@ use std::{pin::Pin, task::Poll};
 
 use futures::{ready, Stream};
 use geoengine_datatypes::{
-    primitives::TimeInterval,
+    primitives::{SpatialPartitioned, TimeInterval},
     raster::{
         EmptyGrid2D, GeoTransform, GridBoundingBox2D, GridBounds, GridIdx2D, GridShape2D, GridStep,
-        Pixel, RasterTile2D,
+        Pixel, RasterTile2D, TilingSpecification,
     },
-    util::Result,
 };
 use pin_project::pin_project;
+
+use crate::util::Result;
+
+use crate::engine::RasterQueryRectangle;
 
 #[derive(Debug, PartialEq, Clone, Copy)]
 enum State {
@@ -104,6 +107,29 @@ where
                 state: State::Initial,
             },
         }
+    }
+
+    pub fn new_like_subquery(
+        stream: S,
+        query_rect_to_answer: RasterQueryRectangle,
+        tiling_spec: TilingSpecification,
+        no_data_value: T,
+    ) -> Self {
+        debug_assert!(query_rect_to_answer.spatial_resolution.y > 0.);
+
+        let tiling_strat = tiling_spec.strategy(
+            query_rect_to_answer.spatial_resolution.x,
+            -query_rect_to_answer.spatial_resolution.y,
+        );
+
+        let grid_bounds = tiling_strat.tile_grid_box(query_rect_to_answer.spatial_partition());
+        Self::new(
+            stream,
+            grid_bounds,
+            tiling_strat.geo_transform,
+            tiling_spec.tile_size_in_pixels,
+            no_data_value,
+        )
     }
 
     #[allow(clippy::too_many_lines)]
@@ -386,7 +412,7 @@ mod tests {
             ([0, 1].into(), TimeInterval::new_unchecked(5, 10)),
         ];
 
-        assert_eq!(tile_time_positions, expected_positions)
+        assert_eq!(tile_time_positions, expected_positions);
     }
 
     #[tokio::test]
@@ -430,7 +456,7 @@ mod tests {
             ([0, 1].into(), TimeInterval::default()),
         ];
 
-        assert_eq!(tile_time_positions, expected_positions)
+        assert_eq!(tile_time_positions, expected_positions);
     }
 
     #[tokio::test]
@@ -516,7 +542,7 @@ mod tests {
             ([0, 1].into(), TimeInterval::new_unchecked(5, 10)),
         ];
 
-        assert_eq!(tile_time_positions, expected_positions)
+        assert_eq!(tile_time_positions, expected_positions);
     }
 
     #[tokio::test]
@@ -602,7 +628,7 @@ mod tests {
             ([0, 1].into(), TimeInterval::new_unchecked(5, 10)),
         ];
 
-        assert_eq!(tile_time_positions, expected_positions)
+        assert_eq!(tile_time_positions, expected_positions);
     }
 
     #[tokio::test]
@@ -660,7 +686,7 @@ mod tests {
             ([0, 0].into(), TimeInterval::new_unchecked(5, 10)),
         ];
 
-        assert_eq!(tile_time_positions, expected_positions)
+        assert_eq!(tile_time_positions, expected_positions);
     }
 
     #[allow(clippy::too_many_lines)]
@@ -779,7 +805,7 @@ mod tests {
             ([0, 1].into(), TimeInterval::new_unchecked(5, 10)),
         ];
 
-        assert_eq!(tile_time_positions, expected_positions)
+        assert_eq!(tile_time_positions, expected_positions);
     }
 
     #[tokio::test]
@@ -841,7 +867,7 @@ mod tests {
             ([0, 1].into(), TimeInterval::default()),
         ];
 
-        assert_eq!(tile_time_positions, expected_positions)
+        assert_eq!(tile_time_positions, expected_positions);
     }
 
     #[tokio::test]
@@ -856,7 +882,7 @@ mod tests {
                     .into(),
                 properties: Default::default(),
             }),
-            Err(geoengine_datatypes::error::Error::InvalidTypedGridConversion),
+            Err(crate::error::Error::NoSpatialBoundsAvailable),
         ];
 
         let result_data = data.into_iter();

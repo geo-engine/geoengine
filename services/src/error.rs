@@ -1,7 +1,11 @@
 use crate::handlers::ErrorResponse;
+use crate::workflows::workflow::WorkflowId;
 use actix_web::http::StatusCode;
 use actix_web::HttpResponse;
-use geoengine_datatypes::{dataset::DatasetProviderId, spatial_reference::SpatialReferenceOption};
+use geoengine_datatypes::{
+    dataset::{DatasetId, DatasetProviderId},
+    spatial_reference::SpatialReferenceOption,
+};
 use snafu::Snafu;
 use strum::IntoStaticStr;
 
@@ -137,6 +141,25 @@ pub enum Error {
     UnknownProviderId,
     MissingDatasetId,
 
+    #[snafu(display("Permission denied for dataset with id {:?}", dataset))]
+    DatasetPermissionDenied {
+        dataset: DatasetId,
+    },
+
+    #[snafu(display("Updating permission ({}, {:?}, {}) denied", role, dataset, permission))]
+    UpateDatasetPermission {
+        role: String,
+        dataset: DatasetId,
+        permission: String,
+    },
+
+    #[snafu(display("Permission ({}, {:?}, {}) already exists", role, dataset, permission))]
+    DuplicateDatasetPermission {
+        role: String,
+        dataset: DatasetId,
+        permission: String,
+    },
+
     #[snafu(display("Parameter {} must have length between {} and {}", parameter, min, max))]
     InvalidStringLength {
         parameter: String,
@@ -229,6 +252,45 @@ pub enum Error {
     AxisOrderingNotKnownForSrs {
         srs_string: String,
     },
+
+    #[snafu(display("Anonymous access is disabled, please log in"))]
+    AnonymousAccessDisabled,
+
+    #[snafu(display("User registration is disabled"))]
+    UserRegistrationDisabled,
+
+    #[snafu(display(
+        "WCS request endpoint {} must match identifier {}",
+        endpoint,
+        identifier
+    ))]
+    WCSEndpointIdentifierMissmatch {
+        endpoint: WorkflowId,
+        identifier: WorkflowId,
+    },
+    #[snafu(display(
+        "WCS request endpoint {} must match identifiers {}",
+        endpoint,
+        identifiers
+    ))]
+    WCSEndpointIdentifiersMissmatch {
+        endpoint: WorkflowId,
+        identifiers: WorkflowId,
+    },
+    #[snafu(display("WMS request endpoint {} must match layer {}", endpoint, layer))]
+    WMSEndpointLayerMissmatch {
+        endpoint: WorkflowId,
+        layer: WorkflowId,
+    },
+    #[snafu(display(
+        "WFS request endpoint {} must match type_names {}",
+        endpoint,
+        type_names
+    ))]
+    WFSEndpointTypeNamesMissmatch {
+        endpoint: WorkflowId,
+        type_names: WorkflowId,
+    },
 }
 
 impl actix_web::error::ResponseError for Error {
@@ -275,6 +337,7 @@ impl From<bb8_postgres::bb8::RunError<<bb8_postgres::PostgresConnectionManager<b
     }
 }
 
+// TODO: remove automatic conversion to our Error because we do not want to leak database internals in the API
 #[cfg(feature = "postgres")]
 impl From<bb8_postgres::tokio_postgres::error::Error> for Error {
     fn from(e: bb8_postgres::tokio_postgres::error::Error) -> Self {

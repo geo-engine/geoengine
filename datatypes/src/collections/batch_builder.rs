@@ -152,9 +152,9 @@ impl RawFeatureCollectionBuilder {
                 ArrayData::builder(arrow::datatypes::DataType::Int64)
                     .len(self.num_features * 2)
                     .add_buffer(values_buffer)
-                    .build(),
+                    .build()?,
             )
-            .build();
+            .build()?;
 
         let array = Arc::new(FixedSizeListArray::from(data)) as ArrayRef;
 
@@ -201,11 +201,11 @@ impl RawFeatureCollectionBuilder {
                         ArrayData::builder(DataType::Float64)
                             .len(num_floats)
                             .add_buffer(coords)
-                            .build(),
+                            .build()?,
                     )
-                    .build(),
+                    .build()?,
             )
-            .build();
+            .build()?;
 
         let array = Arc::new(ListArray::from(data)) as ArrayRef;
 
@@ -239,13 +239,13 @@ impl RawFeatureCollectionBuilder {
                                 ArrayData::builder(DataType::Float64)
                                     .len(num_floats)
                                     .add_buffer(coords)
-                                    .build(),
+                                    .build()?,
                             )
-                            .build(),
+                            .build()?,
                     )
-                    .build(),
+                    .build()?,
             )
-            .build();
+            .build()?;
 
         let array = Arc::new(ListArray::from(data)) as ArrayRef;
 
@@ -285,15 +285,15 @@ impl RawFeatureCollectionBuilder {
                                         ArrayData::builder(DataType::Float64)
                                             .len(num_floats)
                                             .add_buffer(coords)
-                                            .build(),
+                                            .build()?,
                                     )
-                                    .build(),
+                                    .build()?,
                             )
-                            .build(),
+                            .build()?,
                     )
-                    .build(),
+                    .build()?,
             )
-            .build();
+            .build()?;
 
         let array = Arc::new(ListArray::from(data)) as ArrayRef;
 
@@ -331,7 +331,7 @@ impl RawFeatureCollectionBuilder {
             builder.null_bit_buffer(nulls).build()
         } else {
             builder.build()
-        };
+        }?;
 
         let array = Arc::new(PrimitiveArray::<T>::from(data)) as ArrayRef;
 
@@ -425,7 +425,7 @@ impl RawFeatureCollectionBuilder {
         arrays.push(time.expect("checked"));
 
         Ok(FeatureCollection::<CollectionType>::new_from_internals(
-            struct_array_from_data(columns, arrays, self.num_features),
+            struct_array_from_data(columns, arrays, self.num_features)?,
             self.types.clone(),
         ))
     }

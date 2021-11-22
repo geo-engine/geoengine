@@ -101,6 +101,34 @@ impl OperatorDatasets for ExpressionSources {
 }
 
 impl ExpressionSources {
+    pub fn new_a(a: Box<dyn RasterOperator>) -> Self {
+        Self {
+            a,
+            b: None,
+            c: None,
+        }
+    }
+
+    pub fn new_a_b(a: Box<dyn RasterOperator>, b: Box<dyn RasterOperator>) -> Self {
+        Self {
+            a,
+            b: Some(b),
+            c: None,
+        }
+    }
+
+    pub fn new_a_b_c(
+        a: Box<dyn RasterOperator>,
+        b: Box<dyn RasterOperator>,
+        c: Box<dyn RasterOperator>,
+    ) -> Self {
+        Self {
+            a,
+            b: Some(b),
+            c: Some(c),
+        }
+    }
+
     fn number_of_sources(&self) -> usize {
         let a: usize = 1;
         let b: usize = self.b.is_some().into();
@@ -513,7 +541,7 @@ mod tests {
 
         let processor = o.query_processor().unwrap().get_i8().unwrap();
 
-        let ctx = MockQueryContext::new(1);
+        let ctx = MockQueryContext::new(1.into());
         let result_stream = processor
             .query(
                 RasterQueryRectangle {

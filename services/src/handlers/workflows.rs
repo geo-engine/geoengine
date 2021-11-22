@@ -1,11 +1,12 @@
 use std::collections::HashSet;
 
-use crate::datasets::provenance::ProvenanceProvider;
+use crate::datasets::listing::DatasetProvider;
 use crate::datasets::storage::{AddDataset, DatasetDefinition, DatasetStore, MetaDataDefinition};
 use crate::datasets::upload::{UploadId, UploadRootPath};
 use crate::error;
 use crate::error::Result;
 use crate::handlers::Context;
+use crate::util::config::get_config_element;
 use crate::util::user_input::UserInput;
 use crate::util::IdResponse;
 use crate::workflows::registry::WorkflowRegistry;
@@ -16,11 +17,15 @@ use geoengine_datatypes::dataset::{DatasetId, InternalDatasetId};
 use geoengine_datatypes::primitives::AxisAlignedRectangle;
 use geoengine_datatypes::spatial_reference::SpatialReference;
 use geoengine_datatypes::util::Identifier;
-use geoengine_operators::engine::{OperatorDatasets, RasterQueryRectangle, TypedResultDescriptor};
+use geoengine_operators::engine::{
+    OperatorDatasets, RasterQueryRectangle, TypedOperator, TypedResultDescriptor,
+};
 use geoengine_operators::source::{
     FileNotFoundHandling, GdalDatasetGeoTransform, GdalDatasetParameters, GdalMetaDataStatic,
 };
-use geoengine_operators::util::raster_stream_to_geotiff::raster_stream_to_geotiff;
+use geoengine_operators::util::raster_stream_to_geotiff::{
+    raster_stream_to_geotiff, GdalGeoTiffDatasetMetadata, GdalGeoTiffOptions,
+};
 use geoengine_operators::{call_on_generic_raster_processor_gdal_types, call_on_typed_operator};
 use serde::{Deserialize, Serialize};
 use snafu::ResultExt;
@@ -78,14 +83,36 @@ where
 /// }
 /// ```
 async fn register_workflow_handler<C: Context>(
-    _session: C::Session,
+    session: C::Session,
     ctx: web::Data<C>,
     workflow: web::Json<Workflow>,
 ) -> Result<impl Responder> {
+    let workflow = workflow.into_inner();
+
+    // ensure the workflow is valid by initializing it
+    let execution_context = ctx.execution_context(session)?;
+    match workflow.clone().operator {
+        TypedOperator::Vector(o) => {
+            o.initialize(&execution_context)
+                .await
+                .context(error::Operator)?;
+        }
+        TypedOperator::Raster(o) => {
+            o.initialize(&execution_context)
+                .await
+                .context(error::Operator)?;
+        }
+        TypedOperator::Plot(o) => {
+            o.initialize(&execution_context)
+                .await
+                .context(error::Operator)?;
+        }
+    }
+
     let id = ctx
         .workflow_registry_ref_mut()
         .await
-        .register(workflow.into_inner())
+        .register(workflow)
         .await?;
     Ok(web::Json(IdResponse::from(id)))
 }
@@ -207,7 +234,7 @@ async fn get_workflow_metadata_handler<C: Context>(
 /// ```
 async fn get_workflow_provenance_handler<C: Context>(
     id: web::Path<WorkflowId>,
-    _session: C::Session,
+    session: C::Session,
     ctx: web::Data<C>,
 ) -> Result<impl Responder> {
     let workflow = ctx
@@ -220,7 +247,10 @@ async fn get_workflow_provenance_handler<C: Context>(
 
     let db = ctx.dataset_db_ref().await;
 
-    let provenance: Vec<_> = datasets.iter().map(|id| db.provenance(id)).collect();
+    let provenance: Vec<_> = datasets
+        .iter()
+        .map(|id| db.provenance(&session, id))
+        .collect();
     let provenance: Result<Vec<_>> = join_all(provenance).await.into_iter().collect();
 
     // filter duplicates
@@ -236,6 +266,14 @@ struct RasterDatasetFromWorkflow {
     name: String,
     description: Option<String>,
     query: RasterQueryRectangle,
+    #[serde(default = "default_as_cog")]
+    as_cog: bool,
+}
+
+/// By default, we set [`RasterDatasetFromWorkflow::as_cog`] to true to produce cloud-optmized `GeoTiff`s.
+#[inline]
+const fn default_as_cog() -> bool {
+    true
 }
 
 /// response of the dataset from workflow handler
@@ -259,7 +297,7 @@ struct RasterDatasetFromWorkflowResult {
 ///     "name": "foo",
 ///     "description": null,
 ///     "query": {
-///         "spatial_bounds": {
+///         "spatialBounds": {
 ///             "upperLeftCoordinate": {
 ///                 "x": -10.0,
 ///                 "y": 80.0
@@ -269,11 +307,11 @@ struct RasterDatasetFromWorkflowResult {
 ///                 "y": 20.0
 ///             }
 ///         },
-///         "time_interval": {
+///         "timeInterval": {
 ///             "start": 1388534400000,
 ///             "end": 1388534401000
 ///         },
-///         "spatial_resolution": {
+///         "spatialResolution": {
 ///             "x": 0.1,
 ///             "y": 0.1
 ///         }
@@ -331,8 +369,14 @@ async fn dataset_from_workflow_handler<C: Context>(
             p,
             query_rect,
             query_ctx,
-            no_data_value,
-            request_spatial_ref,
+            GdalGeoTiffDatasetMetadata {
+                no_data_value,
+                spatial_reference: request_spatial_ref,
+            },
+            GdalGeoTiffOptions {
+                compression_num_threads: get_config_element::<crate::util::config::Gdal>()?.compression_num_threads,
+                as_cog: info.as_cog,
+            },
             tile_limit,
         ).await)?
     .map_err(error::Error::from)?;
@@ -422,7 +466,7 @@ mod tests {
     use geoengine_datatypes::primitives::{
         FeatureData, Measurement, MultiPoint, SpatialPartition2D, SpatialResolution, TimeInterval,
     };
-    use geoengine_datatypes::raster::RasterDataType;
+    use geoengine_datatypes::raster::{GridShape, RasterDataType, TilingSpecification};
     use geoengine_datatypes::spatial_reference::SpatialReference;
     use geoengine_operators::engine::{MultipleRasterSources, PlotOperator, TypedOperator};
     use geoengine_operators::engine::{RasterOperator, RasterResultDescriptor, VectorOperator};
@@ -461,6 +505,8 @@ mod tests {
     }
 
     #[tokio::test]
+    // TODO: remove when https://github.com/tokio-rs/tokio/issues/4245 is fixed
+    #[allow(clippy::semicolon_if_nothing_returned)]
     async fn register() {
         let res = register_test_helper(Method::POST).await;
 
@@ -685,8 +731,8 @@ mod tests {
         let session_id = ctx.default_session_ref().await.id();
 
         let workflow = Workflow {
-            operator: MockRasterSource {
-                params: MockRasterSourceParams {
+            operator: MockRasterSource::<u8> {
+                params: MockRasterSourceParams::<u8> {
                     data: vec![],
                     result_descriptor: RasterResultDescriptor {
                         data_type: RasterDataType::U8,
@@ -820,6 +866,7 @@ mod tests {
             serde_json::from_str::<serde_json::Value>(&res_body).unwrap(),
             serde_json::json!({
                 "type": "plot",
+                "spatialReference": ""
             })
         );
     }
@@ -878,7 +925,13 @@ mod tests {
 
     #[tokio::test]
     async fn dataset_from_workflow() {
-        let ctx = InMemoryContext::default();
+        let exe_ctx_tiling_spec = TilingSpecification {
+            origin_coordinate: (0., 0.).into(),
+            tile_size_in_pixels: GridShape::new([600, 600]),
+        };
+
+        // override the pixel size since this test was designed for 600 x 600 pixel tiles
+        let ctx = InMemoryContext::new_with_context_spec(exe_ctx_tiling_spec, Default::default());
 
         let session_id = ctx.default_session_ref().await.id();
 
@@ -912,7 +965,7 @@ mod tests {
                 "name": "foo",
                 "description": null,
                 "query": {
-                    "spatial_bounds": {
+                    "spatialBounds": {
                         "upperLeftCoordinate": {
                             "x": -10.0,
                             "y": 80.0
@@ -922,11 +975,11 @@ mod tests {
                             "y": 20.0
                         }
                     },
-                    "time_interval": {
+                    "timeInterval": {
                         "start": 1388534400000,
                         "end": 1388534401000
                     },
-                    "spatial_resolution": {
+                    "spatialResolution": {
                         "x": 0.1,
                         "y": 0.1
                     }
@@ -969,8 +1022,16 @@ mod tests {
             processor,
             query_rect,
             query_ctx,
-            Some(0.),
-            SpatialReference::epsg_4326(),
+            GdalGeoTiffDatasetMetadata {
+                no_data_value: Some(0.),
+                spatial_reference: SpatialReference::epsg_4326(),
+            },
+            GdalGeoTiffOptions {
+                compression_num_threads: get_config_element::<crate::util::config::Gdal>()
+                    .unwrap()
+                    .compression_num_threads,
+                as_cog: false,
+            },
             None,
         )
         .await
@@ -980,6 +1041,48 @@ mod tests {
             include_bytes!("../../../test_data/raster/geotiff_from_stream_compressed.tiff")
                 as &[u8],
             result
+        );
+    }
+
+    #[tokio::test]
+    async fn it_does_not_register_invalid_workflow() {
+        let ctx = InMemoryContext::default();
+        let session_id = ctx.default_session_ref().await.id();
+
+        let workflow = json!({
+          "type": "Vector",
+          "operator": {
+            "type": "Reprojection",
+            "params": {
+              "targetSpatialReference": "EPSG:4326"
+            },
+            "sources": {
+              "source": {
+                "type": "GdalSource",
+                "params": {
+                  "dataset": {
+                    "type": "internal",
+                    "datasetId": "36574dc3-560a-4b09-9d22-d5945f2b8093"
+                  }
+                }
+              }
+            }
+          }
+        });
+
+        let req = test::TestRequest::post()
+            .uri("/workflow")
+            .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())))
+            .append_header((header::CONTENT_TYPE, mime::APPLICATION_JSON))
+            .set_payload(workflow.to_string());
+        let res = send_test_request(req, ctx.clone()).await;
+
+        assert_eq!(res.status(), 400);
+
+        let res_body = read_body_string(res).await;
+        assert_eq!(
+            res_body,
+            json!({"error": "Operator", "message": "Operator: Invalid operator type: expected Vector found Raster"}).to_string()
         );
     }
 }

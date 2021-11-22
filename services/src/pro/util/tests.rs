@@ -6,6 +6,7 @@ use crate::{
     handlers, pro,
     pro::{
         contexts::ProContext,
+        datasets::Role,
         projects::ProProjectDb,
         users::{UserCredentials, UserDb, UserId, UserInfo, UserRegistration, UserSession},
     },
@@ -44,7 +45,6 @@ pub async fn create_session_helper<C: ProContext>(ctx: &C) -> UserSession {
         .unwrap()
 }
 
-#[allow(clippy::missing_panics_doc)]
 pub fn create_random_user_session_helper() -> UserSession {
     let user_id = UserId::new();
 
@@ -59,6 +59,7 @@ pub fn create_random_user_session_helper() -> UserSession {
         valid_until: MAX_DATETIME,
         project: None,
         view: None,
+        roles: vec![user_id.into(), Role::user_role_id()],
     }
 }
 

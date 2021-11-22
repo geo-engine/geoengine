@@ -4,6 +4,7 @@ use crate::contexts::{Context, MockableSession, Session, SessionId};
 use crate::error;
 use crate::handlers::get_token;
 use crate::pro::contexts::{PostgresContext, ProInMemoryContext};
+use crate::pro::datasets::{Role, RoleId};
 use crate::pro::users::UserId;
 use crate::projects::{ProjectId, STRectangle};
 use crate::util::Identifier;
@@ -32,14 +33,17 @@ pub struct UserSession {
     pub valid_until: DateTime<Utc>,
     pub project: Option<ProjectId>,
     pub view: Option<STRectangle>,
+    pub roles: Vec<RoleId>, // a user has a default role (= its user id) and other additonal roles
 }
 
-impl MockableSession for UserSession {
-    fn mock() -> Self {
+impl UserSession {
+    pub fn system_session() -> UserSession {
+        let role = Role::system_role_id();
+        let user_id = UserId(role.0);
         Self {
             id: SessionId::new(),
             user: UserInfo {
-                id: UserId::new(),
+                id: user_id,
                 email: None,
                 real_name: None,
             },
@@ -47,6 +51,26 @@ impl MockableSession for UserSession {
             valid_until: chrono::Utc::now(),
             project: None,
             view: None,
+            roles: vec![role],
+        }
+    }
+}
+
+impl MockableSession for UserSession {
+    fn mock() -> Self {
+        let user_id = UserId::new();
+        Self {
+            id: SessionId::new(),
+            user: UserInfo {
+                id: user_id,
+                email: None,
+                real_name: None,
+            },
+            created: chrono::Utc::now(),
+            valid_until: chrono::Utc::now(),
+            project: None,
+            view: None,
+            roles: vec![user_id.into(), Role::user_role_id()],
         }
     }
 }
@@ -74,7 +98,6 @@ impl Session for UserSession {
 }
 
 impl FromRequest for UserSession {
-    type Config = ();
     type Error = error::Error;
     type Future = LocalBoxFuture<'static, Result<Self, Self::Error>>;
 

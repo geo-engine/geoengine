@@ -10,12 +10,13 @@ pub use operator::{
     OperatorDatasets, PlotOperator, RasterOperator, TypedOperator, VectorOperator,
 };
 pub use operator_impl::{
-    MultipleRasterSources, MultipleVectorSources, Operator, SingleRasterOrVectorSource,
-    SingleRasterSource, SingleVectorMultipleRasterSources, SingleVectorSource, SourceOperator,
+    MultipleRasterOrSingleVectorSource, MultipleRasterSources, MultipleVectorSources, Operator,
+    SingleRasterOrVectorSource, SingleRasterSource, SingleVectorMultipleRasterSources,
+    SingleVectorSource, SourceOperator,
 };
 pub use query::{
-    MockQueryContext, PlotQueryRectangle, QueryContext, QueryRectangle, RasterQueryRectangle,
-    VectorQueryRectangle,
+    ChunkByteSize, MockQueryContext, PlotQueryRectangle, QueryContext, QueryRectangle,
+    RasterQueryRectangle, VectorQueryRectangle,
 };
 pub use query_processor::{
     PlotQueryProcessor, QueryProcessor, RasterQueryProcessor, TypedPlotQueryProcessor,
