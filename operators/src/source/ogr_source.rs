@@ -1047,7 +1047,6 @@ where
                 Ok(FeatureDataValue::NullableBool(value_option))
             }
             FeatureDataType::DateTime => {
-                #[allow(clippy::match_same_arms)]
                 let value_option = match field {
                     Ok(None) => None,
                     Ok(Some(v)) => match time_attribute_parser(v) {
