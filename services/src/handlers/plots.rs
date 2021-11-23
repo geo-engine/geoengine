@@ -14,7 +14,7 @@ use geoengine_operators::engine::{
 };
 
 use crate::error;
-use crate::error::Result;
+use crate::error::{Error, Result};
 use crate::handlers::Context;
 use crate::ogc::util::{parse_bbox, parse_time};
 use crate::util::parsing::parse_spatial_resolution;
@@ -127,11 +127,9 @@ async fn get_plot_handler<C: Context>(
     session: C::Session,
     ctx: web::Data<C>,
 ) -> Result<impl Responder> {
-    let workflow = ctx
-        .workflow_registry_ref()
-        .await
-        .load(&WorkflowId(id.into_inner()))
-        .await?;
+    let workflow_id = WorkflowId(id.into_inner());
+
+    let workflow = ctx.workflow_registry_ref().await.load(&workflow_id).await?;
 
     let operator = workflow.operator.get_plot().context(error::Operator)?;
 
@@ -169,42 +167,52 @@ async fn get_plot_handler<C: Context>(
     };
 
     let query_ctx = ctx.query_context()?;
+    let task_manager = ctx.task_manager();
 
     let output_format = PlotOutputFormat::from(&processor);
     let plot_type = processor.plot_type();
 
-    let data = match processor {
-        TypedPlotQueryProcessor::JsonPlain(processor) => processor
-            .plot_query(query_rect, &query_ctx)
-            .await
-            .context(error::Operator)?,
-        TypedPlotQueryProcessor::JsonVega(processor) => {
-            let chart = processor
+    let task = async move {
+        tokio::time::sleep(tokio::time::Duration::from_secs(1)).await;
+        Ok(match processor {
+            TypedPlotQueryProcessor::JsonPlain(processor) => processor
                 .plot_query(query_rect, &query_ctx)
                 .await
-                .context(error::Operator)?;
+                .context(error::Operator)?,
+            TypedPlotQueryProcessor::JsonVega(processor) => {
+                let chart = processor
+                    .plot_query(query_rect, &query_ctx)
+                    .await
+                    .context(error::Operator)?;
 
-            serde_json::to_value(&chart).context(error::SerdeJson)?
-        }
-        TypedPlotQueryProcessor::ImagePng(processor) => {
-            let png_bytes = processor
-                .plot_query(query_rect, &query_ctx)
-                .await
-                .context(error::Operator)?;
+                serde_json::to_value(&chart).context(error::SerdeJson)?
+            }
+            TypedPlotQueryProcessor::ImagePng(processor) => {
+                let png_bytes = processor
+                    .plot_query(query_rect, &query_ctx)
+                    .await
+                    .context(error::Operator)?;
 
-            let data_uri = format!("data:image/png;base64,{}", base64::encode(png_bytes));
+                let data_uri = format!("data:image/png;base64,{}", base64::encode(png_bytes));
 
-            serde_json::to_value(&data_uri).context(error::SerdeJson)?
-        }
+                serde_json::to_value(&data_uri).context(error::SerdeJson)?
+            }
+        })
     };
 
-    let output = WrappedPlotOutput {
-        output_format,
-        plot_type,
-        data,
-    };
+    let result = task_manager
+        .plot_executor()
+        .submit(&workflow_id, task)
+        .await?;
 
-    Ok(web::Json(output))
+    match result.as_ref() {
+        Ok(v) => Ok(web::Json(WrappedPlotOutput {
+            plot_type,
+            output_format,
+            data: v.clone(),
+        })),
+        Err(_) => Err(Error::NotYetImplemented),
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize)]
