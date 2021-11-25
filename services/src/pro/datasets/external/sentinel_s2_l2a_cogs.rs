@@ -1,6 +1,7 @@
-use crate::datasets::listing::{DatasetListOptions, DatasetListing, DatasetProvider};
-use crate::datasets::provenance::{ProvenanceOutput, ProvenanceProvider};
-use crate::datasets::storage::DatasetProviderDefinition;
+use crate::datasets::listing::{
+    DatasetListOptions, DatasetListing, ExternalDatasetProvider, ProvenanceOutput,
+};
+use crate::datasets::storage::ExternalDatasetProviderDefinition;
 use crate::error::{self, Result};
 use crate::projects::{RasterSymbology, Symbology};
 use crate::stac::{Feature as StacFeature, FeatureCollection as StacCollection, StacAsset};
@@ -69,10 +70,10 @@ impl Default for StacApiRetries {
 
 #[typetag::serde]
 #[async_trait]
-impl DatasetProviderDefinition for SentinelS2L2ACogsProviderDefinition {
+impl ExternalDatasetProviderDefinition for SentinelS2L2ACogsProviderDefinition {
     async fn initialize(
         self: Box<Self>,
-    ) -> crate::error::Result<Box<dyn crate::datasets::listing::DatasetProvider>> {
+    ) -> crate::error::Result<Box<dyn crate::datasets::listing::ExternalDatasetProvider>> {
         Ok(Box::new(SentinelS2L2aCogsDataProvider::new(
             self.id,
             self.api_url,
@@ -202,7 +203,7 @@ impl SentinelS2L2aCogsDataProvider {
 }
 
 #[async_trait]
-impl DatasetProvider for SentinelS2L2aCogsDataProvider {
+impl ExternalDatasetProvider for SentinelS2L2aCogsDataProvider {
     async fn list(&self, _options: Validated<DatasetListOptions>) -> Result<Vec<DatasetListing>> {
         // TODO: options
         let mut x: Vec<DatasetListing> =
@@ -211,16 +212,6 @@ impl DatasetProvider for SentinelS2L2aCogsDataProvider {
         Ok(x)
     }
 
-    async fn load(
-        &self,
-        _dataset: &geoengine_datatypes::dataset::DatasetId,
-    ) -> crate::error::Result<crate::datasets::storage::Dataset> {
-        Err(error::Error::NotYetImplemented)
-    }
-}
-
-#[async_trait]
-impl ProvenanceProvider for SentinelS2L2aCogsDataProvider {
     async fn provenance(&self, dataset: &DatasetId) -> Result<ProvenanceOutput> {
         Ok(ProvenanceOutput {
             dataset: dataset.clone(),
@@ -557,7 +548,7 @@ mod tests {
     use futures::StreamExt;
     use geoengine_datatypes::primitives::{SpatialPartition2D, SpatialResolution};
     use geoengine_operators::{
-        engine::{MockExecutionContext, MockQueryContext, RasterOperator},
+        engine::{ChunkByteSize, MockExecutionContext, MockQueryContext, RasterOperator},
         source::{FileNotFoundHandling, GdalSource, GdalSourceParameters},
     };
     use httptest::{
@@ -573,9 +564,10 @@ mod tests {
     async fn loading_info() -> Result<()> {
         // TODO: mock STAC endpoint
 
-        let def: Box<dyn DatasetProviderDefinition> = serde_json::from_reader(BufReader::new(
-            File::open(test_data!("provider_defs/pro/sentinel_s2_l2a_cogs.json"))?,
-        ))?;
+        let def: Box<dyn ExternalDatasetProviderDefinition> =
+            serde_json::from_reader(BufReader::new(File::open(test_data!(
+                "provider_defs/pro/sentinel_s2_l2a_cogs.json"
+            ))?))?;
 
         let provider = def.initialize().await?;
 
@@ -648,9 +640,10 @@ mod tests {
 
         let mut exe = MockExecutionContext::default();
 
-        let def: Box<dyn DatasetProviderDefinition> = serde_json::from_reader(BufReader::new(
-            File::open(test_data!("provider_defs/pro/sentinel_s2_l2a_cogs.json"))?,
-        ))?;
+        let def: Box<dyn ExternalDatasetProviderDefinition> =
+            serde_json::from_reader(BufReader::new(File::open(test_data!(
+                "provider_defs/pro/sentinel_s2_l2a_cogs.json"
+            ))?))?;
 
         let provider = def.initialize().await?;
 
@@ -710,7 +703,7 @@ mod tests {
             ),
         };
 
-        let ctx = MockQueryContext::new(usize::MAX);
+        let ctx = MockQueryContext::new(ChunkByteSize::MAX);
 
         let result = processor
             .raster_query(query, &ctx)
@@ -766,7 +759,7 @@ mod tests {
         let provider_id: DatasetProviderId =
             "5779494c-f3a2-48b3-8a2d-5fbba8c5b6c5".parse().unwrap();
 
-        let provider_def: Box<dyn DatasetProviderDefinition> =
+        let provider_def: Box<dyn ExternalDatasetProviderDefinition> =
             Box::new(SentinelS2L2ACogsProviderDefinition {
                 name: "Element 84 AWS STAC".into(),
                 id: provider_id,

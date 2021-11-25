@@ -6,7 +6,7 @@ use std::{
 
 use crate::util::user_input::UserInput;
 use crate::{contexts::MockableSession, datasets::storage::DatasetDb};
-use crate::{datasets::storage::DatasetProviderDefinition, error::Result};
+use crate::{datasets::storage::ExternalDatasetProviderDefinition, error::Result};
 
 use super::storage::DatasetDefinition;
 
@@ -63,7 +63,7 @@ pub async fn add_providers_from_directory<D: DatasetDb<S>, S: MockableSession>(
         db: &mut D,
         entry: &DirEntry,
     ) -> Result<()> {
-        let def: Box<dyn DatasetProviderDefinition> =
+        let def: Box<dyn ExternalDatasetProviderDefinition> =
             serde_json::from_reader(BufReader::new(File::open(entry.path())?))?;
 
         db.add_dataset_provider(&S::mock(), def).await?; // TODO: add as system user

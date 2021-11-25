@@ -1,14 +1,14 @@
 use std::path::Path;
 
-use crate::datasets::provenance::{ProvenanceOutput, ProvenanceProvider};
+use crate::datasets::listing::ProvenanceOutput;
 use crate::error::Error;
 use crate::util::parsing::{deserialize_base_url, string_or_string_array};
 use crate::util::retry::retry;
 use crate::{datasets::listing::DatasetListOptions, error::Result};
 use crate::{
     datasets::{
-        listing::{DatasetListing, DatasetProvider},
-        storage::DatasetProviderDefinition,
+        listing::{DatasetListing, ExternalDatasetProvider},
+        storage::ExternalDatasetProviderDefinition,
     },
     error,
     util::user_input::Validated,
@@ -73,8 +73,8 @@ impl Default for RequestRetries {
 
 #[typetag::serde]
 #[async_trait]
-impl DatasetProviderDefinition for Nature40DataProviderDefinition {
-    async fn initialize(self: Box<Self>) -> crate::error::Result<Box<dyn DatasetProvider>> {
+impl ExternalDatasetProviderDefinition for Nature40DataProviderDefinition {
+    async fn initialize(self: Box<Self>) -> crate::error::Result<Box<dyn ExternalDatasetProvider>> {
         Ok(Box::new(Nature40DataProvider {
             id: self.id,
             base_url: self.base_url,
@@ -136,7 +136,7 @@ struct RasterDbs {
 }
 
 #[async_trait]
-impl DatasetProvider for Nature40DataProvider {
+impl ExternalDatasetProvider for Nature40DataProvider {
     async fn list(&self, _options: Validated<DatasetListOptions>) -> Result<Vec<DatasetListing>> {
         // TODO: query the other dbs as well
         let raster_dbs = self.load_raster_dbs().await?;
@@ -196,16 +196,6 @@ impl DatasetProvider for Nature40DataProvider {
         Ok(listing)
     }
 
-    async fn load(
-        &self,
-        _dataset: &geoengine_datatypes::dataset::DatasetId,
-    ) -> crate::error::Result<crate::datasets::storage::Dataset> {
-        Err(error::Error::NotYetImplemented)
-    }
-}
-
-#[async_trait]
-impl ProvenanceProvider for Nature40DataProvider {
     async fn provenance(&self, dataset: &DatasetId) -> Result<ProvenanceOutput> {
         Ok(ProvenanceOutput {
             dataset: dataset.clone(),

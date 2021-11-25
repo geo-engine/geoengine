@@ -412,7 +412,7 @@ mod tests {
             ([0, 1].into(), TimeInterval::new_unchecked(5, 10)),
         ];
 
-        assert_eq!(tile_time_positions, expected_positions)
+        assert_eq!(tile_time_positions, expected_positions);
     }
 
     #[tokio::test]
@@ -456,7 +456,7 @@ mod tests {
             ([0, 1].into(), TimeInterval::default()),
         ];
 
-        assert_eq!(tile_time_positions, expected_positions)
+        assert_eq!(tile_time_positions, expected_positions);
     }
 
     #[tokio::test]
@@ -542,7 +542,7 @@ mod tests {
             ([0, 1].into(), TimeInterval::new_unchecked(5, 10)),
         ];
 
-        assert_eq!(tile_time_positions, expected_positions)
+        assert_eq!(tile_time_positions, expected_positions);
     }
 
     #[tokio::test]
@@ -628,7 +628,7 @@ mod tests {
             ([0, 1].into(), TimeInterval::new_unchecked(5, 10)),
         ];
 
-        assert_eq!(tile_time_positions, expected_positions)
+        assert_eq!(tile_time_positions, expected_positions);
     }
 
     #[tokio::test]
@@ -686,7 +686,7 @@ mod tests {
             ([0, 0].into(), TimeInterval::new_unchecked(5, 10)),
         ];
 
-        assert_eq!(tile_time_positions, expected_positions)
+        assert_eq!(tile_time_positions, expected_positions);
     }
 
     #[allow(clippy::too_many_lines)]
@@ -805,7 +805,7 @@ mod tests {
             ([0, 1].into(), TimeInterval::new_unchecked(5, 10)),
         ];
 
-        assert_eq!(tile_time_positions, expected_positions)
+        assert_eq!(tile_time_positions, expected_positions);
     }
 
     #[tokio::test]
@@ -867,7 +867,7 @@ mod tests {
             ([0, 1].into(), TimeInterval::default()),
         ];
 
-        assert_eq!(tile_time_positions, expected_positions)
+        assert_eq!(tile_time_positions, expected_positions);
     }
 
     #[tokio::test]

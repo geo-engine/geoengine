@@ -2,7 +2,9 @@ use std::str::FromStr;
 
 use actix_web::{web, FromRequest, HttpResponse, Responder};
 use geoengine_operators::call_on_generic_raster_processor_gdal_types;
-use geoengine_operators::util::raster_stream_to_geotiff::raster_stream_to_geotiff_bytes;
+use geoengine_operators::util::raster_stream_to_geotiff::{
+    raster_stream_to_geotiff_bytes, GdalGeoTiffDatasetMetadata, GdalGeoTiffOptions,
+};
 use log::info;
 use snafu::{ensure, ResultExt};
 use url::Url;
@@ -10,7 +12,6 @@ use url::Url;
 use geoengine_datatypes::primitives::{AxisAlignedRectangle, SpatialPartition2D};
 use geoengine_datatypes::{primitives::SpatialResolution, spatial_reference::SpatialReference};
 
-use crate::contexts::MockableSession;
 use crate::error::Result;
 use crate::error::{self, Error};
 use crate::handlers::spatial_references::{spatial_reference_specification, AxisOrder};
@@ -39,17 +40,17 @@ async fn wcs_handler<C: Context>(
     workflow: web::Path<WorkflowId>,
     request: QueryEx<WcsRequest>,
     ctx: web::Data<C>,
-    _session: C::Session,
+    session: C::Session,
 ) -> Result<impl Responder> {
     match request.into_inner() {
         WcsRequest::GetCapabilities(request) => {
             get_capabilities(&request, ctx.get_ref(), workflow.into_inner()).await
         }
         WcsRequest::DescribeCoverage(request) => {
-            describe_coverage(&request, ctx.get_ref(), workflow.into_inner()).await
+            describe_coverage(&request, ctx.get_ref(), session, workflow.into_inner()).await
         }
         WcsRequest::GetCoverage(request) => {
-            get_coverage(&request, ctx.get_ref(), workflow.into_inner()).await
+            get_coverage(&request, ctx.get_ref(), session, workflow.into_inner()).await
         }
     }
 }
@@ -140,6 +141,7 @@ async fn get_capabilities<C: Context>(
 async fn describe_coverage<C: Context>(
     request: &DescribeCoverage,
     ctx: &C,
+    session: C::Session,
     endpoint: WorkflowId,
 ) -> Result<HttpResponse> {
     info!("{:?}", request);
@@ -160,7 +162,7 @@ async fn describe_coverage<C: Context>(
 
     let workflow = ctx.workflow_registry_ref().await.load(&identifiers).await?;
 
-    let exe_ctx = ctx.execution_context(C::Session::mock())?; // TODO: use real session
+    let exe_ctx = ctx.execution_context(session)?;
     let operator = workflow
         .operator
         .get_raster()
@@ -248,6 +250,7 @@ async fn describe_coverage<C: Context>(
 async fn get_coverage<C: Context>(
     request: &GetCoverage,
     ctx: &C,
+    session: C::Session,
     endpoint: WorkflowId,
 ) -> Result<HttpResponse> {
     info!("{:?}", request);
@@ -287,8 +290,7 @@ async fn get_coverage<C: Context>(
 
     let operator = workflow.operator.get_raster().context(error::Operator)?;
 
-    // TODO: use correct session when WCS uses authenticated access
-    let execution_context = ctx.execution_context(C::Session::mock())?;
+    let execution_context = ctx.execution_context(session)?;
 
     let initialized = operator
         .clone()
@@ -349,8 +351,14 @@ async fn get_coverage<C: Context>(
             p,
             query_rect,
             query_ctx,
-            no_data_value,
-            request_spatial_ref,
+            GdalGeoTiffDatasetMetadata {
+                no_data_value,
+                spatial_reference: request_spatial_ref,
+            },
+            GdalGeoTiffOptions {
+                compression_num_threads: get_config_element::<crate::util::config::Gdal>()?.compression_num_threads,
+                as_cog: false,
+            },
             Some(get_config_element::<crate::util::config::Wcs>()?.tile_limit),
         )
         .await)?
@@ -387,6 +395,7 @@ mod tests {
     use actix_web::http::header;
     use actix_web::test;
     use actix_web_httpauth::headers::authorization::Bearer;
+    use geoengine_datatypes::raster::{GridShape2D, TilingSpecification};
 
     #[tokio::test]
     async fn get_capabilities() {
@@ -497,7 +506,6 @@ mod tests {
 
         assert_eq!(res.status(), 200);
         let body = read_body_string(res).await;
-        eprintln!("{}", body);
         assert_eq!(
             format!(
                 r#"<?xml version="1.0" encoding="UTF-8"?>
@@ -537,7 +545,13 @@ mod tests {
 
     #[tokio::test]
     async fn get_coverage() {
-        let ctx = InMemoryContext::default();
+        let exe_ctx_tiling_spec = TilingSpecification {
+            origin_coordinate: (0., 0.).into(),
+            tile_size_in_pixels: GridShape2D::new([600, 600]),
+        };
+
+        // override the pixel size since this test was designed for 600 x 600 pixel tiles
+        let ctx = InMemoryContext::new_with_context_spec(exe_ctx_tiling_spec, Default::default());
         let session_id = ctx.default_session_ref().await.id();
 
         let (_, id) = register_ndvi_workflow_helper(&ctx).await;

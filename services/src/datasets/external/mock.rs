@@ -1,10 +1,9 @@
-use crate::datasets::listing::DatasetProvider;
-use crate::datasets::provenance::{ProvenanceOutput, ProvenanceProvider};
+use crate::datasets::listing::{ExternalDatasetProvider, ProvenanceOutput};
 use crate::{datasets::listing::DatasetListOptions, error::Result};
 use crate::{
     datasets::{
         listing::DatasetListing,
-        storage::{DatasetDefinition, DatasetProviderDefinition, MetaDataDefinition},
+        storage::{DatasetDefinition, ExternalDatasetProviderDefinition, MetaDataDefinition},
     },
     error,
     util::user_input::Validated,
@@ -29,8 +28,8 @@ pub struct MockExternalDataProviderDefinition {
 
 #[typetag::serde]
 #[async_trait]
-impl DatasetProviderDefinition for MockExternalDataProviderDefinition {
-    async fn initialize(self: Box<Self>) -> crate::error::Result<Box<dyn DatasetProvider>> {
+impl ExternalDatasetProviderDefinition for MockExternalDataProviderDefinition {
+    async fn initialize(self: Box<Self>) -> crate::error::Result<Box<dyn ExternalDatasetProvider>> {
         Ok(Box::new(MockExternalDataProvider {
             datasets: self.datasets,
         }))
@@ -54,12 +53,8 @@ pub struct MockExternalDataProvider {
 }
 
 #[async_trait]
-impl DatasetProvider for MockExternalDataProvider {
-    async fn list(
-        &self,
-        // _session: S,
-        _options: Validated<DatasetListOptions>,
-    ) -> Result<Vec<DatasetListing>> {
+impl ExternalDatasetProvider for MockExternalDataProvider {
+    async fn list(&self, _options: Validated<DatasetListOptions>) -> Result<Vec<DatasetListing>> {
         // TODO: user right management
         // TODO: options
         let mut listing = vec![];
@@ -85,17 +80,6 @@ impl DatasetProvider for MockExternalDataProvider {
             .collect())
     }
 
-    async fn load(
-        &self,
-        // _session: S,
-        _dataset: &geoengine_datatypes::dataset::DatasetId,
-    ) -> crate::error::Result<crate::datasets::storage::Dataset> {
-        Err(error::Error::NotYetImplemented)
-    }
-}
-
-#[async_trait]
-impl ProvenanceProvider for MockExternalDataProvider {
     async fn provenance(&self, dataset: &DatasetId) -> Result<ProvenanceOutput> {
         Ok(ProvenanceOutput {
             dataset: dataset.clone(),

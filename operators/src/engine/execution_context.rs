@@ -6,7 +6,6 @@ use crate::source::{GdalLoadingInfo, OgrSourceDataset};
 use crate::util::{create_rayon_thread_pool, Result};
 use async_trait::async_trait;
 use geoengine_datatypes::dataset::DatasetId;
-use geoengine_datatypes::raster::GridShape;
 use geoengine_datatypes::raster::TilingSpecification;
 use rayon::ThreadPool;
 use serde::{Deserialize, Serialize};
@@ -66,17 +65,19 @@ impl Default for MockExecutionContext {
         Self {
             thread_pool: create_rayon_thread_pool(0),
             meta_data: HashMap::default(),
-            tiling_specification: TilingSpecification {
-                origin_coordinate: Default::default(),
-                tile_size_in_pixels: GridShape {
-                    shape_array: [600, 600],
-                },
-            },
+            tiling_specification: TilingSpecification::default(),
         }
     }
 }
 
 impl MockExecutionContext {
+    pub fn new_with_tiling_spec(tiling_specification: TilingSpecification) -> Self {
+        MockExecutionContext {
+            tiling_specification,
+            ..Default::default()
+        }
+    }
+
     pub fn add_meta_data<L, R, Q>(
         &mut self,
         dataset: DatasetId,

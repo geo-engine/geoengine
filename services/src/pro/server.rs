@@ -108,18 +108,28 @@ pub async fn start_pro_server(static_files_dir: Option<PathBuf>) -> Result<()> {
 
     let data_path_config: config::DataProvider = get_config_element()?;
 
+    let chunk_byte_size = config::get_config_element::<config::QueryContext>()?
+        .chunk_byte_size
+        .into();
+
+    let tiling_spec = config::get_config_element::<config::TilingSpecification>()?.into();
+
     match web_config.backend {
         Backend::InMemory => {
             info!("Using in memory backend");
+            let ctx = ProInMemoryContext::new_with_data(
+                data_path_config.dataset_defs_path,
+                data_path_config.provider_defs_path,
+                tiling_spec,
+                chunk_byte_size,
+            )
+            .await;
+
             start(
                 static_files_dir,
                 web_config.bind_address,
                 web_config.version_api,
-                ProInMemoryContext::new_with_data(
-                    data_path_config.dataset_defs_path,
-                    data_path_config.provider_defs_path,
-                )
-                .await,
+                ctx,
             )
             .await
         }
@@ -143,6 +153,8 @@ pub async fn start_pro_server(static_files_dir: Option<PathBuf>) -> Result<()> {
                     NoTls,
                     data_path_config.dataset_defs_path,
                     data_path_config.provider_defs_path,
+                    tiling_spec,
+                    chunk_byte_size,
                 )
                 .await?;
 

@@ -30,7 +30,7 @@ impl VectorQueryProcessor for MockPointSourceProcessor {
         _query: VectorQueryRectangle,
         ctx: &'a dyn QueryContext,
     ) -> Result<BoxStream<'a, Result<Self::VectorType>>> {
-        let chunk_size = ctx.chunk_byte_size() / std::mem::size_of::<Coordinate2D>();
+        let chunk_size = usize::from(ctx.chunk_byte_size()) / std::mem::size_of::<Coordinate2D>();
         Ok(
             stream::iter(self.points.chunks(chunk_size).map(move |chunk| {
                 Ok(MultiPointCollection::from_data(
@@ -140,7 +140,7 @@ mod tests {
             time_interval: TimeInterval::default(),
             spatial_resolution: SpatialResolution::zero_point_one(),
         };
-        let ctx = MockQueryContext::new(2 * std::mem::size_of::<Coordinate2D>());
+        let ctx = MockQueryContext::new((2 * std::mem::size_of::<Coordinate2D>()).into());
 
         let stream = point_processor.query(query_rectangle, &ctx).await.unwrap();
 

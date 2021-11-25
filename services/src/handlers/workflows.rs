@@ -1,11 +1,12 @@
 use std::collections::HashSet;
 
-use crate::datasets::provenance::ProvenanceProvider;
+use crate::datasets::listing::DatasetProvider;
 use crate::datasets::storage::{AddDataset, DatasetDefinition, DatasetStore, MetaDataDefinition};
 use crate::datasets::upload::{UploadId, UploadRootPath};
 use crate::error;
 use crate::error::Result;
 use crate::handlers::Context;
+use crate::util::config::get_config_element;
 use crate::util::user_input::UserInput;
 use crate::util::IdResponse;
 use crate::workflows::registry::WorkflowRegistry;
@@ -22,7 +23,9 @@ use geoengine_operators::engine::{
 use geoengine_operators::source::{
     FileNotFoundHandling, GdalDatasetGeoTransform, GdalDatasetParameters, GdalMetaDataStatic,
 };
-use geoengine_operators::util::raster_stream_to_geotiff::raster_stream_to_geotiff;
+use geoengine_operators::util::raster_stream_to_geotiff::{
+    raster_stream_to_geotiff, GdalGeoTiffDatasetMetadata, GdalGeoTiffOptions,
+};
 use geoengine_operators::{call_on_generic_raster_processor_gdal_types, call_on_typed_operator};
 use serde::{Deserialize, Serialize};
 use snafu::ResultExt;
@@ -231,7 +234,7 @@ async fn get_workflow_metadata_handler<C: Context>(
 /// ```
 async fn get_workflow_provenance_handler<C: Context>(
     id: web::Path<WorkflowId>,
-    _session: C::Session,
+    session: C::Session,
     ctx: web::Data<C>,
 ) -> Result<impl Responder> {
     let workflow = ctx
@@ -244,7 +247,10 @@ async fn get_workflow_provenance_handler<C: Context>(
 
     let db = ctx.dataset_db_ref().await;
 
-    let provenance: Vec<_> = datasets.iter().map(|id| db.provenance(id)).collect();
+    let provenance: Vec<_> = datasets
+        .iter()
+        .map(|id| db.provenance(&session, id))
+        .collect();
     let provenance: Result<Vec<_>> = join_all(provenance).await.into_iter().collect();
 
     // filter duplicates
@@ -260,6 +266,14 @@ struct RasterDatasetFromWorkflow {
     name: String,
     description: Option<String>,
     query: RasterQueryRectangle,
+    #[serde(default = "default_as_cog")]
+    as_cog: bool,
+}
+
+/// By default, we set [`RasterDatasetFromWorkflow::as_cog`] to true to produce cloud-optmized `GeoTiff`s.
+#[inline]
+const fn default_as_cog() -> bool {
+    true
 }
 
 /// response of the dataset from workflow handler
@@ -355,8 +369,14 @@ async fn dataset_from_workflow_handler<C: Context>(
             p,
             query_rect,
             query_ctx,
-            no_data_value,
-            request_spatial_ref,
+            GdalGeoTiffDatasetMetadata {
+                no_data_value,
+                spatial_reference: request_spatial_ref,
+            },
+            GdalGeoTiffOptions {
+                compression_num_threads: get_config_element::<crate::util::config::Gdal>()?.compression_num_threads,
+                as_cog: info.as_cog,
+            },
             tile_limit,
         ).await)?
     .map_err(error::Error::from)?;
@@ -446,7 +466,7 @@ mod tests {
     use geoengine_datatypes::primitives::{
         FeatureData, Measurement, MultiPoint, SpatialPartition2D, SpatialResolution, TimeInterval,
     };
-    use geoengine_datatypes::raster::RasterDataType;
+    use geoengine_datatypes::raster::{GridShape, RasterDataType, TilingSpecification};
     use geoengine_datatypes::spatial_reference::SpatialReference;
     use geoengine_operators::engine::{MultipleRasterSources, PlotOperator, TypedOperator};
     use geoengine_operators::engine::{RasterOperator, RasterResultDescriptor, VectorOperator};
@@ -485,6 +505,8 @@ mod tests {
     }
 
     #[tokio::test]
+    // TODO: remove when https://github.com/tokio-rs/tokio/issues/4245 is fixed
+    #[allow(clippy::semicolon_if_nothing_returned)]
     async fn register() {
         let res = register_test_helper(Method::POST).await;
 
@@ -903,7 +925,13 @@ mod tests {
 
     #[tokio::test]
     async fn dataset_from_workflow() {
-        let ctx = InMemoryContext::default();
+        let exe_ctx_tiling_spec = TilingSpecification {
+            origin_coordinate: (0., 0.).into(),
+            tile_size_in_pixels: GridShape::new([600, 600]),
+        };
+
+        // override the pixel size since this test was designed for 600 x 600 pixel tiles
+        let ctx = InMemoryContext::new_with_context_spec(exe_ctx_tiling_spec, Default::default());
 
         let session_id = ctx.default_session_ref().await.id();
 
@@ -994,8 +1022,16 @@ mod tests {
             processor,
             query_rect,
             query_ctx,
-            Some(0.),
-            SpatialReference::epsg_4326(),
+            GdalGeoTiffDatasetMetadata {
+                no_data_value: Some(0.),
+                spatial_reference: SpatialReference::epsg_4326(),
+            },
+            GdalGeoTiffOptions {
+                compression_num_threads: get_config_element::<crate::util::config::Gdal>()
+                    .unwrap()
+                    .compression_num_threads,
+                as_cog: false,
+            },
             None,
         )
         .await

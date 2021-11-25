@@ -219,7 +219,9 @@ where
 mod tests {
     use super::*;
 
-    use crate::engine::{MockExecutionContext, RasterResultDescriptor, VectorQueryRectangle};
+    use crate::engine::{
+        ChunkByteSize, MockExecutionContext, RasterResultDescriptor, VectorQueryRectangle,
+    };
     use crate::engine::{MockQueryContext, RasterOperator};
     use crate::mock::{MockRasterSource, MockRasterSourceParams};
     use geoengine_datatypes::collections::{MultiPointCollection, MultiPolygonCollection};
@@ -294,7 +296,7 @@ mod tests {
                 time_interval: Default::default(),
                 spatial_resolution: SpatialResolution::new(1., 1.).unwrap(),
             },
-            &MockQueryContext::new(0),
+            &MockQueryContext::new(ChunkByteSize::MIN),
         )
         .await
         .unwrap();
@@ -378,7 +380,7 @@ mod tests {
                 time_interval: Default::default(),
                 spatial_resolution: SpatialResolution::new(1., 1.).unwrap(),
             },
-            &MockQueryContext::new(0),
+            &MockQueryContext::new(ChunkByteSize::MIN),
         )
         .await
         .unwrap();
@@ -485,7 +487,7 @@ mod tests {
                 time_interval: Default::default(),
                 spatial_resolution: SpatialResolution::new(1., 1.).unwrap(),
             },
-            &MockQueryContext::new(0),
+            &MockQueryContext::new(ChunkByteSize::MIN),
         )
         .await
         .unwrap();
@@ -598,7 +600,7 @@ mod tests {
                 time_interval: Default::default(),
                 spatial_resolution: SpatialResolution::new(1., 1.).unwrap(),
             },
-            &MockQueryContext::new(0),
+            &MockQueryContext::new(ChunkByteSize::MIN),
         )
         .await
         .unwrap();

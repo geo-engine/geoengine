@@ -1,16 +1,14 @@
 use crate::contexts::{ExecutionContextImpl, QueryContextImpl};
 use crate::error;
 use crate::pro::contexts::{Context, Db, ProContext};
-use crate::pro::datasets::ProHashMapDatasetDb;
+use crate::pro::datasets::{add_datasets_from_directory, ProHashMapDatasetDb};
 use crate::pro::projects::ProHashMapProjectDb;
 use crate::pro::users::{HashMapUserDb, UserDb, UserSession};
-use crate::util::config;
 use crate::workflows::registry::HashMapRegistry;
-use crate::{
-    datasets::add_from_directory::{add_datasets_from_directory, add_providers_from_directory},
-    error::Result,
-};
+use crate::{datasets::add_from_directory::add_providers_from_directory, error::Result};
 use async_trait::async_trait;
+use geoengine_datatypes::raster::TilingSpecification;
+use geoengine_operators::engine::ChunkByteSize;
 use geoengine_operators::util::create_rayon_thread_pool;
 use rayon::ThreadPool;
 use snafu::ResultExt;
@@ -26,6 +24,8 @@ pub struct ProInMemoryContext {
     workflow_registry: Db<HashMapRegistry>,
     dataset_db: Db<ProHashMapDatasetDb>,
     thread_pool: Arc<ThreadPool>,
+    exe_ctx_tiling_spec: TilingSpecification,
+    query_ctx_chunk_size: ChunkByteSize,
 }
 
 impl Default for ProInMemoryContext {
@@ -36,20 +36,40 @@ impl Default for ProInMemoryContext {
             workflow_registry: Default::default(),
             dataset_db: Default::default(),
             thread_pool: create_rayon_thread_pool(0),
+            exe_ctx_tiling_spec: Default::default(),
+            query_ctx_chunk_size: Default::default(),
         }
     }
 }
 
 impl ProInMemoryContext {
     #[allow(clippy::too_many_lines)]
-    pub async fn new_with_data(dataset_defs_path: PathBuf, provider_defs_path: PathBuf) -> Self {
+    pub async fn new_with_data(
+        dataset_defs_path: PathBuf,
+        provider_defs_path: PathBuf,
+        exe_ctx_tiling_spec: TilingSpecification,
+        query_ctx_chunk_size: ChunkByteSize,
+    ) -> Self {
         let mut db = ProHashMapDatasetDb::default();
         add_datasets_from_directory(&mut db, dataset_defs_path).await;
         add_providers_from_directory(&mut db, provider_defs_path.clone()).await;
         add_providers_from_directory(&mut db, provider_defs_path.join("pro")).await;
 
         Self {
+            exe_ctx_tiling_spec,
+            query_ctx_chunk_size,
             dataset_db: Arc::new(RwLock::new(db)),
+            ..Default::default()
+        }
+    }
+
+    pub fn new_with_context_spec(
+        exe_ctx_tiling_spec: TilingSpecification,
+        query_ctx_chunk_size: ChunkByteSize,
+    ) -> Self {
+        ProInMemoryContext {
+            exe_ctx_tiling_spec,
+            query_ctx_chunk_size,
             ..Default::default()
         }
     }
@@ -110,11 +130,10 @@ impl Context for ProInMemoryContext {
     }
 
     fn query_context(&self) -> Result<Self::QueryContext> {
-        // TODO: load config only once
-        Ok(QueryContextImpl {
-            chunk_byte_size: config::get_config_element::<config::QueryContext>()?.chunk_byte_size,
-            thread_pool: self.thread_pool.clone(),
-        })
+        Ok(QueryContextImpl::new(
+            self.query_ctx_chunk_size,
+            self.thread_pool.clone(),
+        ))
     }
 
     fn execution_context(&self, session: UserSession) -> Result<Self::ExecutionContext> {
@@ -123,6 +142,7 @@ impl Context for ProInMemoryContext {
                 self.dataset_db.clone(),
                 self.thread_pool.clone(),
                 session,
+                self.exe_ctx_tiling_spec,
             ),
         )
     }
