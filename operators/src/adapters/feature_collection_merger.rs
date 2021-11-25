@@ -179,7 +179,7 @@ mod tests {
             .query(qrect, &cx)
             .await
             .unwrap()
-            .fold(0_usize, async move |i, _| i + 1)
+            .fold(0_usize, |i, _| async move { i + 1 })
             .await;
         assert_eq!(number_of_source_chunks, 5);
 

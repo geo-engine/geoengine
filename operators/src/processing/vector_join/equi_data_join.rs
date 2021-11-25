@@ -2,8 +2,7 @@ use std::collections::HashMap;
 use std::sync::Arc;
 
 use float_cmp::approx_eq;
-use futures::stream;
-use futures::stream::BoxStream;
+use futures::stream::{self, BoxStream};
 use futures::StreamExt;
 
 use geoengine_datatypes::collections::{
@@ -356,7 +355,7 @@ where
             .left_processor
             .query(query, ctx)
             .await?
-            .and_then(async move |left_collection| {
+            .and_then(move |left_collection| async move {
                 // This implementation is a nested-loop join
                 let left_collection = Arc::new(left_collection);
 
