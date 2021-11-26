@@ -1141,7 +1141,7 @@ mod tests {
 
         if let MetaDataDefinition::OgrMetaData(meta_data) = &mut meta_data {
             if let Some(columns) = &mut meta_data.loading_info.columns {
-                columns.text.sort();
+                columns.datetime.sort();
             }
         }
 
@@ -1180,8 +1180,8 @@ mod tests {
                     data_type: VectorDataType::MultiPoint,
                     spatial_reference: SpatialReference::epsg_4326().into(),
                     columns: [
-                        ("time_end".to_owned(), FeatureDataType::DateTime),
-                        ("time_start".to_owned(), FeatureDataType::DateTime)
+                        ("time_start".to_owned(), FeatureDataType::DateTime),
+                        ("time_end".to_owned(), FeatureDataType::DateTime)
                     ]
                     .iter()
                     .cloned()
@@ -1200,7 +1200,7 @@ mod tests {
 
         if let MetaDataDefinition::OgrMetaData(meta_data) = &mut meta_data {
             if let Some(columns) = &mut meta_data.loading_info.columns {
-                columns.text.sort();
+                columns.datetime.sort();
             }
         }
 
@@ -1226,7 +1226,7 @@ mod tests {
                         int: vec![],
                         text: vec![],
                         bool: vec![],
-                        datetime: vec!["time_start".to_owned(), "time_end".to_owned()],
+                        datetime: vec!["time_end".to_owned(), "time_start".to_owned()],
                         rename: None,
                     }),
                     force_ogr_time_filter: false,
@@ -1259,7 +1259,7 @@ mod tests {
 
         if let MetaDataDefinition::OgrMetaData(meta_data) = &mut meta_data {
             if let Some(columns) = &mut meta_data.loading_info.columns {
-                columns.text.sort();
+                columns.datetime.sort();
             }
         }
 
@@ -1312,16 +1312,10 @@ mod tests {
 
     #[test]
     fn it_detects_time_start_duration() {
-        let mut meta_data = auto_detect_meta_data_definition(test_data!(
+        let meta_data = auto_detect_meta_data_definition(test_data!(
             "vector/data/points_with_iso_start_duration.json"
         ))
         .unwrap();
-
-        if let MetaDataDefinition::OgrMetaData(meta_data) = &mut meta_data {
-            if let Some(columns) = &mut meta_data.loading_info.columns {
-                columns.text.sort();
-            }
-        }
 
         assert_eq!(
             meta_data,
