@@ -200,7 +200,9 @@ async fn get_dataset_handler<C: Context>(
 ///             "y": null,
 ///             "text": [],
 ///             "float": [],
-///             "int": []
+///             "int": [],
+///             "bool": [],
+///             "datetime": [],
 ///           },
 ///           "forceOgrTimeFilter": false,
 ///           "onError": "ignore"
