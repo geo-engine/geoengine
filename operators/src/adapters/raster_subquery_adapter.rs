@@ -16,7 +16,7 @@ use geoengine_datatypes::primitives::{SpatialPartition2D, SpatialPartitioned};
 use geoengine_datatypes::raster::{EmptyGrid2D, GridBoundingBox2D, GridBounds, GridStep};
 use geoengine_datatypes::{
     error::Error::{GridIndexOutOfBounds, InvalidGridIndex},
-    operations::reproject::{CoordinateProjection, CoordinateProjector, Reproject},
+    operations::reproject::{CoordinateProjection, CoordinateProjector, ReprojectClipped},
     primitives::{SpatialResolution, TimeInterval},
     raster::{
         grid_idx_iter_2d, BoundedGrid, EmptyGrid, MaterializedRasterTile2D, NoDataValue,
@@ -741,7 +741,8 @@ where
             .spatial_partition()
             .intersection(&query_rect.spatial_partition())
             .expect("should not be empty")
-            .reproject(&proj);
+            .reproject_clipped(&proj); // we need to use the fail tollerent reprojection here since there might be some pixels that are outside the valid bounds
+                                       //TODO: there must be a better way for this
 
         if let Ok(spatial_bounds) = spatial_bounds {
             Ok(Some(RasterQueryRectangle {

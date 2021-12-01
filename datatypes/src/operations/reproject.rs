@@ -247,7 +247,7 @@ where
 {
     type Out = A;
     fn reproject_clipped(&self, projector: &P) -> Result<A> {
-        const POINTS_PER_LINE: i32 = 7;
+        const POINTS_PER_LINE: i32 = 21;
 
         // clip bbox to the area of use of the target projection
         let area_of_use_projector = CoordinateProjector::from_known_srs(
