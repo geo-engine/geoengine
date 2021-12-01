@@ -19,13 +19,12 @@ gfbio = ["postgres", "geoengine-datatypes/postgres"]
 pro = ["postgres", "geoengine-operators/pro", "geoengine-datatypes/pro"]
 
 [dependencies]
-actix-files = "0.6.0-beta.8"
-actix-http = "=3.0.0-beta.11"
-actix-multipart = "0.4.0-beta.7"
-actix-rt = "2.2"
-actix-service = "2.0"
-actix-web = "=4.0.0-beta.10"
-actix-web-httpauth = "0.6.0-beta.3"
+actix-files = "=0.6.0-beta.9"
+actix-http = "=3.0.0-beta.14"
+actix-multipart = "=0.4.0-beta.9"
+actix-rt = "2.5"
+actix-web = "=4.0.0-beta.13"
+actix-web-httpauth = "=0.6.0-beta.4"
 async-trait = "0.1"
 base64 = "0.13"
 bb8-postgres = { version = "0.7", features = ["with-uuid-0_8", "with-chrono-0_4", "with-serde_json-1"], optional = true }
@@ -33,7 +32,7 @@ bytes = "1.0"
 chrono = { version = "0.4", features = ["serde"] }
 config = "0.11"
 executor = { path = "../../../rust/executor", version = "0.1"}
-flexi_logger = "0.19"
+flexi_logger = "0.20"
 futures = "0.3"
 futures-util = "0.3"
 gdal = "^0.11"
@@ -45,7 +44,6 @@ image = "0.23"
 lazy_static = "1.4"
 log = "0.4"
 mime = "0.3"
-mpart-async = "0.5"
 num-traits = "0.2"
 paste = "1.0"
 postgres-types = { version = "0.2", features = ["derive"], optional = true }
@@ -60,9 +58,9 @@ serde_json = "1.0"
 serde_urlencoded = "0.7"
 serde_with = "1.9"
 snafu = "0.6"
-strum = { version = "0.22", features = ["derive"] }
+strum = { version = "0.23", features = ["derive"] }
 time = "0.3"
-tokio = { version = "1.1", features = ["macros", "signal", "sync", "rt-multi-thread"] }
+tokio = { version = "1.1", features = ["macros", "fs", "signal", "sync", "rt-multi-thread"] }
 tokio-util = "0.6"
 typetag = "0.1"
 url = { version = "2.2", features = ["serde"] }

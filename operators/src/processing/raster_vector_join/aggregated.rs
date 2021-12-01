@@ -199,7 +199,7 @@ where
     ) -> Result<BoxStream<'a, Result<Self::Output>>> {
         let stream = self.collection
             .query(query, ctx).await?
-            .and_then(async move |mut collection| {
+            .and_then(move |mut collection| async move {
 
                 for (raster, new_column_name) in self.raster_processors.iter().zip(&self.column_names) {
                     collection = call_on_generic_raster_processor!(raster, raster => {

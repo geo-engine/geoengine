@@ -467,7 +467,7 @@ impl FeaturesProvider<'_> {
         match self {
             FeaturesProvider::Layer(l) => l.set_attribute_filter(attribute_query)?,
             FeaturesProvider::ResultSet(r) => {
-                r.deref_mut().set_attribute_filter(attribute_query)?
+                r.deref_mut().set_attribute_filter(attribute_query)?;
             }
         };
 

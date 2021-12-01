@@ -63,6 +63,11 @@ tile_limit = 4
 dataset_defs_path = "./test_data/dataset_defs"
 provider_defs_path = "./test_data/provider_defs"
 
+[gdal]
+# TODO: find good default
+# Use 0 for `ALL_CPUS` option or a number >0 for a specific number of threads.
+compression_num_threads = 8
+
 
 # Settings for Geo Engine Pro
 [user]

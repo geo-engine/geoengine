@@ -241,7 +241,7 @@ impl CollectorKind {
             Self::Values(ref mut c) => {
                 c.add_batch(values);
                 if c.element_count() > COLLECTOR_TO_HISTOGRAM_THRESHOLD {
-                    *self = Self::Histogram(Self::histogram_from_collector(c)?)
+                    *self = Self::Histogram(Self::histogram_from_collector(c)?);
                 }
             }
             Self::Histogram(ref mut h) => {

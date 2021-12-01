@@ -444,7 +444,7 @@ mod tests {
         server.verify_and_clear();
 
         assert_eq!(1, result.len());
-        assert_eq!(60, result[0].len())
+        assert_eq!(60, result[0].len());
     }
 
     #[tokio::test]

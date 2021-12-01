@@ -49,7 +49,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_immediate_success() {
-        let result: Result<(), ()> = retry(3, 0, 1., async || ok(()).await).await;
+        let result: Result<(), ()> = retry(3, 0, 1., || ok(())).await;
 
         assert!(result.is_ok());
     }
@@ -58,7 +58,7 @@ mod tests {
     async fn test_retry_success_after_tries() {
         let i = Arc::new(AtomicUsize::new(0));
 
-        let result = retry(3, 0, 1., async || {
+        let result = retry(3, 0, 1., || {
             let i = i.clone();
             poll_fn(move |_ctx| {
                 Poll::Ready(match i.fetch_add(1, Ordering::Relaxed) {
@@ -66,7 +66,6 @@ mod tests {
                     _ => Ok(()),
                 })
             })
-            .await
         })
         .await;
 
@@ -75,7 +74,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_failure() {
-        let result: Result<(), ()> = retry(3, 0, 1., async || err(()).await).await;
+        let result: Result<(), ()> = retry(3, 0, 1., || err(())).await;
 
         assert!(result.is_err());
     }

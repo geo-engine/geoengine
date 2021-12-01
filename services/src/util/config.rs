@@ -6,8 +6,9 @@ use crate::error::{self, Result};
 use crate::util::parsing::{deserialize_base_url, deserialize_base_url_option};
 
 use chrono::{DateTime, FixedOffset};
-use config::{Config, File};
+use config::{Config, Environment, File};
 use geoengine_datatypes::primitives::{TimeInstance, TimeInterval};
+use geoengine_operators::util::raster_stream_to_geotiff::GdalCompressionNumThreads;
 use lazy_static::lazy_static;
 use serde::Deserialize;
 use snafu::ResultExt;
@@ -33,6 +34,12 @@ lazy_static! {
             .collect();
 
         settings.merge(files).unwrap();
+
+        // Override config with environment variables that start with `GEOENGINE_`,
+        // e.g. `GEOENGINE_WEB__EXTERNAL_ADDRESS=https://path.to.geoengine.io`
+        // Note: Since variables contain underscores, we need to use something different
+        // for seperating groups, for instance double underscores `__`
+        settings.merge(Environment::with_prefix("geoengine").separator("__")).unwrap();
 
         settings
     });
@@ -304,4 +311,13 @@ pub struct DataProvider {
 
 impl ConfigElement for DataProvider {
     const KEY: &'static str = "dataprovider";
+}
+
+#[derive(Debug, Deserialize)]
+pub struct Gdal {
+    pub compression_num_threads: GdalCompressionNumThreads,
+}
+
+impl ConfigElement for Gdal {
+    const KEY: &'static str = "gdal";
 }

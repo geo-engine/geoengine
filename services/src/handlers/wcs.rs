@@ -2,7 +2,9 @@ use std::str::FromStr;
 
 use actix_web::{web, FromRequest, HttpResponse, Responder};
 use geoengine_operators::call_on_generic_raster_processor_gdal_types;
-use geoengine_operators::util::raster_stream_to_geotiff::raster_stream_to_geotiff_bytes;
+use geoengine_operators::util::raster_stream_to_geotiff::{
+    raster_stream_to_geotiff_bytes, GdalGeoTiffDatasetMetadata, GdalGeoTiffOptions,
+};
 use log::info;
 use snafu::{ensure, ResultExt};
 use url::Url;
@@ -349,8 +351,14 @@ async fn get_coverage<C: Context>(
             p,
             query_rect,
             query_ctx,
-            no_data_value,
-            request_spatial_ref,
+            GdalGeoTiffDatasetMetadata {
+                no_data_value,
+                spatial_reference: request_spatial_ref,
+            },
+            GdalGeoTiffOptions {
+                compression_num_threads: get_config_element::<crate::util::config::Gdal>()?.compression_num_threads,
+                as_cog: false,
+            },
             Some(get_config_element::<crate::util::config::Wcs>()?.tile_limit),
         )
         .await)?
@@ -498,7 +506,6 @@ mod tests {
 
         assert_eq!(res.status(), 200);
         let body = read_body_string(res).await;
-        eprintln!("{}", body);
         assert_eq!(
             format!(
                 r#"<?xml version="1.0" encoding="UTF-8"?>

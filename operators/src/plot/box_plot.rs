@@ -241,7 +241,7 @@ impl PlotQueryProcessor for BoxPlotVectorQueryProcessor {
         let mut chart = geoengine_datatypes::plots::BoxPlot::new();
         for accum in &mut accums {
             if let Some(attrib) = accum.finish()? {
-                chart.add_attribute(attrib)
+                chart.add_attribute(attrib);
             }
         }
         Ok(chart.to_vega_embeddable(false)?)
@@ -827,7 +827,7 @@ mod tests {
         let mut data = Vec::<i64>::with_capacity(2 * super::EXACT_CALC_BOUND);
 
         for i in 1..=data.capacity() as i64 {
-            data.push(i)
+            data.push(i);
         }
 
         let vector_source =
