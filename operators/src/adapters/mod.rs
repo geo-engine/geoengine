@@ -1,11 +1,11 @@
 mod feature_collection_merger;
-mod raster_subquery_adapter;
+mod raster_subquery;
 mod raster_time;
 mod raster_time_substream;
 mod sparse_tiles_fill_adapter;
 
 pub use feature_collection_merger::FeatureCollectionChunkMerger;
-pub use raster_subquery_adapter::{
+pub use raster_subquery::{
     fold_by_coordinate_lookup_future, FoldTileAccu, FoldTileAccuMut, RasterSubQueryAdapter,
     SubQueryTileAggregator, TileReprojectionSubQuery,
 };

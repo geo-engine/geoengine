@@ -14,20 +14,18 @@ use crate::{
 use async_trait::async_trait;
 use futures::stream::BoxStream;
 use futures::StreamExt;
-use geoengine_datatypes::primitives::Coordinate2D;
 use geoengine_datatypes::{
     operations::reproject::{
         suggest_pixel_size_from_diag_cross_projected, CoordinateProjection, CoordinateProjector,
         Reproject, ReprojectClipped,
     },
-    primitives::{AxisAlignedRectangle, SpatialResolution},
+    primitives::AxisAlignedRectangle,
     primitives::{BoundingBox2D, SpatialPartition2D},
     raster::{Pixel, RasterTile2D, TilingSpecification},
     spatial_reference::SpatialReference,
 };
 use num_traits::AsPrimitive;
 use serde::{Deserialize, Serialize};
-use snafu::ResultExt;
 
 #[derive(Debug, Serialize, Deserialize, Clone, Copy)]
 #[serde(rename_all = "camelCase")]
@@ -388,60 +386,6 @@ impl InitializedRasterOperator for InitializedRasterReprojection {
     }
 }
 
-/// compute the resolution for the source. For this we subdivide the valid area into a grid and compute the resulting resolution as
-/// the minimum of the required resolutions for all tiles. This gives us a global, reproducible resolution. We don't use the global
-/// tiling strategy for subdivision because we want to avoid partially valid tiles (where a tile is partially outside of the area
-/// of use of the source or target projection). Rather we split divide it into a configurable number of homogeneous `rows` and `cols`
-/// that align with the intersection of source and target area of use.
-fn query_source_resolution<A: AxisAlignedRectangle>(
-    query_resolution: SpatialResolution,
-    from: SpatialReference,
-    to: SpatialReference,
-    rows: usize,
-    cols: usize,
-) -> Result<SpatialResolution> {
-    let projector_source_target = CoordinateProjector::from_known_srs(from, to)?;
-    let projector_target_source = CoordinateProjector::from_known_srs(to, from)?;
-
-    let use_area = projector_source_target.to.area_of_use_projected::<A>()?;
-    let source_use_area_clipped = use_area.reproject_clipped(&projector_target_source)?;
-    let use_area_clipped = source_use_area_clipped.reproject_clipped(&projector_source_target)?;
-
-    let width = use_area_clipped.size_x() / cols as f64;
-    let height = use_area_clipped.size_y() / rows as f64;
-    let mut resolution: Option<SpatialResolution> = None;
-    for row in 0..rows {
-        for col in 0..cols {
-            let target_bbox = A::from_min_max(
-                use_area_clipped.lower_left()
-                    + Coordinate2D::new(col as f64 * width, row as f64 * height),
-                use_area_clipped.lower_left()
-                    + Coordinate2D::new((col + 1) as f64 * width, (row + 1) as f64 * height),
-            )?;
-
-            let source_bbox = target_bbox.reproject_clipped(&projector_target_source)?;
-
-            let tile_resolution = suggest_pixel_size_from_diag_cross_projected(
-                target_bbox,
-                source_bbox,
-                query_resolution,
-            )
-            .context(error::DataType)?;
-
-            if let Some(current_resolution) = resolution {
-                resolution = Some(SpatialResolution::new(
-                    f64::min(current_resolution.x, tile_resolution.x),
-                    f64::min(current_resolution.y, tile_resolution.y),
-                )?);
-            } else {
-                resolution = Some(tile_resolution);
-            }
-        }
-    }
-
-    resolution.ok_or(error::Error::NoSourceResolution)
-}
-
 struct RasterReprojectionProcessor<Q, P>
 where
     Q: RasterQueryProcessor<RasterType = P>,
@@ -474,21 +418,31 @@ where
         }
     }
 
-    fn valid_bounds<T>(source_proj: SpatialReference, target_proj: SpatialReference) -> Result<T>
+    fn valid_bounds<T>(
+        proj_out: SpatialReference,
+        proj_other: SpatialReference,
+    ) -> Result<Option<T>>
     where
         T: AxisAlignedRectangle,
     {
         // generate a projector which transforms wgs84 into the projection we want to produce.
         let valid_bounds_proj =
-            CoordinateProjector::from_known_srs(SpatialReference::epsg_4326(), target_proj)?;
+            CoordinateProjector::from_known_srs(SpatialReference::epsg_4326(), proj_out)?;
 
         // transform the bounds of the input srs (coordinates are in wgs84) into the output projection.
         // TODO check if  there is a better / smarter way to check if the coordinates are valid.
-        let valid_bounds = source_proj
-            .area_of_use::<T>()?
-            .reproject_clipped(&valid_bounds_proj)?;
+        let area_out = proj_out.area_of_use::<T>()?;
+        let area_other = proj_other.area_of_use::<T>()?;
 
-        Ok(valid_bounds)
+        let x = area_out
+            .intersection(&area_other)
+            .map(|area| area.reproject(&valid_bounds_proj));
+
+        match x {
+            Some(Ok(area)) => Ok(Some(area)),
+            None => Ok(None),
+            Some(Err(e)) => Err(e.into()),
+        }
     }
 }
 
@@ -506,21 +460,30 @@ where
         query: RasterQueryRectangle,
         ctx: &'a dyn QueryContext,
     ) -> Result<BoxStream<'a, Result<Self::Output>>> {
+        // calculate the intersection of input and output srs in both coordinate systems
+        // TODO: do this in initialization?
+        let valid_bounds_in = Self::valid_bounds::<SpatialPartition2D>(self.from, self.to)?;
+        let valid_bounds_out = Self::valid_bounds::<SpatialPartition2D>(self.to, self.from)?;
+
+        // calculate the spatial resolution the input data should have using the intersection and the requested resolution
+        let in_spatial_res = suggest_pixel_size_from_diag_cross_projected(
+            valid_bounds_out.expect("projections must overlap"), // TODO: if there is no overlap return an empty stream?
+            valid_bounds_in.expect("projections must overlap"),
+            query.spatial_resolution,
+        )?;
+
+        // setup the subquery
         let sub_query_spec = TileReprojectionSubQuery {
             in_srs: self.from,
             out_srs: self.to,
             no_data_and_fill_value: self.no_data_and_fill_value,
             fold_fn: fold_by_coordinate_lookup_future,
-            in_spatial_res: query_source_resolution::<SpatialPartition2D>(
-                query.spatial_resolution,
-                self.from,
-                self.to,
-                1, // TODO: use a configurable number of rows and cols, but only a resolution computed on a single tile seems to not lead to over estimates
-                1,
-            )?,
-            valid_bounds: Self::valid_bounds(self.from, self.to)?,
+            in_spatial_res,
+            valid_bounds_in,
+            valid_bounds_out,
         };
 
+        // return the adapter which will reproject the tiles and uses the fill adapter to inject missing tiles
         Ok(RasterSubQueryAdapter::<'a, P, _, _>::new(
             &self.source,
             query,
@@ -1018,12 +981,12 @@ mod tests {
                 .into(),
                 rasterband_channel: 1,
                 geo_transform: GdalDatasetGeoTransform {
-                    origin_coordinate: (20_037_508.342_789_244, 19_971_868.880_408_563).into(),
+                    origin_coordinate: (-20_037_508.342_789_244, 19_971_868.880_408_563).into(),
                     x_pixel_size: 14_052.950_258_048_739,
                     y_pixel_size: -14_057.881_117_788_405,
                 },
-                width: 1000,
-                height: 1000,
+                width: 2851,
+                height: 2841,
                 file_not_found_handling: FileNotFoundHandling::Error,
                 no_data_value: Some(0.),
                 properties_mapping: None,
@@ -1045,7 +1008,6 @@ mod tests {
         exe_ctx.tiling_specification =
             TilingSpecification::new((0.0, 0.0).into(), [600, 600].into());
 
-        let output_shape: GridShape2D = [1000, 1000].into();
         let output_bounds =
             SpatialPartition2D::new_unchecked((-180., 90.).into(), (180., -90.).into());
         let time_interval = TimeInterval::new_unchecked(1_396_310_400_000, 1_396_310_400_000);
@@ -1069,8 +1031,8 @@ mod tests {
         .initialize(&exe_ctx)
         .await?;
 
-        let x_query_resolution = output_bounds.size_x() / output_shape.axis_size_x() as f64;
-        let y_query_resolution = output_bounds.size_y() / (output_shape.axis_size_y() * 2) as f64; // *2 to account for the dataset aspect ratio 2:1
+        let x_query_resolution = output_bounds.size_x() / 4800 as f64; // since we request x -180 to 180 and y -90 to 90 with 600x600 tiles this will result in 8 x 4 tiles
+        let y_query_resolution = output_bounds.size_y() / 2400 as f64; // *2 to account for the dataset aspect ratio 2:1
         let spatial_resolution =
             SpatialResolution::new_unchecked(x_query_resolution, y_query_resolution);
 
@@ -1092,9 +1054,16 @@ mod tests {
             .await
             .unwrap();
 
-        qs.map(Result::unwrap)
+        let tiles = qs
+            .map(Result::unwrap)
             .collect::<Vec<RasterTile2D<u8>>>()
             .await;
+
+        // the test must generate 8x4 tiles
+        dbg!(tiles.len(), 32);
+
+        // none of the tiles should be empty
+        assert!(tiles.iter().all(|t| !t.is_empty()));
 
         Ok(())
     }
@@ -1121,9 +1090,12 @@ mod tests {
 
         // ndvi was projected from 4326 to 3857. The calculated source_resolution for getting the raster in 3857 with `res_3857`
         // should thus roughly be like the original `res_4326`
-        let result_res =
-            query_source_resolution::<SpatialPartition2D>(res_3857, epsg_3857, epsg_4326, 1, 1)
-                .unwrap();
+        let result_res = suggest_pixel_size_from_diag_cross_projected::<SpatialPartition2D>(
+            epsg_3857.area_of_use_projected().unwrap(),
+            epsg_4326.area_of_use_projected().unwrap(),
+            res_3857,
+        )
+        .unwrap();
         assert!(1. - (result_res.x / res_4326.x).abs() < 0.02);
         assert!(1. - (result_res.y / res_4326.y).abs() < 0.02);
     }
