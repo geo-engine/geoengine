@@ -537,25 +537,15 @@ impl HistogramMetadataInProgress {
 
     #[inline]
     fn add_vector_batch(&mut self, values: FeatureDataRef) {
-        fn add_data_ref<'d, D, T>(metadata: &mut HistogramMetadataInProgress, data_ref: &D)
+        fn add_data_ref<'d, D, T>(metadata: &mut HistogramMetadataInProgress, data_ref: &'d D)
         where
             D: DataRef<'d, T>,
-            T: Pixel,
+            T: 'static,
         {
-            if data_ref.has_nulls() {
-                for (i, v) in data_ref.as_ref().iter().enumerate() {
-                    if data_ref.is_null(i) {
-                        continue;
-                    }
-
+            for v in data_ref.float_options_iter() {
+                if let Some(v) = v {
                     metadata.n += 1;
-                    metadata.update_minmax(v.as_());
-                }
-            } else {
-                let values = data_ref.as_ref();
-                metadata.n += values.len();
-                for v in values {
-                    metadata.update_minmax(v.as_());
+                    metadata.update_minmax(v);
                 }
             }
         }
@@ -567,12 +557,12 @@ impl HistogramMetadataInProgress {
             FeatureDataRef::Float(values) => {
                 add_data_ref(self, &values);
             }
-            FeatureDataRef::Category(_)
-            | FeatureDataRef::Text(_)
-            | FeatureDataRef::Bool(_)
-            | FeatureDataRef::DateTime(_) => {
+            FeatureDataRef::DateTime(values) => {
+                add_data_ref(self, &values);
+            }
+            FeatureDataRef::Category(_) | FeatureDataRef::Text(_) | FeatureDataRef::Bool(_) => {
                 // do nothing since we don't support them
-                // TODO: fill with live once we support category, text, bool and datetime types
+                // TODO: fill with live once we support category, text, bool types
             }
         }
     }
