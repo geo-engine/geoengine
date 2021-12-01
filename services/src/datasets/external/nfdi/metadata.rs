@@ -1,4 +1,4 @@
-use crate::datasets::provenance::Provenance;
+use crate::datasets::listing::Provenance;
 use geoengine_datatypes::collections::VectorDataType;
 use geoengine_datatypes::primitives::{
     FeatureDataType, Measurement, TimeGranularity, TimeInterval,
@@ -88,7 +88,7 @@ mod tests {
     use crate::datasets::external::nfdi::metadata::{
         Attribute, DataType, GEMetadata, RasterInfo, VectorInfo,
     };
-    use crate::datasets::provenance::Provenance;
+    use crate::datasets::listing::Provenance;
     use geoengine_datatypes::collections::VectorDataType;
     use geoengine_datatypes::primitives::{Coordinate2D, FeatureDataType};
     use geoengine_datatypes::raster::RasterDataType;

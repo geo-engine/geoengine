@@ -1,7 +1,8 @@
 use crate::datasets::external::nfdi::metadata::{DataType, GEMetadata, RasterInfo, VectorInfo};
-use crate::datasets::listing::{DatasetListOptions, DatasetListing, DatasetProvider};
-use crate::datasets::provenance::{ProvenanceOutput, ProvenanceProvider};
-use crate::datasets::storage::{Dataset, DatasetProviderDefinition};
+use crate::datasets::listing::{
+    DatasetListOptions, DatasetListing, ExternalDatasetProvider, ProvenanceOutput,
+};
+use crate::datasets::storage::{Dataset, ExternalDatasetProviderDefinition};
 use crate::error::{Error, Result};
 use crate::util::user_input::Validated;
 use geoengine_datatypes::collections::VectorDataType;
@@ -54,8 +55,8 @@ pub struct NFDIDataProviderDefinition {
 
 #[typetag::serde]
 #[async_trait::async_trait]
-impl DatasetProviderDefinition for NFDIDataProviderDefinition {
-    async fn initialize(self: Box<Self>) -> Result<Box<dyn DatasetProvider>> {
+impl ExternalDatasetProviderDefinition for NFDIDataProviderDefinition {
+    async fn initialize(self: Box<Self>) -> Result<Box<dyn ExternalDatasetProvider>> {
         Ok(Box::new(NFDIDataProvider::new(self).await?))
     }
 
@@ -121,7 +122,7 @@ impl NFDIDataProvider {
         let dataset_stub =
             DatasetServiceClient::with_interceptor(channel.clone(), interceptor.clone());
 
-        let object_stub = ObjectLoadServiceClient::with_interceptor(channel, interceptor.clone());
+        let object_stub = ObjectLoadServiceClient::with_interceptor(channel, interceptor);
 
         Ok(NFDIDataProvider {
             id: def.id,
@@ -136,7 +137,7 @@ impl NFDIDataProvider {
     fn dataset_nfdi_id(id: &DatasetId) -> Result<String> {
         match id {
             DatasetId::External(id) => Ok(id.dataset_id.clone()),
-            _ => Err(Error::InvalidDatasetId),
+            DatasetId::Internal { .. } => Err(Error::InvalidDatasetId),
         }
     }
 
@@ -166,7 +167,7 @@ impl NFDIDataProvider {
         resp.dataset.ok_or(Error::InvalidDatasetId).and_then(|ds| {
             // Extract and parse geoengine metadata
             let md = Self::extract_metadata(&ds)?;
-            self.map_dataset(&ds, &md).map(|ds| (ds, md))
+            Ok((self.map_dataset(&ds, &md), md))
         })
     }
 
@@ -174,29 +175,31 @@ impl NFDIDataProvider {
         &self,
         ds: &scienceobjectsdb_rust_api::sciobjectsdbapi::models::v1::Dataset,
         md: &GEMetadata,
-    ) -> Result<Dataset> {
+    ) -> Dataset {
         let id = DatasetId::External(ExternalDatasetId {
-            provider_id: self.id.clone(),
+            provider_id: self.id,
             dataset_id: ds.id.clone(),
         });
 
         // Create type specific infos
         let (result_descriptor, source_operator) = match &md.data_type {
             DataType::SingleVectorFile(info) => (
-                TypedResultDescriptor::Vector(
-                    self.create_vector_result_descriptor(md.crs.clone().into(), &info)?,
-                ),
+                TypedResultDescriptor::Vector(Self::create_vector_result_descriptor(
+                    md.crs.into(),
+                    info,
+                )),
                 "OgrSource".to_string(),
             ),
             DataType::SingleRasterFile(info) => (
-                TypedResultDescriptor::Raster(
-                    self.create_raster_result_descriptor(md.crs.clone().into(), info)?,
-                ),
+                TypedResultDescriptor::Raster(Self::create_raster_result_descriptor(
+                    md.crs.into(),
+                    info,
+                )),
                 "GdalSource".to_string(),
             ),
         };
 
-        Ok(Dataset {
+        Dataset {
             id,
             name: ds.name.clone(),
             description: ds.description.clone(),
@@ -204,42 +207,39 @@ impl NFDIDataProvider {
             result_descriptor,
             symbology: None,
             provenance: md.provenance.clone(),
-        })
+        }
     }
 
     fn create_vector_result_descriptor(
-        &self,
         crs: SpatialReferenceOption,
         info: &VectorInfo,
-    ) -> Result<VectorResultDescriptor> {
+    ) -> VectorResultDescriptor {
         let columns = info
             .attributes
             .iter()
             .map(|a| (a.name.clone(), a.r#type))
             .collect::<HashMap<String, FeatureDataType>>();
 
-        Ok(VectorResultDescriptor {
+        VectorResultDescriptor {
             data_type: info.vector_type,
             spatial_reference: crs,
             columns,
-        })
+        }
     }
 
     fn create_raster_result_descriptor(
-        &self,
         crs: SpatialReferenceOption,
         info: &RasterInfo,
-    ) -> Result<RasterResultDescriptor> {
-        Ok(RasterResultDescriptor {
+    ) -> RasterResultDescriptor {
+        RasterResultDescriptor {
             data_type: info.data_type,
             spatial_reference: crs,
             measurement: info
                 .measurement
                 .as_ref()
-                .map(Clone::clone)
-                .unwrap_or(Measurement::Unitless),
+                .map_or(Measurement::Unitless, Clone::clone),
             no_data_value: info.no_data_value,
-        })
+        }
     }
 
     async fn get_single_file_object(&self, id: &DatasetId) -> Result<Object> {
@@ -278,7 +278,7 @@ impl NFDIDataProvider {
         let mut float = vec![];
         let mut text = vec![];
 
-        for (k, v) in rd.columns.iter() {
+        for (k, v) in &rd.columns {
             match v {
                 FeatureDataType::Category | FeatureDataType::Int => int.push(k.to_string()),
                 FeatureDataType::Float => float.push(k.to_string()),
@@ -321,11 +321,11 @@ impl NFDIDataProvider {
         rd: &RasterResultDescriptor,
     ) -> Result<GdalLoadingInfo> {
         let part = GdalLoadingInfoPart {
-            time: info.time_interval.clone(),
+            time: info.time_interval,
             params: GdalDatasetParameters {
                 file_path: PathBuf::from(format!("/viscurl/{}", URL_REPLACEMENT)),
                 rasterband_channel: info.rasterband_channel,
-                geo_transform: info.geo_transform.clone(),
+                geo_transform: info.geo_transform,
                 width: info.width,
                 height: info.height,
                 file_not_found_handling: FileNotFoundHandling::NoData,
@@ -389,11 +389,7 @@ impl MetaDataProvider<OgrSourceDataset, VectorResultDescriptor, VectorQueryRecta
 
         match md.data_type {
             DataType::SingleVectorFile(info) => {
-                let result_descriptor = self
-                    .create_vector_result_descriptor(md.crs.into(), &info)
-                    .map_err(|e| geoengine_operators::error::Error::DatasetMetaData {
-                        source: Box::new(e),
-                    })?;
+                let result_descriptor = Self::create_vector_result_descriptor(md.crs.into(), &info);
                 let template = self
                     .vector_loading_template(info.layer_name.clone(), &result_descriptor)
                     .await
@@ -410,7 +406,7 @@ impl MetaDataProvider<OgrSourceDataset, VectorResultDescriptor, VectorQueryRecta
                 };
                 Ok(Box::new(res))
             }
-            _ => Err(geoengine_operators::error::Error::InvalidType {
+            DataType::SingleRasterFile(_) => Err(geoengine_operators::error::Error::InvalidType {
                 found: md.data_type.to_string(),
                 expected: "SingleVectorFile".to_string(),
             }),
@@ -442,11 +438,7 @@ impl MetaDataProvider<GdalLoadingInfo, RasterResultDescriptor, RasterQueryRectan
 
         match &md.data_type {
             DataType::SingleRasterFile(info) => {
-                let result_descriptor =
-                    self.create_raster_result_descriptor(md.crs.into(), info)
-                        .map_err(|e| geoengine_operators::error::Error::DatasetMetaData {
-                            source: Box::new(e),
-                        })?;
+                let result_descriptor = Self::create_raster_result_descriptor(md.crs.into(), info);
                 let template = self
                     .raster_loading_template(info, &result_descriptor)
                     .await
@@ -463,7 +455,7 @@ impl MetaDataProvider<GdalLoadingInfo, RasterResultDescriptor, RasterQueryRectan
                 };
                 Ok(Box::new(res))
             }
-            _ => Err(geoengine_operators::error::Error::InvalidType {
+            DataType::SingleVectorFile(_) => Err(geoengine_operators::error::Error::InvalidType {
                 found: md.data_type.to_string(),
                 expected: "SingleRasterFile".to_string(),
             }),
@@ -472,19 +464,7 @@ impl MetaDataProvider<GdalLoadingInfo, RasterResultDescriptor, RasterQueryRectan
 }
 
 #[async_trait::async_trait]
-impl ProvenanceProvider for NFDIDataProvider {
-    async fn provenance(&self, dataset_id: &DatasetId) -> Result<ProvenanceOutput> {
-        let (ds, _) = self.dataset_info(dataset_id).await?;
-
-        Ok(ProvenanceOutput {
-            dataset: dataset_id.clone(),
-            provenance: ds.provenance,
-        })
-    }
-}
-
-#[async_trait::async_trait]
-impl DatasetProvider for NFDIDataProvider {
+impl ExternalDatasetProvider for NFDIDataProvider {
     async fn list(&self, _options: Validated<DatasetListOptions>) -> Result<Vec<DatasetListing>> {
         let mut project_stub = self.project_stub.clone();
 
@@ -498,15 +478,17 @@ impl DatasetProvider for NFDIDataProvider {
         Ok(resp
             .dataset
             .into_iter()
-            .map(|ds| {
-                let md = Self::extract_metadata(&ds)?;
-                self.map_dataset(&ds, &md).map(|x| x.listing())
-            })
+            .map(|ds| Self::extract_metadata(&ds).map(|md| self.map_dataset(&ds, &md).listing()))
             .collect::<Result<Vec<DatasetListing>>>()?)
     }
 
-    async fn load(&self, id: &DatasetId) -> Result<Dataset> {
-        Ok(self.dataset_info(id).await?.0)
+    async fn provenance(&self, dataset: &DatasetId) -> Result<ProvenanceOutput> {
+        let (ds, _) = self.dataset_info(dataset).await?;
+
+        Ok(ProvenanceOutput {
+            dataset: dataset.clone(),
+            provenance: ds.provenance,
+        })
     }
 }
 
@@ -525,19 +507,21 @@ impl ExpiringDownloadLink for OgrSourceDataset {
         &self,
         url: String,
     ) -> std::result::Result<Self, geoengine_operators::error::Error> {
-        let path = self.file_name.to_str().ok_or(std::io::Error::new(
-            std::io::ErrorKind::InvalidInput,
-            format!(
-                "Could not parse original path as string {:?}",
-                &self.file_name
-            ),
-        ))?;
+        let path = self.file_name.to_str().ok_or_else(|| {
+            std::io::Error::new(
+                std::io::ErrorKind::InvalidInput,
+                format!(
+                    "Could not parse original path as string {:?}",
+                    &self.file_name
+                ),
+            )
+        })?;
         let new_path = PathBuf::from(path.replace(URL_REPLACEMENT, url.as_str()));
 
         Ok(Self {
             file_name: new_path,
             layer_name: self.layer_name.clone(),
-            data_type: self.data_type.clone(),
+            data_type: self.data_type,
             time: self.time.clone(),
             default_geometry: self.default_geometry.clone(),
             columns: self.columns.clone(),
@@ -551,6 +535,7 @@ impl ExpiringDownloadLink for OgrSourceDataset {
 }
 
 impl ExpiringDownloadLink for GdalLoadingInfo {
+    #[allow(clippy::needless_collect)]
     fn new_link(
         &self,
         url: String,
@@ -560,7 +545,7 @@ impl ExpiringDownloadLink for GdalLoadingInfo {
     {
         match &self.info {
             GdalLoadingInfoPartIterator::Static { parts } if parts.as_slice().len() == 1 => {
-                let new_parts: Vec<_> = parts
+                let new_parts = parts
                     .as_slice()
                     .iter()
                     .map(|part| {
@@ -568,7 +553,7 @@ impl ExpiringDownloadLink for GdalLoadingInfo {
                         new_part.params.file_path = PathBuf::from(url.as_str());
                         new_part
                     })
-                    .collect();
+                    .collect::<std::vec::Vec<_>>();
 
                 Ok(Self {
                     info: GdalLoadingInfoPartIterator::Static {
@@ -576,12 +561,10 @@ impl ExpiringDownloadLink for GdalLoadingInfo {
                     },
                 })
             }
-            _ => {
-                return Err(geoengine_operators::error::Error::InvalidType {
-                    found: "GdalLoadingInfoPartIterator::Dynamic".to_string(),
-                    expected: "GdalLoadingInfoPartIterator::Static".to_string(),
-                })
-            }
+            _ => Err(geoengine_operators::error::Error::InvalidType {
+                found: "GdalLoadingInfoPartIterator::Dynamic".to_string(),
+                expected: "GdalLoadingInfoPartIterator::Static".to_string(),
+            }),
         }
     }
 }
@@ -634,8 +617,7 @@ where
 #[cfg(test)]
 mod tests {
     use crate::datasets::external::nfdi::{NFDIDataProvider, NFDIDataProviderDefinition};
-    use crate::datasets::listing::{DatasetListOptions, DatasetProvider, OrderBy};
-    use crate::datasets::provenance::ProvenanceProvider;
+    use crate::datasets::listing::{DatasetListOptions, ExternalDatasetProvider, OrderBy};
     use crate::util::user_input::Validated;
     use futures::StreamExt;
     use geoengine_datatypes::collections::{FeatureCollectionInfos, MultiPointCollection};
@@ -649,14 +631,14 @@ mod tests {
     use std::str::FromStr;
 
     const PROVIDER_ID: &str = "86a7f7ce-1bab-4ce9-a32b-172c0f958ee0";
-    const DATASET_ID: &str = "a04ecdb8-848e-4a00-baa9-d3fb907ec37b";
+    const DATASET_ID: &str = "2dc2eed6-ca6e-401f-831f-a70f7d62f168";
 
     async fn new_provider() -> NFDIDataProvider {
         let def = NFDIDataProviderDefinition {
             id: DatasetProviderId::from_str(PROVIDER_ID).unwrap(),
-            api_token: "vpyJ1yWSHevHoWd9PoNtJAv4H1JLiNO/Lc+T2UGmQX+XksuzHJxvJe16i2pe".to_string(),
+            api_token: "ttTjXzfJOxCqiW4yNRpN8p5e0deaKI5BIF2SMRjRY/JpPUTlS3COnqddcT8g".to_string(),
             api_url: "https://api.core-server-dev.m1.k8s.computational.bio/".to_string(),
-            project_id: "4277287c-7ad0-44b2-821b-cac50d4aae36".to_string(),
+            project_id: "11fcc01b-3355-4246-b3e2-a32f878456f1".to_string(),
             name: "NFDI".to_string(),
         };
 
@@ -678,19 +660,6 @@ mod tests {
         assert!(res.is_ok());
         let res = res.unwrap();
         assert!(!res.is_empty());
-    }
-
-    #[tokio::test]
-    async fn it_loads() {
-        let provider = new_provider().await;
-
-        let id = DatasetId::External(ExternalDatasetId {
-            provider_id: provider.id,
-            dataset_id: DATASET_ID.to_string(),
-        });
-
-        let res = provider.load(&id).await;
-        assert!(res.is_ok());
     }
 
     #[tokio::test]
@@ -723,6 +692,7 @@ mod tests {
         let _res: Box<
             dyn MetaData<OgrSourceDataset, VectorResultDescriptor, VectorQueryRectangle>,
         > = provider.meta_data(&id).await.unwrap();
+        {};
     }
 
     #[tokio::test]
@@ -773,6 +743,16 @@ mod tests {
             .collect()
             .await;
 
+        let sum: usize = result.iter().map(MultiPointCollection::len).sum();
+        println!("{}", sum);
+
+        let result: Vec<MultiPointCollection> = proc
+            .query(qr, &ctx)
+            .await
+            .unwrap()
+            .map(Result::unwrap)
+            .collect()
+            .await;
         let sum: usize = result.iter().map(MultiPointCollection::len).sum();
         println!("{}", sum);
     }

@@ -2,7 +2,7 @@
   "type": "NFDIDataProviderDefinition",
   "id": "86a7f7ce-1bab-4ce9-a32b-172c0f958ee0",
   "name": "NFDI",
-  "apiToken": "vpyJ1yWSHevHoWd9PoNtJAv4H1JLiNO/Lc+T2UGmQX+XksuzHJxvJe16i2pe",
+  "apiToken": "ttTjXzfJOxCqiW4yNRpN8p5e0deaKI5BIF2SMRjRY/JpPUTlS3COnqddcT8g",
   "apiUrl": "https://api.core-server-dev.m1.k8s.computational.bio/",
-  "projectId": "4277287c-7ad0-44b2-821b-cac50d4aae36"
+  "projectId": "11fcc01b-3355-4246-b3e2-a32f878456f1"
 }
