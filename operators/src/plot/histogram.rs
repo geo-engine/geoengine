@@ -76,7 +76,7 @@ impl PlotOperator for Histogram {
                 ensure!(
                     self.params.column_name.is_none(),
                     error::InvalidOperatorSpec {
-                        reason: "Histogram on raster input must not have `column_name` field set"
+                        reason: "Histogram on raster input must not have `columnName` field set"
                             .to_string(),
                     }
                 );
@@ -97,7 +97,7 @@ impl PlotOperator for Histogram {
                         .column_name
                         .as_ref()
                         .context(error::InvalidOperatorSpec {
-                            reason: "Histogram on vector input is missing `column_name` field"
+                            reason: "Histogram on vector input is missing `columnName` field"
                                 .to_string(),
                         })?;
 

@@ -54,6 +54,7 @@ pub enum Error {
 
     AllSourcesMustHaveSameSpatialReference,
 
+    #[snafu(display("InvalidOperatorSpec: {}", reason))]
     InvalidOperatorSpec {
         reason: String,
     },
