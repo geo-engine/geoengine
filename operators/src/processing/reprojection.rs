@@ -1031,8 +1031,8 @@ mod tests {
         .initialize(&exe_ctx)
         .await?;
 
-        let x_query_resolution = output_bounds.size_x() / 4800 as f64; // since we request x -180 to 180 and y -90 to 90 with 600x600 tiles this will result in 8 x 4 tiles
-        let y_query_resolution = output_bounds.size_y() / 2400 as f64; // *2 to account for the dataset aspect ratio 2:1
+        let x_query_resolution = output_bounds.size_x() / 4800.; // since we request x -180 to 180 and y -90 to 90 with 600x600 tiles this will result in 8 x 4 tiles
+        let y_query_resolution = output_bounds.size_y() / 2400.; // *2 to account for the dataset aspect ratio 2:1
         let spatial_resolution =
             SpatialResolution::new_unchecked(x_query_resolution, y_query_resolution);
 
