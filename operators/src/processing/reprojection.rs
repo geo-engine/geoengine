@@ -1060,7 +1060,7 @@ mod tests {
             .await;
 
         // the test must generate 8x4 tiles
-        dbg!(tiles.len(), 32);
+        assert_eq!(tiles.len(), 32);
 
         // none of the tiles should be empty
         assert!(tiles.iter().all(|t| !t.is_empty()));
