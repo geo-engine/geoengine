@@ -1228,6 +1228,8 @@ impl TryFrom<&FeatureDataValue> for i64 {
         Ok(match value {
             FeatureDataValue::Int(v) => *v,
             FeatureDataValue::NullableInt(v) if v.is_some() => v.unwrap(),
+            FeatureDataValue::DateTime(v) => v.inner(),
+            FeatureDataValue::NullableDateTime(v) if v.is_some() => v.unwrap().inner(),
             _ => return Err(crate::collections::FeatureCollectionError::WrongDataType),
         })
     }
