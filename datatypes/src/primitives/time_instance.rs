@@ -13,7 +13,7 @@ use std::fmt::Formatter;
 use std::{convert::TryFrom, ops::Add};
 
 #[derive(Clone, Copy, Deserialize, Serialize, PartialEq, Eq, PartialOrd, Ord, Debug)]
-#[repr(C)]
+#[repr(transparent)]
 pub struct TimeInstance(i64);
 
 impl TimeInstance {

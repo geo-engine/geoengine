@@ -576,12 +576,12 @@ impl<'f> Iterator for BoolDataRefFloatOptionIter<'f> {
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct DateTimeDataRef<'f> {
-    buffer: Vec<TimeInstance>,
+    buffer: &'f [TimeInstance],
     valid_bitmap: &'f Option<arrow::bitmap::Bitmap>,
 }
 
 impl<'f> DateTimeDataRef<'f> {
-    pub fn new(buffer: Vec<TimeInstance>, null_bitmap: &'f Option<arrow::bitmap::Bitmap>) -> Self {
+    pub fn new(buffer: &'f [TimeInstance], null_bitmap: &'f Option<arrow::bitmap::Bitmap>) -> Self {
         Self {
             buffer,
             valid_bitmap: null_bitmap,
@@ -639,7 +639,7 @@ impl<'f> DataRef<'f, TimeInstance> for DateTimeDataRef<'f> {
 
 impl AsRef<[TimeInstance]> for DateTimeDataRef<'_> {
     fn as_ref(&self) -> &[TimeInstance] {
-        &self.buffer
+        self.buffer
     }
 }
 

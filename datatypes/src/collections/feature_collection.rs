@@ -18,10 +18,10 @@ use std::collections::hash_map;
 use std::collections::{HashMap, HashSet};
 use std::convert::{TryFrom, TryInto};
 use std::marker::PhantomData;
-use std::mem;
 use std::ops::{Bound, RangeBounds};
 use std::rc::Rc;
 use std::sync::Arc;
+use std::{mem, slice};
 
 use crate::primitives::{BoolDataRef, Coordinate2D, DateTimeDataRef, TimeInstance};
 use crate::primitives::{
@@ -817,7 +817,7 @@ impl<'a, GeometryRef> FeatureCollectionRow<'a, GeometryRef> {
 
 pub struct FeatureCollectionIterator<'a, GeometryIter> {
     geometries: GeometryIter,
-    time_intervals: std::slice::Iter<'a, TimeInterval>,
+    time_intervals: slice::Iter<'a, TimeInterval>,
     data: Rc<HashMap<String, FeatureDataRef<'a>>>,
     row_num: usize,
 }
@@ -1018,12 +1018,13 @@ where
                 }
                 FeatureDataType::DateTime => {
                     let array: &arrow::array::Date64Array = downcast_array(column);
-                    let transformed: Vec<_> = array
-                        .values()
-                        .iter()
-                        .map(|x| TimeInstance::from_millis_unchecked(*x))
-                        .collect();
-                    DateTimeDataRef::new(transformed, array.data_ref().null_bitmap()).into()
+                    let timestamps = unsafe {
+                        slice::from_raw_parts(
+                            array.values().as_ptr().cast::<TimeInstance>(),
+                            array.len(),
+                        )
+                    };
+                    DateTimeDataRef::new(timestamps, array.data_ref().null_bitmap()).into()
                 }
             },
         )
@@ -1042,7 +1043,7 @@ where
         let timestamps: &arrow::array::Int64Array = downcast_array(&timestamps_ref);
 
         unsafe {
-            std::slice::from_raw_parts(
+            slice::from_raw_parts(
                 timestamps.values().as_ptr().cast::<TimeInterval>(),
                 number_of_time_intervals,
             )
@@ -1520,7 +1521,7 @@ where
 
         // transform the coordinates into a byte slice and create a Buffer from it.
         let coords_buffer = unsafe {
-            let coord_bytes: &[u8] = std::slice::from_raw_parts(
+            let coord_bytes: &[u8] = slice::from_raw_parts(
                 projected_coords.as_ptr().cast::<u8>(),
                 projected_coords.len() * std::mem::size_of::<Coordinate2D>(),
             );

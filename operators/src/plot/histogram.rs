@@ -542,11 +542,9 @@ impl HistogramMetadataInProgress {
             D: DataRef<'d, T>,
             T: 'static,
         {
-            for v in data_ref.float_options_iter() {
-                if let Some(v) = v {
-                    metadata.n += 1;
-                    metadata.update_minmax(v);
-                }
+            for v in data_ref.float_options_iter().flatten() {
+                metadata.n += 1;
+                metadata.update_minmax(v);
             }
         }
 
