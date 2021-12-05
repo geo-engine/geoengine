@@ -391,7 +391,7 @@ impl SentinelS2L2aCogsMetaData {
             self.stac_api_retires.number_of_retries,
             self.stac_api_retires.initial_delay_ms,
             self.stac_api_retires.exponential_backoff_factor,
-            async || -> Result<StacCollection> {
+            || async {
                 let text = client
                     .get(&self.api_url)
                     .query(&params)
