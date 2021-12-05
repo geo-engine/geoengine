@@ -61,7 +61,7 @@ where
         ctx: &'a dyn QueryContext,
         aggregation_method: FeatureAggregationMethod,
     ) -> BoxStream<'a, Result<FeatureCollection<G>>> {
-        let stream = collection.and_then(async move |collection| {
+        let stream = collection.and_then(move |collection| {
             Self::process_collection_chunk(
                 collection,
                 raster_processor,
@@ -70,7 +70,6 @@ where
                 ctx,
                 aggregation_method,
             )
-            .await
         });
 
         stream
