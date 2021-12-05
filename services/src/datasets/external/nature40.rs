@@ -19,7 +19,7 @@ use futures::future::join_all;
 use gdal::DatasetOptions;
 use gdal::Metadata;
 use geoengine_datatypes::dataset::{DatasetId, DatasetProviderId, ExternalDatasetId};
-use geoengine_datatypes::primitives::{TimeGranularity, TimeInstance, TimeInterval, TimeStep};
+use geoengine_datatypes::primitives::{TimeInstance, TimeInterval};
 use geoengine_operators::engine::TypedResultDescriptor;
 use geoengine_operators::source::{
     GdalMetaDataStatic, GdalMetadataFixedTimes, GdalSourceTimePlaceholder, TimeReference,
@@ -418,10 +418,6 @@ impl MetaDataProvider<GdalLoadingInfo, RasterResultDescriptor, RasterQueryRectan
                         format: "%f".to_string(),
                         reference: TimeReference::Start,
                     },
-                },
-                minimum_step: TimeStep {
-                    granularity: TimeGranularity::Days,
-                    step: 1,
                 },
             }))
         }
@@ -1165,6 +1161,7 @@ mod tests {
             base_url: Url::parse(&server.url_str("")).unwrap(),
             user: "geoengine".to_owned(),
             password: "pwd".to_owned(),
+            request_retries: Default::default(),
         })
         .initialize()
         .await
@@ -1224,7 +1221,16 @@ mod tests {
             assert_eq!(
                 params,
                 GdalLoadingInfoPart {
-                    time: TimeInterval::new_instant(TimeInstance::from(NaiveDateTime::parse_from_str("2020-09-02T00:00", "%Y-%m-%dT%H:%M").unwrap())).unwrap(),
+                    time: TimeInterval::new_unchecked(
+                        TimeInstance::from(
+                            NaiveDateTime::parse_from_str("2020-09-01T00:00", "%Y-%m-%dT%H:%M")
+                                .unwrap(),
+                        ),
+                        TimeInstance::from(
+                            NaiveDateTime::parse_from_str("2020-09-02T00:00", "%Y-%m-%dT%H:%M")
+                                .unwrap(),
+                        ),
+                    ),
                     params: GdalDatasetParameters {
                         file_path: PathBuf::from(format!("WCS:{}rasterdb/uas_orthomosaics_2020/wcs?VERSION=1.0.0&COVERAGE=uas_orthomosaics_2020", server.url_str(""))),
                         rasterband_channel: 1,
@@ -1243,8 +1249,6 @@ mod tests {
                     }
                 }
             );
-
-            assert_eq!(parts.next(), None);
         } else {
             panic!();
         }
