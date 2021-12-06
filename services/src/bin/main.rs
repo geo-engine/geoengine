@@ -8,7 +8,7 @@ use geoengine_services::util::config::get_config_element;
 use log::Record;
 use time::format_description;
 
-#[actix_web::main]
+#[tokio::main]
 async fn main() -> Result<(), Error> {
     let logger = initialize_logging()?;
 

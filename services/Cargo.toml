@@ -43,6 +43,7 @@ image = "0.23"
 lazy_static = "1.4"
 log = "0.4"
 mime = "0.3"
+num_cpus = "1.13" # TODO: remove and switch to std::thread::available_concurrency() when it is available
 num-traits = "0.2"
 paste = "1.0"
 postgres-types = { version = "0.2", features = ["derive"], optional = true }

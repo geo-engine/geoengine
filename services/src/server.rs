@@ -99,10 +99,30 @@ where
             app
         }
     })
+    .worker_max_blocking_threads(calculate_max_blocking_threads_per_worker())
     .bind(bind_address)?
     .run()
     .await
     .map_err(Into::into)
+}
+
+/// Calculate maximum number of blocking threads **per worker**.
+///
+/// By default set to 512 / workers.
+///
+/// TODO: use blocking threads globally instead of per worker.
+///
+pub(crate) fn calculate_max_blocking_threads_per_worker() -> usize {
+    const MIN_BLOCKING_THREADS_PER_WORKER: usize = 32;
+
+    // Taken from `actix_server::ServerBuilder`.
+    // By default, server uses number of available logical CPU as thread count.
+    let number_of_workers = num_cpus::get();
+
+    // Taken from `actix_server::ServerWorkerConfig`.
+    let max_blocking_threads = std::cmp::max(512 / number_of_workers, 1);
+
+    std::cmp::max(max_blocking_threads, MIN_BLOCKING_THREADS_PER_WORKER)
 }
 
 pub(crate) fn configure_extractors(cfg: &mut web::ServiceConfig) {
