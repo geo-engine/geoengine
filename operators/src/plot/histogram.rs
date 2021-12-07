@@ -555,12 +555,15 @@ impl HistogramMetadataInProgress {
             FeatureDataRef::Float(values) => {
                 add_data_ref(self, &values);
             }
+            FeatureDataRef::Bool(values) => {
+                add_data_ref(self, &values);
+            }
             FeatureDataRef::DateTime(values) => {
                 add_data_ref(self, &values);
             }
-            FeatureDataRef::Category(_) | FeatureDataRef::Text(_) | FeatureDataRef::Bool(_) => {
+            FeatureDataRef::Category(_) | FeatureDataRef::Text(_) => {
                 // do nothing since we don't support them
-                // TODO: fill with live once we support category, text, bool types
+                // TODO: fill with live once we support category and text types
             }
         }
     }
