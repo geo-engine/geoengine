@@ -129,6 +129,14 @@ impl RasterDb {
         Ok(format!("WCS:{}", raster_url))
     }
 
+    fn url_from_name_with_time(base_url: &Url, name: &str) -> Result<String> {
+        let raster_url = base_url.join(&format!(
+            "/rasterdb/{name}/wcs?VERSION=1.0.0&COVERAGE={name}&TIME=%TIME%",
+            name = name
+        ))?;
+        Ok(format!("WCS:{}", raster_url))
+    }
+
     fn url(&self, base_url: &Url) -> Result<String> {
         Self::url_from_name(base_url, &self.name)
     }
@@ -382,22 +390,21 @@ impl MetaDataProvider<GdalLoadingInfo, RasterResultDescriptor, RasterQueryRectan
                 source: Box::new(e),
             })?;
 
-        let params = gdal_parameters_from_dataset(
-            &dataset,
-            band_index,
-            Path::new(&db_url),
-            None,
-            Some(self.auth().to_vec()),
-        )?;
-
-        let result_descriptor =
-            raster_descriptor_from_dataset(&dataset, band_index as isize, None)?;
-
         if time_positions.is_empty() {
             Ok(Box::new(GdalMetaDataStatic {
                 time: None,
-                params,
-                result_descriptor,
+                params: gdal_parameters_from_dataset(
+                    &dataset,
+                    band_index,
+                    Path::new(&db_url),
+                    None,
+                    Some(self.auth().to_vec()),
+                )?,
+                result_descriptor: raster_descriptor_from_dataset(
+                    &dataset,
+                    band_index as isize,
+                    None,
+                )?,
             }))
         } else {
             let time_steps = time_positions
@@ -409,10 +416,27 @@ impl MetaDataProvider<GdalLoadingInfo, RasterResultDescriptor, RasterQueryRectan
                 .map(|time_istance| TimeInterval::new_instant(time_istance).unwrap())
                 .collect::<Vec<_>>();
 
+            let db_url =
+                RasterDb::url_from_name_with_time(&self.base_url, db_name).map_err(|e| {
+                    geoengine_operators::error::Error::LoadingInfo {
+                        source: Box::new(e),
+                    }
+                })?;
+
             Ok(Box::new(GdalMetadataFixedTimes {
                 time_steps,
-                params,
-                result_descriptor,
+                params: gdal_parameters_from_dataset(
+                    &dataset,
+                    band_index,
+                    Path::new(&db_url),
+                    None,
+                    Some(self.auth().to_vec()),
+                )?,
+                result_descriptor: raster_descriptor_from_dataset(
+                    &dataset,
+                    band_index as isize,
+                    None,
+                )?,
                 time_placeholders: hashmap! {
                     "%TIME%".to_string() => GdalSourceTimePlaceholder {
                         format: "%f".to_string(),
@@ -466,7 +490,10 @@ mod tests {
     use std::{fs::File, io::Read, path::PathBuf, str::FromStr};
 
     use geoengine_datatypes::{
-        primitives::{Measurement, SpatialPartition2D, SpatialResolution, TimeInterval},
+        primitives::{
+            Measurement, SpatialPartition2D, SpatialResolution, TimeGranularity, TimeInterval,
+            TimeStep,
+        },
         raster::RasterDataType,
         spatial_reference::{SpatialReference, SpatialReferenceAuthority},
     };
@@ -1148,6 +1175,7 @@ mod tests {
         }
     }
 
+    #[allow(clippy::too_many_lines)]
     #[allow(clippy::eq_op)]
     #[tokio::test]
     async fn it_loads_time_layer() {
@@ -1202,7 +1230,7 @@ mod tests {
                             .unwrap(),
                     ),
                     TimeInstance::from(
-                        NaiveDateTime::parse_from_str("2020-09-05T00:00", "%Y-%m-%dT%H:%M")
+                        NaiveDateTime::parse_from_str("2020-09-10T00:00", "%Y-%m-%dT%H:%M")
                             .unwrap(),
                     ),
                 ),
@@ -1216,7 +1244,7 @@ mod tests {
             .unwrap();
 
         if let GdalLoadingInfoPartIterator::Static { mut parts } = loading_info.info {
-            let params: GdalLoadingInfoPart = parts.next().unwrap();
+            let mut params: GdalLoadingInfoPart = parts.next().unwrap();
 
             assert_eq!(
                 params,
@@ -1232,7 +1260,78 @@ mod tests {
                         ),
                     ),
                     params: GdalDatasetParameters {
-                        file_path: PathBuf::from(format!("WCS:{}rasterdb/uas_orthomosaics_2020/wcs?VERSION=1.0.0&COVERAGE=uas_orthomosaics_2020", server.url_str(""))),
+                        file_path: PathBuf::from(format!("WCS:{}rasterdb/uas_orthomosaics_2020/wcs?VERSION=1.0.0&COVERAGE=uas_orthomosaics_2020&TIME=000000000", server.url_str(""))),
+                        rasterband_channel: 1,
+                        geo_transform: GdalDatasetGeoTransform {
+                            origin_coordinate: (477_626.465, 5_632_531.035).into(),
+                            x_pixel_size: 0.07,
+                            y_pixel_size: -0.07,
+                        },
+                        width: 7938,
+                        height: 6680,
+                        file_not_found_handling: FileNotFoundHandling::Error,
+                        no_data_value: None,
+                        properties_mapping: None,
+                        gdal_open_options: Some(vec!["UserPwd=geoengine:pwd".to_owned(), "HttpAuth=BASIC".to_owned()]),
+                        gdal_config_options: None,
+                    }
+                }
+            );
+
+            params = parts.next().unwrap();
+
+            assert_eq!(
+                params,
+                GdalLoadingInfoPart {
+                    time: TimeInterval::new_unchecked(
+                        TimeInstance::from(
+                            NaiveDateTime::parse_from_str("2020-09-02T00:00", "%Y-%m-%dT%H:%M")
+                                .unwrap(),
+                        ),
+                        TimeInstance::from(
+                            NaiveDateTime::parse_from_str("2020-09-02T00:00", "%Y-%m-%dT%H:%M")
+                                .unwrap(),
+                        ),
+                    ),
+                    params: GdalDatasetParameters {
+                        file_path: PathBuf::from(format!("WCS:{}rasterdb/uas_orthomosaics_2020/wcs?VERSION=1.0.0&COVERAGE=uas_orthomosaics_2020&TIME=000000000", server.url_str(""))),
+                        rasterband_channel: 1,
+                        geo_transform: GdalDatasetGeoTransform {
+                            origin_coordinate: (477_626.465, 5_632_531.035).into(),
+                            x_pixel_size: 0.07,
+                            y_pixel_size: -0.07,
+                        },
+                        width: 7938,
+                        height: 6680,
+                        file_not_found_handling: FileNotFoundHandling::Error,
+                        no_data_value: None,
+                        properties_mapping: None,
+                        gdal_open_options: Some(vec!["UserPwd=geoengine:pwd".to_owned(), "HttpAuth=BASIC".to_owned()]),
+                        gdal_config_options: None,
+                    }
+                }
+            );
+
+            params = parts.next().unwrap();
+
+            assert_eq!(
+                params,
+                GdalLoadingInfoPart {
+                    time: TimeInterval::new_unchecked(
+                        (TimeInstance::from(
+                            NaiveDateTime::parse_from_str("2020-09-02T00:00", "%Y-%m-%dT%H:%M")
+                                .unwrap(),
+                        ) + TimeStep {
+                            granularity: TimeGranularity::Millis,
+                            step: 1,
+                        }).unwrap(),
+                        TimeInstance::from(
+                            NaiveDateTime::parse_from_str("2020-09-10T00:00", "%Y-%m-%dT%H:%M")
+                                .unwrap(),
+                        ),
+                    ),
+                    params: GdalDatasetParameters {
+                        file_path: PathBuf::from(format!("WCS:{}rasterdb/uas_orthomosaics_2020/wcs?VERSION=1.0.0&COVERAGE=uas_orthomosaics_2020&TIME=001000000", server.url_str(""))),
                         rasterband_channel: 1,
                         geo_transform: GdalDatasetGeoTransform {
                             origin_coordinate: (477_626.465, 5_632_531.035).into(),
