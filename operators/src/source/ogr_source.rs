@@ -4548,11 +4548,11 @@ mod tests {
         let result = result.into_iter().next().unwrap();
 
         let pc = MultiPointCollection::from_data(
-            MultiPoint::many(vec![vec![(1.1, 2.2)], vec![(3.3, 4.4)]]).unwrap(),
+            MultiPoint::many(vec![vec![(1.1, 2.2)], vec![(3.3, 4.4)], vec![(7.2, 5.9)]]).unwrap(),
             vec![TimeInterval::default(), TimeInterval::default()],
             {
                 let mut map = HashMap::new();
-                map.insert("bool".into(), FeatureData::Bool(vec![true, false]));
+                map.insert("bool".into(), FeatureData::Bool(vec![true, false, true]));
                 map
             },
         )
