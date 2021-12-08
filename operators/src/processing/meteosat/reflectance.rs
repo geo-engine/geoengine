@@ -156,39 +156,36 @@ where
             satellite_key: new_satellite_key(),
         }
     }
-}
 
-fn channel<'a>(
-    tile: &RasterTile2D<PixelOut>,
-    satellite: &'a Satellite,
-    params: ReflectanceParams,
-    channel_key: &RasterPropertiesKey,
-) -> Result<&'a Channel> {
-    if params.force_hrv {
-        Ok(satellite.hrv())
-    } else {
-        let channel_id = tile.properties.number_property::<usize>(channel_key)? - 1;
-        satellite.channel(channel_id)
+    fn channel<'a>(
+        &self,
+        tile: &RasterTile2D<PixelOut>,
+        satellite: &'a Satellite,
+    ) -> Result<&'a Channel> {
+        if self.params.force_hrv {
+            Ok(satellite.hrv())
+        } else {
+            let channel_id = tile
+                .properties
+                .number_property::<usize>(&self.channel_key)?
+                - 1;
+            satellite.channel(channel_id)
+        }
+    }
+
+    fn satellite(&self, tile: &RasterTile2D<PixelOut>) -> Result<&'static Satellite> {
+        let id = match self.params.force_satellite {
+            Some(id) => id,
+            _ => tile.properties.number_property(&self.satellite_key)?,
+        };
+        Satellite::satellite_by_msg_id(id)
     }
 }
 
-fn satellite(
-    params: ReflectanceParams,
-    tile: &RasterTile2D<PixelOut>,
-    satellite_key: &RasterPropertiesKey,
-) -> Result<&'static Satellite> {
-    let id = match params.force_satellite {
-        Some(id) => id,
-        _ => tile.properties.number_property(satellite_key)?,
-    };
-    Satellite::satellite_by_msg_id(id)
-}
-
-fn transform_tile(
+fn process_tile(
     tile: RasterTile2D<PixelOut>,
-    params: ReflectanceParams,
-    satellite_key: RasterPropertiesKey,
-    channel_key: RasterPropertiesKey,
+    solar_correction: bool,
+    channel: &Channel,
 ) -> Result<RasterTile2D<PixelOut>> {
     match &tile.grid_array {
         GridOrEmpty::Empty(_) => Ok(RasterTile2D::new_with_properties(
@@ -199,8 +196,6 @@ fn transform_tile(
             tile.properties,
         )),
         GridOrEmpty::Grid(grid) => {
-            let satellite = satellite(params, &tile, &satellite_key)?;
-            let channel = channel(&tile, satellite, params, &channel_key)?;
             let timestamp = tile
                 .time
                 .start()
@@ -220,7 +215,7 @@ fn transform_tile(
             .expect("raster creation must succeed");
 
             // Apply solar correction
-            if params.solar_correction {
+            if solar_correction {
                 let sunpos = SunPos::new(&timestamp);
 
                 for idx in grid_idx_iter_2d(&grid.grid_shape()) {
@@ -280,19 +275,25 @@ where
     ) -> Result<BoxStream<'a, Result<Self::Output>>> {
         let src = self.source.query(query, ctx).await?;
 
-        let rs = src.and_then(move |tile| {
-            let sk = self.satellite_key.clone();
-            let ck = self.channel_key.clone();
-            let params = self.params;
-            tokio::task::spawn_blocking(move || transform_tile(tile, params, sk, ck)).then(
-                |x| async move {
-                    match x {
-                        Ok(r) => r,
-                        Err(e) => Err(e.into()),
-                    }
-                },
-            )
-        });
+        let rs = src
+            .map(move |tile| {
+                tile.and_then(|t| {
+                    let satellite = self.satellite(&t)?;
+                    let channel = self.channel(&t, satellite)?;
+                    Ok((t, channel))
+                })
+            })
+            .and_then(move |(tile, channel)| {
+                let solar_correction = self.params.solar_correction;
+
+                tokio::task::spawn_blocking(move || process_tile(tile, solar_correction, channel))
+                    .then(|x| async move {
+                        match x {
+                            Ok(r) => r,
+                            Err(e) => Err(e.into()),
+                        }
+                    })
+            });
 
         Ok(rs.boxed())
     }

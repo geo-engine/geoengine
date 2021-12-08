@@ -9,7 +9,7 @@ use TypedRasterQueryProcessor::F32 as QueryProcessorOut;
 
 use crate::error::Error;
 use futures::stream::BoxStream;
-use futures::StreamExt;
+use futures::{FutureExt, StreamExt, TryStreamExt};
 use geoengine_datatypes::primitives::{Measurement, SpatialPartition2D};
 use geoengine_datatypes::raster::{
     EmptyGrid, Grid2D, GridOrEmpty, GridShapeAccess, GridSize, NoDataValue, Pixel, RasterDataType,
@@ -199,22 +199,60 @@ where
             })
         }
     }
+}
 
-    fn create_lookup_table(&self, tile: &RasterTile2D<P>) -> Result<Vec<f32>> {
-        let satellite = self.satellite(tile)?;
-        let channel = self.channel(tile, satellite)?;
-        let offset = tile.properties.number_property::<f64>(&self.offset_key)?;
-        let slope = tile.properties.number_property::<f64>(&self.slope_key)?;
+fn create_lookup_table(channel: &Channel, offset: f64, slope: f64) -> Vec<f32> {
+    // let channel = self.channel(tile, satellite)?;
+    // let offset = tile.properties.number_property::<f64>(&self.offset_key)?;
+    // let slope = tile.properties.number_property::<f64>(&self.slope_key)?;
 
-        let mut lut = Vec::with_capacity(1024);
-        for i in 0..1024 {
-            let radiance = offset + f64::from(i) * slope;
-            let temp = channel.calculate_temperature_from_radiance(radiance);
-            lut.push(temp as f32);
+    let mut lut = Vec::with_capacity(1024);
+    for i in 0..1024 {
+        let radiance = offset + f64::from(i) * slope;
+        let temp = channel.calculate_temperature_from_radiance(radiance);
+        lut.push(temp as f32);
+    }
+    lut
+}
+
+fn process_tile<P: Pixel>(tile: RasterTile2D<P>, lut: Vec<f32>) -> Result<RasterTile2D<PixelOut>> {
+    match &tile.grid_array {
+        GridOrEmpty::Empty(_) => Ok(RasterTile2D::new_with_properties(
+            tile.time,
+            tile.tile_position,
+            tile.global_geo_transform,
+            EmptyGrid::new(tile.grid_array.grid_shape(), OUT_NO_DATA_VALUE).into(),
+            tile.properties,
+        )),
+        GridOrEmpty::Grid(grid) => {
+            // Create result raster
+            let mut out = Grid2D::new(
+                grid.grid_shape(),
+                vec![OUT_NO_DATA_VALUE; grid.number_of_elements()],
+                Some(OUT_NO_DATA_VALUE),
+            )
+            .expect("raster creation must succeed");
+
+            for (idx, &pixel) in grid.data.iter().enumerate() {
+                if !grid.is_no_data(pixel) {
+                    let lut_idx: u64 = pixel.as_();
+                    out.data[idx] = *lut
+                        .get(lut_idx as usize)
+                        .ok_or(Error::UnsupportedRasterValue)?;
+                }
+            }
+
+            Ok(RasterTile2D::new_with_properties(
+                tile.time,
+                tile.tile_position,
+                tile.global_geo_transform,
+                out.into(),
+                tile.properties,
+            ))
         }
-        Ok(lut)
     }
 }
+
 #[async_trait]
 impl<Q, P> QueryProcessor for TemperatureProcessor<Q, P>
 where
@@ -230,47 +268,28 @@ where
         ctx: &'a dyn QueryContext,
     ) -> Result<BoxStream<'a, Result<Self::Output>>> {
         let src = self.source.query(query, ctx).await?;
-
-        let rs = src.map(move |tile| {
-            let tile = tile?;
-            match &tile.grid_array {
-                GridOrEmpty::Empty(_) => Ok(RasterTile2D::new_with_properties(
-                    tile.time,
-                    tile.tile_position,
-                    tile.global_geo_transform,
-                    EmptyGrid::new(tile.grid_array.grid_shape(), OUT_NO_DATA_VALUE).into(),
-                    tile.properties,
-                )),
-                GridOrEmpty::Grid(grid) => {
-                    let lut = self.create_lookup_table(&tile)?;
-
-                    // Create result raster
-                    let mut out = Grid2D::new(
-                        grid.grid_shape(),
-                        vec![OUT_NO_DATA_VALUE; grid.number_of_elements()],
-                        Some(OUT_NO_DATA_VALUE),
-                    )
-                    .expect("raster creation must succeed");
-
-                    for (idx, &pixel) in grid.data.iter().enumerate() {
-                        if !grid.is_no_data(pixel) {
-                            let lut_idx: u64 = pixel.as_();
-                            out.data[idx] = *lut
-                                .get(lut_idx as usize)
-                                .ok_or(Error::UnsupportedRasterValue)?;
-                        }
+        let rs = src
+            .map(move |tile| {
+                tile.and_then(|t| {
+                    let satellite = self.satellite(&t)?;
+                    let channel = self.channel(&t, satellite)?;
+                    let offset = t.properties.number_property::<f64>(&self.offset_key)?;
+                    let slope = t.properties.number_property::<f64>(&self.slope_key)?;
+                    Ok((t, channel, offset, slope))
+                })
+            })
+            .and_then(move |(tile, channel, offset, slope)| {
+                tokio::task::spawn_blocking(move || {
+                    let lut = create_lookup_table(channel, offset, slope);
+                    process_tile(tile, lut)
+                })
+                .then(|x| async move {
+                    match x {
+                        Ok(r) => r,
+                        Err(e) => Err(e.into()),
                     }
-
-                    Ok(RasterTile2D::new_with_properties(
-                        tile.time,
-                        tile.tile_position,
-                        tile.global_geo_transform,
-                        out.into(),
-                        tile.properties,
-                    ))
-                }
-            }
-        });
+                })
+            });
         Ok(rs.boxed())
     }
 }
