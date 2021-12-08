@@ -242,7 +242,7 @@ where
             })
             .and_then(move |(tile, offset, slope)| {
                 tokio::task::spawn_blocking(move || process_tile(tile, offset, slope))
-                    .map_err(|e| Error::from(e))
+                    .map_err(Error::from)
             });
         Ok(rs.boxed())
     }

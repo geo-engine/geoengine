@@ -215,7 +215,7 @@ fn create_lookup_table(channel: &Channel, offset: f64, slope: f64) -> Vec<f32> {
     lut
 }
 
-fn process_tile<P: Pixel>(tile: RasterTile2D<P>, lut: Vec<f32>) -> Result<RasterTile2D<PixelOut>> {
+fn process_tile<P: Pixel>(tile: RasterTile2D<P>, lut: &[f32]) -> Result<RasterTile2D<PixelOut>> {
     match &tile.grid_array {
         GridOrEmpty::Empty(_) => Ok(RasterTile2D::new_with_properties(
             tile.time,
@@ -281,7 +281,7 @@ where
             .and_then(move |(tile, channel, offset, slope)| {
                 tokio::task::spawn_blocking(move || {
                     let lut = create_lookup_table(channel, offset, slope);
-                    process_tile(tile, lut)
+                    process_tile(tile, &lut)
                 })
                 .then(|x| async move {
                     match x {

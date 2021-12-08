@@ -126,7 +126,7 @@ impl InitializedRasterOperator for InitializedReflectance {
         if let TypedRasterQueryProcessor::F32(p) = q {
             Ok(QueryProcessorOut(Box::new(ReflectanceProcessor::new(
                 p,
-                self.params.clone(),
+                self.params,
             ))))
         } else {
             Err(Error::InvalidRasterDataType)
