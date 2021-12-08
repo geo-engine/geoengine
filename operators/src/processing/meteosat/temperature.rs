@@ -20,7 +20,9 @@ use serde::{Deserialize, Serialize};
 // Output type is always f32
 type PixelOut = f32;
 use crate::processing::meteosat::satellite::{Channel, Satellite};
-use crate::processing::meteosat::{channel_key, offset_key, satellite_key, slope_key};
+use crate::processing::meteosat::{
+    new_channel_key, new_offset_key, new_satellite_key, new_slope_key,
+};
 use RasterDataType::F32 as RasterOut;
 
 const OUT_NO_DATA_VALUE: PixelOut = PixelOut::NAN;
@@ -169,10 +171,10 @@ where
         Self {
             source,
             params,
-            satellite_key: satellite_key(),
-            channel_key: channel_key(),
-            offset_key: offset_key(),
-            slope_key: slope_key(),
+            satellite_key: new_satellite_key(),
+            channel_key: new_channel_key(),
+            offset_key: new_offset_key(),
+            slope_key: new_slope_key(),
         }
     }
 

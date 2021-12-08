@@ -18,7 +18,7 @@ use serde::{Deserialize, Serialize};
 // Output type is always f32
 type PixelOut = f32;
 use crate::error::Error;
-use crate::processing::meteosat::{offset_key, slope_key};
+use crate::processing::meteosat::{new_offset_key, new_slope_key};
 use RasterDataType::F32 as RasterOut;
 use TypedRasterQueryProcessor::F32 as QueryProcessorOut;
 
@@ -170,8 +170,8 @@ where
         Self {
             source,
             no_data_value,
-            offset_key: offset_key(),
-            slope_key: slope_key(),
+            offset_key: new_offset_key(),
+            slope_key: new_slope_key(),
         }
     }
 }

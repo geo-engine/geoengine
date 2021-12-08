@@ -20,7 +20,7 @@ use serde::{Deserialize, Serialize};
 // Output type is always f32
 type PixelOut = f32;
 use crate::processing::meteosat::satellite::{Channel, Satellite};
-use crate::processing::meteosat::{channel_key, satellite_key};
+use crate::processing::meteosat::{new_channel_key, new_satellite_key};
 use crate::util::sunpos::SunPos;
 use chrono::{DateTime, Datelike, Utc};
 use RasterDataType::F32 as RasterOut;
@@ -152,8 +152,8 @@ where
         Self {
             source,
             params,
-            channel_key: channel_key(),
-            satellite_key: satellite_key(),
+            channel_key: new_channel_key(),
+            satellite_key: new_satellite_key(),
         }
     }
 }
