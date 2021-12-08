@@ -1,17 +1,14 @@
 use futures::{StreamExt, Stream};
-use futures::future;
 use geoengine_datatypes::{primitives::{SpatialPartition2D, TimeInstance, TimeInterval}, raster::{GridOrEmpty, Pixel}};
 use crate::engine::{QueryContext, QueryRectangle, RasterQueryProcessor};
-use pyo3::{Python, types::{PyModule, PyUnicode}};
-use ndarray::{Array2, Axis,concatenate, stack, ArrayBase, OwnedRepr, Dim};
+use pyo3::{types::{PyModule, PyUnicode}};
+use ndarray::{Array2};
 use numpy::{PyArray};
 use rand::prelude::*;
 use crate::util::Result;
 use core::pin::Pin;
-use geoengine_datatypes::raster::BaseTile;
-use geoengine_datatypes::raster::GridShape;
+use geoengine_datatypes::raster::{BaseTile,GridShape};
 use crate::error::Error;
-use tokio::{task, join};
 use crate::pro::datatypes::{RasterResult, Zip};
 use std::time::{Instant};
 
@@ -90,17 +87,7 @@ where
 
         
             let mut zip = Zip::new(bffr);
-            // let load_proc = task::spawn( {
-            //     zip.next()
-            // });
-            // let load_truth = task::spawn( {
-            //     truth_stream.next()
-            // });
-
-            //join!(load_proc, load_truth);
-
-            //let proc_result = zip.next();
-            //let truth_result = truth_stream.next();
+            
 
             let mut buffer_proc: Vec<RasterResult<T>> = Vec::with_capacity(nop);
             let mut truth_int: RasterResult<u8>;
@@ -240,9 +227,7 @@ fn split_time_intervals(query_rect: QueryRectangle<SpatialPartition2D>, step: i6
 
 #[cfg(test)]
 mod tests {
-    use geoengine_datatypes::{dataset::{DatasetId, InternalDatasetId}, hashmap, primitives::{Coordinate2D, TimeInterval, SpatialResolution,  Measurement, TimeGranularity, TimeInstance, TimeStep}, raster::{GeoTransform, RasterDataType}, raster::{TilingSpecification}, spatial_reference::{SpatialReference, SpatialReferenceAuthority, SpatialReferenceOption}};
- 
-
+    use geoengine_datatypes::{dataset::{DatasetId, InternalDatasetId}, hashmap, primitives::{Coordinate2D, TimeInterval, SpatialResolution,  Measurement, TimeGranularity, TimeInstance, TimeStep}, raster::{RasterDataType}, raster::{TilingSpecification}, spatial_reference::{SpatialReference, SpatialReferenceAuthority, SpatialReferenceOption}};
     use geoengine_datatypes::{util::Identifier, raster::{RasterPropertiesEntryType}};
     use std::{path::PathBuf};
     use crate::{engine::{MockExecutionContext,MockQueryContext, RasterOperator, RasterResultDescriptor}, source::{FileNotFoundHandling, GdalDatasetParameters, GdalMetaDataRegular, GdalSource, GdalSourceParameters,GdalMetadataMapping, GdalSourceTimePlaceholder, TimeReference, GdalDatasetGeoTransform}};

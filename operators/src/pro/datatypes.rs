@@ -1,14 +1,6 @@
-use futures::{Stream, StreamExt, TryStreamExt};
-use futures::task::{Context, Poll};
-use futures::stream::BoxStream;
-use futures::pin_mut;
+use futures::{Stream, task::{Context, Poll}};
 use pin_project::pin_project;
-use async_stream::stream;
-//use std::task::{Poll, Context};
-
 use core::pin::Pin;
-
-use geoengine_datatypes::{error::Error, raster::{BaseTile, GridOrEmpty, GridShape}};
 
 #[derive(PartialEq, Clone)]
 pub enum RasterResult<T>{
@@ -125,47 +117,7 @@ where
     }
 }
 
-#[pin_project(project = AdvZipProjection)]
-pub struct AdvZip<T>
-{
-    #[pin]
-    streams_proc: Vec<Pin<Box<dyn Stream<Item = Result<BaseTile<GridOrEmpty<GridShape<[usize; 2]>, T>>, Error>> + Send>>>,
-    stream_truth: Option<Pin<Box<dyn Stream<Item = Result<BaseTile<GridOrEmpty<GridShape<[usize; 2]>, T>>, Error>> + Send>>>,
-    values_proc: Vec<Option<T>>,
-    values_truth: Option<Option<T>>,
-    state: ZipState,
-}
-impl<T> AdvZip<T> {
-    pub fn new(streams_proc: Vec<Pin<Box<dyn Stream<Item = Result<BaseTile<GridOrEmpty<GridShape<[usize; 2]>, T>>, Error>> + Send>>>, stream_truth: Option<Pin<Box<dyn Stream<Item = Result<BaseTile<GridOrEmpty<GridShape<[usize; 2]>, T>>, Error>> + Send>>>) -> Self {
-        if stream_truth.is_some() {
-            AdvZip{
-                values_proc: Vec::with_capacity(streams_proc.len()),
-                streams_proc: streams_proc,
-                stream_truth: stream_truth,
-                values_truth:Some(None),
-                state: ZipState::Idle,
-            }
-        } else {
-            AdvZip{
-                values_proc: Vec::with_capacity(streams_proc.len()),
-                streams_proc: streams_proc,
-                stream_truth: None,
-                values_truth: None,
-                state: ZipState::Idle,
-            }
-        }
-    }
 
-    fn check_streams(self: Pin<&mut Self>, cx: &mut Context<'_>) {
-        let this = self.project();
-
-        if this.streams_proc.is_empty() {
-            this.values_proc.resize_with(this.streams_proc.len(), ||None);
-        }
-
-
-    }
-}
 
 #[tokio::test]
 async fn main() {
