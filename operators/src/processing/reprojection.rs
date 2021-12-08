@@ -1005,11 +1005,10 @@ mod tests {
         let id: DatasetId = InternalDatasetId::new().into();
         exe_ctx.add_meta_data(id.clone(), Box::new(m));
 
-        exe_ctx.tiling_specification =
-            TilingSpecification::new((0.0, 0.0).into(), [300, 300].into());
+        exe_ctx.tiling_specification = TilingSpecification::new((0.0, 0.0).into(), [60, 60].into());
 
         let output_bounds =
-            SpatialPartition2D::new_unchecked((-45., 90.).into(), (0., -90.).into());
+            SpatialPartition2D::new_unchecked((-180., 90.).into(), (180., -90.).into());
         let time_interval = TimeInterval::new_unchecked(1_396_310_400_000, 1_396_310_400_000);
         // 2014-04-01
 
@@ -1031,8 +1030,8 @@ mod tests {
         .initialize(&exe_ctx)
         .await?;
 
-        let x_query_resolution = output_bounds.size_x() / 300.; // since we request x -45 to 0 and y -90 to 90 with 300x300 tiles this will result in 1 x 4 tiles
-        let y_query_resolution = output_bounds.size_y() / 1200.; // *2 to account for the dataset aspect ratio 2:1
+        let x_query_resolution = output_bounds.size_x() / 480.; // since we request x -180 to 180 and y -90 to 90 with 60x60 tiles this will result in 8 x 4 tiles
+        let y_query_resolution = output_bounds.size_y() / 240.; // *2 to account for the dataset aspect ratio 2:1
         let spatial_resolution =
             SpatialResolution::new_unchecked(x_query_resolution, y_query_resolution);
 
@@ -1059,8 +1058,8 @@ mod tests {
             .collect::<Vec<RasterTile2D<u8>>>()
             .await;
 
-        // the test must generate 1x4 tiles
-        assert_eq!(tiles.len(), 4);
+        // the test must generate 8x4 tiles
+        assert_eq!(tiles.len(), 32);
 
         // none of the tiles should be empty
         assert!(tiles.iter().all(|t| !t.is_empty()));
