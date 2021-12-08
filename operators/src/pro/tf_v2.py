@@ -96,16 +96,16 @@ def pauls_awesome_loss(y_true, y_pred):
     return K.sqrt(K.sum(K.square(y_pred*K.cast(y_true>0, "float32") - y_pred)) / K.sum(K.cast(y_true>0, "float32") ))
 def fit(X, y, batch_size):    
     global model
-    #matplotlib.pyplot.imsave('ir-number.png', X[0][:,:,0])
-    #matplotlib.pyplot.imsave('fake_claas.png', y[0][:,:,0], vmin=0,vmax=3)
+    matplotlib.pyplot.imsave('ir_test.png', X[0][:,:,0])
+    matplotlib.pyplot.imsave('claas_test.png', y[0][:,:,0], vmin=0,vmax=3)
     print(y.shape)
     print(X.shape)
     #TODO check wether nan's present?
     #print("contains NaN's: {}".format(np.isnan(np.sum(X))))
     #print("contains inf's: {}".format(~np.all(~np.isinf(X))))
     #X = np.nan_to_num(X)
-    matplotlib.pyplot.imsave('train_claas.png', y[0][:,:,0], vmin=0,vmax=3)
-    matplotlib.pyplot.imsave('train_msg.png', X[0][:,:,1])
+    #matplotlib.pyplot.imsave('train_claas.png', y[0][:,:,0], vmin=0,vmax=3)
+    #matplotlib.pyplot.imsave('train_msg.png', X[0][:,:,1])
     
     global call
     model.fit(X, y, batch_size = batch_size, callbacks=[call])
