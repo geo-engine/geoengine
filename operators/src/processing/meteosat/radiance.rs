@@ -6,13 +6,12 @@ use crate::engine::{
 use crate::util::Result;
 use async_trait::async_trait;
 use futures::stream::BoxStream;
-use futures::StreamExt;
+use futures::{StreamExt, TryFutureExt, TryStreamExt};
 use geoengine_datatypes::primitives::{Measurement, SpatialPartition2D};
 use geoengine_datatypes::raster::{
-    EmptyGrid, Grid2D, GridShapeAccess, NoDataValue, Pixel, RasterDataType, RasterPropertiesKey,
-    RasterTile2D,
+    EmptyGrid, Grid2D, GridOrEmpty, GridShapeAccess, NoDataValue, Pixel, RasterDataType,
+    RasterPropertiesKey, RasterTile2D,
 };
-use num_traits::AsPrimitive;
 use serde::{Deserialize, Serialize};
 
 // Output type is always f32
@@ -119,34 +118,34 @@ impl InitializedRasterOperator for InitializedRadiance {
 
         Ok(match q {
             TypedRasterQueryProcessor::U8(p) => {
-                QueryProcessorOut(Box::new(RadianceProcessor::new(p, OUT_NO_DATA_VALUE.as_())))
+                QueryProcessorOut(Box::new(RadianceProcessor::new(p)))
             }
             TypedRasterQueryProcessor::U16(p) => {
-                QueryProcessorOut(Box::new(RadianceProcessor::new(p, OUT_NO_DATA_VALUE.as_())))
+                QueryProcessorOut(Box::new(RadianceProcessor::new(p)))
             }
             TypedRasterQueryProcessor::U32(p) => {
-                QueryProcessorOut(Box::new(RadianceProcessor::new(p, OUT_NO_DATA_VALUE.as_())))
+                QueryProcessorOut(Box::new(RadianceProcessor::new(p)))
             }
             TypedRasterQueryProcessor::U64(p) => {
-                QueryProcessorOut(Box::new(RadianceProcessor::new(p, OUT_NO_DATA_VALUE.as_())))
+                QueryProcessorOut(Box::new(RadianceProcessor::new(p)))
             }
             TypedRasterQueryProcessor::I8(p) => {
-                QueryProcessorOut(Box::new(RadianceProcessor::new(p, OUT_NO_DATA_VALUE.as_())))
+                QueryProcessorOut(Box::new(RadianceProcessor::new(p)))
             }
             TypedRasterQueryProcessor::I16(p) => {
-                QueryProcessorOut(Box::new(RadianceProcessor::new(p, OUT_NO_DATA_VALUE.as_())))
+                QueryProcessorOut(Box::new(RadianceProcessor::new(p)))
             }
             TypedRasterQueryProcessor::I32(p) => {
-                QueryProcessorOut(Box::new(RadianceProcessor::new(p, OUT_NO_DATA_VALUE.as_())))
+                QueryProcessorOut(Box::new(RadianceProcessor::new(p)))
             }
             TypedRasterQueryProcessor::I64(p) => {
-                QueryProcessorOut(Box::new(RadianceProcessor::new(p, OUT_NO_DATA_VALUE.as_())))
+                QueryProcessorOut(Box::new(RadianceProcessor::new(p)))
             }
             TypedRasterQueryProcessor::F32(p) => {
-                QueryProcessorOut(Box::new(RadianceProcessor::new(p, OUT_NO_DATA_VALUE.as_())))
+                QueryProcessorOut(Box::new(RadianceProcessor::new(p)))
             }
             TypedRasterQueryProcessor::F64(p) => {
-                QueryProcessorOut(Box::new(RadianceProcessor::new(p, OUT_NO_DATA_VALUE.as_())))
+                QueryProcessorOut(Box::new(RadianceProcessor::new(p)))
             }
         })
     }
@@ -157,7 +156,6 @@ where
     Q: RasterQueryProcessor<RasterType = P>,
 {
     source: Q,
-    no_data_value: PixelOut,
     offset_key: RasterPropertiesKey,
     slope_key: RasterPropertiesKey,
 }
@@ -166,14 +164,57 @@ impl<Q, P> RadianceProcessor<Q, P>
 where
     Q: RasterQueryProcessor<RasterType = P>,
 {
-    pub fn new(source: Q, no_data_value: PixelOut) -> Self {
+    pub fn new(source: Q) -> Self {
         Self {
             source,
-            no_data_value,
             offset_key: new_offset_key(),
             slope_key: new_slope_key(),
         }
     }
+}
+
+fn process_tile<P: Pixel>(
+    tile: RasterTile2D<P>,
+    offset: f32,
+    slope: f32,
+) -> RasterTile2D<PixelOut> {
+    let r = match &tile.grid_array {
+        GridOrEmpty::Empty(_) => RasterTile2D::new_with_properties(
+            tile.time,
+            tile.tile_position,
+            tile.global_geo_transform,
+            EmptyGrid::new(tile.grid_array.grid_shape(), OUT_NO_DATA_VALUE).into(),
+            tile.properties,
+        ),
+        GridOrEmpty::Grid(_) => {
+            let mg = tile.grid_array.into_materialized_grid();
+
+            let mut out = Grid2D::new(
+                mg.grid_shape(),
+                vec![OUT_NO_DATA_VALUE; mg.data.len()],
+                Some(OUT_NO_DATA_VALUE),
+            )
+            .expect("raster creation must succeed");
+
+            let tgt = &mut out.data;
+
+            for (idx, v) in mg.data.iter().enumerate() {
+                if !mg.is_no_data(*v) {
+                    let val: PixelOut = (*v).as_();
+                    tgt[idx] = offset + val * slope;
+                }
+            }
+
+            RasterTile2D::new_with_properties(
+                tile.time,
+                tile.tile_position,
+                tile.global_geo_transform,
+                out.into(),
+                tile.properties,
+            )
+        }
+    };
+    r
 }
 
 #[async_trait]
@@ -191,47 +232,19 @@ where
         ctx: &'a dyn QueryContext,
     ) -> Result<BoxStream<'a, Result<Self::Output>>> {
         let src = self.source.query(query, ctx).await?;
-        Ok(src
-            .map(move |tile| match tile {
-                Ok(tile) if tile.grid_array.is_empty() => Ok(RasterTile2D::new_with_properties(
-                    tile.time,
-                    tile.tile_position,
-                    tile.global_geo_transform,
-                    EmptyGrid::new(tile.grid_array.grid_shape(), self.no_data_value).into(),
-                    tile.properties,
-                )),
-                Ok(tile) => {
-                    let mg = tile.grid_array.into_materialized_grid();
-
-                    let mut out = Grid2D::new(
-                        mg.grid_shape(),
-                        vec![self.no_data_value; mg.data.len()],
-                        Some(self.no_data_value),
-                    )
-                    .expect("raster creation must succeed");
-
-                    let offset = tile.properties.number_property::<f32>(&self.offset_key)?;
-                    let slope = tile.properties.number_property::<f32>(&self.slope_key)?;
-                    let tgt = &mut out.data;
-
-                    for (idx, v) in mg.data.iter().enumerate() {
-                        if !mg.is_no_data(*v) {
-                            let val: PixelOut = (*v).as_();
-                            tgt[idx] = offset + val * slope;
-                        }
-                    }
-
-                    Ok(RasterTile2D::new_with_properties(
-                        tile.time,
-                        tile.tile_position,
-                        tile.global_geo_transform,
-                        out.into(),
-                        tile.properties,
-                    ))
-                }
-                Err(e) => Err(e),
+        let rs = src
+            .map(move |tile| {
+                tile.and_then(|t| {
+                    let offset = t.properties.number_property::<f32>(&self.offset_key)?;
+                    let slope = t.properties.number_property::<f32>(&self.slope_key)?;
+                    Ok((t, offset, slope))
+                })
             })
-            .boxed())
+            .and_then(move |(tile, offset, slope)| {
+                tokio::task::spawn_blocking(move || process_tile(tile, offset, slope))
+                    .map_err(|e| Error::from(e))
+            });
+        Ok(rs.boxed())
     }
 }
 
