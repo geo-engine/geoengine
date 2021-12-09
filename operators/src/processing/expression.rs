@@ -81,9 +81,9 @@ pub type Expression = Operator<ExpressionParams, ExpressionSources>;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ExpressionSources {
-    a: Box<dyn RasterOperator>,
-    b: Option<Box<dyn RasterOperator>>,
-    c: Option<Box<dyn RasterOperator>>,
+    pub a: Box<dyn RasterOperator>,
+    pub b: Option<Box<dyn RasterOperator>>,
+    pub c: Option<Box<dyn RasterOperator>>,
 }
 
 impl OperatorDatasets for ExpressionSources {
@@ -429,7 +429,19 @@ where
                         a.global_geo_transform,
                         raster.into(),
                     ))
-                }
+                },
+                (Err(e1), Err(e2)) => {
+                    println!("{:?};{:?}", e1, e2);
+                    unimplemented!();
+                },
+                (Err(e1), Ok(b)) => {
+                    println!("{:?}", e1);
+                    unimplemented!();
+                },
+                (Ok(a), Err(e2)) => {
+                    println!("{:?}", e2);
+                    unimplemented!();
+                },
                 _ => unimplemented!(),
             })
             .boxed())
