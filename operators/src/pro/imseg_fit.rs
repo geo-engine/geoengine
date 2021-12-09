@@ -159,7 +159,7 @@ where
                         
                         let mut arr_proc = ndarray::Array::from_elem((tile_size[0], tile_size[1], nop), default_value);
                         for i in 0 .. proc.len() {
-                            let mut arr_x: ndarray::Array<T, _> = 
+                            let arr_x: ndarray::Array<T, _> = 
                             Array2::from_shape_vec((tile_size[0], tile_size[1]), proc.remove(0))
                             .unwrap(); 
                             arr_proc.slice_mut(ndarray::s![..,..,i]).assign(&arr_x);
@@ -184,6 +184,8 @@ where
                     time = Instant::now();
                 }
                 buffer_proc.drain(..);
+                time_general_processing = time_general_processing + time.elapsed().as_millis();
+                time = Instant::now();
             }
             
                 
@@ -904,12 +906,12 @@ mod tests {
 
         let x = imseg_fit(vec![proc_ir_016, proc_ir_039, proc_ir_087, proc_ir_097, proc_ir_108, proc_ir_120, proc_ir_134],proc_claas, QueryRectangle {
             spatial_bounds: query_bbox,
-            time_interval: TimeInterval::new(1104534000000, 1104534000000 + 9_000_000_000 )
+            time_interval: TimeInterval::new(1104534000000, 1104534000000 + 9_000_000 )
                 .unwrap(),
             spatial_resolution: query_spatial_resolution,
         }, ctx,
-    10 as usize,
     1 as usize,
+    10 as usize,
 0 as u8,
 [512,512],
 0.0).await.unwrap();

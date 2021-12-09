@@ -1,6 +1,13 @@
-use futures::{Stream, task::{Context, Poll}};
+use futures::{Stream, StreamExt, TryStreamExt};
+use futures::task::{Context, Poll};
+use futures::stream::BoxStream;
+use futures::pin_mut;
 use pin_project::pin_project;
+use async_stream::stream;
+//use std::task::{Poll, Context};
 use core::pin::Pin;
+use std::time::{Instant};
+
 
 #[derive(PartialEq, Clone)]
 pub enum RasterResult<T>{
@@ -17,6 +24,7 @@ where
     #[pin]
     streams: Vec<St>,
     values: Vec<Option<St::Item>>,
+    times: Vec<u64>,
     state: ZipState,
 }
 
@@ -36,6 +44,7 @@ where
 
         Self {
             values: Vec::with_capacity(streams.len()),
+            times: Vec::with_capacity(streams.len()),
             streams,
             state: ZipState::Idle,
         }
@@ -46,6 +55,10 @@ where
 
         if this.values.is_empty() {
             this.values.resize_with(this.streams.len(), ||None);
+        }
+
+        if this.times.is_empty() {
+            this.times.resize_with(this.streams.len(), || 0);
         }
 
         *this.state = ZipState::Busy;
@@ -63,11 +76,17 @@ where
                     this.values[i] = Some(value);
                 }
                 Poll::Ready(None) => {
+                    for (i, element) in this.times.iter().enumerate() {
+                        println!("Processor{}: {:?}",i, element);
+                        
+                    }
                     // first stream is done, so the whole `Zip` is done
                     *this.state = ZipState::Finished;
                     return;
                 }
-                Poll::Pending => (/* NOP */),
+                Poll::Pending => {
+                    this.times[i] = this.times[i] + 1;
+                },
             }
         }
     }
@@ -98,6 +117,7 @@ where
 
     fn poll_next(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Vec<St::Item>>> {
         //eprintln!("poll next"); // TODO: REMOVE
+        let time_instace = Instant::now();
 
         if matches!(self.state, ZipState::Finished) {
             return Poll::Ready(None);
@@ -106,12 +126,16 @@ where
         self.as_mut().check_streams(cx);
 
         if matches!(self.state, ZipState::Finished) {
+            println!("Time in poll: {:?}", time_instace.elapsed());
+            
             return Poll::Ready(None);
         }
 
         if let Some(values) = self.return_values() {
+            println!("Time in poll: {:?}", time_instace.elapsed());
             Poll::Ready(Some(values))
         } else {
+            println!("Time in poll: {:?}", time_instace.elapsed());
             Poll::Pending
         }
     }
