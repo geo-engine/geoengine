@@ -26,7 +26,6 @@ geoengine-datatypes = { path = "../datatypes" }
 itertools = "0.10"
 lazy_static = "1.4"
 log = "0.4"
-num_cpus = "1.13" # TODO: remove and switch to std::thread::available_concurrency() when it is available
 num-traits = "0.2"
 ocl = { git = "https://github.com/michaelmattig/ocl", branch = "tentative_master" }  # TODO: use crates.io version once it builds again
 ouroboros = "0.14"
