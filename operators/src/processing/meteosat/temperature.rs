@@ -1,3 +1,5 @@
+use std::sync::Arc;
+
 use crate::engine::{
     ExecutionContext, InitializedRasterOperator, Operator, QueryContext, QueryProcessor,
     RasterOperator, RasterQueryProcessor, RasterQueryRectangle, RasterResultDescriptor,
@@ -5,6 +7,8 @@ use crate::engine::{
 };
 use crate::util::Result;
 use async_trait::async_trait;
+use rayon::iter::{IntoParallelIterator, IntoParallelRefIterator, ParallelIterator};
+use rayon::ThreadPool;
 use TypedRasterQueryProcessor::F32 as QueryProcessorOut;
 
 use crate::error::Error;
@@ -12,8 +16,8 @@ use futures::stream::BoxStream;
 use futures::{StreamExt, TryStreamExt};
 use geoengine_datatypes::primitives::{Measurement, SpatialPartition2D};
 use geoengine_datatypes::raster::{
-    EmptyGrid, Grid2D, GridShapeAccess, GridSize, NoDataValue, Pixel, RasterDataType,
-    RasterPropertiesKey, RasterTile2D,
+    EmptyGrid, Grid2D, GridShapeAccess, NoDataValue, Pixel, RasterDataType, RasterPropertiesKey,
+    RasterTile2D,
 };
 use serde::{Deserialize, Serialize};
 
@@ -201,7 +205,11 @@ where
         }
     }
 
-    async fn process_tile_async(&self, tile: RasterTile2D<P>) -> Result<RasterTile2D<PixelOut>> {
+    async fn process_tile_async(
+        &self,
+        tile: RasterTile2D<P>,
+        pool: Arc<ThreadPool>,
+    ) -> Result<RasterTile2D<PixelOut>> {
         if tile.is_empty() {
             return Ok(RasterTile2D::new_with_properties(
                 tile.time,
@@ -219,8 +227,8 @@ where
         let mat_tile = tile.into_materialized_tile(); // NOTE: the tile is already materialized.
 
         let temp_grid = tokio::task::spawn_blocking(move || {
-            let lut = create_lookup_table(channel, offset, slope);
-            process_tile(&mat_tile.grid_array, &lut)
+            let lut = create_lookup_table(channel, offset, slope, &pool);
+            process_tile(&mat_tile.grid_array, &lut, &pool)
         })
         .await??;
 
@@ -234,35 +242,43 @@ where
     }
 }
 
-fn create_lookup_table(channel: &Channel, offset: f64, slope: f64) -> Vec<f32> {
-    let mut lut = Vec::with_capacity(1024);
-    for i in 0..1024 {
-        let radiance = offset + f64::from(i) * slope;
-        let temp = channel.calculate_temperature_from_radiance(radiance);
-        lut.push(temp as f32);
-    }
-    lut
+fn create_lookup_table(channel: &Channel, offset: f64, slope: f64, pool: &ThreadPool) -> Vec<f32> {
+    pool.install(|| {
+        (0..1024)
+            .into_par_iter()
+            .map(|i| {
+                let radiance = offset + f64::from(i) * slope;
+                channel.calculate_temperature_from_radiance(radiance) as f32
+            })
+            .collect::<Vec<f32>>()
+    })
 }
 
-fn process_tile<P: Pixel>(grid: &Grid2D<P>, lut: &[f32]) -> Result<Grid2D<PixelOut>> {
+fn process_tile<P: Pixel>(
+    grid: &Grid2D<P>,
+    lut: &[f32],
+    pool: &ThreadPool,
+) -> Result<Grid2D<PixelOut>> {
     // Create result raster
-    let mut out = Grid2D::new(
-        grid.grid_shape(),
-        vec![OUT_NO_DATA_VALUE; grid.number_of_elements()],
-        Some(OUT_NO_DATA_VALUE),
-    )
-    .expect("raster creation must succeed");
+    pool.install(|| {
+        let out = grid
+            .data
+            .as_slice()
+            .par_iter()
+            .map(|p| {
+                if grid.is_no_data(*p) {
+                    Some(OUT_NO_DATA_VALUE)
+                } else {
+                    let lut_idx: u64 = p.as_();
+                    lut.get(lut_idx as usize).copied()
+                }
+            })
+            .collect::<Option<Vec<PixelOut>>>()
+            .ok_or(Error::UnsupportedRasterValue)?;
 
-    for (idx, &pixel) in grid.data.iter().enumerate() {
-        if !grid.is_no_data(pixel) {
-            let lut_idx: u64 = pixel.as_();
-            out.data[idx] = *lut
-                .get(lut_idx as usize)
-                .ok_or(Error::UnsupportedRasterValue)?;
-        }
-    }
-
-    Ok(out)
+        let res = Grid2D::new(grid.grid_shape(), out, Some(OUT_NO_DATA_VALUE))?;
+        Ok(res)
+    })
 }
 
 #[async_trait]
@@ -280,7 +296,7 @@ where
         ctx: &'a dyn QueryContext,
     ) -> Result<BoxStream<'a, Result<Self::Output>>> {
         let src = self.source.query(query, ctx).await?;
-        let rs = src.and_then(move |tile| self.process_tile_async(tile));
+        let rs = src.and_then(move |tile| self.process_tile_async(tile, ctx.thread_pool().clone()));
         Ok(rs.boxed())
     }
 }
