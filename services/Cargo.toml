@@ -15,6 +15,7 @@ xml = ["quick-xml"]
 postgres = ["postgres-types", "bb8-postgres"]
 odm = ["pro"]
 gfbio = ["postgres", "geoengine-datatypes/postgres"]
+nfdi = []
 # This compiles Geo Engine Pro
 pro = ["postgres", "geoengine-operators/pro", "geoengine-datatypes/pro"]
 
