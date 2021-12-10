@@ -294,6 +294,11 @@ pub enum Error {
     Statistics {
         source: crate::util::statistics::StatisticsError,
     },
+
+    #[snafu(display("Executor error: {}", source))]
+    Executor {
+        source: crate::executor::error::ExecutorError,
+    },
 }
 
 impl From<geoengine_datatypes::error::Error> for Error {
@@ -351,5 +356,11 @@ impl From<tokio::task::JoinError> for Error {
 impl From<crate::util::statistics::StatisticsError> for Error {
     fn from(source: StatisticsError) -> Self {
         Error::Statistics { source }
+    }
+}
+
+impl From<crate::executor::error::ExecutorError> for Error {
+    fn from(source: crate::executor::error::ExecutorError) -> Self {
+        Self::Executor { source }
     }
 }

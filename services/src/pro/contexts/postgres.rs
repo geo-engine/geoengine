@@ -1,3 +1,4 @@
+use crate::contexts::TaskManager;
 use crate::datasets::add_from_directory::add_providers_from_directory;
 use crate::error::{self, Result};
 use crate::pro::datasets::{add_datasets_from_directory, PostgresDatasetDb, Role};
@@ -50,6 +51,7 @@ where
     thread_pool: Arc<ThreadPool>,
     exe_ctx_tiling_spec: TilingSpecification,
     query_ctx_chunk_size: ChunkByteSize,
+    task_manager: TaskManager,
 }
 
 impl<Tls> PostgresContext<Tls>
@@ -81,6 +83,7 @@ where
             workflow_registry: Arc::new(RwLock::new(PostgresWorkflowRegistry::new(pool.clone()))),
             dataset_db: Arc::new(RwLock::new(PostgresDatasetDb::new(pool.clone()))),
             thread_pool: create_rayon_thread_pool(0),
+            task_manager: Default::default(),
             exe_ctx_tiling_spec,
             query_ctx_chunk_size,
         })
@@ -112,6 +115,7 @@ where
             workflow_registry: Arc::new(RwLock::new(PostgresWorkflowRegistry::new(pool.clone()))),
             dataset_db: Arc::new(RwLock::new(dataset_db)),
             thread_pool: create_rayon_thread_pool(0),
+            task_manager: Default::default(),
             exe_ctx_tiling_spec,
             query_ctx_chunk_size,
         })
@@ -512,6 +516,10 @@ where
                 self.exe_ctx_tiling_spec,
             ),
         )
+    }
+
+    fn task_manager(&self) -> &TaskManager {
+        &self.task_manager
     }
 
     async fn session_by_id(&self, session_id: crate::contexts::SessionId) -> Result<Self::Session> {

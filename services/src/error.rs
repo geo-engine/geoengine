@@ -2,7 +2,6 @@ use crate::handlers::ErrorResponse;
 use crate::workflows::workflow::WorkflowId;
 use actix_web::http::StatusCode;
 use actix_web::HttpResponse;
-use executor::error::ExecutorError;
 use geoengine_datatypes::{
     dataset::{DatasetId, DatasetProviderId},
     spatial_reference::SpatialReferenceOption,
@@ -293,7 +292,7 @@ pub enum Error {
         type_names: WorkflowId,
     },
     Executor {
-        source: executor::error::ExecutorError,
+        source: geoengine_operators::executor::error::ExecutorError,
     },
 }
 
@@ -404,8 +403,8 @@ impl From<proj::ProjError> for Error {
     }
 }
 
-impl From<executor::error::ExecutorError> for Error {
-    fn from(source: ExecutorError) -> Self {
+impl From<geoengine_operators::executor::error::ExecutorError> for Error {
+    fn from(source: geoengine_operators::executor::error::ExecutorError) -> Self {
         Self::Executor { source }
     }
 }

@@ -31,7 +31,6 @@ bb8-postgres = { version = "0.7", features = ["with-uuid-0_8", "with-chrono-0_4"
 bytes = "1.0"
 chrono = { version = "0.4", features = ["serde"] }
 config = "0.11"
-executor = { path = "../../../rust/executor", version = "0.1"}
 flexi_logger = "0.20"
 futures = "0.3"
 futures-util = "0.3"

@@ -19,6 +19,11 @@ use geoengine_operators::engine::{
     ChunkByteSize, ExecutionContext, MetaData, MetaDataProvider, QueryContext,
     RasterQueryRectangle, RasterResultDescriptor, VectorQueryRectangle, VectorResultDescriptor,
 };
+#[cfg(not(feature = "pro"))]
+use geoengine_operators::executor::Executor;
+#[cfg(feature = "pro")]
+use geoengine_operators::pro::executor::Executor;
+
 use geoengine_operators::mock::MockDatasetDataSourceLoadingInfo;
 use geoengine_operators::source::{GdalLoadingInfo, OgrSourceDataset};
 
@@ -65,12 +70,12 @@ pub trait Context: 'static + Send + Sync + Clone {
 
 #[derive(Clone)]
 pub struct TaskManager {
-    plot_executor: Arc<executor::Executor<WorkflowId, Result<Value>>>,
+    plot_executor: Arc<Executor<WorkflowId, Result<Value>>>,
 }
 
 impl TaskManager {
-    pub fn plot_executor(&self) -> &executor::Executor<WorkflowId, Result<Value>> {
-        &self.plot_executor
+    pub fn plot_executor(&self) -> &Executor<WorkflowId, Result<Value>> {
+        self.plot_executor.as_ref()
     }
 }
 

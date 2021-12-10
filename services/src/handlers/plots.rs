@@ -173,7 +173,6 @@ async fn get_plot_handler<C: Context>(
     let plot_type = processor.plot_type();
 
     let task = async move {
-        tokio::time::sleep(tokio::time::Duration::from_secs(1)).await;
         Ok(match processor {
             TypedPlotQueryProcessor::JsonPlain(processor) => processor
                 .plot_query(query_rect, &query_ctx)
