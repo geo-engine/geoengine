@@ -202,7 +202,7 @@ async fn get_plot_handler<C: Context>(
 
     let result = task_manager
         .plot_executor()
-        .submit(&workflow_id, task)
+        .submit_ref(&workflow_id, task)
         .await?;
 
     match result.as_ref() {
