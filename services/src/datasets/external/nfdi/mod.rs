@@ -73,6 +73,7 @@ impl ExternalDatasetProviderDefinition for NFDIDataProviderDefinition {
     }
 }
 
+/// Intercepts `gRPC` calls to the core-storage and attaches the authorization token
 #[derive(Clone, Debug)]
 struct APITokenInterceptor {
     key: AsciiMetadataKey,
@@ -99,6 +100,10 @@ impl Interceptor for APITokenInterceptor {
     }
 }
 
+/// The actual provider implementation. It holds `gRPC` stubs to all relevant
+/// API endpoints. Those stubs need to be cloned, because all calls require
+/// a mutable self reference. However, according to the docs, cloning
+/// is cheap.
 pub struct NFDIDataProvider {
     id: DatasetProviderId,
     project_id: String,
@@ -108,6 +113,7 @@ pub struct NFDIDataProvider {
 }
 
 impl NFDIDataProvider {
+    /// Creates a new provider from the given definition.
     async fn new(def: Box<NFDIDataProviderDefinition>) -> Result<NFDIDataProvider> {
         let url = def.api_url;
         let channel = Endpoint::from_str(url.as_str())
@@ -155,6 +161,7 @@ impl NFDIDataProvider {
         )?)
     }
 
+    /// Retrieves information for the datasat with the given id.
     async fn dataset_info(&self, id: &DatasetId) -> Result<(Dataset, GEMetadata)> {
         let id = Self::dataset_nfdi_id(id)?;
         let mut stub = self.dataset_stub.clone();
@@ -171,6 +178,7 @@ impl NFDIDataProvider {
         })
     }
 
+    /// Maps the `gRPC` dataset representation to geoengine's internal representation.
     fn map_dataset(
         &self,
         ds: &scienceobjectsdb_rust_api::sciobjectsdbapi::models::v1::Dataset,
@@ -210,6 +218,7 @@ impl NFDIDataProvider {
         }
     }
 
+    /// Creates a result descriptor for vector data
     fn create_vector_result_descriptor(
         crs: SpatialReferenceOption,
         info: &VectorInfo,
@@ -227,6 +236,7 @@ impl NFDIDataProvider {
         }
     }
 
+    /// Creates a result descriptor for raster data
     fn create_raster_result_descriptor(
         crs: SpatialReferenceOption,
         info: &RasterInfo,
@@ -242,6 +252,8 @@ impl NFDIDataProvider {
         }
     }
 
+    /// Retrieves a file-object from the core-storage. It assumes, that the dataset consists
+    /// only of a single object group with a single object (the file).
     async fn get_single_file_object(&self, id: &DatasetId) -> Result<Object> {
         let mut ds_stub = self.dataset_stub.clone();
 
@@ -263,11 +275,15 @@ impl NFDIDataProvider {
             .ok_or(Error::NoMainFileCandidateFound)
     }
 
-    async fn vector_loading_template(
-        &self,
+    /// Creates the loading template for vector files. This is basically a loading
+    /// info with a placeholder for the download-url. It will be replaced with
+    /// a concrete url on every call to `MetaData.loading_info()`.
+    /// This is required, since download links from the core-storage are only valid
+    /// for 15 minutes.
+    fn vector_loading_template(
         layer_name: String,
         rd: &VectorResultDescriptor,
-    ) -> Result<OgrSourceDataset> {
+    ) -> OgrSourceDataset {
         let data_type = match rd.data_type {
             VectorDataType::Data => None,
             x => Some(x),
@@ -300,7 +316,7 @@ impl NFDIDataProvider {
 
         let time = OgrSourceDatasetTimeType::None;
 
-        Ok(OgrSourceDataset {
+        OgrSourceDataset {
             file_name: PathBuf::from(link),
             layer_name,
             data_type,
@@ -312,18 +328,19 @@ impl NFDIDataProvider {
             on_error: OgrSourceErrorSpec::Abort,
             sql_query: None,
             attribute_query: None,
-        })
+        }
     }
 
-    async fn raster_loading_template(
-        &self,
-        info: &RasterInfo,
-        rd: &RasterResultDescriptor,
-    ) -> Result<GdalLoadingInfo> {
+    /// Creates the loading template for raster files. This is basically a loading
+    /// info with a placeholder for the download-url. It will be replaced with
+    /// a concrete url on every call to `MetaData.loading_info()`.
+    /// This is required, since download links from the core-storage are only valid
+    /// for 15 minutes.
+    fn raster_loading_template(info: &RasterInfo, rd: &RasterResultDescriptor) -> GdalLoadingInfo {
         let part = GdalLoadingInfoPart {
             time: info.time_interval,
             params: GdalDatasetParameters {
-                file_path: PathBuf::from(format!("/viscurl/{}", URL_REPLACEMENT)),
+                file_path: PathBuf::from(format!("/vsicurl/{}", URL_REPLACEMENT)),
                 rasterband_channel: info.rasterband_channel,
                 geo_transform: info.geo_transform,
                 width: info.width,
@@ -336,11 +353,11 @@ impl NFDIDataProvider {
             },
         };
 
-        Ok(GdalLoadingInfo {
+        GdalLoadingInfo {
             info: GdalLoadingInfoPartIterator::Static {
                 parts: vec![part].into_iter(),
             },
-        })
+        }
     }
 }
 
@@ -390,12 +407,7 @@ impl MetaDataProvider<OgrSourceDataset, VectorResultDescriptor, VectorQueryRecta
         match md.data_type {
             DataType::SingleVectorFile(info) => {
                 let result_descriptor = Self::create_vector_result_descriptor(md.crs.into(), &info);
-                let template = self
-                    .vector_loading_template(info.layer_name.clone(), &result_descriptor)
-                    .await
-                    .map_err(|e| geoengine_operators::error::Error::DatasetMetaData {
-                        source: Box::new(e),
-                    })?;
+                let template = Self::vector_loading_template(info.layer_name, &result_descriptor);
 
                 let res = NFDIMetaData {
                     object_id: object.id,
@@ -439,12 +451,7 @@ impl MetaDataProvider<GdalLoadingInfo, RasterResultDescriptor, RasterQueryRectan
         match &md.data_type {
             DataType::SingleRasterFile(info) => {
                 let result_descriptor = Self::create_raster_result_descriptor(md.crs.into(), info);
-                let template = self
-                    .raster_loading_template(info, &result_descriptor)
-                    .await
-                    .map_err(|e| geoengine_operators::error::Error::DatasetMetaData {
-                        source: Box::new(e),
-                    })?;
+                let template = Self::raster_loading_template(info, &result_descriptor);
 
                 let res = NFDIMetaData {
                     object_id: object.id,
@@ -496,7 +503,9 @@ impl ExternalDatasetProvider for NFDIDataProvider {
  * Internal structures
  */
 
+/// This trait models expiring download links as used in the core storage.
 trait ExpiringDownloadLink {
+    /// This function instantiates the implementor with the given fresh download link.
     fn new_link(&self, url: String) -> std::result::Result<Self, geoengine_operators::error::Error>
     where
         Self: Sized;
@@ -550,7 +559,13 @@ impl ExpiringDownloadLink for GdalLoadingInfo {
                     .iter()
                     .map(|part| {
                         let mut new_part = part.clone();
-                        new_part.params.file_path = PathBuf::from(url.as_str());
+                        new_part.params.file_path = PathBuf::from(
+                            part.params
+                                .file_path
+                                .to_string_lossy()
+                                .as_ref()
+                                .replace(URL_REPLACEMENT, url.as_str()),
+                        );
                         new_part
                     })
                     .collect::<std::vec::Vec<_>>();
@@ -569,6 +584,9 @@ impl ExpiringDownloadLink for GdalLoadingInfo {
     }
 }
 
+/// This is the metadata for datasets retrieved from the core-storage.
+/// It stores an object-id, for which to generate new download links each
+/// time the `load_info()` function is called.
 #[derive(Clone, Debug)]
 struct NFDIMetaData<L, R, Q>
 where
@@ -616,18 +634,13 @@ where
 
 #[cfg(test)]
 mod tests {
-    use crate::datasets::external::nfdi::{NFDIDataProvider, NFDIDataProviderDefinition};
-    use crate::datasets::listing::{DatasetListOptions, ExternalDatasetProvider, OrderBy};
-    use crate::util::user_input::Validated;
-    use futures::StreamExt;
-    use geoengine_datatypes::collections::{FeatureCollectionInfos, MultiPointCollection};
-    use geoengine_datatypes::dataset::{DatasetId, DatasetProviderId, ExternalDatasetId};
-    use geoengine_datatypes::primitives::{BoundingBox2D, SpatialResolution, TimeInterval};
-    use geoengine_operators::engine::{
-        MetaData, MetaDataProvider, MockExecutionContext, MockQueryContext, QueryProcessor,
-        TypedVectorQueryProcessor, VectorOperator, VectorQueryRectangle, VectorResultDescriptor,
+    use crate::datasets::external::nfdi::metadata::{GEMetadata, METADATA_KEY};
+    use crate::datasets::external::nfdi::{
+        ExpiringDownloadLink, NFDIDataProvider, NFDIDataProviderDefinition,
     };
-    use geoengine_operators::source::{OgrSource, OgrSourceDataset, OgrSourceParameters};
+    use geoengine_datatypes::dataset::DatasetProviderId;
+    use scienceobjectsdb_rust_api::sciobjectsdbapi::models::v1::{Dataset, Metadata};
+    use serde_json::Value;
     use std::str::FromStr;
 
     const PROVIDER_ID: &str = "86a7f7ce-1bab-4ce9-a32b-172c0f958ee0";
@@ -645,115 +658,374 @@ mod tests {
         NFDIDataProvider::new(Box::new(def)).await.unwrap()
     }
 
-    #[tokio::test]
-    async fn it_lists() {
-        let provider = new_provider().await;
-
-        let opts = DatasetListOptions {
-            filter: None,
-            limit: 100,
-            offset: 0,
-            order: OrderBy::NameAsc,
-        };
-
-        let res = provider.list(Validated { user_input: opts }).await;
-        assert!(res.is_ok());
-        let res = res.unwrap();
-        assert!(!res.is_empty());
-    }
-
-    #[tokio::test]
-    async fn it_loads_provenance() {
-        let provider = new_provider().await;
-
-        let id = DatasetId::External(ExternalDatasetId {
-            provider_id: provider.id,
-            dataset_id: DATASET_ID.to_string(),
-        });
-
-        let res = provider.provenance(&id).await;
-
-        assert!(res.is_ok());
-
-        let res = res.unwrap();
-
-        assert!(res.provenance.is_some());
-    }
-
-    #[tokio::test]
-    async fn it_loads_meta_data() {
-        let provider = new_provider().await;
-
-        let id = DatasetId::External(ExternalDatasetId {
-            provider_id: provider.id,
-            dataset_id: DATASET_ID.to_string(),
-        });
-
-        let _res: Box<
-            dyn MetaData<OgrSourceDataset, VectorResultDescriptor, VectorQueryRectangle>,
-        > = provider.meta_data(&id).await.unwrap();
-        {};
-    }
-
-    #[tokio::test]
-    async fn it_executes_loads() {
-        let provider = new_provider().await;
-
-        let id = DatasetId::External(ExternalDatasetId {
-            provider_id: provider.id,
-            dataset_id: DATASET_ID.to_string(),
-        });
-
-        let meta: Box<
-            dyn MetaData<OgrSourceDataset, VectorResultDescriptor, VectorQueryRectangle>,
-        > = provider.meta_data(&id).await.unwrap();
-
-        let mut context = MockExecutionContext::default();
-        context.add_meta_data(id.clone(), meta);
-
-        let src = OgrSource {
-            params: OgrSourceParameters {
-                dataset: id,
-                attribute_projection: None,
+    pub(crate) fn vector_meta_data() -> Value {
+        serde_json::json!({
+            "crs":"EPSG:4326",
+            "dataType":{
+                "singleVectorFile":{
+                    "vectorType":"MultiPoint",
+                    "layerName":"test",
+                        "attributes":[{
+                            "name":"name",
+                            "type":"text"
+                        }],
+                    "temporalExtend":null
+                }
             },
-        }
-        .boxed();
-
-        let initialized_op = src.initialize(&context).await.unwrap();
-
-        let proc = initialized_op.query_processor().unwrap();
-        let proc = match proc {
-            TypedVectorQueryProcessor::MultiPoint(qp) => qp,
-            _ => panic!("Expected MultiPoint QueryProcessor"),
-        };
-
-        let ctx = MockQueryContext::default();
-
-        let qr = VectorQueryRectangle {
-            spatial_bounds: BoundingBox2D::new((-180., -90.).into(), (180., 90.).into()).unwrap(),
-            time_interval: TimeInterval::default(),
-            spatial_resolution: SpatialResolution::zero_point_one(),
-        };
-
-        let result: Vec<MultiPointCollection> = proc
-            .query(qr, &ctx)
-            .await
-            .unwrap()
-            .map(Result::unwrap)
-            .collect()
-            .await;
-
-        let sum: usize = result.iter().map(MultiPointCollection::len).sum();
-        println!("{}", sum);
-
-        let result: Vec<MultiPointCollection> = proc
-            .query(qr, &ctx)
-            .await
-            .unwrap()
-            .map(Result::unwrap)
-            .collect()
-            .await;
-        let sum: usize = result.iter().map(MultiPointCollection::len).sum();
-        println!("{}", sum);
+            "provenance":{
+            "citation":"Test",
+            "license":"MIT",
+            "uri":"http://geoengine.io"
+            }
+        })
     }
+
+    pub(crate) fn raster_meta_data() -> Value {
+        serde_json::json!({
+            "crs":"EPSG:4326",
+            "dataType":{
+                "singleRasterFile":{
+                    "dataType":"U8",
+                    "noDataValue":0.0,
+                    "rasterbandChannel":1,
+                    "width":3600,
+                    "height":1800,
+                    "geoTransform":{
+                        "originCoordinate":{
+                            "x":-180.0,
+                            "y":90.0
+                        },
+                        "xPixelSize":0.1,
+                        "yPixelSize":-0.1
+                    }
+                }
+            },
+            "provenance":{
+                "citation":"Test",
+                "license":"MIT",
+                "uri":"http://geoengine.io"
+            }
+        })
+    }
+
+    #[tokio::test]
+    async fn test_extract_meta_data_ok() {
+        let provider = new_provider().await;
+        let ds = Dataset {
+            id: DATASET_ID.to_string(),
+            name: "Test".to_string(),
+            description: "Test".to_string(),
+            created: None,
+            labels: vec![],
+            metadata: vec![Metadata {
+                key: METADATA_KEY.to_string(),
+                labels: vec![],
+                metadata: vector_meta_data().to_string().into_bytes(),
+                schema: None,
+            }],
+            project_id: provider.project_id,
+            is_public: true,
+            status: 0,
+        };
+
+        let md = NFDIDataProvider::extract_metadata(&ds).unwrap();
+        let des = serde_json::from_value::<GEMetadata>(vector_meta_data()).unwrap();
+        assert_eq!(des, md);
+    }
+
+    #[tokio::test]
+    async fn test_extract_meta_data_not_present() {
+        let provider = new_provider().await;
+        let ds = Dataset {
+            id: DATASET_ID.to_string(),
+            name: "Test".to_string(),
+            description: "Test".to_string(),
+            created: None,
+            labels: vec![],
+            metadata: vec![],
+            project_id: provider.project_id,
+            is_public: true,
+            status: 0,
+        };
+        assert!(NFDIDataProvider::extract_metadata(&ds).is_err());
+    }
+
+    #[tokio::test]
+    async fn test_extract_meta_data_parse_error() {
+        let provider = new_provider().await;
+        let ds = Dataset {
+            id: DATASET_ID.to_string(),
+            name: "Test".to_string(),
+            description: "Test".to_string(),
+            created: None,
+            labels: vec![],
+            metadata: vec![Metadata {
+                key: METADATA_KEY.to_string(),
+                labels: vec![],
+                metadata: b"{\"foo\": \"bar\"}".to_vec(),
+                schema: None,
+            }],
+            project_id: provider.project_id,
+            is_public: true,
+            status: 0,
+        };
+        assert!(NFDIDataProvider::extract_metadata(&ds).is_err());
+    }
+
+    #[tokio::test]
+    async fn test_map_vector_dataset() {
+        let provider = new_provider().await;
+        let ds = Dataset {
+            id: DATASET_ID.to_string(),
+            name: "Test".to_string(),
+            description: "Test".to_string(),
+            created: None,
+            labels: vec![],
+            metadata: vec![Metadata {
+                key: METADATA_KEY.to_string(),
+                labels: vec![],
+                metadata: vector_meta_data().to_string().into_bytes(),
+                schema: None,
+            }],
+            project_id: provider.project_id.clone(),
+            is_public: true,
+            status: 0,
+        };
+
+        let md = NFDIDataProvider::extract_metadata(&ds).unwrap();
+        let ds = provider.map_dataset(&ds, &md);
+        assert!(matches!(
+            md.data_type,
+            super::metadata::DataType::SingleVectorFile(_)
+        ));
+        assert_eq!("OgrSource".to_string(), ds.source_operator);
+    }
+
+    #[tokio::test]
+    async fn test_map_raster_dataset() {
+        let provider = new_provider().await;
+        let ds = Dataset {
+            id: DATASET_ID.to_string(),
+            name: "Test".to_string(),
+            description: "Test".to_string(),
+            created: None,
+            labels: vec![],
+            metadata: vec![Metadata {
+                key: METADATA_KEY.to_string(),
+                labels: vec![],
+                metadata: raster_meta_data().to_string().into_bytes(),
+                schema: None,
+            }],
+            project_id: provider.project_id.clone(),
+            is_public: true,
+            status: 0,
+        };
+
+        let md = NFDIDataProvider::extract_metadata(&ds).unwrap();
+        assert!(matches!(
+            md.data_type,
+            super::metadata::DataType::SingleRasterFile(_)
+        ));
+
+        let ds = provider.map_dataset(&ds, &md);
+
+        assert_eq!("GdalSource".to_string(), ds.source_operator);
+    }
+
+    #[tokio::test]
+    async fn test_vector_loading_template() {
+        let provider = new_provider().await;
+        let ds = Dataset {
+            id: DATASET_ID.to_string(),
+            name: "Test".to_string(),
+            description: "Test".to_string(),
+            created: None,
+            labels: vec![],
+            metadata: vec![Metadata {
+                key: METADATA_KEY.to_string(),
+                labels: vec![],
+                metadata: vector_meta_data().to_string().into_bytes(),
+                schema: None,
+            }],
+            project_id: provider.project_id,
+            is_public: true,
+            status: 0,
+        };
+
+        let md = NFDIDataProvider::extract_metadata(&ds).unwrap();
+        let vi = match md.data_type {
+            super::metadata::DataType::SingleVectorFile(vi) => vi,
+            super::metadata::DataType::SingleRasterFile(_) => panic!("Expected vector description"),
+        };
+
+        let rd = NFDIDataProvider::create_vector_result_descriptor(md.crs.into(), &vi);
+
+        let template = NFDIDataProvider::vector_loading_template("test".to_string(), &rd);
+
+        let url = template
+            .new_link("test".to_string())
+            .unwrap()
+            .file_name
+            .to_string_lossy()
+            .to_string();
+
+        assert_eq!("/vsicurl/test", url.as_str());
+    }
+
+    #[tokio::test]
+    async fn test_raster_loading_template() {
+        let provider = new_provider().await;
+        let ds = Dataset {
+            id: DATASET_ID.to_string(),
+            name: "Test".to_string(),
+            description: "Test".to_string(),
+            created: None,
+            labels: vec![],
+            metadata: vec![Metadata {
+                key: METADATA_KEY.to_string(),
+                labels: vec![],
+                metadata: raster_meta_data().to_string().into_bytes(),
+                schema: None,
+            }],
+            project_id: provider.project_id,
+            is_public: true,
+            status: 0,
+        };
+
+        let md = NFDIDataProvider::extract_metadata(&ds).unwrap();
+        let ri = match md.data_type {
+            super::metadata::DataType::SingleRasterFile(ri) => ri,
+            super::metadata::DataType::SingleVectorFile(_) => panic!("Expected raster description"),
+        };
+
+        let rd = NFDIDataProvider::create_raster_result_descriptor(md.crs.into(), &ri);
+
+        let template = NFDIDataProvider::raster_loading_template(&ri, &rd);
+
+        let url = template
+            .new_link("test".to_string())
+            .unwrap()
+            .info
+            .next()
+            .unwrap()
+            .unwrap()
+            .params
+            .file_path
+            .to_string_lossy()
+            .to_string();
+
+        assert_eq!("/vsicurl/test", url.as_str());
+    }
+
+    // #[tokio::test]
+    // async fn it_lists() {
+    //     let provider = new_provider().await;
+    //
+    //     let opts = DatasetListOptions {
+    //         filter: None,
+    //         limit: 100,
+    //         offset: 0,
+    //         order: OrderBy::NameAsc,
+    //     };
+    //
+    //     let res = provider.list(Validated { user_input: opts }).await;
+    //     assert!(res.is_ok());
+    //     let res = res.unwrap();
+    //     assert!(!res.is_empty());
+    // }
+    //
+    // #[tokio::test]
+    // async fn it_loads_provenance() {
+    //     let provider = new_provider().await;
+    //
+    //     let id = DatasetId::External(ExternalDatasetId {
+    //         provider_id: provider.id,
+    //         dataset_id: DATASET_ID.to_string(),
+    //     });
+    //
+    //     let res = provider.provenance(&id).await;
+    //
+    //     assert!(res.is_ok());
+    //
+    //     let res = res.unwrap();
+    //
+    //     assert!(res.provenance.is_some());
+    // }
+    //
+    // #[tokio::test]
+    // async fn it_loads_meta_data() {
+    //     let provider = new_provider().await;
+    //
+    //     let id = DatasetId::External(ExternalDatasetId {
+    //         provider_id: provider.id,
+    //         dataset_id: DATASET_ID.to_string(),
+    //     });
+    //
+    //     let _res: Box<
+    //         dyn MetaData<OgrSourceDataset, VectorResultDescriptor, VectorQueryRectangle>,
+    //     > = provider.meta_data(&id).await.unwrap();
+    //     {};
+    // }
+    //
+    // #[tokio::test]
+    // async fn it_executes_loads() {
+    //     let provider = new_provider().await;
+    //
+    //     let id = DatasetId::External(ExternalDatasetId {
+    //         provider_id: provider.id,
+    //         dataset_id: DATASET_ID.to_string(),
+    //     });
+    //
+    //     let meta: Box<
+    //         dyn MetaData<OgrSourceDataset, VectorResultDescriptor, VectorQueryRectangle>,
+    //     > = provider.meta_data(&id).await.unwrap();
+    //
+    //     let mut context = MockExecutionContext::default();
+    //     context.add_meta_data(id.clone(), meta);
+    //
+    //     let src = OgrSource {
+    //         params: OgrSourceParameters {
+    //             dataset: id,
+    //             attribute_projection: None,
+    //         },
+    //     }
+    //     .boxed();
+    //
+    //     let initialized_op = src.initialize(&context).await.unwrap();
+    //
+    //     let proc = initialized_op.query_processor().unwrap();
+    //     let proc = match proc {
+    //         TypedVectorQueryProcessor::MultiPoint(qp) => qp,
+    //         _ => panic!("Expected MultiPoint QueryProcessor"),
+    //     };
+    //
+    //     let ctx = MockQueryContext::default();
+    //
+    //     let qr = VectorQueryRectangle {
+    //         spatial_bounds: BoundingBox2D::new((-180., -90.).into(), (180., 90.).into()).unwrap(),
+    //         time_interval: TimeInterval::default(),
+    //         spatial_resolution: SpatialResolution::zero_point_one(),
+    //     };
+    //
+    //     let result: Vec<MultiPointCollection> = proc
+    //         .query(qr, &ctx)
+    //         .await
+    //         .unwrap()
+    //         .map(Result::unwrap)
+    //         .collect()
+    //         .await;
+    //
+    //     let sum: usize = result.iter().map(MultiPointCollection::len).sum();
+    //     println!("{}", sum);
+    //
+    //     let result: Vec<MultiPointCollection> = proc
+    //         .query(qr, &ctx)
+    //         .await
+    //         .unwrap()
+    //         .map(Result::unwrap)
+    //         .collect()
+    //         .await;
+    //     let sum: usize = result.iter().map(MultiPointCollection::len).sum();
+    //     println!("{}", sum);
+    // }
 }
