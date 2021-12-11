@@ -912,6 +912,38 @@ mod tests {
     }
 
     #[test]
+    fn range_filter_bool() {
+        let collection = MultiPointCollection::from_data(
+            MultiPoint::many(vec![
+                (0.0, 0.1),
+                (1.0, 1.1),
+                (2.0, 3.1),
+                (3.0, 3.1),
+                (4.0, 4.1),
+            ])
+            .unwrap(),
+            vec![TimeInterval::new_unchecked(0, 1); 5],
+            [(
+                "foo".to_string(),
+                FeatureData::Bool(vec![false, false, true, true, true]),
+            )]
+            .iter()
+            .cloned()
+            .collect(),
+        )
+        .unwrap();
+
+        assert_eq!(
+            collection
+                .column_range_filter("foo", &[FeatureDataValue::Bool(true)..], false)
+                .unwrap(),
+            collection
+                .filter(vec![false, false, true, true, true])
+                .unwrap()
+        );
+    }
+
+    #[test]
     fn range_filter_datetime() {
         let collection = MultiPointCollection::from_data(
             MultiPoint::many(vec![
