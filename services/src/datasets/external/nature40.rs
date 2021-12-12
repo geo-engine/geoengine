@@ -439,7 +439,7 @@ impl MetaDataProvider<GdalLoadingInfo, RasterResultDescriptor, RasterQueryRectan
                 )?,
                 time_placeholders: hashmap! {
                     "%TIME%".to_string() => GdalSourceTimePlaceholder {
-                        format: "%f".to_string(),
+                        format: "%Y-%m-%dT%H:%M".to_string(),
                         reference: TimeReference::Start,
                     },
                 },
@@ -1260,7 +1260,7 @@ mod tests {
                         ),
                     ),
                     params: GdalDatasetParameters {
-                        file_path: PathBuf::from(format!("WCS:{}rasterdb/uas_orthomosaics_2020/wcs?VERSION=1.0.0&COVERAGE=uas_orthomosaics_2020&TIME=000000000", server.url_str(""))),
+                        file_path: PathBuf::from(format!("WCS:{}rasterdb/uas_orthomosaics_2020/wcs?VERSION=1.0.0&COVERAGE=uas_orthomosaics_2020&TIME=2020-09-01T00:00", server.url_str(""))),
                         rasterband_channel: 1,
                         geo_transform: GdalDatasetGeoTransform {
                             origin_coordinate: (477_626.465, 5_632_531.035).into(),
@@ -1294,7 +1294,7 @@ mod tests {
                         ),
                     ),
                     params: GdalDatasetParameters {
-                        file_path: PathBuf::from(format!("WCS:{}rasterdb/uas_orthomosaics_2020/wcs?VERSION=1.0.0&COVERAGE=uas_orthomosaics_2020&TIME=000000000", server.url_str(""))),
+                        file_path: PathBuf::from(format!("WCS:{}rasterdb/uas_orthomosaics_2020/wcs?VERSION=1.0.0&COVERAGE=uas_orthomosaics_2020&TIME=2020-09-02T00:00", server.url_str(""))),
                         rasterband_channel: 1,
                         geo_transform: GdalDatasetGeoTransform {
                             origin_coordinate: (477_626.465, 5_632_531.035).into(),
@@ -1331,7 +1331,7 @@ mod tests {
                         ),
                     ),
                     params: GdalDatasetParameters {
-                        file_path: PathBuf::from(format!("WCS:{}rasterdb/uas_orthomosaics_2020/wcs?VERSION=1.0.0&COVERAGE=uas_orthomosaics_2020&TIME=001000000", server.url_str(""))),
+                        file_path: PathBuf::from(format!("WCS:{}rasterdb/uas_orthomosaics_2020/wcs?VERSION=1.0.0&COVERAGE=uas_orthomosaics_2020&TIME=2020-09-02T00:00", server.url_str(""))),
                         rasterband_channel: 1,
                         geo_transform: GdalDatasetGeoTransform {
                             origin_coordinate: (477_626.465, 5_632_531.035).into(),
