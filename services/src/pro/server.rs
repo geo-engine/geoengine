@@ -7,7 +7,9 @@ use crate::pro::contexts::{ProContext, ProInMemoryContext};
 use crate::util::config::{self, get_config_element, Backend};
 
 use super::projects::ProProjectDb;
-use crate::server::{configure_extractors, render_404, render_405};
+use crate::server::{
+    calculate_max_blocking_threads_per_worker, configure_extractors, render_404, render_405,
+};
 use actix_files::Files;
 use actix_web::{http, middleware, web, App, HttpServer};
 #[cfg(feature = "postgres")]
@@ -65,6 +67,7 @@ where
         }
         app
     })
+    .worker_max_blocking_threads(calculate_max_blocking_threads_per_worker())
     .bind(bind_address)?
     .run()
     .await
