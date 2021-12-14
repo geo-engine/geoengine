@@ -8,7 +8,8 @@ use crate::engine::{
 use crate::util::Result;
 use async_trait::async_trait;
 use num_traits::AsPrimitive;
-use rayon::iter::{IntoParallelIterator, IntoParallelRefIterator, ParallelIterator};
+use rayon::iter::{IndexedParallelIterator, ParallelIterator};
+use rayon::slice::ParallelSlice;
 use rayon::ThreadPool;
 use TypedRasterQueryProcessor::F32 as QueryProcessorOut;
 
@@ -17,8 +18,8 @@ use futures::stream::BoxStream;
 use futures::{StreamExt, TryStreamExt};
 use geoengine_datatypes::primitives::{Measurement, SpatialPartition2D};
 use geoengine_datatypes::raster::{
-    EmptyGrid, Grid2D, GridShapeAccess, GridSize, GridSpaceToLinearSpace, MaterializedRasterTile2D,
-    NoDataValue, RasterDataType, RasterPropertiesKey, RasterTile2D,
+    EmptyGrid, Grid2D, GridShapeAccess, GridSize, MaterializedRasterTile2D, NoDataValue,
+    RasterDataType, RasterPropertiesKey, RasterTile2D,
 };
 use serde::{Deserialize, Serialize};
 
@@ -238,41 +239,44 @@ fn process_tile(
         let out_grid = if solar_correction {
             let sunpos = SunPos::new(&timestamp);
 
-            let grid_bounds = grid.grid_shape();
             let tile_geo_transform = tile.tile_geo_transform();
 
-            (0..grid_bounds.number_of_elements())
-                .into_par_iter()
-                .map(|lin_idx| {
-                    let pixel = grid.data[lin_idx];
+            grid.data
+                .par_chunks_exact(grid.axis_size_y()) // we know that a raster is always a perfect grid. Exact will always include all elements
+                .enumerate()
+                .map(|(y, row)| {
+                    row.iter().enumerate().map(move |(x, &pixel)| {
+                        if grid.is_no_data(pixel) {
+                            OUT_NO_DATA_VALUE
+                        } else {
+                            let grid_idx = [y as isize, x as isize].into();
+                            let geos_coord =
+                                tile_geo_transform.grid_idx_to_center_coordinate_2d(grid_idx);
 
-                    if grid.is_no_data(pixel) {
-                        OUT_NO_DATA_VALUE
-                    } else {
-                        let grid_idx = grid_bounds.grid_idx_unchecked(lin_idx);
-                        let geos_coord =
-                            tile_geo_transform.grid_idx_to_center_coordinate_2d(grid_idx);
+                            let (lat, lon) = channel.view_angle_lat_lon(geos_coord, 0.0);
+                            let (_, zenith) = sunpos.solar_azimuth_zenith(lat, lon);
 
-                        let (lat, lon) = channel.view_angle_lat_lon(geos_coord, 0.0);
-                        let (_, zenith) = sunpos.solar_azimuth_zenith(lat, lon);
-
-                        (f64::from(pixel) * esd * esd
-                            / (etsr * zenith.min(80.0).to_radians().cos()))
-                            as PixelOut
-                    }
+                            (f64::from(pixel) * esd * esd
+                                / (etsr * zenith.min(80.0).to_radians().cos()))
+                                as PixelOut
+                        }
+                    })
                 })
+                .flatten_iter()
                 .collect::<Vec<f32>>()
         } else {
             grid.data
-                .as_slice()
-                .par_iter()
-                .map(|&p| {
-                    if grid.is_no_data(p) {
-                        OUT_NO_DATA_VALUE
-                    } else {
-                        (f64::from(p) * esd * esd / etsr).as_()
-                    }
+                .par_chunks(1.max(grid.axis_size_y() / pool.current_num_threads()))
+                .map(|row| {
+                    row.iter().map(|&p| {
+                        if grid.is_no_data(p) {
+                            OUT_NO_DATA_VALUE
+                        } else {
+                            (f64::from(p) * esd * esd / etsr).as_()
+                        }
+                    })
                 })
+                .flatten_iter()
                 .collect::<Vec<f32>>()
         };
 

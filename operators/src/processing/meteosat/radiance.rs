@@ -11,10 +11,11 @@ use futures::stream::BoxStream;
 use futures::{StreamExt, TryStreamExt};
 use geoengine_datatypes::primitives::{Measurement, SpatialPartition2D};
 use geoengine_datatypes::raster::{
-    EmptyGrid, Grid2D, GridShapeAccess, NoDataValue, Pixel, RasterDataType, RasterPropertiesKey,
-    RasterTile2D,
+    EmptyGrid, Grid2D, GridShapeAccess, GridSize, NoDataValue, Pixel, RasterDataType,
+    RasterPropertiesKey, RasterTile2D,
 };
-use rayon::iter::{IntoParallelRefIterator, ParallelIterator};
+use rayon::iter::ParallelIterator;
+use rayon::slice::ParallelSlice;
 use rayon::ThreadPool;
 use serde::{Deserialize, Serialize};
 
@@ -220,16 +221,18 @@ fn process_tile<P: Pixel>(
     pool.install(|| {
         let rad_array = grid
             .data
-            .as_slice()
-            .par_iter()
-            .map(|p| {
-                if grid.is_no_data(*p) {
-                    OUT_NO_DATA_VALUE
-                } else {
-                    let val: PixelOut = (p).as_();
-                    offset + val * slope
-                }
+            .par_chunks(1.max(grid.axis_size_y() / pool.current_num_threads()))
+            .map(|row| {
+                row.iter().map(|p| {
+                    if grid.is_no_data(*p) {
+                        OUT_NO_DATA_VALUE
+                    } else {
+                        let val: PixelOut = (p).as_();
+                        offset + val * slope
+                    }
+                })
             })
+            .flatten_iter()
             .collect::<Vec<PixelOut>>();
 
         Grid2D::new(grid.grid_shape(), rad_array, Some(OUT_NO_DATA_VALUE))
