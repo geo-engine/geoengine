@@ -844,7 +844,7 @@ impl<'a> ClProgramRunnable<'a> {
                 Buffer::<i8>::builder()
                     .queue(queue.clone())
                     .len(len)
-                    .fill_val(false as i8)
+                    .fill_val(i8::from(false))
                     .build()?,
             )?;
         }
