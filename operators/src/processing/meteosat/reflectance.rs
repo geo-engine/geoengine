@@ -242,7 +242,7 @@ fn process_tile(
             let tile_geo_transform = tile.tile_geo_transform();
 
             grid.data
-                .par_chunks_exact(grid.axis_size_y()) // we know that a raster is always a perfect grid. Exact will always include all elements
+                .par_chunks_exact(grid.axis_size_x()) // we know that a raster is always a perfect grid. Exact will always include all elements
                 .enumerate()
                 .map(|(y, row)| {
                     row.iter().enumerate().map(move |(x, &pixel)| {
@@ -266,7 +266,7 @@ fn process_tile(
                 .collect::<Vec<f32>>()
         } else {
             grid.data
-                .par_chunks(1.max(grid.axis_size_y() / pool.current_num_threads()))
+                .par_chunks(grid.axis_size_x())
                 .map(|row| {
                     row.iter().map(|&p| {
                         if grid.is_no_data(p) {

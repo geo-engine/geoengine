@@ -221,7 +221,7 @@ fn process_tile<P: Pixel>(
     pool.install(|| {
         let rad_array = grid
             .data
-            .par_chunks(1.max(grid.axis_size_y() / pool.current_num_threads()))
+            .par_chunks(grid.axis_size_x())
             .map(|row| {
                 row.iter().map(|p| {
                     if grid.is_no_data(*p) {
