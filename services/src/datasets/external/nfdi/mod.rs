@@ -260,6 +260,7 @@ impl NFDIDataProvider {
         let group = ds_stub
             .get_dataset_object_groups(GetDatasetObjectGroupsRequest {
                 id: Self::dataset_nfdi_id(id)?,
+                page_request: None,
             })
             .await?
             .into_inner()
