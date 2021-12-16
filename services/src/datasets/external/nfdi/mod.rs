@@ -17,7 +17,7 @@ use geoengine_operators::mock::MockDatasetDataSourceLoadingInfo;
 use geoengine_operators::source::{
     FileNotFoundHandling, GdalDatasetParameters, GdalLoadingInfo, GdalLoadingInfoPart,
     GdalLoadingInfoPartIterator, OgrSourceColumnSpec, OgrSourceDataset, OgrSourceDatasetTimeType,
-    OgrSourceErrorSpec,
+    OgrSourceDurationSpec, OgrSourceErrorSpec, OgrSourceTimeFormat,
 };
 use scienceobjectsdb_rust_api::sciobjectsdbapi::models::v1::Object;
 use scienceobjectsdb_rust_api::sciobjectsdbapi::services::v1::dataset_service_client::DatasetServiceClient;
@@ -281,10 +281,7 @@ impl NFDIDataProvider {
     /// a concrete url on every call to `MetaData.loading_info()`.
     /// This is required, since download links from the core-storage are only valid
     /// for 15 minutes.
-    fn vector_loading_template(
-        layer_name: String,
-        rd: &VectorResultDescriptor,
-    ) -> OgrSourceDataset {
+    fn vector_loading_template(vi: &VectorInfo, rd: &VectorResultDescriptor) -> OgrSourceDataset {
         let data_type = match rd.data_type {
             VectorDataType::Data => None,
             x => Some(x),
@@ -315,11 +312,38 @@ impl NFDIDataProvider {
             rename: None,
         };
 
-        let time = OgrSourceDatasetTimeType::None;
+        let time = match &vi.temporal_extend {
+            Some(metadata::TemporalExtend::Instant { attribute }) => {
+                OgrSourceDatasetTimeType::Start {
+                    start_field: attribute.clone(),
+                    start_format: OgrSourceTimeFormat::Auto,
+                    duration: OgrSourceDurationSpec::Zero,
+                }
+            }
+            Some(metadata::TemporalExtend::Interval {
+                attribute_start,
+                attribute_end,
+            }) => OgrSourceDatasetTimeType::StartEnd {
+                start_field: attribute_start.clone(),
+                start_format: OgrSourceTimeFormat::Auto,
+                end_field: attribute_end.clone(),
+                end_format: OgrSourceTimeFormat::Auto,
+            },
+            Some(metadata::TemporalExtend::Duration {
+                attribute_start,
+                attribute_duration,
+                unit: _,
+            }) => OgrSourceDatasetTimeType::StartDuration {
+                start_field: attribute_start.clone(),
+                start_format: OgrSourceTimeFormat::Auto,
+                duration_field: attribute_duration.clone(),
+            },
+            None => OgrSourceDatasetTimeType::None,
+        };
 
         OgrSourceDataset {
             file_name: PathBuf::from(link),
-            layer_name,
+            layer_name: vi.layer_name.clone(),
             data_type,
             time,
             default_geometry: None,
@@ -408,7 +432,7 @@ impl MetaDataProvider<OgrSourceDataset, VectorResultDescriptor, VectorQueryRecta
         match md.data_type {
             DataType::SingleVectorFile(info) => {
                 let result_descriptor = Self::create_vector_result_descriptor(md.crs.into(), &info);
-                let template = Self::vector_loading_template(info.layer_name, &result_descriptor);
+                let template = Self::vector_loading_template(&info, &result_descriptor);
 
                 let res = NFDIMetaData {
                     object_id: object.id,
