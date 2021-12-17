@@ -9,11 +9,6 @@ password = "geoengine"
 [operators.gdal_source]
 raster_data_root_path = "../test_data/raster" # relative to sub crate directory for tests
 
-[logging]
-# Minimum log level. Can be one of error, warn, info, debug, trace
-# or a more detailed spec. See https://docs.rs/flexi_logger/0.17.1/flexi_logger/struct.LogSpecification.html.
-log_spec = "debug"
-
 [raster.tiling_specification]
     origin_coordinate_x = 0.0
     origin_coordinate_y = 0.0

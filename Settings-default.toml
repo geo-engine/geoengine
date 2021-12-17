@@ -33,7 +33,7 @@ path = "upload"
 [logging]
 # Minimum log level. Can be one of error, warn, info, debug, trace
 # or a more detailed spec. See https://docs.rs/flexi_logger/0.17.1/flexi_logger/struct.LogSpecification.html.
-log_spec = "debug"
+log_spec = "info"
 
 # Whether the logs should be also written to files.
 # Log files are rotated once per day. The last 7 files will be kept.
