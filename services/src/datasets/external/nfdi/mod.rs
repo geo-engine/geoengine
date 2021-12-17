@@ -751,6 +751,7 @@ mod tests {
             project_id: provider.project_id,
             is_public: true,
             status: 0,
+            bucket: "".to_string(),
         };
 
         let md = NFDIDataProvider::extract_metadata(&ds).unwrap();
@@ -771,6 +772,7 @@ mod tests {
             project_id: provider.project_id,
             is_public: true,
             status: 0,
+            bucket: "".to_string(),
         };
         assert!(NFDIDataProvider::extract_metadata(&ds).is_err());
     }
@@ -793,6 +795,7 @@ mod tests {
             project_id: provider.project_id,
             is_public: true,
             status: 0,
+            bucket: "".to_string(),
         };
         assert!(NFDIDataProvider::extract_metadata(&ds).is_err());
     }
@@ -815,6 +818,7 @@ mod tests {
             project_id: provider.project_id.clone(),
             is_public: true,
             status: 0,
+            bucket: "".to_string(),
         };
 
         let md = NFDIDataProvider::extract_metadata(&ds).unwrap();
@@ -844,6 +848,7 @@ mod tests {
             project_id: provider.project_id.clone(),
             is_public: true,
             status: 0,
+            bucket: "".to_string(),
         };
 
         let md = NFDIDataProvider::extract_metadata(&ds).unwrap();
@@ -875,6 +880,7 @@ mod tests {
             project_id: provider.project_id,
             is_public: true,
             status: 0,
+            bucket: "".to_string(),
         };
 
         let md = NFDIDataProvider::extract_metadata(&ds).unwrap();
@@ -885,7 +891,7 @@ mod tests {
 
         let rd = NFDIDataProvider::create_vector_result_descriptor(md.crs.into(), &vi);
 
-        let template = NFDIDataProvider::vector_loading_template("test".to_string(), &rd);
+        let template = NFDIDataProvider::vector_loading_template(&vi, &rd);
 
         let url = template
             .new_link("test".to_string())
@@ -915,6 +921,7 @@ mod tests {
             project_id: provider.project_id,
             is_public: true,
             status: 0,
+            bucket: "".to_string(),
         };
 
         let md = NFDIDataProvider::extract_metadata(&ds).unwrap();
