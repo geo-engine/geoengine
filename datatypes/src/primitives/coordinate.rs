@@ -42,6 +42,7 @@ impl Coordinate2D {
         Self { x, y }
     }
 
+    #[must_use]
     pub fn min_elements(&self, other: Self) -> Self {
         Coordinate2D {
             x: self.x.min(other.x),
@@ -49,6 +50,7 @@ impl Coordinate2D {
         }
     }
 
+    #[must_use]
     pub fn max_elements(&self, other: Self) -> Self {
         Coordinate2D {
             x: self.x.max(other.x),

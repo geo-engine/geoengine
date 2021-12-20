@@ -243,8 +243,10 @@ pub fn initialize_debugging_in_test() {
 }
 
 pub trait SetMultipartBody {
+    #[must_use]
     fn set_multipart<B: Into<Vec<u8>>>(self, parts: Vec<(&str, B)>) -> Self;
 
+    #[must_use]
     fn set_multipart_files(self, file_paths: &[PathBuf]) -> Self
     where
         Self: Sized,
