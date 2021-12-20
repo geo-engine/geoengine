@@ -36,6 +36,7 @@ use serde::{Deserialize, Serialize};
 use snafu::{ensure, ResultExt};
 use std::collections::HashMap;
 use std::convert::{TryFrom, TryInto};
+use std::time::Instant;
 use std::{marker::PhantomData, path::PathBuf};
 //use gdal::metadata::Metadata; // TODO: handle metadata
 
@@ -505,8 +506,10 @@ where
             .spatial_partition()
             .intersects(&dataset_params.spatial_partition())
         {
+            debug!("Loading tile {:?}", &tile_information);
             Self::load_tile_data_async(dataset_params, tile_information).await
         } else {
+            debug!("Skipping tile {:?}", &tile_information);
             let fill_value: T = dataset_params.no_data_value.map_or_else(T::zero, T::from_);
 
             let empty_grid = if let Some(no_data) = dataset_params.no_data_value {
@@ -539,6 +542,7 @@ where
         dataset_params: &GdalDatasetParameters,
         tile_information: &TileInformation,
     ) -> Result<GridWithProperties<T>> {
+        let start = Instant::now();
         let dataset_bounds = dataset_params.spatial_partition();
         // TODO: handle datasets where origin is not in the upper left corner
         let geo_transform: GeoTransform = dataset_params.geo_transform.try_into()?;
@@ -582,16 +586,15 @@ where
 
         if dataset_result.is_err() {
             // TODO: check if Gdal error is actually file not found
-            return match dataset_params.file_not_found_handling {
+
+            let err_result = match dataset_params.file_not_found_handling {
                 FileNotFoundHandling::NoData => {
                     if let Some(no_data) = no_data_value {
-                        debug!("file not found -> returning empty grid");
                         Ok(GridWithProperties {
                             grid: EmptyGrid::new(output_shape, no_data).into(),
                             properties,
                         })
                     } else {
-                        debug!("file not found -> returning filled grid");
                         Ok(GridWithProperties {
                             grid: Grid2D::new_filled(output_shape, fill_value, None).into(),
                             properties,
@@ -602,6 +605,13 @@ where
                     file_path: dataset_params.file_path.to_string_lossy().to_string(),
                 }),
             };
+            let elapsed = start.elapsed();
+            debug!(
+                "file not found -> returning error = {}, took {:?}",
+                err_result.is_err(),
+                elapsed
+            );
+            return err_result;
         };
 
         let dataset = dataset_result.expect("checked");
@@ -626,7 +636,11 @@ where
                 } else {
                     Grid2D::new_filled(output_shape, fill_value, None).into()
                 };
-
+                let elapsed = start.elapsed();
+                debug!(
+                    "no intersection -> returning empty grid, took {:?}",
+                    elapsed
+                );
                 return Ok(GridWithProperties {
                     grid: no_data_grid,
                     properties,
@@ -659,6 +673,9 @@ where
             tile_raster.grid_blit_from(dataset_raster);
             tile_raster.into()
         };
+
+        let elapsed = start.elapsed();
+        debug!("data loaded -> returning data grid, took {:?}", elapsed);
 
         Ok(GridWithProperties {
             grid: result_grid,
@@ -715,6 +732,7 @@ where
         query: crate::engine::RasterQueryRectangle,
         _ctx: &'a dyn crate::engine::QueryContext,
     ) -> Result<BoxStream<Result<Self::Output>>> {
+        let start = Instant::now();
         debug!(
             "Querying GdalSourceProcessor<{:?}> with: {:?}.",
             P::TYPE,
@@ -723,7 +741,11 @@ where
 
         let meta_data = self.meta_data.loading_info(query).await?;
 
-        debug!("GdalLoadingInfo: {:?}.", &meta_data);
+        debug!(
+            "GdalSourceProcessor<{:?}> meta data loaded, took {:?}.",
+            P::TYPE,
+            start.elapsed()
+        );
 
         // TODO: what to do if loading info is empty?
         let stream = stream::iter(meta_data.info)
