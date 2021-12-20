@@ -75,5 +75,4 @@ walkdir = "2.3"
 xml-rs = "0.8.3"
 
 [build-dependencies]
-anyhow = "1.0.40"
-vergen = "5"
+vergen = "6"
