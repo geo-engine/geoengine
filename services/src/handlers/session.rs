@@ -173,7 +173,7 @@ mod tests {
         let (session, project) = create_project_helper(&ctx).await;
 
         let req = test::TestRequest::post()
-            .uri(&format!("/session/project/{}", project.to_string()))
+            .uri(&format!("/session/project/{}", project))
             .append_header((header::AUTHORIZATION, Bearer::new(session.id().to_string())));
         let res = send_test_request(req, ctx.clone()).await;
 
