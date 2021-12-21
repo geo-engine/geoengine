@@ -676,7 +676,7 @@ fn multipoint_builder_bytes() {
 
     let floats: &[Coordinate2D] = unsafe {
         std::slice::from_raw_parts(
-            first_multi_point.value(0)[0] as *const u8 as *const _,
+            first_multi_point.value(0).as_ptr() as *const _,
             first_multi_point.len(),
         )
     };
@@ -688,7 +688,7 @@ fn multipoint_builder_bytes() {
 
     let floats: &[Coordinate2D] = unsafe {
         std::slice::from_raw_parts(
-            second_multi_point.value(0)[0] as *const u8 as *const _,
+            second_multi_point.value(0).as_ptr() as *const _,
             second_multi_point.len(),
         )
     };
