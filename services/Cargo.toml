@@ -60,7 +60,7 @@ serde_with = "1.9"
 snafu = "0.6"
 strum = { version = "0.23", features = ["derive"] }
 time = "0.3"
-tokio = { version = "1.1", features = ["macros", "fs", "signal", "sync", "rt-multi-thread"] }
+tokio = { version = "1.15", features = ["macros", "fs", "signal", "sync", "rt-multi-thread"] }
 tokio-util = "0.6"
 typetag = "0.1"
 url = { version = "2.2", features = ["serde"] }
