@@ -208,7 +208,9 @@ pub async fn send_test_request<C: SimpleContext>(
             .configure(handlers::workflows::init_workflow_routes::<C>),
     )
     .await;
-    test::call_service(&app, req.to_request()).await
+    test::call_service(&app, req.to_request())
+        .await
+        .map_into_boxed_body()
 }
 
 pub async fn read_body_string(res: ServiceResponse) -> String {
