@@ -1,3 +1,5 @@
+use std::sync::Arc;
+
 use crate::engine::{
     ExecutionContext, InitializedRasterOperator, Operator, QueryContext, QueryProcessor,
     RasterOperator, RasterQueryProcessor, RasterQueryRectangle, RasterResultDescriptor,
@@ -5,22 +7,26 @@ use crate::engine::{
 };
 use crate::util::Result;
 use async_trait::async_trait;
+use num_traits::AsPrimitive;
+use rayon::iter::{IndexedParallelIterator, ParallelIterator};
+use rayon::slice::ParallelSlice;
+use rayon::ThreadPool;
 use TypedRasterQueryProcessor::F32 as QueryProcessorOut;
 
 use crate::error::Error;
 use futures::stream::BoxStream;
-use futures::StreamExt;
+use futures::{StreamExt, TryStreamExt};
 use geoengine_datatypes::primitives::{Measurement, SpatialPartition2D};
 use geoengine_datatypes::raster::{
-    grid_idx_iter_2d, EmptyGrid, Grid2D, GridOrEmpty, GridShapeAccess, GridSize,
-    GridSpaceToLinearSpace, NoDataValue, RasterDataType, RasterPropertiesKey, RasterTile2D,
+    EmptyGrid, Grid2D, GridShapeAccess, GridSize, MaterializedRasterTile2D, NoDataValue,
+    RasterDataType, RasterPropertiesKey, RasterTile2D,
 };
 use serde::{Deserialize, Serialize};
 
 // Output type is always f32
 type PixelOut = f32;
 use crate::processing::meteosat::satellite::{Channel, Satellite};
-use crate::processing::meteosat::{channel_key, satellite_key};
+use crate::processing::meteosat::{new_channel_key, new_satellite_key};
 use crate::util::sunpos::SunPos;
 use chrono::{DateTime, Datelike, Utc};
 use RasterDataType::F32 as RasterOut;
@@ -31,7 +37,7 @@ const OUT_NO_DATA_VALUE: PixelOut = PixelOut::NAN;
 /// * `solar_correction` switch to enable solar correction.
 /// * `force_hrv` switch to force the use of the hrv channel.
 /// * `force_satellite` forces the use of the satellite with the given name.
-#[derive(Debug, Serialize, Deserialize, PartialEq, Clone, Default)]
+#[derive(Debug, Serialize, Deserialize, PartialEq, Clone, Default, Copy)]
 #[serde(rename_all = "camelCase")]
 pub struct ReflectanceParams {
     pub solar_correction: bool,
@@ -126,7 +132,7 @@ impl InitializedRasterOperator for InitializedReflectance {
         if let TypedRasterQueryProcessor::F32(p) = q {
             Ok(QueryProcessorOut(Box::new(ReflectanceProcessor::new(
                 p,
-                self.params.clone(),
+                self.params,
             ))))
         } else {
             Err(Error::InvalidRasterDataType)
@@ -152,17 +158,9 @@ where
         Self {
             source,
             params,
-            channel_key: channel_key(),
-            satellite_key: satellite_key(),
+            channel_key: new_channel_key(),
+            satellite_key: new_satellite_key(),
         }
-    }
-
-    fn satellite(&self, tile: &RasterTile2D<PixelOut>) -> Result<&'static Satellite> {
-        let id = match self.params.force_satellite {
-            Some(id) => id,
-            _ => tile.properties.number_property(&self.satellite_key)?,
-        };
-        Satellite::satellite_by_msg_id(id)
     }
 
     fn channel<'a>(
@@ -180,6 +178,122 @@ where
             satellite.channel(channel_id)
         }
     }
+
+    fn satellite(&self, tile: &RasterTile2D<PixelOut>) -> Result<&'static Satellite> {
+        let id = match self.params.force_satellite {
+            Some(id) => id,
+            _ => tile.properties.number_property(&self.satellite_key)?,
+        };
+        Satellite::satellite_by_msg_id(id)
+    }
+
+    async fn process_tile_async(
+        &self,
+        tile: RasterTile2D<PixelOut>,
+        pool: Arc<ThreadPool>,
+    ) -> Result<RasterTile2D<PixelOut>> {
+        if tile.is_empty() {
+            return Ok(RasterTile2D::new_with_properties(
+                tile.time,
+                tile.tile_position,
+                tile.global_geo_transform,
+                EmptyGrid::new(tile.grid_shape(), OUT_NO_DATA_VALUE).into(),
+                tile.properties,
+            ));
+        }
+
+        let satellite = self.satellite(&tile)?;
+        let channel = self.channel(&tile, satellite)?;
+        let solar_correction = self.params.solar_correction;
+
+        let mat_tile = tile.into_materialized_tile(); // NOTE: the tile is already materialized.
+
+        let refl_tile = tokio::task::spawn_blocking(move || {
+            process_tile(mat_tile, solar_correction, channel, &pool)
+        })
+        .await??;
+
+        Ok(refl_tile)
+    }
+}
+
+fn process_tile(
+    tile: MaterializedRasterTile2D<PixelOut>,
+    solar_correction: bool,
+    channel: &Channel,
+    pool: &ThreadPool,
+) -> Result<RasterTile2D<PixelOut>> {
+    pool.install(|| {
+        let timestamp = tile
+            .time
+            .start()
+            .as_utc_date_time()
+            .ok_or(Error::InvalidUTCTimestamp)?;
+
+        // get extra terrestrial solar radiation (...) and ESD (solar position)
+        let etsr = channel.etsr / std::f64::consts::PI;
+        let esd = calculate_esd(&timestamp);
+
+        let grid = &tile.grid_array;
+        // Apply solar correction
+        let out_grid = if solar_correction {
+            let sunpos = SunPos::new(&timestamp);
+
+            let tile_geo_transform = tile.tile_geo_transform();
+
+            grid.data
+                .par_chunks_exact(grid.axis_size_x()) // we know that a raster is always a perfect grid. Exact will always include all elements
+                .enumerate()
+                .map(|(y, row)| {
+                    row.iter().enumerate().map(move |(x, &pixel)| {
+                        if grid.is_no_data(pixel) {
+                            OUT_NO_DATA_VALUE
+                        } else {
+                            let grid_idx = [y as isize, x as isize].into();
+                            let geos_coord =
+                                tile_geo_transform.grid_idx_to_center_coordinate_2d(grid_idx);
+
+                            let (lat, lon) = channel.view_angle_lat_lon(geos_coord, 0.0);
+                            let (_, zenith) = sunpos.solar_azimuth_zenith(lat, lon);
+
+                            (f64::from(pixel) * esd * esd
+                                / (etsr * zenith.min(80.0).to_radians().cos()))
+                                as PixelOut
+                        }
+                    })
+                })
+                .flatten_iter()
+                .collect::<Vec<f32>>()
+        } else {
+            grid.data
+                .par_chunks(grid.axis_size_x())
+                .map(|row| {
+                    row.iter().map(|&p| {
+                        if grid.is_no_data(p) {
+                            OUT_NO_DATA_VALUE
+                        } else {
+                            (f64::from(p) * esd * esd / etsr).as_()
+                        }
+                    })
+                })
+                .flatten_iter()
+                .collect::<Vec<f32>>()
+        };
+
+        let out_grid = Grid2D::new(
+            tile.grid_array.grid_shape(),
+            out_grid,
+            Some(OUT_NO_DATA_VALUE),
+        )?;
+
+        Ok(RasterTile2D::new_with_properties(
+            tile.time,
+            tile.tile_position,
+            tile.global_geo_transform,
+            out_grid.into(),
+            tile.properties,
+        ))
+    })
 }
 
 fn calculate_esd(timestamp: &DateTime<Utc>) -> f64 {
@@ -203,76 +317,7 @@ where
         ctx: &'a dyn QueryContext,
     ) -> Result<BoxStream<'a, Result<Self::Output>>> {
         let src = self.source.query(query, ctx).await?;
-
-        let rs = src.map(move |tile| {
-            let tile = tile?;
-            match &tile.grid_array {
-                GridOrEmpty::Empty(_) => Ok(RasterTile2D::new_with_properties(
-                    tile.time,
-                    tile.tile_position,
-                    tile.global_geo_transform,
-                    EmptyGrid::new(tile.grid_array.grid_shape(), OUT_NO_DATA_VALUE).into(),
-                    tile.properties,
-                )),
-                GridOrEmpty::Grid(grid) => {
-                    let satellite = self.satellite(&tile)?;
-                    let channel = self.channel(&tile, satellite)?;
-                    let timestamp = tile
-                        .time
-                        .start()
-                        .as_utc_date_time()
-                        .ok_or(Error::InvalidUTCTimestamp)?;
-
-                    // get extra terrestrial solar radiation (...) and ESD (solar position)
-                    let etsr = channel.etsr / std::f64::consts::PI;
-                    let esd = calculate_esd(&timestamp);
-
-                    // Create result raster
-                    let mut out = Grid2D::new(
-                        grid.grid_shape(),
-                        vec![OUT_NO_DATA_VALUE; grid.number_of_elements()],
-                        Some(OUT_NO_DATA_VALUE),
-                    )
-                    .expect("raster creation must succeed");
-
-                    // Apply solar correction
-                    if self.params.solar_correction {
-                        let sunpos = SunPos::new(&timestamp);
-
-                        for idx in grid_idx_iter_2d(&grid.grid_shape()) {
-                            let flat_idx = grid.shape.linear_space_index_unchecked(idx);
-                            let pixel = grid.data[flat_idx];
-
-                            if !grid.is_no_data(pixel) {
-                                let geos_coord = tile
-                                    .global_geo_transform
-                                    .grid_idx_to_center_coordinate_2d(idx);
-
-                                let (lat, lon) = channel.view_angle_lat_lon(geos_coord, 0.0);
-                                let (_, zenith) = sunpos.solar_azimuth_zenith(lat, lon);
-
-                                out.data[flat_idx] = (f64::from(pixel) * esd * esd
-                                    / (etsr * zenith.min(80.0).to_radians().cos()))
-                                    as PixelOut;
-                            }
-                        }
-                    } else {
-                        for (idx, &pixel) in grid.data.iter().enumerate() {
-                            if !grid.is_no_data(pixel) {
-                                out.data[idx] = (f64::from(pixel) * esd * esd / etsr) as PixelOut;
-                            }
-                        }
-                    }
-                    Ok(RasterTile2D::new_with_properties(
-                        tile.time,
-                        tile.tile_position,
-                        tile.global_geo_transform,
-                        out.into(),
-                        tile.properties,
-                    ))
-                }
-            }
-        });
+        let rs = src.and_then(move |tile| self.process_tile_async(tile, ctx.thread_pool().clone()));
         Ok(rs.boxed())
     }
 }
@@ -366,7 +411,7 @@ mod tests {
     #[tokio::test]
     async fn test_ok_no_solar_correction() {
         let result =
-            process_mock(ReflectanceParams::default(), Some(1), Some(1), false, None).await;
+            dbg!(process_mock(ReflectanceParams::default(), Some(1), Some(1), false, None).await);
 
         assert!(result.is_ok());
         assert!(geoengine_datatypes::util::test::eq_with_no_data(
