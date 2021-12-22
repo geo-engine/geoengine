@@ -12,7 +12,6 @@ use serde::{Deserialize, Serialize};
 use std::convert::TryInto;
 use std::path::Path;
 use std::path::PathBuf;
-use std::sync::{Arc, Mutex, PoisonError};
 
 use crate::{engine::RasterQueryRectangle, util::Result};
 use crate::{
@@ -55,9 +54,9 @@ pub struct GdalGeoTiffDatasetMetadata {
     pub spatial_reference: SpatialReference,
 }
 
-pub async fn raster_stream_to_geotiff<T, C: QueryContext + 'static>(
+pub async fn raster_stream_to_geotiff<P, C: QueryContext + 'static>(
     file_path: &Path,
-    processor: Box<dyn RasterQueryProcessor<RasterType = T>>,
+    processor: Box<dyn RasterQueryProcessor<RasterType = P>>,
     query_rect: RasterQueryRectangle,
     query_ctx: C,
     gdal_tiff_metadata: GdalGeoTiffDatasetMetadata,
@@ -65,58 +64,50 @@ pub async fn raster_stream_to_geotiff<T, C: QueryContext + 'static>(
     tile_limit: Option<usize>,
 ) -> Result<()>
 where
-    T: Pixel + GdalType,
+    P: Pixel + GdalType,
 {
     // TODO: create file path if it doesn't exist
     // TODO: handle streams with multiple time steps correctly
 
     let file_path = file_path.to_owned();
 
-    let dataset_writer = Arc::new(Mutex::new(
-        tokio::task::spawn_blocking(move || {
-            GdalDatasetWriter::new(
-                &file_path,
-                query_rect,
-                gdal_tiff_metadata,
-                gdal_tiff_options,
-            )
-        })
-        .await??,
-    ));
+    let dataset_writer = tokio::task::spawn_blocking(move || {
+        GdalDatasetWriter::new(
+            &file_path,
+            query_rect,
+            gdal_tiff_metadata,
+            gdal_tiff_options,
+        )
+    })
+    .await?;
 
-    let mut tile_stream = processor.raster_query(query_rect, &query_ctx).await?;
+    let tile_stream = processor.raster_query(query_rect, &query_ctx).await?;
 
-    let mut tile_count = 0;
-    while let Some(tile) = tile_stream.next().await {
-        // TODO: more descriptive error. This error occured when a file could not be created...
-        let tile = tile?;
+    let dataset_writer = tile_stream
+        .enumerate()
+        .fold(
+            dataset_writer,
+            move |dataset_writer, (tile_index, tile)| async move {
+                if tile_limit.map_or_else(|| false, |limit| tile_index >= limit) {
+                    return Err(Error::TileLimitExceeded {
+                        limit: tile_limit.expect("limit exist because it is exceeded"),
+                    });
+                }
 
-        let dataset_writer = dataset_writer.clone();
+                // TODO: more descriptive error. This error occured when a file could not be created...
+                let dataset_writer = dataset_writer?;
+                let tile = tile?;
 
-        tokio::task::spawn_blocking(move || {
-            // we ignore poisoning since we serialize the locking and emit errors
-            let dataset_writer = dataset_writer
-                .lock()
-                .unwrap_or_else(PoisonError::into_inner);
+                tokio::task::spawn_blocking(move || -> Result<GdalDatasetWriter<P>> {
+                    dataset_writer.write_tile(tile)?;
+                    Ok(dataset_writer)
+                })
+                .await?
+            },
+        )
+        .await?;
 
-            dataset_writer.write_tile(tile)
-        })
-        .await??;
-
-        tile_count += 1;
-
-        if tile_limit.map_or_else(|| false, |limit| tile_count > limit) {
-            return Err(Error::TileLimitExceeded {
-                limit: tile_limit.expect("limit exist because it is exceeded"),
-            });
-        }
-    }
-
-    Arc::try_unwrap(dataset_writer)
-        .expect("We have no references left since we await'ed all tasks")
-        .into_inner()
-        .unwrap_or_else(PoisonError::into_inner)
-        .finish()
+    dataset_writer.finish()
 }
 
 const COG_BLOCK_SIZE: &str = "512";
