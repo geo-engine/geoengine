@@ -1,5 +1,5 @@
 use futures::StreamExt;
-use gdal::raster::{Buffer, GdalType, RasterBand, RasterCreationOption};
+use gdal::raster::{Buffer, GdalType, RasterCreationOption};
 use gdal::{Dataset, Driver};
 use geoengine_datatypes::primitives::{
     AxisAlignedRectangle, SpatialPartition2D, SpatialPartitioned,
@@ -12,6 +12,7 @@ use serde::{Deserialize, Serialize};
 use std::convert::TryInto;
 use std::path::Path;
 use std::path::PathBuf;
+use std::sync::{Arc, Mutex, PoisonError};
 
 use crate::{engine::RasterQueryRectangle, util::Result};
 use crate::{
@@ -69,47 +70,38 @@ where
     // TODO: create file path if it doesn't exist
     // TODO: handle streams with multiple time steps correctly
 
-    // let (tx, rx): (Sender<RasterTile2D<T>>, Receiver<RasterTile2D<T>>) = mpsc::channel();
-
-    // let file_path_clone = file_path.to_owned();
-    // let writer = tokio::task::spawn_blocking(move || {
-    //     gdal_writer(
-    //         &rx,
-    //         &file_path_clone,
-    //         query_rect,
-    //         gdal_tiff_metadata,
-    //         gdal_tiff_options,
-    //     )
-    // });
-
     let file_path = file_path.to_owned();
 
-    let mut dataset_writer = tokio::task::spawn_blocking(move || {
-        GdalDatasetWriter::new(
-            &file_path,
-            query_rect,
-            gdal_tiff_metadata,
-            gdal_tiff_options,
-        )
-    })
-    .await??;
-    let mut rasterband_writer = dataset_writer.rasterband_writer()?;
+    let dataset_writer = Arc::new(Mutex::new(
+        tokio::task::spawn_blocking(move || {
+            GdalDatasetWriter::new(
+                &file_path,
+                query_rect,
+                gdal_tiff_metadata,
+                gdal_tiff_options,
+            )
+        })
+        .await??,
+    ));
 
     let mut tile_stream = processor.raster_query(query_rect, &query_ctx).await?;
 
     let mut tile_count = 0;
     while let Some(tile) = tile_stream.next().await {
         // TODO: more descriptive error. This error occured when a file could not be created...
-        // tx.send(tile?).map_err(|_| Error::ChannelSend)?;
+        let tile = tile?;
 
-        rasterband_writer.write_tile(tile?)?;
+        let dataset_writer = dataset_writer.clone();
 
-        // rasterband_writer =
-        //     tokio::task::spawn_blocking(move || -> Result<GdalDatasetBandWriter<T>> {
-        //         rasterband_writer.write_tile(tile?)?;
-        //         Ok(rasterband_writer)
-        //     })
-        //     .await??;
+        tokio::task::spawn_blocking(move || {
+            // we ignore poisoning since we serialize the locking and emit errors
+            let dataset_writer = dataset_writer
+                .lock()
+                .unwrap_or_else(PoisonError::into_inner);
+
+            dataset_writer.write_tile(tile)
+        })
+        .await??;
 
         tile_count += 1;
 
@@ -120,19 +112,21 @@ where
         }
     }
 
-    // drop(tx);
-
-    // writer.await??;
-
-    dataset_writer.finish()
+    Arc::try_unwrap(dataset_writer)
+        .expect("We have no references left since we await'ed all tasks")
+        .into_inner()
+        .unwrap_or_else(PoisonError::into_inner)
+        .finish()
 }
 
 const COG_BLOCK_SIZE: &str = "512";
 const COMPRESSION_FORMAT: &str = "LZW";
 const COMPRESSION_LEVEL: &str = "9"; // maximum compression
 
+#[derive(Debug)]
 struct GdalDatasetWriter<P: Pixel + GdalType> {
     dataset: Dataset,
+    rasterband_index: isize,
     intermediate_file_path: PathBuf,
     output_file_path: PathBuf,
     gdal_tiff_options: GdalGeoTiffOptions,
@@ -182,7 +176,8 @@ impl<P: Pixel + GdalType> GdalDatasetWriter<P> {
 
         dataset.set_spatial_ref(&gdal_tiff_metadata.spatial_reference.try_into()?)?;
         dataset.set_geo_transform(&output_geo_transform.into())?;
-        let mut band = dataset.rasterband(1)?;
+        let rasterband_index = 1;
+        let mut band = dataset.rasterband(rasterband_index)?;
 
         if let Some(no_data) = gdal_tiff_metadata.no_data_value {
             band.set_no_data_value(no_data)?;
@@ -190,6 +185,7 @@ impl<P: Pixel + GdalType> GdalDatasetWriter<P> {
 
         Ok(Self {
             dataset,
+            rasterband_index,
             intermediate_file_path,
             output_file_path,
             gdal_tiff_options,
@@ -202,54 +198,7 @@ impl<P: Pixel + GdalType> GdalDatasetWriter<P> {
         })
     }
 
-    fn rasterband_writer(&mut self) -> Result<GdalDatasetBandWriter<P>> {
-        Ok(GdalDatasetBandWriter {
-            band: self.dataset.rasterband(1)?,
-            gdal_tiff_metadata: self.gdal_tiff_metadata,
-            output_bounds: self.output_bounds,
-            output_geo_transform: self.output_geo_transform,
-            x_pixel_size: self.x_pixel_size,
-            y_pixel_size: self.y_pixel_size,
-            _type: Default::default(),
-        })
-    }
-
-    fn finish(self) -> Result<()> {
-        if self.gdal_tiff_options.as_cog {
-            geotiff_to_cog(
-                self.dataset,
-                &self.intermediate_file_path,
-                &self.output_file_path,
-                self.gdal_tiff_options.compression_num_threads,
-            )
-        } else {
-            let driver = self.dataset.driver();
-
-            // close file before renaming
-            drop(self.dataset);
-
-            driver.rename(&self.output_file_path, &self.intermediate_file_path)?;
-
-            Ok(())
-        }
-    }
-}
-
-struct GdalDatasetBandWriter<'d, P: Pixel + GdalType> {
-    band: RasterBand<'d>,
-    gdal_tiff_metadata: GdalGeoTiffDatasetMetadata,
-    output_bounds: SpatialPartition2D,
-    output_geo_transform: GeoTransform,
-    x_pixel_size: f64,
-    y_pixel_size: f64,
-    _type: std::marker::PhantomData<P>,
-}
-
-// TODO: note why this works
-unsafe impl<'d, P: Pixel + GdalType> Send for GdalDatasetBandWriter<'d, P> {}
-
-impl<'d, P: Pixel + GdalType> GdalDatasetBandWriter<'d, P> {
-    fn write_tile(&mut self, tile: RasterTile2D<P>) -> Result<()> {
+    fn write_tile(&self, tile: RasterTile2D<P>) -> Result<()> {
         let tile_info = tile.tile_information();
 
         let tile_bounds = tile_info.spatial_partition();
@@ -302,9 +251,31 @@ impl<'d, P: Pixel + GdalType> GdalDatasetBandWriter<'d, P> {
 
         let buffer = Buffer::new(window_size, grid_array.data);
 
-        self.band.write(window, window_size, &buffer)?;
+        self.dataset
+            .rasterband(self.rasterband_index)?
+            .write(window, window_size, &buffer)?;
 
         Ok(())
+    }
+
+    fn finish(self) -> Result<()> {
+        if self.gdal_tiff_options.as_cog {
+            geotiff_to_cog(
+                self.dataset,
+                &self.intermediate_file_path,
+                &self.output_file_path,
+                self.gdal_tiff_options.compression_num_threads,
+            )
+        } else {
+            let driver = self.dataset.driver();
+
+            // close file before renaming
+            drop(self.dataset);
+
+            driver.rename(&self.output_file_path, &self.intermediate_file_path)?;
+
+            Ok(())
+        }
     }
 }
 
