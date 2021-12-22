@@ -107,7 +107,7 @@ where
         )
         .await?;
 
-    dataset_writer.finish()
+    tokio::task::spawn_blocking(move || dataset_writer.finish()).await?
 }
 
 const COG_BLOCK_SIZE: &str = "512";
