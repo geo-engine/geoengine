@@ -529,6 +529,7 @@ impl RgbaColor {
     /// On debug, if factor is not in [0, 1]
     ///
     #[allow(unstable_name_collisions)]
+    #[must_use]
     pub fn factor_add(self, other: Self, factor: f64) -> Self {
         debug_assert!((0.0..=1.0).contains(&factor));
 

@@ -304,6 +304,7 @@ impl TimeInterval {
 
     /// Extends a time interval with the bounds of another time interval.
     /// The result has the smaller `start` and the larger `end`.
+    #[must_use]
     pub fn extend(&self, other: &Self) -> TimeInterval {
         Self {
             start: self.start.min(other.start),

@@ -6,7 +6,8 @@ use crate::util::config;
 use crate::util::config::get_config_element;
 
 use actix_files::Files;
-use actix_web::dev::{AnyBody, ServiceResponse};
+use actix_http::body::{BoxBody, EitherBody, MessageBody};
+use actix_web::dev::ServiceResponse;
 use actix_web::error::{InternalError, JsonPayloadError, QueryPayloadError};
 use actix_web::{http, middleware, web, App, HttpResponse, HttpServer};
 use log::{debug, info};
@@ -231,42 +232,42 @@ pub(crate) async fn show_version_handler() -> impl actix_web::Responder {
 
 #[allow(clippy::unnecessary_wraps)]
 pub(crate) fn render_404(
-    mut res: ServiceResponse,
-) -> actix_web::Result<middleware::ErrorHandlerResponse<AnyBody>> {
-    res.headers_mut().insert(
+    mut response: ServiceResponse,
+) -> actix_web::Result<middleware::ErrorHandlerResponse<BoxBody>> {
+    response.headers_mut().insert(
         http::header::CONTENT_TYPE,
-        http::HeaderValue::from_static("application/json"),
+        http::header::HeaderValue::from_static("application/json"),
     );
-    let res = res.map_body(|_, _| {
-        AnyBody::from(
-            serde_json::to_string(&ErrorResponse {
-                error: "NotFound".to_string(),
-                message: "Not Found".to_string(),
-            })
-            .unwrap(),
-        )
-    });
-    Ok(middleware::ErrorHandlerResponse::Response(res))
+
+    let response_json_string = serde_json::to_string(&ErrorResponse {
+        error: "NotFound".to_string(),
+        message: "Not Found".to_string(),
+    })
+    .expect("Serialization of fixed ErrorResponse must not fail");
+
+    let response = response.map_body(|_, _| EitherBody::new(response_json_string.boxed()));
+
+    Ok(middleware::ErrorHandlerResponse::Response(response))
 }
 
 #[allow(clippy::unnecessary_wraps)]
 pub(crate) fn render_405(
-    mut res: ServiceResponse,
-) -> actix_web::Result<middleware::ErrorHandlerResponse<AnyBody>> {
-    res.headers_mut().insert(
+    mut response: ServiceResponse,
+) -> actix_web::Result<middleware::ErrorHandlerResponse<BoxBody>> {
+    response.headers_mut().insert(
         http::header::CONTENT_TYPE,
-        http::HeaderValue::from_static("application/json"),
+        http::header::HeaderValue::from_static("application/json"),
     );
-    let res = res.map_body(|_, _| {
-        AnyBody::from(
-            serde_json::to_string(&ErrorResponse {
-                error: "MethodNotAllowed".to_string(),
-                message: "HTTP method not allowed.".to_string(),
-            })
-            .unwrap(),
-        )
-    });
-    Ok(middleware::ErrorHandlerResponse::Response(res))
+
+    let response_json_string = serde_json::to_string(&ErrorResponse {
+        error: "MethodNotAllowed".to_string(),
+        message: "HTTP method not allowed.".to_string(),
+    })
+    .expect("Serialization of fixed ErrorResponse must not fail");
+
+    let response = response.map_body(|_, _| EitherBody::new(response_json_string.boxed()));
+
+    Ok(middleware::ErrorHandlerResponse::Response(response))
 }
 
 #[cfg(test)]
