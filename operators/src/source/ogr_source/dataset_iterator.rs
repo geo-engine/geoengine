@@ -39,12 +39,9 @@ unsafe impl Send for OgrDatasetIterator {}
 #[self_referencing]
 struct _OgrDatasetIterator {
     dataset: gdal::Dataset,
-    #[borrows(dataset)]
+    #[borrows(mut dataset)]
     #[covariant]
     features_provider: FeaturesProvider<'this>,
-    #[borrows(features_provider)]
-    #[covariant]
-    peeked: Option<Option<Feature<'this>>>,
 }
 
 impl OgrDatasetIterator {
@@ -57,7 +54,6 @@ impl OgrDatasetIterator {
             features_provider_builder: |dataset| {
                 Self::create_features_provider(dataset, dataset_information, query_rectangle)
             },
-            peeked_builder: |_| Ok(None),
         }
         .try_build()?;
 
@@ -188,34 +184,6 @@ impl OgrDatasetIterator {
     pub fn was_spatial_filtered_by_ogr(&self) -> bool {
         self.use_ogr_spatial_filter
     }
-
-    pub fn peek(&mut self) -> Option<&Feature<'_>> {
-        self.dataset_iterator.with_mut(|dataset_iterator| {
-            if dataset_iterator.peeked.is_some() {
-                return;
-            }
-
-            let item = feature_iterator_next(dataset_iterator.features_provider);
-            *dataset_iterator.peeked = Some(item);
-        });
-
-        if let Some(peeked) = self.dataset_iterator.borrow_peeked() {
-            peeked.as_ref()
-        } else {
-            None
-        }
-    }
-
-    fn take_peeked<'f>(&mut self) -> Option<Feature<'f>> {
-        self.dataset_iterator.with_peeked_mut(|peeked| {
-            if let Some(Some(item)) = peeked.take() {
-                // we need to reduce the lifetime to `'f` in order to safely hand it out of this iterator
-                Some(unsafe { std::mem::transmute::<Feature<'_>, Feature<'f>>(item) })
-            } else {
-                None
-            }
-        })
-    }
 }
 
 #[allow(clippy::copy_iterator)]
@@ -228,14 +196,11 @@ impl<'f> Iterator for &'f mut OgrDatasetIterator {
             return None;
         }
 
-        if let Some(item) = self.take_peeked() {
-            return Some(item);
-        }
-
         let features_provider = self.dataset_iterator.borrow_features_provider();
 
-        // we somehow have to tell the reference to adhere to the lifetime `'f`
-        // without peeking, we could implement this for `&'f _` instead of `&'f mut _` and get rid of the transmute
+        // We somehow have to tell the reference to adhere to the lifetime `'f`
+        // On the other hand, we could implement this for `&'f _` instead of `&'f mut _` and get rid of the transmute.
+        // However, it makes more sense to require a mutable reference here.
         let features_provider = unsafe { std::mem::transmute::<&'_ _, &'f _>(features_provider) };
 
         let next = feature_iterator_next(features_provider);
