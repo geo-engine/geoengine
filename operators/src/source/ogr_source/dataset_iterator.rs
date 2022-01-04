@@ -18,6 +18,8 @@ use crate::util::Result;
 
 use super::{CsvHeader, FeaturesProvider, FormatSpecifics, OgrSourceDataset};
 
+/// An iterator over features from a OGR dataset.
+/// This iterator contains the dataset and one of its layers.
 pub struct OgrDatasetIterator {
     dataset_iterator: _OgrDatasetIterator,
     // must be cell since we borrow self in the iterator for emitting the output value
@@ -26,7 +28,13 @@ pub struct OgrDatasetIterator {
     use_ogr_spatial_filter: bool,
 }
 
-/// `features` actually *mutably* borrows `features_provider`.
+// We can implement `Send` for the combination of OGR dataset and layer
+// as long we have a one-to-one relation. The layer mutates the dataset.
+// So it is not `Send` if there is more than one layer.
+unsafe impl Send for OgrDatasetIterator {}
+
+/// Store a dataset and one of its layers.
+/// Allows to iterate over features via accessing the layer only.
 /// We must ensure to not access it from the outside.
 #[self_referencing]
 struct _OgrDatasetIterator {
