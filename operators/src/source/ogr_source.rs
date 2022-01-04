@@ -1,4 +1,7 @@
-use std::iter::Peekable;
+mod dataset_iterator;
+
+use std::collections::{HashMap, HashSet};
+use std::fmt::Debug;
 use std::marker::PhantomData;
 use std::ops::{Add, DerefMut};
 use std::path::PathBuf;
@@ -6,11 +9,6 @@ use std::pin::Pin;
 use std::str::FromStr;
 use std::sync::mpsc::{self, Receiver, SyncSender, TryRecvError, TrySendError};
 use std::task::Poll;
-use std::{
-    collections::{HashMap, HashSet},
-    iter::Fuse,
-};
-use std::{ffi::OsStr, fmt::Debug};
 
 use chrono::DateTime;
 use chrono::NaiveDate;
@@ -19,9 +17,8 @@ use futures::stream::BoxStream;
 use futures::task::{Context, Waker};
 use futures::Stream;
 use futures::StreamExt;
-use gdal::vector::sql::{Dialect, ResultSet};
-use gdal::vector::{Feature, FeatureIterator, FieldValue, Layer, LayerCaps, OGRwkbGeometryType};
-use gdal::{Dataset, DatasetOptions, GdalOpenFlags};
+use gdal::vector::sql::ResultSet;
+use gdal::vector::{Feature, FieldValue, Layer, LayerCaps, OGRwkbGeometryType};
 use log::debug;
 use serde::{Deserialize, Serialize};
 use snafu::ResultExt;
@@ -41,7 +38,6 @@ use geoengine_datatypes::util::arrow::ArrowTyped;
 
 use crate::engine::{OperatorDatasets, QueryProcessor, VectorQueryRectangle};
 use crate::error::Error;
-use crate::util::gdal::gdal_open_dataset_ex;
 use crate::util::Result;
 use crate::{
     engine::{
@@ -54,6 +50,8 @@ use async_trait::async_trait;
 use gdal::errors::GdalError;
 use geoengine_datatypes::dataset::DatasetId;
 use std::convert::{TryFrom, TryInto};
+
+use self::dataset_iterator::OgrDatasetIterator;
 
 #[derive(Clone, Debug, PartialEq, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -428,13 +426,6 @@ enum FeaturesProvider<'a> {
 }
 
 impl FeaturesProvider<'_> {
-    fn features(&mut self) -> FeatureIterator {
-        match self {
-            FeaturesProvider::Layer(l) => l.features(),
-            FeaturesProvider::ResultSet(r) => r.features(),
-        }
-    }
-
     fn layer_ref(&self) -> &Layer {
         match self {
             FeaturesProvider::Layer(l) => l,
@@ -523,78 +514,6 @@ where
         }
     }
 
-    fn open_csv_dataset(dataset_info: &OgrSourceDataset) -> Result<Dataset> {
-        let columns = dataset_info
-            .columns
-            .as_ref()
-            .ok_or(error::Error::OgrSourceColumnsSpecMissing)?;
-
-        let allowed_drivers = Some(vec!["CSV"]);
-
-        let mut dataset_options = DatasetOptions {
-            open_flags: GdalOpenFlags::GDAL_OF_VECTOR,
-            allowed_drivers: allowed_drivers.as_deref(),
-            ..DatasetOptions::default()
-        };
-
-        let headers = if let Some(FormatSpecifics::Csv { header }) = &columns.format_specifics {
-            header.as_gdal_param()
-        } else {
-            CsvHeader::Auto.as_gdal_param()
-        };
-
-        // TODO: make column x optional or allow other indication for data collection
-        if columns.x.is_empty() {
-            let open_opts = &[
-                headers.as_str(),
-                // "AUTODETECT_TYPE=YES", // This breaks tests
-            ];
-            dataset_options.open_options = Some(open_opts);
-            return gdal_open_dataset_ex(&dataset_info.file_name, dataset_options);
-        }
-
-        if let Some(y) = &columns.y {
-            let open_opts = &[
-                &format!("X_POSSIBLE_NAMES={}", columns.x),
-                &format!("Y_POSSIBLE_NAMES={}", y),
-                headers.as_str(),
-                "AUTODETECT_TYPE=YES",
-            ];
-            dataset_options.open_options = Some(open_opts);
-            return gdal_open_dataset_ex(&dataset_info.file_name, dataset_options);
-        }
-
-        let open_opts = &[
-            &format!("GEOM_POSSIBLE_NAMES={}", columns.x),
-            headers.as_str(),
-            "AUTODETECT_TYPE=YES",
-        ];
-        dataset_options.open_options = Some(open_opts);
-        gdal_open_dataset_ex(&dataset_info.file_name, dataset_options)
-    }
-
-    fn is_csv(dataset_info: &OgrSourceDataset) -> bool {
-        if let Some("csv" | "tsv") = dataset_info.file_name.extension().and_then(OsStr::to_str) {
-            true
-        } else {
-            dataset_info.file_name.as_path().starts_with("CSV:")
-        }
-    }
-
-    fn open_gdal_dataset(dataset_info: &OgrSourceDataset) -> Result<Dataset> {
-        if Self::is_csv(dataset_info) {
-            Self::open_csv_dataset(dataset_info)
-        } else {
-            gdal_open_dataset_ex(
-                &dataset_info.file_name,
-                DatasetOptions {
-                    open_flags: GdalOpenFlags::GDAL_OF_VECTOR,
-                    ..Default::default()
-                },
-            )
-        }
-    }
-
     fn compute_thread(
         work_query: &mut WorkQuery,
         dataset_information: &OgrSourceDataset,
@@ -603,47 +522,16 @@ where
         query_rectangle: &VectorQueryRectangle,
         chunk_byte_size: usize,
     ) -> Result<()> {
-        // TODO: add OGR time filter if forced
-        let dataset = Self::open_gdal_dataset(dataset_information)?;
+        let mut dataset_iterator = OgrDatasetIterator::new(dataset_information, query_rectangle)?;
 
-        let mut features_provider = if let Some(sql) = dataset_information.sql_query.as_ref() {
-            FeaturesProvider::ResultSet(
-                dataset
-                    .execute_sql(sql, None, Dialect::DEFAULT)?
-                    .ok_or(error::Error::OgrSqlQuery)?,
-            )
-        } else {
-            FeaturesProvider::Layer(dataset.layer_by_name(&dataset_information.layer_name)?)
-        };
-
-        let use_ogr_spatial_filter = dataset_information.force_ogr_spatial_filter
-            || features_provider.has_gdal_capability(gdal::vector::LayerCaps::OLCFastSpatialFilter);
-
-        if use_ogr_spatial_filter {
-            debug!(
-                "using spatial filter {:?} for layer {:?}",
-                query_rectangle.spatial_bounds, &dataset_information.layer_name
-            );
-            // NOTE: the OGR-filter may be inaccurately allowing more features that should be returned in a "strict" fashion.
-            features_provider.set_spatial_filter(&query_rectangle.spatial_bounds);
-        }
-
-        if let Some(attribute_query) = &dataset_information.attribute_query {
-            debug!(
-                "using attribute filter {:?} for layer {:?}",
-                attribute_query, &dataset_information.layer_name
-            );
-            features_provider.set_attribute_filter(attribute_query)?;
-        }
+        let was_spatial_filtered_by_ogr = dataset_iterator.was_spatial_filtered_by_ogr();
 
         let (data_types, feature_collection_builder) =
             Self::initialize_types_and_builder(dataset_information);
 
         let time_extractor = Self::initialize_time_extractors(dataset_information);
 
-        let mut features = features_provider.features().fuse().peekable();
-
-        if features.peek().is_none() {
+        if dataset_iterator.peek().is_none() {
             // emit empty dataset and finish
 
             let empty_collection = feature_collection_builder
@@ -664,16 +552,16 @@ where
 
         let mut emitted_non_empty_collections = false;
 
-        while features.peek().is_some() {
+        while dataset_iterator.peek().is_some() {
             let batch_result = Self::compute_batch(
-                &mut features,
+                &mut dataset_iterator,
                 feature_collection_builder.clone(),
                 dataset_information,
                 &data_types,
                 query_rectangle,
                 &time_extractor,
                 chunk_byte_size,
-                use_ogr_spatial_filter,
+                was_spatial_filtered_by_ogr,
             );
 
             let batch_result = if let Some(rename) = dataset_information
@@ -876,7 +764,7 @@ where
 
     #[allow(clippy::too_many_arguments)]
     fn compute_batch(
-        feature_iterator: &mut Peekable<Fuse<FeatureIterator<'_>>>,
+        feature_iterator: &mut OgrDatasetIterator,
         feature_collection_builder: FeatureCollectionBuilder<G>,
         dataset_information: &OgrSourceDataset,
         data_types: &HashMap<String, FeatureDataType>,
