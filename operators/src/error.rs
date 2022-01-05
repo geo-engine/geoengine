@@ -294,6 +294,21 @@ pub enum Error {
     Statistics {
         source: crate::util::statistics::StatisticsError,
     },
+
+    #[snafu(context(false))]
+    ExpressionOperator {
+        source: crate::processing::ExpressionError,
+    },
+}
+
+/// The error requires to be `Send`.
+/// This inner modules tries to enforce this.
+mod requirements {
+    use super::*;
+
+    trait RequiresSend: Send {}
+
+    impl RequiresSend for Error {}
 }
 
 impl From<geoengine_datatypes::error::Error> for Error {
