@@ -340,7 +340,7 @@ impl Stream for CsvSourceStream {
                         None => break,
                     };
 
-                    let row = record.with_context(|| error::CsvSourceReader)?;
+                    let row = record.context(error::CsvSourceReader)?;
                     let parsed_row = CsvSourceStream::parse_row(header, &row)?;
 
                     // TODO: filter time

@@ -29,7 +29,7 @@ postgres-types = { version = "0.2", features = ["derive", "with-chrono-0_4", "wi
 proj = "0.22"
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
-snafu = "0.6"
+snafu = "0.7"
 uuid = { version = "0.8", features = ["serde", "v4", "v5"] }
 
 [dev-dependencies]
