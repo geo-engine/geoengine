@@ -20,7 +20,7 @@ crossbeam = "0.8"
 csv = "1.1"
 float-cmp = "0.9"
 futures = "0.3"
-gdal = { version = "0.11", features = ["bindgen"] }
+gdal = "0.11"
 gdal-sys = "0.5"
 geo = "0.18"
 geoengine-datatypes = { path = "../datatypes" }
