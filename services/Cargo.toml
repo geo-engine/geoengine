@@ -21,7 +21,7 @@ pro = ["postgres", "geoengine-operators/pro", "geoengine-datatypes/pro"]
 [dependencies]
 actix-files = "=0.6.0-beta.10"
 actix-http = "=3.0.0-beta.16"
-actix-multipart = "=0.4.0-beta.9"
+actix-multipart = "=0.4.0-beta.12"
 actix-rt = "2.5"
 actix-web = "=4.0.0-beta.15"
 actix-web-httpauth = "=0.6.0-beta.6"
