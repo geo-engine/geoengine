@@ -1,3 +1,5 @@
+use std::sync::Arc;
+
 use futures::{Future, FutureExt, TryFuture};
 use geoengine_datatypes::{
     primitives::{SpatialPartitioned, TimeInstance, TimeInterval, TimeStep},
@@ -7,6 +9,7 @@ use geoengine_datatypes::{
     },
 };
 use num_traits::AsPrimitive;
+use rayon::ThreadPool;
 
 use crate::{
     adapters::{FoldTileAccu, SubQueryTileAggregator},
@@ -46,6 +49,8 @@ pub struct TemporalMeanTileAccu<T> {
     out_no_data_value: T,
 
     initial_state: bool,
+
+    pool: Arc<ThreadPool>,
 }
 
 impl<T> TemporalMeanTileAccu<T> {
@@ -137,6 +142,7 @@ where
             ignore_no_data: _,
             out_no_data_value,
             initial_state: _,
+            pool: _pool,
         } = self;
 
         let value_grid = match value_grid {
@@ -172,6 +178,10 @@ where
 
         RasterTile2D::new(time, tile_position, global_geo_transform, res_grid.into())
     }
+
+    fn thread_pool(&self) -> &Arc<ThreadPool> {
+        &self.pool
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -198,6 +208,7 @@ where
         &self,
         tile_info: TileInformation,
         query_rect: RasterQueryRectangle,
+        pool: &Arc<ThreadPool>,
     ) -> Result<Self::TileAccu> {
         Ok(TemporalMeanTileAccu {
             time: query_rect.time_interval,
@@ -208,6 +219,7 @@ where
             ignore_no_data: self.ignore_no_data,
             out_no_data_value: self.no_data_value,
             initial_state: true,
+            pool: pool.clone(),
         })
     }
 

@@ -1,8 +1,11 @@
+use std::sync::Arc;
+
 use futures::{Future, FutureExt, TryFuture};
 use geoengine_datatypes::{
     primitives::{SpatialPartitioned, TimeInstance, TimeInterval, TimeStep},
     raster::{EmptyGrid2D, Grid2D, GridOrEmpty, Pixel, RasterTile2D, TileInformation},
 };
+use rayon::ThreadPool;
 
 use crate::{
     adapters::{FoldTileAccu, FoldTileAccuMut, SubQueryTileAggregator},
@@ -151,6 +154,7 @@ where
     TemporalRasterAggregationTileAccu {
         accu_tile,
         initial_state: false,
+        pool: acc.pool,
     }
 }
 
@@ -162,8 +166,13 @@ where
     T: Pixel,
     C: NoDataIgnoringAccFunction,
 {
-    let mut acc_tile = acc.into_tile();
-    let grid = match (acc_tile.grid_array, tile.grid_array) {
+    let TemporalRasterAggregationTileAccu {
+        mut accu_tile,
+        initial_state: _initial_state,
+        pool,
+    } = acc;
+
+    let grid = match (accu_tile.grid_array, tile.grid_array) {
         (GridOrEmpty::Grid(mut a), GridOrEmpty::Grid(g)) => {
             a.data = a
                 .inner_ref()
@@ -179,10 +188,11 @@ where
         (GridOrEmpty::Empty(a), GridOrEmpty::Empty(_)) => GridOrEmpty::Empty(a),
     };
 
-    acc_tile.grid_array = grid;
+    accu_tile.grid_array = grid;
     TemporalRasterAggregationTileAccu {
-        accu_tile: acc_tile,
+        accu_tile,
         initial_state: false,
+        pool,
     }
 }
 
@@ -234,6 +244,7 @@ where
         TemporalRasterAggregationTileAccu {
             accu_tile: next_accu,
             initial_state: false,
+            pool: acc.pool,
         }
     } else {
         acc
@@ -269,6 +280,7 @@ where
     TemporalRasterAggregationTileAccu {
         accu_tile: next_accu,
         initial_state: false,
+        pool: acc.pool,
     }
 }
 
@@ -291,6 +303,7 @@ where
 pub struct TemporalRasterAggregationTileAccu<T> {
     accu_tile: RasterTile2D<T>,
     initial_state: bool,
+    pool: Arc<ThreadPool>,
 }
 
 impl<T: Pixel> FoldTileAccu for TemporalRasterAggregationTileAccu<T> {
@@ -298,6 +311,10 @@ impl<T: Pixel> FoldTileAccu for TemporalRasterAggregationTileAccu<T> {
 
     fn into_tile(self) -> RasterTile2D<Self::RasterType> {
         self.accu_tile
+    }
+
+    fn thread_pool(&self) -> &Arc<ThreadPool> {
+        &self.pool
     }
 }
 
@@ -331,6 +348,7 @@ where
         &self,
         tile_info: TileInformation,
         query_rect: RasterQueryRectangle,
+        pool: &Arc<ThreadPool>,
     ) -> Result<Self::TileAccu> {
         let output_raster = if let Some(no_data_value) = self.no_data_value {
             EmptyGrid2D::new(tile_info.tile_size_in_pixels, no_data_value).into()
@@ -349,6 +367,7 @@ where
                 output_raster,
             ),
             initial_state: true,
+            pool: pool.clone(),
         })
     }
 
@@ -395,6 +414,7 @@ where
         &self,
         tile_info: TileInformation,
         query_rect: RasterQueryRectangle,
+        pool: &Arc<ThreadPool>,
     ) -> Result<Self::TileAccu> {
         let output_raster =
             EmptyGrid2D::new(tile_info.tile_size_in_pixels, self.no_data_value).into();
@@ -406,6 +426,7 @@ where
                 output_raster,
             ),
             initial_state: true,
+            pool: pool.clone(),
         })
     }
 

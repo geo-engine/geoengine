@@ -78,6 +78,17 @@ impl MockExecutionContext {
         }
     }
 
+    pub fn new_with_tiling_spec_and_thread_count(
+        tiling_specification: TilingSpecification,
+        num_threads: usize,
+    ) -> Self {
+        MockExecutionContext {
+            thread_pool: create_rayon_thread_pool(num_threads),
+            tiling_specification,
+            ..Default::default()
+        }
+    }
+
     pub fn add_meta_data<L, R, Q>(
         &mut self,
         dataset: DatasetId,

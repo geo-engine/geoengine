@@ -1,24 +1,27 @@
+use std::sync::Arc;
+
 use crate::engine::RasterQueryRectangle;
 use crate::error;
 use crate::util::Result;
 use futures::{FutureExt, TryFuture};
 use geoengine_datatypes::operations::reproject::Reproject;
 use geoengine_datatypes::primitives::{SpatialPartition2D, SpatialPartitioned};
+use geoengine_datatypes::raster::{Grid2D, GridIndexAccess, GridSize};
 use geoengine_datatypes::{
-    error::Error::{GridIndexOutOfBounds, InvalidGridIndex},
     operations::reproject::{CoordinateProjection, CoordinateProjector},
     primitives::{SpatialResolution, TimeInterval},
-    raster::{grid_idx_iter_2d, BoundedGrid, EmptyGrid, MaterializedRasterTile2D},
+    raster::EmptyGrid,
     spatial_reference::SpatialReference,
 };
 use geoengine_datatypes::{
     primitives::{Coordinate2D, TimeInstance},
-    raster::{
-        CoordinatePixelAccess, GridIdx2D, GridIndexAccessMut, Pixel, RasterTile2D, TileInformation,
-    },
+    raster::{CoordinatePixelAccess, GridIdx2D, Pixel, RasterTile2D, TileInformation},
 };
+use rayon::ThreadPool;
 
 use log::debug;
+use rayon::iter::{IndexedParallelIterator, ParallelIterator};
+use rayon::slice::ParallelSliceMut;
 
 use super::{FoldTileAccu, FoldTileAccuMut, SubQueryTileAggregator};
 
@@ -49,60 +52,28 @@ where
         &self,
         tile_info: TileInformation,
         query_rect: RasterQueryRectangle,
+        pool: &Arc<ThreadPool>,
     ) -> Result<Self::TileAccu> {
+        // println!("new_fold_accu {:?}", &tile_info.global_tile_position);
+
         let output_raster =
             EmptyGrid::new(tile_info.tile_size_in_pixels, self.no_data_and_fill_value);
 
-        // get all pixel idxs and coordinates.
-        let idxs: Vec<GridIdx2D> = grid_idx_iter_2d(&output_raster.bounding_box()).collect();
-        let idx_coords: Vec<(GridIdx2D, Coordinate2D)> = idxs
-            .iter()
-            .map(|&i| {
-                (
-                    i,
-                    tile_info
-                        .tile_geo_transform()
-                        .grid_idx_to_upper_left_coordinate_2d(i),
-                )
-            })
-            .collect();
+        let pool = pool.clone();
 
         // if there is a valid output spatial partition, we need to reproject the coordinates.
-        let idx_coords = if let Some(valid_out_area) = self.valid_bounds_out {
-            // check if the tile to fill is contained by the valid bounds of the input projection
-            if valid_out_area.contains(&tile_info.spatial_partition()) {
-                debug!("reproject whole tile");
-                // use all pixel coordinates
-                idx_coords
-            } else if valid_out_area.intersects(&tile_info.spatial_partition()) {
-                debug!("reproject part of tile");
-                // filter the coordinates to only contain valid ones
-                idx_coords
-                    .into_iter()
-                    .filter(|(_, c)| valid_out_area.contains_coordinate(c))
-                    .collect()
-            } else {
-                debug!("reproject empty tile");
-                // fastpath to skip filter
-                vec![]
-            }
+        let projected_coords = if let Some(valid_out_area) = self.valid_bounds_out {
+            projected_coordinate_grid_parallel(
+                &pool,
+                tile_info,
+                self.out_srs,
+                self.in_srs,
+                &valid_out_area,
+            )?
         } else {
-            debug!("reproject tile outside valid bounds");
-            // TODO: fail here?
-            vec![]
+            debug!("reproject tile outside valid bounds"); // TODO: error?
+            Grid2D::new_filled(tile_info.tile_size_in_pixels, None, None)
         };
-
-        // unzip to use batch projection
-        let (idxs, coords): (Vec<_>, Vec<_>) = idx_coords.into_iter().unzip();
-        debug!("reproject {} pixels", idxs.len());
-
-        // project
-        let proj = CoordinateProjector::from_known_srs(self.out_srs, self.in_srs)?; // TODO: check if we can store it in self. Maybe not because send/sync.
-        let projected_coords = proj.project_coordinates(&coords)?; //TODO: we can filter the projected coordinates however they are vaild if the projection was ok.
-
-        // zip idx and projected coordinates
-        let coords: Vec<(GridIdx2D, Coordinate2D)> =
-            idxs.into_iter().zip(projected_coords.into_iter()).collect();
 
         Ok(TileWithProjectionCoordinates {
             accu_tile: RasterTile2D::new_with_tile_info(
@@ -110,7 +81,8 @@ where
                 tile_info,
                 output_raster.into(),
             ),
-            coords,
+            coords: projected_coords,
+            pool,
         })
     }
 
@@ -144,6 +116,98 @@ where
     }
 }
 
+fn projected_coordinate_grid_parallel(
+    pool: &ThreadPool,
+    tile_info: TileInformation,
+    out_srs: SpatialReference,
+    in_srs: SpatialReference,
+    valid_out_area: &SpatialPartition2D,
+) -> Result<Grid2D<Option<Coordinate2D>>> {
+    const OVERPROVISIONING: usize = 1; // split the work into multiple chunks per thread.
+    const MAX_PARALELLISM: usize = 8; // max task / work split
+
+    let start = std::time::Instant::now();
+
+    let res = pool.install(|| {
+        // get all pixel idxs and coordinates.
+        debug!(
+            "projected_coordinate_grid_parallel {:?}",
+            &tile_info.global_tile_position
+        );
+
+        let mut coord_grid: Grid2D<Option<Coordinate2D>> =
+            Grid2D::new_filled(tile_info.tile_size_in_pixels, None, None);
+
+        let tile_geo_transform = tile_info.tile_geo_transform();
+
+        let parallelism = pool.current_num_threads().max(MAX_PARALELLISM); // TODO: figure out how to enhance this
+        let par_chunk_split =
+            (tile_info.tile_size_in_pixels.axis_size_y() / (parallelism * OVERPROVISIONING)).max(1); // don't go below one line. Thats more complicated then needed
+        let par_chunk_size = tile_info.tile_size_in_pixels.axis_size_x() * par_chunk_split;
+        debug!(
+            "parallelism: threads={} par_chunk_split={} par_chunk_size={}",
+            pool.current_num_threads(),
+            par_chunk_split,
+            par_chunk_size
+        );
+
+        let axis_size_x = tile_info.tile_size_in_pixels.axis_size_x();
+
+        let res = coord_grid
+            .data
+            .par_chunks_mut(par_chunk_size)
+            .enumerate()
+            .try_for_each(|(chunk_idx, opt_coord_slice)| {
+                let chunk_start_y = chunk_idx * par_chunk_split;
+                let chunk_len = opt_coord_slice.len();
+                let out_coords = (0..chunk_len)
+                    .map(|lin_idx| {
+                        let x_idx = lin_idx % axis_size_x;
+                        let y_idx = lin_idx / axis_size_x + chunk_start_y;
+                        let grid_idx = GridIdx2D::from([y_idx as isize, x_idx as isize]);
+                        tile_geo_transform.grid_idx_to_upper_left_coordinate_2d(grid_idx)
+                    })
+                    .collect::<Vec<Coordinate2D>>();
+
+                let chunk_bounds =
+                    SpatialPartition2D::new_unchecked(out_coords[0], out_coords[chunk_len - 1]);
+
+                let proj = CoordinateProjector::from_known_srs(out_srs, in_srs)?;
+
+                if valid_out_area.contains(&chunk_bounds) {
+                    debug!("reproject whole tile chunk");
+                    let in_coords = proj.project_coordinates(&out_coords)?;
+                    opt_coord_slice
+                        .iter_mut()
+                        .zip(in_coords.into_iter())
+                        .for_each(|(opt_coord, in_coord)| *opt_coord = Some(in_coord));
+                } else if valid_out_area.intersects(&chunk_bounds) {
+                    debug!("reproject part of tile chunk");
+                    opt_coord_slice
+                        .iter_mut()
+                        .zip(out_coords.into_iter())
+                        .for_each(|(opt_coord, idx_coord)| {
+                            let in_coord = if valid_out_area.contains_coordinate(&idx_coord) {
+                                proj.project_coordinate(idx_coord).ok()
+                            } else {
+                                None
+                            };
+                            *opt_coord = in_coord;
+                        });
+                } else {
+                    debug!("reproject empty tile chunk");
+                }
+                Result::<(), crate::error::Error>::Ok(())
+            });
+        res.map(|_| coord_grid)
+    });
+    debug!(
+        "projected_coordinate_grid_parallel took {} (ns)",
+        start.elapsed().as_nanos()
+    );
+    res
+}
+
 #[allow(dead_code)]
 pub fn fold_by_coordinate_lookup_future<T>(
     accu: TileWithProjectionCoordinates<T>,
@@ -152,6 +216,7 @@ pub fn fold_by_coordinate_lookup_future<T>(
 where
     T: Pixel,
 {
+    //  println!("fold_by_coordinate_lookup_future {:?}", &tile.tile_position);
     tokio::task::spawn_blocking(|| fold_by_coordinate_lookup_impl(accu, tile)).then(
         |x| async move {
             match x {
@@ -172,6 +237,10 @@ pub fn fold_by_coordinate_lookup_impl<T>(
 where
     T: Pixel,
 {
+    const OVERPROVISIONING: usize = 1; // split the work into multiple chunks per thread.
+    const MAX_PARALELLISM: usize = 16; // max task / work split
+
+    // println!("fold_by_coordinate_lookup_impl {:?}", &tile.tile_position);
     let mut accu = accu;
     let t_union = accu.accu_tile.time.union(&tile.time)?;
 
@@ -181,52 +250,54 @@ where
         return Ok(accu);
     }
 
-    let TileWithProjectionCoordinates { accu_tile, coords } = accu;
+    let TileWithProjectionCoordinates {
+        accu_tile,
+        coords,
+        pool,
+    } = accu;
 
     let mut materialized_accu_tile = accu_tile.into_materialized_tile(); //in a fold chain the real materialization should only happen once. All other calls will be simple conversions.
 
-    match insert_projected_pixels(&mut materialized_accu_tile, &tile, coords.iter()) {
-        Ok(_) => Ok(TileWithProjectionCoordinates {
-            accu_tile: materialized_accu_tile.into(),
-            coords,
-        }),
-        Err(error) => Err(error),
-    }
-}
+    pool.install(|| {
+        let parallelism = pool.current_num_threads().max(MAX_PARALELLISM); // TODO: figure out how to enhance this
+        let par_chunk_split = (materialized_accu_tile.grid_array.shape.axis_size_y()
+            / (parallelism * OVERPROVISIONING))
+            .max(1); // don't go below one line. Thats more complicated then needed
+        let par_chunk_size =
+            materialized_accu_tile.grid_array.shape.axis_size_x() * par_chunk_split;
 
-/// This method takes two tiles and a map from `GridIdx2D` to `Coordinate2D`. Then for all `GridIdx2D` we set the values from the corresponding coordinate in the source tile.
-pub fn insert_projected_pixels<'a, T: Pixel, I: Iterator<Item = &'a (GridIdx2D, Coordinate2D)>>(
-    target: &mut MaterializedRasterTile2D<T>,
-    source: &RasterTile2D<T>,
-    local_target_idx_source_coordinate_map: I,
-) -> Result<()> {
-    // TODO: it would be better to run the pixel wise stuff in insert_projected_pixels in parallel...
-    for (idx, coord) in local_target_idx_source_coordinate_map {
-        match source.pixel_value_at_coord(*coord) {
-            Ok(px_value) => target.set_at_grid_index(*idx, px_value)?,
-            Err(e) => match e {
-                // Ignore errors where a coordinate is not inside a source tile. This is by design.
-                GridIndexOutOfBounds {
-                    index: _,
-                    min_index: _,
-                    max_index: _,
-                }
-                | InvalidGridIndex {
-                    grid_index: _,
-                    description: _,
-                } => {}
-                _ => return Err(error::Error::DataType { source: e }),
-            },
-        }
-    }
+        materialized_accu_tile
+            .grid_array
+            .data
+            .par_chunks_mut(par_chunk_size)
+            .enumerate()
+            .for_each(|(y_f, row_slice)| {
+                let y = y_f * par_chunk_split;
+                row_slice.iter_mut().enumerate().for_each(|(x, pixel)| {
+                    let lookup_coord = coords
+                        .get_at_grid_index_unchecked(GridIdx2D::from([y as isize, x as isize]));
+                    if let Some(coord) = lookup_coord {
+                        if tile.spatial_partition().contains_coordinate(&coord) {
+                            let lookup_value = tile.pixel_value_at_coord_unchecked(coord);
+                            *pixel = lookup_value;
+                        }
+                    }
+                });
+            });
+    });
 
-    Ok(())
+    Ok(TileWithProjectionCoordinates {
+        accu_tile: materialized_accu_tile.into(),
+        coords,
+        pool,
+    })
 }
 
 #[derive(Debug, Clone)]
 pub struct TileWithProjectionCoordinates<T> {
     accu_tile: RasterTile2D<T>,
-    coords: Vec<(GridIdx2D, Coordinate2D)>,
+    coords: Grid2D<Option<Coordinate2D>>,
+    pool: Arc<ThreadPool>,
 }
 
 impl<T: Pixel> FoldTileAccu for TileWithProjectionCoordinates<T> {
@@ -234,6 +305,10 @@ impl<T: Pixel> FoldTileAccu for TileWithProjectionCoordinates<T> {
 
     fn into_tile(self) -> RasterTile2D<Self::RasterType> {
         self.accu_tile
+    }
+
+    fn thread_pool(&self) -> &Arc<ThreadPool> {
+        &self.pool
     }
 }
 

@@ -49,4 +49,10 @@ mod tests {
 
         rayon::current_num_threads();
     }
+
+    #[test]
+    fn num_threads() {
+        let pool = create_rayon_thread_pool(11);
+        assert_eq!(11, pool.current_num_threads());
+    }
 }

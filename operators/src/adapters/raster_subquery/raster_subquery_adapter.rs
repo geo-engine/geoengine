@@ -24,6 +24,8 @@ use geoengine_datatypes::{
 };
 
 use pin_project::pin_project;
+use rayon::ThreadPool;
+use std::sync::Arc;
 use std::task::Poll;
 
 use std::pin::Pin;
@@ -31,18 +33,11 @@ use std::pin::Pin;
 pub trait FoldTileAccu {
     type RasterType: Pixel;
     fn into_tile(self) -> RasterTile2D<Self::RasterType>;
+    fn thread_pool(&self) -> &Arc<ThreadPool>;
 }
 
 pub trait FoldTileAccuMut: FoldTileAccu {
     fn tile_mut(&mut self) -> &mut RasterTile2D<Self::RasterType>;
-}
-
-impl<T: Pixel> FoldTileAccu for RasterTile2D<T> {
-    type RasterType = T;
-
-    fn into_tile(self) -> RasterTile2D<Self::RasterType> {
-        self
-    }
 }
 
 pub type RasterFold<'a, T, FoldFuture, FoldMethod, FoldTileAccu> =
@@ -294,9 +289,11 @@ where
             match rq_res {
                 Ok((query, query_rect)) => {
                     // TODO: generation of the folding accu should be a future
-                    let tile_folding_accu = this
-                        .sub_query
-                        .new_fold_accu(*this.current_tile_spec, *query_rect)?;
+                    let tile_folding_accu = this.sub_query.new_fold_accu(
+                        *this.current_tile_spec,
+                        *query_rect,
+                        this.query_ctx.thread_pool(),
+                    )?;
 
                     let tile_folding_stream =
                         query.try_fold(tile_folding_accu, this.sub_query.fold_method());
@@ -413,6 +410,7 @@ where
         &self,
         tile_info: TileInformation,
         query_rect: RasterQueryRectangle,
+        pool: &Arc<ThreadPool>,
     ) -> Result<Self::TileAccu>;
 
     /// This method generates `Some(QueryRectangle)` for a tile-specific sub-query or `None` if the `query_rect` cannot be translated.
@@ -442,6 +440,36 @@ where
     }
 }
 
+#[derive(Clone, Debug)]
+pub struct RasterTileAccu2D<T> {
+    pub tile: RasterTile2D<T>,
+    pub pool: Arc<ThreadPool>,
+}
+
+impl<T> RasterTileAccu2D<T> {
+    pub fn new(tile: RasterTile2D<T>, pool: Arc<ThreadPool>) -> Self {
+        RasterTileAccu2D { tile, pool }
+    }
+}
+
+impl<T: Pixel> FoldTileAccu for RasterTileAccu2D<T> {
+    type RasterType = T;
+
+    fn into_tile(self) -> RasterTile2D<Self::RasterType> {
+        self.tile
+    }
+
+    fn thread_pool(&self) -> &Arc<ThreadPool> {
+        &self.pool
+    }
+}
+
+impl<T: Pixel> FoldTileAccuMut for RasterTileAccu2D<T> {
+    fn tile_mut(&mut self) -> &mut RasterTile2D<T> {
+        &mut self.tile
+    }
+}
+
 #[derive(Debug, Clone)]
 pub struct TileSubQueryIdentity<F, T> {
     fold_fn: F,
@@ -451,27 +479,26 @@ pub struct TileSubQueryIdentity<F, T> {
 impl<T, FoldM, FoldF> SubQueryTileAggregator<T> for TileSubQueryIdentity<FoldM, T>
 where
     T: Pixel,
-    FoldM: Send + Clone + Fn(RasterTile2D<T>, RasterTile2D<T>) -> FoldF,
-    FoldF: Send + TryFuture<Ok = RasterTile2D<T>, Error = error::Error>,
+    FoldM: Send + Clone + Fn(RasterTileAccu2D<T>, RasterTile2D<T>) -> FoldF,
+    FoldF: Send + TryFuture<Ok = RasterTileAccu2D<T>, Error = error::Error>,
 {
     type FoldFuture = FoldF;
 
     type FoldMethod = FoldM;
 
-    type TileAccu = RasterTile2D<T>;
+    type TileAccu = RasterTileAccu2D<T>;
 
     fn new_fold_accu(
         &self,
         tile_info: TileInformation,
         query_rect: RasterQueryRectangle,
+        pool: &Arc<ThreadPool>,
     ) -> Result<Self::TileAccu> {
         let output_raster =
             EmptyGrid2D::new(tile_info.tile_size_in_pixels, T::from_(self.no_data_value)).into();
-        Ok(RasterTile2D::new_with_tile_info(
-            query_rect.time_interval,
-            tile_info,
-            output_raster,
-        ))
+        let output_tile =
+            RasterTile2D::new_with_tile_info(query_rect.time_interval, tile_info, output_raster);
+        Ok(RasterTileAccu2D::new(output_tile, pool.clone()))
     }
 
     fn tile_query_rectangle(
@@ -492,39 +519,45 @@ where
     }
 }
 
-pub fn fold_by_blit_impl<T>(accu: RasterTile2D<T>, tile: RasterTile2D<T>) -> Result<RasterTile2D<T>>
+pub fn fold_by_blit_impl<T>(
+    accu: RasterTileAccu2D<T>,
+    tile: RasterTile2D<T>,
+) -> Result<RasterTileAccu2D<T>>
 where
     T: Pixel,
 {
-    let mut accu_tile = accu.into_tile();
+    let mut accu_tile = accu.tile;
+    let pool = accu.pool;
     let t_union = accu_tile.time.union(&tile.time)?;
 
     accu_tile.time = t_union;
 
     if tile.grid_array.is_empty() && accu_tile.no_data_value() == tile.no_data_value() {
-        return Ok(accu_tile);
+        return Ok(RasterTileAccu2D::new(accu_tile, pool));
     }
 
     let mut materialized_accu_tile = accu_tile.into_materialized_tile();
 
-    match materialized_accu_tile.blit(tile) {
-        Ok(_) => Ok(materialized_accu_tile.into()),
+    let blit_tile = match materialized_accu_tile.blit(tile) {
+        Ok(_) => materialized_accu_tile.into(),
         Err(_error) => {
             // Ignore lookup errors
             //dbg!(
             //    "Skipping non-overlapping area tiles in blit method. This schould not happen but the MockSource produces all tiles!!!",
             //    error
             //);
-            Ok(materialized_accu_tile.into())
+            materialized_accu_tile.into()
         }
-    }
+    };
+
+    Ok(RasterTileAccu2D::new(blit_tile, pool))
 }
 
 #[allow(dead_code)]
 pub fn fold_by_blit_future<T>(
-    accu: RasterTile2D<T>,
+    accu: RasterTileAccu2D<T>,
     tile: RasterTile2D<T>,
-) -> impl Future<Output = Result<RasterTile2D<T>>>
+) -> impl Future<Output = Result<RasterTileAccu2D<T>>>
 where
     T: Pixel,
 {
@@ -555,7 +588,7 @@ mod tests {
     #[tokio::test]
     async fn identity() {
         let no_data_value = Some(0);
-        let data = vec![
+        let data: Vec<RasterTile2D<u8>> = vec![
             RasterTile2D {
                 time: TimeInterval::new_unchecked(0, 5),
                 tile_position: [-1, 0].into(),

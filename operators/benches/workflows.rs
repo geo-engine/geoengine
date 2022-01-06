@@ -145,7 +145,7 @@ fn bench_gdal_source_operator_tile_size() {
         &tiling_specs,
         gdal_operator,
         |ts| {
-            let mut mex = MockExecutionContext::new_with_tiling_spec(ts);
+            let mut mex = MockExecutionContext::new_with_tiling_spec_and_thread_count(ts, 8);
             mex.add_meta_data(id.clone(), meta_data.box_clone());
             mex
         },
@@ -208,7 +208,7 @@ fn bench_gdal_source_operator_with_expression_tile_size() {
         &tiling_specs,
         expression_operator,
         |ts| {
-            let mut mex = MockExecutionContext::new_with_tiling_spec(ts);
+            let mut mex = MockExecutionContext::new_with_tiling_spec_and_thread_count(ts, 8);
             mex.add_meta_data(id.clone(), meta_data.box_clone());
             mex
         },
@@ -229,7 +229,7 @@ fn bench_gdal_source_operator_with_identity_reprojection() {
     )];
 
     let run_time = tokio::runtime::Runtime::new().unwrap();
-    let ctx = MockQueryContext::with_chunk_size_and_thread_count(ChunkByteSize::MAX, 8);
+    let ctx = MockQueryContext::with_chunk_size_and_thread_count(ChunkByteSize::MAX, 32);
 
     let tiling_specs = vec![
         // TilingSpecification::new((0., 0.).into(), [32, 32].into()),
@@ -267,7 +267,7 @@ fn bench_gdal_source_operator_with_identity_reprojection() {
         &tiling_specs,
         projection_operator.boxed(),
         |ts| {
-            let mut mex = MockExecutionContext::new_with_tiling_spec(ts);
+            let mut mex = MockExecutionContext::new_with_tiling_spec_and_thread_count(ts, 8);
             mex.add_meta_data(id.clone(), meta_data.box_clone());
             mex
         },
@@ -332,7 +332,7 @@ fn bench_gdal_source_operator_with_4326_to_3857_reprojection() {
         &tiling_specs,
         projection_operator.boxed(),
         |ts| {
-            let mut mex = MockExecutionContext::new_with_tiling_spec(ts);
+            let mut mex = MockExecutionContext::new_with_tiling_spec_and_thread_count(ts, 8);
             mex.add_meta_data(id.clone(), meta_data.box_clone());
             mex
         },
