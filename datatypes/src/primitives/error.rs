@@ -1,11 +1,12 @@
 use crate::error::Error;
 use arrow::error::ArrowError;
-use snafu::Snafu;
+use snafu::prelude::*;
 
 use super::TimeInstance;
 
 #[derive(Debug, Snafu)]
-#[snafu(visibility = "pub(crate)")]
+#[snafu(visibility(pub(crate)))]
+#[snafu(context(suffix(false)))] // disables default `Snafu` suffix
 pub enum PrimitivesError {
     UnallowedEmpty,
     UnclosedPolygonRing,
