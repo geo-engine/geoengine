@@ -123,8 +123,7 @@ fn projected_coordinate_grid_parallel(
     in_srs: SpatialReference,
     valid_out_area: &SpatialPartition2D,
 ) -> Result<Grid2D<Option<Coordinate2D>>> {
-    const OVERPROVISIONING: usize = 1; // split the work into multiple chunks per thread.
-    const MAX_PARALELLISM: usize = 8; // max task / work split
+    const MIN_ROWS_IN_PAR_CHUNK: usize = 64; // this must never be smaller than 1
 
     let start = std::time::Instant::now();
 
@@ -140,9 +139,9 @@ fn projected_coordinate_grid_parallel(
 
         let tile_geo_transform = tile_info.tile_geo_transform();
 
-        let parallelism = pool.current_num_threads().max(MAX_PARALELLISM); // TODO: figure out how to enhance this
+        let parallelism = pool.current_num_threads();
         let par_chunk_split =
-            (tile_info.tile_size_in_pixels.axis_size_y() / (parallelism * OVERPROVISIONING)).max(1); // don't go below one line. Thats more complicated then needed
+            (tile_info.tile_size_in_pixels.axis_size_y() / parallelism).max(MIN_ROWS_IN_PAR_CHUNK); // don't go below MIN_ROWS_IN_PAR_CHUNK lines per chunk.
         let par_chunk_size = tile_info.tile_size_in_pixels.axis_size_x() * par_chunk_split;
         debug!(
             "parallelism: threads={} par_chunk_split={} par_chunk_size={}",
@@ -237,8 +236,7 @@ pub fn fold_by_coordinate_lookup_impl<T>(
 where
     T: Pixel,
 {
-    const OVERPROVISIONING: usize = 1; // split the work into multiple chunks per thread.
-    const MAX_PARALELLISM: usize = 16; // max task / work split
+    const MIN_ROWS_IN_PAR_CHUNK: usize = 32; // this must never be smaller than 1
 
     // println!("fold_by_coordinate_lookup_impl {:?}", &tile.tile_position);
     let mut accu = accu;
@@ -259,10 +257,9 @@ where
     let mut materialized_accu_tile = accu_tile.into_materialized_tile(); //in a fold chain the real materialization should only happen once. All other calls will be simple conversions.
 
     pool.install(|| {
-        let parallelism = pool.current_num_threads().max(MAX_PARALELLISM); // TODO: figure out how to enhance this
-        let par_chunk_split = (materialized_accu_tile.grid_array.shape.axis_size_y()
-            / (parallelism * OVERPROVISIONING))
-            .max(1); // don't go below one line. Thats more complicated then needed
+        let parallelism = pool.current_num_threads();
+        let par_chunk_split = (materialized_accu_tile.grid_array.shape.axis_size_y() / parallelism)
+            .max(MIN_ROWS_IN_PAR_CHUNK); // don't go below MIN_ROWS_IN_PAR_CHUNK lines per chunk.
         let par_chunk_size =
             materialized_accu_tile.grid_array.shape.axis_size_x() * par_chunk_split;
 
