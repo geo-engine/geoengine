@@ -178,6 +178,24 @@ pub enum TypedRasterQueryProcessor {
     F64(Box<dyn RasterQueryProcessor<RasterType = f64>>),
 }
 
+impl std::fmt::Debug for TypedRasterQueryProcessor {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let interals = "RasterQueryProcessor"; // TODO: implement debug for children
+        match self {
+            Self::U8(_) => f.debug_tuple("U8").field(&interals).finish(),
+            Self::U16(_) => f.debug_tuple("U16").field(&interals).finish(),
+            Self::U32(_) => f.debug_tuple("U32").field(&interals).finish(),
+            Self::U64(_) => f.debug_tuple("U64").field(&interals).finish(),
+            Self::I8(_) => f.debug_tuple("I8").field(&interals).finish(),
+            Self::I16(_) => f.debug_tuple("I16").field(&interals).finish(),
+            Self::I32(_) => f.debug_tuple("I32").field(&interals).finish(),
+            Self::I64(_) => f.debug_tuple("I64").field(&interals).finish(),
+            Self::F32(_) => f.debug_tuple("F32").field(&interals).finish(),
+            Self::F64(_) => f.debug_tuple("F64").field(&interals).finish(),
+        }
+    }
+}
+
 impl TypedRasterQueryProcessor {
     pub fn get_u8(self) -> Option<Box<dyn RasterQueryProcessor<RasterType = u8>>> {
         match self {

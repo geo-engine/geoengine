@@ -1,6 +1,5 @@
 WHITESPACE = _{ WHITE_SPACE }
 
-// TODO: negative numbers
 number = @{
     decimal | integer
 }

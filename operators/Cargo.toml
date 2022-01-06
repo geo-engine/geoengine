@@ -42,6 +42,7 @@ rustfmt-wrapper = "0.1"
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 snafu = "0.6"
+tempfile = "3.1"
 tokio = { version = "1.15", features = ["macros", "signal", "sync", "rt-multi-thread"] }
 typetag = "0.1"
 uuid = { version = "0.8", features = ["serde", "v4", "v5"] }
@@ -49,7 +50,7 @@ uuid = { version = "0.8", features = ["serde", "v4", "v5"] }
 [dev-dependencies]
 geo-rand = { git = "https://github.com/lelongg/geo-rand", tag = "v0.3.0" }
 rand = "0.8"
-tempfile = "3.1"
+
 
 
 [[bench]]

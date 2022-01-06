@@ -28,5 +28,9 @@ pub enum ExpressionError {
     RustFmtError { error: String },
     RustFmtIoError { error: String },
     RustFmtConversionError { source: std::string::FromUtf8Error },
-    CannotGenerateSourceCodeFile { source: String },
+    CannotGenerateSourceCodeFile { error: String },
+    CannotGenerateSourceCodeDirectory { error: String },
+    CompileError { error: String },
+    Linker { error: String },
+    LinkedFunctionNotFound { error: String },
 }

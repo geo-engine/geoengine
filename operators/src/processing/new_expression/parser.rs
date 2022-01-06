@@ -6,8 +6,6 @@ use pest::{
     Parser,
 };
 use pest_derive::Parser;
-use proc_macro2::Ident;
-use quote::format_ident;
 use snafu::{ensure, ResultExt};
 
 use crate::util::duplicate_or_empty_str_slice;
@@ -15,7 +13,7 @@ use crate::util::duplicate_or_empty_str_slice;
 use super::{
     codegen::{
         Assignment, AstNode, AstOperator, BooleanComparator, BooleanExpression, BooleanOperator,
-        Branch, ExpressionAst,
+        Branch, ExpressionAst, Identifier,
     },
     error::{self, ExpressionError},
 };
@@ -28,10 +26,11 @@ pub type PestError = pest::error::Error<Rule>;
 #[grammar = "processing/new_expression/expression.pest"] // relative to src
 struct _ExpressionParser;
 
+/// A parser for user-defined expressions.
 pub struct ExpressionParser {
-    parameters: Vec<Ident>,
-    variables: Rc<RefCell<Vec<Ident>>>,
-    imports: Rc<RefCell<Vec<Ident>>>,
+    parameters: Vec<Identifier>,
+    variables: Rc<RefCell<Vec<Identifier>>>,
+    imports: Rc<RefCell<Vec<Identifier>>>,
 }
 
 lazy_static::lazy_static! {
@@ -64,7 +63,7 @@ impl ExpressionParser {
         }
 
         Ok(Self {
-            parameters: parameters.iter().map(|v| format_ident!("{}", v)).collect(),
+            parameters: parameters.iter().map(Into::into).collect(),
             variables: Rc::new(RefCell::new(Vec::new())),
             imports: Rc::new(RefCell::new(vec![])),
         })
@@ -77,7 +76,12 @@ impl ExpressionParser {
 
         let root = self.build_ast(pairs)?;
 
-        ExpressionAst::new(name.to_string(), self.parameters, self.imports, root)
+        ExpressionAst::new(
+            name.to_string().into(),
+            self.parameters,
+            self.imports.borrow().iter().cloned().collect(),
+            root,
+        )
     }
 
     fn build_ast(&self, pairs: Pairs<'_, Rule>) -> Result<AstNode> {
@@ -96,7 +100,7 @@ impl ExpressionParser {
                 pair.as_str().parse().context(error::InvalidNumber)?,
             )),
             Rule::identifier => {
-                let identifier = format_ident!("{}", pair.as_str());
+                let identifier = pair.as_str().into();
                 if self.parameters.contains(&identifier)
                     || self.variables.borrow().contains(&identifier)
                 {
@@ -111,13 +115,11 @@ impl ExpressionParser {
                 let mut pairs = pair.into_inner();
 
                 // first one is name
-                let name = format_ident!(
-                    "{}",
-                    pairs
-                        .next()
-                        .ok_or(ExpressionError::MissingFunctionName)?
-                        .as_str()
-                );
+                let name: Identifier = pairs
+                    .next()
+                    .ok_or(ExpressionError::MissingFunctionName)?
+                    .as_str()
+                    .into();
 
                 let args = pairs
                     .map(|pair| self.build_ast(pair.into_inner()))
@@ -173,7 +175,7 @@ impl ExpressionParser {
                             .next()
                             .ok_or(ExpressionError::AssignmentNeedsTwoParts)?;
 
-                        let identifier = format_ident!("{}", first_pair.as_str());
+                        let identifier = first_pair.as_str().into();
 
                         if self.parameters.contains(&identifier) {
                             return Err(ExpressionError::CannotAssignToParameter {
@@ -218,10 +220,10 @@ impl ExpressionParser {
 
         // change some operators to functions
         if matches!(op.as_rule(), Rule::power) {
-            self.imports.borrow_mut().push(format_ident!("pow"));
+            self.imports.borrow_mut().push("pow".into());
 
             return Ok(AstNode::Function {
-                name: format_ident!("pow"),
+                name: "pow".into(),
                 args: vec![left, right],
             });
         }
