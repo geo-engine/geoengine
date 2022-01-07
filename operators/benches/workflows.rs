@@ -35,7 +35,6 @@ fn bench_raster_operator<'a, Q, T, F, C, B>(
     named_operator: Box<dyn RasterOperator>,
     context_builder: F,
     chunk_byte_size: B,
-    run_time: &tokio::runtime::Runtime,
     num_threads: C,
 ) where
     F: Fn(TilingSpecification, usize) -> MockExecutionContext,
@@ -44,6 +43,8 @@ fn bench_raster_operator<'a, Q, T, F, C, B>(
     T: IntoIterator<Item = &'a TilingSpecification> + Clone,
     B: IntoIterator<Item = &'a ChunkByteSize> + Clone,
 {
+    let run_time = tokio::runtime::Runtime::new().unwrap();
+
     for current_threads in num_threads.into_iter() {
         for tiling_spec in tiling_specs.clone().into_iter() {
             let exe_ctx = (context_builder)(*tiling_spec, *current_threads);
@@ -122,8 +123,6 @@ fn bench_gdal_source_operator_tile_size() {
         },
     )];
 
-    let run_time = tokio::runtime::Runtime::new().unwrap();
-
     let tiling_specs = vec![
         TilingSpecification::new((0., 0.).into(), [32, 32].into()),
         TilingSpecification::new((0., 0.).into(), [64, 64].into()),
@@ -160,7 +159,6 @@ fn bench_gdal_source_operator_tile_size() {
             mex
         },
         &[ChunkByteSize::MAX],
-        &run_time,
         &[8],
     );
 }
@@ -175,8 +173,6 @@ fn bench_gdal_source_operator_with_expression_tile_size() {
             spatial_resolution: SpatialResolution::new(0.01, 0.01).unwrap(),
         },
     )];
-
-    let run_time = tokio::runtime::Runtime::new().unwrap();
 
     let tiling_specs = vec![
         // TilingSpecification::new((0., 0.).into(), [32, 32].into()),
@@ -224,7 +220,6 @@ fn bench_gdal_source_operator_with_expression_tile_size() {
             mex
         },
         &[ChunkByteSize::MAX],
-        &run_time,
         &[8],
     );
 }
@@ -239,8 +234,6 @@ fn bench_gdal_source_operator_with_identity_reprojection() {
             spatial_resolution: SpatialResolution::new(0.01, 0.01).unwrap(),
         },
     )];
-
-    let run_time = tokio::runtime::Runtime::new().unwrap();
 
     let tiling_specs = vec![
         // TilingSpecification::new((0., 0.).into(), [32, 32].into()),
@@ -284,7 +277,6 @@ fn bench_gdal_source_operator_with_identity_reprojection() {
             mex
         },
         &[ChunkByteSize::MAX],
-        &run_time,
         &[8],
     );
 }
@@ -302,8 +294,6 @@ fn bench_gdal_source_operator_with_4326_to_3857_reprojection() {
             spatial_resolution: SpatialResolution::new(1050., 2100.).unwrap(),
         },
     )];
-
-    let run_time = tokio::runtime::Runtime::new().unwrap();
 
     let tiling_specs = vec![
         // TilingSpecification::new((0., 0.).into(), [32, 32].into()),
@@ -350,7 +340,6 @@ fn bench_gdal_source_operator_with_4326_to_3857_reprojection() {
             mex
         },
         &[ChunkByteSize::MAX],
-        &run_time,
         &[1, 4, 8, 16, 32],
     );
 }
