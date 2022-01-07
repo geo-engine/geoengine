@@ -1,5 +1,6 @@
 use super::query::{QueryContext, QueryRectangle};
 use super::{PlotQueryRectangle, RasterQueryRectangle, VectorQueryRectangle};
+use crate::adapters::RasterConversionQueryProcessor;
 use crate::util::Result;
 use async_trait::async_trait;
 use futures::stream::BoxStream;
@@ -41,6 +42,8 @@ pub trait RasterQueryProcessor: Sync + Send {
         Box::new(self)
     }
 }
+
+pub type BoxRasterQueryProcessor<P> = Box<dyn RasterQueryProcessor<RasterType = P>>;
 
 #[async_trait]
 impl<S, T> RasterQueryProcessor for S
@@ -255,6 +258,21 @@ impl TypedRasterQueryProcessor {
         match self {
             Self::F64(r) => Some(r),
             _ => None,
+        }
+    }
+
+    pub fn into_f64(self) -> BoxRasterQueryProcessor<f64> {
+        match self {
+            Self::U8(r) => RasterConversionQueryProcessor::new(r).boxed(),
+            Self::U16(r) => RasterConversionQueryProcessor::new(r).boxed(),
+            Self::U32(r) => RasterConversionQueryProcessor::new(r).boxed(),
+            Self::U64(r) => RasterConversionQueryProcessor::new(r).boxed(),
+            Self::I8(r) => RasterConversionQueryProcessor::new(r).boxed(),
+            Self::I16(r) => RasterConversionQueryProcessor::new(r).boxed(),
+            Self::I32(r) => RasterConversionQueryProcessor::new(r).boxed(),
+            Self::I64(r) => RasterConversionQueryProcessor::new(r).boxed(),
+            Self::F32(r) => RasterConversionQueryProcessor::new(r).boxed(),
+            Self::F64(r) => r,
         }
     }
 }

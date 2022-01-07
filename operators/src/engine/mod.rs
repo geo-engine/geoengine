@@ -19,8 +19,9 @@ pub use query::{
     RasterQueryRectangle, VectorQueryRectangle,
 };
 pub use query_processor::{
-    PlotQueryProcessor, QueryProcessor, RasterQueryProcessor, TypedPlotQueryProcessor,
-    TypedRasterQueryProcessor, TypedVectorQueryProcessor, VectorQueryProcessor,
+    BoxRasterQueryProcessor, PlotQueryProcessor, QueryProcessor, RasterQueryProcessor,
+    TypedPlotQueryProcessor, TypedRasterQueryProcessor, TypedVectorQueryProcessor,
+    VectorQueryProcessor,
 };
 pub use result_descriptor::{
     PlotResultDescriptor, RasterResultDescriptor, ResultDescriptor, TypedResultDescriptor,

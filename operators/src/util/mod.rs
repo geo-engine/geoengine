@@ -6,6 +6,7 @@ pub mod raster_stream_to_geotiff;
 pub mod raster_stream_to_png;
 mod rayon;
 pub mod statistics;
+pub mod stream_zip;
 pub mod string_token;
 pub mod sunpos;
 

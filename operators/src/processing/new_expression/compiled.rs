@@ -75,6 +75,16 @@ impl LinkedExpression {
                 error: error.to_string(),
             })
     }
+
+    /// Returns a function with two input parameters
+    #[allow(clippy::type_complexity)]
+    pub unsafe fn function_3ary(&self) -> Result<Symbol<fn(f64, f64, f64) -> f64>> {
+        self.library
+            .get(self.function_name.as_bytes())
+            .map_err(|error| ExpressionError::LinkedFunctionNotFound {
+                error: error.to_string(),
+            })
+    }
 }
 
 impl Drop for LinkedExpression {

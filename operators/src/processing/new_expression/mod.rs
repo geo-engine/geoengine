@@ -3,14 +3,14 @@ use std::{marker::PhantomData, sync::Arc};
 use self::{codegen::ExpressionAst, compiled::LinkedExpression, parser::ExpressionParser};
 use crate::{
     engine::{
-        ExecutionContext, InitializedRasterOperator, Operator, OperatorDatasets, QueryContext,
-        QueryProcessor, RasterOperator, RasterQueryProcessor, RasterQueryRectangle,
-        RasterResultDescriptor, TypedRasterQueryProcessor,
+        BoxRasterQueryProcessor, ExecutionContext, InitializedRasterOperator, Operator,
+        OperatorDatasets, QueryContext, QueryProcessor, RasterOperator, RasterQueryProcessor,
+        RasterQueryRectangle, RasterResultDescriptor, TypedRasterQueryProcessor,
     },
-    util::{input::float_with_nan, Result},
+    util::{input::float_with_nan, stream_zip::StreamTuple3Zip, Result},
 };
 use async_trait::async_trait;
-use futures::{stream::BoxStream, StreamExt, TryStreamExt};
+use futures::{stream::BoxStream, try_join, StreamExt, TryStreamExt};
 use geoengine_datatypes::{
     dataset::DatasetId,
     primitives::{Measurement, SpatialPartition2D},
@@ -19,7 +19,9 @@ use geoengine_datatypes::{
     },
 };
 use num_traits::AsPrimitive;
-use rayon::iter::{IndexedParallelIterator, IntoParallelRefIterator, ParallelIterator};
+use rayon::iter::{
+    IndexedParallelIterator, IntoParallelIterator, IntoParallelRefIterator, ParallelIterator,
+};
 use serde::{Deserialize, Serialize};
 use snafu::ensure;
 
@@ -156,9 +158,9 @@ impl RasterOperator for NewExpression {
     ) -> Result<Box<dyn InitializedRasterOperator>> {
         // TODO: handle more then 2 inputs, i.e. 1-8
         ensure!(
-            (1..=2).contains(&self.sources.number_of_sources()),
+            (1..=3).contains(&self.sources.number_of_sources()),
             crate::error::InvalidNumberOfRasterInputs {
-                expected: 1..3,
+                expected: 1..4,
                 found: self.sources.number_of_sources()
             }
         );
@@ -293,6 +295,21 @@ impl InitializedRasterOperator for InitializedExpression {
                     )
                 })
             }
+            3 => {
+                let [a, b, c] =
+                    <[_; 3]>::try_from(query_processors).expect("len previously checked");
+                let query_processors = (a.into_f64(), b.into_f64(), c.into_f64());
+                call_generic_raster_processor!(
+                    output_type,
+                    ExpressionQueryProcessor3::new(
+                        expression,
+                        query_processors,
+                        output_no_data_value.as_(),
+                        self.map_no_data,
+                    )
+                    .boxed()
+                )
+            }
             _ => return Err(crate::error::Error::InvalidNumberOfExpressionInputs), // TODO: handle more than two inputs
         })
     }
@@ -307,7 +324,7 @@ where
     T1: Pixel,
     TO: Pixel,
 {
-    pub source_a: Box<dyn RasterQueryProcessor<RasterType = T1>>,
+    pub source_a: BoxRasterQueryProcessor<T1>,
     pub phantom_data: PhantomData<TO>,
     pub program: Arc<LinkedExpression>,
     pub no_data_value: TO,
@@ -320,8 +337,23 @@ where
     T2: Pixel,
     TO: Pixel,
 {
-    pub source_a: Box<dyn RasterQueryProcessor<RasterType = T1>>,
-    pub source_b: Box<dyn RasterQueryProcessor<RasterType = T2>>,
+    pub source_a: BoxRasterQueryProcessor<T1>,
+    pub source_b: BoxRasterQueryProcessor<T2>,
+    pub phantom_data: PhantomData<TO>,
+    pub program: Arc<LinkedExpression>,
+    pub no_data_value: TO,
+    pub map_no_data: bool,
+}
+
+struct ExpressionQueryProcessor3<TO>
+where
+    TO: Pixel,
+{
+    pub sources: (
+        BoxRasterQueryProcessor<f64>,
+        BoxRasterQueryProcessor<f64>,
+        BoxRasterQueryProcessor<f64>,
+    ),
     pub phantom_data: PhantomData<TO>,
     pub program: Arc<LinkedExpression>,
     pub no_data_value: TO,
@@ -335,7 +367,7 @@ where
 {
     fn new(
         program: LinkedExpression,
-        source_a: Box<dyn RasterQueryProcessor<RasterType = T1>>,
+        source_a: BoxRasterQueryProcessor<T1>,
         no_data_value: TO,
         map_no_data: bool,
     ) -> Self {
@@ -357,14 +389,38 @@ where
 {
     fn new(
         program: LinkedExpression,
-        source_a: Box<dyn RasterQueryProcessor<RasterType = T1>>,
-        source_b: Box<dyn RasterQueryProcessor<RasterType = T2>>,
+        source_a: BoxRasterQueryProcessor<T1>,
+        source_b: BoxRasterQueryProcessor<T2>,
         no_data_value: TO,
         map_no_data: bool,
     ) -> Self {
         Self {
             source_a,
             source_b,
+            program: Arc::new(program),
+            phantom_data: PhantomData::default(),
+            no_data_value,
+            map_no_data,
+        }
+    }
+}
+
+impl<TO> ExpressionQueryProcessor3<TO>
+where
+    TO: Pixel,
+{
+    fn new(
+        program: LinkedExpression,
+        sources: (
+            BoxRasterQueryProcessor<f64>,
+            BoxRasterQueryProcessor<f64>,
+            BoxRasterQueryProcessor<f64>,
+        ),
+        no_data_value: TO,
+        map_no_data: bool,
+    ) -> Self {
+        Self {
+            sources,
             program: Arc::new(program),
             phantom_data: PhantomData::default(),
             no_data_value,
@@ -525,6 +581,106 @@ where
                                 let a = a.as_();
                                 let b = b.as_();
                                 let result = expression(a, b);
+                                TO::from_(result)
+                            })
+                            .collect();
+
+                        Result::<Vec<TO>>::Ok(data)
+                    })
+                })
+                .await??;
+
+                let out =
+                    Grid2D::<TO>::new(output_grid_shape, data, Some(self.no_data_value))?.into();
+
+                Ok(RasterTile2D::new(
+                    out_time,
+                    out_tile_position,
+                    out_global_geo_transform,
+                    out,
+                ))
+            })
+            .boxed())
+    }
+}
+
+#[async_trait]
+impl<'a, TO> QueryProcessor for ExpressionQueryProcessor3<TO>
+where
+    TO: Pixel,
+{
+    type Output = RasterTile2D<TO>;
+    type SpatialBounds = SpatialPartition2D;
+
+    async fn query<'b>(
+        &'b self,
+        query: RasterQueryRectangle,
+        ctx: &'b dyn QueryContext,
+    ) -> Result<BoxStream<'b, Result<Self::Output>>> {
+        // TODO: tile alignment
+
+        let queries = try_join!(
+            self.sources.0.query(query, ctx),
+            self.sources.1.query(query, ctx),
+            self.sources.2.query(query, ctx),
+        )?;
+
+        Ok(StreamTuple3Zip::new(queries)
+            .map(|rasters| Ok((rasters.0?, rasters.1?, rasters.2?))) // just propagate error
+            .and_then(move |rasters| async move {
+                if rasters.0.grid_array.is_empty()
+                    && rasters.1.grid_array.is_empty()
+                    && rasters.2.grid_array.is_empty()
+                {
+                    let a = &rasters.0;
+                    return Ok(RasterTile2D::new(
+                        a.time,
+                        a.tile_position,
+                        a.global_geo_transform,
+                        EmptyGrid::new(a.grid_array.grid_shape(), self.no_data_value).into(),
+                    ));
+                }
+
+                let a_tile = &rasters.0;
+
+                let out_time = a_tile.time;
+                let out_tile_position = a_tile.tile_position;
+                let out_global_geo_transform = a_tile.global_geo_transform;
+                let out_no_data = self.no_data_value;
+
+                let output_grid_shape = a_tile.grid_shape();
+
+                let thread_pool = ctx.thread_pool().clone();
+                let program = self.program.clone();
+                let map_no_data = self.map_no_data;
+
+                let data = tokio::task::spawn_blocking(move || {
+                    thread_pool.install(move || {
+                        let expression = unsafe {
+                            // we have to "trust" that the function has the signature we expect
+                            program.function_3ary()?
+                        };
+
+                        let tile_0 = rasters.0.into_materialized_tile();
+                        let tile_1 = rasters.1.into_materialized_tile();
+                        let tile_2 = rasters.2.into_materialized_tile();
+
+                        let data = (
+                            &tile_0.grid_array.data,
+                            &tile_1.grid_array.data,
+                            &tile_2.grid_array.data,
+                        )
+                            .into_par_iter()
+                            .map(|(a, b, c)| {
+                                if !map_no_data
+                                    && (tile_0.is_no_data(*a)
+                                        || tile_1.is_no_data(*b)
+                                        || tile_2.is_no_data(*c))
+                                {
+                                    return out_no_data;
+                                }
+
+                                let result = expression(*a, *b, *c);
                                 TO::from_(result)
                             })
                             .collect();
@@ -802,6 +958,68 @@ mod tests {
             Grid2D::new(
                 [3, 2].into(),
                 vec![2, 4, 6, 8, 10, 12],
+                no_data_value_option,
+            )
+            .unwrap()
+            .into()
+        );
+    }
+
+    #[tokio::test]
+    async fn basic_ternary() {
+        let no_data_value = 3;
+        let no_data_value_option = Some(no_data_value);
+
+        let raster_a = make_raster(no_data_value_option);
+        let raster_b = make_raster(no_data_value_option);
+        let raster_c = make_raster(no_data_value_option);
+
+        let o = NewExpression {
+            params: ExpressionParams {
+                expression: "A+B+C".to_string(),
+                output_type: RasterDataType::I8,
+                output_no_data_value: no_data_value.as_(), //  cast no_data_valuee to f64
+                output_measurement: Some(Measurement::Unitless),
+                map_no_data: false,
+            },
+            sources: ExpressionSources {
+                a: raster_a,
+                b: Some(raster_b),
+                c: Some(raster_c),
+            },
+        }
+        .boxed()
+        .initialize(&MockExecutionContext::default())
+        .await
+        .unwrap();
+
+        let processor = o.query_processor().unwrap().get_i8().unwrap();
+
+        let ctx = MockQueryContext::new(1.into());
+        let result_stream = processor
+            .query(
+                RasterQueryRectangle {
+                    spatial_bounds: SpatialPartition2D::new_unchecked(
+                        (0., 4.).into(),
+                        (3., 0.).into(),
+                    ),
+                    time_interval: Default::default(),
+                    spatial_resolution: SpatialResolution::one(),
+                },
+                &ctx,
+            )
+            .await
+            .unwrap();
+
+        let result: Vec<Result<RasterTile2D<i8>>> = result_stream.collect().await;
+
+        assert_eq!(result.len(), 1);
+
+        assert_eq!(
+            result[0].as_ref().unwrap().grid_array,
+            Grid2D::new(
+                [3, 2].into(),
+                vec![3, 6, 3, 12, 15, 18],
                 no_data_value_option,
             )
             .unwrap()
