@@ -1,5 +1,7 @@
-use super::{RasterQueryRectangle, VectorQueryRectangle};
-use crate::engine::{RasterResultDescriptor, ResultDescriptor, VectorResultDescriptor};
+use super::{MockQueryContext, RasterQueryRectangle, VectorQueryRectangle};
+use crate::engine::{
+    ChunkByteSize, RasterResultDescriptor, ResultDescriptor, VectorResultDescriptor,
+};
 use crate::error::Error;
 use crate::mock::MockDatasetDataSourceLoadingInfo;
 use crate::source::{GdalLoadingInfo, OgrSourceDataset};
@@ -100,6 +102,13 @@ impl MockExecutionContext {
     {
         self.meta_data
             .insert(dataset, Box::new(meta_data) as Box<dyn Any + Send + Sync>);
+    }
+
+    pub fn mock_query_context(&self, chunk_byte_size: ChunkByteSize) -> MockQueryContext {
+        MockQueryContext {
+            chunk_byte_size,
+            thread_pool: self.thread_pool.clone(),
+        }
     }
 }
 
