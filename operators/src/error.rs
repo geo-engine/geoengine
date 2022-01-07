@@ -2,12 +2,13 @@ use crate::util::statistics::StatisticsError;
 use chrono::ParseError;
 use geoengine_datatypes::dataset::DatasetId;
 use geoengine_datatypes::primitives::FeatureDataType;
-use snafu::Snafu;
+use snafu::prelude::*;
 use std::ops::Range;
 use std::path::PathBuf;
 
 #[derive(Debug, Snafu)]
-#[snafu(visibility = "pub(crate)")]
+#[snafu(visibility(pub(crate)))]
+#[snafu(context(suffix(false)))] // disables default `Snafu` suffix
 pub enum Error {
     UnsupportedRasterValue,
 

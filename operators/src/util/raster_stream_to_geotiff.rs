@@ -1,16 +1,17 @@
 use futures::StreamExt;
 use gdal::raster::{Buffer, GdalType, RasterCreationOption};
 use gdal::{Dataset, Driver};
-use geoengine_datatypes::primitives::{AxisAlignedRectangle, SpatialPartitioned};
+use geoengine_datatypes::primitives::{
+    AxisAlignedRectangle, SpatialPartition2D, SpatialPartitioned,
+};
 use geoengine_datatypes::raster::{
     ChangeGridBounds, GeoTransform, Grid2D, GridBlit, GridIdx, GridSize, Pixel, RasterTile2D,
 };
 use geoengine_datatypes::spatial_reference::SpatialReference;
 use serde::{Deserialize, Serialize};
 use std::convert::TryInto;
+use std::path::Path;
 use std::path::PathBuf;
-use std::sync::mpsc::{Receiver, Sender};
-use std::{path::Path, sync::mpsc};
 
 use crate::{engine::RasterQueryRectangle, util::Result};
 use crate::{
@@ -53,9 +54,9 @@ pub struct GdalGeoTiffDatasetMetadata {
     pub spatial_reference: SpatialReference,
 }
 
-pub async fn raster_stream_to_geotiff<T, C: QueryContext + 'static>(
+pub async fn raster_stream_to_geotiff<P, C: QueryContext + 'static>(
     file_path: &Path,
-    processor: Box<dyn RasterQueryProcessor<RasterType = T>>,
+    processor: Box<dyn RasterQueryProcessor<RasterType = P>>,
     query_rect: RasterQueryRectangle,
     query_ctx: C,
     gdal_tiff_metadata: GdalGeoTiffDatasetMetadata,
@@ -63,105 +64,137 @@ pub async fn raster_stream_to_geotiff<T, C: QueryContext + 'static>(
     tile_limit: Option<usize>,
 ) -> Result<()>
 where
-    T: Pixel + GdalType,
+    P: Pixel + GdalType,
 {
     // TODO: create file path if it doesn't exist
     // TODO: handle streams with multiple time steps correctly
 
-    let (tx, rx): (Sender<RasterTile2D<T>>, Receiver<RasterTile2D<T>>) = mpsc::channel();
+    let file_path = file_path.to_owned();
 
-    let file_path_clone = file_path.to_owned();
-    let writer = tokio::task::spawn_blocking(move || {
-        gdal_writer(
-            &rx,
-            &file_path_clone,
+    let dataset_writer = tokio::task::spawn_blocking(move || {
+        GdalDatasetWriter::new(
+            &file_path,
             query_rect,
             gdal_tiff_metadata,
             gdal_tiff_options,
         )
-    });
+    })
+    .await?;
 
-    let mut tile_stream = processor.raster_query(query_rect, &query_ctx).await?;
+    let tile_stream = processor.raster_query(query_rect, &query_ctx).await?;
 
-    let mut tile_count = 0;
-    while let Some(tile) = tile_stream.next().await {
-        // TODO: more descriptive error. This error occured when a file could not be created...
-        tx.send(tile?).map_err(|_| Error::ChannelSend)?;
+    let dataset_writer = tile_stream
+        .enumerate()
+        .fold(
+            dataset_writer,
+            move |dataset_writer, (tile_index, tile)| async move {
+                if tile_limit.map_or_else(|| false, |limit| tile_index >= limit) {
+                    return Err(Error::TileLimitExceeded {
+                        limit: tile_limit.expect("limit exist because it is exceeded"),
+                    });
+                }
 
-        tile_count += 1;
+                // TODO: more descriptive error. This error occured when a file could not be created...
+                let dataset_writer = dataset_writer?;
+                let tile = tile?;
 
-        if tile_limit.map_or_else(|| false, |limit| tile_count > limit) {
-            return Err(Error::TileLimitExceeded {
-                limit: tile_limit.expect("limit exist because it is exceeded"),
-            });
-        }
-    }
+                tokio::task::spawn_blocking(move || -> Result<GdalDatasetWriter<P>> {
+                    dataset_writer.write_tile(tile)?;
+                    Ok(dataset_writer)
+                })
+                .await?
+            },
+        )
+        .await?;
 
-    drop(tx);
-
-    writer.await??;
-
-    Ok(())
+    tokio::task::spawn_blocking(move || dataset_writer.finish()).await?
 }
 
 const COG_BLOCK_SIZE: &str = "512";
 const COMPRESSION_FORMAT: &str = "LZW";
 const COMPRESSION_LEVEL: &str = "9"; // maximum compression
 
-fn gdal_writer<T: Pixel + GdalType>(
-    rx: &Receiver<RasterTile2D<T>>,
-    file_path: &Path,
-    query_rect: RasterQueryRectangle,
-    gdal_tiff_metadata: GdalGeoTiffDatasetMetadata,
+#[derive(Debug)]
+struct GdalDatasetWriter<P: Pixel + GdalType> {
+    dataset: Dataset,
+    rasterband_index: isize,
+    intermediate_file_path: PathBuf,
+    output_file_path: PathBuf,
     gdal_tiff_options: GdalGeoTiffOptions,
-) -> Result<()> {
-    const INTERMEDIATE_FILE_SUFFIX: &str = "GEO-ENGINE-TMP";
-    let intermediate_file_path = file_path.with_extension(INTERMEDIATE_FILE_SUFFIX);
-    let output_file_path = file_path;
+    gdal_tiff_metadata: GdalGeoTiffDatasetMetadata,
+    output_bounds: SpatialPartition2D,
+    output_geo_transform: GeoTransform,
+    x_pixel_size: f64,
+    y_pixel_size: f64,
+    _type: std::marker::PhantomData<P>,
+}
 
-    let compression_num_threads = gdal_tiff_options.compression_num_threads.to_string();
+impl<P: Pixel + GdalType> GdalDatasetWriter<P> {
+    fn new(
+        file_path: &Path,
+        query_rect: RasterQueryRectangle,
+        gdal_tiff_metadata: GdalGeoTiffDatasetMetadata,
+        gdal_tiff_options: GdalGeoTiffOptions,
+    ) -> Result<Self> {
+        const INTERMEDIATE_FILE_SUFFIX: &str = "GEO-ENGINE-TMP";
+        let intermediate_file_path = file_path.with_extension(INTERMEDIATE_FILE_SUFFIX);
+        let output_file_path = file_path.to_path_buf();
 
-    let x_pixel_size = query_rect.spatial_resolution.x;
-    let y_pixel_size = query_rect.spatial_resolution.y;
-    let width = (query_rect.spatial_bounds.size_x() / x_pixel_size).ceil() as u32;
-    let height = (query_rect.spatial_bounds.size_y() / y_pixel_size).ceil() as u32;
+        let compression_num_threads = gdal_tiff_options.compression_num_threads.to_string();
 
-    let output_geo_transform = GeoTransform::new(
-        query_rect.spatial_bounds.upper_left(),
-        x_pixel_size,
-        -y_pixel_size,
-    );
-    let output_bounds = query_rect.spatial_bounds;
+        let x_pixel_size = query_rect.spatial_resolution.x;
+        let y_pixel_size = query_rect.spatial_resolution.y;
+        let width = (query_rect.spatial_bounds.size_x() / x_pixel_size).ceil() as u32;
+        let height = (query_rect.spatial_bounds.size_y() / y_pixel_size).ceil() as u32;
 
-    let driver = Driver::get("GTiff")?;
-    let options = create_gdal_tiff_options(&compression_num_threads, gdal_tiff_options.as_cog);
+        let output_geo_transform = GeoTransform::new(
+            query_rect.spatial_bounds.upper_left(),
+            x_pixel_size,
+            -y_pixel_size,
+        );
+        let output_bounds = query_rect.spatial_bounds;
 
-    let mut dataset = driver.create_with_band_type_with_options::<T, _>(
-        if gdal_tiff_options.as_cog {
-            &intermediate_file_path
-        } else {
-            output_file_path
-        },
-        width as isize,
-        height as isize,
-        1,
-        &options,
-    )?;
+        let driver = Driver::get("GTiff")?;
+        let options = create_gdal_tiff_options(&compression_num_threads, gdal_tiff_options.as_cog);
 
-    dataset.set_spatial_ref(&gdal_tiff_metadata.spatial_reference.try_into()?)?;
-    dataset.set_geo_transform(&output_geo_transform.into())?;
-    let mut band = dataset.rasterband(1)?;
+        let mut dataset = driver.create_with_band_type_with_options::<P, _>(
+            &intermediate_file_path,
+            width as isize,
+            height as isize,
+            1,
+            &options,
+        )?;
 
-    if let Some(no_data) = gdal_tiff_metadata.no_data_value {
-        band.set_no_data_value(no_data)?;
+        dataset.set_spatial_ref(&gdal_tiff_metadata.spatial_reference.try_into()?)?;
+        dataset.set_geo_transform(&output_geo_transform.into())?;
+        let rasterband_index = 1;
+        let mut band = dataset.rasterband(rasterband_index)?;
+
+        if let Some(no_data) = gdal_tiff_metadata.no_data_value {
+            band.set_no_data_value(no_data)?;
+        }
+
+        Ok(Self {
+            dataset,
+            rasterband_index,
+            intermediate_file_path,
+            output_file_path,
+            gdal_tiff_options,
+            gdal_tiff_metadata,
+            output_bounds,
+            output_geo_transform,
+            x_pixel_size,
+            y_pixel_size,
+            _type: Default::default(),
+        })
     }
 
-    while let Ok(tile) = rx.recv() {
+    fn write_tile(&self, tile: RasterTile2D<P>) -> Result<()> {
         let tile_info = tile.tile_information();
 
         let tile_bounds = tile_info.spatial_partition();
 
-        let (upper_left, grid_array) = if output_bounds.contains(&tile_bounds) {
+        let (upper_left, grid_array) = if self.output_bounds.contains(&tile_bounds) {
             (
                 tile_bounds.upper_left(),
                 tile.into_materialized_tile().grid_array,
@@ -169,19 +202,20 @@ fn gdal_writer<T: Pixel + GdalType>(
         } else {
             // extract relevant data from tile (intersection with output_bounds)
 
-            let intersection = output_bounds
+            let intersection = self
+                .output_bounds
                 .intersection(&tile_bounds)
                 .expect("tile must intersect with query");
 
             let mut output_grid = Grid2D::new_filled(
                 intersection.grid_shape(
-                    output_geo_transform.origin_coordinate,
-                    output_geo_transform.spatial_resolution(),
+                    self.output_geo_transform.origin_coordinate,
+                    self.output_geo_transform.spatial_resolution(),
                 ),
-                gdal_tiff_metadata
+                self.gdal_tiff_metadata
                     .no_data_value
-                    .map_or_else(T::zero, T::from_),
-                gdal_tiff_metadata.no_data_value.map(T::from_),
+                    .map_or_else(P::zero, P::from_),
+                self.gdal_tiff_metadata.no_data_value.map(P::from_),
             );
 
             let offset = tile
@@ -195,11 +229,11 @@ fn gdal_writer<T: Pixel + GdalType>(
             (intersection.upper_left(), output_grid)
         };
 
-        let upper_left_pixel_x = ((upper_left.x - output_geo_transform.origin_coordinate.x)
-            / x_pixel_size)
+        let upper_left_pixel_x = ((upper_left.x - self.output_geo_transform.origin_coordinate.x)
+            / self.x_pixel_size)
             .floor() as isize;
-        let upper_left_pixel_y = ((output_geo_transform.origin_coordinate.y - upper_left.y)
-            / y_pixel_size)
+        let upper_left_pixel_y = ((self.output_geo_transform.origin_coordinate.y - upper_left.y)
+            / self.y_pixel_size)
             .floor() as isize;
         let window = (upper_left_pixel_x, upper_left_pixel_y);
 
@@ -208,19 +242,32 @@ fn gdal_writer<T: Pixel + GdalType>(
 
         let buffer = Buffer::new(window_size, grid_array.data);
 
-        band.write(window, window_size, &buffer)?;
+        self.dataset
+            .rasterband(self.rasterband_index)?
+            .write(window, window_size, &buffer)?;
+
+        Ok(())
     }
 
-    if gdal_tiff_options.as_cog {
-        geotiff_to_cog(
-            dataset,
-            &intermediate_file_path,
-            output_file_path,
-            gdal_tiff_options.compression_num_threads,
-        )?;
-    }
+    fn finish(self) -> Result<()> {
+        if self.gdal_tiff_options.as_cog {
+            geotiff_to_cog(
+                self.dataset,
+                &self.intermediate_file_path,
+                &self.output_file_path,
+                self.gdal_tiff_options.compression_num_threads,
+            )
+        } else {
+            let driver = self.dataset.driver();
 
-    Ok(())
+            // close file before renaming
+            drop(self.dataset);
+
+            driver.rename(&self.output_file_path, &self.intermediate_file_path)?;
+
+            Ok(())
+        }
+    }
 }
 
 fn create_gdal_tiff_options(

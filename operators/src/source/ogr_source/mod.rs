@@ -1,31 +1,30 @@
-use std::iter::Peekable;
+mod dataset_iterator;
+
+use std::collections::{HashMap, HashSet};
+use std::fmt::Debug;
 use std::marker::PhantomData;
 use std::ops::{Add, DerefMut};
 use std::path::PathBuf;
 use std::pin::Pin;
 use std::str::FromStr;
-use std::sync::mpsc::{self, Receiver, SyncSender, TryRecvError, TrySendError};
+use std::sync::Arc;
 use std::task::Poll;
-use std::{
-    collections::{HashMap, HashSet},
-    iter::Fuse,
-};
-use std::{ffi::OsStr, fmt::Debug};
 
 use chrono::DateTime;
 use chrono::NaiveDate;
 use chrono::NaiveDateTime;
-use futures::stream::BoxStream;
-use futures::task::{Context, Waker};
-use futures::Stream;
-use futures::StreamExt;
-use gdal::vector::sql::{Dialect, ResultSet};
-use gdal::vector::{Feature, FeatureIterator, FieldValue, Layer, LayerCaps, OGRwkbGeometryType};
-use gdal::{Dataset, DatasetOptions, GdalOpenFlags};
+use futures::future::BoxFuture;
+use futures::stream::{BoxStream, FusedStream};
+use futures::task::Context;
+use futures::{ready, Stream, StreamExt};
+use futures::{Future, FutureExt};
+use gdal::vector::sql::ResultSet;
+use gdal::vector::{Feature, FieldValue, Layer, LayerCaps, OGRwkbGeometryType};
 use log::debug;
+use pin_project::pin_project;
 use serde::{Deserialize, Serialize};
 use snafu::ResultExt;
-use tokio::task::spawn_blocking;
+use tokio::sync::Mutex;
 
 use geoengine_datatypes::collections::{
     BuilderProvider, FeatureCollection, FeatureCollectionBuilder, FeatureCollectionInfos,
@@ -41,7 +40,6 @@ use geoengine_datatypes::util::arrow::ArrowTyped;
 
 use crate::engine::{OperatorDatasets, QueryProcessor, VectorQueryRectangle};
 use crate::error::Error;
-use crate::util::gdal::gdal_open_dataset_ex;
 use crate::util::Result;
 use crate::{
     engine::{
@@ -54,6 +52,8 @@ use async_trait::async_trait;
 use gdal::errors::GdalError;
 use geoengine_datatypes::dataset::DatasetId;
 use std::convert::{TryFrom, TryInto};
+
+use self::dataset_iterator::OgrDatasetIterator;
 
 #[derive(Clone, Debug, PartialEq, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -337,7 +337,6 @@ impl OgrSource {
 
 impl InitializedVectorOperator for InitializedOgrSource {
     fn query_processor(&self) -> Result<TypedVectorQueryProcessor> {
-        // TODO: simplify with macro
         Ok(match self.result_descriptor.data_type {
             VectorDataType::Data => TypedVectorQueryProcessor::Data(
                 OgrSourceProcessor::new(self.state.dataset_information.clone()).boxed(),
@@ -403,23 +402,27 @@ where
             query,
             ctx.chunk_byte_size().into(),
         )
+        .await?
         .boxed())
     }
 }
 
+#[pin_project(project = OgrSourceStreamProjection)]
 pub struct OgrSourceStream<G>
 where
     G: Geometry + ArrowTyped,
 {
-    worker_thread_is_idle: bool,
-    worker_thread_terminated: bool,
-    poll_result_receiver: Receiver<Option<Result<FeatureCollection<G>>>>,
-    work_query_sender: SyncSender<WorkQuery>,
-    _geometry_type: PhantomData<G>,
-}
-
-struct WorkQuery {
-    waker: Waker,
+    dataset_information: Arc<OgrSourceDataset>,
+    dataset_iterator: Arc<Mutex<OgrDatasetIterator>>,
+    data_types: Arc<HashMap<String, FeatureDataType>>,
+    feature_collection_builder: FeatureCollectionBuilder<G>,
+    time_extractor: Arc<Box<dyn Fn(&Feature) -> Result<TimeInterval> + Send + Sync + 'static>>,
+    query_rectangle: VectorQueryRectangle,
+    chunk_byte_size: usize,
+    #[pin]
+    future: Option<BoxFuture<'static, Result<FeatureCollection<G>>>>,
+    has_ended: bool,
+    prestine: bool,
 }
 
 enum FeaturesProvider<'a> {
@@ -428,13 +431,6 @@ enum FeaturesProvider<'a> {
 }
 
 impl FeaturesProvider<'_> {
-    fn features(&mut self) -> FeatureIterator {
-        match self {
-            FeaturesProvider::Layer(l) => l.features(),
-            FeaturesProvider::ResultSet(r) => r.features(),
-        }
-    }
-
     fn layer_ref(&self) -> &Layer {
         match self {
             FeaturesProvider::Layer(l) => l,
@@ -484,196 +480,56 @@ where
     G: Geometry + ArrowTyped + 'static + TryFromOgrGeometry + TryFrom<TypedGeometry>,
     FeatureCollectionRowBuilder<G>: FeatureCollectionBuilderGeometryHandler<G>,
 {
-    pub fn new(
+    pub async fn new(
         dataset_information: OgrSourceDataset,
         query_rectangle: VectorQueryRectangle,
         chunk_byte_size: usize,
-    ) -> Self {
-        // We need two slots for the channel in case of an error: first output `Err`, then output `None` to close the `Stream`
-        let (poll_result_sender, poll_result_receiver) = mpsc::sync_channel(2);
-        let (work_query_sender, work_query_receiver) = mpsc::sync_channel(1);
+    ) -> Result<Self> {
+        tokio::task::spawn_blocking(move || {
+            let dataset_iterator = OgrDatasetIterator::new(&dataset_information, &query_rectangle)?;
 
-        // This stream spawns a thread early since GDAL's data types are not `Send` and we need to create everything inside this thread.
-        spawn_blocking(move || {
-            let mut work_query = match work_query_receiver.recv() {
-                Ok(work_query) => work_query,
-                Err(_) => return, // sender disconnected, so there will be no new work
-            };
+            let (data_types, feature_collection_builder) =
+                Self::initialize_types_and_builder(&dataset_information);
 
-            if let Err(error) = Self::compute_thread(
-                &mut work_query,
-                &dataset_information,
-                &work_query_receiver,
-                &poll_result_sender,
-                &query_rectangle,
-                chunk_byte_size,
-            ) {
-                poll_result_sender.send(Some(Err(error))).unwrap();
-                poll_result_sender.send(None).unwrap();
-                work_query.waker.wake();
-            };
-        });
+            let dataset_information = Arc::new(dataset_information);
+            let time_extractor = Self::initialize_time_extractors(dataset_information.time.clone());
 
-        Self {
-            worker_thread_is_idle: true,
-            worker_thread_terminated: false,
-            poll_result_receiver,
-            work_query_sender,
-            _geometry_type: Default::default(),
-        }
-    }
-
-    fn open_csv_dataset(dataset_info: &OgrSourceDataset) -> Result<Dataset> {
-        let columns = dataset_info
-            .columns
-            .as_ref()
-            .ok_or(error::Error::OgrSourceColumnsSpecMissing)?;
-
-        let allowed_drivers = Some(vec!["CSV"]);
-
-        let mut dataset_options = DatasetOptions {
-            open_flags: GdalOpenFlags::GDAL_OF_VECTOR,
-            allowed_drivers: allowed_drivers.as_deref(),
-            ..DatasetOptions::default()
-        };
-
-        let headers = if let Some(FormatSpecifics::Csv { header }) = &columns.format_specifics {
-            header.as_gdal_param()
-        } else {
-            CsvHeader::Auto.as_gdal_param()
-        };
-
-        // TODO: make column x optional or allow other indication for data collection
-        if columns.x.is_empty() {
-            let open_opts = &[
-                headers.as_str(),
-                // "AUTODETECT_TYPE=YES", // This breaks tests
-            ];
-            dataset_options.open_options = Some(open_opts);
-            return gdal_open_dataset_ex(&dataset_info.file_name, dataset_options);
-        }
-
-        if let Some(y) = &columns.y {
-            let open_opts = &[
-                &format!("X_POSSIBLE_NAMES={}", columns.x),
-                &format!("Y_POSSIBLE_NAMES={}", y),
-                headers.as_str(),
-                "AUTODETECT_TYPE=YES",
-            ];
-            dataset_options.open_options = Some(open_opts);
-            return gdal_open_dataset_ex(&dataset_info.file_name, dataset_options);
-        }
-
-        let open_opts = &[
-            &format!("GEOM_POSSIBLE_NAMES={}", columns.x),
-            headers.as_str(),
-            "AUTODETECT_TYPE=YES",
-        ];
-        dataset_options.open_options = Some(open_opts);
-        gdal_open_dataset_ex(&dataset_info.file_name, dataset_options)
-    }
-
-    fn is_csv(dataset_info: &OgrSourceDataset) -> bool {
-        if let Some("csv" | "tsv") = dataset_info.file_name.extension().and_then(OsStr::to_str) {
-            true
-        } else {
-            dataset_info.file_name.as_path().starts_with("CSV:")
-        }
-    }
-
-    fn open_gdal_dataset(dataset_info: &OgrSourceDataset) -> Result<Dataset> {
-        if Self::is_csv(dataset_info) {
-            Self::open_csv_dataset(dataset_info)
-        } else {
-            gdal_open_dataset_ex(
-                &dataset_info.file_name,
-                DatasetOptions {
-                    open_flags: GdalOpenFlags::GDAL_OF_VECTOR,
-                    ..Default::default()
-                },
-            )
-        }
-    }
-
-    fn compute_thread(
-        work_query: &mut WorkQuery,
-        dataset_information: &OgrSourceDataset,
-        work_query_receiver: &Receiver<WorkQuery>,
-        poll_result_sender: &SyncSender<Option<Result<FeatureCollection<G>>>>,
-        query_rectangle: &VectorQueryRectangle,
-        chunk_byte_size: usize,
-    ) -> Result<()> {
-        // TODO: add OGR time filter if forced
-        let dataset = Self::open_gdal_dataset(dataset_information)?;
-
-        let mut features_provider = if let Some(sql) = dataset_information.sql_query.as_ref() {
-            FeaturesProvider::ResultSet(
-                dataset
-                    .execute_sql(sql, None, Dialect::DEFAULT)?
-                    .ok_or(error::Error::OgrSqlQuery)?,
-            )
-        } else {
-            FeaturesProvider::Layer(dataset.layer_by_name(&dataset_information.layer_name)?)
-        };
-
-        let use_ogr_spatial_filter = dataset_information.force_ogr_spatial_filter
-            || features_provider.has_gdal_capability(gdal::vector::LayerCaps::OLCFastSpatialFilter);
-
-        if use_ogr_spatial_filter {
-            debug!(
-                "using spatial filter {:?} for layer {:?}",
-                query_rectangle.spatial_bounds, &dataset_information.layer_name
-            );
-            // NOTE: the OGR-filter may be inaccurately allowing more features that should be returned in a "strict" fashion.
-            features_provider.set_spatial_filter(&query_rectangle.spatial_bounds);
-        }
-
-        if let Some(attribute_query) = &dataset_information.attribute_query {
-            debug!(
-                "using attribute filter {:?} for layer {:?}",
-                attribute_query, &dataset_information.layer_name
-            );
-            features_provider.set_attribute_filter(attribute_query)?;
-        }
-
-        let (data_types, feature_collection_builder) =
-            Self::initialize_types_and_builder(dataset_information);
-
-        let time_extractor = Self::initialize_time_extractors(dataset_information);
-
-        let mut features = features_provider.features().fuse().peekable();
-
-        if features.peek().is_none() {
-            // emit empty dataset and finish
-
-            let empty_collection = feature_collection_builder
-                .finish_header()
-                .build()
-                .map_err(Into::into);
-
-            if poll_result_sender
-                .send(Some(empty_collection))
-                .and_then(|_| poll_result_sender.send(None))
-                .is_ok()
-            {
-                work_query.waker.wake_by_ref();
-            }
-
-            return Ok(());
-        }
-
-        let mut emitted_non_empty_collections = false;
-
-        while features.peek().is_some() {
-            let batch_result = Self::compute_batch(
-                &mut features,
-                feature_collection_builder.clone(),
+            Ok(Self {
                 dataset_information,
-                &data_types,
+                dataset_iterator: Arc::new(Mutex::new(dataset_iterator)),
+                data_types: Arc::new(data_types),
+                feature_collection_builder,
                 query_rectangle,
-                &time_extractor,
+                time_extractor: Arc::new(time_extractor),
                 chunk_byte_size,
-                use_ogr_spatial_filter,
+                future: None,
+                has_ended: false,
+                prestine: true,
+            })
+        })
+        .await?
+    }
+
+    async fn compute_batch_future(
+        dataset_iterator: Arc<Mutex<OgrDatasetIterator>>,
+        dataset_information: Arc<OgrSourceDataset>,
+        feature_collection_builder: FeatureCollectionBuilder<G>,
+        data_types: Arc<HashMap<String, FeatureDataType>>,
+        query_rectangle: VectorQueryRectangle,
+        time_extractor: Arc<Box<dyn Fn(&Feature) -> Result<TimeInterval> + Send + Sync>>,
+        chunk_byte_size: usize,
+    ) -> Result<FeatureCollection<G>> {
+        tokio::task::spawn_blocking(move || {
+            let mut dataset_iterator = dataset_iterator.blocking_lock();
+
+            let batch_result = Self::compute_batch(
+                &mut dataset_iterator,
+                feature_collection_builder,
+                &dataset_information,
+                &data_types,
+                &query_rectangle,
+                time_extractor.as_ref(),
+                chunk_byte_size,
             );
 
             let batch_result = if let Some(rename) = dataset_information
@@ -688,38 +544,14 @@ where
                 batch_result
             };
 
-            let is_empty = batch_result
-                .as_ref()
-                .map_or(false, FeatureCollection::is_empty);
-
-            // don't emit an empty collection if there were non-empty results previously
-            if is_empty && emitted_non_empty_collections {
-                break;
-            }
-
-            emitted_non_empty_collections = true;
-
-            match poll_result_sender.send(Some(batch_result)) {
-                Ok(_) => work_query.waker.wake_by_ref(),
-                Err(_) => return Ok(()), // receiver disconnected, so this thread can abort
-            };
-
-            *work_query = match work_query_receiver.recv() {
-                Ok(work_query) => work_query,
-                Err(_) => return Ok(()), // sender disconnected, so there will be no new work
-            };
-        }
-
-        if poll_result_sender.send(None).is_ok() {
-            work_query.waker.wake_by_ref();
-        }
-
-        Ok(())
+            batch_result
+        })
+        .await?
     }
 
     fn create_time_parser(
-        time_format: &OgrSourceTimeFormat,
-    ) -> Box<dyn Fn(FieldValue) -> Result<TimeInstance> + '_> {
+        time_format: OgrSourceTimeFormat,
+    ) -> Box<dyn Fn(FieldValue) -> Result<TimeInstance> + Send + Sync> {
         debug!("{:?}", time_format);
 
         match time_format {
@@ -730,14 +562,14 @@ where
             }),
             OgrSourceTimeFormat::Custom { custom_format } => Box::new(move |field: FieldValue| {
                 let date = field.into_string().ok_or(Error::OgrFieldValueIsNotString)?;
-                let date_time_result = DateTime::parse_from_str(&date, custom_format)
+                let date_time_result = DateTime::parse_from_str(&date, &custom_format)
                     .map(|t| t.timestamp_millis())
                     .or_else(|_| {
-                        NaiveDateTime::parse_from_str(&date, custom_format)
+                        NaiveDateTime::parse_from_str(&date, &custom_format)
                             .map(|n| n.timestamp_millis())
                     })
                     .or_else(|_| {
-                        NaiveDate::parse_from_str(&date, custom_format)
+                        NaiveDate::parse_from_str(&date, &custom_format)
                             .map(|d| d.and_hms(0, 0, 0).timestamp_millis())
                     });
                 Ok(date_time_result?.try_into()?)
@@ -758,11 +590,11 @@ where
     }
 
     fn initialize_time_extractors(
-        dataset_information: &OgrSourceDataset,
-    ) -> Box<dyn Fn(&Feature) -> Result<TimeInterval> + '_> {
+        time: OgrSourceDatasetTimeType,
+    ) -> Box<dyn Fn(&Feature) -> Result<TimeInterval> + Send + Sync> {
         // TODO: exploit rust-gdal `datetime` feature
 
-        match &dataset_information.time {
+        match time {
             OgrSourceDatasetTimeType::None => {
                 Box::new(move |_feature: &Feature| Ok(TimeInterval::default()))
             }
@@ -777,7 +609,7 @@ where
                     let field_value = feature.field(&start_field)?;
                     if let Some(field_value) = field_value {
                         let time_start = time_start_parser(field_value)?;
-                        TimeInterval::new(time_start, (time_start + *duration)?).map_err(Into::into)
+                        TimeInterval::new(time_start, (time_start + duration)?).map_err(Into::into)
                     } else {
                         // TODO: throw error or use some user defined default time (like for geometries)?
                         Ok(TimeInterval::default())
@@ -876,15 +708,16 @@ where
 
     #[allow(clippy::too_many_arguments)]
     fn compute_batch(
-        feature_iterator: &mut Peekable<Fuse<FeatureIterator<'_>>>,
+        feature_iterator: &mut OgrDatasetIterator,
         feature_collection_builder: FeatureCollectionBuilder<G>,
         dataset_information: &OgrSourceDataset,
         data_types: &HashMap<String, FeatureDataType>,
         query_rectangle: &VectorQueryRectangle,
         time_extractor: &dyn Fn(&Feature) -> Result<TimeInterval>,
         chunk_byte_size: usize,
-        was_spatial_filtered_by_ogr: bool,
     ) -> Result<FeatureCollection<G>> {
+        let was_spatial_filtered_by_ogr = feature_iterator.was_spatial_filtered_by_ogr();
+
         let mut builder = feature_collection_builder.finish_header();
 
         let default_geometry: Option<G> = match &dataset_information.default_geometry {
@@ -1042,59 +875,77 @@ where
 
 impl<G> Stream for OgrSourceStream<G>
 where
-    G: Geometry + ArrowTyped + 'static + std::marker::Unpin,
+    G: Geometry + ArrowTyped + 'static + std::marker::Unpin + TryFromOgrGeometry,
+    FeatureCollectionRowBuilder<G>: FeatureCollectionBuilderGeometryHandler<G>,
 {
     type Item = Result<FeatureCollection<G>>;
 
-    fn poll_next(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
-        if self.worker_thread_terminated {
-            // error was sent out previously, now stop the stream
+    fn poll_next(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
+        if self.is_terminated() {
             return Poll::Ready(None);
         }
 
-        match self.poll_result_receiver.try_recv() {
-            Ok(poll_result) => {
-                self.as_mut().worker_thread_is_idle = true;
+        let mut this = self.project();
 
-                return Poll::Ready(poll_result);
-            }
-            Err(TryRecvError::Empty) => {
-                // nothing to do
-            }
-            Err(TryRecvError::Disconnected) => {
-                self.as_mut().worker_thread_terminated = true;
+        loop {
+            if let Some(future) = this.future.as_mut().as_pin_mut() {
+                // try to fetch result from future
 
-                return Poll::Ready(Some(Err(Error::WorkerThread {
-                    reason: "Channel on worker thread died".to_string(),
-                })));
-            }
-        };
+                let collection: Result<FeatureCollection<G>> = ready!(future.poll(cx));
+                this.future.set(None);
 
-        if self.worker_thread_is_idle {
-            let work_query = WorkQuery {
-                waker: cx.waker().clone(),
-            };
+                match collection {
+                    Err(e) => {
+                        *this.has_ended = true;
 
-            match self.work_query_sender.try_send(work_query) {
-                Ok(_) => {
-                    self.as_mut().worker_thread_is_idle = true;
+                        return Poll::Ready(Some(Err(e)));
+                    }
+                    Ok(collection) if collection.is_empty() => {
+                        *this.has_ended = true;
+
+                        return if *this.prestine {
+                            // only emit empty collection if there was no previous result
+                            Poll::Ready(Some(Ok(collection)))
+                        } else {
+                            Poll::Ready(None)
+                        };
+                    }
+                    Ok(collection) => {
+                        if *this.prestine {
+                            *this.prestine = false;
+                        }
+
+                        return Poll::Ready(Some(Ok(collection)));
+                    }
                 }
+            }
 
-                Err(TrySendError::Full(_)) => {
-                    // The thread has still work to do
-                }
+            // spawn new task…
 
-                Err(TrySendError::Disconnected(_)) => {
-                    self.as_mut().worker_thread_terminated = true;
+            let future = Self::compute_batch_future(
+                this.dataset_iterator.clone(),
+                this.dataset_information.clone(),
+                this.feature_collection_builder.clone(),
+                this.data_types.clone(),
+                *this.query_rectangle,
+                this.time_extractor.clone(),
+                *this.chunk_byte_size,
+            );
 
-                    return Poll::Ready(Some(Err(Error::WorkerThread {
-                        reason: "Channel on worker thread died".to_string(),
-                    })));
-                }
-            };
+            // …and store it
+
+            this.future.set(Some(future.boxed()));
         }
+    }
+}
 
-        Poll::Pending
+impl<G> FusedStream for OgrSourceStream<G>
+where
+    G: Geometry + ArrowTyped + 'static + std::marker::Unpin + TryFromOgrGeometry,
+    FeatureCollectionRowBuilder<G>: FeatureCollectionBuilderGeometryHandler<G>,
+{
+    fn is_terminated(&self) -> bool {
+        self.has_ended
     }
 }
 
@@ -1245,9 +1096,10 @@ mod tests {
     use crate::engine::{ChunkByteSize, MockExecutionContext, MockQueryContext, StaticMetaData};
     use crate::source::ogr_source::FormatSpecifics::Csv;
     use crate::test_data;
-    use futures::TryStreamExt;
+    use futures::{StreamExt, TryStreamExt};
     use geoengine_datatypes::collections::{
-        DataCollection, GeometryCollection, MultiPointCollection, MultiPolygonCollection,
+        DataCollection, FeatureCollectionInfos, GeometryCollection, MultiPointCollection,
+        MultiPolygonCollection,
     };
     use geoengine_datatypes::dataset::InternalDatasetId;
     use geoengine_datatypes::primitives::{
@@ -1444,7 +1296,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn error() -> Result<()> {
+    async fn early_error() {
         let dataset_information = OgrSourceDataset {
             file_name: "".into(),
             layer_name: "".to_string(),
@@ -1475,9 +1327,51 @@ mod tests {
         let query = query_processor
             .query(
                 VectorQueryRectangle {
-                    spatial_bounds: BoundingBox2D::new((0., 0.).into(), (1., 1.).into())?,
+                    spatial_bounds: BoundingBox2D::new((0., 0.).into(), (1., 1.).into()).unwrap(),
                     time_interval: Default::default(),
-                    spatial_resolution: SpatialResolution::new(1., 1.)?,
+                    spatial_resolution: SpatialResolution::new(1., 1.).unwrap(),
+                },
+                &context,
+            )
+            .await;
+
+        assert!(query.is_err());
+    }
+
+    #[tokio::test]
+    async fn error_in_stream() {
+        let dataset_information = OgrSourceDataset {
+            file_name: test_data!("vector/data/missing_geo.json").into(),
+            layer_name: "missing_geo".to_string(),
+            data_type: None,
+            time: OgrSourceDatasetTimeType::None,
+            default_geometry: None,
+            columns: None,
+            force_ogr_time_filter: false,
+            force_ogr_spatial_filter: false,
+            on_error: OgrSourceErrorSpec::Abort,
+            sql_query: None,
+            attribute_query: None,
+        };
+        let info = StaticMetaData {
+            loading_info: dataset_information,
+            result_descriptor: VectorResultDescriptor {
+                data_type: VectorDataType::MultiPoint,
+                spatial_reference: SpatialReferenceOption::Unreferenced,
+                columns: Default::default(),
+            },
+            phantom: Default::default(),
+        };
+
+        let query_processor = OgrSourceProcessor::<MultiPoint>::new(Box::new(info));
+
+        let context = MockQueryContext::new(ChunkByteSize::MAX);
+        let query = query_processor
+            .query(
+                VectorQueryRectangle {
+                    spatial_bounds: BoundingBox2D::new((0., 0.).into(), (5., 5.).into()).unwrap(),
+                    time_interval: Default::default(),
+                    spatial_resolution: SpatialResolution::new(1., 1.).unwrap(),
                 },
                 &context,
             )
@@ -1487,9 +1381,8 @@ mod tests {
         let result: Vec<Result<MultiPointCollection>> = query.collect().await;
 
         assert_eq!(result.len(), 1);
-        assert!(result[0].is_err());
 
-        Ok(())
+        assert!(result[0].is_err());
     }
 
     #[tokio::test]
