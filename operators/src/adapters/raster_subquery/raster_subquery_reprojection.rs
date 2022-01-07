@@ -3,7 +3,8 @@ use std::sync::Arc;
 use crate::engine::RasterQueryRectangle;
 use crate::error;
 use crate::util::Result;
-use futures::{FutureExt, TryFuture};
+use futures::future::BoxFuture;
+use futures::{Future, FutureExt, TryFuture, TryFutureExt};
 use geoengine_datatypes::operations::reproject::Reproject;
 use geoengine_datatypes::primitives::{SpatialPartition2D, SpatialPartitioned};
 use geoengine_datatypes::raster::{Grid2D, GridIndexAccess, GridSize};
@@ -36,10 +37,14 @@ pub struct TileReprojectionSubQuery<T, F> {
     pub valid_bounds_out: Option<SpatialPartition2D>,
 }
 
-impl<T, FoldM, FoldF> SubQueryTileAggregator<T> for TileReprojectionSubQuery<T, FoldM>
+impl<'a, T, FoldM, FoldF> SubQueryTileAggregator<'a, T> for TileReprojectionSubQuery<T, FoldM>
 where
     T: Pixel,
-    FoldM: Send + Clone + Fn(TileWithProjectionCoordinates<T>, RasterTile2D<T>) -> FoldF,
+    FoldM: Send
+        + Sync
+        + 'static
+        + Clone
+        + Fn(TileWithProjectionCoordinates<T>, RasterTile2D<T>) -> FoldF,
     FoldF: Send + TryFuture<Ok = TileWithProjectionCoordinates<T>, Error = error::Error>,
 {
     type FoldFuture = FoldF;
@@ -47,43 +52,26 @@ where
     type FoldMethod = FoldM;
 
     type TileAccu = TileWithProjectionCoordinates<T>;
+    type TileAccuFuture = BoxFuture<'a, Result<Self::TileAccu>>;
 
     fn new_fold_accu(
         &self,
         tile_info: TileInformation,
         query_rect: RasterQueryRectangle,
         pool: &Arc<ThreadPool>,
-    ) -> Result<Self::TileAccu> {
+    ) -> Self::TileAccuFuture {
         // println!("new_fold_accu {:?}", &tile_info.global_tile_position);
 
-        let output_raster =
-            EmptyGrid::new(tile_info.tile_size_in_pixels, self.no_data_and_fill_value);
-
-        let pool = pool.clone();
-
-        // if there is a valid output spatial partition, we need to reproject the coordinates.
-        let projected_coords = if let Some(valid_out_area) = self.valid_bounds_out {
-            projected_coordinate_grid_parallel(
-                &pool,
-                tile_info,
-                self.out_srs,
-                self.in_srs,
-                &valid_out_area,
-            )?
-        } else {
-            debug!("reproject tile outside valid bounds"); // TODO: error?
-            Grid2D::new_filled(tile_info.tile_size_in_pixels, None, None)
-        };
-
-        Ok(TileWithProjectionCoordinates {
-            accu_tile: RasterTile2D::new_with_tile_info(
-                query_rect.time_interval,
-                tile_info,
-                output_raster.into(),
-            ),
-            coords: projected_coords,
-            pool,
-        })
+        build_accu(
+            query_rect,
+            pool.clone(),
+            tile_info,
+            self.no_data_and_fill_value,
+            self.valid_bounds_out,
+            self.out_srs,
+            self.in_srs,
+        )
+        .boxed()
     }
 
     fn tile_query_rectangle(
@@ -114,6 +102,42 @@ where
     fn fold_method(&self) -> Self::FoldMethod {
         self.fold_fn.clone()
     }
+}
+
+fn build_accu<T: Pixel>(
+    query_rect: RasterQueryRectangle,
+    pool: Arc<ThreadPool>,
+    tile_info: TileInformation,
+    no_data_and_fill_value: T,
+    valid_bounds_out: Option<SpatialPartition2D>,
+    out_srs: SpatialReference,
+    in_srs: SpatialReference,
+) -> impl Future<Output = Result<TileWithProjectionCoordinates<T>>> {
+    tokio::task::spawn_blocking(move || {
+        let output_raster = EmptyGrid::new(tile_info.tile_size_in_pixels, no_data_and_fill_value);
+
+        let pool = pool.clone();
+
+        // if there is a valid output spatial partition, we need to reproject the coordinates.
+        let projected_coords = if let Some(valid_out_area) = valid_bounds_out {
+            projected_coordinate_grid_parallel(&pool, tile_info, out_srs, in_srs, &valid_out_area)?
+        } else {
+            debug!("reproject tile outside valid bounds"); // TODO: error?
+            Grid2D::new_filled(tile_info.tile_size_in_pixels, None, None)
+        };
+
+        Ok(TileWithProjectionCoordinates {
+            accu_tile: RasterTile2D::new_with_tile_info(
+                query_rect.time_interval,
+                tile_info,
+                output_raster.into(),
+            ),
+            coords: projected_coords,
+            pool,
+        })
+    })
+    .map_err(From::from)
+    .and_then(|x| async { x }) // flatten Ok(Ok())
 }
 
 fn projected_coordinate_grid_parallel(
