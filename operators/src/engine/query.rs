@@ -57,7 +57,7 @@ impl ChunkByteSize {
         ChunkByteSize(cbs)
     }
 
-    pub fn bytes(&self) -> usize {
+    pub fn bytes(self) -> usize {
         self.0
     }
 }
