@@ -19,7 +19,7 @@ pub enum ExpressionError {
     ComparisonNeedsThreeParts,
     CannotAssignToParameter { parameter: String },
     AssignmentNeedsTwoParts,
-    ParserError { source: PestError },
+    Parser { source: PestError },
     EmptyExpressionName,
     EmptyParameterName,
     DuplicateParameterName { parameter: String },

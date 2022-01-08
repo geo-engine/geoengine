@@ -72,7 +72,7 @@ impl ExpressionParser {
     pub fn parse(self, name: &str, input: &str) -> Result<ExpressionAst> {
         ensure!(!name.is_empty(), error::EmptyExpressionName);
 
-        let pairs = _ExpressionParser::parse(Rule::main, input).context(error::ParserError)?;
+        let pairs = _ExpressionParser::parse(Rule::main, input).context(error::Parser)?;
 
         let root = self.build_ast(pairs)?;
 
