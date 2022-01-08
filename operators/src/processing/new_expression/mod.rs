@@ -1,29 +1,15 @@
-use std::{marker::PhantomData, sync::Arc};
-
 use self::{codegen::ExpressionAst, compiled::LinkedExpression, parser::ExpressionParser};
 use crate::{
     engine::{
-        BoxRasterQueryProcessor, ExecutionContext, InitializedRasterOperator, Operator,
-        OperatorDatasets, QueryContext, QueryProcessor, RasterOperator, RasterQueryProcessor,
-        RasterQueryRectangle, RasterResultDescriptor, TypedRasterQueryProcessor,
+        ExecutionContext, InitializedRasterOperator, Operator, OperatorDatasets, RasterOperator,
+        RasterQueryProcessor, RasterResultDescriptor, TypedRasterQueryProcessor,
     },
-    util::{
-        input::float_with_nan,
-        stream_zip::{StreamTuple2Zip, StreamTuple3Zip},
-        Result,
-    },
+    processing::new_expression::query_processor::ExpressionQueryProcessor,
+    util::{input::float_with_nan, Result},
 };
 use async_trait::async_trait;
-use futures::{stream::BoxStream, try_join, StreamExt, TryStreamExt};
-use geoengine_datatypes::{
-    dataset::DatasetId,
-    primitives::{Measurement, SpatialPartition2D},
-    raster::{
-        EmptyGrid, Grid2D, GridShapeAccess, NoDataValue, Pixel, RasterDataType, RasterTile2D,
-    },
-};
+use geoengine_datatypes::{dataset::DatasetId, primitives::Measurement, raster::RasterDataType};
 use num_traits::AsPrimitive;
-use rayon::iter::{IntoParallelIterator, IntoParallelRefIterator, ParallelIterator};
 use serde::{Deserialize, Serialize};
 use snafu::ensure;
 
@@ -33,6 +19,7 @@ mod codegen;
 mod compiled;
 mod error;
 mod parser;
+mod query_processor;
 
 /// Parameters for the `Expression` operator.
 /// * The `expression` must only contain simple arithmetic
@@ -320,331 +307,18 @@ impl InitializedRasterOperator for InitializedExpression {
     }
 }
 
-struct ExpressionQueryProcessor<TO, Sources>
-where
-    TO: Pixel,
-{
-    pub sources: Sources,
-    pub phantom_data: PhantomData<TO>,
-    pub program: Arc<LinkedExpression>,
-    pub no_data_value: TO,
-    pub map_no_data: bool,
-}
-
-impl<TO, Sources> ExpressionQueryProcessor<TO, Sources>
-where
-    TO: Pixel,
-{
-    fn new(
-        program: LinkedExpression,
-        sources: Sources,
-        no_data_value: TO,
-        map_no_data: bool,
-    ) -> Self {
-        Self {
-            sources,
-            program: Arc::new(program),
-            phantom_data: PhantomData::default(),
-            no_data_value,
-            map_no_data,
-        }
-    }
-}
-
-#[async_trait]
-impl<'a, TO, T1> QueryProcessor for ExpressionQueryProcessor<TO, BoxRasterQueryProcessor<T1>>
-where
-    T1: Pixel,
-    TO: Pixel,
-{
-    type Output = RasterTile2D<TO>;
-    type SpatialBounds = SpatialPartition2D;
-
-    async fn query<'b>(
-        &'b self,
-        query: RasterQueryRectangle,
-        ctx: &'b dyn QueryContext,
-    ) -> Result<BoxStream<'b, Result<Self::Output>>> {
-        Ok(self
-            .sources
-            .query(query, ctx)
-            .await?
-            .and_then(move |a| async move {
-                if a.grid_array.is_empty() {
-                    return Ok(RasterTile2D::new(
-                        a.time,
-                        a.tile_position,
-                        a.global_geo_transform,
-                        EmptyGrid::new(a.grid_array.grid_shape(), self.no_data_value).into(),
-                    ));
-                }
-
-                // TODO: iterate over empty grid
-                let a_tile = a.into_materialized_tile();
-
-                let out_time = a_tile.time;
-                let out_tile_position = a_tile.tile_position;
-                let out_global_geo_transform = a_tile.global_geo_transform;
-                let out_no_data = self.no_data_value;
-
-                let output_grid_shape = a_tile.grid_shape();
-
-                let thread_pool = ctx.thread_pool().clone();
-                let program = self.program.clone();
-                let map_no_data = self.map_no_data;
-
-                let data = tokio::task::spawn_blocking(move || {
-                    thread_pool.install(move || {
-                        let expression = unsafe {
-                            // we have to "trust" that the function has the signature we expect
-                            program.unary_function()?
-                        };
-
-                        let data = a_tile
-                            .grid_array
-                            .data
-                            .par_iter()
-                            .map(|a| {
-                                if !map_no_data && a_tile.is_no_data(*a) {
-                                    return out_no_data;
-                                }
-
-                                let a = a.as_();
-                                let result = expression(a);
-                                TO::from_(result)
-                            })
-                            .collect();
-
-                        Result::<Vec<TO>>::Ok(data)
-                    })
-                })
-                .await??;
-
-                let out =
-                    Grid2D::<TO>::new(output_grid_shape, data, Some(self.no_data_value))?.into();
-
-                Ok(RasterTile2D::new(
-                    out_time,
-                    out_tile_position,
-                    out_global_geo_transform,
-                    out,
-                ))
-            })
-            .boxed())
-    }
-}
-
-#[async_trait]
-impl<'a, TO, T1, T2> QueryProcessor
-    for ExpressionQueryProcessor<TO, (BoxRasterQueryProcessor<T1>, BoxRasterQueryProcessor<T2>)>
-where
-    T1: Pixel,
-    T2: Pixel,
-    TO: Pixel,
-{
-    type Output = RasterTile2D<TO>;
-    type SpatialBounds = SpatialPartition2D;
-
-    async fn query<'b>(
-        &'b self,
-        query: RasterQueryRectangle,
-        ctx: &'b dyn QueryContext,
-    ) -> Result<BoxStream<'b, Result<Self::Output>>> {
-        // TODO: tile alignment
-
-        let queries = try_join!(
-            self.sources.0.query(query, ctx),
-            self.sources.1.query(query, ctx),
-        )?;
-
-        Ok(StreamTuple2Zip::new(queries)
-            .map(|rasters| Ok((rasters.0?, rasters.1?))) // just propagate error
-            .and_then(move |rasters| async move {
-                if rasters.0.grid_array.is_empty() && rasters.1.grid_array.is_empty() {
-                    let a = &rasters.0;
-                    return Ok(RasterTile2D::new(
-                        a.time,
-                        a.tile_position,
-                        a.global_geo_transform,
-                        EmptyGrid::new(a.grid_array.grid_shape(), self.no_data_value).into(),
-                    ));
-                }
-
-                let a_tile = &rasters.0;
-
-                let out_time = a_tile.time;
-                let out_tile_position = a_tile.tile_position;
-                let out_global_geo_transform = a_tile.global_geo_transform;
-                let out_no_data = self.no_data_value;
-
-                let output_grid_shape = a_tile.grid_shape();
-
-                let thread_pool = ctx.thread_pool().clone();
-                let program = self.program.clone();
-                let map_no_data = self.map_no_data;
-
-                let data = tokio::task::spawn_blocking(move || {
-                    thread_pool.install(move || {
-                        let expression = unsafe {
-                            // we have to "trust" that the function has the signature we expect
-                            program.binary_function()?
-                        };
-
-                        let tile_0 = rasters.0.into_materialized_tile();
-                        let tile_1 = rasters.1.into_materialized_tile();
-
-                        let data = (&tile_0.grid_array.data, &tile_1.grid_array.data)
-                            .into_par_iter()
-                            .map(|(a, b)| {
-                                if !map_no_data && (tile_0.is_no_data(*a) || tile_1.is_no_data(*b))
-                                {
-                                    return out_no_data;
-                                }
-
-                                let result = expression(a.as_(), b.as_());
-                                TO::from_(result)
-                            })
-                            .collect();
-
-                        Result::<Vec<TO>>::Ok(data)
-                    })
-                })
-                .await??;
-
-                let out =
-                    Grid2D::<TO>::new(output_grid_shape, data, Some(self.no_data_value))?.into();
-
-                Ok(RasterTile2D::new(
-                    out_time,
-                    out_tile_position,
-                    out_global_geo_transform,
-                    out,
-                ))
-            })
-            .boxed())
-    }
-}
-
-#[async_trait]
-impl<'a, TO, T1, T2, T3> QueryProcessor
-    for ExpressionQueryProcessor<
-        TO,
-        (
-            BoxRasterQueryProcessor<T1>,
-            BoxRasterQueryProcessor<T2>,
-            BoxRasterQueryProcessor<T3>,
-        ),
-    >
-where
-    TO: Pixel,
-    T1: Pixel,
-    T2: Pixel,
-    T3: Pixel,
-{
-    type Output = RasterTile2D<TO>;
-    type SpatialBounds = SpatialPartition2D;
-
-    async fn query<'b>(
-        &'b self,
-        query: RasterQueryRectangle,
-        ctx: &'b dyn QueryContext,
-    ) -> Result<BoxStream<'b, Result<Self::Output>>> {
-        // TODO: tile alignment
-
-        let queries = try_join!(
-            self.sources.0.query(query, ctx),
-            self.sources.1.query(query, ctx),
-            self.sources.2.query(query, ctx),
-        )?;
-
-        Ok(StreamTuple3Zip::new(queries)
-            .map(|rasters| Ok((rasters.0?, rasters.1?, rasters.2?))) // just propagate error
-            .and_then(move |rasters| async move {
-                if rasters.0.grid_array.is_empty()
-                    && rasters.1.grid_array.is_empty()
-                    && rasters.2.grid_array.is_empty()
-                {
-                    let a = &rasters.0;
-                    return Ok(RasterTile2D::new(
-                        a.time,
-                        a.tile_position,
-                        a.global_geo_transform,
-                        EmptyGrid::new(a.grid_array.grid_shape(), self.no_data_value).into(),
-                    ));
-                }
-
-                let a_tile = &rasters.0;
-
-                let out_time = a_tile.time;
-                let out_tile_position = a_tile.tile_position;
-                let out_global_geo_transform = a_tile.global_geo_transform;
-                let out_no_data = self.no_data_value;
-
-                let output_grid_shape = a_tile.grid_shape();
-
-                let thread_pool = ctx.thread_pool().clone();
-                let program = self.program.clone();
-                let map_no_data = self.map_no_data;
-
-                let data = tokio::task::spawn_blocking(move || {
-                    thread_pool.install(move || {
-                        let expression = unsafe {
-                            // we have to "trust" that the function has the signature we expect
-                            program.function_3ary()?
-                        };
-
-                        let tile_0 = rasters.0.into_materialized_tile();
-                        let tile_1 = rasters.1.into_materialized_tile();
-                        let tile_2 = rasters.2.into_materialized_tile();
-
-                        let data = (
-                            &tile_0.grid_array.data,
-                            &tile_1.grid_array.data,
-                            &tile_2.grid_array.data,
-                        )
-                            .into_par_iter()
-                            .map(|(a, b, c)| {
-                                if !map_no_data
-                                    && (tile_0.is_no_data(*a)
-                                        || tile_1.is_no_data(*b)
-                                        || tile_2.is_no_data(*c))
-                                {
-                                    return out_no_data;
-                                }
-
-                                let result = expression(a.as_(), b.as_(), c.as_());
-                                TO::from_(result)
-                            })
-                            .collect();
-
-                        Result::<Vec<TO>>::Ok(data)
-                    })
-                })
-                .await??;
-
-                let out =
-                    Grid2D::<TO>::new(output_grid_shape, data, Some(self.no_data_value))?.into();
-
-                Ok(RasterTile2D::new(
-                    out_time,
-                    out_tile_position,
-                    out_global_geo_transform,
-                    out,
-                ))
-            })
-            .boxed())
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::engine::{MockExecutionContext, MockQueryContext};
+    use crate::engine::{
+        MockExecutionContext, MockQueryContext, QueryProcessor, RasterQueryRectangle,
+    };
     use crate::mock::{MockRasterSource, MockRasterSourceParams};
+    use futures::StreamExt;
     use geoengine_datatypes::primitives::{
         Measurement, SpatialPartition2D, SpatialResolution, TimeInterval,
     };
-    use geoengine_datatypes::raster::TileInformation;
+    use geoengine_datatypes::raster::{Grid2D, RasterTile2D, TileInformation};
     use geoengine_datatypes::spatial_reference::SpatialReference;
     use geoengine_datatypes::util::test::TestDefault;
 
