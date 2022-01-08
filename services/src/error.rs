@@ -6,13 +6,15 @@ use geoengine_datatypes::{
     dataset::{DatasetId, DatasetProviderId},
     spatial_reference::SpatialReferenceOption,
 };
-use snafu::Snafu;
+use snafu::prelude::*;
 use strum::IntoStaticStr;
 use tonic::Status;
 
 pub type Result<T, E = Error> = std::result::Result<T, E>;
+
 #[derive(Debug, Snafu, IntoStaticStr)]
-#[snafu(visibility = "pub(crate)")]
+#[snafu(visibility(pub(crate)))]
+#[snafu(context(suffix(false)))] // disables default `Snafu` suffix
 pub enum Error {
     DataType {
         source: geoengine_datatypes::error::Error,

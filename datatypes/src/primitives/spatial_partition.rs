@@ -1,5 +1,5 @@
 use serde::{Deserialize, Serialize};
-use snafu::ensure;
+use snafu::prelude::*;
 
 use crate::error;
 use crate::raster::GridShape2D;
