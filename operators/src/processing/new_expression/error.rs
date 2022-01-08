@@ -4,7 +4,8 @@ use super::parser::PestError;
 use snafu::Snafu;
 
 #[derive(Debug, Snafu, Clone, PartialEq)]
-#[snafu(visibility = "pub(crate)")]
+#[snafu(visibility(pub(crate)))]
+#[snafu(context(suffix(false)))] // disables default `Snafu` suffix
 pub enum ExpressionError {
     UnknownVariable { variable: String },
     UnexpectedBranchStructure,
