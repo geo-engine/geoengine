@@ -12,6 +12,10 @@ mod vector_join;
 
 pub use expression::{Expression, ExpressionParams, ExpressionSources};
 pub use new_expression::ExpressionError;
+pub use new_expression::{
+    ExpressionParams as NewExpressionParams, ExpressionSources as NewExpressionSources,
+    NewExpression,
+};
 pub use point_in_polygon::{
     PointInPolygonFilter, PointInPolygonFilterParams, PointInPolygonFilterSource,
     PointInPolygonTester,

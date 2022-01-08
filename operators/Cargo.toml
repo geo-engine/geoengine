@@ -54,6 +54,9 @@ geo-rand = { git = "https://github.com/lelongg/geo-rand", tag = "v0.3.0" }
 rand = "0.8"
 
 
+[[bench]]
+name = "expression"
+harness = false
 
 [[bench]]
 name = "workflows"
