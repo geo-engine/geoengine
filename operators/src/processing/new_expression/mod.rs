@@ -7,7 +7,11 @@ use crate::{
         OperatorDatasets, QueryContext, QueryProcessor, RasterOperator, RasterQueryProcessor,
         RasterQueryRectangle, RasterResultDescriptor, TypedRasterQueryProcessor,
     },
-    util::{input::float_with_nan, stream_zip::StreamTuple3Zip, Result},
+    util::{
+        input::float_with_nan,
+        stream_zip::{StreamTuple2Zip, StreamTuple3Zip},
+        Result,
+    },
 };
 use async_trait::async_trait;
 use futures::{stream::BoxStream, try_join, StreamExt, TryStreamExt};
@@ -19,9 +23,7 @@ use geoengine_datatypes::{
     },
 };
 use num_traits::AsPrimitive;
-use rayon::iter::{
-    IndexedParallelIterator, IntoParallelIterator, IntoParallelRefIterator, ParallelIterator,
-};
+use rayon::iter::{IntoParallelIterator, IntoParallelRefIterator, ParallelIterator};
 use serde::{Deserialize, Serialize};
 use snafu::ensure;
 
@@ -271,7 +273,7 @@ impl InitializedRasterOperator for InitializedExpression {
                 call_on_generic_raster_processor!(a, p_a => {
                     call_generic_raster_processor!(
                         output_type,
-                        ExpressionQueryProcessor1::new(
+                        ExpressionQueryProcessor::new(
                             expression,
                             p_a,
                             output_no_data_value.as_(),
@@ -285,10 +287,9 @@ impl InitializedRasterOperator for InitializedExpression {
                 call_on_bi_generic_raster_processor!(a, b, (p_a, p_b) => {
                     call_generic_raster_processor!(
                         output_type,
-                        ExpressionQueryProcessor2::new(
+                        ExpressionQueryProcessor::new(
                             expression,
-                            p_a,
-                            p_b,
+                            (p_a, p_b),
                             output_no_data_value.as_(),
                             self.map_no_data,
                         ).boxed()
@@ -301,7 +302,7 @@ impl InitializedRasterOperator for InitializedExpression {
                 let query_processors = (a.into_f64(), b.into_f64(), c.into_f64());
                 call_generic_raster_processor!(
                     output_type,
-                    ExpressionQueryProcessor3::new(
+                    ExpressionQueryProcessor::new(
                         expression,
                         query_processors,
                         output_no_data_value.as_(),
@@ -319,103 +320,24 @@ impl InitializedRasterOperator for InitializedExpression {
     }
 }
 
-struct ExpressionQueryProcessor1<T1, TO>
+struct ExpressionQueryProcessor<TO, Sources>
 where
-    T1: Pixel,
     TO: Pixel,
 {
-    pub source_a: BoxRasterQueryProcessor<T1>,
+    pub sources: Sources,
     pub phantom_data: PhantomData<TO>,
     pub program: Arc<LinkedExpression>,
     pub no_data_value: TO,
     pub map_no_data: bool,
 }
 
-struct ExpressionQueryProcessor2<T1, T2, TO>
-where
-    T1: Pixel,
-    T2: Pixel,
-    TO: Pixel,
-{
-    pub source_a: BoxRasterQueryProcessor<T1>,
-    pub source_b: BoxRasterQueryProcessor<T2>,
-    pub phantom_data: PhantomData<TO>,
-    pub program: Arc<LinkedExpression>,
-    pub no_data_value: TO,
-    pub map_no_data: bool,
-}
-
-struct ExpressionQueryProcessor3<TO>
-where
-    TO: Pixel,
-{
-    pub sources: (
-        BoxRasterQueryProcessor<f64>,
-        BoxRasterQueryProcessor<f64>,
-        BoxRasterQueryProcessor<f64>,
-    ),
-    pub phantom_data: PhantomData<TO>,
-    pub program: Arc<LinkedExpression>,
-    pub no_data_value: TO,
-    pub map_no_data: bool,
-}
-
-impl<T1, TO> ExpressionQueryProcessor1<T1, TO>
-where
-    T1: Pixel,
-    TO: Pixel,
-{
-    fn new(
-        program: LinkedExpression,
-        source_a: BoxRasterQueryProcessor<T1>,
-        no_data_value: TO,
-        map_no_data: bool,
-    ) -> Self {
-        Self {
-            source_a,
-            program: Arc::new(program),
-            phantom_data: PhantomData::default(),
-            no_data_value,
-            map_no_data,
-        }
-    }
-}
-
-impl<T1, T2, TO> ExpressionQueryProcessor2<T1, T2, TO>
-where
-    T1: Pixel,
-    T2: Pixel,
-    TO: Pixel,
-{
-    fn new(
-        program: LinkedExpression,
-        source_a: BoxRasterQueryProcessor<T1>,
-        source_b: BoxRasterQueryProcessor<T2>,
-        no_data_value: TO,
-        map_no_data: bool,
-    ) -> Self {
-        Self {
-            source_a,
-            source_b,
-            program: Arc::new(program),
-            phantom_data: PhantomData::default(),
-            no_data_value,
-            map_no_data,
-        }
-    }
-}
-
-impl<TO> ExpressionQueryProcessor3<TO>
+impl<TO, Sources> ExpressionQueryProcessor<TO, Sources>
 where
     TO: Pixel,
 {
     fn new(
         program: LinkedExpression,
-        sources: (
-            BoxRasterQueryProcessor<f64>,
-            BoxRasterQueryProcessor<f64>,
-            BoxRasterQueryProcessor<f64>,
-        ),
+        sources: Sources,
         no_data_value: TO,
         map_no_data: bool,
     ) -> Self {
@@ -430,7 +352,7 @@ where
 }
 
 #[async_trait]
-impl<'a, T1, TO> QueryProcessor for ExpressionQueryProcessor1<T1, TO>
+impl<'a, TO, T1> QueryProcessor for ExpressionQueryProcessor<TO, BoxRasterQueryProcessor<T1>>
 where
     T1: Pixel,
     TO: Pixel,
@@ -444,7 +366,7 @@ where
         ctx: &'b dyn QueryContext,
     ) -> Result<BoxStream<'b, Result<Self::Output>>> {
         Ok(self
-            .source_a
+            .sources
             .query(query, ctx)
             .await?
             .and_then(move |a| async move {
@@ -513,7 +435,8 @@ where
 }
 
 #[async_trait]
-impl<'a, T1, T2, TO> QueryProcessor for ExpressionQueryProcessor2<T1, T2, TO>
+impl<'a, TO, T1, T2> QueryProcessor
+    for ExpressionQueryProcessor<TO, (BoxRasterQueryProcessor<T1>, BoxRasterQueryProcessor<T2>)>
 where
     T1: Pixel,
     T2: Pixel,
@@ -529,14 +452,16 @@ where
     ) -> Result<BoxStream<'b, Result<Self::Output>>> {
         // TODO: tile alignment
 
-        Ok(self
-            .source_a
-            .query(query, ctx)
-            .await?
-            .zip(self.source_b.query(query, ctx).await?)
-            .map(|(a, b)| Ok((a?, b?))) // just propagate error
-            .and_then(move |(a, b)| async move {
-                if a.grid_array.is_empty() && b.grid_array.is_empty() {
+        let queries = try_join!(
+            self.sources.0.query(query, ctx),
+            self.sources.1.query(query, ctx),
+        )?;
+
+        Ok(StreamTuple2Zip::new(queries)
+            .map(|rasters| Ok((rasters.0?, rasters.1?))) // just propagate error
+            .and_then(move |rasters| async move {
+                if rasters.0.grid_array.is_empty() && rasters.1.grid_array.is_empty() {
+                    let a = &rasters.0;
                     return Ok(RasterTile2D::new(
                         a.time,
                         a.tile_position,
@@ -545,9 +470,7 @@ where
                     ));
                 }
 
-                // TODO: iterate over empty grid
-                let a_tile = a.into_materialized_tile();
-                let b_tile = b.into_materialized_tile();
+                let a_tile = &rasters.0;
 
                 let out_time = a_tile.time;
                 let out_tile_position = a_tile.tile_position;
@@ -567,20 +490,18 @@ where
                             program.binary_function()?
                         };
 
-                        let data = a_tile
-                            .grid_array
-                            .data
-                            .par_iter()
-                            .zip(&b_tile.grid_array.data)
+                        let tile_0 = rasters.0.into_materialized_tile();
+                        let tile_1 = rasters.1.into_materialized_tile();
+
+                        let data = (&tile_0.grid_array.data, &tile_1.grid_array.data)
+                            .into_par_iter()
                             .map(|(a, b)| {
-                                if !map_no_data && (a_tile.is_no_data(*a) || b_tile.is_no_data(*b))
+                                if !map_no_data && (tile_0.is_no_data(*a) || tile_1.is_no_data(*b))
                                 {
                                     return out_no_data;
                                 }
 
-                                let a = a.as_();
-                                let b = b.as_();
-                                let result = expression(a, b);
+                                let result = expression(a.as_(), b.as_());
                                 TO::from_(result)
                             })
                             .collect();
@@ -605,9 +526,20 @@ where
 }
 
 #[async_trait]
-impl<'a, TO> QueryProcessor for ExpressionQueryProcessor3<TO>
+impl<'a, TO, T1, T2, T3> QueryProcessor
+    for ExpressionQueryProcessor<
+        TO,
+        (
+            BoxRasterQueryProcessor<T1>,
+            BoxRasterQueryProcessor<T2>,
+            BoxRasterQueryProcessor<T3>,
+        ),
+    >
 where
     TO: Pixel,
+    T1: Pixel,
+    T2: Pixel,
+    T3: Pixel,
 {
     type Output = RasterTile2D<TO>;
     type SpatialBounds = SpatialPartition2D;
@@ -680,7 +612,7 @@ where
                                     return out_no_data;
                                 }
 
-                                let result = expression(*a, *b, *c);
+                                let result = expression(a.as_(), b.as_(), c.as_());
                                 TO::from_(result)
                             })
                             .collect();
