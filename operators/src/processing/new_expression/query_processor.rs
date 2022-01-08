@@ -51,6 +51,60 @@ where
 }
 
 #[async_trait]
+impl<'a, TO, Tuple> QueryProcessor for ExpressionQueryProcessor<TO, Tuple>
+where
+    TO: Pixel,
+    Tuple: ExpressionTupleProcessor<TO>,
+{
+    type Output = RasterTile2D<TO>;
+    type SpatialBounds = SpatialPartition2D;
+
+    async fn query<'b>(
+        &'b self,
+        query: RasterQueryRectangle,
+        ctx: &'b dyn QueryContext,
+    ) -> Result<BoxStream<'b, Result<Self::Output>>> {
+        let stream = self
+            .sources
+            .queries(query, ctx)
+            .await?
+            .and_then(move |rasters| async move {
+                if Tuple::all_empty(&rasters) {
+                    return Ok(Tuple::empty_raster(&rasters));
+                }
+
+                let (out_time, out_tile_position, out_global_geo_transform, output_grid_shape) =
+                    Tuple::metadata(&rasters);
+
+                let out_no_data = self.no_data_value;
+
+                let thread_pool = ctx.thread_pool().clone();
+                let program = self.program.clone();
+                let map_no_data = self.map_no_data;
+
+                let data = tokio::task::spawn_blocking(move || {
+                    thread_pool.install(move || {
+                        Tuple::compute_expression(rasters, &program, map_no_data, out_no_data)
+                    })
+                })
+                .await??;
+
+                let out =
+                    Grid2D::<TO>::new(output_grid_shape, data, Some(self.no_data_value))?.into();
+
+                Ok(RasterTile2D::new(
+                    out_time,
+                    out_tile_position,
+                    out_global_geo_transform,
+                    out,
+                ))
+            });
+
+        Ok(stream.boxed())
+    }
+}
+
+#[async_trait]
 trait ExpressionTupleProcessor<TO: Pixel>: Send + Sync {
     type Tuple: Send + 'static;
 
@@ -150,6 +204,7 @@ where
     }
 }
 
+// TODO: implement this via macro for 2-8 sources
 #[async_trait]
 impl<TO, T1, T2> ExpressionTupleProcessor<TO>
     for (BoxRasterQueryProcessor<T1>, BoxRasterQueryProcessor<T2>)
@@ -328,59 +383,5 @@ where
             .collect();
 
         Result::<Vec<TO>>::Ok(data)
-    }
-}
-
-#[async_trait]
-impl<'a, TO, Tuple> QueryProcessor for ExpressionQueryProcessor<TO, Tuple>
-where
-    TO: Pixel,
-    Tuple: ExpressionTupleProcessor<TO>,
-{
-    type Output = RasterTile2D<TO>;
-    type SpatialBounds = SpatialPartition2D;
-
-    async fn query<'b>(
-        &'b self,
-        query: RasterQueryRectangle,
-        ctx: &'b dyn QueryContext,
-    ) -> Result<BoxStream<'b, Result<Self::Output>>> {
-        let stream = self
-            .sources
-            .queries(query, ctx)
-            .await?
-            .and_then(move |rasters| async move {
-                if Tuple::all_empty(&rasters) {
-                    return Ok(Tuple::empty_raster(&rasters));
-                }
-
-                let (out_time, out_tile_position, out_global_geo_transform, output_grid_shape) =
-                    Tuple::metadata(&rasters);
-
-                let out_no_data = self.no_data_value;
-
-                let thread_pool = ctx.thread_pool().clone();
-                let program = self.program.clone();
-                let map_no_data = self.map_no_data;
-
-                let data = tokio::task::spawn_blocking(move || {
-                    thread_pool.install(move || {
-                        Tuple::compute_expression(rasters, &program, map_no_data, out_no_data)
-                    })
-                })
-                .await??;
-
-                let out =
-                    Grid2D::<TO>::new(output_grid_shape, data, Some(self.no_data_value))?.into();
-
-                Ok(RasterTile2D::new(
-                    out_time,
-                    out_tile_position,
-                    out_global_geo_transform,
-                    out,
-                ))
-            });
-
-        Ok(stream.boxed())
     }
 }
