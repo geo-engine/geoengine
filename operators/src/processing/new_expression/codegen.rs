@@ -42,20 +42,6 @@ impl ExpressionAst {
         self.to_token_stream().to_string()
     }
 
-    // TODO: maybe use formatted code in debug mode
-    // pub fn formatted_code(&self) -> Result<String> {
-    //     rustfmt_wrapper::rustfmt(self.to_token_stream()).map_err(|error| match error {
-    //         rustfmt_wrapper::Error::NoRustfmt => ExpressionError::RustFmtMissing,
-    //         rustfmt_wrapper::Error::Rustfmt(error) => ExpressionError::RustFmtError { error },
-    //         rustfmt_wrapper::Error::IO(error) => ExpressionError::RustFmtIoError {
-    //             error: error.to_string(),
-    //         },
-    //         rustfmt_wrapper::Error::Conversion(source) => {
-    //             ExpressionError::RustFmtConversionError { source }
-    //         }
-    //     })
-    // }
-
     pub fn name(&self) -> &str {
         self.name.as_ref()
     }
