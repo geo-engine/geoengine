@@ -481,15 +481,8 @@ mod tests {
 
         match collection.data("foo").unwrap() {
             FeatureDataRef::Float(n) => {
-                assert_eq!(n.as_ref()[0], 1.);
-                assert_eq!(n.as_ref()[1], 2.);
-                assert_eq!(n.as_ref()[2], 3.);
-                assert_eq!(n.as_ref()[3], 4.);
-
-                assert_eq!(n.nulls()[0], !true);
-                assert_eq!(n.nulls()[1], !false);
-                assert_eq!(n.nulls()[2], !true);
-                assert_eq!(n.nulls()[3], !true);
+                assert_eq!(n.as_ref(), &[1., 2., 3., 4.]);
+                assert_eq!(n.nulls(), &[false, true, false, false]);
             }
             _ => unreachable!(),
         }

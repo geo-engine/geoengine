@@ -7,7 +7,7 @@ use chrono::{DateTime, Datelike, TimeZone, Timelike};
 const EARTH_MEAN_RADIUS: f64 = 6371.01; // In km
 const ASTRONOMICAL_UNIT: f64 = 149_597_890.0; // In km
 
-#[derive(Debug)]
+#[derive(Debug, Copy, Clone)]
 pub struct SunPos {
     greenwich_mean_sidereal_time: f64,
     right_ascension: f64,

@@ -271,8 +271,6 @@ mod tests {
     }
 
     #[tokio::test]
-    // TODO: remove when https://github.com/tokio-rs/tokio/issues/4245 is fixed
-    #[allow(clippy::semicolon_if_nothing_returned)]
     async fn create() {
         let res = create_test_helper(Method::POST).await;
 
@@ -440,15 +438,13 @@ mod tests {
 
         let req = test::TestRequest::default()
             .method(method)
-            .uri(&format!("/project/{}", project.to_string()))
+            .uri(&format!("/project/{}", project))
             .append_header((header::CONTENT_LENGTH, 0))
             .append_header((header::AUTHORIZATION, Bearer::new(session.id().to_string())));
         send_test_request(req, ctx).await
     }
 
     #[tokio::test]
-    // TODO: remove when https://github.com/tokio-rs/tokio/issues/4245 is fixed
-    #[allow(clippy::semicolon_if_nothing_returned)]
     async fn load() {
         let res = load_test_helper(Method::GET).await;
 
@@ -473,7 +469,7 @@ mod tests {
         let (_, project) = create_project_helper(&ctx).await;
 
         let req = test::TestRequest::get()
-            .uri(&format!("/project/{}", project.to_string()))
+            .uri(&format!("/project/{}", project))
             .append_header((header::CONTENT_LENGTH, 0));
         let res = send_test_request(req, ctx).await;
 
@@ -512,7 +508,7 @@ mod tests {
 
         let req = test::TestRequest::default()
             .method(method)
-            .uri(&format!("/project/{}", project.to_string()))
+            .uri(&format!("/project/{}", project))
             .append_header((header::CONTENT_LENGTH, 0))
             .append_header((header::AUTHORIZATION, Bearer::new(session.id().to_string())))
             .set_json(&update);
@@ -545,7 +541,7 @@ mod tests {
         let (session, project) = create_project_helper(&ctx).await;
 
         let req = test::TestRequest::patch()
-            .uri(&format!("/project/{}", project.to_string()))
+            .uri(&format!("/project/{}", project))
             .append_header((header::CONTENT_LENGTH, 0))
             .append_header((header::CONTENT_TYPE, mime::APPLICATION_JSON))
             .append_header((header::AUTHORIZATION, Bearer::new(session.id().to_string())))
@@ -584,7 +580,7 @@ mod tests {
         });
 
         let req = test::TestRequest::patch()
-            .uri(&format!("/project/{}", project.to_string()))
+            .uri(&format!("/project/{}", project))
             .append_header((header::AUTHORIZATION, Bearer::new(session.id().to_string())))
             .set_json(&update);
         let res = send_test_request(req, ctx).await;
@@ -608,7 +604,7 @@ mod tests {
             update: UpdateProject,
         ) -> Vec<Layer> {
             let req = test::TestRequest::patch()
-                .uri(&format!("/project/{}", project_id.to_string()))
+                .uri(&format!("/project/{}", project_id))
                 .append_header((header::AUTHORIZATION, Bearer::new(session.id().to_string())))
                 .set_json(&update);
             let res = send_test_request(req, ctx.clone()).await;
@@ -753,7 +749,7 @@ mod tests {
             update: UpdateProject,
         ) -> Vec<Plot> {
             let req = test::TestRequest::patch()
-                .uri(&format!("/project/{}", project_id.to_string()))
+                .uri(&format!("/project/{}", project_id))
                 .append_header((header::AUTHORIZATION, Bearer::new(session.id().to_string())))
                 .set_json(&update);
             let res = send_test_request(req, ctx.clone()).await;
@@ -879,7 +875,7 @@ mod tests {
         let (session, project) = create_project_helper(&ctx).await;
 
         let req = test::TestRequest::delete()
-            .uri(&format!("/project/{}", project.to_string()))
+            .uri(&format!("/project/{}", project))
             .append_header((header::CONTENT_LENGTH, 0))
             .append_header((header::AUTHORIZATION, Bearer::new(session.id().to_string())));
         let res = send_test_request(req, ctx.clone()).await;
@@ -895,7 +891,7 @@ mod tests {
             .is_err());
 
         let req = test::TestRequest::delete()
-            .uri(&format!("/project/{}", project.to_string()))
+            .uri(&format!("/project/{}", project))
             .append_header((header::CONTENT_LENGTH, 0))
             .append_header((header::AUTHORIZATION, Bearer::new(session.id().to_string())));
         let res = send_test_request(req, ctx).await;

@@ -505,8 +505,6 @@ mod tests {
     }
 
     #[tokio::test]
-    // TODO: remove when https://github.com/tokio-rs/tokio/issues/4245 is fixed
-    #[allow(clippy::semicolon_if_nothing_returned)]
     async fn register() {
         let res = register_test_helper(Method::POST).await;
 
@@ -608,7 +606,7 @@ mod tests {
 
         let req = test::TestRequest::default()
             .method(method)
-            .uri(&format!("/workflow/{}", id.to_string()))
+            .uri(&format!("/workflow/{}", id))
             .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())));
         let res = send_test_request(req, ctx).await;
 
@@ -637,7 +635,7 @@ mod tests {
 
         let (_, id) = register_ndvi_workflow_helper(&ctx).await;
 
-        let req = test::TestRequest::get().uri(&format!("/workflow/{}", id.to_string()));
+        let req = test::TestRequest::get().uri(&format!("/workflow/{}", id));
         let res = send_test_request(req, ctx).await;
 
         ErrorResponse::assert(
@@ -697,7 +695,7 @@ mod tests {
 
         let req = test::TestRequest::default()
             .method(method)
-            .uri(&format!("/workflow/{}/metadata", id.to_string()))
+            .uri(&format!("/workflow/{}/metadata", id))
             .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())));
         send_test_request(req, ctx).await
     }
@@ -758,7 +756,7 @@ mod tests {
             .unwrap();
 
         let req = test::TestRequest::get()
-            .uri(&format!("/workflow/{}/metadata", id.to_string()))
+            .uri(&format!("/workflow/{}/metadata", id))
             .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())));
         let res = send_test_request(req, ctx).await;
 
@@ -818,7 +816,7 @@ mod tests {
             .await
             .unwrap();
 
-        let req = test::TestRequest::get().uri(&format!("/workflow/{}/metadata", id.to_string()));
+        let req = test::TestRequest::get().uri(&format!("/workflow/{}/metadata", id));
         let res = send_test_request(req, ctx).await;
 
         ErrorResponse::assert(
@@ -854,7 +852,7 @@ mod tests {
             .unwrap();
 
         let req = test::TestRequest::get()
-            .uri(&format!("/workflow/{}/metadata", id.to_string()))
+            .uri(&format!("/workflow/{}/metadata", id))
             .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())));
         let res = send_test_request(req, ctx).await;
 
@@ -899,7 +897,7 @@ mod tests {
             .unwrap();
 
         let req = test::TestRequest::get()
-            .uri(&format!("/workflow/{}/provenance", id.to_string()))
+            .uri(&format!("/workflow/{}/provenance", id))
             .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())));
         let res = send_test_request(req, ctx).await;
 
@@ -957,7 +955,7 @@ mod tests {
 
         // create dataset from workflow
         let req = test::TestRequest::post()
-            .uri(&format!("/datasetFromWorkflow/{}", workflow_id.to_string(),))
+            .uri(&format!("/datasetFromWorkflow/{}", workflow_id))
             .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())))
             .append_header((header::CONTENT_TYPE, mime::APPLICATION_JSON))
             .set_payload(

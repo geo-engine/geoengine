@@ -276,8 +276,6 @@ mod tests {
     }
 
     #[tokio::test]
-    // TODO: remove when https://github.com/tokio-rs/tokio/issues/4245 is fixed
-    #[allow(clippy::semicolon_if_nothing_returned)]
     async fn register() {
         let ctx = ProInMemoryContext::default();
 
@@ -424,8 +422,6 @@ mod tests {
     }
 
     #[tokio::test]
-    // TODO: remove when https://github.com/tokio-rs/tokio/issues/4245 is fixed
-    #[allow(clippy::semicolon_if_nothing_returned)]
     async fn login() {
         let res = login_test_helper(Method::POST, "secret123").await;
 
@@ -656,7 +652,7 @@ mod tests {
         let (session, project) = create_project_helper(&ctx).await;
 
         let req = test::TestRequest::post()
-            .uri(&format!("/session/project/{}", project.to_string()))
+            .uri(&format!("/session/project/{}", project))
             .append_header((header::AUTHORIZATION, Bearer::new(session.id().to_string())));
         let res = send_pro_test_request(req, ctx.clone()).await;
 

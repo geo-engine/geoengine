@@ -325,12 +325,14 @@ impl HistogramBuilder {
     ///     .build()
     ///     .unwrap();
     /// ```
+    #[must_use]
     pub fn labels(mut self, labels: Vec<String>) -> Self {
         self.labels = Some(labels);
         self
     }
 
     /// Add counts to the histogram
+    #[must_use]
     pub fn counts(mut self, counts: Vec<u64>) -> Self {
         self.counts = Some(counts);
         self
