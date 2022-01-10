@@ -147,7 +147,12 @@ fn projected_coordinate_grid_parallel(
     in_srs: SpatialReference,
     valid_out_area: &SpatialPartition2D,
 ) -> Result<Grid2D<Option<Coordinate2D>>> {
-    const MIN_ROWS_IN_PAR_CHUNK: usize = 64; // this must never be smaller than 1
+    const MIN_ELEMENTS_IN_PAR_CHUNK: usize = 64 * 512; // this must never be smaller than 1
+    let min_rows_in_par_chunk = num::integer::div_ceil(
+        MIN_ELEMENTS_IN_PAR_CHUNK,
+        tile_info.tile_size_in_pixels.axis_size_x(),
+    )
+    .max(1);
 
     let start = std::time::Instant::now();
 
@@ -165,7 +170,8 @@ fn projected_coordinate_grid_parallel(
 
         let parallelism = pool.current_num_threads();
         let par_chunk_split =
-            (tile_info.tile_size_in_pixels.axis_size_y() / parallelism).max(MIN_ROWS_IN_PAR_CHUNK); // don't go below MIN_ROWS_IN_PAR_CHUNK lines per chunk.
+            num::integer::div_ceil(tile_info.tile_size_in_pixels.axis_size_y(), parallelism)
+                .max(min_rows_in_par_chunk); // don't go below MIN_ROWS_IN_PAR_CHUNK lines per chunk.
         let par_chunk_size = tile_info.tile_size_in_pixels.axis_size_x() * par_chunk_split;
         debug!(
             "parallelism: threads={} par_chunk_split={} par_chunk_size={}",
@@ -260,7 +266,9 @@ pub fn fold_by_coordinate_lookup_impl<T>(
 where
     T: Pixel,
 {
-    const MIN_ROWS_IN_PAR_CHUNK: usize = 32; // this must never be smaller than 1
+    const MIN_ELEMENTS_IN_PAR_CHUNK: usize = 32 * 512; // this must never be smaller than 1
+    let min_rows_in_par_chunk =
+        num::integer::div_ceil(MIN_ELEMENTS_IN_PAR_CHUNK, tile.grid_array.axis_size_x()).max(1);
 
     // println!("fold_by_coordinate_lookup_impl {:?}", &tile.tile_position);
     let mut accu = accu;
@@ -282,8 +290,11 @@ where
 
     pool.install(|| {
         let parallelism = pool.current_num_threads();
-        let par_chunk_split = (materialized_accu_tile.grid_array.shape.axis_size_y() / parallelism)
-            .max(MIN_ROWS_IN_PAR_CHUNK); // don't go below MIN_ROWS_IN_PAR_CHUNK lines per chunk.
+        let par_chunk_split = num::integer::div_ceil(
+            materialized_accu_tile.grid_array.shape.axis_size_y(),
+            parallelism,
+        )
+        .max(min_rows_in_par_chunk); // don't go below MIN_ROWS_IN_PAR_CHUNK lines per chunk.
         let par_chunk_size =
             materialized_accu_tile.grid_array.shape.axis_size_x() * par_chunk_split;
 
