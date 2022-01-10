@@ -179,8 +179,9 @@ where
             }
         };
 
+        // This can only fail, if the receiver side is dropped
         if kc.response.send(receiver).is_err() {
-            log::error!("Could not pass back proxied stream.");
+            log::warn!("Result consumer dropped unexpectedly.");
         }
     }
 
