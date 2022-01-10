@@ -70,7 +70,6 @@ uuid = { version = "0.8", features = ["serde", "v4", "v5"] }
 zip = "0.5"
 
 [dev-dependencies]
-clap = "3.0.0-beta.2"
 httptest = "0.15.2"
 rand = "0.8.4"
 tempfile = "3.1"
