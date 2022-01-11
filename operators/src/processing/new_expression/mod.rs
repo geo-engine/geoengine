@@ -271,17 +271,32 @@ impl InitializedRasterOperator for InitializedExpression {
             }
             2 => {
                 let [a, b] = <[_; 2]>::try_from(query_processors).expect("len previously checked");
-                call_on_bi_generic_raster_processor!(a, b, (p_a, p_b) => {
-                    call_generic_raster_processor!(
-                        output_type,
-                        ExpressionQueryProcessor::new(
-                            expression,
-                            (p_a, p_b),
-                            output_no_data_value.as_(),
-                            self.map_no_data,
-                        ).boxed()
+                let query_processors = (a.into_f64(), b.into_f64());
+                call_generic_raster_processor!(
+                    output_type,
+                    ExpressionQueryProcessor::new(
+                        expression,
+                        query_processors,
+                        output_no_data_value.as_(),
+                        self.map_no_data,
                     )
-                })
+                    .boxed()
+                )
+
+                // TODO: We could save prior conversions by monomophizing the differnt expressions
+                //       However, this would lead to lots of compile symbols, e.g., 10x10x10 for this case
+                //
+                // call_on_bi_generic_raster_processor!(a, b, (p_a, p_b) => {
+                //     call_generic_raster_processor!(
+                //         output_type,
+                //         ExpressionQueryProcessor::new(
+                //             expression,
+                //             (p_a, p_b),
+                //             output_no_data_value.as_(),
+                //             self.map_no_data,
+                //         ).boxed()
+                //     )
+                // })
             }
             3 => {
                 let [a, b, c] =
