@@ -40,6 +40,12 @@ use std::time::Instant;
 use std::{marker::PhantomData, path::PathBuf};
 //use gdal::metadata::Metadata; // TODO: handle metadata
 
+pub use metadata::{GdalMetaDataRegular, GdalMetaDataStatic, GdalMetadataNetCdfCf};
+
+use self::metadata::NetCdfCfGdalLoadingInfoPartIterator;
+
+mod metadata;
+
 /// Parameters for the GDAL Source Operator
 ///
 /// # Examples
@@ -134,6 +140,7 @@ pub enum GdalLoadingInfoPartIterator {
         parts: std::vec::IntoIter<GdalLoadingInfoPart>,
     },
     Dynamic(DynamicGdalLoadingInfoPartIterator),
+    NetCdfCf(NetCdfCfGdalLoadingInfoPartIterator),
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -179,6 +186,7 @@ impl Iterator for GdalLoadingInfoPartIterator {
 
                 Some(loading_info_part)
             }
+            GdalLoadingInfoPartIterator::NetCdfCf(iter) => iter.next(),
         }
     }
 }
@@ -330,100 +338,6 @@ impl GridShapeAccess for GdalDatasetParameters {
 pub enum FileNotFoundHandling {
     NoData, // output tiles filled with nodata
     Error,  // return error tile
-}
-
-#[derive(PartialEq, Serialize, Deserialize, Debug, Clone)]
-#[serde(rename_all = "camelCase")]
-pub struct GdalMetaDataStatic {
-    pub time: Option<TimeInterval>,
-    pub params: GdalDatasetParameters,
-    pub result_descriptor: RasterResultDescriptor,
-}
-
-#[async_trait]
-impl MetaData<GdalLoadingInfo, RasterResultDescriptor, RasterQueryRectangle>
-    for GdalMetaDataStatic
-{
-    async fn loading_info(&self, query: RasterQueryRectangle) -> Result<GdalLoadingInfo> {
-        let valid = self.time.unwrap_or_default();
-
-        let parts = if valid.intersects(&query.time_interval) {
-            vec![GdalLoadingInfoPart {
-                time: valid,
-                params: self.params.clone(),
-            }]
-            .into_iter()
-        } else {
-            vec![].into_iter()
-        };
-
-        Ok(GdalLoadingInfo {
-            info: GdalLoadingInfoPartIterator::Static { parts },
-        })
-    }
-
-    async fn result_descriptor(&self) -> Result<RasterResultDescriptor> {
-        Ok(self.result_descriptor.clone())
-    }
-
-    fn box_clone(
-        &self,
-    ) -> Box<dyn MetaData<GdalLoadingInfo, RasterResultDescriptor, RasterQueryRectangle>> {
-        Box::new(self.clone())
-    }
-}
-
-/// Meta data for a regular time series that begins (is anchored) at `start` with multiple gdal data
-/// sets `step` time apart. The `time_placeholders` in the file path of the dataset are replaced with the
-/// specified time `reference` in specified time `format`.
-// TODO: `start` is actually more a reference time, because the time series also goes in
-//        negative direction. Maybe it would be better to have a real start and end time, then
-//        everything before start and after end is just one big nodata raster instead of many
-#[derive(PartialEq, Serialize, Deserialize, Debug, Clone)]
-#[serde(rename_all = "camelCase")]
-pub struct GdalMetaDataRegular {
-    pub result_descriptor: RasterResultDescriptor,
-    pub params: GdalDatasetParameters,
-    pub time_placeholders: HashMap<String, GdalSourceTimePlaceholder>,
-    pub start: TimeInstance,
-    pub step: TimeStep,
-}
-
-#[async_trait]
-impl MetaData<GdalLoadingInfo, RasterResultDescriptor, RasterQueryRectangle>
-    for GdalMetaDataRegular
-{
-    async fn loading_info(&self, query: RasterQueryRectangle) -> Result<GdalLoadingInfo> {
-        let snapped_start = self
-            .step
-            .snap_relative(self.start, query.time_interval.start())?;
-
-        let snapped_interval =
-            TimeInterval::new_unchecked(snapped_start, query.time_interval.end()); // TODO: snap end?
-
-        let time_iterator =
-            TimeStepIter::new_with_interval_incl_start(snapped_interval, self.step)?;
-
-        Ok(GdalLoadingInfo {
-            info: GdalLoadingInfoPartIterator::Dynamic(DynamicGdalLoadingInfoPartIterator::new(
-                time_iterator,
-                self.params.clone(),
-                self.time_placeholders.clone(),
-                self.step,
-                query.time_interval.end(),
-            )?),
-        })
-    }
-
-    async fn result_descriptor(&self) -> Result<RasterResultDescriptor> {
-        Ok(self.result_descriptor.clone())
-    }
-
-    fn box_clone(
-        &self,
-    ) -> Box<dyn MetaData<GdalLoadingInfo, RasterResultDescriptor, RasterQueryRectangle>> {
-        Box::new(self.clone())
-    }
 }
 
 impl GdalDatasetParameters {
