@@ -18,11 +18,11 @@ use geoengine_datatypes::{
     primitives::{Coordinate2D, TimeInstance},
     raster::{CoordinatePixelAccess, GridIdx2D, Pixel, RasterTile2D, TileInformation},
 };
-use rayon::ThreadPool;
-
 use log::debug;
+use num;
 use rayon::iter::{IndexedParallelIterator, ParallelIterator};
 use rayon::slice::ParallelSliceMut;
+use rayon::ThreadPool;
 
 use super::{FoldTileAccu, FoldTileAccuMut, SubQueryTileAggregator};
 
