@@ -15,7 +15,7 @@ This workspace contains the Geo Engine crates.
 We suggest to add the [UbuntuGIS PPA](https://wiki.ubuntu.com/UbuntuGIS) for a recent version of GDAL.
 ```
 # Add ppa
-add-apt-repository ppa:ubuntugis/ppa
+add-apt-repository ppa:ubuntugis/ubuntugis-unstable
 # Update
 apt update
 ```
