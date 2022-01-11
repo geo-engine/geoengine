@@ -1,4 +1,6 @@
-use futures::{Future, FutureExt, TryFuture};
+use std::sync::Arc;
+
+use futures::{future::BoxFuture, Future, FutureExt, TryFuture, TryFutureExt};
 use geoengine_datatypes::{
     primitives::{SpatialPartitioned, TimeInstance, TimeInterval, TimeStep},
     raster::{
@@ -7,6 +9,7 @@ use geoengine_datatypes::{
     },
 };
 use num_traits::AsPrimitive;
+use rayon::ThreadPool;
 
 use crate::{
     adapters::{FoldTileAccu, SubQueryTileAggregator},
@@ -46,6 +49,8 @@ pub struct TemporalMeanTileAccu<T> {
     out_no_data_value: T,
 
     initial_state: bool,
+
+    pool: Arc<ThreadPool>,
 }
 
 impl<T> TemporalMeanTileAccu<T> {
@@ -137,6 +142,7 @@ where
             ignore_no_data: _,
             out_no_data_value,
             initial_state: _,
+            pool: _pool,
         } = self;
 
         let value_grid = match value_grid {
@@ -172,6 +178,10 @@ where
 
         RasterTile2D::new(time, tile_position, global_geo_transform, res_grid.into())
     }
+
+    fn thread_pool(&self) -> &Arc<ThreadPool> {
+        &self.pool
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -182,13 +192,15 @@ pub struct TemporalRasterMeanAggregationSubQuery<F, T: Pixel> {
     pub step: TimeStep,
 }
 
-impl<T, FoldM, FoldF> SubQueryTileAggregator<T> for TemporalRasterMeanAggregationSubQuery<FoldM, T>
+impl<'a, T, FoldM, FoldF> SubQueryTileAggregator<'a, T>
+    for TemporalRasterMeanAggregationSubQuery<FoldM, T>
 where
     T: Pixel,
-    FoldM: Send + Clone + Fn(TemporalMeanTileAccu<T>, RasterTile2D<T>) -> FoldF,
+    FoldM: Send + Sync + 'static + Clone + Fn(TemporalMeanTileAccu<T>, RasterTile2D<T>) -> FoldF,
     FoldF: Send + TryFuture<Ok = TemporalMeanTileAccu<T>, Error = crate::error::Error>,
 {
     type TileAccu = TemporalMeanTileAccu<T>;
+    type TileAccuFuture = BoxFuture<'a, Result<Self::TileAccu>>;
 
     type FoldFuture = FoldF;
 
@@ -198,17 +210,16 @@ where
         &self,
         tile_info: TileInformation,
         query_rect: RasterQueryRectangle,
-    ) -> Result<Self::TileAccu> {
-        Ok(TemporalMeanTileAccu {
-            time: query_rect.time_interval,
-            tile_position: tile_info.global_tile_position,
-            global_geo_transform: tile_info.global_geo_transform,
-            value_grid: EmptyGrid2D::new(tile_info.tile_size_in_pixels, 0.).into(),
-            count_grid: Grid2D::new_filled(tile_info.tile_size_in_pixels, 0, None),
-            ignore_no_data: self.ignore_no_data,
-            out_no_data_value: self.no_data_value,
-            initial_state: true,
-        })
+        pool: &Arc<ThreadPool>,
+    ) -> Self::TileAccuFuture {
+        build_accu(
+            query_rect,
+            tile_info,
+            pool.clone(),
+            self.ignore_no_data,
+            self.no_data_value,
+        )
+        .boxed()
     }
 
     fn tile_query_rectangle(
@@ -227,4 +238,25 @@ where
     fn fold_method(&self) -> Self::FoldMethod {
         self.fold_fn.clone()
     }
+}
+
+fn build_accu<T: Pixel>(
+    query_rect: RasterQueryRectangle,
+    tile_info: TileInformation,
+    pool: Arc<ThreadPool>,
+    ignore_no_data: bool,
+    no_data_value: T,
+) -> impl Future<Output = Result<TemporalMeanTileAccu<T>>> {
+    tokio::task::spawn_blocking(move || TemporalMeanTileAccu {
+        time: query_rect.time_interval,
+        tile_position: tile_info.global_tile_position,
+        global_geo_transform: tile_info.global_geo_transform,
+        value_grid: EmptyGrid2D::new(tile_info.tile_size_in_pixels, 0.).into(),
+        count_grid: Grid2D::new_filled(tile_info.tile_size_in_pixels, 0, None),
+        ignore_no_data,
+        out_no_data_value: no_data_value,
+        initial_state: true,
+        pool,
+    })
+    .map_err(From::from)
 }
