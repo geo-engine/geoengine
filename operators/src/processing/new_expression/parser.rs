@@ -1,4 +1,4 @@
-use std::{cell::RefCell, rc::Rc};
+use std::{cell::RefCell, collections::HashSet, rc::Rc};
 
 use pest::{
     iterators::{Pair, Pairs},
@@ -8,7 +8,7 @@ use pest::{
 use pest_derive::Parser;
 use snafu::{ensure, ResultExt};
 
-use crate::util::duplicate_or_empty_str_slice;
+use crate::{processing::new_expression::codegen::Parameter, util::duplicate_or_empty_str_slice};
 
 use super::{
     codegen::{
@@ -28,7 +28,9 @@ struct _ExpressionParser;
 
 /// A parser for user-defined expressions.
 pub struct ExpressionParser {
-    parameters: Vec<Identifier>,
+    parameters: Vec<Parameter>,
+    numeric_parameters: HashSet<Identifier>,
+    boolean_parameters: HashSet<Identifier>,
     variables: Rc<RefCell<Vec<Identifier>>>,
     imports: Rc<RefCell<Vec<Identifier>>>,
 }
@@ -47,7 +49,7 @@ lazy_static::lazy_static! {
 }
 
 impl ExpressionParser {
-    pub fn new(parameters: &[String]) -> Result<Self> {
+    pub fn new(parameters: &[Parameter]) -> Result<Self> {
         match duplicate_or_empty_str_slice(parameters) {
             crate::util::DuplicateOrEmpty::Ok => (), // fine
             crate::util::DuplicateOrEmpty::Duplicate(parameter) => {
@@ -58,12 +60,19 @@ impl ExpressionParser {
             }
         };
 
+        let mut numeric_parameters = HashSet::with_capacity(parameters.len() / 2);
+        let mut boolean_parameters = HashSet::with_capacity(parameters.len() / 2);
         for parameter in parameters {
-            ensure!(!parameter.is_empty(), error::EmptyParameterName);
+            match parameter {
+                Parameter::Number(name) => numeric_parameters.insert(name.clone()),
+                Parameter::Boolean(name) => boolean_parameters.insert(name.clone()),
+            };
         }
 
         Ok(Self {
-            parameters: parameters.iter().map(Into::into).collect(),
+            parameters: parameters.to_vec(),
+            numeric_parameters,
+            boolean_parameters,
             variables: Rc::new(RefCell::new(Vec::new())),
             imports: Rc::new(RefCell::new(vec![])),
         })
@@ -101,7 +110,7 @@ impl ExpressionParser {
             )),
             Rule::identifier => {
                 let identifier = pair.as_str().into();
-                if self.parameters.contains(&identifier)
+                if self.numeric_parameters.contains(&identifier)
                     || self.variables.borrow().contains(&identifier)
                 {
                     Ok(AstNode::Variable(identifier))
@@ -177,7 +186,7 @@ impl ExpressionParser {
 
                         let identifier = first_pair.as_str().into();
 
-                        if self.parameters.contains(&identifier) {
+                        if self.numeric_parameters.contains(&identifier) {
                             return Err(ExpressionError::CannotAssignToParameter {
                                 parameter: identifier.to_string(),
                             });
@@ -258,6 +267,16 @@ impl ExpressionParser {
 
     fn resolve_boolean_expression_rule(&self, pair: Pair<Rule>) -> Result<BooleanExpression> {
         match pair.as_rule() {
+            Rule::identifier => {
+                let identifier = pair.as_str().into();
+                if self.boolean_parameters.contains(&identifier) {
+                    Ok(BooleanExpression::Variable(identifier))
+                } else {
+                    Err(ExpressionError::UnknownBooleanVariable {
+                        variable: identifier.to_string(),
+                    })
+                }
+            }
             Rule::boolean_true => Ok(BooleanExpression::Constant(true)),
             Rule::boolean_false => Ok(BooleanExpression::Constant(false)),
             Rule::boolean_comparison => {
@@ -334,11 +353,16 @@ mod tests {
 
     use super::*;
 
-    fn parse(name: &str, parameters: &[&str], input: &str) -> String {
-        let parameters = parameters
+    fn parse(name: &str, parameters: &[&str], boolean_parameters: &[&str], input: &str) -> String {
+        let parameters: Vec<Parameter> = parameters
             .iter()
-            .map(ToString::to_string)
-            .collect::<Vec<String>>();
+            .map(|&p| Parameter::Number(Identifier::from(p)))
+            .chain(
+                boolean_parameters
+                    .iter()
+                    .map(|&p| Parameter::Boolean(Identifier::from(p))),
+            )
+            .collect();
 
         let parser = ExpressionParser::new(&parameters).unwrap();
         let ast = parser.parse(name, input).unwrap();
@@ -349,7 +373,7 @@ mod tests {
     #[test]
     fn simple() {
         assert_eq!(
-            parse("expression", &[], "1"),
+            parse("expression", &[], &[], "1"),
             quote! {
                 #[no_mangle]
                 pub extern "C" fn expression() -> f64 {
@@ -360,7 +384,7 @@ mod tests {
         );
 
         assert_eq!(
-            parse("foo", &[], "1 + 2"),
+            parse("foo", &[], &[], "1 + 2"),
             quote! {
                 #[no_mangle]
                 pub extern "C" fn foo() -> f64 {
@@ -371,7 +395,7 @@ mod tests {
         );
 
         assert_eq!(
-            parse("bar", &[], "-1 + 2"),
+            parse("bar", &[], &[], "-1 + 2"),
             quote! {
                 #[no_mangle]
                 pub extern "C" fn bar() -> f64 {
@@ -382,7 +406,7 @@ mod tests {
         );
 
         assert_eq!(
-            parse("baz", &[], "1 - -2"),
+            parse("baz", &[], &[], "1 - -2"),
             quote! {
                 #[no_mangle]
                 pub extern "C" fn baz() -> f64 {
@@ -393,7 +417,7 @@ mod tests {
         );
 
         assert_eq!(
-            parse("expression", &[], "1 + 2 / 3"),
+            parse("expression", &[], &[], "1 + 2 / 3"),
             quote! {
                 #[no_mangle]
                 pub extern "C" fn expression() -> f64 {
@@ -404,7 +428,7 @@ mod tests {
         );
 
         assert_eq!(
-            parse("expression", &[], "2**4"),
+            parse("expression", &[], &[], "2**4"),
             quote! {
                 #[inline]
                 fn import_pow(a: f64, b: f64) -> f64 {
@@ -422,7 +446,7 @@ mod tests {
     #[test]
     fn params() {
         assert_eq!(
-            parse("expression", &["a"], "a + 1"),
+            parse("expression", &["a"], &[], "a + 1"),
             quote! {
                 #[no_mangle]
                 pub extern "C" fn expression(a: f64) -> f64 {
@@ -433,7 +457,7 @@ mod tests {
         );
 
         assert_eq!(
-            parse("ndvi", &["a", "b"], "(a-b) / (a+b)"),
+            parse("ndvi", &["a", "b"], &[], "(a-b) / (a+b)"),
             quote! {
                 #[no_mangle]
                 pub extern "C" fn ndvi(a: f64, b: f64) -> f64 {
@@ -444,7 +468,7 @@ mod tests {
         );
 
         assert_eq!(
-            parse("expression", &["a"], "max(a, 0)"),
+            parse("expression", &["a"], &[], "max(a, 0)"),
             quote! {
                 #[inline]
                 fn import_max(a: f64, b: f64) -> f64 {
@@ -460,9 +484,32 @@ mod tests {
     }
 
     #[test]
+    fn boolean_params() {
+        assert_eq!(
+            parse(
+                "expression",
+                &["a"],
+                &["is_a_nodata"],
+                "if is_a_nodata { 0 } else { a }"
+            ),
+            quote! {
+                #[no_mangle]
+                pub extern "C" fn expression(a: f64, is_a_nodata: bool) -> f64 {
+                    if is_a_nodata {
+                        0f64
+                    } else {
+                        a
+                    }
+                }
+            }
+            .to_string()
+        );
+    }
+
+    #[test]
     fn branches() {
         assert_eq!(
-            parse("expression", &[], "if true { 1 } else { 2 }"),
+            parse("expression", &[], &[], "if true { 1 } else { 2 }"),
             quote! {
                 #[no_mangle]
                 pub extern "C" fn expression() -> f64 {
@@ -479,6 +526,7 @@ mod tests {
         assert_eq!(
             parse(
                 "expression",
+                &[],
                 &[],
                 "if TRUE { 1 } else if false { 2 } else { 1 + 2 }"
             ),
@@ -501,6 +549,7 @@ mod tests {
             parse(
                 "expression",
                 &[],
+                &[],
                 "if 1 < 2 { 1 } else if 1 + 5 < 3 - 1 { 2 } else { 1 + 2 }"
             ),
             quote! {
@@ -521,6 +570,7 @@ mod tests {
         assert_eq!(
             parse(
                 "expression",
+                &[],
                 &[],
                 "if true && false {
                     1
@@ -555,6 +605,7 @@ mod tests {
         assert_eq!(
             parse(
                 "expression",
+                &[],
                 &[],
                 "let a = 1.2;
                 let b = 2;

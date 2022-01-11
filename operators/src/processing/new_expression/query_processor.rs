@@ -195,7 +195,7 @@ where
                     return out_no_data;
                 }
 
-                let result = expression(a.as_());
+                let result = expression(a.as_(), is_no_data);
                 TO::from_(result)
             })
             .collect();
@@ -278,7 +278,7 @@ where
                     return out_no_data;
                 }
 
-                let result = expression(a.as_(), b.as_());
+                let result = expression(a.as_(), is_a_no_data, b.as_(), is_b_no_data);
                 TO::from_(result)
             })
             .collect();
@@ -377,7 +377,14 @@ where
                     return out_no_data;
                 }
 
-                let result = expression(a.as_(), b.as_(), c.as_());
+                let result = expression(
+                    a.as_(),
+                    is_a_no_data,
+                    b.as_(),
+                    is_b_no_data,
+                    c.as_(),
+                    is_c_no_data,
+                );
                 TO::from_(result)
             })
             .collect();

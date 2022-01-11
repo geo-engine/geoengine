@@ -8,6 +8,7 @@ use snafu::Snafu;
 #[snafu(context(suffix(false)))] // disables default `Snafu` suffix
 pub enum ExpressionError {
     UnknownVariable { variable: String },
+    UnknownBooleanVariable { variable: String },
     UnexpectedBranchStructure,
     BranchStructureMalformed,
     UnexpectedRule { rule: String },

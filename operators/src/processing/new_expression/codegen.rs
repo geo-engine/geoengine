@@ -16,7 +16,7 @@ type Result<T, E = ExpressionError> = std::result::Result<T, E>;
 pub struct ExpressionAst {
     name: Identifier,
     root: AstNode,
-    parameters: Vec<Identifier>,
+    parameters: Vec<Parameter>,
     imports: HashSet<Identifier>,
     // TODO: dtype Float or Int
 }
@@ -24,7 +24,7 @@ pub struct ExpressionAst {
 impl ExpressionAst {
     pub fn new(
         name: Identifier,
-        parameters: Vec<Identifier>,
+        parameters: Vec<Parameter>,
         imports: HashSet<Identifier>,
         root: AstNode,
     ) -> Result<ExpressionAst> {
@@ -76,12 +76,19 @@ impl ToTokens for ExpressionAst {
         }
 
         let fn_name = &self.name;
-        let params = &self.parameters;
+        let params: Vec<TokenStream> = self
+            .parameters
+            .iter()
+            .map(|p| match p {
+                Parameter::Number(param) => quote! { #param: #dtype },
+                Parameter::Boolean(param) => quote! { #param: bool },
+            })
+            .collect();
         let content = &self.root;
 
         tokens.extend(quote! {
             #[no_mangle]
-            pub extern "C" fn #fn_name (#(#params : #dtype),*) -> #dtype {
+            pub extern "C" fn #fn_name (#(#params),*) -> #dtype {
                 #content
             }
         });
@@ -242,6 +249,7 @@ pub struct Branch {
 
 #[derive(Debug, Clone)]
 pub enum BooleanExpression {
+    Variable(Identifier),
     Constant(bool),
     Comparison {
         left: Box<AstNode>,
@@ -258,6 +266,7 @@ pub enum BooleanExpression {
 impl ToTokens for BooleanExpression {
     fn to_tokens(&self, tokens: &mut TokenStream) {
         let new_tokens = match self {
+            Self::Variable(v) => quote! { #v },
             Self::Constant(b) => quote! { #b },
             Self::Comparison { left, op, right } => quote! { ( (#left) #op (#right) ) },
             Self::Operation { left, op, right } => quote! { ( (#left) #op (#right) ) },
@@ -326,5 +335,19 @@ impl ToTokens for Assignment {
         };
 
         tokens.extend(new_tokens);
+    }
+}
+
+#[derive(Debug, Clone)]
+pub enum Parameter {
+    Number(Identifier),
+    Boolean(Identifier),
+}
+
+impl AsRef<str> for Parameter {
+    fn as_ref(&self) -> &str {
+        match self {
+            Self::Number(identifier) | Self::Boolean(identifier) => identifier.as_ref(),
+        }
     }
 }

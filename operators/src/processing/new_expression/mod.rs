@@ -4,7 +4,7 @@ use crate::{
         ExecutionContext, InitializedRasterOperator, Operator, OperatorDatasets, RasterOperator,
         RasterQueryProcessor, RasterResultDescriptor, TypedRasterQueryProcessor,
     },
-    processing::new_expression::query_processor::ExpressionQueryProcessor,
+    processing::new_expression::{codegen::Parameter, query_processor::ExpressionQueryProcessor},
     util::{input::float_with_nan, Result},
 };
 use async_trait::async_trait;
@@ -156,8 +156,15 @@ impl RasterOperator for NewExpression {
 
         // we refer to raster's by A, B, C, …
         let parameters = (0..self.sources.number_of_sources())
-            .map(index_to_parameter)
-            .collect::<Vec<String>>();
+            .flat_map(|i| {
+                let parameter = index_to_parameter(i);
+                let boolean_parameter = format!("is_{}_nodata", &parameter);
+                [
+                    Parameter::Number(parameter.into()),
+                    Parameter::Boolean(boolean_parameter.into()),
+                ]
+            })
+            .collect::<Vec<_>>();
 
         let expression = ExpressionParser::new(&parameters)?.parse(
             "expression", // TODO: generate and store a unique name
