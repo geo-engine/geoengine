@@ -1,18 +1,3 @@
-use actix_web::{web, FromRequest, Responder};
-use geoengine_datatypes::operations::reproject::{
-    CoordinateProjection, CoordinateProjector, ReprojectClipped,
-};
-use geoengine_datatypes::spatial_reference::SpatialReference;
-use serde::{Deserialize, Serialize};
-use snafu::ResultExt;
-use uuid::Uuid;
-
-use geoengine_datatypes::plots::PlotOutputFormat;
-use geoengine_datatypes::primitives::{BoundingBox2D, SpatialResolution, TimeInterval};
-use geoengine_operators::engine::{
-    ResultDescriptor, TypedPlotQueryProcessor, VectorQueryRectangle,
-};
-
 use crate::error;
 use crate::error::Result;
 use crate::handlers::Context;
@@ -20,6 +5,17 @@ use crate::ogc::util::{parse_bbox, parse_time};
 use crate::util::parsing::parse_spatial_resolution;
 use crate::workflows::registry::WorkflowRegistry;
 use crate::workflows::workflow::WorkflowId;
+use actix_web::{web, FromRequest, Responder};
+use geoengine_datatypes::operations::reproject::reproject_query;
+use geoengine_datatypes::plots::PlotOutputFormat;
+use geoengine_datatypes::primitives::{BoundingBox2D, SpatialResolution, TimeInterval};
+use geoengine_datatypes::spatial_reference::SpatialReference;
+use geoengine_operators::engine::{
+    ResultDescriptor, TypedPlotQueryProcessor, VectorQueryRectangle,
+};
+use serde::{Deserialize, Serialize};
+use snafu::ResultExt;
+use uuid::Uuid;
 
 pub(crate) fn init_plot_routes<C>(cfg: &mut web::ServiceConfig)
 where
@@ -151,22 +147,21 @@ async fn get_plot_handler<C: Context>(
     let request_spatial_ref: SpatialReference =
         params.crs.ok_or(error::Error::MissingSpatialReference)?;
 
-    let spatial_bounds = if request_spatial_ref == workflow_spatial_ref {
-        params.bbox
-    } else {
-        let projector =
-            CoordinateProjector::from_known_srs(request_spatial_ref, workflow_spatial_ref)?;
-
-        params.bbox.reproject_clipped(&projector)?
-    };
-
-    let processor = initialized.query_processor().context(error::Operator)?;
-
     let query_rect = VectorQueryRectangle {
-        spatial_bounds,
+        spatial_bounds: params.bbox,
         time_interval: params.time,
         spatial_resolution: params.spatial_resolution,
     };
+
+    let query_rect = if request_spatial_ref == workflow_spatial_ref {
+        query_rect
+    } else {
+        reproject_query(query_rect, workflow_spatial_ref, request_spatial_ref)
+            .map_err(From::from)
+            .context(error::Operator)?
+    };
+
+    let processor = initialized.query_processor().context(error::Operator)?;
 
     let query_ctx = ctx.query_context()?;
 

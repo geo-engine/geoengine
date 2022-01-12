@@ -16,8 +16,8 @@ use futures::stream::BoxStream;
 use futures::StreamExt;
 use geoengine_datatypes::{
     operations::reproject::{
-        suggest_pixel_size_from_diag_cross_projected, CoordinateProjection, CoordinateProjector,
-        Reproject, ReprojectClipped,
+        reproject_query, suggest_pixel_size_from_diag_cross_projected, CoordinateProjection,
+        CoordinateProjector, Reproject,
     },
     primitives::AxisAlignedRectangle,
     primitives::{BoundingBox2D, SpatialPartition2D},
@@ -111,7 +111,7 @@ impl InitializedVectorOperator for InitializedVectorReprojection {
         match self.source.query_processor()? {
             TypedVectorQueryProcessor::Data(source) => Ok(TypedVectorQueryProcessor::Data(
                 MapQueryProcessor::new(source, move |query| {
-                    query_rewrite_fn(query, state.source_srs, state.target_srs)
+                    reproject_query(query, state.source_srs, state.target_srs).map_err(From::from)
                 })
                 .boxed(),
             )),
@@ -167,30 +167,6 @@ where
     }
 }
 
-/// this method performs the transformation of a query rectangle in `target` projection
-/// to a new query rectangle with coordinates in the `source` projection
-pub fn query_rewrite_fn(
-    query: VectorQueryRectangle,
-    source: SpatialReference,
-    target: SpatialReference,
-) -> Result<VectorQueryRectangle> {
-    let projector_source_target = CoordinateProjector::from_known_srs(source, target)?;
-    let projector_target_source = CoordinateProjector::from_known_srs(target, source)?;
-
-    let p_bbox = query
-        .spatial_bounds
-        .reproject_clipped(&projector_target_source)?;
-    let s_bbox = p_bbox.reproject(&projector_source_target)?;
-
-    let p_spatial_resolution =
-        suggest_pixel_size_from_diag_cross_projected(s_bbox, p_bbox, query.spatial_resolution)?;
-    Ok(VectorQueryRectangle {
-        spatial_bounds: p_bbox,
-        spatial_resolution: p_spatial_resolution,
-        time_interval: query.time_interval,
-    })
-}
-
 #[async_trait]
 impl<Q, G> QueryProcessor for VectorReprojectionProcessor<Q, G>
 where
@@ -205,7 +181,7 @@ where
         query: VectorQueryRectangle,
         ctx: &'a dyn QueryContext,
     ) -> Result<BoxStream<'a, Result<Self::Output>>> {
-        let rewritten_query = query_rewrite_fn(query, self.from, self.to)?;
+        let rewritten_query = reproject_query(query, self.from, self.to)?;
 
         Ok(self
             .source
@@ -947,7 +923,7 @@ mod tests {
 
         assert_eq!(
             expected,
-            query_rewrite_fn(
+            reproject_query(
                 query,
                 SpatialReference::new(SpatialReferenceAuthority::Epsg, 3857),
                 SpatialReference::epsg_4326(),
