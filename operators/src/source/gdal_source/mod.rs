@@ -25,7 +25,7 @@ use geoengine_datatypes::raster::{
 use geoengine_datatypes::util::test::TestDefault;
 use geoengine_datatypes::{dataset::DatasetId, raster::TileInformation};
 use geoengine_datatypes::{
-    primitives::{TimeInstance, TimeInterval, TimeStep, TimeStepIter},
+    primitives::TimeInterval,
     raster::{
         Grid, GridBlit, GridBoundingBox2D, GridBounds, GridIdx, GridSize, GridSpaceToLinearSpace,
         TilingSpecification,
@@ -40,11 +40,12 @@ use std::time::Instant;
 use std::{marker::PhantomData, path::PathBuf};
 //use gdal::metadata::Metadata; // TODO: handle metadata
 
-pub use metadata::{GdalMetaDataRegular, GdalMetaDataStatic, GdalMetadataNetCdfCf};
+pub use loading_info::{
+    GdalLoadingInfo, GdalLoadingInfoPart, GdalLoadingInfoPartIterator, GdalMetaDataRegular,
+    GdalMetaDataStatic, GdalMetadataNetCdfCf,
+};
 
-use self::metadata::NetCdfCfGdalLoadingInfoPartIterator;
-
-mod metadata;
+mod loading_info;
 
 /// Parameters for the GDAL Source Operator
 ///
@@ -90,59 +91,6 @@ impl OperatorDatasets for GdalSourceParameters {
 type GdalMetaData =
     Box<dyn MetaData<GdalLoadingInfo, RasterResultDescriptor, RasterQueryRectangle>>;
 
-#[derive(Debug, Clone)]
-pub struct GdalLoadingInfo {
-    /// partitions of dataset sorted by time
-    pub info: GdalLoadingInfoPartIterator,
-}
-
-#[derive(Debug, Clone)]
-pub struct DynamicGdalLoadingInfoPartIterator {
-    time_step_iter: TimeStepIter,
-    params: GdalDatasetParameters,
-    time_placeholders: HashMap<String, GdalSourceTimePlaceholder>,
-    step: TimeStep,
-    max_t2: TimeInstance,
-}
-
-impl DynamicGdalLoadingInfoPartIterator {
-    fn new(
-        time_step_iter: TimeStepIter,
-        params: GdalDatasetParameters,
-        time_placeholders: HashMap<String, GdalSourceTimePlaceholder>,
-        step: TimeStep,
-        max_t2: TimeInstance,
-    ) -> Result<Self> {
-        // TODO: maybe fail on deserialization
-        if time_placeholders.is_empty()
-            || time_placeholders.keys().any(String::is_empty)
-            || time_placeholders
-                .values()
-                .any(|value| value.format.is_empty())
-        {
-            return Err(Error::DynamicGdalSourceSpecHasEmptyTimePlaceholders);
-        }
-
-        Ok(Self {
-            time_step_iter,
-            params,
-            time_placeholders,
-            step,
-            max_t2,
-        })
-    }
-}
-
-#[allow(clippy::large_enum_variant)]
-#[derive(Debug, Clone)]
-pub enum GdalLoadingInfoPartIterator {
-    Static {
-        parts: std::vec::IntoIter<GdalLoadingInfoPart>,
-    },
-    Dynamic(DynamicGdalLoadingInfoPartIterator),
-    NetCdfCf(NetCdfCfGdalLoadingInfoPartIterator),
-}
-
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(rename_all = "camelCase")]
 pub struct GdalSourceTimePlaceholder {
@@ -155,47 +103,6 @@ pub struct GdalSourceTimePlaceholder {
 pub enum TimeReference {
     Start,
     End,
-}
-
-impl Iterator for GdalLoadingInfoPartIterator {
-    type Item = Result<GdalLoadingInfoPart>;
-
-    fn next(&mut self) -> Option<Self::Item> {
-        match self {
-            GdalLoadingInfoPartIterator::Static { parts } => parts.next().map(Result::Ok),
-            GdalLoadingInfoPartIterator::Dynamic(DynamicGdalLoadingInfoPartIterator {
-                time_step_iter,
-                params,
-                time_placeholders,
-                step,
-                max_t2,
-            }) => {
-                let t1 = time_step_iter.next()?;
-
-                let t2 = t1 + *step;
-                let t2 = t2.unwrap_or(*max_t2);
-
-                let time_interval = TimeInterval::new_unchecked(t1, t2);
-
-                let loading_info_part = params
-                    .replace_time_placeholders(time_placeholders, time_interval)
-                    .map(|loading_info_part_params| GdalLoadingInfoPart {
-                        time: time_interval,
-                        params: loading_info_part_params,
-                    });
-
-                Some(loading_info_part)
-            }
-            GdalLoadingInfoPartIterator::NetCdfCf(iter) => iter.next(),
-        }
-    }
-}
-
-/// one temporal slice of the dataset that requires reading from exactly one Gdal dataset
-#[derive(Debug, Clone, PartialEq)]
-pub struct GdalLoadingInfoPart {
-    pub time: TimeInterval,
-    pub params: GdalDatasetParameters,
 }
 
 /// Parameters for loading data using Gdal
@@ -880,7 +787,9 @@ mod tests {
     use crate::util::gdal::add_ndvi_dataset;
     use crate::util::Result;
     use geoengine_datatypes::hashmap;
-    use geoengine_datatypes::primitives::{AxisAlignedRectangle, SpatialPartition2D};
+    use geoengine_datatypes::primitives::{
+        AxisAlignedRectangle, SpatialPartition2D, TimeInstance, TimeStep,
+    };
     use geoengine_datatypes::raster::{TileInformation, TilingStrategy};
     use geoengine_datatypes::{
         primitives::{Measurement, SpatialResolution, TimeGranularity},
