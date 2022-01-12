@@ -267,7 +267,7 @@ mod tests {
 
     #[tokio::test]
     async fn json() {
-        let ctx = InMemoryContext::default();
+        let ctx = InMemoryContext::test_default();
         let session_id = ctx.default_session_ref().await.id();
 
         let workflow = Workflow {
@@ -324,7 +324,7 @@ mod tests {
 
     #[tokio::test]
     async fn json_vega() {
-        let ctx = InMemoryContext::default();
+        let ctx = InMemoryContext::test_default();
         let session_id = ctx.default_session_ref().await.id();
 
         let workflow = Workflow {
@@ -411,7 +411,7 @@ mod tests {
     #[tokio::test]
     async fn check_request_types() {
         async fn get_workflow_json(method: Method) -> ServiceResponse {
-            let ctx = InMemoryContext::default();
+            let ctx = InMemoryContext::test_default();
             let session_id = ctx.default_session_ref().await.id();
 
             let workflow = Workflow {

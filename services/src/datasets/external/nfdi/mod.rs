@@ -1012,7 +1012,7 @@ mod tests {
     //         dyn MetaData<OgrSourceDataset, VectorResultDescriptor, VectorQueryRectangle>,
     //     > = provider.meta_data(&id).await.unwrap();
     //
-    //     let mut context = MockExecutionContext::default();
+    //     let mut context = MockExecutionContext::test_default();
     //     context.add_meta_data(id.clone(), meta);
     //
     //     let src = OgrSource {
@@ -1031,7 +1031,7 @@ mod tests {
     //         _ => panic!("Expected MultiPoint QueryProcessor"),
     //     };
     //
-    //     let ctx = MockQueryContext::default();
+    //     let ctx = MockQueryContext::test_default();
     //
     //     let qr = VectorQueryRectangle {
     //         spatial_bounds: BoundingBox2D::new((-180., -90.).into(), (180., 90.).into()).unwrap(),

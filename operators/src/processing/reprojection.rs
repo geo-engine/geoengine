@@ -577,7 +577,7 @@ mod tests {
                 source: point_source.into(),
             },
         })
-        .initialize(&MockExecutionContext::default())
+        .initialize(&MockExecutionContext::test_default())
         .await?;
 
         let query_processor = initialized_operator.query_processor()?;
@@ -646,7 +646,7 @@ mod tests {
                 source: lines_source.into(),
             },
         })
-        .initialize(&MockExecutionContext::default())
+        .initialize(&MockExecutionContext::test_default())
         .await?;
 
         let query_processor = initialized_operator.query_processor()?;
@@ -717,7 +717,7 @@ mod tests {
                 source: polygon_source.into(),
             },
         })
-        .initialize(&MockExecutionContext::default())
+        .initialize(&MockExecutionContext::test_default())
         .await?;
 
         let query_processor = initialized_operator.query_processor()?;
@@ -810,13 +810,13 @@ mod tests {
         }
         .boxed();
 
-        let mut exe_ctx = MockExecutionContext::default();
+        let mut exe_ctx = MockExecutionContext::test_default();
         exe_ctx.tiling_specification.tile_size_in_pixels = GridShape {
             // we need a smaller tile size
             shape_array: [2, 2],
         };
 
-        let query_ctx = MockQueryContext::default();
+        let query_ctx = MockQueryContext::test_default();
 
         let initialized_operator = RasterOperator::boxed(Reprojection {
             params: ReprojectionParams {
@@ -854,8 +854,8 @@ mod tests {
 
     #[tokio::test]
     async fn raster_ndvi_3857() -> Result<()> {
-        let mut exe_ctx = MockExecutionContext::default();
-        let query_ctx = MockQueryContext::default();
+        let mut exe_ctx = MockExecutionContext::test_default();
+        let query_ctx = MockQueryContext::test_default();
         let id = add_ndvi_dataset(&mut exe_ctx);
         exe_ctx.tiling_specification =
             TilingSpecification::new((0.0, 0.0).into(), [450, 450].into());
@@ -959,8 +959,8 @@ mod tests {
 
     #[tokio::test]
     async fn raster_ndvi_3857_to_4326() -> Result<()> {
-        let mut exe_ctx = MockExecutionContext::default();
-        let query_ctx = MockQueryContext::default();
+        let mut exe_ctx = MockExecutionContext::test_default();
+        let query_ctx = MockQueryContext::test_default();
 
         let m = GdalMetaDataRegular {
             start: TimeInstance::from_millis(1_388_534_400_000).unwrap(),
@@ -1101,8 +1101,8 @@ mod tests {
 
     #[tokio::test]
     async fn query_outside_projection_area_of_use_produces_empty_tiles() {
-        let mut exe_ctx = MockExecutionContext::default();
-        let query_ctx = MockQueryContext::default();
+        let mut exe_ctx = MockExecutionContext::test_default();
+        let query_ctx = MockQueryContext::test_default();
 
         let m = GdalMetaDataStatic {
             time: Some(TimeInterval::default()),
@@ -1196,8 +1196,8 @@ mod tests {
 
     #[tokio::test]
     async fn points_from_wgs84_to_utm36n() {
-        let exe_ctx = MockExecutionContext::default();
-        let query_ctx = MockQueryContext::default();
+        let exe_ctx = MockExecutionContext::test_default();
+        let query_ctx = MockQueryContext::test_default();
 
         let point_source = MockFeatureCollectionSource::single(
             MultiPointCollection::from_data(

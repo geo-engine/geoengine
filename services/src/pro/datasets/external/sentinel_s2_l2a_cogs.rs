@@ -546,7 +546,10 @@ mod tests {
 
     use crate::test_data;
     use futures::StreamExt;
-    use geoengine_datatypes::primitives::{SpatialPartition2D, SpatialResolution};
+    use geoengine_datatypes::{
+        primitives::{SpatialPartition2D, SpatialResolution},
+        util::test::TestDefault,
+    };
     use geoengine_operators::{
         engine::{ChunkByteSize, MockExecutionContext, MockQueryContext, RasterOperator},
         source::{FileNotFoundHandling, GdalSource, GdalSourceParameters},
@@ -638,7 +641,7 @@ mod tests {
     async fn query_data() -> Result<()> {
         // TODO: mock STAC endpoint
 
-        let mut exe = MockExecutionContext::default();
+        let mut exe = MockExecutionContext::test_default();
 
         let def: Box<dyn ExternalDatasetProviderDefinition> =
             serde_json::from_reader(BufReader::new(File::open(test_data!(

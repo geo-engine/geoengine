@@ -1,9 +1,12 @@
 use std::sync::Arc;
 
 /// A spatio-temporal rectangle for querying data
-use geoengine_datatypes::primitives::{
-    AxisAlignedRectangle, BoundingBox2D, SpatialPartition2D, SpatialPartitioned, SpatialResolution,
-    TimeInterval,
+use geoengine_datatypes::{
+    primitives::{
+        AxisAlignedRectangle, BoundingBox2D, SpatialPartition2D, SpatialPartitioned,
+        SpatialResolution, TimeInterval,
+    },
+    util::test::TestDefault,
 };
 use rayon::ThreadPool;
 use serde::{Deserialize, Serialize};
@@ -74,9 +77,9 @@ impl From<ChunkByteSize> for usize {
     }
 }
 
-impl Default for ChunkByteSize {
-    fn default() -> Self {
-        Self(1024 * 1024) // TODO: find reasonable default
+impl TestDefault for ChunkByteSize {
+    fn test_default() -> Self {
+        Self(1024 * 1024)
     }
 }
 
@@ -90,10 +93,10 @@ pub struct MockQueryContext {
     pub thread_pool: Arc<ThreadPool>,
 }
 
-impl Default for MockQueryContext {
-    fn default() -> Self {
+impl TestDefault for MockQueryContext {
+    fn test_default() -> Self {
         Self {
-            chunk_byte_size: ChunkByteSize::default(),
+            chunk_byte_size: ChunkByteSize::test_default(),
             thread_pool: create_rayon_thread_pool(0),
         }
     }
@@ -103,7 +106,7 @@ impl MockQueryContext {
     pub fn new(chunk_byte_size: ChunkByteSize) -> Self {
         Self {
             chunk_byte_size,
-            ..Default::default()
+            thread_pool: create_rayon_thread_pool(0),
         }
     }
 

@@ -244,10 +244,11 @@ mod tests {
     use geoengine_datatypes::operations::image::Colorizer;
     use geoengine_datatypes::primitives::{TimeGranularity, TimeStep};
     use geoengine_datatypes::spatial_reference::SpatialReference;
+    use geoengine_datatypes::util::test::TestDefault;
     use serde_json::json;
 
     async fn create_test_helper(method: Method) -> ServiceResponse {
-        let ctx = InMemoryContext::default();
+        let ctx = InMemoryContext::test_default();
 
         let session_id = ctx.default_session_ref().await.id();
 
@@ -286,7 +287,7 @@ mod tests {
 
     #[tokio::test]
     async fn create_invalid_body() {
-        let ctx = InMemoryContext::default();
+        let ctx = InMemoryContext::test_default();
 
         let session_id = ctx.default_session_ref().await.id();
 
@@ -308,7 +309,7 @@ mod tests {
 
     #[tokio::test]
     async fn create_missing_fields() {
-        let ctx = InMemoryContext::default();
+        let ctx = InMemoryContext::test_default();
 
         let session_id = ctx.default_session_ref().await.id();
 
@@ -334,7 +335,7 @@ mod tests {
 
     #[tokio::test]
     async fn create_missing_header() {
-        let ctx = InMemoryContext::default();
+        let ctx = InMemoryContext::test_default();
 
         let create = json!({
             "description": "Foo".to_string(),
@@ -354,7 +355,7 @@ mod tests {
     }
 
     async fn list_test_helper(method: Method) -> ServiceResponse {
-        let ctx = InMemoryContext::default();
+        let ctx = InMemoryContext::test_default();
 
         let (session, _) = create_project_helper(&ctx).await;
 
@@ -398,7 +399,7 @@ mod tests {
 
     #[tokio::test]
     async fn list_missing_header() {
-        let ctx = InMemoryContext::default();
+        let ctx = InMemoryContext::test_default();
 
         create_project_helper(&ctx).await;
 
@@ -432,7 +433,7 @@ mod tests {
     }
 
     async fn load_test_helper(method: Method) -> ServiceResponse {
-        let ctx = InMemoryContext::default();
+        let ctx = InMemoryContext::test_default();
 
         let (session, project) = create_project_helper(&ctx).await;
 
@@ -464,7 +465,7 @@ mod tests {
 
     #[tokio::test]
     async fn load_missing_header() {
-        let ctx = InMemoryContext::default();
+        let ctx = InMemoryContext::test_default();
 
         let (_, project) = create_project_helper(&ctx).await;
 
@@ -484,7 +485,7 @@ mod tests {
 
     #[tokio::test]
     async fn load_not_found() {
-        let ctx = InMemoryContext::default();
+        let ctx = InMemoryContext::test_default();
 
         let session_id = ctx.default_session_ref().await.id();
 
@@ -500,7 +501,7 @@ mod tests {
     async fn update_test_helper(
         method: Method,
     ) -> (InMemoryContext, SimpleSession, ProjectId, ServiceResponse) {
-        let ctx = InMemoryContext::default();
+        let ctx = InMemoryContext::test_default();
 
         let (session, project) = create_project_helper(&ctx).await;
 
@@ -536,7 +537,7 @@ mod tests {
 
     #[tokio::test]
     async fn update_invalid_body() {
-        let ctx = InMemoryContext::default();
+        let ctx = InMemoryContext::test_default();
 
         let (session, project) = create_project_helper(&ctx).await;
 
@@ -559,7 +560,7 @@ mod tests {
 
     #[tokio::test]
     async fn update_missing_fields() {
-        let ctx = InMemoryContext::default();
+        let ctx = InMemoryContext::test_default();
 
         let (session, project) = create_project_helper(&ctx).await;
 
@@ -622,7 +623,7 @@ mod tests {
             loaded.layers
         }
 
-        let ctx = InMemoryContext::default();
+        let ctx = InMemoryContext::test_default();
 
         let (session, project) = create_project_helper(&ctx).await;
 
@@ -767,7 +768,7 @@ mod tests {
             loaded.plots
         }
 
-        let ctx = InMemoryContext::default();
+        let ctx = InMemoryContext::test_default();
 
         let (session, project) = create_project_helper(&ctx).await;
 
@@ -870,7 +871,7 @@ mod tests {
 
     #[tokio::test]
     async fn delete() {
-        let ctx = InMemoryContext::default();
+        let ctx = InMemoryContext::test_default();
 
         let (session, project) = create_project_helper(&ctx).await;
 

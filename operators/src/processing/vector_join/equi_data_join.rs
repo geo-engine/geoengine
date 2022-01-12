@@ -394,6 +394,7 @@ mod tests {
     use geoengine_datatypes::primitives::{
         BoundingBox2D, FeatureData, MultiPoint, SpatialResolution, TimeInterval,
     };
+    use geoengine_datatypes::util::test::TestDefault;
 
     use crate::engine::{ChunkByteSize, MockExecutionContext, MockQueryContext, VectorOperator};
     use crate::mock::MockFeatureCollectionSource;
@@ -408,7 +409,7 @@ mod tests {
         right_join_column: &str,
         right_suffix: &str,
     ) -> Vec<MultiPointCollection> {
-        let execution_context = MockExecutionContext::default();
+        let execution_context = MockExecutionContext::test_default();
 
         let left = MockFeatureCollectionSource::single(left)
             .boxed()

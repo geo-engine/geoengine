@@ -233,10 +233,11 @@ mod tests {
     use actix_web_httpauth::headers::authorization::Bearer;
     use geoengine_datatypes::spatial_reference::SpatialReference;
     use geoengine_datatypes::spatial_reference::SpatialReferenceAuthority;
+    use geoengine_datatypes::util::test::TestDefault;
 
     #[tokio::test]
     async fn get_spatial_reference() {
-        let ctx = InMemoryContext::default();
+        let ctx = InMemoryContext::test_default();
         let session_id = ctx.default_session_ref().await.id();
 
         let req = actix_web::test::TestRequest::get()

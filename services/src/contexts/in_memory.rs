@@ -13,6 +13,7 @@ use crate::{
 use crate::{projects::hashmap_projectdb::HashMapProjectDb, workflows::registry::HashMapRegistry};
 use async_trait::async_trait;
 use geoengine_datatypes::raster::TilingSpecification;
+use geoengine_datatypes::util::test::TestDefault;
 use geoengine_operators::engine::ChunkByteSize;
 use geoengine_operators::util::create_rayon_thread_pool;
 use rayon::ThreadPool;
@@ -30,16 +31,16 @@ pub struct InMemoryContext {
     query_ctx_chunk_size: ChunkByteSize,
 }
 
-impl Default for InMemoryContext {
-    fn default() -> Self {
+impl TestDefault for InMemoryContext {
+    fn test_default() -> Self {
         Self {
             project_db: Default::default(),
             workflow_registry: Default::default(),
             dataset_db: Default::default(),
             session: Default::default(),
             thread_pool: create_rayon_thread_pool(0),
-            exe_ctx_tiling_spec: Default::default(),
-            query_ctx_chunk_size: Default::default(),
+            exe_ctx_tiling_spec: TestDefault::test_default(),
+            query_ctx_chunk_size: TestDefault::test_default(),
         }
     }
 }
@@ -55,11 +56,14 @@ impl InMemoryContext {
         add_datasets_from_directory(&mut db, dataset_defs_path).await;
         add_providers_from_directory(&mut db, provider_defs_path).await;
 
-        InMemoryContext {
+        Self {
+            project_db: Default::default(),
+            workflow_registry: Default::default(),
+            session: Default::default(),
+            thread_pool: create_rayon_thread_pool(0),
             exe_ctx_tiling_spec,
             query_ctx_chunk_size,
             dataset_db: Arc::new(RwLock::new(db)),
-            ..Default::default()
         }
     }
 
@@ -67,10 +71,14 @@ impl InMemoryContext {
         exe_ctx_tiling_spec: TilingSpecification,
         query_ctx_chunk_size: ChunkByteSize,
     ) -> Self {
-        InMemoryContext {
+        Self {
+            project_db: Default::default(),
+            workflow_registry: Default::default(),
+            dataset_db: Default::default(),
+            session: Default::default(),
+            thread_pool: create_rayon_thread_pool(0),
             exe_ctx_tiling_spec,
             query_ctx_chunk_size,
-            ..Default::default()
         }
     }
 }
