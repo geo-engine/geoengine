@@ -504,6 +504,34 @@ mod tests {
             }
             .to_string()
         );
+
+        assert_eq!(
+            parse(
+                "expression",
+                &["A", "B", "out_nodata"],
+                &["is_A_nodata", "is_B_nodata"],
+                "if is_A_nodata {
+                    B * 2
+                } else if A == 6 {
+                    out_nodata
+                } else {
+                    A
+                }"
+            ),
+            quote! {
+                #[no_mangle]
+                pub extern "C" fn expression(A: f64, B: f64, out_nodata: f64, is_A_nodata: bool, is_B_nodata: bool) -> f64 {
+                    if is_A_nodata {
+                        (B * 2f64)
+                    } else if ((A) == (6f64)) {
+                        out_nodata
+                    } else {
+                        A
+                    }
+                }
+            }
+            .to_string()
+        );
     }
 
     #[test]

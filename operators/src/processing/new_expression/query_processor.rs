@@ -178,7 +178,7 @@ where
     ) -> Result<Vec<TO>> {
         let expression = unsafe {
             // we have to "trust" that the function has the signature we expect
-            program.unary_function()?
+            program.function_3::<f64, bool, f64>()?
         };
 
         // cannot be empty at this point
@@ -195,7 +195,7 @@ where
                     return out_no_data;
                 }
 
-                let result = expression(a.as_(), is_no_data);
+                let result = expression(a.as_(), is_no_data, out_no_data.as_());
                 TO::from_(result)
             })
             .collect();
@@ -261,7 +261,7 @@ where
     ) -> Result<Vec<TO>> {
         let expression = unsafe {
             // we have to "trust" that the function has the signature we expect
-            program.binary_function()?
+            program.function_5::<f64, bool, f64, bool, f64>()?
         };
 
         // TODO: allow iterating over empty rasters
@@ -278,7 +278,13 @@ where
                     return out_no_data;
                 }
 
-                let result = expression(a.as_(), is_a_no_data, b.as_(), is_b_no_data);
+                let result = expression(
+                    a.as_(),
+                    is_a_no_data,
+                    b.as_(),
+                    is_b_no_data,
+                    out_no_data.as_(),
+                );
                 TO::from_(result)
             })
             .collect();
@@ -354,7 +360,7 @@ where
     ) -> Result<Vec<TO>> {
         let expression = unsafe {
             // we have to "trust" that the function has the signature we expect
-            program.function_3ary()?
+            program.function_7::<f64, bool, f64, bool, f64, bool, f64>()?
         };
 
         // TODO: allow iterating over empty rasters
@@ -384,6 +390,7 @@ where
                     is_b_no_data,
                     c.as_(),
                     is_c_no_data,
+                    out_no_data.as_(),
                 );
                 TO::from_(result)
             })

@@ -56,9 +56,18 @@ impl LinkedExpression {
         })
     }
 
-    /// Returns a function with one input parameter
+    /// Returns a function with 3 input parameters
     #[allow(clippy::type_complexity)]
-    pub unsafe fn unary_function(&self) -> Result<Symbol<fn(f64, bool) -> f64>> {
+    pub unsafe fn function_3<A, B, C>(&self) -> Result<Symbol<fn(A, B, C) -> f64>> {
+        self.library
+            .get(self.function_name.as_bytes())
+            .map_err(|error| ExpressionError::LinkedFunctionNotFound {
+                error: error.to_string(),
+            })
+    }
+    /// Returns a function with 5 input parameters
+    #[allow(clippy::type_complexity)]
+    pub unsafe fn function_5<A, B, C, D, E>(&self) -> Result<Symbol<fn(A, B, C, D, E) -> f64>> {
         self.library
             .get(self.function_name.as_bytes())
             .map_err(|error| ExpressionError::LinkedFunctionNotFound {
@@ -66,21 +75,11 @@ impl LinkedExpression {
             })
     }
 
-    /// Returns a function with two input parameters
+    /// Returns a function with 7 input parameters
     #[allow(clippy::type_complexity)]
-    pub unsafe fn binary_function(&self) -> Result<Symbol<fn(f64, bool, f64, bool) -> f64>> {
-        self.library
-            .get(self.function_name.as_bytes())
-            .map_err(|error| ExpressionError::LinkedFunctionNotFound {
-                error: error.to_string(),
-            })
-    }
-
-    /// Returns a function with two input parameters
-    #[allow(clippy::type_complexity)]
-    pub unsafe fn function_3ary(
+    pub unsafe fn function_7<A, B, C, D, E, F, G>(
         &self,
-    ) -> Result<Symbol<fn(f64, bool, f64, bool, f64, bool) -> f64>> {
+    ) -> Result<Symbol<fn(A, B, C, D, E, F, G) -> f64>> {
         self.library
             .get(self.function_name.as_bytes())
             .map_err(|error| ExpressionError::LinkedFunctionNotFound {
