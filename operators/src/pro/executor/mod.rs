@@ -1,17 +1,19 @@
-use crate::executor::error::{ExecutorError, Result};
-use futures::future::BoxFuture;
-use futures::stream::{BoxStream, FuturesUnordered};
-use futures::{Future, Stream, StreamExt};
-use replay::SendError;
 use std::collections::HashMap;
 use std::hash::Hash;
 use std::pin::Pin;
 use std::sync::Arc;
 use std::task::{Context, Poll};
-use tokio::sync::mpsc;
 
+use futures::future::BoxFuture;
+use futures::stream::{BoxStream, FuturesUnordered};
+use futures::{Future, Stream, StreamExt};
+use tokio::sync::mpsc;
 use tokio::task::{JoinError, JoinHandle};
 
+use error::{ExecutorError, Result};
+use replay::SendError;
+
+pub mod error;
 pub mod replay;
 
 /// Encapsulates a requested stream computation to send
@@ -483,12 +485,15 @@ where
 
 #[cfg(test)]
 mod tests {
-    use super::Executor;
-    use crate::executor::error::ExecutorError;
-    use futures::{Stream, StreamExt};
     use std::pin::Pin;
     use std::sync::Arc;
     use std::task::{Context, Poll};
+
+    use futures::{Stream, StreamExt};
+
+    use crate::pro::executor::error::ExecutorError;
+
+    use super::Executor;
 
     #[tokio::test]
     async fn test_stream_empty_stream() -> Result<(), ExecutorError> {

@@ -3,7 +3,7 @@ use std::sync::Arc;
 
 use super::{Context, Db, SimpleSession};
 use super::{Session, SimpleContext};
-use crate::contexts::{ExecutionContextImpl, QueryContextImpl, SessionId, TaskManager};
+use crate::contexts::{ExecutionContextImpl, QueryContextImpl, SessionId};
 use crate::datasets::in_memory::HashMapDatasetDb;
 use crate::error::Error;
 use crate::{
@@ -28,7 +28,6 @@ pub struct InMemoryContext {
     thread_pool: Arc<ThreadPool>,
     exe_ctx_tiling_spec: TilingSpecification,
     query_ctx_chunk_size: ChunkByteSize,
-    task_manager: TaskManager,
 }
 
 impl Default for InMemoryContext {
@@ -41,7 +40,6 @@ impl Default for InMemoryContext {
             thread_pool: create_rayon_thread_pool(0),
             exe_ctx_tiling_spec: Default::default(),
             query_ctx_chunk_size: Default::default(),
-            task_manager: Default::default(),
         }
     }
 }
@@ -132,10 +130,6 @@ impl Context for InMemoryContext {
                 self.exe_ctx_tiling_spec,
             ),
         )
-    }
-
-    fn task_manager(&self) -> &TaskManager {
-        &self.task_manager
     }
 
     async fn session_by_id(&self, session_id: SessionId) -> Result<Self::Session> {

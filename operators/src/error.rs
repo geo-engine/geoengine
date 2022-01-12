@@ -296,9 +296,11 @@ pub enum Error {
         source: crate::util::statistics::StatisticsError,
     },
 
+    #[cfg(feature = "pro")]
     #[snafu(display("Executor error: {}", source))]
     Executor {
-        source: crate::executor::error::ExecutorError,
+        #[snafu(implicit)]
+        source: crate::pro::executor::error::ExecutorError,
     },
 }
 
@@ -357,11 +359,5 @@ impl From<tokio::task::JoinError> for Error {
 impl From<crate::util::statistics::StatisticsError> for Error {
     fn from(source: StatisticsError) -> Self {
         Error::Statistics { source }
-    }
-}
-
-impl From<crate::executor::error::ExecutorError> for Error {
-    fn from(source: crate::executor::error::ExecutorError) -> Self {
-        Self::Executor { source }
     }
 }

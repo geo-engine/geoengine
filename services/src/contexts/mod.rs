@@ -2,7 +2,6 @@ use crate::error::Result;
 use crate::{projects::ProjectDb, workflows::registry::WorkflowRegistry};
 use async_trait::async_trait;
 use rayon::ThreadPool;
-use serde_json::Value;
 use std::sync::Arc;
 use tokio::sync::{RwLock, RwLockReadGuard, RwLockWriteGuard};
 
@@ -19,16 +18,11 @@ use geoengine_operators::engine::{
     ChunkByteSize, ExecutionContext, MetaData, MetaDataProvider, QueryContext,
     RasterQueryRectangle, RasterResultDescriptor, VectorQueryRectangle, VectorResultDescriptor,
 };
-#[cfg(not(feature = "pro"))]
-use geoengine_operators::executor::Executor;
-#[cfg(feature = "pro")]
-use geoengine_operators::pro::executor::Executor;
 
 use geoengine_operators::mock::MockDatasetDataSourceLoadingInfo;
 use geoengine_operators::source::{GdalLoadingInfo, OgrSourceDataset};
 
 use crate::datasets::listing::SessionMetaDataProvider;
-use crate::workflows::workflow::WorkflowId;
 pub use in_memory::InMemoryContext;
 pub use session::{MockableSession, Session, SessionId, SimpleSession};
 pub use simple_context::SimpleContext;
@@ -63,28 +57,7 @@ pub trait Context: 'static + Send + Sync + Clone {
 
     fn execution_context(&self, session: Self::Session) -> Result<Self::ExecutionContext>;
 
-    fn task_manager(&self) -> &TaskManager;
-
     async fn session_by_id(&self, session_id: SessionId) -> Result<Self::Session>;
-}
-
-#[derive(Clone)]
-pub struct TaskManager {
-    plot_executor: Arc<Executor<WorkflowId, Result<Value>>>,
-}
-
-impl TaskManager {
-    pub fn plot_executor(&self) -> &Executor<WorkflowId, Result<Value>> {
-        self.plot_executor.as_ref()
-    }
-}
-
-impl Default for TaskManager {
-    fn default() -> Self {
-        TaskManager {
-            plot_executor: Arc::new(Default::default()),
-        }
-    }
 }
 
 pub struct QueryContextImpl {

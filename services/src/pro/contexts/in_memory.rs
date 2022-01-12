@@ -1,6 +1,6 @@
-use crate::contexts::{ExecutionContextImpl, QueryContextImpl, TaskManager};
+use crate::contexts::{ExecutionContextImpl, QueryContextImpl};
 use crate::error;
-use crate::pro::contexts::{Context, Db, ProContext};
+use crate::pro::contexts::{Context, Db, ProContext, TaskManager};
 use crate::pro::datasets::{add_datasets_from_directory, ProHashMapDatasetDb};
 use crate::pro::projects::ProHashMapProjectDb;
 use crate::pro::users::{HashMapUserDb, UserDb, UserSession};
@@ -90,6 +90,9 @@ impl ProContext for ProInMemoryContext {
     async fn user_db_ref_mut(&self) -> RwLockWriteGuard<'_, Self::UserDB> {
         self.user_db.write().await
     }
+    fn task_manager(&self) -> &TaskManager {
+        &self.task_manager
+    }
 }
 
 #[async_trait]
@@ -147,10 +150,6 @@ impl Context for ProInMemoryContext {
                 self.exe_ctx_tiling_spec,
             ),
         )
-    }
-
-    fn task_manager(&self) -> &TaskManager {
-        &self.task_manager
     }
 
     async fn session_by_id(&self, session_id: crate::contexts::SessionId) -> Result<Self::Session> {

@@ -1,6 +1,6 @@
-use crate::contexts::TaskManager;
 use crate::datasets::add_from_directory::add_providers_from_directory;
 use crate::error::{self, Result};
+use crate::pro::contexts::TaskManager;
 use crate::pro::datasets::{add_datasets_from_directory, PostgresDatasetDb, Role};
 use crate::pro::projects::ProjectPermission;
 use crate::pro::users::{UserDb, UserId, UserSession};
@@ -450,6 +450,10 @@ where
     async fn user_db_ref_mut(&self) -> RwLockWriteGuard<'_, Self::UserDB> {
         self.user_db.write().await
     }
+
+    fn task_manager(&self) -> &TaskManager {
+        &self.task_manager
+    }
 }
 
 #[async_trait]
@@ -516,10 +520,6 @@ where
                 self.exe_ctx_tiling_spec,
             ),
         )
-    }
-
-    fn task_manager(&self) -> &TaskManager {
-        &self.task_manager
     }
 
     async fn session_by_id(&self, session_id: crate::contexts::SessionId) -> Result<Self::Session> {

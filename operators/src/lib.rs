@@ -25,7 +25,6 @@ pub mod adapters;
 #[macro_use]
 pub mod engine;
 pub mod error;
-pub mod executor;
 pub mod mock;
 pub mod opencl;
 pub mod plot;

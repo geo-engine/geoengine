@@ -312,8 +312,12 @@ pub enum Error {
     },
 
     MissingNFDIMetaData,
+
+    #[cfg(feature = "pro")]
+    #[snafu(display("Executor error: {}", source))]
     Executor {
-        source: geoengine_operators::executor::error::ExecutorError,
+        #[snafu(implicit)]
+        source: geoengine_operators::pro::executor::error::ExecutorError,
     },
 }
 
@@ -433,11 +437,5 @@ impl From<tonic::Status> for Error {
 impl From<tonic::transport::Error> for Error {
     fn from(source: tonic::transport::Error) -> Self {
         Self::TonicTransport { source }
-    }
-}
-
-impl From<geoengine_operators::executor::error::ExecutorError> for Error {
-    fn from(source: geoengine_operators::executor::error::ExecutorError) -> Self {
-        Self::Executor { source }
     }
 }
