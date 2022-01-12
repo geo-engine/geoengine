@@ -163,11 +163,12 @@ mod tests {
     use geoengine_datatypes::collections::FeatureCollectionInfos;
     use geoengine_datatypes::dataset::InternalDatasetId;
     use geoengine_datatypes::primitives::{BoundingBox2D, SpatialResolution};
+    use geoengine_datatypes::util::test::TestDefault;
     use geoengine_datatypes::util::Identifier;
 
     #[tokio::test]
     async fn test() {
-        let mut execution_context = MockExecutionContext::default();
+        let mut execution_context = MockExecutionContext::test_default();
 
         let id = DatasetId::Internal {
             dataset_id: InternalDatasetId::new(),

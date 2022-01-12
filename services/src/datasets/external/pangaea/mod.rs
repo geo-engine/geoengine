@@ -203,6 +203,7 @@ mod tests {
     use geoengine_datatypes::primitives::{
         BoundingBox2D, Coordinate2D, MultiPointAccess, SpatialResolution, TimeInterval,
     };
+    use geoengine_datatypes::util::test::TestDefault;
     use geoengine_operators::engine::{
         InitializedVectorOperator, MetaData, MockExecutionContext, MockQueryContext,
         QueryProcessor, TypedVectorQueryProcessor, VectorOperator, VectorQueryRectangle,
@@ -411,7 +412,7 @@ mod tests {
         server.verify_and_clear();
         setup_vsicurl(&mut server, doi, "pangaea_geo_none.tsv").await;
 
-        let mut context = MockExecutionContext::default();
+        let mut context = MockExecutionContext::test_default();
         context.add_meta_data(id.clone(), meta);
 
         let src = OgrSource {
@@ -435,7 +436,7 @@ mod tests {
             time_interval: TimeInterval::default(),
             spatial_resolution: SpatialResolution::zero_point_one(),
         };
-        let ctx = MockQueryContext::default();
+        let ctx = MockQueryContext::test_default();
 
         let result = proc.query(query_rectangle, &ctx).await;
 
@@ -466,7 +467,7 @@ mod tests {
         server.verify_and_clear();
         setup_vsicurl(&mut server, doi, "pangaea_geo_point.tsv").await;
 
-        let mut context = MockExecutionContext::default();
+        let mut context = MockExecutionContext::test_default();
         context.add_meta_data(id.clone(), meta);
 
         let src = OgrSource {
@@ -491,7 +492,7 @@ mod tests {
             time_interval: TimeInterval::default(),
             spatial_resolution: SpatialResolution::zero_point_one(),
         };
-        let ctx = MockQueryContext::default();
+        let ctx = MockQueryContext::test_default();
 
         let result: Vec<MultiPointCollection> = proc
             .query(query_rectangle, &ctx)
@@ -533,7 +534,7 @@ mod tests {
         server.verify_and_clear();
         setup_vsicurl(&mut server, doi, "pangaea_geo_box.tsv").await;
 
-        let mut context = MockExecutionContext::default();
+        let mut context = MockExecutionContext::test_default();
         context.add_meta_data(id.clone(), meta);
 
         let src = OgrSource {
@@ -558,7 +559,7 @@ mod tests {
             time_interval: TimeInterval::default(),
             spatial_resolution: SpatialResolution::zero_point_one(),
         };
-        let ctx = MockQueryContext::default();
+        let ctx = MockQueryContext::test_default();
 
         let result: Vec<MultiPolygonCollection> = proc
             .query(query_rectangle, &ctx)
@@ -596,7 +597,7 @@ mod tests {
         server.verify_and_clear();
         setup_vsicurl(&mut server, doi, "pangaea_geo_lat_lon.tsv").await;
 
-        let mut context = MockExecutionContext::default();
+        let mut context = MockExecutionContext::test_default();
         context.add_meta_data(id.clone(), meta);
 
         let src = OgrSource {
@@ -620,7 +621,7 @@ mod tests {
             time_interval: TimeInterval::default(),
             spatial_resolution: SpatialResolution::zero_point_one(),
         };
-        let ctx = MockQueryContext::default();
+        let ctx = MockQueryContext::test_default();
 
         let result: Vec<MultiPointCollection> = proc
             .query(query_rectangle, &ctx)

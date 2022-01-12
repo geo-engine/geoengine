@@ -371,6 +371,7 @@ mod tests {
     use geoengine_datatypes::operations::image::RgbaColor;
     use geoengine_datatypes::primitives::SpatialPartition2D;
     use geoengine_datatypes::raster::{GridShape2D, TilingSpecification};
+    use geoengine_datatypes::util::test::TestDefault;
     use geoengine_operators::engine::{
         ExecutionContext, RasterQueryProcessor, RasterQueryRectangle,
     };
@@ -380,7 +381,7 @@ mod tests {
     use xml::ParserConfig;
 
     async fn test_test_helper(method: Method, path: Option<&str>) -> ServiceResponse {
-        let ctx = InMemoryContext::default();
+        let ctx = InMemoryContext::test_default();
         let session_id = ctx.default_session_ref().await.id();
 
         let req = actix_web::test::TestRequest::default()
@@ -422,7 +423,7 @@ mod tests {
     }
 
     async fn get_capabilities_test_helper(method: Method) -> ServiceResponse {
-        let ctx = InMemoryContext::default();
+        let ctx = InMemoryContext::test_default();
         let session_id = ctx.default_session_ref().await.id();
 
         let (_, id) = register_ndvi_workflow_helper(&ctx).await;
@@ -483,7 +484,7 @@ mod tests {
 
     #[tokio::test]
     async fn png_from_stream_non_full() {
-        let ctx = InMemoryContext::default();
+        let ctx = InMemoryContext::test_default();
         let exe_ctx = ctx.execution_context(SimpleSession::default()).unwrap();
 
         let gdal_source = GdalSourceProcessor::<u8> {
@@ -526,7 +527,10 @@ mod tests {
         };
 
         // override the pixel size since this test was designed for 600 x 600 pixel tiles
-        let ctx = InMemoryContext::new_with_context_spec(exe_ctx_tiling_spec, Default::default());
+        let ctx = InMemoryContext::new_with_context_spec(
+            exe_ctx_tiling_spec,
+            TestDefault::test_default(),
+        );
 
         let session_id = ctx.default_session_ref().await.id();
 
@@ -551,7 +555,7 @@ mod tests {
 
     #[tokio::test]
     async fn get_map_ndvi() {
-        let ctx = InMemoryContext::default();
+        let ctx = InMemoryContext::test_default();
         let session_id = ctx.default_session_ref().await.id();
 
         let (_, id) = register_ndvi_workflow_helper(&ctx).await;
@@ -581,7 +585,10 @@ mod tests {
         };
 
         // override the pixel size since this test was designed for 600 x 600 pixel tiles
-        let ctx = InMemoryContext::new_with_context_spec(exe_ctx_tiling_spec, Default::default());
+        let ctx = InMemoryContext::new_with_context_spec(
+            exe_ctx_tiling_spec,
+            TestDefault::test_default(),
+        );
 
         let session_id = ctx.default_session_ref().await.id();
 
@@ -624,7 +631,10 @@ mod tests {
         };
 
         // override the pixel size since this test was designed for 600 x 600 pixel tiles
-        let ctx = InMemoryContext::new_with_context_spec(exe_ctx_tiling_spec, Default::default());
+        let ctx = InMemoryContext::new_with_context_spec(
+            exe_ctx_tiling_spec,
+            TestDefault::test_default(),
+        );
 
         let session_id = ctx.default_session_ref().await.id();
 
@@ -675,7 +685,7 @@ mod tests {
 
     #[tokio::test]
     async fn it_zoomes_very_far() {
-        let ctx = InMemoryContext::default();
+        let ctx = InMemoryContext::test_default();
         let session_id = ctx.default_session_ref().await.id();
 
         let (_, id) = register_ndvi_workflow_helper(&ctx).await;

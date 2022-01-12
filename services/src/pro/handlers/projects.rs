@@ -267,6 +267,7 @@ mod tests {
     use actix_web::dev::ServiceResponse;
     use actix_web::{http::header, http::Method, test};
     use actix_web_httpauth::headers::authorization::Bearer;
+    use geoengine_datatypes::util::test::TestDefault;
 
     use crate::{
         contexts::Context,
@@ -286,7 +287,7 @@ mod tests {
 
     #[tokio::test]
     async fn load_version() {
-        let ctx = ProInMemoryContext::default();
+        let ctx = ProInMemoryContext::test_default();
 
         let (session, project) = create_project_helper(&ctx).await;
 
@@ -335,7 +336,7 @@ mod tests {
 
     #[tokio::test]
     async fn load_version_not_found() {
-        let ctx = ProInMemoryContext::default();
+        let ctx = ProInMemoryContext::test_default();
 
         let (session, project) = create_project_helper(&ctx).await;
 
@@ -353,7 +354,7 @@ mod tests {
 
     #[tokio::test]
     async fn add_permission() {
-        let ctx = ProInMemoryContext::default();
+        let ctx = ProInMemoryContext::test_default();
 
         let (session, project) = create_project_helper(&ctx).await;
 
@@ -399,7 +400,7 @@ mod tests {
 
     #[tokio::test]
     async fn add_permission_missing_header() {
-        let ctx = ProInMemoryContext::default();
+        let ctx = ProInMemoryContext::test_default();
 
         let (_, project) = create_project_helper(&ctx).await;
 
@@ -442,7 +443,7 @@ mod tests {
 
     #[tokio::test]
     async fn remove_permission() {
-        let ctx = ProInMemoryContext::default();
+        let ctx = ProInMemoryContext::test_default();
 
         let (session, project) = create_project_helper(&ctx).await;
 
@@ -505,7 +506,7 @@ mod tests {
 
     #[tokio::test]
     async fn remove_permission_missing_header() {
-        let ctx = ProInMemoryContext::default();
+        let ctx = ProInMemoryContext::test_default();
 
         let (session, project) = create_project_helper(&ctx).await;
 
@@ -555,7 +556,7 @@ mod tests {
 
     #[tokio::test]
     async fn list_permissions() {
-        let ctx = ProInMemoryContext::default();
+        let ctx = ProInMemoryContext::test_default();
 
         let (session, project) = create_project_helper(&ctx).await;
 
@@ -603,7 +604,7 @@ mod tests {
 
     #[tokio::test]
     async fn list_permissions_missing_header() {
-        let ctx = ProInMemoryContext::default();
+        let ctx = ProInMemoryContext::test_default();
 
         let (session, project) = create_project_helper(&ctx).await;
 
@@ -652,7 +653,7 @@ mod tests {
     }
 
     async fn versions_test_helper(method: Method) -> ServiceResponse {
-        let ctx = ProInMemoryContext::default();
+        let ctx = ProInMemoryContext::test_default();
 
         let (session, project) = create_project_helper(&ctx).await;
 
@@ -691,7 +692,7 @@ mod tests {
 
     #[tokio::test]
     async fn versions_missing_header() {
-        let ctx = ProInMemoryContext::default();
+        let ctx = ProInMemoryContext::test_default();
 
         let (session, project) = create_project_helper(&ctx).await;
 

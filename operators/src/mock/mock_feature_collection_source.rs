@@ -149,6 +149,7 @@ mod tests {
     use crate::engine::{MockExecutionContext, MockQueryContext};
     use futures::executor::block_on_stream;
     use geoengine_datatypes::primitives::{BoundingBox2D, Coordinate2D, FeatureData, TimeInterval};
+    use geoengine_datatypes::util::test::TestDefault;
     use geoengine_datatypes::{collections::MultiPointCollection, primitives::SpatialResolution};
 
     #[test]
@@ -265,7 +266,7 @@ mod tests {
         let source = MockFeatureCollectionSource::single(collection.clone()).boxed();
 
         let source = source
-            .initialize(&MockExecutionContext::default())
+            .initialize(&MockExecutionContext::test_default())
             .await
             .unwrap();
 

@@ -83,7 +83,7 @@ mod test_util {
 
         let processor = op.query_processor().unwrap().get_f32().unwrap();
 
-        let ctx = MockQueryContext::default();
+        let ctx = MockQueryContext::test_default();
         let result_stream = processor.query(query, &ctx).await.unwrap();
         let mut result: Vec<Result<RasterTile2D<f32>>> = result_stream.collect().await;
         assert_eq!(1, result.len());

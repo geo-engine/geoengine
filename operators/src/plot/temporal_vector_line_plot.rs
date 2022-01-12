@@ -255,6 +255,7 @@ impl<const LENGTH: usize> FeatureAttributeValues<LENGTH> {
 mod tests {
     use super::*;
     use chrono::NaiveDate;
+    use geoengine_datatypes::util::test::TestDefault;
     use geoengine_datatypes::{
         collections::MultiPointCollection,
         plots::PlotMetaData,
@@ -305,7 +306,7 @@ mod tests {
         )
         .boxed();
 
-        let exe_ctc = MockExecutionContext::default();
+        let exe_ctc = MockExecutionContext::test_default();
 
         let operator = FeatureAttributeValuesOverTime {
             params: FeatureAttributeValuesOverTimeParams {
@@ -405,7 +406,7 @@ mod tests {
         )
         .boxed();
 
-        let exe_ctc = MockExecutionContext::default();
+        let exe_ctc = MockExecutionContext::test_default();
 
         let operator = FeatureAttributeValuesOverTime {
             params: FeatureAttributeValuesOverTimeParams {
@@ -493,7 +494,7 @@ mod tests {
         )
         .boxed();
 
-        let exe_ctc = MockExecutionContext::default();
+        let exe_ctc = MockExecutionContext::test_default();
 
         let operator = FeatureAttributeValuesOverTime {
             params: FeatureAttributeValuesOverTimeParams {

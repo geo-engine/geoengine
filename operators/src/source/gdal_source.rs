@@ -1424,8 +1424,8 @@ mod tests {
 
     #[tokio::test]
     async fn test_query_single_time_slice() {
-        let mut exe_ctx = MockExecutionContext::default();
-        let query_ctx = MockQueryContext::default();
+        let mut exe_ctx = MockExecutionContext::test_default();
+        let query_ctx = MockQueryContext::test_default();
         let id = add_ndvi_dataset(&mut exe_ctx);
 
         let output_shape: GridShape2D = [256, 256].into();
@@ -1474,8 +1474,8 @@ mod tests {
 
     #[tokio::test]
     async fn test_query_multi_time_slices() {
-        let mut exe_ctx = MockExecutionContext::default();
-        let query_ctx = MockQueryContext::default();
+        let mut exe_ctx = MockExecutionContext::test_default();
+        let query_ctx = MockQueryContext::test_default();
         let id = add_ndvi_dataset(&mut exe_ctx);
 
         let output_shape: GridShape2D = [256, 256].into();
@@ -1509,8 +1509,8 @@ mod tests {
 
     #[tokio::test]
     async fn test_nodata() {
-        let mut exe_ctx = MockExecutionContext::default();
-        let query_ctx = MockQueryContext::default();
+        let mut exe_ctx = MockExecutionContext::test_default();
+        let query_ctx = MockQueryContext::test_default();
         let id = add_ndvi_dataset(&mut exe_ctx);
 
         let output_shape: GridShape2D = [256, 256].into();
