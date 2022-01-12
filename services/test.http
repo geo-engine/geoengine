@@ -212,3 +212,64 @@ POST http://localhost:3000/task/new/init
 ###
 
 POST http://localhost:3000/task/new/upload/530a6809-34c0-457f-8cb9-52c7b89f1ad6
+
+
+
+###
+
+
+
+
+
+POST http://localhost:3030/anonymous
+Content-Type: application/json
+
+###
+
+POST http://localhost:3030/workflow
+Authorization: Bearer 6750cbe9-11fa-49ea-9c93-a604a9d445f1
+Content-Type: application/json
+
+{
+  "type": "Raster",
+  "operator": {
+      "type": "GdalSource",
+      "params": {
+          "dataset": {
+              "type": "internal",
+              "datasetId": "36574dc3-560a-4b09-9d22-d5945f2b8093"
+          }
+      }
+  }
+}
+
+###
+
+POST http://localhost:3030/datasetFromWorkflow/8df9b0e6-e4b4-586e-90a3-6cf0f08c4e62
+Authorization: Bearer 6750cbe9-11fa-49ea-9c93-a604a9d445f1
+Content-Type: application/json
+
+{
+    "name": "foo",
+    "description": null,
+    "query": {
+        "spatialBounds": {
+            "upperLeftCoordinate": {
+                "x": -180.0,
+                "y": 90.0
+            },
+            "lowerRightCoordinate": {
+                "x": 180.0,
+                "y": -90.0
+            }
+        },
+        "timeInterval": {
+            "start": 1388534400000,
+            "end": 1388534401000
+        },
+        "spatialResolution": {
+            "x": 0.1,
+            "y": 0.1
+        }
+    }
+}
