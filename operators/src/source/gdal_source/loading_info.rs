@@ -113,7 +113,9 @@ pub struct GdalMetadataNetCdfCf {
     pub result_descriptor: RasterResultDescriptor,
     pub params: GdalDatasetParameters,
     pub start: TimeInstance,
+    pub end: TimeInstance, // TODO: Use this or time dimension size (number of steps)?
     pub step: TimeStep,
+    pub band_offset: usize,
 }
 
 #[async_trait]
@@ -131,13 +133,17 @@ impl MetaData<GdalLoadingInfo, RasterResultDescriptor, RasterQueryRectangle>
         let time_iterator =
             TimeStepIter::new_with_interval_incl_start(snapped_interval, self.step)?;
 
+        // TODO: REMOVE
+        dbg!(self.band_offset);
+
         Ok(GdalLoadingInfo {
             info: GdalLoadingInfoPartIterator::NetCdfCf(NetCdfCfGdalLoadingInfoPartIterator::new(
                 time_iterator,
                 self.params.clone(),
                 self.step,
                 self.start,
-                query.time_interval.end(),
+                self.end,
+                self.band_offset,
             )),
         })
     }
@@ -220,6 +226,7 @@ pub struct NetCdfCfGdalLoadingInfoPartIterator {
     step: TimeStep,
     dataset_time_start: TimeInstance,
     max_t2: TimeInstance,
+    band_offset: usize,
 }
 
 impl NetCdfCfGdalLoadingInfoPartIterator {
@@ -229,6 +236,7 @@ impl NetCdfCfGdalLoadingInfoPartIterator {
         step: TimeStep,
         dataset_time_start: TimeInstance,
         max_t2: TimeInstance,
+        band_offset: usize,
     ) -> Self {
         Self {
             time_step_iter,
@@ -236,6 +244,7 @@ impl NetCdfCfGdalLoadingInfoPartIterator {
             step,
             dataset_time_start,
             max_t2,
+            band_offset,
         }
     }
 
@@ -276,8 +285,9 @@ impl Iterator for NetCdfCfGdalLoadingInfoPartIterator {
         };
 
         let mut params = self.params.clone();
-        params.rasterband_channel = 1 + steps_between as usize;
+        params.rasterband_channel = self.band_offset + 1 + steps_between as usize;
 
+        // TODO: REMOVE
         dbg!(
             &params,
             t1.as_rfc3339(),
@@ -368,6 +378,7 @@ mod tests {
             step: time_step,
             dataset_time_start: time_start,
             max_t2: time_end,
+            band_offset: 0,
         };
 
         let step_1 = iter.next().unwrap().unwrap();
@@ -449,6 +460,7 @@ mod tests {
                     NaiveDate::from_ymd(2010, 1, 1).and_hms(0, 0, 0),
                 ),
                 max_t2: TimeInstance::from(NaiveDate::from_ymd(2022, 1, 1).and_hms(0, 0, 0)),
+                band_offset: 0,
             }
         }
 
