@@ -311,6 +311,8 @@ pub enum Error {
         message: String,
     },
     MissingNFDIMetaData,
+
+    NetCdfCfMissingMetaData,
 }
 
 impl actix_web::error::ResponseError for Error {
@@ -429,5 +431,11 @@ impl From<tonic::Status> for Error {
 impl From<tonic::transport::Error> for Error {
     fn from(source: tonic::transport::Error) -> Self {
         Self::TonicTransport { source }
+    }
+}
+
+impl From<tokio::task::JoinError> for Error {
+    fn from(source: tokio::task::JoinError) -> Self {
+        Error::TokioJoin { source }
     }
 }
