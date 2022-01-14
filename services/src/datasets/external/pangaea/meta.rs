@@ -6,10 +6,10 @@ use futures::StreamExt;
 use geoengine_datatypes::collections::VectorDataType;
 use geoengine_datatypes::primitives::{
     AxisAlignedRectangle, BoundingBox2D, Coordinate2D, FeatureDataType, MultiPoint, MultiPolygon,
-    TypedGeometry,
+    TypedGeometry, VectorQueryRectangle,
 };
 use geoengine_datatypes::spatial_reference::SpatialReference;
-use geoengine_operators::engine::{StaticMetaData, VectorQueryRectangle, VectorResultDescriptor};
+use geoengine_operators::engine::{StaticMetaData, VectorResultDescriptor};
 use geoengine_operators::source::{
     CsvHeader, FormatSpecifics, OgrSourceColumnSpec, OgrSourceDataset, OgrSourceDatasetTimeType,
     OgrSourceErrorSpec,

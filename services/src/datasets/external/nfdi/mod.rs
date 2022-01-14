@@ -7,11 +7,13 @@ use crate::error::{Error, Result};
 use crate::util::user_input::Validated;
 use geoengine_datatypes::collections::VectorDataType;
 use geoengine_datatypes::dataset::{DatasetId, DatasetProviderId, ExternalDatasetId};
-use geoengine_datatypes::primitives::{FeatureDataType, Measurement};
+use geoengine_datatypes::primitives::{
+    FeatureDataType, Measurement, RasterQueryRectangle, VectorQueryRectangle,
+};
 use geoengine_datatypes::spatial_reference::SpatialReferenceOption;
 use geoengine_operators::engine::{
-    MetaData, MetaDataProvider, RasterQueryRectangle, RasterResultDescriptor, ResultDescriptor,
-    TypedResultDescriptor, VectorQueryRectangle, VectorResultDescriptor,
+    MetaData, MetaDataProvider, RasterResultDescriptor, ResultDescriptor, TypedResultDescriptor,
+    VectorResultDescriptor,
 };
 use geoengine_operators::mock::MockDatasetDataSourceLoadingInfo;
 use geoengine_operators::source::{
@@ -1012,7 +1014,7 @@ mod tests {
     //         dyn MetaData<OgrSourceDataset, VectorResultDescriptor, VectorQueryRectangle>,
     //     > = provider.meta_data(&id).await.unwrap();
     //
-    //     let mut context = MockExecutionContext::default();
+    //     let mut context = MockExecutionContext::test_default();
     //     context.add_meta_data(id.clone(), meta);
     //
     //     let src = OgrSource {
@@ -1031,7 +1033,7 @@ mod tests {
     //         _ => panic!("Expected MultiPoint QueryProcessor"),
     //     };
     //
-    //     let ctx = MockQueryContext::default();
+    //     let ctx = MockQueryContext::test_default();
     //
     //     let qr = VectorQueryRectangle {
     //         spatial_bounds: BoundingBox2D::new((-180., -90.).into(), (180., 90.).into()).unwrap(),

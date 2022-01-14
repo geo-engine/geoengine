@@ -1,16 +1,16 @@
+use crate::engine::QueryContext;
 use crate::engine::{
     ExecutionContext, InitializedVectorOperator, OperatorDatasets, ResultDescriptor,
     SourceOperator, TypedVectorQueryProcessor, VectorOperator, VectorQueryProcessor,
     VectorResultDescriptor,
 };
-use crate::engine::{QueryContext, VectorQueryRectangle};
 use crate::util::Result;
 use async_trait::async_trait;
 use futures::stream::{self, BoxStream, StreamExt};
 use geoengine_datatypes::collections::{FeatureCollection, FeatureCollectionInfos};
 use geoengine_datatypes::dataset::DatasetId;
 use geoengine_datatypes::primitives::{
-    Geometry, MultiLineString, MultiPoint, MultiPolygon, NoGeometry,
+    Geometry, MultiLineString, MultiPoint, MultiPolygon, NoGeometry, VectorQueryRectangle,
 };
 use geoengine_datatypes::spatial_reference::SpatialReference;
 use geoengine_datatypes::util::arrow::ArrowTyped;
@@ -149,6 +149,7 @@ mod tests {
     use crate::engine::{MockExecutionContext, MockQueryContext};
     use futures::executor::block_on_stream;
     use geoengine_datatypes::primitives::{BoundingBox2D, Coordinate2D, FeatureData, TimeInterval};
+    use geoengine_datatypes::util::test::TestDefault;
     use geoengine_datatypes::{collections::MultiPointCollection, primitives::SpatialResolution};
 
     #[test]
@@ -265,7 +266,7 @@ mod tests {
         let source = MockFeatureCollectionSource::single(collection.clone()).boxed();
 
         let source = source
-            .initialize(&MockExecutionContext::default())
+            .initialize(&MockExecutionContext::test_default())
             .await
             .unwrap();
 

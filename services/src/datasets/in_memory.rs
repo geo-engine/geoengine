@@ -10,13 +10,13 @@ use crate::error;
 use crate::error::Result;
 use crate::util::user_input::Validated;
 use async_trait::async_trait;
+use geoengine_datatypes::primitives::{RasterQueryRectangle, VectorQueryRectangle};
 use geoengine_datatypes::{
     dataset::{DatasetId, DatasetProviderId, InternalDatasetId},
     util::Identifier,
 };
 use geoengine_operators::engine::{
-    MetaData, RasterQueryRectangle, RasterResultDescriptor, StaticMetaData, TypedResultDescriptor,
-    VectorQueryRectangle, VectorResultDescriptor,
+    MetaData, RasterResultDescriptor, StaticMetaData, TypedResultDescriptor, VectorResultDescriptor,
 };
 use geoengine_operators::source::{
     GdalLoadingInfo, GdalMetaDataRegular, GdalMetadataNetCdfCf, OgrSourceDataset,
@@ -381,12 +381,13 @@ mod tests {
     use crate::util::user_input::UserInput;
     use geoengine_datatypes::collections::VectorDataType;
     use geoengine_datatypes::spatial_reference::SpatialReferenceOption;
+    use geoengine_datatypes::util::test::TestDefault;
     use geoengine_operators::engine::MetaDataProvider;
     use geoengine_operators::source::OgrSourceErrorSpec;
 
     #[tokio::test]
     async fn add_ogr_and_list() -> Result<()> {
-        let ctx = InMemoryContext::default();
+        let ctx = InMemoryContext::test_default();
 
         let session = SimpleSession::default();
 

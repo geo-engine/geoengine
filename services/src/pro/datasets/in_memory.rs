@@ -16,13 +16,13 @@ use crate::pro::datasets::Permission;
 use crate::pro::users::{UserId, UserSession};
 use crate::util::user_input::Validated;
 use async_trait::async_trait;
+use geoengine_datatypes::primitives::{RasterQueryRectangle, VectorQueryRectangle};
 use geoengine_datatypes::{
     dataset::{DatasetId, DatasetProviderId, InternalDatasetId},
     util::Identifier,
 };
 use geoengine_operators::engine::{
-    MetaData, RasterQueryRectangle, RasterResultDescriptor, StaticMetaData, TypedResultDescriptor,
-    VectorQueryRectangle, VectorResultDescriptor,
+    MetaData, RasterResultDescriptor, StaticMetaData, TypedResultDescriptor, VectorResultDescriptor,
 };
 use geoengine_operators::source::{
     GdalLoadingInfo, GdalMetaDataRegular, GdalMetadataNetCdfCf, OgrSourceDataset,
@@ -486,12 +486,13 @@ mod tests {
     use crate::util::user_input::UserInput;
     use geoengine_datatypes::collections::VectorDataType;
     use geoengine_datatypes::spatial_reference::SpatialReferenceOption;
+    use geoengine_datatypes::util::test::TestDefault;
     use geoengine_operators::engine::MetaDataProvider;
     use geoengine_operators::source::OgrSourceErrorSpec;
 
     #[tokio::test]
     async fn add_ogr_and_list() -> Result<()> {
-        let ctx = ProInMemoryContext::default();
+        let ctx = ProInMemoryContext::test_default();
 
         let session = UserSession::mock(); // TODO: find suitable way for public data
 
@@ -584,7 +585,7 @@ mod tests {
 
     #[tokio::test]
     async fn it_lists_only_permitted_datasets() -> Result<()> {
-        let ctx = ProInMemoryContext::default();
+        let ctx = ProInMemoryContext::test_default();
 
         let session1 = UserSession::mock();
         let session2 = UserSession::mock();
@@ -667,7 +668,7 @@ mod tests {
 
     #[tokio::test]
     async fn it_shows_only_permitted_provenance() -> Result<()> {
-        let ctx = ProInMemoryContext::default();
+        let ctx = ProInMemoryContext::test_default();
 
         let session1 = UserSession::mock();
         let session2 = UserSession::mock();
@@ -730,7 +731,7 @@ mod tests {
 
     #[tokio::test]
     async fn it_updates_permissions() -> Result<()> {
-        let ctx = ProInMemoryContext::default();
+        let ctx = ProInMemoryContext::test_default();
 
         let session1 = UserSession::mock();
         let session2 = UserSession::mock();
@@ -812,7 +813,7 @@ mod tests {
 
     #[tokio::test]
     async fn it_uses_roles_for_permissions() -> Result<()> {
-        let ctx = ProInMemoryContext::default();
+        let ctx = ProInMemoryContext::test_default();
 
         let session1 = UserSession::mock();
         let session2 = UserSession::mock();
@@ -894,7 +895,7 @@ mod tests {
 
     #[tokio::test]
     async fn it_secures_meta_data() -> Result<()> {
-        let ctx = ProInMemoryContext::default();
+        let ctx = ProInMemoryContext::test_default();
 
         let session1 = UserSession::mock();
         let session2 = UserSession::mock();
@@ -985,7 +986,7 @@ mod tests {
 
     #[tokio::test]
     async fn it_secures_uploads() -> Result<()> {
-        let ctx = ProInMemoryContext::default();
+        let ctx = ProInMemoryContext::test_default();
 
         let session1 = UserSession::mock();
         let session2 = UserSession::mock();

@@ -5,35 +5,26 @@ use crate::datasets::listing::{ExternalDatasetProvider, ProvenanceOutput};
 use crate::error::Error;
 use crate::{datasets::listing::DatasetListOptions, error::Result};
 use crate::{
-    datasets::{
-        listing::DatasetListing,
-        storage::{DatasetDefinition, ExternalDatasetProviderDefinition, MetaDataDefinition},
-    },
-    error,
+    datasets::{listing::DatasetListing, storage::ExternalDatasetProviderDefinition},
     util::user_input::Validated,
 };
 use async_trait::async_trait;
 use chrono::NaiveDate;
-use futures::StreamExt;
-use gdal::{Dataset, Metadata};
+use gdal::Metadata;
 use geoengine_datatypes::dataset::{DatasetId, DatasetProviderId, ExternalDatasetId};
 use geoengine_datatypes::primitives::{
-    Measurement, TimeGranularity, TimeInstance, TimeInterval, TimeStep,
+    Measurement, RasterQueryRectangle, TimeGranularity, TimeInstance, TimeInterval, TimeStep,
+    VectorQueryRectangle,
 };
 use geoengine_datatypes::raster::RasterDataType;
-use geoengine_datatypes::spatial_reference::{SpatialReference, SpatialReferenceOption};
+use geoengine_datatypes::spatial_reference::SpatialReference;
 use geoengine_operators::engine::TypedResultDescriptor;
-use geoengine_operators::source::{
-    FileNotFoundHandling, GdalDatasetParameters, GdalMetadataNetCdfCf,
-};
+use geoengine_operators::source::GdalMetadataNetCdfCf;
 use geoengine_operators::util::gdal::{
     gdal_open_dataset, gdal_parameters_from_dataset, raster_descriptor_from_dataset,
 };
 use geoengine_operators::{
-    engine::{
-        MetaData, MetaDataProvider, RasterQueryRectangle, RasterResultDescriptor,
-        VectorQueryRectangle, VectorResultDescriptor,
-    },
+    engine::{MetaData, MetaDataProvider, RasterResultDescriptor, VectorResultDescriptor},
     mock::MockDatasetDataSourceLoadingInfo,
     source::{GdalLoadingInfo, OgrSourceDataset},
 };
@@ -315,7 +306,7 @@ impl MetaDataProvider<GdalLoadingInfo, RasterResultDescriptor, RasterQueryRectan
         // TODO spawn blocking
         self.meta_data(dataset)
             .await
-            .map_err(|e| geoengine_operators::error::Error::LoadingInfo {
+            .map_err(|_| geoengine_operators::error::Error::LoadingInfo {
                 source: Box::new(Error::InvalidExternalDatasetId { provider: self.id }),
             })
     }
@@ -373,7 +364,7 @@ mod tests {
         // let meta = ds.metadata_domains();
         // let meta = dbg!(meta);
 
-        let global = ds.metadata_domain("");
+        // let global = ds.metadata_domain("");
 
         let title = ds.metadata_item("NC_GLOBAL#title", "").unwrap();
         let time_coverage_start = ds
@@ -400,7 +391,7 @@ mod tests {
             for band in 1..=ds.raster_count() {
                 let b = ds.rasterband(band).unwrap();
 
-                let xs = b.x_size();
+                // let xs = b.x_size();
                 let ys = b.y_size();
 
                 dbg!(ys);

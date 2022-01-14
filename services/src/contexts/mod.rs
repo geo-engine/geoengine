@@ -1,6 +1,7 @@
 use crate::error::Result;
 use crate::{projects::ProjectDb, workflows::registry::WorkflowRegistry};
 use async_trait::async_trait;
+use geoengine_datatypes::primitives::{RasterQueryRectangle, VectorQueryRectangle};
 use rayon::ThreadPool;
 use std::sync::Arc;
 use tokio::sync::{RwLock, RwLockReadGuard, RwLockWriteGuard};
@@ -16,7 +17,7 @@ use geoengine_datatypes::dataset::DatasetId;
 use geoengine_datatypes::raster::TilingSpecification;
 use geoengine_operators::engine::{
     ChunkByteSize, ExecutionContext, MetaData, MetaDataProvider, QueryContext,
-    RasterQueryRectangle, RasterResultDescriptor, VectorQueryRectangle, VectorResultDescriptor,
+    RasterResultDescriptor, VectorResultDescriptor,
 };
 use geoengine_operators::mock::MockDatasetDataSourceLoadingInfo;
 use geoengine_operators::source::{GdalLoadingInfo, OgrSourceDataset};

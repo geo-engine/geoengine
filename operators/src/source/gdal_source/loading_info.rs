@@ -1,11 +1,13 @@
 use std::collections::HashMap;
 
 use async_trait::async_trait;
-use geoengine_datatypes::primitives::{TimeInstance, TimeInterval, TimeStep, TimeStepIter};
+use geoengine_datatypes::primitives::{
+    RasterQueryRectangle, TimeInstance, TimeInterval, TimeStep, TimeStepIter,
+};
 use serde::{Deserialize, Serialize};
 
 use crate::{
-    engine::{MetaData, RasterQueryRectangle, RasterResultDescriptor},
+    engine::{MetaData, RasterResultDescriptor},
     error::Error,
     util::Result,
 };
