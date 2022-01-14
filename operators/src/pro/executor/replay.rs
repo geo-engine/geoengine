@@ -525,6 +525,7 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
+    use futures::StreamExt;
     use std::matches;
     use tokio::time::Duration;
 
@@ -759,5 +760,32 @@ mod tests {
         let (r1, r2) = tokio::join!(t, rt);
         assert!(r1.is_ok());
         assert!(r2.is_ok());
+    }
+
+    #[tokio::test]
+    async fn test_receive_stream() {
+        let (tx, rx) = channel(2);
+        let rx2 = tx.subscribe().unwrap();
+
+        let f1 = async move {
+            for i in 1..=3 {
+                assert!(tx.send(i).await.is_ok());
+            }
+        };
+
+        let f2 = async move {
+            let s: ReceiverStream<i32> = rx.into();
+            s.collect::<Vec<i32>>().await
+        };
+
+        let f3 = async move {
+            let s: ReceiverStream<i32> = rx2.into();
+            s.collect::<Vec<i32>>().await
+        };
+
+        let (_, results1, results2) = tokio::join!(f1, f2, f3);
+
+        assert_eq!(vec![1, 2, 3], results1);
+        assert_eq!(vec![1, 2, 3], results2);
     }
 }
