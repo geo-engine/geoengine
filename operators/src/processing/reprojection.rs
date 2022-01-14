@@ -472,9 +472,10 @@ where
 
 #[cfg(test)]
 mod tests {
-    use std::collections::HashMap;
-    use std::path::PathBuf;
-
+    use super::*;
+    use crate::engine::{MockExecutionContext, MockQueryContext};
+    use crate::mock::MockFeatureCollectionSource;
+    use crate::mock::{MockRasterSource, MockRasterSourceParams};
     use crate::{
         engine::{ChunkByteSize, VectorOperator},
         source::{
@@ -485,6 +486,7 @@ mod tests {
         test_data,
         util::gdal::{add_ndvi_dataset, gdal_open_dataset},
     };
+    use futures::StreamExt;
     use geoengine_datatypes::{
         collections::{
             GeometryCollection, MultiLineStringCollection, MultiPointCollection,
@@ -493,8 +495,8 @@ mod tests {
         dataset::{DatasetId, InternalDatasetId},
         hashmap,
         primitives::{
-            BoundingBox2D, Measurement, MultiLineString, MultiPoint, MultiPolygon,
-            SpatialResolution, TimeGranularity, TimeInstance, TimeInterval, TimeStep, QueryRectangle,
+            BoundingBox2D, Measurement, MultiLineString, MultiPoint, MultiPolygon, QueryRectangle,
+            SpatialResolution, TimeGranularity, TimeInstance, TimeInterval, TimeStep,
         },
         raster::{Grid, GridShape, GridShape2D, GridSize, RasterDataType, RasterTile2D},
         spatial_reference::SpatialReferenceAuthority,
@@ -507,13 +509,8 @@ mod tests {
             Identifier,
         },
     };
-
-    use crate::engine::{MockExecutionContext, MockQueryContext};
-    use crate::mock::MockFeatureCollectionSource;
-    use crate::mock::{MockRasterSource, MockRasterSourceParams};
-    use futures::StreamExt;
-
-    use super::*;
+    use std::collections::HashMap;
+    use std::path::PathBuf;
 
     #[tokio::test]
     async fn multi_point() -> Result<()> {
