@@ -535,7 +535,7 @@ mod tests {
             },
         }
         .boxed()
-        .initialize(&MockExecutionContext::default())
+        .initialize(&MockExecutionContext::test_default())
         .await
         .unwrap();
 

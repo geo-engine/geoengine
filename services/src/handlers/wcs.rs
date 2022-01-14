@@ -396,10 +396,11 @@ mod tests {
     use actix_web::test;
     use actix_web_httpauth::headers::authorization::Bearer;
     use geoengine_datatypes::raster::{GridShape2D, TilingSpecification};
+    use geoengine_datatypes::util::test::TestDefault;
 
     #[tokio::test]
     async fn get_capabilities() {
-        let ctx = InMemoryContext::default();
+        let ctx = InMemoryContext::test_default();
         let session_id = ctx.default_session_ref().await.id();
 
         let (_, id) = register_ndvi_workflow_helper(&ctx).await;
@@ -483,7 +484,7 @@ mod tests {
 
     #[tokio::test]
     async fn describe_coverage() {
-        let ctx = InMemoryContext::default();
+        let ctx = InMemoryContext::test_default();
         let session_id = ctx.default_session_ref().await.id();
 
         let (_, id) = register_ndvi_workflow_helper(&ctx).await;
@@ -551,7 +552,10 @@ mod tests {
         };
 
         // override the pixel size since this test was designed for 600 x 600 pixel tiles
-        let ctx = InMemoryContext::new_with_context_spec(exe_ctx_tiling_spec, Default::default());
+        let ctx = InMemoryContext::new_with_context_spec(
+            exe_ctx_tiling_spec,
+            TestDefault::test_default(),
+        );
         let session_id = ctx.default_session_ref().await.id();
 
         let (_, id) = register_ndvi_workflow_helper(&ctx).await;

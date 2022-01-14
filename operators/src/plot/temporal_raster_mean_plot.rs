@@ -337,7 +337,7 @@ mod tests {
             },
         };
 
-        let execution_context = MockExecutionContext::default();
+        let execution_context = MockExecutionContext::test_default();
 
         let temporal_raster_mean_plot = temporal_raster_mean_plot
             .boxed()
@@ -447,7 +447,7 @@ mod tests {
             },
         };
 
-        let execution_context = MockExecutionContext::default();
+        let execution_context = MockExecutionContext::test_default();
 
         let temporal_raster_mean_plot = temporal_raster_mean_plot
             .boxed()

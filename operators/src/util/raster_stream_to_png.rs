@@ -103,6 +103,7 @@ mod tests {
     use geoengine_datatypes::{
         primitives::{Coordinate2D, SpatialPartition2D, SpatialResolution},
         raster::TilingSpecification,
+        util::test::TestDefault,
     };
 
     use crate::{
@@ -113,7 +114,7 @@ mod tests {
 
     #[tokio::test]
     async fn png_from_stream() {
-        let ctx = MockQueryContext::default();
+        let ctx = MockQueryContext::test_default();
         let tiling_specification =
             TilingSpecification::new(Coordinate2D::default(), [600, 600].into());
 

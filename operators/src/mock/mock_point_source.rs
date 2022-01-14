@@ -102,6 +102,7 @@ mod tests {
     use futures::executor::block_on_stream;
     use geoengine_datatypes::collections::FeatureCollectionInfos;
     use geoengine_datatypes::primitives::{BoundingBox2D, SpatialResolution};
+    use geoengine_datatypes::util::test::TestDefault;
 
     #[test]
     fn serde() {
@@ -120,7 +121,7 @@ mod tests {
 
     #[tokio::test]
     async fn execute() {
-        let execution_context = MockExecutionContext::default();
+        let execution_context = MockExecutionContext::test_default();
         let points = vec![Coordinate2D::new(1., 2.); 3];
 
         let mps = MockPointSource {

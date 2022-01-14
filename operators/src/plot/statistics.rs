@@ -261,7 +261,7 @@ mod tests {
             sources: vec![raster_source].into(),
         };
 
-        let execution_context = MockExecutionContext::default();
+        let execution_context = MockExecutionContext::test_default();
 
         let statistics = statistics
             .boxed()

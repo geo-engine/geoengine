@@ -263,10 +263,9 @@ mod tests {
         }
         .boxed();
 
-        let execution_context = MockExecutionContext {
-            tiling_specification: TilingSpecification::new((0., 0.).into(), [3, 2].into()),
-            ..Default::default()
-        };
+        let execution_context = MockExecutionContext::new_with_tiling_spec(
+            TilingSpecification::new((0., 0.).into(), [3, 2].into()),
+        );
 
         let raster_source = raster_source.initialize(&execution_context).await.unwrap();
 
@@ -347,10 +346,9 @@ mod tests {
         }
         .boxed();
 
-        let execution_context = MockExecutionContext {
-            tiling_specification: TilingSpecification::new((0., 0.).into(), [3, 2].into()),
-            ..Default::default()
-        };
+        let execution_context = MockExecutionContext::new_with_tiling_spec(
+            TilingSpecification::new((0., 0.).into(), [3, 2].into()),
+        );
 
         let raster_source = raster_source.initialize(&execution_context).await.unwrap();
 
@@ -458,10 +456,9 @@ mod tests {
         }
         .boxed();
 
-        let execution_context = MockExecutionContext {
-            tiling_specification: TilingSpecification::new((0., 0.).into(), [3, 2].into()),
-            ..Default::default()
-        };
+        let execution_context = MockExecutionContext::new_with_tiling_spec(
+            TilingSpecification::new((0., 0.).into(), [3, 2].into()),
+        );
 
         let raster_source = raster_source.initialize(&execution_context).await.unwrap();
 
@@ -569,10 +566,9 @@ mod tests {
         }
         .boxed();
 
-        let execution_context = MockExecutionContext {
-            tiling_specification: TilingSpecification::new((0., 0.).into(), [3, 2].into()),
-            ..Default::default()
-        };
+        let execution_context = MockExecutionContext::new_with_tiling_spec(
+            TilingSpecification::new((0., 0.).into(), [3, 2].into()),
+        );
 
         let raster_source = raster_source.initialize(&execution_context).await.unwrap();
 

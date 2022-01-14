@@ -1,11 +1,11 @@
 use std::sync::Arc;
 
+use crate::util::create_rayon_thread_pool;
+use crate::util::test::TestDefault;
 pub use geoengine_datatypes::primitives::{
     PlotQueryRectangle, QueryRectangle, RasterQueryRectangle, VectorQueryRectangle,
 };
 use rayon::ThreadPool;
-
-use crate::util::create_rayon_thread_pool;
 
 /// Defines the size in bytes of a vector data chunk
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
@@ -36,9 +36,9 @@ impl From<ChunkByteSize> for usize {
     }
 }
 
-impl Default for ChunkByteSize {
-    fn default() -> Self {
-        Self(1024 * 1024) // TODO: find reasonable default
+impl TestDefault for ChunkByteSize {
+    fn test_default() -> Self {
+        Self(1024 * 1024)
     }
 }
 
@@ -52,10 +52,10 @@ pub struct MockQueryContext {
     pub thread_pool: Arc<ThreadPool>,
 }
 
-impl Default for MockQueryContext {
-    fn default() -> Self {
+impl TestDefault for MockQueryContext {
+    fn test_default() -> Self {
         Self {
-            chunk_byte_size: ChunkByteSize::default(),
+            chunk_byte_size: ChunkByteSize::test_default(),
             thread_pool: create_rayon_thread_pool(0),
         }
     }
@@ -65,7 +65,7 @@ impl MockQueryContext {
     pub fn new(chunk_byte_size: ChunkByteSize) -> Self {
         Self {
             chunk_byte_size,
-            ..Default::default()
+            thread_pool: create_rayon_thread_pool(0),
         }
     }
 

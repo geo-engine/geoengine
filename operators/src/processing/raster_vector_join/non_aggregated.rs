@@ -320,7 +320,7 @@ mod tests {
         )
         .boxed();
 
-        let mut execution_context = MockExecutionContext::default();
+        let mut execution_context = MockExecutionContext::test_default();
 
         let raster_source = GdalSource {
             params: GdalSourceParameters {
@@ -413,7 +413,7 @@ mod tests {
         )
         .boxed();
 
-        let mut execution_context = MockExecutionContext::default();
+        let mut execution_context = MockExecutionContext::test_default();
 
         let raster_source = GdalSource {
             params: GdalSourceParameters {
@@ -513,7 +513,7 @@ mod tests {
         )
         .boxed();
 
-        let mut execution_context = MockExecutionContext::default();
+        let mut execution_context = MockExecutionContext::test_default();
 
         let raster_source = GdalSource {
             params: GdalSourceParameters {
@@ -616,7 +616,7 @@ mod tests {
         )
         .boxed();
 
-        let mut execution_context = MockExecutionContext::default();
+        let mut execution_context = MockExecutionContext::test_default();
 
         let raster_source = GdalSource {
             params: GdalSourceParameters {
@@ -774,10 +774,9 @@ mod tests {
         }
         .boxed();
 
-        let execution_context = MockExecutionContext {
-            tiling_specification: TilingSpecification::new((0., 0.).into(), [3, 2].into()),
-            ..Default::default()
-        };
+        let execution_context = MockExecutionContext::new_with_tiling_spec(
+            TilingSpecification::new((0., 0.).into(), [3, 2].into()),
+        );
 
         let raster = raster_source
             .initialize(&execution_context)
@@ -931,10 +930,9 @@ mod tests {
         }
         .boxed();
 
-        let execution_context = MockExecutionContext {
-            tiling_specification: TilingSpecification::new((0., 0.).into(), [3, 2].into()),
-            ..Default::default()
-        };
+        let execution_context = MockExecutionContext::new_with_tiling_spec(
+            TilingSpecification::new((0., 0.).into(), [3, 2].into()),
+        );
 
         let raster = raster_source
             .initialize(&execution_context)

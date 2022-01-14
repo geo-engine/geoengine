@@ -392,6 +392,7 @@ mod tests {
     use geoengine_datatypes::primitives::{
         BoundingBox2D, FeatureData, MultiPoint, SpatialResolution, TimeInterval,
     };
+    use geoengine_datatypes::util::test::TestDefault;
     use geoengine_operators::engine::QueryProcessor;
     use geoengine_operators::{engine::MockQueryContext, source::OgrSourceProcessor};
     use rand::RngCore;
@@ -757,7 +758,7 @@ mod tests {
                 time_interval: TimeInterval::default(),
                 spatial_resolution: SpatialResolution::zero_point_one(),
             };
-            let ctx = MockQueryContext::default();
+            let ctx = MockQueryContext::test_default();
 
             let result: Vec<_> = processor
                 .query(query_rectangle, &ctx)

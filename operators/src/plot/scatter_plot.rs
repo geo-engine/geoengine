@@ -266,6 +266,7 @@ impl CollectorKind {
 
 #[cfg(test)]
 mod tests {
+    use geoengine_datatypes::util::test::TestDefault;
     use serde_json::json;
 
     use geoengine_datatypes::primitives::{
@@ -344,7 +345,7 @@ mod tests {
             sources: vector_source.into(),
         };
 
-        let execution_context = MockExecutionContext::default();
+        let execution_context = MockExecutionContext::test_default();
 
         let query_processor = box_plot
             .boxed()
@@ -421,7 +422,7 @@ mod tests {
             sources: vector_source.into(),
         };
 
-        let execution_context = MockExecutionContext::default();
+        let execution_context = MockExecutionContext::test_default();
 
         let query_processor = box_plot
             .boxed()
@@ -475,7 +476,7 @@ mod tests {
             sources: vector_source.into(),
         };
 
-        let execution_context = MockExecutionContext::default();
+        let execution_context = MockExecutionContext::test_default();
 
         let init = box_plot.boxed().initialize(&execution_context).await;
 
@@ -505,7 +506,7 @@ mod tests {
             sources: vector_source.into(),
         };
 
-        let execution_context = MockExecutionContext::default();
+        let execution_context = MockExecutionContext::test_default();
 
         let init = box_plot.boxed().initialize(&execution_context).await;
 
@@ -535,7 +536,7 @@ mod tests {
             sources: vector_source.into(),
         };
 
-        let execution_context = MockExecutionContext::default();
+        let execution_context = MockExecutionContext::test_default();
 
         let init = box_plot.boxed().initialize(&execution_context).await;
 
@@ -565,7 +566,7 @@ mod tests {
             sources: vector_source.into(),
         };
 
-        let execution_context = MockExecutionContext::default();
+        let execution_context = MockExecutionContext::test_default();
 
         let init = box_plot.boxed().initialize(&execution_context).await;
 
@@ -594,7 +595,7 @@ mod tests {
             sources: vector_source.into(),
         };
 
-        let execution_context = MockExecutionContext::default();
+        let execution_context = MockExecutionContext::test_default();
 
         let query_processor = box_plot
             .boxed()
@@ -647,7 +648,7 @@ mod tests {
             sources: vector_source.into(),
         };
 
-        let execution_context = MockExecutionContext::default();
+        let execution_context = MockExecutionContext::test_default();
 
         let query_processor = box_plot
             .boxed()
@@ -702,7 +703,7 @@ mod tests {
             sources: vector_source.into(),
         };
 
-        let execution_context = MockExecutionContext::default();
+        let execution_context = MockExecutionContext::test_default();
 
         let query_processor = box_plot
             .boxed()
@@ -783,7 +784,7 @@ mod tests {
             sources: vector_source.into(),
         };
 
-        let execution_context = MockExecutionContext::default();
+        let execution_context = MockExecutionContext::test_default();
 
         let query_processor = box_plot
             .boxed()

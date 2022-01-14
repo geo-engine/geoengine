@@ -271,6 +271,7 @@ mod tests {
     use geoengine_datatypes::primitives::{
         BoundingBox2D, Coordinate2D, MultiPoint, MultiPolygon, SpatialResolution, TimeInterval,
     };
+    use geoengine_datatypes::util::test::TestDefault;
 
     use crate::engine::{
         ChunkByteSize, MockExecutionContext, MockQueryContext, VectorQueryRectangle,
@@ -364,7 +365,7 @@ mod tests {
             },
         }
         .boxed()
-        .initialize(&MockExecutionContext::default())
+        .initialize(&MockExecutionContext::test_default())
         .await?;
 
         let query_processor = operator.query_processor()?.multi_point().unwrap();
@@ -413,7 +414,7 @@ mod tests {
             },
         }
         .boxed()
-        .initialize(&MockExecutionContext::default())
+        .initialize(&MockExecutionContext::test_default())
         .await?;
 
         let query_processor = operator.query_processor()?.multi_point().unwrap();
@@ -475,7 +476,7 @@ mod tests {
             },
         }
         .boxed()
-        .initialize(&MockExecutionContext::default())
+        .initialize(&MockExecutionContext::test_default())
         .await?;
 
         let query_processor = operator.query_processor()?.multi_point().unwrap();
@@ -554,7 +555,7 @@ mod tests {
             },
         }
         .boxed()
-        .initialize(&MockExecutionContext::default())
+        .initialize(&MockExecutionContext::test_default())
         .await?;
 
         let query_processor = operator.query_processor()?.multi_point().unwrap();
@@ -630,7 +631,7 @@ mod tests {
             },
         }
         .boxed()
-        .initialize(&MockExecutionContext::default())
+        .initialize(&MockExecutionContext::test_default())
         .await
         .unwrap();
 
@@ -642,7 +643,7 @@ mod tests {
 
         let query_processor = operator.query_processor().unwrap().multi_point().unwrap();
 
-        let query_context = MockQueryContext::default();
+        let query_context = MockQueryContext::test_default();
 
         let query = query_processor
             .query(query_rectangle, &query_context)

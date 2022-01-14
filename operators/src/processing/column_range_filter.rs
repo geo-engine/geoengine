@@ -158,6 +158,7 @@ mod tests {
     use geoengine_datatypes::primitives::{
         BoundingBox2D, Coordinate2D, FeatureData, MultiPoint, SpatialResolution, TimeInterval,
     };
+    use geoengine_datatypes::util::test::TestDefault;
 
     #[test]
     fn serde() {
@@ -231,7 +232,7 @@ mod tests {
         .boxed();
 
         let initialized = filter
-            .initialize(&MockExecutionContext::default())
+            .initialize(&MockExecutionContext::test_default())
             .await
             .unwrap();
 
