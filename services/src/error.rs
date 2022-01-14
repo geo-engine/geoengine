@@ -6,7 +6,6 @@ use geoengine_datatypes::{
     dataset::{DatasetId, DatasetProviderId},
     spatial_reference::SpatialReferenceOption,
 };
-use geoengine_operators::pro::executor::error::ExecutorError;
 use snafu::prelude::*;
 use strum::IntoStaticStr;
 use tonic::Status;
@@ -442,7 +441,7 @@ impl From<tonic::transport::Error> for Error {
 
 #[cfg(feature = "pro")]
 impl From<geoengine_operators::pro::executor::error::ExecutorError> for Error {
-    fn from(source: ExecutorError) -> Self {
+    fn from(source: geoengine_operators::pro::executor::error::ExecutorError) -> Self {
         Self::Executor { source }
     }
 }
