@@ -34,11 +34,11 @@ use geoengine_datatypes::collections::{
 use geoengine_datatypes::primitives::{
     AxisAlignedRectangle, BoundingBox2D, Coordinate2D, FeatureDataType, FeatureDataValue, Geometry,
     MultiLineString, MultiPoint, MultiPolygon, NoGeometry, TimeInstance, TimeInterval, TimeStep,
-    TypedGeometry,
+    TypedGeometry, VectorQueryRectangle,
 };
 use geoengine_datatypes::util::arrow::ArrowTyped;
 
-use crate::engine::{OperatorDatasets, QueryProcessor, VectorQueryRectangle};
+use crate::engine::{OperatorDatasets, QueryProcessor};
 use crate::error::Error;
 use crate::util::Result;
 use crate::{

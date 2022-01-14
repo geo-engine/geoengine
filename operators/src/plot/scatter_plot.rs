@@ -8,11 +8,11 @@ use geoengine_datatypes::plots::{Histogram2D, HistogramDimension, Plot, PlotData
 use crate::engine::{
     ExecutionContext, InitializedPlotOperator, InitializedVectorOperator, Operator, PlotOperator,
     PlotQueryProcessor, PlotResultDescriptor, QueryContext, QueryProcessor, SingleVectorSource,
-    TypedPlotQueryProcessor, TypedVectorQueryProcessor, VectorQueryRectangle,
+    TypedPlotQueryProcessor, TypedVectorQueryProcessor,
 };
 use crate::error::Error;
 use crate::util::Result;
-use geoengine_datatypes::primitives::Coordinate2D;
+use geoengine_datatypes::primitives::{Coordinate2D, VectorQueryRectangle};
 
 pub const SCATTERPLOT_OPERATOR_NAME: &str = "ScatterPlot";
 

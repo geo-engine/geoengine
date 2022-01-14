@@ -3,10 +3,9 @@ use crate::{
     adapters::{fold_by_coordinate_lookup_future, RasterSubQueryAdapter, TileReprojectionSubQuery},
     engine::{
         ExecutionContext, InitializedRasterOperator, InitializedVectorOperator, Operator,
-        QueryContext, QueryProcessor, RasterOperator, RasterQueryProcessor, RasterQueryRectangle,
-        RasterResultDescriptor, SingleRasterOrVectorSource, TypedRasterQueryProcessor,
-        TypedVectorQueryProcessor, VectorOperator, VectorQueryProcessor, VectorQueryRectangle,
-        VectorResultDescriptor,
+        QueryContext, QueryProcessor, RasterOperator, RasterQueryProcessor, RasterResultDescriptor,
+        SingleRasterOrVectorSource, TypedRasterQueryProcessor, TypedVectorQueryProcessor,
+        VectorOperator, VectorQueryProcessor, VectorResultDescriptor,
     },
     error,
     util::{input::RasterOrVectorOperator, Result},
@@ -16,11 +15,11 @@ use futures::stream::BoxStream;
 use futures::StreamExt;
 use geoengine_datatypes::{
     operations::reproject::{
-        suggest_pixel_size_from_diag_cross_projected, CoordinateProjection, CoordinateProjector,
-        Reproject, ReprojectClipped,
+        reproject_query, suggest_pixel_size_from_diag_cross_projected, CoordinateProjection,
+        CoordinateProjector, Reproject,
     },
     primitives::AxisAlignedRectangle,
-    primitives::{BoundingBox2D, SpatialPartition2D},
+    primitives::{BoundingBox2D, RasterQueryRectangle, SpatialPartition2D, VectorQueryRectangle},
     raster::{Pixel, RasterTile2D, TilingSpecification},
     spatial_reference::SpatialReference,
 };
@@ -111,7 +110,7 @@ impl InitializedVectorOperator for InitializedVectorReprojection {
         match self.source.query_processor()? {
             TypedVectorQueryProcessor::Data(source) => Ok(TypedVectorQueryProcessor::Data(
                 MapQueryProcessor::new(source, move |query| {
-                    query_rewrite_fn(query, state.source_srs, state.target_srs)
+                    reproject_query(query, state.source_srs, state.target_srs).map_err(From::from)
                 })
                 .boxed(),
             )),
@@ -167,30 +166,6 @@ where
     }
 }
 
-/// this method performs the transformation of a query rectangle in `target` projection
-/// to a new query rectangle with coordinates in the `source` projection
-pub fn query_rewrite_fn(
-    query: VectorQueryRectangle,
-    source: SpatialReference,
-    target: SpatialReference,
-) -> Result<VectorQueryRectangle> {
-    let projector_source_target = CoordinateProjector::from_known_srs(source, target)?;
-    let projector_target_source = CoordinateProjector::from_known_srs(target, source)?;
-
-    let p_bbox = query
-        .spatial_bounds
-        .reproject_clipped(&projector_target_source)?;
-    let s_bbox = p_bbox.reproject(&projector_source_target)?;
-
-    let p_spatial_resolution =
-        suggest_pixel_size_from_diag_cross_projected(s_bbox, p_bbox, query.spatial_resolution)?;
-    Ok(VectorQueryRectangle {
-        spatial_bounds: p_bbox,
-        spatial_resolution: p_spatial_resolution,
-        time_interval: query.time_interval,
-    })
-}
-
 #[async_trait]
 impl<Q, G> QueryProcessor for VectorReprojectionProcessor<Q, G>
 where
@@ -205,7 +180,7 @@ where
         query: VectorQueryRectangle,
         ctx: &'a dyn QueryContext,
     ) -> Result<BoxStream<'a, Result<Self::Output>>> {
-        let rewritten_query = query_rewrite_fn(query, self.from, self.to)?;
+        let rewritten_query = reproject_query(query, self.from, self.to)?;
 
         Ok(self
             .source
@@ -497,11 +472,12 @@ where
 
 #[cfg(test)]
 mod tests {
-    use std::collections::HashMap;
-    use std::path::PathBuf;
-
+    use super::*;
+    use crate::engine::{MockExecutionContext, MockQueryContext};
+    use crate::mock::MockFeatureCollectionSource;
+    use crate::mock::{MockRasterSource, MockRasterSourceParams};
     use crate::{
-        engine::{ChunkByteSize, QueryRectangle, VectorOperator},
+        engine::{ChunkByteSize, VectorOperator},
         source::{
             FileNotFoundHandling, GdalDatasetGeoTransform, GdalDatasetParameters,
             GdalMetaDataRegular, GdalMetaDataStatic, GdalSource, GdalSourceParameters,
@@ -510,6 +486,7 @@ mod tests {
         test_data,
         util::gdal::{add_ndvi_dataset, gdal_open_dataset},
     };
+    use futures::StreamExt;
     use geoengine_datatypes::{
         collections::{
             GeometryCollection, MultiLineStringCollection, MultiPointCollection,
@@ -518,7 +495,7 @@ mod tests {
         dataset::{DatasetId, InternalDatasetId},
         hashmap,
         primitives::{
-            BoundingBox2D, Measurement, MultiLineString, MultiPoint, MultiPolygon,
+            BoundingBox2D, Measurement, MultiLineString, MultiPoint, MultiPolygon, QueryRectangle,
             SpatialResolution, TimeGranularity, TimeInstance, TimeInterval, TimeStep,
         },
         raster::{Grid, GridShape, GridShape2D, GridSize, RasterDataType, RasterTile2D},
@@ -532,13 +509,8 @@ mod tests {
             Identifier,
         },
     };
-
-    use crate::engine::{MockExecutionContext, MockQueryContext};
-    use crate::mock::MockFeatureCollectionSource;
-    use crate::mock::{MockRasterSource, MockRasterSourceParams};
-    use futures::StreamExt;
-
-    use super::*;
+    use std::collections::HashMap;
+    use std::path::PathBuf;
 
     #[tokio::test]
     async fn multi_point() -> Result<()> {
@@ -947,7 +919,7 @@ mod tests {
 
         assert_eq!(
             expected,
-            query_rewrite_fn(
+            reproject_query(
                 query,
                 SpatialReference::new(SpatialReferenceAuthority::Epsg, 3857),
                 SpatialReference::epsg_4326(),

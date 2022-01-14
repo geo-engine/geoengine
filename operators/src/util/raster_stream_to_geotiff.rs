@@ -2,7 +2,7 @@ use futures::StreamExt;
 use gdal::raster::{Buffer, GdalType, RasterCreationOption};
 use gdal::{Dataset, Driver};
 use geoengine_datatypes::primitives::{
-    AxisAlignedRectangle, SpatialPartition2D, SpatialPartitioned,
+    AxisAlignedRectangle, RasterQueryRectangle, SpatialPartition2D, SpatialPartitioned,
 };
 use geoengine_datatypes::raster::{
     ChangeGridBounds, GeoTransform, Grid2D, GridBlit, GridIdx, GridSize, Pixel, RasterTile2D,
@@ -13,7 +13,7 @@ use std::convert::TryInto;
 use std::path::Path;
 use std::path::PathBuf;
 
-use crate::{engine::RasterQueryRectangle, util::Result};
+use crate::util::Result;
 use crate::{
     engine::{QueryContext, RasterQueryProcessor},
     error::Error,

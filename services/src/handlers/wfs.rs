@@ -1,4 +1,5 @@
 use actix_web::{web, FromRequest, HttpResponse};
+use geoengine_datatypes::primitives::VectorQueryRectangle;
 use reqwest::Url;
 use snafu::{ensure, ResultExt};
 
@@ -23,7 +24,6 @@ use geoengine_datatypes::{
 };
 use geoengine_operators::engine::{
     QueryContext, ResultDescriptor, TypedVectorQueryProcessor, VectorQueryProcessor,
-    VectorQueryRectangle,
 };
 use geoengine_operators::engine::{QueryProcessor, VectorOperator};
 use geoengine_operators::processing::{Reprojection, ReprojectionParams};

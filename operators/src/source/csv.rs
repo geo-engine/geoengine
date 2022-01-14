@@ -8,6 +8,7 @@ use futures::stream::BoxStream;
 use futures::task::{Context, Poll};
 use futures::{Stream, StreamExt};
 use geoengine_datatypes::dataset::DatasetId;
+use geoengine_datatypes::primitives::VectorQueryRectangle;
 use serde::{Deserialize, Serialize};
 use snafu::{ensure, OptionExt, ResultExt};
 
@@ -19,11 +20,11 @@ use geoengine_datatypes::{
     spatial_reference::SpatialReference,
 };
 
+use crate::engine::QueryProcessor;
 use crate::engine::{
     InitializedVectorOperator, OperatorDatasets, QueryContext, SourceOperator,
     TypedVectorQueryProcessor, VectorOperator, VectorQueryProcessor, VectorResultDescriptor,
 };
-use crate::engine::{QueryProcessor, VectorQueryRectangle};
 use crate::error;
 use crate::util::Result;
 use async_trait::async_trait;

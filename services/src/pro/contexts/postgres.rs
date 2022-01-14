@@ -555,13 +555,14 @@ mod tests {
     };
     use geoengine_datatypes::primitives::{
         BoundingBox2D, Coordinate2D, FeatureDataType, SpatialResolution, TimeInterval,
+        VectorQueryRectangle,
     };
     use geoengine_datatypes::spatial_reference::{SpatialReference, SpatialReferenceOption};
     use geoengine_datatypes::util::test::TestDefault;
     use geoengine_datatypes::util::Identifier;
     use geoengine_operators::engine::{
         MetaData, MultipleRasterSources, PlotOperator, StaticMetaData, TypedOperator,
-        TypedResultDescriptor, VectorOperator, VectorQueryRectangle, VectorResultDescriptor,
+        TypedResultDescriptor, VectorOperator, VectorResultDescriptor,
     };
     use geoengine_operators::mock::{MockPointSource, MockPointSourceParams};
     use geoengine_operators::plot::{Statistics, StatisticsParams};

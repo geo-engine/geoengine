@@ -1,7 +1,7 @@
 use crate::engine::{
     ExecutionContext, InitializedPlotOperator, InitializedRasterOperator, Operator, PlotOperator,
     PlotQueryProcessor, PlotResultDescriptor, QueryContext, QueryProcessor, RasterQueryProcessor,
-    SingleRasterSource, TypedPlotQueryProcessor, VectorQueryRectangle,
+    SingleRasterSource, TypedPlotQueryProcessor,
 };
 use crate::util::math::average_floor;
 use crate::util::Result;
@@ -9,7 +9,9 @@ use async_trait::async_trait;
 use futures::stream::BoxStream;
 use futures::StreamExt;
 use geoengine_datatypes::plots::{AreaLineChart, Plot, PlotData};
-use geoengine_datatypes::primitives::{Measurement, TimeInstance, TimeInterval};
+use geoengine_datatypes::primitives::{
+    Measurement, TimeInstance, TimeInterval, VectorQueryRectangle,
+};
 use geoengine_datatypes::raster::{Pixel, RasterTile2D};
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;

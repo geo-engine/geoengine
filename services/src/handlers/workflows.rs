@@ -14,12 +14,10 @@ use crate::workflows::workflow::{Workflow, WorkflowId};
 use actix_web::{web, FromRequest, Responder};
 use futures::future::join_all;
 use geoengine_datatypes::dataset::{DatasetId, InternalDatasetId};
-use geoengine_datatypes::primitives::AxisAlignedRectangle;
+use geoengine_datatypes::primitives::{AxisAlignedRectangle, RasterQueryRectangle};
 use geoengine_datatypes::spatial_reference::SpatialReference;
 use geoengine_datatypes::util::Identifier;
-use geoengine_operators::engine::{
-    OperatorDatasets, RasterQueryRectangle, TypedOperator, TypedResultDescriptor,
-};
+use geoengine_operators::engine::{OperatorDatasets, TypedOperator, TypedResultDescriptor};
 use geoengine_operators::source::{
     FileNotFoundHandling, GdalDatasetGeoTransform, GdalDatasetParameters, GdalMetaDataStatic,
 };

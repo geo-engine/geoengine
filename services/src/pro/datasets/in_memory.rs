@@ -16,13 +16,13 @@ use crate::pro::datasets::Permission;
 use crate::pro::users::{UserId, UserSession};
 use crate::util::user_input::Validated;
 use async_trait::async_trait;
+use geoengine_datatypes::primitives::{RasterQueryRectangle, VectorQueryRectangle};
 use geoengine_datatypes::{
     dataset::{DatasetId, DatasetProviderId, InternalDatasetId},
     util::Identifier,
 };
 use geoengine_operators::engine::{
-    MetaData, RasterQueryRectangle, RasterResultDescriptor, StaticMetaData, TypedResultDescriptor,
-    VectorQueryRectangle, VectorResultDescriptor,
+    MetaData, RasterResultDescriptor, StaticMetaData, TypedResultDescriptor, VectorResultDescriptor,
 };
 use geoengine_operators::source::{GdalLoadingInfo, GdalMetaDataRegular, OgrSourceDataset};
 use geoengine_operators::{mock::MockDatasetDataSourceLoadingInfo, source::GdalMetaDataStatic};

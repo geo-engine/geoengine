@@ -26,11 +26,11 @@ use gdal::{vector::OGRFieldType, DatasetOptions};
 use geoengine_datatypes::{
     collections::VectorDataType,
     dataset::{DatasetProviderId, InternalDatasetId},
-    primitives::FeatureDataType,
+    primitives::{FeatureDataType, VectorQueryRectangle},
     spatial_reference::{SpatialReference, SpatialReferenceOption},
 };
 use geoengine_operators::{
-    engine::{StaticMetaData, VectorQueryRectangle, VectorResultDescriptor},
+    engine::{StaticMetaData, VectorResultDescriptor},
     source::{
         OgrSourceColumnSpec, OgrSourceDataset, OgrSourceDatasetTimeType, OgrSourceDurationSpec,
         OgrSourceTimeFormat,

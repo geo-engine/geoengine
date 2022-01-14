@@ -1,5 +1,6 @@
 use async_trait::async_trait;
 use futures::StreamExt;
+use geoengine_datatypes::primitives::{PlotQueryRectangle, VectorQueryRectangle};
 use num_traits::AsPrimitive;
 use serde::{Deserialize, Serialize};
 
@@ -10,9 +11,8 @@ use geoengine_datatypes::raster::{GridOrEmpty, GridSize, NoDataValue};
 use crate::engine::{
     ExecutionContext, InitializedPlotOperator, InitializedRasterOperator,
     InitializedVectorOperator, MultipleRasterOrSingleVectorSource, Operator, PlotOperator,
-    PlotQueryProcessor, PlotQueryRectangle, PlotResultDescriptor, QueryContext, QueryProcessor,
-    ResultDescriptor, TypedPlotQueryProcessor, TypedRasterQueryProcessor,
-    TypedVectorQueryProcessor, VectorQueryRectangle,
+    PlotQueryProcessor, PlotResultDescriptor, QueryContext, QueryProcessor, ResultDescriptor,
+    TypedPlotQueryProcessor, TypedRasterQueryProcessor, TypedVectorQueryProcessor,
 };
 use crate::error::{self, Error};
 use crate::util::input::MultiRasterOrVectorOperator;

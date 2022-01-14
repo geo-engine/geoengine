@@ -17,17 +17,16 @@ use bb8_postgres::tokio_postgres::{Config, NoTls};
 use bb8_postgres::PostgresConnectionManager;
 use geoengine_datatypes::collections::VectorDataType;
 use geoengine_datatypes::dataset::{DatasetId, DatasetProviderId, ExternalDatasetId};
-use geoengine_datatypes::primitives::FeatureDataType;
+use geoengine_datatypes::primitives::{
+    FeatureDataType, RasterQueryRectangle, VectorQueryRectangle,
+};
 use geoengine_datatypes::spatial_reference::SpatialReference;
 use geoengine_operators::engine::{StaticMetaData, TypedResultDescriptor};
 use geoengine_operators::source::{
     OgrSourceColumnSpec, OgrSourceDatasetTimeType, OgrSourceErrorSpec,
 };
 use geoengine_operators::{
-    engine::{
-        MetaData, MetaDataProvider, RasterQueryRectangle, RasterResultDescriptor,
-        VectorQueryRectangle, VectorResultDescriptor,
-    },
+    engine::{MetaData, MetaDataProvider, RasterResultDescriptor, VectorResultDescriptor},
     mock::MockDatasetDataSourceLoadingInfo,
     source::{GdalLoadingInfo, OgrSourceDataset},
 };

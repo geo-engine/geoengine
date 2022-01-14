@@ -10,12 +10,14 @@ use geoengine_datatypes::collections::{
     FeatureCollectionInfos, FeatureCollectionRowBuilder, GeoFeatureCollectionRowBuilder,
     GeometryRandomAccess,
 };
-use geoengine_datatypes::primitives::{BoundingBox2D, FeatureDataRef, Geometry, TimeInterval};
+use geoengine_datatypes::primitives::{
+    BoundingBox2D, FeatureDataRef, Geometry, TimeInterval, VectorQueryRectangle,
+};
 use geoengine_datatypes::util::arrow::ArrowTyped;
 
 use crate::adapters::FeatureCollectionChunkMerger;
+use crate::engine::QueryProcessor;
 use crate::engine::{QueryContext, VectorQueryProcessor};
-use crate::engine::{QueryProcessor, VectorQueryRectangle};
 use crate::error::Error;
 use crate::util::Result;
 use async_trait::async_trait;

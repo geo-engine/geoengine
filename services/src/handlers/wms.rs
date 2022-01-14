@@ -2,7 +2,9 @@ use actix_web::{web, FromRequest, HttpResponse};
 use reqwest::Url;
 use snafu::{ensure, ResultExt};
 
-use geoengine_datatypes::primitives::{AxisAlignedRectangle, SpatialPartition2D};
+use geoengine_datatypes::primitives::{
+    AxisAlignedRectangle, RasterQueryRectangle, SpatialPartition2D,
+};
 use geoengine_datatypes::{
     operations::image::Colorizer, primitives::SpatialResolution,
     spatial_reference::SpatialReference,
@@ -19,7 +21,7 @@ use crate::workflows::registry::WorkflowRegistry;
 use crate::workflows::workflow::WorkflowId;
 
 use geoengine_datatypes::primitives::{TimeInstance, TimeInterval};
-use geoengine_operators::engine::{RasterOperator, RasterQueryRectangle, ResultDescriptor};
+use geoengine_operators::engine::{RasterOperator, ResultDescriptor};
 use geoengine_operators::processing::{Reprojection, ReprojectionParams};
 use geoengine_operators::{
     call_on_generic_raster_processor, util::raster_stream_to_png::raster_stream_to_png_bytes,
@@ -372,9 +374,7 @@ mod tests {
     use geoengine_datatypes::primitives::SpatialPartition2D;
     use geoengine_datatypes::raster::{GridShape2D, TilingSpecification};
     use geoengine_datatypes::util::test::TestDefault;
-    use geoengine_operators::engine::{
-        ExecutionContext, RasterQueryProcessor, RasterQueryRectangle,
-    };
+    use geoengine_operators::engine::{ExecutionContext, RasterQueryProcessor};
     use geoengine_operators::source::GdalSourceProcessor;
     use geoengine_operators::util::gdal::create_ndvi_meta_data;
     use std::convert::TryInto;
