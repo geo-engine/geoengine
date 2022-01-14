@@ -451,8 +451,8 @@ where
         self.user_db.write().await
     }
 
-    fn task_manager(&self) -> &TaskManager {
-        &self.task_manager
+    fn task_manager(&self) -> TaskManager {
+        self.task_manager.clone()
     }
 }
 

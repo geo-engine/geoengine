@@ -6,6 +6,7 @@ use geoengine_datatypes::{
     dataset::{DatasetId, DatasetProviderId},
     spatial_reference::SpatialReferenceOption,
 };
+use geoengine_operators::pro::executor::error::ExecutorError;
 use snafu::prelude::*;
 use strum::IntoStaticStr;
 use tonic::Status;
@@ -316,7 +317,6 @@ pub enum Error {
     #[cfg(feature = "pro")]
     #[snafu(display("Executor error: {}", source))]
     Executor {
-        #[snafu(implicit)]
         source: geoengine_operators::pro::executor::error::ExecutorError,
     },
 }
@@ -437,5 +437,12 @@ impl From<tonic::Status> for Error {
 impl From<tonic::transport::Error> for Error {
     fn from(source: tonic::transport::Error) -> Self {
         Self::TonicTransport { source }
+    }
+}
+
+#[cfg(feature = "pro")]
+impl From<geoengine_operators::pro::executor::error::ExecutorError> for Error {
+    fn from(source: ExecutorError) -> Self {
+        Self::Executor { source }
     }
 }

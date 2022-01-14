@@ -14,7 +14,6 @@ use crate::pro::users::{UserDb, UserSession};
 use crate::workflows::workflow::WorkflowId;
 use async_trait::async_trait;
 use geoengine_operators::pro::executor::Executor;
-use serde_json::Value;
 use tokio::sync::{RwLockReadGuard, RwLockWriteGuard};
 
 /// A pro contexts that extends the default context.
@@ -26,16 +25,20 @@ pub trait ProContext: Context<Session = UserSession> {
     fn user_db(&self) -> Db<Self::UserDB>;
     async fn user_db_ref(&self) -> RwLockReadGuard<Self::UserDB>;
     async fn user_db_ref_mut(&self) -> RwLockWriteGuard<Self::UserDB>;
-    fn task_manager(&self) -> &TaskManager;
+    fn task_manager(&self) -> TaskManager;
 }
 
 #[derive(Clone)]
 pub struct TaskManager {
-    plot_executor: Arc<Executor<WorkflowId, crate::error::Result<Value>>>,
+    plot_executor:
+        Arc<Executor<WorkflowId, crate::error::Result<crate::handlers::plots::WrappedPlotOutput>>>,
 }
 
 impl TaskManager {
-    pub fn plot_executor(&self) -> &Executor<WorkflowId, crate::error::Result<Value>> {
+    pub fn plot_executor(
+        &self,
+    ) -> &Executor<WorkflowId, crate::error::Result<crate::handlers::plots::WrappedPlotOutput>>
+    {
         self.plot_executor.as_ref()
     }
 }

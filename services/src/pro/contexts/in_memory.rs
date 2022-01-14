@@ -90,8 +90,8 @@ impl ProContext for ProInMemoryContext {
     async fn user_db_ref_mut(&self) -> RwLockWriteGuard<'_, Self::UserDB> {
         self.user_db.write().await
     }
-    fn task_manager(&self) -> &TaskManager {
-        &self.task_manager
+    fn task_manager(&self) -> TaskManager {
+        self.task_manager.clone()
     }
 }
 
