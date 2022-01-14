@@ -258,7 +258,7 @@ impl NetCdfCfDataProvider {
 
 #[async_trait]
 impl ExternalDatasetProvider for NetCdfCfDataProvider {
-    async fn list(&self, _options: Validated<DatasetListOptions>) -> Result<Vec<DatasetListing>> {
+    async fn list(&self, options: Validated<DatasetListOptions>) -> Result<Vec<DatasetListing>> {
         // TODO: user right management
         // TODO: options
 
@@ -280,6 +280,14 @@ impl ExternalDatasetProvider for NetCdfCfDataProvider {
                 Err(e) => debug!("Failed to list dataset: {}", e),
             }
         }
+
+        // TODO: react to filter and sort options
+        // TODO: don't compute everything and filter then
+        let datasets = datasets
+            .into_iter()
+            .skip(options.user_input.offset as usize)
+            .take(options.user_input.limit as usize)
+            .collect();
 
         Ok(datasets)
     }
