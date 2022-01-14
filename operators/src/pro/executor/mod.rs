@@ -349,7 +349,7 @@ where
         self.sender.send(kc).await?;
         let res = rx.await?;
 
-        Ok(StreamReceiver::new(res))
+        Ok(StreamReceiver::new(res.into()))
     }
 
     /// Submits a single-result computation to this executor. In contrast
@@ -419,19 +419,21 @@ where
     }
 }
 
+#[pin_project::pin_project]
 pub struct StreamReceiver<T>
 where
     T: Sync + Send + 'static,
 {
-    rx: replay::Receiver<Result<Arc<T>>>,
+    #[pin]
+    input: replay::ReceiverStream<Result<Arc<T>>>,
 }
 
 impl<T> StreamReceiver<T>
 where
     T: Sync + Send + 'static,
 {
-    fn new(rx: replay::Receiver<Result<Arc<T>>>) -> StreamReceiver<T> {
-        StreamReceiver { rx }
+    fn new(input: replay::ReceiverStream<Result<Arc<T>>>) -> StreamReceiver<T> {
+        StreamReceiver { input }
     }
 }
 
@@ -442,9 +444,8 @@ where
     type Item = Arc<T>;
 
     fn poll_next(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
-        let mut n = self.rx.recv();
-
-        match Pin::new(&mut n).poll(cx) {
+        let this = self.project();
+        match this.input.poll_next(cx) {
             Poll::Pending => Poll::Pending,
             Poll::Ready(None) => Poll::Ready(None),
             Poll::Ready(Some(Ok(v))) => Poll::Ready(Some(v)),

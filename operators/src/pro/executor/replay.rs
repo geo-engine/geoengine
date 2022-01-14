@@ -1,4 +1,4 @@
-use futures::Future;
+use futures::{Future, Stream};
 use std::collections::{HashMap, VecDeque};
 use std::pin::Pin;
 use std::sync::atomic::{AtomicUsize, Ordering};
@@ -492,6 +492,33 @@ where
 
     fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
         self.receiver.poll_recv(cx)
+    }
+}
+
+pub struct ReceiverStream<T>
+where
+    T: Clone,
+{
+    inner: Receiver<T>,
+}
+
+impl<T> From<Receiver<T>> for ReceiverStream<T>
+where
+    T: Clone,
+{
+    fn from(r: Receiver<T>) -> Self {
+        ReceiverStream { inner: r }
+    }
+}
+
+impl<T> Stream for ReceiverStream<T>
+where
+    T: Clone,
+{
+    type Item = T;
+
+    fn poll_next(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
+        self.inner.poll_recv(cx)
     }
 }
 
