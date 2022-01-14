@@ -4,7 +4,7 @@ use std::time::Instant;
 
 use futures::StreamExt;
 use geoengine_datatypes::dataset::DatasetId;
-use geoengine_datatypes::primitives::Measurement;
+use geoengine_datatypes::primitives::{Measurement, RasterQueryRectangle};
 use geoengine_datatypes::raster::RasterDataType;
 use geoengine_datatypes::spatial_reference::SpatialReference;
 use geoengine_datatypes::util::Identifier;
@@ -19,10 +19,7 @@ use geoengine_operators::processing::{
 };
 use geoengine_operators::source::GdalSource;
 use geoengine_operators::{
-    engine::{
-        ChunkByteSize, MockExecutionContext, RasterOperator, RasterQueryProcessor,
-        RasterQueryRectangle,
-    },
+    engine::{ChunkByteSize, MockExecutionContext, RasterOperator, RasterQueryProcessor},
     source::GdalSourceParameters,
     util::gdal::create_ndvi_meta_data,
 };

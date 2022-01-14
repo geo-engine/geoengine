@@ -2,7 +2,7 @@ use crate::adapters::FeatureCollectionStreamExt;
 use crate::processing::raster_vector_join::create_feature_aggregator;
 use futures::stream::BoxStream;
 use futures::{StreamExt, TryStreamExt};
-use geoengine_datatypes::primitives::{BoundingBox2D, Geometry};
+use geoengine_datatypes::primitives::{BoundingBox2D, Geometry, VectorQueryRectangle};
 use geoengine_datatypes::util::arrow::ArrowTyped;
 use std::marker::PhantomData;
 use std::sync::Arc;
@@ -15,7 +15,7 @@ use geoengine_datatypes::{
 use super::util::{CoveredPixels, PixelCoverCreator};
 use crate::engine::{
     QueryContext, QueryProcessor, RasterQueryProcessor, TypedRasterQueryProcessor,
-    VectorQueryProcessor, VectorQueryRectangle,
+    VectorQueryProcessor,
 };
 use crate::util::Result;
 use crate::{adapters::RasterStreamExt, error::Error};
@@ -280,7 +280,7 @@ mod tests {
 
     use crate::engine::{
         ChunkByteSize, MockExecutionContext, MockQueryContext, QueryProcessor, RasterOperator,
-        RasterResultDescriptor, VectorOperator, VectorQueryRectangle,
+        RasterResultDescriptor, VectorOperator,
     };
     use crate::mock::{MockFeatureCollectionSource, MockRasterSource, MockRasterSourceParams};
     use crate::source::{GdalSource, GdalSourceParameters};

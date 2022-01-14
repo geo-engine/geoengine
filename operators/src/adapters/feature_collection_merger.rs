@@ -131,12 +131,14 @@ mod tests {
 
     use crate::engine::{
         MockExecutionContext, MockQueryContext, QueryProcessor, TypedVectorQueryProcessor,
-        VectorOperator, VectorQueryRectangle,
+        VectorOperator,
     };
     use crate::error::Error;
     use crate::mock::{MockFeatureCollectionSource, MockPointSource, MockPointSourceParams};
     use futures::{StreamExt, TryStreamExt};
-    use geoengine_datatypes::primitives::{BoundingBox2D, Coordinate2D, MultiPoint, TimeInterval};
+    use geoengine_datatypes::primitives::{
+        BoundingBox2D, Coordinate2D, MultiPoint, TimeInterval, VectorQueryRectangle,
+    };
     use geoengine_datatypes::util::test::TestDefault;
     use geoengine_datatypes::{
         collections::{DataCollection, MultiPointCollection},

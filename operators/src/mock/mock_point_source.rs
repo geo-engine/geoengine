@@ -1,4 +1,4 @@
-use crate::engine::{OperatorDatasets, QueryContext, VectorQueryRectangle};
+use crate::engine::{OperatorDatasets, QueryContext};
 use crate::{
     engine::{
         ExecutionContext, InitializedVectorOperator, SourceOperator, TypedVectorQueryProcessor,
@@ -10,6 +10,7 @@ use async_trait::async_trait;
 use futures::stream::{self, BoxStream, StreamExt};
 use geoengine_datatypes::collections::VectorDataType;
 use geoengine_datatypes::dataset::DatasetId;
+use geoengine_datatypes::primitives::VectorQueryRectangle;
 use geoengine_datatypes::{
     collections::MultiPointCollection,
     primitives::{Coordinate2D, TimeInterval},

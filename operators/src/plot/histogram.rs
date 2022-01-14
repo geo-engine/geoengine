@@ -1,5 +1,4 @@
 use crate::engine::QueryProcessor;
-use crate::engine::VectorQueryRectangle;
 use crate::error;
 use crate::error::Error;
 use crate::string_token;
@@ -19,7 +18,7 @@ use futures::stream::BoxStream;
 use futures::{StreamExt, TryFutureExt};
 use geoengine_datatypes::plots::{Plot, PlotData};
 use geoengine_datatypes::primitives::{
-    DataRef, FeatureDataRef, FeatureDataType, Geometry, Measurement,
+    DataRef, FeatureDataRef, FeatureDataType, Geometry, Measurement, VectorQueryRectangle,
 };
 use geoengine_datatypes::raster::{Pixel, RasterTile2D};
 use geoengine_datatypes::{

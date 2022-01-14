@@ -1,5 +1,4 @@
-use super::query::{QueryContext, QueryRectangle};
-use super::{PlotQueryRectangle, RasterQueryRectangle, VectorQueryRectangle};
+use super::query::QueryContext;
 use crate::util::Result;
 use async_trait::async_trait;
 use futures::stream::BoxStream;
@@ -7,7 +6,10 @@ use geoengine_datatypes::collections::{
     DataCollection, MultiLineStringCollection, MultiPolygonCollection,
 };
 use geoengine_datatypes::plots::{PlotData, PlotOutputFormat};
-use geoengine_datatypes::primitives::{AxisAlignedRectangle, BoundingBox2D, SpatialPartition2D};
+use geoengine_datatypes::primitives::{
+    AxisAlignedRectangle, BoundingBox2D, PlotQueryRectangle, QueryRectangle, RasterQueryRectangle,
+    SpatialPartition2D, VectorQueryRectangle,
+};
 use geoengine_datatypes::raster::Pixel;
 use geoengine_datatypes::{collections::MultiPointCollection, raster::RasterTile2D};
 

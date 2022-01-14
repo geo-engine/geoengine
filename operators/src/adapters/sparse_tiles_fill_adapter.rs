@@ -1,18 +1,14 @@
-use std::{pin::Pin, task::Poll};
-
+use crate::util::Result;
 use futures::{ready, Stream};
 use geoengine_datatypes::{
-    primitives::{SpatialPartitioned, TimeInterval},
+    primitives::{RasterQueryRectangle, SpatialPartitioned, TimeInterval},
     raster::{
         EmptyGrid2D, GeoTransform, GridBoundingBox2D, GridBounds, GridIdx2D, GridShape2D, GridStep,
         Pixel, RasterTile2D, TilingSpecification,
     },
 };
 use pin_project::pin_project;
-
-use crate::util::Result;
-
-use crate::engine::RasterQueryRectangle;
+use std::{pin::Pin, task::Poll};
 
 #[derive(Debug, PartialEq, Clone, Copy)]
 enum State {

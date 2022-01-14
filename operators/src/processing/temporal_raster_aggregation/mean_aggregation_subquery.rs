@@ -2,7 +2,7 @@ use std::sync::Arc;
 
 use futures::{future::BoxFuture, Future, FutureExt, TryFuture, TryFutureExt};
 use geoengine_datatypes::{
-    primitives::{SpatialPartitioned, TimeInstance, TimeInterval, TimeStep},
+    primitives::{RasterQueryRectangle, SpatialPartitioned, TimeInstance, TimeInterval, TimeStep},
     raster::{
         EmptyGrid2D, GeoTransform, Grid2D, GridIdx2D, GridOrEmpty, GridOrEmpty2D, GridShapeAccess,
         NoDataValue, Pixel, RasterTile2D, TileInformation,
@@ -13,7 +13,6 @@ use rayon::ThreadPool;
 
 use crate::{
     adapters::{FoldTileAccu, SubQueryTileAggregator},
-    engine::RasterQueryRectangle,
     util::Result,
 };
 

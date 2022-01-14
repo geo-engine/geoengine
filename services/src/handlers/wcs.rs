@@ -9,7 +9,9 @@ use log::info;
 use snafu::{ensure, ResultExt};
 use url::Url;
 
-use geoengine_datatypes::primitives::{AxisAlignedRectangle, SpatialPartition2D};
+use geoengine_datatypes::primitives::{
+    AxisAlignedRectangle, RasterQueryRectangle, SpatialPartition2D,
+};
 use geoengine_datatypes::{primitives::SpatialResolution, spatial_reference::SpatialReference};
 
 use crate::error::Result;
@@ -24,8 +26,8 @@ use crate::workflows::registry::WorkflowRegistry;
 use crate::workflows::workflow::WorkflowId;
 
 use geoengine_datatypes::primitives::{TimeInstance, TimeInterval};
+use geoengine_operators::engine::RasterOperator;
 use geoengine_operators::engine::ResultDescriptor;
-use geoengine_operators::engine::{RasterOperator, RasterQueryRectangle};
 use geoengine_operators::processing::{Reprojection, ReprojectionParams};
 
 pub(crate) fn init_wcs_routes<C>(cfg: &mut web::ServiceConfig)
@@ -338,7 +340,7 @@ async fn get_coverage<C: Context>(
             }
         };
 
-    let query_rect: RasterQueryRectangle = RasterQueryRectangle {
+    let query_rect = RasterQueryRectangle {
         spatial_bounds: request_partition,
         time_interval: request.time.unwrap_or_else(default_time_from_config),
         spatial_resolution,

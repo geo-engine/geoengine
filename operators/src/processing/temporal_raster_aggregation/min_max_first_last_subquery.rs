@@ -2,14 +2,16 @@ use std::sync::Arc;
 
 use futures::{future::BoxFuture, Future, FutureExt, TryFuture, TryFutureExt};
 use geoengine_datatypes::{
-    primitives::{SpatialPartitioned, TimeInstance, TimeInterval, TimeStep},
+    primitives::{
+        QueryRectangle, RasterQueryRectangle, SpatialPartitioned, TimeInstance, TimeInterval,
+        TimeStep,
+    },
     raster::{EmptyGrid2D, Grid2D, GridOrEmpty, Pixel, RasterTile2D, TileInformation},
 };
 use rayon::ThreadPool;
 
 use crate::{
     adapters::{FoldTileAccu, FoldTileAccuMut, SubQueryTileAggregator},
-    engine::{QueryRectangle, RasterQueryRectangle},
     util::Result,
 };
 

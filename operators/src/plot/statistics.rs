@@ -1,7 +1,7 @@
 use crate::engine::{
     ExecutionContext, InitializedPlotOperator, InitializedRasterOperator, MultipleRasterSources,
     Operator, PlotOperator, PlotQueryProcessor, PlotResultDescriptor, QueryContext, QueryProcessor,
-    TypedPlotQueryProcessor, TypedRasterQueryProcessor, VectorQueryRectangle,
+    TypedPlotQueryProcessor, TypedRasterQueryProcessor,
 };
 use crate::error;
 use crate::util::number_statistics::NumberStatistics;
@@ -10,6 +10,7 @@ use async_trait::async_trait;
 use futures::future::join_all;
 use futures::stream::select_all;
 use futures::{FutureExt, StreamExt};
+use geoengine_datatypes::primitives::VectorQueryRectangle;
 use geoengine_datatypes::raster::{Grid2D, GridOrEmpty, GridSize, NoDataValue};
 use geoengine_datatypes::spatial_reference::SpatialReferenceOption;
 use serde::{Deserialize, Serialize};
@@ -199,7 +200,7 @@ mod tests {
     use super::*;
     use crate::engine::{
         ChunkByteSize, MockExecutionContext, MockQueryContext, RasterOperator,
-        RasterResultDescriptor, VectorQueryRectangle,
+        RasterResultDescriptor,
     };
     use crate::mock::{MockRasterSource, MockRasterSourceParams};
     use geoengine_datatypes::primitives::{

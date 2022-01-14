@@ -356,7 +356,9 @@ async fn unzip(zip_path: &Path, target_path: &Path) -> Result<(), error::Error> 
 
 #[cfg(test)]
 mod tests {
-    use geoengine_datatypes::primitives::{SpatialPartition2D, SpatialResolution, TimeInterval};
+    use geoengine_datatypes::primitives::{
+        RasterQueryRectangle, SpatialPartition2D, SpatialResolution, TimeInterval,
+    };
     use geoengine_datatypes::raster::RasterTile2D;
     use geoengine_datatypes::spatial_reference::SpatialReferenceAuthority;
     use geoengine_datatypes::util::test::TestDefault;
@@ -384,9 +386,7 @@ mod tests {
     };
     use actix_web::{http::header, test};
     use actix_web_httpauth::headers::authorization::Bearer;
-    use geoengine_operators::engine::{
-        MetaData, MetaDataProvider, RasterOperator, RasterQueryRectangle,
-    };
+    use geoengine_operators::engine::{MetaData, MetaDataProvider, RasterOperator};
     use std::io::Write;
     use std::io::{Cursor, Read};
     use std::path::PathBuf;

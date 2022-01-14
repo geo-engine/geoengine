@@ -8,6 +8,7 @@ use geoengine_datatypes::collections::{
 };
 use geoengine_datatypes::primitives::{
     BoundingBox2D, Circle, FeatureDataType, FeatureDataValue, MultiPoint, MultiPointAccess,
+    VectorQueryRectangle,
 };
 use serde::{Deserialize, Serialize};
 use snafu::ensure;
@@ -16,7 +17,7 @@ use crate::adapters::FeatureCollectionStreamExt;
 use crate::engine::{
     ExecutionContext, InitializedVectorOperator, Operator, QueryContext, QueryProcessor,
     SingleVectorSource, TypedVectorQueryProcessor, VectorOperator, VectorQueryProcessor,
-    VectorQueryRectangle, VectorResultDescriptor,
+    VectorResultDescriptor,
 };
 use crate::error::{self, Error};
 use crate::processing::circle_merging_quadtree::aggregates::MeanAggregator;

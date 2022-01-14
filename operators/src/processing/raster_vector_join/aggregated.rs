@@ -9,7 +9,7 @@ use geoengine_datatypes::util::arrow::ArrowTyped;
 
 use crate::engine::{
     QueryContext, QueryProcessor, RasterQueryProcessor, TypedRasterQueryProcessor,
-    VectorQueryProcessor, VectorQueryRectangle,
+    VectorQueryProcessor,
 };
 use crate::processing::raster_vector_join::aggregator::{
     Aggregator, FirstValueFloatAggregator, FirstValueIntAggregator, MeanValueAggregator,
@@ -18,7 +18,7 @@ use crate::processing::raster_vector_join::aggregator::{
 use crate::processing::raster_vector_join::TemporalAggregationMethod;
 use crate::util::Result;
 use async_trait::async_trait;
-use geoengine_datatypes::primitives::{BoundingBox2D, Geometry};
+use geoengine_datatypes::primitives::{BoundingBox2D, Geometry, VectorQueryRectangle};
 
 use super::util::{CoveredPixels, FeatureTimeSpanIter, PixelCoverCreator};
 use super::{create_feature_aggregator, FeatureAggregationMethod};
@@ -219,9 +219,7 @@ where
 mod tests {
     use super::*;
 
-    use crate::engine::{
-        ChunkByteSize, MockExecutionContext, RasterResultDescriptor, VectorQueryRectangle,
-    };
+    use crate::engine::{ChunkByteSize, MockExecutionContext, RasterResultDescriptor};
     use crate::engine::{MockQueryContext, RasterOperator};
     use crate::mock::{MockRasterSource, MockRasterSourceParams};
     use geoengine_datatypes::collections::{MultiPointCollection, MultiPolygonCollection};

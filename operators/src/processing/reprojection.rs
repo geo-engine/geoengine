@@ -3,10 +3,9 @@ use crate::{
     adapters::{fold_by_coordinate_lookup_future, RasterSubQueryAdapter, TileReprojectionSubQuery},
     engine::{
         ExecutionContext, InitializedRasterOperator, InitializedVectorOperator, Operator,
-        QueryContext, QueryProcessor, RasterOperator, RasterQueryProcessor, RasterQueryRectangle,
-        RasterResultDescriptor, SingleRasterOrVectorSource, TypedRasterQueryProcessor,
-        TypedVectorQueryProcessor, VectorOperator, VectorQueryProcessor, VectorQueryRectangle,
-        VectorResultDescriptor,
+        QueryContext, QueryProcessor, RasterOperator, RasterQueryProcessor, RasterResultDescriptor,
+        SingleRasterOrVectorSource, TypedRasterQueryProcessor, TypedVectorQueryProcessor,
+        VectorOperator, VectorQueryProcessor, VectorResultDescriptor,
     },
     error,
     util::{input::RasterOrVectorOperator, Result},
@@ -20,7 +19,7 @@ use geoengine_datatypes::{
         CoordinateProjector, Reproject,
     },
     primitives::AxisAlignedRectangle,
-    primitives::{BoundingBox2D, SpatialPartition2D},
+    primitives::{BoundingBox2D, RasterQueryRectangle, SpatialPartition2D, VectorQueryRectangle},
     raster::{Pixel, RasterTile2D, TilingSpecification},
     spatial_reference::SpatialReference,
 };
@@ -477,7 +476,7 @@ mod tests {
     use std::path::PathBuf;
 
     use crate::{
-        engine::{ChunkByteSize, QueryRectangle, VectorOperator},
+        engine::{ChunkByteSize, VectorOperator},
         source::{
             FileNotFoundHandling, GdalDatasetGeoTransform, GdalDatasetParameters,
             GdalMetaDataRegular, GdalMetaDataStatic, GdalSource, GdalSourceParameters,
@@ -495,7 +494,7 @@ mod tests {
         hashmap,
         primitives::{
             BoundingBox2D, Measurement, MultiLineString, MultiPoint, MultiPolygon,
-            SpatialResolution, TimeGranularity, TimeInstance, TimeInterval, TimeStep,
+            SpatialResolution, TimeGranularity, TimeInstance, TimeInterval, TimeStep, QueryRectangle,
         },
         raster::{Grid, GridShape, GridShape2D, GridSize, RasterDataType, RasterTile2D},
         spatial_reference::SpatialReferenceAuthority,

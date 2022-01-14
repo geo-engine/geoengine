@@ -8,11 +8,11 @@ use crate::workflows::workflow::WorkflowId;
 use actix_web::{web, FromRequest, Responder};
 use geoengine_datatypes::operations::reproject::reproject_query;
 use geoengine_datatypes::plots::PlotOutputFormat;
-use geoengine_datatypes::primitives::{BoundingBox2D, SpatialResolution, TimeInterval};
-use geoengine_datatypes::spatial_reference::SpatialReference;
-use geoengine_operators::engine::{
-    ResultDescriptor, TypedPlotQueryProcessor, VectorQueryRectangle,
+use geoengine_datatypes::primitives::{
+    BoundingBox2D, SpatialResolution, TimeInterval, VectorQueryRectangle,
 };
+use geoengine_datatypes::spatial_reference::SpatialReference;
+use geoengine_operators::engine::{ResultDescriptor, TypedPlotQueryProcessor};
 use serde::{Deserialize, Serialize};
 use snafu::ResultExt;
 use uuid::Uuid;

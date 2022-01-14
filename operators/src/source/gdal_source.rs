@@ -1,4 +1,4 @@
-use crate::engine::{MetaData, OperatorDatasets, QueryProcessor, RasterQueryRectangle};
+use crate::engine::{MetaData, OperatorDatasets, QueryProcessor};
 use crate::util::gdal::gdal_open_dataset_ex;
 use crate::util::input::float_option_with_nan;
 use crate::{
@@ -16,7 +16,9 @@ use futures::{
 };
 use gdal::raster::{GdalType, RasterBand as GdalRasterBand};
 use gdal::{DatasetOptions, GdalOpenFlags, Metadata as GdalMetadata};
-use geoengine_datatypes::primitives::{Coordinate2D, SpatialPartition2D, SpatialPartitioned};
+use geoengine_datatypes::primitives::{
+    Coordinate2D, RasterQueryRectangle, SpatialPartition2D, SpatialPartitioned,
+};
 use geoengine_datatypes::raster::{
     EmptyGrid, GeoTransform, Grid2D, GridOrEmpty2D, GridShapeAccess, Pixel, RasterDataType,
     RasterProperties, RasterPropertiesEntry, RasterPropertiesEntryType, RasterPropertiesKey,
@@ -729,7 +731,7 @@ where
 
     async fn query<'a>(
         &'a self,
-        query: crate::engine::RasterQueryRectangle,
+        query: RasterQueryRectangle,
         _ctx: &'a dyn crate::engine::QueryContext,
     ) -> Result<BoxStream<Result<Self::Output>>> {
         let start = Instant::now();

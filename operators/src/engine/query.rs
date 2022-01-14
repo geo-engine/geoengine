@@ -1,10 +1,7 @@
 use std::sync::Arc;
 
 use crate::util::create_rayon_thread_pool;
-use crate::util::test::TestDefault;
-pub use geoengine_datatypes::primitives::{
-    PlotQueryRectangle, QueryRectangle, RasterQueryRectangle, VectorQueryRectangle,
-};
+use geoengine_datatypes::util::test::TestDefault;
 use rayon::ThreadPool;
 
 /// Defines the size in bytes of a vector data chunk

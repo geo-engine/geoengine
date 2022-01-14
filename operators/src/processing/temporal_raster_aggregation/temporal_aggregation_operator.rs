@@ -11,7 +11,7 @@ use crate::{
     util::Result,
 };
 use async_trait::async_trait;
-use geoengine_datatypes::primitives::SpatialPartition2D;
+use geoengine_datatypes::primitives::{RasterQueryRectangle, SpatialPartition2D};
 use geoengine_datatypes::raster::{Pixel, RasterTile2D};
 use geoengine_datatypes::{primitives::TimeStep, raster::TilingSpecification};
 use log::debug;
@@ -222,7 +222,7 @@ where
     #[allow(clippy::too_many_lines)]
     async fn query<'a>(
         &'a self,
-        query: crate::engine::RasterQueryRectangle,
+        query: RasterQueryRectangle,
         ctx: &'a dyn crate::engine::QueryContext,
     ) -> Result<futures::stream::BoxStream<'a, Result<Self::Output>>> {
         match self.aggregation_type {
@@ -338,7 +338,7 @@ mod tests {
     use num_traits::AsPrimitive;
 
     use crate::{
-        engine::{MockExecutionContext, MockQueryContext, RasterQueryRectangle},
+        engine::{MockExecutionContext, MockQueryContext},
         mock::{MockRasterSource, MockRasterSourceParams},
     };
 

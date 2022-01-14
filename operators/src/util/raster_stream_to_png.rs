@@ -1,13 +1,13 @@
 use futures::StreamExt;
 use geoengine_datatypes::{
     operations::image::{Colorizer, RgbaColor, ToPng},
-    primitives::{AxisAlignedRectangle, TimeInterval},
+    primitives::{AxisAlignedRectangle, RasterQueryRectangle, TimeInterval},
     raster::{Blit, EmptyGrid2D, GeoTransform, Grid2D, Pixel, RasterTile2D},
 };
 use num_traits::AsPrimitive;
 use std::convert::TryInto;
 
-use crate::engine::{QueryContext, QueryProcessor, RasterQueryProcessor, RasterQueryRectangle};
+use crate::engine::{QueryContext, QueryProcessor, RasterQueryProcessor};
 use crate::{error, util::Result};
 
 #[allow(clippy::too_many_arguments)]

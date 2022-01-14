@@ -2,13 +2,13 @@ use crate::engine::QueryProcessor;
 use crate::engine::{
     ExecutionContext, InitializedPlotOperator, InitializedVectorOperator, Operator, PlotOperator,
     PlotQueryProcessor, PlotResultDescriptor, QueryContext, SingleVectorSource,
-    TypedPlotQueryProcessor, VectorQueryProcessor, VectorQueryRectangle,
+    TypedPlotQueryProcessor, VectorQueryProcessor,
 };
 use crate::error;
 use crate::util::Result;
 use async_trait::async_trait;
 use futures::StreamExt;
-use geoengine_datatypes::primitives::FeatureDataType;
+use geoengine_datatypes::primitives::{FeatureDataType, VectorQueryRectangle};
 use geoengine_datatypes::{
     collections::FeatureCollection,
     plots::{Plot, PlotData},

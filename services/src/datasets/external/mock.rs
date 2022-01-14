@@ -10,11 +10,9 @@ use crate::{
 };
 use async_trait::async_trait;
 use geoengine_datatypes::dataset::{DatasetId, DatasetProviderId};
+use geoengine_datatypes::primitives::{RasterQueryRectangle, VectorQueryRectangle};
 use geoengine_operators::{
-    engine::{
-        MetaData, MetaDataProvider, RasterQueryRectangle, RasterResultDescriptor,
-        VectorQueryRectangle, VectorResultDescriptor,
-    },
+    engine::{MetaData, MetaDataProvider, RasterResultDescriptor, VectorResultDescriptor},
     mock::MockDatasetDataSourceLoadingInfo,
     source::{GdalLoadingInfo, OgrSourceDataset},
 };

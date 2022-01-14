@@ -1,7 +1,6 @@
 use crate::engine::{
     InitializedRasterOperator, Operator, OperatorDatasets, QueryContext, QueryProcessor,
-    RasterOperator, RasterQueryProcessor, RasterQueryRectangle, RasterResultDescriptor,
-    TypedRasterQueryProcessor,
+    RasterOperator, RasterQueryProcessor, RasterResultDescriptor, TypedRasterQueryProcessor,
 };
 use crate::error::Error;
 use crate::util::input::float_with_nan;
@@ -15,7 +14,7 @@ use async_trait::async_trait;
 use futures::stream::BoxStream;
 use futures::StreamExt;
 use geoengine_datatypes::dataset::DatasetId;
-use geoengine_datatypes::primitives::{Measurement, SpatialPartition2D};
+use geoengine_datatypes::primitives::{Measurement, RasterQueryRectangle, SpatialPartition2D};
 use geoengine_datatypes::raster::{
     EmptyGrid, Grid2D, GridShapeAccess, Pixel, RasterDataType, RasterTile2D,
 };

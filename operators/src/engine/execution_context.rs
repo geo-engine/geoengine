@@ -1,4 +1,4 @@
-use super::{MockQueryContext, RasterQueryRectangle, VectorQueryRectangle};
+use super::MockQueryContext;
 use crate::engine::{
     ChunkByteSize, RasterResultDescriptor, ResultDescriptor, VectorResultDescriptor,
 };
@@ -8,6 +8,7 @@ use crate::source::{GdalLoadingInfo, OgrSourceDataset};
 use crate::util::{create_rayon_thread_pool, Result};
 use async_trait::async_trait;
 use geoengine_datatypes::dataset::DatasetId;
+use geoengine_datatypes::primitives::{RasterQueryRectangle, VectorQueryRectangle};
 use geoengine_datatypes::raster::TilingSpecification;
 use geoengine_datatypes::util::test::TestDefault;
 use rayon::ThreadPool;

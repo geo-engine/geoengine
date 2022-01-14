@@ -5,9 +5,9 @@ use crate::datasets::listing::{
 use crate::datasets::storage::ExternalDatasetProviderDefinition;
 use async_trait::async_trait;
 use geoengine_datatypes::dataset::{DatasetId, DatasetProviderId};
+use geoengine_datatypes::primitives::{RasterQueryRectangle, VectorQueryRectangle};
 use geoengine_operators::engine::{
-    MetaData, MetaDataProvider, RasterQueryRectangle, RasterResultDescriptor, VectorQueryRectangle,
-    VectorResultDescriptor,
+    MetaData, MetaDataProvider, RasterResultDescriptor, VectorResultDescriptor,
 };
 use geoengine_operators::source::{GdalLoadingInfo, OgrSourceDataset};
 use reqwest::Client;
@@ -202,12 +202,12 @@ mod tests {
     use geoengine_datatypes::dataset::{DatasetId, DatasetProviderId, ExternalDatasetId};
     use geoengine_datatypes::primitives::{
         BoundingBox2D, Coordinate2D, MultiPointAccess, SpatialResolution, TimeInterval,
+        VectorQueryRectangle,
     };
     use geoengine_datatypes::util::test::TestDefault;
     use geoengine_operators::engine::{
         InitializedVectorOperator, MetaData, MockExecutionContext, MockQueryContext,
-        QueryProcessor, TypedVectorQueryProcessor, VectorOperator, VectorQueryRectangle,
-        VectorResultDescriptor,
+        QueryProcessor, TypedVectorQueryProcessor, VectorOperator, VectorResultDescriptor,
     };
     use geoengine_operators::source::{OgrSource, OgrSourceDataset, OgrSourceParameters};
     use httptest::{

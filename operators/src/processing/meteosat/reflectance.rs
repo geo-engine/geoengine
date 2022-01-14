@@ -2,8 +2,8 @@ use std::sync::Arc;
 
 use crate::engine::{
     ExecutionContext, InitializedRasterOperator, Operator, QueryContext, QueryProcessor,
-    RasterOperator, RasterQueryProcessor, RasterQueryRectangle, RasterResultDescriptor,
-    SingleRasterSource, TypedRasterQueryProcessor,
+    RasterOperator, RasterQueryProcessor, RasterResultDescriptor, SingleRasterSource,
+    TypedRasterQueryProcessor,
 };
 use crate::util::Result;
 use async_trait::async_trait;
@@ -16,7 +16,7 @@ use TypedRasterQueryProcessor::F32 as QueryProcessorOut;
 use crate::error::Error;
 use futures::stream::BoxStream;
 use futures::{StreamExt, TryStreamExt};
-use geoengine_datatypes::primitives::{Measurement, SpatialPartition2D};
+use geoengine_datatypes::primitives::{Measurement, RasterQueryRectangle, SpatialPartition2D};
 use geoengine_datatypes::raster::{
     EmptyGrid, Grid2D, GridShapeAccess, GridSize, MaterializedRasterTile2D, NoDataValue,
     RasterDataType, RasterPropertiesKey, RasterTile2D,
