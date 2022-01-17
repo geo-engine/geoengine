@@ -3,7 +3,7 @@ use std::{marker::PhantomData, sync::Arc};
 use async_trait::async_trait;
 use futures::{stream::BoxStream, try_join, StreamExt, TryStreamExt};
 use geoengine_datatypes::{
-    primitives::{SpatialPartition2D, TimeInterval},
+    primitives::{RasterQueryRectangle, SpatialPartition2D, TimeInterval},
     raster::{
         GeoTransform, Grid2D, GridIdx2D, GridShape2D, GridShapeAccess, NoDataValue, Pixel,
         RasterTile2D,
@@ -13,7 +13,7 @@ use num_traits::AsPrimitive;
 use rayon::iter::{IntoParallelIterator, IntoParallelRefIterator, ParallelIterator};
 
 use crate::{
-    engine::{BoxRasterQueryProcessor, QueryContext, QueryProcessor, RasterQueryRectangle},
+    engine::{BoxRasterQueryProcessor, QueryContext, QueryProcessor},
     util::{stream_zip::StreamTupleZip, Result},
 };
 

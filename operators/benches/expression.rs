@@ -1,10 +1,13 @@
 use futures::{Future, StreamExt};
 use geoengine_datatypes::{
-    primitives::{Measurement, SpatialPartition2D, SpatialResolution, TimeInterval},
+    primitives::{
+        Measurement, RasterQueryRectangle, SpatialPartition2D, SpatialResolution, TimeInterval,
+    },
     raster::{RasterDataType, RasterTile2D},
+    util::test::TestDefault,
 };
 use geoengine_operators::{
-    engine::{MockExecutionContext, MockQueryContext, RasterOperator, RasterQueryRectangle},
+    engine::{MockExecutionContext, MockQueryContext, RasterOperator},
     processing::{
         Expression, ExpressionParams, ExpressionSources, NewExpression, NewExpressionParams,
         NewExpressionSources,
@@ -69,8 +72,8 @@ fn ndvi_source(execution_context: &mut MockExecutionContext) -> Box<dyn RasterOp
 async fn main() {
     const RUNS: usize = 5;
 
-    let mut execution_context = MockExecutionContext::default();
-    let query_context = MockQueryContext::default();
+    let mut execution_context = MockExecutionContext::test_default();
+    let query_context = MockQueryContext::test_default();
 
     let ndvi_source = ndvi_source(&mut execution_context);
 

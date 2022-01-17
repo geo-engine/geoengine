@@ -1,12 +1,12 @@
 use async_trait::async_trait;
 use futures::{stream::BoxStream, StreamExt, TryStreamExt};
 use geoengine_datatypes::{
-    primitives::SpatialPartition2D,
+    primitives::{RasterQueryRectangle, SpatialPartition2D},
     raster::{Pixel, RasterTile2D},
 };
 use num_traits::AsPrimitive;
 
-use crate::engine::{BoxRasterQueryProcessor, QueryContext, QueryProcessor, RasterQueryRectangle};
+use crate::engine::{BoxRasterQueryProcessor, QueryContext, QueryProcessor};
 use crate::util::Result;
 
 pub struct RasterConversionQueryProcessor<PIn: Pixel, POut: Pixel> {

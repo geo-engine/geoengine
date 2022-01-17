@@ -333,13 +333,11 @@ impl InitializedRasterOperator for InitializedExpression {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::engine::{
-        MockExecutionContext, MockQueryContext, QueryProcessor, RasterQueryRectangle,
-    };
+    use crate::engine::{MockExecutionContext, MockQueryContext, QueryProcessor};
     use crate::mock::{MockRasterSource, MockRasterSourceParams};
     use futures::StreamExt;
     use geoengine_datatypes::primitives::{
-        Measurement, SpatialPartition2D, SpatialResolution, TimeInterval,
+        Measurement, RasterQueryRectangle, SpatialPartition2D, SpatialResolution, TimeInterval,
     };
     use geoengine_datatypes::raster::{Grid2D, RasterTile2D, TileInformation};
     use geoengine_datatypes::spatial_reference::SpatialReference;
@@ -435,7 +433,7 @@ mod tests {
             },
         }
         .boxed()
-        .initialize(&MockExecutionContext::default())
+        .initialize(&MockExecutionContext::test_default())
         .await
         .unwrap();
 
@@ -495,7 +493,7 @@ mod tests {
             },
         }
         .boxed()
-        .initialize(&MockExecutionContext::default())
+        .initialize(&MockExecutionContext::test_default())
         .await
         .unwrap();
 
@@ -556,7 +554,7 @@ mod tests {
             },
         }
         .boxed()
-        .initialize(&MockExecutionContext::default())
+        .initialize(&MockExecutionContext::test_default())
         .await
         .unwrap();
 
@@ -624,7 +622,7 @@ mod tests {
             },
         }
         .boxed()
-        .initialize(&MockExecutionContext::default())
+        .initialize(&MockExecutionContext::test_default())
         .await
         .unwrap();
 
@@ -682,7 +680,7 @@ mod tests {
             },
         }
         .boxed()
-        .initialize(&MockExecutionContext::default())
+        .initialize(&MockExecutionContext::test_default())
         .await
         .unwrap();
 
