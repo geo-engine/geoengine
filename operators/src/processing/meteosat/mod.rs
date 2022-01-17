@@ -43,8 +43,8 @@ mod test_util {
 
     use geoengine_datatypes::dataset::{DatasetId, InternalDatasetId};
     use geoengine_datatypes::primitives::{
-        Measurement, SpatialPartition2D, SpatialResolution, TimeGranularity, TimeInstance,
-        TimeInterval, TimeStep,
+        Measurement, RasterQueryRectangle, SpatialPartition2D, SpatialResolution, TimeGranularity,
+        TimeInstance, TimeInterval, TimeStep,
     };
     use geoengine_datatypes::raster::{
         EmptyGrid2D, Grid2D, GridOrEmpty, Pixel, RasterDataType, RasterProperties,
@@ -55,7 +55,7 @@ mod test_util {
 
     use crate::engine::{
         MockExecutionContext, MockQueryContext, QueryProcessor, RasterOperator,
-        RasterQueryRectangle, RasterResultDescriptor,
+        RasterResultDescriptor,
     };
     use crate::mock::{MockRasterSource, MockRasterSourceParams};
     use crate::processing::meteosat::{
@@ -83,7 +83,7 @@ mod test_util {
 
         let processor = op.query_processor().unwrap().get_f32().unwrap();
 
-        let ctx = MockQueryContext::default();
+        let ctx = MockQueryContext::test_default();
         let result_stream = processor.query(query, &ctx).await.unwrap();
         let mut result: Vec<Result<RasterTile2D<f32>>> = result_stream.collect().await;
         assert_eq!(1, result.len());

@@ -14,10 +14,7 @@ pub use operator_impl::{
     SingleRasterOrVectorSource, SingleRasterSource, SingleVectorMultipleRasterSources,
     SingleVectorSource, SourceOperator,
 };
-pub use query::{
-    ChunkByteSize, MockQueryContext, PlotQueryRectangle, QueryContext, QueryRectangle,
-    RasterQueryRectangle, VectorQueryRectangle,
-};
+pub use query::{ChunkByteSize, MockQueryContext, QueryContext};
 pub use query_processor::{
     BoxRasterQueryProcessor, PlotQueryProcessor, QueryProcessor, RasterQueryProcessor,
     TypedPlotQueryProcessor, TypedRasterQueryProcessor, TypedVectorQueryProcessor,

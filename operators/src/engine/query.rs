@@ -1,49 +1,8 @@
 use std::sync::Arc;
 
-/// A spatio-temporal rectangle for querying data
-use geoengine_datatypes::primitives::{
-    AxisAlignedRectangle, BoundingBox2D, SpatialPartition2D, SpatialPartitioned, SpatialResolution,
-    TimeInterval,
-};
-use rayon::ThreadPool;
-use serde::{Deserialize, Serialize};
-
 use crate::util::create_rayon_thread_pool;
-
-/// A spatio-temporal rectangle for querying data with a bounding box
-#[derive(Copy, Clone, Debug, PartialEq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct QueryRectangle<SpatialBounds: AxisAlignedRectangle> {
-    pub spatial_bounds: SpatialBounds,
-    pub time_interval: TimeInterval,
-    pub spatial_resolution: SpatialResolution,
-}
-
-pub type VectorQueryRectangle = QueryRectangle<BoundingBox2D>;
-pub type RasterQueryRectangle = QueryRectangle<SpatialPartition2D>;
-pub type PlotQueryRectangle = QueryRectangle<BoundingBox2D>;
-
-impl SpatialPartitioned for VectorQueryRectangle {
-    fn spatial_partition(&self) -> SpatialPartition2D {
-        SpatialPartition2D::with_bbox_and_resolution(self.spatial_bounds, self.spatial_resolution)
-    }
-}
-
-impl SpatialPartitioned for RasterQueryRectangle {
-    fn spatial_partition(&self) -> SpatialPartition2D {
-        self.spatial_bounds
-    }
-}
-
-impl From<VectorQueryRectangle> for RasterQueryRectangle {
-    fn from(value: VectorQueryRectangle) -> Self {
-        Self {
-            spatial_bounds: value.spatial_partition(),
-            time_interval: value.time_interval,
-            spatial_resolution: value.spatial_resolution,
-        }
-    }
-}
+use geoengine_datatypes::util::test::TestDefault;
+use rayon::ThreadPool;
 
 /// Defines the size in bytes of a vector data chunk
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
@@ -55,6 +14,10 @@ impl ChunkByteSize {
 
     pub fn new(cbs: usize) -> Self {
         ChunkByteSize(cbs)
+    }
+
+    pub fn bytes(self) -> usize {
+        self.0
     }
 }
 
@@ -70,9 +33,9 @@ impl From<ChunkByteSize> for usize {
     }
 }
 
-impl Default for ChunkByteSize {
-    fn default() -> Self {
-        Self(1024 * 1024) // TODO: find reasonable default
+impl TestDefault for ChunkByteSize {
+    fn test_default() -> Self {
+        Self(1024 * 1024)
     }
 }
 
@@ -86,10 +49,10 @@ pub struct MockQueryContext {
     pub thread_pool: Arc<ThreadPool>,
 }
 
-impl Default for MockQueryContext {
-    fn default() -> Self {
+impl TestDefault for MockQueryContext {
+    fn test_default() -> Self {
         Self {
-            chunk_byte_size: ChunkByteSize::default(),
+            chunk_byte_size: ChunkByteSize::test_default(),
             thread_pool: create_rayon_thread_pool(0),
         }
     }
@@ -99,7 +62,7 @@ impl MockQueryContext {
     pub fn new(chunk_byte_size: ChunkByteSize) -> Self {
         Self {
             chunk_byte_size,
-            ..Default::default()
+            thread_pool: create_rayon_thread_pool(0),
         }
     }
 

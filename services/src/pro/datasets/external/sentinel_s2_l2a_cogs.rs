@@ -15,13 +15,13 @@ use geoengine_datatypes::operations::reproject::{
     CoordinateProjection, CoordinateProjector, ReprojectClipped,
 };
 use geoengine_datatypes::primitives::{
-    AxisAlignedRectangle, BoundingBox2D, Measurement, SpatialPartitioned, TimeInterval,
+    AxisAlignedRectangle, BoundingBox2D, Measurement, RasterQueryRectangle, SpatialPartitioned,
+    TimeInterval, VectorQueryRectangle,
 };
 use geoengine_datatypes::raster::RasterDataType;
 use geoengine_datatypes::spatial_reference::{SpatialReference, SpatialReferenceAuthority};
 use geoengine_operators::engine::{
-    MetaData, MetaDataProvider, RasterQueryRectangle, RasterResultDescriptor, VectorQueryRectangle,
-    VectorResultDescriptor,
+    MetaData, MetaDataProvider, RasterResultDescriptor, VectorResultDescriptor,
 };
 use geoengine_operators::mock::MockDatasetDataSourceLoadingInfo;
 use geoengine_operators::source::{
@@ -546,7 +546,10 @@ mod tests {
 
     use crate::test_data;
     use futures::StreamExt;
-    use geoengine_datatypes::primitives::{SpatialPartition2D, SpatialResolution};
+    use geoengine_datatypes::{
+        primitives::{SpatialPartition2D, SpatialResolution},
+        util::test::TestDefault,
+    };
     use geoengine_operators::{
         engine::{ChunkByteSize, MockExecutionContext, MockQueryContext, RasterOperator},
         source::{FileNotFoundHandling, GdalSource, GdalSourceParameters},
@@ -638,7 +641,7 @@ mod tests {
     async fn query_data() -> Result<()> {
         // TODO: mock STAC endpoint
 
-        let mut exe = MockExecutionContext::default();
+        let mut exe = MockExecutionContext::test_default();
 
         let def: Box<dyn ExternalDatasetProviderDefinition> =
             serde_json::from_reader(BufReader::new(File::open(test_data!(

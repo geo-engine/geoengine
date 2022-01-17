@@ -1,4 +1,4 @@
-use crate::engine::{MetaData, OperatorDatasets, QueryProcessor, RasterQueryRectangle};
+use crate::engine::{MetaData, OperatorDatasets, QueryProcessor};
 use crate::util::gdal::gdal_open_dataset_ex;
 use crate::util::input::float_option_with_nan;
 use crate::{
@@ -16,7 +16,9 @@ use futures::{
 };
 use gdal::raster::{GdalType, RasterBand as GdalRasterBand};
 use gdal::{DatasetOptions, GdalOpenFlags, Metadata as GdalMetadata};
-use geoengine_datatypes::primitives::{Coordinate2D, SpatialPartition2D, SpatialPartitioned};
+use geoengine_datatypes::primitives::{
+    Coordinate2D, RasterQueryRectangle, SpatialPartition2D, SpatialPartitioned,
+};
 use geoengine_datatypes::raster::{
     EmptyGrid, GeoTransform, Grid2D, GridOrEmpty2D, GridShapeAccess, Pixel, RasterDataType,
     RasterProperties, RasterPropertiesEntry, RasterPropertiesEntryType, RasterPropertiesKey,
@@ -729,7 +731,7 @@ where
 
     async fn query<'a>(
         &'a self,
-        query: crate::engine::RasterQueryRectangle,
+        query: RasterQueryRectangle,
         _ctx: &'a dyn crate::engine::QueryContext,
     ) -> Result<BoxStream<Result<Self::Output>>> {
         let start = Instant::now();
@@ -1424,8 +1426,8 @@ mod tests {
 
     #[tokio::test]
     async fn test_query_single_time_slice() {
-        let mut exe_ctx = MockExecutionContext::default();
-        let query_ctx = MockQueryContext::default();
+        let mut exe_ctx = MockExecutionContext::test_default();
+        let query_ctx = MockQueryContext::test_default();
         let id = add_ndvi_dataset(&mut exe_ctx);
 
         let output_shape: GridShape2D = [256, 256].into();
@@ -1474,8 +1476,8 @@ mod tests {
 
     #[tokio::test]
     async fn test_query_multi_time_slices() {
-        let mut exe_ctx = MockExecutionContext::default();
-        let query_ctx = MockQueryContext::default();
+        let mut exe_ctx = MockExecutionContext::test_default();
+        let query_ctx = MockQueryContext::test_default();
         let id = add_ndvi_dataset(&mut exe_ctx);
 
         let output_shape: GridShape2D = [256, 256].into();
@@ -1509,8 +1511,8 @@ mod tests {
 
     #[tokio::test]
     async fn test_nodata() {
-        let mut exe_ctx = MockExecutionContext::default();
-        let query_ctx = MockQueryContext::default();
+        let mut exe_ctx = MockExecutionContext::test_default();
+        let query_ctx = MockQueryContext::test_default();
         let id = add_ndvi_dataset(&mut exe_ctx);
 
         let output_shape: GridShape2D = [256, 256].into();

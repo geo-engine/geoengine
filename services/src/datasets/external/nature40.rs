@@ -18,16 +18,14 @@ use futures::future::join_all;
 use gdal::DatasetOptions;
 use gdal::Metadata;
 use geoengine_datatypes::dataset::{DatasetId, DatasetProviderId, ExternalDatasetId};
+use geoengine_datatypes::primitives::{RasterQueryRectangle, VectorQueryRectangle};
 use geoengine_operators::engine::TypedResultDescriptor;
 use geoengine_operators::source::GdalMetaDataStatic;
 use geoengine_operators::util::gdal::{
     gdal_open_dataset_ex, gdal_parameters_from_dataset, raster_descriptor_from_dataset,
 };
 use geoengine_operators::{
-    engine::{
-        MetaData, MetaDataProvider, RasterQueryRectangle, RasterResultDescriptor,
-        VectorQueryRectangle, VectorResultDescriptor,
-    },
+    engine::{MetaData, MetaDataProvider, RasterResultDescriptor, VectorResultDescriptor},
     mock::MockDatasetDataSourceLoadingInfo,
     source::{GdalLoadingInfo, OgrSourceDataset},
 };
@@ -412,16 +410,15 @@ mod tests {
     use std::{fs::File, io::Read, path::PathBuf, str::FromStr};
 
     use geoengine_datatypes::{
-        primitives::{Measurement, SpatialPartition2D, SpatialResolution, TimeInterval},
+        primitives::{
+            Measurement, QueryRectangle, SpatialPartition2D, SpatialResolution, TimeInterval,
+        },
         raster::RasterDataType,
         spatial_reference::{SpatialReference, SpatialReferenceAuthority},
     };
-    use geoengine_operators::{
-        engine::QueryRectangle,
-        source::{
-            FileNotFoundHandling, GdalDatasetGeoTransform, GdalDatasetParameters,
-            GdalLoadingInfoPart, GdalLoadingInfoPartIterator,
-        },
+    use geoengine_operators::source::{
+        FileNotFoundHandling, GdalDatasetGeoTransform, GdalDatasetParameters, GdalLoadingInfoPart,
+        GdalLoadingInfoPartIterator,
     };
     use httptest::{
         all_of,

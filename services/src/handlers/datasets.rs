@@ -26,11 +26,11 @@ use gdal::{vector::OGRFieldType, DatasetOptions};
 use geoengine_datatypes::{
     collections::VectorDataType,
     dataset::{DatasetProviderId, InternalDatasetId},
-    primitives::FeatureDataType,
+    primitives::{FeatureDataType, VectorQueryRectangle},
     spatial_reference::{SpatialReference, SpatialReferenceOption},
 };
 use geoengine_operators::{
-    engine::{StaticMetaData, VectorQueryRectangle, VectorResultDescriptor},
+    engine::{StaticMetaData, VectorResultDescriptor},
     source::{
         OgrSourceColumnSpec, OgrSourceDataset, OgrSourceDatasetTimeType, OgrSourceDurationSpec,
         OgrSourceTimeFormat,
@@ -723,6 +723,7 @@ mod tests {
     use geoengine_datatypes::primitives::{BoundingBox2D, SpatialResolution};
     use geoengine_datatypes::raster::{GridShape2D, TilingSpecification};
     use geoengine_datatypes::spatial_reference::SpatialReferenceOption;
+    use geoengine_datatypes::util::test::TestDefault;
     use geoengine_operators::engine::{
         ExecutionContext, InitializedVectorOperator, QueryProcessor, StaticMetaData,
         VectorOperator, VectorResultDescriptor,
@@ -736,7 +737,7 @@ mod tests {
     #[tokio::test]
     #[allow(clippy::too_many_lines)]
     async fn test_list_datasets() -> Result<()> {
-        let ctx = InMemoryContext::default();
+        let ctx = InMemoryContext::test_default();
 
         let session_id = ctx.default_session_ref().await.id();
 
@@ -1015,7 +1016,10 @@ mod tests {
         };
 
         // override the pixel size since this test was designed for 600 x 600 pixel tiles
-        let ctx = InMemoryContext::new_with_context_spec(exe_ctx_tiling_spec, Default::default());
+        let ctx = InMemoryContext::new_with_context_spec(
+            exe_ctx_tiling_spec,
+            TestDefault::test_default(),
+        );
 
         let session = ctx.default_session_ref().await;
         let session_id = session.id();
@@ -1391,7 +1395,7 @@ mod tests {
 
     #[tokio::test]
     async fn get_dataset() -> Result<()> {
-        let ctx = InMemoryContext::default();
+        let ctx = InMemoryContext::test_default();
 
         let session_id = ctx.default_session_ref().await.id();
 

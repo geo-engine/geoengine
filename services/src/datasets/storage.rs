@@ -8,7 +8,8 @@ use crate::projects::Symbology;
 use crate::util::user_input::{UserInput, Validated};
 use async_trait::async_trait;
 use geoengine_datatypes::dataset::{DatasetId, DatasetProviderId};
-use geoengine_operators::engine::{MetaData, VectorQueryRectangle};
+use geoengine_datatypes::primitives::VectorQueryRectangle;
+use geoengine_operators::engine::MetaData;
 use geoengine_operators::{engine::StaticMetaData, source::OgrSourceDataset};
 use geoengine_operators::{
     engine::TypedResultDescriptor, mock::MockDatasetDataSourceLoadingInfo,

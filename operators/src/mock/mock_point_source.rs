@@ -1,4 +1,4 @@
-use crate::engine::{OperatorDatasets, QueryContext, VectorQueryRectangle};
+use crate::engine::{OperatorDatasets, QueryContext};
 use crate::{
     engine::{
         ExecutionContext, InitializedVectorOperator, SourceOperator, TypedVectorQueryProcessor,
@@ -10,6 +10,7 @@ use async_trait::async_trait;
 use futures::stream::{self, BoxStream, StreamExt};
 use geoengine_datatypes::collections::VectorDataType;
 use geoengine_datatypes::dataset::DatasetId;
+use geoengine_datatypes::primitives::VectorQueryRectangle;
 use geoengine_datatypes::{
     collections::MultiPointCollection,
     primitives::{Coordinate2D, TimeInterval},
@@ -102,6 +103,7 @@ mod tests {
     use futures::executor::block_on_stream;
     use geoengine_datatypes::collections::FeatureCollectionInfos;
     use geoengine_datatypes::primitives::{BoundingBox2D, SpatialResolution};
+    use geoengine_datatypes::util::test::TestDefault;
 
     #[test]
     fn serde() {
@@ -120,7 +122,7 @@ mod tests {
 
     #[tokio::test]
     async fn execute() {
-        let execution_context = MockExecutionContext::default();
+        let execution_context = MockExecutionContext::test_default();
         let points = vec![Coordinate2D::new(1., 2.); 3];
 
         let mps = MockPointSource {

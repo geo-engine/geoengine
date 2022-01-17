@@ -1,17 +1,16 @@
-use num_traits::Zero;
-use proj::Proj;
-use snafu::ensure;
-
 use crate::{
     error::{self, Error},
     primitives::{
         AxisAlignedRectangle, Coordinate2D, Line, MultiLineString, MultiLineStringAccess,
         MultiLineStringRef, MultiPoint, MultiPointAccess, MultiPointRef, MultiPolygon,
-        MultiPolygonAccess, MultiPolygonRef, SpatialBounded, SpatialResolution,
+        MultiPolygonAccess, MultiPolygonRef, QueryRectangle, SpatialBounded, SpatialResolution,
     },
     spatial_reference::SpatialReference,
     util::Result,
 };
+use num_traits::Zero;
+use proj::Proj;
+use snafu::ensure;
 
 pub trait CoordinateProjection {
     fn from_known_srs(from: SpatialReference, to: SpatialReference) -> Result<Self>
@@ -443,6 +442,30 @@ pub fn project_coordinates_fail_tolerant<P: CoordinateProjection>(
     //    i.len()
     //);
     individual_projected
+}
+
+/// this method performs the transformation of a query rectangle in `target` projection
+/// to a new query rectangle with coordinates in the `source` projection
+pub fn reproject_query<S: AxisAlignedRectangle>(
+    query: QueryRectangle<S>,
+    source: SpatialReference,
+    target: SpatialReference,
+) -> Result<QueryRectangle<S>> {
+    let projector_source_target = CoordinateProjector::from_known_srs(source, target)?;
+    let projector_target_source = CoordinateProjector::from_known_srs(target, source)?;
+
+    let p_bbox = query
+        .spatial_bounds
+        .reproject_clipped(&projector_target_source)?;
+    let s_bbox = p_bbox.reproject(&projector_source_target)?;
+
+    let p_spatial_resolution =
+        suggest_pixel_size_from_diag_cross_projected(s_bbox, p_bbox, query.spatial_resolution)?;
+    Ok(QueryRectangle {
+        spatial_bounds: p_bbox,
+        spatial_resolution: p_spatial_resolution,
+        time_interval: query.time_interval,
+    })
 }
 
 #[cfg(test)]

@@ -1,5 +1,6 @@
-use crate::primitives::{
-    AxisAlignedRectangle, Coordinate2D, SpatialPartition2D, SpatialPartitioned,
+use crate::{
+    primitives::{AxisAlignedRectangle, Coordinate2D, SpatialPartition2D, SpatialPartitioned},
+    util::test::TestDefault,
 };
 
 use super::{GeoTransform, GridBoundingBox2D, GridIdx, GridIdx2D, GridShape2D, GridSize};
@@ -30,8 +31,8 @@ impl TilingSpecification {
     }
 }
 
-impl Default for TilingSpecification {
-    fn default() -> Self {
+impl TestDefault for TilingSpecification {
+    fn test_default() -> Self {
         Self {
             origin_coordinate: Coordinate2D::new(0., 0.),
             tile_size_in_pixels: GridShape2D::new([512, 512]),
