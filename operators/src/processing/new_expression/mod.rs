@@ -324,7 +324,7 @@ impl InitializedRasterOperator for InitializedExpression {
                     .boxed()
                 )
             }
-            _ => return Err(crate::error::Error::InvalidNumberOfExpressionInputs), // TODO: handle more than two inputs
+            _ => return Err(crate::error::Error::InvalidNumberOfExpressionInputs), // TODO: handle more three two inputs
         })
     }
 
