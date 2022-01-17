@@ -454,7 +454,8 @@ where
             Poll::Ready(Some(Err(ExecutorError::Cancelled))) => {
                 panic!("Executor task cancelled!")
             }
-            Poll::Ready(Some(Err(_))) => unreachable!(),
+            // Submission already succeeded -> Unreachable.
+            Poll::Ready(Some(Err(ExecutorError::Submission { .. }))) => unreachable!(),
         }
     }
 }
