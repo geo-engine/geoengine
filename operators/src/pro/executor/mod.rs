@@ -583,16 +583,29 @@ mod tests {
 
     #[tokio::test]
     async fn test_stream_consumer_drop() {
-        let e = Executor::new(5);
+        let e = Executor::new(2);
+        let chk;
         {
             let mut sf = e
                 .submit_stream_ref(&1, futures::stream::iter(vec![1, 2, 3]))
                 .await
                 .unwrap();
             // Consume a single element
-            assert_eq!(Some(Arc::new(1)), sf.next().await);
+            chk = sf.next().await;
+            assert_eq!(Some(Arc::new(1)), chk);
         }
-        // How to assert this?
+        // Assert that the task is dropped if all consumers are dropped.
+        // Therefore, resubmit another one and ensure we produce new results.
+        let mut sf = e
+            .submit_stream_ref(&1, futures::stream::iter(vec![1, 2, 3]))
+            .await
+            .unwrap();
+        let chk2 = sf.next().await;
+        assert_eq!(Some(Arc::new(1)), chk);
+
+        assert_eq!(chk, chk2);
+
+        assert!(!Arc::ptr_eq(&chk.unwrap(), &chk2.unwrap()));
     }
 
     #[tokio::test]
