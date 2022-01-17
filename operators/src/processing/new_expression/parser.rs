@@ -102,7 +102,6 @@ impl ExpressionParser {
     }
 
     fn resolve_expression_rule(&self, pair: Pair<Rule>) -> Result<AstNode> {
-        // dbg!(&pair);
         match pair.as_rule() {
             Rule::expression => self.build_ast(pair.into_inner()),
             Rule::number => Ok(AstNode::Constant(
@@ -237,7 +236,6 @@ impl ExpressionParser {
             });
         }
 
-        // dbg!("merge", &left, &op, &right);
         let ast_operator = match op.as_rule() {
             Rule::add => AstOperator::Add,
             Rule::subtract => AstOperator::Subtract,
@@ -328,7 +326,6 @@ impl ExpressionParser {
     ) -> Result<BooleanExpression> {
         let (left, right) = (left?, right?);
 
-        // dbg!("merge", &left, &op, &right);
         let boolean_operator = match op.as_rule() {
             Rule::and => BooleanOperator::And,
             Rule::or => BooleanOperator::Or,
