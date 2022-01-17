@@ -127,9 +127,12 @@ impl ExpressionSources {
 
 /// Create a parameter name from an index.
 /// Starts with `A`.
+///
+/// ## Note
+///
+/// This function only makes sense for indices between 0 and 25.
+///
 fn index_to_parameter(index: usize) -> String {
-    // TODO: handle indices > 26
-
     let index = index as u32;
     let start_index = 'A' as u32;
 
