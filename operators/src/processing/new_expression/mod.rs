@@ -157,7 +157,7 @@ impl RasterOperator for NewExpression {
             }
         );
 
-        // we refer to raster's by A, B, C, …
+        // we refer to rasters by A, B, C, …
         let parameters = (0..self.sources.number_of_sources())
             .flat_map(|i| {
                 let parameter = index_to_parameter(i);
@@ -186,16 +186,16 @@ impl RasterOperator for NewExpression {
 
         let spatial_reference = sources.a.result_descriptor().spatial_reference;
 
-        for other_spatial_refenence in sources
+        for other_spatial_reference in sources
             .iter()
             .skip(1)
             .map(|source| source.result_descriptor().spatial_reference)
         {
             ensure!(
-                spatial_reference == other_spatial_refenence,
+                spatial_reference == other_spatial_reference,
                 crate::error::InvalidSpatialReference {
                     expected: spatial_reference,
-                    found: other_spatial_refenence,
+                    found: other_spatial_reference,
                 }
             );
         }
