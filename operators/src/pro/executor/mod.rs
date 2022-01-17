@@ -235,6 +235,7 @@ where
         let id = completed_task.id;
 
         // Remove the map entry only, if the completed task's id matches the stored task's id
+        // There may be older tasks around (with smaller ids) that should not trigger a removal from the map.
         if let std::collections::hash_map::Entry::Occupied(e) =
             self.computations.entry(completed_task.key)
         {
@@ -322,7 +323,7 @@ where
 
         // This is the task that is responsible for driving the async computations and
         // notifying consumers about success and failure.
-        let driver = tokio::spawn(looper.main_loop());
+        let driver = tokio::spawn(async move { looper.main_loop().await });
 
         Executor { sender, driver }
     }
