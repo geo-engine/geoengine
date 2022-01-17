@@ -322,7 +322,7 @@ where
 
         // This is the task that is responsible for driving the async computations and
         // notifying consumers about success and failure.
-        let driver = tokio::spawn(async move { looper.main_loop().await });
+        let driver = tokio::spawn(looper.main_loop());
 
         Executor { sender, driver }
     }
