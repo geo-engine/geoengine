@@ -403,6 +403,7 @@ impl From<Vec<geo::MultiPolygon<f64>>> for MultiPolygonCollection {
 
 #[cfg(test)]
 mod tests {
+    use float_cmp::approx_eq;
     use geo::polygon;
 
     use super::*;
@@ -823,7 +824,7 @@ mod tests {
     }
 
     #[test]
-    fn reproject_multi_lines_epsg4326_epsg900913_collection() {
+    fn reproject_multi_polygons_epsg4326_epsg900913_collection() {
         use crate::operations::reproject::Reproject;
         use crate::operations::reproject::{CoordinateProjection, CoordinateProjector};
         use crate::primitives::FeatureData;
@@ -868,39 +869,45 @@ mod tests {
         )
         .unwrap();
 
-        let expected_collection = MultiPolygonCollection::from_slices(
-            &[
-                MultiPolygon::new(vec![
-                    vec![vec![
-                        HAMBURG_EPSG_900_913,
-                        MARBURG_EPSG_900_913,
-                        COLOGNE_EPSG_900_913,
-                        HAMBURG_EPSG_900_913,
-                    ]],
-                    vec![vec![
-                        COLOGNE_EPSG_900_913,
-                        HAMBURG_EPSG_900_913,
-                        MARBURG_EPSG_900_913,
-                        COLOGNE_EPSG_900_913,
-                    ]],
-                ])
-                .unwrap(),
-                MultiPolygon::new(vec![vec![vec![
+        let expected = [
+            MultiPolygon::new(vec![
+                vec![vec![
+                    HAMBURG_EPSG_900_913,
                     MARBURG_EPSG_900_913,
                     COLOGNE_EPSG_900_913,
                     HAMBURG_EPSG_900_913,
+                ]],
+                vec![vec![
+                    COLOGNE_EPSG_900_913,
+                    HAMBURG_EPSG_900_913,
                     MARBURG_EPSG_900_913,
-                ]]])
-                .unwrap(),
-            ],
-            &[TimeInterval::default(), TimeInterval::default()],
-            &[("A", FeatureData::Int(vec![1, 2]))],
-        )
-        .unwrap();
+                    COLOGNE_EPSG_900_913,
+                ]],
+            ])
+            .unwrap(),
+            MultiPolygon::new(vec![vec![vec![
+                MARBURG_EPSG_900_913,
+                COLOGNE_EPSG_900_913,
+                HAMBURG_EPSG_900_913,
+                MARBURG_EPSG_900_913,
+            ]]])
+            .unwrap(),
+        ];
 
         let proj_collection = collection.reproject(&projector).unwrap();
 
-        assert_eq!(proj_collection, expected_collection);
+        proj_collection
+            .geometries()
+            .into_iter()
+            .zip(expected.iter())
+            .for_each(|(a, e)| {
+                assert!(approx_eq!(
+                    MultiPolygon,
+                    a.into(),
+                    e.clone(),
+                    epsilon = 0.00001
+                ));
+            });
     }
 
     #[test]

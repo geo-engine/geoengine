@@ -3,6 +3,7 @@ use std::convert::TryFrom;
 use super::{AxisAlignedRectangle, Coordinate2D, SpatialBounded};
 use crate::error;
 use crate::util::Result;
+use float_cmp::ApproxEq;
 #[cfg(feature = "postgres")]
 use postgres_types::{FromSql, ToSql};
 use serde::{Deserialize, Serialize};
@@ -546,6 +547,22 @@ impl TryFrom<BoundingBox2D> for gdal::vector::Geometry {
             value.upper_right_coordinate.y,
         )
         .map_err(crate::error::Error::from)
+    }
+}
+
+impl ApproxEq for BoundingBox2D {
+    type Margin = float_cmp::F64Margin;
+
+    fn approx_eq<M>(self, other: Self, margin: M) -> bool
+    where
+        M: Into<Self::Margin>,
+    {
+        let m = margin.into();
+        self.upper_right_coordinate
+            .approx_eq(other.upper_right_coordinate, m)
+            && self
+                .lower_left_coordinate
+                .approx_eq(other.lower_left_coordinate, m)
     }
 }
 

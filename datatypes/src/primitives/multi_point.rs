@@ -2,6 +2,7 @@ use std::convert::{TryFrom, TryInto};
 
 use arrow::array::{ArrayBuilder, BooleanArray};
 use arrow::error::ArrowError;
+use float_cmp::{ApproxEq, F64Margin};
 use serde::{Deserialize, Serialize};
 use snafu::ensure;
 
@@ -282,6 +283,18 @@ where
     fn spatial_bounds(&self) -> BoundingBox2D {
         BoundingBox2D::from_coord_ref_iter(self.points())
             .expect("there must be at least one cordinate in a multipoint")
+    }
+}
+
+impl ApproxEq for MultiPoint {
+    type Margin = F64Margin;
+
+    fn approx_eq<M: Into<Self::Margin>>(self, other: Self, margin: M) -> bool {
+        let m = margin.into();
+        self.coordinates
+            .iter()
+            .zip(other.coordinates.iter())
+            .all(|(&a, &b)| a.approx_eq(b, m))
     }
 }
 

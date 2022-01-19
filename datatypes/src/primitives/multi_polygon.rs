@@ -2,6 +2,7 @@ use std::convert::TryFrom;
 
 use arrow::array::{ArrayBuilder, BooleanArray};
 use arrow::error::ArrowError;
+use float_cmp::{ApproxEq, F64Margin};
 use geo::intersects::Intersects;
 use serde::{Deserialize, Serialize};
 use snafu::ensure;
@@ -398,6 +399,27 @@ impl<'g> From<&MultiPolygonRef<'g>> for MultiPolygon {
                 .map(|polygon| polygon.iter().copied().map(ToOwned::to_owned).collect())
                 .collect(),
         )
+    }
+}
+
+impl ApproxEq for MultiPolygon {
+    type Margin = F64Margin;
+
+    fn approx_eq<M: Into<Self::Margin>>(self, other: Self, margin: M) -> bool {
+        let m = margin.into();
+        self.polygons()
+            .iter()
+            .zip(other.polygons())
+            .all(|(polygon_a, polygon_b)| {
+                polygon_a.iter().zip(polygon_b).all(|(ring_a, ring_b)| {
+                    ring_a
+                        .iter()
+                        .zip(ring_b)
+                        .all(|(&coordinate_a, &coordinate_b)| {
+                            coordinate_a.approx_eq(coordinate_b, m)
+                        })
+                })
+            })
     }
 }
 

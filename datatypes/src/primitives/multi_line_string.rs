@@ -2,6 +2,7 @@ use std::convert::TryFrom;
 
 use arrow::array::{ArrayBuilder, BooleanArray};
 use arrow::error::ArrowError;
+use float_cmp::{ApproxEq, F64Margin};
 use geo::algorithm::intersects::Intersects;
 use serde::{Deserialize, Serialize};
 use snafu::ensure;
@@ -97,6 +98,18 @@ impl TryFrom<TypedGeometry> for MultiLineString {
 impl AsRef<[Vec<Coordinate2D>]> for MultiLineString {
     fn as_ref(&self) -> &[Vec<Coordinate2D>] {
         &self.coordinates
+    }
+}
+
+impl ApproxEq for MultiLineString {
+    type Margin = F64Margin;
+
+    fn approx_eq<M: Into<Self::Margin>>(self, other: Self, margin: M) -> bool {
+        let m = margin.into();
+        self.lines()
+            .iter()
+            .zip(other.lines().iter())
+            .all(|(line_a, line_b)| line_a.approx_eq(line_b, m))
     }
 }
 
