@@ -321,3 +321,12 @@ pub struct Gdal {
 impl ConfigElement for Gdal {
     const KEY: &'static str = "gdal";
 }
+
+#[derive(Debug, Deserialize)]
+pub struct Executor {
+    pub queue_size: usize,
+}
+
+impl ConfigElement for Executor {
+    const KEY: &'static str = "executor";
+}

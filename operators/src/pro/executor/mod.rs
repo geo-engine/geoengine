@@ -410,16 +410,6 @@ where
     }
 }
 
-impl<Key, T> Default for Executor<Key, T>
-where
-    Key: Hash + Clone + Eq + Send + 'static,
-    T: Sync + Send + 'static,
-{
-    fn default() -> Self {
-        Self::new(5)
-    }
-}
-
 #[pin_project::pin_project]
 pub struct StreamReceiver<T>
 where

@@ -10,7 +10,7 @@ use std::sync::Arc;
 
 use crate::contexts::{Context, Db};
 use crate::pro::users::{UserDb, UserSession};
-
+use crate::util::config::get_config_element;
 use crate::workflows::workflow::WorkflowId;
 use async_trait::async_trait;
 use geoengine_operators::pro::executor::Executor;
@@ -45,8 +45,11 @@ impl TaskManager {
 
 impl Default for TaskManager {
     fn default() -> Self {
+        let queue_size =
+            get_config_element::<crate::util::config::Executor>().map_or(5, |it| it.queue_size);
+
         TaskManager {
-            plot_executor: Arc::new(Default::default()),
+            plot_executor: Arc::new(Executor::new(queue_size)),
         }
     }
 }
