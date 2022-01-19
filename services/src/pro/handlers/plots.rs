@@ -15,7 +15,7 @@ where
 }
 
 /// Generates a [plot](crate::handlers::plots::WrappedPlotOutput).
-/// This handler behaves the same as the standarad [plot handler](crate::handlers::plots::get_plot_handler),
+/// This handler behaves the same as the standard [plot handler](crate::handlers::plots::get_plot_handler),
 /// except that it uses an [executor](crate::pro::contexts::TaskManager) for query execution.
 async fn get_plot_handler<C: ProContext>(
     id: web::Path<Uuid>,
@@ -23,7 +23,7 @@ async fn get_plot_handler<C: ProContext>(
     session: C::Session,
     ctx: web::Data<C>,
 ) -> Result<impl Responder> {
-    let workflow_id = WorkflowId(id.as_ref().clone());
+    let workflow_id = WorkflowId(*id.as_ref());
     let task_manager = ctx.task_manager();
 
     let task = crate::handlers::plots::process_plot_request(id, params, session, ctx);
