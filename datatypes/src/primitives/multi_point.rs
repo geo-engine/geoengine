@@ -291,15 +291,19 @@ impl ApproxEq for MultiPoint {
 
     fn approx_eq<M: Into<Self::Margin>>(self, other: Self, margin: M) -> bool {
         let m = margin.into();
-        self.coordinates
-            .iter()
-            .zip(other.coordinates.iter())
-            .all(|(&a, &b)| a.approx_eq(b, m))
+        self.coordinates.len() == other.coordinates.len()
+            && self
+                .coordinates
+                .iter()
+                .zip(other.coordinates.iter())
+                .all(|(&a, &b)| a.approx_eq(b, m))
     }
 }
 
 #[cfg(test)]
 mod tests {
+    use float_cmp::approx_eq;
+
     use super::*;
 
     #[test]
@@ -348,5 +352,44 @@ mod tests {
         ]);
         let mp = MultiPoint { coordinates };
         assert_eq!(mp.spatial_bounds(), expected);
+    }
+
+    #[test]
+    fn approx_equal() {
+        let a = MultiPoint::new(vec![
+            (0.5, 0.5).into(),
+            (0.5, 0.5).into(),
+            (0.5, 0.5).into(),
+        ])
+        .unwrap();
+
+        let b = MultiPoint::new(vec![
+            (0.5, 0.499_999_999).into(),
+            (0.5, 0.5).into(),
+            (0.5, 0.5).into(),
+        ])
+        .unwrap();
+
+        assert!(approx_eq!(MultiPoint, a, b, epsilon = 0.000_001));
+    }
+
+    #[test]
+    fn not_approx_equal_len() {
+        let a = MultiPoint::new(vec![
+            (0.5, 0.5).into(),
+            (0.5, 0.5).into(),
+            (0.5, 0.5).into(),
+        ])
+        .unwrap();
+
+        let b = MultiPoint::new(vec![
+            (0.5, 0.5).into(),
+            (0.5, 0.5).into(),
+            (0.5, 0.5).into(),
+            (123_456_789.5, 123_456_789.5).into(),
+        ])
+        .unwrap();
+
+        assert!(!approx_eq!(MultiPoint, a, b, F64Margin::default()));
     }
 }

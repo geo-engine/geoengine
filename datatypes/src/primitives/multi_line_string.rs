@@ -106,10 +106,12 @@ impl ApproxEq for MultiLineString {
 
     fn approx_eq<M: Into<Self::Margin>>(self, other: Self, margin: M) -> bool {
         let m = margin.into();
-        self.lines()
-            .iter()
-            .zip(other.lines().iter())
-            .all(|(line_a, line_b)| line_a.approx_eq(line_b, m))
+        self.lines().len() == other.lines().len()
+            && self
+                .lines()
+                .iter()
+                .zip(other.lines().iter())
+                .all(|(line_a, line_b)| line_a.len() == line_b.len() && line_a.approx_eq(line_b, m))
     }
 }
 
@@ -319,6 +321,8 @@ impl<'g> From<&MultiLineStringRef<'g>> for MultiLineString {
 
 #[cfg(test)]
 mod tests {
+    use float_cmp::approx_eq;
+
     use super::*;
 
     #[test]
@@ -348,5 +352,63 @@ mod tests {
             aggregate(&multi_line_string),
             aggregate(&multi_line_string_ref)
         );
+    }
+
+    #[test]
+    fn approx_equal() {
+        let a = MultiLineString::new(vec![
+            vec![(0.1, 0.1).into(), (0.5, 0.5).into()],
+            vec![(0.5, 0.5).into(), (0.6, 0.6).into()],
+            vec![(0.6, 0.6).into(), (0.9, 0.9).into()],
+        ])
+        .unwrap();
+
+        let b = MultiLineString::new(vec![
+            vec![(0.099_999_999, 0.1).into(), (0.5, 0.5).into()],
+            vec![(0.5, 0.5).into(), (0.6, 0.6).into()],
+            vec![(0.6, 0.6).into(), (0.9, 0.9).into()],
+        ])
+        .unwrap();
+
+        assert!(approx_eq!(MultiLineString, a, b, epsilon = 0.000_001));
+    }
+
+    #[test]
+    fn not_approx_equal_outer_len() {
+        let a = MultiLineString::new(vec![
+            vec![(0.1, 0.1).into(), (0.5, 0.5).into()],
+            vec![(0.5, 0.5).into(), (0.6, 0.6).into()],
+            vec![(0.6, 0.6).into(), (0.9, 0.9).into()],
+        ])
+        .unwrap();
+
+        let b = MultiLineString::new(vec![
+            vec![(0.1, 0.1).into(), (0.5, 0.5).into()],
+            vec![(0.5, 0.5).into(), (0.6, 0.6).into()],
+            vec![(0.6, 0.6).into(), (0.9, 0.9).into()],
+            vec![(0.9, 0.9).into(), (123_456_789.9, 123_456_789.9).into()],
+        ])
+        .unwrap();
+
+        assert!(!approx_eq!(MultiLineString, a, b, F64Margin::default()));
+    }
+
+    #[test]
+    fn not_approx_equal_inner_len() {
+        let a = MultiLineString::new(vec![
+            vec![(0.1, 0.1).into(), (0.5, 0.5).into()],
+            vec![(0.5, 0.5).into(), (0.6, 0.6).into(), (0.7, 0.7).into()],
+            vec![(0.7, 0.7).into(), (0.9, 0.9).into()],
+        ])
+        .unwrap();
+
+        let b = MultiLineString::new(vec![
+            vec![(0.1, 0.1).into(), (0.5, 0.5).into()],
+            vec![(0.5, 0.5).into(), (0.6, 0.6).into()],
+            vec![(0.6, 0.6).into(), (0.7, 0.7).into(), (0.9, 0.9).into()],
+        ])
+        .unwrap();
+
+        assert!(!approx_eq!(MultiLineString, a, b, F64Margin::default()));
     }
 }
