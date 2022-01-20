@@ -11,7 +11,7 @@ use async_trait::async_trait;
 use geoengine_datatypes::{dataset::DatasetId, primitives::Measurement, raster::RasterDataType};
 use num_traits::AsPrimitive;
 use serde::{Deserialize, Serialize};
-use snafu::ensure;
+use snafu::{ensure, OptionExt};
 
 pub use self::error::ExpressionError;
 
@@ -255,7 +255,10 @@ impl InitializedRasterOperator for InitializedExpression {
     fn query_processor(&self) -> Result<TypedRasterQueryProcessor> {
         let output_type = self.result_descriptor().data_type;
         // TODO: allow processing expression without NO DATA
-        let output_no_data_value = self.result_descriptor().no_data_value.unwrap_or_default();
+        let output_no_data_value = self
+            .result_descriptor()
+            .no_data_value
+            .context(error::MissingOutputNoDataValue)?;
 
         let expression = LinkedExpression::new(&self.expression)?;
 

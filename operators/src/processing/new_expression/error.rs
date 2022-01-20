@@ -32,4 +32,5 @@ pub enum ExpressionError {
     Linker { error: String },
     LinkedFunctionNotFound { error: String },
     MissingIdentifier,
+    MissingOutputNoDataValue,
 }
