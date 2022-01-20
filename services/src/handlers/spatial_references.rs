@@ -1,3 +1,5 @@
+use crate::handlers::Context;
+use crate::{error, error::Error, error::Result};
 use actix_web::{web, FromRequest, Responder};
 use geoengine_datatypes::{
     primitives::BoundingBox2D,
@@ -7,9 +9,6 @@ use proj_sys::PJ_PROJ_STRING_TYPE_PJ_PROJ_4;
 use serde::{Deserialize, Serialize};
 use snafu::ResultExt;
 use std::str::FromStr;
-
-use crate::handlers::Context;
-use crate::{error, error::Error, error::Result};
 
 pub(crate) fn init_spatial_reference_routes<C>(cfg: &mut web::ServiceConfig)
 where
@@ -231,6 +230,7 @@ mod tests {
     use actix_web;
     use actix_web::http::header;
     use actix_web_httpauth::headers::authorization::Bearer;
+    use float_cmp::approx_eq;
     use geoengine_datatypes::spatial_reference::SpatialReference;
     use geoengine_datatypes::spatial_reference::SpatialReferenceAuthority;
     use geoengine_datatypes::util::test::TestDefault;
@@ -268,16 +268,29 @@ mod tests {
     #[test]
     fn spec_webmercator() {
         let spec = spatial_reference_specification("EPSG:3857").unwrap();
-        assert_eq!(SpatialReferenceSpecification {
-                name: "WGS 84 / Pseudo-Mercator".to_owned(),
-                spatial_reference: SpatialReference::new(SpatialReferenceAuthority::Epsg, 3857),
-                proj_string: "+proj=merc +a=6378137 +b=6378137 +lat_ts=0 +lon_0=0 +x_0=0 +y_0=0 +k=1 +units=m +nadgrids=@null +wktext +no_defs +type=crs".into(),
-                extent: BoundingBox2D::new_unchecked((-20_037_508.342_789_244, -20_048_966.104_014_6).into(),  (20_037_508.342_789_244, 20_048_966.104_014_594).into()),
-                axis_labels: Some(("Easting".to_owned(), "Northing".to_owned())),
-                axis_order: Some(AxisOrder::EastNorth),
-            },
-            spec
+        assert_eq!(spec.name, "WGS 84 / Pseudo-Mercator");
+        assert_eq!(
+            spec.spatial_reference,
+            SpatialReference::new(SpatialReferenceAuthority::Epsg, 3857)
         );
+        assert_eq!(
+            spec.proj_string,
+            "+proj=merc +a=6378137 +b=6378137 +lat_ts=0 +lon_0=0 +x_0=0 +y_0=0 +k=1 +units=m +nadgrids=@null +wktext +no_defs +type=crs",
+        );
+        assert!(approx_eq!(
+            BoundingBox2D,
+            spec.extent,
+            BoundingBox2D::new_unchecked(
+                (-20_037_508.342_789_244, -20_048_966.104_014_6).into(),
+                (20_037_508.342_789_244, 20_048_966.104_014_594).into()
+            ),
+            epsilon = 0.000_001
+        ));
+        assert_eq!(
+            spec.axis_labels,
+            Some(("Easting".to_owned(), "Northing".to_owned()))
+        );
+        assert_eq!(spec.axis_order, Some(AxisOrder::EastNorth));
     }
 
     #[test]
