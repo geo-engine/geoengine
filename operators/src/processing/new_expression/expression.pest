@@ -44,15 +44,17 @@ boolean_operator = _{ and | or }
     or  = { "||" }
 
 boolean_expression = { boolean_term ~ (boolean_operator ~ boolean_term)* }
-boolean_term = _{ boolean_true | boolean_false | boolean_comparison | identifier | "(" ~ boolean_expression ~ ")" }
+boolean_term = _{ boolean_true | boolean_false | boolean_comparison | identifier_is_nodata | identifier | "(" ~ boolean_expression ~ ")" }
     boolean_true = { ^"true" }
     boolean_false = { ^"false" }
     boolean_comparison = { expression ~ boolean_comparator ~ expression }
 
+identifier_is_nodata = { identifier ~ ^"is" ~ ^"nodata" }
+
 branch = {
     "if" ~ boolean_expression ~ "{" ~ expression ~ "}"
-    ~ ("else" ~ "if" ~ boolean_expression ~ "{" ~ expression ~ "}")*
-    ~ "else" ~ "{" ~ expression ~ "}"
+    ~ (^"else" ~ ^"if" ~ boolean_expression ~ "{" ~ expression ~ "}")*
+    ~ ^"else" ~ "{" ~ expression ~ "}"
 }
 
 assignment = {

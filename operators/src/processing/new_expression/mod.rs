@@ -161,7 +161,7 @@ impl RasterOperator for NewExpression {
         let parameters = (0..self.sources.number_of_sources())
             .flat_map(|i| {
                 let parameter = index_to_parameter(i);
-                let boolean_parameter = format!("is_{}_nodata", &parameter);
+                let boolean_parameter = format!("{}_is_nodata", &parameter);
                 [
                     Parameter::Number(parameter.into()),
                     Parameter::Boolean(boolean_parameter.into()),
@@ -605,7 +605,7 @@ mod tests {
 
         let o = NewExpression {
             params: ExpressionParams {
-                expression: "if is_A_nodata {
+                expression: "if A IS NODATA {
                     B * 2
                 } else if A == 6 {
                     out_nodata

@@ -275,6 +275,26 @@ impl ExpressionParser {
                     })
                 }
             }
+            Rule::identifier_is_nodata => {
+                // convert `A IS NODATA` to the variable `A_is_nodata`
+
+                let mut pairs = pair.into_inner();
+
+                let identifier = pairs
+                    .next()
+                    .ok_or(ExpressionError::MissingIdentifier)?
+                    .as_str();
+
+                let new_identifier = format!("{}_is_nodata", identifier).into();
+
+                if self.boolean_parameters.contains(&new_identifier) {
+                    Ok(BooleanExpression::Variable(new_identifier))
+                } else {
+                    Err(ExpressionError::UnknownBooleanVariable {
+                        variable: identifier.to_string(),
+                    })
+                }
+            }
             Rule::boolean_true => Ok(BooleanExpression::Constant(true)),
             Rule::boolean_false => Ok(BooleanExpression::Constant(false)),
             Rule::boolean_comparison => {
@@ -486,13 +506,13 @@ mod tests {
             parse(
                 "expression",
                 &["a"],
-                &["is_a_nodata"],
-                "if is_a_nodata { 0 } else { a }"
+                &["a_is_nodata"],
+                "if a is nodata { 0 } else { a }"
             ),
             quote! {
                 #[no_mangle]
-                pub extern "C" fn expression(a: f64, is_a_nodata: bool) -> f64 {
-                    if is_a_nodata {
+                pub extern "C" fn expression(a: f64, a_is_nodata: bool) -> f64 {
+                    if a_is_nodata {
                         0f64
                     } else {
                         a
@@ -506,8 +526,8 @@ mod tests {
             parse(
                 "expression",
                 &["A", "B", "out_nodata"],
-                &["is_A_nodata", "is_B_nodata"],
-                "if is_A_nodata {
+                &["A_is_nodata", "B_is_nodata"],
+                "if A IS NODATA {
                     B * 2
                 } else if A == 6 {
                     out_nodata
@@ -517,8 +537,8 @@ mod tests {
             ),
             quote! {
                 #[no_mangle]
-                pub extern "C" fn expression(A: f64, B: f64, out_nodata: f64, is_A_nodata: bool, is_B_nodata: bool) -> f64 {
-                    if is_A_nodata {
+                pub extern "C" fn expression(A: f64, B: f64, out_nodata: f64, A_is_nodata: bool, B_is_nodata: bool) -> f64 {
+                    if A_is_nodata {
                         (B * 2f64)
                     } else if ((A) == (6f64)) {
                         out_nodata
