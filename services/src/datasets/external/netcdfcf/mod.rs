@@ -80,8 +80,6 @@ struct SubDataset {
 
 impl NetCdfCfDataProvider {
     fn subdatasets_from_subdatasets_metadata(metadata: &[String]) -> Result<Vec<SubDataset>> {
-        // TODO: Read field `standard_name` from metadata
-
         let mut subdatasets = vec![];
         for i in (0..metadata.len()).step_by(2) {
             let name = metadata
