@@ -901,12 +901,7 @@ mod tests {
             .into_iter()
             .zip(expected.iter())
             .for_each(|(a, e)| {
-                assert!(approx_eq!(
-                    MultiPolygon,
-                    a.into(),
-                    e.clone(),
-                    epsilon = 0.00001
-                ));
+                assert!(approx_eq!(&MultiPolygon, &a.into(), e, epsilon = 0.00001));
             });
     }
 

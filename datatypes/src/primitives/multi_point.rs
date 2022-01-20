@@ -286,7 +286,7 @@ where
     }
 }
 
-impl ApproxEq for MultiPoint {
+impl ApproxEq for &MultiPoint {
     type Margin = F64Margin;
 
     fn approx_eq<M: Into<Self::Margin>>(self, other: Self, margin: M) -> bool {
@@ -370,7 +370,7 @@ mod tests {
         ])
         .unwrap();
 
-        assert!(approx_eq!(MultiPoint, a, b, epsilon = 0.000_001));
+        assert!(approx_eq!(&MultiPoint, &a, &b, epsilon = 0.000_001));
     }
 
     #[test]
@@ -390,6 +390,6 @@ mod tests {
         ])
         .unwrap();
 
-        assert!(!approx_eq!(MultiPoint, a, b, F64Margin::default()));
+        assert!(!approx_eq!(&MultiPoint, &a, &b, F64Margin::default()));
     }
 }

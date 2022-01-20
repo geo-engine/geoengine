@@ -579,12 +579,7 @@ mod tests {
             .into_iter()
             .zip(expected.iter())
             .for_each(|(a, e)| {
-                assert!(approx_eq!(
-                    MultiPoint,
-                    a.into(),
-                    e.clone(),
-                    epsilon = 0.00001
-                ));
+                assert!(approx_eq!(&MultiPoint, &a.into(), e, epsilon = 0.00001));
             });
 
         Ok(())
@@ -656,9 +651,9 @@ mod tests {
             .zip(expected.iter())
             .for_each(|(a, e)| {
                 assert!(approx_eq!(
-                    MultiLineString,
-                    a.into(),
-                    e.clone(),
+                    &MultiLineString,
+                    &a.into(),
+                    e,
                     epsilon = 0.00001
                 ));
             });
@@ -733,12 +728,7 @@ mod tests {
             .into_iter()
             .zip(expected.iter())
             .for_each(|(a, e)| {
-                assert!(approx_eq!(
-                    MultiPolygon,
-                    a.into(),
-                    e.clone(),
-                    epsilon = 0.00001
-                ));
+                assert!(approx_eq!(&MultiPolygon, &a.into(), e, epsilon = 0.00001));
             });
 
         Ok(())

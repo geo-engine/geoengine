@@ -402,7 +402,7 @@ impl<'g> From<&MultiPolygonRef<'g>> for MultiPolygon {
     }
 }
 
-impl ApproxEq for MultiPolygon {
+impl ApproxEq for &MultiPolygon {
     type Margin = F64Margin;
 
     fn approx_eq<M: Into<Self::Margin>>(self, other: Self, margin: M) -> bool {
@@ -547,7 +547,7 @@ mod tests {
         ])
         .unwrap();
 
-        assert!(approx_eq!(MultiPolygon, a, b, epsilon = 0.000_001));
+        assert!(approx_eq!(&MultiPolygon, &a, &b, epsilon = 0.000_001));
     }
 
     #[test]
@@ -608,7 +608,7 @@ mod tests {
         ])
         .unwrap();
 
-        assert!(!approx_eq!(MultiPolygon, a, b, F64Margin::default()));
+        assert!(!approx_eq!(&MultiPolygon, &a, &b, F64Margin::default()));
     }
 
     #[test]
@@ -678,6 +678,6 @@ mod tests {
         ])
         .unwrap();
 
-        assert!(!approx_eq!(MultiPolygon, a, b, F64Margin::default()));
+        assert!(!approx_eq!(&MultiPolygon, &a, &b, F64Margin::default()));
     }
 }

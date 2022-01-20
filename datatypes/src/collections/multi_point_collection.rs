@@ -1186,12 +1186,7 @@ mod tests {
             .into_iter()
             .zip(expected.iter())
             .for_each(|(a, e)| {
-                assert!(approx_eq!(
-                    MultiPoint,
-                    a.into(),
-                    e.clone(),
-                    epsilon = 0.000_001
-                ));
+                assert!(approx_eq!(&MultiPoint, &a.into(), e, epsilon = 0.000_001));
             });
     }
 

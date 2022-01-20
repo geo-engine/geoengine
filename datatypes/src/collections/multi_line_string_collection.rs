@@ -585,9 +585,9 @@ mod tests {
             .zip(expected.iter())
             .for_each(|(a, e)| {
                 assert!(approx_eq!(
-                    MultiLineString,
-                    a.into(),
-                    e.clone(),
+                    &MultiLineString,
+                    &a.into(),
+                    e,
                     epsilon = 0.00001
                 ));
             });

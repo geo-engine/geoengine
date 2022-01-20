@@ -101,7 +101,7 @@ impl AsRef<[Vec<Coordinate2D>]> for MultiLineString {
     }
 }
 
-impl ApproxEq for MultiLineString {
+impl ApproxEq for &MultiLineString {
     type Margin = F64Margin;
 
     fn approx_eq<M: Into<Self::Margin>>(self, other: Self, margin: M) -> bool {
@@ -370,7 +370,7 @@ mod tests {
         ])
         .unwrap();
 
-        assert!(approx_eq!(MultiLineString, a, b, epsilon = 0.000_001));
+        assert!(approx_eq!(&MultiLineString, &a, &b, epsilon = 0.000_001));
     }
 
     #[test]
@@ -390,7 +390,7 @@ mod tests {
         ])
         .unwrap();
 
-        assert!(!approx_eq!(MultiLineString, a, b, F64Margin::default()));
+        assert!(!approx_eq!(&MultiLineString, &a, &b, F64Margin::default()));
     }
 
     #[test]
@@ -409,6 +409,6 @@ mod tests {
         ])
         .unwrap();
 
-        assert!(!approx_eq!(MultiLineString, a, b, F64Margin::default()));
+        assert!(!approx_eq!(&MultiLineString, &a, &b, F64Margin::default()));
     }
 }
