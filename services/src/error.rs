@@ -1,5 +1,5 @@
-use crate::handlers::ErrorResponse;
 use crate::workflows::workflow::WorkflowId;
+use crate::{datasets::external::netcdfcf::NetCdfCf4DProviderError, handlers::ErrorResponse};
 use actix_web::http::StatusCode;
 use actix_web::HttpResponse;
 use geoengine_datatypes::{
@@ -312,7 +312,10 @@ pub enum Error {
     },
     MissingNFDIMetaData,
 
-    NetCdfCfMissingMetaData,
+    NetCdfCf4DProvider {
+        #[snafu(implicit)]
+        source: NetCdfCf4DProviderError,
+    },
 }
 
 impl actix_web::error::ResponseError for Error {

@@ -1,9 +1,9 @@
 use std::path::{Path, PathBuf};
 use std::str::FromStr;
 
+use crate::datasets::listing::DatasetListOptions;
 use crate::datasets::listing::{ExternalDatasetProvider, ProvenanceOutput};
 use crate::error::Error;
-use crate::{datasets::listing::DatasetListOptions, error::Result};
 use crate::{
     datasets::{listing::DatasetListing, storage::ExternalDatasetProviderDefinition},
     util::user_input::Validated,
@@ -30,6 +30,13 @@ use geoengine_operators::{
 };
 use log::debug;
 use serde::{Deserialize, Serialize};
+use snafu::ResultExt;
+
+pub use self::error::NetCdfCf4DProviderError;
+
+mod error;
+
+type Result<T, E = NetCdfCf4DProviderError> = std::result::Result<T, E>;
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct NetCdfCfDataProviderDefinition {
@@ -73,18 +80,20 @@ struct SubDataset {
 
 impl NetCdfCfDataProvider {
     fn subdatasets_from_subdatasets_metadata(metadata: &[String]) -> Result<Vec<SubDataset>> {
+        // TODO: Read field `standard_name` from metadata
+
         let mut subdatasets = vec![];
         for i in (0..metadata.len()).step_by(2) {
             let name = metadata
                 .get(i)
                 .and_then(|s| s.split_once('='))
-                .ok_or(Error::NetCdfCfMissingMetaData)?
+                .ok_or(NetCdfCf4DProviderError::CannotComputeSubdatasetsFromMetadata)?
                 .1
                 .to_owned();
             let desc = metadata
                 .get(i + 1)
                 .and_then(|s| s.split_once('='))
-                .ok_or(Error::NetCdfCfMissingMetaData)?
+                .ok_or(NetCdfCf4DProviderError::CannotComputeSubdatasetsFromMetadata)?
                 .1
                 .to_owned();
 
@@ -94,56 +103,57 @@ impl NetCdfCfDataProvider {
     }
 
     fn listing_from_netcdf(id: DatasetProviderId, path: &Path) -> Result<Vec<DatasetListing>> {
-        let ds = gdal_open_dataset(path)?;
+        let ds = gdal_open_dataset(path).context(error::InvalidDatasetIdFile)?;
 
-        // TODO: report more details in error
         let title = ds
             .metadata_item("NC_GLOBAL#title", "")
-            .ok_or(Error::NetCdfCfMissingMetaData)?;
+            .ok_or(NetCdfCf4DProviderError::MissingTitle)?;
 
         let spatial_reference = SpatialReference::from_str(
             &ds.metadata_item("NC_GLOBAL#geospatial_bounds_crs", "")
-                .ok_or(Error::NetCdfCfMissingMetaData)?,
-        )?
+                .ok_or(NetCdfCf4DProviderError::MissingCrs)?,
+        )
+        .context(error::CannotParseCrs)?
         .into();
 
         let subdatasets = Self::subdatasets_from_subdatasets_metadata(
             &ds.metadata_domain("SUBDATASETS")
-                .ok_or(Error::NetCdfCfMissingMetaData)?,
+                .ok_or(NetCdfCf4DProviderError::MissingSubdatasets)?,
         )?;
 
         let mut subdataset_iter = subdatasets.into_iter();
 
         let entities_ds = subdataset_iter
             .next()
-            .ok_or(Error::NetCdfCfMissingMetaData)?;
+            .ok_or(NetCdfCf4DProviderError::MissingEntities)?;
 
         // TODO: make parsing of entities dimensions more robust
         let num_entities: u32 = entities_ds.desc[1..entities_ds
             .desc
             .find('x')
-            .ok_or(Error::NetCdfCfMissingMetaData)?]
+            .ok_or(NetCdfCf4DProviderError::CannotSplitNumberOfEntities)?]
             .parse()
-            .map_err(|_| Error::NetCdfCfMissingMetaData)?;
+            .context(error::CannotParseNumberOfEntities)?;
 
         let mut datasets = Vec::new();
         for group_ds in subdataset_iter {
             let data_type = if let Some(data_type) = datatype_from_desc(&group_ds.desc) {
                 data_type
             } else {
-                dbg!(group_ds.desc);
-                return Err(Error::NotYetImplemented);
+                return Err(NetCdfCf4DProviderError::DataTypeNotYetImplemented {
+                    data_type: group_ds.desc,
+                });
             };
 
             for entity_idx in 0..num_entities {
                 let group_name = group_ds
                     .name
                     .rsplit_once(':')
-                    .ok_or(Error::NetCdfCfMissingMetaData)?
+                    .ok_or(NetCdfCf4DProviderError::MissingGroupName)?
                     .1;
                 let file_name = path
                     .file_name()
-                    .ok_or(Error::NetCdfCfMissingMetaData)?
+                    .ok_or(NetCdfCf4DProviderError::MissingFileName)?
                     .to_string_lossy();
 
                 datasets.push(DatasetListing {
@@ -176,23 +186,20 @@ impl NetCdfCfDataProvider {
     {
         let dataset = dataset
             .external()
-            .ok_or(geoengine_operators::error::Error::LoadingInfo {
-                source: Box::new(Error::InvalidExternalDatasetId { provider: self.id }),
-            })?;
+            .ok_or(NetCdfCf4DProviderError::InvalidExternalDatasetId { provider: self.id })?;
+
         let split: Vec<_> = dataset.dataset_id.split("::").collect();
 
-        let path = split
-            .get(0)
-            .ok_or(Error::InvalidExternalDatasetId { provider: self.id })?;
-
-        let group = split
-            .get(1)
-            .ok_or(Error::InvalidExternalDatasetId { provider: self.id })?;
-
-        let entity_idx: u32 = split
-            .get(2)
-            .ok_or(Error::InvalidExternalDatasetId { provider: self.id })
-            .and_then(|s| s.parse().map_err(|_| Error::NetCdfCfMissingMetaData))?;
+        let [path, group, entity_idx] = if let [path, group, entity_idx] = split.as_slice() {
+            [path, group, entity_idx]
+        } else {
+            return Err(NetCdfCf4DProviderError::InvalidDatasetIdLength {
+                length: split.len(),
+            });
+        };
+        let entity_idx = entity_idx
+            .parse::<u32>()
+            .context(error::DatasetIdEntityNotANumber)?;
 
         let path = self.path.join(path);
 
@@ -202,58 +209,27 @@ impl NetCdfCfDataProvider {
             group = group
         );
 
-        let ds = gdal_open_dataset(Path::new(&gdal_path))?;
+        let ds = gdal_open_dataset(Path::new(&gdal_path)).context(error::InvalidDatasetIdFile)?;
 
-        let time_coverage_start: i32 = ds
-            .metadata_item("NC_GLOBAL#time_coverage_start", "")
-            .ok_or(Error::NetCdfCfMissingMetaData)
-            .and_then(|s| s.parse().map_err(|_| Error::NetCdfCfMissingMetaData))?;
-        let time_coverage_end: i32 = ds
-            .metadata_item("NC_GLOBAL#time_coverage_end", "")
-            .ok_or(Error::NetCdfCfMissingMetaData)
-            .and_then(|s| s.parse().map_err(|_| Error::NetCdfCfMissingMetaData))?;
-        let time_coverage_resolution = ds
-            .metadata_item("NC_GLOBAL#time_coverage_resolution", "")
-            .ok_or(Error::NetCdfCfMissingMetaData)?;
+        let result_descriptor = raster_descriptor_from_dataset(&ds, 1, None)
+            .context(error::GeneratingResultDescriptorFromDataset)?; // use band 1 because bands are homogeneous
 
-        let result_descriptor = raster_descriptor_from_dataset(&ds, 1, None)?; // use band 1 because bands are homogeneous
+        let (start, end, step) = parse_time_coverage(
+            &ds.metadata_item("NC_GLOBAL#time_coverage_start", "")
+                .ok_or(NetCdfCf4DProviderError::MissingTimeCoverageStart)?,
+            &ds.metadata_item("NC_GLOBAL#time_coverage_end", "")
+                .ok_or(NetCdfCf4DProviderError::MissingTimeCoverageEnd)?,
+            &ds.metadata_item("NC_GLOBAL#time_coverage_resolution", "")
+                .ok_or(NetCdfCf4DProviderError::MissingTimeCoverageResolution)?,
+        )?;
 
-        let (start, end, step) = match time_coverage_resolution.as_str() {
-            "Yearly" | "every 1 year" => {
-                let start = TimeInstance::from(
-                    NaiveDate::from_ymd(time_coverage_start, 1, 1).and_hms(0, 0, 0),
-                );
-                // end + 1 because it is exclusive for us but inclusive in the metadata
-                let end = TimeInstance::from(
-                    NaiveDate::from_ymd(time_coverage_end + 1, 1, 1).and_hms(0, 0, 0),
-                );
-                let step = TimeStep {
-                    granularity: TimeGranularity::Years,
-                    step: 1,
-                };
-                (start, end, step)
-            }
-            "decade" => {
-                let start = TimeInstance::from(
-                    NaiveDate::from_ymd(time_coverage_start, 1, 1).and_hms(0, 0, 0),
-                );
-                // end + 1 because it is exclusive for us but inclusive in the metadata
-                let end = TimeInstance::from(
-                    NaiveDate::from_ymd(time_coverage_end + 1, 1, 1).and_hms(0, 0, 0),
-                );
-                let step = TimeStep {
-                    granularity: TimeGranularity::Years,
-                    step: 10,
-                };
-                (start, end, step)
-            }
-            _ => return Err(Error::NotYetImplemented), // TODO
-        };
+        let num_time_steps = steps_in_time_coverage(start, end, step)?;
 
-        let num_time_steps = step.num_steps_in_interval(TimeInterval::new(start, end)?)? + 1;
-        dbg!("#############################", &num_time_steps);
+        let params = gdal_parameters_from_dataset(&ds, 1, Path::new(&gdal_path), Some(0), None)
+            .context(error::GeneratingParametersFromDataset)?;
+
         Ok(Box::new(GdalMetadataNetCdfCf {
-            params: gdal_parameters_from_dataset(&ds, 1, Path::new(&gdal_path), Some(0), None)?,
+            params,
             result_descriptor,
             start,
             end, // TODO: Use this or time dimension size (number of steps)?
@@ -261,6 +237,54 @@ impl NetCdfCfDataProvider {
             band_offset: (entity_idx * num_time_steps) as usize,
         }))
     }
+}
+
+fn steps_in_time_coverage(start: TimeInstance, end: TimeInstance, step: TimeStep) -> Result<u32> {
+    let time_interval =
+        TimeInterval::new(start, end).context(error::InvalidTimeCoverageInterval)?;
+
+    let steps = step
+        .num_steps_in_interval(time_interval)
+        .context(error::CannotCalculateStepsInTimeCoverageInterval)?;
+
+    Ok(steps + 1)
+}
+
+fn parse_time_coverage(
+    start: &str,
+    end: &str,
+    resolution: &str,
+) -> Result<(TimeInstance, TimeInstance, TimeStep)> {
+    let start = start
+        .parse::<i32>()
+        .context(error::CannotConvertTimeCoverageToInt)?;
+    let end = end
+        .parse::<i32>()
+        .context(error::CannotConvertTimeCoverageToInt)?;
+
+    Ok(match resolution {
+        "Yearly" | "every 1 year" => {
+            let start = TimeInstance::from(NaiveDate::from_ymd(start, 1, 1).and_hms(0, 0, 0));
+            // end + 1 because it is exclusive for us but inclusive in the metadata
+            let end = TimeInstance::from(NaiveDate::from_ymd(end + 1, 1, 1).and_hms(0, 0, 0));
+            let step = TimeStep {
+                granularity: TimeGranularity::Years,
+                step: 1,
+            };
+            (start, end, step)
+        }
+        "decade" => {
+            let start = TimeInstance::from(NaiveDate::from_ymd(start, 1, 1).and_hms(0, 0, 0));
+            // end + 1 because it is exclusive for us but inclusive in the metadata
+            let end = TimeInstance::from(NaiveDate::from_ymd(end + 1, 1, 1).and_hms(0, 0, 0));
+            let step = TimeStep {
+                granularity: TimeGranularity::Years,
+                step: 10,
+            };
+            (start, end, step)
+        }
+        _ => return Err(NetCdfCf4DProviderError::NotYetImplemented), // TODO
+    })
 }
 
 fn strip_datatype_info(desc: &str) -> Option<&str> {
@@ -291,7 +315,10 @@ fn datatype_from_desc(desc: &str) -> Option<RasterDataType> {
 
 #[async_trait]
 impl ExternalDatasetProvider for NetCdfCfDataProvider {
-    async fn list(&self, options: Validated<DatasetListOptions>) -> Result<Vec<DatasetListing>> {
+    async fn list(
+        &self,
+        options: Validated<DatasetListOptions>,
+    ) -> crate::error::Result<Vec<DatasetListing>> {
         // TODO: user right management
         // TODO: options
 
@@ -325,7 +352,7 @@ impl ExternalDatasetProvider for NetCdfCfDataProvider {
         Ok(datasets)
     }
 
-    async fn provenance(&self, dataset: &DatasetId) -> Result<ProvenanceOutput> {
+    async fn provenance(&self, dataset: &DatasetId) -> crate::error::Result<ProvenanceOutput> {
         Ok(ProvenanceOutput {
             dataset: dataset.clone(),
             provenance: None,
@@ -680,46 +707,70 @@ mod tests {
     }
 
     // #[test]
-    // fn test_name() {
-    //     let ds = gdal_open_dataset(Path::new(
-    //         "/home/michael/rust-projects/geoengine/netcdf_data/dataset_sm.nc",
-    //     ))
-    //     .unwrap();
-    //     // let meta = ds.metadata_domains();
-    //     // let meta = dbg!(meta);
+    // fn test_access() {
+    // let ds = gdal_open_dataset(test_data!("netcdf4d/dataset_m.nc").file_prefix()).unwrap();
 
-    //     // let global = ds.metadata_domain("");
+    // let subdatasets = ds.metadata_domain("SUBDATASETS").unwrap();
 
-    //     let title = ds.metadata_item("NC_GLOBAL#title", "").unwrap();
-    //     let time_coverage_start = ds
-    //         .metadata_item("NC_GLOBAL#time_coverage_start", "")
-    //         .unwrap();
-    //     let time_coverage_end = ds.metadata_item("NC_GLOBAL#time_coverage_end", "").unwrap();
-    //     let time_coverage_resolution = ds
-    //         .metadata_item("NC_GLOBAL#time_coverage_resolution", "")
-    //         .unwrap();
+    // for i in (0..subdatasets.len()).step_by(2) {
+    //     let name = subdatasets[i].split_once('=').unwrap().1;
 
-    //     dbg!(title);
-    //     dbg!(time_coverage_start);
-    //     dbg!(time_coverage_end);
-    //     dbg!(time_coverage_resolution);
-
-    //     let subdatasets = ds.metadata_domain("SUBDATASETS").unwrap();
-
-    //     for i in (0..subdatasets.len()).step_by(2) {
-    //         let name = subdatasets[i].split_once('=').unwrap().1;
-    //         dbg!(&name);
-
-    //         let ds = gdal_open_dataset(Path::new(&name)).unwrap();
-
-    //         for band in 1..=ds.raster_count() {
-    //             let b = ds.rasterband(band).unwrap();
-
-    //             // let xs = b.x_size();
-    //             let ys = b.y_size();
-
-    //             dbg!(ys);
-    //         }
+    //     if !name.contains("entities") {
+    //         continue;
     //     }
+
+    //     dbg!(&name);
+
+    //     let ds = gdal_open_dataset(Path::new(&name)).unwrap();
+
+    //     for band in 1..=ds.raster_count() {
+    //         let b = ds.rasterband(band).unwrap();
+
+    //         // let xs = b.x_size();
+    //         let ys = b.y_size();
+
+    //         dbg!(ys);
+    //     }
+    // }
+
+    // let dataset = gdal_open_dataset(Path::new(&format!(
+    //     "NETCDF:{}:entities",
+    //     test_data!("netcdf4d/dataset_m.nc").to_string_lossy()
+    // )))
+    // .unwrap();
+
+    // dbg!(dataset.raster_count());
+
+    // let band = dataset.rasterband(1).unwrap();
+
+    // dbg!(band.x_size());
+    // dbg!(band.y_size());
+    // dbg!(band.block_size());
+    // dbg!(band.band_type());
+
+    // let block_index: (usize, usize) = (0, 0);
+
+    // let size = band.block_size();
+    // let pixels = (size.0 * size.1) as usize;
+    // let mut data: Vec<u8> = Vec::with_capacity(pixels);
+
+    // let rv = unsafe {
+    //     gdal_sys::GDALReadBlock(
+    //         band.gdal_object_ptr(),
+    //         block_index.0 as c_int,
+    //         block_index.1 as c_int,
+    //         data.as_mut_ptr() as GDALRasterBandH,
+    //     )
+    // };
+
+    // unsafe {
+    //     data.set_len(pixels);
+    // };
+
+    //     let data = band.read_block::<u8>((0, 0)).unwrap();
+
+    //     dbg!(data);
+
+    //     gdal_sys::GDALDataType
     // }
 }
