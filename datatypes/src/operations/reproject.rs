@@ -657,7 +657,12 @@ mod tests {
             (20_037_508.342_789_244, 20_048_966.104_014_594).into(),
         );
 
-        assert_eq!(projected, expected);
+        assert!(approx_eq!(
+            BoundingBox2D,
+            projected,
+            expected,
+            epsilon = 0.000_001
+        ));
     }
 
     #[test]
@@ -678,7 +683,12 @@ mod tests {
             (20_037_508.342_789_244, 20_048_966.104_014_594).into(),
         );
 
-        assert_eq!(projected, expected);
+        assert!(approx_eq!(
+            BoundingBox2D,
+            projected,
+            expected,
+            epsilon = 0.000_001
+        ));
     }
 
     #[test]

@@ -486,7 +486,9 @@ mod tests {
         test_data,
         util::gdal::{add_ndvi_dataset, gdal_open_dataset},
     };
+    use float_cmp::approx_eq;
     use futures::StreamExt;
+    use geoengine_datatypes::collections::IntoGeometryIterator;
     use geoengine_datatypes::{
         collections::{
             GeometryCollection, MultiLineStringCollection, MultiPointCollection,
@@ -525,16 +527,12 @@ mod tests {
             Default::default(),
         )?;
 
-        let projected_points = MultiPointCollection::from_data(
-            MultiPoint::many(vec![
-                MARBURG_EPSG_900_913,
-                COLOGNE_EPSG_900_913,
-                HAMBURG_EPSG_900_913,
-            ])
-            .unwrap(),
-            vec![TimeInterval::new_unchecked(0, 1); 3],
-            Default::default(),
-        )?;
+        let expected = MultiPoint::many(vec![
+            MARBURG_EPSG_900_913,
+            COLOGNE_EPSG_900_913,
+            HAMBURG_EPSG_900_913,
+        ])
+        .unwrap();
 
         let point_source = MockFeatureCollectionSource::single(points.clone()).boxed();
 
@@ -576,7 +574,13 @@ mod tests {
 
         assert_eq!(result.len(), 1);
 
-        assert_eq!(result[0], projected_points);
+        result[0]
+            .geometries()
+            .into_iter()
+            .zip(expected.iter())
+            .for_each(|(a, e)| {
+                assert!(approx_eq!(&MultiPoint, &a.into(), e, epsilon = 0.00001));
+            });
 
         Ok(())
     }
@@ -594,16 +598,12 @@ mod tests {
             Default::default(),
         )?;
 
-        let projected_lines = MultiLineStringCollection::from_data(
-            vec![MultiLineString::new(vec![vec![
-                MARBURG_EPSG_900_913,
-                COLOGNE_EPSG_900_913,
-                HAMBURG_EPSG_900_913,
-            ]])
-            .unwrap()],
-            vec![TimeInterval::new_unchecked(0, 1); 1],
-            Default::default(),
-        )?;
+        let expected = [MultiLineString::new(vec![vec![
+            MARBURG_EPSG_900_913,
+            COLOGNE_EPSG_900_913,
+            HAMBURG_EPSG_900_913,
+        ]])
+        .unwrap()];
 
         let lines_source = MockFeatureCollectionSource::single(lines.clone()).boxed();
 
@@ -645,7 +645,18 @@ mod tests {
 
         assert_eq!(result.len(), 1);
 
-        assert_eq!(result[0], projected_lines);
+        result[0]
+            .geometries()
+            .into_iter()
+            .zip(expected.iter())
+            .for_each(|(a, e)| {
+                assert!(approx_eq!(
+                    &MultiLineString,
+                    &a.into(),
+                    e,
+                    epsilon = 0.00001
+                ));
+            });
 
         Ok(())
     }
@@ -664,17 +675,13 @@ mod tests {
             Default::default(),
         )?;
 
-        let projected_polygons = MultiPolygonCollection::from_data(
-            vec![MultiPolygon::new(vec![vec![vec![
-                MARBURG_EPSG_900_913,
-                COLOGNE_EPSG_900_913,
-                HAMBURG_EPSG_900_913,
-                MARBURG_EPSG_900_913,
-            ]]])
-            .unwrap()],
-            vec![TimeInterval::new_unchecked(0, 1); 1],
-            Default::default(),
-        )?;
+        let expected = [MultiPolygon::new(vec![vec![vec![
+            MARBURG_EPSG_900_913,
+            COLOGNE_EPSG_900_913,
+            HAMBURG_EPSG_900_913,
+            MARBURG_EPSG_900_913,
+        ]]])
+        .unwrap()];
 
         let polygon_source = MockFeatureCollectionSource::single(polygons.clone()).boxed();
 
@@ -716,7 +723,13 @@ mod tests {
 
         assert_eq!(result.len(), 1);
 
-        assert_eq!(result[0], projected_polygons);
+        result[0]
+            .geometries()
+            .into_iter()
+            .zip(expected.iter())
+            .for_each(|(a, e)| {
+                assert!(approx_eq!(&MultiPolygon, &a.into(), e, epsilon = 0.00001));
+            });
 
         Ok(())
     }
@@ -917,16 +930,19 @@ mod tests {
             (20_037_508.342_789_244, 20_048_966.104_014_594).into(),
         );
 
-        assert_eq!(
+        let reprojected = reproject_query(
+            query,
+            SpatialReference::new(SpatialReferenceAuthority::Epsg, 3857),
+            SpatialReference::epsg_4326(),
+        )
+        .unwrap();
+
+        assert!(approx_eq!(
+            BoundingBox2D,
             expected,
-            reproject_query(
-                query,
-                SpatialReference::new(SpatialReferenceAuthority::Epsg, 3857),
-                SpatialReference::epsg_4326(),
-            )
-            .unwrap()
-            .spatial_bounds
-        );
+            reprojected.spatial_bounds,
+            epsilon = 0.000_001
+        ));
     }
 
     #[tokio::test]
