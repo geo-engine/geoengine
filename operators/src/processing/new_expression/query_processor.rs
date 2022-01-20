@@ -9,6 +9,7 @@ use geoengine_datatypes::{
         RasterTile2D,
     },
 };
+use libloading::Symbol;
 use num_traits::AsPrimitive;
 use rayon::iter::{IntoParallelIterator, IntoParallelRefIterator, ParallelIterator};
 
@@ -293,109 +294,163 @@ where
     }
 }
 
-#[async_trait]
-impl<TO, T1, T2, T3> ExpressionTupleProcessor<TO>
-    for (
-        BoxRasterQueryProcessor<T1>,
-        BoxRasterQueryProcessor<T2>,
-        BoxRasterQueryProcessor<T3>,
-    )
-where
-    TO: Pixel,
-    T1: Pixel + AsPrimitive<TO>,
-    T2: Pixel,
-    T3: Pixel,
-{
-    type Tuple = (RasterTile2D<T1>, RasterTile2D<T2>, RasterTile2D<T3>);
+type Function3 = fn(f64, bool, f64, bool, f64, bool, f64) -> f64;
+type Function4 = fn(f64, bool, f64, bool, f64, bool, f64, bool, f64) -> f64;
+type Function5 = fn(f64, bool, f64, bool, f64, bool, f64, bool, f64, bool, f64) -> f64;
+type Function6 = fn(f64, bool, f64, bool, f64, bool, f64, bool, f64, bool, f64, bool, f64) -> f64;
+type Function7 =
+    fn(f64, bool, f64, bool, f64, bool, f64, bool, f64, bool, f64, bool, f64, bool, f64) -> f64;
+type Function8 = fn(
+    f64,
+    bool,
+    f64,
+    bool,
+    f64,
+    bool,
+    f64,
+    bool,
+    f64,
+    bool,
+    f64,
+    bool,
+    f64,
+    bool,
+    f64,
+    bool,
+    f64,
+) -> f64;
 
-    #[inline]
-    async fn queries<'a>(
-        &'a self,
-        query: RasterQueryRectangle,
-        ctx: &'a dyn QueryContext,
-    ) -> Result<BoxStream<'a, Result<Self::Tuple>>> {
-        // TODO: tile alignment
+macro_rules! impl_expression_tuple_processor {
+    ( $i:tt => $( $x:tt ),+ ) => {
+        paste::paste! {
+            impl_expression_tuple_processor!(
+                @inner
+                $( $x ),*
+                |
+                $( [< T $x >] ),*
+                |
+                $( [< tile_ $x >] ),*
+                |
+                $( [< pixel_ $x >] ),*
+                |
+                $( [< is_nodata_ $x >] ),*
+                |
+                [< Function $i >]
+            );
+        }
+    };
 
-        let queries = try_join!(
-            self.0.query(query, ctx),
-            self.1.query(query, ctx),
-            self.2.query(query, ctx)
-        )?;
+    // We have `0, 1, 2, …` and `T0, T1, T2, …`
+    (@inner $( $I:tt ),+ | $( $T:tt ),+ | $( $TILE:tt ),+ | $( $PIXEL:tt ),+ | $( $IS_NODATA:tt ),+ | $FN_T:ty ) => {
+        #[async_trait]
+        impl<TO, $($T),*> ExpressionTupleProcessor<TO>
+            for (
+                $(BoxRasterQueryProcessor<$T>),*
+            )
+        where
+            TO: Pixel,
+            $($T : Pixel + AsPrimitive<TO>),*
+        {
+            type Tuple = ( $(RasterTile2D<$T>),* );
 
-        let stream =
-            StreamTupleZip::new(queries).map(|rasters| Ok((rasters.0?, rasters.1?, rasters.2?)));
+            #[inline]
+            async fn queries<'a>(
+                &'a self,
+                query: RasterQueryRectangle,
+                ctx: &'a dyn QueryContext,
+            ) -> Result<BoxStream<'a, Result<Self::Tuple>>> {
+                // TODO: tile alignment
 
-        Ok(stream.boxed())
-    }
+                let queries = try_join!(
+                    $( self.$I.query(query, ctx) ),*
+                )?;
 
-    #[inline]
-    fn all_empty(tuple: &Self::Tuple) -> bool {
-        tuple.0.grid_array.is_empty()
-            && tuple.1.grid_array.is_empty()
-            && tuple.2.grid_array.is_empty()
-    }
+                let stream =
+                    StreamTupleZip::new(queries).map(|rasters| Ok((
+                        $( rasters.$I? ),*
+                    )));
 
-    #[inline]
-    fn empty_raster(tuple: &Self::Tuple) -> RasterTile2D<TO> {
-        tuple.0.clone().convert()
-    }
+                Ok(stream.boxed())
+            }
 
-    #[inline]
-    fn metadata(tuple: &Self::Tuple) -> (TimeInterval, GridIdx2D, GeoTransform, GridShape2D) {
-        let raster = &tuple.0;
+            #[inline]
+            fn all_empty(tuple: &Self::Tuple) -> bool {
+                $( tuple.$I.grid_array.is_empty() )&&*
+            }
 
-        (
-            raster.time,
-            raster.tile_position,
-            raster.global_geo_transform,
-            raster.grid_shape(),
-        )
-    }
+            #[inline]
+            fn empty_raster(tuple: &Self::Tuple) -> RasterTile2D<TO> {
+                tuple.0.clone().convert()
+            }
 
-    fn compute_expression(
-        rasters: Self::Tuple,
-        program: &LinkedExpression,
-        map_no_data: bool,
-        out_no_data: TO,
-    ) -> Result<Vec<TO>> {
-        let expression = unsafe {
-            // we have to "trust" that the function has the signature we expect
-            program.function_7::<f64, bool, f64, bool, f64, bool, f64>()?
-        };
+            #[inline]
+            fn metadata(tuple: &Self::Tuple) -> (TimeInterval, GridIdx2D, GeoTransform, GridShape2D) {
+                let raster = &tuple.0;
 
-        // TODO: allow iterating over empty rasters
-        let tile_0 = rasters.0.into_materialized_tile();
-        let tile_1 = rasters.1.into_materialized_tile();
-        let tile_2 = rasters.2.into_materialized_tile();
+                (
+                    raster.time,
+                    raster.tile_position,
+                    raster.global_geo_transform,
+                    raster.grid_shape(),
+                )
+            }
 
-        let data = (
-            &tile_0.grid_array.data,
-            &tile_1.grid_array.data,
-            &tile_2.grid_array.data,
-        )
-            .into_par_iter()
-            .map(|(a, b, c)| {
-                let is_a_no_data = tile_0.is_no_data(*a);
-                let is_b_no_data = tile_1.is_no_data(*b);
-                let is_c_no_data = tile_2.is_no_data(*c);
+            fn compute_expression(
+                rasters: Self::Tuple,
+                program: &LinkedExpression,
+                map_no_data: bool,
+                out_no_data: TO,
+            ) -> Result<Vec<TO>> {
+                let expression: Symbol<$FN_T> = unsafe {
+                    // we have to "trust" that the function has the signature we expect
+                    program.function_nary()?
+                };
 
-                if !map_no_data && (is_a_no_data || is_b_no_data || is_c_no_data) {
-                    return out_no_data;
-                }
+                // TODO: allow iterating over empty rasters
+                $(
+                    let $TILE = rasters.$I.into_materialized_tile();
+                )*
 
-                let result = expression(
-                    a.as_(),
-                    is_a_no_data,
-                    b.as_(),
-                    is_b_no_data,
-                    c.as_(),
-                    is_c_no_data,
-                    out_no_data.as_(),
-                );
-                TO::from_(result)
-            })
-            .collect();
+                let data = (
+                    $(
+                        & $TILE.grid_array.data
+                    ),*
+                )
+                    .into_par_iter()
+                    .map(|( $($PIXEL),* )| {
+                        $(
+                            let $IS_NODATA = $TILE.is_no_data(* $PIXEL);
+                        )*
 
-        Result::<Vec<TO>>::Ok(data)
-    }
+                        if !map_no_data && ( $($IS_NODATA)||* ) {
+                            return out_no_data;
+                        }
+
+                        let result = expression(
+                            $(
+                                $PIXEL.as_(),
+                                $IS_NODATA,
+                            )*
+                            out_no_data.as_(),
+                        );
+                        TO::from_(result)
+                    })
+                    .collect();
+
+                Result::<Vec<TO>>::Ok(data)
+            }
+        }
+    };
+
+    // For any input, generate `f64, bool`
+    (@input_dtypes $x:tt) => {
+        f64, bool
+    };
 }
+
+impl_expression_tuple_processor!(3 => 0, 1, 2);
+impl_expression_tuple_processor!(4 => 0, 1, 2, 3);
+impl_expression_tuple_processor!(5 => 0, 1, 2, 3, 4);
+impl_expression_tuple_processor!(6 => 0, 1, 2, 3, 4, 5);
+impl_expression_tuple_processor!(7 => 0, 1, 2, 3, 4, 5, 6);
+impl_expression_tuple_processor!(8 => 0, 1, 2, 3, 4, 5, 6, 7);

@@ -33,4 +33,5 @@ pub enum ExpressionError {
     LinkedFunctionNotFound { error: String },
     MissingIdentifier,
     MissingOutputNoDataValue,
+    SourcesMustBeConsecutive,
 }

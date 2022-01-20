@@ -75,11 +75,9 @@ impl LinkedExpression {
             })
     }
 
-    /// Returns a function with 7 input parameters
+    /// Returns an n-ary function
     #[allow(clippy::type_complexity)]
-    pub unsafe fn function_7<A, B, C, D, E, F, G>(
-        &self,
-    ) -> Result<Symbol<fn(A, B, C, D, E, F, G) -> f64>> {
+    pub unsafe fn function_nary<F>(&self) -> Result<Symbol<F>> {
         self.library
             .get(self.function_name.as_bytes())
             .map_err(|error| ExpressionError::LinkedFunctionNotFound {
