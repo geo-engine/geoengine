@@ -2,6 +2,7 @@ use crate::util::arrow::ArrowTyped;
 use arrow::array::{ArrayBuilder, BooleanArray, Float64Builder};
 use arrow::datatypes::{DataType, Field};
 use arrow::error::ArrowError;
+use float_cmp::ApproxEq;
 use ocl::OclPrm;
 #[cfg(feature = "postgres")]
 use postgres_types::{FromSql, ToSql};
@@ -301,6 +302,18 @@ impl Div<f64> for Coordinate2D {
 
     fn div(self, rhs: f64) -> Self::Output {
         Coordinate2D::new(self.x / rhs, self.y / rhs)
+    }
+}
+
+impl ApproxEq for Coordinate2D {
+    type Margin = float_cmp::F64Margin;
+
+    fn approx_eq<M>(self, other: Self, margin: M) -> bool
+    where
+        M: Into<Self::Margin>,
+    {
+        let m = margin.into();
+        self.x.approx_eq(other.x, m) && self.y.approx_eq(other.y, m)
     }
 }
 

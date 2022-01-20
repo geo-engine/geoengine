@@ -32,9 +32,10 @@ bytes = "1.0"
 chrono = { version = "0.4", features = ["serde"] }
 config = "0.11"
 flexi_logger = "0.22"
+float-cmp = "0.9"
 futures = "0.3"
 futures-util = "0.3"
-gdal = "0.11"
+gdal = "0.12"
 geo = "0.18"
 geoengine-datatypes = { path = "../datatypes" }
 geoengine-operators = { path = "../operators" }
@@ -67,7 +68,6 @@ typetag = "0.1"
 url = { version = "2.2", features = ["serde"] }
 uuid = { version = "0.8", features = ["serde", "v4", "v5"] }
 zip = "0.5"
-
 [dev-dependencies]
 httptest = "0.15.2"
 rand = "0.8.4"
