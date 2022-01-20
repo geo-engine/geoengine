@@ -409,7 +409,7 @@ mod tests {
     use super::*;
 
     use crate::collections::{BuilderProvider, FeatureCollectionModifications};
-    use crate::primitives::TimeInterval;
+    use crate::primitives::{FeatureDataRef, TimeInterval};
 
     #[test]
     fn single_polygons() {
@@ -896,6 +896,7 @@ mod tests {
 
         let proj_collection = collection.reproject(&projector).unwrap();
 
+        // Assert geometrys are approx equal
         proj_collection
             .geometries()
             .into_iter()
@@ -903,6 +904,20 @@ mod tests {
             .for_each(|(a, e)| {
                 assert!(approx_eq!(&MultiPolygon, &a.into(), e, epsilon = 0.00001));
             });
+
+        // Assert that feature time intervals did not move around
+        assert_eq!(proj_collection.time_intervals().len(), 2);
+        assert_eq!(
+            proj_collection.time_intervals(),
+            &[TimeInterval::default(), TimeInterval::default()]
+        );
+
+        // Assert that feature data did not magicaly disappear
+        if let FeatureDataRef::Int(numbers) = proj_collection.data("A").unwrap() {
+            assert_eq!(numbers.as_ref(), &[1, 2]);
+        } else {
+            unreachable!();
+        }
     }
 
     #[test]
