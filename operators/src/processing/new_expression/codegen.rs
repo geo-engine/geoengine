@@ -14,6 +14,7 @@ type Result<T, E = ExpressionError> = std::result::Result<T, E>;
 /// Allows genering Rust code.
 #[derive(Debug, Clone)]
 pub struct ExpressionAst {
+    /// This name is the generated function name after generating code.
     name: Identifier,
     root: AstNode,
     parameters: Vec<Parameter>,
