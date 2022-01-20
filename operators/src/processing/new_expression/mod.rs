@@ -268,17 +268,33 @@ impl InitializedRasterOperator for InitializedExpression {
         Ok(match query_processors.len() {
             1 => {
                 let [a] = <[_; 1]>::try_from(query_processors).expect("len previously checked");
-                call_on_generic_raster_processor!(a, p_a => {
-                    call_generic_raster_processor!(
-                        output_type,
-                        ExpressionQueryProcessor::new(
-                            expression,
-                            p_a,
-                            output_no_data_value.as_(),
-                            self.map_no_data,
-                        ).boxed()
+                let query_processor = a.into_f64();
+                call_generic_raster_processor!(
+                    output_type,
+                    ExpressionQueryProcessor::new(
+                        expression,
+                        query_processor,
+                        output_no_data_value.as_(),
+                        self.map_no_data,
                     )
-                })
+                    .boxed()
+                )
+
+                // TODO: We could save prior conversions by monomophizing the differnt expressions
+                //       However, this would lead to lots of compile symbols and to different results than using the
+                //       variants with more than one raster.
+                //
+                // call_on_generic_raster_processor!(a, p_a => {
+                //     call_generic_raster_processor!(
+                //         output_type,
+                //         ExpressionQueryProcessor::new(
+                //             expression,
+                //             p_a,
+                //             output_no_data_value.as_(),
+                //             self.map_no_data,
+                //         ).boxed()
+                //     )
+                // })
             }
             2 => {
                 let [a, b] = <[_; 2]>::try_from(query_processors).expect("len previously checked");
