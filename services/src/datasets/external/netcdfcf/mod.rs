@@ -156,12 +156,14 @@ impl NetCdfCfDataProvider {
                     .ok_or(NetCdfCf4DProviderError::MissingFileName)?
                     .to_string_lossy();
 
+                let group_titles = titles_of_group_hierarchy(&ds, group_name)?.join(" > ");
+
                 datasets.push(DatasetListing {
                     id: DatasetId::External(ExternalDatasetId {
                         provider_id: id,
                         dataset_id: format!("{file_name}::{group_name}::{entity_idx}"),
                     }),
-                    name: format!("{title} {file_name} {group_name} {entity_idx}"),
+                    name: format!("{title}: {group_titles} > {entity_idx}"),
                     description: "".to_owned(), // TODO
                     tags: vec![],               // TODO
                     source_operator: "GdalSource".to_owned(),
@@ -285,6 +287,33 @@ fn parse_time_coverage(
         }
         _ => return Err(NetCdfCf4DProviderError::NotYetImplemented), // TODO
     })
+}
+
+fn titles_of_group_hierarchy(ds: &gdal::Dataset, groups: &str) -> Result<Vec<String>> {
+    let mut groups = groups
+        .trim_start_matches('/')
+        .split('/')
+        .collect::<Vec<_>>();
+
+    groups.pop(); // remove trailing `/ebv_cube`
+
+    let mut group_titles = Vec::with_capacity(groups.len());
+    let mut metadata_key_prefix = String::new();
+
+    for group in groups {
+        metadata_key_prefix.push('/');
+        metadata_key_prefix.push_str(group);
+
+        let metadata_key = format!("{metadata_key_prefix}/NC_GLOBAL#standard_name");
+
+        if let Some(title) = ds.metadata_item(&metadata_key, "") {
+            group_titles.push(title);
+        } else {
+            return Err(NetCdfCf4DProviderError::NoTitleForGroup { metadata_key });
+        }
+    }
+
+    Ok(group_titles)
 }
 
 fn strip_datatype_info(desc: &str) -> Option<&str> {
@@ -459,7 +488,7 @@ mod tests {
                     provider_id,
                     dataset_id: "dataset_m.nc::/metric_1/ebv_cube::0".into(),
                 }),
-                name: "Test dataset metric dataset_m.nc /metric_1/ebv_cube 0".into(),
+                name: "Test dataset metric: Random metric 1 > 0".into(),
                 description: "".into(),
                 tags: vec![],
                 source_operator: "GdalSource".into(),
@@ -474,7 +503,7 @@ mod tests {
                     provider_id,
                     dataset_id: "dataset_m.nc::/metric_1/ebv_cube::1".into(),
                 }),
-                name: "Test dataset metric dataset_m.nc /metric_1/ebv_cube 1".into(),
+                name: "Test dataset metric: Random metric 1 > 1".into(),
                 description: "".into(),
                 tags: vec![],
                 source_operator: "GdalSource".into(),
@@ -489,7 +518,7 @@ mod tests {
                     provider_id,
                     dataset_id: "dataset_m.nc::/metric_1/ebv_cube::2".into(),
                 }),
-                name: "Test dataset metric dataset_m.nc /metric_1/ebv_cube 2".into(),
+                name: "Test dataset metric: Random metric 1 > 2".into(),
                 description: "".into(),
                 tags: vec![],
                 source_operator: "GdalSource".into(),
@@ -504,7 +533,7 @@ mod tests {
                     provider_id,
                     dataset_id: "dataset_m.nc::/metric_2/ebv_cube::0".into(),
                 }),
-                name: "Test dataset metric dataset_m.nc /metric_2/ebv_cube 0".into(),
+                name: "Test dataset metric: Random metric 2 > 0".into(),
                 description: "".into(),
                 tags: vec![],
                 source_operator: "GdalSource".into(),
@@ -519,7 +548,7 @@ mod tests {
                     provider_id,
                     dataset_id: "dataset_m.nc::/metric_2/ebv_cube::1".into(),
                 }),
-                name: "Test dataset metric dataset_m.nc /metric_2/ebv_cube 1".into(),
+                name: "Test dataset metric: Random metric 2 > 1".into(),
                 description: "".into(),
                 tags: vec![],
                 source_operator: "GdalSource".into(),
@@ -534,7 +563,7 @@ mod tests {
                     provider_id,
                     dataset_id: "dataset_m.nc::/metric_2/ebv_cube::2".into(),
                 }),
-                name: "Test dataset metric dataset_m.nc /metric_2/ebv_cube 2".into(),
+                name: "Test dataset metric: Random metric 2 > 2".into(),
                 description: "".into(),
                 tags: vec![],
                 source_operator: "GdalSource".into(),
@@ -572,9 +601,8 @@ mod tests {
                     provider_id,
                     dataset_id: "dataset_sm.nc::/scenario_1/metric_1/ebv_cube::0".into(),
                 }),
-                name:
-                    "Test dataset metric and scenario dataset_sm.nc /scenario_1/metric_1/ebv_cube 0"
-                        .into(),
+                name: "Test dataset metric and scenario: Sustainability > Random metric 1 > 0"
+                    .into(),
                 description: "".into(),
                 tags: vec![],
                 source_operator: "GdalSource".into(),
@@ -589,9 +617,7 @@ mod tests {
                     provider_id,
                     dataset_id: "dataset_sm.nc::/scenario_5/metric_2/ebv_cube::1".into(),
                 }),
-                name:
-                    "Test dataset metric and scenario dataset_sm.nc /scenario_5/metric_2/ebv_cube 1"
-                        .into(),
+                name: "Test dataset metric and scenario: Fossil-fueled Development > Random metric 2 > 1".into(),
                 description: "".into(),
                 tags: vec![],
                 source_operator: "GdalSource".into(),

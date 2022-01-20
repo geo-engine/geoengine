@@ -20,6 +20,9 @@ pub enum NetCdfCf4DProviderError {
     MissingEntities,
     MissingGroupName,
     MissingFileName,
+    NoTitleForGroup {
+        metadata_key: String,
+    },
     CannotParseNumberOfEntities {
         source: std::num::ParseIntError,
     },
