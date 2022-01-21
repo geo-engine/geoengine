@@ -366,7 +366,8 @@ impl NFDIDataProvider {
     fn raster_loading_template(info: &RasterInfo, rd: &RasterResultDescriptor) -> GdalLoadingInfo {
         let part = GdalLoadingInfoPart {
             time: info.time_interval,
-            params: GdalDatasetParameters {
+            // TODO: set to None when there is no data
+            params: Some(GdalDatasetParameters {
                 file_path: PathBuf::from(format!("/vsicurl/{}", URL_REPLACEMENT)),
                 rasterband_channel: info.rasterband_channel,
                 geo_transform: info.geo_transform,
@@ -377,7 +378,7 @@ impl NFDIDataProvider {
                 properties_mapping: None,
                 gdal_open_options: None,
                 gdal_config_options: None,
-            },
+            }),
         };
 
         GdalLoadingInfo {
@@ -586,13 +587,15 @@ impl ExpiringDownloadLink for GdalLoadingInfo {
                     .iter()
                     .map(|part| {
                         let mut new_part = part.clone();
-                        new_part.params.file_path = PathBuf::from(
-                            part.params
-                                .file_path
-                                .to_string_lossy()
-                                .as_ref()
-                                .replace(URL_REPLACEMENT, url.as_str()),
-                        );
+                        if let Some(mut params) = new_part.params.as_mut() {
+                            params.file_path = PathBuf::from(
+                                params
+                                    .file_path
+                                    .to_string_lossy()
+                                    .as_ref()
+                                    .replace(URL_REPLACEMENT, url.as_str()),
+                            );
+                        };
                         new_part
                     })
                     .collect::<std::vec::Vec<_>>();
@@ -944,6 +947,7 @@ mod tests {
             .unwrap()
             .unwrap()
             .params
+            .unwrap()
             .file_path
             .to_string_lossy()
             .to_string();

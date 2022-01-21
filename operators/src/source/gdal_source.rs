@@ -38,8 +38,8 @@ use serde::{Deserialize, Serialize};
 use snafu::{ensure, ResultExt};
 use std::collections::HashMap;
 use std::convert::{TryFrom, TryInto};
+use std::path::PathBuf;
 use std::time::Instant;
-use std::{marker::PhantomData, path::PathBuf};
 //use gdal::metadata::Metadata; // TODO: handle metadata
 
 /// Parameters for the GDAL Source Operator
@@ -176,7 +176,7 @@ impl Iterator for GdalLoadingInfoPartIterator {
                     .replace_time_placeholders(time_placeholders, time_interval)
                     .map(|loading_info_part_params| GdalLoadingInfoPart {
                         time: time_interval,
-                        params: loading_info_part_params,
+                        params: Some(loading_info_part_params),
                     });
 
                 Some(loading_info_part)
@@ -189,7 +189,7 @@ impl Iterator for GdalLoadingInfoPartIterator {
 #[derive(Debug, Clone, PartialEq)]
 pub struct GdalLoadingInfoPart {
     pub time: TimeInterval,
-    pub params: GdalDatasetParameters,
+    pub params: Option<GdalDatasetParameters>,
 }
 
 /// Parameters for loading data using Gdal
@@ -352,7 +352,7 @@ impl MetaData<GdalLoadingInfo, RasterResultDescriptor, RasterQueryRectangle>
         let parts = if valid.intersects(&query.time_interval) {
             vec![GdalLoadingInfoPart {
                 time: valid,
-                params: self.params.clone(),
+                params: Some(self.params.clone()),
             }]
             .into_iter()
         } else {
@@ -478,7 +478,7 @@ where
 {
     pub tiling_specification: TilingSpecification,
     pub meta_data: GdalMetaData,
-    pub phantom_data: PhantomData<T>,
+    pub no_data_value: Option<T>,
 }
 
 impl<T> GdalSourceProcessor<T>
@@ -500,30 +500,36 @@ where
     }
 
     pub async fn load_tile_async(
-        dataset_params: GdalDatasetParameters,
+        dataset_params: Option<GdalDatasetParameters>,
         tile_information: TileInformation,
         time: TimeInterval,
+        no_data_value: Option<T>,
     ) -> Result<RasterTile2D<T>> {
-        let f = if tile_information
-            .spatial_partition()
-            .intersects(&dataset_params.spatial_partition())
-        {
-            debug!("Loading tile {:?}", &tile_information);
-            Self::load_tile_data_async(dataset_params, tile_information).await
-        } else {
-            debug!("Skipping tile {:?}", &tile_information);
-            let fill_value: T = dataset_params.no_data_value.map_or_else(T::zero, T::from_);
+        let f = match dataset_params {
+            Some(ds)
+                if tile_information
+                    .spatial_partition()
+                    .intersects(&ds.spatial_partition()) =>
+            {
+                debug!("Loading tile {:?}", &tile_information);
+                Self::load_tile_data_async(ds, tile_information).await
+            }
+            _ => {
+                debug!("Skipping tile {:?}", &tile_information);
+                let fill_value: T = no_data_value.unwrap_or_else(T::zero);
 
-            let empty_grid = if let Some(no_data) = dataset_params.no_data_value {
-                EmptyGrid::new(tile_information.tile_size_in_pixels, T::from_(no_data)).into()
-            } else {
-                Grid2D::new_filled(tile_information.tile_size_in_pixels, fill_value, None).into()
-            };
+                let empty_grid = if let Some(no_data) = no_data_value {
+                    EmptyGrid::new(tile_information.tile_size_in_pixels, T::from_(no_data)).into()
+                } else {
+                    Grid2D::new_filled(tile_information.tile_size_in_pixels, fill_value, None)
+                        .into()
+                };
 
-            Ok(GridWithProperties {
-                grid: empty_grid,
-                properties: Default::default(),
-            })
+                Ok(GridWithProperties {
+                    grid: empty_grid,
+                    properties: Default::default(),
+                })
+            }
         };
 
         f.map(|grid_with_properties| {
@@ -694,29 +700,28 @@ where
         info: GdalLoadingInfoPart,
     ) -> impl Stream<Item = Result<RasterTile2D<T>>> {
         let spatial_resolution = query.spatial_resolution;
-        let geo_transform = info.params.geo_transform;
+        let no_data_value = self.no_data_value;
 
-        // adjust the spatial resolution to the sign of the geotransform
-        let x_signed = if geo_transform.x_pixel_size.is_sign_positive()
-            && spatial_resolution.x.is_sign_positive()
-        {
-            spatial_resolution.x
-        } else {
-            spatial_resolution.x * -1.0
-        };
-
-        let y_signed = if geo_transform.y_pixel_size.is_sign_positive()
-            && spatial_resolution.y.is_sign_positive()
-        {
-            spatial_resolution.y
-        } else {
+        // TODO: re-evaluate the logic behind this
+        // The "Pixel-space" starts at the top-left corner of a GDAL image.
+        // We assume that GDAL datasets are not flipped.
+        // Therefore, the x-axis is always increasing
+        debug_assert!(spatial_resolution.x.is_sign_positive());
+        // and the y-axis is always decreasing
+        let spatial_resolution_y = if spatial_resolution.y.is_sign_positive() {
             spatial_resolution.y * -1.0
+        } else {
+            spatial_resolution.y
         };
 
-        let tiling_strategy = self.tiling_specification.strategy(x_signed, y_signed);
+        let tiling_strategy = self
+            .tiling_specification
+            .strategy(spatial_resolution.x, spatial_resolution_y);
 
         stream::iter(tiling_strategy.tile_information_iterator(query.spatial_bounds))
-            .map(move |tile| Self::load_tile_async(info.params.clone(), tile, info.time))
+            .map(move |tile| {
+                Self::load_tile_async(info.params.clone(), tile, info.time, no_data_value)
+            })
             .buffered(1) // TODO: find a good default and / or add to config.
     }
 }
@@ -805,7 +810,7 @@ impl InitializedRasterOperator for InitializedGdalSourceOperator {
                 GdalSourceProcessor {
                     tiling_specification: self.tiling_specification,
                     meta_data: self.meta_data.clone(),
-                    phantom_data: Default::default(),
+                    no_data_value: self.result_descriptor.no_data_value_as_(),
                 }
                 .boxed(),
             ),
@@ -813,7 +818,7 @@ impl InitializedRasterOperator for InitializedGdalSourceOperator {
                 GdalSourceProcessor {
                     tiling_specification: self.tiling_specification,
                     meta_data: self.meta_data.clone(),
-                    phantom_data: Default::default(),
+                    no_data_value: self.result_descriptor.no_data_value_as_(),
                 }
                 .boxed(),
             ),
@@ -821,7 +826,7 @@ impl InitializedRasterOperator for InitializedGdalSourceOperator {
                 GdalSourceProcessor {
                     tiling_specification: self.tiling_specification,
                     meta_data: self.meta_data.clone(),
-                    phantom_data: Default::default(),
+                    no_data_value: self.result_descriptor.no_data_value_as_(),
                 }
                 .boxed(),
             ),
@@ -831,7 +836,7 @@ impl InitializedRasterOperator for InitializedGdalSourceOperator {
                 GdalSourceProcessor {
                     tiling_specification: self.tiling_specification,
                     meta_data: self.meta_data.clone(),
-                    phantom_data: Default::default(),
+                    no_data_value: self.result_descriptor.no_data_value_as_(),
                 }
                 .boxed(),
             ),
@@ -839,7 +844,7 @@ impl InitializedRasterOperator for InitializedGdalSourceOperator {
                 GdalSourceProcessor {
                     tiling_specification: self.tiling_specification,
                     meta_data: self.meta_data.clone(),
-                    phantom_data: Default::default(),
+                    no_data_value: self.result_descriptor.no_data_value_as_(),
                 }
                 .boxed(),
             ),
@@ -848,7 +853,7 @@ impl InitializedRasterOperator for InitializedGdalSourceOperator {
                 GdalSourceProcessor {
                     tiling_specification: self.tiling_specification,
                     meta_data: self.meta_data.clone(),
-                    phantom_data: Default::default(),
+                    no_data_value: self.result_descriptor.no_data_value_as_(),
                 }
                 .boxed(),
             ),
@@ -856,7 +861,7 @@ impl InitializedRasterOperator for InitializedGdalSourceOperator {
                 GdalSourceProcessor {
                     tiling_specification: self.tiling_specification,
                     meta_data: self.meta_data.clone(),
-                    phantom_data: Default::default(),
+                    no_data_value: self.result_descriptor.no_data_value_as_(),
                 }
                 .boxed(),
             ),
@@ -967,9 +972,10 @@ mod tests {
     use crate::test_data;
     use crate::util::gdal::add_ndvi_dataset;
     use crate::util::Result;
+
     use geoengine_datatypes::hashmap;
     use geoengine_datatypes::primitives::{AxisAlignedRectangle, SpatialPartition2D};
-    use geoengine_datatypes::raster::{TileInformation, TilingStrategy};
+    use geoengine_datatypes::raster::{EmptyGrid2D, TileInformation, TilingStrategy};
     use geoengine_datatypes::{
         primitives::{Measurement, SpatialResolution, TimeGranularity},
         raster::GridShape2D,
@@ -1318,7 +1324,14 @@ mod tests {
                 .await
                 .unwrap()
                 .info
-                .map(|p| p.unwrap().params.file_path.to_str().unwrap().to_owned())
+                .map(|p| p
+                    .unwrap()
+                    .params
+                    .unwrap()
+                    .file_path
+                    .to_str()
+                    .unwrap()
+                    .to_owned())
                 .collect::<Vec<_>>(),
             &[
                 "/foo/bar_000000000.tiff",
@@ -1541,6 +1554,31 @@ mod tests {
         );
 
         assert!(tile_1.is_empty());
+    }
+
+    #[tokio::test]
+    async fn timestep_without_params() {
+        let output_bounds =
+            SpatialPartition2D::new_unchecked((-90., 90.).into(), (90., -90.).into());
+        let output_shape: GridShape2D = [256, 256].into();
+
+        let tile_info = TileInformation::with_partition_and_shape(output_bounds, output_shape);
+        let time_interval = TimeInterval::new_unchecked(1_388_534_400_000, 1_391_212_800_000); // 2014-01-01 - 2014-01-15
+        let params = None;
+
+        let tile =
+            GdalSourceProcessor::<f64>::load_tile_async(params, tile_info, time_interval, Some(1.))
+                .await;
+
+        assert!(tile.is_ok());
+
+        let expected = RasterTile2D::<f64>::new_with_tile_info(
+            time_interval,
+            tile_info,
+            EmptyGrid2D::new(output_shape, 1.).into(),
+        );
+
+        assert_eq!(tile.unwrap(), expected);
     }
 
     #[test]
