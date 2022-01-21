@@ -1,3 +1,4 @@
+use gdal::errors::GdalError;
 use geoengine_datatypes::dataset::DatasetProviderId;
 use snafu::Snafu;
 
@@ -11,13 +12,25 @@ pub enum NetCdfCf4DProviderError {
     DataTypeNotYetImplemented {
         data_type: String,
     },
-    MissingTimeCoverageStart,
-    MissingTimeCoverageEnd,
-    MissingTimeCoverageResolution,
-    MissingTitle,
-    MissingCrs,
+    MissingTimeCoverageStart {
+        source: GdalError,
+    },
+    MissingTimeCoverageEnd {
+        source: GdalError,
+    },
+    MissingTimeCoverageResolution {
+        source: GdalError,
+    },
+    MissingTitle {
+        source: GdalError,
+    },
+    MissingCrs {
+        source: GdalError,
+    },
     MissingSubdatasets,
-    MissingEntities,
+    MissingEntities {
+        source: GdalError,
+    },
     MissingGroupName,
     MissingFileName,
     NoTitleForGroup {
@@ -58,4 +71,22 @@ pub enum NetCdfCf4DProviderError {
         source: std::num::ParseIntError,
     },
     CannotComputeSubdatasetsFromMetadata,
+    GdalMd {
+        source: GdalError,
+    },
+    UnknownGdalDatatype {
+        type_number: u32,
+    },
+    MustBe4DDataset {
+        number_of_dimensions: usize,
+    },
+    CannotGetGeoTransform {
+        source: GdalError,
+    },
+    InvalidGeoTransformLength {
+        length: usize,
+    },
+    InvalidGeoTransformNumbers {
+        source: std::num::ParseFloatError,
+    },
 }
