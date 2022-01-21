@@ -424,10 +424,15 @@ mod tests {
         let tiling_specification =
             TilingSpecification::new(Coordinate2D::default(), [600, 600].into());
 
+        let metadata = create_ndvi_meta_data();
+
         let gdal_source = GdalSourceProcessor::<u8> {
             tiling_specification,
-            meta_data: Box::new(create_ndvi_meta_data()),
-            no_data_value: Some(0),
+            no_data_value: metadata
+                .params
+                .no_data_value
+                .map(num_traits::AsPrimitive::as_),
+            meta_data: Box::new(metadata),
         };
 
         let query_bbox = SpatialPartition2D::new((-10., 80.).into(), (50., 20.).into()).unwrap();
@@ -470,10 +475,15 @@ mod tests {
         let tiling_specification =
             TilingSpecification::new(Coordinate2D::default(), [600, 600].into());
 
+        let metadata = create_ndvi_meta_data();
+
         let gdal_source = GdalSourceProcessor::<u8> {
             tiling_specification,
-            meta_data: Box::new(create_ndvi_meta_data()),
-            no_data_value: Some(0),
+            no_data_value: metadata
+                .params
+                .no_data_value
+                .map(num_traits::AsPrimitive::as_),
+            meta_data: Box::new(metadata),
         };
 
         let query_bbox = SpatialPartition2D::new((-10., 80.).into(), (50., 20.).into()).unwrap();
@@ -519,10 +529,15 @@ mod tests {
         let tiling_specification =
             TilingSpecification::new(Coordinate2D::default(), [600, 600].into());
 
+        let metadata = create_ndvi_meta_data();
+
         let gdal_source = GdalSourceProcessor::<u8> {
             tiling_specification,
-            meta_data: Box::new(create_ndvi_meta_data()),
-            no_data_value: Some(0),
+            no_data_value: metadata
+                .params
+                .no_data_value
+                .map(num_traits::AsPrimitive::as_),
+            meta_data: Box::new(metadata),
         };
 
         let query_bbox = SpatialPartition2D::new((-10., 80.).into(), (50., 20.).into()).unwrap();
@@ -560,10 +575,15 @@ mod tests {
         let tiling_specification =
             TilingSpecification::new(Coordinate2D::default(), [600, 600].into());
 
+        let metadata = create_ndvi_meta_data();
+
         let gdal_source = GdalSourceProcessor::<u8> {
             tiling_specification,
-            meta_data: Box::new(create_ndvi_meta_data()),
-            no_data_value: Some(0),
+            no_data_value: metadata
+                .params
+                .no_data_value
+                .map(num_traits::AsPrimitive::as_),
+            meta_data: Box::new(metadata),
         };
 
         let query_bbox =
