@@ -855,7 +855,7 @@ mod tests {
         };
 
         let server = TestProjectServer::start_default().await;
-        let addr = format!("http://{}", server.address().to_string());
+        let addr = format!("http://{}", server.address());
         let provider = new_provider_with_url(addr).await;
 
         let md = NFDIDataProvider::extract_metadata(&ds).unwrap();
@@ -894,7 +894,7 @@ mod tests {
         ));
 
         let server = TestProjectServer::start_default().await;
-        let addr = format!("http://{}", server.address().to_string());
+        let addr = format!("http://{}", server.address());
         let provider = new_provider_with_url(addr).await;
 
         let ds = provider.map_dataset(&ds, &md);
@@ -991,7 +991,7 @@ mod tests {
     async fn it_lists() {
         let mut server = TestProjectServer::start_default().await;
 
-        let _ = server.setup(
+        server.setup(
             MockBuilder::when()
                 .path("/api.services.v1.ProjectService/GetProjectDatasets")
                 .then()
@@ -1017,7 +1017,7 @@ mod tests {
                 }),
         );
 
-        let addr = format!("http://{}", server.address().to_string());
+        let addr = format!("http://{}", server.address());
         let provider = new_provider_with_url(addr).await;
 
         let opts = DatasetListOptions {
@@ -1037,7 +1037,7 @@ mod tests {
     async fn it_loads_provenance() {
         let mut server = TestProjectServer::start_default().await;
 
-        let _ = server.setup(
+        server.setup(
             MockBuilder::when()
                 .path("/api.services.v1.DatasetService/GetDataset")
                 .then()
@@ -1068,7 +1068,7 @@ mod tests {
             dataset_id: DATASET_ID.to_string(),
         });
 
-        let addr = format!("http://{}", server.address().to_string());
+        let addr = format!("http://{}", server.address());
         let provider = new_provider_with_url(addr).await;
 
         let res = provider.provenance(&id).await;
@@ -1084,7 +1084,7 @@ mod tests {
     async fn it_loads_meta_data() {
         let mut server = TestProjectServer::start_default().await;
 
-        let _ = server.setup(
+        server.setup(
             MockBuilder::when()
                 .path("/api.services.v1.DatasetService/GetDataset")
                 .then()
@@ -1110,7 +1110,7 @@ mod tests {
                 }),
         );
 
-        let _ = server.setup(
+        server.setup(
             MockBuilder::when()
                 .path("/api.services.v1.DatasetService/GetDatasetObjectGroups")
                 .then()
@@ -1152,7 +1152,7 @@ mod tests {
             dataset_id: DATASET_ID.to_string(),
         });
 
-        let addr = format!("http://{}", server.address().to_string());
+        let addr = format!("http://{}", server.address());
         let provider = new_provider_with_url(addr).await;
 
         let res: geoengine_operators::util::Result<
@@ -1163,14 +1163,15 @@ mod tests {
     }
 
     #[tokio::test]
+    #[allow(clippy::too_many_lines)]
     async fn it_executes_loads() {
         let mut server = TestProjectServer::start_default().await;
         let dl_server = Server::run();
 
-        let addr = format!("http://{}", server.address().to_string());
-        let dl_addr = format!("http://{}/file.fgb", dl_server.addr().to_string());
+        let addr = format!("http://{}", server.address());
+        let dl_addr = format!("http://{}/file.fgb", dl_server.addr());
 
-        let _ = server.setup(
+        server.setup(
             MockBuilder::when()
                 .path("/api.services.v1.DatasetService/GetDataset")
                 .then()
@@ -1196,7 +1197,7 @@ mod tests {
                 }),
         );
 
-        let _ = server.setup(
+        server.setup(
             MockBuilder::when()
                 .path("/api.services.v1.DatasetService/GetDatasetObjectGroups")
                 .then()
@@ -1233,7 +1234,7 @@ mod tests {
                 }),
         );
 
-        let _ = server.setup(
+        server.setup(
             MockBuilder::when()
                 .path("/api.services.v1.ObjectLoadService/CreateDownloadLink")
                 .then()
