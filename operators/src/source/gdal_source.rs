@@ -723,21 +723,18 @@ where
         let spatial_resolution = query.spatial_resolution;
         let no_data_value = self.no_data_value;
 
-        // TODO: re-evaluate the logic behind this
-        // The "Pixel-space" starts at the top-left corner of a GDAL image.
-        // We assume that GDAL datasets are not flipped.
-        // Therefore, the x-axis is always increasing
-        debug_assert!(spatial_resolution.x.is_sign_positive());
-        // and the y-axis is always decreasing
-        let spatial_resolution_y = if spatial_resolution.y.is_sign_positive() {
-            spatial_resolution.y * -1.0
-        } else {
-            spatial_resolution.y
-        };
+        // TODO: evaluate if there are GeoTransforms with positive y-axis
+        // The "Pixel-space" starts at the top-left corner of a `GeoTransform`.
+        // Therefore, the pixel size on the x-axis is always increasing
+        let pixel_size_x = spatial_resolution.x;
+        debug_assert!(pixel_size_x.is_sign_positive());
+        // and the pixel size on  the y-axis is always decreasing
+        let pixel_size_y = spatial_resolution.y * -1.0;
+        debug_assert!(pixel_size_y.is_sign_negative());
 
         let tiling_strategy = self
             .tiling_specification
-            .strategy(spatial_resolution.x, spatial_resolution_y);
+            .strategy(pixel_size_x, pixel_size_y);
 
         stream::iter(tiling_strategy.tile_information_iterator(query.spatial_bounds))
             .map(move |tile| {
