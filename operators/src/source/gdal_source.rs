@@ -20,9 +20,9 @@ use geoengine_datatypes::primitives::{
     Coordinate2D, RasterQueryRectangle, SpatialPartition2D, SpatialPartitioned,
 };
 use geoengine_datatypes::raster::{
-    EmptyGrid, GeoTransform, Grid2D, GridOrEmpty2D, GridShapeAccess, Pixel, RasterDataType,
-    RasterProperties, RasterPropertiesEntry, RasterPropertiesEntryType, RasterPropertiesKey,
-    RasterTile2D,
+    EmptyGrid, GeoTransform, Grid2D, GridOrEmpty2D, GridShape2D, GridShapeAccess, Pixel,
+    RasterDataType, RasterProperties, RasterPropertiesEntry, RasterPropertiesEntryType,
+    RasterPropertiesKey, RasterTile2D,
 };
 use geoengine_datatypes::util::test::TestDefault;
 use geoengine_datatypes::{dataset::DatasetId, raster::TileInformation};
@@ -499,6 +499,24 @@ where
         .context(error::TokioJoin)?
     }
 
+    fn create_empty_grid_with_props(
+        tile_size: GridShape2D,
+        no_data_value: Option<T>,
+    ) -> GridWithProperties<T> {
+        let fill_value: T = no_data_value.unwrap_or_else(T::zero);
+
+        let empty_grid = if let Some(no_data) = no_data_value {
+            EmptyGrid::new(tile_size, T::from_(no_data)).into()
+        } else {
+            Grid2D::new_filled(tile_size, fill_value, None).into()
+        };
+
+        GridWithProperties {
+            grid: empty_grid,
+            properties: Default::default(),
+        }
+    }
+
     pub async fn load_tile_async(
         dataset_params: Option<GdalDatasetParameters>,
         tile_information: TileInformation,
@@ -514,21 +532,24 @@ where
                 debug!("Loading tile {:?}", &tile_information);
                 Self::load_tile_data_async(ds, tile_information).await
             }
+            Some(_) => {
+                debug!("Skipping tile not in query rect {:?}", &tile_information);
+
+                Ok(Self::create_empty_grid_with_props(
+                    tile_information.tile_size_in_pixels,
+                    no_data_value,
+                ))
+            }
             _ => {
-                debug!("Skipping tile {:?}", &tile_information);
-                let fill_value: T = no_data_value.unwrap_or_else(T::zero);
+                debug!(
+                    "Skipping tile without GdalDatasetParameters {:?}",
+                    &tile_information
+                );
 
-                let empty_grid = if let Some(no_data) = no_data_value {
-                    EmptyGrid::new(tile_information.tile_size_in_pixels, T::from_(no_data)).into()
-                } else {
-                    Grid2D::new_filled(tile_information.tile_size_in_pixels, fill_value, None)
-                        .into()
-                };
-
-                Ok(GridWithProperties {
-                    grid: empty_grid,
-                    properties: Default::default(),
-                })
+                Ok(Self::create_empty_grid_with_props(
+                    tile_information.tile_size_in_pixels,
+                    no_data_value,
+                ))
             }
         };
 
