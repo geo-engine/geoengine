@@ -13,7 +13,7 @@ edition = "2021"
 pro = ["geoengine-datatypes/pro"]
 
 [dependencies]
-arrow = { version = "6.5", features = ["simd"] }
+arrow = { version = "7.0", features = ["simd"] }
 async-trait = "0.1"
 chrono = "0.4"
 crossbeam = "0.8"
