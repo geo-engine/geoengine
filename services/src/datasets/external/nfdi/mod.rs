@@ -684,11 +684,6 @@ mod tests {
     use crate::datasets::listing::{DatasetListOptions, ExternalDatasetProvider, OrderBy};
     use crate::util::user_input::Validated;
 
-    mod wiremock_gen {
-        // hello.Greeter: is the prefix of all rpc,
-        // MyMockServer: name of the generated Server,
-        wiremock_grpc::generate!("api.services.v1", TestProjectServer);
-    }
     use geoengine_datatypes::collections::{FeatureCollectionInfos, MultiPointCollection};
     use geoengine_datatypes::primitives::{
         BoundingBox2D, SpatialResolution, TimeInterval, VectorQueryRectangle,
@@ -699,8 +694,12 @@ mod tests {
         TypedVectorQueryProcessor, VectorOperator, VectorResultDescriptor,
     };
     use geoengine_operators::source::{OgrSource, OgrSourceDataset, OgrSourceParameters};
-    use wiremock_gen::*; // this imports generated
-    use wiremock_grpc::*; // this imports MockBuilder
+
+    mod wiremock_gen {
+        wiremock_grpc::generate!("api.services.v1", TestProjectServer);
+    }
+    use wiremock_gen::*;
+    use wiremock_grpc::*;
 
     const PROVIDER_ID: &str = "86a7f7ce-1bab-4ce9-a32b-172c0f958ee0";
     const PROJECT_ID: &str = "B";
