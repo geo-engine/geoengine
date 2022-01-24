@@ -1,3 +1,4 @@
+use crate::adapters::SparseTilesFillAdapter;
 use crate::engine::{MetaData, OperatorDatasets, QueryProcessor};
 use crate::util::gdal::gdal_open_dataset_ex;
 use crate::util::input::float_option_with_nan;
@@ -736,11 +737,21 @@ where
             .tiling_specification
             .strategy(pixel_size_x, pixel_size_y);
 
-        stream::iter(tiling_strategy.tile_information_iterator(query.spatial_bounds))
-            .map(move |tile| {
-                Self::load_tile_async(info.params.clone(), tile, info.time, no_data_value)
-            })
-            .buffered(1) // TODO: find a good default and / or add to config.
+        let source_stream =
+            stream::iter(tiling_strategy.tile_information_iterator(query.spatial_bounds))
+                .map(move |tile| {
+                    Self::load_tile_async(info.params.clone(), tile, info.time, no_data_value)
+                })
+                .buffered(1); // TODO: find a good default and / or add to config.
+
+        // use SparseTilesFillAdapter to fill all the gaps
+        SparseTilesFillAdapter::new(
+            source_stream,
+            tiling_strategy.tile_grid_box(query.spatial_partition()),
+            tiling_strategy.geo_transform,
+            tiling_strategy.tile_size_in_pixels,
+            no_data_value.unwrap_or_else(T::zero),
+        )
     }
 }
 
