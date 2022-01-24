@@ -295,6 +295,17 @@ pub enum Error {
     Statistics {
         source: crate::util::statistics::StatisticsError,
     },
+
+    #[snafu(display("SparseTilesFillAdapter error: {}", source))]
+    SparseTilesFillAdapter {
+        source: crate::adapters::SparseTilesFillAdapterError,
+    },
+}
+
+impl From<crate::adapters::SparseTilesFillAdapterError> for Error {
+    fn from(source: crate::adapters::SparseTilesFillAdapterError) -> Self {
+        Error::SparseTilesFillAdapter { source }
+    }
 }
 
 impl From<geoengine_datatypes::error::Error> for Error {

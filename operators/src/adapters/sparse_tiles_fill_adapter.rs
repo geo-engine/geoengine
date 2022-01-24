@@ -8,7 +8,39 @@ use geoengine_datatypes::{
     },
 };
 use pin_project::pin_project;
+use snafu::Snafu;
 use std::{pin::Pin, task::Poll};
+
+#[derive(Debug, Snafu)]
+pub enum SparseTilesFillAdapterError {
+    #[snafu(display(
+        "Received tile TimeInterval ({}) starts before current TimeInterval: {}",
+        tile_start,
+        current_start
+    ))]
+    TileTimeIntervalStartBeforeCurrentStart {
+        tile_start: TimeInterval,
+        current_start: TimeInterval,
+    },
+    #[snafu(display(
+        "Received tile TimeInterval ({}) length differs from received TimeInterval with equal start: {}",
+        tile_interval,
+        current_interval
+    ))]
+    TileTimeIntervalLengthMissmatch {
+        tile_interval: TimeInterval,
+        current_interval: TimeInterval,
+    },
+    #[snafu(display(
+        "Received tile TimeInterval ({}) is the first in a grid run but does no time progress. (Old time: {})",
+        tile_interval,
+        current_interval
+    ))]
+    GridWrapMustDoTimeProgress {
+        tile_interval: TimeInterval,
+        current_interval: TimeInterval,
+    },
+}
 
 #[derive(Debug, PartialEq, Clone, Copy)]
 enum State {
@@ -128,6 +160,7 @@ where
         )
     }
 
+    // TODO: return Result with SparseTilesFillAdapterError and map it to Error in the poll_next method if possible
     #[allow(clippy::too_many_lines)]
     pub fn next_step(
         self: Pin<&mut Self>,
@@ -178,7 +211,38 @@ where
             }
             State::PollingForNextTile => {
                 let res = match ready!(this.stream.as_mut().poll_next(cx)) {
-                    // This is a new tile and it is the one to produce in this call. Time and idx are correct.
+                    // CHECK BASIC ASSERTIONS
+
+                    // The start of the recieved TimeInterval MUST NOT BE before the start of the current TimeInterval.
+                    Some(Ok(tile)) if tile.time.start() < this.sc.current_time.start() => {
+                        this.sc.state = State::Ended;
+                        return Poll::Ready(Some(Err(
+                            SparseTilesFillAdapterError::TileTimeIntervalStartBeforeCurrentStart {
+                                current_start: this.sc.current_time,
+                                tile_start: tile.time,
+                            }
+                            .into(),
+                        )));
+                    }
+                    // A received TimeInterval with start EQUAL to the current TimeInterval MUST NOT differ in the end (XD).
+                    Some(Ok(tile))
+                        if tile.time.start() == this.sc.current_time.start()
+                            && tile.time != this.sc.current_time =>
+                    {
+                        this.sc.state = State::Ended;
+                        return Poll::Ready(Some(Err(
+                            SparseTilesFillAdapterError::TileTimeIntervalLengthMissmatch {
+                                tile_interval: tile.time,
+                                current_interval: this.sc.current_time,
+                            }
+                            .into(),
+                        )));
+                    }
+
+                    // TILE IN CURRENT GRID RUN / TIME INTERVAL
+
+                    // Time and idx are EQUAL to the current ones (to produce).
+                    // Therefore, it is the one to produce in this call.
                     Some(Ok(tile))
                         if this.sc.current_idx == tile.tile_position
                             && this.sc.current_time == tile.time =>
@@ -190,29 +254,144 @@ where
                         this.sc.state = State::PollingForNextTile;
                         Some(Ok(tile))
                     }
-                    // this is a new tile,  we are at the start of a new grid run and this is the first tile
-                    Some(Ok(tile))
-                        if this.sc.current_idx == tile.tile_position
-                            && this.sc.current_idx == min_idx =>
-                    {
+
+                    // TimeInterval is EQUAL to the current ones (to produce).
+                    // GridIdx is NOT EQUAL the current one (to produce).
+                    // Therefore, return empty tile and go to FillAndProduceNextTile.
+                    Some(Ok(tile)) if this.sc.current_time == tile.time => {
                         debug_assert!(!this.sc.is_any_tile_stored());
                         debug_assert!(tile.time.start() >= this.sc.current_time.start());
+
+                        this.sc.next_tile = Some(tile);
+                        this.sc.state = State::FillAndProduceNextTile;
+                        Some(Ok(this.sc.current_no_data_tile()))
+                    }
+
+                    // TILE IN NEXT GRID RUN / TIME INTERVAL
+
+                    // We are at the start of a new grid run => The tile we received is the first in an new TimeInstant.
+                    // The tile GridIdx is equal to the GridIdx (to produce).
+                    // AND the current TimeInterval is a TimeInstant.
+                    // AND the tiles start TimeInstant is the direct follower of the current TimeInstant (end + 1 = start).
+                    // Therefore, it is the one to produce in this call.
+                    Some(Ok(tile))
+                        if this.sc.current_idx == min_idx
+                            && this.sc.current_idx == tile.tile_position
+                            && this.sc.current_time.is_instant()
+                            && this.sc.current_time.end() + 1 == tile.time.start() =>
+                    {
+                        debug_assert!(!this.sc.is_any_tile_stored());
+                        debug_assert!(tile.time.start() > this.sc.current_time.start());
+                        debug_assert!(tile.time.start() > this.sc.current_time.end());
 
                         this.sc.current_time = tile.time;
                         this.sc.state = State::PollingForNextTile;
                         Some(Ok(tile))
                     }
-                    // this is a new tile and we are at the start of a new grid run but it is not the tile to produce
-                    Some(Ok(tile)) if this.sc.current_idx == min_idx => {
+
+                    // We are at the start of a new grid run => The tile we received is the first in an new TimeInterval.
+                    // The tile GridIdx is equal to the GridIdx (to produce).
+                    // AND the tiles TimeInterval starts where the current TimeInterval ends.
+                    // Therefore, it is the one to produce in this call.
+                    Some(Ok(tile))
+                        if this.sc.current_idx == min_idx
+                            && this.sc.current_idx == tile.tile_position
+                            && this.sc.current_time.end() == tile.time.start() =>
+                    {
                         debug_assert!(!this.sc.is_any_tile_stored());
-                        debug_assert!(tile.time.start() >= this.sc.current_time.start());
+                        debug_assert!(tile.time.start() > this.sc.current_time.start());
+
+                        this.sc.current_time = tile.time;
+                        this.sc.state = State::PollingForNextTile;
+                        Some(Ok(tile))
+                    }
+
+                    // The tile GridIdx is NOT EQUAL to the GridIdx (to produce) => Tile is in a new TimeInstant but not the current AND first one.
+                    // AND the the current TimeInterval is a TimeInstant
+                    // AND the tiles time is directly following the current TimeInstant => use tile.time as current_time.
+                    // Produce empty tile and go to FillAndProduceNextTile state.
+                    Some(Ok(tile))
+                        if this.sc.current_idx == min_idx
+                            && this.sc.current_time.is_instant()
+                            && this.sc.current_time.end() + 1 == tile.time.start() =>
+                    {
+                        debug_assert!(!this.sc.is_any_tile_stored());
+                        debug_assert!(tile.time.start() > this.sc.current_time.start());
 
                         this.sc.current_time = tile.time;
                         this.sc.next_tile = Some(tile);
                         this.sc.state = State::FillAndProduceNextTile;
                         Some(Ok(this.sc.current_no_data_tile()))
                     }
-                    // there is a new tile. Store it to use it in the next steps.
+
+                    // The tile GridIdx is NOT EQUAL to the GridIdx (to produce) => Tile is in a new TimeInterval but not the current AND first one.
+                    // AND the tiles TimeInterval starts where the current/previous TimeInterval ends => use tile.time as current_time.
+                    Some(Ok(tile))
+                        if this.sc.current_idx == min_idx
+                            && this.sc.current_time.end() == tile.time.start() =>
+                    {
+                        debug_assert!(!this.sc.is_any_tile_stored());
+                        debug_assert!(tile.time.start() > this.sc.current_time.start());
+
+                        this.sc.current_time = tile.time;
+                        this.sc.next_tile = Some(tile);
+                        this.sc.state = State::FillAndProduceNextTile;
+                        Some(Ok(this.sc.current_no_data_tile()))
+                    }
+
+                    // GAP BETWEEN CURRENT AND NEXT GRID RUN / TIME INTERVAL
+
+                    // The tile GridIdx is NOT EQUAL to the GridIdx (to produce) => Tile is in a new TimeInstant but not the current AND first one.
+                    // AND the the current TimeInterval is a TimeInstant
+                    // AND the tiles time is NOT directly following the current TimeInstant => create a new TimeInterval to fill the gap.
+                    // Produce empty tile and go to FillAndProduceNextTile state.
+                    Some(Ok(tile))
+                        if this.sc.current_idx == min_idx
+                            && this.sc.current_time.is_instant()
+                            && this.sc.current_time.end() + 1 != tile.time.start() =>
+                    {
+                        debug_assert!(!this.sc.is_any_tile_stored());
+                        debug_assert!(tile.time.start() > this.sc.current_time.start());
+
+                        this.sc.current_time =
+                            TimeInterval::new(this.sc.current_time.end() + 1, tile.time.start())?;
+                        this.sc.next_tile = Some(tile);
+                        this.sc.state = State::FillAndProduceNextTile;
+                        Some(Ok(this.sc.current_no_data_tile()))
+                    }
+
+                    // The tile GridIdx is NOT EQUAL to the GridIdx (to produce) => Tile is in a new TimeInterval but not the current AND first one.
+                    // AND the tiles TimeInterval starts where the current/previous TimeInterval ends => use tile.time as current_time.
+                    Some(Ok(tile))
+                        if this.sc.current_idx == min_idx
+                            && this.sc.current_time.end() != tile.time.start() =>
+                    {
+                        debug_assert!(!this.sc.is_any_tile_stored());
+                        debug_assert!(tile.time.start() > this.sc.current_time.start());
+
+                        this.sc.current_time =
+                            TimeInterval::new(this.sc.current_time.end(), tile.time.start())?;
+                        this.sc.next_tile = Some(tile);
+                        this.sc.state = State::FillAndProduceNextTile;
+                        Some(Ok(this.sc.current_no_data_tile()))
+                    }
+
+                    // The tile GridIdx is NOT EQUAL to the GridIdx (to produce) => it is not the current one.
+                    // Tile is in a new TimeInterval is not the current one and not directly connected to the current one.
+                    // AND the current time is a TimeInstant.
+                    // Construct the TimeInterval between the current and the next time.
+                    Some(Ok(tile)) if this.sc.current_time.is_instant() => {
+                        debug_assert!(!this.sc.is_any_tile_stored());
+                        debug_assert!(tile.time.start() >= this.sc.current_time.start());
+
+                        this.sc.next_tile = Some(tile);
+                        this.sc.state = State::FillAndProduceNextTile;
+                        Some(Ok(this.sc.current_no_data_tile()))
+                    }
+
+                    // The tile GridIdx is NOT EQUAL to the GridIdx (to produce) => it  is  not the  current one.
+                    // Tile is in a new TimeInterval is not the current one and not directly connected to the current one.
+                    // Construct the TimeInterval between the current and the next time.
                     Some(Ok(tile)) => {
                         debug_assert!(!this.sc.is_any_tile_stored());
                         debug_assert!(tile.time.start() >= this.sc.current_time.start());
@@ -221,6 +400,7 @@ where
                         this.sc.state = State::FillAndProduceNextTile;
                         Some(Ok(this.sc.current_no_data_tile()))
                     }
+
                     // an error ouccured, stop producing anything and return the error.
                     Some(Err(e)) => {
                         this.sc.state = State::Ended;
@@ -269,8 +449,23 @@ where
                     .expect("next_tile must be set in NextTile state");
 
                 let (next_idx, next_time) = match this.sc.maybe_next_idx() {
+                    // the next GridIdx is in the current TimeInterval
                     Some(idx) => (idx, this.sc.current_time),
-                    None => (this.sc.min_index(), next_time),
+                    // the next GridIdx is in the next TimeInstant which is the one of the next tile
+                    None if this.sc.current_time.is_instant()
+                        && this.sc.current_time.end() + 1 == next_time.start() =>
+                    {
+                        (this.sc.min_index(), next_time)
+                    }
+                    // the next GridIdx is in the next TimeInterval which is the one of the next tile
+                    None if this.sc.current_time.end() == next_time.start() => {
+                        (this.sc.min_index(), next_time)
+                    }
+                    // the next GridIdx is in the next TimeInterval which is BEFORE the one of the next tile
+                    None => (
+                        this.sc.min_index(),
+                        TimeInterval::new(this.sc.current_time.end(), next_time.start())?,
+                    ),
                 };
 
                 debug_assert!(next_time.start() >= this.sc.current_time.start());
@@ -902,5 +1097,197 @@ mod tests {
         assert_eq!(tiles.len(), 2);
         assert!(tiles[0].is_ok());
         assert!(tiles[1].is_err());
+    }
+
+    #[allow(clippy::too_many_lines)]
+    #[tokio::test]
+    async fn test_timeinterval_gap() {
+        let no_data_value = Some(0);
+        let data = vec![
+            RasterTile2D {
+                time: TimeInterval::new_unchecked(0, 5),
+                tile_position: [-1, 0].into(),
+                global_geo_transform: TestDefault::test_default(),
+                grid_array: Grid::new([2, 2].into(), vec![1, 2, 3, 4], no_data_value)
+                    .unwrap()
+                    .into(),
+                properties: Default::default(),
+            },
+            RasterTile2D {
+                time: TimeInterval::new_unchecked(0, 5),
+                tile_position: [-1, 1].into(),
+                global_geo_transform: TestDefault::test_default(),
+                grid_array: Grid::new([2, 2].into(), vec![7, 8, 9, 10], no_data_value)
+                    .unwrap()
+                    .into(),
+                properties: Default::default(),
+            },
+            RasterTile2D {
+                time: TimeInterval::new_unchecked(0, 5),
+                tile_position: [0, 0].into(),
+                global_geo_transform: TestDefault::test_default(),
+                grid_array: Grid::new([2, 2].into(), vec![1, 2, 3, 4], no_data_value)
+                    .unwrap()
+                    .into(),
+                properties: Default::default(),
+            },
+            RasterTile2D {
+                time: TimeInterval::new_unchecked(0, 5),
+                tile_position: [0, 1].into(),
+                global_geo_transform: TestDefault::test_default(),
+                grid_array: Grid::new([2, 2].into(), vec![7, 8, 9, 10], no_data_value)
+                    .unwrap()
+                    .into(),
+                properties: Default::default(),
+            },
+            RasterTile2D {
+                time: TimeInterval::new_unchecked(10, 15),
+                tile_position: [-1, 0].into(),
+                global_geo_transform: TestDefault::test_default(),
+                grid_array: Grid::new([2, 2].into(), vec![13, 14, 15, 16], no_data_value)
+                    .unwrap()
+                    .into(),
+                properties: Default::default(),
+            },
+            RasterTile2D {
+                time: TimeInterval::new_unchecked(10, 15),
+                tile_position: [-1, 1].into(),
+                global_geo_transform: TestDefault::test_default(),
+                grid_array: Grid::new([2, 2].into(), vec![19, 20, 21, 22], no_data_value)
+                    .unwrap()
+                    .into(),
+                properties: Default::default(),
+            },
+            RasterTile2D {
+                time: TimeInterval::new_unchecked(10, 15),
+                tile_position: [0, 0].into(),
+                global_geo_transform: TestDefault::test_default(),
+                grid_array: Grid::new([2, 2].into(), vec![13, 14, 15, 16], no_data_value)
+                    .unwrap()
+                    .into(),
+                properties: Default::default(),
+            },
+            RasterTile2D {
+                time: TimeInterval::new_unchecked(10, 15),
+                tile_position: [0, 1].into(),
+                global_geo_transform: TestDefault::test_default(),
+                grid_array: Grid::new([2, 2].into(), vec![19, 20, 21, 22], no_data_value)
+                    .unwrap()
+                    .into(),
+                properties: Default::default(),
+            },
+        ];
+
+        let result_data = data.into_iter().map(Ok);
+
+        let in_stream = stream::iter(result_data);
+        let grid_bounding_box = GridBoundingBox2D::new([-1, 0], [0, 1]).unwrap();
+        let global_geo_transform = GeoTransform::test_default();
+        let tile_shape = [2, 2].into();
+        let no_data_value = 0;
+
+        let adapter = SparseTilesFillAdapter::new(
+            in_stream,
+            grid_bounding_box,
+            global_geo_transform,
+            tile_shape,
+            no_data_value,
+        );
+
+        let tiles: Vec<Result<RasterTile2D<i32>>> = adapter.collect().await;
+
+        let tile_time_positions: Vec<(GridIdx2D, TimeInterval)> = tiles
+            .into_iter()
+            .map(|t| {
+                let g = t.unwrap();
+                (g.tile_position, g.time)
+            })
+            .collect();
+
+        let expected_positions = vec![
+            ([-1, 0].into(), TimeInterval::new_unchecked(0, 5)),
+            ([-1, 1].into(), TimeInterval::new_unchecked(0, 5)),
+            ([0, 0].into(), TimeInterval::new_unchecked(0, 5)),
+            ([0, 1].into(), TimeInterval::new_unchecked(0, 5)),
+            ([-1, 0].into(), TimeInterval::new_unchecked(5, 10)),
+            ([-1, 1].into(), TimeInterval::new_unchecked(5, 10)),
+            ([0, 0].into(), TimeInterval::new_unchecked(5, 10)),
+            ([0, 1].into(), TimeInterval::new_unchecked(5, 10)),
+            ([-1, 0].into(), TimeInterval::new_unchecked(10, 15)),
+            ([-1, 1].into(), TimeInterval::new_unchecked(10, 15)),
+            ([0, 0].into(), TimeInterval::new_unchecked(10, 15)),
+            ([0, 1].into(), TimeInterval::new_unchecked(10, 15)),
+        ];
+
+        assert_eq!(tile_time_positions, expected_positions);
+    }
+
+    #[allow(clippy::too_many_lines)]
+    #[tokio::test]
+    async fn test_timeinterval_gap_and_end_start_gap() {
+        let no_data_value = Some(0);
+        let data = vec![
+            RasterTile2D {
+                time: TimeInterval::new_unchecked(0, 5),
+                tile_position: [-1, 1].into(),
+                global_geo_transform: TestDefault::test_default(),
+                grid_array: Grid::new([2, 2].into(), vec![7, 8, 9, 10], no_data_value)
+                    .unwrap()
+                    .into(),
+                properties: Default::default(),
+            },
+            RasterTile2D {
+                time: TimeInterval::new_unchecked(10, 15),
+                tile_position: [0, 0].into(),
+                global_geo_transform: TestDefault::test_default(),
+                grid_array: Grid::new([2, 2].into(), vec![13, 14, 15, 16], no_data_value)
+                    .unwrap()
+                    .into(),
+                properties: Default::default(),
+            },
+        ];
+
+        let result_data = data.into_iter().map(Ok);
+
+        let in_stream = stream::iter(result_data);
+        let grid_bounding_box = GridBoundingBox2D::new([-1, 0], [0, 1]).unwrap();
+        let global_geo_transform = GeoTransform::test_default();
+        let tile_shape = [2, 2].into();
+        let no_data_value = 0;
+
+        let adapter = SparseTilesFillAdapter::new(
+            in_stream,
+            grid_bounding_box,
+            global_geo_transform,
+            tile_shape,
+            no_data_value,
+        );
+
+        let tiles: Vec<Result<RasterTile2D<i32>>> = adapter.collect().await;
+
+        let tile_time_positions: Vec<(GridIdx2D, TimeInterval, bool)> = tiles
+            .into_iter()
+            .map(|t| {
+                let g = t.unwrap();
+                (g.tile_position, g.time, g.is_empty())
+            })
+            .collect();
+
+        let expected_positions = vec![
+            ([-1, 0].into(), TimeInterval::new_unchecked(0, 5), true),
+            ([-1, 1].into(), TimeInterval::new_unchecked(0, 5), false),
+            ([0, 0].into(), TimeInterval::new_unchecked(0, 5), true),
+            ([0, 1].into(), TimeInterval::new_unchecked(0, 5), true),
+            ([-1, 0].into(), TimeInterval::new_unchecked(5, 10), true),
+            ([-1, 1].into(), TimeInterval::new_unchecked(5, 10), true),
+            ([0, 0].into(), TimeInterval::new_unchecked(5, 10), true),
+            ([0, 1].into(), TimeInterval::new_unchecked(5, 10), true),
+            ([-1, 0].into(), TimeInterval::new_unchecked(10, 15), true),
+            ([-1, 1].into(), TimeInterval::new_unchecked(10, 15), true),
+            ([0, 0].into(), TimeInterval::new_unchecked(10, 15), false),
+            ([0, 1].into(), TimeInterval::new_unchecked(10, 15), true),
+        ];
+
+        assert_eq!(tile_time_positions, expected_positions);
     }
 }
