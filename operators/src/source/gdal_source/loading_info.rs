@@ -332,11 +332,86 @@ pub struct GdalLoadingInfoPart {
 #[cfg(test)]
 mod tests {
     use chrono::NaiveDate;
-    use geoengine_datatypes::primitives::TimeGranularity;
+    use geoengine_datatypes::{
+        hashmap,
+        primitives::{Measurement, SpatialPartition2D, SpatialResolution, TimeGranularity},
+        raster::RasterDataType,
+        spatial_reference::SpatialReference,
+        util::test::TestDefault,
+    };
 
-    use crate::source::{FileNotFoundHandling, GdalDatasetGeoTransform};
+    use crate::source::{FileNotFoundHandling, GdalDatasetGeoTransform, TimeReference};
 
     use super::*;
+
+    #[tokio::test]
+    async fn test_regular_meta_data() {
+        let no_data_value = Some(0.);
+
+        let meta_data = GdalMetaDataRegular {
+            result_descriptor: RasterResultDescriptor {
+                data_type: RasterDataType::U8,
+                spatial_reference: SpatialReference::epsg_4326().into(),
+                measurement: Measurement::Unitless,
+                no_data_value,
+            },
+            params: GdalDatasetParameters {
+                file_path: "/foo/bar_%TIME%.tiff".into(),
+                rasterband_channel: 0,
+                geo_transform: TestDefault::test_default(),
+                width: 360,
+                height: 180,
+                file_not_found_handling: FileNotFoundHandling::NoData,
+                no_data_value,
+                properties_mapping: None,
+                gdal_open_options: None,
+                gdal_config_options: None,
+            },
+            time_placeholders: hashmap! {
+                "%TIME%".to_string() => GdalSourceTimePlaceholder {
+                    format: "%f".to_string(),
+                    reference: TimeReference::Start,
+                },
+            },
+            start: TimeInstance::from_millis_unchecked(11),
+            step: TimeStep {
+                granularity: TimeGranularity::Millis,
+                step: 11,
+            },
+        };
+
+        assert_eq!(
+            meta_data.result_descriptor().await.unwrap(),
+            RasterResultDescriptor {
+                data_type: RasterDataType::U8,
+                spatial_reference: SpatialReference::epsg_4326().into(),
+                measurement: Measurement::Unitless,
+                no_data_value: Some(0.)
+            }
+        );
+
+        assert_eq!(
+            meta_data
+                .loading_info(RasterQueryRectangle {
+                    spatial_bounds: SpatialPartition2D::new_unchecked(
+                        (0., 1.).into(),
+                        (1., 0.).into()
+                    ),
+                    time_interval: TimeInterval::new_unchecked(0, 30),
+                    spatial_resolution: SpatialResolution::one(),
+                })
+                .await
+                .unwrap()
+                .info
+                .map(|p| p.unwrap().params.file_path.to_str().unwrap().to_owned())
+                .collect::<Vec<_>>(),
+            &[
+                "/foo/bar_000000000.tiff",
+                "/foo/bar_011000000.tiff",
+                "/foo/bar_022000000.tiff"
+            ]
+        );
+    }
 
     #[test]
     fn netcdf_cf_time_steps() {

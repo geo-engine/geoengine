@@ -789,15 +789,10 @@ mod tests {
     use crate::util::gdal::add_ndvi_dataset;
     use crate::util::Result;
     use geoengine_datatypes::hashmap;
-    use geoengine_datatypes::primitives::{
-        AxisAlignedRectangle, SpatialPartition2D, TimeInstance, TimeStep,
-    };
+    use geoengine_datatypes::primitives::{AxisAlignedRectangle, SpatialPartition2D, TimeInstance};
+    use geoengine_datatypes::raster::GridIdx2D;
     use geoengine_datatypes::raster::{TileInformation, TilingStrategy};
-    use geoengine_datatypes::{
-        primitives::{Measurement, SpatialResolution, TimeGranularity},
-        raster::GridShape2D,
-    };
-    use geoengine_datatypes::{raster::GridIdx2D, spatial_reference::SpatialReference};
+    use geoengine_datatypes::{primitives::SpatialResolution, raster::GridShape2D};
 
     async fn query_gdal_source(
         exe_ctx: &mut MockExecutionContext,
@@ -1080,75 +1075,6 @@ mod tests {
             replaced.file_not_found_handling
         );
         assert_eq!(params.no_data_value, replaced.no_data_value);
-    }
-
-    #[tokio::test]
-    async fn test_regular_meta_data() {
-        let no_data_value = Some(0.);
-
-        let meta_data = GdalMetaDataRegular {
-            result_descriptor: RasterResultDescriptor {
-                data_type: RasterDataType::U8,
-                spatial_reference: SpatialReference::epsg_4326().into(),
-                measurement: Measurement::Unitless,
-                no_data_value,
-            },
-            params: GdalDatasetParameters {
-                file_path: "/foo/bar_%TIME%.tiff".into(),
-                rasterband_channel: 0,
-                geo_transform: TestDefault::test_default(),
-                width: 360,
-                height: 180,
-                file_not_found_handling: FileNotFoundHandling::NoData,
-                no_data_value,
-                properties_mapping: None,
-                gdal_open_options: None,
-                gdal_config_options: None,
-            },
-            time_placeholders: hashmap! {
-                "%TIME%".to_string() => GdalSourceTimePlaceholder {
-                    format: "%f".to_string(),
-                    reference: TimeReference::Start,
-                },
-            },
-            start: TimeInstance::from_millis_unchecked(11),
-            step: TimeStep {
-                granularity: TimeGranularity::Millis,
-                step: 11,
-            },
-        };
-
-        assert_eq!(
-            meta_data.result_descriptor().await.unwrap(),
-            RasterResultDescriptor {
-                data_type: RasterDataType::U8,
-                spatial_reference: SpatialReference::epsg_4326().into(),
-                measurement: Measurement::Unitless,
-                no_data_value: Some(0.)
-            }
-        );
-
-        assert_eq!(
-            meta_data
-                .loading_info(RasterQueryRectangle {
-                    spatial_bounds: SpatialPartition2D::new_unchecked(
-                        (0., 1.).into(),
-                        (1., 0.).into()
-                    ),
-                    time_interval: TimeInterval::new_unchecked(0, 30),
-                    spatial_resolution: SpatialResolution::one(),
-                })
-                .await
-                .unwrap()
-                .info
-                .map(|p| p.unwrap().params.file_path.to_str().unwrap().to_owned())
-                .collect::<Vec<_>>(),
-            &[
-                "/foo/bar_000000000.tiff",
-                "/foo/bar_011000000.tiff",
-                "/foo/bar_022000000.tiff"
-            ]
-        );
     }
 
     #[test]
