@@ -115,8 +115,13 @@ pub struct GdalMetadataNetCdfCf {
     pub result_descriptor: RasterResultDescriptor,
     pub params: GdalDatasetParameters,
     pub start: TimeInstance,
-    pub end: TimeInstance, // TODO: Use this or time dimension size (number of steps)?
+    /// We use the end to specify the last, non-inclusive valid time point.
+    /// Queries behind this point return no data.
+    /// TODO: Alternatively, we could think about using the number of possible time steps in the future.
+    pub end: TimeInstance,
     pub step: TimeStep,
+    /// A band offset specifies the first band index to use for the first point in time.
+    /// All other time steps are added to this offset.
     pub band_offset: usize,
 }
 
@@ -134,9 +139,6 @@ impl MetaData<GdalLoadingInfo, RasterResultDescriptor, RasterQueryRectangle>
 
         let time_iterator =
             TimeStepIter::new_with_interval_incl_start(snapped_interval, self.step)?;
-
-        // TODO: REMOVE
-        dbg!(self.band_offset);
 
         Ok(GdalLoadingInfo {
             info: GdalLoadingInfoPartIterator::NetCdfCf(NetCdfCfGdalLoadingInfoPartIterator::new(
@@ -249,10 +251,6 @@ impl NetCdfCfGdalLoadingInfoPartIterator {
             band_offset,
         }
     }
-
-    // fn band_offset(reference_time: TimeInstance, step: TimeStep, input_time: TimeInstance) -> usize {
-    //     reference_time + step * band_index as TimeInstance
-    // }
 }
 
 impl Iterator for NetCdfCfGdalLoadingInfoPartIterator {
@@ -276,7 +274,7 @@ impl Iterator for NetCdfCfGdalLoadingInfoPartIterator {
 
         let time_interval = TimeInterval::new_unchecked(t1, t2);
 
-        // TODO: off by one if date is larger than reference time
+        // off by one if date is larger than reference time
         let steps_between = if t1 == self.dataset_time_start {
             0
         } else {
@@ -288,13 +286,6 @@ impl Iterator for NetCdfCfGdalLoadingInfoPartIterator {
 
         let mut params = self.params.clone();
         params.rasterband_channel = self.band_offset + 1 + steps_between as usize;
-
-        // TODO: REMOVE
-        dbg!(
-            &params,
-            t1.as_rfc3339(),
-            self.dataset_time_start.as_rfc3339()
-        );
 
         Some(Ok(GdalLoadingInfoPart {
             time: time_interval,
