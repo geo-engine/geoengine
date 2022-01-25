@@ -5,7 +5,7 @@ use crate::engine::{
 use crate::error::Error;
 use crate::util::input::float_with_nan;
 use crate::util::Result;
-use crate::{call_bi_generic_processor, call_generic_raster_processor};
+use crate::{call_generic_raster_processor, call_on_bi_generic_raster_processor};
 use crate::{
     engine::ExecutionContext,
     opencl::{ClProgram, CompiledClProgram, IterationType, RasterArgument},
@@ -271,7 +271,7 @@ impl InitializedRasterOperator for InitializedExpression {
                 let output_no_data_value =
                     self.result_descriptor().no_data_value.unwrap_or_default();
 
-                call_bi_generic_processor!(a, b, (p_a, p_b) => {
+                call_on_bi_generic_raster_processor!(a, b, (p_a, p_b) => {
                     let res = call_generic_raster_processor!(
                         output_type,
                         ExpressionQueryProcessor::new(
