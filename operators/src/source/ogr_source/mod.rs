@@ -34,11 +34,11 @@ use geoengine_datatypes::collections::{
 use geoengine_datatypes::primitives::{
     AxisAlignedRectangle, BoundingBox2D, Coordinate2D, FeatureDataType, FeatureDataValue, Geometry,
     MultiLineString, MultiPoint, MultiPolygon, NoGeometry, TimeInstance, TimeInterval, TimeStep,
-    TypedGeometry,
+    TypedGeometry, VectorQueryRectangle,
 };
 use geoengine_datatypes::util::arrow::ArrowTyped;
 
-use crate::engine::{OperatorDatasets, QueryProcessor, VectorQueryRectangle};
+use crate::engine::{OperatorDatasets, QueryProcessor};
 use crate::error::Error;
 use crate::util::Result;
 use crate::{
@@ -1106,6 +1106,7 @@ mod tests {
         BoundingBox2D, FeatureData, SpatialResolution, TimeGranularity,
     };
     use geoengine_datatypes::spatial_reference::{SpatialReference, SpatialReferenceOption};
+    use geoengine_datatypes::util::test::TestDefault;
     use geoengine_datatypes::util::Identifier;
     use serde_json::json;
 
@@ -1446,7 +1447,7 @@ mod tests {
         let dataset = DatasetId::Internal {
             dataset_id: InternalDatasetId::new(),
         };
-        let mut exe_ctx = MockExecutionContext::default();
+        let mut exe_ctx = MockExecutionContext::test_default();
         exe_ctx.add_meta_data::<OgrSourceDataset, VectorResultDescriptor, VectorQueryRectangle>(
             dataset.clone(),
             Box::new(StaticMetaData {
@@ -1541,7 +1542,7 @@ mod tests {
         let dataset = DatasetId::Internal {
             dataset_id: InternalDatasetId::new(),
         };
-        let mut exe_ctx = MockExecutionContext::default();
+        let mut exe_ctx = MockExecutionContext::test_default();
         exe_ctx.add_meta_data::<OgrSourceDataset, VectorResultDescriptor, VectorQueryRectangle>(
             dataset.clone(),
             Box::new(StaticMetaData {
@@ -1636,7 +1637,7 @@ mod tests {
         let dataset = DatasetId::Internal {
             dataset_id: InternalDatasetId::new(),
         };
-        let mut exe_ctx = MockExecutionContext::default();
+        let mut exe_ctx = MockExecutionContext::test_default();
         exe_ctx.add_meta_data::<OgrSourceDataset, VectorResultDescriptor, VectorQueryRectangle>(
             dataset.clone(),
             Box::new(StaticMetaData {
@@ -1735,7 +1736,7 @@ mod tests {
         let id = DatasetId::Internal {
             dataset_id: InternalDatasetId::new(),
         };
-        let mut exe_ctx = MockExecutionContext::default();
+        let mut exe_ctx = MockExecutionContext::test_default();
         exe_ctx.add_meta_data::<OgrSourceDataset, VectorResultDescriptor, VectorQueryRectangle>(
             id.clone(),
             Box::new(StaticMetaData {
@@ -1926,7 +1927,7 @@ mod tests {
         let id = DatasetId::Internal {
             dataset_id: InternalDatasetId::new(),
         };
-        let mut exe_ctx = MockExecutionContext::default();
+        let mut exe_ctx = MockExecutionContext::test_default();
         exe_ctx.add_meta_data::<OgrSourceDataset, VectorResultDescriptor, VectorQueryRectangle>(
             id.clone(),
             Box::new(StaticMetaData {
@@ -3284,7 +3285,7 @@ mod tests {
         let id = DatasetId::Internal {
             dataset_id: InternalDatasetId::new(),
         };
-        let mut exe_ctx = MockExecutionContext::default();
+        let mut exe_ctx = MockExecutionContext::test_default();
         exe_ctx.add_meta_data::<OgrSourceDataset, VectorResultDescriptor, VectorQueryRectangle>(
             id.clone(),
             Box::new(StaticMetaData {
@@ -3531,7 +3532,7 @@ mod tests {
         let dataset = DatasetId::Internal {
             dataset_id: InternalDatasetId::new(),
         };
-        let mut exe_ctx = MockExecutionContext::default();
+        let mut exe_ctx = MockExecutionContext::test_default();
         exe_ctx.add_meta_data::<OgrSourceDataset, VectorResultDescriptor, VectorQueryRectangle>(
             dataset.clone(),
             Box::new(StaticMetaData {
@@ -3607,7 +3608,7 @@ mod tests {
         let dataset = DatasetId::Internal {
             dataset_id: InternalDatasetId::new(),
         };
-        let mut exe_ctx = MockExecutionContext::default();
+        let mut exe_ctx = MockExecutionContext::test_default();
         exe_ctx.add_meta_data::<OgrSourceDataset, VectorResultDescriptor, VectorQueryRectangle>(
             dataset.clone(),
             Box::new(StaticMetaData {
@@ -3700,7 +3701,7 @@ mod tests {
         let dataset = DatasetId::Internal {
             dataset_id: InternalDatasetId::new(),
         };
-        let mut exe_ctx = MockExecutionContext::default();
+        let mut exe_ctx = MockExecutionContext::test_default();
         exe_ctx.add_meta_data::<OgrSourceDataset, VectorResultDescriptor, VectorQueryRectangle>(
             dataset.clone(),
             Box::new(StaticMetaData {
@@ -3807,7 +3808,7 @@ mod tests {
         let dataset = DatasetId::Internal {
             dataset_id: InternalDatasetId::new(),
         };
-        let mut exe_ctx = MockExecutionContext::default();
+        let mut exe_ctx = MockExecutionContext::test_default();
         exe_ctx.add_meta_data::<OgrSourceDataset, VectorResultDescriptor, VectorQueryRectangle>(
             dataset.clone(),
             Box::new(StaticMetaData {
@@ -3916,7 +3917,7 @@ mod tests {
         let dataset = DatasetId::Internal {
             dataset_id: InternalDatasetId::new(),
         };
-        let mut exe_ctx = MockExecutionContext::default();
+        let mut exe_ctx = MockExecutionContext::test_default();
         exe_ctx.add_meta_data::<OgrSourceDataset, VectorResultDescriptor, VectorQueryRectangle>(
             dataset.clone(),
             Box::new(StaticMetaData {
@@ -4025,7 +4026,7 @@ mod tests {
         let dataset = DatasetId::Internal {
             dataset_id: InternalDatasetId::new(),
         };
-        let mut exe_ctx = MockExecutionContext::default();
+        let mut exe_ctx = MockExecutionContext::test_default();
         exe_ctx.add_meta_data::<OgrSourceDataset, VectorResultDescriptor, VectorQueryRectangle>(
             dataset.clone(),
             Box::new(StaticMetaData {

@@ -213,6 +213,7 @@ mod tests {
     use crate::mock::MockFeatureCollectionSource;
     use geoengine_datatypes::collections::{DataCollection, MultiPointCollection};
     use geoengine_datatypes::primitives::{FeatureData, NoGeometry, TimeInterval};
+    use geoengine_datatypes::util::test::TestDefault;
 
     #[test]
     fn params() {
@@ -273,7 +274,7 @@ mod tests {
 
         operator
             .boxed()
-            .initialize(&MockExecutionContext::default())
+            .initialize(&MockExecutionContext::test_default())
             .await
             .unwrap();
     }

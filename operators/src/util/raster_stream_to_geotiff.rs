@@ -2,7 +2,7 @@ use futures::StreamExt;
 use gdal::raster::{Buffer, GdalType, RasterCreationOption};
 use gdal::{Dataset, Driver};
 use geoengine_datatypes::primitives::{
-    AxisAlignedRectangle, SpatialPartition2D, SpatialPartitioned,
+    AxisAlignedRectangle, RasterQueryRectangle, SpatialPartition2D, SpatialPartitioned,
 };
 use geoengine_datatypes::raster::{
     ChangeGridBounds, GeoTransform, Grid2D, GridBlit, GridIdx, GridSize, Pixel, RasterTile2D,
@@ -13,7 +13,7 @@ use std::convert::TryInto;
 use std::path::Path;
 use std::path::PathBuf;
 
-use crate::{engine::RasterQueryRectangle, util::Result};
+use crate::util::Result;
 use crate::{
     engine::{QueryContext, RasterQueryProcessor},
     error::Error,
@@ -409,6 +409,7 @@ mod tests {
     use geoengine_datatypes::{
         primitives::{Coordinate2D, SpatialPartition2D, SpatialResolution, TimeInterval},
         raster::TilingSpecification,
+        util::test::TestDefault,
     };
 
     use crate::{
@@ -419,7 +420,7 @@ mod tests {
 
     #[tokio::test]
     async fn geotiff_from_stream() {
-        let ctx = MockQueryContext::default();
+        let ctx = MockQueryContext::test_default();
         let tiling_specification =
             TilingSpecification::new(Coordinate2D::default(), [600, 600].into());
 
@@ -465,7 +466,7 @@ mod tests {
 
     #[tokio::test]
     async fn cloud_optimized_geotiff_from_stream() {
-        let ctx = MockQueryContext::default();
+        let ctx = MockQueryContext::test_default();
         let tiling_specification =
             TilingSpecification::new(Coordinate2D::default(), [600, 600].into());
 
@@ -514,7 +515,7 @@ mod tests {
 
     #[tokio::test]
     async fn geotiff_from_stream_limit() {
-        let ctx = MockQueryContext::default();
+        let ctx = MockQueryContext::test_default();
         let tiling_specification =
             TilingSpecification::new(Coordinate2D::default(), [600, 600].into());
 
@@ -555,7 +556,7 @@ mod tests {
 
     #[tokio::test]
     async fn geotiff_from_stream_in_range_of_window() {
-        let ctx = MockQueryContext::default();
+        let ctx = MockQueryContext::test_default();
         let tiling_specification =
             TilingSpecification::new(Coordinate2D::default(), [600, 600].into());
 

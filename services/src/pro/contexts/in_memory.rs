@@ -8,6 +8,7 @@ use crate::workflows::registry::HashMapRegistry;
 use crate::{datasets::add_from_directory::add_providers_from_directory, error::Result};
 use async_trait::async_trait;
 use geoengine_datatypes::raster::TilingSpecification;
+use geoengine_datatypes::util::test::TestDefault;
 use geoengine_operators::engine::ChunkByteSize;
 use geoengine_operators::util::create_rayon_thread_pool;
 use rayon::ThreadPool;
@@ -29,21 +30,20 @@ pub struct ProInMemoryContext {
     task_manager: TaskManager,
 }
 
-impl Default for ProInMemoryContext {
-    fn default() -> Self {
+impl TestDefault for ProInMemoryContext {
+    fn test_default() -> Self {
         Self {
             user_db: Default::default(),
             project_db: Default::default(),
             workflow_registry: Default::default(),
             dataset_db: Default::default(),
             thread_pool: create_rayon_thread_pool(0),
-            exe_ctx_tiling_spec: Default::default(),
-            query_ctx_chunk_size: Default::default(),
+            exe_ctx_tiling_spec: TestDefault::test_default(),
+            query_ctx_chunk_size: TestDefault::test_default(),
             task_manager: Default::default(),
         }
     }
 }
-
 impl ProInMemoryContext {
     #[allow(clippy::too_many_lines)]
     pub async fn new_with_data(
@@ -58,10 +58,14 @@ impl ProInMemoryContext {
         add_providers_from_directory(&mut db, provider_defs_path.join("pro")).await;
 
         Self {
+            user_db: Default::default(),
+            project_db: Default::default(),
+            workflow_registry: Default::default(),
+            thread_pool: create_rayon_thread_pool(0),
             exe_ctx_tiling_spec,
             query_ctx_chunk_size,
             dataset_db: Arc::new(RwLock::new(db)),
-            ..Default::default()
+            task_manager: Default::default(),
         }
     }
 
@@ -70,9 +74,14 @@ impl ProInMemoryContext {
         query_ctx_chunk_size: ChunkByteSize,
     ) -> Self {
         ProInMemoryContext {
+            user_db: Default::default(),
+            project_db: Default::default(),
+            workflow_registry: Default::default(),
+            dataset_db: Default::default(),
+            thread_pool: create_rayon_thread_pool(0),
             exe_ctx_tiling_spec,
             query_ctx_chunk_size,
-            ..Default::default()
+            task_manager: Default::default(),
         }
     }
 }

@@ -1,5 +1,5 @@
-use super::query::{QueryContext, QueryRectangle};
-use super::{PlotQueryRectangle, RasterQueryRectangle, VectorQueryRectangle};
+use super::query::QueryContext;
+use crate::adapters::RasterConversionQueryProcessor;
 use crate::util::Result;
 use async_trait::async_trait;
 use futures::stream::BoxStream;
@@ -7,7 +7,10 @@ use geoengine_datatypes::collections::{
     DataCollection, MultiLineStringCollection, MultiPolygonCollection,
 };
 use geoengine_datatypes::plots::{PlotData, PlotOutputFormat};
-use geoengine_datatypes::primitives::{AxisAlignedRectangle, BoundingBox2D, SpatialPartition2D};
+use geoengine_datatypes::primitives::{
+    AxisAlignedRectangle, BoundingBox2D, PlotQueryRectangle, QueryRectangle, RasterQueryRectangle,
+    SpatialPartition2D, VectorQueryRectangle,
+};
 use geoengine_datatypes::raster::Pixel;
 use geoengine_datatypes::{collections::MultiPointCollection, raster::RasterTile2D};
 
@@ -41,6 +44,8 @@ pub trait RasterQueryProcessor: Sync + Send {
         Box::new(self)
     }
 }
+
+pub type BoxRasterQueryProcessor<P> = Box<dyn RasterQueryProcessor<RasterType = P>>;
 
 #[async_trait]
 impl<S, T> RasterQueryProcessor for S
@@ -178,6 +183,24 @@ pub enum TypedRasterQueryProcessor {
     F64(Box<dyn RasterQueryProcessor<RasterType = f64>>),
 }
 
+impl std::fmt::Debug for TypedRasterQueryProcessor {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let interals = "RasterQueryProcessor"; // TODO: implement debug for children
+        match self {
+            Self::U8(_) => f.debug_tuple("U8").field(&interals).finish(),
+            Self::U16(_) => f.debug_tuple("U16").field(&interals).finish(),
+            Self::U32(_) => f.debug_tuple("U32").field(&interals).finish(),
+            Self::U64(_) => f.debug_tuple("U64").field(&interals).finish(),
+            Self::I8(_) => f.debug_tuple("I8").field(&interals).finish(),
+            Self::I16(_) => f.debug_tuple("I16").field(&interals).finish(),
+            Self::I32(_) => f.debug_tuple("I32").field(&interals).finish(),
+            Self::I64(_) => f.debug_tuple("I64").field(&interals).finish(),
+            Self::F32(_) => f.debug_tuple("F32").field(&interals).finish(),
+            Self::F64(_) => f.debug_tuple("F64").field(&interals).finish(),
+        }
+    }
+}
+
 impl TypedRasterQueryProcessor {
     pub fn get_u8(self) -> Option<Box<dyn RasterQueryProcessor<RasterType = u8>>> {
         match self {
@@ -237,6 +260,21 @@ impl TypedRasterQueryProcessor {
         match self {
             Self::F64(r) => Some(r),
             _ => None,
+        }
+    }
+
+    pub fn into_f64(self) -> BoxRasterQueryProcessor<f64> {
+        match self {
+            Self::U8(r) => RasterConversionQueryProcessor::new(r).boxed(),
+            Self::U16(r) => RasterConversionQueryProcessor::new(r).boxed(),
+            Self::U32(r) => RasterConversionQueryProcessor::new(r).boxed(),
+            Self::U64(r) => RasterConversionQueryProcessor::new(r).boxed(),
+            Self::I8(r) => RasterConversionQueryProcessor::new(r).boxed(),
+            Self::I16(r) => RasterConversionQueryProcessor::new(r).boxed(),
+            Self::I32(r) => RasterConversionQueryProcessor::new(r).boxed(),
+            Self::I64(r) => RasterConversionQueryProcessor::new(r).boxed(),
+            Self::F32(r) => RasterConversionQueryProcessor::new(r).boxed(),
+            Self::F64(r) => r,
         }
     }
 }

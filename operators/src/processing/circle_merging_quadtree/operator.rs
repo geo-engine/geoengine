@@ -8,6 +8,7 @@ use geoengine_datatypes::collections::{
 };
 use geoengine_datatypes::primitives::{
     BoundingBox2D, Circle, FeatureDataType, FeatureDataValue, MultiPoint, MultiPointAccess,
+    VectorQueryRectangle,
 };
 use serde::{Deserialize, Serialize};
 use snafu::ensure;
@@ -16,7 +17,7 @@ use crate::adapters::FeatureCollectionStreamExt;
 use crate::engine::{
     ExecutionContext, InitializedVectorOperator, Operator, QueryContext, QueryProcessor,
     SingleVectorSource, TypedVectorQueryProcessor, VectorOperator, VectorQueryProcessor,
-    VectorQueryRectangle, VectorResultDescriptor,
+    VectorResultDescriptor,
 };
 use crate::error::{self, Error};
 use crate::processing::circle_merging_quadtree::aggregates::MeanAggregator;
@@ -424,6 +425,7 @@ mod tests {
     use geoengine_datatypes::primitives::FeatureData;
     use geoengine_datatypes::primitives::SpatialResolution;
     use geoengine_datatypes::primitives::TimeInterval;
+    use geoengine_datatypes::util::test::TestDefault;
 
     use crate::{
         engine::{MockExecutionContext, MockQueryContext},
@@ -457,7 +459,7 @@ mod tests {
             },
         };
 
-        let execution_context = MockExecutionContext::default();
+        let execution_context = MockExecutionContext::test_default();
 
         let initialized_operator = operator
             .boxed()
@@ -471,7 +473,7 @@ mod tests {
             .multi_point()
             .unwrap();
 
-        let query_context = MockQueryContext::default();
+        let query_context = MockQueryContext::test_default();
 
         let qrect = VectorQueryRectangle {
             spatial_bounds: BoundingBox2D::new((-180., -90.).into(), (180., 90.).into()).unwrap(),
@@ -538,7 +540,7 @@ mod tests {
             },
         };
 
-        let execution_context = MockExecutionContext::default();
+        let execution_context = MockExecutionContext::test_default();
 
         let initialized_operator = operator
             .boxed()
@@ -552,7 +554,7 @@ mod tests {
             .multi_point()
             .unwrap();
 
-        let query_context = MockQueryContext::default();
+        let query_context = MockQueryContext::test_default();
 
         let qrect = VectorQueryRectangle {
             spatial_bounds: BoundingBox2D::new((-180., -90.).into(), (180., 90.).into()).unwrap(),
@@ -620,7 +622,7 @@ mod tests {
             },
         };
 
-        let execution_context = MockExecutionContext::default();
+        let execution_context = MockExecutionContext::test_default();
 
         let initialized_operator = operator
             .boxed()
@@ -634,7 +636,7 @@ mod tests {
             .multi_point()
             .unwrap();
 
-        let query_context = MockQueryContext::default();
+        let query_context = MockQueryContext::test_default();
 
         let qrect = VectorQueryRectangle {
             spatial_bounds: BoundingBox2D::new((-180., -90.).into(), (180., 90.).into()).unwrap(),
@@ -710,7 +712,7 @@ mod tests {
             },
         };
 
-        let execution_context = MockExecutionContext::default();
+        let execution_context = MockExecutionContext::test_default();
 
         let initialized_operator = operator
             .boxed()
@@ -724,7 +726,7 @@ mod tests {
             .multi_point()
             .unwrap();
 
-        let query_context = MockQueryContext::default();
+        let query_context = MockQueryContext::test_default();
 
         let qrect = VectorQueryRectangle {
             spatial_bounds: BoundingBox2D::new((-180., -90.).into(), (180., 90.).into()).unwrap(),

@@ -1,12 +1,13 @@
 use futures::StreamExt;
 use geo_rand::{GeoRand, GeoRandParameters};
 use geoengine_datatypes::collections::{FeatureCollectionInfos, MultiPolygonCollection};
-use geoengine_datatypes::primitives::{BoundingBox2D, MultiPoint, SpatialResolution};
+use geoengine_datatypes::primitives::{
+    BoundingBox2D, MultiPoint, QueryRectangle, SpatialResolution,
+};
+use geoengine_datatypes::util::test::TestDefault;
 use geoengine_datatypes::{collections::MultiPointCollection, primitives::TimeInterval};
 use geoengine_operators::engine::{ChunkByteSize, QueryProcessor};
-use geoengine_operators::engine::{
-    MockExecutionContext, MockQueryContext, QueryRectangle, VectorOperator,
-};
+use geoengine_operators::engine::{MockExecutionContext, MockQueryContext, VectorOperator};
 use geoengine_operators::mock::MockFeatureCollectionSource;
 use geoengine_operators::processing::{
     PointInPolygonFilter, PointInPolygonFilterParams, PointInPolygonFilterSource,
@@ -29,7 +30,7 @@ async fn pip(points: MultiPointCollection, polygons: MultiPolygonCollection, num
         },
     }
     .boxed()
-    .initialize(&MockExecutionContext::default())
+    .initialize(&MockExecutionContext::test_default())
     .await
     .unwrap();
 
