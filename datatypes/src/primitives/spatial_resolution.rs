@@ -72,8 +72,8 @@ impl Mul<f64> for SpatialResolution {
 
     fn mul(self, rhs: f64) -> Self::Output {
         SpatialResolution {
-            x: self.x + rhs,
-            y: self.y + rhs,
+            x: self.x * rhs,
+            y: self.y * rhs,
         }
     }
 }
@@ -83,8 +83,47 @@ impl Div<f64> for SpatialResolution {
 
     fn div(self, rhs: f64) -> Self::Output {
         SpatialResolution {
-            x: self.x + rhs,
-            y: self.y + rhs,
+            x: self.x / rhs,
+            y: self.y / rhs,
         }
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use super::*;
+    use std::mem;
+
+    #[test]
+    fn byte_size() {
+        assert_eq!(
+            mem::size_of::<SpatialResolution>(),
+            2 * mem::size_of::<f64>()
+        );
+        assert_eq!(mem::size_of::<SpatialResolution>(), 2 * 8);
+    }
+
+    #[test]
+    fn add() {
+        let res = SpatialResolution { x: 4., y: 9. } + SpatialResolution { x: 1., y: 1. };
+        assert_eq!(res, SpatialResolution { x: 5., y: 10. });
+    }
+
+    #[test]
+    fn sub() {
+        let res = SpatialResolution { x: 4., y: 9. } - SpatialResolution { x: 1., y: 1. };
+        assert_eq!(res, SpatialResolution { x: 3., y: 8. });
+    }
+
+    #[test]
+    fn mul_scalar() {
+        let res = SpatialResolution { x: 4., y: 9. } * 2.;
+        assert_eq!(res, SpatialResolution { x: 8., y: 18. });
+    }
+
+    #[test]
+    fn div_scalar() {
+        let res = SpatialResolution { x: 4., y: 8. } / 2.;
+        assert_eq!(res, SpatialResolution { x: 2., y: 4. });
     }
 }
