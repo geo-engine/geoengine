@@ -366,7 +366,6 @@ impl NFDIDataProvider {
     fn raster_loading_template(info: &RasterInfo, rd: &RasterResultDescriptor) -> GdalLoadingInfo {
         let part = GdalLoadingInfoPart {
             time: info.time_interval,
-            // TODO: set to None when there is no data
             params: Some(GdalDatasetParameters {
                 file_path: PathBuf::from(format!("/vsicurl/{}", URL_REPLACEMENT)),
                 rasterband_channel: info.rasterband_channel,
