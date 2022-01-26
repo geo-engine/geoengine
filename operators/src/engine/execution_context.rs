@@ -1,4 +1,4 @@
-use super::{MockQueryContext, RasterQueryRectangle, VectorQueryRectangle};
+use super::MockQueryContext;
 use crate::engine::{
     ChunkByteSize, RasterResultDescriptor, ResultDescriptor, VectorResultDescriptor,
 };
@@ -8,7 +8,9 @@ use crate::source::{GdalLoadingInfo, OgrSourceDataset};
 use crate::util::{create_rayon_thread_pool, Result};
 use async_trait::async_trait;
 use geoengine_datatypes::dataset::DatasetId;
+use geoengine_datatypes::primitives::{RasterQueryRectangle, VectorQueryRectangle};
 use geoengine_datatypes::raster::TilingSpecification;
+use geoengine_datatypes::util::test::TestDefault;
 use rayon::ThreadPool;
 use serde::{Deserialize, Serialize};
 use std::any::Any;
@@ -62,21 +64,22 @@ pub struct MockExecutionContext {
     pub tiling_specification: TilingSpecification,
 }
 
-impl Default for MockExecutionContext {
-    fn default() -> Self {
+impl TestDefault for MockExecutionContext {
+    fn test_default() -> Self {
         Self {
             thread_pool: create_rayon_thread_pool(0),
             meta_data: HashMap::default(),
-            tiling_specification: TilingSpecification::default(),
+            tiling_specification: TilingSpecification::test_default(),
         }
     }
 }
 
 impl MockExecutionContext {
     pub fn new_with_tiling_spec(tiling_specification: TilingSpecification) -> Self {
-        MockExecutionContext {
+        Self {
+            thread_pool: create_rayon_thread_pool(0),
+            meta_data: HashMap::default(),
             tiling_specification,
-            ..Default::default()
         }
     }
 
@@ -84,10 +87,10 @@ impl MockExecutionContext {
         tiling_specification: TilingSpecification,
         num_threads: usize,
     ) -> Self {
-        MockExecutionContext {
+        Self {
             thread_pool: create_rayon_thread_pool(num_threads),
+            meta_data: HashMap::default(),
             tiling_specification,
-            ..Default::default()
         }
     }
 

@@ -1,12 +1,13 @@
 use std::sync::Arc;
 
-use crate::engine::RasterQueryRectangle;
 use crate::error;
 use crate::util::Result;
 use futures::future::BoxFuture;
 use futures::{Future, FutureExt, TryFuture, TryFutureExt};
 use geoengine_datatypes::operations::reproject::Reproject;
-use geoengine_datatypes::primitives::{SpatialPartition2D, SpatialPartitioned};
+use geoengine_datatypes::primitives::{
+    RasterQueryRectangle, SpatialPartition2D, SpatialPartitioned,
+};
 use geoengine_datatypes::raster::{Grid2D, GridIndexAccess, GridSize};
 use geoengine_datatypes::{
     operations::reproject::{CoordinateProjection, CoordinateProjector},
@@ -425,7 +426,7 @@ mod tests {
         }
         .boxed();
 
-        let mut exe_ctx = MockExecutionContext::default();
+        let mut exe_ctx = MockExecutionContext::test_default();
         exe_ctx.tiling_specification.tile_size_in_pixels = GridShape {
             shape_array: [2, 2],
         };
@@ -436,7 +437,7 @@ mod tests {
             spatial_resolution: SpatialResolution::one(),
         };
 
-        let query_ctx = MockQueryContext::default();
+        let query_ctx = MockQueryContext::test_default();
         let tiling_strat = exe_ctx.tiling_specification;
 
         let op = mrs1.initialize(&exe_ctx).await.unwrap();

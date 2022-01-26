@@ -3,10 +3,9 @@ use crate::{
     adapters::{fold_by_coordinate_lookup_future, RasterSubQueryAdapter, TileReprojectionSubQuery},
     engine::{
         ExecutionContext, InitializedRasterOperator, InitializedVectorOperator, Operator,
-        QueryContext, QueryProcessor, RasterOperator, RasterQueryProcessor, RasterQueryRectangle,
-        RasterResultDescriptor, SingleRasterOrVectorSource, TypedRasterQueryProcessor,
-        TypedVectorQueryProcessor, VectorOperator, VectorQueryProcessor, VectorQueryRectangle,
-        VectorResultDescriptor,
+        QueryContext, QueryProcessor, RasterOperator, RasterQueryProcessor, RasterResultDescriptor,
+        SingleRasterOrVectorSource, TypedRasterQueryProcessor, TypedVectorQueryProcessor,
+        VectorOperator, VectorQueryProcessor, VectorResultDescriptor,
     },
     error,
     util::{input::RasterOrVectorOperator, Result},
@@ -16,11 +15,11 @@ use futures::stream::BoxStream;
 use futures::StreamExt;
 use geoengine_datatypes::{
     operations::reproject::{
-        suggest_pixel_size_from_diag_cross_projected, CoordinateProjection, CoordinateProjector,
-        Reproject, ReprojectClipped,
+        reproject_query, suggest_pixel_size_from_diag_cross_projected, CoordinateProjection,
+        CoordinateProjector, Reproject,
     },
     primitives::AxisAlignedRectangle,
-    primitives::{BoundingBox2D, SpatialPartition2D},
+    primitives::{BoundingBox2D, RasterQueryRectangle, SpatialPartition2D, VectorQueryRectangle},
     raster::{Pixel, RasterTile2D, TilingSpecification},
     spatial_reference::SpatialReference,
 };
@@ -111,7 +110,7 @@ impl InitializedVectorOperator for InitializedVectorReprojection {
         match self.source.query_processor()? {
             TypedVectorQueryProcessor::Data(source) => Ok(TypedVectorQueryProcessor::Data(
                 MapQueryProcessor::new(source, move |query| {
-                    query_rewrite_fn(query, state.source_srs, state.target_srs)
+                    reproject_query(query, state.source_srs, state.target_srs).map_err(From::from)
                 })
                 .boxed(),
             )),
@@ -167,30 +166,6 @@ where
     }
 }
 
-/// this method performs the transformation of a query rectangle in `target` projection
-/// to a new query rectangle with coordinates in the `source` projection
-pub fn query_rewrite_fn(
-    query: VectorQueryRectangle,
-    source: SpatialReference,
-    target: SpatialReference,
-) -> Result<VectorQueryRectangle> {
-    let projector_source_target = CoordinateProjector::from_known_srs(source, target)?;
-    let projector_target_source = CoordinateProjector::from_known_srs(target, source)?;
-
-    let p_bbox = query
-        .spatial_bounds
-        .reproject_clipped(&projector_target_source)?;
-    let s_bbox = p_bbox.reproject(&projector_source_target)?;
-
-    let p_spatial_resolution =
-        suggest_pixel_size_from_diag_cross_projected(s_bbox, p_bbox, query.spatial_resolution)?;
-    Ok(VectorQueryRectangle {
-        spatial_bounds: p_bbox,
-        spatial_resolution: p_spatial_resolution,
-        time_interval: query.time_interval,
-    })
-}
-
 #[async_trait]
 impl<Q, G> QueryProcessor for VectorReprojectionProcessor<Q, G>
 where
@@ -205,7 +180,7 @@ where
         query: VectorQueryRectangle,
         ctx: &'a dyn QueryContext,
     ) -> Result<BoxStream<'a, Result<Self::Output>>> {
-        let rewritten_query = query_rewrite_fn(query, self.from, self.to)?;
+        let rewritten_query = reproject_query(query, self.from, self.to)?;
 
         Ok(self
             .source
@@ -497,11 +472,12 @@ where
 
 #[cfg(test)]
 mod tests {
-    use std::collections::HashMap;
-    use std::path::PathBuf;
-
+    use super::*;
+    use crate::engine::{MockExecutionContext, MockQueryContext};
+    use crate::mock::MockFeatureCollectionSource;
+    use crate::mock::{MockRasterSource, MockRasterSourceParams};
     use crate::{
-        engine::{ChunkByteSize, QueryRectangle, VectorOperator},
+        engine::{ChunkByteSize, VectorOperator},
         source::{
             FileNotFoundHandling, GdalDatasetGeoTransform, GdalDatasetParameters,
             GdalMetaDataRegular, GdalMetaDataStatic, GdalSource, GdalSourceParameters,
@@ -510,6 +486,9 @@ mod tests {
         test_data,
         util::gdal::{add_ndvi_dataset, gdal_open_dataset},
     };
+    use float_cmp::approx_eq;
+    use futures::StreamExt;
+    use geoengine_datatypes::collections::IntoGeometryIterator;
     use geoengine_datatypes::{
         collections::{
             GeometryCollection, MultiLineStringCollection, MultiPointCollection,
@@ -518,7 +497,7 @@ mod tests {
         dataset::{DatasetId, InternalDatasetId},
         hashmap,
         primitives::{
-            BoundingBox2D, Measurement, MultiLineString, MultiPoint, MultiPolygon,
+            BoundingBox2D, Measurement, MultiLineString, MultiPoint, MultiPolygon, QueryRectangle,
             SpatialResolution, TimeGranularity, TimeInstance, TimeInterval, TimeStep,
         },
         raster::{Grid, GridShape, GridShape2D, GridSize, RasterDataType, RasterTile2D},
@@ -532,13 +511,8 @@ mod tests {
             Identifier,
         },
     };
-
-    use crate::engine::{MockExecutionContext, MockQueryContext};
-    use crate::mock::MockFeatureCollectionSource;
-    use crate::mock::{MockRasterSource, MockRasterSourceParams};
-    use futures::StreamExt;
-
-    use super::*;
+    use std::collections::HashMap;
+    use std::path::PathBuf;
 
     #[tokio::test]
     async fn multi_point() -> Result<()> {
@@ -553,16 +527,12 @@ mod tests {
             Default::default(),
         )?;
 
-        let projected_points = MultiPointCollection::from_data(
-            MultiPoint::many(vec![
-                MARBURG_EPSG_900_913,
-                COLOGNE_EPSG_900_913,
-                HAMBURG_EPSG_900_913,
-            ])
-            .unwrap(),
-            vec![TimeInterval::new_unchecked(0, 1); 3],
-            Default::default(),
-        )?;
+        let expected = MultiPoint::many(vec![
+            MARBURG_EPSG_900_913,
+            COLOGNE_EPSG_900_913,
+            HAMBURG_EPSG_900_913,
+        ])
+        .unwrap();
 
         let point_source = MockFeatureCollectionSource::single(points.clone()).boxed();
 
@@ -577,7 +547,7 @@ mod tests {
                 source: point_source.into(),
             },
         })
-        .initialize(&MockExecutionContext::default())
+        .initialize(&MockExecutionContext::test_default())
         .await?;
 
         let query_processor = initialized_operator.query_processor()?;
@@ -604,7 +574,13 @@ mod tests {
 
         assert_eq!(result.len(), 1);
 
-        assert_eq!(result[0], projected_points);
+        result[0]
+            .geometries()
+            .into_iter()
+            .zip(expected.iter())
+            .for_each(|(a, e)| {
+                assert!(approx_eq!(&MultiPoint, &a.into(), e, epsilon = 0.00001));
+            });
 
         Ok(())
     }
@@ -622,16 +598,12 @@ mod tests {
             Default::default(),
         )?;
 
-        let projected_lines = MultiLineStringCollection::from_data(
-            vec![MultiLineString::new(vec![vec![
-                MARBURG_EPSG_900_913,
-                COLOGNE_EPSG_900_913,
-                HAMBURG_EPSG_900_913,
-            ]])
-            .unwrap()],
-            vec![TimeInterval::new_unchecked(0, 1); 1],
-            Default::default(),
-        )?;
+        let expected = [MultiLineString::new(vec![vec![
+            MARBURG_EPSG_900_913,
+            COLOGNE_EPSG_900_913,
+            HAMBURG_EPSG_900_913,
+        ]])
+        .unwrap()];
 
         let lines_source = MockFeatureCollectionSource::single(lines.clone()).boxed();
 
@@ -646,7 +618,7 @@ mod tests {
                 source: lines_source.into(),
             },
         })
-        .initialize(&MockExecutionContext::default())
+        .initialize(&MockExecutionContext::test_default())
         .await?;
 
         let query_processor = initialized_operator.query_processor()?;
@@ -673,7 +645,18 @@ mod tests {
 
         assert_eq!(result.len(), 1);
 
-        assert_eq!(result[0], projected_lines);
+        result[0]
+            .geometries()
+            .into_iter()
+            .zip(expected.iter())
+            .for_each(|(a, e)| {
+                assert!(approx_eq!(
+                    &MultiLineString,
+                    &a.into(),
+                    e,
+                    epsilon = 0.00001
+                ));
+            });
 
         Ok(())
     }
@@ -692,17 +675,13 @@ mod tests {
             Default::default(),
         )?;
 
-        let projected_polygons = MultiPolygonCollection::from_data(
-            vec![MultiPolygon::new(vec![vec![vec![
-                MARBURG_EPSG_900_913,
-                COLOGNE_EPSG_900_913,
-                HAMBURG_EPSG_900_913,
-                MARBURG_EPSG_900_913,
-            ]]])
-            .unwrap()],
-            vec![TimeInterval::new_unchecked(0, 1); 1],
-            Default::default(),
-        )?;
+        let expected = [MultiPolygon::new(vec![vec![vec![
+            MARBURG_EPSG_900_913,
+            COLOGNE_EPSG_900_913,
+            HAMBURG_EPSG_900_913,
+            MARBURG_EPSG_900_913,
+        ]]])
+        .unwrap()];
 
         let polygon_source = MockFeatureCollectionSource::single(polygons.clone()).boxed();
 
@@ -717,7 +696,7 @@ mod tests {
                 source: polygon_source.into(),
             },
         })
-        .initialize(&MockExecutionContext::default())
+        .initialize(&MockExecutionContext::test_default())
         .await?;
 
         let query_processor = initialized_operator.query_processor()?;
@@ -744,7 +723,13 @@ mod tests {
 
         assert_eq!(result.len(), 1);
 
-        assert_eq!(result[0], projected_polygons);
+        result[0]
+            .geometries()
+            .into_iter()
+            .zip(expected.iter())
+            .for_each(|(a, e)| {
+                assert!(approx_eq!(&MultiPolygon, &a.into(), e, epsilon = 0.00001));
+            });
 
         Ok(())
     }
@@ -810,13 +795,13 @@ mod tests {
         }
         .boxed();
 
-        let mut exe_ctx = MockExecutionContext::default();
+        let mut exe_ctx = MockExecutionContext::test_default();
         exe_ctx.tiling_specification.tile_size_in_pixels = GridShape {
             // we need a smaller tile size
             shape_array: [2, 2],
         };
 
-        let query_ctx = MockQueryContext::default();
+        let query_ctx = MockQueryContext::test_default();
 
         let initialized_operator = RasterOperator::boxed(Reprojection {
             params: ReprojectionParams {
@@ -854,8 +839,8 @@ mod tests {
 
     #[tokio::test]
     async fn raster_ndvi_3857() -> Result<()> {
-        let mut exe_ctx = MockExecutionContext::default();
-        let query_ctx = MockQueryContext::default();
+        let mut exe_ctx = MockExecutionContext::test_default();
+        let query_ctx = MockQueryContext::test_default();
         let id = add_ndvi_dataset(&mut exe_ctx);
         exe_ctx.tiling_specification =
             TilingSpecification::new((0.0, 0.0).into(), [450, 450].into());
@@ -945,22 +930,25 @@ mod tests {
             (20_037_508.342_789_244, 20_048_966.104_014_594).into(),
         );
 
-        assert_eq!(
+        let reprojected = reproject_query(
+            query,
+            SpatialReference::new(SpatialReferenceAuthority::Epsg, 3857),
+            SpatialReference::epsg_4326(),
+        )
+        .unwrap();
+
+        assert!(approx_eq!(
+            BoundingBox2D,
             expected,
-            query_rewrite_fn(
-                query,
-                SpatialReference::new(SpatialReferenceAuthority::Epsg, 3857),
-                SpatialReference::epsg_4326(),
-            )
-            .unwrap()
-            .spatial_bounds
-        );
+            reprojected.spatial_bounds,
+            epsilon = 0.000_001
+        ));
     }
 
     #[tokio::test]
     async fn raster_ndvi_3857_to_4326() -> Result<()> {
-        let mut exe_ctx = MockExecutionContext::default();
-        let query_ctx = MockQueryContext::default();
+        let mut exe_ctx = MockExecutionContext::test_default();
+        let query_ctx = MockQueryContext::test_default();
 
         let m = GdalMetaDataRegular {
             start: TimeInstance::from_millis(1_388_534_400_000).unwrap(),
@@ -1101,8 +1089,8 @@ mod tests {
 
     #[tokio::test]
     async fn query_outside_projection_area_of_use_produces_empty_tiles() {
-        let mut exe_ctx = MockExecutionContext::default();
-        let query_ctx = MockQueryContext::default();
+        let mut exe_ctx = MockExecutionContext::test_default();
+        let query_ctx = MockQueryContext::test_default();
 
         let m = GdalMetaDataStatic {
             time: Some(TimeInterval::default()),
@@ -1196,8 +1184,8 @@ mod tests {
 
     #[tokio::test]
     async fn points_from_wgs84_to_utm36n() {
-        let exe_ctx = MockExecutionContext::default();
-        let query_ctx = MockQueryContext::default();
+        let exe_ctx = MockExecutionContext::test_default();
+        let query_ctx = MockQueryContext::test_default();
 
         let point_source = MockFeatureCollectionSource::single(
             MultiPointCollection::from_data(

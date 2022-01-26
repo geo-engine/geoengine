@@ -1,3 +1,5 @@
+use float_cmp::{ApproxEq, F64Margin};
+
 use super::{BoundingBox2D, Coordinate2D, SpatialBounded};
 
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -45,6 +47,15 @@ impl SpatialBounded for Line {
             self.start.min_elements(self.end),
             self.start.max_elements(self.end),
         )
+    }
+}
+
+impl ApproxEq for Line {
+    type Margin = F64Margin;
+
+    fn approx_eq<M: Into<Self::Margin>>(self, other: Self, margin: M) -> bool {
+        let m = margin.into();
+        self.start.approx_eq(other.start, m) && self.end.approx_eq(other.end, m)
     }
 }
 

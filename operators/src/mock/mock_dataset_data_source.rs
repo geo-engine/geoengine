@@ -1,7 +1,7 @@
 use crate::engine::{
     ExecutionContext, InitializedVectorOperator, MetaData, OperatorDatasets, QueryContext,
     ResultDescriptor, SourceOperator, TypedVectorQueryProcessor, VectorOperator,
-    VectorQueryProcessor, VectorQueryRectangle, VectorResultDescriptor,
+    VectorQueryProcessor, VectorResultDescriptor,
 };
 use crate::util::Result;
 use async_trait::async_trait;
@@ -10,7 +10,7 @@ use futures::stream::BoxStream;
 use futures::StreamExt;
 use geoengine_datatypes::collections::{MultiPointCollection, VectorDataType};
 use geoengine_datatypes::dataset::DatasetId;
-use geoengine_datatypes::primitives::{Coordinate2D, TimeInterval};
+use geoengine_datatypes::primitives::{Coordinate2D, TimeInterval, VectorQueryRectangle};
 use geoengine_datatypes::spatial_reference::SpatialReferenceOption;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
@@ -163,11 +163,12 @@ mod tests {
     use geoengine_datatypes::collections::FeatureCollectionInfos;
     use geoengine_datatypes::dataset::InternalDatasetId;
     use geoengine_datatypes::primitives::{BoundingBox2D, SpatialResolution};
+    use geoengine_datatypes::util::test::TestDefault;
     use geoengine_datatypes::util::Identifier;
 
     #[tokio::test]
     async fn test() {
-        let mut execution_context = MockExecutionContext::default();
+        let mut execution_context = MockExecutionContext::test_default();
 
         let id = DatasetId::Internal {
             dataset_id: InternalDatasetId::new(),

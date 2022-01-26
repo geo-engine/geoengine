@@ -246,7 +246,6 @@ mod tests {
 
     use crate::engine::{
         ChunkByteSize, MockExecutionContext, MockQueryContext, QueryProcessor, RasterOperator,
-        VectorQueryRectangle,
     };
     use crate::mock::MockFeatureCollectionSource;
     use crate::source::{GdalSource, GdalSourceParameters};
@@ -257,7 +256,9 @@ mod tests {
     use geoengine_datatypes::dataset::DatasetId;
     use geoengine_datatypes::primitives::{
         BoundingBox2D, DataRef, FeatureDataRef, MultiPoint, SpatialResolution, TimeInterval,
+        VectorQueryRectangle,
     };
+    use geoengine_datatypes::util::test::TestDefault;
     use serde_json::json;
 
     #[test]
@@ -331,7 +332,7 @@ mod tests {
         )
         .boxed();
 
-        let mut exe_ctc = MockExecutionContext::default();
+        let mut exe_ctc = MockExecutionContext::test_default();
         let ndvi_id = add_ndvi_dataset(&mut exe_ctc);
 
         let operator = RasterVectorJoin {
@@ -404,7 +405,7 @@ mod tests {
         )
         .boxed();
 
-        let mut exe_ctc = MockExecutionContext::default();
+        let mut exe_ctc = MockExecutionContext::test_default();
         let ndvi_id = add_ndvi_dataset(&mut exe_ctc);
 
         let operator = RasterVectorJoin {
@@ -478,7 +479,7 @@ mod tests {
         )
         .boxed();
 
-        let mut exe_ctc = MockExecutionContext::default();
+        let mut exe_ctc = MockExecutionContext::test_default();
         let ndvi_id = add_ndvi_dataset(&mut exe_ctc);
 
         let operator = RasterVectorJoin {

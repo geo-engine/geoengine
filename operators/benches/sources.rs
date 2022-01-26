@@ -4,16 +4,14 @@ use std::time::Instant;
 
 use futures::StreamExt;
 use geoengine_datatypes::{
-    primitives::{SpatialPartition2D, SpatialResolution, TimeInterval},
+    primitives::{RasterQueryRectangle, SpatialPartition2D, SpatialResolution, TimeInterval},
     raster::{
         GeoTransform, Grid2D, GridOrEmpty2D, GridSize, Pixel, RasterTile2D, TilingSpecification,
     },
     util::test::TestDefault,
 };
 use geoengine_operators::{
-    engine::{
-        ChunkByteSize, MockQueryContext, QueryContext, RasterQueryProcessor, RasterQueryRectangle,
-    },
+    engine::{ChunkByteSize, MockQueryContext, QueryContext, RasterQueryProcessor},
     mock::MockRasterSourceProcessor,
     source::{GdalMetaDataRegular, GdalSourceProcessor},
     util::gdal::create_ndvi_meta_data,

@@ -19,11 +19,11 @@ nfdi = ["postgres", "geoengine-datatypes/postgres", "scienceobjectsdb_rust_api"]
 pro = ["postgres", "geoengine-operators/pro", "geoengine-datatypes/pro"]
 
 [dependencies]
-actix-files = "=0.6.0-beta.13"
-actix-http = "=3.0.0-beta.18"
+actix-files = "=0.6.0-beta.15"
+actix-http = "=3.0.0-beta.19"
 actix-multipart = "=0.4.0-beta.12"
-actix-rt = "2.5"
-actix-web = "=4.0.0-beta.19"
+actix-rt = "2.6"
+actix-web = "=4.0.0-beta.21"
 actix-web-httpauth = "=0.6.0-beta.7"
 async-trait = "0.1"
 base64 = "0.13"
@@ -32,9 +32,10 @@ bytes = "1.0"
 chrono = { version = "0.4", features = ["serde"] }
 config = "0.11"
 flexi_logger = "0.22"
+float-cmp = "0.9"
 futures = "0.3"
 futures-util = "0.3"
-gdal = "0.11"
+gdal = "0.12"
 geo = "0.18"
 geoengine-datatypes = { path = "../datatypes" }
 geoengine-operators = { path = "../operators" }
@@ -43,7 +44,6 @@ image = "0.23"
 lazy_static = "1.4"
 log = "0.4"
 mime = "0.3"
-num_cpus = "1.13" # TODO: remove and switch to std::thread::available_concurrency() when it is available
 num-traits = "0.2"
 paste = "1.0"
 postgres-types = { version = "0.2", features = ["derive"], optional = true }
@@ -68,12 +68,12 @@ typetag = "0.1"
 url = { version = "2.2", features = ["serde"] }
 uuid = { version = "0.8", features = ["serde", "v4", "v5"] }
 zip = "0.5"
-
 [dev-dependencies]
 httptest = "0.15.2"
 rand = "0.8.4"
 tempfile = "3.1"
 walkdir = "2.3"
+wiremock-grpc = "0.0.3-alpha1"
 xml-rs = "0.8.3"
 
 [build-dependencies]

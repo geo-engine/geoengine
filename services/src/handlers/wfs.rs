@@ -1,4 +1,5 @@
 use actix_web::{web, FromRequest, HttpResponse};
+use geoengine_datatypes::primitives::VectorQueryRectangle;
 use reqwest::Url;
 use snafu::{ensure, ResultExt};
 
@@ -23,7 +24,6 @@ use geoengine_datatypes::{
 };
 use geoengine_operators::engine::{
     QueryContext, ResultDescriptor, TypedVectorQueryProcessor, VectorQueryProcessor,
-    VectorQueryRectangle,
 };
 use geoengine_operators::engine::{QueryProcessor, VectorOperator};
 use geoengine_operators::processing::{Reprojection, ReprojectionParams};
@@ -606,6 +606,7 @@ mod tests {
     use geoengine_datatypes::dataset::DatasetId;
     use geoengine_datatypes::raster::{GridShape2D, TilingSpecification};
     use geoengine_datatypes::test_data;
+    use geoengine_datatypes::util::test::TestDefault;
     use geoengine_operators::engine::TypedOperator;
     use geoengine_operators::source::CsvSourceParameters;
     use geoengine_operators::source::{CsvGeometrySpecification, CsvSource, CsvTimeSpecification};
@@ -617,7 +618,7 @@ mod tests {
 
     #[tokio::test]
     async fn mock_test() {
-        let ctx = InMemoryContext::default();
+        let ctx = InMemoryContext::test_default();
         let session_id = ctx.default_session_ref().await.id();
 
         let req = test::TestRequest::get()
@@ -721,7 +722,7 @@ x;y
         .unwrap();
         temp_file.seek(SeekFrom::Start(0)).unwrap();
 
-        let ctx = InMemoryContext::default();
+        let ctx = InMemoryContext::test_default();
         let session_id = ctx.default_session_ref().await.id();
 
         let workflow = Workflow {
@@ -789,7 +790,7 @@ x;y
         .unwrap();
         temp_file.seek(SeekFrom::Start(0)).unwrap();
 
-        let ctx = InMemoryContext::default();
+        let ctx = InMemoryContext::test_default();
         let session_id = ctx.default_session_ref().await.id();
 
         let workflow = Workflow {
@@ -876,7 +877,7 @@ x;y
 
     #[tokio::test]
     async fn get_feature_registry_missing_fields() {
-        let ctx = InMemoryContext::default();
+        let ctx = InMemoryContext::test_default();
         let session_id = ctx.default_session_ref().await.id();
 
         let req = test::TestRequest::get().uri(
@@ -907,7 +908,7 @@ x;y
         .unwrap();
         temp_file.seek(SeekFrom::Start(0)).unwrap();
 
-        let ctx = InMemoryContext::default();
+        let ctx = InMemoryContext::test_default();
         let session_id = ctx.default_session_ref().await.id();
 
         let workflow = Workflow {
@@ -1008,7 +1009,7 @@ x;y
 
     #[tokio::test]
     async fn get_feature_json_missing_fields() {
-        let ctx = InMemoryContext::default();
+        let ctx = InMemoryContext::test_default();
         let session_id = ctx.default_session_ref().await.id();
 
         let params = &[
@@ -1062,7 +1063,10 @@ x;y
         };
 
         // override the pixel size since this test was designed for 600 x 600 pixel tiles
-        let ctx = InMemoryContext::new_with_context_spec(exe_ctx_tiling_spec, Default::default());
+        let ctx = InMemoryContext::new_with_context_spec(
+            exe_ctx_tiling_spec,
+            TestDefault::test_default(),
+        );
 
         let session_id = ctx.default_session_ref().await.id();
 

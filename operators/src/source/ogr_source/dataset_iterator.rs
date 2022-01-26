@@ -1,22 +1,19 @@
 // generated code of `_OgrDatasetIterator` needs this lint for the `peeked` field
 #![allow(clippy::option_option)]
 
-use std::cell::Cell;
-use std::ffi::OsStr;
-use std::iter::FusedIterator;
-
-use gdal::vector::sql::Dialect;
-use gdal::vector::Feature;
-use gdal::{Dataset, DatasetOptions, GdalOpenFlags};
-use log::debug;
-use ouroboros::self_referencing;
-
-use crate::engine::VectorQueryRectangle;
+use super::{CsvHeader, FeaturesProvider, FormatSpecifics, OgrSourceDataset};
 use crate::error::{self};
 use crate::util::gdal::gdal_open_dataset_ex;
 use crate::util::Result;
-
-use super::{CsvHeader, FeaturesProvider, FormatSpecifics, OgrSourceDataset};
+use gdal::vector::sql::Dialect;
+use gdal::vector::Feature;
+use gdal::{Dataset, DatasetOptions, GdalOpenFlags};
+use geoengine_datatypes::primitives::VectorQueryRectangle;
+use log::debug;
+use ouroboros::self_referencing;
+use std::cell::Cell;
+use std::ffi::OsStr;
+use std::iter::FusedIterator;
 
 /// An iterator over features from a OGR dataset.
 /// This iterator contains the dataset and one of its layers.

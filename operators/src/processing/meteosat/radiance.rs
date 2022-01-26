@@ -2,14 +2,14 @@ use std::sync::Arc;
 
 use crate::engine::{
     ExecutionContext, InitializedRasterOperator, Operator, QueryContext, QueryProcessor,
-    RasterOperator, RasterQueryProcessor, RasterQueryRectangle, RasterResultDescriptor,
-    SingleRasterSource, TypedRasterQueryProcessor,
+    RasterOperator, RasterQueryProcessor, RasterResultDescriptor, SingleRasterSource,
+    TypedRasterQueryProcessor,
 };
 use crate::util::Result;
 use async_trait::async_trait;
 use futures::stream::BoxStream;
 use futures::{StreamExt, TryStreamExt};
-use geoengine_datatypes::primitives::{Measurement, SpatialPartition2D};
+use geoengine_datatypes::primitives::{Measurement, RasterQueryRectangle, SpatialPartition2D};
 use geoengine_datatypes::raster::{
     EmptyGrid, Grid2D, GridShapeAccess, GridSize, NoDataValue, Pixel, RasterDataType,
     RasterPropertiesKey, RasterTile2D,
@@ -267,11 +267,12 @@ mod tests {
     use crate::processing::meteosat::test_util;
     use geoengine_datatypes::primitives::Measurement;
     use geoengine_datatypes::raster::{EmptyGrid2D, Grid2D};
+    use geoengine_datatypes::util::test::TestDefault;
     use std::collections::HashMap;
 
     // #[tokio::test]
     // async fn test_msg_raster() {
-    //     let mut ctx = MockExecutionContext::default();
+    //     let mut ctx = MockExecutionContext::test_default();
     //     let src = test_util::_create_gdal_src(&mut ctx);
     //
     //     let result = test_util::process(
@@ -293,7 +294,7 @@ mod tests {
     #[tokio::test]
     async fn test_ok() {
         let no_data_value_option = Some(super::OUT_NO_DATA_VALUE);
-        let ctx = MockExecutionContext::default();
+        let ctx = MockExecutionContext::test_default();
 
         let result = test_util::process(
             || {
@@ -326,7 +327,7 @@ mod tests {
     #[tokio::test]
     async fn test_empty_raster() {
         let no_data_value_option = Some(super::OUT_NO_DATA_VALUE);
-        let ctx = MockExecutionContext::default();
+        let ctx = MockExecutionContext::test_default();
 
         let result = test_util::process(
             || {
@@ -352,7 +353,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_missing_offset() {
-        let ctx = MockExecutionContext::default();
+        let ctx = MockExecutionContext::test_default();
 
         let result = test_util::process(
             || {
@@ -375,7 +376,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_missing_slope() {
-        let ctx = MockExecutionContext::default();
+        let ctx = MockExecutionContext::test_default();
 
         let result = test_util::process(
             || {
@@ -398,7 +399,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_invalid_measurement_unitless() {
-        let ctx = MockExecutionContext::default();
+        let ctx = MockExecutionContext::test_default();
 
         let res = test_util::process(
             || {
@@ -422,7 +423,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_invalid_measurement_continuous() {
-        let ctx = MockExecutionContext::default();
+        let ctx = MockExecutionContext::test_default();
 
         let res = test_util::process(
             || {
@@ -453,7 +454,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_invalid_measurement_classification() {
-        let ctx = MockExecutionContext::default();
+        let ctx = MockExecutionContext::test_default();
 
         let res = test_util::process(
             || {

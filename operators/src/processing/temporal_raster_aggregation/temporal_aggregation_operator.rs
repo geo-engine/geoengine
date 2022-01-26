@@ -11,7 +11,7 @@ use crate::{
     util::Result,
 };
 use async_trait::async_trait;
-use geoengine_datatypes::primitives::SpatialPartition2D;
+use geoengine_datatypes::primitives::{RasterQueryRectangle, SpatialPartition2D};
 use geoengine_datatypes::raster::{Pixel, RasterTile2D};
 use geoengine_datatypes::{primitives::TimeStep, raster::TilingSpecification};
 use log::debug;
@@ -222,7 +222,7 @@ where
     #[allow(clippy::too_many_lines)]
     async fn query<'a>(
         &'a self,
-        query: crate::engine::RasterQueryRectangle,
+        query: RasterQueryRectangle,
         ctx: &'a dyn crate::engine::QueryContext,
     ) -> Result<futures::stream::BoxStream<'a, Result<Self::Output>>> {
         match self.aggregation_type {
@@ -338,7 +338,7 @@ mod tests {
     use num_traits::AsPrimitive;
 
     use crate::{
-        engine::{MockExecutionContext, MockQueryContext, RasterQueryRectangle},
+        engine::{MockExecutionContext, MockQueryContext},
         mock::{MockRasterSource, MockRasterSourceParams},
     };
 
@@ -376,16 +376,16 @@ mod tests {
         }
         .boxed();
 
-        let exe_ctx = MockExecutionContext {
-            tiling_specification: TilingSpecification::new((0., 0.).into(), [3, 2].into()),
-            ..Default::default()
-        };
+        let exe_ctx = MockExecutionContext::new_with_tiling_spec(TilingSpecification::new(
+            (0., 0.).into(),
+            [3, 2].into(),
+        ));
         let query_rect = RasterQueryRectangle {
             spatial_bounds: SpatialPartition2D::new_unchecked((0., 3.).into(), (4., 0.).into()),
             time_interval: TimeInterval::new_unchecked(0, 40),
             spatial_resolution: SpatialResolution::one(),
         };
-        let query_ctx = MockQueryContext::default();
+        let query_ctx = MockQueryContext::test_default();
 
         let qp = agg
             .initialize(&exe_ctx)
@@ -498,16 +498,16 @@ mod tests {
         }
         .boxed();
 
-        let exe_ctx = MockExecutionContext {
-            tiling_specification: TilingSpecification::new((0., 0.).into(), [3, 2].into()),
-            ..Default::default()
-        };
+        let exe_ctx = MockExecutionContext::new_with_tiling_spec(TilingSpecification::new(
+            (0., 0.).into(),
+            [3, 2].into(),
+        ));
         let query_rect = RasterQueryRectangle {
             spatial_bounds: SpatialPartition2D::new_unchecked((0., 3.).into(), (4., 0.).into()),
             time_interval: TimeInterval::new_unchecked(0, 40),
             spatial_resolution: SpatialResolution::one(),
         };
-        let query_ctx = MockQueryContext::default();
+        let query_ctx = MockQueryContext::test_default();
 
         let qp = agg
             .initialize(&exe_ctx)
@@ -625,16 +625,16 @@ mod tests {
         }
         .boxed();
 
-        let exe_ctx = MockExecutionContext {
-            tiling_specification: TilingSpecification::new((0., 0.).into(), [3, 2].into()),
-            ..Default::default()
-        };
+        let exe_ctx = MockExecutionContext::new_with_tiling_spec(TilingSpecification::new(
+            (0., 0.).into(),
+            [3, 2].into(),
+        ));
         let query_rect = RasterQueryRectangle {
             spatial_bounds: SpatialPartition2D::new_unchecked((0., 3.).into(), (4., 0.).into()),
             time_interval: TimeInterval::new_unchecked(0, 40),
             spatial_resolution: SpatialResolution::one(),
         };
-        let query_ctx = MockQueryContext::default();
+        let query_ctx = MockQueryContext::test_default();
 
         let qp = agg
             .initialize(&exe_ctx)
@@ -757,16 +757,16 @@ mod tests {
         }
         .boxed();
 
-        let exe_ctx = MockExecutionContext {
-            tiling_specification: TilingSpecification::new((0., 0.).into(), [3, 2].into()),
-            ..Default::default()
-        };
+        let exe_ctx = MockExecutionContext::new_with_tiling_spec(TilingSpecification::new(
+            (0., 0.).into(),
+            [3, 2].into(),
+        ));
         let query_rect = RasterQueryRectangle {
             spatial_bounds: SpatialPartition2D::new_unchecked((0., 3.).into(), (4., 0.).into()),
             time_interval: TimeInterval::new_unchecked(0, 40),
             spatial_resolution: SpatialResolution::one(),
         };
-        let query_ctx = MockQueryContext::default();
+        let query_ctx = MockQueryContext::test_default();
 
         let qp = agg
             .initialize(&exe_ctx)
@@ -887,16 +887,16 @@ mod tests {
         }
         .boxed();
 
-        let exe_ctx = MockExecutionContext {
-            tiling_specification: TilingSpecification::new((0., 0.).into(), [3, 2].into()),
-            ..Default::default()
-        };
+        let exe_ctx = MockExecutionContext::new_with_tiling_spec(TilingSpecification::new(
+            (0., 0.).into(),
+            [3, 2].into(),
+        ));
         let query_rect = RasterQueryRectangle {
             spatial_bounds: SpatialPartition2D::new_unchecked((0., 3.).into(), (2., 0.).into()),
             time_interval: TimeInterval::new_unchecked(0, 20),
             spatial_resolution: SpatialResolution::one(),
         };
-        let query_ctx = MockQueryContext::default();
+        let query_ctx = MockQueryContext::test_default();
 
         let qp = agg
             .initialize(&exe_ctx)
@@ -961,16 +961,16 @@ mod tests {
         }
         .boxed();
 
-        let exe_ctx = MockExecutionContext {
-            tiling_specification: TilingSpecification::new((0., 0.).into(), [3, 2].into()),
-            ..Default::default()
-        };
+        let exe_ctx = MockExecutionContext::new_with_tiling_spec(TilingSpecification::new(
+            (0., 0.).into(),
+            [3, 2].into(),
+        ));
         let query_rect = RasterQueryRectangle {
             spatial_bounds: SpatialPartition2D::new_unchecked((0., 3.).into(), (4., 0.).into()),
             time_interval: TimeInterval::new_unchecked(0, 30),
             spatial_resolution: SpatialResolution::one(),
         };
-        let query_ctx = MockQueryContext::default();
+        let query_ctx = MockQueryContext::test_default();
 
         let qp = agg
             .initialize(&exe_ctx)
@@ -1052,16 +1052,16 @@ mod tests {
         }
         .boxed();
 
-        let exe_ctx = MockExecutionContext {
-            tiling_specification: TilingSpecification::new((0., 0.).into(), [3, 2].into()),
-            ..Default::default()
-        };
+        let exe_ctx = MockExecutionContext::new_with_tiling_spec(TilingSpecification::new(
+            (0., 0.).into(),
+            [3, 2].into(),
+        ));
         let query_rect = RasterQueryRectangle {
             spatial_bounds: SpatialPartition2D::new_unchecked((0., 3.).into(), (4., 0.).into()),
             time_interval: TimeInterval::new_unchecked(0, 30),
             spatial_resolution: SpatialResolution::one(),
         };
-        let query_ctx = MockQueryContext::default();
+        let query_ctx = MockQueryContext::test_default();
 
         let qp = agg
             .initialize(&exe_ctx)
@@ -1143,16 +1143,16 @@ mod tests {
         }
         .boxed();
 
-        let exe_ctx = MockExecutionContext {
-            tiling_specification: TilingSpecification::new((0., 0.).into(), [3, 2].into()),
-            ..Default::default()
-        };
+        let exe_ctx = MockExecutionContext::new_with_tiling_spec(TilingSpecification::new(
+            (0., 0.).into(),
+            [3, 2].into(),
+        ));
         let query_rect = RasterQueryRectangle {
             spatial_bounds: SpatialPartition2D::new_unchecked((0., 3.).into(), (4., 0.).into()),
             time_interval: TimeInterval::new_unchecked(0, 30),
             spatial_resolution: SpatialResolution::one(),
         };
-        let query_ctx = MockQueryContext::default();
+        let query_ctx = MockQueryContext::test_default();
 
         let qp = agg
             .initialize(&exe_ctx)
@@ -1233,16 +1233,16 @@ mod tests {
         }
         .boxed();
 
-        let exe_ctx = MockExecutionContext {
-            tiling_specification: TilingSpecification::new((0., 0.).into(), [3, 2].into()),
-            ..Default::default()
-        };
+        let exe_ctx = MockExecutionContext::new_with_tiling_spec(TilingSpecification::new(
+            (0., 0.).into(),
+            [3, 2].into(),
+        ));
         let query_rect = RasterQueryRectangle {
             spatial_bounds: SpatialPartition2D::new_unchecked((0., 3.).into(), (4., 0.).into()),
             time_interval: TimeInterval::new_unchecked(0, 30),
             spatial_resolution: SpatialResolution::one(),
         };
-        let query_ctx = MockQueryContext::default();
+        let query_ctx = MockQueryContext::test_default();
 
         let qp = agg
             .initialize(&exe_ctx)
@@ -1322,16 +1322,16 @@ mod tests {
         }
         .boxed();
 
-        let exe_ctx = MockExecutionContext {
-            tiling_specification: TilingSpecification::new((0., 0.).into(), [3, 2].into()),
-            ..Default::default()
-        };
+        let exe_ctx = MockExecutionContext::new_with_tiling_spec(TilingSpecification::new(
+            (0., 0.).into(),
+            [3, 2].into(),
+        ));
         let query_rect = RasterQueryRectangle {
             spatial_bounds: SpatialPartition2D::new_unchecked((0., 3.).into(), (4., 0.).into()),
             time_interval: TimeInterval::new_unchecked(0, 30),
             spatial_resolution: SpatialResolution::one(),
         };
-        let query_ctx = MockQueryContext::default();
+        let query_ctx = MockQueryContext::test_default();
 
         let qp = agg
             .initialize(&exe_ctx)
@@ -1411,16 +1411,16 @@ mod tests {
         }
         .boxed();
 
-        let exe_ctx = MockExecutionContext {
-            tiling_specification: TilingSpecification::new((0., 0.).into(), [3, 2].into()),
-            ..Default::default()
-        };
+        let exe_ctx = MockExecutionContext::new_with_tiling_spec(TilingSpecification::new(
+            (0., 0.).into(),
+            [3, 2].into(),
+        ));
         let query_rect = RasterQueryRectangle {
             spatial_bounds: SpatialPartition2D::new_unchecked((0., 3.).into(), (4., 0.).into()),
             time_interval: TimeInterval::new_unchecked(0, 30),
             spatial_resolution: SpatialResolution::one(),
         };
-        let query_ctx = MockQueryContext::default();
+        let query_ctx = MockQueryContext::test_default();
 
         let qp = agg
             .initialize(&exe_ctx)

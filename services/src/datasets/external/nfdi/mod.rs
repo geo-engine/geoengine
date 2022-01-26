@@ -7,11 +7,13 @@ use crate::error::{Error, Result};
 use crate::util::user_input::Validated;
 use geoengine_datatypes::collections::VectorDataType;
 use geoengine_datatypes::dataset::{DatasetId, DatasetProviderId, ExternalDatasetId};
-use geoengine_datatypes::primitives::{FeatureDataType, Measurement};
+use geoengine_datatypes::primitives::{
+    FeatureDataType, Measurement, RasterQueryRectangle, VectorQueryRectangle,
+};
 use geoengine_datatypes::spatial_reference::SpatialReferenceOption;
 use geoengine_operators::engine::{
-    MetaData, MetaDataProvider, RasterQueryRectangle, RasterResultDescriptor, ResultDescriptor,
-    TypedResultDescriptor, VectorQueryRectangle, VectorResultDescriptor,
+    MetaData, MetaDataProvider, RasterResultDescriptor, ResultDescriptor, TypedResultDescriptor,
+    VectorResultDescriptor,
 };
 use geoengine_operators::mock::MockDatasetDataSourceLoadingInfo;
 use geoengine_operators::source::{
@@ -663,23 +665,55 @@ mod tests {
     use crate::datasets::external::nfdi::{
         ExpiringDownloadLink, NFDIDataProvider, NFDIDataProviderDefinition,
     };
-    use geoengine_datatypes::dataset::DatasetProviderId;
-    use scienceobjectsdb_rust_api::sciobjectsdbapi::models::v1::{Dataset, Metadata};
+    use futures::StreamExt;
+    use geoengine_datatypes::dataset::{DatasetId, DatasetProviderId, ExternalDatasetId};
+    use httptest::responders::status_code;
+    use httptest::{Expectation, Server};
+    use scienceobjectsdb_rust_api::sciobjectsdbapi::models::v1::{
+        Dataset, Metadata, Object, ObjectGroup,
+    };
+    use scienceobjectsdb_rust_api::sciobjectsdbapi::services::v1::{
+        CreateDownloadLinkResponse, GetDatasetObjectGroupsResponse, GetDatasetResponse,
+        GetProjectDatasetsResponse,
+    };
     use serde_json::Value;
     use std::str::FromStr;
+    use tokio::fs::File;
+    use tokio::io::AsyncReadExt;
+
+    use crate::datasets::listing::{DatasetListOptions, ExternalDatasetProvider, OrderBy};
+    use crate::util::user_input::Validated;
+
+    use geoengine_datatypes::collections::{FeatureCollectionInfos, MultiPointCollection};
+    use geoengine_datatypes::primitives::{
+        BoundingBox2D, SpatialResolution, TimeInterval, VectorQueryRectangle,
+    };
+    use geoengine_datatypes::util::test::TestDefault;
+    use geoengine_operators::engine::{
+        MetaData, MetaDataProvider, MockExecutionContext, MockQueryContext, QueryProcessor,
+        TypedVectorQueryProcessor, VectorOperator, VectorResultDescriptor,
+    };
+    use geoengine_operators::source::{OgrSource, OgrSourceDataset, OgrSourceParameters};
+
+    mod wiremock_gen {
+        wiremock_grpc::generate!("api.services.v1", TestProjectServer);
+    }
+    use wiremock_gen::*;
+    use wiremock_grpc::*;
 
     const PROVIDER_ID: &str = "86a7f7ce-1bab-4ce9-a32b-172c0f958ee0";
-    const DATASET_ID: &str = "2dc2eed6-ca6e-401f-831f-a70f7d62f168";
+    const PROJECT_ID: &str = "B";
+    const DATASET_ID: &str = "C";
+    const TOKEN: &str = "DUMMY";
 
-    async fn new_provider() -> NFDIDataProvider {
+    async fn new_provider_with_url(url: String) -> NFDIDataProvider {
         let def = NFDIDataProviderDefinition {
             id: DatasetProviderId::from_str(PROVIDER_ID).unwrap(),
-            api_token: "ttTjXzfJOxCqiW4yNRpN8p5e0deaKI5BIF2SMRjRY/JpPUTlS3COnqddcT8g".to_string(),
-            api_url: "https://api.core-server-dev.m1.k8s.computational.bio/".to_string(),
-            project_id: "11fcc01b-3355-4246-b3e2-a32f878456f1".to_string(),
+            api_token: TOKEN.to_string(),
+            api_url: url,
+            project_id: PROJECT_ID.to_string(),
             name: "NFDI".to_string(),
         };
-
         NFDIDataProvider::new(Box::new(def)).await.unwrap()
     }
 
@@ -689,9 +723,12 @@ mod tests {
             "dataType":{
                 "singleVectorFile":{
                     "vectorType":"MultiPoint",
-                    "layerName":"test",
+                    "layerName":"points",
                         "attributes":[{
-                            "name":"name",
+                            "name":"num",
+                            "type":"int"
+                        },{
+                            "name":"txt",
                             "type":"text"
                         }],
                     "temporalExtend":null
@@ -735,7 +772,6 @@ mod tests {
 
     #[tokio::test]
     async fn test_extract_meta_data_ok() {
-        let provider = new_provider().await;
         let ds = Dataset {
             id: DATASET_ID.to_string(),
             name: "Test".to_string(),
@@ -748,12 +784,11 @@ mod tests {
                 metadata: vector_meta_data().to_string().into_bytes(),
                 schema: None,
             }],
-            project_id: provider.project_id,
+            project_id: PROJECT_ID.to_string(),
             is_public: true,
             status: 0,
             bucket: "".to_string(),
         };
-
         let md = NFDIDataProvider::extract_metadata(&ds).unwrap();
         let des = serde_json::from_value::<GEMetadata>(vector_meta_data()).unwrap();
         assert_eq!(des, md);
@@ -761,7 +796,6 @@ mod tests {
 
     #[tokio::test]
     async fn test_extract_meta_data_not_present() {
-        let provider = new_provider().await;
         let ds = Dataset {
             id: DATASET_ID.to_string(),
             name: "Test".to_string(),
@@ -769,7 +803,7 @@ mod tests {
             created: None,
             labels: vec![],
             metadata: vec![],
-            project_id: provider.project_id,
+            project_id: PROJECT_ID.to_string(),
             is_public: true,
             status: 0,
             bucket: "".to_string(),
@@ -779,7 +813,6 @@ mod tests {
 
     #[tokio::test]
     async fn test_extract_meta_data_parse_error() {
-        let provider = new_provider().await;
         let ds = Dataset {
             id: DATASET_ID.to_string(),
             name: "Test".to_string(),
@@ -792,7 +825,7 @@ mod tests {
                 metadata: b"{\"foo\": \"bar\"}".to_vec(),
                 schema: None,
             }],
-            project_id: provider.project_id,
+            project_id: PROJECT_ID.to_string(),
             is_public: true,
             status: 0,
             bucket: "".to_string(),
@@ -802,7 +835,6 @@ mod tests {
 
     #[tokio::test]
     async fn test_map_vector_dataset() {
-        let provider = new_provider().await;
         let ds = Dataset {
             id: DATASET_ID.to_string(),
             name: "Test".to_string(),
@@ -815,11 +847,15 @@ mod tests {
                 metadata: vector_meta_data().to_string().into_bytes(),
                 schema: None,
             }],
-            project_id: provider.project_id.clone(),
+            project_id: PROJECT_ID.to_string(),
             is_public: true,
             status: 0,
             bucket: "".to_string(),
         };
+
+        let server = TestProjectServer::start_default().await;
+        let addr = format!("http://{}", server.address());
+        let provider = new_provider_with_url(addr).await;
 
         let md = NFDIDataProvider::extract_metadata(&ds).unwrap();
         let ds = provider.map_dataset(&ds, &md);
@@ -832,7 +868,6 @@ mod tests {
 
     #[tokio::test]
     async fn test_map_raster_dataset() {
-        let provider = new_provider().await;
         let ds = Dataset {
             id: DATASET_ID.to_string(),
             name: "Test".to_string(),
@@ -845,7 +880,7 @@ mod tests {
                 metadata: raster_meta_data().to_string().into_bytes(),
                 schema: None,
             }],
-            project_id: provider.project_id.clone(),
+            project_id: PROJECT_ID.to_string(),
             is_public: true,
             status: 0,
             bucket: "".to_string(),
@@ -857,6 +892,10 @@ mod tests {
             super::metadata::DataType::SingleRasterFile(_)
         ));
 
+        let server = TestProjectServer::start_default().await;
+        let addr = format!("http://{}", server.address());
+        let provider = new_provider_with_url(addr).await;
+
         let ds = provider.map_dataset(&ds, &md);
 
         assert_eq!("GdalSource".to_string(), ds.source_operator);
@@ -864,7 +903,6 @@ mod tests {
 
     #[tokio::test]
     async fn test_vector_loading_template() {
-        let provider = new_provider().await;
         let ds = Dataset {
             id: DATASET_ID.to_string(),
             name: "Test".to_string(),
@@ -877,7 +915,7 @@ mod tests {
                 metadata: vector_meta_data().to_string().into_bytes(),
                 schema: None,
             }],
-            project_id: provider.project_id,
+            project_id: PROJECT_ID.to_string(),
             is_public: true,
             status: 0,
             bucket: "".to_string(),
@@ -905,7 +943,6 @@ mod tests {
 
     #[tokio::test]
     async fn test_raster_loading_template() {
-        let provider = new_provider().await;
         let ds = Dataset {
             id: DATASET_ID.to_string(),
             name: "Test".to_string(),
@@ -918,7 +955,7 @@ mod tests {
                 metadata: raster_meta_data().to_string().into_bytes(),
                 schema: None,
             }],
-            project_id: provider.project_id,
+            project_id: PROJECT_ID.to_string(),
             is_public: true,
             status: 0,
             bucket: "".to_string(),
@@ -949,115 +986,328 @@ mod tests {
         assert_eq!("/vsicurl/test", url.as_str());
     }
 
-    // #[tokio::test]
-    // async fn it_lists() {
-    //     let provider = new_provider().await;
-    //
-    //     let opts = DatasetListOptions {
-    //         filter: None,
-    //         limit: 100,
-    //         offset: 0,
-    //         order: OrderBy::NameAsc,
-    //     };
-    //
-    //     let res = provider.list(Validated { user_input: opts }).await;
-    //     assert!(res.is_ok());
-    //     let res = res.unwrap();
-    //     assert!(!res.is_empty());
-    // }
-    //
-    // #[tokio::test]
-    // async fn it_loads_provenance() {
-    //     let provider = new_provider().await;
-    //
-    //     let id = DatasetId::External(ExternalDatasetId {
-    //         provider_id: provider.id,
-    //         dataset_id: DATASET_ID.to_string(),
-    //     });
-    //
-    //     let res = provider.provenance(&id).await;
-    //
-    //     assert!(res.is_ok());
-    //
-    //     let res = res.unwrap();
-    //
-    //     assert!(res.provenance.is_some());
-    // }
-    //
-    // #[tokio::test]
-    // async fn it_loads_meta_data() {
-    //     let provider = new_provider().await;
-    //
-    //     let id = DatasetId::External(ExternalDatasetId {
-    //         provider_id: provider.id,
-    //         dataset_id: DATASET_ID.to_string(),
-    //     });
-    //
-    //     let _res: Box<
-    //         dyn MetaData<OgrSourceDataset, VectorResultDescriptor, VectorQueryRectangle>,
-    //     > = provider.meta_data(&id).await.unwrap();
-    //     {};
-    // }
-    //
-    // #[tokio::test]
-    // async fn it_executes_loads() {
-    //     let provider = new_provider().await;
-    //
-    //     let id = DatasetId::External(ExternalDatasetId {
-    //         provider_id: provider.id,
-    //         dataset_id: DATASET_ID.to_string(),
-    //     });
-    //
-    //     let meta: Box<
-    //         dyn MetaData<OgrSourceDataset, VectorResultDescriptor, VectorQueryRectangle>,
-    //     > = provider.meta_data(&id).await.unwrap();
-    //
-    //     let mut context = MockExecutionContext::default();
-    //     context.add_meta_data(id.clone(), meta);
-    //
-    //     let src = OgrSource {
-    //         params: OgrSourceParameters {
-    //             dataset: id,
-    //             attribute_projection: None,
-    //         },
-    //     }
-    //     .boxed();
-    //
-    //     let initialized_op = src.initialize(&context).await.unwrap();
-    //
-    //     let proc = initialized_op.query_processor().unwrap();
-    //     let proc = match proc {
-    //         TypedVectorQueryProcessor::MultiPoint(qp) => qp,
-    //         _ => panic!("Expected MultiPoint QueryProcessor"),
-    //     };
-    //
-    //     let ctx = MockQueryContext::default();
-    //
-    //     let qr = VectorQueryRectangle {
-    //         spatial_bounds: BoundingBox2D::new((-180., -90.).into(), (180., 90.).into()).unwrap(),
-    //         time_interval: TimeInterval::default(),
-    //         spatial_resolution: SpatialResolution::zero_point_one(),
-    //     };
-    //
-    //     let result: Vec<MultiPointCollection> = proc
-    //         .query(qr, &ctx)
-    //         .await
-    //         .unwrap()
-    //         .map(Result::unwrap)
-    //         .collect()
-    //         .await;
-    //
-    //     let sum: usize = result.iter().map(MultiPointCollection::len).sum();
-    //     println!("{}", sum);
-    //
-    //     let result: Vec<MultiPointCollection> = proc
-    //         .query(qr, &ctx)
-    //         .await
-    //         .unwrap()
-    //         .map(Result::unwrap)
-    //         .collect()
-    //         .await;
-    //     let sum: usize = result.iter().map(MultiPointCollection::len).sum();
-    //     println!("{}", sum);
-    // }
+    #[tokio::test]
+    async fn it_lists() {
+        let mut server = TestProjectServer::start_default().await;
+
+        server.setup(
+            MockBuilder::when()
+                .path("/api.services.v1.ProjectService/GetProjectDatasets")
+                .then()
+                .return_status(tonic::Code::Ok)
+                .return_body(|| GetProjectDatasetsResponse {
+                    dataset: vec![Dataset {
+                        id: DATASET_ID.to_string(),
+                        name: "Test".to_string(),
+                        description: "Test".to_string(),
+                        created: None,
+                        labels: vec![],
+                        metadata: vec![Metadata {
+                            key: METADATA_KEY.to_string(),
+                            labels: vec![],
+                            metadata: raster_meta_data().to_string().into_bytes(),
+                            schema: None,
+                        }],
+                        project_id: PROJECT_ID.to_string(),
+                        is_public: true,
+                        status: 0,
+                        bucket: "".to_string(),
+                    }],
+                }),
+        );
+
+        let addr = format!("http://{}", server.address());
+        let provider = new_provider_with_url(addr).await;
+
+        let opts = DatasetListOptions {
+            filter: None,
+            limit: 100,
+            offset: 0,
+            order: OrderBy::NameAsc,
+        };
+
+        let res = provider.list(Validated { user_input: opts }).await;
+        assert!(res.is_ok());
+        let res = res.unwrap();
+        assert_eq!(1, res.len());
+    }
+
+    #[tokio::test]
+    async fn it_loads_provenance() {
+        let mut server = TestProjectServer::start_default().await;
+
+        server.setup(
+            MockBuilder::when()
+                .path("/api.services.v1.DatasetService/GetDataset")
+                .then()
+                .return_status(tonic::Code::Ok)
+                .return_body(|| GetDatasetResponse {
+                    dataset: Some(Dataset {
+                        id: DATASET_ID.to_string(),
+                        name: "Test".to_string(),
+                        description: "Test".to_string(),
+                        created: None,
+                        labels: vec![],
+                        metadata: vec![Metadata {
+                            key: METADATA_KEY.to_string(),
+                            labels: vec![],
+                            metadata: raster_meta_data().to_string().into_bytes(),
+                            schema: None,
+                        }],
+                        project_id: PROJECT_ID.to_string(),
+                        is_public: true,
+                        status: 0,
+                        bucket: "".to_string(),
+                    }),
+                }),
+        );
+
+        let id = DatasetId::External(ExternalDatasetId {
+            provider_id: DatasetProviderId::from_str(PROVIDER_ID).unwrap(),
+            dataset_id: DATASET_ID.to_string(),
+        });
+
+        let addr = format!("http://{}", server.address());
+        let provider = new_provider_with_url(addr).await;
+
+        let res = provider.provenance(&id).await;
+
+        assert!(res.is_ok());
+
+        let res = res.unwrap();
+
+        assert!(res.provenance.is_some());
+    }
+
+    #[tokio::test]
+    async fn it_loads_meta_data() {
+        let mut server = TestProjectServer::start_default().await;
+
+        server.setup(
+            MockBuilder::when()
+                .path("/api.services.v1.DatasetService/GetDataset")
+                .then()
+                .return_status(tonic::Code::Ok)
+                .return_body(|| GetDatasetResponse {
+                    dataset: Some(Dataset {
+                        id: DATASET_ID.to_string(),
+                        name: "Test".to_string(),
+                        description: "Test".to_string(),
+                        created: None,
+                        labels: vec![],
+                        metadata: vec![Metadata {
+                            key: METADATA_KEY.to_string(),
+                            labels: vec![],
+                            metadata: vector_meta_data().to_string().into_bytes(),
+                            schema: None,
+                        }],
+                        project_id: PROJECT_ID.to_string(),
+                        is_public: true,
+                        status: 0,
+                        bucket: "".to_string(),
+                    }),
+                }),
+        );
+
+        server.setup(
+            MockBuilder::when()
+                .path("/api.services.v1.DatasetService/GetDatasetObjectGroups")
+                .then()
+                .return_status(tonic::Code::Ok)
+                .return_body(|| GetDatasetObjectGroupsResponse {
+                    object_groups: vec![ObjectGroup {
+                        id: "OG".to_string(),
+                        name: "Test".to_string(),
+                        description: "Test".to_string(),
+                        dataset_id: DATASET_ID.to_string(),
+                        project_id: PROJECT_ID.to_string(),
+                        labels: vec![],
+                        metadata: vec![],
+                        status: 0,
+                        objects: vec![Object {
+                            id: "OBJ".to_string(),
+                            filename: "".to_string(),
+                            filetype: "".to_string(),
+                            labels: vec![],
+                            metadata: vec![],
+                            created: None,
+                            location: None,
+                            origin: None,
+                            content_len: 0,
+                            upload_id: "".to_string(),
+                            generated: None,
+                            object_group_id: "OG".to_string(),
+                            dataset_id: DATASET_ID.to_string(),
+                            project_id: PROJECT_ID.to_string(),
+                        }],
+                        generated: None,
+                        created: None,
+                    }],
+                }),
+        );
+
+        let id = DatasetId::External(ExternalDatasetId {
+            provider_id: DatasetProviderId::from_str(PROVIDER_ID).unwrap(),
+            dataset_id: DATASET_ID.to_string(),
+        });
+
+        let addr = format!("http://{}", server.address());
+        let provider = new_provider_with_url(addr).await;
+
+        let res: geoengine_operators::util::Result<
+            Box<dyn MetaData<OgrSourceDataset, VectorResultDescriptor, VectorQueryRectangle>>,
+        > = provider.meta_data(&id).await;
+
+        assert!(res.is_ok());
+    }
+
+    #[tokio::test]
+    #[allow(clippy::too_many_lines)]
+    async fn it_executes_loads() {
+        let mut server = TestProjectServer::start_default().await;
+        let dl_server = Server::run();
+
+        let addr = format!("http://{}", server.address());
+        let dl_addr = format!("http://{}/file.fgb", dl_server.addr());
+
+        server.setup(
+            MockBuilder::when()
+                .path("/api.services.v1.DatasetService/GetDataset")
+                .then()
+                .return_status(tonic::Code::Ok)
+                .return_body(|| GetDatasetResponse {
+                    dataset: Some(Dataset {
+                        id: DATASET_ID.to_string(),
+                        name: "Test".to_string(),
+                        description: "Test".to_string(),
+                        created: None,
+                        labels: vec![],
+                        metadata: vec![Metadata {
+                            key: METADATA_KEY.to_string(),
+                            labels: vec![],
+                            metadata: vector_meta_data().to_string().into_bytes(),
+                            schema: None,
+                        }],
+                        project_id: PROJECT_ID.to_string(),
+                        is_public: true,
+                        status: 0,
+                        bucket: "".to_string(),
+                    }),
+                }),
+        );
+
+        server.setup(
+            MockBuilder::when()
+                .path("/api.services.v1.DatasetService/GetDatasetObjectGroups")
+                .then()
+                .return_status(tonic::Code::Ok)
+                .return_body(|| GetDatasetObjectGroupsResponse {
+                    object_groups: vec![ObjectGroup {
+                        id: "OG".to_string(),
+                        name: "Test".to_string(),
+                        description: "Test".to_string(),
+                        dataset_id: DATASET_ID.to_string(),
+                        project_id: PROJECT_ID.to_string(),
+                        labels: vec![],
+                        metadata: vec![],
+                        status: 0,
+                        objects: vec![Object {
+                            id: "OBJ".to_string(),
+                            filename: "points.fgb".to_string(),
+                            filetype: "fgb".to_string(),
+                            labels: vec![],
+                            metadata: vec![],
+                            created: None,
+                            location: None,
+                            origin: None,
+                            content_len: 0,
+                            upload_id: "".to_string(),
+                            generated: None,
+                            object_group_id: "OG".to_string(),
+                            dataset_id: DATASET_ID.to_string(),
+                            project_id: PROJECT_ID.to_string(),
+                        }],
+                        generated: None,
+                        created: None,
+                    }],
+                }),
+        );
+
+        server.setup(
+            MockBuilder::when()
+                .path("/api.services.v1.ObjectLoadService/CreateDownloadLink")
+                .then()
+                .return_status(tonic::Code::Ok)
+                .return_body(|| CreateDownloadLinkResponse {
+                    download_link: dl_addr.clone(),
+                    object: None,
+                }),
+        );
+
+        let mut data = vec![];
+        let mut file = File::open(geoengine_datatypes::test_data!("vector/data/points.fgb"))
+            .await
+            .unwrap();
+        let file_size = file.read_to_end(&mut data).await.unwrap();
+
+        let responder = status_code(200)
+            .append_header("content-type", "text/csv")
+            .append_header("content-length", file_size)
+            .body(data);
+
+        dl_server.expect(
+            Expectation::matching(httptest::matchers::request::path("/file.fgb"))
+                .times(1..)
+                .respond_with(responder),
+        );
+
+        let id = DatasetId::External(ExternalDatasetId {
+            provider_id: DatasetProviderId::from_str(PROVIDER_ID).unwrap(),
+            dataset_id: DATASET_ID.to_string(),
+        });
+
+        let provider = new_provider_with_url(addr).await;
+
+        let meta: Box<
+            dyn MetaData<OgrSourceDataset, VectorResultDescriptor, VectorQueryRectangle>,
+        > = provider.meta_data(&id).await.unwrap();
+
+        let mut context = MockExecutionContext::test_default();
+        context.add_meta_data(id.clone(), meta);
+
+        let src = OgrSource {
+            params: OgrSourceParameters {
+                dataset: id,
+                attribute_projection: None,
+            },
+        }
+        .boxed();
+
+        let initialized_op = src.initialize(&context).await.unwrap();
+
+        let proc = initialized_op.query_processor().unwrap();
+        let proc = match proc {
+            TypedVectorQueryProcessor::MultiPoint(qp) => qp,
+            _ => panic!("Expected MultiPoint QueryProcessor"),
+        };
+
+        let ctx = MockQueryContext::test_default();
+
+        let qr = VectorQueryRectangle {
+            spatial_bounds: BoundingBox2D::new((-180., -90.).into(), (180., 90.).into()).unwrap(),
+            time_interval: TimeInterval::default(),
+            spatial_resolution: SpatialResolution::zero_point_one(),
+        };
+
+        let result: Vec<MultiPointCollection> = proc
+            .query(qr, &ctx)
+            .await
+            .unwrap()
+            .map(Result::unwrap)
+            .collect()
+            .await;
+
+        let element_count: usize = result.iter().map(MultiPointCollection::len).sum();
+        assert_eq!(2, element_count);
+    }
 }
