@@ -22,7 +22,6 @@ geo = "0.18"
 geojson = "0.22"
 image = "0.23"
 num-traits = "0.2"
-ocl = { git = "https://github.com/michaelmattig/ocl", branch = "tentative_master" } # TODO: use crates.io version once it builds again
 ordered-float = { version= "2.0", features = ["serde"] }
 paste = "1.0"
 postgres-types = { version = "0.2", features = ["derive", "with-chrono-0_4", "with-uuid-0_8"], optional = true }

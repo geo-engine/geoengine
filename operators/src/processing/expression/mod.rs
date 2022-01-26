@@ -4,7 +4,7 @@ use crate::{
         ExecutionContext, InitializedRasterOperator, Operator, OperatorDatasets, RasterOperator,
         RasterQueryProcessor, RasterResultDescriptor, TypedRasterQueryProcessor,
     },
-    processing::new_expression::{codegen::Parameter, query_processor::ExpressionQueryProcessor},
+    processing::expression::{codegen::Parameter, query_processor::ExpressionQueryProcessor},
     util::{input::float_with_nan, Result},
 };
 use async_trait::async_trait;
@@ -41,7 +41,7 @@ pub struct ExpressionParams {
 // TODO: rename to `Expression`
 /// The `Expression` operator calculates an expression for all pixels of the input rasters and
 /// produces raster tiles of a given output type
-pub type NewExpression = Operator<ExpressionParams, ExpressionSources>;
+pub type Expression = Operator<ExpressionParams, ExpressionSources>;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ExpressionSources {
@@ -196,7 +196,7 @@ fn index_to_parameter(index: usize) -> String {
 
 #[typetag::serde]
 #[async_trait]
-impl RasterOperator for NewExpression {
+impl RasterOperator for Expression {
     async fn initialize(
         self: Box<Self>,
         context: &dyn crate::engine::ExecutionContext,
@@ -605,7 +605,7 @@ mod tests {
 
         let raster_a = make_raster(Some(3));
 
-        let o = NewExpression {
+        let o = Expression {
             params: ExpressionParams {
                 expression: "2 * A".to_string(),
                 output_type: RasterDataType::I8,
@@ -670,7 +670,7 @@ mod tests {
 
         let raster_a = make_raster(Some(3));
 
-        let o = NewExpression {
+        let o = Expression {
             params: ExpressionParams {
                 expression: "2 * A".to_string(),
                 output_type: RasterDataType::I8,
@@ -736,7 +736,7 @@ mod tests {
         let raster_a = make_raster(None);
         let raster_b = make_raster(None);
 
-        let o = NewExpression {
+        let o = Expression {
             params: ExpressionParams {
                 expression: "A+B".to_string(),
                 output_type: RasterDataType::I8,
@@ -802,7 +802,7 @@ mod tests {
         let raster_a = make_raster(Some(3));
         let raster_b = make_raster(None);
 
-        let o = NewExpression {
+        let o = Expression {
             params: ExpressionParams {
                 expression: "if A IS NODATA {
                     B * 2
@@ -872,7 +872,7 @@ mod tests {
         let raster_b = make_raster(no_data_value_option);
         let raster_c = make_raster(no_data_value_option);
 
-        let o = NewExpression {
+        let o = Expression {
             params: ExpressionParams {
                 expression: "A+B+C".to_string(),
                 output_type: RasterDataType::I8,
@@ -944,7 +944,7 @@ mod tests {
         let raster_g = make_raster(no_data_value_option);
         let raster_h = make_raster(no_data_value_option);
 
-        let o = NewExpression {
+        let o = Expression {
             params: ExpressionParams {
                 expression: "A+B+C+D+E+F+G+H".to_string(),
                 output_type: RasterDataType::I8,
