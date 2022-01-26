@@ -13,7 +13,7 @@ use std::fmt::{Debug, Display};
 use std::{cmp::Ordering, convert::TryInto};
 
 /// Stores time intervals in ms in close-open semantic [start, end)
-#[derive(Clone, Copy, Deserialize, Serialize, PartialEq, Eq)]
+#[derive(Clone, Copy, Deserialize, Serialize, PartialEq, Eq, Hash)]
 #[cfg_attr(feature = "postgres", derive(ToSql, FromSql))]
 #[repr(C)]
 pub struct TimeInterval {

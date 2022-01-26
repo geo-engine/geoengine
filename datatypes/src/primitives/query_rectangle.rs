@@ -5,7 +5,7 @@ use super::{
 use serde::{Deserialize, Serialize};
 
 /// A spatio-temporal rectangle with a specified resolution
-#[derive(Copy, Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[derive(Copy, Clone, Debug, PartialEq, Serialize, Deserialize, Eq, Hash)]
 #[serde(rename_all = "camelCase")]
 pub struct QueryRectangle<SpatialBounds: AxisAlignedRectangle> {
     pub spatial_bounds: SpatialBounds,

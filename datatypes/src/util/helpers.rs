@@ -33,6 +33,16 @@ pub fn approx_eq_floats(left: &[f64], right: &[f64]) -> bool {
     true
 }
 
+/// Convert an f64 floating point value to bits
+/// and use a single NAN representation.
+pub fn f64_to_bits(v: f64) -> u64 {
+    if v.is_nan() {
+        f64::NAN.to_bits()
+    } else {
+        v.to_bits()
+    }
+}
+
 /// Create hash maps by specifying key-value pairs
 #[macro_export]
 macro_rules! hashmap {

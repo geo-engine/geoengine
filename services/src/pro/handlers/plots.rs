@@ -1,9 +1,10 @@
 use actix_web::{web, FromRequest, Responder};
+use geoengine_datatypes::primitives::VectorQueryRectangle;
 use uuid::Uuid;
 
 use crate::error::{Error, Result};
 use crate::handlers::plots::GetPlot;
-use crate::pro::contexts::ProContext;
+use crate::pro::contexts::{ExecutorKey, ProContext};
 use crate::workflows::workflow::WorkflowId;
 
 pub(crate) fn init_plot_routes<C>(cfg: &mut web::ServiceConfig)
@@ -26,15 +27,25 @@ async fn get_plot_handler<C: ProContext>(
     let workflow_id = WorkflowId(*id.as_ref());
     let task_manager = ctx.task_manager();
 
+    let query_rectangle = VectorQueryRectangle {
+        spatial_bounds: params.bbox,
+        time_interval: params.time,
+        spatial_resolution: params.spatial_resolution,
+    };
+
     let task = crate::handlers::plots::process_plot_request(id, params, session, ctx);
 
-    let result = task_manager
-        .plot_executor()
-        .submit_ref(&workflow_id, task)
-        .await?;
+    let key = ExecutorKey {
+        workflow_id,
+        query_rectangle,
+    };
+
+    let result = task_manager.plot_executor().submit_ref(&key, task).await?;
 
     match result.as_ref() {
         Ok(v) => Ok(web::Json(v.clone())),
-        Err(_) => Err(Error::NotYetImplemented),
+        Err(e) => Err(Error::ExecutorComputation {
+            message: format!("Executor computation failed: {:?}", e),
+        }),
     }
 }

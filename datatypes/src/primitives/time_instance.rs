@@ -11,7 +11,7 @@ use snafu::ensure;
 use snafu::Error;
 use std::{convert::TryFrom, ops::Add};
 
-#[derive(Clone, Copy, Deserialize, Serialize, PartialEq, Eq, PartialOrd, Ord, Debug)]
+#[derive(Clone, Copy, Deserialize, Serialize, PartialEq, Eq, PartialOrd, Ord, Debug, Hash)]
 #[repr(C)]
 pub struct TimeInstance(i64);
 
