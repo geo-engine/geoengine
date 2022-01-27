@@ -17,11 +17,13 @@ use gdal::cpl::CslStringList;
 use gdal::errors::GdalError;
 use gdal::{Dataset, DatasetOptions, GdalOpenFlags};
 use gdal_sys::{
-    CPLErr, GDALAttributeReadAsString, GDALDataType, GDALDatasetGetRootGroup, GDALDimensionGetSize,
-    GDALExtendedDataTypeGetNumericDataType, GDALGroupGetAttribute, GDALGroupGetGroupNames,
-    GDALGroupHS, GDALGroupOpenGroup, GDALGroupOpenMDArray, GDALMDArrayGetAttribute,
+    CPLErr, CSLDestroy, GDALAttributeReadAsString, GDALAttributeRelease, GDALDataType,
+    GDALDatasetGetRootGroup, GDALDimensionGetSize, GDALExtendedDataTypeGetNumericDataType,
+    GDALExtendedDataTypeRelease, GDALGroupGetAttribute, GDALGroupGetGroupNames, GDALGroupHS,
+    GDALGroupOpenGroup, GDALGroupOpenMDArray, GDALGroupRelease, GDALMDArrayGetAttribute,
     GDALMDArrayGetDataType, GDALMDArrayGetDimensions, GDALMDArrayGetNoDataValueAsDouble,
-    GDALMDArrayGetSpatialRef, GDALMDArrayH,
+    GDALMDArrayGetSpatialRef, GDALMDArrayH, GDALMDArrayRelease, GDALReleaseDimensions,
+    OSRDestroySpatialReference, VSIFree,
 };
 use geoengine_datatypes::dataset::{DatasetId, DatasetProviderId, ExternalDatasetId};
 use geoengine_datatypes::primitives::{
@@ -86,7 +88,6 @@ pub struct NetCdfCfDataProvider {
 }
 
 /// TODO: This should be part of the GDAL crate
-/// TODO: free group with `GDALGroupRelease()`
 #[derive(Debug)]
 struct MdGroup<'d> {
     c_group: *mut GDALGroupHS,
@@ -94,15 +95,30 @@ struct MdGroup<'d> {
     name: String,
 }
 
+impl Drop for MdGroup<'_> {
+    fn drop(&mut self) {
+        unsafe {
+            GDALGroupRelease(self.c_group);
+        }
+    }
+}
+
 /// TODO: This should be part of the GDAL crate
-/// TODO: free group with `GDALGroupRelease()`
 #[derive(Debug)]
 struct MdArray<'g> {
     c_mdarray: GDALMDArrayH,
     _group: &'g MdGroup<'g>,
 }
 
-/// TODO: There are potential memory leaks from the C-API
+impl Drop for MdArray<'_> {
+    fn drop(&mut self) {
+        unsafe {
+            GDALMDArrayRelease(self.c_mdarray);
+        }
+    }
+}
+
+/// Always check new implementations with `RUSTFLAGS="-Z sanitizer=leak"`
 impl<'d> MdGroup<'d> {
     unsafe fn _string(raw_ptr: *const c_char) -> String {
         let c_str = CStr::from_ptr(raw_ptr);
@@ -179,7 +195,11 @@ impl<'d> MdGroup<'d> {
                 return Err(Self::_last_null_pointer_err("GDALGroupGetAttribute"));
             }
 
-            Self::_string(GDALAttributeReadAsString(c_attribute))
+            let value = Self::_string(GDALAttributeReadAsString(c_attribute));
+
+            GDALAttributeRelease(c_attribute);
+
+            value
         };
 
         Ok(value)
@@ -240,10 +260,24 @@ impl<'d> MdGroup<'d> {
                 return Err(GdalError::BadArgument("GDALMDArrayRead failed".to_string()));
             }
 
-            string_pointers
+            let strings = string_pointers
                 .into_iter()
-                .map(|string_ptr| Self::_string(string_ptr))
-                .collect()
+                .map(|string_ptr| {
+                    let string = Self::_string(string_ptr);
+
+                    VSIFree(string_ptr as *mut c_void);
+
+                    string
+                })
+                .collect();
+
+            GDALExtendedDataTypeRelease(data_type);
+
+            GDALMDArrayRelease(c_mdarray);
+
+            GDALReleaseDimensions(c_dimensions, dim_count);
+
+            strings
         };
 
         Ok(value)
@@ -255,7 +289,11 @@ impl<'d> MdGroup<'d> {
         unsafe {
             let c_group_names = GDALGroupGetGroupNames(self.c_group, options.as_ptr());
 
-            Self::_string_array(c_group_names)
+            let strings = Self::_string_array(c_group_names);
+
+            CSLDestroy(c_group_names);
+
+            strings
         }
     }
 
@@ -298,7 +336,13 @@ impl<'d> MdGroup<'d> {
 
             let c_data_type = GDALMDArrayGetDataType(c_mdarray);
 
-            GDALExtendedDataTypeGetNumericDataType(c_data_type)
+            let data_type = GDALExtendedDataTypeGetNumericDataType(c_data_type);
+
+            GDALMDArrayRelease(c_mdarray);
+
+            GDALExtendedDataTypeRelease(c_data_type);
+
+            data_type
         };
 
         Ok(match gdal_data_type {
@@ -337,13 +381,17 @@ impl<'d> MdGroup<'d> {
         })
     }
 }
-/// TODO: There are potential memory leaks from the C-API
+/// Always check new implementations with `RUSTFLAGS="-Z sanitizer=leak"`
 impl<'g> MdArray<'g> {
     fn spatial_reference(&self) -> Result<SpatialReferenceOption> {
         let gdal_spatial_ref = unsafe {
             let c_gdal_spatial_ref = GDALMDArrayGetSpatialRef(self.c_mdarray);
 
-            gdal::spatial_ref::SpatialRef::from_c_obj(c_gdal_spatial_ref)
+            let gdal_spatial_ref = gdal::spatial_ref::SpatialRef::from_c_obj(c_gdal_spatial_ref);
+
+            OSRDestroySpatialReference(c_gdal_spatial_ref);
+
+            gdal_spatial_ref
         }
         .context(error::GdalMd)?;
 
@@ -356,7 +404,11 @@ impl<'g> MdArray<'g> {
         let gdal_data_type = unsafe {
             let c_data_type = GDALMDArrayGetDataType(self.c_mdarray);
 
-            GDALExtendedDataTypeGetNumericDataType(c_data_type)
+            let data_type = GDALExtendedDataTypeGetNumericDataType(c_data_type);
+
+            GDALExtendedDataTypeRelease(c_data_type);
+
+            data_type
         };
 
         Ok(match gdal_data_type {
@@ -404,12 +456,16 @@ impl<'g> MdArray<'g> {
 
             let dimensions = std::slice::from_raw_parts_mut(c_dimensions, number_of_dimensions);
 
-            DimensionSizes {
+            let sizes = DimensionSizes {
                 _entity: GDALDimensionGetSize(dimensions[0]) as usize,
                 time: GDALDimensionGetSize(dimensions[1]) as usize,
                 lat: GDALDimensionGetSize(dimensions[2]) as usize,
                 lon: GDALDimensionGetSize(dimensions[3]) as usize,
-            }
+            };
+
+            GDALReleaseDimensions(c_dimensions, number_of_dimensions);
+
+            sizes
         })
     }
 
@@ -424,7 +480,11 @@ impl<'g> MdArray<'g> {
                 return Err(MdGroup::_last_null_pointer_err("GDALGroupGetAttribute"));
             }
 
-            MdGroup::_string(GDALAttributeReadAsString(c_attribute))
+            let value = MdGroup::_string(GDALAttributeReadAsString(c_attribute));
+
+            GDALAttributeRelease(c_attribute);
+
+            value
         };
 
         Ok(value)
@@ -633,19 +693,32 @@ impl NetCdfCfDataProvider {
 
         let (start, end, step) = parse_time_coverage(&start, &end, &step)?;
 
-        let crs_array = root_group.open_array("crs")?;
-        let geo_transform = crs_array
-            .attribute_as_string("GeoTransform")
-            .context(error::CannotGetGeoTransform)?;
-        let geo_transform = parse_geo_transform(&geo_transform)?;
+        let geo_transform = {
+            let crs_array = root_group.open_array("crs")?;
+            let geo_transform = crs_array
+                .attribute_as_string("GeoTransform")
+                .context(error::CannotGetGeoTransform)?;
+            parse_geo_transform(&geo_transform)?
+        };
 
         // traverse groups
-        let mut group = root_group;
+        let mut group_stack = vec![root_group];
+
+        // let mut group = root_group;
         for group_name in group_path.split('/') {
-            group = group.open_group(group_name)?;
+            group_stack.push(
+                group_stack
+                    .last()
+                    .expect("at least root group in here")
+                    .open_group(group_name)?,
+            );
+            // group = group.open_group(group_name)?;
         }
 
-        let data_array = group.open_array("ebv_cube")?;
+        let data_array = group_stack
+            .last()
+            .expect("at least root group in here")
+            .open_array("ebv_cube")?;
 
         let dimensions = data_array.dimensions()?;
 
