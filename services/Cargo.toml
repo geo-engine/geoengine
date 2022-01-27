@@ -19,11 +19,11 @@ nfdi = ["postgres", "geoengine-datatypes/postgres", "scienceobjectsdb_rust_api"]
 pro = ["postgres", "geoengine-operators/pro", "geoengine-datatypes/pro"]
 
 [dependencies]
-actix-files = "=0.6.0-beta.14"
-actix-http = "=3.0.0-beta.18"
+actix-files = "=0.6.0-beta.15"
+actix-http = "=3.0.0-beta.19"
 actix-multipart = "=0.4.0-beta.12"
-actix-rt = "2.5"
-actix-web = "=4.0.0-beta.20"
+actix-rt = "2.6"
+actix-web = "=4.0.0-beta.21"
 actix-web-httpauth = "=0.6.0-beta.7"
 async-trait = "0.1"
 base64 = "0.13"
@@ -73,6 +73,7 @@ httptest = "0.15.2"
 rand = "0.8.4"
 tempfile = "3.1"
 walkdir = "2.3"
+wiremock-grpc = "0.0.3-alpha1"
 xml-rs = "0.8.3"
 
 [build-dependencies]

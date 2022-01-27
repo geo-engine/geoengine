@@ -3,7 +3,6 @@ use arrow::array::{ArrayBuilder, BooleanArray, Float64Builder};
 use arrow::datatypes::{DataType, Field};
 use arrow::error::ArrowError;
 use float_cmp::ApproxEq;
-use ocl::OclPrm;
 #[cfg(feature = "postgres")]
 use postgres_types::{FromSql, ToSql};
 use proj::Coord;
@@ -21,9 +20,6 @@ pub struct Coordinate2D {
     pub x: f64,
     pub y: f64,
 }
-
-// Make coordinates transferable to OpenCl devices
-unsafe impl OclPrm for Coordinate2D {}
 
 impl Coordinate2D {
     /// Creates a new coordinate
