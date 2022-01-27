@@ -14,7 +14,7 @@ use std::{pin::Pin, task::Poll};
 #[derive(Debug, Snafu)]
 pub enum SparseTilesFillAdapterError {
     #[snafu(display(
-        "Received tile TimeInterval ({}) starts before current TimeInterval: {}",
+        "Received tile TimeInterval ({}) starts before current TimeInterval: {}. This is probably a bug in a child operator.",
         tile_start,
         current_start
     ))]
@@ -23,7 +23,7 @@ pub enum SparseTilesFillAdapterError {
         current_start: TimeInterval,
     },
     #[snafu(display(
-        "Received tile TimeInterval ({}) length differs from received TimeInterval with equal start: {}",
+        "Received tile TimeInterval ({}) length differs from received TimeInterval with equal start: {}. This is probably a bug in a child operator.",
         tile_interval,
         current_interval
     ))]
@@ -32,7 +32,7 @@ pub enum SparseTilesFillAdapterError {
         current_interval: TimeInterval,
     },
     #[snafu(display(
-        "Received tile TimeInterval ({}) is the first in a grid run but does no time progress. (Old time: {})",
+        "Received tile TimeInterval ({}) is the first in a grid run but does no time progress. (Old time: {}). This is probably a bug in a child operator.",
         tile_interval,
         current_interval
     ))]
