@@ -200,6 +200,7 @@ fn bench_gdal_source_operator_with_expression_tile_size() {
             output_type: RasterDataType::U8,
             output_no_data_value: 0., //  cast no_data_valuee to f64
             output_measurement: Some(Measurement::Unitless),
+            map_no_data: false,
         },
         sources: ExpressionSources::new_a_b(gdal_operator.clone().boxed(), gdal_operator.boxed()),
     }

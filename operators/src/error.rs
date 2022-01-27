@@ -98,32 +98,6 @@ pub enum Error {
         source: serde_json::Error,
     },
 
-    Ocl {
-        ocl_error: ocl::error::Error,
-    },
-
-    ClProgramInvalidRasterIndex,
-
-    ClProgramInvalidRasterDataType,
-
-    ClProgramInvalidFeaturesIndex,
-
-    ClProgramInvalidVectorDataType,
-
-    ClProgramInvalidGenericIndex,
-
-    ClProgramInvalidGenericDataType,
-
-    ClProgramUnspecifiedRaster,
-
-    ClProgramUnspecifiedFeatures,
-
-    ClProgramUnspecifiedGenericBuffer,
-
-    ClProgramInvalidColumn,
-
-    ClInvalidInputsForIterationType,
-
     InvalidExpression,
 
     InvalidNumberOfExpressionInputs,
@@ -343,12 +317,6 @@ impl From<serde_json::Error> for Error {
 impl From<chrono::format::ParseError> for Error {
     fn from(source: ParseError) -> Self {
         Self::TimeParse { source }
-    }
-}
-
-impl From<ocl::Error> for Error {
-    fn from(ocl_error: ocl::Error) -> Self {
-        Self::Ocl { ocl_error }
     }
 }
 

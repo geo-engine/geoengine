@@ -1,3 +1,5 @@
+#![feature(bench_black_box)]
+
 use futures::{Future, StreamExt};
 use geoengine_datatypes::{
     primitives::{
@@ -8,10 +10,7 @@ use geoengine_datatypes::{
 };
 use geoengine_operators::{
     engine::{MockExecutionContext, MockQueryContext, RasterOperator},
-    processing::{
-        Expression, ExpressionParams, ExpressionSources, NewExpression, NewExpressionParams,
-        NewExpressionSources,
-    },
+    processing::{Expression, ExpressionParams, ExpressionSources},
     source::{GdalSource, GdalSourceParameters},
     util::{gdal::add_ndvi_dataset, number_statistics::NumberStatistics, Result},
 };
@@ -19,13 +18,11 @@ use serde::Serialize;
 
 #[derive(Serialize)]
 struct OutputRow {
-    opencl_mean: f64,
-    opencl_std_dev: f64,
-    native_mean: f64,
-    native_std_dev: f64,
+    expression_mean: f64,
+    expression_std_dev: f64,
 }
 
-fn opencl_source(
+fn expression_on_sources(
     a: Box<dyn RasterOperator>,
     b: Box<dyn RasterOperator>,
 ) -> Box<dyn RasterOperator> {
@@ -35,25 +32,9 @@ fn opencl_source(
             output_type: RasterDataType::F64,
             output_no_data_value: 0.,
             output_measurement: Some(Measurement::Unitless),
-        },
-        sources: ExpressionSources::new_a_b(a, b),
-    }
-    .boxed()
-}
-
-fn native_source(
-    a: Box<dyn RasterOperator>,
-    b: Box<dyn RasterOperator>,
-) -> Box<dyn RasterOperator> {
-    NewExpression {
-        params: NewExpressionParams {
-            expression: "(A - B) / (A + B)".to_string(),
-            output_type: RasterDataType::F64,
-            output_no_data_value: 0.,
-            output_measurement: Some(Measurement::Unitless),
             map_no_data: false,
         },
-        sources: NewExpressionSources::new_a_b(a, b),
+        sources: ExpressionSources::new_a_b(a, b),
     }
     .boxed()
 }
@@ -77,19 +58,9 @@ async fn main() {
 
     let ndvi_source = ndvi_source(&mut execution_context);
 
-    let opencl_source = opencl_source(ndvi_source.clone(), ndvi_source.clone());
-    let native_source = native_source(ndvi_source.clone(), ndvi_source);
+    let expression = expression_on_sources(ndvi_source.clone(), ndvi_source);
 
-    let opencl_processor = opencl_source
-        .initialize(&execution_context)
-        .await
-        .unwrap()
-        .query_processor()
-        .unwrap()
-        .get_f64()
-        .unwrap();
-
-    let native_processor = native_source
+    let expression_processor = expression
         .initialize(&execution_context)
         .await
         .unwrap()
@@ -105,22 +76,11 @@ async fn main() {
         spatial_resolution: SpatialResolution::new(0.01, 0.01).unwrap(),
     };
 
-    let mut opencl_times = NumberStatistics::default();
-    let mut native_times = NumberStatistics::default();
+    let mut times = NumberStatistics::default();
 
     for _ in 0..RUNS {
-        let (opencl_time, native_result) = time_it(|| async {
-            let opencl_query = opencl_processor
-                .raster_query(qrect, &query_context)
-                .await
-                .unwrap();
-
-            opencl_query.map(Result::unwrap).collect().await
-        })
-        .await;
-
-        let (native_time, opencl_result) = time_it(|| async {
-            let native_query = native_processor
+        let (time, result) = time_it(|| async {
+            let native_query = expression_processor
                 .raster_query(qrect, &query_context)
                 .await
                 .unwrap();
@@ -129,10 +89,9 @@ async fn main() {
         })
         .await;
 
-        assert_eq!(opencl_result, native_result); // validate results
+        times.add(time);
 
-        opencl_times.add(opencl_time);
-        native_times.add(native_time);
+        std::hint::black_box(result);
     }
 
     let mut csv = csv::WriterBuilder::new()
@@ -141,10 +100,8 @@ async fn main() {
         .from_writer(std::io::stdout());
 
     csv.serialize(OutputRow {
-        opencl_mean: opencl_times.mean(),
-        opencl_std_dev: opencl_times.std_dev(),
-        native_mean: native_times.mean(),
-        native_std_dev: native_times.std_dev(),
+        expression_mean: times.mean(),
+        expression_std_dev: times.std_dev(),
     })
     .unwrap();
 }
