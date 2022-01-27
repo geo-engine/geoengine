@@ -14,7 +14,7 @@ postgres = ["postgres-types"]
 pro = ["postgres"]
 
 [dependencies]
-arrow = { version = "6.0", features = ["simd"] }
+arrow = { version = "8.0", features = ["simd"] }
 chrono = "0.4"
 float-cmp = "0.9"
 gdal = "0.12"

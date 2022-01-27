@@ -1,0 +1,72 @@
+WHITESPACE = _{ WHITE_SPACE }
+
+number = @{
+    decimal | integer
+}
+    integer = @{ "-"? ~ ASCII_DIGIT+ }
+    decimal = @{ "-"? ~ ASCII_DIGIT+ ~ "." ~ ASCII_DIGIT+ }
+
+identifier = @{
+    ASCII_ALPHA ~ (ASCII_ALPHANUMERIC | "_")*
+}
+
+// TODO: functions without parameters
+function = {
+    identifier ~ "(" ~ expression ~ ("," ~ expression)* ~ ")"
+}
+
+operator = _{
+    power | add | subtract | multiply | divide
+}
+    add      = { "+" }
+    subtract = { "-" }
+    multiply = { "*" }
+    divide   = { "/" }
+    power    = { "**" }
+
+
+expression = { term ~ (operator ~ term)* }
+term = _{ branch | number | function | identifier | "(" ~ expression ~ ")" }
+
+boolean_comparator= _{
+    equals | not_equals | smaller_equals | smaller | larger_equals | larger
+}
+    equals         = { "==" }
+    not_equals     = { "!=" }
+    smaller        = { "<" }
+    smaller_equals = { "<=" }
+    larger         = { ">" }
+    larger_equals  = { ">=" }
+
+// TODO: allow negation?
+boolean_operator = _{ and | or }
+    and = { "&&" }
+    or  = { "||" }
+
+boolean_expression = { boolean_term ~ (boolean_operator ~ boolean_term)* }
+boolean_term = _{ boolean_true | boolean_false | boolean_comparison | identifier_is_nodata | identifier | "(" ~ boolean_expression ~ ")" }
+    boolean_true = { ^"true" }
+    boolean_false = { ^"false" }
+    boolean_comparison = { expression ~ boolean_comparator ~ expression }
+
+identifier_is_nodata = { identifier ~ ^"is" ~ ^"nodata" }
+
+branch = {
+    "if" ~ boolean_expression ~ "{" ~ expression ~ "}"
+    ~ (^"else" ~ ^"if" ~ boolean_expression ~ "{" ~ expression ~ "}")*
+    ~ ^"else" ~ "{" ~ expression ~ "}"
+}
+
+assignment = {
+    "let" ~ identifier ~ "=" ~ expression ~ ";"
+}
+
+assignments_and_expression = {
+    assignment* ~ expression
+}
+
+main = _{
+    SOI ~ assignments_and_expression ~ EOI
+}
+
+

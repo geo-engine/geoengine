@@ -16,8 +16,9 @@ pub use operator_impl::{
 };
 pub use query::{ChunkByteSize, MockQueryContext, QueryContext};
 pub use query_processor::{
-    PlotQueryProcessor, QueryProcessor, RasterQueryProcessor, TypedPlotQueryProcessor,
-    TypedRasterQueryProcessor, TypedVectorQueryProcessor, VectorQueryProcessor,
+    BoxRasterQueryProcessor, PlotQueryProcessor, QueryProcessor, RasterQueryProcessor,
+    TypedPlotQueryProcessor, TypedRasterQueryProcessor, TypedVectorQueryProcessor,
+    VectorQueryProcessor,
 };
 pub use result_descriptor::{
     PlotResultDescriptor, RasterResultDescriptor, ResultDescriptor, TypedResultDescriptor,
@@ -123,16 +124,16 @@ macro_rules! call_on_generic_vector_processor {
     };
 }
 
-/// Calls a function on two `TypedRQueryProcessor`s by calling it on their variant combination.
-/// Call via `call_bi_generic_processor!(input_a, input_b, (processor_a, processor_b) => function)`.
+/// Calls a function on two `TypedRasterQueryProcessor`s by calling it on their variant combination.
+/// Call via `call_on_bi_generic_raster_processor!(input_a, input_b, (processor_a, processor_b) => function)`.
 #[macro_export]
-macro_rules! call_bi_generic_processor {
+macro_rules! call_on_bi_generic_raster_processor {
     (
         $input_a:expr, $input_b:expr,
         ( $processor_a:ident, $processor_b:ident ) => $function_call:expr
     ) => {
         // TODO: this should be automated, but it seems like this requires a procedural macro
-        call_bi_generic_processor!(
+        call_on_bi_generic_raster_processor!(
             @variants
             $input_a, $input_b,
             ( $processor_a, $processor_b ) => $function_call,
