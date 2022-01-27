@@ -63,6 +63,7 @@ struct StateContainer<T> {
 }
 
 impl<T: Pixel> StateContainer<T> {
+    /// Create a new no-data `RasterTile2D` with `GridIdx` and time from the current state
     fn current_no_data_tile(&self) -> RasterTile2D<T> {
         RasterTile2D::new(
             self.current_time,
@@ -72,6 +73,7 @@ impl<T: Pixel> StateContainer<T> {
         )
     }
 
+    /// Check if the next tile to produce is the stored one
     fn is_next_tile_stored(&self) -> bool {
         if let Some(t) = &self.next_tile {
             t.tile_position == self.current_idx && t.time == self.current_time
@@ -80,47 +82,59 @@ impl<T: Pixel> StateContainer<T> {
         }
     }
 
+    /// Get the next `GridIdx` following the current state `GridIdx`. None if the current `GridIdx` is the max `GridIdx` of the grid.
     fn maybe_next_idx(&self) -> Option<GridIdx2D> {
         self.grid_bounds.inc_idx_unchecked(self.current_idx, 1)
     }
 
+    /// Get the next `GridIdx` following the current state Grid`GridIdx`Idx. Returns the minimal `GridIdx` if the current `GridIdx` is the max `GridIdx`.
     fn wrapped_next_idx(&self) -> GridIdx2D {
         self.grid_bounds
             .inc_idx_unchecked(self.current_idx, 1)
             .unwrap_or_else(|| self.min_index())
     }
 
+    /// Get the minimal `GridIdx` of the grid.
     fn min_index(&self) -> GridIdx2D {
         self.grid_bounds.min_index()
     }
 
+    /// Get the maximal `GridIdx` of the grid.
     fn max_index(&self) -> GridIdx2D {
         self.grid_bounds.max_index()
     }
 
+    /// Check if any tile is stored in the state.
     fn is_any_tile_stored(&self) -> bool {
         self.next_tile.is_some()
     }
 
+    /// Check if a `TimeInterval` starts before the current state `TimeInterval`.
     fn time_starts_before_current_state(&self, time: TimeInterval) -> bool {
         time.start() < self.current_time.start()
     }
 
+    /// Check if a `TimeInterval` start equals the start of the current state `TimeInterval`.
     fn time_starts_equals_current_state(&self, time: TimeInterval) -> bool {
         time.start() == self.current_time.start()
     }
 
+    /// Check if a `TimeInterval` duration equals the duration of the current state `TimeInterval`.
     fn time_duration_equals_current_state(&self, time: TimeInterval) -> bool {
         time.duration_ms() == self.current_time.duration_ms()
     }
 
+    /// Check if a `TimeInterval` equals the current state `TimeInterval`.
     fn time_equals_current_state(&self, time: TimeInterval) -> bool {
         time == self.current_time
     }
 
+    /// Check if a `GridIdx` is the next to produce i.e. the current state `GridIdx`.
     fn grid_idx_is_the_next_to_produce(&self, tile_idx: GridIdx2D) -> bool {
         tile_idx == self.current_idx
     }
+
+    /// Check if a `TimeInterval` is directly connected to the end of the current state `TimeInterval`.
     fn time_directly_following_current_state(&self, time: TimeInterval) -> bool {
         if self.current_time.is_instant() {
             self.current_time.end() + 1 == time.start()
@@ -128,8 +142,15 @@ impl<T: Pixel> StateContainer<T> {
             self.current_time.end() == time.start()
         }
     }
+
+    /// Check if the current state `GridIdx`  is the first of a grid run i.e. it equals the minimal `GridIdx` .
     fn current_idx_is_first_in_grid_run(&self) -> bool {
         self.current_idx == self.min_index()
+    }
+
+    /// Check if the current state `GridIdx`  is the first of a grid run i.e. it equals the minimal `GridIdx` .
+    fn current_idx_is_last_in_grid_run(&self) -> bool {
+        self.current_idx == self.max_index()
     }
 }
 
@@ -202,32 +223,26 @@ where
         let mut this = self.project();
 
         match this.sc.state {
+            // this is the initial state.
             State::Initial => {
+                // there must not be a grid stored
+                debug_assert!(!this.sc.is_any_tile_stored());
                 // poll for a first (input) tile
-                let res = match ready!(this.stream.as_mut().poll_next(cx)) {
-                    // this is a the first tile ever
+                let result_tile = match ready!(this.stream.as_mut().poll_next(cx)) {
                     Some(Ok(tile)) => {
-                        // to be in this state we must await a first tile in a grid run
-                        debug_assert!(this.sc.current_idx == min_idx);
-                        // there must not be a grid stored
-                        debug_assert!(!this.sc.is_any_tile_stored());
-
+                        // this is a the first tile ever
                         // in any case the tiles time is the first time interval /  instant we can produce
                         this.sc.current_time = tile.time;
 
-                        if this.sc.current_idx == tile.tile_position {
-                            // it is the the first in the grid AND therefore the first one to return.
-                            // this.sc.current_time = tile.time;
-                            this.sc.state = State::PollingForNextTile;
-                            Some(Ok(tile))
+                        if this.sc.grid_idx_is_the_next_to_produce(tile.tile_position) {
+                            this.sc.state = State::PollingForNextTile; // return the received tile and set state to polling for the next tile
+                            tile
                         } else {
-                            // this.sc.current_time = tile.time;
                             this.sc.next_tile = Some(tile);
-                            this.sc.state = State::FillAndProduceNextTile;
-                            Some(Ok(this.sc.current_no_data_tile())) // it is important to generate the no data tile here since we need the time
+                            this.sc.state = State::FillAndProduceNextTile; // save the tile and go to fill mode
+                            this.sc.current_no_data_tile()
                         }
                     }
-
                     // an error ouccured, stop producing anything and return the error.
                     Some(Err(e)) => {
                         this.sc.state = State::Ended;
@@ -237,23 +252,27 @@ where
                     None => {
                         debug_assert!(this.sc.current_idx == min_idx);
                         this.sc.state = State::FillToEnd;
-                        Some(Ok(this.sc.current_no_data_tile()))
+                        this.sc.current_no_data_tile()
                     }
                 };
                 // move the current_idx. There is no need to do time progress here. Either a new tile triggers that or it is never needed for an empty source.
                 this.sc.current_idx = wrapped_next_idx;
-                Poll::Ready(res)
+                Poll::Ready(Some(Ok(result_tile)))
             }
+            // this is the state where we are waiting for the next tile to arrive.
             State::PollingForNextTile => {
+                // there must not be a tile stored
+                debug_assert!(!this.sc.is_any_tile_stored());
+
+                // There are four cases we have to handle:
+                // 1. The received tile has a TimeInterval that starts before the current tile. This must not happen and is propably a bug in the source.
+                // 2. The received tile has a TimeInterval that matches the TimeInterval of the state. This TimeInterval is is currently produced.
+                // 3. The received tile has a TimeInterval that directly continues the current TimeInterval. This TimeInterval will be produced once all tiles of the current grid have been produced.
+                // 4. The received tile has a TimeInterval that starts after the current TimeInterval and is not directly connected to the current TimeInterval. Befor this TimeInterval is produced, an intermediate TimeInterval is produced.
+
                 let res = match ready!(this.stream.as_mut().poll_next(cx)) {
-                    // CHECK BASIC ASSERTIONS
-
-                    // The start of the recieved TimeInterval MUST NOT BE before the start of the current TimeInterval.
                     Some(Ok(tile)) => {
-                        debug_assert!(!this.sc.is_any_tile_stored());
-                        dbg!(tile.tile_position, tile.time);
-
-                        // A received tile MUST not have a time start before the current time.
+                        // 1. The start of the recieved TimeInterval MUST NOT BE before the start of the current TimeInterval.
                         if this.sc.time_starts_before_current_state(tile.time) {
                             this.sc.state = State::Ended;
                             return Poll::Ready(Some(Err(
@@ -264,7 +283,7 @@ where
                             .into(),
                         )));
                         }
-                        // A received TimeInterval with start EQUAL to the current TimeInterval MUST NOT differ in the end
+                        // 2. a) The received TimeInterval with start EQUAL to the current TimeInterval MUST NOT have a differend duration / end.
                         if this.sc.time_starts_equals_current_state(tile.time)
                             && !this.sc.time_duration_equals_current_state(tile.time)
                         {
@@ -278,73 +297,48 @@ where
                             )));
                         };
 
+                        // 2 b) The received TimeInterval with start EQUAL to the current TimeInterval MUST NOT have a differend duration / end.
                         let next_tile = if this.sc.time_equals_current_state(tile.time) {
-                            // TILE IN CURRENT GRID RUN / TIME INTERVAL
-                            debug_assert!(tile.time.start() == this.sc.current_time.start());
-
                             if this.sc.grid_idx_is_the_next_to_produce(tile.tile_position) {
-                                debug_assert!(this.sc.current_idx == tile.tile_position);
-                                dbg!("0___n");
-                                // Time and idx are EQUAL to the current ones (to produce).
-                                // Therefore, it is the one to produce in this call.
-
-                                this.sc.current_time = tile.time; // time is equal so dont to update it
+                                // the tile is the next to produce. Return it and set state to polling for the next tile.
                                 this.sc.state = State::PollingForNextTile;
                                 tile
                             } else {
-                                debug_assert!(this.sc.current_idx != tile.tile_position);
-                                dbg!("0___g");
-                                // TimeInterval is EQUAL to the current ones (to produce).
-                                // GridIdx is NOT EQUAL the current one (to produce).
-                                // Therefore, return empty tile and go to FillAndProduceNextTile.
+                                // the tile is not the next to produce. Save it and go to fill mode.
                                 this.sc.next_tile = Some(tile);
                                 this.sc.state = State::FillAndProduceNextTile;
                                 this.sc.current_no_data_tile()
                             }
-                        } else if this.sc.time_directly_following_current_state(tile.time) {
-                            debug_assert!(
-                                tile.time.start() == this.sc.current_time.end()
-                                    || (this.sc.current_time.is_instant()
-                                        && this.sc.current_time.end() + 1 == tile.time.start())
-                            );
-                            // TILE IN NEXT GRID RUN / TIME INTERVAL
+                        }
+                        // 3. The received tile has a TimeInterval that directly continues the current TimeInterval.
+                        else if this.sc.time_directly_following_current_state(tile.time) {
+                            // if the current_idx is the first in a new grid run then it is the first one with the new TimeInterval.
+                            // this switches the time in the state to the time of the new tile.
                             if this.sc.current_idx_is_first_in_grid_run() {
-                                debug_assert!(this.sc.current_idx == this.sc.min_index());
                                 if this.sc.grid_idx_is_the_next_to_produce(tile.tile_position) {
-                                    debug_assert!(this.sc.current_idx == tile.tile_position);
-                                    dbg!("1_f_n");
-                                    // We are at the start of a new grid run => The tile we received is the first in an new TimeInstant.
-                                    // The tile GridIdx is equal to the GridIdx (to produce).
-                                    // AND the current TimeInterval is a TimeInstant.
-                                    // AND the tiles start TimeInstant is the direct follower of the current TimeInstant (end + 1 = start).
-                                    // Therefore, it is the one to produce in this call.
-
+                                    // return the tile and set state to polling for the next tile.
                                     this.sc.current_time = tile.time;
                                     this.sc.state = State::PollingForNextTile;
                                     tile
                                 } else {
-                                    debug_assert!(this.sc.current_idx != tile.tile_position);
-                                    dbg!("1_f_g");
-                                    // The tile GridIdx is NOT EQUAL to the GridIdx (to produce) => Tile is in a new TimeInterval but not the current AND first one.
-                                    // AND the tiles TimeInterval starts where the current/previous TimeInterval ends => use tile.time as current_time.
+                                    // save the tile and go to fill mode.
                                     this.sc.current_time = tile.time;
                                     this.sc.next_tile = Some(tile);
                                     this.sc.state = State::FillAndProduceNextTile;
                                     this.sc.current_no_data_tile()
                                 }
                             } else {
-                                dbg!("1_i_g");
+                                // the revieved tile is in a new TimeInterval but we still need to finish the current one. Store tile and go to fill mode.
                                 this.sc.next_tile = Some(tile);
                                 this.sc.state = State::FillAndProduceNextTile;
                                 this.sc.current_no_data_tile()
                             }
-                        } else {
-                            // GAP BETWEEN CURRENT AND NEXT GRID RUN / TIME INTERVAL
-                            debug_assert!(this.sc.current_time.end() < tile.time.start()); // should be impossible
-
+                        }
+                        // 4. The received tile has a TimeInterval that starts after the current TimeInterval and is not directly connected to the current TimeInterval.
+                        else {
+                            // if the current_idx is the first in a new grid run then it is the first one with a new TimeInterval.
+                            // We need to generate a fill TimeInterval since current and tile TimeInterval are not connedted.
                             if this.sc.current_idx_is_first_in_grid_run() {
-                                dbg!("2_f_g");
-
                                 this.sc.current_time = TimeInterval::new(
                                     this.sc.current_time.end(),
                                     tile.time.start(),
@@ -353,8 +347,7 @@ where
                                 this.sc.state = State::FillAndProduceNextTile;
                                 this.sc.current_no_data_tile()
                             } else {
-                                dbg!("2_i_g");
-
+                                // the received tile is in a new TimeInterval but we still need to finish the current one. Store tile and go to fill mode.
                                 this.sc.next_tile = Some(tile);
                                 this.sc.state = State::FillAndProduceNextTile;
                                 this.sc.current_no_data_tile()
@@ -370,16 +363,16 @@ where
                     }
                     // the source is empty (now). Remember that.
                     None => {
-                        if this.sc.current_idx == min_idx {
-                            // there was a tile and it flipped the next index to the first one. => we are done.
+                        if this.sc.current_idx_is_first_in_grid_run() {
+                            // there was a tile and it flipped the state index to the first one. => we are done.
                             this.sc.state = State::Ended;
                             None
-                        } else if this.sc.current_idx == this.sc.max_index() {
+                        } else if this.sc.current_idx_is_last_in_grid_run() {
                             // this is the last tile
                             this.sc.state = State::Ended;
                             Some(Ok(this.sc.current_no_data_tile()))
                         } else {
-                            // there was a tile and it was not the last one. => fill to end.
+                            // there was a tile and it was not the last one. => go to fill to end mode.
                             this.sc.state = State::FillToEnd;
                             Some(Ok(this.sc.current_no_data_tile()))
                         }
@@ -402,6 +395,7 @@ where
 
                 Poll::Ready(Some(Ok(next_tile)))
             }
+            // this is the state where we produce fill tiles until another state is reached.
             State::FillAndProduceNextTile => {
                 let stored_tile_time = this
                     .sc
@@ -409,26 +403,22 @@ where
                     .as_ref()
                     .map(|t| t.time)
                     .expect("next_tile must be set in NextTile state");
-                dbg!("State::FillAndProduceNextTile A", stored_tile_time);
+
                 let (next_idx, next_time) = match this.sc.maybe_next_idx() {
                     // the next GridIdx is in the current TimeInterval
                     Some(idx) => {
                         dbg!("0");
                         (idx, this.sc.current_time)
                     }
-                    // the next GridIdx is in the next TimeInstant which is the one of the next tile
+                    // the next GridIdx is in the next TimeInterval
                     None => {
-                        if this.sc.current_time.is_instant()
-                            && this.sc.current_time.end() + 1 == stored_tile_time.start()
+                        if this
+                            .sc
+                            .time_directly_following_current_state(stored_tile_time)
                         {
-                            dbg!("1");
-                            (this.sc.min_index(), stored_tile_time)
-                        } else if this.sc.current_time.end() == stored_tile_time.start() {
-                            dbg!("2");
                             (this.sc.min_index(), stored_tile_time)
                         } else {
-                            // the next GridIdx is in the next TimeInterval which is BEFORE the one of the next tile
-                            dbg!("3");
+                            // the next GridIdx is not in the next TimeInterval. We need to create a new intermediate TimeInterval.
                             (
                                 this.sc.min_index(),
                                 TimeInterval::new(
@@ -439,9 +429,6 @@ where
                         }
                     }
                 };
-                dbg!("State::FillAndProduceNextTile B", next_time);
-
-                debug_assert!(next_time.start() >= this.sc.current_time.start());
 
                 let no_data_tile = this.sc.current_no_data_tile();
 
@@ -451,7 +438,7 @@ where
                 Poll::Ready(Some(Ok(no_data_tile)))
             }
             // this is  the last tile to produce ever
-            State::FillToEnd if this.sc.current_idx == this.sc.max_index() => {
+            State::FillToEnd if this.sc.current_idx_is_last_in_grid_run() => {
                 this.sc.state = State::Ended;
                 Poll::Ready(Some(Ok(this.sc.current_no_data_tile())))
             }
