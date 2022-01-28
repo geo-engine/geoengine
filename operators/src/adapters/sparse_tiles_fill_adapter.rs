@@ -265,10 +265,12 @@ where
                 debug_assert!(!this.sc.is_any_tile_stored());
 
                 // There are four cases we have to handle:
-                // 1. The received tile has a TimeInterval that starts before the current tile. This must not happen and is propably a bug in the source.
-                // 2. The received tile has a TimeInterval that matches the TimeInterval of the state. This TimeInterval is is currently produced.
-                // 3. The received tile has a TimeInterval that directly continues the current TimeInterval. This TimeInterval will be produced once all tiles of the current grid have been produced.
-                // 4. The received tile has a TimeInterval that starts after the current TimeInterval and is not directly connected to the current TimeInterval. Befor this TimeInterval is produced, an intermediate TimeInterval is produced.
+                // 1. The received tile has a TimeInterval that starts before the current tile. This must not happen and is probably a bug in the source.
+                // 2. The received tile has a TimeInterval that matches the TimeInterval of the state. This TimeInterval is currently produced.
+                // 3. The received tile has a TimeInterval that directly continues the current TimeInterval.
+                //    This TimeInterval will be produced once all tiles of the current grid have been produced.
+                // 4. The received tile has a TimeInterval that starts after the current TimeInterval and is not directly connected to the current TimeInterval.
+                //    Before this TimeInterval is produced, an intermediate TimeInterval is produced.
 
                 let res = match ready!(this.stream.as_mut().poll_next(cx)) {
                     Some(Ok(tile)) => {
@@ -297,7 +299,7 @@ where
                             )));
                         };
 
-                        // 2 b) The received TimeInterval with start EQUAL to the current TimeInterval MUST NOT have a differend duration / end.
+                        // 2 b) The received TimeInterval with start EQUAL to the current TimeInterval MUST NOT have a different duration / end.
                         let next_tile = if this.sc.time_equals_current_state(tile.time) {
                             if this.sc.grid_idx_is_the_next_to_produce(tile.tile_position) {
                                 // the tile is the next to produce. Return it and set state to polling for the next tile.
