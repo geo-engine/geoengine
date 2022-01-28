@@ -490,7 +490,7 @@ mod tests {
         let gdal_source = GdalSourceProcessor::<u8> {
             tiling_specification: exe_ctx.tiling_specification(),
             meta_data: Box::new(create_ndvi_meta_data()),
-            phantom_data: Default::default(),
+            no_data_value: None,
         };
 
         let query_partition =

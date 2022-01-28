@@ -12,7 +12,7 @@ pub use raster_subquery::{
     SubQueryTileAggregator, TileReprojectionSubQuery,
 };
 pub use raster_time::RasterTimeAdapter;
-pub use sparse_tiles_fill_adapter::SparseTilesFillAdapter;
+pub use sparse_tiles_fill_adapter::{SparseTilesFillAdapter, SparseTilesFillAdapterError};
 
 use self::raster_time_substream::RasterTimeMultiFold;
 use crate::util::Result;
