@@ -98,32 +98,6 @@ pub enum Error {
         source: serde_json::Error,
     },
 
-    Ocl {
-        ocl_error: ocl::error::Error,
-    },
-
-    ClProgramInvalidRasterIndex,
-
-    ClProgramInvalidRasterDataType,
-
-    ClProgramInvalidFeaturesIndex,
-
-    ClProgramInvalidVectorDataType,
-
-    ClProgramInvalidGenericIndex,
-
-    ClProgramInvalidGenericDataType,
-
-    ClProgramUnspecifiedRaster,
-
-    ClProgramUnspecifiedFeatures,
-
-    ClProgramUnspecifiedGenericBuffer,
-
-    ClProgramInvalidColumn,
-
-    ClInvalidInputsForIterationType,
-
     InvalidExpression,
 
     InvalidNumberOfExpressionInputs,
@@ -303,10 +277,21 @@ pub enum Error {
         source: crate::pro::executor::error::ExecutorError,
     },
 
+    #[snafu(display("SparseTilesFillAdapter error: {}", source))]
+    SparseTilesFillAdapter {
+        source: crate::adapters::SparseTilesFillAdapterError,
+    },
+
     #[snafu(context(false))]
     ExpressionOperator {
         source: crate::processing::ExpressionError,
     },
+}
+
+impl From<crate::adapters::SparseTilesFillAdapterError> for Error {
+    fn from(source: crate::adapters::SparseTilesFillAdapterError) -> Self {
+        Error::SparseTilesFillAdapter { source }
+    }
 }
 
 /// The error requires to be `Send`.
@@ -350,12 +335,6 @@ impl From<serde_json::Error> for Error {
 impl From<chrono::format::ParseError> for Error {
     fn from(source: ParseError) -> Self {
         Self::TimeParse { source }
-    }
-}
-
-impl From<ocl::Error> for Error {
-    fn from(ocl_error: ocl::Error) -> Self {
-        Self::Ocl { ocl_error }
     }
 }
 

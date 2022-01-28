@@ -8,7 +8,7 @@ use pest::{
 use pest_derive::Parser;
 use snafu::{ensure, ResultExt};
 
-use crate::{processing::new_expression::codegen::Parameter, util::duplicate_or_empty_str_slice};
+use crate::{processing::expression::codegen::Parameter, util::duplicate_or_empty_str_slice};
 
 use super::{
     codegen::{
@@ -23,7 +23,7 @@ type Result<T, E = ExpressionError> = std::result::Result<T, E>;
 pub type PestError = pest::error::Error<Rule>;
 
 #[derive(Parser)]
-#[grammar = "processing/new_expression/expression.pest"] // relative to src
+#[grammar = "processing/expression/expression.pest"] // relative to src
 struct _ExpressionParser;
 
 /// A parser for user-defined expressions.

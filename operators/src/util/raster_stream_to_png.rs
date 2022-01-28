@@ -121,7 +121,7 @@ mod tests {
         let gdal_source = GdalSourceProcessor::<u8> {
             tiling_specification,
             meta_data: Box::new(create_ndvi_meta_data()),
-            phantom_data: Default::default(),
+            no_data_value: Some(0),
         };
 
         let query_partition =

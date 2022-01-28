@@ -94,8 +94,25 @@ where
         time: TimeInterval,
         tile_info: TileInformation,
         data: GridOrEmpty<D, T>,
-    ) -> Self {
-        // TODO: assert, tile information xy size equals the data xy size
+    ) -> Self
+    where
+        D: GridSize,
+    {
+        debug_assert_eq!(
+            tile_info.tile_size_in_pixels.axis_size_x(),
+            data.shape_ref().axis_size_x()
+        );
+
+        debug_assert_eq!(
+            tile_info.tile_size_in_pixels.axis_size_y(),
+            data.shape_ref().axis_size_y()
+        );
+
+        debug_assert_eq!(
+            tile_info.tile_size_in_pixels.number_of_elements(),
+            data.shape_ref().number_of_elements()
+        );
+
         Self {
             time,
             tile_position: tile_info.global_tile_position,
@@ -112,7 +129,21 @@ where
         data: GridOrEmpty<D, T>,
         properties: RasterProperties,
     ) -> Self {
-        // TODO: assert, tile information xy size equals the data xy size
+        debug_assert_eq!(
+            tile_info.tile_size_in_pixels.axis_size_x(),
+            data.shape_ref().axis_size_x()
+        );
+
+        debug_assert_eq!(
+            tile_info.tile_size_in_pixels.axis_size_y(),
+            data.shape_ref().axis_size_y()
+        );
+
+        debug_assert_eq!(
+            tile_info.tile_size_in_pixels.number_of_elements(),
+            data.shape_ref().number_of_elements()
+        );
+
         Self {
             time,
             tile_position: tile_info.global_tile_position,

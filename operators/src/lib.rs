@@ -26,7 +26,6 @@ pub mod adapters;
 pub mod engine;
 pub mod error;
 pub mod mock;
-pub mod opencl;
 pub mod plot;
 pub mod processing;
 pub mod source;

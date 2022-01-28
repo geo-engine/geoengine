@@ -873,7 +873,7 @@ mod tests {
                 params,
                 GdalLoadingInfoPart {
                     time: TimeInterval::default(),
-                    params: GdalDatasetParameters {
+                    params: Some(GdalDatasetParameters {
                         file_path: PathBuf::from(format!("WCS:{}rasterdb/lidar_2018_wetness_1m/wcs?VERSION=1.0.0&COVERAGE=lidar_2018_wetness_1m", server.url_str(""))),
                         rasterband_channel: 1,
                         geo_transform: GdalDatasetGeoTransform {
@@ -888,7 +888,7 @@ mod tests {
                         properties_mapping: None,
                         gdal_open_options: Some(vec!["UserPwd=geoengine:pwd".to_owned(), "HttpAuth=BASIC".to_owned()]),
                         gdal_config_options: None,
-                    }
+                    })
                 }
             );
 
