@@ -318,6 +318,12 @@ pub enum Error {
     Executor {
         source: geoengine_operators::pro::executor::error::ExecutorError,
     },
+
+    #[cfg(feature = "pro")]
+    #[snafu(display("Executor error: {}", message))]
+    ExecutorComputation {
+        message: String,
+    },
 }
 
 impl actix_web::error::ResponseError for Error {
