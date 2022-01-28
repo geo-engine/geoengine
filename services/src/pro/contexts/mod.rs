@@ -6,7 +6,6 @@ mod postgres;
 pub use in_memory::ProInMemoryContext;
 #[cfg(feature = "postgres")]
 pub use postgres::PostgresContext;
-use std::hash::Hash;
 use std::sync::Arc;
 
 use crate::contexts::{Context, Db};
@@ -14,7 +13,6 @@ use crate::pro::users::{UserDb, UserSession};
 use crate::util::config::get_config_element;
 use crate::workflows::workflow::WorkflowId;
 use async_trait::async_trait;
-use geoengine_datatypes::primitives::{AxisAlignedRectangle, BoundingBox2D, QueryRectangle};
 use geoengine_operators::pro::executor::Executor;
 use tokio::sync::{RwLockReadGuard, RwLockWriteGuard};
 
@@ -30,29 +28,17 @@ pub trait ProContext: Context<Session = UserSession> {
     fn task_manager(&self) -> TaskManager;
 }
 
-#[derive(Hash, Clone, PartialEq, Eq)]
-pub struct ExecutorKey<T: AxisAlignedRectangle + Hash + Clone> {
-    pub workflow_id: WorkflowId,
-    pub query_rectangle: QueryRectangle<T>,
-}
-
 #[derive(Clone)]
 pub struct TaskManager {
-    plot_executor: Arc<
-        Executor<
-            ExecutorKey<BoundingBox2D>,
-            crate::error::Result<crate::handlers::plots::WrappedPlotOutput>,
-        >,
-    >,
+    plot_executor:
+        Arc<Executor<WorkflowId, crate::error::Result<crate::handlers::plots::WrappedPlotOutput>>>,
 }
 
 impl TaskManager {
     pub fn plot_executor(
         &self,
-    ) -> &Executor<
-        ExecutorKey<BoundingBox2D>,
-        crate::error::Result<crate::handlers::plots::WrappedPlotOutput>,
-    > {
+    ) -> &Executor<WorkflowId, crate::error::Result<crate::handlers::plots::WrappedPlotOutput>>
+    {
         self.plot_executor.as_ref()
     }
 }

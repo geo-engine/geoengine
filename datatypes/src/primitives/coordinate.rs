@@ -8,37 +8,18 @@ use ocl::OclPrm;
 use postgres_types::{FromSql, ToSql};
 use proj::Coord;
 use serde::{Deserialize, Serialize};
-use std::hash::{Hash, Hasher};
 use std::{
     fmt,
     ops::{Add, Div, Mul, Sub},
     slice,
 };
 
-#[derive(Clone, Copy, Debug, Deserialize, PartialOrd, Serialize, Default)]
+#[derive(Clone, Copy, Debug, Deserialize, PartialEq, PartialOrd, Serialize, Default)]
 #[cfg_attr(feature = "postgres", derive(ToSql, FromSql))]
 #[repr(C)]
 pub struct Coordinate2D {
     pub x: f64,
     pub y: f64,
-}
-
-impl PartialEq for Coordinate2D {
-    fn eq(&self, other: &Self) -> bool {
-        crate::util::helpers::f64_to_bits(self.x) == crate::util::helpers::f64_to_bits(other.x)
-            && crate::util::helpers::f64_to_bits(self.y)
-                == crate::util::helpers::f64_to_bits(other.y)
-    }
-}
-
-impl Eq for Coordinate2D {}
-
-impl Hash for Coordinate2D {
-    fn hash<H: Hasher>(&self, state: &mut H) {
-        // Ensure a single NAN representation
-        state.write_u64(crate::util::helpers::f64_to_bits(self.x));
-        state.write_u64(crate::util::helpers::f64_to_bits(self.y));
-    }
 }
 
 // Make coordinates transferable to OpenCl devices
@@ -339,7 +320,6 @@ impl ApproxEq for Coordinate2D {
 #[cfg(test)]
 mod test {
     use super::*;
-    use std::collections::hash_map::DefaultHasher;
     use std::mem;
 
     #[test]
@@ -411,49 +391,5 @@ mod test {
             Coordinate2D::new(0., 0.).euclidean_distance(&(1., 1.).into()),
             2.0_f64.sqrt()
         );
-    }
-
-    #[test]
-    fn partial_eq() {
-        let c1 = Coordinate2D { x: 4., y: 8. };
-        let c2 = Coordinate2D { x: 4., y: 8. };
-        assert_eq!(c1, c2);
-    }
-
-    #[test]
-    fn partial_eq_nan() {
-        let c1 = Coordinate2D { x: f64::NAN, y: 8. };
-        let c2 = Coordinate2D { x: f64::NAN, y: 8. };
-        assert_eq!(c1, c2);
-    }
-
-    #[test]
-    fn hash() {
-        let mut h1 = DefaultHasher::new();
-        let c1 = Coordinate2D { x: 4., y: 8. };
-        c1.hash(&mut h1);
-        let v1 = h1.finish();
-
-        let mut h2 = DefaultHasher::new();
-        let c2 = Coordinate2D { x: 4., y: 8. };
-        c2.hash(&mut h2);
-        let v2 = h2.finish();
-
-        assert_eq!(v1, v2);
-    }
-
-    #[test]
-    fn hash_nan() {
-        let mut h1 = DefaultHasher::new();
-        let c1 = Coordinate2D { x: f64::NAN, y: 8. };
-        c1.hash(&mut h1);
-        let v1 = h1.finish();
-
-        let mut h2 = DefaultHasher::new();
-        let c2 = Coordinate2D { x: f64::NAN, y: 8. };
-        c2.hash(&mut h2);
-        let v2 = h2.finish();
-
-        assert_eq!(v1, v2);
     }
 }
