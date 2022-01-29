@@ -492,7 +492,7 @@ where
         dataset_params: GdalDatasetParameters,
         tile_information: TileInformation,
     ) -> Result<GridWithProperties<T>> {
-        tokio::task::spawn_blocking(move || {
+        crate::util::spawn_blocking(move || {
             Self::load_tile_data(&dataset_params, &tile_information)
         })
         .await
@@ -540,6 +540,7 @@ where
     /// A method to load single tiles from a GDAL dataset.
     ///
     #[allow(clippy::too_many_lines)]
+    #[tracing::instrument]
     pub fn load_tile_data(
         dataset_params: &GdalDatasetParameters,
         tile_information: &TileInformation,
@@ -581,9 +582,10 @@ where
         let fill_value = no_data_value.unwrap_or_else(T::zero);
         let mut properties = RasterProperties::default();
 
-        debug!(
+        tracing::debug!(
             "no_data_value is {:?} and fill_value is {:?}.",
-            &no_data_value, &fill_value
+            &no_data_value,
+            &fill_value
         );
 
         if dataset_result.is_err() {

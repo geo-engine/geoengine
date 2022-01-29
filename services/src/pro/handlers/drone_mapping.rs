@@ -286,7 +286,7 @@ async fn dataset_definition_from_geotiff(
     tiff_path: &Path,
 ) -> Result<DatasetDefinition, error::Error> {
     let tiff_path = tiff_path.to_owned();
-    tokio::task::spawn_blocking(move || {
+    geoengine_operators::util::spawn_blocking(move || {
         let dataset = gdal_open_dataset(&tiff_path).context(error::Operator)?;
 
         let gdal_params = gdal_parameters_from_dataset(&dataset, 1, &tiff_path, None, None)
@@ -325,7 +325,7 @@ async fn unzip(zip_path: &Path, target_path: &Path) -> Result<(), error::Error> 
     let zip_path = zip_path.to_owned();
     let target_path = target_path.to_owned();
 
-    tokio::task::spawn_blocking(move || {
+    geoengine_operators::util::spawn_blocking(move || {
         let zip_file_read = std::fs::File::open(&zip_path).context(error::Io)?;
         let mut archive = zip::ZipArchive::new(zip_file_read).unwrap(); // TODO
 
@@ -591,7 +591,7 @@ mod tests {
 
     /// create a zip file from the content of `source_dir` and its subfolders and output it as a byte vector
     async fn zip_dir(source_dir: PathBuf) -> Result<Vec<u8>> {
-        tokio::task::spawn_blocking(move || {
+        geoengine_operators::util::spawn_blocking(move || {
             let mut output = vec![];
             {
                 let mut zip = zip::ZipWriter::new(Cursor::new(&mut output));

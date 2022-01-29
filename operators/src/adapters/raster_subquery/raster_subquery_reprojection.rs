@@ -114,7 +114,7 @@ fn build_accu<T: Pixel>(
     out_srs: SpatialReference,
     in_srs: SpatialReference,
 ) -> impl Future<Output = Result<TileWithProjectionCoordinates<T>>> {
-    tokio::task::spawn_blocking(move || {
+    crate::util::spawn_blocking(move || {
         let output_raster = EmptyGrid::new(tile_info.tile_size_in_pixels, no_data_and_fill_value);
 
         let pool = pool.clone();
@@ -247,7 +247,7 @@ where
     T: Pixel,
 {
     //  println!("fold_by_coordinate_lookup_future {:?}", &tile.tile_position);
-    tokio::task::spawn_blocking(|| fold_by_coordinate_lookup_impl(accu, tile)).then(
+    crate::util::spawn_blocking(|| fold_by_coordinate_lookup_impl(accu, tile)).then(
         |x| async move {
             match x {
                 Ok(r) => r,

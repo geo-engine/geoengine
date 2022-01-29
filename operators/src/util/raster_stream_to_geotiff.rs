@@ -71,7 +71,7 @@ where
 
     let file_path = file_path.to_owned();
 
-    let dataset_writer = tokio::task::spawn_blocking(move || {
+    let dataset_writer = crate::util::spawn_blocking(move || {
         GdalDatasetWriter::new(
             &file_path,
             query_rect,
@@ -98,7 +98,7 @@ where
                 let dataset_writer = dataset_writer?;
                 let tile = tile?;
 
-                tokio::task::spawn_blocking(move || -> Result<GdalDatasetWriter<P>> {
+                crate::util::spawn_blocking(move || -> Result<GdalDatasetWriter<P>> {
                     dataset_writer.write_tile(tile)?;
                     Ok(dataset_writer)
                 })
@@ -107,7 +107,7 @@ where
         )
         .await?;
 
-    tokio::task::spawn_blocking(move || dataset_writer.finish()).await?
+    crate::util::spawn_blocking(move || dataset_writer.finish()).await?
 }
 
 const COG_BLOCK_SIZE: &str = "512";
