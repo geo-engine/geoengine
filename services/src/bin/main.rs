@@ -1,21 +1,18 @@
-use flexi_logger::{
-    style, AdaptiveFormat, Age, Cleanup, Criterion, DeferredNow, Duplicate, FileSpec, Logger,
-    LoggerHandle, Naming, WriteMode,
-};
-use geoengine_services::error::{Error, Result};
+use flexi_logger::writers::{FileLogWriter, FileLogWriterHandle};
+use flexi_logger::{Age, Cleanup, Criterion, FileSpec, Naming, WriteMode};
+use geoengine_services::error::Result;
 use geoengine_services::util::config;
 use geoengine_services::util::config::get_config_element;
-use log::Record;
+use std::str::FromStr;
 use time::format_description;
+use tracing::metadata::LevelFilter;
+use tracing_subscriber::prelude::*;
 
 #[tokio::main]
-async fn main() -> Result<(), Error> {
-    let logger = initialize_logging()?;
+async fn main() {
+    let _log_writer_handle = initialize_logging();
 
-    let res = start_server().await;
-
-    logger.shutdown();
-    res
+    start_server().await.unwrap();
 }
 
 #[cfg(not(feature = "pro"))]
@@ -28,15 +25,26 @@ pub async fn start_server() -> Result<()> {
     geoengine_services::pro::server::start_pro_server(None).await
 }
 
-fn initialize_logging() -> Result<LoggerHandle> {
-    let logging_config: config::Logging = get_config_element()?;
+/// Tries to initialize `tracing-subscriber` logging, `flexi-logging` and `GDAL` logging.
+///
+/// # Panics
+/// If anything cannot be initialized, this method panics as it is supposed to run at startup.
+///
+fn initialize_logging() -> Option<FileLogWriterHandle> {
+    reroute_gdal_logging();
 
-    let mut logger = Logger::try_with_str(logging_config.log_spec)?
-        .format(custom_log_format)
-        .adaptive_format_for_stderr(AdaptiveFormat::Custom(
-            custom_log_format,
-            colored_custom_log_format,
-        ));
+    let logging_config: config::Logging = get_config_element().unwrap();
+
+    let level_filter = LevelFilter::from_str(&logging_config.log_spec).unwrap();
+
+    let console_layer = tracing_subscriber::fmt::layer()
+        .with_file(false)
+        .with_target(true)
+        .with_ansi(true)
+        .with_writer(std::io::stderr)
+        .with_filter(level_filter);
+
+    let registry = tracing_subscriber::registry().with(console_layer);
 
     if logging_config.log_to_file {
         let mut file_spec = FileSpec::default().basename(logging_config.filename_prefix);
@@ -45,25 +53,40 @@ fn initialize_logging() -> Result<LoggerHandle> {
             file_spec = file_spec.directory(dir);
         }
 
-        logger = logger
-            .log_to_file(file_spec)
-            .write_mode(if logging_config.enable_buffering {
-                WriteMode::BufferAndFlush
-            } else {
-                WriteMode::Direct
-            })
+        // TODO: use local time instead of UTC
+        // On Unix, using local time implies using an unsound feature: https://docs.rs/flexi_logger/latest/flexi_logger/error_info/index.html#time
+        // Thus, we use UTC time instead.
+        flexi_logger::DeferredNow::force_utc();
+
+        let (file_writer, fw_handle) = FileLogWriter::builder(file_spec)
+            .write_mode(WriteMode::Async)
             .append()
             .rotate(
                 Criterion::Age(Age::Day),
                 Naming::Timestamps,
                 Cleanup::KeepLogFiles(7),
             )
-            .duplicate_to_stderr(Duplicate::All);
+            .try_build_with_handle()
+            .unwrap();
+
+        let file_layer = tracing_subscriber::fmt::layer()
+            .with_file(false)
+            .with_target(true)
+            // TODO: there are still format flags within spans due to bug: https://github.com/tokio-rs/tracing/issues/1817
+            .with_ansi(false)
+            .with_writer(move || file_writer.clone())
+            .with_filter(level_filter);
+
+        let registry = registry.with(file_layer);
+
+        registry.init();
+
+        return Some(fw_handle);
     }
 
-    reroute_gdal_logging();
+    registry.init();
 
-    Ok(logger.start()?)
+    None
 }
 
 /// We install a GDAL error handler that logs all messages with our log macros.
@@ -97,48 +120,4 @@ const TIME_FORMAT_STR: &str = "[year]-[month]-[day] [hour]:[minute]:[second].[su
 lazy_static::lazy_static! {
     static ref TIME_FORMAT: Vec<format_description::FormatItem<'static>>
         = format_description::parse(TIME_FORMAT_STR).expect("time format must be parsable");
-}
-
-/// A logline-formatter that produces log lines like
-/// <br>
-/// ```[2021-05-18 10:16:53 +02:00] INFO [my_prog::some_submodule] Task successfully read from conf.json```
-/// <br>
-fn custom_log_format(
-    w: &mut dyn std::io::Write,
-    now: &mut DeferredNow,
-    record: &Record,
-) -> Result<(), std::io::Error> {
-    write!(
-        w,
-        "[{}] {} [{}] {}",
-        now.now()
-            .format(&TIME_FORMAT)
-            .unwrap_or_else(|_| "Timestamping failed".to_string()),
-        record.level(),
-        record.module_path().unwrap_or("<unnamed>"),
-        &record.args()
-    )
-}
-
-/// A colored version of the logline-formatter `custom_log_format`.
-fn colored_custom_log_format(
-    w: &mut dyn std::io::Write,
-    now: &mut DeferredNow,
-    record: &Record,
-) -> Result<(), std::io::Error> {
-    let level = record.level();
-    let style = style(level);
-
-    write!(
-        w,
-        "[{}] {} [{}] {}",
-        style.paint(
-            now.now()
-                .format(&TIME_FORMAT)
-                .unwrap_or_else(|_| "Timestamping failed".to_string()),
-        ),
-        style.paint(level.to_string()),
-        record.module_path().unwrap_or("<unnamed>"),
-        style.paint(&record.args().to_string())
-    )
 }
