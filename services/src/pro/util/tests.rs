@@ -1,5 +1,6 @@
-use chrono::{MAX_DATETIME, MIN_DATETIME};
-use geoengine_datatypes::{spatial_reference::SpatialReferenceOption, util::Identifier};
+use geoengine_datatypes::{
+    primitives::TimeInstance, spatial_reference::SpatialReferenceOption, util::Identifier,
+};
 
 use crate::{
     contexts::SessionId,
@@ -55,8 +56,8 @@ pub fn create_random_user_session_helper() -> UserSession {
             email: Some(user_id.to_string()),
             real_name: Some(user_id.to_string()),
         },
-        created: MIN_DATETIME,
-        valid_until: MAX_DATETIME,
+        created: TimeInstance::MIN,
+        valid_until: TimeInstance::MAX,
         project: None,
         view: None,
         roles: vec![user_id.into(), Role::user_role_id()],

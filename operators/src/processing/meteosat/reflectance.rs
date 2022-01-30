@@ -11,6 +11,7 @@ use num_traits::AsPrimitive;
 use rayon::iter::{IndexedParallelIterator, ParallelIterator};
 use rayon::slice::ParallelSlice;
 use rayon::ThreadPool;
+use time::OffsetDateTime;
 use TypedRasterQueryProcessor::F32 as QueryProcessorOut;
 
 use crate::error::Error;
@@ -28,7 +29,6 @@ type PixelOut = f32;
 use crate::processing::meteosat::satellite::{Channel, Satellite};
 use crate::processing::meteosat::{new_channel_key, new_satellite_key};
 use crate::util::sunpos::SunPos;
-use chrono::{DateTime, Datelike, Utc};
 use RasterDataType::F32 as RasterOut;
 
 const OUT_NO_DATA_VALUE: PixelOut = PixelOut::NAN;
@@ -296,7 +296,7 @@ fn process_tile(
     })
 }
 
-fn calculate_esd(timestamp: &DateTime<Utc>) -> f64 {
+fn calculate_esd(timestamp: &OffsetDateTime) -> f64 {
     let perihelion = f64::from(timestamp.ordinal()) - 3.0;
     let e = 0.0167;
     let theta = std::f64::consts::TAU * (perihelion / 365.0);

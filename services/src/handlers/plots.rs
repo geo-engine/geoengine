@@ -220,7 +220,6 @@ mod tests {
     use actix_web::dev::ServiceResponse;
     use actix_web::http::{header, Method};
     use actix_web_httpauth::headers::authorization::Bearer;
-    use chrono::NaiveDate;
     use geoengine_datatypes::primitives::Measurement;
     use geoengine_datatypes::raster::{Grid2D, RasterDataType, RasterTile2D, TileInformation};
     use geoengine_datatypes::spatial_reference::SpatialReference;
@@ -232,6 +231,7 @@ mod tests {
     };
     use num_traits::AsPrimitive;
     use serde_json::json;
+    use time::macros::datetime;
 
     fn example_raster_source() -> Box<dyn RasterOperator> {
         let no_data_value = None;
@@ -394,8 +394,8 @@ mod tests {
                 bbox: BoundingBox2D::new((-180., -90.).into(), (180., 90.).into()).unwrap(),
                 crs: SpatialReference::epsg_4326().into(),
                 time: TimeInterval::new(
-                    NaiveDate::from_ymd(2020, 1, 1).and_hms(0, 0, 0),
-                    NaiveDate::from_ymd(2020, 1, 1).and_hms(0, 0, 0),
+                    datetime!(2020-01-01 0:00:00 UTC),
+                    datetime!(2020-01-01 0:00:00 UTC),
                 )
                 .unwrap(),
                 spatial_resolution: SpatialResolution::zero_point_one(),

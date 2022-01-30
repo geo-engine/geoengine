@@ -10,9 +10,6 @@ use std::str::FromStr;
 use std::sync::Arc;
 use std::task::Poll;
 
-use chrono::DateTime;
-use chrono::NaiveDate;
-use chrono::NaiveDateTime;
 use futures::future::BoxFuture;
 use futures::stream::{BoxStream, FusedStream};
 use futures::task::Context;
@@ -24,6 +21,8 @@ use log::debug;
 use pin_project::pin_project;
 use serde::{Deserialize, Serialize};
 use snafu::ResultExt;
+use time::format_description::well_known::Rfc3339;
+use time::{Date, OffsetDateTime, PrimitiveDateTime};
 use tokio::sync::Mutex;
 
 use geoengine_datatypes::collections::{
@@ -556,23 +555,34 @@ where
 
         match time_format {
             OgrSourceTimeFormat::Auto => Box::new(move |field: FieldValue| match field {
-                FieldValue::DateValue(value) => Ok(value.and_hms(0, 0, 0).naive_utc().into()),
-                FieldValue::DateTimeValue(value) => Ok(value.naive_utc().into()),
+                FieldValue::DateValue(value) => {
+                    let chrono_date_time = value.and_hms(0, 0, 0).naive_utc();
+                    let timestamp_millis = chrono_date_time.timestamp_millis();
+                    Ok(TimeInstance::from_millis(timestamp_millis)?)
+                }
+                FieldValue::DateTimeValue(value) => {
+                    let timestamp_millis = value.naive_utc().timestamp_millis();
+                    Ok(TimeInstance::from_millis(timestamp_millis)?)
+                }
                 _ => Err(Error::OgrFieldValueIsNotDateTime),
             }),
             OgrSourceTimeFormat::Custom { custom_format } => Box::new(move |field: FieldValue| {
                 let date = field.into_string().ok_or(Error::OgrFieldValueIsNotString)?;
-                let date_time_result = DateTime::parse_from_str(&date, &custom_format)
-                    .map(|t| t.timestamp_millis())
+                let format = time::format_description::parse(&custom_format)?;
+                OffsetDateTime::parse(&date, &format)
+                    .map_err(Error::from)
                     .or_else(|_| {
-                        NaiveDateTime::parse_from_str(&date, &custom_format)
-                            .map(|n| n.timestamp_millis())
+                        PrimitiveDateTime::parse(&date, &format)
+                            .map(PrimitiveDateTime::assume_utc)
+                            .map_err(Error::from)
                     })
                     .or_else(|_| {
-                        NaiveDate::parse_from_str(&date, &custom_format)
-                            .map(|d| d.and_hms(0, 0, 0).timestamp_millis())
-                    });
-                Ok(date_time_result?.try_into()?)
+                        Date::parse(&date, &format)
+                            .map_err(Error::from)
+                            .and_then(|d| d.with_hms(0, 0, 0).map_err(Error::from))
+                            .map(PrimitiveDateTime::assume_utc)
+                    })
+                    .map(TimeInstance::from)
             }),
             OgrSourceTimeFormat::Seconds => Box::new(move |field: FieldValue| match field {
                 FieldValue::IntegerValue(v) => {
@@ -581,9 +591,11 @@ where
                 FieldValue::Integer64Value(v) => {
                     TimeInstance::from_millis(v * 1000).context(error::DataType)
                 }
-                FieldValue::StringValue(v) => DateTime::parse_from_str(&v, "%s")
-                    .context(error::TimeParse)
-                    .and_then(|d| d.timestamp_millis().try_into().context(error::DataType)),
+                FieldValue::StringValue(v) => {
+                    let parse = OffsetDateTime::parse(&v, &Rfc3339)?;
+                    let time_instance = TimeInstance::from(parse);
+                    Ok(time_instance)
+                }
                 _ => Err(Error::OgrFieldValueIsNotValidForSeconds),
             }),
         }

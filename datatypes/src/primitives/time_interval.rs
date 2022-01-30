@@ -500,19 +500,19 @@ impl ArrowTyped for TimeInterval {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use chrono::NaiveDate;
+    use time::macros::datetime;
 
     #[test]
     fn to_geo_json_event() {
-        let min_visualizable_value = -8_334_632_851_200_001 + 1;
-        let max_visualizable_value = 8_210_298_412_800_000 - 1;
+        let min_visualizable_value = -377_705_116_800_000;
+        let max_visualizable_value = 253_402_300_799_999;
 
         assert_eq!(
             TimeInterval::new_unchecked(min_visualizable_value, max_visualizable_value)
                 .as_geo_json_event(),
             serde_json::json!({
-                "start": "-262144-01-01T00:00:00+00:00",
-                "end": "+262143-12-31T23:59:59.999+00:00",
+                "start": "-9999-01-01T00:00:00.0+00:00",
+                "end": "9999-12-31T23:59:59.999Z",
                 "type": "Interval",
             })
         );
@@ -523,8 +523,8 @@ mod tests {
             )
             .as_geo_json_event(),
             serde_json::json!({
-                "start": "-262144-01-01T00:00:00+00:00",
-                "end": "+262143-12-31T23:59:59.999+00:00",
+                "start": "-9999-01-01T00:00:00.0+00:00",
+                "end": "9999-12-31T23:59:59.999Z",
                 "type": "Interval",
             })
         );
@@ -535,8 +535,8 @@ mod tests {
             )
             .as_geo_json_event(),
             serde_json::json!({
-                "start": "-262144-01-01T00:00:00+00:00",
-                "end": "+262143-12-31T23:59:59.999+00:00",
+                "start": "-9999-01-01T00:00:00.0+00:00",
+                "end": "9999-12-31T23:59:59.999Z",
                 "type": "Interval",
             })
         );
@@ -544,14 +544,11 @@ mod tests {
 
     #[test]
     fn duration_millis() {
-        assert_eq!(
-            TimeInterval::default().duration_ms(),
-            16_544_931_263_999_999
-        );
+        assert_eq!(TimeInterval::default().duration_ms(), 631_107_417_599_999);
 
         let time_interval = TimeInterval::new(
-            TimeInstance::from(NaiveDate::from_ymd(1990, 1, 1).and_hms(0, 0, 0)),
-            TimeInstance::from(NaiveDate::from_ymd(2000, 1, 1).and_hms(0, 0, 0)),
+            TimeInstance::from(datetime!(1990-01-01 0:00:00 UTC)),
+            TimeInstance::from(datetime!(2000-01-01 0:00:00 UTC)),
         )
         .unwrap();
 
@@ -561,32 +558,32 @@ mod tests {
             TimeInterval::new(-1, TimeInstance::MAX)
                 .unwrap()
                 .duration_ms(),
-            8_210_298_412_800_000
+            253_402_300_800_000
         );
         assert_eq!(
             TimeInterval::new(0, TimeInstance::MAX)
                 .unwrap()
                 .duration_ms(),
-            8_210_298_412_799_999
+            253_402_300_799_999
         );
 
         assert_eq!(
             TimeInterval::new(TimeInstance::MIN, -1)
                 .unwrap()
                 .duration_ms(),
-            8_334_632_851_199_999
+            377_705_116_799_999
         );
         assert_eq!(
             TimeInterval::new(TimeInstance::MIN, 0)
                 .unwrap()
                 .duration_ms(),
-            8_334_632_851_200_000
+            377_705_116_800_000
         );
         assert_eq!(
             TimeInterval::new(TimeInstance::MIN, 1)
                 .unwrap()
                 .duration_ms(),
-            8_334_632_851_200_001
+            377_705_116_800_001
         );
     }
 

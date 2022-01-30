@@ -1,6 +1,5 @@
 use crate::primitives::error;
 use crate::util::Result;
-use chrono::{DateTime, NaiveDateTime, TimeZone, Utc};
 #[cfg(feature = "postgres")]
 use postgres_types::private::BytesMut;
 #[cfg(feature = "postgres")]
@@ -10,9 +9,12 @@ use snafu::ensure;
 #[cfg(feature = "postgres")]
 use snafu::Error;
 use std::{convert::TryFrom, ops::Add};
+use time::format_description::well_known::Rfc3339;
+use time::macros::format_description;
+use time::{Duration, OffsetDateTime, PrimitiveDateTime, UtcOffset};
 
-#[derive(Clone, Copy, Deserialize, Serialize, PartialEq, Eq, PartialOrd, Ord, Debug)]
-#[repr(C)]
+#[derive(Clone, Copy, Deserialize, Serialize, PartialEq, Eq, PartialOrd, Ord, Debug, Hash)]
+#[repr(transparent)]
 pub struct TimeInstance(i64);
 
 impl TimeInstance {
@@ -33,21 +35,40 @@ impl TimeInstance {
         TimeInstance(millis)
     }
 
-    pub fn as_utc_date_time(self) -> Option<DateTime<Utc>> {
-        Utc.timestamp_millis_opt(self.0).single()
+    pub fn as_utc_date_time(self) -> Option<OffsetDateTime> {
+        let seconds = self.inner() / 1000;
+        let millis = self.inner() % 1000;
+
+        let date_time =
+            OffsetDateTime::from_unix_timestamp(seconds).ok()? + Duration::milliseconds(millis);
+
+        Some(date_time)
     }
 
-    pub fn as_naive_date_time(self) -> Option<NaiveDateTime> {
-        self.as_utc_date_time().map(|t| t.naive_utc())
+    pub fn as_naive_date_time(self) -> Option<PrimitiveDateTime> {
+        let utc_date_time = self.as_utc_date_time()?;
+        let naive_date_time = PrimitiveDateTime::new(utc_date_time.date(), utc_date_time.time());
+        Some(naive_date_time)
     }
 
     pub fn as_rfc3339(self) -> String {
         let instance = self.clamp(TimeInstance::MIN, TimeInstance::MAX);
 
-        instance
+        let utc_date_time = instance
             .as_utc_date_time()
-            .expect("TimeInstance is not valid")
-            .to_rfc3339()
+            .expect("works because it is clamped");
+
+        if utc_date_time.year() >= 0 {
+            return utc_date_time
+                .format(&Rfc3339)
+                .expect("Formatting into RFC 3339 does not fail");
+        }
+
+        let format = format_description!(
+            "[year]-[month]-[day]T[hour]:[minute]:[second].[subsecond][offset_hour sign:mandatory]:[offset_minute]"
+        );
+
+        utc_date_time.format(&format).expect("valid format")
     }
 
     pub const fn inner(self) -> i64 {
@@ -55,22 +76,30 @@ impl TimeInstance {
     }
 
     pub fn now() -> Self {
-        Self::from(chrono::offset::Utc::now())
+        Self::from(OffsetDateTime::now_utc())
     }
 
-    pub const MIN: Self = TimeInstance::from_millis_unchecked(-8_334_632_851_200_001 + 1);
-    pub const MAX: Self = TimeInstance::from_millis_unchecked(8_210_298_412_800_000 - 1);
+    pub const MIN: Self = TimeInstance::from_millis_unchecked(-377_705_116_800_000);
+    pub const MAX: Self = TimeInstance::from_millis_unchecked(253_402_300_799_999);
 }
 
-impl From<NaiveDateTime> for TimeInstance {
-    fn from(date_time: NaiveDateTime) -> Self {
-        TimeInstance::from_millis(date_time.timestamp_millis()).expect("valid for chrono datetimes")
+impl From<PrimitiveDateTime> for TimeInstance {
+    fn from(date_time: PrimitiveDateTime) -> Self {
+        let date_time = date_time.assume_utc();
+        let unix_timestamp_seconds = date_time.unix_timestamp();
+        let unix_timestamp_millis =
+            unix_timestamp_seconds * 1_000 + i64::from(date_time.millisecond());
+        TimeInstance::from_millis(unix_timestamp_millis).expect("valid for `time` datetimes")
     }
 }
 
-impl From<DateTime<Utc>> for TimeInstance {
-    fn from(date_time: DateTime<Utc>) -> Self {
-        TimeInstance::from_millis(date_time.timestamp_millis()).expect("valid for chrono datetimes")
+impl From<OffsetDateTime> for TimeInstance {
+    fn from(date_time: OffsetDateTime) -> Self {
+        let date_time = date_time.to_offset(UtcOffset::UTC);
+        let unix_timestamp_seconds = date_time.unix_timestamp();
+        let unix_timestamp_millis =
+            unix_timestamp_seconds * 1_000 + i64::from(date_time.millisecond());
+        TimeInstance::from_millis(unix_timestamp_millis).expect("valid for `time` datetimes")
     }
 }
 
@@ -101,7 +130,7 @@ impl ToSql for TimeInstance {
     where
         Self: Sized,
     {
-        <DateTime<Utc> as ToSql>::accepts(ty)
+        <OffsetDateTime as ToSql>::accepts(ty)
     }
 
     fn to_sql_checked(
@@ -116,11 +145,11 @@ impl ToSql for TimeInstance {
 #[cfg(feature = "postgres")]
 impl<'a> FromSql<'a> for TimeInstance {
     fn from_sql(ty: &Type, raw: &'a [u8]) -> Result<Self, Box<dyn Error + Sync + Send>> {
-        DateTime::<Utc>::from_sql(ty, raw).map(Into::into)
+        OffsetDateTime::from_sql(ty, raw).map(Into::into)
     }
 
     fn accepts(ty: &Type) -> bool {
-        <DateTime<Utc> as FromSql>::accepts(ty)
+        <OffsetDateTime as FromSql>::accepts(ty)
     }
 }
 
@@ -138,7 +167,13 @@ mod tests {
 
     #[test]
     fn bounds_wrt_chrono() {
-        assert_eq!(TimeInstance::MIN, TimeInstance::from(chrono::MIN_DATETIME));
-        assert_eq!(TimeInstance::MAX, TimeInstance::from(chrono::MAX_DATETIME));
+        assert_eq!(
+            TimeInstance::MIN,
+            TimeInstance::from(PrimitiveDateTime::MIN)
+        );
+        assert_eq!(
+            TimeInstance::MAX,
+            TimeInstance::from(PrimitiveDateTime::MAX)
+        );
     }
 }

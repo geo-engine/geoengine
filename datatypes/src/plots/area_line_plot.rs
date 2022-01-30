@@ -89,17 +89,17 @@ impl Plot for AreaLineChart {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use chrono::NaiveDate;
+    use time::macros::datetime;
 
     #[test]
     fn serialization() {
         let chart = AreaLineChart::new(
             vec![
-                TimeInstance::from(NaiveDate::from_ymd(2010, 1, 1).and_hms(0, 0, 0)),
-                TimeInstance::from(NaiveDate::from_ymd(2011, 1, 1).and_hms(0, 0, 0)),
-                TimeInstance::from(NaiveDate::from_ymd(2012, 1, 1).and_hms(0, 0, 0)),
-                TimeInstance::from(NaiveDate::from_ymd(2013, 1, 1).and_hms(0, 0, 0)),
-                TimeInstance::from(NaiveDate::from_ymd(2014, 1, 1).and_hms(0, 0, 0)),
+                TimeInstance::from(datetime!(2010-01-01 0:00:00 UTC)),
+                TimeInstance::from(datetime!(2011-01-01 0:00:00 UTC)),
+                TimeInstance::from(datetime!(2012-01-01 0:00:00 UTC)),
+                TimeInstance::from(datetime!(2013-01-01 0:00:00 UTC)),
+                TimeInstance::from(datetime!(2014-01-01 0:00:00 UTC)),
             ],
             vec![0., 1., 4., 9., 7.],
             Measurement::Unitless,
@@ -110,7 +110,7 @@ mod tests {
         assert_eq!(
             chart.to_vega_embeddable(false).unwrap(),
             PlotData {
-                vega_string: r#"{"$schema":"https://vega.github.io/schema/vega-lite/v4.17.0.json","data":{"values":[{"x":"2010-01-01T00:00:00+00:00","y":0.0},{"x":"2011-01-01T00:00:00+00:00","y":1.0},{"x":"2012-01-01T00:00:00+00:00","y":4.0},{"x":"2013-01-01T00:00:00+00:00","y":9.0},{"x":"2014-01-01T00:00:00+00:00","y":7.0}]},"description":"Area Plot","encoding":{"x":{"field":"x","title":"Time","type":"temporal"},"y":{"field":"y","title":"","type":"quantitative"}},"mark":{"type":"area","line":true,"point":true}}"#.to_owned(),
+                vega_string: r#"{"$schema":"https://vega.github.io/schema/vega-lite/v4.17.0.json","data":{"values":[{"x":"2010-01-01T00:00:00Z","y":0.0},{"x":"2011-01-01T00:00:00Z","y":1.0},{"x":"2012-01-01T00:00:00Z","y":4.0},{"x":"2013-01-01T00:00:00Z","y":9.0},{"x":"2014-01-01T00:00:00Z","y":7.0}]},"description":"Area Plot","encoding":{"x":{"field":"x","title":"Time","type":"temporal"},"y":{"field":"y","title":"","type":"quantitative"}},"mark":{"type":"area","line":true,"point":true}}"#.to_owned(),
                 metadata: PlotMetaData::None,
             }
         );
@@ -120,11 +120,11 @@ mod tests {
     fn without_area() {
         let chart = AreaLineChart::new(
             vec![
-                TimeInstance::from(NaiveDate::from_ymd(2010, 1, 1).and_hms(0, 0, 0)),
-                TimeInstance::from(NaiveDate::from_ymd(2011, 1, 1).and_hms(0, 0, 0)),
-                TimeInstance::from(NaiveDate::from_ymd(2012, 1, 1).and_hms(0, 0, 0)),
-                TimeInstance::from(NaiveDate::from_ymd(2013, 1, 1).and_hms(0, 0, 0)),
-                TimeInstance::from(NaiveDate::from_ymd(2014, 1, 1).and_hms(0, 0, 0)),
+                TimeInstance::from(datetime!(2010-01-01 0:00:00 UTC)),
+                TimeInstance::from(datetime!(2011-01-01 0:00:00 UTC)),
+                TimeInstance::from(datetime!(2012-01-01 0:00:00 UTC)),
+                TimeInstance::from(datetime!(2013-01-01 0:00:00 UTC)),
+                TimeInstance::from(datetime!(2014-01-01 0:00:00 UTC)),
             ],
             vec![0., 1., 4., 9., 7.],
             Measurement::Continuous {
@@ -138,7 +138,7 @@ mod tests {
         assert_eq!(
             chart.to_vega_embeddable(false).unwrap(),
             PlotData {
-                vega_string: r#"{"$schema":"https://vega.github.io/schema/vega-lite/v4.17.0.json","data":{"values":[{"x":"2010-01-01T00:00:00+00:00","y":0.0},{"x":"2011-01-01T00:00:00+00:00","y":1.0},{"x":"2012-01-01T00:00:00+00:00","y":4.0},{"x":"2013-01-01T00:00:00+00:00","y":9.0},{"x":"2014-01-01T00:00:00+00:00","y":7.0}]},"description":"Area Plot","encoding":{"x":{"field":"x","title":"Time","type":"temporal"},"y":{"field":"y","title":"Joy in Pct","type":"quantitative"}},"mark":{"type":"line","line":true,"point":true}}"#.to_owned(),
+                vega_string: r#"{"$schema":"https://vega.github.io/schema/vega-lite/v4.17.0.json","data":{"values":[{"x":"2010-01-01T00:00:00Z","y":0.0},{"x":"2011-01-01T00:00:00Z","y":1.0},{"x":"2012-01-01T00:00:00Z","y":4.0},{"x":"2013-01-01T00:00:00Z","y":9.0},{"x":"2014-01-01T00:00:00Z","y":7.0}]},"description":"Area Plot","encoding":{"x":{"field":"x","title":"Time","type":"temporal"},"y":{"field":"y","title":"Joy in Pct","type":"quantitative"}},"mark":{"type":"line","line":true,"point":true}}"#.to_owned(),
                 metadata: PlotMetaData::None,
             }
         );

@@ -1,6 +1,7 @@
 use std::collections::HashMap;
 
 use async_trait::async_trait;
+use geoengine_datatypes::primitives::TimeInstance;
 use pwhash::bcrypt;
 use snafu::ensure;
 
@@ -57,8 +58,8 @@ impl UserDb for HashMapUserDb {
                 email: None,
                 real_name: None,
             },
-            created: chrono::Utc::now(),
-            valid_until: chrono::Utc::now() + chrono::Duration::minutes(60),
+            created: TimeInstance::now(),
+            valid_until: TimeInstance::now() + 60 * 60 * 1000, // + 60 minutes
             project: None,
             view: None,
             roles: vec![id.into(), Role::anonymous_role_id()],
@@ -79,9 +80,9 @@ impl UserDb for HashMapUserDb {
                         email: Some(user.email.clone()),
                         real_name: Some(user.real_name.clone()),
                     },
-                    created: chrono::Utc::now(),
+                    created: TimeInstance::now(),
                     // TODO: make session length configurable
-                    valid_until: chrono::Utc::now() + chrono::Duration::minutes(60),
+                    valid_until: TimeInstance::now() + 60 * 60 * 1000, // + 60 minutes
                     project: None,
                     view: None,
                     roles: vec![user.id.into(), Role::user_role_id()],

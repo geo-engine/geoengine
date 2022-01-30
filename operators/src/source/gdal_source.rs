@@ -41,6 +41,7 @@ use std::collections::HashMap;
 use std::convert::{TryFrom, TryInto};
 use std::path::PathBuf;
 use std::time::Instant;
+use time::format_description;
 //use gdal::metadata::Metadata; // TODO: handle metadata
 
 /// Parameters for the GDAL Source Operator
@@ -447,7 +448,7 @@ impl GdalDatasetParameters {
             let time_string = time
                 .as_naive_date_time()
                 .ok_or(Error::TimeInstanceNotDisplayable)?
-                .format(&time_placeholder.format)
+                .format(&format_description::parse(&time_placeholder.format)?)?
                 .to_string();
 
             // TODO: use more efficient algorithm for replacing multiple placeholders, e.g. aho-corasick

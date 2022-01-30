@@ -16,6 +16,7 @@ use bb8_postgres::{
     tokio_postgres::Socket,
 };
 use pwhash::bcrypt;
+use time::Duration;
 use uuid::Uuid;
 
 pub struct PostgresUserDb<Tls>
@@ -136,14 +137,14 @@ where
             .await?;
 
         // TODO: load from config
-        let session_duration = chrono::Duration::days(30);
+        let session_duration = Duration::days(30);
         let row = tx
             .query_one(
                 &stmt,
                 &[
                     &session_id,
                     &user_id,
-                    &(session_duration.num_seconds() as f64),
+                    &(session_duration.whole_seconds() as f64),
                 ],
             )
             .await?;
@@ -193,14 +194,14 @@ where
                 .await?;
 
             // TODO: load from config
-            let session_duration = chrono::Duration::days(30);
+            let session_duration = Duration::days(30);
             let row = conn
                 .query_one(
                     &stmt,
                     &[
                         &session_id,
                         &user_id,
-                        &(session_duration.num_seconds() as f64),
+                        &(session_duration.whole_seconds() as f64),
                     ],
                 )
                 .await?;

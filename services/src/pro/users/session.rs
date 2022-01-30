@@ -1,3 +1,4 @@
+use geoengine_datatypes::primitives::TimeInstance;
 use serde::{Deserialize, Serialize};
 
 use crate::contexts::{Context, MockableSession, Session, SessionId};
@@ -11,7 +12,6 @@ use crate::util::Identifier;
 use actix_http::Payload;
 use actix_web::{web, FromRequest, HttpRequest};
 use bb8_postgres::tokio_postgres::NoTls;
-use chrono::{DateTime, Utc};
 use futures::future::err;
 use futures_util::future::LocalBoxFuture;
 use futures_util::FutureExt;
@@ -29,8 +29,8 @@ pub struct UserInfo {
 pub struct UserSession {
     pub id: SessionId,
     pub user: UserInfo,
-    pub created: DateTime<Utc>,
-    pub valid_until: DateTime<Utc>,
+    pub created: TimeInstance,
+    pub valid_until: TimeInstance,
     pub project: Option<ProjectId>,
     pub view: Option<STRectangle>,
     pub roles: Vec<RoleId>, // a user has a default role (= its user id) and other additonal roles
@@ -47,8 +47,8 @@ impl UserSession {
                 email: None,
                 real_name: None,
             },
-            created: chrono::Utc::now(),
-            valid_until: chrono::Utc::now(),
+            created: TimeInstance::now(),
+            valid_until: TimeInstance::now(),
             project: None,
             view: None,
             roles: vec![role],
@@ -66,8 +66,8 @@ impl MockableSession for UserSession {
                 email: None,
                 real_name: None,
             },
-            created: chrono::Utc::now(),
-            valid_until: chrono::Utc::now(),
+            created: TimeInstance::now(),
+            valid_until: TimeInstance::now(),
             project: None,
             view: None,
             roles: vec![user_id.into(), Role::user_role_id()],
@@ -80,12 +80,12 @@ impl Session for UserSession {
         self.id
     }
 
-    fn created(&self) -> &DateTime<Utc> {
-        &self.created
+    fn created(&self) -> TimeInstance {
+        self.created
     }
 
-    fn valid_until(&self) -> &DateTime<Utc> {
-        &self.valid_until
+    fn valid_until(&self) -> TimeInstance {
+        self.valid_until
     }
 
     fn project(&self) -> Option<ProjectId> {

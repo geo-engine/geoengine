@@ -5,13 +5,13 @@ use std::sync::RwLock;
 use crate::error::{self, Result};
 use crate::util::parsing::{deserialize_base_url, deserialize_base_url_option};
 
-use chrono::{DateTime, FixedOffset};
 use config::{Config, Environment, File};
 use geoengine_datatypes::primitives::{TimeInstance, TimeInterval};
 use geoengine_operators::util::raster_stream_to_geotiff::GdalCompressionNumThreads;
 use lazy_static::lazy_static;
 use serde::Deserialize;
 use snafu::ResultExt;
+use time::OffsetDateTime;
 
 lazy_static! {
     static ref SETTINGS: RwLock<Config> = RwLock::new({
@@ -235,12 +235,11 @@ impl OgcDefaultTime {
     pub fn time_interval(&self) -> TimeInterval {
         match self {
             OgcDefaultTime::Now => {
-                TimeInterval::new_instant(TimeInstance::from(chrono::offset::Utc::now()))
+                TimeInterval::new_instant(TimeInstance::from(time::OffsetDateTime::now_utc()))
                     .expect("config error")
             }
             OgcDefaultTime::Value(value) => {
-                TimeInterval::new(value.start.timestamp_millis(), value.end.timestamp_millis())
-                    .expect("config error")
+                TimeInterval::new(value.start, value.end).expect("config error")
             }
         }
     }
@@ -252,8 +251,8 @@ pub trait DefaultTime {
 
 #[derive(Debug, Deserialize)]
 pub struct TimeStartEnd {
-    pub start: DateTime<FixedOffset>,
-    pub end: DateTime<FixedOffset>,
+    pub start: OffsetDateTime,
+    pub end: OffsetDateTime,
 }
 
 #[derive(Debug, Deserialize)]
