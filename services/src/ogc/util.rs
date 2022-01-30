@@ -1,4 +1,3 @@
-use chrono::FixedOffset;
 use geoengine_datatypes::primitives::{AxisAlignedRectangle, BoundingBox2D};
 use geoengine_datatypes::primitives::{Coordinate2D, SpatialResolution, TimeInterval};
 use geoengine_datatypes::spatial_reference::SpatialReference;
@@ -6,6 +5,8 @@ use serde::de::Error;
 use serde::{Deserialize, Serialize};
 use snafu::ResultExt;
 use std::str::FromStr;
+use time::format_description::well_known::Rfc3339;
+use time::OffsetDateTime;
 
 use super::wcs::request::WcsBoundingbox;
 use crate::error::{self, Result};
@@ -105,14 +106,12 @@ where
     let split: Vec<_> = s
         .split('/')
         // use `from_str` instead of `parse_from_rfc3339` to use a relaxed form of RFC3339 that supports dates BC
-        .map(chrono::DateTime::<FixedOffset>::from_str)
+        .map(|input| OffsetDateTime::parse(input, &Rfc3339))
         .collect();
 
     match *split.as_slice() {
-        [Ok(time)] => TimeInterval::new(time.timestamp_millis(), time.timestamp_millis())
-            .map_err(D::Error::custom),
-        [Ok(start), Ok(end)] => TimeInterval::new(start.timestamp_millis(), end.timestamp_millis())
-            .map_err(D::Error::custom),
+        [Ok(time)] => TimeInterval::new(time, time).map_err(D::Error::custom),
+        [Ok(start), Ok(end)] => TimeInterval::new(start, end).map_err(D::Error::custom),
         _ => Err(D::Error::custom(format!("Invalid time {}", s))),
     }
 }
@@ -262,29 +261,27 @@ pub fn tuple_from_ogc_params(
 
 #[cfg(test)]
 mod tests {
-    use chrono::{TimeZone, Utc};
+    use super::*;
     use geoengine_datatypes::spatial_reference::SpatialReferenceAuthority;
     use serde::de::value::StringDeserializer;
     use serde::de::IntoDeserializer;
-
-    use super::*;
+    use time::macros::datetime;
 
     #[test]
     fn parse_time_normal() {
         assert_eq!(
-            TimeInterval::new_instant(Utc.ymd(1970, 1, 2).and_hms_milli(9, 10, 11, 12)).unwrap(),
+            TimeInterval::new_instant(datetime!(1970-01-02 9:10:11.12 UTC)).unwrap(),
             parse_time(to_deserializer("1970-01-02T09:10:11.012+00:00")).unwrap()
         );
         assert_eq!(
-            TimeInterval::new_instant(Utc.ymd(2020, 12, 31).and_hms_milli(23, 59, 59, 999))
-                .unwrap(),
+            TimeInterval::new_instant(datetime!(2020-12-31 23:59:59.999 UTC)).unwrap(),
             parse_time(to_deserializer("2020-12-31T23:59:59.999Z")).unwrap()
         );
 
         assert_eq!(
             TimeInterval::new(
-                Utc.ymd(2019, 1, 1).and_hms_milli(0, 0, 0, 0),
-                Utc.ymd(2019, 12, 31).and_hms_milli(23, 59, 59, 999)
+                datetime!(2019-01-01 0:00:00.0 UTC),
+                datetime!(2019-12-31 23:59:59.999 UTC),
             )
             .unwrap(),
             parse_time(to_deserializer(
@@ -294,7 +291,7 @@ mod tests {
         );
 
         assert_eq!(
-            TimeInterval::new_instant(Utc.ymd(2019, 1, 1).and_hms_milli(0, 0, 0, 0)).unwrap(),
+            TimeInterval::new_instant(datetime!(2019-01-01 0:00:00.0 UTC)).unwrap(),
             parse_time(to_deserializer(
                 "2019-01-01T00:00:00.000Z/2019-01-01T00:00:00.000Z"
             ))
@@ -302,7 +299,7 @@ mod tests {
         );
 
         assert_eq!(
-            TimeInterval::new_instant(Utc.ymd(2014, 4, 1).and_hms_milli(12, 0, 0, 0)).unwrap(),
+            TimeInterval::new_instant(datetime!(2014-04-01 12:00:00.0 UTC)).unwrap(),
             parse_time(to_deserializer("2014-04-01T12:00:00.000+00:00")).unwrap()
         );
     }
@@ -310,11 +307,11 @@ mod tests {
     #[test]
     fn parse_time_medieval() {
         assert_eq!(
-            TimeInterval::new_instant(Utc.ymd(600, 1, 2).and_hms_milli(9, 10, 11, 12)).unwrap(),
+            TimeInterval::new_instant(datetime!(600-01-02 9:10:11.12 UTC)).unwrap(),
             parse_time(to_deserializer("600-01-02T09:10:11.012+00:00")).unwrap()
         );
         assert_eq!(
-            TimeInterval::new_instant(Utc.ymd(600, 1, 2).and_hms_milli(9, 10, 11, 12)).unwrap(),
+            TimeInterval::new_instant(datetime!(600-01-02 9:10:11.12 UTC)).unwrap(),
             parse_time(to_deserializer("600-01-02T09:10:11.012Z")).unwrap()
         );
     }
@@ -322,19 +319,19 @@ mod tests {
     #[test]
     fn parse_time_bc() {
         assert_eq!(
-            TimeInterval::new_instant(Utc.ymd(-600, 1, 2).and_hms_milli(9, 10, 11, 12)).unwrap(),
+            TimeInterval::new_instant(datetime!(-600-01-02 9:10:11.12 UTC)).unwrap(),
             parse_time(to_deserializer("-600-01-02T09:10:11.012+00:00")).unwrap()
         );
         assert_eq!(
-            TimeInterval::new_instant(Utc.ymd(-600, 1, 2).and_hms_milli(9, 10, 11, 12)).unwrap(),
+            TimeInterval::new_instant(datetime!(-600-01-02 9:10:11.12 UTC)).unwrap(),
             parse_time(to_deserializer("-0600-01-02T09:10:11.012+00:00")).unwrap()
         );
         assert_eq!(
-            TimeInterval::new_instant(Utc.ymd(-600, 1, 2).and_hms_milli(9, 10, 11, 12)).unwrap(),
+            TimeInterval::new_instant(datetime!(-600-01-02 9:10:11.12 UTC)).unwrap(),
             parse_time(to_deserializer("-00600-01-02T09:10:11.012+00:00")).unwrap()
         );
         assert_eq!(
-            TimeInterval::new_instant(Utc.ymd(-600, 1, 2).and_hms_milli(9, 10, 11, 0)).unwrap(),
+            TimeInterval::new_instant(datetime!(-600-01-02 9:10:11.0 UTC)).unwrap(),
             parse_time(to_deserializer("-00600-01-02T09:10:11.0Z")).unwrap()
         );
     }
@@ -342,7 +339,7 @@ mod tests {
     #[test]
     fn parse_time_with_offset() {
         assert_eq!(
-            TimeInterval::new_instant(Utc.ymd(-600, 1, 2).and_hms_milli(8, 10, 11, 0)).unwrap(),
+            TimeInterval::new_instant(datetime!(-600-01-02 8:10:11.0 UTC)).unwrap(),
             parse_time(to_deserializer("-00600-01-02T09:10:11.0+01:00")).unwrap()
         );
     }

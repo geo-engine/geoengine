@@ -285,7 +285,6 @@ mod tests {
     use crate::mock::{MockFeatureCollectionSource, MockRasterSource, MockRasterSourceParams};
     use crate::source::{GdalSource, GdalSourceParameters};
     use crate::util::gdal::add_ndvi_dataset;
-    use chrono::NaiveDate;
     use geoengine_datatypes::collections::{
         MultiPointCollection, MultiPolygonCollection, ToGeoJson,
     };
@@ -297,11 +296,11 @@ mod tests {
     };
     use geoengine_datatypes::spatial_reference::SpatialReference;
     use geoengine_datatypes::util::test::TestDefault;
+    use time::macros::datetime;
 
     #[tokio::test]
     async fn both_instant() {
-        let time_instant =
-            TimeInterval::new_instant(NaiveDate::from_ymd(2014, 1, 1).and_hms(0, 0, 0)).unwrap();
+        let time_instant = TimeInterval::new_instant(datetime!(2014-01-01 0:00:00 UTC)).unwrap();
 
         let points = MockFeatureCollectionSource::single(
             MultiPointCollection::from_data(
@@ -402,11 +401,7 @@ mod tests {
                     (-14.05, 19.95),
                 ])
                 .unwrap(),
-                vec![
-                    TimeInterval::new_instant(NaiveDate::from_ymd(2014, 1, 1).and_hms(0, 0, 0))
-                        .unwrap();
-                    4
-                ],
+                vec![TimeInterval::new_instant(datetime!(2014-01-01 0:00:00 UTC)).unwrap(); 4],
                 Default::default(),
             )
             .unwrap(),
@@ -451,8 +446,8 @@ mod tests {
                     spatial_bounds: BoundingBox2D::new((-180., -90.).into(), (180., 90.).into())
                         .unwrap(),
                     time_interval: TimeInterval::new(
-                        NaiveDate::from_ymd(2014, 1, 1).and_hms(0, 0, 0),
-                        NaiveDate::from_ymd(2014, 3, 1).and_hms(0, 0, 0),
+                        datetime!(2014-01-01 0:00:00 UTC),
+                        datetime!(2014-03-01 0:00:00 UTC),
                     )
                     .unwrap(),
                     spatial_resolution: SpatialResolution::new(0.1, 0.1).unwrap(),
@@ -479,8 +474,7 @@ mod tests {
                     (-14.05, 19.95),
                 ])
                 .unwrap(),
-                &[TimeInterval::new_instant(NaiveDate::from_ymd(2014, 1, 1).and_hms(0, 0, 0))
-                    .unwrap(); 4],
+                &[TimeInterval::new_instant(datetime!(2014-01-01 0:00:00 UTC)).unwrap(); 4],
                 // these values are taken from loading the tiff in QGIS
                 &[("ndvi", FeatureData::Int(vec![54, 55, 51, 55]))],
             )
@@ -501,8 +495,8 @@ mod tests {
                 .unwrap(),
                 vec![
                     TimeInterval::new(
-                        NaiveDate::from_ymd(2014, 1, 1).and_hms(0, 0, 0),
-                        NaiveDate::from_ymd(2014, 3, 1).and_hms(0, 0, 0),
+                        datetime!(2014-01-01 0:00:00 UTC),
+                        datetime!(2014-03-01 0:00:00 UTC),
                     )
                     .unwrap();
                     4
@@ -550,10 +544,8 @@ mod tests {
                 VectorQueryRectangle {
                     spatial_bounds: BoundingBox2D::new((-180., -90.).into(), (180., 90.).into())
                         .unwrap(),
-                    time_interval: TimeInterval::new_instant(
-                        NaiveDate::from_ymd(2014, 1, 1).and_hms(0, 0, 0),
-                    )
-                    .unwrap(),
+                    time_interval: TimeInterval::new_instant(datetime!(2014-01-01 0:00:00 UTC))
+                        .unwrap(),
                     spatial_resolution: SpatialResolution::new(0.1, 0.1).unwrap(),
                 },
                 &MockQueryContext::new(ChunkByteSize::MAX),
@@ -579,8 +571,8 @@ mod tests {
                 ])
                 .unwrap(),
                 &[TimeInterval::new(
-                    NaiveDate::from_ymd(2014, 1, 1).and_hms(0, 0, 0),
-                    NaiveDate::from_ymd(2014, 2, 1).and_hms(0, 0, 0),
+                    datetime!(2014-01-01 0:00:00 UTC),
+                    datetime!(2014-02-01 0:00:00 UTC),
                 )
                 .unwrap(); 4],
                 // these values are taken from loading the tiff in QGIS
@@ -604,8 +596,8 @@ mod tests {
                 .unwrap(),
                 vec![
                     TimeInterval::new(
-                        NaiveDate::from_ymd(2014, 1, 1).and_hms(0, 0, 0),
-                        NaiveDate::from_ymd(2014, 3, 1).and_hms(0, 0, 0),
+                        datetime!(2014-01-01 0:00:00 UTC),
+                        datetime!(2014-03-01 0:00:00 UTC),
                     )
                     .unwrap();
                     4
@@ -654,8 +646,8 @@ mod tests {
                     spatial_bounds: BoundingBox2D::new((-180., -90.).into(), (180., 90.).into())
                         .unwrap(),
                     time_interval: TimeInterval::new(
-                        NaiveDate::from_ymd(2014, 1, 1).and_hms(0, 0, 0),
-                        NaiveDate::from_ymd(2014, 3, 1).and_hms(0, 0, 0),
+                        datetime!(2014-01-01 0:00:00 UTC),
+                        datetime!(2014-03-01 0:00:00 UTC),
                     )
                     .unwrap(),
                     spatial_resolution: SpatialResolution::new(0.1, 0.1).unwrap(),
@@ -673,13 +665,13 @@ mod tests {
         let result = result.remove(0);
 
         let t1 = TimeInterval::new(
-            NaiveDate::from_ymd(2014, 1, 1).and_hms(0, 0, 0),
-            NaiveDate::from_ymd(2014, 2, 1).and_hms(0, 0, 0),
+            datetime!(2014-01-01 0:00:00 UTC),
+            datetime!(2014-02-01 0:00:00 UTC),
         )
         .unwrap();
         let t2 = TimeInterval::new(
-            NaiveDate::from_ymd(2014, 2, 1).and_hms(0, 0, 0),
-            NaiveDate::from_ymd(2014, 3, 1).and_hms(0, 0, 0),
+            datetime!(2014-02-01 0:00:00 UTC),
+            datetime!(2014-03-01 0:00:00 UTC),
         )
         .unwrap();
         assert_eq!(

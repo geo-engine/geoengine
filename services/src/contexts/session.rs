@@ -1,5 +1,5 @@
-use chrono::{DateTime, Utc, MAX_DATETIME, MIN_DATETIME};
 use geoengine_datatypes::identifier;
+use geoengine_datatypes::primitives::TimeInstance;
 use geoengine_datatypes::util::Identifier;
 use serde::{Deserialize, Serialize};
 
@@ -17,8 +17,8 @@ identifier!(SessionId);
 
 pub trait Session: Send + Sync + Serialize {
     fn id(&self) -> SessionId;
-    fn created(&self) -> &DateTime<Utc>;
-    fn valid_until(&self) -> &DateTime<Utc>;
+    fn created(&self) -> TimeInstance;
+    fn valid_until(&self) -> TimeInstance;
     fn project(&self) -> Option<ProjectId>;
     fn view(&self) -> Option<&STRectangle>;
 }
@@ -49,12 +49,12 @@ impl Session for SimpleSession {
         self.id
     }
 
-    fn created(&self) -> &DateTime<Utc> {
-        &MIN_DATETIME
+    fn created(&self) -> TimeInstance {
+        TimeInstance::MIN
     }
 
-    fn valid_until(&self) -> &DateTime<Utc> {
-        &MAX_DATETIME
+    fn valid_until(&self) -> TimeInstance {
+        TimeInstance::MAX
     }
 
     fn project(&self) -> Option<ProjectId> {

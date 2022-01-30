@@ -257,7 +257,6 @@ mod tests {
         mock::{MockRasterSource, MockRasterSourceParams},
         source::GdalSourceParameters,
     };
-    use chrono::NaiveDate;
     use geoengine_datatypes::spatial_reference::SpatialReference;
     use geoengine_datatypes::{
         dataset::InternalDatasetId,
@@ -273,6 +272,7 @@ mod tests {
     };
     use num_traits::AsPrimitive;
     use serde_json::json;
+    use time::macros::datetime;
 
     #[test]
     fn serialization() {
@@ -330,8 +330,8 @@ mod tests {
             sources: SingleRasterSource {
                 raster: generate_mock_raster_source(
                     vec![TimeInterval::new(
-                        TimeInstance::from(NaiveDate::from_ymd(1990, 1, 1).and_hms(0, 0, 0)),
-                        TimeInstance::from(NaiveDate::from_ymd(2000, 1, 1).and_hms(0, 0, 0)),
+                        TimeInstance::from(datetime!(1990-01-01 0:00:00 UTC)),
+                        TimeInstance::from(datetime!(2000-01-01 0:00:00 UTC)),
                     )
                     .unwrap()],
                     vec![vec![1, 2, 3, 4, 5, 6]],
@@ -425,18 +425,18 @@ mod tests {
                 raster: generate_mock_raster_source(
                     vec![
                         TimeInterval::new(
-                            TimeInstance::from(NaiveDate::from_ymd(1990, 1, 1).and_hms(0, 0, 0)),
-                            TimeInstance::from(NaiveDate::from_ymd(1995, 1, 1).and_hms(0, 0, 0)),
+                            TimeInstance::from(datetime!(1990-01-01 0:00:00 UTC)),
+                            TimeInstance::from(datetime!(1995-01-01 0:00:00 UTC)),
                         )
                         .unwrap(),
                         TimeInterval::new(
-                            TimeInstance::from(NaiveDate::from_ymd(1995, 1, 1).and_hms(0, 0, 0)),
-                            TimeInstance::from(NaiveDate::from_ymd(2000, 1, 1).and_hms(0, 0, 0)),
+                            TimeInstance::from(datetime!(1995-01-01 0:00:00 UTC)),
+                            TimeInstance::from(datetime!(2000-01-01 0:00:00 UTC)),
                         )
                         .unwrap(),
                         TimeInterval::new(
-                            TimeInstance::from(NaiveDate::from_ymd(2000, 1, 1).and_hms(0, 0, 0)),
-                            TimeInstance::from(NaiveDate::from_ymd(2005, 1, 1).and_hms(0, 0, 0)),
+                            TimeInstance::from(datetime!(2000-01-01 0:00:00 UTC)),
+                            TimeInstance::from(datetime!(2005-01-01 0:00:00 UTC)),
                         )
                         .unwrap(),
                     ],
@@ -480,9 +480,9 @@ mod tests {
             result,
             AreaLineChart::new(
                 vec![
-                    TimeInstance::from(NaiveDate::from_ymd(1990, 1, 1).and_hms(0, 0, 0)),
-                    TimeInstance::from(NaiveDate::from_ymd(1995, 1, 1).and_hms(0, 0, 0)),
-                    TimeInstance::from(NaiveDate::from_ymd(2000, 1, 1).and_hms(0, 0, 0))
+                    TimeInstance::from(datetime!(1990-01-01 0:00:00 UTC)),
+                    TimeInstance::from(datetime!(1995-01-01 0:00:00 UTC)),
+                    TimeInstance::from(datetime!(2000-01-01 0:00:00 UTC))
                 ],
                 vec![3.5, 8.5, 5.5],
                 Measurement::Unitless,

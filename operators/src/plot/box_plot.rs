@@ -449,8 +449,12 @@ impl BoxPlotAccum {
 
 #[cfg(test)]
 mod tests {
-    use serde_json::json;
-
+    use super::*;
+    use crate::engine::{
+        ChunkByteSize, MockExecutionContext, MockQueryContext, RasterOperator,
+        RasterResultDescriptor, VectorOperator,
+    };
+    use crate::mock::{MockFeatureCollectionSource, MockRasterSource, MockRasterSourceParams};
     use geoengine_datatypes::primitives::{
         BoundingBox2D, FeatureData, Measurement, NoGeometry, SpatialResolution, TimeInterval,
     };
@@ -460,15 +464,8 @@ mod tests {
     use geoengine_datatypes::spatial_reference::SpatialReference;
     use geoengine_datatypes::util::test::TestDefault;
     use geoengine_datatypes::{collections::DataCollection, primitives::MultiPoint};
-
-    use crate::engine::{
-        ChunkByteSize, MockExecutionContext, MockQueryContext, RasterOperator,
-        RasterResultDescriptor, VectorOperator,
-    };
-    use crate::mock::{MockFeatureCollectionSource, MockRasterSource, MockRasterSourceParams};
-
-    use super::*;
-    use chrono::NaiveDate;
+    use serde_json::json;
+    use time::macros::datetime;
 
     #[test]
     fn serialization() {
@@ -1193,10 +1190,8 @@ mod tests {
                 VectorQueryRectangle {
                     spatial_bounds: BoundingBox2D::new((-180., -90.).into(), (180., 90.).into())
                         .unwrap(),
-                    time_interval: TimeInterval::new_instant(
-                        NaiveDate::from_ymd(2013, 12, 1).and_hms(12, 0, 0),
-                    )
-                    .unwrap(),
+                    time_interval: TimeInterval::new_instant(datetime!(2013-12-01 12:00:00 UTC))
+                        .unwrap(),
                     spatial_resolution: SpatialResolution::one(),
                 },
                 &MockQueryContext::test_default(),
@@ -1262,10 +1257,8 @@ mod tests {
                 VectorQueryRectangle {
                     spatial_bounds: BoundingBox2D::new((-180., -90.).into(), (180., 90.).into())
                         .unwrap(),
-                    time_interval: TimeInterval::new_instant(
-                        NaiveDate::from_ymd(2013, 12, 1).and_hms(12, 0, 0),
-                    )
-                    .unwrap(),
+                    time_interval: TimeInterval::new_instant(datetime!(2013-12-01 12:00:00 UTC))
+                        .unwrap(),
                     spatial_resolution: SpatialResolution::one(),
                 },
                 &MockQueryContext::test_default(),
@@ -1331,10 +1324,8 @@ mod tests {
                 VectorQueryRectangle {
                     spatial_bounds: BoundingBox2D::new((-180., -90.).into(), (180., 90.).into())
                         .unwrap(),
-                    time_interval: TimeInterval::new_instant(
-                        NaiveDate::from_ymd(2013, 12, 1).and_hms(12, 0, 0),
-                    )
-                    .unwrap(),
+                    time_interval: TimeInterval::new_instant(datetime!(2013-12-01 12:00:00 UTC))
+                        .unwrap(),
                     spatial_resolution: SpatialResolution::one(),
                 },
                 &MockQueryContext::test_default(),
@@ -1405,10 +1396,8 @@ mod tests {
                 VectorQueryRectangle {
                     spatial_bounds: BoundingBox2D::new((-180., -90.).into(), (180., 90.).into())
                         .unwrap(),
-                    time_interval: TimeInterval::new_instant(
-                        NaiveDate::from_ymd(2013, 12, 1).and_hms(12, 0, 0),
-                    )
-                    .unwrap(),
+                    time_interval: TimeInterval::new_instant(datetime!(2013-12-01 12:00:00 UTC))
+                        .unwrap(),
                     spatial_resolution: SpatialResolution::one(),
                 },
                 &MockQueryContext::test_default(),

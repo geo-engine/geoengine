@@ -217,8 +217,8 @@ mod tests {
             "params": {
                 "data": [{
                     "time": {
-                        "start": -8_334_632_851_200_000_i64,
-                        "end": 8_210_298_412_799_999_i64
+                        "start": -377_705_116_800_000_i64,
+                        "end": 253_402_300_799_999_i64
                     },
                     "tilePosition": [0, 0],
                     "globalGeoTransform": {

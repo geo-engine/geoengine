@@ -5,7 +5,6 @@ use crate::util::config::ProjectService;
 use crate::util::user_input::UserInput;
 use crate::workflows::workflow::WorkflowId;
 use crate::{error, util::config::get_config_element};
-use chrono::{DateTime, Utc};
 use geoengine_datatypes::{identifier, operations::image::RgbaColor};
 use geoengine_datatypes::{operations::image::Colorizer, primitives::TimeInstance};
 use geoengine_datatypes::{
@@ -386,7 +385,7 @@ pub struct ProjectListing {
     pub description: String,
     pub layer_names: Vec<String>,
     pub plot_names: Vec<String>,
-    pub changed: DateTime<Utc>,
+    pub changed: TimeInstance,
 }
 
 impl From<&Project> for ProjectListing {
@@ -502,14 +501,14 @@ identifier!(ProjectVersionId);
 #[derive(Debug, PartialEq, Serialize, Deserialize, Clone, Copy)]
 pub struct ProjectVersion {
     pub id: ProjectVersionId,
-    pub changed: DateTime<Utc>,
+    pub changed: TimeInstance,
 }
 
 impl ProjectVersion {
     fn new() -> Self {
         Self {
             id: ProjectVersionId::new(),
-            changed: chrono::offset::Utc::now(),
+            changed: TimeInstance::now(),
         }
     }
 }

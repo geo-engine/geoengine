@@ -250,7 +250,6 @@ mod tests {
     use crate::mock::MockFeatureCollectionSource;
     use crate::source::{GdalSource, GdalSourceParameters};
     use crate::util::gdal::add_ndvi_dataset;
-    use chrono::NaiveDate;
     use futures::StreamExt;
     use geoengine_datatypes::collections::{FeatureCollectionInfos, MultiPointCollection};
     use geoengine_datatypes::dataset::DatasetId;
@@ -260,6 +259,7 @@ mod tests {
     };
     use geoengine_datatypes::util::test::TestDefault;
     use serde_json::json;
+    use time::macros::datetime;
 
     #[test]
     fn serialization() {
@@ -320,8 +320,8 @@ mod tests {
                 .unwrap(),
                 vec![
                     TimeInterval::new(
-                        NaiveDate::from_ymd(2014, 1, 1).and_hms(0, 0, 0),
-                        NaiveDate::from_ymd(2014, 1, 1).and_hms(0, 0, 0),
+                        datetime!(2014-01-01 0:00:00 UTC),
+                        datetime!(2014-01-01 0:00:00 UTC),
                     )
                     .unwrap();
                     4
@@ -393,8 +393,8 @@ mod tests {
                 .unwrap(),
                 vec![
                     TimeInterval::new(
-                        NaiveDate::from_ymd(2014, 1, 1).and_hms(0, 0, 0),
-                        NaiveDate::from_ymd(2014, 3, 1).and_hms(0, 0, 0),
+                        datetime!(2014-01-01 0:00:00 UTC),
+                        datetime!(2014-03-01 0:00:00 UTC),
                     )
                     .unwrap();
                     4

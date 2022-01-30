@@ -598,7 +598,6 @@ mod tests {
         OgrSourceColumnSpec, OgrSourceDataset, OgrSourceDatasetTimeType, OgrSourceErrorSpec,
     };
     use crate::test_data;
-    use chrono::NaiveDate;
     use geoengine_datatypes::dataset::{DatasetId, InternalDatasetId};
     use geoengine_datatypes::primitives::{
         BoundingBox2D, FeatureData, NoGeometry, SpatialResolution, TimeInterval,
@@ -613,6 +612,7 @@ mod tests {
     };
     use num_traits::AsPrimitive;
     use serde_json::json;
+    use time::macros::datetime;
 
     #[test]
     fn serialization() {
@@ -1286,10 +1286,8 @@ mod tests {
                 VectorQueryRectangle {
                     spatial_bounds: BoundingBox2D::new((-180., -90.).into(), (180., 90.).into())
                         .unwrap(),
-                    time_interval: TimeInterval::new_instant(
-                        NaiveDate::from_ymd(2013, 12, 1).and_hms(12, 0, 0),
-                    )
-                    .unwrap(),
+                    time_interval: TimeInterval::new_instant(datetime!(2013-12-01 12:00:00 UTC))
+                        .unwrap(),
                     spatial_resolution: SpatialResolution::one(),
                 },
                 &MockQueryContext::new(ChunkByteSize::MIN),
