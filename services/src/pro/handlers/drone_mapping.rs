@@ -528,7 +528,7 @@ mod tests {
         let part = loading_info.info.next().unwrap().unwrap();
         assert!(loading_info.info.next().is_none());
 
-        let file_path = &part.params.file_path;
+        let file_path = &part.params.as_ref().unwrap().file_path;
 
         assert_eq!(
             file_path,
@@ -544,7 +544,7 @@ mod tests {
             part,
             GdalLoadingInfoPart {
                 time: TimeInterval::default(),
-                params: GdalDatasetParameters {
+                params: Some(GdalDatasetParameters {
                     file_path: file_path.clone(),
                     rasterband_channel: 1,
                     geo_transform: GdalDatasetGeoTransform {
@@ -559,7 +559,7 @@ mod tests {
                     properties_mapping: None,
                     gdal_open_options: None,
                     gdal_config_options: None,
-                },
+                }),
             }
         );
 

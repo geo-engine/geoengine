@@ -1,4 +1,5 @@
 use geoengine_datatypes::primitives::{FeatureDataType, Measurement};
+use geoengine_datatypes::raster::FromPrimitive;
 use geoengine_datatypes::{
     collections::VectorDataType, raster::RasterDataType, spatial_reference::SpatialReferenceOption,
 };
@@ -79,6 +80,12 @@ impl ResultDescriptor for RasterResultDescriptor {
             measurement: self.measurement.clone(),
             ..*self
         }
+    }
+}
+
+impl RasterResultDescriptor {
+    pub fn no_data_value_as_<T: FromPrimitive<f64>>(&self) -> Option<T> {
+        self.no_data_value.map(|v| T::from_(v))
     }
 }
 

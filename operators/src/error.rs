@@ -270,10 +270,20 @@ pub enum Error {
         source: crate::util::statistics::StatisticsError,
     },
 
+    #[snafu(display("SparseTilesFillAdapter error: {}", source))]
+    SparseTilesFillAdapter {
+        source: crate::adapters::SparseTilesFillAdapterError,
+    },
     #[snafu(context(false))]
     ExpressionOperator {
         source: crate::processing::ExpressionError,
     },
+}
+
+impl From<crate::adapters::SparseTilesFillAdapterError> for Error {
+    fn from(source: crate::adapters::SparseTilesFillAdapterError) -> Self {
+        Error::SparseTilesFillAdapter { source }
+    }
 }
 
 /// The error requires to be `Send`.
