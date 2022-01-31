@@ -389,7 +389,6 @@ where
     /// A method to load single tiles from a GDAL dataset.
     ///
     #[allow(clippy::too_many_lines)]
-    #[tracing::instrument]
     pub fn load_tile_data(
         dataset_params: &GdalDatasetParameters,
         tile_information: &TileInformation,
