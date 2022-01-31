@@ -1,0 +1,6 @@
+{
+  "type": "NetCdfCfDataProviderDefinition",
+  "id": "1690c483-b17f-4d98-95c8-00a64849cd0b",
+  "name": "terranova",
+  "path": "test_data/netcdf4d/"
+}
