@@ -1160,7 +1160,7 @@ mod tests {
             loading_info_parts[0],
             GdalLoadingInfoPart {
                 time: TimeInterval::new_unchecked(946_684_800_000, 1_262_304_000_000),
-                params: GdalDatasetParameters {
+                params: Some(GdalDatasetParameters {
                     file_path,
                     rasterband_channel: 4,
                     geo_transform: GdalDatasetGeoTransform {
@@ -1175,7 +1175,7 @@ mod tests {
                     properties_mapping: None,
                     gdal_open_options: None,
                     gdal_config_options: None
-                }
+                })
             }
         );
     }

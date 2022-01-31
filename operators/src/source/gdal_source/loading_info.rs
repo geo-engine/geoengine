@@ -32,7 +32,7 @@ impl MetaData<GdalLoadingInfo, RasterResultDescriptor, RasterQueryRectangle>
         let parts = if valid.intersects(&query.time_interval) {
             vec![GdalLoadingInfoPart {
                 time: valid,
-                params: self.params.clone(),
+                params: Some(self.params.clone()),
             }]
             .into_iter()
         } else {
@@ -216,7 +216,7 @@ impl Iterator for DynamicGdalLoadingInfoPartIterator {
             .replace_time_placeholders(&self.time_placeholders, time_interval)
             .map(|loading_info_part_params| GdalLoadingInfoPart {
                 time: time_interval,
-                params: loading_info_part_params,
+                params: Some(loading_info_part_params),
             });
 
         Some(loading_info_part)
@@ -289,7 +289,7 @@ impl Iterator for NetCdfCfGdalLoadingInfoPartIterator {
 
         Some(Ok(GdalLoadingInfoPart {
             time: time_interval,
-            params,
+            params: Some(params),
         }))
     }
 }
@@ -326,7 +326,7 @@ impl Iterator for GdalLoadingInfoPartIterator {
 #[derive(Debug, Clone, PartialEq)]
 pub struct GdalLoadingInfoPart {
     pub time: TimeInterval,
-    pub params: GdalDatasetParameters,
+    pub params: Option<GdalDatasetParameters>,
 }
 
 #[cfg(test)]
@@ -403,7 +403,14 @@ mod tests {
                 .await
                 .unwrap()
                 .info
-                .map(|p| p.unwrap().params.file_path.to_str().unwrap().to_owned())
+                .map(|p| p
+                    .unwrap()
+                    .params
+                    .unwrap()
+                    .file_path
+                    .to_str()
+                    .unwrap()
+                    .to_owned())
                 .collect::<Vec<_>>(),
             &[
                 "/foo/bar_000000000.tiff",
@@ -459,7 +466,7 @@ mod tests {
             )
             .unwrap()
         );
-        assert_eq!(step_1.params.rasterband_channel, 1);
+        assert_eq!(step_1.params.unwrap().rasterband_channel, 1);
 
         let step_2 = iter.next().unwrap().unwrap();
 
@@ -471,7 +478,7 @@ mod tests {
             )
             .unwrap()
         );
-        assert_eq!(step_2.params.rasterband_channel, 2);
+        assert_eq!(step_2.params.unwrap().rasterband_channel, 2);
 
         let step_3 = iter.next().unwrap().unwrap();
 
@@ -483,12 +490,12 @@ mod tests {
             )
             .unwrap()
         );
-        assert_eq!(step_3.params.rasterband_channel, 3);
+        assert_eq!(step_3.params.unwrap().rasterband_channel, 3);
 
         for i in 4..=12 {
             let step = iter.next().unwrap().unwrap();
 
-            assert_eq!(step.params.rasterband_channel, i);
+            assert_eq!(step.params.unwrap().rasterband_channel, i);
         }
 
         assert!(iter.next().is_none());
@@ -546,7 +553,7 @@ mod tests {
             )
             .unwrap()
         );
-        assert_eq!(step.params.rasterband_channel, 5);
+        assert_eq!(step.params.unwrap().rasterband_channel, 5);
 
         assert!(iter.next().is_none());
 
@@ -564,7 +571,7 @@ mod tests {
             )
             .unwrap()
         );
-        assert_eq!(step.params.rasterband_channel, 1);
+        assert_eq!(step.params.unwrap().rasterband_channel, 1);
 
         assert!(iter.next().is_none());
 
@@ -582,7 +589,7 @@ mod tests {
             )
             .unwrap()
         );
-        assert_eq!(step.params.rasterband_channel, 12);
+        assert_eq!(step.params.unwrap().rasterband_channel, 12);
 
         assert!(iter.next().is_none());
 

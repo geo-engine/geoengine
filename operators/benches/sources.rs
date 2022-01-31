@@ -24,7 +24,7 @@ fn setup_gdal_source(
     GdalSourceProcessor::<u8> {
         tiling_specification,
         meta_data: Box::new(meta_data),
-        phantom_data: Default::default(),
+        no_data_value: Some(0),
     }
 }
 

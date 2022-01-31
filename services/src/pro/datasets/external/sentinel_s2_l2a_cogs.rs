@@ -302,7 +302,7 @@ impl SentinelS2L2aCogsMetaData {
 
         Ok(GdalLoadingInfoPart {
             time: time_interval,
-            params: GdalDatasetParameters {
+            params: Some(GdalDatasetParameters {
                 file_path: PathBuf::from(format!("/vsicurl/{}", asset.href)),
                 rasterband_channel: 1,
                 geo_transform: GdalDatasetGeoTransform::from(
@@ -317,7 +317,7 @@ impl SentinelS2L2aCogsMetaData {
                 properties_mapping: None,
                 gdal_open_options: None,
                 gdal_config_options: None,
-            },
+            }),
         })
     }
 
@@ -606,7 +606,7 @@ mod tests {
 
         let expected = vec![GdalLoadingInfoPart {
             time: TimeInterval::new_unchecked(1_609_581_746_000, 1_609_581_747_000),
-            params: GdalDatasetParameters {
+            params: Some(GdalDatasetParameters {
                 file_path: "/vsicurl/https://sentinel-cogs.s3.us-west-2.amazonaws.com/sentinel-s2-l2a-cogs/32/R/PU/2021/1/S2B_32RPU_20210102_0_L2A/B01.tif".into(),
                 rasterband_channel: 1,
                 geo_transform: GdalDatasetGeoTransform {
@@ -621,7 +621,7 @@ mod tests {
                 properties_mapping: None,
                 gdal_open_options: None,
                 gdal_config_options: None,
-            },
+            }),
         }];
 
         if let GdalLoadingInfoPartIterator::Static { parts } = loading_info.info {
@@ -818,7 +818,7 @@ mod tests {
             parts,
             vec![GdalLoadingInfoPart {
                 time: TimeInterval::new_unchecked(1_632_384_644_000, 1_632_384_645_000),
-                params: GdalDatasetParameters {
+                params: Some(GdalDatasetParameters {
                     file_path: "/vsicurl/https://sentinel-cogs.s3.us-west-2.amazonaws.com/sentinel-s2-l2a-cogs/36/M/WC/2021/9/S2B_36MWC_20210923_0_L2A/B04.tif".into(),
                     rasterband_channel: 1,
                     geo_transform: GdalDatasetGeoTransform {
@@ -833,7 +833,7 @@ mod tests {
                     properties_mapping: None,
                     gdal_open_options: None,
                     gdal_config_options: None,
-                },
+                }),
             }]
         );
     }
