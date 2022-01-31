@@ -259,20 +259,25 @@ impl Iterator for NetCdfCfGdalLoadingInfoPartIterator {
     fn next(&mut self) -> Option<Self::Item> {
         let t1 = self.time_step_iter.next()?;
 
-        // our first band is the reference time
-        // TODO: what if it intersects the reference time with t1 < ref?
-        if t1 < self.dataset_time_start || t1 >= self.max_t2 {
-            return None;
-        }
-
         // snap t1 relative to reference time
-        // TODO: error handling instead of `ok`
         let t1 = self.step.snap_relative(self.dataset_time_start, t1).ok()?;
 
         let t2 = t1 + self.step;
         let t2 = t2.unwrap_or(self.max_t2);
 
         let time_interval = TimeInterval::new_unchecked(t1, t2);
+
+        // TODO: how to prevent generating loads of empty time intervals for a very small t1?
+        if t1 < self.dataset_time_start {
+            return Some(Ok(GdalLoadingInfoPart {
+                time: time_interval,
+                params: None,
+            }));
+        }
+
+        if t1 >= self.max_t2 {
+            return None;
+        }
 
         // off by one if date is larger than reference time
         let steps_between = if t1 == self.dataset_time_start {
@@ -284,6 +289,7 @@ impl Iterator for NetCdfCfGdalLoadingInfoPartIterator {
                 .unwrap() // TODO: what to do if this fails?
         };
 
+        // our first band is the reference time
         let mut params = self.params.clone();
         params.rasterband_channel = self.band_offset + 1 + steps_between as usize;
 
@@ -418,6 +424,95 @@ mod tests {
                 "/foo/bar_022000000.tiff"
             ]
         );
+    }
+
+    #[tokio::test]
+    async fn netcdf_cf_time_steps_before_after() {
+        let time_start = TimeInstance::from(NaiveDate::from_ymd(2010, 1, 1).and_hms(0, 0, 0));
+        let time_end = TimeInstance::from(NaiveDate::from_ymd(2012, 1, 1).and_hms(0, 0, 0));
+        let time_step = TimeStep {
+            step: 1,
+            granularity: TimeGranularity::Years,
+        };
+
+        let metadata = GdalMetadataNetCdfCf {
+            result_descriptor: RasterResultDescriptor {
+                data_type: RasterDataType::U8,
+                spatial_reference: SpatialReference::epsg_4326().into(),
+                measurement: Measurement::Unitless,
+                no_data_value: None,
+            },
+            params: GdalDatasetParameters {
+                file_path: "path/to/ds".into(),
+                rasterband_channel: 0,
+                geo_transform: GdalDatasetGeoTransform {
+                    origin_coordinate: (0., 0.).into(),
+                    x_pixel_size: 1.,
+                    y_pixel_size: 1.,
+                },
+                width: 128,
+                height: 128,
+                file_not_found_handling: FileNotFoundHandling::Error,
+                no_data_value: None,
+                properties_mapping: None,
+                gdal_open_options: None,
+                gdal_config_options: None,
+            },
+            start: time_start,
+            end: time_end,
+            step: time_step,
+            band_offset: 0,
+        };
+
+        let query = RasterQueryRectangle {
+            spatial_bounds: SpatialPartition2D::new_unchecked((0., 128.).into(), (128., 0.).into()),
+            time_interval: TimeInterval::new_unchecked(
+                TimeInstance::from(NaiveDate::from_ymd(2009, 7, 1).and_hms(0, 0, 0)),
+                TimeInstance::from(NaiveDate::from_ymd(2013, 3, 1).and_hms(0, 0, 0)),
+            ),
+            spatial_resolution: SpatialResolution::one(),
+        };
+
+        let loading_info = metadata.loading_info(query).await.unwrap();
+        let mut iter = loading_info.info;
+
+        let step_1 = iter.next().unwrap().unwrap();
+
+        assert_eq!(
+            step_1.time,
+            TimeInterval::new(
+                TimeInstance::from(NaiveDate::from_ymd(2009, 1, 1).and_hms(0, 0, 0)),
+                TimeInstance::from(NaiveDate::from_ymd(2010, 1, 1).and_hms(0, 0, 0))
+            )
+            .unwrap()
+        );
+        assert!(step_1.params.is_none());
+
+        let step_2 = iter.next().unwrap().unwrap();
+
+        assert_eq!(
+            step_2.time,
+            TimeInterval::new(
+                TimeInstance::from(NaiveDate::from_ymd(2010, 1, 1).and_hms(0, 0, 0)),
+                TimeInstance::from(NaiveDate::from_ymd(2011, 1, 1).and_hms(0, 0, 0))
+            )
+            .unwrap()
+        );
+        assert_eq!(step_2.params.unwrap().rasterband_channel, 1);
+
+        let step_3 = iter.next().unwrap().unwrap();
+
+        assert_eq!(
+            step_3.time,
+            TimeInterval::new(
+                TimeInstance::from(NaiveDate::from_ymd(2011, 1, 1).and_hms(0, 0, 0)),
+                TimeInstance::from(NaiveDate::from_ymd(2012, 1, 1).and_hms(0, 0, 0))
+            )
+            .unwrap()
+        );
+        assert_eq!(step_3.params.unwrap().rasterband_channel, 2);
+
+        assert!(iter.next().is_none());
     }
 
     #[test]
@@ -593,11 +688,21 @@ mod tests {
 
         assert!(iter.next().is_none());
 
-        assert!(iter_for_instance(TimeInstance::from(
+        let iter = iter_for_instance(TimeInstance::from(
             NaiveDate::from_ymd(2009, 1, 1).and_hms(0, 0, 0),
         ))
         .next()
-        .is_none());
+        .unwrap()
+        .unwrap();
+        assert_eq!(
+            iter.time,
+            TimeInterval::new(
+                TimeInstance::from(NaiveDate::from_ymd(2009, 1, 1).and_hms(0, 0, 0)),
+                TimeInstance::from(NaiveDate::from_ymd(2010, 1, 1).and_hms(0, 0, 0))
+            )
+            .unwrap(),
+        );
+        assert!(iter.params.is_none());
 
         assert!(iter_for_instance(TimeInstance::from(
             NaiveDate::from_ymd(2022, 1, 1).and_hms(0, 0, 0),
