@@ -1235,7 +1235,7 @@ mod tests {
             .collect(),
         )
         .unwrap();
-        let mut iter = (&collection).into_iter();
+        let mut iter = collection.into_iter();
 
         let row = iter.next().unwrap();
         assert_eq!(&[Coordinate2D::new(0.0, 0.1)], row.geometry.points());

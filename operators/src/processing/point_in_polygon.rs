@@ -151,7 +151,7 @@ impl PointInPolygonFilterProcessor {
             let time_intervals = points.time_intervals();
             let coordinates = points.coordinates();
 
-            for (chunk_index, chunk_result) in (&mut result).chunks_mut(chunk_size).enumerate() {
+            for (chunk_index, chunk_result) in result.chunks_mut(chunk_size).enumerate() {
                 let feature_index_start = chunk_index * chunk_size;
                 let features_index_end = min(feature_index_start + chunk_size, num_features);
                 let tester = tester.clone();
