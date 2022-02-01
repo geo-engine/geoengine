@@ -11,6 +11,7 @@ use futures::future::join_all;
 use futures::stream::select_all;
 use futures::{FutureExt, StreamExt};
 use geoengine_datatypes::primitives::VectorQueryRectangle;
+use geoengine_datatypes::raster::ConvertDataType;
 use geoengine_datatypes::raster::{Grid2D, GridOrEmpty, GridSize, NoDataValue};
 use geoengine_datatypes::spatial_reference::SpatialReferenceOption;
 use serde::{Deserialize, Serialize};
@@ -118,7 +119,7 @@ impl PlotQueryProcessor for StatisticsQueryProcessor {
             queries.push(
                 call_on_generic_raster_processor!(raster_processor, processor => {
                     processor.query(query.into(), ctx).await?
-                             .map(move |r| r.map(|tile| (i, tile.convert::<f64>())))
+                             .map(move |r| r.map(|tile| (i, tile.convert_data_type())))
                              .boxed()
                 }),
             );
