@@ -336,7 +336,7 @@ async fn unzip(zip_path: &Path, target_path: &Path) -> Result<(), error::Error> 
                 None => continue,
             };
 
-            if (&*file.name()).ends_with('/') {
+            if file.name().ends_with('/') {
                 std::fs::create_dir_all(&out_path).context(error::Io)?; // TODO
             } else {
                 if let Some(p) = out_path.parent() {
