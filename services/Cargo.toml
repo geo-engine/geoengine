@@ -66,7 +66,7 @@ tokio = { version = "1.15", features = ["macros", "fs", "signal", "sync", "rt-mu
 tokio-util = "0.6"
 tonic = { version = "0.6", features = ["tls", "tls-roots"] }
 tracing = "0.1"
-tracing-actix-web = "=0.5.0-beta.11"
+tracing-actix-web = "=0.5.0-rc.1"
 tracing-subscriber = { version = "0.3", features = ["local-time", "ansi"] }
 typetag = "0.1"
 url = { version = "2.2", features = ["serde"] }
