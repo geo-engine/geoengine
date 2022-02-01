@@ -72,14 +72,14 @@ where
     Out: Copy + Send + Sync + 'static,
 {
     fn convert_data_type_parallel(self) -> Grid<G, Out> {
-        // let lowest_dim_size = self.shape.axis_size_x();
+        let lowest_dim_size = self.shape.axis_size_x();
 
         Grid {
             shape: self.shape,
             data: self
                 .data
                 .into_par_iter()
-                .with_min_len(512)
+                .with_min_len(lowest_dim_size)
                 .map(|pixel| pixel.as_())
                 .collect(),
             no_data_value: self.no_data_value.map(AsPrimitive::as_),
