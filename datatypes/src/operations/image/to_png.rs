@@ -1,3 +1,5 @@
+use std::io::Cursor;
+
 use crate::raster::{
     Grid2D, GridIndexAccess, GridOrEmpty2D, NoDataValue, Pixel, RasterTile2D, TypedRasterTile2D,
 };
@@ -12,6 +14,18 @@ use image::{DynamicImage, ImageBuffer, ImageFormat, RgbaImage};
 pub trait ToPng {
     /// Outputs png bytes of an image of size width x height
     fn to_png(&self, width: u32, height: u32, colorizer: &Colorizer) -> Result<Vec<u8>>;
+}
+
+fn image_buffer_to_png_bytes(
+    image_buffer: ImageBuffer<image::Rgba<u8>, Vec<u8>>,
+) -> Result<Vec<u8>> {
+    let mut buffer = Cursor::new(Vec::new());
+    DynamicImage::ImageRgba8(image_buffer)
+        .write_to(&mut buffer, ImageFormat::Png)
+        .map_err(|error| error::Error::Colorizer {
+            details: format!("encoding PNG failed: {}", error),
+        })?;
+    Ok(buffer.into_inner())
 }
 
 impl<P> ToPng for Grid2D<P>
@@ -33,15 +47,7 @@ where
             create_rgba_image(self, width, height, colorizer, scale_x, scale_y, no_data_fn)
         };
 
-        let mut buffer = Vec::new();
-
-        DynamicImage::ImageRgba8(image_buffer)
-            .write_to(&mut buffer, ImageFormat::Png)
-            .map_err(|error| error::Error::Colorizer {
-                details: format!("encoding PNG failed: {}", error),
-            })?;
-
-        Ok(buffer)
+        image_buffer_to_png_bytes(image_buffer)
     }
 }
 
@@ -56,15 +62,7 @@ where
 
         let image_buffer = ImageBuffer::from_pixel(width, height, no_data_color);
 
-        let mut buffer = Vec::new();
-
-        DynamicImage::ImageRgba8(image_buffer)
-            .write_to(&mut buffer, ImageFormat::Png)
-            .map_err(|error| error::Error::Colorizer {
-                details: format!("encoding PNG failed: {}", error),
-            })?;
-
-        Ok(buffer)
+        image_buffer_to_png_bytes(image_buffer)
     }
 }
 
