@@ -4,7 +4,7 @@ use async_trait::async_trait;
 use futures::{stream::BoxStream, StreamExt, TryStreamExt};
 use geoengine_datatypes::{
     primitives::{RasterQueryRectangle, SpatialPartition2D},
-    raster::{ConvertDataType, ConvertDataTypeParallel, Pixel, RasterTile2D},
+    raster::{ConvertDataTypeParallel, Pixel, RasterTile2D},
 };
 use num_traits::AsPrimitive;
 
