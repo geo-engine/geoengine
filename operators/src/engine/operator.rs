@@ -19,6 +19,7 @@ pub trait OperatorDatasets {
         datasets
     }
 
+    #[allow(clippy::ptr_arg)] // must allow `push` on `datasets`
     fn datasets_collect(&self, datasets: &mut Vec<DatasetId>);
 }
 

@@ -1,6 +1,6 @@
 use std::collections::VecDeque;
 use std::ffi::{c_void, CStr, CString};
-use std::os::raw::{c_char, c_int};
+use std::os::raw::c_char;
 use std::path::{Path, PathBuf};
 use std::str::FromStr;
 
@@ -219,7 +219,8 @@ impl<'d> MdGroup<'d> {
 
             let mut dim_count = 0;
 
-            let c_dimensions = GDALMDArrayGetDimensions(c_mdarray, &mut dim_count as *mut usize);
+            let c_dimensions =
+                GDALMDArrayGetDimensions(c_mdarray, std::ptr::addr_of_mut!(dim_count));
             let dimensions = std::slice::from_raw_parts_mut(c_dimensions, dim_count);
 
             let mut count = Vec::<usize>::with_capacity(dim_count);
@@ -431,7 +432,7 @@ impl<'g> MdArray<'g> {
         let mut has_nodata = 0;
 
         let no_data_value = unsafe {
-            GDALMDArrayGetNoDataValueAsDouble(self.c_mdarray, &mut has_nodata as *mut c_int)
+            GDALMDArrayGetNoDataValueAsDouble(self.c_mdarray, std::ptr::addr_of_mut!(has_nodata))
         };
 
         if has_nodata == 0 {
@@ -445,8 +446,10 @@ impl<'g> MdArray<'g> {
         let mut number_of_dimensions = 0;
 
         Ok(unsafe {
-            let c_dimensions =
-                GDALMDArrayGetDimensions(self.c_mdarray, &mut number_of_dimensions as *mut usize);
+            let c_dimensions = GDALMDArrayGetDimensions(
+                self.c_mdarray,
+                std::ptr::addr_of_mut!(number_of_dimensions),
+            );
 
             if number_of_dimensions != 4 {
                 return Err(NetCdfCf4DProviderError::MustBe4DDataset {
