@@ -200,8 +200,7 @@ fn bench_mock_source_operator() {
         &tiling_specs,
         operator_builder,
         |ts, num_threads| {
-            let mex = MockExecutionContext::new_with_tiling_spec_and_thread_count(ts, num_threads);
-            mex
+            MockExecutionContext::new_with_tiling_spec_and_thread_count(ts, num_threads)
         },
         &[ChunkByteSize::MAX],
         &[4, 8, 16, 32],
@@ -283,8 +282,7 @@ fn bench_mock_source_operator_with_expression() {
         &tiling_specs,
         operator_builder,
         |ts, num_threads| {
-            let mex = MockExecutionContext::new_with_tiling_spec_and_thread_count(ts, num_threads);
-            mex
+            MockExecutionContext::new_with_tiling_spec_and_thread_count(ts, num_threads)
         },
         &[ChunkByteSize::MAX],
         &[1, 2, 4, 8, 16, 32],
@@ -358,8 +356,7 @@ fn bench_mock_source_operator_with_identity_reprojection() {
         &tiling_specs,
         operator_builder,
         |ts, num_threads| {
-            let mex = MockExecutionContext::new_with_tiling_spec_and_thread_count(ts, num_threads);
-            mex
+            MockExecutionContext::new_with_tiling_spec_and_thread_count(ts, num_threads)
         },
         &[ChunkByteSize::MAX],
         &[4, 8, 16, 32],
@@ -430,8 +427,7 @@ fn bench_mock_source_operator_with_4326_to_3857_reprojection() {
         &tiling_specs,
         operator_builder,
         |ts, num_threads| {
-            let mex = MockExecutionContext::new_with_tiling_spec_and_thread_count(ts, num_threads);
-            mex
+            MockExecutionContext::new_with_tiling_spec_and_thread_count(ts, num_threads)
         },
         &[ChunkByteSize::MAX],
         &[4, 8, 16, 32],

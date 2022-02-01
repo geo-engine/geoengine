@@ -31,7 +31,7 @@ async fn process_tile<PIn: Pixel + AsPrimitive<POut>, POut: Pixel>(
 ) -> Result<RasterTile2D<POut>> {
     tokio::task::spawn_blocking(move || pool.install(|| tile.convert_data_type_parallel()))
         .await
-        .map_err(|e| e.into())
+        .map_err(Into::into)
 }
 
 #[async_trait]

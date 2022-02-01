@@ -80,7 +80,7 @@ where
                 .data
                 .into_par_iter()
                 .with_min_len(lowest_dim_size)
-                .map(|pixel| pixel.as_())
+                .map(AsPrimitive::as_)
                 .collect(),
             no_data_value: self.no_data_value.map(AsPrimitive::as_),
         }
