@@ -12,10 +12,11 @@ use crate::{processing::expression::codegen::Parameter, util::duplicate_or_empty
 
 use super::{
     codegen::{
-        Assignment, AstNode, AstOperator, BooleanComparator, BooleanExpression, BooleanOperator,
-        Branch, ExpressionAst, Identifier,
+        Assignment, AstFunction, AstNode, AstOperator, BooleanComparator, BooleanExpression,
+        BooleanOperator, Branch, ExpressionAst, Identifier,
     },
     error::{self, ExpressionError},
+    functions::FUNCTIONS,
 };
 
 type Result<T, E = ExpressionError> = std::result::Result<T, E>;
@@ -32,7 +33,7 @@ pub struct ExpressionParser {
     numeric_parameters: HashSet<Identifier>,
     boolean_parameters: HashSet<Identifier>,
     variables: Rc<RefCell<Vec<Identifier>>>,
-    imports: Rc<RefCell<Vec<Identifier>>>,
+    functions: Rc<RefCell<Vec<AstFunction>>>,
 }
 
 lazy_static::lazy_static! {
@@ -74,7 +75,7 @@ impl ExpressionParser {
             numeric_parameters,
             boolean_parameters,
             variables: Rc::new(RefCell::new(Vec::new())),
-            imports: Rc::new(RefCell::new(vec![])),
+            functions: Rc::new(RefCell::new(vec![])),
         })
     }
 
@@ -88,7 +89,7 @@ impl ExpressionParser {
         ExpressionAst::new(
             name.to_string().into(),
             self.parameters,
-            self.imports.borrow().iter().cloned().collect(),
+            self.functions.borrow().iter().cloned().collect(),
             root,
         )
     }
@@ -119,24 +120,7 @@ impl ExpressionParser {
                     })
                 }
             }
-            Rule::function => {
-                let mut pairs = pair.into_inner();
-
-                // first one is name
-                let name: Identifier = pairs
-                    .next()
-                    .ok_or(ExpressionError::MissingFunctionName)?
-                    .as_str()
-                    .into();
-
-                let args = pairs
-                    .map(|pair| self.build_ast(pair.into_inner()))
-                    .collect::<Result<Vec<_>, _>>()?;
-
-                self.imports.borrow_mut().push(name.clone());
-
-                Ok(AstNode::Function { name, args })
-            }
+            Rule::function => self.resolve_function(pair.into_inner()),
             Rule::branch => {
                 // pairs are boolean -> expression
                 // and last one is just an expression
@@ -218,6 +202,39 @@ impl ExpressionParser {
         }
     }
 
+    fn resolve_function(&self, mut pairs: Pairs<Rule>) -> Result<AstNode> {
+        // first one is name
+        let name: Identifier = pairs
+            .next()
+            .ok_or(ExpressionError::MissingFunctionName)?
+            .as_str()
+            .into();
+
+        let args = pairs
+            .map(|pair| self.build_ast(pair.into_inner()))
+            .collect::<Result<Vec<_>, _>>()?;
+
+        match FUNCTIONS.get(name.as_ref()) {
+            Some(function) if function.num_args.contains(&args.len()) => {
+                self.functions.borrow_mut().push(AstFunction {
+                    name: name.clone(),
+                    num_parameters: args.len(),
+                });
+
+                Ok(AstNode::Function { name, args })
+            }
+            Some(function) => Err(ExpressionError::InvalidFunctionArgumentCount {
+                function: name.to_string(),
+                expected_min: *function.num_args.start(),
+                expected_max: *function.num_args.end(),
+                actual: args.len(),
+            }),
+            None => Err(ExpressionError::UnknownFunction {
+                function: name.to_string(),
+            }),
+        }
+    }
+
     fn resolve_infix_operations(
         &self,
         left: Result<AstNode>,
@@ -228,7 +245,10 @@ impl ExpressionParser {
 
         // change some operators to functions
         if matches!(op.as_rule(), Rule::power) {
-            self.imports.borrow_mut().push("pow".into());
+            self.functions.borrow_mut().push(AstFunction {
+                name: "pow".into(),
+                num_parameters: 2,
+            });
 
             return Ok(AstNode::Function {
                 name: "pow".into(),
@@ -483,7 +503,10 @@ mod tests {
             }
             .to_string()
         );
+    }
 
+    #[test]
+    fn functions() {
         assert_eq!(
             parse("expression", &["a"], &[], "max(a, 0)"),
             quote! {
@@ -494,6 +517,83 @@ mod tests {
                 #[no_mangle]
                 pub extern "C" fn expression(a: f64) -> f64 {
                     import_max(a, 0f64)
+                }
+            }
+            .to_string()
+        );
+
+        assert_eq!(
+            parse("expression", &["a"], &[], "pow(sqrt(a), 2)"),
+            quote! {
+                #[inline]
+                fn import_pow(a: f64, b: f64) -> f64 {
+                    f64::powf(a, b)
+                }
+                #[inline]
+                fn import_sqrt(a: f64) -> f64 {
+                    f64::sqrt(a)
+                }
+                #[no_mangle]
+                pub extern "C" fn expression(a: f64) -> f64 {
+                    import_pow(import_sqrt(a), 2f64)
+                }
+            }
+            .to_string()
+        );
+
+        assert_eq!(
+            parse("waves", &[], &[], "cos(sin(tan(acos(asin(atan(1))))))"),
+            quote! {
+                #[inline]
+                fn import_acos(a: f64) -> f64 {
+                    f64::acos(a)
+                }
+                #[inline]
+                fn import_asin(a: f64) -> f64 {
+                    f64::asin(a)
+                }
+                #[inline]
+                fn import_atan(a: f64) -> f64 {
+                    f64::atan(a)
+                }
+                #[inline]
+                fn import_cos(a: f64) -> f64 {
+                    f64::cos(a)
+                }
+                #[inline]
+                fn import_sin(a: f64) -> f64 {
+                    f64::sin(a)
+                }
+                #[inline]
+                fn import_tan(a: f64) -> f64 {
+                    f64::tan(a)
+                }
+                #[no_mangle]
+                pub extern "C" fn waves() -> f64 {
+                    import_cos(import_sin(import_tan(import_acos(import_asin(import_atan(1f64))))))
+                }
+            }
+            .to_string()
+        );
+
+        assert_eq!(
+            parse("non_linear", &[], &[], "ln(log10(pi()))"),
+            quote! {
+                #[inline]
+                fn import_ln(a: f64) -> f64 {
+                    f64::ln(a)
+                }
+                #[inline]
+                fn import_log10(a: f64) -> f64 {
+                    f64::log10(a)
+                }
+                #[inline]
+                fn import_pi() -> f64 {
+                    std::f64::consts::PI
+                }
+                #[no_mangle]
+                pub extern "C" fn non_linear() -> f64 {
+                    import_ln(import_log10(import_pi()))
                 }
             }
             .to_string()

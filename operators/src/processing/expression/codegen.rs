@@ -1,10 +1,13 @@
-use std::{collections::HashSet, fmt::Debug};
+use std::{collections::BTreeSet, fmt::Debug};
 
 use proc_macro2::TokenStream;
 use quote::{format_ident, quote, ToTokens};
 use snafu::ensure;
 
-use super::error::{self, ExpressionError};
+use super::{
+    error::{self, ExpressionError},
+    functions::FUNCTIONS,
+};
 
 type Result<T, E = ExpressionError> = std::result::Result<T, E>;
 
@@ -18,7 +21,7 @@ pub struct ExpressionAst {
     name: Identifier,
     root: AstNode,
     parameters: Vec<Parameter>,
-    imports: HashSet<Identifier>,
+    functions: BTreeSet<AstFunction>,
     // TODO: dtype Float or Int
 }
 
@@ -26,7 +29,7 @@ impl ExpressionAst {
     pub fn new(
         name: Identifier,
         parameters: Vec<Parameter>,
-        imports: HashSet<Identifier>,
+        functions: BTreeSet<AstFunction>,
         root: AstNode,
     ) -> Result<ExpressionAst> {
         ensure!(!name.as_ref().is_empty(), error::EmptyExpressionName);
@@ -35,7 +38,7 @@ impl ExpressionAst {
             name,
             root,
             parameters,
-            imports,
+            functions,
         })
     }
 
@@ -52,28 +55,8 @@ impl ToTokens for ExpressionAst {
     fn to_tokens(&self, tokens: &mut TokenStream) {
         let dtype = format_ident!("{}", "f64");
 
-        for fn_name in &self.imports {
-            let prefixed_fn_name = format_ident!("import_{}", fn_name.as_ref());
-
-            tokens.extend(quote! {
-                #[inline]
-            });
-
-            let fn_tokens = match fn_name.as_ref() {
-                "max" => quote! {
-                    fn #prefixed_fn_name (a: #dtype, b: #dtype) -> #dtype {
-                        #dtype::max(a, b)
-                    }
-                },
-                "pow" => quote! {
-                    fn #prefixed_fn_name (a: #dtype, b: #dtype) -> #dtype {
-                        #dtype::powf(a, b)
-                    }
-                },
-                _ => todo!("{} is not yet supported", fn_name),
-            };
-
-            tokens.extend(fn_tokens);
+        for function in &self.functions {
+            function.to_tokens(tokens);
         }
 
         let fn_name = &self.name;
@@ -180,7 +163,7 @@ impl ToTokens for AstNode {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 #[repr(transparent)]
 pub struct Identifier(String);
 
@@ -350,5 +333,28 @@ impl AsRef<str> for Parameter {
         match self {
             Self::Number(identifier) | Self::Boolean(identifier) => identifier.as_ref(),
         }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub struct AstFunction {
+    pub name: Identifier,
+    pub num_parameters: usize,
+}
+
+impl ToTokens for AstFunction {
+    fn to_tokens(&self, tokens: &mut TokenStream) {
+        let function = match FUNCTIONS.get(self.name.as_ref()) {
+            Some(f) => f,
+            None => return, // do nothing if, for some reason, the function doesn't exist
+        };
+
+        let prefixed_fn_name = format_ident!("import_{}", self.name.as_ref());
+
+        tokens.extend(quote! {
+            #[inline]
+        });
+
+        tokens.extend((function.token_fn)(self.num_parameters, prefixed_fn_name));
     }
 }
