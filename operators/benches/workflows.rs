@@ -2,18 +2,23 @@
 use std::hint::black_box;
 use std::time::Instant;
 
-use futures::StreamExt;
+use futures::TryStreamExt;
 use geoengine_datatypes::dataset::DatasetId;
-use geoengine_datatypes::primitives::{Measurement, RasterQueryRectangle};
-use geoengine_datatypes::raster::RasterDataType;
+use geoengine_datatypes::primitives::{
+    Measurement, QueryRectangle, RasterQueryRectangle, SpatialPartitioned,
+};
+use geoengine_datatypes::raster::{Grid2D, RasterDataType};
 use geoengine_datatypes::spatial_reference::SpatialReference;
+
 use geoengine_datatypes::util::Identifier;
 use geoengine_datatypes::{
     dataset::InternalDatasetId,
     primitives::{SpatialPartition2D, SpatialResolution, TimeInterval},
     raster::{GridSize, RasterTile2D, TilingSpecification},
 };
-use geoengine_operators::engine::{MetaData, SingleRasterOrVectorSource};
+use geoengine_operators::call_on_generic_raster_processor;
+use geoengine_operators::engine::{MetaData, RasterResultDescriptor, SingleRasterOrVectorSource};
+use geoengine_operators::mock::{MockRasterSource, MockRasterSourceParams};
 use geoengine_operators::processing::{
     Expression, ExpressionParams, ExpressionSources, Reprojection, ReprojectionParams,
 };
@@ -24,89 +29,414 @@ use geoengine_operators::{
     util::gdal::create_ndvi_meta_data,
 };
 
-#[inline(never)]
-fn bench_raster_operator<'a, Q, T, F, C, B>(
+pub struct BenchSetup<Q, T, F, C, B, O> {
     bench_id: &'static str,
     named_querys: Q,
     tiling_specs: T,
-    named_operator: Box<dyn RasterOperator>,
+    operator_builder: O,
     context_builder: F,
     chunk_byte_size: B,
     num_threads: C,
-) where
+}
+
+impl<'a, Q, T, F, C, B, O> BenchSetup<Q, T, F, C, B, O>
+where
     F: Fn(TilingSpecification, usize) -> MockExecutionContext,
     C: IntoIterator<Item = &'a usize> + Clone,
     Q: IntoIterator<Item = &'a (&'static str, RasterQueryRectangle)> + Clone,
     T: IntoIterator<Item = &'a TilingSpecification> + Clone,
     B: IntoIterator<Item = &'a ChunkByteSize> + Clone,
+    O: Fn(TilingSpecification, QueryRectangle<SpatialPartition2D>) -> Box<dyn RasterOperator>,
 {
-    let run_time = tokio::runtime::Runtime::new().unwrap();
+    #[inline(never)]
+    fn bench_raster_operator(&self) {
+        let run_time = tokio::runtime::Runtime::new().unwrap();
 
-    for current_threads in num_threads.into_iter() {
-        for tiling_spec in tiling_specs.clone().into_iter() {
-            let exe_ctx = (context_builder)(*tiling_spec, *current_threads);
-            for current_cbs in chunk_byte_size.clone().into_iter() {
-                let ctx = exe_ctx.mock_query_context(*current_cbs);
+        for current_threads in self.num_threads.clone().into_iter() {
+            for tiling_spec in self.tiling_specs.clone().into_iter() {
+                let exe_ctx = (self.context_builder)(*tiling_spec, *current_threads);
 
-                // let init_start = Instant::now();
-                let initialized_operator =
-                    run_time.block_on(async { named_operator.clone().initialize(&exe_ctx).await });
+                for current_cbs in self.chunk_byte_size.clone().into_iter() {
+                    let ctx = exe_ctx.mock_query_context(*current_cbs);
 
-                // let init_elapsed = init_start.elapsed();
-                // println!(
-                //    "Initialized context \"{}\" | operator \"\" | in {} s  ({} ns)",
-                //    context_name,
-                //    init_elapsed.as_secs_f32(),
-                //    init_elapsed.as_nanos()
-                //);
+                    for (qrect_name, qrect) in self.named_querys.clone().into_iter() {
+                        let operator = (self.operator_builder)(*tiling_spec, *qrect);
+                        let init_start = Instant::now();
+                        let initialized_operator =
+                            run_time.block_on(async { operator.initialize(&exe_ctx).await });
+                        let init_elapsed = init_start.elapsed();
+                        // println!(
+                        //    "Initialized context \"{}\" | operator \"\" | in {} s  ({} ns)",
+                        //    context_name,
+                        //    init_elapsed.as_secs_f32(),
+                        //    init_elapsed.as_nanos()
+                        //);
 
-                let initialized_queryprocessor = initialized_operator
-                    .unwrap()
-                    .query_processor()
-                    .unwrap()
-                    .get_u8()
-                    .unwrap();
+                        let initialized_queryprocessor =
+                            initialized_operator.unwrap().query_processor().unwrap();
 
-                for (qrect_name, qrect) in named_querys.clone().into_iter() {
-                    run_time.block_on(async {
-                        let start_query = Instant::now();
-                        // query the operator
-                        let query = initialized_queryprocessor
-                            .raster_query(*qrect, &ctx)
-                            .await
-                            .unwrap();
-                        let query_elapsed = start_query.elapsed();
+                        call_on_generic_raster_processor!(initialized_queryprocessor, op => { run_time.block_on(async {
+                                let start_query = Instant::now();
+                                // query the operator
+                                let query = op
+                                    .raster_query(*qrect, &ctx)
+                                    .await
+                                    .unwrap();
+                                let query_elapsed = start_query.elapsed();
 
-                        let start = Instant::now();
-                        // drain the stream
-                        // TODO: build a custom drain that does not collect all the tiles
-                        let res: Vec<Result<RasterTile2D<_>, _>> = query.collect().await;
+                                let start = Instant::now();
+                                // drain the stream
+                                // TODO: build a custom drain that does not collect all the tiles
+                                let tile_count_res: Result<usize,_> = query.try_fold(0, |accu, tile|  async move {
+                                    black_box({
+                                        let _ = tile;
+                                        Ok(accu + 1)
+                                    })
 
-                        let elapsed = start.elapsed();
+                                }).await;
 
-                        // count elements in a black_box to avoid compiler optimization
-                        let number_of_tiles =
-                            black_box(res.into_iter().map(Result::unwrap).count());
+                                let elapsed = start.elapsed();
+                                let number_of_tiles = tile_count_res.unwrap();
 
-                        println!(
-                            "{}, {}, {}, {}, {}, {}, {}, {}, {}, {}",
-                            bench_id,
-                            current_threads,
-                            current_cbs.bytes(),
-                            qrect_name,
-                            tiling_spec.tile_size_in_pixels.axis_size_y(),
-                            tiling_spec.tile_size_in_pixels.axis_size_x(),
-                            query_elapsed.as_nanos(),
-                            number_of_tiles,
-                            number_of_tiles as u128
-                                * tiling_spec.tile_size_in_pixels.number_of_elements() as u128,
-                            elapsed.as_nanos()
-                        );
-                    });
+                                // count elements in a black_box to avoid compiler optimization
+
+
+
+                                println!(
+                                    "{}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}",
+                                    self.bench_id,
+                                    current_threads,
+                                    current_cbs.bytes(),
+                                    qrect_name,
+                                    tiling_spec.tile_size_in_pixels.axis_size_y(),
+                                    tiling_spec.tile_size_in_pixels.axis_size_x(),
+                                    init_elapsed.as_nanos(),
+                                    query_elapsed.as_nanos(),
+                                    number_of_tiles,
+                                    number_of_tiles as u128
+                                        * tiling_spec.tile_size_in_pixels.number_of_elements() as u128,
+                                    elapsed.as_nanos()
+                                );
+                            });
+                        });
+                    }
                 }
             }
         }
     }
+
+    pub fn new(
+        bench_id: &'static str,
+        named_querys: Q,
+        tiling_specs: T,
+        operator_builder: O,
+        context_builder: F,
+        chunk_byte_size: B,
+        num_threads: C,
+    ) -> Self {
+        Self {
+            bench_id,
+            named_querys,
+            tiling_specs,
+            operator_builder,
+            context_builder,
+            chunk_byte_size,
+            num_threads,
+        }
+    }
+}
+
+fn bench_mock_source_operator() {
+    let qrect = RasterQueryRectangle {
+        spatial_bounds: SpatialPartition2D::new((-180., 90.).into(), (180., -90.).into()).unwrap(),
+        time_interval: TimeInterval::new(1_388_534_400_000, 1_388_534_400_000 + 1000).unwrap(),
+        spatial_resolution: SpatialResolution::new(0.01, 0.01).unwrap(),
+    };
+    let tiling_spec = TilingSpecification::new((0., 0.).into(), [512, 512].into());
+
+    let qrects = vec![("World in 36000x18000 pixels", qrect)];
+    let tiling_specs = vec![tiling_spec];
+
+    fn operator_builder(
+        tiling_spec: TilingSpecification,
+        query_rect: RasterQueryRectangle,
+    ) -> Box<dyn RasterOperator> {
+        let no_data_value = Some(42);
+        let query_resolution = query_rect.spatial_resolution;
+        let query_time = query_rect.time_interval;
+        let tileing_strategy = tiling_spec.strategy(query_resolution.x, -1. * query_resolution.y);
+        let tile_iter = tileing_strategy.tile_information_iterator(query_rect.spatial_partition());
+
+        let mock_data = tile_iter
+            .enumerate()
+            .map(|(id, tile_info)| {
+                let data = Grid2D::new(
+                    tiling_spec.tile_size_in_pixels,
+                    vec![(id % 255) as u8; tile_info.tile_size_in_pixels.number_of_elements()],
+                    no_data_value,
+                )
+                .unwrap();
+                RasterTile2D::new_with_tile_info(query_time, tile_info, data.into())
+            })
+            .collect();
+
+        MockRasterSource {
+            params: MockRasterSourceParams {
+                data: mock_data,
+                result_descriptor: RasterResultDescriptor {
+                    data_type: RasterDataType::U8,
+                    spatial_reference: SpatialReference::epsg_4326().into(),
+                    measurement: Measurement::Unitless,
+                    no_data_value: no_data_value.map(|v| v as f64),
+                },
+            },
+        }
+        .boxed()
+    }
+
+    BenchSetup::new(
+        "mock_source",
+        &qrects,
+        &tiling_specs,
+        operator_builder,
+        |ts, num_threads| {
+            let mex = MockExecutionContext::new_with_tiling_spec_and_thread_count(ts, num_threads);
+            mex
+        },
+        &[ChunkByteSize::MAX],
+        &[4, 8, 16, 32],
+    )
+    .bench_raster_operator();
+}
+
+fn bench_mock_source_operator_with_expression() {
+    let qrect = RasterQueryRectangle {
+        spatial_bounds: SpatialPartition2D::new((-180., 90.).into(), (180., -90.).into()).unwrap(),
+        time_interval: TimeInterval::new(1_388_534_400_000, 1_388_534_400_000 + 1000).unwrap(),
+        spatial_resolution: SpatialResolution::new(0.005, 0.005).unwrap(),
+    };
+
+    let qrects = vec![("World in 72000x36000 pixels", qrect)];
+    let tiling_specs = vec![
+        TilingSpecification::new((0., 0.).into(), [512, 512].into()),
+        TilingSpecification::new((0., 0.).into(), [1024, 1024].into()),
+        TilingSpecification::new((0., 0.).into(), [2048, 2048].into()),
+        TilingSpecification::new((0., 0.).into(), [4096, 4096].into()),
+        TilingSpecification::new((0., 0.).into(), [9000, 9000].into()),
+        TilingSpecification::new((0., 0.).into(), [18000, 18000].into()),
+    ];
+
+    fn operator_builder(
+        tiling_spec: TilingSpecification,
+        query_rect: RasterQueryRectangle,
+    ) -> Box<dyn RasterOperator> {
+        let no_data_value = Some(42);
+        let query_resolution = query_rect.spatial_resolution;
+        let query_time = query_rect.time_interval;
+        let tileing_strategy = tiling_spec.strategy(query_resolution.x, -1. * query_resolution.y);
+        let tile_iter = tileing_strategy.tile_information_iterator(query_rect.spatial_partition());
+
+        let mock_data = tile_iter
+            .enumerate()
+            .map(|(id, tile_info)| {
+                let data = Grid2D::new(
+                    tiling_spec.tile_size_in_pixels,
+                    vec![(id % 255) as u8; tile_info.tile_size_in_pixels.number_of_elements()],
+                    no_data_value,
+                )
+                .unwrap();
+                RasterTile2D::new_with_tile_info(query_time, tile_info, data.into())
+            })
+            .collect();
+
+        let mock_raster_operator = MockRasterSource {
+            params: MockRasterSourceParams {
+                data: mock_data,
+                result_descriptor: RasterResultDescriptor {
+                    data_type: RasterDataType::U8,
+                    spatial_reference: SpatialReference::epsg_4326().into(),
+                    measurement: Measurement::Unitless,
+                    no_data_value: no_data_value.map(|v| v as f64),
+                },
+            },
+        };
+
+        Expression {
+            params: ExpressionParams {
+                expression: "A+B".to_string(),
+                output_type: RasterDataType::U8,
+                output_no_data_value: 0., //  cast no_data_valuee to f64
+                output_measurement: Some(Measurement::Unitless),
+                map_no_data: false,
+            },
+            sources: ExpressionSources::new_a_b(
+                mock_raster_operator.clone().boxed(),
+                mock_raster_operator.boxed(),
+            ),
+        }
+        .boxed()
+    }
+
+    BenchSetup::new(
+        "mock_source_with_expression_a+b",
+        &qrects,
+        &tiling_specs,
+        operator_builder,
+        |ts, num_threads| {
+            let mex = MockExecutionContext::new_with_tiling_spec_and_thread_count(ts, num_threads);
+            mex
+        },
+        &[ChunkByteSize::MAX],
+        &[1, 2, 4, 8, 16, 32],
+    )
+    .bench_raster_operator();
+}
+
+fn bench_mock_source_operator_with_identity_reprojection() {
+    let qrect = RasterQueryRectangle {
+        spatial_bounds: SpatialPartition2D::new((-180., 90.).into(), (180., -90.).into()).unwrap(),
+        time_interval: TimeInterval::new(1_388_534_400_000, 1_388_534_400_000 + 1000).unwrap(),
+        spatial_resolution: SpatialResolution::new(0.01, 0.01).unwrap(),
+    };
+
+    let qrects = vec![("World in 36000x18000 pixels", qrect)];
+    let tiling_specs = vec![
+        TilingSpecification::new((0., 0.).into(), [512, 512].into()),
+        TilingSpecification::new((0., 0.).into(), [1024, 1024].into()),
+        TilingSpecification::new((0., 0.).into(), [2048, 2048].into()),
+        TilingSpecification::new((0., 0.).into(), [4096, 4096].into()),
+        TilingSpecification::new((0., 0.).into(), [9000, 9000].into()),
+        TilingSpecification::new((0., 0.).into(), [18000, 18000].into()),
+    ];
+
+    fn operator_builder(
+        tiling_spec: TilingSpecification,
+        query_rect: RasterQueryRectangle,
+    ) -> Box<dyn RasterOperator> {
+        let no_data_value = Some(42);
+        let query_resolution = query_rect.spatial_resolution;
+        let query_time = query_rect.time_interval;
+        let tileing_strategy = tiling_spec.strategy(query_resolution.x, -1. * query_resolution.y);
+        let tile_iter = tileing_strategy.tile_information_iterator(query_rect.spatial_partition());
+        let mock_data = tile_iter
+            .enumerate()
+            .map(|(id, tile_info)| {
+                let data = Grid2D::new(
+                    tiling_spec.tile_size_in_pixels,
+                    vec![(id % 255) as u8; tile_info.tile_size_in_pixels.number_of_elements()],
+                    no_data_value,
+                )
+                .unwrap();
+                RasterTile2D::new_with_tile_info(query_time, tile_info, data.into())
+            })
+            .collect();
+
+        let mock_raster_operator = MockRasterSource {
+            params: MockRasterSourceParams {
+                data: mock_data,
+                result_descriptor: RasterResultDescriptor {
+                    data_type: RasterDataType::U8,
+                    spatial_reference: SpatialReference::epsg_4326().into(),
+                    measurement: Measurement::Unitless,
+                    no_data_value: no_data_value.map(|v| v as f64),
+                },
+            },
+        };
+
+        Reprojection {
+            params: ReprojectionParams {
+                target_spatial_reference: SpatialReference::epsg_4326(),
+            },
+            sources: SingleRasterOrVectorSource::from(mock_raster_operator.boxed()),
+        }
+        .boxed()
+    }
+
+    BenchSetup::new(
+        "mock_source_512px_with_identity_reprojection",
+        &qrects,
+        &tiling_specs,
+        operator_builder,
+        |ts, num_threads| {
+            let mex = MockExecutionContext::new_with_tiling_spec_and_thread_count(ts, num_threads);
+            mex
+        },
+        &[ChunkByteSize::MAX],
+        &[4, 8, 16, 32],
+    )
+    .bench_raster_operator();
+}
+
+fn bench_mock_source_operator_with_4326_to_3857_reprojection() {
+    let qrect = RasterQueryRectangle {
+        spatial_bounds: SpatialPartition2D::new(
+            (-20_037_508.342_789_244, 20_048_966.104_014_594).into(),
+            (20_037_508.342_789_244, -20_048_966.104_014_594).into(),
+        )
+        .unwrap(),
+        time_interval: TimeInterval::new(1_388_534_400_000, 1_388_534_400_000 + 1000).unwrap(),
+        spatial_resolution: SpatialResolution::new(1050., 2100.).unwrap(),
+    };
+    let tiling_spec = TilingSpecification::new((0., 0.).into(), [512, 512].into());
+
+    let qrects = vec![("World in 36000x18000 pixels", qrect)];
+    let tiling_specs = vec![tiling_spec];
+
+    fn operator_builder(
+        tiling_spec: TilingSpecification,
+        query_rect: RasterQueryRectangle,
+    ) -> Box<dyn RasterOperator> {
+        let no_data_value = Some(42);
+        let query_resolution = query_rect.spatial_resolution;
+        let query_time = query_rect.time_interval;
+        let tileing_strategy = tiling_spec.strategy(query_resolution.x, -1. * query_resolution.y);
+        let tile_iter = tileing_strategy.tile_information_iterator(query_rect.spatial_partition());
+        let mock_data = tile_iter
+            .enumerate()
+            .map(|(id, tile_info)| {
+                let data = Grid2D::new(
+                    tiling_spec.tile_size_in_pixels,
+                    vec![(id % 255) as u8; tile_info.tile_size_in_pixels.number_of_elements()],
+                    no_data_value,
+                )
+                .unwrap();
+                RasterTile2D::new_with_tile_info(query_time, tile_info, data.into())
+            })
+            .collect();
+        let mock_raster_operator = MockRasterSource {
+            params: MockRasterSourceParams {
+                data: mock_data,
+                result_descriptor: RasterResultDescriptor {
+                    data_type: RasterDataType::U8,
+                    spatial_reference: SpatialReference::epsg_4326().into(),
+                    measurement: Measurement::Unitless,
+                    no_data_value: no_data_value.map(|v| v as f64),
+                },
+            },
+        };
+
+        Reprojection {
+            params: ReprojectionParams {
+                target_spatial_reference: SpatialReference::epsg_4326(),
+            },
+            sources: SingleRasterOrVectorSource::from(mock_raster_operator.boxed()),
+        }
+        .boxed()
+    }
+
+    BenchSetup::new(
+        "mock_source projection 4326 -> 3857",
+        &qrects,
+        &tiling_specs,
+        operator_builder,
+        |ts, num_threads| {
+            let mex = MockExecutionContext::new_with_tiling_spec_and_thread_count(ts, num_threads);
+            mex
+        },
+        &[ChunkByteSize::MAX],
+        &[4, 8, 16, 32],
+    )
+    .bench_raster_operator();
 }
 
 fn bench_gdal_source_operator_tile_size() {
@@ -144,11 +474,11 @@ fn bench_gdal_source_operator_tile_size() {
     }
     .boxed();
 
-    bench_raster_operator(
+    BenchSetup::new(
         "gdal_source",
         &qrects,
         &tiling_specs,
-        gdal_operator,
+        |_, _| gdal_operator.clone(),
         |ts, num_threads| {
             let mut mex =
                 MockExecutionContext::new_with_tiling_spec_and_thread_count(ts, num_threads);
@@ -157,7 +487,8 @@ fn bench_gdal_source_operator_tile_size() {
         },
         &[ChunkByteSize::MAX],
         &[8],
-    );
+    )
+    .bench_raster_operator();
 }
 
 fn bench_gdal_source_operator_with_expression_tile_size() {
@@ -206,11 +537,11 @@ fn bench_gdal_source_operator_with_expression_tile_size() {
     }
     .boxed();
 
-    bench_raster_operator(
+    BenchSetup::new(
         "expression a+b",
         &qrects,
         &tiling_specs,
-        expression_operator,
+        |_, _| expression_operator.clone(),
         |ts, num_threads| {
             let mut mex =
                 MockExecutionContext::new_with_tiling_spec_and_thread_count(ts, num_threads);
@@ -219,7 +550,8 @@ fn bench_gdal_source_operator_with_expression_tile_size() {
         },
         &[ChunkByteSize::MAX],
         &[8],
-    );
+    )
+    .bench_raster_operator();
 }
 
 fn bench_gdal_source_operator_with_identity_reprojection() {
@@ -261,13 +593,14 @@ fn bench_gdal_source_operator_with_identity_reprojection() {
             target_spatial_reference: SpatialReference::epsg_4326(),
         },
         sources: SingleRasterOrVectorSource::from(gdal_operator.boxed()),
-    };
+    }
+    .boxed();
 
-    bench_raster_operator(
-        "projection identity",
+    BenchSetup::new(
+        "gdal source + projection identity",
         &qrects,
         &tiling_specs,
-        projection_operator.boxed(),
+        |_, _| projection_operator.clone(),
         |ts, num_threads| {
             let mut mex =
                 MockExecutionContext::new_with_tiling_spec_and_thread_count(ts, num_threads);
@@ -324,13 +657,14 @@ fn bench_gdal_source_operator_with_4326_to_3857_reprojection() {
             ),
         },
         sources: SingleRasterOrVectorSource::from(gdal_operator.boxed()),
-    };
+    }
+    .boxed();
 
-    bench_raster_operator(
+    BenchSetup::new(
         "projection 4326 -> 3857",
         &qrects,
         &tiling_specs,
-        projection_operator.boxed(),
+        |_, _| projection_operator.clone(),
         |ts, num_threads| {
             let mut mex =
                 MockExecutionContext::new_with_tiling_spec_and_thread_count(ts, num_threads);
@@ -343,8 +677,12 @@ fn bench_gdal_source_operator_with_4326_to_3857_reprojection() {
 }
 
 fn main() {
-    println!("Bench_name, num_threads, chunk_byte_size, query_name, tilesize_x, tilesize_y, query_time (ns), tiles_produced, pixels_produced, stream_collect_time (ns) ");
+    println!("Bench_name, num_threads, chunk_byte_size, query_name, tilesize_x, tilesize_y, init_time (ns), query_time (ns), tiles_produced, pixels_produced, stream_collect_time (ns) ");
 
+    bench_mock_source_operator();
+    bench_mock_source_operator_with_expression();
+    bench_mock_source_operator_with_identity_reprojection();
+    bench_mock_source_operator_with_4326_to_3857_reprojection();
     bench_gdal_source_operator_tile_size();
     bench_gdal_source_operator_with_expression_tile_size();
     bench_gdal_source_operator_with_identity_reprojection();
