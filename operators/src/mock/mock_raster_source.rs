@@ -8,7 +8,7 @@ use async_trait::async_trait;
 use futures::{stream, stream::StreamExt};
 use geoengine_datatypes::dataset::DatasetId;
 use geoengine_datatypes::primitives::{RasterQueryRectangle, SpatialPartitioned};
-use geoengine_datatypes::raster::{FromPrimitive, Pixel, RasterTile2D};
+use geoengine_datatypes::raster::{ConvertDataType, FromPrimitive, Pixel, RasterTile2D};
 use num_traits::AsPrimitive;
 use serde::{Deserialize, Serialize};
 
@@ -153,7 +153,7 @@ impl<T: Pixel> InitializedRasterOperator for InitializedMockRasterSource<T> {
             let data: Vec<RasterTile2D<To>> = raster_tiles
                 .iter()
                 .cloned()
-                .map(RasterTile2D::convert)
+                .map(RasterTile2D::convert_data_type)
                 .collect();
             MockRasterSourceProcessor::new(data).boxed()
         }
