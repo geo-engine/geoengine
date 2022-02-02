@@ -618,6 +618,67 @@ mod tests {
             }
             .to_string()
         );
+
+        assert_eq!(
+            parse("rounding", &[], &[], "round(1.3) + ceil(1.2) + floor(1.1)"),
+            quote! {
+                #[inline]
+                fn import_ceil__1(a: f64) -> f64 {
+                    f64::ceil(a)
+                }
+                #[inline]
+                fn import_floor__1(a: f64) -> f64 {
+                    f64::floor(a)
+                }
+                #[inline]
+                fn import_round__1(a: f64) -> f64 {
+                    f64::round(a)
+                }
+                #[no_mangle]
+                pub extern "C" fn rounding() -> f64 {
+                    ((import_round__1(1.3f64) + import_ceil__1(1.2f64)) + import_floor__1(1.1f64))
+                }
+            }
+            .to_string()
+        );
+
+        assert_eq!(
+            parse("radians", &[], &[], "to_radians(1.3) + to_degrees(1.3)"),
+            quote! {
+                #[inline]
+                fn import_to_degrees__1(a: f64) -> f64 {
+                    f64::to_degrees(a)
+                }
+                #[inline]
+                fn import_to_radians__1(a: f64) -> f64 {
+                    f64::to_radians(a)
+                }
+                #[no_mangle]
+                pub extern "C" fn radians() -> f64 {
+                    (import_to_radians__1(1.3f64) + import_to_degrees__1(1.3f64))
+                }
+            }
+            .to_string()
+        );
+
+        assert_eq!(
+            parse("mod_e", &[], &[], "mod(5, e())"),
+            quote! {
+                #[inline]
+                fn import_e__0() -> f64 {
+                    std::f64::consts::E
+                }
+                #[inline]
+                fn import_mod__2(a: f64, b: f64) -> f64 {
+                    a % b
+                }
+                #[no_mangle]
+                pub extern "C" fn mod_e() -> f64 {
+                    import_mod__2(5f64, import_e__0())
+                }
+            }
+            .to_string()
+        );
     }
 
     #[test]

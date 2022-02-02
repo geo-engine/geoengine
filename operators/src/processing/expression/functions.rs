@@ -157,6 +157,69 @@ lazy_static::lazy_static! {
             },
         });
 
+        functions.insert("e", Function {
+            num_args: 0..=0,
+            token_fn: |_, fn_name| quote! {
+                fn #fn_name() -> f64 {
+                    std::f64::consts::E
+                }
+            },
+        });
+
+        functions.insert("round", Function {
+            num_args: 1..=1,
+            token_fn: |_, fn_name| quote! {
+                fn #fn_name(a: f64) -> f64 {
+                    f64::round(a)
+                }
+            },
+        });
+
+        functions.insert("ceil", Function {
+            num_args: 1..=1,
+            token_fn: |_, fn_name| quote! {
+                fn #fn_name(a: f64) -> f64 {
+                    f64::ceil(a)
+                }
+            },
+        });
+
+        functions.insert("floor", Function {
+            num_args: 1..=1,
+            token_fn: |_, fn_name| quote! {
+                fn #fn_name(a: f64) -> f64 {
+                    f64::floor(a)
+                }
+            },
+        });
+
+        functions.insert("mod", Function {
+            num_args: 2..=2,
+            token_fn: |_, fn_name| quote! {
+                fn #fn_name(a: f64, b: f64) -> f64 {
+                    a % b
+                }
+            },
+        });
+
+        functions.insert("to_radians", Function {
+            num_args: 1..=1,
+            token_fn: |_, fn_name| quote! {
+                fn #fn_name(a: f64) -> f64 {
+                    f64::to_radians(a)
+                }
+            },
+        });
+
+        functions.insert("to_degrees", Function {
+            num_args: 1..=1,
+            token_fn: |_, fn_name| quote! {
+                fn #fn_name(a: f64) -> f64 {
+                    f64::to_degrees(a)
+                }
+            },
+        });
+
         functions
     };
 }
