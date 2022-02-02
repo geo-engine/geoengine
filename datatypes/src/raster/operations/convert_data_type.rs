@@ -87,16 +87,6 @@ where
     }
 }
 
-impl<In, Out, G> ConvertDataTypeParallel<EmptyGrid<G, Out>> for EmptyGrid<G, In>
-where
-    In: AsPrimitive<Out> + Copy + Send + Sync + 'static,
-    Out: Copy + Send + Sync + 'static,
-{
-    fn convert_data_type_parallel(self) -> EmptyGrid<G, Out> {
-        self.convert_data_type()
-    }
-}
-
 impl<In, Out, G> ConvertDataTypeParallel<GridOrEmpty<G, Out>> for GridOrEmpty<G, In>
 where
     G: GridSize,
@@ -106,7 +96,7 @@ where
     fn convert_data_type_parallel(self) -> GridOrEmpty<G, Out> {
         match self {
             GridOrEmpty::Grid(g) => GridOrEmpty::Grid(g.convert_data_type_parallel()),
-            GridOrEmpty::Empty(n) => GridOrEmpty::Empty(n.convert_data_type_parallel()),
+            GridOrEmpty::Empty(n) => GridOrEmpty::Empty(n.convert_data_type()),
         }
     }
 }
@@ -124,4 +114,118 @@ where
             tile_position: self.tile_position,
         }
     }
+}
+
+
+#[cfg(test)]
+mod tests {
+    use crate::{raster::{Grid2D, EmptyGrid2D, GridOrEmpty2D, RasterTile2D, GeoTransform}, primitives::TimeInterval};
+
+    use super::*;
+
+    #[test]
+    fn convert_grid() {
+        let g_u8: Grid2D<u8> = Grid2D::new_filled([32,32].into(), 8, Some(7));
+        let g_f64: Grid2D<f32> = g_u8.convert_data_type();
+        assert!(g_f64.data.into_iter().all(|f| f == 8.));
+        assert_eq!(g_f64.no_data_value, Some(7.));
+    }
+
+    #[test]
+    fn convert_grid_parallel() {
+        let g_u8: Grid2D<u8> = Grid2D::new_filled([32,32].into(), 8, Some(7));
+        let g_f64: Grid2D<f32> = g_u8.convert_data_type_parallel();
+        assert!(g_f64.data.into_iter().all(|f| f == 8.));
+        assert_eq!(g_f64.no_data_value, Some(7.));
+    }
+
+    #[test]
+    fn convert_empty_grid() {
+        let g_u8: EmptyGrid2D<u8> = EmptyGrid2D::new([32,32].into(), 7);
+        let g_f64: EmptyGrid2D<f32> = g_u8.convert_data_type();
+        assert_eq!(g_f64.no_data_value, 7.);
+    }
+
+    #[test]
+    fn convert_grid_or_empty_grid() {
+        let g_u8: GridOrEmpty2D<u8> = Grid2D::new_filled([32,32].into(), 8, Some(7)).into();
+        let g_f64: GridOrEmpty2D<f32> = g_u8.convert_data_type();
+        if let GridOrEmpty2D::Grid(g) = g_f64 {
+            assert!(g.data.into_iter().all(|f| f == 8.));
+            assert_eq!(g.no_data_value, Some(7.));
+        } else {
+            assert!(false);
+        }
+    }
+
+    #[test]
+    fn convert_grid_or_empty_empty() {
+        let g_u8: GridOrEmpty2D<u8> = EmptyGrid2D::new([32,32].into(), 7).into();
+        let g_f64: GridOrEmpty2D<f32> = g_u8.convert_data_type();
+        if let GridOrEmpty2D::Empty(g) = g_f64 {
+            assert_eq!(g.no_data_value, 7.);
+        } else {
+            assert!(false);
+        }
+    }
+
+    #[test]
+    fn convert_grid_or_empty_grid_parallel() {
+        let g_u8: GridOrEmpty2D<u8> = Grid2D::new_filled([32,32].into(), 8, Some(7)).into();
+        let g_f64: GridOrEmpty2D<f32> = g_u8.convert_data_type_parallel();
+        if let GridOrEmpty2D::Grid(g) = g_f64 {
+            assert!(g.data.into_iter().all(|f| f == 8.));
+            assert_eq!(g.no_data_value, Some(7.));
+        } else {
+            assert!(false);
+        }
+    }
+
+    #[test]
+    fn convert_grid_or_empty_empty_parallel() {
+        let g_u8: GridOrEmpty2D<u8> = EmptyGrid2D::new([32,32].into(), 7).into();
+        let g_f64: GridOrEmpty2D<f32> = g_u8.convert_data_type_parallel();
+        if let GridOrEmpty2D::Empty(g) = g_f64 {
+            assert_eq!(g.no_data_value, 7.);
+        } else {
+            assert!(false);
+        }
+    }
+
+    #[test]
+    fn convert_raster_tile() {
+        let g_u8: GridOrEmpty2D<u8> = Grid2D::new_filled([32,32].into(), 8, Some(7)).into();
+        let tile_u8 = RasterTile2D::new(TimeInterval::default(), [0,0].into(), GeoTransform::new((0.,0.).into(), 1., -1.), g_u8);
+        let tile_f64: RasterTile2D<f32> = tile_u8.convert_data_type();
+        
+        assert_eq!(tile_f64.time, TimeInterval::default());
+        assert_eq!(tile_f64.tile_position, [0,0].into());
+        assert_eq!(tile_f64.global_geo_transform, GeoTransform::new((0.,0.).into(), 1., -1.));        
+        
+        if let GridOrEmpty2D::Grid(g) = tile_f64.grid_array {
+            assert!(g.data.into_iter().all(|f| f == 8.));
+            assert_eq!(g.no_data_value, Some(7.));
+        } else {
+            assert!(false);
+        }
+    }
+
+    #[test]
+    fn convert_raster_tile_parallel() {
+        let g_u8: GridOrEmpty2D<u8> = Grid2D::new_filled([32,32].into(), 8, Some(7)).into();
+        let tile_u8 = RasterTile2D::new(TimeInterval::default(), [0,0].into(), GeoTransform::new((0.,0.).into(), 1., -1.), g_u8);
+        let tile_f64: RasterTile2D<f32> = tile_u8.convert_data_type_parallel();
+        
+        assert_eq!(tile_f64.time, TimeInterval::default());
+        assert_eq!(tile_f64.tile_position, [0,0].into());
+        assert_eq!(tile_f64.global_geo_transform, GeoTransform::new((0.,0.).into(), 1., -1.));        
+        
+        if let GridOrEmpty2D::Grid(g) = tile_f64.grid_array {
+            assert!(g.data.into_iter().all(|f| f == 8.));
+            assert_eq!(g.no_data_value, Some(7.));
+        } else {
+            assert!(false);
+        }
+    }
+
 }
