@@ -222,7 +222,7 @@ impl Nature40DataProvider {
 
     async fn try_load_dataset(&self, db_url: String) -> Result<gdal::Dataset> {
         let auth = self.auth();
-        tokio::task::spawn_blocking(move || {
+        crate::util::spawn_blocking(move || {
             let dataset = gdal_open_dataset_ex(
                 Path::new(&db_url),
                 DatasetOptions {

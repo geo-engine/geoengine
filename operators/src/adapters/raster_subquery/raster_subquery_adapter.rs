@@ -522,7 +522,7 @@ pub fn identity_accu<T: Pixel>(
     no_data_value: T,
     pool: Arc<ThreadPool>,
 ) -> impl Future<Output = Result<RasterTileAccu2D<T>>> {
-    tokio::task::spawn_blocking(move || {
+    crate::util::spawn_blocking(move || {
         let output_raster =
             EmptyGrid2D::new(tile_info.tile_size_in_pixels, T::from_(no_data_value)).into();
         let output_tile =
@@ -574,7 +574,7 @@ pub fn fold_by_blit_future<T>(
 where
     T: Pixel,
 {
-    tokio::task::spawn_blocking(|| fold_by_blit_impl(accu, tile)).then(|x| async move {
+    crate::util::spawn_blocking(|| fold_by_blit_impl(accu, tile)).then(|x| async move {
         match x {
             Ok(r) => r,
             Err(e) => Err(e.into()),

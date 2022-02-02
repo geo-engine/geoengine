@@ -193,7 +193,7 @@ impl PointInPolygonFilterProcessor {
         let thread_pool = ctx.thread_pool().clone();
 
         let thread_points = points.clone();
-        let filter = tokio::task::spawn_blocking(move || {
+        let filter = crate::util::spawn_blocking(move || {
             Self::filter_parallel(&thread_points, &polygons, &thread_pool)
         })
         .await?;
