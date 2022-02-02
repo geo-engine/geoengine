@@ -468,12 +468,12 @@ mod tests {
             parse("expression", &[], &[], "2**4"),
             quote! {
                 #[inline]
-                fn import_pow(a: f64, b: f64) -> f64 {
+                fn import_pow__2(a: f64, b: f64) -> f64 {
                     f64::powf(a, b)
                 }
                 #[no_mangle]
                 pub extern "C" fn expression() -> f64 {
-                    import_pow(2f64 , 4f64)
+                    import_pow__2(2f64 , 4f64)
                 }
             }
             .to_string()
@@ -506,17 +506,18 @@ mod tests {
     }
 
     #[test]
+    #[allow(clippy::too_many_lines)]
     fn functions() {
         assert_eq!(
             parse("expression", &["a"], &[], "max(a, 0)"),
             quote! {
                 #[inline]
-                fn import_max(a: f64, b: f64) -> f64 {
+                fn import_max__2(a: f64, b: f64) -> f64 {
                     f64::max(a, b)
                 }
                 #[no_mangle]
                 pub extern "C" fn expression(a: f64) -> f64 {
-                    import_max(a, 0f64)
+                    import_max__2(a, 0f64)
                 }
             }
             .to_string()
@@ -526,16 +527,16 @@ mod tests {
             parse("expression", &["a"], &[], "pow(sqrt(a), 2)"),
             quote! {
                 #[inline]
-                fn import_pow(a: f64, b: f64) -> f64 {
+                fn import_pow__2(a: f64, b: f64) -> f64 {
                     f64::powf(a, b)
                 }
                 #[inline]
-                fn import_sqrt(a: f64) -> f64 {
+                fn import_sqrt__1(a: f64) -> f64 {
                     f64::sqrt(a)
                 }
                 #[no_mangle]
                 pub extern "C" fn expression(a: f64) -> f64 {
-                    import_pow(import_sqrt(a), 2f64)
+                    import_pow__2(import_sqrt__1(a), 2f64)
                 }
             }
             .to_string()
@@ -545,32 +546,32 @@ mod tests {
             parse("waves", &[], &[], "cos(sin(tan(acos(asin(atan(1))))))"),
             quote! {
                 #[inline]
-                fn import_acos(a: f64) -> f64 {
+                fn import_acos__1(a: f64) -> f64 {
                     f64::acos(a)
                 }
                 #[inline]
-                fn import_asin(a: f64) -> f64 {
+                fn import_asin__1(a: f64) -> f64 {
                     f64::asin(a)
                 }
                 #[inline]
-                fn import_atan(a: f64) -> f64 {
+                fn import_atan__1(a: f64) -> f64 {
                     f64::atan(a)
                 }
                 #[inline]
-                fn import_cos(a: f64) -> f64 {
+                fn import_cos__1(a: f64) -> f64 {
                     f64::cos(a)
                 }
                 #[inline]
-                fn import_sin(a: f64) -> f64 {
+                fn import_sin__1(a: f64) -> f64 {
                     f64::sin(a)
                 }
                 #[inline]
-                fn import_tan(a: f64) -> f64 {
+                fn import_tan__1(a: f64) -> f64 {
                     f64::tan(a)
                 }
                 #[no_mangle]
                 pub extern "C" fn waves() -> f64 {
-                    import_cos(import_sin(import_tan(import_acos(import_asin(import_atan(1f64))))))
+                    import_cos__1(import_sin__1(import_tan__1(import_acos__1(import_asin__1(import_atan__1(1f64))))))
                 }
             }
             .to_string()
@@ -580,20 +581,39 @@ mod tests {
             parse("non_linear", &[], &[], "ln(log10(pi()))"),
             quote! {
                 #[inline]
-                fn import_ln(a: f64) -> f64 {
+                fn import_ln__1(a: f64) -> f64 {
                     f64::ln(a)
                 }
                 #[inline]
-                fn import_log10(a: f64) -> f64 {
+                fn import_log10__1(a: f64) -> f64 {
                     f64::log10(a)
                 }
                 #[inline]
-                fn import_pi() -> f64 {
+                fn import_pi__0() -> f64 {
                     std::f64::consts::PI
                 }
                 #[no_mangle]
                 pub extern "C" fn non_linear() -> f64 {
-                    import_ln(import_log10(import_pi()))
+                    import_ln__1(import_log10__1(import_pi__0()))
+                }
+            }
+            .to_string()
+        );
+
+        assert_eq!(
+            parse("three", &[], &[], "min(1, 2, max(3, 4, 5))"),
+            quote! {
+                #[inline]
+                fn import_max__3(a: f64, b: f64, c: f64) -> f64 {
+                    f64::max(f64::max(a, b), c)
+                }
+                #[inline]
+                fn import_min__3(a: f64, b: f64, c: f64) -> f64 {
+                    f64::min(f64::min(a, b), c)
+                }
+                #[no_mangle]
+                pub extern "C" fn three() -> f64 {
+                    import_min__3(1f64, 2f64, import_max__3(3f64, 4f64, 5f64))
                 }
             }
             .to_string()
@@ -727,7 +747,7 @@ mod tests {
             ),
             quote! {
                 #[inline]
-                fn import_max(a: f64, b: f64) -> f64 {
+                fn import_max__2(a: f64, b: f64) -> f64 {
                     f64::max(a, b)
                 }
                 #[no_mangle]
@@ -737,7 +757,7 @@ mod tests {
                     } else if ((((1f64) < (2f64))) && (true)) {
                         2f64
                     } else {
-                        import_max(1f64, 2f64)
+                        import_max__2(1f64, 2f64)
                     }
                 }
             }

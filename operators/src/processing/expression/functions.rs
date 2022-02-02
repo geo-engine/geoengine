@@ -12,21 +12,41 @@ lazy_static::lazy_static! {
         let mut functions = HashMap::new();
 
         functions.insert("min", Function {
-            num_args: 2..=2,
-            token_fn: |_, fn_name| quote! {
-                fn #fn_name(a: f64, b: f64) -> f64 {
-                    f64::min(a, b)
+            num_args: 2..=3,
+            token_fn: |num_args, fn_name| {
+                match num_args {
+                    2 => quote! {
+                        fn #fn_name(a: f64, b: f64) -> f64 {
+                            f64::min(a, b)
+                        }
+                    },
+                    3 => quote! {
+                        fn #fn_name(a: f64, b: f64, c: f64) -> f64 {
+                            f64::min(f64::min(a, b), c)
+                        }
+                    },
+                    _ => TokenStream::new(),
                 }
-            },
+            }
         });
 
         functions.insert("max", Function {
-            num_args: 2..=2,
-            token_fn: |_, fn_name| quote! {
-                fn #fn_name(a: f64, b: f64) -> f64 {
-                    f64::max(a, b)
+            num_args: 2..=3,
+            token_fn: |num_args, fn_name| {
+                match num_args {
+                    2 => quote! {
+                        fn #fn_name(a: f64, b: f64) -> f64 {
+                            f64::max(a, b)
+                        }
+                    },
+                    3 => quote! {
+                        fn #fn_name(a: f64, b: f64, c: f64) -> f64 {
+                            f64::max(f64::max(a, b), c)
+                        }
+                    },
+                    _ => TokenStream::new(),
                 }
-            },
+            }
         });
 
         functions.insert("abs", Function {

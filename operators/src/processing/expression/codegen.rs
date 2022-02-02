@@ -111,7 +111,7 @@ impl ToTokens for AstNode {
                 quote! { ( #left #op #right ) }
             }
             Self::Function { name, args } => {
-                let fn_name = format_ident!("import_{}", name.as_ref());
+                let fn_name = format_ident!("import_{}__{}", name.as_ref(), args.len());
                 quote! { #fn_name(#(#args),*) }
             }
             AstNode::Branch {
@@ -349,7 +349,8 @@ impl ToTokens for AstFunction {
             None => return, // do nothing if, for some reason, the function doesn't exist
         };
 
-        let prefixed_fn_name = format_ident!("import_{}", self.name.as_ref());
+        let prefixed_fn_name =
+            format_ident!("import_{}__{}", self.name.as_ref(), self.num_parameters);
 
         tokens.extend(quote! {
             #[inline]
