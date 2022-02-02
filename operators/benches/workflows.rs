@@ -1,13 +1,13 @@
 #![feature(bench_black_box)]
 use std::hint::black_box;
-use std::time::Instant;
+use std::time::{Instant, Duration};
 
 use futures::TryStreamExt;
 use geoengine_datatypes::dataset::DatasetId;
 use geoengine_datatypes::primitives::{
     Measurement, QueryRectangle, RasterQueryRectangle, SpatialPartitioned,
 };
-use geoengine_datatypes::raster::{Grid2D, RasterDataType};
+use geoengine_datatypes::raster::{Grid2D, RasterDataType, GridShape2D};
 use geoengine_datatypes::spatial_reference::SpatialReference;
 
 use geoengine_datatypes::util::Identifier;
@@ -28,6 +28,8 @@ use geoengine_operators::{
     source::GdalSourceParameters,
     util::gdal::create_ndvi_meta_data,
 };
+
+use serde::{Serialize, Serializer};
 
 pub struct BenchSetup<Q, T, F, C, B, O> {
     bench_id: &'static str,
@@ -59,7 +61,7 @@ where
                 for current_cbs in self.chunk_byte_size.clone().into_iter() {
                     let ctx = exe_ctx.mock_query_context(*current_cbs);
 
-                    for (qrect_name, qrect) in self.named_querys.clone().into_iter() {
+                    for (ref qrect_name, qrect) in self.named_querys.clone().into_iter() {
                         let operator = (self.operator_builder)(*tiling_spec, *qrect);
                         let init_start = Instant::now();
                         let initialized_operator =
@@ -102,21 +104,17 @@ where
 
 
 
-                                println!(
-                                    "{}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}",
-                                    self.bench_id,
-                                    current_threads,
-                                    current_cbs.bytes(),
-                                    qrect_name,
-                                    tiling_spec.tile_size_in_pixels.axis_size_y(),
-                                    tiling_spec.tile_size_in_pixels.axis_size_x(),
-                                    init_elapsed.as_nanos(),
-                                    query_elapsed.as_nanos(),
+                                WorkflowBenchResult{
+                                    bench_id: self.bench_id.to_owned(),
+                                    num_threads: *current_threads,
+                                    chunk_byte_size: *current_cbs,
+                                    qrect_name: qrect_name.to_string(),
+                                    tile_size: tiling_spec.tile_size_in_pixels,
                                     number_of_tiles,
-                                    number_of_tiles as u128
-                                        * tiling_spec.tile_size_in_pixels.number_of_elements() as u128,
-                                    elapsed.as_nanos()
-                                );
+                                    init_time: init_elapsed,
+                                    query_time: query_elapsed,
+                                    stream_time: elapsed,
+                                }
                             });
                         });
                     }
@@ -144,6 +142,31 @@ where
             num_threads,
         }
     }
+}
+
+#[derive(Debug, Serialize)]
+pub struct WorkflowBenchResult {
+    pub bench_id: String,
+    pub num_threads: usize,
+    pub chunk_byte_size: ChunkByteSize,
+    pub qrect_name: String,
+    pub tile_size: GridShape2D,
+    pub number_of_tiles: usize,
+    #[serde(rename = "init_time_ms")]
+    #[serde(serialize_with = "serialize_duration_as_millis")]
+    pub init_time: Duration,
+    #[serde(rename = "query_time_ms")]
+    #[serde(serialize_with = "serialize_duration_as_millis")]
+    pub query_time: Duration,
+    #[serde(rename = "stream_time_ms")]
+    #[serde(serialize_with = "serialize_duration_as_millis")]
+    pub stream_time: Duration,
+}
+
+fn serialize_duration_as_millis<S>(duration: &Duration, serializer: S) -> Result<S::Ok, S::Error>
+where S: Serializer,
+{
+    serializer.serialize_u128(duration.as_millis())
 }
 
 fn bench_mock_source_operator() {
