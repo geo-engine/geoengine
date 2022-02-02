@@ -89,7 +89,7 @@ impl ExpressionParser {
         ExpressionAst::new(
             name.to_string().into(),
             self.parameters,
-            self.functions.borrow().iter().cloned().collect(),
+            self.functions.borrow_mut().drain(..).collect(),
             root,
         )
     }
