@@ -92,6 +92,13 @@ where
             .configure(handlers::wfs::init_wfs_routes::<C>)
             .configure(handlers::wms::init_wms_routes::<C>)
             .configure(handlers::workflows::init_workflow_routes::<C>);
+
+        #[cfg(feature = "ebv")]
+        {
+            app = app
+                .service(web::scope("/ebv").configure(handlers::ebv::init_ebv_routes::<C>(None)));
+        }
+
         if version_api {
             app = app.route("/version", web::get().to(show_version_handler));
         }

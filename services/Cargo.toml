@@ -15,6 +15,7 @@ xml = ["quick-xml"]
 postgres = ["postgres-types", "bb8-postgres"]
 odm = ["pro"]
 nfdi = ["postgres", "geoengine-datatypes/postgres", "scienceobjectsdb_rust_api"]
+ebv = []
 # This compiles Geo Engine Pro
 pro = ["postgres", "geoengine-operators/pro", "geoengine-datatypes/pro"]
 
@@ -69,6 +70,7 @@ typetag = "0.1"
 url = { version = "2.2", features = ["serde"] }
 uuid = { version = "0.8", features = ["serde", "v4", "v5"] }
 zip = "0.5"
+
 [dev-dependencies]
 httptest = "0.15.2"
 rand = "0.8.4"
