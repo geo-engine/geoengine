@@ -9,9 +9,9 @@ use crate::util::Result;
 use async_trait::async_trait;
 use futures::future::join_all;
 use futures::stream::select_all;
-use futures::{FutureExt, StreamExt};
+use futures::{FutureExt, StreamExt, TryFutureExt, TryStreamExt};
 use geoengine_datatypes::primitives::VectorQueryRectangle;
-use geoengine_datatypes::raster::ConvertDataType;
+use geoengine_datatypes::raster::ConvertDataTypeParallel;
 use geoengine_datatypes::raster::{Grid2D, GridOrEmpty, GridSize, NoDataValue};
 use geoengine_datatypes::spatial_reference::SpatialReferenceOption;
 use serde::{Deserialize, Serialize};
@@ -119,7 +119,7 @@ impl PlotQueryProcessor for StatisticsQueryProcessor {
             queries.push(
                 call_on_generic_raster_processor!(raster_processor, processor => {
                     processor.query(query.into(), ctx).await?
-                             .map(move |r| r.map(|tile| (i, tile.convert_data_type())))
+                             .and_then(move |tile| crate::util::spawn_blocking_with_thread_pool(ctx.thread_pool().clone(), move || (i, tile.convert_data_type_parallel()) ).map_err(Into::into))
                              .boxed()
                 }),
             );

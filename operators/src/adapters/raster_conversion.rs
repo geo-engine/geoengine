@@ -1,5 +1,3 @@
-use std::sync::Arc;
-
 use async_trait::async_trait;
 use futures::{stream::BoxStream, StreamExt, TryFutureExt, TryStreamExt};
 use geoengine_datatypes::{
