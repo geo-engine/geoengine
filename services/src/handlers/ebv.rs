@@ -8,6 +8,7 @@ use actix_web::{
     web::{self, ServiceConfig},
     FromRequest, Responder,
 };
+use log::debug;
 use serde::Serialize;
 
 pub(crate) fn init_ebv_routes<C>(base_url: Option<String>) -> Box<dyn FnOnce(&mut ServiceConfig)>
@@ -98,7 +99,7 @@ async fn get_classes<C: Context>(
     let base_url = base_url.get_ref().as_ref();
     let url = format!("{base_url}/ebv");
 
-    dbg!(&url);
+    debug!("Calling {url}");
 
     let response = reqwest::get(url)
         .await?
@@ -139,6 +140,8 @@ async fn get_ebv_datasets<C: Context>(
     let base_url = base_url.get_ref().as_ref();
     let url = format!("{base_url}/datasets/filter");
 
+    debug!("Calling {url}");
+
     let response = reqwest::Client::new()
         .get(url)
         .query(&[("ebvName", &ebv_name.into_inner())])
@@ -173,6 +176,8 @@ async fn get_ebv_dataset<C: Context>(
 ) -> Result<impl Responder> {
     let base_url = base_url.get_ref().as_ref();
     let url = format!("{base_url}/datasets/{id}");
+
+    debug!("Calling {url}");
 
     let response = reqwest::get(url)
         .await?
@@ -216,8 +221,6 @@ mod tests {
         ctx: C,
         mock_address: String,
     ) -> ServiceResponse {
-        // let mock_address = mock_address.trim_end_matches(|c| c == '/').to_owned();
-
         let app = test::init_service({
             let app = App::new()
                 .app_data(web::Data::new(ctx))
