@@ -1,8 +1,8 @@
 use async_trait::async_trait;
-use futures::{stream::BoxStream, StreamExt, TryStreamExt};
+use futures::{stream::BoxStream, StreamExt, TryFutureExt, TryStreamExt};
 use geoengine_datatypes::{
     primitives::{RasterQueryRectangle, SpatialPartition2D},
-    raster::{Pixel, RasterTile2D},
+    raster::{ConvertDataTypeParallel, Pixel, RasterTile2D},
 };
 use num_traits::AsPrimitive;
 
@@ -37,9 +37,13 @@ where
         ctx: &'b dyn QueryContext,
     ) -> Result<BoxStream<'b, Result<Self::Output>>> {
         let stream = self.query_processor.query(query, ctx).await?;
+        let converted_stream = stream.and_then(move |tile| {
+            crate::util::spawn_blocking_with_thread_pool(ctx.thread_pool().clone(), || {
+                tile.convert_data_type_parallel()
+            })
+            .map_err(Into::into)
+        });
 
-        let converted_steam = stream.map_ok(RasterTile2D::convert::<POut>);
-
-        Ok(converted_steam.boxed())
+        Ok(converted_stream.boxed())
     }
 }
