@@ -9,9 +9,10 @@ use serde::{Deserialize, Serialize};
 use snafu::ensure;
 #[cfg(feature = "postgres")]
 use snafu::Error;
+use std::str::FromStr;
 use std::{convert::TryFrom, ops::Add};
 
-#[derive(Clone, Copy, Deserialize, Serialize, PartialEq, Eq, PartialOrd, Ord, Debug)]
+#[derive(Clone, Copy, Serialize, PartialEq, Eq, PartialOrd, Ord, Debug)]
 #[repr(C)]
 pub struct TimeInstance(i64);
 
@@ -129,6 +130,56 @@ impl Add<i64> for TimeInstance {
 
     fn add(self, rhs: i64) -> Self::Output {
         TimeInstance::from_millis_unchecked(self.0 + rhs)
+    }
+}
+
+impl FromStr for TimeInstance {
+    type Err = chrono::ParseError;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        let date_time = DateTime::<chrono::FixedOffset>::parse_from_rfc3339(s)?;
+        let date_time = date_time.with_timezone(&Utc);
+        Ok(date_time.into())
+    }
+}
+
+impl<'de> Deserialize<'de> for TimeInstance {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        struct IsoStringOrUnixTimestamp;
+
+        impl<'de> serde::de::Visitor<'de> for IsoStringOrUnixTimestamp {
+            type Value = TimeInstance;
+
+            fn expecting(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
+                formatter.write_str("RFC 3339 timestamp string or Unix timestamp integer")
+            }
+
+            fn visit_str<E>(self, value: &str) -> Result<Self::Value, E>
+            where
+                E: serde::de::Error,
+            {
+                TimeInstance::from_str(value).map_err(E::custom)
+            }
+
+            fn visit_i64<E>(self, v: i64) -> Result<Self::Value, E>
+            where
+                E: serde::de::Error,
+            {
+                TimeInstance::from_millis(v).map_err(E::custom)
+            }
+
+            fn visit_u64<E>(self, v: u64) -> Result<Self::Value, E>
+            where
+                E: serde::de::Error,
+            {
+                Self::visit_i64(self, v as i64)
+            }
+        }
+
+        deserializer.deserialize_any(IsoStringOrUnixTimestamp)
     }
 }
 

@@ -31,7 +31,7 @@ bb8-postgres = { version = "0.7", features = ["with-uuid-0_8", "with-chrono-0_4"
 bytes = "1.0"
 chrono = { version = "0.4", features = ["serde"] }
 config = "0.11"
-flexi_logger = "0.22"
+flexi_logger = { version = "0.22", features = ["trc"] }
 float-cmp = "0.9"
 futures = "0.3"
 futures-util = "0.3"
@@ -65,10 +65,14 @@ time = "0.3"
 tokio = { version = "1.15", features = ["macros", "fs", "signal", "sync", "rt-multi-thread"] }
 tokio-util = "0.6"
 tonic = { version = "0.6", features = ["tls", "tls-roots"] }
+tracing = "0.1"
+tracing-actix-web = "=0.5.0-rc.1"
+tracing-subscriber = { version = "0.3", features = ["local-time", "ansi"] }
 typetag = "0.1"
 url = { version = "2.2", features = ["serde"] }
 uuid = { version = "0.8", features = ["serde", "v4", "v5"] }
 zip = "0.5"
+
 [dev-dependencies]
 httptest = "0.15.2"
 rand = "0.8.4"

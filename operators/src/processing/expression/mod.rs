@@ -18,6 +18,7 @@ pub use self::error::ExpressionError;
 mod codegen;
 mod compiled;
 mod error;
+mod functions;
 mod parser;
 mod query_processor;
 
@@ -995,6 +996,71 @@ mod tests {
             Grid2D::new(
                 [3, 2].into(),
                 vec![8, 16, 24, 32, 40, 48],
+                no_data_value_option,
+            )
+            .unwrap()
+            .into()
+        );
+    }
+
+    #[tokio::test]
+    async fn test_functions() {
+        let no_data_value = 42;
+        let no_data_value_option = Some(no_data_value);
+
+        let raster_a = make_raster(Some(no_data_value));
+
+        let o = Expression {
+            params: ExpressionParams {
+                expression: "min(A * pi(), 10)".to_string(),
+                output_type: RasterDataType::I8,
+                output_no_data_value: no_data_value.as_(), //  cast no_data_value to f64
+                output_measurement: Some(Measurement::Unitless),
+                map_no_data: false,
+            },
+            sources: ExpressionSources {
+                a: raster_a,
+                b: None,
+                c: None,
+                d: None,
+                e: None,
+                f: None,
+                g: None,
+                h: None,
+            },
+        }
+        .boxed()
+        .initialize(&MockExecutionContext::test_default())
+        .await
+        .unwrap();
+
+        let processor = o.query_processor().unwrap().get_i8().unwrap();
+
+        let ctx = MockQueryContext::new(1.into());
+        let result_stream = processor
+            .query(
+                RasterQueryRectangle {
+                    spatial_bounds: SpatialPartition2D::new_unchecked(
+                        (0., 4.).into(),
+                        (3., 0.).into(),
+                    ),
+                    time_interval: Default::default(),
+                    spatial_resolution: SpatialResolution::one(),
+                },
+                &ctx,
+            )
+            .await
+            .unwrap();
+
+        let result: Vec<Result<RasterTile2D<i8>>> = result_stream.collect().await;
+
+        assert_eq!(result.len(), 1);
+
+        assert_eq!(
+            result[0].as_ref().unwrap().grid_array,
+            Grid2D::new(
+                [3, 2].into(),
+                vec![3, 6, 9, 10, 10, 10],
                 no_data_value_option,
             )
             .unwrap()

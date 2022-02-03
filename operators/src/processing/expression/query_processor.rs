@@ -81,15 +81,13 @@ where
 
                 let out_no_data = self.no_data_value;
 
-                let thread_pool = ctx.thread_pool().clone();
                 let program = self.program.clone();
                 let map_no_data = self.map_no_data;
 
-                let data = tokio::task::spawn_blocking(move || {
-                    thread_pool.install(move || {
-                        Tuple::compute_expression(rasters, &program, map_no_data, out_no_data)
-                    })
-                })
+                let data = crate::util::spawn_blocking_with_thread_pool(
+                    ctx.thread_pool().clone(),
+                    move || Tuple::compute_expression(rasters, &program, map_no_data, out_no_data),
+                )
                 .await??;
 
                 let out =

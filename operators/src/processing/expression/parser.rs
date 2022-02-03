@@ -12,10 +12,11 @@ use crate::{processing::expression::codegen::Parameter, util::duplicate_or_empty
 
 use super::{
     codegen::{
-        Assignment, AstNode, AstOperator, BooleanComparator, BooleanExpression, BooleanOperator,
-        Branch, ExpressionAst, Identifier,
+        Assignment, AstFunction, AstNode, AstOperator, BooleanComparator, BooleanExpression,
+        BooleanOperator, Branch, ExpressionAst, Identifier,
     },
     error::{self, ExpressionError},
+    functions::FUNCTIONS,
 };
 
 type Result<T, E = ExpressionError> = std::result::Result<T, E>;
@@ -32,7 +33,7 @@ pub struct ExpressionParser {
     numeric_parameters: HashSet<Identifier>,
     boolean_parameters: HashSet<Identifier>,
     variables: Rc<RefCell<Vec<Identifier>>>,
-    imports: Rc<RefCell<Vec<Identifier>>>,
+    functions: Rc<RefCell<Vec<AstFunction>>>,
 }
 
 lazy_static::lazy_static! {
@@ -74,7 +75,7 @@ impl ExpressionParser {
             numeric_parameters,
             boolean_parameters,
             variables: Rc::new(RefCell::new(Vec::new())),
-            imports: Rc::new(RefCell::new(vec![])),
+            functions: Rc::new(RefCell::new(vec![])),
         })
     }
 
@@ -88,7 +89,7 @@ impl ExpressionParser {
         ExpressionAst::new(
             name.to_string().into(),
             self.parameters,
-            self.imports.borrow().iter().cloned().collect(),
+            self.functions.borrow_mut().drain(..).collect(),
             root,
         )
     }
@@ -119,24 +120,7 @@ impl ExpressionParser {
                     })
                 }
             }
-            Rule::function => {
-                let mut pairs = pair.into_inner();
-
-                // first one is name
-                let name: Identifier = pairs
-                    .next()
-                    .ok_or(ExpressionError::MissingFunctionName)?
-                    .as_str()
-                    .into();
-
-                let args = pairs
-                    .map(|pair| self.build_ast(pair.into_inner()))
-                    .collect::<Result<Vec<_>, _>>()?;
-
-                self.imports.borrow_mut().push(name.clone());
-
-                Ok(AstNode::Function { name, args })
-            }
+            Rule::function => self.resolve_function(pair.into_inner()),
             Rule::branch => {
                 // pairs are boolean -> expression
                 // and last one is just an expression
@@ -218,6 +202,39 @@ impl ExpressionParser {
         }
     }
 
+    fn resolve_function(&self, mut pairs: Pairs<Rule>) -> Result<AstNode> {
+        // first one is name
+        let name: Identifier = pairs
+            .next()
+            .ok_or(ExpressionError::MissingFunctionName)?
+            .as_str()
+            .into();
+
+        let args = pairs
+            .map(|pair| self.build_ast(pair.into_inner()))
+            .collect::<Result<Vec<_>, _>>()?;
+
+        match FUNCTIONS.get(name.as_ref()) {
+            Some(function) if function.num_args.contains(&args.len()) => {
+                self.functions.borrow_mut().push(AstFunction {
+                    name: name.clone(),
+                    num_parameters: args.len(),
+                });
+
+                Ok(AstNode::Function { name, args })
+            }
+            Some(function) => Err(ExpressionError::InvalidFunctionArgumentCount {
+                function: name.to_string(),
+                expected_min: *function.num_args.start(),
+                expected_max: *function.num_args.end(),
+                actual: args.len(),
+            }),
+            None => Err(ExpressionError::UnknownFunction {
+                function: name.to_string(),
+            }),
+        }
+    }
+
     fn resolve_infix_operations(
         &self,
         left: Result<AstNode>,
@@ -228,7 +245,10 @@ impl ExpressionParser {
 
         // change some operators to functions
         if matches!(op.as_rule(), Rule::power) {
-            self.imports.borrow_mut().push("pow".into());
+            self.functions.borrow_mut().push(AstFunction {
+                name: "pow".into(),
+                num_parameters: 2,
+            });
 
             return Ok(AstNode::Function {
                 name: "pow".into(),
@@ -448,12 +468,12 @@ mod tests {
             parse("expression", &[], &[], "2**4"),
             quote! {
                 #[inline]
-                fn import_pow(a: f64, b: f64) -> f64 {
+                fn import_pow__2(a: f64, b: f64) -> f64 {
                     f64::powf(a, b)
                 }
                 #[no_mangle]
                 pub extern "C" fn expression() -> f64 {
-                    import_pow(2f64 , 4f64)
+                    import_pow__2(2f64 , 4f64)
                 }
             }
             .to_string()
@@ -483,17 +503,178 @@ mod tests {
             }
             .to_string()
         );
+    }
 
+    #[test]
+    #[allow(clippy::too_many_lines)]
+    fn functions() {
         assert_eq!(
             parse("expression", &["a"], &[], "max(a, 0)"),
             quote! {
                 #[inline]
-                fn import_max(a: f64, b: f64) -> f64 {
+                fn import_max__2(a: f64, b: f64) -> f64 {
                     f64::max(a, b)
                 }
                 #[no_mangle]
                 pub extern "C" fn expression(a: f64) -> f64 {
-                    import_max(a, 0f64)
+                    import_max__2(a, 0f64)
+                }
+            }
+            .to_string()
+        );
+
+        assert_eq!(
+            parse("expression", &["a"], &[], "pow(sqrt(a), 2)"),
+            quote! {
+                #[inline]
+                fn import_pow__2(a: f64, b: f64) -> f64 {
+                    f64::powf(a, b)
+                }
+                #[inline]
+                fn import_sqrt__1(a: f64) -> f64 {
+                    f64::sqrt(a)
+                }
+                #[no_mangle]
+                pub extern "C" fn expression(a: f64) -> f64 {
+                    import_pow__2(import_sqrt__1(a), 2f64)
+                }
+            }
+            .to_string()
+        );
+
+        assert_eq!(
+            parse("waves", &[], &[], "cos(sin(tan(acos(asin(atan(1))))))"),
+            quote! {
+                #[inline]
+                fn import_acos__1(a: f64) -> f64 {
+                    f64::acos(a)
+                }
+                #[inline]
+                fn import_asin__1(a: f64) -> f64 {
+                    f64::asin(a)
+                }
+                #[inline]
+                fn import_atan__1(a: f64) -> f64 {
+                    f64::atan(a)
+                }
+                #[inline]
+                fn import_cos__1(a: f64) -> f64 {
+                    f64::cos(a)
+                }
+                #[inline]
+                fn import_sin__1(a: f64) -> f64 {
+                    f64::sin(a)
+                }
+                #[inline]
+                fn import_tan__1(a: f64) -> f64 {
+                    f64::tan(a)
+                }
+                #[no_mangle]
+                pub extern "C" fn waves() -> f64 {
+                    import_cos__1(import_sin__1(import_tan__1(import_acos__1(import_asin__1(import_atan__1(1f64))))))
+                }
+            }
+            .to_string()
+        );
+
+        assert_eq!(
+            parse("non_linear", &[], &[], "ln(log10(pi()))"),
+            quote! {
+                #[inline]
+                fn import_ln__1(a: f64) -> f64 {
+                    f64::ln(a)
+                }
+                #[inline]
+                fn import_log10__1(a: f64) -> f64 {
+                    f64::log10(a)
+                }
+                #[inline]
+                fn import_pi__0() -> f64 {
+                    std::f64::consts::PI
+                }
+                #[no_mangle]
+                pub extern "C" fn non_linear() -> f64 {
+                    import_ln__1(import_log10__1(import_pi__0()))
+                }
+            }
+            .to_string()
+        );
+
+        assert_eq!(
+            parse("three", &[], &[], "min(1, 2, max(3, 4, 5))"),
+            quote! {
+                #[inline]
+                fn import_max__3(a: f64, b: f64, c: f64) -> f64 {
+                    f64::max(f64::max(a, b), c)
+                }
+                #[inline]
+                fn import_min__3(a: f64, b: f64, c: f64) -> f64 {
+                    f64::min(f64::min(a, b), c)
+                }
+                #[no_mangle]
+                pub extern "C" fn three() -> f64 {
+                    import_min__3(1f64, 2f64, import_max__3(3f64, 4f64, 5f64))
+                }
+            }
+            .to_string()
+        );
+
+        assert_eq!(
+            parse("rounding", &[], &[], "round(1.3) + ceil(1.2) + floor(1.1)"),
+            quote! {
+                #[inline]
+                fn import_ceil__1(a: f64) -> f64 {
+                    f64::ceil(a)
+                }
+                #[inline]
+                fn import_floor__1(a: f64) -> f64 {
+                    f64::floor(a)
+                }
+                #[inline]
+                fn import_round__1(a: f64) -> f64 {
+                    f64::round(a)
+                }
+                #[no_mangle]
+                pub extern "C" fn rounding() -> f64 {
+                    ((import_round__1(1.3f64) + import_ceil__1(1.2f64)) + import_floor__1(1.1f64))
+                }
+            }
+            .to_string()
+        );
+
+        assert_eq!(
+            parse("radians", &[], &[], "to_radians(1.3) + to_degrees(1.3)"),
+            quote! {
+                #[inline]
+                fn import_to_degrees__1(a: f64) -> f64 {
+                    f64::to_degrees(a)
+                }
+                #[inline]
+                fn import_to_radians__1(a: f64) -> f64 {
+                    f64::to_radians(a)
+                }
+                #[no_mangle]
+                pub extern "C" fn radians() -> f64 {
+                    (import_to_radians__1(1.3f64) + import_to_degrees__1(1.3f64))
+                }
+            }
+            .to_string()
+        );
+
+        assert_eq!(
+            parse("mod_e", &[], &[], "mod(5, e())"),
+            quote! {
+                #[inline]
+                fn import_e__0() -> f64 {
+                    std::f64::consts::E
+                }
+                #[inline]
+                fn import_mod__2(a: f64, b: f64) -> f64 {
+                    a % b
+                }
+                #[no_mangle]
+                pub extern "C" fn mod_e() -> f64 {
+                    import_mod__2(5f64, import_e__0())
                 }
             }
             .to_string()
@@ -627,7 +808,7 @@ mod tests {
             ),
             quote! {
                 #[inline]
-                fn import_max(a: f64, b: f64) -> f64 {
+                fn import_max__2(a: f64, b: f64) -> f64 {
                     f64::max(a, b)
                 }
                 #[no_mangle]
@@ -637,7 +818,7 @@ mod tests {
                     } else if ((((1f64) < (2f64))) && (true)) {
                         2f64
                     } else {
-                        import_max(1f64, 2f64)
+                        import_max__2(1f64, 2f64)
                     }
                 }
             }
