@@ -122,7 +122,8 @@ async fn get_classes<C: Context>(
 struct EbvDataset {
     id: String,
     name: String,
-    author: String,
+    author_name: String,
+    author_institution: String,
     description: String,
     license: String,
     dataset_path: String,
@@ -152,11 +153,8 @@ async fn get_ebv_datasets<C: Context>(
         .map(|data| EbvDataset {
             id: data.id,
             name: data.title,
-            author: format!(
-                "{name} ({institution})",
-                name = data.creator.creator_name,
-                institution = data.creator.creator_institution
-            ),
+            author_name: data.creator.creator_name,
+            author_institution: data.creator.creator_institution,
             description: data.summary,
             license: data.license,
             dataset_path: data.dataset.pathname,
@@ -187,11 +185,8 @@ async fn get_ebv_dataset<C: Context>(
         .map(|data| EbvDataset {
             id: data.id,
             name: data.title,
-            author: format!(
-                "{name} ({institution})",
-                name = data.creator.creator_name,
-                institution = data.creator.creator_institution
-            ),
+            author_name: data.creator.creator_name,
+            author_institution: data.creator.creator_institution,
             description: data.summary,
             license: data.license,
             dataset_path: data.dataset.pathname,
@@ -521,7 +516,8 @@ mod tests {
             json!([{
                 "id": "5",
                 "name": "Global habitat availability for mammals from 2015-2055",
-                "author": "Daniele Baisero (Department of Biology and Biotechnology, Sapienza University of Rome)",
+                "authorName": "Daniele Baisero",
+                "authorInstitution": "Department of Biology and Biotechnology, Sapienza University of Rome",
                 "description": "Global habitat availability for 5,090 mammals in 5 year intervals (subset from 2015 to 2055).",
                 "license": "https://creativecommons.org/licenses/by/4.0",
                 "datasetPath": "/5/public/v1_rodinini_001.nc"
@@ -660,7 +656,8 @@ mod tests {
             json!({
                 "id": "5",
                 "name": "Global habitat availability for mammals from 2015-2055",
-                "author": "Daniele Baisero (Department of Biology and Biotechnology, Sapienza University of Rome)",
+                "authorName": "Daniele Baisero",
+                "authorInstitution": "Department of Biology and Biotechnology, Sapienza University of Rome",
                 "description": "Global habitat availability for 5,090 mammals in 5 year intervals (subset from 2015 to 2055).",
                 "license": "https://creativecommons.org/licenses/by/4.0",
                 "datasetPath": "/5/public/v1_rodinini_001.nc"
