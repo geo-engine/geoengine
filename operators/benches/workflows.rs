@@ -36,15 +36,17 @@ pub struct BenchmarkCollector {
 }
 
 impl BenchmarkCollector {
-    pub fn new() -> Self {
-        BenchmarkCollector {
-            writer: csv::Writer::from_writer(std::io::stdout()),
-        }
-    }
-
     pub fn add_benchmark_result(&mut self, result: WorkflowBenchmarkResult) {
         self.writer.serialize(result).unwrap();
         self.writer.flush().unwrap();
+    }
+}
+
+impl Default for BenchmarkCollector {
+    fn default() -> Self {
+        BenchmarkCollector {
+            writer: csv::Writer::from_writer(std::io::stdout()),
+        }
     }
 }
 
@@ -203,7 +205,7 @@ where
                 })
         });
 
-        let iter = iter.map(
+        iter.map(
             move |(num_threads, tiling_spec, chunk_byte_size, query_name, query_rect)| {
                 WorkflowSingleBenchmark {
                     bench_id: self.bench_id,
@@ -216,9 +218,7 @@ where
                     context_builder: self.context_builder.clone(),
                 }
             },
-        );
-
-        iter
+        )
     }
 }
 
@@ -798,7 +798,7 @@ fn bench_gdal_source_operator_with_4326_to_3857_reprojection(
 }
 
 fn main() {
-    let mut bench_collector = BenchmarkCollector::new();
+    let mut bench_collector = BenchmarkCollector::default();
 
     bench_mock_source_operator(&mut bench_collector);
     bench_mock_source_operator_with_expression(&mut bench_collector);
