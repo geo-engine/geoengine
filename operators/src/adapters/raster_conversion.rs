@@ -29,7 +29,7 @@ async fn process_tile<PIn: Pixel + AsPrimitive<POut>, POut: Pixel>(
     tile: RasterTile2D<PIn>,
     pool: Arc<rayon::ThreadPool>,
 ) -> Result<RasterTile2D<POut>> {
-    tokio::task::spawn_blocking(move || pool.install(|| tile.convert_data_type_parallel()))
+    crate::util::spawn_blocking(move || pool.install(|| tile.convert_data_type_parallel()))
         .await
         .map_err(Into::into)
 }
