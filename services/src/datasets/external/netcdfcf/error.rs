@@ -89,4 +89,7 @@ pub enum NetCdfCf4DProviderError {
     InvalidGeoTransformNumbers {
         source: std::num::ParseFloatError,
     },
+    CannotParseDatasetId {
+        source: serde_json::Error,
+    },
 }

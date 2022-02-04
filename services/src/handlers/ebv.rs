@@ -2,12 +2,17 @@
 //!
 //! Connects to <https://portal.geobon.org/api/v1/>.
 
-use crate::contexts::Context;
+use std::str::FromStr;
+
+use crate::datasets::external::netcdfcf::NetCdfOverview;
 use crate::error::Result;
+use crate::{contexts::Context, datasets::external::netcdfcf::NetCdfCfDataProvider};
 use actix_web::{
     web::{self, ServiceConfig},
     FromRequest, Responder,
 };
+use geoengine_datatypes::dataset::DatasetProviderId;
+use geoengine_datatypes::test_data;
 use log::debug;
 use serde::Serialize;
 
@@ -22,7 +27,10 @@ where
         )))
         .service(web::resource("/classes").route(web::get().to(get_classes::<C>)))
         .service(web::resource("/datasets/{ebv_name}").route(web::get().to(get_ebv_datasets::<C>)))
-        .service(web::resource("/dataset/{id}").route(web::get().to(get_ebv_dataset::<C>)));
+        .service(web::resource("/dataset/{id}").route(web::get().to(get_ebv_dataset::<C>)))
+        .service(
+            web::resource("/subdatasets/{name}*").route(web::get().to(get_ebv_subdatasets::<C>)),
+        );
     })
 }
 
@@ -201,6 +209,44 @@ async fn get_ebv_dataset<C: Context>(
     Ok(web::Json(dataset))
 }
 
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct EbvHierarchy {
+    provider_id: DatasetProviderId,
+    tree: NetCdfOverview,
+}
+
+async fn get_ebv_subdatasets<C: Context>(
+    dataset_name: web::Path<String>,
+    _params: web::Query<()>,
+    _base_url: web::Data<BaseUrl>,
+    _session: C::Session,
+    _ctx: web::Data<C>,
+) -> Result<impl Responder> {
+    dbg!(&dataset_name);
+
+    let listing = {
+        // TODO: make dir configurable
+        let data_path = test_data!("netcdf4d/").join(dataset_name.into_inner());
+
+        debug!("Accessing dataset {}", data_path.display());
+
+        crate::util::spawn_blocking(move || NetCdfCfDataProvider::build_netcdf_tree(&data_path))
+            .await
+            // TODO: error handling
+            .unwrap()
+            .unwrap()
+    };
+
+    // TODO: find a way to get the external dataset provider id
+    let provider_id = DatasetProviderId::from_str("1690c483-b17f-4d98-95c8-00a64849cd0b")?;
+
+    Ok(web::Json(EbvHierarchy {
+        provider_id,
+        tree: listing,
+    }))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -239,6 +285,156 @@ mod tests {
         test::call_service(&app, req.to_request())
             .await
             .map_into_boxed_body()
+    }
+
+    #[tokio::test]
+    #[allow(clippy::too_many_lines)]
+    async fn test_get_subdatasets() {
+        let ctx = InMemoryContext::test_default();
+        let session_id = ctx.default_session_ref().await.id();
+
+        let req = actix_web::test::TestRequest::get()
+            .uri("/ebv/subdatasets/dataset_sm.nc")
+            .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())));
+        let res = send_test_request(req, ctx, "".to_string()).await;
+
+        assert_eq!(res.status(), 200, "{:?}", res.response());
+
+        assert_eq!(
+            read_body_string(res).await,
+            json!({
+                "providerId": "1690c483-b17f-4d98-95c8-00a64849cd0b",
+                "tree": {
+                    "fileName": "dataset_sm.nc",
+                    "title": "Test dataset metric and scenario",
+                    "spatialReference": "EPSG:3035",
+                    "subgroups": [{
+                            "name": "scenario_1",
+                            "title": "Sustainability",
+                            "description": "",
+                            "dataType": null,
+                            "subgroups": [{
+                                    "name": "metric_1",
+                                    "title": "Random metric 1",
+                                    "description": "",
+                                    "dataType": "I16",
+                                    "subgroups": []
+                                },
+                                {
+                                    "name": "metric_2",
+                                    "title": "Random metric 2",
+                                    "description": "",
+                                    "dataType": "I16",
+                                    "subgroups": []
+                                }
+                            ]
+                        },
+                        {
+                            "name": "scenario_2",
+                            "title": "Middle of the Road ",
+                            "description": "",
+                            "dataType": null,
+                            "subgroups": [{
+                                    "name": "metric_1",
+                                    "title": "Random metric 1",
+                                    "description": "",
+                                    "dataType": "I16",
+                                    "subgroups": []
+                                },
+                                {
+                                    "name": "metric_2",
+                                    "title": "Random metric 2",
+                                    "description": "",
+                                    "dataType": "I16",
+                                    "subgroups": []
+                                }
+                            ]
+                        },
+                        {
+                            "name": "scenario_3",
+                            "title": "Regional Rivalry",
+                            "description": "",
+                            "dataType": null,
+                            "subgroups": [{
+                                    "name": "metric_1",
+                                    "title": "Random metric 1",
+                                    "description": "",
+                                    "dataType": "I16",
+                                    "subgroups": []
+                                },
+                                {
+                                    "name": "metric_2",
+                                    "title": "Random metric 2",
+                                    "description": "",
+                                    "dataType": "I16",
+                                    "subgroups": []
+                                }
+                            ]
+                        },
+                        {
+                            "name": "scenario_4",
+                            "title": "Inequality",
+                            "description": "",
+                            "dataType": null,
+                            "subgroups": [{
+                                    "name": "metric_1",
+                                    "title": "Random metric 1",
+                                    "description": "",
+                                    "dataType": "I16",
+                                    "subgroups": []
+                                },
+                                {
+                                    "name": "metric_2",
+                                    "title": "Random metric 2",
+                                    "description": "",
+                                    "dataType": "I16",
+                                    "subgroups": []
+                                }
+                            ]
+                        },
+                        {
+                            "name": "scenario_5",
+                            "title": "Fossil-fueled Development",
+                            "description": "",
+                            "dataType": null,
+                            "subgroups": [{
+                                    "name": "metric_1",
+                                    "title": "Random metric 1",
+                                    "description": "",
+                                    "dataType": "I16",
+                                    "subgroups": []
+                                },
+                                {
+                                    "name": "metric_2",
+                                    "title": "Random metric 2",
+                                    "description": "",
+                                    "dataType": "I16",
+                                    "subgroups": []
+                                }
+                            ]
+                        }
+                    ],
+                    "entities": [{
+                            "id": 0,
+                            "name": "entity01"
+                        },
+                        {
+                            "id": 1,
+                            "name": "entity02"
+                        }
+                    ],
+                    "time": {
+                        "start": 946_684_800_000_i64,
+                        "end": 1_609_459_200_000_i64
+                    },
+                    "timeStep": {
+                        "granularity": "Years",
+                        "step": 10
+                    }
+                }
+            })
+            .to_string()
+        );
     }
 
     #[tokio::test]

@@ -27,7 +27,7 @@ use gdal_sys::{
 };
 use geoengine_datatypes::dataset::{DatasetId, DatasetProviderId, ExternalDatasetId};
 use geoengine_datatypes::primitives::{
-    Measurement, RasterQueryRectangle, TimeGranularity, TimeInstance, TimeStep,
+    Measurement, RasterQueryRectangle, TimeGranularity, TimeInstance, TimeInterval, TimeStep,
     VectorQueryRectangle,
 };
 use geoengine_datatypes::raster::{GdalGeoTransform, RasterDataType};
@@ -502,45 +502,89 @@ struct DimensionSizes {
     pub lon: usize,
 }
 
-#[derive(Debug)]
-struct GroupPath<'g> {
-    pub prefix: Vec<GroupPathSegment>,
-    pub current: MdGroup<'g>,
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct NetCdfOverview {
+    pub file_name: String,
+    pub title: String,
+    pub spatial_reference: SpatialReferenceOption,
+    pub subgroups: Vec<NetCdfSubgroup>,
+    pub entities: Vec<NetCdfArrayDataset>,
+    pub time: TimeInterval,
+    pub time_step: TimeStep,
 }
 
-impl<'g> GroupPath<'g> {
-    fn new(current: MdGroup<'g>) -> Self {
-        Self {
-            prefix: vec![],
-            current,
-        }
-    }
-
-    fn extend(&self, group: MdGroup<'g>) -> Self {
-        let mut new_prefix = self.prefix.clone();
-        new_prefix.push(GroupPathSegment {
-            name: self.current.name.clone(),
-            title: self
-                .current
-                .attribute_as_string("standard_name")
-                .unwrap_or_default(),
-        });
-
-        Self {
-            prefix: new_prefix,
-            current: group,
-        }
-    }
-}
-
-#[derive(Debug, Clone)]
-struct GroupPathSegment {
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct NetCdfSubgroup {
     pub name: String,
     pub title: String,
+    pub description: String,
+    // TODO: would actually be nice if it were inside dataset/entity
+    pub data_type: Option<RasterDataType>,
+    pub subgroups: Vec<NetCdfSubgroup>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct NetCdfArrayDataset {
+    pub id: usize,
+    pub name: String,
+}
+
+trait ToNetCdfSubgroup {
+    fn to_net_cdf_subgroup(&self) -> Result<NetCdfSubgroup>;
+}
+
+impl<'a> ToNetCdfSubgroup for MdGroup<'a> {
+    fn to_net_cdf_subgroup(&self) -> Result<NetCdfSubgroup> {
+        let name = self.name.clone();
+        let title = self
+            .attribute_as_string("standard_name")
+            .unwrap_or_default();
+        // TODO: how to get that?
+        let description = "".to_string();
+
+        let subgroup_names = self.group_names();
+
+        if subgroup_names.is_empty() {
+            let data_type = Some(self.datatype_of_numeric_array("ebv_cube")?);
+
+            return Ok(NetCdfSubgroup {
+                name,
+                title,
+                description,
+                data_type,
+                subgroups: Vec::new(),
+            });
+        }
+
+        let mut subgroups = Vec::with_capacity(subgroup_names.len());
+
+        for subgroup in subgroup_names {
+            subgroups.push(self.open_group(&subgroup)?.to_net_cdf_subgroup()?);
+        }
+
+        Ok(NetCdfSubgroup {
+            name,
+            title,
+            description,
+            data_type: None,
+            subgroups,
+        })
+    }
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct NetCdfCf4DDatasetId {
+    pub file_name: String,
+    pub group_names: Vec<String>,
+    pub entity: usize,
 }
 
 impl NetCdfCfDataProvider {
-    fn listing_from_netcdf(id: DatasetProviderId, path: &Path) -> Result<Vec<DatasetListing>> {
+    pub(crate) fn build_netcdf_tree(path: &Path) -> Result<NetCdfOverview> {
         let ds = gdal_open_dataset_ex(
             path,
             DatasetOptions {
@@ -573,63 +617,101 @@ impl NetCdfCfDataProvider {
 
         let entities = root_group
             .dimension_as_string_array("entities")
-            .context(error::MissingEntities)?;
-
-        let mut group_deque: VecDeque<GroupPath> = root_group
-            .group_names()
+            .context(error::MissingEntities)?
             .into_iter()
-            .map(|name| Ok(GroupPath::new(root_group.open_group(&name)?)))
-            .collect::<Result<VecDeque<_>>>()?;
+            .enumerate()
+            .map(|(id, name)| NetCdfArrayDataset { id, name })
+            .collect::<Vec<_>>();
 
-        let mut datasets = Vec::new();
+        let subgroups = root_group
+            .group_names()
+            .iter()
+            .map(|name| root_group.open_group(name)?.to_net_cdf_subgroup())
+            .collect::<Result<Vec<_>>>()?;
 
-        while let Some(group_path) = group_deque.pop_front() {
-            let subgroups = group_path
-                .current
-                .group_names()
-                .into_iter()
-                .map(|name| Ok(group_path.extend(group_path.current.open_group(&name)?)))
-                .collect::<Result<Vec<_>>>()?;
+        let start = root_group
+            .attribute_as_string("time_coverage_start")
+            .context(error::MissingTimeCoverageStart)?;
+        let end = root_group
+            .attribute_as_string("time_coverage_end")
+            .context(error::MissingTimeCoverageEnd)?;
+        let step = root_group
+            .attribute_as_string("time_coverage_resolution")
+            .context(error::MissingTimeCoverageResolution)?;
 
-            if !subgroups.is_empty() {
-                group_deque.extend(subgroups);
+        let (time_start, time_end, time_step) = parse_time_coverage(&start, &end, &step)?;
+
+        Ok(NetCdfOverview {
+            file_name: file_name.to_string(),
+            title,
+            spatial_reference,
+            subgroups,
+            entities,
+            time: TimeInterval::new(time_start, time_end)
+                .unwrap_or_else(|_| TimeInterval::from(time_start)),
+            time_step,
+        })
+    }
+
+    pub(crate) fn listing_from_netcdf(
+        id: DatasetProviderId,
+        path: &Path,
+    ) -> Result<Vec<DatasetListing>> {
+        let tree = Self::build_netcdf_tree(path)?;
+
+        let mut paths: VecDeque<Vec<&NetCdfSubgroup>> =
+            tree.subgroups.iter().map(|s| vec![s]).collect();
+
+        let mut listings = Vec::new();
+
+        while let Some(path) = paths.pop_front() {
+            let tail = path.last().expect("our lists aren't empty");
+
+            if !tail.subgroups.is_empty() {
+                for subgroup in &tail.subgroups {
+                    let mut updated_path = path.clone();
+                    updated_path.push(subgroup);
+                    paths.push_back(updated_path);
+                }
 
                 continue;
             }
 
-            // Emit datasets
+            // emit datasets
 
-            let (mut group_names, mut group_titles): (Vec<String>, Vec<String>) = group_path
-                .prefix
-                .into_iter()
-                .map(|s| (s.name, s.title))
-                .unzip();
-            group_names.push(group_path.current.name.clone());
-            group_titles.push(
-                group_path
-                    .current
-                    .attribute_as_string("standard_name")
-                    .unwrap_or_default(),
-            );
+            let group_title_path = path
+                .iter()
+                .map(|s| s.title.as_str())
+                .collect::<Vec<&str>>()
+                .join(" > ");
 
-            let group_name_path = group_names.join("/");
-            let group_title_path = group_titles.join(" > ");
+            let group_names = path.iter().map(|s| s.name.clone()).collect::<Vec<String>>();
 
-            let data_type = group_path.current.datatype_of_numeric_array("ebv_cube")?;
+            let data_type = tail.data_type.unwrap_or(RasterDataType::F32);
 
-            for (entity_idx, entity_name) in entities.iter().enumerate() {
-                datasets.push(DatasetListing {
+            for entity in &tree.entities {
+                let dataset_id = NetCdfCf4DDatasetId {
+                    file_name: tree.file_name.clone(),
+                    group_names: group_names.clone(),
+                    entity: entity.id,
+                };
+
+                listings.push(DatasetListing {
                     id: DatasetId::External(ExternalDatasetId {
                         provider_id: id,
-                        dataset_id: format!("{file_name}::{group_name_path}::{entity_idx}"),
+                        dataset_id: serde_json::to_string(&dataset_id).unwrap_or_default(),
                     }),
-                    name: format!("{title}: {group_title_path} > {entity_name}"),
+                    name: format!(
+                        "{title}: {group_title_path} > {entity_name}",
+                        title = tree.title,
+                        entity_name = entity.name
+                    ),
                     description: "".to_owned(), // TODO: where to get from file?
                     tags: vec![],               // TODO: where to get from file?
                     source_operator: "GdalSource".to_owned(),
                     result_descriptor: TypedResultDescriptor::Raster(RasterResultDescriptor {
                         data_type,
-                        spatial_reference,
+                        spatial_reference: tree.spatial_reference,
                         measurement: Measurement::Unitless, // TODO: where to get from file?
                         no_data_value: None, // we don't want to open the dataset at this point. We should get rid of the result descriptor in the listing in general
                     }),
@@ -638,7 +720,7 @@ impl NetCdfCfDataProvider {
             }
         }
 
-        Ok(datasets)
+        Ok(listings)
     }
 
     async fn meta_data(
@@ -650,25 +732,15 @@ impl NetCdfCfDataProvider {
             .external()
             .ok_or(NetCdfCf4DProviderError::InvalidExternalDatasetId { provider: self.id })?;
 
-        let split: Vec<_> = dataset.dataset_id.split("::").collect();
+        let dataset_id: NetCdfCf4DDatasetId =
+            serde_json::from_str(&dataset.dataset_id).context(error::CannotParseDatasetId)?;
 
-        let [path, group_path, entity_idx] = if let [path, group, entity_idx] = split.as_slice() {
-            [path, group, entity_idx]
-        } else {
-            return Err(NetCdfCf4DProviderError::InvalidDatasetIdLength {
-                length: split.len(),
-            });
-        };
-        let entity_idx = entity_idx
-            .parse::<u32>()
-            .context(error::DatasetIdEntityNotANumber)?;
-
-        let path = self.path.join(path);
+        let path = self.path.join(dataset_id.file_name);
 
         let gdal_path = format!(
             "NETCDF:{path}:/{group}/ebv_cube",
             path = path.to_string_lossy(),
-            group = group_path
+            group = dataset_id.group_names.join("/")
         );
 
         let dataset = gdal_open_dataset_ex(
@@ -708,7 +780,7 @@ impl NetCdfCfDataProvider {
         let mut group_stack = vec![root_group];
 
         // let mut group = root_group;
-        for group_name in group_path.split('/') {
+        for group_name in &dataset_id.group_names {
             group_stack.push(
                 group_stack
                     .last()
@@ -751,7 +823,7 @@ impl NetCdfCfDataProvider {
             start,
             end, // TODO: Use this or time dimension size (number of steps)?
             step,
-            band_offset: entity_idx as usize * dimensions.time,
+            band_offset: dataset_id.entity as usize * dimensions.time,
         }))
     }
 }
@@ -956,7 +1028,9 @@ mod tests {
             DatasetListing {
                 id: DatasetId::External(ExternalDatasetId {
                     provider_id,
-                    dataset_id: "dataset_m.nc::metric_1::0".into(),
+                    dataset_id:
+                        "{\"fileName\":\"dataset_m.nc\",\"groupNames\":[\"metric_1\"],\"entity\":0}"
+                            .into(),
                 }),
                 name: "Test dataset metric: Random metric 1 > entity01".into(),
                 description: "".into(),
@@ -971,7 +1045,9 @@ mod tests {
             DatasetListing {
                 id: DatasetId::External(ExternalDatasetId {
                     provider_id,
-                    dataset_id: "dataset_m.nc::metric_1::1".into(),
+                    dataset_id:
+                        "{\"fileName\":\"dataset_m.nc\",\"groupNames\":[\"metric_1\"],\"entity\":1}"
+                            .into(),
                 }),
                 name: "Test dataset metric: Random metric 1 > entity02".into(),
                 description: "".into(),
@@ -986,7 +1062,9 @@ mod tests {
             DatasetListing {
                 id: DatasetId::External(ExternalDatasetId {
                     provider_id,
-                    dataset_id: "dataset_m.nc::metric_1::2".into(),
+                    dataset_id:
+                        "{\"fileName\":\"dataset_m.nc\",\"groupNames\":[\"metric_1\"],\"entity\":2}"
+                            .into(),
                 }),
                 name: "Test dataset metric: Random metric 1 > entity03".into(),
                 description: "".into(),
@@ -1001,7 +1079,9 @@ mod tests {
             DatasetListing {
                 id: DatasetId::External(ExternalDatasetId {
                     provider_id,
-                    dataset_id: "dataset_m.nc::metric_2::0".into(),
+                    dataset_id:
+                        "{\"fileName\":\"dataset_m.nc\",\"groupNames\":[\"metric_2\"],\"entity\":0}"
+                            .into(),
                 }),
                 name: "Test dataset metric: Random metric 2 > entity01".into(),
                 description: "".into(),
@@ -1016,7 +1096,9 @@ mod tests {
             DatasetListing {
                 id: DatasetId::External(ExternalDatasetId {
                     provider_id,
-                    dataset_id: "dataset_m.nc::metric_2::1".into(),
+                    dataset_id:
+                        "{\"fileName\":\"dataset_m.nc\",\"groupNames\":[\"metric_2\"],\"entity\":1}"
+                            .into(),
                 }),
                 name: "Test dataset metric: Random metric 2 > entity02".into(),
                 description: "".into(),
@@ -1031,7 +1113,9 @@ mod tests {
             DatasetListing {
                 id: DatasetId::External(ExternalDatasetId {
                     provider_id,
-                    dataset_id: "dataset_m.nc::metric_2::2".into(),
+                    dataset_id:
+                        "{\"fileName\":\"dataset_m.nc\",\"groupNames\":[\"metric_2\"],\"entity\":2}"
+                            .into(),
                 }),
                 name: "Test dataset metric: Random metric 2 > entity03".into(),
                 description: "".into(),
@@ -1069,7 +1153,7 @@ mod tests {
             DatasetListing {
                 id: DatasetId::External(ExternalDatasetId {
                     provider_id,
-                    dataset_id: "dataset_sm.nc::scenario_1/metric_1::0".into(),
+                    dataset_id: "{\"fileName\":\"dataset_sm.nc\",\"groupNames\":[\"scenario_1\",\"metric_1\"],\"entity\":0}".into(),
                 }),
                 name:
                     "Test dataset metric and scenario: Sustainability > Random metric 1 > entity01"
@@ -1086,7 +1170,7 @@ mod tests {
             DatasetListing {
                 id: DatasetId::External(ExternalDatasetId {
                     provider_id,
-                    dataset_id: "dataset_sm.nc::scenario_5/metric_2::1".into(),
+                    dataset_id: "{\"fileName\":\"dataset_sm.nc\",\"groupNames\":[\"scenario_5\",\"metric_2\"],\"entity\":1}".into(),
                 }),
                 name: "Test dataset metric and scenario: Fossil-fueled Development > Random metric 2 > entity02".into(),
                 description: "".into(),
@@ -1110,7 +1194,7 @@ mod tests {
         let metadata = provider
             .meta_data(&DatasetId::External(ExternalDatasetId {
                 provider_id: provider.id,
-                dataset_id: "dataset_sm.nc::scenario_5/metric_2::1".into(),
+                dataset_id: "{\"fileName\":\"dataset_sm.nc\",\"groupNames\":[\"scenario_5\",\"metric_2\"],\"entity\":1}".into(),
             }))
             .await
             .unwrap();
