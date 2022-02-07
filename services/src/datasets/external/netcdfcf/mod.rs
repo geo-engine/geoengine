@@ -924,7 +924,8 @@ mod tests {
         test_data,
     };
     use geoengine_operators::source::{
-        FileNotFoundHandling, GdalDatasetGeoTransform, GdalDatasetParameters, GdalLoadingInfoPart,
+        FileNotFoundHandling, GdalDatasetGeoTransform, GdalDatasetParameters,
+        GdalLoadingInfoTemporalSlice,
     };
 
     use super::*;
@@ -1143,7 +1144,7 @@ mod tests {
             .await
             .unwrap();
 
-        let mut loading_info_parts = Vec::<GdalLoadingInfoPart>::new();
+        let mut loading_info_parts = Vec::<GdalLoadingInfoTemporalSlice>::new();
         for part in loading_info.info {
             loading_info_parts.push(part.unwrap());
         }
@@ -1161,7 +1162,7 @@ mod tests {
 
         assert_eq!(
             loading_info_parts[0],
-            GdalLoadingInfoPart {
+            GdalLoadingInfoTemporalSlice {
                 time: TimeInterval::new_unchecked(946_684_800_000, 1_262_304_000_000),
                 params: Some(GdalDatasetParameters {
                     file_path,
