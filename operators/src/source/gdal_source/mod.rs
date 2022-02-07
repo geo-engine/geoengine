@@ -482,7 +482,7 @@ impl GdalRasterLoader {
                 .map(Result::Ok)
             })
             .try_flatten()
-            .try_buffered(2)
+            .try_buffered(16) // TODO: make this configurable
     }
 }
 
