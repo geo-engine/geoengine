@@ -450,13 +450,16 @@ impl GdalRasterLoader {
         no_data_value: Option<T>,
         tiling_strategy: TilingStrategy,
     ) -> impl Stream<Item = impl Future<Output = Result<RasterTile2D<T>>>> {
-        let source_stream = stream::iter(
-            tiling_strategy.tile_information_iterator(query.spatial_bounds),
+        stream::iter(tiling_strategy.tile_information_iterator(query.spatial_bounds)).map(
+            move |tile| {
+                GdalRasterLoader::load_tile_async(
+                    info.params.clone(),
+                    tile,
+                    info.time,
+                    no_data_value,
+                )
+            },
         )
-        .map(move |tile| {
-            GdalRasterLoader::load_tile_async(info.params.clone(), tile, info.time, no_data_value)
-        });
-        source_stream
     }
 
     fn loading_info_to_tile_stream<
@@ -684,14 +687,17 @@ where
     T: Pixel + GdalType,
 {
     let dataset_raster = read_grid_from_raster(
-        &rasterband,
-        &dataset_grid_box,
+        rasterband,
+        dataset_grid_box,
         tile_grid_bounds,
         no_data_value,
     )?;
 
-    let mut tile_raster =
-        Grid2D::new_filled(tile_grid, no_data_value.unwrap_or(T::zero()), no_data_value);
+    let mut tile_raster = Grid2D::new_filled(
+        tile_grid,
+        no_data_value.unwrap_or_else(T::zero),
+        no_data_value,
+    );
     tile_raster.grid_blit_from(dataset_raster);
     Ok(tile_raster)
 }
@@ -724,7 +730,7 @@ where
 
     let result_grid = if dataset_intersection_area == output_bounds {
         read_grid_from_raster(
-            &rasterband,
+            rasterband,
             &dataset_grid_bounds,
             output_shape,
             no_data_value,
@@ -733,7 +739,7 @@ where
         let tile_grid_bounds =
             output_geo_transform.spatial_to_grid_bounds(&dataset_intersection_area);
         read_partial_grid_from_raster(
-            &rasterband,
+            rasterband,
             &dataset_grid_bounds,
             tile_grid_bounds,
             output_shape,
