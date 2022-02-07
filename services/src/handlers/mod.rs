@@ -10,6 +10,8 @@ use std::fmt;
 use std::str::FromStr;
 
 pub mod datasets;
+#[cfg(feature = "nfdi")]
+pub mod gfbio;
 pub mod plots;
 pub mod projects;
 pub mod session;

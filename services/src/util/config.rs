@@ -7,6 +7,7 @@ use crate::util::parsing::{deserialize_base_url, deserialize_base_url_option};
 
 use chrono::{DateTime, FixedOffset};
 use config::{Config, Environment, File};
+use geoengine_datatypes::dataset::DatasetProviderId;
 use geoengine_datatypes::primitives::{TimeInstance, TimeInterval};
 use geoengine_operators::util::raster_stream_to_geotiff::GdalCompressionNumThreads;
 use lazy_static::lazy_static;
@@ -320,4 +321,16 @@ pub struct Gdal {
 
 impl ConfigElement for Gdal {
     const KEY: &'static str = "gdal";
+}
+
+#[derive(Debug, Deserialize)]
+pub struct GFBio {
+    #[serde(deserialize_with = "deserialize_base_url")]
+    pub basket_api_base_url: url::Url,
+    pub pangaea_provider_id: DatasetProviderId,
+    pub gfbio_provider_id: DatasetProviderId,
+}
+
+impl ConfigElement for GFBio {
+    const KEY: &'static str = "gfbio";
 }
