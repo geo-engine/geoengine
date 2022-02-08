@@ -14,12 +14,10 @@ use crate::workflows::workflow::{Workflow, WorkflowId};
 use actix_web::{web, FromRequest, Responder};
 use futures::future::join_all;
 use geoengine_datatypes::dataset::{DatasetId, InternalDatasetId};
-use geoengine_datatypes::primitives::AxisAlignedRectangle;
+use geoengine_datatypes::primitives::{AxisAlignedRectangle, RasterQueryRectangle};
 use geoengine_datatypes::spatial_reference::SpatialReference;
 use geoengine_datatypes::util::Identifier;
-use geoengine_operators::engine::{
-    OperatorDatasets, RasterQueryRectangle, TypedOperator, TypedResultDescriptor,
-};
+use geoengine_operators::engine::{OperatorDatasets, TypedOperator, TypedResultDescriptor};
 use geoengine_operators::source::{
     FileNotFoundHandling, GdalDatasetGeoTransform, GdalDatasetParameters, GdalMetaDataStatic,
 };
@@ -468,6 +466,7 @@ mod tests {
     };
     use geoengine_datatypes::raster::{GridShape, RasterDataType, TilingSpecification};
     use geoengine_datatypes::spatial_reference::SpatialReference;
+    use geoengine_datatypes::util::test::TestDefault;
     use geoengine_operators::engine::{MultipleRasterSources, PlotOperator, TypedOperator};
     use geoengine_operators::engine::{RasterOperator, RasterResultDescriptor, VectorOperator};
     use geoengine_operators::mock::{
@@ -480,7 +479,7 @@ mod tests {
     use serde_json::json;
 
     async fn register_test_helper(method: Method) -> ServiceResponse {
-        let ctx = InMemoryContext::default();
+        let ctx = InMemoryContext::test_default();
 
         let session_id = ctx.default_session_ref().await.id();
 
@@ -505,8 +504,6 @@ mod tests {
     }
 
     #[tokio::test]
-    // TODO: remove when https://github.com/tokio-rs/tokio/issues/4245 is fixed
-    #[allow(clippy::semicolon_if_nothing_returned)]
     async fn register() {
         let res = register_test_helper(Method::POST).await;
 
@@ -522,7 +519,7 @@ mod tests {
 
     #[tokio::test]
     async fn register_missing_header() {
-        let ctx = InMemoryContext::default();
+        let ctx = InMemoryContext::test_default();
 
         let workflow = Workflow {
             operator: MockPointSource {
@@ -552,7 +549,7 @@ mod tests {
 
     #[tokio::test]
     async fn register_invalid_body() {
-        let ctx = InMemoryContext::default();
+        let ctx = InMemoryContext::test_default();
 
         let session_id = ctx.default_session_ref().await.id();
 
@@ -576,7 +573,7 @@ mod tests {
 
     #[tokio::test]
     async fn register_missing_fields() {
-        let ctx = InMemoryContext::default();
+        let ctx = InMemoryContext::test_default();
 
         let session_id = ctx.default_session_ref().await.id();
 
@@ -600,7 +597,7 @@ mod tests {
     }
 
     async fn load_test_helper(method: Method) -> (Workflow, ServiceResponse) {
-        let ctx = InMemoryContext::default();
+        let ctx = InMemoryContext::test_default();
 
         let session_id = ctx.default_session_ref().await.id();
 
@@ -608,7 +605,7 @@ mod tests {
 
         let req = test::TestRequest::default()
             .method(method)
-            .uri(&format!("/workflow/{}", id.to_string()))
+            .uri(&format!("/workflow/{}", id))
             .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())));
         let res = send_test_request(req, ctx).await;
 
@@ -633,11 +630,11 @@ mod tests {
 
     #[tokio::test]
     async fn load_missing_header() {
-        let ctx = InMemoryContext::default();
+        let ctx = InMemoryContext::test_default();
 
         let (_, id) = register_ndvi_workflow_helper(&ctx).await;
 
-        let req = test::TestRequest::get().uri(&format!("/workflow/{}", id.to_string()));
+        let req = test::TestRequest::get().uri(&format!("/workflow/{}", id));
         let res = send_test_request(req, ctx).await;
 
         ErrorResponse::assert(
@@ -651,7 +648,7 @@ mod tests {
 
     #[tokio::test]
     async fn load_not_exist() {
-        let ctx = InMemoryContext::default();
+        let ctx = InMemoryContext::test_default();
 
         let session_id = ctx.default_session_ref().await.id();
 
@@ -664,7 +661,7 @@ mod tests {
     }
 
     async fn vector_metadata_test_helper(method: Method) -> ServiceResponse {
-        let ctx = InMemoryContext::default();
+        let ctx = InMemoryContext::test_default();
 
         let session_id = ctx.default_session_ref().await.id();
 
@@ -697,7 +694,7 @@ mod tests {
 
         let req = test::TestRequest::default()
             .method(method)
-            .uri(&format!("/workflow/{}/metadata", id.to_string()))
+            .uri(&format!("/workflow/{}/metadata", id))
             .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())));
         send_test_request(req, ctx).await
     }
@@ -726,7 +723,7 @@ mod tests {
 
     #[tokio::test]
     async fn raster_metadata() {
-        let ctx = InMemoryContext::default();
+        let ctx = InMemoryContext::test_default();
 
         let session_id = ctx.default_session_ref().await.id();
 
@@ -758,7 +755,7 @@ mod tests {
             .unwrap();
 
         let req = test::TestRequest::get()
-            .uri(&format!("/workflow/{}/metadata", id.to_string()))
+            .uri(&format!("/workflow/{}/metadata", id))
             .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())));
         let res = send_test_request(req, ctx).await;
 
@@ -789,7 +786,7 @@ mod tests {
 
     #[tokio::test]
     async fn metadata_missing_header() {
-        let ctx = InMemoryContext::default();
+        let ctx = InMemoryContext::test_default();
 
         let workflow = Workflow {
             operator: MockFeatureCollectionSource::single(
@@ -818,7 +815,7 @@ mod tests {
             .await
             .unwrap();
 
-        let req = test::TestRequest::get().uri(&format!("/workflow/{}/metadata", id.to_string()));
+        let req = test::TestRequest::get().uri(&format!("/workflow/{}/metadata", id));
         let res = send_test_request(req, ctx).await;
 
         ErrorResponse::assert(
@@ -832,7 +829,7 @@ mod tests {
 
     #[tokio::test]
     async fn plot_metadata() {
-        let ctx = InMemoryContext::default();
+        let ctx = InMemoryContext::test_default();
 
         let session_id = ctx.default_session_ref().await.id();
 
@@ -854,7 +851,7 @@ mod tests {
             .unwrap();
 
         let req = test::TestRequest::get()
-            .uri(&format!("/workflow/{}/metadata", id.to_string()))
+            .uri(&format!("/workflow/{}/metadata", id))
             .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())));
         let res = send_test_request(req, ctx).await;
 
@@ -873,7 +870,7 @@ mod tests {
 
     #[tokio::test]
     async fn provenance() {
-        let ctx = InMemoryContext::default();
+        let ctx = InMemoryContext::test_default();
 
         let session_id = ctx.default_session_ref().await.id();
 
@@ -899,7 +896,7 @@ mod tests {
             .unwrap();
 
         let req = test::TestRequest::get()
-            .uri(&format!("/workflow/{}/provenance", id.to_string()))
+            .uri(&format!("/workflow/{}/provenance", id))
             .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())));
         let res = send_test_request(req, ctx).await;
 
@@ -924,6 +921,7 @@ mod tests {
     }
 
     #[tokio::test]
+    #[allow(clippy::too_many_lines)]
     async fn dataset_from_workflow() {
         let exe_ctx_tiling_spec = TilingSpecification {
             origin_coordinate: (0., 0.).into(),
@@ -931,7 +929,10 @@ mod tests {
         };
 
         // override the pixel size since this test was designed for 600 x 600 pixel tiles
-        let ctx = InMemoryContext::new_with_context_spec(exe_ctx_tiling_spec, Default::default());
+        let ctx = InMemoryContext::new_with_context_spec(
+            exe_ctx_tiling_spec,
+            TestDefault::test_default(),
+        );
 
         let session_id = ctx.default_session_ref().await.id();
 
@@ -957,7 +958,7 @@ mod tests {
 
         // create dataset from workflow
         let req = test::TestRequest::post()
-            .uri(&format!("/datasetFromWorkflow/{}", workflow_id.to_string(),))
+            .uri(&format!("/datasetFromWorkflow/{}", workflow_id))
             .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())))
             .append_header((header::CONTENT_TYPE, mime::APPLICATION_JSON))
             .set_payload(
@@ -1046,7 +1047,7 @@ mod tests {
 
     #[tokio::test]
     async fn it_does_not_register_invalid_workflow() {
-        let ctx = InMemoryContext::default();
+        let ctx = InMemoryContext::test_default();
         let session_id = ctx.default_session_ref().await.id();
 
         let workflow = json!({

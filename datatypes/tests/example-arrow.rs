@@ -4,12 +4,11 @@ use arrow::array::{
     Int32Builder, ListArray, ListBuilder, StringArray, StringBuilder, StructBuilder, UInt64Array,
     UInt64Builder,
 };
-use arrow::buffer::{Buffer, MutableBuffer};
+use arrow::buffer::Buffer;
 use arrow::compute::gt_eq_scalar;
 use arrow::compute::kernels::filter::filter;
 use arrow::datatypes::{DataType, Field};
 use geoengine_datatypes::primitives::{Coordinate2D, TimeInterval};
-use ocl::ProQue;
 use std::{mem, slice};
 
 #[test]
@@ -294,69 +293,6 @@ fn binary() {
             TimeInterval::new(2, 3).unwrap(),
         ]
     );
-}
-
-#[test]
-#[allow(clippy::cast_ptr_alignment)]
-fn ocl() {
-    let array = {
-        let mut builder = Int32Builder::new(5);
-        builder
-            .append_slice(&(1..=5).collect::<Vec<i32>>())
-            .unwrap();
-
-        builder.finish()
-    };
-
-    assert_eq!(array.len(), 5);
-
-    let src = r#"
-        __kernel void add(__global int* buffer, int scalar) {
-            buffer[get_global_id(0)] += scalar;
-        }
-    "#;
-
-    let pro_que = ProQue::builder()
-        .src(src)
-        .dims(array.len())
-        .build()
-        .unwrap();
-
-    let ocl_buffer = pro_que
-        .buffer_builder()
-        .copy_host_slice(array.values())
-        .build()
-        .unwrap();
-
-    let kernel = pro_que
-        .kernel_builder("add")
-        .arg(&ocl_buffer)
-        .arg(10_i32)
-        .build()
-        .unwrap();
-
-    unsafe {
-        kernel.enq().unwrap();
-    }
-
-    assert_eq!(ocl_buffer.len(), 5);
-
-    let result = {
-        let buffer = MutableBuffer::from_len_zeroed(ocl_buffer.len() * mem::size_of::<i32>());
-        let buffer_raw: &mut [i32] =
-            unsafe { slice::from_raw_parts_mut(buffer.as_ptr() as *mut i32, ocl_buffer.len()) };
-        ocl_buffer.read(buffer_raw).enq().unwrap();
-
-        let data = ArrayData::builder(DataType::Int32)
-            .len(ocl_buffer.len())
-            .add_buffer(buffer.into())
-            .build()
-            .unwrap();
-
-        Int32Array::from(data)
-    };
-
-    assert_eq!(result.values(), &[11, 12, 13, 14, 15]);
 }
 
 #[test]
@@ -676,7 +612,7 @@ fn multipoint_builder_bytes() {
 
     let floats: &[Coordinate2D] = unsafe {
         std::slice::from_raw_parts(
-            first_multi_point.value(0)[0] as *const u8 as *const _,
+            first_multi_point.value(0).as_ptr() as *const _,
             first_multi_point.len(),
         )
     };
@@ -688,7 +624,7 @@ fn multipoint_builder_bytes() {
 
     let floats: &[Coordinate2D] = unsafe {
         std::slice::from_raw_parts(
-            second_multi_point.value(0)[0] as *const u8 as *const _,
+            second_multi_point.value(0).as_ptr() as *const _,
             second_multi_point.len(),
         )
     };

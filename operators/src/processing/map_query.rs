@@ -1,10 +1,8 @@
-use crate::engine::{
-    QueryContext, RasterQueryProcessor, RasterQueryRectangle, VectorQueryProcessor,
-    VectorQueryRectangle,
-};
+use crate::engine::{QueryContext, RasterQueryProcessor, VectorQueryProcessor};
 use crate::util::Result;
 use async_trait::async_trait;
 use futures::stream::BoxStream;
+use geoengine_datatypes::primitives::{RasterQueryRectangle, VectorQueryRectangle};
 use geoengine_datatypes::raster::RasterTile2D;
 
 /// This `QueryProcessor` allows to rewrite a query. It does not change the data. Results of the children are forwarded.

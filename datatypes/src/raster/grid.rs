@@ -1,6 +1,6 @@
 use std::ops::Add;
 
-use num_traits::{AsPrimitive, Zero};
+use num_traits::Zero;
 use serde::{Deserialize, Serialize};
 use snafu::ensure;
 
@@ -308,20 +308,6 @@ where
     pub fn new_filled(shape: D, fill_value: T, no_data_value: Option<T>) -> Self {
         let data = vec![fill_value; shape.number_of_elements()];
         Self::new(shape, data, no_data_value).expect("sizes must match")
-    }
-
-    /// Converts the data type of the raster by converting it pixel-wise
-    pub fn convert_dtype<To>(self) -> Grid<D, To>
-    where
-        T: AsPrimitive<To> + Copy + 'static,
-        To: Copy + 'static,
-    {
-        Grid::new(
-            self.shape,
-            self.data.iter().map(|&pixel| pixel.as_()).collect(),
-            self.no_data_value.map(AsPrimitive::as_),
-        )
-        .expect("grid array type conversion cannot fail")
     }
 
     pub fn inner_ref(&self) -> &Vec<T> {

@@ -66,6 +66,12 @@ pub enum TypedFeatureCollection {
     MultiPolygon(MultiPolygonCollection),
 }
 
+impl AsRef<TypedFeatureCollection> for TypedFeatureCollection {
+    fn as_ref(&self) -> &TypedFeatureCollection {
+        self
+    }
+}
+
 /// A feature collection reference, wrapped by type info
 #[derive(Clone, Debug, PartialEq)]
 #[allow(dead_code)]
@@ -504,19 +510,19 @@ mod tests {
         let c2 = MultiPointCollection::empty();
 
         TypedFeatureCollectionRef::from(&c1)
-            .append(&(&c2).into())
+            .append(&c2.as_ref().into())
             .unwrap();
 
         let c3 = MultiPolygonCollection::empty();
 
         TypedFeatureCollectionRef::from(&c1)
-            .append(&(&c3).into())
+            .append(&c3.as_ref().into())
             .unwrap_err();
 
         let c4: TypedFeatureCollection = MultiPointCollection::empty().into();
 
         TypedFeatureCollectionRef::from(&c1)
-            .append(&(&c4).into())
+            .append(&c4.as_ref().into())
             .unwrap();
     }
 }

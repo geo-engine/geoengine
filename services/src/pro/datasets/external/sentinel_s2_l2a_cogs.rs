@@ -15,13 +15,13 @@ use geoengine_datatypes::operations::reproject::{
     CoordinateProjection, CoordinateProjector, ReprojectClipped,
 };
 use geoengine_datatypes::primitives::{
-    AxisAlignedRectangle, BoundingBox2D, Measurement, SpatialPartitioned, TimeInterval,
+    AxisAlignedRectangle, BoundingBox2D, Measurement, RasterQueryRectangle, SpatialPartitioned,
+    TimeInterval, VectorQueryRectangle,
 };
 use geoengine_datatypes::raster::RasterDataType;
 use geoengine_datatypes::spatial_reference::{SpatialReference, SpatialReferenceAuthority};
 use geoengine_operators::engine::{
-    MetaData, MetaDataProvider, RasterQueryRectangle, RasterResultDescriptor, VectorQueryRectangle,
-    VectorResultDescriptor,
+    MetaData, MetaDataProvider, RasterResultDescriptor, VectorResultDescriptor,
 };
 use geoengine_operators::mock::MockDatasetDataSourceLoadingInfo;
 use geoengine_operators::source::{
@@ -302,7 +302,7 @@ impl SentinelS2L2aCogsMetaData {
 
         Ok(GdalLoadingInfoPart {
             time: time_interval,
-            params: GdalDatasetParameters {
+            params: Some(GdalDatasetParameters {
                 file_path: PathBuf::from(format!("/vsicurl/{}", asset.href)),
                 rasterband_channel: 1,
                 geo_transform: GdalDatasetGeoTransform::from(
@@ -317,7 +317,7 @@ impl SentinelS2L2aCogsMetaData {
                 properties_mapping: None,
                 gdal_open_options: None,
                 gdal_config_options: None,
-            },
+            }),
         })
     }
 
@@ -546,7 +546,10 @@ mod tests {
 
     use crate::test_data;
     use futures::StreamExt;
-    use geoengine_datatypes::primitives::{SpatialPartition2D, SpatialResolution};
+    use geoengine_datatypes::{
+        primitives::{SpatialPartition2D, SpatialResolution},
+        util::test::TestDefault,
+    };
     use geoengine_operators::{
         engine::{ChunkByteSize, MockExecutionContext, MockQueryContext, RasterOperator},
         source::{FileNotFoundHandling, GdalSource, GdalSourceParameters},
@@ -603,7 +606,7 @@ mod tests {
 
         let expected = vec![GdalLoadingInfoPart {
             time: TimeInterval::new_unchecked(1_609_581_746_000, 1_609_581_747_000),
-            params: GdalDatasetParameters {
+            params: Some(GdalDatasetParameters {
                 file_path: "/vsicurl/https://sentinel-cogs.s3.us-west-2.amazonaws.com/sentinel-s2-l2a-cogs/32/R/PU/2021/1/S2B_32RPU_20210102_0_L2A/B01.tif".into(),
                 rasterband_channel: 1,
                 geo_transform: GdalDatasetGeoTransform {
@@ -618,7 +621,7 @@ mod tests {
                 properties_mapping: None,
                 gdal_open_options: None,
                 gdal_config_options: None,
-            },
+            }),
         }];
 
         if let GdalLoadingInfoPartIterator::Static { parts } = loading_info.info {
@@ -638,7 +641,7 @@ mod tests {
     async fn query_data() -> Result<()> {
         // TODO: mock STAC endpoint
 
-        let mut exe = MockExecutionContext::default();
+        let mut exe = MockExecutionContext::test_default();
 
         let def: Box<dyn ExternalDatasetProviderDefinition> =
             serde_json::from_reader(BufReader::new(File::open(test_data!(
@@ -815,7 +818,7 @@ mod tests {
             parts,
             vec![GdalLoadingInfoPart {
                 time: TimeInterval::new_unchecked(1_632_384_644_000, 1_632_384_645_000),
-                params: GdalDatasetParameters {
+                params: Some(GdalDatasetParameters {
                     file_path: "/vsicurl/https://sentinel-cogs.s3.us-west-2.amazonaws.com/sentinel-s2-l2a-cogs/36/M/WC/2021/9/S2B_36MWC_20210923_0_L2A/B04.tif".into(),
                     rasterband_channel: 1,
                     geo_transform: GdalDatasetGeoTransform {
@@ -830,7 +833,7 @@ mod tests {
                     properties_mapping: None,
                     gdal_open_options: None,
                     gdal_config_options: None,
-                },
+                }),
             }]
         );
     }

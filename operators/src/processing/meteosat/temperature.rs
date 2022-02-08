@@ -1,18 +1,23 @@
+use std::sync::Arc;
+
 use crate::engine::{
     ExecutionContext, InitializedRasterOperator, Operator, QueryContext, QueryProcessor,
-    RasterOperator, RasterQueryProcessor, RasterQueryRectangle, RasterResultDescriptor,
-    SingleRasterSource, TypedRasterQueryProcessor,
+    RasterOperator, RasterQueryProcessor, RasterResultDescriptor, SingleRasterSource,
+    TypedRasterQueryProcessor,
 };
 use crate::util::Result;
 use async_trait::async_trait;
+use rayon::iter::ParallelIterator;
+use rayon::slice::ParallelSlice;
+use rayon::ThreadPool;
 use TypedRasterQueryProcessor::F32 as QueryProcessorOut;
 
 use crate::error::Error;
 use futures::stream::BoxStream;
-use futures::StreamExt;
-use geoengine_datatypes::primitives::{Measurement, SpatialPartition2D};
+use futures::{StreamExt, TryStreamExt};
+use geoengine_datatypes::primitives::{Measurement, RasterQueryRectangle, SpatialPartition2D};
 use geoengine_datatypes::raster::{
-    EmptyGrid, Grid2D, GridOrEmpty, GridShapeAccess, GridSize, NoDataValue, Pixel, RasterDataType,
+    EmptyGrid, Grid2D, GridShapeAccess, GridSize, NoDataValue, Pixel, RasterDataType,
     RasterPropertiesKey, RasterTile2D,
 };
 use serde::{Deserialize, Serialize};
@@ -20,7 +25,9 @@ use serde::{Deserialize, Serialize};
 // Output type is always f32
 type PixelOut = f32;
 use crate::processing::meteosat::satellite::{Channel, Satellite};
-use crate::processing::meteosat::{channel_key, offset_key, satellite_key, slope_key};
+use crate::processing::meteosat::{
+    new_channel_key, new_offset_key, new_satellite_key, new_slope_key,
+};
 use RasterDataType::F32 as RasterOut;
 
 const OUT_NO_DATA_VALUE: PixelOut = PixelOut::NAN;
@@ -164,15 +171,16 @@ where
 impl<Q, P> TemperatureProcessor<Q, P>
 where
     Q: RasterQueryProcessor<RasterType = P>,
+    P: Pixel,
 {
     pub fn new(source: Q, params: TemperatureParams) -> Self {
         Self {
             source,
             params,
-            satellite_key: satellite_key(),
-            channel_key: channel_key(),
-            offset_key: offset_key(),
-            slope_key: slope_key(),
+            satellite_key: new_satellite_key(),
+            channel_key: new_channel_key(),
+            offset_key: new_offset_key(),
+            slope_key: new_slope_key(),
         }
     }
 
@@ -198,21 +206,83 @@ where
         }
     }
 
-    fn create_lookup_table(&self, tile: &RasterTile2D<P>) -> Result<Vec<f32>> {
-        let satellite = self.satellite(tile)?;
-        let channel = self.channel(tile, satellite)?;
+    async fn process_tile_async(
+        &self,
+        tile: RasterTile2D<P>,
+        pool: Arc<ThreadPool>,
+    ) -> Result<RasterTile2D<PixelOut>> {
+        if tile.is_empty() {
+            return Ok(RasterTile2D::new_with_properties(
+                tile.time,
+                tile.tile_position,
+                tile.global_geo_transform,
+                EmptyGrid::new(tile.grid_array.grid_shape(), OUT_NO_DATA_VALUE).into(),
+                tile.properties,
+            ));
+        }
+
+        let satellite = self.satellite(&tile)?;
+        let channel = self.channel(&tile, satellite)?;
         let offset = tile.properties.number_property::<f64>(&self.offset_key)?;
         let slope = tile.properties.number_property::<f64>(&self.slope_key)?;
+        let mat_tile = tile.into_materialized_tile(); // NOTE: the tile is already materialized.
 
-        let mut lut = Vec::with_capacity(1024);
-        for i in 0..1024 {
-            let radiance = offset + f64::from(i) * slope;
-            let temp = channel.calculate_temperature_from_radiance(radiance);
-            lut.push(temp as f32);
-        }
-        Ok(lut)
+        let temp_grid = crate::util::spawn_blocking(move || {
+            let lut = create_lookup_table(channel, offset, slope, &pool);
+            process_tile(&mat_tile.grid_array, &lut, &pool)
+        })
+        .await??;
+
+        Ok(RasterTile2D::new_with_properties(
+            mat_tile.time,
+            mat_tile.tile_position,
+            mat_tile.global_geo_transform,
+            temp_grid.into(),
+            mat_tile.properties,
+        ))
     }
 }
+
+fn create_lookup_table(channel: &Channel, offset: f64, slope: f64, _pool: &ThreadPool) -> Vec<f32> {
+    // this should propably be done with SIMD not a threadpool
+    (0..1024)
+        .into_iter()
+        .map(|i| {
+            let radiance = offset + f64::from(i) * slope;
+            channel.calculate_temperature_from_radiance(radiance) as f32
+        })
+        .collect::<Vec<f32>>()
+}
+
+fn process_tile<P: Pixel>(
+    grid: &Grid2D<P>,
+    lut: &[f32],
+    pool: &ThreadPool,
+) -> Result<Grid2D<PixelOut>> {
+    // Create result raster
+    pool.install(|| {
+        let out = grid
+            .data
+            .par_chunks(grid.axis_size_x())
+            .map(|row| {
+                row.iter().map(|p| {
+                    if grid.is_no_data(*p) {
+                        Some(OUT_NO_DATA_VALUE)
+                    } else {
+                        let lut_idx: u64 = p.as_();
+                        lut.get(lut_idx as usize).copied()
+                    }
+                })
+            })
+            .flatten_iter()
+            .collect::<Option<Vec<PixelOut>>>()
+            .ok_or(Error::UnsupportedRasterValue)?;
+
+        let res = Grid2D::new(grid.grid_shape(), out, Some(OUT_NO_DATA_VALUE))?;
+        Ok(res)
+    })
+}
+
 #[async_trait]
 impl<Q, P> QueryProcessor for TemperatureProcessor<Q, P>
 where
@@ -228,47 +298,7 @@ where
         ctx: &'a dyn QueryContext,
     ) -> Result<BoxStream<'a, Result<Self::Output>>> {
         let src = self.source.query(query, ctx).await?;
-
-        let rs = src.map(move |tile| {
-            let tile = tile?;
-            match &tile.grid_array {
-                GridOrEmpty::Empty(_) => Ok(RasterTile2D::new_with_properties(
-                    tile.time,
-                    tile.tile_position,
-                    tile.global_geo_transform,
-                    EmptyGrid::new(tile.grid_array.grid_shape(), OUT_NO_DATA_VALUE).into(),
-                    tile.properties,
-                )),
-                GridOrEmpty::Grid(grid) => {
-                    let lut = self.create_lookup_table(&tile)?;
-
-                    // Create result raster
-                    let mut out = Grid2D::new(
-                        grid.grid_shape(),
-                        vec![OUT_NO_DATA_VALUE; grid.number_of_elements()],
-                        Some(OUT_NO_DATA_VALUE),
-                    )
-                    .expect("raster creation must succeed");
-
-                    for (idx, &pixel) in grid.data.iter().enumerate() {
-                        if !grid.is_no_data(pixel) {
-                            let lut_idx: u64 = pixel.as_();
-                            out.data[idx] = *lut
-                                .get(lut_idx as usize)
-                                .ok_or(Error::UnsupportedRasterValue)?;
-                        }
-                    }
-
-                    Ok(RasterTile2D::new_with_properties(
-                        tile.time,
-                        tile.tile_position,
-                        tile.global_geo_transform,
-                        out.into(),
-                        tile.properties,
-                    ))
-                }
-            }
-        });
+        let rs = src.and_then(move |tile| self.process_tile_async(tile, ctx.thread_pool().clone()));
         Ok(rs.boxed())
     }
 }
@@ -282,11 +312,12 @@ mod tests {
     use crate::processing::meteosat::test_util;
     use geoengine_datatypes::primitives::Measurement;
     use geoengine_datatypes::raster::{EmptyGrid2D, Grid2D};
+    use geoengine_datatypes::util::test::TestDefault;
     use std::collections::HashMap;
 
     // #[tokio::test]
     // async fn test_msg_raster() {
-    //     let mut ctx = MockExecutionContext::default();
+    //     let mut ctx = MockExecutionContext::test_default();
     //     let src = test_util::_create_gdal_src(&mut ctx);
     //
     //     let result = test_util::process(
@@ -307,7 +338,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_empty_ok() {
-        let ctx = MockExecutionContext::default();
+        let ctx = MockExecutionContext::test_default();
         let res = test_util::process(
             || {
                 let props = test_util::create_properties(Some(4), Some(1), Some(0.0), Some(1.0));
@@ -334,7 +365,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_ok() {
-        let ctx = MockExecutionContext::default();
+        let ctx = MockExecutionContext::test_default();
         let res = test_util::process(
             || {
                 let props = test_util::create_properties(Some(4), Some(1), Some(0.0), Some(1.0));
@@ -374,7 +405,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_ok_force_satellite() {
-        let ctx = MockExecutionContext::default();
+        let ctx = MockExecutionContext::test_default();
         let res = test_util::process(
             || {
                 let props = test_util::create_properties(Some(4), Some(1), Some(0.0), Some(1.0));
@@ -416,7 +447,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_fail_illegal_input() {
-        let ctx = MockExecutionContext::default();
+        let ctx = MockExecutionContext::test_default();
 
         let res = test_util::process(
             || {
@@ -444,7 +475,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_invalid_force_satellite() {
-        let ctx = MockExecutionContext::default();
+        let ctx = MockExecutionContext::test_default();
         let res = test_util::process(
             || {
                 let props = test_util::create_properties(Some(4), Some(1), Some(0.0), Some(1.0));
@@ -468,7 +499,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_missing_satellite() {
-        let ctx = MockExecutionContext::default();
+        let ctx = MockExecutionContext::test_default();
         let res = test_util::process(
             || {
                 let props = test_util::create_properties(Some(4), None, Some(0.0), Some(1.0));
@@ -490,7 +521,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_invalid_satellite() {
-        let ctx = MockExecutionContext::default();
+        let ctx = MockExecutionContext::test_default();
         let res = test_util::process(
             || {
                 let props = test_util::create_properties(Some(4), Some(42), Some(0.0), Some(1.0));
@@ -512,7 +543,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_missing_channel() {
-        let ctx = MockExecutionContext::default();
+        let ctx = MockExecutionContext::test_default();
         let res = test_util::process(
             || {
                 let props = test_util::create_properties(None, Some(1), Some(0.0), Some(1.0));
@@ -534,7 +565,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_invalid_channel() {
-        let ctx = MockExecutionContext::default();
+        let ctx = MockExecutionContext::test_default();
         let res = test_util::process(
             || {
                 let props = test_util::create_properties(Some(1), Some(1), Some(0.0), Some(1.0));
@@ -556,7 +587,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_missing_slope() {
-        let ctx = MockExecutionContext::default();
+        let ctx = MockExecutionContext::test_default();
         let res = test_util::process(
             || {
                 let props = test_util::create_properties(Some(4), Some(1), Some(0.0), None);
@@ -578,7 +609,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_missing_offset() {
-        let ctx = MockExecutionContext::default();
+        let ctx = MockExecutionContext::test_default();
         let res = test_util::process(
             || {
                 let props = test_util::create_properties(Some(4), Some(1), None, Some(1.0));
@@ -600,7 +631,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_invalid_measurement_unitless() {
-        let ctx = MockExecutionContext::default();
+        let ctx = MockExecutionContext::test_default();
         let res = test_util::process(
             || {
                 let props = test_util::create_properties(Some(4), Some(1), Some(0.0), Some(1.0));
@@ -623,7 +654,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_invalid_measurement_continuous() {
-        let ctx = MockExecutionContext::default();
+        let ctx = MockExecutionContext::test_default();
         let res = test_util::process(
             || {
                 let props = test_util::create_properties(Some(4), Some(1), Some(0.0), Some(1.0));
@@ -653,7 +684,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_invalid_measurement_classification() {
-        let ctx = MockExecutionContext::default();
+        let ctx = MockExecutionContext::test_default();
         let res = test_util::process(
             || {
                 let props = test_util::create_properties(Some(4), Some(1), Some(0.0), Some(1.0));

@@ -2,16 +2,14 @@ use super::RasterProperties;
 use super::{
     grid_or_empty::GridOrEmpty, GeoTransform, GeoTransformAccess, Grid, GridBounds, GridIdx2D,
     GridIndexAccess, GridIndexAccessMut, GridShape, GridShape2D, GridShape3D, GridShapeAccess,
-    GridSize, GridSpaceToLinearSpace, NoDataValue, Raster, TileInformation,
+    GridSize, NoDataValue, Raster, TileInformation,
 };
 use crate::primitives::{
     Coordinate2D, SpatialBounded, SpatialPartition2D, SpatialPartitioned, TemporalBounded,
     TimeInterval,
 };
-use crate::raster::data_type::FromPrimitive;
 use crate::raster::{CoordinatePixelAccess, Pixel};
 use crate::util::Result;
-use num_traits::AsPrimitive;
 use serde::{Deserialize, Serialize};
 
 /// A `RasterTile` is a `BaseTile` of raster data where the data is represented by `GridOrEmpty`.
@@ -94,8 +92,25 @@ where
         time: TimeInterval,
         tile_info: TileInformation,
         data: GridOrEmpty<D, T>,
-    ) -> Self {
-        // TODO: assert, tile information xy size equals the data xy size
+    ) -> Self
+    where
+        D: GridSize,
+    {
+        debug_assert_eq!(
+            tile_info.tile_size_in_pixels.axis_size_x(),
+            data.shape_ref().axis_size_x()
+        );
+
+        debug_assert_eq!(
+            tile_info.tile_size_in_pixels.axis_size_y(),
+            data.shape_ref().axis_size_y()
+        );
+
+        debug_assert_eq!(
+            tile_info.tile_size_in_pixels.number_of_elements(),
+            data.shape_ref().number_of_elements()
+        );
+
         Self {
             time,
             tile_position: tile_info.global_tile_position,
@@ -112,7 +127,21 @@ where
         data: GridOrEmpty<D, T>,
         properties: RasterProperties,
     ) -> Self {
-        // TODO: assert, tile information xy size equals the data xy size
+        debug_assert_eq!(
+            tile_info.tile_size_in_pixels.axis_size_x(),
+            data.shape_ref().axis_size_x()
+        );
+
+        debug_assert_eq!(
+            tile_info.tile_size_in_pixels.axis_size_y(),
+            data.shape_ref().axis_size_y()
+        );
+
+        debug_assert_eq!(
+            tile_info.tile_size_in_pixels.number_of_elements(),
+            data.shape_ref().number_of_elements()
+        );
+
         Self {
             time,
             tile_position: tile_info.global_tile_position,
@@ -168,22 +197,6 @@ where
             grid_array: GridOrEmpty::Grid(data),
             properties: RasterProperties::default(),
         }
-    }
-
-    /// Converts the data type of the raster tile by converting its inner raster
-    pub fn convert<To>(self) -> BaseTile<GridOrEmpty<D, To>>
-    where
-        D: GridSize + GridSpaceToLinearSpace,
-        To: Pixel + FromPrimitive<T>,
-        T: AsPrimitive<To>,
-    {
-        RasterTile::new_with_properties(
-            self.time,
-            self.tile_position,
-            self.global_geo_transform,
-            self.grid_array.convert_dtype(),
-            self.properties,
-        )
     }
 
     /// Returns true if the grid is a `NoDataGrid`

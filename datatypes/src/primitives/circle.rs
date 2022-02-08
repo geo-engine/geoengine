@@ -105,6 +105,7 @@ impl Circle {
     }
 
     /// Enlarges the circle by the given delta
+    #[must_use]
     pub fn buffer(&self, delta: f64) -> Self {
         Circle {
             center: self.center,

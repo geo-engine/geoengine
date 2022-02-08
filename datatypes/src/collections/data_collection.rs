@@ -214,7 +214,7 @@ mod tests {
             .collect(),
         )
         .unwrap();
-        let mut iter = (&collection).into_iter();
+        let mut iter = collection.into_iter();
 
         let row = iter.next().unwrap();
         assert_eq!(NoGeometry, row.geometry);

@@ -208,7 +208,9 @@ pub async fn send_test_request<C: SimpleContext>(
             .configure(handlers::workflows::init_workflow_routes::<C>),
     )
     .await;
-    test::call_service(&app, req.to_request()).await
+    test::call_service(&app, req.to_request())
+        .await
+        .map_into_boxed_body()
 }
 
 pub async fn read_body_string(res: ServiceResponse) -> String {
@@ -243,8 +245,10 @@ pub fn initialize_debugging_in_test() {
 }
 
 pub trait SetMultipartBody {
+    #[must_use]
     fn set_multipart<B: Into<Vec<u8>>>(self, parts: Vec<(&str, B)>) -> Self;
 
+    #[must_use]
     fn set_multipart_files(self, file_paths: &[PathBuf]) -> Self
     where
         Self: Sized,

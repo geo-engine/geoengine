@@ -244,10 +244,11 @@ mod tests {
     use geoengine_datatypes::operations::image::Colorizer;
     use geoengine_datatypes::primitives::{TimeGranularity, TimeStep};
     use geoengine_datatypes::spatial_reference::SpatialReference;
+    use geoengine_datatypes::util::test::TestDefault;
     use serde_json::json;
 
     async fn create_test_helper(method: Method) -> ServiceResponse {
-        let ctx = InMemoryContext::default();
+        let ctx = InMemoryContext::test_default();
 
         let session_id = ctx.default_session_ref().await.id();
 
@@ -271,8 +272,6 @@ mod tests {
     }
 
     #[tokio::test]
-    // TODO: remove when https://github.com/tokio-rs/tokio/issues/4245 is fixed
-    #[allow(clippy::semicolon_if_nothing_returned)]
     async fn create() {
         let res = create_test_helper(Method::POST).await;
 
@@ -288,7 +287,7 @@ mod tests {
 
     #[tokio::test]
     async fn create_invalid_body() {
-        let ctx = InMemoryContext::default();
+        let ctx = InMemoryContext::test_default();
 
         let session_id = ctx.default_session_ref().await.id();
 
@@ -310,7 +309,7 @@ mod tests {
 
     #[tokio::test]
     async fn create_missing_fields() {
-        let ctx = InMemoryContext::default();
+        let ctx = InMemoryContext::test_default();
 
         let session_id = ctx.default_session_ref().await.id();
 
@@ -336,7 +335,7 @@ mod tests {
 
     #[tokio::test]
     async fn create_missing_header() {
-        let ctx = InMemoryContext::default();
+        let ctx = InMemoryContext::test_default();
 
         let create = json!({
             "description": "Foo".to_string(),
@@ -356,7 +355,7 @@ mod tests {
     }
 
     async fn list_test_helper(method: Method) -> ServiceResponse {
-        let ctx = InMemoryContext::default();
+        let ctx = InMemoryContext::test_default();
 
         let (session, _) = create_project_helper(&ctx).await;
 
@@ -400,7 +399,7 @@ mod tests {
 
     #[tokio::test]
     async fn list_missing_header() {
-        let ctx = InMemoryContext::default();
+        let ctx = InMemoryContext::test_default();
 
         create_project_helper(&ctx).await;
 
@@ -434,21 +433,19 @@ mod tests {
     }
 
     async fn load_test_helper(method: Method) -> ServiceResponse {
-        let ctx = InMemoryContext::default();
+        let ctx = InMemoryContext::test_default();
 
         let (session, project) = create_project_helper(&ctx).await;
 
         let req = test::TestRequest::default()
             .method(method)
-            .uri(&format!("/project/{}", project.to_string()))
+            .uri(&format!("/project/{}", project))
             .append_header((header::CONTENT_LENGTH, 0))
             .append_header((header::AUTHORIZATION, Bearer::new(session.id().to_string())));
         send_test_request(req, ctx).await
     }
 
     #[tokio::test]
-    // TODO: remove when https://github.com/tokio-rs/tokio/issues/4245 is fixed
-    #[allow(clippy::semicolon_if_nothing_returned)]
     async fn load() {
         let res = load_test_helper(Method::GET).await;
 
@@ -468,12 +465,12 @@ mod tests {
 
     #[tokio::test]
     async fn load_missing_header() {
-        let ctx = InMemoryContext::default();
+        let ctx = InMemoryContext::test_default();
 
         let (_, project) = create_project_helper(&ctx).await;
 
         let req = test::TestRequest::get()
-            .uri(&format!("/project/{}", project.to_string()))
+            .uri(&format!("/project/{}", project))
             .append_header((header::CONTENT_LENGTH, 0));
         let res = send_test_request(req, ctx).await;
 
@@ -488,7 +485,7 @@ mod tests {
 
     #[tokio::test]
     async fn load_not_found() {
-        let ctx = InMemoryContext::default();
+        let ctx = InMemoryContext::test_default();
 
         let session_id = ctx.default_session_ref().await.id();
 
@@ -504,7 +501,7 @@ mod tests {
     async fn update_test_helper(
         method: Method,
     ) -> (InMemoryContext, SimpleSession, ProjectId, ServiceResponse) {
-        let ctx = InMemoryContext::default();
+        let ctx = InMemoryContext::test_default();
 
         let (session, project) = create_project_helper(&ctx).await;
 
@@ -512,7 +509,7 @@ mod tests {
 
         let req = test::TestRequest::default()
             .method(method)
-            .uri(&format!("/project/{}", project.to_string()))
+            .uri(&format!("/project/{}", project))
             .append_header((header::CONTENT_LENGTH, 0))
             .append_header((header::AUTHORIZATION, Bearer::new(session.id().to_string())))
             .set_json(&update);
@@ -540,12 +537,12 @@ mod tests {
 
     #[tokio::test]
     async fn update_invalid_body() {
-        let ctx = InMemoryContext::default();
+        let ctx = InMemoryContext::test_default();
 
         let (session, project) = create_project_helper(&ctx).await;
 
         let req = test::TestRequest::patch()
-            .uri(&format!("/project/{}", project.to_string()))
+            .uri(&format!("/project/{}", project))
             .append_header((header::CONTENT_LENGTH, 0))
             .append_header((header::CONTENT_TYPE, mime::APPLICATION_JSON))
             .append_header((header::AUTHORIZATION, Bearer::new(session.id().to_string())))
@@ -563,7 +560,7 @@ mod tests {
 
     #[tokio::test]
     async fn update_missing_fields() {
-        let ctx = InMemoryContext::default();
+        let ctx = InMemoryContext::test_default();
 
         let (session, project) = create_project_helper(&ctx).await;
 
@@ -584,7 +581,7 @@ mod tests {
         });
 
         let req = test::TestRequest::patch()
-            .uri(&format!("/project/{}", project.to_string()))
+            .uri(&format!("/project/{}", project))
             .append_header((header::AUTHORIZATION, Bearer::new(session.id().to_string())))
             .set_json(&update);
         let res = send_test_request(req, ctx).await;
@@ -608,7 +605,7 @@ mod tests {
             update: UpdateProject,
         ) -> Vec<Layer> {
             let req = test::TestRequest::patch()
-                .uri(&format!("/project/{}", project_id.to_string()))
+                .uri(&format!("/project/{}", project_id))
                 .append_header((header::AUTHORIZATION, Bearer::new(session.id().to_string())))
                 .set_json(&update);
             let res = send_test_request(req, ctx.clone()).await;
@@ -626,7 +623,7 @@ mod tests {
             loaded.layers
         }
 
-        let ctx = InMemoryContext::default();
+        let ctx = InMemoryContext::test_default();
 
         let (session, project) = create_project_helper(&ctx).await;
 
@@ -753,7 +750,7 @@ mod tests {
             update: UpdateProject,
         ) -> Vec<Plot> {
             let req = test::TestRequest::patch()
-                .uri(&format!("/project/{}", project_id.to_string()))
+                .uri(&format!("/project/{}", project_id))
                 .append_header((header::AUTHORIZATION, Bearer::new(session.id().to_string())))
                 .set_json(&update);
             let res = send_test_request(req, ctx.clone()).await;
@@ -771,7 +768,7 @@ mod tests {
             loaded.plots
         }
 
-        let ctx = InMemoryContext::default();
+        let ctx = InMemoryContext::test_default();
 
         let (session, project) = create_project_helper(&ctx).await;
 
@@ -874,12 +871,12 @@ mod tests {
 
     #[tokio::test]
     async fn delete() {
-        let ctx = InMemoryContext::default();
+        let ctx = InMemoryContext::test_default();
 
         let (session, project) = create_project_helper(&ctx).await;
 
         let req = test::TestRequest::delete()
-            .uri(&format!("/project/{}", project.to_string()))
+            .uri(&format!("/project/{}", project))
             .append_header((header::CONTENT_LENGTH, 0))
             .append_header((header::AUTHORIZATION, Bearer::new(session.id().to_string())));
         let res = send_test_request(req, ctx.clone()).await;
@@ -895,7 +892,7 @@ mod tests {
             .is_err());
 
         let req = test::TestRequest::delete()
-            .uri(&format!("/project/{}", project.to_string()))
+            .uri(&format!("/project/{}", project))
             .append_header((header::CONTENT_LENGTH, 0))
             .append_header((header::AUTHORIZATION, Bearer::new(session.id().to_string())));
         let res = send_test_request(req, ctx).await;

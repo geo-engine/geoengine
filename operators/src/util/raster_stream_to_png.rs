@@ -1,13 +1,13 @@
 use futures::StreamExt;
 use geoengine_datatypes::{
     operations::image::{Colorizer, RgbaColor, ToPng},
-    primitives::{AxisAlignedRectangle, TimeInterval},
+    primitives::{AxisAlignedRectangle, RasterQueryRectangle, TimeInterval},
     raster::{Blit, EmptyGrid2D, GeoTransform, Grid2D, Pixel, RasterTile2D},
 };
 use num_traits::AsPrimitive;
 use std::convert::TryInto;
 
-use crate::engine::{QueryContext, QueryProcessor, RasterQueryProcessor, RasterQueryRectangle};
+use crate::engine::{QueryContext, QueryProcessor, RasterQueryProcessor};
 use crate::{error, util::Result};
 
 #[allow(clippy::too_many_arguments)]
@@ -103,6 +103,7 @@ mod tests {
     use geoengine_datatypes::{
         primitives::{Coordinate2D, SpatialPartition2D, SpatialResolution},
         raster::TilingSpecification,
+        util::test::TestDefault,
     };
 
     use crate::{
@@ -113,14 +114,14 @@ mod tests {
 
     #[tokio::test]
     async fn png_from_stream() {
-        let ctx = MockQueryContext::default();
+        let ctx = MockQueryContext::test_default();
         let tiling_specification =
             TilingSpecification::new(Coordinate2D::default(), [600, 600].into());
 
         let gdal_source = GdalSourceProcessor::<u8> {
             tiling_specification,
             meta_data: Box::new(create_ndvi_meta_data()),
-            phantom_data: Default::default(),
+            no_data_value: Some(0),
         };
 
         let query_partition =

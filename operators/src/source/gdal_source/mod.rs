@@ -1,4 +1,5 @@
-use crate::engine::{MetaData, OperatorDatasets, QueryProcessor, RasterQueryRectangle};
+use crate::adapters::SparseTilesFillAdapter;
+use crate::engine::{MetaData, OperatorDatasets, QueryProcessor};
 use crate::util::gdal::gdal_open_dataset_ex;
 use crate::util::input::float_option_with_nan;
 use crate::{
@@ -17,17 +18,17 @@ use futures::{
 use gdal::raster::{GdalType, RasterBand as GdalRasterBand};
 use gdal::{DatasetOptions, GdalOpenFlags, Metadata as GdalMetadata};
 use geoengine_datatypes::primitives::{
-    Coordinate2D, SpatialPartition2D, SpatialPartitioned, TimeGranularity,
+    Coordinate2D, RasterQueryRectangle, SpatialPartition2D, SpatialPartitioned,
 };
 use geoengine_datatypes::raster::{
-    EmptyGrid, GeoTransform, Grid2D, GridOrEmpty2D, GridShapeAccess, Pixel, RasterDataType,
-    RasterProperties, RasterPropertiesEntry, RasterPropertiesEntryType, RasterPropertiesKey,
-    RasterTile2D,
+    EmptyGrid, GeoTransform, Grid2D, GridOrEmpty2D, GridShape2D, GridShapeAccess, Pixel,
+    RasterDataType, RasterProperties, RasterPropertiesEntry, RasterPropertiesEntryType,
+    RasterPropertiesKey, RasterTile2D,
 };
 use geoengine_datatypes::util::test::TestDefault;
 use geoengine_datatypes::{dataset::DatasetId, raster::TileInformation};
 use geoengine_datatypes::{
-    primitives::{TimeInstance, TimeInterval, TimeStep, TimeStepIter},
+    primitives::TimeInterval,
     raster::{
         Grid, GridBlit, GridBoundingBox2D, GridBounds, GridIdx, GridSize, GridSpaceToLinearSpace,
         TilingSpecification,
@@ -38,8 +39,16 @@ use serde::{Deserialize, Serialize};
 use snafu::{ensure, ResultExt};
 use std::collections::HashMap;
 use std::convert::{TryFrom, TryInto};
-use std::{marker::PhantomData, path::PathBuf};
+use std::path::PathBuf;
+use std::time::Instant;
 //use gdal::metadata::Metadata; // TODO: handle metadata
+
+pub use loading_info::{
+    GdalLoadingInfo, GdalLoadingInfoPart, GdalLoadingInfoPartIterator, GdalMetaDataRegular,
+    GdalMetaDataStatic, GdalMetadataNetCdfCf,
+};
+
+mod loading_info;
 
 /// Parameters for the GDAL Source Operator
 ///
@@ -85,58 +94,6 @@ impl OperatorDatasets for GdalSourceParameters {
 type GdalMetaData =
     Box<dyn MetaData<GdalLoadingInfo, RasterResultDescriptor, RasterQueryRectangle>>;
 
-#[derive(Debug, Clone)]
-pub struct GdalLoadingInfo {
-    /// partitions of dataset sorted by time
-    pub info: GdalLoadingInfoPartIterator,
-}
-
-#[derive(Debug, Clone)]
-pub struct DynamicGdalLoadingInfoPartIterator {
-    time_step_iter: TimeStepIter,
-    params: GdalDatasetParameters,
-    time_placeholders: HashMap<String, GdalSourceTimePlaceholder>,
-    step: TimeStep,
-    max_t2: TimeInstance,
-}
-
-impl DynamicGdalLoadingInfoPartIterator {
-    fn new(
-        time_step_iter: TimeStepIter,
-        params: GdalDatasetParameters,
-        time_placeholders: HashMap<String, GdalSourceTimePlaceholder>,
-        step: TimeStep,
-        max_t2: TimeInstance,
-    ) -> Result<Self> {
-        // TODO: maybe fail on deserialization
-        if time_placeholders.is_empty()
-            || time_placeholders.keys().any(String::is_empty)
-            || time_placeholders
-                .values()
-                .any(|value| value.format.is_empty())
-        {
-            return Err(Error::DynamicGdalSourceSpecHasEmptyTimePlaceholders);
-        }
-
-        Ok(Self {
-            time_step_iter,
-            params,
-            time_placeholders,
-            step,
-            max_t2,
-        })
-    }
-}
-
-#[allow(clippy::large_enum_variant)]
-#[derive(Debug, Clone)]
-pub enum GdalLoadingInfoPartIterator {
-    Static {
-        parts: std::vec::IntoIter<GdalLoadingInfoPart>,
-    },
-    Dynamic(DynamicGdalLoadingInfoPartIterator),
-}
-
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(rename_all = "camelCase")]
 pub struct GdalSourceTimePlaceholder {
@@ -149,46 +106,6 @@ pub struct GdalSourceTimePlaceholder {
 pub enum TimeReference {
     Start,
     End,
-}
-
-impl Iterator for GdalLoadingInfoPartIterator {
-    type Item = Result<GdalLoadingInfoPart>;
-
-    fn next(&mut self) -> Option<Self::Item> {
-        match self {
-            GdalLoadingInfoPartIterator::Static { parts } => parts.next().map(Result::Ok),
-            GdalLoadingInfoPartIterator::Dynamic(DynamicGdalLoadingInfoPartIterator {
-                time_step_iter,
-                params,
-                time_placeholders,
-                step,
-                max_t2,
-            }) => {
-                let t1 = time_step_iter.next()?;
-
-                let t2 = t1 + *step;
-                let t2 = t2.unwrap_or(*max_t2);
-
-                let time_interval = TimeInterval::new_unchecked(t1, t2);
-
-                let loading_info_part = params
-                    .replace_time_placeholders(time_placeholders, time_interval)
-                    .map(|loading_info_part_params| GdalLoadingInfoPart {
-                        time: time_interval,
-                        params: loading_info_part_params,
-                    });
-
-                Some(loading_info_part)
-            }
-        }
-    }
-}
-
-/// one temporal slice of the dataset that requires reading from exactly one Gdal dataset
-#[derive(Debug, Clone, PartialEq)]
-pub struct GdalLoadingInfoPart {
-    pub time: TimeInterval,
-    pub params: GdalDatasetParameters,
 }
 
 /// Parameters for loading data using Gdal
@@ -333,249 +250,6 @@ pub enum FileNotFoundHandling {
     Error,  // return error tile
 }
 
-#[derive(PartialEq, Serialize, Deserialize, Debug, Clone)]
-#[serde(rename_all = "camelCase")]
-pub struct GdalMetaDataStatic {
-    pub time: Option<TimeInterval>,
-    pub params: GdalDatasetParameters,
-    pub result_descriptor: RasterResultDescriptor,
-}
-
-#[async_trait]
-impl MetaData<GdalLoadingInfo, RasterResultDescriptor, RasterQueryRectangle>
-    for GdalMetaDataStatic
-{
-    async fn loading_info(&self, query: RasterQueryRectangle) -> Result<GdalLoadingInfo> {
-        let valid = self.time.unwrap_or_default();
-
-        let parts = if valid.intersects(&query.time_interval) {
-            vec![GdalLoadingInfoPart {
-                time: valid,
-                params: self.params.clone(),
-            }]
-            .into_iter()
-        } else {
-            vec![].into_iter()
-        };
-
-        Ok(GdalLoadingInfo {
-            info: GdalLoadingInfoPartIterator::Static { parts },
-        })
-    }
-
-    async fn result_descriptor(&self) -> Result<RasterResultDescriptor> {
-        Ok(self.result_descriptor.clone())
-    }
-
-    fn box_clone(
-        &self,
-    ) -> Box<dyn MetaData<GdalLoadingInfo, RasterResultDescriptor, RasterQueryRectangle>> {
-        Box::new(self.clone())
-    }
-}
-
-#[derive(PartialEq, Serialize, Deserialize, Debug, Clone)]
-#[serde(rename_all = "camelCase")]
-pub struct GdalMetadataFixedTimes {
-    pub time_steps: Vec<TimeInterval>,
-    pub params: GdalDatasetParameters,
-    pub result_descriptor: RasterResultDescriptor,
-    pub time_placeholders: HashMap<String, GdalSourceTimePlaceholder>,
-}
-
-impl GdalMetadataFixedTimes {
-    #[allow(dead_code)]
-    fn new(
-        time_steps: Vec<TimeInterval>,
-        params: GdalDatasetParameters,
-        result_descriptor: RasterResultDescriptor,
-        time_placeholders: HashMap<String, GdalSourceTimePlaceholder>,
-    ) -> Self {
-        let mut sorted_time_steps = time_steps;
-        sorted_time_steps.sort_by(|a, b| a.end().partial_cmp(&b.start()).unwrap());
-
-        GdalMetadataFixedTimes {
-            time_steps: sorted_time_steps,
-            params,
-            result_descriptor,
-            time_placeholders,
-        }
-    }
-}
-
-#[async_trait]
-impl MetaData<GdalLoadingInfo, RasterResultDescriptor, RasterQueryRectangle>
-    for GdalMetadataFixedTimes
-{
-    async fn loading_info(&self, query: RasterQueryRectangle) -> Result<GdalLoadingInfo> {
-        let minimum_step = TimeStep {
-            granularity: TimeGranularity::Millis,
-            step: 1,
-        };
-
-        let sorted_time_steps = if self
-            .time_steps
-            .windows(2)
-            .all(|w| w[0].end() <= w[1].start())
-        {
-            self.time_steps.clone()
-        } else {
-            let mut sorted_time_steps = self.time_steps.clone();
-            sorted_time_steps.sort_by(|a, b| a.end().partial_cmp(&b.start()).unwrap());
-            sorted_time_steps
-        };
-
-        let mut time_steps_no_gaps = sorted_time_steps.clone();
-
-        for (index, time) in sorted_time_steps.iter().enumerate() {
-            if index < sorted_time_steps.len() - 1 {
-                if time.is_instant() {
-                    time_steps_no_gaps.push(TimeInterval::new(
-                        (time.end() + minimum_step)?,
-                        sorted_time_steps[index + 1].start(),
-                    )?);
-                } else {
-                    time_steps_no_gaps.push(TimeInterval::new(
-                        time.end(),
-                        sorted_time_steps[index + 1].start(),
-                    )?);
-                }
-            }
-        }
-
-        time_steps_no_gaps.sort_by(|a, b| a.start().partial_cmp(&b.start()).unwrap());
-
-        let valid_duration = TimeInterval::new(
-            time_steps_no_gaps[0].start(),
-            time_steps_no_gaps[time_steps_no_gaps.len() - 1].start(),
-        )?;
-
-        let parts = match valid_duration.intersect(&query.time_interval) {
-            Some(time_interval) => {
-                let mut loading_info_parts: Vec<GdalLoadingInfoPart> = Vec::new();
-
-                if query.time_interval.start() < time_interval.start() {
-                    let gap =
-                        TimeInterval::new(query.time_interval.start(), time_interval.start())?;
-
-                    loading_info_parts.push(
-                        self.params
-                            .replace_time_placeholders(&self.time_placeholders, gap)
-                            .map(|loading_info_part_params| GdalLoadingInfoPart {
-                                time: gap,
-                                params: loading_info_part_params,
-                            })?,
-                    );
-                }
-                for time_position in &time_steps_no_gaps {
-                    if let Some(step_interval) = time_interval.intersect(time_position) {
-                        loading_info_parts.push(
-                            self.params
-                                .replace_time_placeholders(&self.time_placeholders, step_interval)
-                                .map(|loading_info_part_params| GdalLoadingInfoPart {
-                                    time: step_interval,
-                                    params: loading_info_part_params,
-                                })?,
-                        );
-                    }
-                }
-
-                if query.time_interval.end() > time_interval.end() {
-                    let gap = TimeInterval::new(time_interval.end(), query.time_interval.end())?;
-
-                    loading_info_parts.push(
-                        self.params
-                            .replace_time_placeholders(&self.time_placeholders, gap)
-                            .map(|loading_info_part_params| GdalLoadingInfoPart {
-                                time: gap,
-                                params: loading_info_part_params,
-                            })?,
-                    );
-                }
-
-                loading_info_parts
-            }
-            .into_iter(),
-
-            None => vec![self
-                .params
-                .replace_time_placeholders(&self.time_placeholders, query.time_interval)
-                .map(|loading_info_part_params| GdalLoadingInfoPart {
-                    time: query.time_interval,
-                    params: loading_info_part_params,
-                })?]
-            .into_iter(),
-        };
-
-        Ok(GdalLoadingInfo {
-            info: GdalLoadingInfoPartIterator::Static { parts },
-        })
-    }
-
-    async fn result_descriptor(&self) -> Result<RasterResultDescriptor> {
-        Ok(self.result_descriptor.clone())
-    }
-
-    fn box_clone(
-        &self,
-    ) -> Box<dyn MetaData<GdalLoadingInfo, RasterResultDescriptor, RasterQueryRectangle>> {
-        Box::new(self.clone())
-    }
-}
-
-/// Meta data for a regular time series that begins (is anchored) at `start` with multiple gdal data
-/// sets `step` time apart. The `time_placeholders` in the file path of the dataset are replaced with the
-/// specified time `reference` in specified time `format`.
-// TODO: `start` is actually more a reference time, because the time series also goes in
-//        negative direction. Maybe it would be better to have a real start and end time, then
-//        everything before start and after end is just one big nodata raster instead of many
-#[derive(PartialEq, Serialize, Deserialize, Debug, Clone)]
-#[serde(rename_all = "camelCase")]
-pub struct GdalMetaDataRegular {
-    pub result_descriptor: RasterResultDescriptor,
-    pub params: GdalDatasetParameters,
-    pub time_placeholders: HashMap<String, GdalSourceTimePlaceholder>,
-    pub start: TimeInstance,
-    pub step: TimeStep,
-}
-
-#[async_trait]
-impl MetaData<GdalLoadingInfo, RasterResultDescriptor, RasterQueryRectangle>
-    for GdalMetaDataRegular
-{
-    async fn loading_info(&self, query: RasterQueryRectangle) -> Result<GdalLoadingInfo> {
-        let snapped_start = self
-            .step
-            .snap_relative(self.start, query.time_interval.start())?;
-
-        let snapped_interval =
-            TimeInterval::new_unchecked(snapped_start, query.time_interval.end()); // TODO: snap end?
-
-        let time_iterator =
-            TimeStepIter::new_with_interval_incl_start(snapped_interval, self.step)?;
-
-        Ok(GdalLoadingInfo {
-            info: GdalLoadingInfoPartIterator::Dynamic(DynamicGdalLoadingInfoPartIterator::new(
-                time_iterator,
-                self.params.clone(),
-                self.time_placeholders.clone(),
-                self.step,
-                query.time_interval.end(),
-            )?),
-        })
-    }
-
-    async fn result_descriptor(&self) -> Result<RasterResultDescriptor> {
-        Ok(self.result_descriptor.clone())
-    }
-
-    fn box_clone(
-        &self,
-    ) -> Box<dyn MetaData<GdalLoadingInfo, RasterResultDescriptor, RasterQueryRectangle>> {
-        Box::new(self.clone())
-    }
-}
-
 impl GdalDatasetParameters {
     /// Placeholders are replaced by formatted time value.
     /// E.g. `%my_placeholder%` could be replaced by `2014-04-01` depending on the format and time input.
@@ -626,7 +300,7 @@ where
 {
     pub tiling_specification: TilingSpecification,
     pub meta_data: GdalMetaData,
-    pub phantom_data: PhantomData<T>,
+    pub no_data_value: Option<T>,
 }
 
 impl<T> GdalSourceProcessor<T>
@@ -640,36 +314,65 @@ where
         dataset_params: GdalDatasetParameters,
         tile_information: TileInformation,
     ) -> Result<GridWithProperties<T>> {
-        tokio::task::spawn_blocking(move || {
+        crate::util::spawn_blocking(move || {
             Self::load_tile_data(&dataset_params, &tile_information)
         })
         .await
         .context(error::TokioJoin)?
     }
 
+    fn create_empty_grid_with_props(
+        tile_size: GridShape2D,
+        no_data_value: Option<T>,
+    ) -> GridWithProperties<T> {
+        let fill_value: T = no_data_value.unwrap_or_else(T::zero);
+
+        let empty_grid = if let Some(no_data) = no_data_value {
+            EmptyGrid::new(tile_size, T::from_(no_data)).into()
+        } else {
+            Grid2D::new_filled(tile_size, fill_value, None).into()
+        };
+
+        GridWithProperties {
+            grid: empty_grid,
+            properties: Default::default(),
+        }
+    }
+
     pub async fn load_tile_async(
-        dataset_params: GdalDatasetParameters,
+        dataset_params: Option<GdalDatasetParameters>,
         tile_information: TileInformation,
         time: TimeInterval,
+        no_data_value: Option<T>,
     ) -> Result<RasterTile2D<T>> {
-        let f = if tile_information
-            .spatial_partition()
-            .intersects(&dataset_params.spatial_partition())
-        {
-            Self::load_tile_data_async(dataset_params, tile_information).await
-        } else {
-            let fill_value: T = dataset_params.no_data_value.map_or_else(T::zero, T::from_);
+        let f = match dataset_params {
+            Some(ds)
+                if tile_information
+                    .spatial_partition()
+                    .intersects(&ds.spatial_partition()) =>
+            {
+                debug!("Loading tile {:?}", &tile_information);
+                Self::load_tile_data_async(ds, tile_information).await
+            }
+            Some(_) => {
+                debug!("Skipping tile not in query rect {:?}", &tile_information);
 
-            let empty_grid = if let Some(no_data) = dataset_params.no_data_value {
-                EmptyGrid::new(tile_information.tile_size_in_pixels, T::from_(no_data)).into()
-            } else {
-                Grid2D::new_filled(tile_information.tile_size_in_pixels, fill_value, None).into()
-            };
+                Ok(Self::create_empty_grid_with_props(
+                    tile_information.tile_size_in_pixels,
+                    no_data_value,
+                ))
+            }
+            _ => {
+                debug!(
+                    "Skipping tile without GdalDatasetParameters {:?}",
+                    &tile_information
+                );
 
-            Ok(GridWithProperties {
-                grid: empty_grid,
-                properties: Default::default(),
-            })
+                Ok(Self::create_empty_grid_with_props(
+                    tile_information.tile_size_in_pixels,
+                    no_data_value,
+                ))
+            }
         };
 
         f.map(|grid_with_properties| {
@@ -690,6 +393,7 @@ where
         dataset_params: &GdalDatasetParameters,
         tile_information: &TileInformation,
     ) -> Result<GridWithProperties<T>> {
+        let start = Instant::now();
         let dataset_bounds = dataset_params.spatial_partition();
         // TODO: handle datasets where origin is not in the upper left corner
         let geo_transform: GeoTransform = dataset_params.geo_transform.try_into()?;
@@ -726,23 +430,23 @@ where
         let fill_value = no_data_value.unwrap_or_else(T::zero);
         let mut properties = RasterProperties::default();
 
-        debug!(
+        tracing::debug!(
             "no_data_value is {:?} and fill_value is {:?}.",
-            &no_data_value, &fill_value
+            &no_data_value,
+            &fill_value
         );
 
         if dataset_result.is_err() {
             // TODO: check if Gdal error is actually file not found
-            return match dataset_params.file_not_found_handling {
+
+            let err_result = match dataset_params.file_not_found_handling {
                 FileNotFoundHandling::NoData => {
                     if let Some(no_data) = no_data_value {
-                        debug!("file not found -> returning empty grid");
                         Ok(GridWithProperties {
                             grid: EmptyGrid::new(output_shape, no_data).into(),
                             properties,
                         })
                     } else {
-                        debug!("file not found -> returning filled grid");
                         Ok(GridWithProperties {
                             grid: Grid2D::new_filled(output_shape, fill_value, None).into(),
                             properties,
@@ -753,6 +457,13 @@ where
                     file_path: dataset_params.file_path.to_string_lossy().to_string(),
                 }),
             };
+            let elapsed = start.elapsed();
+            debug!(
+                "file not found -> returning error = {}, took {:?}",
+                err_result.is_err(),
+                elapsed
+            );
+            return err_result;
         };
 
         let dataset = dataset_result.expect("checked");
@@ -777,7 +488,11 @@ where
                 } else {
                     Grid2D::new_filled(output_shape, fill_value, None).into()
                 };
-
+                let elapsed = start.elapsed();
+                debug!(
+                    "no intersection -> returning empty grid, took {:?}",
+                    elapsed
+                );
                 return Ok(GridWithProperties {
                     grid: no_data_grid,
                     properties,
@@ -811,6 +526,9 @@ where
             tile_raster.into()
         };
 
+        let elapsed = start.elapsed();
+        debug!("data loaded -> returning data grid, took {:?}", elapsed);
+
         Ok(GridWithProperties {
             grid: result_grid,
             properties,
@@ -826,30 +544,36 @@ where
         info: GdalLoadingInfoPart,
     ) -> impl Stream<Item = Result<RasterTile2D<T>>> {
         let spatial_resolution = query.spatial_resolution;
-        let geo_transform = info.params.geo_transform;
+        let no_data_value = self.no_data_value;
 
-        // adjust the spatial resolution to the sign of the geotransform
-        let x_signed = if geo_transform.x_pixel_size.is_sign_positive()
-            && spatial_resolution.x.is_sign_positive()
-        {
-            spatial_resolution.x
-        } else {
-            spatial_resolution.x * -1.0
-        };
+        // TODO: evaluate if there are GeoTransforms with positive y-axis
+        // The "Pixel-space" starts at the top-left corner of a `GeoTransform`.
+        // Therefore, the pixel size on the x-axis is always increasing
+        let pixel_size_x = spatial_resolution.x;
+        debug_assert!(pixel_size_x.is_sign_positive());
+        // and the pixel size on  the y-axis is always decreasing
+        let pixel_size_y = spatial_resolution.y * -1.0;
+        debug_assert!(pixel_size_y.is_sign_negative());
 
-        let y_signed = if geo_transform.y_pixel_size.is_sign_positive()
-            && spatial_resolution.y.is_sign_positive()
-        {
-            spatial_resolution.y
-        } else {
-            spatial_resolution.y * -1.0
-        };
+        let tiling_strategy = self
+            .tiling_specification
+            .strategy(pixel_size_x, pixel_size_y);
 
-        let tiling_strategy = self.tiling_specification.strategy(x_signed, y_signed);
+        let source_stream =
+            stream::iter(tiling_strategy.tile_information_iterator(query.spatial_bounds))
+                .map(move |tile| {
+                    Self::load_tile_async(info.params.clone(), tile, info.time, no_data_value)
+                })
+                .buffered(1); // TODO: find a good default and / or add to config.
 
-        stream::iter(tiling_strategy.tile_information_iterator(query.spatial_bounds))
-            .map(move |tile| Self::load_tile_async(info.params.clone(), tile, info.time))
-            .buffered(1) // TODO: find a good default and / or add to config.
+        // use SparseTilesFillAdapter to fill all the gaps
+        SparseTilesFillAdapter::new(
+            source_stream,
+            tiling_strategy.tile_grid_box(query.spatial_partition()),
+            tiling_strategy.geo_transform,
+            tiling_strategy.tile_size_in_pixels,
+            no_data_value.unwrap_or_else(T::zero),
+        )
     }
 }
 
@@ -863,9 +587,10 @@ where
 
     async fn query<'a>(
         &'a self,
-        query: crate::engine::RasterQueryRectangle,
+        query: RasterQueryRectangle,
         _ctx: &'a dyn crate::engine::QueryContext,
     ) -> Result<BoxStream<Result<Self::Output>>> {
+        let start = Instant::now();
         debug!(
             "Querying GdalSourceProcessor<{:?}> with: {:?}.",
             P::TYPE,
@@ -874,7 +599,11 @@ where
 
         let meta_data = self.meta_data.loading_info(query).await?;
 
-        debug!("GdalLoadingInfo: {:?}.", &meta_data);
+        debug!(
+            "GdalSourceProcessor<{:?}> meta data loaded, took {:?}.",
+            P::TYPE,
+            start.elapsed()
+        );
 
         // TODO: what to do if loading info is empty?
         let stream = stream::iter(meta_data.info)
@@ -932,7 +661,7 @@ impl InitializedRasterOperator for InitializedGdalSourceOperator {
                 GdalSourceProcessor {
                     tiling_specification: self.tiling_specification,
                     meta_data: self.meta_data.clone(),
-                    phantom_data: Default::default(),
+                    no_data_value: self.result_descriptor.no_data_value_as_(),
                 }
                 .boxed(),
             ),
@@ -940,7 +669,7 @@ impl InitializedRasterOperator for InitializedGdalSourceOperator {
                 GdalSourceProcessor {
                     tiling_specification: self.tiling_specification,
                     meta_data: self.meta_data.clone(),
-                    phantom_data: Default::default(),
+                    no_data_value: self.result_descriptor.no_data_value_as_(),
                 }
                 .boxed(),
             ),
@@ -948,7 +677,7 @@ impl InitializedRasterOperator for InitializedGdalSourceOperator {
                 GdalSourceProcessor {
                     tiling_specification: self.tiling_specification,
                     meta_data: self.meta_data.clone(),
-                    phantom_data: Default::default(),
+                    no_data_value: self.result_descriptor.no_data_value_as_(),
                 }
                 .boxed(),
             ),
@@ -958,7 +687,7 @@ impl InitializedRasterOperator for InitializedGdalSourceOperator {
                 GdalSourceProcessor {
                     tiling_specification: self.tiling_specification,
                     meta_data: self.meta_data.clone(),
-                    phantom_data: Default::default(),
+                    no_data_value: self.result_descriptor.no_data_value_as_(),
                 }
                 .boxed(),
             ),
@@ -966,7 +695,7 @@ impl InitializedRasterOperator for InitializedGdalSourceOperator {
                 GdalSourceProcessor {
                     tiling_specification: self.tiling_specification,
                     meta_data: self.meta_data.clone(),
-                    phantom_data: Default::default(),
+                    no_data_value: self.result_descriptor.no_data_value_as_(),
                 }
                 .boxed(),
             ),
@@ -975,7 +704,7 @@ impl InitializedRasterOperator for InitializedGdalSourceOperator {
                 GdalSourceProcessor {
                     tiling_specification: self.tiling_specification,
                     meta_data: self.meta_data.clone(),
-                    phantom_data: Default::default(),
+                    no_data_value: self.result_descriptor.no_data_value_as_(),
                 }
                 .boxed(),
             ),
@@ -983,7 +712,7 @@ impl InitializedRasterOperator for InitializedGdalSourceOperator {
                 GdalSourceProcessor {
                     tiling_specification: self.tiling_specification,
                     meta_data: self.meta_data.clone(),
-                    phantom_data: Default::default(),
+                    no_data_value: self.result_descriptor.no_data_value_as_(),
                 }
                 .boxed(),
             ),
@@ -1094,14 +823,12 @@ mod tests {
     use crate::test_data;
     use crate::util::gdal::add_ndvi_dataset;
     use crate::util::Result;
+
     use geoengine_datatypes::hashmap;
-    use geoengine_datatypes::primitives::{AxisAlignedRectangle, SpatialPartition2D};
+    use geoengine_datatypes::primitives::{AxisAlignedRectangle, SpatialPartition2D, TimeInstance};
+    use geoengine_datatypes::raster::{EmptyGrid2D, GridIdx2D};
     use geoengine_datatypes::raster::{TileInformation, TilingStrategy};
-    use geoengine_datatypes::{
-        primitives::{Measurement, SpatialResolution, TimeGranularity},
-        raster::GridShape2D,
-    };
-    use geoengine_datatypes::{raster::GridIdx2D, spatial_reference::SpatialReference};
+    use geoengine_datatypes::{primitives::SpatialResolution, raster::GridShape2D};
 
     async fn query_gdal_source(
         exe_ctx: &mut MockExecutionContext,
@@ -1386,296 +1113,6 @@ mod tests {
         assert_eq!(params.no_data_value, replaced.no_data_value);
     }
 
-    #[tokio::test]
-    async fn test_regular_meta_data() {
-        let no_data_value = Some(0.);
-
-        let meta_data = GdalMetaDataRegular {
-            result_descriptor: RasterResultDescriptor {
-                data_type: RasterDataType::U8,
-                spatial_reference: SpatialReference::epsg_4326().into(),
-                measurement: Measurement::Unitless,
-                no_data_value,
-            },
-            params: GdalDatasetParameters {
-                file_path: "/foo/bar_%TIME%.tiff".into(),
-                rasterband_channel: 0,
-                geo_transform: TestDefault::test_default(),
-                width: 360,
-                height: 180,
-                file_not_found_handling: FileNotFoundHandling::NoData,
-                no_data_value,
-                properties_mapping: None,
-                gdal_open_options: None,
-                gdal_config_options: None,
-            },
-            time_placeholders: hashmap! {
-                "%TIME%".to_string() => GdalSourceTimePlaceholder {
-                    format: "%f".to_string(),
-                    reference: TimeReference::Start,
-                },
-            },
-            start: TimeInstance::from_millis_unchecked(11),
-            step: TimeStep {
-                granularity: TimeGranularity::Millis,
-                step: 11,
-            },
-        };
-
-        assert_eq!(
-            meta_data.result_descriptor().await.unwrap(),
-            RasterResultDescriptor {
-                data_type: RasterDataType::U8,
-                spatial_reference: SpatialReference::epsg_4326().into(),
-                measurement: Measurement::Unitless,
-                no_data_value: Some(0.)
-            }
-        );
-
-        assert_eq!(
-            meta_data
-                .loading_info(RasterQueryRectangle {
-                    spatial_bounds: SpatialPartition2D::new_unchecked(
-                        (0., 1.).into(),
-                        (1., 0.).into()
-                    ),
-                    time_interval: TimeInterval::new_unchecked(0, 30),
-                    spatial_resolution: SpatialResolution::one(),
-                })
-                .await
-                .unwrap()
-                .info
-                .map(|p| p.unwrap().params.file_path.to_str().unwrap().to_owned())
-                .collect::<Vec<_>>(),
-            &[
-                "/foo/bar_000000000.tiff",
-                "/foo/bar_011000000.tiff",
-                "/foo/bar_022000000.tiff"
-            ]
-        );
-    }
-
-    #[allow(clippy::suspicious_map)]
-    #[allow(clippy::too_many_lines)]
-    #[tokio::test]
-    async fn test_step_time_instance() {
-        let result_descriptor = RasterResultDescriptor {
-            data_type: RasterDataType::U8,
-            spatial_reference: SpatialReference::epsg_4326().into(),
-            measurement: Measurement::Unitless,
-            no_data_value: Some(0.),
-        };
-        let params = GdalDatasetParameters {
-            file_path: "/foo/bar_step_%TIME%.tiff".into(),
-            rasterband_channel: 0,
-            geo_transform: TestDefault::test_default(),
-            width: 360,
-            height: 180,
-            file_not_found_handling: FileNotFoundHandling::NoData,
-            no_data_value: Some(0.),
-            properties_mapping: None,
-            gdal_open_options: None,
-            gdal_config_options: None,
-        };
-        let time_steps = vec![
-            TimeInterval::new_instant(30).unwrap(),
-            TimeInterval::new_instant(5).unwrap(),
-            TimeInterval::new_instant(10).unwrap(),
-            TimeInterval::new_instant(20).unwrap(),
-            TimeInterval::new_instant(15).unwrap(),
-        ];
-        let time_placeholders = hashmap! {
-            "%TIME%".to_string() => GdalSourceTimePlaceholder {
-                format: "%f".to_string(),
-                reference: TimeReference::Start,
-            },
-        };
-
-        let meta_data =
-            GdalMetadataFixedTimes::new(time_steps, params, result_descriptor, time_placeholders);
-
-        assert_eq!(
-            meta_data.result_descriptor().await.unwrap(),
-            RasterResultDescriptor {
-                data_type: RasterDataType::U8,
-                spatial_reference: SpatialReference::epsg_4326().into(),
-                measurement: Measurement::Unitless,
-                no_data_value: Some(0.)
-            }
-        );
-
-        assert_eq!(
-            meta_data
-                .loading_info(RasterQueryRectangle {
-                    spatial_bounds: SpatialPartition2D::new_unchecked(
-                        (0., 1.).into(),
-                        (1., 0.).into()
-                    ),
-                    time_interval: TimeInterval::new_unchecked(6, 18),
-                    spatial_resolution: SpatialResolution::one(),
-                })
-                .await
-                .unwrap()
-                .info
-                .map(|p| p.unwrap().params.file_path.to_str().unwrap().to_owned())
-                .collect::<Vec<_>>(),
-            &[
-                "/foo/bar_step_006000000.tiff",
-                "/foo/bar_step_010000000.tiff",
-                "/foo/bar_step_011000000.tiff",
-                "/foo/bar_step_015000000.tiff",
-                "/foo/bar_step_016000000.tiff"
-            ]
-        );
-
-        assert_eq!(
-            meta_data
-                .loading_info(RasterQueryRectangle {
-                    spatial_bounds: SpatialPartition2D::new_unchecked(
-                        (0., 1.).into(),
-                        (1., 0.).into()
-                    ),
-                    time_interval: TimeInterval::new_unchecked(22, 32),
-                    spatial_resolution: SpatialResolution::one(),
-                })
-                .await
-                .unwrap()
-                .info
-                .map(|p| p.unwrap().params.file_path.to_str().unwrap().to_owned())
-                .collect::<Vec<_>>(),
-            &[
-                "/foo/bar_step_022000000.tiff",
-                "/foo/bar_step_030000000.tiff"
-            ]
-        );
-
-        assert_eq!(
-            meta_data
-                .loading_info(RasterQueryRectangle {
-                    spatial_bounds: SpatialPartition2D::new_unchecked(
-                        (0., 1.).into(),
-                        (1., 0.).into()
-                    ),
-                    time_interval: TimeInterval::new_unchecked(40, 50),
-                    spatial_resolution: SpatialResolution::one(),
-                })
-                .await
-                .unwrap()
-                .info
-                .map(|p| p.unwrap().params.file_path.to_str().unwrap().to_owned())
-                .collect::<Vec<_>>(),
-            &["/foo/bar_step_040000000.tiff"]
-        );
-    }
-
-    #[allow(clippy::suspicious_map)]
-    #[tokio::test]
-    async fn test_step_time_interval() {
-        let result_descriptor = RasterResultDescriptor {
-            data_type: RasterDataType::U8,
-            spatial_reference: SpatialReference::epsg_4326().into(),
-            measurement: Measurement::Unitless,
-            no_data_value: Some(0.),
-        };
-        let params = GdalDatasetParameters {
-            file_path: "/foo/bar_step_%TIME%.tiff".into(),
-            rasterband_channel: 0,
-            geo_transform: TestDefault::test_default(),
-            width: 360,
-            height: 180,
-            file_not_found_handling: FileNotFoundHandling::NoData,
-            no_data_value: Some(0.),
-            properties_mapping: None,
-            gdal_open_options: None,
-            gdal_config_options: None,
-        };
-        let time_steps = vec![
-            TimeInterval::new_instant(30).unwrap(),
-            TimeInterval::new_unchecked(10, 20),
-            TimeInterval::new_unchecked(22, 25),
-        ];
-        let time_placeholders = hashmap! {
-            "%TIME%".to_string() => GdalSourceTimePlaceholder {
-                format: "%f".to_string(),
-                reference: TimeReference::Start,
-            },
-        };
-
-        let meta_data =
-            GdalMetadataFixedTimes::new(time_steps, params, result_descriptor, time_placeholders);
-
-        assert_eq!(
-            meta_data.result_descriptor().await.unwrap(),
-            RasterResultDescriptor {
-                data_type: RasterDataType::U8,
-                spatial_reference: SpatialReference::epsg_4326().into(),
-                measurement: Measurement::Unitless,
-                no_data_value: Some(0.)
-            }
-        );
-
-        assert_eq!(
-            meta_data
-                .loading_info(RasterQueryRectangle {
-                    spatial_bounds: SpatialPartition2D::new_unchecked(
-                        (0., 1.).into(),
-                        (1., 0.).into()
-                    ),
-                    time_interval: TimeInterval::new_unchecked(14, 18),
-                    spatial_resolution: SpatialResolution::one(),
-                })
-                .await
-                .unwrap()
-                .info
-                .map(|p| p.unwrap().params.file_path.to_str().unwrap().to_owned())
-                .collect::<Vec<_>>(),
-            &["/foo/bar_step_014000000.tiff"]
-        );
-
-        assert_eq!(
-            meta_data
-                .loading_info(RasterQueryRectangle {
-                    spatial_bounds: SpatialPartition2D::new_unchecked(
-                        (0., 1.).into(),
-                        (1., 0.).into()
-                    ),
-                    time_interval: TimeInterval::new_unchecked(15, 24),
-                    spatial_resolution: SpatialResolution::one(),
-                })
-                .await
-                .unwrap()
-                .info
-                .map(|p| p.unwrap().params.file_path.to_str().unwrap().to_owned())
-                .collect::<Vec<_>>(),
-            &[
-                "/foo/bar_step_015000000.tiff",
-                "/foo/bar_step_020000000.tiff",
-                "/foo/bar_step_022000000.tiff"
-            ]
-        );
-
-        assert_eq!(
-            meta_data
-                .loading_info(RasterQueryRectangle {
-                    spatial_bounds: SpatialPartition2D::new_unchecked(
-                        (0., 1.).into(),
-                        (1., 0.).into()
-                    ),
-                    time_interval: TimeInterval::new_unchecked(5, 15),
-                    spatial_resolution: SpatialResolution::one(),
-                })
-                .await
-                .unwrap()
-                .info
-                .map(|p| p.unwrap().params.file_path.to_str().unwrap().to_owned())
-                .collect::<Vec<_>>(),
-            &[
-                "/foo/bar_step_005000000.tiff",
-                "/foo/bar_step_010000000.tiff"
-            ]
-        );
-    }
-
     #[test]
     fn test_load_tile_data() {
         let output_shape: GridShape2D = [8, 8].into();
@@ -1774,8 +1211,8 @@ mod tests {
 
     #[tokio::test]
     async fn test_query_single_time_slice() {
-        let mut exe_ctx = MockExecutionContext::default();
-        let query_ctx = MockQueryContext::default();
+        let mut exe_ctx = MockExecutionContext::test_default();
+        let query_ctx = MockQueryContext::test_default();
         let id = add_ndvi_dataset(&mut exe_ctx);
 
         let output_shape: GridShape2D = [256, 256].into();
@@ -1824,8 +1261,8 @@ mod tests {
 
     #[tokio::test]
     async fn test_query_multi_time_slices() {
-        let mut exe_ctx = MockExecutionContext::default();
-        let query_ctx = MockQueryContext::default();
+        let mut exe_ctx = MockExecutionContext::test_default();
+        let query_ctx = MockQueryContext::test_default();
         let id = add_ndvi_dataset(&mut exe_ctx);
 
         let output_shape: GridShape2D = [256, 256].into();
@@ -1859,8 +1296,8 @@ mod tests {
 
     #[tokio::test]
     async fn test_nodata() {
-        let mut exe_ctx = MockExecutionContext::default();
-        let query_ctx = MockQueryContext::default();
+        let mut exe_ctx = MockExecutionContext::test_default();
+        let query_ctx = MockQueryContext::test_default();
         let id = add_ndvi_dataset(&mut exe_ctx);
 
         let output_shape: GridShape2D = [256, 256].into();
@@ -1889,6 +1326,31 @@ mod tests {
         );
 
         assert!(tile_1.is_empty());
+    }
+
+    #[tokio::test]
+    async fn timestep_without_params() {
+        let output_bounds =
+            SpatialPartition2D::new_unchecked((-90., 90.).into(), (90., -90.).into());
+        let output_shape: GridShape2D = [256, 256].into();
+
+        let tile_info = TileInformation::with_partition_and_shape(output_bounds, output_shape);
+        let time_interval = TimeInterval::new_unchecked(1_388_534_400_000, 1_391_212_800_000); // 2014-01-01 - 2014-01-15
+        let params = None;
+
+        let tile =
+            GdalSourceProcessor::<f64>::load_tile_async(params, tile_info, time_interval, Some(1.))
+                .await;
+
+        assert!(tile.is_ok());
+
+        let expected = RasterTile2D::<f64>::new_with_tile_info(
+            time_interval,
+            tile_info,
+            EmptyGrid2D::new(output_shape, 1.).into(),
+        );
+
+        assert_eq!(tile.unwrap(), expected);
     }
 
     #[test]

@@ -291,23 +291,6 @@ where
     }
 }
 
-impl RasterDataType {
-    pub fn ocl_type(self) -> &'static str {
-        match self {
-            RasterDataType::U8 => "uchar",
-            RasterDataType::U16 => "ushort",
-            RasterDataType::U32 => "uint",
-            RasterDataType::U64 => "ulong",
-            RasterDataType::I8 => "char",
-            RasterDataType::I16 => "short",
-            RasterDataType::I32 => "int",
-            RasterDataType::I64 => "long",
-            RasterDataType::F32 => "float",
-            RasterDataType::F64 => "double",
-        }
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
