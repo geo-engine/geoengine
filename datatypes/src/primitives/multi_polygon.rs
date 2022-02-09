@@ -10,7 +10,8 @@ use snafu::ensure;
 use crate::collections::VectorDataType;
 use crate::error::Error;
 use crate::primitives::{
-    error, BoundingBox2D, GeometryRef, MultiLineString, PrimitivesError, TypedGeometry,
+    error, BoundingBox2D, GeometryRef, MultiLineString, PrimitivesError, SpatialBounded,
+    TypedGeometry,
 };
 use crate::primitives::{Coordinate2D, Geometry};
 use crate::util::arrow::{downcast_array, ArrowTyped};
@@ -353,6 +354,18 @@ impl<'g> MultiPolygonAccess for MultiPolygonRef<'g> {
 
     fn polygons(&self) -> &[Self::R] {
         &self.polygons
+    }
+}
+
+impl<'g> SpatialBounded for MultiPolygonRef<'g> {
+    fn spatial_bounds(&self) -> BoundingBox2D {
+        let outer_ring_coords = self
+            .polygons
+            .iter()
+            .filter_map(|p| p.iter().next())
+            .flat_map(|&x| x.into_iter());
+        BoundingBox2D::from_coord_ref_iter(outer_ring_coords)
+            .expect("there must be at least one coordinate in a multipolygon")
     }
 }
 

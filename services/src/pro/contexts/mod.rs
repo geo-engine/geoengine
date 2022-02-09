@@ -9,7 +9,9 @@ pub use postgres::PostgresContext;
 use std::sync::Arc;
 
 use crate::contexts::{Context, Db};
-use crate::pro::executor::PlotDescription;
+use crate::pro::executor::{
+    MultiLinestringDescription, MultiPointDescription, MultiPolygonDescription, PlotDescription,
+};
 use crate::pro::users::{UserDb, UserSession};
 use crate::util::config::get_config_element;
 use async_trait::async_trait;
@@ -30,12 +32,28 @@ pub trait ProContext: Context<Session = UserSession> {
 
 #[derive(Clone)]
 pub struct TaskManager {
-    plot_executor: Arc<Executor<PlotDescription>>,
+    executors: Arc<Executors>,
+}
+
+struct Executors {
+    plot_executor: Executor<PlotDescription>,
+    point_executor: Executor<MultiPointDescription>,
+    line_executor: Executor<MultiLinestringDescription>,
+    polygon_executor: Executor<MultiPolygonDescription>,
 }
 
 impl TaskManager {
     pub fn plot_executor(&self) -> &Executor<PlotDescription> {
-        self.plot_executor.as_ref()
+        &self.executors.plot_executor
+    }
+    pub fn point_executor(&self) -> &Executor<MultiPointDescription> {
+        &self.executors.point_executor
+    }
+    pub fn line_executor(&self) -> &Executor<MultiLinestringDescription> {
+        &self.executors.line_executor
+    }
+    pub fn polygon_executor(&self) -> &Executor<MultiPolygonDescription> {
+        &self.executors.polygon_executor
     }
 }
 
@@ -45,215 +63,12 @@ impl Default for TaskManager {
             get_config_element::<crate::util::config::Executor>().map_or(5, |it| it.queue_size);
 
         TaskManager {
-            plot_executor: Arc::new(Executor::new(queue_size)),
+            executors: Arc::new(Executors {
+                plot_executor: Executor::new(queue_size),
+                point_executor: Executor::new(queue_size),
+                line_executor: Executor::new(queue_size),
+                polygon_executor: Executor::new(queue_size),
+            }),
         }
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use crate::pro::contexts::ExecutorKey;
-    use crate::workflows::workflow::WorkflowId;
-    use geoengine_datatypes::primitives::{
-        BoundingBox2D, Coordinate2D, QueryRectangle, SpatialResolution, TimeInterval,
-    };
-    use std::collections::hash_map::DefaultHasher;
-    use std::hash::{Hash, Hasher};
-    use uuid::Uuid;
-
-    #[test]
-    fn test_executor_key_bb_hash_ok() {
-        let wf_id = Uuid::default();
-
-        let k1 = ExecutorKey {
-            workflow_id: WorkflowId(wf_id),
-            query_rectangle: QueryRectangle {
-                spatial_bounds: BoundingBox2D::new(
-                    Coordinate2D::new(0.0, 0.0),
-                    Coordinate2D::new(10.0, 10.0),
-                )
-                .unwrap(),
-                time_interval: TimeInterval::new(1, 10).unwrap(),
-                spatial_resolution: SpatialResolution::one(),
-            },
-        };
-
-        let k2 = ExecutorKey {
-            workflow_id: WorkflowId(wf_id),
-            query_rectangle: QueryRectangle {
-                spatial_bounds: BoundingBox2D::new(
-                    Coordinate2D::new(0.0, 0.0),
-                    Coordinate2D::new(10.0, 10.0),
-                )
-                .unwrap(),
-                time_interval: TimeInterval::new(1, 10).unwrap(),
-                spatial_resolution: SpatialResolution::one(),
-            },
-        };
-
-        let mut h1 = DefaultHasher::new();
-        let mut h2 = DefaultHasher::new();
-
-        k1.hash(&mut h1);
-        k2.hash(&mut h2);
-
-        assert_eq!(h1.finish(), h2.finish());
-    }
-
-    #[test]
-    fn test_executor_key_bb_hash_id() {
-        let wf_id = Uuid::default();
-        let wf_id2 = Uuid::new_v4();
-
-        let k1 = ExecutorKey {
-            workflow_id: WorkflowId(wf_id),
-            query_rectangle: QueryRectangle {
-                spatial_bounds: BoundingBox2D::new(
-                    Coordinate2D::new(0.0, 0.0),
-                    Coordinate2D::new(10.0, 10.0),
-                )
-                .unwrap(),
-                time_interval: TimeInterval::new(1, 10).unwrap(),
-                spatial_resolution: SpatialResolution::one(),
-            },
-        };
-
-        let k2 = ExecutorKey {
-            workflow_id: WorkflowId(wf_id2),
-            query_rectangle: QueryRectangle {
-                spatial_bounds: BoundingBox2D::new(
-                    Coordinate2D::new(0.0, 0.0),
-                    Coordinate2D::new(10.0, 10.0),
-                )
-                .unwrap(),
-                time_interval: TimeInterval::new(1, 10).unwrap(),
-                spatial_resolution: SpatialResolution::one(),
-            },
-        };
-
-        let mut h1 = DefaultHasher::new();
-        let mut h2 = DefaultHasher::new();
-
-        k1.hash(&mut h1);
-        k2.hash(&mut h2);
-
-        assert_ne!(h1.finish(), h2.finish());
-    }
-
-    #[test]
-    fn test_executor_key_bb_hash_bounds() {
-        let wf_id = Uuid::default();
-
-        let k1 = ExecutorKey {
-            workflow_id: WorkflowId(wf_id),
-            query_rectangle: QueryRectangle {
-                spatial_bounds: BoundingBox2D::new(
-                    Coordinate2D::new(0.1, 0.0),
-                    Coordinate2D::new(10.0, 10.0),
-                )
-                .unwrap(),
-                time_interval: TimeInterval::new(1, 10).unwrap(),
-                spatial_resolution: SpatialResolution::one(),
-            },
-        };
-
-        let k2 = ExecutorKey {
-            workflow_id: WorkflowId(wf_id),
-            query_rectangle: QueryRectangle {
-                spatial_bounds: BoundingBox2D::new(
-                    Coordinate2D::new(0.0, 0.0),
-                    Coordinate2D::new(10.0, 10.0),
-                )
-                .unwrap(),
-                time_interval: TimeInterval::new(1, 10).unwrap(),
-                spatial_resolution: SpatialResolution::one(),
-            },
-        };
-
-        let mut h1 = DefaultHasher::new();
-        let mut h2 = DefaultHasher::new();
-
-        k1.hash(&mut h1);
-        k2.hash(&mut h2);
-
-        assert_ne!(h1.finish(), h2.finish());
-    }
-
-    #[test]
-    fn test_executor_key_bb_hash_interval() {
-        let wf_id = Uuid::default();
-
-        let k1 = ExecutorKey {
-            workflow_id: WorkflowId(wf_id),
-            query_rectangle: QueryRectangle {
-                spatial_bounds: BoundingBox2D::new(
-                    Coordinate2D::new(0.0, 0.0),
-                    Coordinate2D::new(10.0, 10.0),
-                )
-                .unwrap(),
-                time_interval: TimeInterval::new(1, 11).unwrap(),
-                spatial_resolution: SpatialResolution::one(),
-            },
-        };
-
-        let k2 = ExecutorKey {
-            workflow_id: WorkflowId(wf_id),
-            query_rectangle: QueryRectangle {
-                spatial_bounds: BoundingBox2D::new(
-                    Coordinate2D::new(0.0, 0.0),
-                    Coordinate2D::new(10.0, 10.0),
-                )
-                .unwrap(),
-                time_interval: TimeInterval::new(1, 10).unwrap(),
-                spatial_resolution: SpatialResolution::one(),
-            },
-        };
-
-        let mut h1 = DefaultHasher::new();
-        let mut h2 = DefaultHasher::new();
-
-        k1.hash(&mut h1);
-        k2.hash(&mut h2);
-
-        assert_ne!(h1.finish(), h2.finish());
-    }
-
-    #[test]
-    fn test_executor_key_bb_hash_res() {
-        let wf_id = Uuid::default();
-
-        let k1 = ExecutorKey {
-            workflow_id: WorkflowId(wf_id),
-            query_rectangle: QueryRectangle {
-                spatial_bounds: BoundingBox2D::new(
-                    Coordinate2D::new(0.0, 0.0),
-                    Coordinate2D::new(10.0, 10.0),
-                )
-                .unwrap(),
-                time_interval: TimeInterval::new(1, 10).unwrap(),
-                spatial_resolution: SpatialResolution::one(),
-            },
-        };
-
-        let k2 = ExecutorKey {
-            workflow_id: WorkflowId(wf_id),
-            query_rectangle: QueryRectangle {
-                spatial_bounds: BoundingBox2D::new(
-                    Coordinate2D::new(0.0, 0.0),
-                    Coordinate2D::new(10.0, 10.0),
-                )
-                .unwrap(),
-                time_interval: TimeInterval::new(1, 10).unwrap(),
-                spatial_resolution: SpatialResolution::zero_point_one(),
-            },
-        };
-
-        let mut h1 = DefaultHasher::new();
-        let mut h2 = DefaultHasher::new();
-
-        k1.hash(&mut h1);
-        k2.hash(&mut h2);
-
-        assert_ne!(h1.finish(), h2.finish());
     }
 }

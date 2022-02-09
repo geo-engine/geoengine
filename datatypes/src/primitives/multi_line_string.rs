@@ -10,7 +10,7 @@ use snafu::ensure;
 use crate::collections::VectorDataType;
 use crate::error::Error;
 use crate::primitives::{
-    error, BoundingBox2D, GeometryRef, MultiPoint, PrimitivesError, TypedGeometry,
+    error, BoundingBox2D, GeometryRef, MultiPoint, PrimitivesError, SpatialBounded, TypedGeometry,
 };
 use crate::primitives::{Coordinate2D, Geometry};
 use crate::util::arrow::{downcast_array, ArrowTyped};
@@ -278,6 +278,13 @@ impl<'g> MultiLineStringAccess for MultiLineStringRef<'g> {
     type L = &'g [Coordinate2D];
     fn lines(&self) -> &[&'g [Coordinate2D]] {
         &self.point_coordinates
+    }
+}
+impl<'g> SpatialBounded for MultiLineStringRef<'g> {
+    fn spatial_bounds(&self) -> BoundingBox2D {
+        let coords = self.point_coordinates.iter().flat_map(|&x| x.into_iter());
+        BoundingBox2D::from_coord_ref_iter(coords)
+            .expect("there must be at least one coordinate in a multilinestring")
     }
 }
 
