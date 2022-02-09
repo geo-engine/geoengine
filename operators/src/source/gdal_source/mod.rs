@@ -652,6 +652,8 @@ impl InitializedRasterOperator for InitializedGdalSourceOperator {
     }
 }
 
+/// This method reads the data for a single grid with a specified size from the GDAL dataset.
+/// It fails if the tile is not within the dataset.
 fn read_grid_from_raster<
     T,
     D: GridSize<ShapeArray = [usize; 2]> + GridSpaceToLinearSpace<IndexArray = [isize; 2]>,
@@ -676,6 +678,9 @@ where
     Grid::new(tile_grid, buffer.data, no_data_value).map_err(Into::into)
 }
 
+/// This method reads the data for a single grid with a specified size from the GDAL dataset.
+/// If the tile overlaps the borders of the dataset only the data in the dataset bounds is read.
+/// The data read from the dataset is clipped into a grid with the requested size filled  with the `no_data_value`.
 fn read_partial_grid_from_raster<T>(
     rasterband: &GdalRasterBand,
     dataset_grid_box: &GridBoundingBox2D,
@@ -702,6 +707,10 @@ where
     Ok(tile_raster)
 }
 
+/// This method reads the data for a single tile with a specified size from the GDAL dataset.
+/// It handles conversion to grid coordinates.
+/// If the tile is inside the dataset it uses the `read_grid_from_raster` method.
+/// f the tile overlaps the borders of the dataset it uses the `read_partial_grid_from_raster` method.  
 fn read_grid_and_handle_edges<T>(
     tile_info: TileInformation,
     rasterband: &GdalRasterBand,
@@ -750,6 +759,7 @@ where
     Ok(Some(result_grid))
 }
 
+/// This method reads the data for a single tile with a specified size from the GDAL dataset and adds the requested metadata as properties to the tile.
 fn read_raster_tile_with_properties<T: Pixel + gdal::raster::GdalType>(
     dataset: &gdal::Dataset,
     dataset_params: &GdalDatasetParameters,
