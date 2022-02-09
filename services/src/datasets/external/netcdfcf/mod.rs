@@ -44,7 +44,7 @@ use geoengine_operators::{
 };
 use log::debug;
 use serde::{Deserialize, Serialize};
-use snafu::ResultExt;
+use snafu::{OptionExt, ResultExt};
 
 pub use self::error::NetCdfCf4DProviderError;
 
@@ -648,7 +648,7 @@ impl NetCdfCfDataProvider {
             subgroups,
             entities,
             time: TimeInterval::new(time_start, time_end)
-                .unwrap_or_else(|_| TimeInterval::from(time_start)),
+                .context(error::InvalidTimeRangeForDataset)?,
             time_step,
         })
     }
@@ -665,7 +665,7 @@ impl NetCdfCfDataProvider {
         let mut listings = Vec::new();
 
         while let Some(path) = paths.pop_front() {
-            let tail = path.last().expect("our lists aren't empty");
+            let tail = path.last().context(error::PathToDataIsEmpty)?;
 
             if !tail.subgroups.is_empty() {
                 for subgroup in &tail.subgroups {
@@ -687,7 +687,7 @@ impl NetCdfCfDataProvider {
 
             let group_names = path.iter().map(|s| s.name.clone()).collect::<Vec<String>>();
 
-            let data_type = tail.data_type.unwrap_or(RasterDataType::F32);
+            let data_type = tail.data_type.context(error::MissingDataType)?;
 
             for entity in &tree.entities {
                 let dataset_id = NetCdfCf4DDatasetId {

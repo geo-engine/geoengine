@@ -5,7 +5,7 @@
 use std::str::FromStr;
 
 use crate::datasets::external::netcdfcf::NetCdfOverview;
-use crate::error::Result;
+use crate::error::{ErrorSource, Result};
 use crate::{contexts::Context, datasets::external::netcdfcf::NetCdfCfDataProvider};
 use actix_web::{
     web::{self, ServiceConfig},
@@ -15,6 +15,7 @@ use geoengine_datatypes::dataset::DatasetProviderId;
 use geoengine_datatypes::test_data;
 use log::debug;
 use serde::Serialize;
+use snafu::{ResultExt, Snafu};
 
 pub(crate) fn init_ebv_routes<C>(base_url: Option<String>) -> Box<dyn FnOnce(&mut ServiceConfig)>
 where
@@ -83,6 +84,14 @@ mod portal_responses {
     pub struct EbvDatasetsResponseDataset {
         pub pathname: String,
     }
+}
+
+#[derive(Debug, Snafu)]
+#[snafu(visibility(pub(crate)))]
+#[snafu(module(error), context(suffix(false)))] // disables default `Snafu` suffix
+pub enum EbvError {
+    #[snafu(display("Cannot parse NetCDF file metadata: {source}"))]
+    CannotParseNetCdfFile { source: Box<dyn ErrorSource> },
 }
 
 #[derive(Debug, Serialize)]
@@ -230,10 +239,9 @@ async fn get_ebv_subdatasets<C: Context>(
         debug!("Accessing dataset {}", data_path.display());
 
         crate::util::spawn_blocking(move || NetCdfCfDataProvider::build_netcdf_tree(&data_path))
-            .await
-            // TODO: error handling
-            .unwrap()
-            .unwrap()
+            .await?
+            .map_err(|e| Box::new(e) as _)
+            .context(error::CannotParseNetCdfFile)?
     };
 
     // TODO: find a way to get the external dataset provider id
