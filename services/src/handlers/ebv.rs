@@ -245,8 +245,10 @@ async fn get_ebv_subdatasets<C: Context>(
     let dataset = get_dataset_metadata(base_url.get_ref(), id.into_inner()).await?;
 
     let listing = {
+        let dataset_path = dataset.dataset_path.trim_start_matches('/');
+
         // TODO: make dir configurable
-        let data_path = test_data!("netcdf4d/").join(dataset.dataset_path);
+        let data_path = test_data!("netcdf4d/").join(dataset_path);
 
         debug!("Accessing dataset {}", data_path.display());
 
