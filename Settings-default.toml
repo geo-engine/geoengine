@@ -64,6 +64,7 @@ provider_defs_path = "./test_data/provider_defs"
 # TODO: find good default
 # Use 0 for `ALL_CPUS` option or a number >0 for a specific number of threads.
 compression_num_threads = 8
+allowed_drivers = ["CSV", "COG", "GPKG", "GTiff", "JPEG2000", "MEM", "netCDF", "WCS", "FlatGeobuf", "GeoJSON", "GPKG", "PostgreSQL", "SQLite", "WFS"]
 
 
 # Settings for Geo Engine Pro

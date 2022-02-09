@@ -5,6 +5,7 @@ use geoengine_datatypes::primitives::{RasterQueryRectangle, VectorQueryRectangle
 use rayon::ThreadPool;
 use std::sync::Arc;
 use tokio::sync::{RwLock, RwLockReadGuard, RwLockWriteGuard};
+use type_map::concurrent::TypeMap;
 
 mod in_memory;
 mod session;
@@ -93,6 +94,7 @@ where
     thread_pool: Arc<ThreadPool>,
     session: S,
     tiling_specification: TilingSpecification,
+    config: Arc<TypeMap>,
 }
 
 impl<S, D> ExecutionContextImpl<S, D>
@@ -105,12 +107,14 @@ where
         thread_pool: Arc<ThreadPool>,
         session: S,
         tiling_specification: TilingSpecification,
+        config: Arc<TypeMap>,
     ) -> Self {
         Self {
             dataset_db,
             thread_pool,
             session,
             tiling_specification,
+            config,
         }
     }
 }
@@ -133,6 +137,10 @@ where
 
     fn tiling_specification(&self) -> TilingSpecification {
         self.tiling_specification
+    }
+
+    fn config(&self) -> Arc<TypeMap> {
+        todo!()
     }
 }
 

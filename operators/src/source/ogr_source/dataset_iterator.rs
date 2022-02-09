@@ -2,7 +2,9 @@
 #![allow(clippy::option_option)]
 
 use super::{CsvHeader, FeaturesProvider, FormatSpecifics, OgrSourceDataset};
+use crate::engine::Config;
 use crate::error::{self};
+use crate::source::GdalConfig;
 use crate::util::gdal::gdal_open_dataset_ex;
 use crate::util::Result;
 use gdal::vector::sql::Dialect;
@@ -39,18 +41,21 @@ struct _OgrDatasetIterator {
     #[borrows(mut dataset)]
     #[covariant]
     features_provider: FeaturesProvider<'this>,
+    config: Config,
 }
 
 impl OgrDatasetIterator {
     pub fn new(
         dataset_information: &OgrSourceDataset,
         query_rectangle: &VectorQueryRectangle,
+        config: Config,
     ) -> Result<OgrDatasetIterator> {
         let dataset_iterator = _OgrDatasetIteratorTryBuilder {
-            dataset: Self::open_gdal_dataset(dataset_information)?,
+            dataset: Self::open_gdal_dataset(dataset_information, &config)?,
             features_provider_builder: |dataset| {
                 Self::create_features_provider(dataset, dataset_information, query_rectangle)
             },
+            config,
         }
         .try_build()?;
 
@@ -106,31 +111,33 @@ impl OgrDatasetIterator {
         Ok(features_provider)
     }
 
-    fn open_gdal_dataset(dataset_info: &OgrSourceDataset) -> Result<Dataset> {
+    fn open_gdal_dataset(dataset_info: &OgrSourceDataset, config: &Config) -> Result<Dataset> {
         if Self::is_csv(dataset_info) {
-            Self::open_csv_dataset(dataset_info)
+            Self::open_csv_dataset(dataset_info, config)
         } else {
+            let allowed_drivers = config.get::<GdalConfig>().unwrap().allowed_drivers_ref();
             gdal_open_dataset_ex(
                 &dataset_info.file_name,
                 DatasetOptions {
                     open_flags: GdalOpenFlags::GDAL_OF_VECTOR,
                     ..Default::default()
                 },
+                &allowed_drivers,
             )
         }
     }
 
-    fn open_csv_dataset(dataset_info: &OgrSourceDataset) -> Result<Dataset> {
+    fn open_csv_dataset(dataset_info: &OgrSourceDataset, config: &Config) -> Result<Dataset> {
         let columns = dataset_info
             .columns
             .as_ref()
             .ok_or(error::Error::OgrSourceColumnsSpecMissing)?;
 
-        let allowed_drivers = Some(vec!["CSV"]);
+        let allowed_drivers = config.get::<GdalConfig>().unwrap().allowed_drivers_ref();
 
         let mut dataset_options = DatasetOptions {
             open_flags: GdalOpenFlags::GDAL_OF_VECTOR,
-            allowed_drivers: allowed_drivers.as_deref(),
+            allowed_drivers: Some(&allowed_drivers),
             ..DatasetOptions::default()
         };
 
@@ -147,7 +154,12 @@ impl OgrDatasetIterator {
                 // "AUTODETECT_TYPE=YES", // This breaks tests
             ];
             dataset_options.open_options = Some(open_opts);
-            return gdal_open_dataset_ex(&dataset_info.file_name, dataset_options);
+
+            return gdal_open_dataset_ex(
+                &dataset_info.file_name,
+                dataset_options,
+                &allowed_drivers,
+            );
         }
 
         if let Some(y) = &columns.y {
@@ -158,7 +170,11 @@ impl OgrDatasetIterator {
                 "AUTODETECT_TYPE=YES",
             ];
             dataset_options.open_options = Some(open_opts);
-            return gdal_open_dataset_ex(&dataset_info.file_name, dataset_options);
+            return gdal_open_dataset_ex(
+                &dataset_info.file_name,
+                dataset_options,
+                &allowed_drivers,
+            );
         }
 
         let open_opts = &[
@@ -167,7 +183,7 @@ impl OgrDatasetIterator {
             "AUTODETECT_TYPE=YES",
         ];
         dataset_options.open_options = Some(open_opts);
-        gdal_open_dataset_ex(&dataset_info.file_name, dataset_options)
+        gdal_open_dataset_ex(&dataset_info.file_name, dataset_options, &allowed_drivers)
     }
 
     fn is_csv(dataset_info: &OgrSourceDataset) -> bool {

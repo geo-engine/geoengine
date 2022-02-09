@@ -18,6 +18,7 @@ use geoengine_operators::engine::ChunkByteSize;
 use geoengine_operators::util::create_rayon_thread_pool;
 use rayon::ThreadPool;
 use tokio::sync::{RwLock, RwLockReadGuard, RwLockWriteGuard};
+use type_map::concurrent::TypeMap;
 
 /// A context with references to in-memory versions of the individual databases.
 #[derive(Clone)]
@@ -29,6 +30,7 @@ pub struct InMemoryContext {
     thread_pool: Arc<ThreadPool>,
     exe_ctx_tiling_spec: TilingSpecification,
     query_ctx_chunk_size: ChunkByteSize,
+    config: Arc<TypeMap>,
 }
 
 impl TestDefault for InMemoryContext {
@@ -41,6 +43,7 @@ impl TestDefault for InMemoryContext {
             thread_pool: create_rayon_thread_pool(0),
             exe_ctx_tiling_spec: TestDefault::test_default(),
             query_ctx_chunk_size: TestDefault::test_default(),
+            config: Arc::new(crate::util::config::as_type_map().expect("Failed to create config")),
         }
     }
 }
@@ -64,6 +67,7 @@ impl InMemoryContext {
             exe_ctx_tiling_spec,
             query_ctx_chunk_size,
             dataset_db: Arc::new(RwLock::new(db)),
+            config: Arc::new(crate::util::config::as_type_map().expect("Failed to create config")),
         }
     }
 
@@ -79,6 +83,7 @@ impl InMemoryContext {
             thread_pool: create_rayon_thread_pool(0),
             exe_ctx_tiling_spec,
             query_ctx_chunk_size,
+            config: Arc::new(crate::util::config::as_type_map().expect("Failed to create config")),
         }
     }
 }
@@ -136,6 +141,7 @@ impl Context for InMemoryContext {
                 self.thread_pool.clone(),
                 session,
                 self.exe_ctx_tiling_spec,
+                self.config.clone(),
             ),
         )
     }

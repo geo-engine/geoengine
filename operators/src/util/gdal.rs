@@ -3,7 +3,7 @@ use std::{
     path::{Path, PathBuf},
 };
 
-use gdal::{raster::GDALDataType, Dataset, DatasetOptions};
+use gdal::{raster::GDALDataType, Dataset, DatasetOptions, GdalOpenFlags};
 use geoengine_datatypes::{
     dataset::{DatasetId, InternalDatasetId},
     hashmap,
@@ -74,14 +74,22 @@ pub fn add_ndvi_dataset(ctx: &mut MockExecutionContext) -> DatasetId {
 }
 
 /// Opens a Gdal Dataset with the given `path`.
-/// Other crates should use this method for Gdal Dataset access as a workaround to avoid strange errors.
-pub fn gdal_open_dataset(path: &Path) -> Result<Dataset> {
-    gdal_open_dataset_ex(path, DatasetOptions::default())
+pub fn gdal_open_dataset(path: &Path, allowed_drivers: &[&str]) -> Result<Dataset> {
+    gdal_open_dataset_ex(path, DatasetOptions::default(), allowed_drivers)
 }
 
 /// Opens a Gdal Dataset with the given `path` and `dataset_options`.
-/// Other crates should use this method for Gdal Dataset access as a workaround to avoid strange errors.
-pub fn gdal_open_dataset_ex(path: &Path, dataset_options: DatasetOptions) -> Result<Dataset> {
+pub fn gdal_open_dataset_ex(
+    path: &Path,
+    dataset_options: DatasetOptions,
+    allowed_drivers: &[&str],
+) -> Result<Dataset> {
+    let dataset_options = {
+        let mut dataset_options = dataset_options;
+        dataset_options.allowed_drivers = Some(allowed_drivers);
+        dataset_options
+    };
+
     #[cfg(debug_assertions)]
     let dataset_options = {
         let mut dataset_options = dataset_options;

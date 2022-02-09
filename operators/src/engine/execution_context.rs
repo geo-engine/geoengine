@@ -18,6 +18,7 @@ use std::collections::HashMap;
 use std::fmt::Debug;
 use std::marker::PhantomData;
 use std::sync::Arc;
+use type_map::concurrent::TypeMap;
 
 /// A context that provides certain utility access during operator initialization
 pub trait ExecutionContext: Send
@@ -28,7 +29,11 @@ pub trait ExecutionContext: Send
 {
     fn thread_pool(&self) -> &Arc<ThreadPool>;
     fn tiling_specification(&self) -> TilingSpecification;
+
+    fn config(&self) -> Config;
 }
+
+pub type Config = Arc<TypeMap>;
 
 #[async_trait]
 pub trait MetaDataProvider<L, R, Q>
@@ -62,6 +67,7 @@ pub struct MockExecutionContext {
     pub thread_pool: Arc<ThreadPool>,
     pub meta_data: HashMap<DatasetId, Box<dyn Any + Send + Sync>>,
     pub tiling_specification: TilingSpecification,
+    pub config: Arc<TypeMap>,
 }
 
 impl TestDefault for MockExecutionContext {
@@ -70,6 +76,7 @@ impl TestDefault for MockExecutionContext {
             thread_pool: create_rayon_thread_pool(0),
             meta_data: HashMap::default(),
             tiling_specification: TilingSpecification::test_default(),
+            config: Arc::new(TypeMap::default()),
         }
     }
 }
@@ -80,6 +87,7 @@ impl MockExecutionContext {
             thread_pool: create_rayon_thread_pool(0),
             meta_data: HashMap::default(),
             tiling_specification,
+            config: Arc::new(TypeMap::default()),
         }
     }
 
@@ -91,6 +99,7 @@ impl MockExecutionContext {
             thread_pool: create_rayon_thread_pool(num_threads),
             meta_data: HashMap::default(),
             tiling_specification,
+            config: Arc::new(TypeMap::default()),
         }
     }
 
@@ -122,6 +131,10 @@ impl ExecutionContext for MockExecutionContext {
 
     fn tiling_specification(&self) -> TilingSpecification {
         self.tiling_specification
+    }
+
+    fn config(&self) -> Arc<TypeMap> {
+        self.config.clone()
     }
 }
 

@@ -8,10 +8,12 @@ use crate::util::parsing::{deserialize_base_url, deserialize_base_url_option};
 use chrono::{DateTime, FixedOffset};
 use config::{Config, Environment, File};
 use geoengine_datatypes::primitives::{TimeInstance, TimeInterval};
+use geoengine_operators::source::GdalConfig;
 use geoengine_operators::util::raster_stream_to_geotiff::GdalCompressionNumThreads;
 use lazy_static::lazy_static;
 use serde::Deserialize;
 use snafu::ResultExt;
+use type_map::concurrent::TypeMap;
 
 lazy_static! {
     static ref SETTINGS: RwLock<Config> = RwLock::new({
@@ -43,6 +45,16 @@ lazy_static! {
 
         settings
     });
+}
+
+pub fn as_type_map() -> Result<TypeMap> {
+    let mut map = TypeMap::new();
+
+    map.insert::<GdalConfig>(GdalConfig {
+        allowed_drivers: get_config_element::<Gdal>()?.allowed_drivers,
+    });
+
+    Ok(map)
 }
 
 /// test may run in subdirectory
@@ -315,6 +327,7 @@ impl ConfigElement for DataProvider {
 #[derive(Debug, Deserialize)]
 pub struct Gdal {
     pub compression_num_threads: GdalCompressionNumThreads,
+    pub allowed_drivers: Vec<String>,
 }
 
 impl ConfigElement for Gdal {

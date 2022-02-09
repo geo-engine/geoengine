@@ -1,5 +1,5 @@
 use crate::adapters::SparseTilesFillAdapter;
-use crate::engine::{MetaData, OperatorDatasets, QueryProcessor};
+use crate::engine::{Config, MetaData, OperatorDatasets, QueryProcessor};
 use crate::util::gdal::gdal_open_dataset_ex;
 use crate::util::input::float_option_with_nan;
 use crate::{
@@ -301,6 +301,7 @@ where
     pub tiling_specification: TilingSpecification,
     pub meta_data: GdalMetaData,
     pub no_data_value: Option<T>,
+    pub config: Config,
 }
 
 impl<T> GdalSourceProcessor<T>
@@ -313,9 +314,10 @@ where
     pub async fn load_tile_data_async(
         dataset_params: GdalDatasetParameters,
         tile_information: TileInformation,
+        config: Config,
     ) -> Result<GridWithProperties<T>> {
         crate::util::spawn_blocking(move || {
-            Self::load_tile_data(&dataset_params, &tile_information)
+            Self::load_tile_data(&dataset_params, &tile_information, config)
         })
         .await
         .context(error::TokioJoin)?
@@ -344,6 +346,7 @@ where
         tile_information: TileInformation,
         time: TimeInterval,
         no_data_value: Option<T>,
+        config: Config,
     ) -> Result<RasterTile2D<T>> {
         let f = match dataset_params {
             Some(ds)
@@ -352,7 +355,7 @@ where
                     .intersects(&ds.spatial_partition()) =>
             {
                 debug!("Loading tile {:?}", &tile_information);
-                Self::load_tile_data_async(ds, tile_information).await
+                Self::load_tile_data_async(ds, tile_information, config).await
             }
             Some(_) => {
                 debug!("Skipping tile not in query rect {:?}", &tile_information);
@@ -392,6 +395,7 @@ where
     pub fn load_tile_data(
         dataset_params: &GdalDatasetParameters,
         tile_information: &TileInformation,
+        config: Config,
     ) -> Result<GridWithProperties<T>> {
         let start = Instant::now();
         let dataset_bounds = dataset_params.spatial_partition();
@@ -418,6 +422,11 @@ where
             .as_ref()
             .map(|config_options| TemporaryGdalThreadLocalConfigOptions::new(config_options));
 
+        let allowed_drivers = config
+            .get::<GdalConfig>()
+            .unwrap() // TODO
+            .allowed_drivers_ref();
+
         let dataset_result = gdal_open_dataset_ex(
             &dataset_params.file_path,
             DatasetOptions {
@@ -425,6 +434,7 @@ where
                 open_options: options.as_deref(),
                 ..DatasetOptions::default()
             },
+            &allowed_drivers,
         );
         let no_data_value = dataset_params.no_data_value.map(T::from_);
         let fill_value = no_data_value.unwrap_or_else(T::zero);
@@ -559,10 +569,19 @@ where
             .tiling_specification
             .strategy(pixel_size_x, pixel_size_y);
 
+        let config = self.config.clone();
+
         let source_stream =
             stream::iter(tiling_strategy.tile_information_iterator(query.spatial_bounds))
                 .map(move |tile| {
-                    Self::load_tile_async(info.params.clone(), tile, info.time, no_data_value)
+                    let config = config.clone();
+                    Self::load_tile_async(
+                        info.params.clone(),
+                        tile,
+                        info.time,
+                        no_data_value,
+                        config,
+                    )
                 })
                 .buffered(1); // TODO: find a good default and / or add to config.
 
@@ -634,6 +653,7 @@ impl RasterOperator for GdalSource {
             result_descriptor: meta_data.result_descriptor().await?,
             meta_data,
             tiling_specification: context.tiling_specification(),
+            config: context.config(),
         }
         .boxed())
     }
@@ -648,6 +668,7 @@ pub struct InitializedGdalSourceOperator {
     pub meta_data: GdalMetaData,
     pub result_descriptor: RasterResultDescriptor,
     pub tiling_specification: TilingSpecification,
+    pub config: Config,
 }
 
 impl InitializedRasterOperator for InitializedGdalSourceOperator {
@@ -662,6 +683,7 @@ impl InitializedRasterOperator for InitializedGdalSourceOperator {
                     tiling_specification: self.tiling_specification,
                     meta_data: self.meta_data.clone(),
                     no_data_value: self.result_descriptor.no_data_value_as_(),
+                    config: self.config.clone(),
                 }
                 .boxed(),
             ),
@@ -670,6 +692,7 @@ impl InitializedRasterOperator for InitializedGdalSourceOperator {
                     tiling_specification: self.tiling_specification,
                     meta_data: self.meta_data.clone(),
                     no_data_value: self.result_descriptor.no_data_value_as_(),
+                    config: self.config.clone(),
                 }
                 .boxed(),
             ),
@@ -678,6 +701,7 @@ impl InitializedRasterOperator for InitializedGdalSourceOperator {
                     tiling_specification: self.tiling_specification,
                     meta_data: self.meta_data.clone(),
                     no_data_value: self.result_descriptor.no_data_value_as_(),
+                    config: self.config.clone(),
                 }
                 .boxed(),
             ),
@@ -688,6 +712,7 @@ impl InitializedRasterOperator for InitializedGdalSourceOperator {
                     tiling_specification: self.tiling_specification,
                     meta_data: self.meta_data.clone(),
                     no_data_value: self.result_descriptor.no_data_value_as_(),
+                    config: self.config.clone(),
                 }
                 .boxed(),
             ),
@@ -696,6 +721,7 @@ impl InitializedRasterOperator for InitializedGdalSourceOperator {
                     tiling_specification: self.tiling_specification,
                     meta_data: self.meta_data.clone(),
                     no_data_value: self.result_descriptor.no_data_value_as_(),
+                    config: self.config.clone(),
                 }
                 .boxed(),
             ),
@@ -705,6 +731,7 @@ impl InitializedRasterOperator for InitializedGdalSourceOperator {
                     tiling_specification: self.tiling_specification,
                     meta_data: self.meta_data.clone(),
                     no_data_value: self.result_descriptor.no_data_value_as_(),
+                    config: self.config.clone(),
                 }
                 .boxed(),
             ),
@@ -713,6 +740,7 @@ impl InitializedRasterOperator for InitializedGdalSourceOperator {
                     tiling_specification: self.tiling_specification,
                     meta_data: self.meta_data.clone(),
                     no_data_value: self.result_descriptor.no_data_value_as_(),
+                    config: self.config.clone(),
                 }
                 .boxed(),
             ),
@@ -816,6 +844,46 @@ fn properties_from_band(properties: &mut RasterProperties, gdal_dataset: &GdalRa
     }
 }
 
+#[derive(Debug, Clone)]
+pub struct GdalConfig {
+    pub allowed_drivers: Vec<String>,
+}
+
+impl GdalConfig {
+    pub fn allowed_drivers_ref(&self) -> Vec<&str> {
+        self.allowed_drivers
+            .iter()
+            .map(String::as_str)
+            .collect::<Vec<_>>()
+    }
+}
+
+impl TestDefault for GdalConfig {
+    fn test_default() -> Self {
+        GdalConfig {
+            allowed_drivers: [
+                "CSV",
+                "COG",
+                "GPKG",
+                "GTiff",
+                "JPEG2000",
+                "MEM",
+                "netCDF",
+                "WCS",
+                "FlatGeobuf",
+                "GeoJSON",
+                "GPKG",
+                "PostgreSQL",
+                "SQLite",
+                "WFS",
+            ]
+            .iter()
+            .map(|s| s.to_string())
+            .collect(),
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -874,6 +942,9 @@ mod tests {
         output_shape: GridShape2D,
         output_bounds: SpatialPartition2D,
     ) -> Result<GridWithProperties<u8>> {
+        let mut config = Config::default();
+        config.insert(GdalConfig::test_default());
+
         GdalSourceProcessor::<u8>::load_tile_data(
             &GdalDatasetParameters {
                 file_path: test_data!("raster/modis_ndvi/MOD13A2_M_NDVI_2014-01-01.TIFF").into(),
@@ -915,6 +986,7 @@ mod tests {
                 gdal_config_options: None,
             },
             &TileInformation::with_partition_and_shape(output_bounds, output_shape),
+            config,
         )
     }
 
@@ -1338,9 +1410,17 @@ mod tests {
         let time_interval = TimeInterval::new_unchecked(1_388_534_400_000, 1_391_212_800_000); // 2014-01-01 - 2014-01-15
         let params = None;
 
-        let tile =
-            GdalSourceProcessor::<f64>::load_tile_async(params, tile_info, time_interval, Some(1.))
-                .await;
+        let mut config = Config::default();
+        config.insert(GdalConfig::test_default());
+
+        let tile = GdalSourceProcessor::<f64>::load_tile_async(
+            params,
+            tile_info,
+            time_interval,
+            Some(1.),
+            config,
+        )
+        .await;
 
         assert!(tile.is_ok());
 

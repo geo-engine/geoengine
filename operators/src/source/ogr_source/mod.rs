@@ -38,7 +38,7 @@ use geoengine_datatypes::primitives::{
 };
 use geoengine_datatypes::util::arrow::ArrowTyped;
 
-use crate::engine::{OperatorDatasets, QueryProcessor};
+use crate::engine::{Config, OperatorDatasets, QueryProcessor};
 use crate::error::Error;
 use crate::util::Result;
 use crate::{
@@ -289,6 +289,7 @@ pub struct OgrSourceState {
 pub struct InitializedOgrSource {
     result_descriptor: VectorResultDescriptor,
     state: OgrSourceState,
+    config: Config,
 }
 
 #[typetag::serde]
@@ -309,6 +310,7 @@ impl VectorOperator for OgrSource {
             state: OgrSourceState {
                 dataset_information: info,
             },
+            config: context.config(),
         };
 
         Ok(initialized_source.boxed())
@@ -339,16 +341,32 @@ impl InitializedVectorOperator for InitializedOgrSource {
     fn query_processor(&self) -> Result<TypedVectorQueryProcessor> {
         Ok(match self.result_descriptor.data_type {
             VectorDataType::Data => TypedVectorQueryProcessor::Data(
-                OgrSourceProcessor::new(self.state.dataset_information.clone()).boxed(),
+                OgrSourceProcessor::new(
+                    self.state.dataset_information.clone(),
+                    self.config.clone(),
+                )
+                .boxed(),
             ),
             VectorDataType::MultiPoint => TypedVectorQueryProcessor::MultiPoint(
-                OgrSourceProcessor::new(self.state.dataset_information.clone()).boxed(),
+                OgrSourceProcessor::new(
+                    self.state.dataset_information.clone(),
+                    self.config.clone(),
+                )
+                .boxed(),
             ),
             VectorDataType::MultiLineString => TypedVectorQueryProcessor::MultiLineString(
-                OgrSourceProcessor::new(self.state.dataset_information.clone()).boxed(),
+                OgrSourceProcessor::new(
+                    self.state.dataset_information.clone(),
+                    self.config.clone(),
+                )
+                .boxed(),
             ),
             VectorDataType::MultiPolygon => TypedVectorQueryProcessor::MultiPolygon(
-                OgrSourceProcessor::new(self.state.dataset_information.clone()).boxed(),
+                OgrSourceProcessor::new(
+                    self.state.dataset_information.clone(),
+                    self.config.clone(),
+                )
+                .boxed(),
             ),
         })
     }
@@ -365,6 +383,7 @@ where
     dataset_information:
         Box<dyn MetaData<OgrSourceDataset, VectorResultDescriptor, VectorQueryRectangle>>,
     _collection_type: PhantomData<FeatureCollection<G>>,
+    config: Config,
 }
 
 impl<G> OgrSourceProcessor<G>
@@ -375,10 +394,12 @@ where
         dataset_information: Box<
             dyn MetaData<OgrSourceDataset, VectorResultDescriptor, VectorQueryRectangle>,
         >,
+        config: Config,
     ) -> Self {
         Self {
             dataset_information,
             _collection_type: Default::default(),
+            config,
         }
     }
 }
@@ -401,6 +422,7 @@ where
             self.dataset_information.loading_info(query).await?,
             query,
             ctx.chunk_byte_size().into(),
+            self.config.clone(),
         )
         .await?
         .boxed())
@@ -484,9 +506,11 @@ where
         dataset_information: OgrSourceDataset,
         query_rectangle: VectorQueryRectangle,
         chunk_byte_size: usize,
+        config: Config,
     ) -> Result<Self> {
         crate::util::spawn_blocking(move || {
-            let dataset_iterator = OgrDatasetIterator::new(&dataset_information, &query_rectangle)?;
+            let dataset_iterator =
+                OgrDatasetIterator::new(&dataset_information, &query_rectangle, config)?;
 
             let (data_types, feature_collection_builder) =
                 Self::initialize_types_and_builder(&dataset_information);
@@ -1095,6 +1119,7 @@ mod tests {
 
     use crate::engine::{ChunkByteSize, MockExecutionContext, MockQueryContext, StaticMetaData};
     use crate::source::ogr_source::FormatSpecifics::Csv;
+    use crate::source::GdalConfig;
     use crate::test_data;
     use futures::{StreamExt, TryStreamExt};
     use geoengine_datatypes::collections::{
@@ -1273,7 +1298,10 @@ mod tests {
             phantom: Default::default(),
         };
 
-        let query_processor = OgrSourceProcessor::<MultiPoint>::new(Box::new(info));
+        let mut config = Config::default();
+        config.insert(GdalConfig::test_default());
+
+        let query_processor = OgrSourceProcessor::<MultiPoint>::new(Box::new(info), config);
 
         let context = MockQueryContext::new(ChunkByteSize::MAX);
         let query = query_processor
@@ -1322,7 +1350,10 @@ mod tests {
             phantom: Default::default(),
         };
 
-        let query_processor = OgrSourceProcessor::<MultiPoint>::new(Box::new(info));
+        let mut config = Config::default();
+        config.insert(GdalConfig::test_default());
+
+        let query_processor = OgrSourceProcessor::<MultiPoint>::new(Box::new(info), config);
 
         let context = MockQueryContext::new(ChunkByteSize::MAX);
         let query = query_processor
@@ -1364,7 +1395,10 @@ mod tests {
             phantom: Default::default(),
         };
 
-        let query_processor = OgrSourceProcessor::<MultiPoint>::new(Box::new(info));
+        let mut config = Config::default();
+        config.insert(GdalConfig::test_default());
+
+        let query_processor = OgrSourceProcessor::<MultiPoint>::new(Box::new(info), config);
 
         let context = MockQueryContext::new(ChunkByteSize::MAX);
         let query = query_processor
@@ -1411,7 +1445,10 @@ mod tests {
             phantom: Default::default(),
         };
 
-        let query_processor = OgrSourceProcessor::<MultiPoint>::new(Box::new(info));
+        let mut config = Config::default();
+        config.insert(GdalConfig::test_default());
+
+        let query_processor = OgrSourceProcessor::<MultiPoint>::new(Box::new(info), config);
 
         let context = MockQueryContext::new(ChunkByteSize::MAX);
         let query = query_processor
@@ -3134,7 +3171,10 @@ mod tests {
             phantom: Default::default(),
         };
 
-        let query_processor = OgrSourceProcessor::<NoGeometry>::new(Box::new(info));
+        let mut config = Config::default();
+        config.insert(GdalConfig::test_default());
+
+        let query_processor = OgrSourceProcessor::<NoGeometry>::new(Box::new(info), config);
 
         let context = MockQueryContext::new(ChunkByteSize::MAX);
         let query = query_processor
@@ -3229,7 +3269,10 @@ mod tests {
             phantom: Default::default(),
         };
 
-        let query_processor = OgrSourceProcessor::<MultiPoint>::new(Box::new(info));
+        let mut config = Config::default();
+        config.insert(GdalConfig::test_default());
+
+        let query_processor = OgrSourceProcessor::<MultiPoint>::new(Box::new(info), config);
 
         let context = MockQueryContext::new(ChunkByteSize::MAX);
         let query = query_processor
@@ -4178,7 +4221,10 @@ mod tests {
             phantom: Default::default(),
         };
 
-        let query_processor = OgrSourceProcessor::<NoGeometry>::new(Box::new(info));
+        let mut config = Config::default();
+        config.insert(GdalConfig::test_default());
+
+        let query_processor = OgrSourceProcessor::<NoGeometry>::new(Box::new(info), config);
 
         let context = MockQueryContext::new(ChunkByteSize::MAX);
         let query = query_processor
