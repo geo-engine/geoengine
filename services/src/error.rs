@@ -1,4 +1,3 @@
-use crate::handlers::ebv::EbvError;
 use crate::workflows::workflow::WorkflowId;
 use crate::{datasets::external::netcdfcf::NetCdfCf4DProviderError, handlers::ErrorResponse};
 use actix_web::http::StatusCode;
@@ -318,9 +317,10 @@ pub enum Error {
         source: NetCdfCf4DProviderError,
     },
 
+    #[cfg(feature = "ebv")]
     #[snafu(context(false))]
     EbvHandler {
-        source: EbvError,
+        source: crate::handlers::ebv::EbvError,
     },
 }
 
