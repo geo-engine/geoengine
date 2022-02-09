@@ -2,9 +2,7 @@
 //!
 //! Connects to <https://portal.geobon.org/api/v1/>.
 
-use std::str::FromStr;
-
-use crate::datasets::external::netcdfcf::NetCdfOverview;
+use crate::datasets::external::netcdfcf::{NetCdfOverview, NETCDF_CF_PROVIDER_ID};
 use crate::error::{ErrorSource, Result};
 use crate::{contexts::Context, datasets::external::netcdfcf::NetCdfCfDataProvider};
 use actix_web::{
@@ -244,11 +242,8 @@ async fn get_ebv_subdatasets<C: Context>(
             .context(error::CannotParseNetCdfFile)?
     };
 
-    // TODO: find a way to get the external dataset provider id
-    let provider_id = DatasetProviderId::from_str("1690c483-b17f-4d98-95c8-00a64849cd0b")?;
-
     Ok(web::Json(EbvHierarchy {
-        provider_id,
+        provider_id: NETCDF_CF_PROVIDER_ID,
         tree: listing,
     }))
 }

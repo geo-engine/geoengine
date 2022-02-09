@@ -52,9 +52,12 @@ mod error;
 
 type Result<T, E = NetCdfCf4DProviderError> = std::result::Result<T, E>;
 
+/// Singleton Provider with id `1690c483-b17f-4d98-95c8-00a64849cd0b`
+pub const NETCDF_CF_PROVIDER_ID: DatasetProviderId =
+    DatasetProviderId::from_u128(0x1690_c483_b17f_4d98_95c8_00a6_4849_cd0b);
+
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct NetCdfCfDataProviderDefinition {
-    pub id: DatasetProviderId,
     pub name: String,
     pub path: PathBuf,
 }
@@ -63,10 +66,7 @@ pub struct NetCdfCfDataProviderDefinition {
 #[async_trait]
 impl ExternalDatasetProviderDefinition for NetCdfCfDataProviderDefinition {
     async fn initialize(self: Box<Self>) -> crate::error::Result<Box<dyn ExternalDatasetProvider>> {
-        Ok(Box::new(NetCdfCfDataProvider {
-            id: self.id,
-            path: self.path,
-        }))
+        Ok(Box::new(NetCdfCfDataProvider { path: self.path }))
     }
 
     fn type_name(&self) -> String {
@@ -78,12 +78,11 @@ impl ExternalDatasetProviderDefinition for NetCdfCfDataProviderDefinition {
     }
 
     fn id(&self) -> DatasetProviderId {
-        self.id
+        NETCDF_CF_PROVIDER_ID
     }
 }
 
 pub struct NetCdfCfDataProvider {
-    id: DatasetProviderId,
     path: PathBuf,
 }
 
@@ -725,9 +724,12 @@ impl NetCdfCfDataProvider {
         dataset: &DatasetId,
     ) -> Result<Box<dyn MetaData<GdalLoadingInfo, RasterResultDescriptor, RasterQueryRectangle>>>
     {
-        let dataset = dataset
-            .external()
-            .ok_or(NetCdfCf4DProviderError::InvalidExternalDatasetId { provider: self.id })?;
+        let dataset =
+            dataset
+                .external()
+                .ok_or(NetCdfCf4DProviderError::InvalidExternalDatasetId {
+                    provider: NETCDF_CF_PROVIDER_ID,
+                })?;
 
         let dataset_id: NetCdfCf4DDatasetId =
             serde_json::from_str(&dataset.dataset_id).context(error::CannotParseDatasetId)?;
@@ -898,10 +900,10 @@ impl ExternalDatasetProvider for NetCdfCfDataProvider {
                 continue;
             }
 
-            let id = self.id;
-            let listing =
-                tokio::task::spawn_blocking(move || Self::listing_from_netcdf(id, &entry.path()))
-                    .await?;
+            let listing = tokio::task::spawn_blocking(move || {
+                Self::listing_from_netcdf(NETCDF_CF_PROVIDER_ID, &entry.path())
+            })
+            .await?;
 
             match listing {
                 Ok(listing) => datasets.extend(listing),
@@ -943,7 +945,9 @@ impl MetaDataProvider<GdalLoadingInfo, RasterResultDescriptor, RasterQueryRectan
         self.meta_data(dataset)
             .await
             .map_err(|_| geoengine_operators::error::Error::LoadingInfo {
-                source: Box::new(Error::InvalidExternalDatasetId { provider: self.id }),
+                source: Box::new(Error::InvalidExternalDatasetId {
+                    provider: NETCDF_CF_PROVIDER_ID,
+                }),
             })
     }
 }
@@ -1212,13 +1216,12 @@ mod tests {
     #[tokio::test]
     async fn test_metadata_from_netcdf_sm() {
         let provider = NetCdfCfDataProvider {
-            id: DatasetProviderId::from_str("bf6bb6ea-5d5d-467d-bad1-267bf3a54470").unwrap(),
             path: test_data!("netcdf4d/").to_path_buf(),
         };
 
         let metadata = provider
             .meta_data(&DatasetId::External(ExternalDatasetId {
-                provider_id: provider.id,
+                provider_id: NETCDF_CF_PROVIDER_ID,
                 dataset_id: serde_json::json!({
                     "fileName": "dataset_sm.nc",
                     "groupNames": ["scenario_5", "metric_2"],
