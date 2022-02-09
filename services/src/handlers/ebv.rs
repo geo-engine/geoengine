@@ -223,8 +223,6 @@ async fn get_ebv_subdatasets<C: Context>(
     _session: C::Session,
     _ctx: web::Data<C>,
 ) -> Result<impl Responder> {
-    dbg!(&dataset_name);
-
     let listing = {
         // TODO: make dir configurable
         let data_path = test_data!("netcdf4d/").join(dataset_name.into_inner());
