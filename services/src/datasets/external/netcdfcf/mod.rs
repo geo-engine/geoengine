@@ -507,7 +507,7 @@ struct DimensionSizes {
 pub(crate) struct NetCdfOverview {
     pub file_name: String,
     pub title: String,
-    pub spatial_reference: SpatialReferenceOption,
+    pub spatial_reference: SpatialReference,
     pub subgroups: Vec<NetCdfSubgroup>,
     pub entities: Vec<NetCdfArrayDataset>,
     pub time: TimeInterval,
@@ -610,10 +610,8 @@ impl NetCdfCfDataProvider {
         let spatial_reference = root_group
             .attribute_as_string("geospatial_bounds_crs")
             .context(error::MissingCrs)?;
-        let spatial_reference: SpatialReferenceOption =
-            SpatialReference::from_str(&spatial_reference)
-                .context(error::CannotParseCrs)?
-                .into();
+        let spatial_reference: SpatialReference =
+            SpatialReference::from_str(&spatial_reference).context(error::CannotParseCrs)?;
 
         let entities = root_group
             .dimension_as_string_array("entities")
@@ -711,7 +709,7 @@ impl NetCdfCfDataProvider {
                     source_operator: "GdalSource".to_owned(),
                     result_descriptor: TypedResultDescriptor::Raster(RasterResultDescriptor {
                         data_type,
-                        spatial_reference: tree.spatial_reference,
+                        spatial_reference: tree.spatial_reference.into(),
                         measurement: Measurement::Unitless, // TODO: where to get from file?
                         no_data_value: None, // we don't want to open the dataset at this point. We should get rid of the result descriptor in the listing in general
                     }),
