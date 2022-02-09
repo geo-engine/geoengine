@@ -508,36 +508,36 @@ pub(crate) struct NetCdfOverview {
     pub file_name: String,
     pub title: String,
     pub spatial_reference: SpatialReference,
-    pub subgroups: Vec<NetCdfSubgroup>,
-    pub entities: Vec<NetCdfArrayDataset>,
+    pub groups: Vec<NetCdfGroup>,
+    pub entities: Vec<NetCdfEntity>,
     pub time: TimeInterval,
     pub time_step: TimeStep,
 }
 
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
-pub(crate) struct NetCdfSubgroup {
+pub(crate) struct NetCdfGroup {
     pub name: String,
     pub title: String,
     pub description: String,
     // TODO: would actually be nice if it were inside dataset/entity
     pub data_type: Option<RasterDataType>,
-    pub subgroups: Vec<NetCdfSubgroup>,
+    pub groups: Vec<NetCdfGroup>,
 }
 
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
-pub(crate) struct NetCdfArrayDataset {
+pub(crate) struct NetCdfEntity {
     pub id: usize,
     pub name: String,
 }
 
 trait ToNetCdfSubgroup {
-    fn to_net_cdf_subgroup(&self) -> Result<NetCdfSubgroup>;
+    fn to_net_cdf_subgroup(&self) -> Result<NetCdfGroup>;
 }
 
 impl<'a> ToNetCdfSubgroup for MdGroup<'a> {
-    fn to_net_cdf_subgroup(&self) -> Result<NetCdfSubgroup> {
+    fn to_net_cdf_subgroup(&self) -> Result<NetCdfGroup> {
         let name = self.name.clone();
         let title = self
             .attribute_as_string("standard_name")
@@ -545,32 +545,32 @@ impl<'a> ToNetCdfSubgroup for MdGroup<'a> {
         // TODO: how to get that?
         let description = "".to_string();
 
-        let subgroup_names = self.group_names();
+        let group_names = self.group_names();
 
-        if subgroup_names.is_empty() {
+        if group_names.is_empty() {
             let data_type = Some(self.datatype_of_numeric_array("ebv_cube")?);
 
-            return Ok(NetCdfSubgroup {
+            return Ok(NetCdfGroup {
                 name,
                 title,
                 description,
                 data_type,
-                subgroups: Vec::new(),
+                groups: Vec::new(),
             });
         }
 
-        let mut subgroups = Vec::with_capacity(subgroup_names.len());
+        let mut groups = Vec::with_capacity(group_names.len());
 
-        for subgroup in subgroup_names {
-            subgroups.push(self.open_group(&subgroup)?.to_net_cdf_subgroup()?);
+        for subgroup in group_names {
+            groups.push(self.open_group(&subgroup)?.to_net_cdf_subgroup()?);
         }
 
-        Ok(NetCdfSubgroup {
+        Ok(NetCdfGroup {
             name,
             title,
             description,
             data_type: None,
-            subgroups,
+            groups,
         })
     }
 }
@@ -618,10 +618,10 @@ impl NetCdfCfDataProvider {
             .context(error::MissingEntities)?
             .into_iter()
             .enumerate()
-            .map(|(id, name)| NetCdfArrayDataset { id, name })
+            .map(|(id, name)| NetCdfEntity { id, name })
             .collect::<Vec<_>>();
 
-        let subgroups = root_group
+        let groups = root_group
             .group_names()
             .iter()
             .map(|name| root_group.open_group(name)?.to_net_cdf_subgroup())
@@ -643,7 +643,7 @@ impl NetCdfCfDataProvider {
             file_name: file_name.to_string(),
             title,
             spatial_reference,
-            subgroups,
+            groups,
             entities,
             time: TimeInterval::new(time_start, time_end)
                 .context(error::InvalidTimeRangeForDataset)?,
@@ -657,16 +657,15 @@ impl NetCdfCfDataProvider {
     ) -> Result<Vec<DatasetListing>> {
         let tree = Self::build_netcdf_tree(path)?;
 
-        let mut paths: VecDeque<Vec<&NetCdfSubgroup>> =
-            tree.subgroups.iter().map(|s| vec![s]).collect();
+        let mut paths: VecDeque<Vec<&NetCdfGroup>> = tree.groups.iter().map(|s| vec![s]).collect();
 
         let mut listings = Vec::new();
 
         while let Some(path) = paths.pop_front() {
             let tail = path.last().context(error::PathToDataIsEmpty)?;
 
-            if !tail.subgroups.is_empty() {
-                for subgroup in &tail.subgroups {
+            if !tail.groups.is_empty() {
+                for subgroup in &tail.groups {
                     let mut updated_path = path.clone();
                     updated_path.push(subgroup);
                     paths.push_back(updated_path);

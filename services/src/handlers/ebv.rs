@@ -314,24 +314,24 @@ mod tests {
                     "fileName": "dataset_sm.nc",
                     "title": "Test dataset metric and scenario",
                     "spatialReference": "EPSG:3035",
-                    "subgroups": [{
+                    "groups": [{
                             "name": "scenario_1",
                             "title": "Sustainability",
                             "description": "",
                             "dataType": null,
-                            "subgroups": [{
+                            "groups": [{
                                     "name": "metric_1",
                                     "title": "Random metric 1",
                                     "description": "",
                                     "dataType": "I16",
-                                    "subgroups": []
+                                    "groups": []
                                 },
                                 {
                                     "name": "metric_2",
                                     "title": "Random metric 2",
                                     "description": "",
                                     "dataType": "I16",
-                                    "subgroups": []
+                                    "groups": []
                                 }
                             ]
                         },
@@ -340,19 +340,19 @@ mod tests {
                             "title": "Middle of the Road ",
                             "description": "",
                             "dataType": null,
-                            "subgroups": [{
+                            "groups": [{
                                     "name": "metric_1",
                                     "title": "Random metric 1",
                                     "description": "",
                                     "dataType": "I16",
-                                    "subgroups": []
+                                    "groups": []
                                 },
                                 {
                                     "name": "metric_2",
                                     "title": "Random metric 2",
                                     "description": "",
                                     "dataType": "I16",
-                                    "subgroups": []
+                                    "groups": []
                                 }
                             ]
                         },
@@ -361,19 +361,19 @@ mod tests {
                             "title": "Regional Rivalry",
                             "description": "",
                             "dataType": null,
-                            "subgroups": [{
+                            "groups": [{
                                     "name": "metric_1",
                                     "title": "Random metric 1",
                                     "description": "",
                                     "dataType": "I16",
-                                    "subgroups": []
+                                    "groups": []
                                 },
                                 {
                                     "name": "metric_2",
                                     "title": "Random metric 2",
                                     "description": "",
                                     "dataType": "I16",
-                                    "subgroups": []
+                                    "groups": []
                                 }
                             ]
                         },
@@ -382,19 +382,19 @@ mod tests {
                             "title": "Inequality",
                             "description": "",
                             "dataType": null,
-                            "subgroups": [{
+                            "groups": [{
                                     "name": "metric_1",
                                     "title": "Random metric 1",
                                     "description": "",
                                     "dataType": "I16",
-                                    "subgroups": []
+                                    "groups": []
                                 },
                                 {
                                     "name": "metric_2",
                                     "title": "Random metric 2",
                                     "description": "",
                                     "dataType": "I16",
-                                    "subgroups": []
+                                    "groups": []
                                 }
                             ]
                         },
@@ -403,19 +403,19 @@ mod tests {
                             "title": "Fossil-fueled Development",
                             "description": "",
                             "dataType": null,
-                            "subgroups": [{
+                            "groups": [{
                                     "name": "metric_1",
                                     "title": "Random metric 1",
                                     "description": "",
                                     "dataType": "I16",
-                                    "subgroups": []
+                                    "groups": []
                                 },
                                 {
                                     "name": "metric_2",
                                     "title": "Random metric 2",
                                     "description": "",
                                     "dataType": "I16",
-                                    "subgroups": []
+                                    "groups": []
                                 }
                             ]
                         }
