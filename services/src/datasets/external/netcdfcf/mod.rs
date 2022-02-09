@@ -1025,9 +1025,12 @@ mod tests {
             DatasetListing {
                 id: DatasetId::External(ExternalDatasetId {
                     provider_id,
-                    dataset_id:
-                        "{\"fileName\":\"dataset_m.nc\",\"groupNames\":[\"metric_1\"],\"entity\":0}"
-                            .into(),
+                    dataset_id: serde_json::json!({
+                        "fileName": "dataset_m.nc",
+                        "groupNames": ["metric_1"],
+                        "entity": 0
+                    })
+                    .to_string(),
                 }),
                 name: "Test dataset metric: Random metric 1 > entity01".into(),
                 description: "".into(),
@@ -1042,9 +1045,12 @@ mod tests {
             DatasetListing {
                 id: DatasetId::External(ExternalDatasetId {
                     provider_id,
-                    dataset_id:
-                        "{\"fileName\":\"dataset_m.nc\",\"groupNames\":[\"metric_1\"],\"entity\":1}"
-                            .into(),
+                    dataset_id: serde_json::json!({
+                        "fileName": "dataset_m.nc",
+                        "groupNames": ["metric_1"],
+                        "entity": 1
+                    })
+                    .to_string(),
                 }),
                 name: "Test dataset metric: Random metric 1 > entity02".into(),
                 description: "".into(),
@@ -1059,9 +1065,12 @@ mod tests {
             DatasetListing {
                 id: DatasetId::External(ExternalDatasetId {
                     provider_id,
-                    dataset_id:
-                        "{\"fileName\":\"dataset_m.nc\",\"groupNames\":[\"metric_1\"],\"entity\":2}"
-                            .into(),
+                    dataset_id: serde_json::json!({
+                        "fileName": "dataset_m.nc",
+                        "groupNames": ["metric_1"],
+                        "entity": 2
+                    })
+                    .to_string(),
                 }),
                 name: "Test dataset metric: Random metric 1 > entity03".into(),
                 description: "".into(),
@@ -1076,9 +1085,12 @@ mod tests {
             DatasetListing {
                 id: DatasetId::External(ExternalDatasetId {
                     provider_id,
-                    dataset_id:
-                        "{\"fileName\":\"dataset_m.nc\",\"groupNames\":[\"metric_2\"],\"entity\":0}"
-                            .into(),
+                    dataset_id: serde_json::json!({
+                        "fileName": "dataset_m.nc",
+                        "groupNames": ["metric_2"],
+                        "entity": 0
+                    })
+                    .to_string(),
                 }),
                 name: "Test dataset metric: Random metric 2 > entity01".into(),
                 description: "".into(),
@@ -1093,9 +1105,12 @@ mod tests {
             DatasetListing {
                 id: DatasetId::External(ExternalDatasetId {
                     provider_id,
-                    dataset_id:
-                        "{\"fileName\":\"dataset_m.nc\",\"groupNames\":[\"metric_2\"],\"entity\":1}"
-                            .into(),
+                    dataset_id: serde_json::json!({
+                        "fileName": "dataset_m.nc",
+                        "groupNames": ["metric_2"],
+                        "entity": 1
+                    })
+                    .to_string(),
                 }),
                 name: "Test dataset metric: Random metric 2 > entity02".into(),
                 description: "".into(),
@@ -1110,9 +1125,12 @@ mod tests {
             DatasetListing {
                 id: DatasetId::External(ExternalDatasetId {
                     provider_id,
-                    dataset_id:
-                        "{\"fileName\":\"dataset_m.nc\",\"groupNames\":[\"metric_2\"],\"entity\":2}"
-                            .into(),
+                    dataset_id: serde_json::json!({
+                        "fileName": "dataset_m.nc",
+                        "groupNames": ["metric_2"],
+                        "entity": 2
+                    })
+                    .to_string(),
                 }),
                 name: "Test dataset metric: Random metric 2 > entity03".into(),
                 description: "".into(),
@@ -1150,7 +1168,12 @@ mod tests {
             DatasetListing {
                 id: DatasetId::External(ExternalDatasetId {
                     provider_id,
-                    dataset_id: "{\"fileName\":\"dataset_sm.nc\",\"groupNames\":[\"scenario_1\",\"metric_1\"],\"entity\":0}".into(),
+                    dataset_id: serde_json::json!({
+                        "fileName": "dataset_sm.nc",
+                        "groupNames": ["scenario_1", "metric_1"],
+                        "entity": 0
+                    })
+                    .to_string(),
                 }),
                 name:
                     "Test dataset metric and scenario: Sustainability > Random metric 1 > entity01"
@@ -1167,7 +1190,12 @@ mod tests {
             DatasetListing {
                 id: DatasetId::External(ExternalDatasetId {
                     provider_id,
-                    dataset_id: "{\"fileName\":\"dataset_sm.nc\",\"groupNames\":[\"scenario_5\",\"metric_2\"],\"entity\":1}".into(),
+                    dataset_id: serde_json::json!({
+                        "fileName": "dataset_sm.nc",
+                        "groupNames": ["scenario_5", "metric_2"],
+                        "entity": 1
+                    })
+                    .to_string(),
                 }),
                 name: "Test dataset metric and scenario: Fossil-fueled Development > Random metric 2 > entity02".into(),
                 description: "".into(),
@@ -1191,7 +1219,12 @@ mod tests {
         let metadata = provider
             .meta_data(&DatasetId::External(ExternalDatasetId {
                 provider_id: provider.id,
-                dataset_id: "{\"fileName\":\"dataset_sm.nc\",\"groupNames\":[\"scenario_5\",\"metric_2\"],\"entity\":1}".into(),
+                dataset_id: serde_json::json!({
+                    "fileName": "dataset_sm.nc",
+                    "groupNames": ["scenario_5", "metric_2"],
+                    "entity": 1
+                })
+                .to_string(),
             }))
             .await
             .unwrap();
