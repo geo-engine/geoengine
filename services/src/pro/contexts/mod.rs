@@ -6,15 +6,13 @@ mod postgres;
 pub use in_memory::ProInMemoryContext;
 #[cfg(feature = "postgres")]
 pub use postgres::PostgresContext;
-use std::hash::{Hash, Hasher};
 use std::sync::Arc;
 
 use crate::contexts::{Context, Db};
+use crate::pro::executor::PlotDescription;
 use crate::pro::users::{UserDb, UserSession};
 use crate::util::config::get_config_element;
-use crate::workflows::workflow::WorkflowId;
 use async_trait::async_trait;
-use geoengine_datatypes::primitives::{AxisAlignedRectangle, BoundingBox2D, QueryRectangle};
 use geoengine_operators::pro::executor::Executor;
 use tokio::sync::{RwLockReadGuard, RwLockWriteGuard};
 
@@ -30,57 +28,13 @@ pub trait ProContext: Context<Session = UserSession> {
     fn task_manager(&self) -> TaskManager;
 }
 
-#[derive(Debug, Clone, PartialEq)]
-pub struct ExecutorKey<T: PartialEq + Clone + AxisAlignedRectangle> {
-    pub workflow_id: WorkflowId,
-    pub query_rectangle: QueryRectangle<T>,
-}
-
-impl Eq for ExecutorKey<BoundingBox2D> {}
-
-impl Hash for ExecutorKey<BoundingBox2D> {
-    fn hash<H: Hasher>(&self, state: &mut H) {
-        self.workflow_id.hash(state);
-        state.write_i64(self.query_rectangle.time_interval.start().inner());
-        state.write_i64(self.query_rectangle.time_interval.end().inner());
-        state.write_u64(self.query_rectangle.spatial_bounds.lower_left().x.to_bits());
-        state.write_u64(self.query_rectangle.spatial_bounds.lower_left().y.to_bits());
-        state.write_u64(
-            self.query_rectangle
-                .spatial_bounds
-                .upper_right()
-                .x
-                .to_bits(),
-        );
-        state.write_u64(
-            self.query_rectangle
-                .spatial_bounds
-                .upper_right()
-                .y
-                .to_bits(),
-        );
-        state.write_u64(self.query_rectangle.spatial_resolution.x.to_bits());
-        state.write_u64(self.query_rectangle.spatial_resolution.y.to_bits());
-    }
-}
-
 #[derive(Clone)]
 pub struct TaskManager {
-    plot_executor: Arc<
-        Executor<
-            ExecutorKey<BoundingBox2D>,
-            crate::error::Result<crate::handlers::plots::WrappedPlotOutput>,
-        >,
-    >,
+    plot_executor: Arc<Executor<PlotDescription>>,
 }
 
 impl TaskManager {
-    pub fn plot_executor(
-        &self,
-    ) -> &Executor<
-        ExecutorKey<BoundingBox2D>,
-        crate::error::Result<crate::handlers::plots::WrappedPlotOutput>,
-    > {
+    pub fn plot_executor(&self) -> &Executor<PlotDescription> {
         self.plot_executor.as_ref()
     }
 }

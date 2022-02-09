@@ -16,57 +16,82 @@ use replay::SendError;
 pub mod error;
 pub mod replay;
 
+/// Description of an `Executor` task. The description consists provides a primary
+/// key to identify identical computations (`KeyType`).
+pub trait ExecutorTaskDescription: Clone + Send + 'static {
+    /// A unique identifier for the actual computation of a task
+    type KeyType: Clone + Send + PartialEq + Eq + Hash;
+    /// The result type of the computation
+    type ResultType: Sync + Send;
+    /// Returns the unique identifies
+    fn primary_key(&self) -> &Self::KeyType;
+    /// Determines if this computation can be satisfied by using the result
+    /// of `other`. E.g., if the bounding box of `other` contains this tasks bounding box.
+    ///
+    /// Note: It is not required to check the `primary_key`s in this method.
+    fn can_join(&self, other: &Self) -> bool;
+    /// Extracts the result for this task from the result of a possibly 'greater'
+    /// result.
+    ///
+    /// If the computation returns a stream of `ResultType` irrelevant elements may by filtered
+    /// out by returning `None`. Moreover, it is also possible to extract a subset of elements
+    /// (e.g., features or pixels) from the given result. In those cases this method simply
+    /// returns a new instance of `ResultType`.
+    ///
+    fn slice_result(&self, result: &Self::ResultType) -> Option<Self::ResultType>;
+}
+
 /// Encapsulates a requested stream computation to send
 /// it to the executor task.
-struct KeyedComputation<Key, T>
+struct KeyedComputation<Desc>
 where
-    Key: Hash + Clone + Eq + Send + 'static,
+    Desc: ExecutorTaskDescription,
 {
-    key: Key,
-    response: tokio::sync::oneshot::Sender<replay::Receiver<Result<Arc<T>>>>,
-    stream: BoxStream<'static, T>,
+    key: Desc,
+    response: tokio::sync::oneshot::Sender<replay::Receiver<Result<Arc<Desc::ResultType>>>>,
+    stream: BoxStream<'static, Desc::ResultType>,
 }
 
 /// A helper to retrieve a computation's key even if
 /// the executing task failed.
 #[pin_project::pin_project]
-struct KeyedJoinHandle<K, T>
+struct KeyedJoinHandle<Desc>
 where
-    K: Clone,
+    Desc: ExecutorTaskDescription,
 {
     // The computation's key
-    key: K,
+    key: Desc,
     // A unique sequence number of the computation. See `ComputationEntry`
     // for a detailed description.
     id: usize,
     // The sender side of the replay channel.
-    sender: replay::Sender<Result<Arc<T>>>,
+    sender: replay::Sender<Result<Arc<Desc::ResultType>>>,
     // The join handle of the underlying task
     #[pin]
     handle: JoinHandle<()>,
 }
 
 /// The result when waiting on a `KeyedJoinHandle`
-struct KeyedJoinResult<K, T>
+struct KeyedJoinResult<Desc>
 where
-    K: Clone,
+    Desc: ExecutorTaskDescription,
 {
     // The computation's key
-    key: K,
+    key: Desc,
     // A unique sequence number of the computation. See `ComputationEntry`
     // for a detailed description.
     id: usize,
     // The sender side of the replay channel.
-    sender: replay::Sender<Result<Arc<T>>>,
+    sender: replay::Sender<Result<Arc<Desc::ResultType>>>,
     // The result returned by the task.
     result: std::result::Result<(), JoinError>,
 }
 
-impl<K, T> Future for KeyedJoinHandle<K, T>
+impl<Desc> Future for KeyedJoinHandle<Desc>
 where
-    K: Clone,
+    Desc: ExecutorTaskDescription,
 {
-    type Output = KeyedJoinResult<K, T>;
+    type Output = KeyedJoinResult<Desc>;
 
     fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
         let this = self.project();
@@ -86,7 +111,10 @@ where
 /// It contains a sender from the associated replay channel
 /// in order to register new consumers.
 /// See `replay::Sender::subscribe`.
-struct ComputationEntry<T> {
+struct ComputationEntry<Desc>
+where
+    Desc: ExecutorTaskDescription,
+{
     // A unique sequence number of the computation.
     // This is used to decide whether or not to drop computation
     // infos after completion. If a computation task for a given key
@@ -98,7 +126,8 @@ struct ComputationEntry<T> {
     // started computation must *NOT* be removed from this list.
     // We use this ID to handle such cases.
     id: usize,
-    sender: replay::Sender<Result<Arc<T>>>,
+    key: Desc,
+    sender: replay::Sender<Result<Arc<Desc::ResultType>>>,
 }
 
 type TerminationMessage<T> =
@@ -106,67 +135,77 @@ type TerminationMessage<T> =
 
 /// This encapsulates the main loop of the executor task.
 /// It manages all new, running and finished computations.
-struct ExecutorLooper<Key, T>
+struct ExecutorLooper<Desc>
 where
-    Key: Hash + Clone + Eq + Send + 'static,
-    T: Sync + Send + 'static,
+    Desc: ExecutorTaskDescription,
 {
     buffer_size: usize,
-    receiver: mpsc::Receiver<KeyedComputation<Key, T>>,
-    computations: HashMap<Key, ComputationEntry<T>>,
-    tasks: FuturesUnordered<KeyedJoinHandle<Key, T>>,
-    termination_msgs: FuturesUnordered<BoxFuture<'static, TerminationMessage<T>>>,
+    receiver: mpsc::Receiver<KeyedComputation<Desc>>,
+    computations: HashMap<Desc::KeyType, Vec<ComputationEntry<Desc>>>,
+    tasks: FuturesUnordered<KeyedJoinHandle<Desc>>,
+    termination_msgs: FuturesUnordered<BoxFuture<'static, TerminationMessage<Desc::ResultType>>>,
+    id_seq: usize,
 }
 
-impl<Key, T> ExecutorLooper<Key, T>
+impl<Desc> ExecutorLooper<Desc>
 where
-    Key: Hash + Clone + Eq + Send + 'static,
-    T: Sync + Send + 'static,
+    Desc: ExecutorTaskDescription,
 {
     /// Creates a new Looper.
     fn new(
         buffer_size: usize,
-        receiver: mpsc::Receiver<KeyedComputation<Key, T>>,
-    ) -> ExecutorLooper<Key, T> {
+        receiver: mpsc::Receiver<KeyedComputation<Desc>>,
+    ) -> ExecutorLooper<Desc> {
         ExecutorLooper {
             buffer_size,
             receiver,
             computations: HashMap::new(),
             tasks: FuturesUnordered::new(),
             termination_msgs: FuturesUnordered::new(),
+            id_seq: 0,
         }
+    }
+
+    fn next_id(current: &mut usize) -> usize {
+        *current += 1;
+        *current
     }
 
     /// Handles a new computation request. It first tries to join
     /// a running computation. If this is not possible, a new
     /// computation is started.
-    fn handle_new_task(&mut self, kc: KeyedComputation<Key, T>) {
+    fn handle_new_task(&mut self, kc: KeyedComputation<Desc>) {
         log::debug!("Received new stream request.");
         let key = kc.key;
 
-        let entry = self.computations.entry(key.clone());
+        let entry = self.computations.entry(key.primary_key().clone());
         let receiver = match entry {
             // There is a computation running
             std::collections::hash_map::Entry::Occupied(mut oe) => {
-                match oe.get().sender.subscribe() {
-                    Ok(rx) => {
-                        log::debug!("Attaching request to existing stream.");
+                let entries = oe.get_mut();
+                let append = entries
+                    .iter_mut()
+                    .filter(|ce| key.can_join(&ce.key))
+                    .find_map(|ce| match ce.sender.subscribe() {
+                        Ok(rx) => Some(rx),
+                        Err(_) => None,
+                    });
+
+                match append {
+                    Some(rx) => {
+                        log::debug!("Joining running computation for request.");
                         rx
                     }
-                    // Stream progressed too far, start a new one
-                    Err(_) => {
-                        log::debug!(
-                            "Stream progressed too far. Starting new computation for request."
-                        );
-                        let new_id = oe.get().id + 1;
+                    None => {
+                        log::debug!("Stream progressed too far or results do not cover requested result. Starting new computation for request.");
                         let (entry, rx) = Self::start_computation(
                             self.buffer_size,
-                            new_id,
+                            Self::next_id(&mut self.id_seq),
                             key,
                             kc.stream,
                             &mut self.tasks,
                         );
-                        oe.insert(entry);
+                        entries.push(entry);
                         rx
                     }
                 }
@@ -174,9 +213,14 @@ where
             // Start a new computation
             std::collections::hash_map::Entry::Vacant(ve) => {
                 log::debug!("Starting new computation for request.");
-                let (entry, rx) =
-                    Self::start_computation(self.buffer_size, 0, key, kc.stream, &mut self.tasks);
-                ve.insert(entry);
+                let (entry, rx) = Self::start_computation(
+                    self.buffer_size,
+                    Self::next_id(&mut self.id_seq),
+                    key,
+                    kc.stream,
+                    &mut self.tasks,
+                );
+                ve.insert(vec![entry]);
                 rx
             }
         };
@@ -194,14 +238,18 @@ where
     fn start_computation(
         buffer_size: usize,
         id: usize,
-        key: Key,
-        mut stream: BoxStream<'static, T>,
-        tasks: &mut FuturesUnordered<KeyedJoinHandle<Key, T>>,
-    ) -> (ComputationEntry<T>, replay::Receiver<Result<Arc<T>>>) {
+        key: Desc,
+        mut stream: BoxStream<'static, Desc::ResultType>,
+        tasks: &mut FuturesUnordered<KeyedJoinHandle<Desc>>,
+    ) -> (
+        ComputationEntry<Desc>,
+        replay::Receiver<Result<Arc<Desc::ResultType>>>,
+    ) {
         let (tx, rx) = replay::channel(buffer_size);
 
         let entry = ComputationEntry {
             id,
+            key: key.clone(),
             sender: tx.clone(),
         };
 
@@ -231,16 +279,20 @@ where
     /// consumers. Furthermore, if the computation task was cancelled
     /// or panicked, this is also propagated.
     ///
-    fn handle_completed_task(&mut self, completed_task: KeyedJoinResult<Key, T>) {
+    fn handle_completed_task(&mut self, completed_task: KeyedJoinResult<Desc>) {
         let id = completed_task.id;
 
         // Remove the map entry only, if the completed task's id matches the stored task's id
         // There may be older tasks around (with smaller ids) that should not trigger a removal from the map.
-        if let std::collections::hash_map::Entry::Occupied(e) =
-            self.computations.entry(completed_task.key)
+        if let std::collections::hash_map::Entry::Occupied(mut oe) = self
+            .computations
+            .entry(completed_task.key.primary_key().clone())
         {
-            if e.get().id == id {
-                e.remove();
+            if let Some(idx) = oe.get().iter().position(|x| x.id == id) {
+                oe.get_mut().swap_remove(idx);
+            }
+            if oe.get().is_empty() {
+                oe.remove();
             }
         }
 
@@ -300,24 +352,22 @@ where
 /// the oldest element.
 /// New consumers join the same computation if the window did not slide forward at
 /// the time of task submission. Otherwise, a new computation task is started.
-pub struct Executor<Key, T>
+pub struct Executor<Desc>
 where
-    Key: Hash + Clone + Eq + Send + 'static,
-    T: Sync + Send + 'static,
+    Desc: ExecutorTaskDescription,
 {
-    sender: mpsc::Sender<KeyedComputation<Key, T>>,
+    sender: mpsc::Sender<KeyedComputation<Desc>>,
     driver: JoinHandle<()>,
 }
 
-impl<Key, T> Executor<Key, T>
+impl<Desc> Executor<Desc>
 where
-    Key: Hash + Clone + Eq + Send + 'static,
-    T: Sync + Send + 'static,
+    Desc: ExecutorTaskDescription,
 {
     /// Creates a new `Executor` instance, ready to serve computations. The buffer
     /// size determines how much elements are at most kept  in memory per computation.
-    pub fn new(buffer_size: usize) -> Executor<Key, T> {
-        let (sender, receiver) = tokio::sync::mpsc::channel::<KeyedComputation<Key, T>>(128);
+    pub fn new(buffer_size: usize) -> Executor<Desc> {
+        let (sender, receiver) = tokio::sync::mpsc::channel::<KeyedComputation<Desc>>(128);
 
         let mut looper = ExecutorLooper::new(buffer_size, receiver);
 
@@ -335,11 +385,12 @@ where
     ///
     /// #Errors
     /// This call fails, if the `Executor` was already closed.
-    pub async fn submit_stream_ref<F>(&self, key: &Key, stream: F) -> Result<StreamReceiver<T>>
+    pub async fn submit_stream<F>(&self, key: &Desc, stream: F) -> Result<StreamReceiver<Desc>>
     where
-        F: Stream<Item = T> + Send + 'static,
+        F: Stream<Item = Desc::ResultType> + Send + 'static,
     {
-        let (tx, rx) = tokio::sync::oneshot::channel::<replay::Receiver<Result<Arc<T>>>>();
+        let (tx, rx) =
+            tokio::sync::oneshot::channel::<replay::Receiver<Result<Arc<Desc::ResultType>>>>();
 
         let kc = KeyedComputation {
             key: key.clone(),
@@ -350,7 +401,7 @@ where
         self.sender.send(kc).await?;
         let res = rx.await?;
 
-        Ok(StreamReceiver::new(res.into()))
+        Ok(StreamReceiver::new(key.clone(), res.into()))
     }
 
     /// Submits a single-result computation to this executor. In contrast
@@ -361,13 +412,11 @@ where
     /// #Errors
     /// This call fails, if the `Executor` was already closed.
     #[allow(clippy::missing_panics_doc)]
-    pub async fn submit_ref<F>(&self, key: &Key, f: F) -> Result<Arc<T>>
+    pub async fn submit<F>(&self, key: &Desc, f: F) -> Result<Desc::ResultType>
     where
-        F: Future<Output = T> + Send + 'static,
+        F: Future<Output = Desc::ResultType> + Send + 'static,
     {
-        let mut stream = self
-            .submit_stream_ref(key, futures::stream::once(f))
-            .await?;
+        let mut stream = self.submit_stream(key, futures::stream::once(f)).await?;
 
         Ok(stream.next().await.unwrap())
     }
@@ -378,100 +427,53 @@ where
     }
 }
 
-impl<Key, T> Executor<Key, T>
-where
-    Key: Hash + Clone + Eq + Send + 'static,
-    T: Clone + Sync + Send + 'static,
-{
-    /// Submits a streaming computation to this executor. This method
-    /// returns a stream providing the results of the original (given) stream.
-    ///
-    /// #Errors
-    /// This call fails, if the `Executor` was already closed.
-    pub async fn submit_stream<F>(&self, key: &Key, stream: F) -> Result<CloningStreamReceiver<T>>
-    where
-        F: Stream<Item = T> + Send + 'static,
-    {
-        let consumer = self.submit_stream_ref(key, stream).await?;
-        Ok(CloningStreamReceiver { consumer })
-    }
-
-    /// Submits a single-result computation to this executor.
-    ///
-    /// #Errors
-    /// This call fails, if the `Executor` was already closed.
-    #[allow(clippy::missing_panics_doc)]
-    pub async fn submit<F>(&self, key: &Key, f: F) -> Result<T>
-    where
-        F: Future<Output = T> + Send + 'static,
-    {
-        let mut stream = self.submit_stream(key, futures::stream::once(f)).await?;
-        Ok(stream.next().await.unwrap())
-    }
-}
-
 #[pin_project::pin_project]
-pub struct StreamReceiver<T>
+pub struct StreamReceiver<Desc>
 where
-    T: Sync + Send + 'static,
+    Desc: ExecutorTaskDescription,
 {
+    key: Desc,
     #[pin]
-    input: replay::ReceiverStream<Result<Arc<T>>>,
+    input: replay::ReceiverStream<Result<Arc<Desc::ResultType>>>,
 }
 
-impl<T> StreamReceiver<T>
+impl<Desc> StreamReceiver<Desc>
 where
-    T: Sync + Send + 'static,
+    Desc: ExecutorTaskDescription,
 {
-    fn new(input: replay::ReceiverStream<Result<Arc<T>>>) -> StreamReceiver<T> {
-        StreamReceiver { input }
+    fn new(
+        key: Desc,
+        input: replay::ReceiverStream<Result<Arc<Desc::ResultType>>>,
+    ) -> StreamReceiver<Desc> {
+        StreamReceiver { key, input }
     }
 }
 
-impl<T> Stream for StreamReceiver<T>
+impl<Desc> Stream for StreamReceiver<Desc>
 where
-    T: Sync + Send + 'static,
+    Desc: ExecutorTaskDescription,
 {
-    type Item = Arc<T>;
+    type Item = Desc::ResultType;
 
     fn poll_next(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
-        let this = self.project();
-        match this.input.poll_next(cx) {
-            Poll::Pending => Poll::Pending,
-            Poll::Ready(None) => Poll::Ready(None),
-            Poll::Ready(Some(Ok(v))) => Poll::Ready(Some(v)),
-            Poll::Ready(Some(Err(ExecutorError::Panic))) => panic!("Executor task panicked!"),
-            Poll::Ready(Some(Err(ExecutorError::Cancelled))) => {
-                panic!("Executor task cancelled!")
+        let mut this = self.project();
+        loop {
+            match this.input.as_mut().poll_next(cx) {
+                Poll::Pending => return Poll::Pending,
+                Poll::Ready(None) => return Poll::Ready(None),
+                Poll::Ready(Some(Ok(res))) => {
+                    if let Some(sliced) = this.key.slice_result(res.as_ref()) {
+                        // Slicing produced a result -> Otherwise loop again
+                        return Poll::Ready(Some(sliced));
+                    }
+                }
+                Poll::Ready(Some(Err(ExecutorError::Panic))) => panic!("Executor task panicked!"),
+                Poll::Ready(Some(Err(ExecutorError::Cancelled))) => {
+                    panic!("Executor task cancelled!")
+                }
+                // Submission already succeeded -> Unreachable.
+                Poll::Ready(Some(Err(ExecutorError::Submission { .. }))) => unreachable!(),
             }
-            // Submission already succeeded -> Unreachable.
-            Poll::Ready(Some(Err(ExecutorError::Submission { .. }))) => unreachable!(),
-        }
-    }
-}
-
-//
-#[pin_project::pin_project]
-pub struct CloningStreamReceiver<T>
-where
-    T: Clone + Sync + Send + 'static,
-{
-    #[pin]
-    consumer: StreamReceiver<T>,
-}
-
-impl<T> Stream for CloningStreamReceiver<T>
-where
-    T: Clone + Sync + Send + 'static,
-{
-    type Item = T;
-
-    fn poll_next(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
-        let this = self.project();
-        match this.consumer.poll_next(cx) {
-            Poll::Ready(Some(v)) => Poll::Ready(Some(v.as_ref().clone())),
-            Poll::Ready(None) => Poll::Ready(None),
-            Poll::Pending => Poll::Pending,
         }
     }
 }
@@ -485,19 +487,37 @@ mod tests {
     use futures::{Stream, StreamExt};
 
     use crate::pro::executor::error::ExecutorError;
+    use crate::pro::executor::ExecutorTaskDescription;
 
     use super::Executor;
 
+    impl ExecutorTaskDescription for i32 {
+        type KeyType = i32;
+        type ResultType = i32;
+
+        fn primary_key(&self) -> &Self::KeyType {
+            &self
+        }
+
+        fn can_join(&self, other: &Self) -> bool {
+            self == other
+        }
+
+        fn slice_result(&self, result: &Self::ResultType) -> Option<Self::ResultType> {
+            Some(*result)
+        }
+    }
+
     #[tokio::test]
     async fn test_stream_empty_stream() -> Result<(), ExecutorError> {
-        let e = Executor::<i32, i32>::new(5);
+        let e = Executor::<i32>::new(5);
 
         let sf1 = e
-            .submit_stream_ref(&1, futures::stream::iter(Vec::<i32>::new()))
+            .submit_stream(&1, futures::stream::iter(Vec::<i32>::new()))
             .await
             .unwrap();
 
-        let results: Vec<Arc<i32>> = sf1.collect().await;
+        let results = sf1.collect::<Vec<_>>().await;
 
         assert!(results.is_empty());
         Ok(())
@@ -505,16 +525,16 @@ mod tests {
 
     #[tokio::test]
     async fn test_stream_single_consumer() -> Result<(), ExecutorError> {
-        let e = Executor::<i32, i32>::new(5);
+        let e = Executor::<i32>::new(5);
 
         let sf1 = e
-            .submit_stream_ref(&1, futures::stream::iter(vec![1, 2, 3]))
+            .submit_stream(&1, futures::stream::iter(vec![1, 2, 3]))
             .await
             .unwrap();
 
-        let results: Vec<Arc<i32>> = sf1.collect().await;
+        let results = sf1.collect::<Vec<_>>().await;
 
-        assert_eq!(vec![Arc::new(1), Arc::new(2), Arc::new(3)], results);
+        assert_eq!(vec![1, 2, 3], results);
         Ok(())
     }
 
@@ -522,8 +542,8 @@ mod tests {
     async fn test_stream_two_consumers() -> Result<(), ExecutorError> {
         let e = Executor::new(5);
 
-        let sf1 = e.submit_stream_ref(&1, futures::stream::iter(vec![1, 2, 3]));
-        let sf2 = e.submit_stream_ref(&1, futures::stream::iter(vec![1, 2, 3]));
+        let sf1 = e.submit_stream(&1, futures::stream::iter(vec![1, 2, 3]));
+        let sf2 = e.submit_stream(&1, futures::stream::iter(vec![1, 2, 3]));
 
         let (sf1, sf2) = tokio::join!(sf1, sf2);
 
@@ -546,8 +566,8 @@ mod tests {
             }
         }
 
-        assert_eq!(vec![Arc::new(1), Arc::new(2), Arc::new(3)], res1);
-        assert_eq!(vec![Arc::new(1), Arc::new(2), Arc::new(3)], res2);
+        assert_eq!(vec![1, 2, 3], res1);
+        assert_eq!(vec![1, 2, 3], res2);
 
         Ok(())
     }
@@ -566,7 +586,7 @@ mod tests {
     #[should_panic(expected = "Executor task panicked!")]
     async fn test_stream_propagate_panic() {
         let e = Executor::new(5);
-        let sf = e.submit_stream_ref(&1, PanicStream {});
+        let sf = e.submit_stream(&1, PanicStream {});
         let mut sf = sf.await.unwrap();
         sf.next().await;
     }
@@ -574,54 +594,36 @@ mod tests {
     #[tokio::test]
     async fn test_stream_consumer_drop() {
         let e = Executor::new(2);
-        let chk;
-        {
-            let mut sf = e
-                .submit_stream_ref(&1, futures::stream::iter(vec![1, 2, 3]))
+        let chk = {
+            e.submit_stream(&1, futures::stream::iter(vec![1, 2, 3]))
                 .await
-                .unwrap();
-            // Consume a single element
-            chk = sf.next().await;
-            assert_eq!(Some(Arc::new(1)), chk);
-        }
+                .unwrap()
+                .next()
+                .await
+        };
         // Assert that the task is dropped if all consumers are dropped.
         // Therefore, resubmit another one and ensure we produce new results.
-        let mut sf = e
-            .submit_stream_ref(&1, futures::stream::iter(vec![1, 2, 3]))
-            .await
-            .unwrap();
-        let chk2 = sf.next().await;
-        assert_eq!(Some(Arc::new(1)), chk);
+        let chk2 = {
+            e.submit_stream(&1, futures::stream::iter(vec![2, 2, 3]))
+                .await
+                .unwrap()
+                .next()
+                .await
+        };
 
-        assert_eq!(chk, chk2);
-
-        assert!(!Arc::ptr_eq(&chk.unwrap(), &chk2.unwrap()));
-    }
-
-    #[tokio::test]
-    async fn test_stream_clone() -> Result<(), ExecutorError> {
-        let e = Executor::<i32, i32>::new(5);
-
-        let sf1 = e
-            .submit_stream(&1, futures::stream::iter(vec![1, 2, 3]))
-            .await
-            .unwrap();
-
-        let results: Vec<i32> = sf1.collect().await;
-
-        assert_eq!(vec![1, 2, 3], results);
-        Ok(())
+        assert_eq!(Some(1), chk);
+        assert_eq!(Some(2), chk2);
     }
 
     #[tokio::test]
     async fn test_simple() -> Result<(), ExecutorError> {
         let e = Executor::new(5);
-        let f = e.submit_ref(&1, async { 2_u64 });
+        let f = e.submit(&1, async { 2 });
 
-        assert_eq!(Arc::new(2_u64), f.await?);
+        assert_eq!(2, f.await?);
 
-        let f = e.submit_ref(&1, async { 42_u64 });
-        assert_eq!(Arc::new(42_u64), f.await?);
+        let f = e.submit(&1, async { 42 });
+        assert_eq!(42, f.await?);
 
         Ok(())
     }
@@ -629,21 +631,20 @@ mod tests {
     #[tokio::test]
     async fn test_multi_consumers() -> Result<(), ExecutorError> {
         let e = Executor::new(5);
-        // We use arc here to ensure both actually return the same result
-        let f = e.submit_ref(&1, async { 2_u64 });
-        let f2 = e.submit_ref(&1, async { 2_u64 });
+        let f = e.submit(&1, async { 2 });
+        let f2 = e.submit(&1, async { 2 });
 
         let (r1, r2) = tokio::join!(f, f2);
         let (r1, r2) = (r1?, r2?);
 
-        assert!(Arc::ptr_eq(&r1, &r2));
+        assert_eq!(r1, r2);
 
-        let f = e.submit_ref(&1, async { 2_u64 });
-        let f2 = e.submit_ref(&1, async { 2_u64 });
+        let f = e.submit(&1, async { 2 });
+        let f2 = e.submit(&1, async { 2 });
 
         let r1 = f.await?;
         let r2 = f2.await?;
-        assert!(!Arc::ptr_eq(&r1, &r2));
+        assert_eq!(r1, r2);
 
         Ok(())
     }
@@ -652,7 +653,7 @@ mod tests {
     #[should_panic]
     async fn test_panic() {
         let e = Executor::new(5);
-        let f = e.submit_ref(&1, async { panic!("booom") });
+        let f = e.submit(&1, async { panic!("booom") });
 
         f.await.unwrap();
     }
@@ -660,19 +661,91 @@ mod tests {
     #[tokio::test]
     async fn test_close() -> Result<(), ExecutorError> {
         let e = Executor::new(5);
-        let f = e.submit_ref(&1, async { 2_u64 });
-        assert_eq!(Arc::new(2_u64), f.await?);
+        let f = e.submit(&1, async { 2 });
+        assert_eq!(2, f.await?);
         let c = e.close();
         c.await?;
 
         Ok(())
     }
 
+    #[derive(Clone)]
+    struct IntDesc {
+        key: i32,
+        do_slice: bool,
+    }
+
+    impl ExecutorTaskDescription for IntDesc {
+        type KeyType = i32;
+        type ResultType = Arc<i32>;
+
+        fn primary_key(&self) -> &Self::KeyType {
+            &self.key
+        }
+
+        fn can_join(&self, other: &Self) -> bool {
+            self.key == other.key
+        }
+
+        fn slice_result(&self, result: &Self::ResultType) -> Option<Self::ResultType> {
+            if !self.do_slice || *result.as_ref() % 2 == 0 {
+                Some(result.clone())
+            } else {
+                None
+            }
+        }
+    }
+
     #[tokio::test]
-    async fn test_clone() -> Result<(), ExecutorError> {
-        let e = Executor::new(5);
-        let f = e.submit(&1, async { 2_u64 });
-        assert_eq!(2_u64, f.await?);
-        Ok(())
+    async fn test_slicing() {
+        let d1 = IntDesc {
+            key: 1,
+            do_slice: false,
+        };
+
+        let d2 = IntDesc {
+            key: 1,
+            do_slice: true,
+        };
+
+        let e = Executor::new(1);
+
+        let mut s1 = e
+            .submit_stream(
+                &d1,
+                futures::stream::iter(vec![Arc::new(1), Arc::new(2), Arc::new(3), Arc::new(4)]),
+            )
+            .await
+            .unwrap();
+
+        let mut s2 = e
+            .submit_stream(
+                &d2,
+                futures::stream::iter(vec![Arc::new(1), Arc::new(2), Arc::new(3), Arc::new(4)]),
+            )
+            .await
+            .unwrap();
+
+        let mut res1: Vec<Arc<i32>> = vec![];
+        let mut res2: Vec<Arc<i32>> = vec![];
+
+        loop {
+            tokio::select! {
+                Some(v) = s1.next() => {
+                    res1.push(v);
+                },
+                Some(v) = s2.next() => {
+                    res2.push(v);
+                },
+                else => {
+                    break;
+                }
+            }
+        }
+
+        assert_eq!(4, res1.len());
+        assert_eq!(2, res2.len());
+        assert!(Arc::ptr_eq(res1.get(1).unwrap(), res2.get(0).unwrap()));
+        assert!(Arc::ptr_eq(res1.get(3).unwrap(), res2.get(1).unwrap()));
     }
 }
