@@ -401,7 +401,7 @@ impl GdalRasterLoader {
         );
         let no_data_value = dataset_params.no_data_value.map(T::from_);
 
-        tracing::debug!("no_data_value is {:?} ", &no_data_value,);
+        debug!("no_data_value is {:?} ", &no_data_value,);
 
         if dataset_result.is_err() {
             // TODO: check if Gdal error is actually file not found
@@ -436,7 +436,7 @@ impl GdalRasterLoader {
         .unwrap_or_else(|| create_no_data_tile(tile_information, tile_time, no_data_value));
 
         let elapsed = start.elapsed();
-        tracing::debug!("data loaded -> returning data grid, took {:?}", elapsed);
+        debug!("data loaded -> returning data grid, took {:?}", elapsed);
 
         Ok(result_tile)
     }
