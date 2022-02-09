@@ -319,7 +319,7 @@ impl Stream for CsvSourceStream {
         let parameters = self.parameters.clone();
         let waker = cx.waker().clone();
 
-        tokio::task::spawn_blocking(move || {
+        crate::util::spawn_blocking(move || {
             let mut csv_reader = reader_state.lock().unwrap();
             let computation_result = || -> Result<Option<MultiPointCollection>> {
                 // TODO: is clone necessary?

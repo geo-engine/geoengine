@@ -10,8 +10,8 @@ identifier = @{
     ASCII_ALPHA ~ (ASCII_ALPHANUMERIC | "_")*
 }
 
-// TODO: functions without parameters
 function = {
+    identifier ~ "(" ~ ")" |
     identifier ~ "(" ~ expression ~ ("," ~ expression)* ~ ")"
 }
 

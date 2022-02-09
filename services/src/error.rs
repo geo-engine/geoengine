@@ -1,5 +1,5 @@
-use crate::handlers::ErrorResponse;
 use crate::workflows::workflow::WorkflowId;
+use crate::{datasets::external::netcdfcf::NetCdfCf4DProviderError, handlers::ErrorResponse};
 use actix_web::http::StatusCode;
 use actix_web::HttpResponse;
 use geoengine_datatypes::{
@@ -324,6 +324,11 @@ pub enum Error {
     ExecutorComputation {
         message: String,
     },
+
+    NetCdfCf4DProvider {
+        #[snafu(implicit)]
+        source: NetCdfCf4DProviderError,
+    },
 }
 
 impl actix_web::error::ResponseError for Error {
@@ -449,5 +454,11 @@ impl From<tonic::transport::Error> for Error {
 impl From<geoengine_operators::pro::executor::error::ExecutorError> for Error {
     fn from(source: geoengine_operators::pro::executor::error::ExecutorError) -> Self {
         Self::Executor { source }
+    }
+}
+
+impl From<tokio::task::JoinError> for Error {
+    fn from(source: tokio::task::JoinError) -> Self {
+        Error::TokioJoin { source }
     }
 }

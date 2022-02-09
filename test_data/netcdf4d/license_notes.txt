@@ -1,0 +1,8 @@
+All test data within this folder was obtained from the German Centre for Integrative Biodiversity Research (iDiv) and is licensed
+under a Creative Commons Attribution 4.0 License (http://creativecommons.org/licenses/by/4.0/)
+
+In particular, the datasets are:
+- "Test dataset metric"
+  Luise Quoß, German Centre for Integrative Biodiversity Research (iDiv), 2022-01-18
+- "Test dataset metric and scenario"
+  Luise Quoß, German Centre for Integrative Biodiversity Research (iDiv), 2022-01-18

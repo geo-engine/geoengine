@@ -214,7 +214,6 @@ pub struct Logging {
     pub log_spec: String,
     pub log_to_file: bool,
     pub filename_prefix: String,
-    pub enable_buffering: bool,
     pub log_directory: Option<String>,
 }
 
