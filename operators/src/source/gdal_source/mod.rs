@@ -710,7 +710,7 @@ where
 /// This method reads the data for a single tile with a specified size from the GDAL dataset.
 /// It handles conversion to grid coordinates.
 /// If the tile is inside the dataset it uses the `read_grid_from_raster` method.
-/// f the tile overlaps the borders of the dataset it uses the `read_partial_grid_from_raster` method.  
+/// If the tile overlaps the borders of the dataset it uses the `read_partial_grid_from_raster` method.  
 fn read_grid_and_handle_edges<T>(
     tile_info: TileInformation,
     rasterband: &GdalRasterBand,
