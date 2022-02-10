@@ -30,7 +30,7 @@ impl MetaData<GdalLoadingInfo, RasterResultDescriptor, RasterQueryRectangle>
         let valid = self.time.unwrap_or_default();
 
         let parts = if valid.intersects(&query.time_interval) {
-            vec![GdalLoadingInfoPart {
+            vec![GdalLoadingInfoTemporalSlice {
                 time: valid,
                 params: Some(self.params.clone()),
             }]
@@ -40,7 +40,7 @@ impl MetaData<GdalLoadingInfo, RasterResultDescriptor, RasterQueryRectangle>
         };
 
         Ok(GdalLoadingInfo {
-            info: GdalLoadingInfoPartIterator::Static { parts },
+            info: GdalLoadingInfoTemporalSliceIterator::Static { parts },
         })
     }
 
@@ -87,13 +87,15 @@ impl MetaData<GdalLoadingInfo, RasterResultDescriptor, RasterQueryRectangle>
             TimeStepIter::new_with_interval_incl_start(snapped_interval, self.step)?;
 
         Ok(GdalLoadingInfo {
-            info: GdalLoadingInfoPartIterator::Dynamic(DynamicGdalLoadingInfoPartIterator::new(
-                time_iterator,
-                self.params.clone(),
-                self.time_placeholders.clone(),
-                self.step,
-                query.time_interval.end(),
-            )?),
+            info: GdalLoadingInfoTemporalSliceIterator::Dynamic(
+                DynamicGdalLoadingInfoPartIterator::new(
+                    time_iterator,
+                    self.params.clone(),
+                    self.time_placeholders.clone(),
+                    self.step,
+                    query.time_interval.end(),
+                )?,
+            ),
         })
     }
 
@@ -141,14 +143,16 @@ impl MetaData<GdalLoadingInfo, RasterResultDescriptor, RasterQueryRectangle>
             TimeStepIter::new_with_interval_incl_start(snapped_interval, self.step)?;
 
         Ok(GdalLoadingInfo {
-            info: GdalLoadingInfoPartIterator::NetCdfCf(NetCdfCfGdalLoadingInfoPartIterator::new(
-                time_iterator,
-                self.params.clone(),
-                self.step,
-                self.start,
-                self.end,
-                self.band_offset,
-            )),
+            info: GdalLoadingInfoTemporalSliceIterator::NetCdfCf(
+                NetCdfCfGdalLoadingInfoPartIterator::new(
+                    time_iterator,
+                    self.params.clone(),
+                    self.step,
+                    self.start,
+                    self.end,
+                    self.band_offset,
+                ),
+            ),
         })
     }
 
@@ -201,7 +205,7 @@ impl DynamicGdalLoadingInfoPartIterator {
 }
 
 impl Iterator for DynamicGdalLoadingInfoPartIterator {
-    type Item = Result<GdalLoadingInfoPart>;
+    type Item = Result<GdalLoadingInfoTemporalSlice>;
 
     fn next(&mut self) -> Option<Self::Item> {
         let t1 = self.time_step_iter.next()?;
@@ -214,7 +218,7 @@ impl Iterator for DynamicGdalLoadingInfoPartIterator {
         let loading_info_part = self
             .params
             .replace_time_placeholders(&self.time_placeholders, time_interval)
-            .map(|loading_info_part_params| GdalLoadingInfoPart {
+            .map(|loading_info_part_params| GdalLoadingInfoTemporalSlice {
                 time: time_interval,
                 params: Some(loading_info_part_params),
             });
@@ -254,7 +258,7 @@ impl NetCdfCfGdalLoadingInfoPartIterator {
 }
 
 impl Iterator for NetCdfCfGdalLoadingInfoPartIterator {
-    type Item = Result<GdalLoadingInfoPart>;
+    type Item = Result<GdalLoadingInfoTemporalSlice>;
 
     fn next(&mut self) -> Option<Self::Item> {
         let t1 = self.time_step_iter.next()?;
@@ -269,7 +273,7 @@ impl Iterator for NetCdfCfGdalLoadingInfoPartIterator {
 
         // TODO: how to prevent generating loads of empty time intervals for a very small t1?
         if t1 < self.dataset_time_start {
-            return Some(Ok(GdalLoadingInfoPart {
+            return Some(Ok(GdalLoadingInfoTemporalSlice {
                 time: time_interval,
                 params: None,
             }));
@@ -293,7 +297,7 @@ impl Iterator for NetCdfCfGdalLoadingInfoPartIterator {
         let mut params = self.params.clone();
         params.rasterband_channel = self.band_offset + 1 + steps_between as usize;
 
-        Some(Ok(GdalLoadingInfoPart {
+        Some(Ok(GdalLoadingInfoTemporalSlice {
             time: time_interval,
             params: Some(params),
         }))
@@ -303,34 +307,34 @@ impl Iterator for NetCdfCfGdalLoadingInfoPartIterator {
 #[derive(Debug, Clone)]
 pub struct GdalLoadingInfo {
     /// partitions of dataset sorted by time
-    pub info: GdalLoadingInfoPartIterator,
+    pub info: GdalLoadingInfoTemporalSliceIterator,
 }
 
 #[allow(clippy::large_enum_variant)]
 #[derive(Debug, Clone)]
-pub enum GdalLoadingInfoPartIterator {
+pub enum GdalLoadingInfoTemporalSliceIterator {
     Static {
-        parts: std::vec::IntoIter<GdalLoadingInfoPart>,
+        parts: std::vec::IntoIter<GdalLoadingInfoTemporalSlice>,
     },
     Dynamic(DynamicGdalLoadingInfoPartIterator),
     NetCdfCf(NetCdfCfGdalLoadingInfoPartIterator),
 }
 
-impl Iterator for GdalLoadingInfoPartIterator {
-    type Item = Result<GdalLoadingInfoPart>;
+impl Iterator for GdalLoadingInfoTemporalSliceIterator {
+    type Item = Result<GdalLoadingInfoTemporalSlice>;
 
     fn next(&mut self) -> Option<Self::Item> {
         match self {
-            GdalLoadingInfoPartIterator::Static { parts } => parts.next().map(Result::Ok),
-            GdalLoadingInfoPartIterator::Dynamic(iter) => iter.next(),
-            GdalLoadingInfoPartIterator::NetCdfCf(iter) => iter.next(),
+            GdalLoadingInfoTemporalSliceIterator::Static { parts } => parts.next().map(Result::Ok),
+            GdalLoadingInfoTemporalSliceIterator::Dynamic(iter) => iter.next(),
+            GdalLoadingInfoTemporalSliceIterator::NetCdfCf(iter) => iter.next(),
         }
     }
 }
 
 /// one temporal slice of the dataset that requires reading from exactly one Gdal dataset
 #[derive(Debug, Clone, PartialEq)]
-pub struct GdalLoadingInfoPart {
+pub struct GdalLoadingInfoTemporalSlice {
     pub time: TimeInterval,
     pub params: Option<GdalDatasetParameters>,
 }
