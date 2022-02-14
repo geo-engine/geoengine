@@ -176,3 +176,129 @@ where
         Box::pin(RasterStreamBoxer::new(self, qr, ctx))
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use crate::engine::{
+        MockQueryContext, QueryContext, RasterQueryProcessor, VectorQueryProcessor,
+    };
+    use crate::error::Error;
+    use crate::pro::executor::operators::OneshotQueryProcessor;
+    use futures::prelude::stream::BoxStream;
+    use futures::StreamExt;
+    use geoengine_datatypes::primitives::{
+        BoundingBox2D, NoGeometry, RasterQueryRectangle, SpatialPartition2D, SpatialResolution,
+        TimeInterval, VectorQueryRectangle,
+    };
+    use geoengine_datatypes::raster::RasterTile2D;
+    use geoengine_datatypes::util::test::TestDefault;
+
+    struct TestProcesor {
+        fail: bool,
+    }
+
+    #[async_trait::async_trait]
+    impl VectorQueryProcessor for TestProcesor {
+        type VectorType = NoGeometry;
+
+        async fn vector_query<'a>(
+            &'a self,
+            _query: VectorQueryRectangle,
+            _ctx: &'a dyn QueryContext,
+        ) -> crate::util::Result<BoxStream<'a, crate::util::Result<Self::VectorType>>> {
+            if self.fail {
+                Err(Error::QueryProcessor)
+            } else {
+                let s = futures::stream::empty();
+                Ok(Box::pin(s))
+            }
+        }
+    }
+
+    #[async_trait::async_trait]
+    impl RasterQueryProcessor for TestProcesor {
+        type RasterType = u8;
+
+        async fn raster_query<'a>(
+            &'a self,
+            _query: RasterQueryRectangle,
+            _ctx: &'a dyn QueryContext,
+        ) -> crate::util::Result<BoxStream<'a, crate::util::Result<RasterTile2D<Self::RasterType>>>>
+        {
+            if self.fail {
+                Err(Error::QueryProcessor)
+            } else {
+                let s = futures::stream::empty();
+                Ok(Box::pin(s))
+            }
+        }
+    }
+
+    #[tokio::test]
+    async fn test_vector_ok() {
+        let tp: Box<dyn VectorQueryProcessor<VectorType = NoGeometry>> =
+            Box::new(TestProcesor { fail: false });
+
+        let ctx = MockQueryContext::test_default();
+        let qr = VectorQueryRectangle {
+            spatial_bounds: BoundingBox2D::new((0., 0.).into(), (10., 10.).into()).unwrap(),
+            time_interval: TimeInterval::new(0, 10).unwrap(),
+            spatial_resolution: SpatialResolution::one(),
+        };
+
+        let s = tp.into_stream(qr, ctx).await;
+        assert!(s.is_ok());
+        let v = s.unwrap().collect::<Vec<_>>().await;
+        assert!(v.is_empty());
+    }
+
+    #[tokio::test]
+    async fn test_vector_fail() {
+        let tp: Box<dyn VectorQueryProcessor<VectorType = NoGeometry>> =
+            Box::new(TestProcesor { fail: true });
+
+        let ctx = MockQueryContext::test_default();
+        let qr = VectorQueryRectangle {
+            spatial_bounds: BoundingBox2D::new((0., 0.).into(), (10., 10.).into()).unwrap(),
+            time_interval: TimeInterval::new(0, 10).unwrap(),
+            spatial_resolution: SpatialResolution::one(),
+        };
+
+        let s = tp.into_stream(qr, ctx).await;
+        assert!(s.is_err());
+    }
+
+    #[tokio::test]
+    async fn test_raster_ok() {
+        let tp: Box<dyn RasterQueryProcessor<RasterType = u8>> =
+            Box::new(TestProcesor { fail: false });
+
+        let ctx = MockQueryContext::test_default();
+        let qr = RasterQueryRectangle {
+            spatial_bounds: SpatialPartition2D::new((0., 10.).into(), (10., 0.).into()).unwrap(),
+            time_interval: TimeInterval::new(0, 10).unwrap(),
+            spatial_resolution: SpatialResolution::one(),
+        };
+
+        let s = tp.into_stream(qr, ctx).await;
+        assert!(s.is_ok());
+        let v = s.unwrap().collect::<Vec<_>>().await;
+        assert!(v.is_empty());
+    }
+
+    #[tokio::test]
+    async fn test_raster_fail() {
+        let tp: Box<dyn RasterQueryProcessor<RasterType = u8>> =
+            Box::new(TestProcesor { fail: true });
+
+        let ctx = MockQueryContext::test_default();
+        let qr = RasterQueryRectangle {
+            spatial_bounds: SpatialPartition2D::new((0., 10.).into(), (10., 0.).into()).unwrap(),
+            time_interval: TimeInterval::new(0, 10).unwrap(),
+            spatial_resolution: SpatialResolution::one(),
+        };
+
+        let s = tp.into_stream(qr, ctx).await;
+        assert!(s.is_err());
+    }
+}
