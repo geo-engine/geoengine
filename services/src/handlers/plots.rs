@@ -40,9 +40,9 @@ pub(crate) struct GetPlot {
 #[derive(Debug, Clone, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct WrappedPlotOutput {
-    output_format: PlotOutputFormat,
-    plot_type: &'static str,
-    data: serde_json::Value,
+    pub(crate) output_format: PlotOutputFormat,
+    pub(crate) plot_type: &'static str,
+    pub(crate) data: serde_json::Value,
 }
 
 /// Generates a [plot](WrappedPlotOutput).
