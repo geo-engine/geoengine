@@ -1,22 +1,40 @@
 use crate::handlers::plots::WrappedPlotOutput;
 use crate::workflows::workflow::WorkflowId;
 use float_cmp::approx_eq;
+use geo::prelude::Intersects;
 use geoengine_datatypes::collections::{
-    FeatureCollection, FeatureCollectionInfos, FeatureCollectionModifications, IntoGeometryIterator,
+    FeatureCollection, FeatureCollectionInfos, FeatureCollectionModifications,
 };
 use geoengine_datatypes::primitives::{
-    BoundingBox2D, Geometry, MultiLineString, MultiPoint, MultiPolygon, SpatialBounded,
-    TimeInterval,
+    BoundingBox2D, Geometry, MultiLineString, MultiPoint, MultiPolygon, NoGeometry,
+    SpatialPartition2D, SpatialPartitioned, TemporalBounded, TimeInterval,
 };
+use geoengine_datatypes::raster::{Pixel, RasterTile2D};
 use geoengine_datatypes::util::arrow::ArrowTyped;
 use geoengine_operators::pro::executor::ExecutorTaskDescription;
 use std::marker::PhantomData;
 
+/// A [description][ExecutorTaskDescription] of an [`Executor`][geoengine_operators::pro::executor::Executor] task
+/// for plot data.
 #[derive(Clone, Debug)]
 pub struct PlotDescription {
     pub id: WorkflowId,
     pub spatial_bounds: BoundingBox2D,
     pub temporal_bounds: TimeInterval,
+}
+
+impl PlotDescription {
+    pub fn new(
+        id: WorkflowId,
+        spatial_bounds: BoundingBox2D,
+        temporal_bounds: TimeInterval,
+    ) -> PlotDescription {
+        PlotDescription {
+            id,
+            spatial_bounds,
+            temporal_bounds,
+        }
+    }
 }
 
 impl ExecutorTaskDescription for PlotDescription {
@@ -40,25 +58,58 @@ impl ExecutorTaskDescription for PlotDescription {
     }
 }
 
-pub type MultiPointDescription = VectorDescription<MultiPoint>;
-pub type MultiLinestringDescription = VectorDescription<MultiLineString>;
-pub type MultiPolygonDescription = VectorDescription<MultiPolygon>;
+/// A trait for spatio-temporal filterable [feature collections][FeatureCollection].
+pub trait STFilterable<G> {
+    /// Filters out features that do not intersect the given spatio-temporal bounds
+    /// and returns the resulting [`FeatureCollection`].
+    fn apply_filter(
+        self,
+        t: &TimeInterval,
+        s: &BoundingBox2D,
+    ) -> geoengine_datatypes::util::Result<FeatureCollection<G>>;
+}
 
-#[derive(Debug)]
-pub struct VectorDescription<G> {
+impl<'a, G> STFilterable<G> for &'a FeatureCollection<G>
+where
+    G: Geometry + ArrowTyped,
+    Self: IntoIterator,
+    <Self as IntoIterator>::Item: Intersects<BoundingBox2D> + Intersects<TimeInterval>,
+{
+    fn apply_filter(
+        self,
+        t: &TimeInterval,
+        s: &BoundingBox2D,
+    ) -> geoengine_datatypes::util::Result<FeatureCollection<G>> {
+        let mask = self
+            .into_iter()
+            .map(|x| x.intersects(t) && x.intersects(s))
+            .collect::<Vec<_>>();
+        self.filter(mask)
+    }
+}
+
+pub type DataDescription = FeatureCollectionTaskDescription<NoGeometry>;
+pub type MultiPointDescription = FeatureCollectionTaskDescription<MultiPoint>;
+pub type MultiLinestringDescription = FeatureCollectionTaskDescription<MultiLineString>;
+pub type MultiPolygonDescription = FeatureCollectionTaskDescription<MultiPolygon>;
+
+/// A [description][ExecutorTaskDescription] of an [`Executor`][geoengine_operators::pro::executor::Executor] task
+/// for feature data.
+#[derive(Clone, Debug)]
+pub struct FeatureCollectionTaskDescription<G> {
     pub id: WorkflowId,
     pub spatial_bounds: BoundingBox2D,
     pub temporal_bounds: TimeInterval,
     _p: PhantomData<G>,
 }
 
-impl<G> VectorDescription<G> {
+impl<G> FeatureCollectionTaskDescription<G> {
     pub fn new(
         id: WorkflowId,
         spatial_bounds: BoundingBox2D,
         temporal_bounds: TimeInterval,
-    ) -> VectorDescription<G> {
-        VectorDescription {
+    ) -> Self {
+        Self {
             id,
             spatial_bounds,
             temporal_bounds,
@@ -67,22 +118,10 @@ impl<G> VectorDescription<G> {
     }
 }
 
-impl<G> Clone for VectorDescription<G> {
-    fn clone(&self) -> Self {
-        VectorDescription {
-            id: self.id,
-            spatial_bounds: self.spatial_bounds,
-            temporal_bounds: self.temporal_bounds,
-            _p: Default::default(),
-        }
-    }
-}
-
-impl<G> ExecutorTaskDescription for VectorDescription<G>
+impl<G> ExecutorTaskDescription for FeatureCollectionTaskDescription<G>
 where
     G: Geometry + ArrowTyped + 'static,
-    for<'c> FeatureCollection<G>: IntoGeometryIterator<'c>,
-    for<'c> <FeatureCollection<G> as IntoGeometryIterator<'c>>::GeometryType: SpatialBounded,
+    for<'a> &'a FeatureCollection<G>: STFilterable<G>,
 {
     type KeyType = WorkflowId;
     type ResultType = geoengine_operators::util::Result<FeatureCollection<G>>;
@@ -92,24 +131,79 @@ where
     }
 
     fn can_join(&self, other: &Self) -> bool {
-        other.temporal_bounds.contains(&self.temporal_bounds)
-            && other.spatial_bounds.contains_bbox(&self.spatial_bounds)
+        other.temporal_bounds.contains(&self.temporal_bounds) && !G::IS_GEOMETRY
+            || other.spatial_bounds.contains_bbox(&self.spatial_bounds)
     }
 
     fn slice_result(&self, result: &Self::ResultType) -> Option<Self::ResultType> {
         match result {
-            Ok(c) => {
-                let mask = c
-                    .time_intervals()
-                    .iter()
-                    .zip(c.geometries())
-                    .map(|(t, g)| {
-                        self.temporal_bounds.intersects(t)
-                            && g.spatial_bounds().intersects_bbox(&self.spatial_bounds)
-                    })
-                    .collect::<Vec<_>>();
+            Ok(collection) => {
+                let filtered = collection
+                    .apply_filter(&self.temporal_bounds, &self.spatial_bounds)
+                    .map_err(geoengine_operators::error::Error::from);
 
-                Some(c.filter(mask).map_err(|e| e.into()))
+                match filtered {
+                    Ok(f) if f.is_empty() => None,
+                    Ok(f) => Some(Ok(f)),
+                    Err(e) => Some(Err(e)),
+                }
+            }
+            Err(_e) => Some(Err(geoengine_operators::error::Error::NotYetImplemented)),
+        }
+    }
+}
+
+/// A [description][ExecutorTaskDescription] of an [`geoengine_operators::pro::executor::Executor`] task
+/// for raster data.
+#[derive(Clone, Debug)]
+pub struct RasterTaskDescription<P> {
+    pub id: WorkflowId,
+    pub spatial_bounds: SpatialPartition2D,
+    pub temporal_bounds: TimeInterval,
+    _p: PhantomData<P>,
+}
+
+impl<P> RasterTaskDescription<P> {
+    pub fn new(
+        id: WorkflowId,
+        spatial_bounds: SpatialPartition2D,
+        temporal_bounds: TimeInterval,
+    ) -> Self {
+        Self {
+            id,
+            spatial_bounds,
+            temporal_bounds,
+            _p: Default::default(),
+        }
+    }
+}
+
+impl<P> ExecutorTaskDescription for RasterTaskDescription<P>
+where
+    P: Pixel,
+{
+    type KeyType = WorkflowId;
+    type ResultType = geoengine_operators::util::Result<RasterTile2D<P>>;
+
+    fn primary_key(&self) -> &Self::KeyType {
+        &self.id
+    }
+
+    fn can_join(&self, other: &Self) -> bool {
+        other.temporal_bounds.contains(&self.temporal_bounds)
+            && other.spatial_bounds.contains(&self.spatial_bounds)
+    }
+
+    fn slice_result(&self, result: &Self::ResultType) -> Option<Self::ResultType> {
+        match result {
+            Ok(r) => {
+                if r.temporal_bounds().intersects(&self.temporal_bounds)
+                    && r.spatial_partition().intersects(&self.spatial_bounds)
+                {
+                    Some(Ok(r.clone()))
+                } else {
+                    None
+                }
             }
             Err(_e) => Some(Err(geoengine_operators::error::Error::NotYetImplemented)),
         }
