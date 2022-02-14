@@ -6,7 +6,7 @@ use geoengine_datatypes::{
     dataset::{DatasetId, DatasetProviderId},
     spatial_reference::SpatialReferenceOption,
 };
-use snafu::prelude::*;
+use snafu::{prelude::*, AsErrorSource};
 use strum::IntoStaticStr;
 use tonic::Status;
 
@@ -313,6 +313,17 @@ pub enum Error {
 
     MissingNFDIMetaData,
 
+    NetCdfCf4DProvider {
+        source: NetCdfCf4DProviderError,
+    },
+
+    #[cfg(feature = "ebv")]
+    #[snafu(context(false))]
+    EbvHandler {
+        source: crate::handlers::ebv::EbvError,
+    },
+
+    #[snafu(context(false))]
     #[cfg(feature = "pro")]
     #[snafu(display("Executor error: {}", source))]
     Executor {
@@ -323,11 +334,6 @@ pub enum Error {
     #[snafu(display("Executor error: {}", message))]
     ExecutorComputation {
         message: String,
-    },
-
-    NetCdfCf4DProvider {
-        #[snafu(implicit)]
-        source: NetCdfCf4DProviderError,
     },
 }
 
@@ -462,3 +468,9 @@ impl From<tokio::task::JoinError> for Error {
         Error::TokioJoin { source }
     }
 }
+
+pub trait ErrorSource: std::error::Error + Send + Sync + 'static + AsErrorSource {}
+
+impl ErrorSource for dyn std::error::Error + Send + Sync + 'static {}
+
+impl<T> ErrorSource for T where T: std::error::Error + Send + Sync + 'static {}

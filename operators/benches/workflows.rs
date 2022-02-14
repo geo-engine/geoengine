@@ -557,15 +557,28 @@ fn bench_mock_source_operator_with_4326_to_3857_reprojection(
 }
 
 fn bench_gdal_source_operator_tile_size(bench_collector: &mut BenchmarkCollector) {
-    let qrects = vec![(
-        "World in 36000x18000 pixels",
-        RasterQueryRectangle {
-            spatial_bounds: SpatialPartition2D::new((-180., 90.).into(), (180., -90.).into())
-                .unwrap(),
-            time_interval: TimeInterval::new(1_388_534_400_000, 1_388_534_400_000 + 1000).unwrap(),
-            spatial_resolution: SpatialResolution::new(0.01, 0.01).unwrap(),
-        },
-    )];
+    let qrects = vec![
+        (
+            "World in 36000x18000 pixels",
+            RasterQueryRectangle {
+                spatial_bounds: SpatialPartition2D::new((-180., 90.).into(), (180., -90.).into())
+                    .unwrap(),
+                time_interval: TimeInterval::new(1_388_534_400_000, 1_388_534_400_000 + 1000)
+                    .unwrap(),
+                spatial_resolution: SpatialResolution::new(0.01, 0.01).unwrap(),
+            },
+        ),
+        (
+            "World in 72000x36000 pixels",
+            RasterQueryRectangle {
+                spatial_bounds: SpatialPartition2D::new((-180., 90.).into(), (180., -90.).into())
+                    .unwrap(),
+                time_interval: TimeInterval::new(1_388_534_400_000, 1_388_534_400_000 + 1000)
+                    .unwrap(),
+                spatial_resolution: SpatialResolution::new(0.005, 0.005).unwrap(),
+            },
+        ),
+    ];
 
     let tiling_specs = vec![
         TilingSpecification::new((0., 0.).into(), [32, 32].into()),

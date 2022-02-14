@@ -2,14 +2,18 @@
 //!
 //! Connects to <https://portal.geobon.org/api/v1/>.
 
-use crate::contexts::Context;
-use crate::error::Result;
+use crate::datasets::external::netcdfcf::{NetCdfOverview, NETCDF_CF_PROVIDER_ID};
+use crate::error::{ErrorSource, Result};
+use crate::{contexts::Context, datasets::external::netcdfcf::NetCdfCfDataProvider};
 use actix_web::{
     web::{self, ServiceConfig},
     FromRequest, Responder,
 };
+use geoengine_datatypes::dataset::DatasetProviderId;
+use geoengine_datatypes::test_data;
 use log::debug;
 use serde::Serialize;
+use snafu::{ResultExt, Snafu};
 
 pub(crate) fn init_ebv_routes<C>(base_url: Option<String>) -> Box<dyn FnOnce(&mut ServiceConfig)>
 where
@@ -22,7 +26,11 @@ where
         )))
         .service(web::resource("/classes").route(web::get().to(get_classes::<C>)))
         .service(web::resource("/datasets/{ebv_name}").route(web::get().to(get_ebv_datasets::<C>)))
-        .service(web::resource("/dataset/{id}").route(web::get().to(get_ebv_dataset::<C>)));
+        .service(web::resource("/dataset/{id}").route(web::get().to(get_ebv_dataset::<C>)))
+        .service(
+            web::resource("/dataset/{id}/subdatasets")
+                .route(web::get().to(get_ebv_subdatasets::<C>)),
+        );
     })
 }
 
@@ -75,6 +83,16 @@ mod portal_responses {
     pub struct EbvDatasetsResponseDataset {
         pub pathname: String,
     }
+}
+
+#[derive(Debug, Snafu)]
+#[snafu(visibility(pub(crate)))]
+#[snafu(module(error), context(suffix(false)))] // disables default `Snafu` suffix
+pub enum EbvError {
+    #[snafu(display("Cannot parse NetCDF file metadata: {source}"))]
+    CannotParseNetCdfFile { source: Box<dyn ErrorSource> },
+    #[snafu(display("Cannot lookup dataset with id {id}"))]
+    CannotLookupDataset { id: usize },
 }
 
 #[derive(Debug, Serialize)]
@@ -174,7 +192,13 @@ async fn get_ebv_dataset<C: Context>(
     _session: C::Session,
     _ctx: web::Data<C>,
 ) -> Result<impl Responder> {
-    let base_url = base_url.get_ref().as_ref();
+    let dataset = get_dataset_metadata(base_url.get_ref(), id.into_inner()).await?;
+
+    Ok(web::Json(dataset))
+}
+
+async fn get_dataset_metadata(base_url: &BaseUrl, id: usize) -> Result<EbvDataset> {
+    let base_url = base_url.as_ref();
     let url = format!("{base_url}/datasets/{id}");
 
     debug!("Calling {url}");
@@ -198,7 +222,46 @@ async fn get_ebv_dataset<C: Context>(
         })
         .next();
 
-    Ok(web::Json(dataset))
+    match dataset {
+        Some(dataset) => Ok(dataset),
+        None => Err(EbvError::CannotLookupDataset { id }.into()),
+    }
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct EbvHierarchy {
+    provider_id: DatasetProviderId,
+    tree: NetCdfOverview,
+}
+
+async fn get_ebv_subdatasets<C: Context>(
+    id: web::Path<usize>,
+    _params: web::Query<()>,
+    base_url: web::Data<BaseUrl>,
+    _session: C::Session,
+    _ctx: web::Data<C>,
+) -> Result<impl Responder> {
+    let dataset = get_dataset_metadata(base_url.get_ref(), id.into_inner()).await?;
+
+    let listing = {
+        let dataset_path = dataset.dataset_path.trim_start_matches('/');
+
+        // TODO: make dir configurable
+        let data_path = test_data!("netcdf4d/").join(dataset_path);
+
+        debug!("Accessing dataset {}", data_path.display());
+
+        crate::util::spawn_blocking(move || NetCdfCfDataProvider::build_netcdf_tree(&data_path))
+            .await?
+            .map_err(|e| Box::new(e) as _)
+            .context(error::CannotParseNetCdfFile)?
+    };
+
+    Ok(web::Json(EbvHierarchy {
+        provider_id: NETCDF_CF_PROVIDER_ID,
+        tree: listing,
+    }))
 }
 
 #[cfg(test)]
@@ -239,6 +302,268 @@ mod tests {
         test::call_service(&app, req.to_request())
             .await
             .map_into_boxed_body()
+    }
+
+    #[tokio::test]
+    #[allow(clippy::too_many_lines)]
+    async fn test_get_subdatasets() {
+        let ctx = InMemoryContext::test_default();
+        let session_id = ctx.default_session_ref().await.id();
+
+        let mock_server = httptest::Server::run();
+        mock_server.expect(
+            Expectation::matching(request::method_path("GET", "/api/v1/datasets/5"))
+                .respond_with(
+                    status_code(200)
+                        .append_header("Content-Type", "application/json")
+                        .body(r#"{
+                            "code": 200,
+                            "message": "List of dataset(s).",
+                            "data": [
+                                {
+                                    "id": "5",
+                                    "naming_authority": "The German Centre for Integrative Biodiversity Research (iDiv) Halle-Jena-Leipzig",
+                                    "title": "Global habitat availability for mammals from 2015-2055",
+                                    "date_created": "2020-01-01",
+                                    "summary": "Global habitat availability for 5,090 mammals in 5 year intervals (subset from 2015 to 2055).",
+                                    "references": [
+                                        "10.2139\/ssrn.3451453",
+                                        "10.1016\/j.oneear.2020.05.015"
+                                    ],
+                                    "source": "More info here: https:\/\/doi.org\/10.1016\/j.oneear.2020.05.015",
+                                    "coverage_content_type": "modelResult",
+                                    "processing_level": "N\/A",
+                                    "project": "Global Mammal Assessment (GMA)",
+                                    "project_url": [
+                                        "https:\/\/globalmammal.org"
+                                    ],
+                                    "creator": {
+                                        "creator_name": "Daniele Baisero",
+                                        "creator_email": "daniele.baisero@gmail.com",
+                                        "creator_institution": "Department of Biology and Biotechnology, Sapienza University of Rome",
+                                        "creator_country": "Italy"
+                                    },
+                                    "contributor_name": "N\/A",
+                                    "license": "https:\/\/creativecommons.org\/licenses\/by\/4.0",
+                                    "publisher": {
+                                        "publisher_name": "Daniele Baisero",
+                                        "publisher_email": "daniele.baisero@gmail.com",
+                                        "publisher_institution": "Department of Biology and Biotechnology, Sapienza University of Rome",
+                                        "publisher_country": "Italy"
+                                    },
+                                    "ebv": {
+                                        "ebv_class": "Species populations",
+                                        "ebv_name": "Species distributions"
+                                    },
+                                    "ebv_entity": {
+                                        "ebv_entity_type": "Species",
+                                        "ebv_entity_scope": "Mammals",
+                                        "ebv_entity_classification_name": "N\/A",
+                                        "ebv_entity_classification_url": "N\/A"
+                                    },
+                                    "ebv_metric": {
+                                        "ebv_metric_1": {
+                                            ":standard_name": "Habitat availability",
+                                            ":long_name": "Land-use of 5,090 mammals calculated in km2",
+                                            ":units": "km2"
+                                        }
+                                    },
+                                    "ebv_scenario": {
+                                        "ebv_scenario_classification_name": "Shared Socioeconomic Pathways (SSPs) \/ Representative Concentration Pathway (RCPs)",
+                                        "ebv_scenario_classification_version": "N\/A",
+                                        "ebv_scenario_classification_url": "N\/A",
+                                        "ebv_scenario_1": {
+                                            ":standard_name": "Sustainability",
+                                            ":long_name": "SSP1-RCP2.6"
+                                        },
+                                        "ebv_scenario_2": {
+                                            ":standard_name": "Middle of the Road ",
+                                            ":long_name": "SSP2-RCP4.5"
+                                        },
+                                        "ebv_scenario_3": {
+                                            ":standard_name": "Regional Rivalry",
+                                            ":long_name": "SSP3-RCP6.0"
+                                        },
+                                        "ebv_scenario_4": {
+                                            ":standard_name": "Inequality",
+                                            ":long_name": "SSP4-RCP6.0"
+                                        },
+                                        "ebv_scenario_5": {
+                                            ":standard_name": "Fossil-fueled Development",
+                                            ":long_name": "SSP5-RCP8.5"
+                                        }
+                                    },
+                                    "ebv_spatial": {
+                                        "ebv_spatial_scope": "Global",
+                                        "ebv_spatial_description": "N\/A",
+                                        "ebv_spatial_resolution": null
+                                    },
+                                    "geospatial_lat_units": "degrees_north",
+                                    "geospatial_lon_units": "degrees_east",
+                                    "time_coverage": {
+                                        "time_coverage_resolution": "Every 5 years",
+                                        "time_coverage_start": "2015-01-01",
+                                        "time_coverage_end": "2055-01-01"
+                                    },
+                                    "ebv_domain": "Terrestrial",
+                                    "comment": "N\/A",
+                                    "dataset": {
+                                        "pathname": "dataset_sm.nc",
+                                        "download": "portal.geobon.org\/data\/upload\/5\/public\/v1_rodinini_001.nc",
+                                        "metadata_json": "portal.geobon.org\/data\/upload\/5\/public\/v1_metadata.js",
+                                        "metadata_xml": "portal.geobon.org\/data\/upload\/5\/public\/v1_metadata.xml"
+                                    },
+                                    "file": {
+                                        "download": "portal.geobon.org\/img\/5\/49630_insights.png"
+                                    }
+                                }
+                            ]
+                        }"#),
+                ),
+        );
+
+        let req = actix_web::test::TestRequest::get()
+            .uri("/ebv/dataset/5/subdatasets")
+            .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())));
+        let res = send_test_request(req, ctx, mock_server.url_str("/api/v1")).await;
+
+        assert_eq!(res.status(), 200, "{:?}", res.response());
+
+        assert_eq!(
+            read_body_string(res).await,
+            json!({
+                "providerId": "1690c483-b17f-4d98-95c8-00a64849cd0b",
+                "tree": {
+                    "fileName": "dataset_sm.nc",
+                    "title": "Test dataset metric and scenario",
+                    "spatialReference": "EPSG:3035",
+                    "groups": [{
+                            "name": "scenario_1",
+                            "title": "Sustainability",
+                            "description": "",
+                            "dataType": null,
+                            "groups": [{
+                                    "name": "metric_1",
+                                    "title": "Random metric 1",
+                                    "description": "",
+                                    "dataType": "I16",
+                                    "groups": []
+                                },
+                                {
+                                    "name": "metric_2",
+                                    "title": "Random metric 2",
+                                    "description": "",
+                                    "dataType": "I16",
+                                    "groups": []
+                                }
+                            ]
+                        },
+                        {
+                            "name": "scenario_2",
+                            "title": "Middle of the Road ",
+                            "description": "",
+                            "dataType": null,
+                            "groups": [{
+                                    "name": "metric_1",
+                                    "title": "Random metric 1",
+                                    "description": "",
+                                    "dataType": "I16",
+                                    "groups": []
+                                },
+                                {
+                                    "name": "metric_2",
+                                    "title": "Random metric 2",
+                                    "description": "",
+                                    "dataType": "I16",
+                                    "groups": []
+                                }
+                            ]
+                        },
+                        {
+                            "name": "scenario_3",
+                            "title": "Regional Rivalry",
+                            "description": "",
+                            "dataType": null,
+                            "groups": [{
+                                    "name": "metric_1",
+                                    "title": "Random metric 1",
+                                    "description": "",
+                                    "dataType": "I16",
+                                    "groups": []
+                                },
+                                {
+                                    "name": "metric_2",
+                                    "title": "Random metric 2",
+                                    "description": "",
+                                    "dataType": "I16",
+                                    "groups": []
+                                }
+                            ]
+                        },
+                        {
+                            "name": "scenario_4",
+                            "title": "Inequality",
+                            "description": "",
+                            "dataType": null,
+                            "groups": [{
+                                    "name": "metric_1",
+                                    "title": "Random metric 1",
+                                    "description": "",
+                                    "dataType": "I16",
+                                    "groups": []
+                                },
+                                {
+                                    "name": "metric_2",
+                                    "title": "Random metric 2",
+                                    "description": "",
+                                    "dataType": "I16",
+                                    "groups": []
+                                }
+                            ]
+                        },
+                        {
+                            "name": "scenario_5",
+                            "title": "Fossil-fueled Development",
+                            "description": "",
+                            "dataType": null,
+                            "groups": [{
+                                    "name": "metric_1",
+                                    "title": "Random metric 1",
+                                    "description": "",
+                                    "dataType": "I16",
+                                    "groups": []
+                                },
+                                {
+                                    "name": "metric_2",
+                                    "title": "Random metric 2",
+                                    "description": "",
+                                    "dataType": "I16",
+                                    "groups": []
+                                }
+                            ]
+                        }
+                    ],
+                    "entities": [{
+                            "id": 0,
+                            "name": "entity01"
+                        },
+                        {
+                            "id": 1,
+                            "name": "entity02"
+                        }
+                    ],
+                    "time": {
+                        "start": 946_684_800_000_i64,
+                        "end": 1_609_459_200_000_i64
+                    },
+                    "timeStep": {
+                        "granularity": "Years",
+                        "step": 10
+                    }
+                }
+            })
+            .to_string()
+        );
     }
 
     #[tokio::test]
