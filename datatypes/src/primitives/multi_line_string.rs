@@ -282,9 +282,18 @@ impl<'g> MultiLineStringAccess for MultiLineStringRef<'g> {
 }
 impl<'g> SpatialBounded for MultiLineStringRef<'g> {
     fn spatial_bounds(&self) -> BoundingBox2D {
-        let coords = self.point_coordinates.iter().flat_map(|&x| x.into_iter());
+        let coords = self.point_coordinates.iter().flat_map(|&x| x.iter());
         BoundingBox2D::from_coord_ref_iter(coords)
             .expect("there must be at least one coordinate in a multilinestring")
+    }
+}
+
+impl<'g> Intersects<BoundingBox2D> for MultiLineStringRef<'g> {
+    fn intersects(&self, rhs: &BoundingBox2D) -> bool {
+        self.point_coordinates
+            .iter()
+            .flat_map(|&x| x.iter())
+            .any(|c| rhs.contains_coordinate(c))
     }
 }
 

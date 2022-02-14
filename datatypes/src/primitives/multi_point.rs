@@ -3,6 +3,7 @@ use std::convert::{TryFrom, TryInto};
 use arrow::array::{ArrayBuilder, BooleanArray};
 use arrow::error::ArrowError;
 use float_cmp::{ApproxEq, F64Margin};
+use geo::prelude::Intersects;
 use serde::{Deserialize, Serialize};
 use snafu::ensure;
 
@@ -283,6 +284,14 @@ where
     fn spatial_bounds(&self) -> BoundingBox2D {
         BoundingBox2D::from_coord_ref_iter(self.points())
             .expect("there must be at least one cordinate in a multipoint")
+    }
+}
+
+impl<'f> Intersects<BoundingBox2D> for MultiPointRef<'f> {
+    fn intersects(&self, rhs: &BoundingBox2D) -> bool {
+        self.point_coordinates
+            .iter()
+            .any(|c| rhs.contains_coordinate(c))
     }
 }
 

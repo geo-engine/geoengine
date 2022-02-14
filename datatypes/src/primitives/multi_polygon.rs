@@ -363,9 +363,19 @@ impl<'g> SpatialBounded for MultiPolygonRef<'g> {
             .polygons
             .iter()
             .filter_map(|p| p.iter().next())
-            .flat_map(|&x| x.into_iter());
+            .flat_map(|&x| x.iter());
         BoundingBox2D::from_coord_ref_iter(outer_ring_coords)
             .expect("there must be at least one coordinate in a multipolygon")
+    }
+}
+
+impl<'g> Intersects<BoundingBox2D> for MultiPolygonRef<'g> {
+    fn intersects(&self, rhs: &BoundingBox2D) -> bool {
+        self.polygons
+            .iter()
+            .filter_map(|p| p.iter().next())
+            .flat_map(|&x| x.iter())
+            .any(|c| rhs.contains_coordinate(c))
     }
 }
 
