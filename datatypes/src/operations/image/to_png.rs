@@ -156,6 +156,16 @@ mod tests {
     use crate::raster::GridIndexAccessMut;
     use std::convert::TryInto;
 
+    #[allow(dead_code)]
+    fn save_image_bytes(image_bytes: &[u8], filename: &str) {
+        use std::io::Write;
+
+        std::fs::File::create(filename)
+            .unwrap()
+            .write_all(image_bytes)
+            .unwrap();
+    }
+
     #[test]
     fn linear_gradient() {
         let mut raster = Grid2D::new([2, 2].into(), vec![0; 4], None).unwrap();
@@ -176,6 +186,8 @@ mod tests {
         .unwrap();
 
         let image_bytes = raster.to_png(100, 100, &colorizer).unwrap();
+
+        // save_image_bytes(&image_bytes, "linear_gradient.png");
 
         assert_eq!(
             include_bytes!("../../../../test_data/colorizer/linear_gradient.png") as &[u8],
@@ -203,6 +215,8 @@ mod tests {
         .unwrap();
 
         let image_bytes = raster.to_png(100, 100, &colorizer).unwrap();
+
+        // save_image_bytes(&image_bytes, "logarithmic_gradient.png");
 
         assert_eq!(
             include_bytes!("../../../../test_data/colorizer/logarithmic_gradient.png") as &[u8],
@@ -233,6 +247,8 @@ mod tests {
 
         let image_bytes = raster.to_png(100, 100, &colorizer).unwrap();
 
+        // save_image_bytes(&image_bytes, "palette.png");
+
         assert_eq!(
             include_bytes!("../../../../test_data/colorizer/palette.png") as &[u8],
             image_bytes.as_slice()
@@ -249,6 +265,8 @@ mod tests {
         let colorizer = Colorizer::rgba();
 
         let image_bytes = raster.to_png(100, 100, &colorizer).unwrap();
+
+        // save_image_bytes(&image_bytes, "rgba.png");
 
         assert_eq!(
             include_bytes!("../../../../test_data/colorizer/rgba.png") as &[u8],
@@ -274,6 +292,8 @@ mod tests {
 
         let image_bytes = raster.to_png(100, 100, &colorizer).unwrap();
 
+        // save_image_bytes(&image_bytes, "no_data.png");
+
         assert_eq!(
             include_bytes!("../../../../test_data/colorizer/no_data.png") as &[u8],
             image_bytes.as_slice()
@@ -297,6 +317,8 @@ mod tests {
         .unwrap();
 
         let image_bytes = raster.to_png(100, 100, &colorizer).unwrap();
+
+        // save_image_bytes(&image_bytes, "empty.png");
 
         assert_eq!(
             include_bytes!("../../../../test_data/colorizer/empty.png") as &[u8],
