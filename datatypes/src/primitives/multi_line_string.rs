@@ -3,7 +3,7 @@ use std::convert::TryFrom;
 use arrow::array::{ArrayBuilder, BooleanArray};
 use arrow::error::ArrowError;
 use float_cmp::{ApproxEq, F64Margin};
-use geo::algorithm::intersects::Intersects;
+use geo::intersects::Intersects;
 use serde::{Deserialize, Serialize};
 use snafu::ensure;
 
@@ -290,10 +290,7 @@ impl<'g> SpatialBounded for MultiLineStringRef<'g> {
 
 impl<'g> Intersects<BoundingBox2D> for MultiLineStringRef<'g> {
     fn intersects(&self, rhs: &BoundingBox2D) -> bool {
-        self.point_coordinates
-            .iter()
-            .flat_map(|&x| x.iter())
-            .any(|c| rhs.contains_coordinate(c))
+        self.spatial_bounds().intersects_bbox(rhs)
     }
 }
 
@@ -367,6 +364,32 @@ mod tests {
         assert_eq!(
             aggregate(&multi_line_string),
             aggregate(&multi_line_string_ref)
+        );
+    }
+
+    #[test]
+    fn test_ref_intersects() {
+        let coordinates = vec![vec![(0.0, 0.0).into(), (10.0, 10.0).into()]];
+        let multi_line_string_ref =
+            MultiLineStringRef::new(coordinates.iter().map(AsRef::as_ref).collect()).unwrap();
+
+        assert!(
+            multi_line_string_ref.intersects(&BoundingBox2D::new_unchecked(
+                (-1., -1.,).into(),
+                (11., 11.).into()
+            ))
+        );
+        assert!(
+            multi_line_string_ref.intersects(&BoundingBox2D::new_unchecked(
+                (2., 2.,).into(),
+                (9., 9.).into()
+            ))
+        );
+        assert!(
+            !multi_line_string_ref.intersects(&BoundingBox2D::new_unchecked(
+                (-2., -2.,).into(),
+                (-2., 12.).into()
+            ))
         );
     }
 
