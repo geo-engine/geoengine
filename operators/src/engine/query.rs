@@ -3,9 +3,10 @@ use std::sync::Arc;
 use crate::util::create_rayon_thread_pool;
 use geoengine_datatypes::util::test::TestDefault;
 use rayon::ThreadPool;
+use serde::{Deserialize, Serialize};
 
 /// Defines the size in bytes of a vector data chunk
-#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Debug, Serialize, Deserialize)]
 pub struct ChunkByteSize(usize);
 
 impl ChunkByteSize {

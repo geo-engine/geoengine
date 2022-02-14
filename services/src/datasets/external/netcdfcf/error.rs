@@ -2,8 +2,6 @@ use gdal::errors::GdalError;
 use geoengine_datatypes::dataset::DatasetProviderId;
 use snafu::Snafu;
 
-// TODO: `Clone` and `PartialEq`
-
 #[derive(Debug, Snafu)]
 #[snafu(visibility(pub(crate)))]
 #[snafu(context(suffix(false)))] // disables default `Snafu` suffix
@@ -89,4 +87,12 @@ pub enum NetCdfCf4DProviderError {
     InvalidGeoTransformNumbers {
         source: std::num::ParseFloatError,
     },
+    CannotParseDatasetId {
+        source: serde_json::Error,
+    },
+    InvalidTimeRangeForDataset {
+        source: geoengine_datatypes::error::Error,
+    },
+    PathToDataIsEmpty,
+    MissingDataType,
 }

@@ -206,7 +206,7 @@ where
     T: Pixel,
     C: AccFunction,
 {
-    tokio::task::spawn_blocking(|| fold_fn::<T, C>(accu, tile)).then(|x| async move {
+    crate::util::spawn_blocking(|| fold_fn::<T, C>(accu, tile)).then(|x| async move {
         match x {
             Ok(r) => Ok(r),
             Err(e) => Err(e.into()),
@@ -222,7 +222,7 @@ where
     T: Pixel,
     C: NoDataIgnoringAccFunction,
 {
-    tokio::task::spawn_blocking(|| no_data_ignoring_fold_fn::<T, C>(accu, tile)).then(
+    crate::util::spawn_blocking(|| no_data_ignoring_fold_fn::<T, C>(accu, tile)).then(
         |x| async move {
             match x {
                 Ok(r) => Ok(r),
@@ -260,7 +260,7 @@ pub fn first_tile_fold_future<T>(
 where
     T: Pixel,
 {
-    tokio::task::spawn_blocking(|| first_tile_fold_fn(accu, tile)).then(move |x| async move {
+    crate::util::spawn_blocking(|| first_tile_fold_fn(accu, tile)).then(move |x| async move {
         match x {
             Ok(r) => Ok(r),
             Err(e) => Err(e.into()),
@@ -293,7 +293,7 @@ pub fn last_tile_fold_future<T>(
 where
     T: Pixel,
 {
-    tokio::task::spawn_blocking(|| last_tile_fold_fn(accu, tile)).then(move |x| async move {
+    crate::util::spawn_blocking(|| last_tile_fold_fn(accu, tile)).then(move |x| async move {
         match x {
             Ok(r) => Ok(r),
             Err(e) => Err(e.into()),
@@ -393,7 +393,7 @@ fn build_temporal_accu<T: Pixel>(
     no_data_value: Option<T>,
     initial_value: T,
 ) -> impl Future<Output = Result<TemporalRasterAggregationTileAccu<T>>> {
-    tokio::task::spawn_blocking(move || {
+    crate::util::spawn_blocking(move || {
         let output_raster = if let Some(no_data_value) = no_data_value {
             EmptyGrid2D::new(tile_info.tile_size_in_pixels, no_data_value).into()
         } else {
@@ -470,7 +470,7 @@ fn build_temporal_no_data_accu<T: Pixel>(
     pool: Arc<ThreadPool>,
     no_data_value: T,
 ) -> impl Future<Output = Result<TemporalRasterAggregationTileAccu<T>>> {
-    tokio::task::spawn_blocking(move || {
+    crate::util::spawn_blocking(move || {
         let output_raster = EmptyGrid2D::new(tile_info.tile_size_in_pixels, no_data_value).into();
 
         TemporalRasterAggregationTileAccu {

@@ -222,7 +222,7 @@ impl Nature40DataProvider {
 
     async fn try_load_dataset(&self, db_url: String) -> Result<gdal::Dataset> {
         let auth = self.auth();
-        tokio::task::spawn_blocking(move || {
+        crate::util::spawn_blocking(move || {
             let dataset = gdal_open_dataset_ex(
                 Path::new(&db_url),
                 DatasetOptions {
@@ -417,8 +417,8 @@ mod tests {
         spatial_reference::{SpatialReference, SpatialReferenceAuthority},
     };
     use geoengine_operators::source::{
-        FileNotFoundHandling, GdalDatasetGeoTransform, GdalDatasetParameters, GdalLoadingInfoPart,
-        GdalLoadingInfoPartIterator,
+        FileNotFoundHandling, GdalDatasetGeoTransform, GdalDatasetParameters,
+        GdalLoadingInfoTemporalSlice, GdalLoadingInfoTemporalSliceIterator,
     };
     use httptest::{
         all_of,
@@ -866,12 +866,12 @@ mod tests {
             .await
             .unwrap();
 
-        if let GdalLoadingInfoPartIterator::Static { mut parts } = loading_info.info {
-            let params: GdalLoadingInfoPart = parts.next().unwrap();
+        if let GdalLoadingInfoTemporalSliceIterator::Static { mut parts } = loading_info.info {
+            let params: GdalLoadingInfoTemporalSlice = parts.next().unwrap();
 
             assert_eq!(
                 params,
-                GdalLoadingInfoPart {
+                GdalLoadingInfoTemporalSlice {
                     time: TimeInterval::default(),
                     params: Some(GdalDatasetParameters {
                         file_path: PathBuf::from(format!("WCS:{}rasterdb/lidar_2018_wetness_1m/wcs?VERSION=1.0.0&COVERAGE=lidar_2018_wetness_1m", server.url_str(""))),

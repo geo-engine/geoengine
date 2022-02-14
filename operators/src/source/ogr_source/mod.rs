@@ -485,7 +485,7 @@ where
         query_rectangle: VectorQueryRectangle,
         chunk_byte_size: usize,
     ) -> Result<Self> {
-        tokio::task::spawn_blocking(move || {
+        crate::util::spawn_blocking(move || {
             let dataset_iterator = OgrDatasetIterator::new(&dataset_information, &query_rectangle)?;
 
             let (data_types, feature_collection_builder) =
@@ -519,7 +519,7 @@ where
         time_extractor: Arc<Box<dyn Fn(&Feature) -> Result<TimeInterval> + Send + Sync>>,
         chunk_byte_size: usize,
     ) -> Result<FeatureCollection<G>> {
-        tokio::task::spawn_blocking(move || {
+        crate::util::spawn_blocking(move || {
             let mut dataset_iterator = dataset_iterator.blocking_lock();
 
             let batch_result = Self::compute_batch(

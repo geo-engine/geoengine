@@ -23,7 +23,7 @@ pub fn mean_tile_fold_future<T>(
 where
     T: Pixel,
 {
-    tokio::task::spawn_blocking(|| {
+    crate::util::spawn_blocking(|| {
         let mut accu = accu;
         accu.add_tile(tile)?;
         Ok(accu)
@@ -246,7 +246,7 @@ fn build_accu<T: Pixel>(
     ignore_no_data: bool,
     no_data_value: T,
 ) -> impl Future<Output = Result<TemporalMeanTileAccu<T>>> {
-    tokio::task::spawn_blocking(move || TemporalMeanTileAccu {
+    crate::util::spawn_blocking(move || TemporalMeanTileAccu {
         time: query_rect.time_interval,
         tile_position: tile_info.global_tile_position,
         global_geo_transform: tile_info.global_geo_transform,

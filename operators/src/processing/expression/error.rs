@@ -7,30 +7,71 @@ use snafu::Snafu;
 #[snafu(visibility(pub(crate)))]
 #[snafu(context(suffix(false)))] // disables default `Snafu` suffix
 pub enum ExpressionError {
-    UnknownVariable { variable: String },
-    UnknownBooleanVariable { variable: String },
+    UnknownVariable {
+        variable: String,
+    },
+    UnknownBooleanVariable {
+        variable: String,
+    },
+    UnknownFunction {
+        function: String,
+    },
+    InvalidFunctionArgumentCount {
+        function: String,
+        expected_min: usize,
+        expected_max: usize,
+        actual: usize,
+    },
     UnexpectedBranchStructure,
     BranchStructureMalformed,
-    UnexpectedRule { rule: String },
+    UnexpectedRule {
+        rule: String,
+    },
     DoesNotEndWithExpression,
-    UnexpectedOperator { operator: String },
-    UnexpectedComparator { comparator: String },
-    UnexpectedBooleanRule { rule: String },
-    UnexpectedBooleanOperator { operator: String },
+    UnexpectedOperator {
+        operator: String,
+    },
+    UnexpectedComparator {
+        comparator: String,
+    },
+    UnexpectedBooleanRule {
+        rule: String,
+    },
+    UnexpectedBooleanOperator {
+        operator: String,
+    },
     ComparisonNeedsThreeParts,
-    CannotAssignToParameter { parameter: String },
+    CannotAssignToParameter {
+        parameter: String,
+    },
     AssignmentNeedsTwoParts,
-    Parser { source: PestError },
+    Parser {
+        source: PestError,
+    },
     EmptyExpressionName,
     EmptyParameterName,
-    DuplicateParameterName { parameter: String },
-    InvalidNumber { source: ParseFloatError },
+    DuplicateParameterName {
+        parameter: String,
+    },
+    InvalidNumber {
+        source: ParseFloatError,
+    },
     MissingFunctionName,
-    CannotGenerateSourceCodeFile { error: String },
-    CannotGenerateSourceCodeDirectory { error: String },
-    CompileError { error: String },
-    Linker { error: String },
-    LinkedFunctionNotFound { error: String },
+    CannotGenerateSourceCodeFile {
+        error: String,
+    },
+    CannotGenerateSourceCodeDirectory {
+        error: String,
+    },
+    CompileError {
+        error: String,
+    },
+    Linker {
+        error: String,
+    },
+    LinkedFunctionNotFound {
+        error: String,
+    },
     MissingIdentifier,
     MissingOutputNoDataValue,
     SourcesMustBeConsecutive,

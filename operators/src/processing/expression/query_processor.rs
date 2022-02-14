@@ -5,13 +5,15 @@ use futures::{stream::BoxStream, try_join, StreamExt, TryStreamExt};
 use geoengine_datatypes::{
     primitives::{RasterQueryRectangle, SpatialPartition2D, TimeInterval},
     raster::{
-        GeoTransform, Grid2D, GridIdx2D, GridShape2D, GridShapeAccess, NoDataValue, Pixel,
-        RasterTile2D,
+        ConvertDataType, GeoTransform, Grid2D, GridIdx2D, GridShape2D, GridShapeAccess, GridSize,
+        NoDataValue, Pixel, RasterTile2D,
     },
 };
 use libloading::Symbol;
 use num_traits::AsPrimitive;
-use rayon::iter::{IntoParallelIterator, IntoParallelRefIterator, ParallelIterator};
+use rayon::iter::{
+    IndexedParallelIterator, IntoParallelIterator, IntoParallelRefIterator, ParallelIterator,
+};
 
 use crate::{
     engine::{BoxRasterQueryProcessor, QueryContext, QueryProcessor},
@@ -79,15 +81,13 @@ where
 
                 let out_no_data = self.no_data_value;
 
-                let thread_pool = ctx.thread_pool().clone();
                 let program = self.program.clone();
                 let map_no_data = self.map_no_data;
 
-                let data = tokio::task::spawn_blocking(move || {
-                    thread_pool.install(move || {
-                        Tuple::compute_expression(rasters, &program, map_no_data, out_no_data)
-                    })
-                })
+                let data = crate::util::spawn_blocking_with_thread_pool(
+                    ctx.thread_pool().clone(),
+                    move || Tuple::compute_expression(rasters, &program, map_no_data, out_no_data),
+                )
                 .await??;
 
                 let out =
@@ -155,7 +155,7 @@ where
 
     #[inline]
     fn empty_raster(tuple: &Self::Tuple) -> RasterTile2D<TO> {
-        tuple.clone().convert()
+        tuple.clone().convert_data_type()
     }
 
     #[inline]
@@ -189,6 +189,7 @@ where
             .grid_array
             .data
             .par_iter()
+            .with_min_len(tile.grid_array.grid_shape().axis_size_x())
             .map(|a| {
                 let is_no_data = tile.is_no_data(*a);
 
@@ -238,7 +239,7 @@ where
 
     #[inline]
     fn empty_raster(tuple: &Self::Tuple) -> RasterTile2D<TO> {
-        tuple.0.clone().convert()
+        tuple.0.clone().convert_data_type()
     }
 
     #[inline]
@@ -271,6 +272,7 @@ where
 
         let data = (&tile_0.grid_array.data, &tile_1.grid_array.data)
             .into_par_iter()
+            .with_min_len(tile_0.grid_array.grid_shape().axis_size_x())
             .map(|(a, b)| {
                 let is_a_no_data = tile_0.is_no_data(*a);
                 let is_b_no_data = tile_1.is_no_data(*b);
@@ -380,7 +382,7 @@ macro_rules! impl_expression_tuple_processor {
 
             #[inline]
             fn empty_raster(tuple: &Self::Tuple) -> RasterTile2D<TO> {
-                tuple.0.clone().convert()
+                tuple.0.clone().convert_data_type()
             }
 
             #[inline]
@@ -406,6 +408,8 @@ macro_rules! impl_expression_tuple_processor {
                     program.function_nary()?
                 };
 
+                let min_batch_size = rasters.0.grid_array.grid_shape().axis_size_x();
+
                 // TODO: allow iterating over empty rasters
                 $(
                     let $TILE = rasters.$I.into_materialized_tile();
@@ -417,6 +421,7 @@ macro_rules! impl_expression_tuple_processor {
                     ),*
                 )
                     .into_par_iter()
+                    .with_min_len(min_batch_size)
                     .map(|( $($PIXEL),* )| {
                         $(
                             let $IS_NODATA = $TILE.is_no_data(* $PIXEL);

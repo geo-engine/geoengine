@@ -8,7 +8,6 @@ use super::{
 };
 
 use crate::util::Result;
-use num_traits::AsPrimitive;
 use serde::{Deserialize, Serialize};
 
 pub type GridOrEmpty1D<T> = GridOrEmpty<GridShape1D, T>;
@@ -40,18 +39,6 @@ where
         match self {
             GridOrEmpty::Grid(g) => &g.shape,
             GridOrEmpty::Empty(n) => &n.shape,
-        }
-    }
-
-    /// Converts the data type of the raster by converting it pixel-wise
-    pub fn convert_dtype<To>(self) -> GridOrEmpty<D, To>
-    where
-        T: AsPrimitive<To> + Copy + 'static,
-        To: Copy + 'static,
-    {
-        match self {
-            GridOrEmpty::Grid(g) => GridOrEmpty::Grid(g.convert_dtype()),
-            GridOrEmpty::Empty(n) => GridOrEmpty::Empty(n.convert_dtype()),
         }
     }
 
