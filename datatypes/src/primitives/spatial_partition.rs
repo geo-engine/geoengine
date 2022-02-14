@@ -167,11 +167,11 @@ impl SpatialPartition2D {
     }
 
     fn contains_x(&self, other: &Self) -> bool {
-        crate::util::ranges::value_in_range(
+        crate::util::ranges::value_in_range_inclusive(
             other.upper_left_coordinate.x,
             self.upper_left_coordinate.x,
             self.lower_right_coordinate.x,
-        ) && crate::util::ranges::value_in_range(
+        ) && crate::util::ranges::value_in_range_inclusive(
             other.lower_right_coordinate.x,
             self.upper_left_coordinate.x,
             self.lower_right_coordinate.x,
@@ -179,11 +179,11 @@ impl SpatialPartition2D {
     }
 
     fn contains_y(&self, other: &Self) -> bool {
-        crate::util::ranges::value_in_range_inv(
+        crate::util::ranges::value_in_range_inclusive(
             other.lower_right_coordinate.y,
             self.lower_right_coordinate.y,
             self.upper_left_coordinate.y,
-        ) && crate::util::ranges::value_in_range_inv(
+        ) && crate::util::ranges::value_in_range_inclusive(
             other.upper_left_coordinate.y,
             self.lower_right_coordinate.y,
             self.upper_left_coordinate.y,
@@ -303,6 +303,14 @@ mod tests {
         let p2 = SpatialPartition2D::new_unchecked((0., 1.).into(), (0.5, 0.5).into());
         assert!(p1.contains(&p2));
         assert!(!p2.contains(&p1));
+    }
+
+    #[test]
+    fn it_contains_itself() {
+        let p1 = SpatialPartition2D::new_unchecked((0., 1.).into(), (1., 0.).into());
+        let p2 = SpatialPartition2D::new_unchecked((0., 1.).into(), (1., 0.).into());
+        assert!(p1.contains(&p2));
+        assert!(p2.contains(&p1));
     }
 
     #[test]
