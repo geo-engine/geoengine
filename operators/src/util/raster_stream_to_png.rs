@@ -1,3 +1,4 @@
+use futures::stream::BoxStream;
 use futures::StreamExt;
 use geoengine_datatypes::{
     operations::image::{Colorizer, RgbaColor, ToPng},
@@ -24,9 +25,33 @@ pub async fn raster_stream_to_png_bytes<T, C: QueryContext>(
 where
     T: Pixel,
 {
-    let colorizer = colorizer.unwrap_or(default_colorizer_gradient::<T>()?);
-
     let tile_stream = processor.query(query_rect, &query_ctx).await?;
+    raster_stream_to_png_bytes_stream::<T>(
+        tile_stream,
+        query_rect,
+        width,
+        height,
+        time,
+        colorizer,
+        no_data_value,
+    )
+    .await
+}
+
+#[allow(clippy::too_many_arguments)]
+pub async fn raster_stream_to_png_bytes_stream<T>(
+    tile_stream: BoxStream<'_, Result<RasterTile2D<T>>>,
+    query_rect: RasterQueryRectangle,
+    width: u32,
+    height: u32,
+    time: Option<TimeInterval>,
+    colorizer: Option<Colorizer>,
+    no_data_value: Option<T>,
+) -> Result<Vec<u8>>
+where
+    T: Pixel,
+{
+    let colorizer = colorizer.unwrap_or(default_colorizer_gradient::<T>()?);
 
     let x_query_resolution = query_rect.spatial_bounds.size_x() / f64::from(width);
     let y_query_resolution = query_rect.spatial_bounds.size_y() / f64::from(height);
