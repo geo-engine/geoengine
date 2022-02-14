@@ -456,13 +456,6 @@ impl From<tonic::transport::Error> for Error {
     }
 }
 
-#[cfg(feature = "pro")]
-impl From<geoengine_operators::pro::executor::error::ExecutorError> for Error {
-    fn from(source: geoengine_operators::pro::executor::error::ExecutorError) -> Self {
-        Self::Executor { source }
-    }
-}
-
 impl From<tokio::task::JoinError> for Error {
     fn from(source: tokio::task::JoinError) -> Self {
         Error::TokioJoin { source }
