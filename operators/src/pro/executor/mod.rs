@@ -1,4 +1,5 @@
 use std::collections::HashMap;
+use std::fmt::Debug;
 use std::hash::Hash;
 use std::pin::Pin;
 use std::sync::Arc;
@@ -14,11 +15,12 @@ use error::{ExecutorError, Result};
 use replay::SendError;
 
 pub mod error;
+pub mod operators;
 pub mod replay;
 
-/// Description of an `Executor` task. The description consists provides a primary
+/// Description of an [Executor] task. The description consists provides a primary
 /// key to identify identical computations (`KeyType`).
-pub trait ExecutorTaskDescription: Clone + Send + 'static {
+pub trait ExecutorTaskDescription: Clone + Send + Debug + 'static {
     /// A unique identifier for the actual computation of a task
     type KeyType: Clone + Send + PartialEq + Eq + Hash;
     /// The result type of the computation
@@ -41,6 +43,11 @@ pub trait ExecutorTaskDescription: Clone + Send + 'static {
     fn slice_result(&self, result: &Self::ResultType) -> Option<Self::ResultType>;
 }
 
+type TerminationMessage<T> =
+    std::result::Result<(), SendError<std::result::Result<Arc<T>, ExecutorError>>>;
+
+type ReplayReceiver<T> = replay::Receiver<Result<Arc<T>>>;
+
 /// Encapsulates a requested stream computation to send
 /// it to the executor task.
 struct KeyedComputation<Desc>
@@ -48,7 +55,7 @@ where
     Desc: ExecutorTaskDescription,
 {
     key: Desc,
-    response: tokio::sync::oneshot::Sender<replay::Receiver<Result<Arc<Desc::ResultType>>>>,
+    response: tokio::sync::oneshot::Sender<ReplayReceiver<Desc::ResultType>>,
     stream: BoxStream<'static, Desc::ResultType>,
 }
 
@@ -110,7 +117,8 @@ where
 /// An entry for the map of currently running computations.
 /// It contains a sender from the associated replay channel
 /// in order to register new consumers.
-/// See `replay::Sender::subscribe`.
+///
+/// See [`replay::Sender::subscribe`].
 struct ComputationEntry<Desc>
 where
     Desc: ExecutorTaskDescription,
@@ -129,9 +137,6 @@ where
     key: Desc,
     sender: replay::Sender<Result<Arc<Desc::ResultType>>>,
 }
-
-type TerminationMessage<T> =
-    std::result::Result<(), SendError<std::result::Result<Arc<T>, ExecutorError>>>;
 
 /// This encapsulates the main loop of the executor task.
 /// It manages all new, running and finished computations.
@@ -175,7 +180,6 @@ where
     /// a running computation. If this is not possible, a new
     /// computation is started.
     fn handle_new_task(&mut self, kc: KeyedComputation<Desc>) {
-        log::debug!("Received new stream request.");
         let key = kc.key;
 
         let entry = self.computations.entry(key.primary_key().clone());
@@ -187,17 +191,21 @@ where
                     .iter_mut()
                     .filter(|ce| key.can_join(&ce.key))
                     .find_map(|ce| match ce.sender.subscribe() {
-                        Ok(rx) => Some(rx),
+                        Ok(rx) => Some((&ce.key, rx)),
                         Err(_) => None,
                     });
 
                 match append {
-                    Some(rx) => {
-                        log::debug!("Joining running computation for request.");
+                    Some((desc, rx)) => {
+                        log::debug!(
+                            "Joining running computation for request. New: {:?}, Running: {:?}",
+                            &key,
+                            desc
+                        );
                         rx
                     }
                     None => {
-                        log::debug!("Stream progressed too far or results do not cover requested result. Starting new computation for request.");
+                        log::debug!("Stream progressed too far or results do not cover requested result. Starting new computation for request: {:?}", &key);
                         let (entry, rx) = Self::start_computation(
                             self.buffer_size,
                             Self::next_id(&mut self.id_seq),
@@ -212,7 +220,7 @@ where
             }
             // Start a new computation
             std::collections::hash_map::Entry::Vacant(ve) => {
-                log::debug!("Starting new computation for request.");
+                log::debug!("Starting new computation for request: {:?}", &key);
                 let (entry, rx) = Self::start_computation(
                     self.buffer_size,
                     Self::next_id(&mut self.id_seq),
@@ -233,7 +241,7 @@ where
 
     /// Starts a new computation. It spawns a separate task
     /// in which the computation is executed. Therefore it establishes
-    /// a new `replay::channel` and returns infos about the computation
+    /// a new [`replay::channel`] and returns infos about the computation
     /// and the receiving side of the replay channel.
     fn start_computation(
         buffer_size: usize,
@@ -241,10 +249,7 @@ where
         key: Desc,
         mut stream: BoxStream<'static, Desc::ResultType>,
         tasks: &mut FuturesUnordered<KeyedJoinHandle<Desc>>,
-    ) -> (
-        ComputationEntry<Desc>,
-        replay::Receiver<Result<Arc<Desc::ResultType>>>,
-    ) {
+    ) -> (ComputationEntry<Desc>, ReplayReceiver<Desc::ResultType>) {
         let (tx, rx) = replay::channel(buffer_size);
 
         let entry = ComputationEntry {
@@ -255,10 +260,11 @@ where
 
         let jh = {
             let tx = tx.clone();
+            let key = key.clone();
             tokio::spawn(async move {
                 while let Some(v) = stream.next().await {
                     if let Err(replay::SendError::Closed(_)) = tx.send(Ok(Arc::new(v))).await {
-                        log::debug!("All consumers left. Cancelling task.");
+                        log::debug!("All consumers left. Cancelling task: {:?}", &key);
                         break;
                     }
                 }
@@ -300,10 +306,16 @@ where
             Err(e) => {
                 self.termination_msgs.push(Box::pin(async move {
                     if e.try_into_panic().is_ok() {
-                        log::warn!("Stream task panicked. Notifying consumer streams.");
+                        log::warn!(
+                            "Stream task panicked. Notifying consumer streams. Request: {:?}",
+                            &completed_task.key
+                        );
                         completed_task.sender.send(Err(ExecutorError::Panic)).await
                     } else {
-                        log::warn!("Stream task was cancelled. Notifying consumer streams.");
+                        log::warn!(
+                            "Stream task was cancelled. Notifying consumer streams. Request: {:?}",
+                            &completed_task.key
+                        );
                         completed_task
                             .sender
                             .send(Err(ExecutorError::Cancelled))
@@ -312,7 +324,10 @@ where
                 }));
             }
             Ok(_) => {
-                log::debug!("Computation finished. Notifying consumer streams.");
+                log::debug!(
+                    "Computation finished. Notifying consumer streams. Request: {:?}",
+                    &completed_task.key
+                );
                 // After destroying the sender all remaining receivers will receive end-of-stream
             }
         }
@@ -378,10 +393,7 @@ where
         Executor { sender, driver }
     }
 
-    /// Submits a streaming computation to this executor. In contrast
-    /// to `Executor.submit_stream`, this method returns a Stream of
-    /// `Arc<T>` that allows to use the executor with non-cloneable
-    /// results.
+    /// Submits a streaming computation to this executor.
     ///
     /// #Errors
     /// This call fails, if the `Executor` was already closed.
@@ -389,8 +401,7 @@ where
     where
         F: Stream<Item = Desc::ResultType> + Send + 'static,
     {
-        let (tx, rx) =
-            tokio::sync::oneshot::channel::<replay::Receiver<Result<Arc<Desc::ResultType>>>>();
+        let (tx, rx) = tokio::sync::oneshot::channel::<ReplayReceiver<Desc::ResultType>>();
 
         let kc = KeyedComputation {
             key: key.clone(),
@@ -404,10 +415,7 @@ where
         Ok(StreamReceiver::new(key.clone(), res.into()))
     }
 
-    /// Submits a single-result computation to this executor. In contrast
-    /// to `Executor.submit`, this method returns an
-    /// `Arc<T>` that allows to use the executor with non-cloneable
-    /// results.
+    /// Submits a single-result computation to this executor.
     ///
     /// #Errors
     /// This call fails, if the `Executor` was already closed.
@@ -496,7 +504,7 @@ mod tests {
         type ResultType = i32;
 
         fn primary_key(&self) -> &Self::KeyType {
-            &self
+            self
         }
 
         fn can_join(&self, other: &Self) -> bool {
@@ -669,7 +677,7 @@ mod tests {
         Ok(())
     }
 
-    #[derive(Clone)]
+    #[derive(Clone, Debug)]
     struct IntDesc {
         key: i32,
         do_slice: bool,
