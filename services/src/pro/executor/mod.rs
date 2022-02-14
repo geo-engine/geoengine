@@ -265,7 +265,7 @@ mod tests {
             data: Default::default(),
         });
 
-        assert!(pd1.clone().can_join(&pd1));
+        assert!(pd1.can_join(&pd1));
         assert!(!pd1.can_join(&pd2));
         assert!(!pd1.can_join(&pd3));
         assert!(!pd1.can_join(&pd4));
