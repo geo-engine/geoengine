@@ -7,7 +7,8 @@ use crate::engine::{
 };
 use crate::util::Result;
 use async_trait::async_trait;
-use rayon::iter::{IntoParallelIterator, IntoParallelRefIterator, ParallelIterator};
+use rayon::iter::ParallelIterator;
+use rayon::slice::ParallelSlice;
 use rayon::ThreadPool;
 use TypedRasterQueryProcessor::F32 as QueryProcessorOut;
 
@@ -16,8 +17,8 @@ use futures::stream::BoxStream;
 use futures::{StreamExt, TryStreamExt};
 use geoengine_datatypes::primitives::{Measurement, SpatialPartition2D};
 use geoengine_datatypes::raster::{
-    EmptyGrid, Grid2D, GridShapeAccess, NoDataValue, Pixel, RasterDataType, RasterPropertiesKey,
-    RasterTile2D,
+    EmptyGrid, Grid2D, GridShapeAccess, GridSize, NoDataValue, Pixel, RasterDataType,
+    RasterPropertiesKey, RasterTile2D,
 };
 use serde::{Deserialize, Serialize};
 
@@ -242,16 +243,15 @@ where
     }
 }
 
-fn create_lookup_table(channel: &Channel, offset: f64, slope: f64, pool: &ThreadPool) -> Vec<f32> {
-    pool.install(|| {
-        (0..1024)
-            .into_par_iter()
-            .map(|i| {
-                let radiance = offset + f64::from(i) * slope;
-                channel.calculate_temperature_from_radiance(radiance) as f32
-            })
-            .collect::<Vec<f32>>()
-    })
+fn create_lookup_table(channel: &Channel, offset: f64, slope: f64, _pool: &ThreadPool) -> Vec<f32> {
+    // this should propably be done with SIMD not a threadpool
+    (0..1024)
+        .into_iter()
+        .map(|i| {
+            let radiance = offset + f64::from(i) * slope;
+            channel.calculate_temperature_from_radiance(radiance) as f32
+        })
+        .collect::<Vec<f32>>()
 }
 
 fn process_tile<P: Pixel>(
@@ -263,16 +263,18 @@ fn process_tile<P: Pixel>(
     pool.install(|| {
         let out = grid
             .data
-            .as_slice()
-            .par_iter()
-            .map(|p| {
-                if grid.is_no_data(*p) {
-                    Some(OUT_NO_DATA_VALUE)
-                } else {
-                    let lut_idx: u64 = p.as_();
-                    lut.get(lut_idx as usize).copied()
-                }
+            .par_chunks(grid.axis_size_x())
+            .map(|row| {
+                row.iter().map(|p| {
+                    if grid.is_no_data(*p) {
+                        Some(OUT_NO_DATA_VALUE)
+                    } else {
+                        let lut_idx: u64 = p.as_();
+                        lut.get(lut_idx as usize).copied()
+                    }
+                })
             })
+            .flatten_iter()
             .collect::<Option<Vec<PixelOut>>>()
             .ok_or(Error::UnsupportedRasterValue)?;
 

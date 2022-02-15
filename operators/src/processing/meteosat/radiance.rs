@@ -1,3 +1,5 @@
+use std::sync::Arc;
+
 use crate::engine::{
     ExecutionContext, InitializedRasterOperator, Operator, QueryContext, QueryProcessor,
     RasterOperator, RasterQueryProcessor, RasterQueryRectangle, RasterResultDescriptor,
@@ -6,12 +8,15 @@ use crate::engine::{
 use crate::util::Result;
 use async_trait::async_trait;
 use futures::stream::BoxStream;
-use futures::{StreamExt, TryFutureExt, TryStreamExt};
+use futures::{StreamExt, TryStreamExt};
 use geoengine_datatypes::primitives::{Measurement, SpatialPartition2D};
 use geoengine_datatypes::raster::{
-    EmptyGrid, Grid2D, GridOrEmpty, GridShapeAccess, NoDataValue, Pixel, RasterDataType,
+    EmptyGrid, Grid2D, GridShapeAccess, GridSize, NoDataValue, Pixel, RasterDataType,
     RasterPropertiesKey, RasterTile2D,
 };
+use rayon::iter::ParallelIterator;
+use rayon::slice::ParallelSlice;
+use rayon::ThreadPool;
 use serde::{Deserialize, Serialize};
 
 // Output type is always f32
@@ -163,6 +168,7 @@ where
 impl<Q, P> RadianceProcessor<Q, P>
 where
     Q: RasterQueryProcessor<RasterType = P>,
+    P: Pixel,
 {
     pub fn new(source: Q) -> Self {
         Self {
@@ -171,50 +177,67 @@ where
             slope_key: new_slope_key(),
         }
     }
-}
 
-fn process_tile<P: Pixel>(
-    tile: RasterTile2D<P>,
-    offset: f32,
-    slope: f32,
-) -> RasterTile2D<PixelOut> {
-    let r = match &tile.grid_array {
-        GridOrEmpty::Empty(_) => RasterTile2D::new_with_properties(
-            tile.time,
-            tile.tile_position,
-            tile.global_geo_transform,
-            EmptyGrid::new(tile.grid_array.grid_shape(), OUT_NO_DATA_VALUE).into(),
-            tile.properties,
-        ),
-        GridOrEmpty::Grid(_) => {
-            let mg = tile.grid_array.into_materialized_grid();
-
-            let mut out = Grid2D::new(
-                mg.grid_shape(),
-                vec![OUT_NO_DATA_VALUE; mg.data.len()],
-                Some(OUT_NO_DATA_VALUE),
-            )
-            .expect("raster creation must succeed");
-
-            let tgt = &mut out.data;
-
-            for (idx, v) in mg.data.iter().enumerate() {
-                if !mg.is_no_data(*v) {
-                    let val: PixelOut = (*v).as_();
-                    tgt[idx] = offset + val * slope;
-                }
-            }
-
-            RasterTile2D::new_with_properties(
+    async fn process_tile_async(
+        &self,
+        tile: RasterTile2D<P>,
+        pool: Arc<ThreadPool>,
+    ) -> Result<RasterTile2D<PixelOut>> {
+        if tile.is_empty() {
+            return Ok(RasterTile2D::new_with_properties(
                 tile.time,
                 tile.tile_position,
                 tile.global_geo_transform,
-                out.into(),
+                EmptyGrid::new(tile.grid_array.grid_shape(), OUT_NO_DATA_VALUE).into(),
                 tile.properties,
-            )
+            ));
         }
-    };
-    r
+
+        let offset = tile.properties.number_property::<f32>(&self.offset_key)?;
+        let slope = tile.properties.number_property::<f32>(&self.slope_key)?;
+        let mat_tile = tile.into_materialized_tile(); // NOTE: the tile is already materialized.
+
+        let rad_grid = tokio::task::spawn_blocking(move || {
+            process_tile(&mat_tile.grid_array, offset, slope, &pool)
+        })
+        .await?;
+
+        Ok(RasterTile2D::new_with_properties(
+            mat_tile.time,
+            mat_tile.tile_position,
+            mat_tile.global_geo_transform,
+            rad_grid.into(),
+            mat_tile.properties,
+        ))
+    }
+}
+
+fn process_tile<P: Pixel>(
+    grid: &Grid2D<P>,
+    offset: f32,
+    slope: f32,
+    pool: &ThreadPool,
+) -> Grid2D<PixelOut> {
+    pool.install(|| {
+        let rad_array = grid
+            .data
+            .par_chunks(grid.axis_size_x())
+            .map(|row| {
+                row.iter().map(|p| {
+                    if grid.is_no_data(*p) {
+                        OUT_NO_DATA_VALUE
+                    } else {
+                        let val: PixelOut = (p).as_();
+                        offset + val * slope
+                    }
+                })
+            })
+            .flatten_iter()
+            .collect::<Vec<PixelOut>>();
+
+        Grid2D::new(grid.grid_shape(), rad_array, Some(OUT_NO_DATA_VALUE))
+            .expect("raster creation must succeed")
+    })
 }
 
 #[async_trait]
@@ -232,18 +255,7 @@ where
         ctx: &'a dyn QueryContext,
     ) -> Result<BoxStream<'a, Result<Self::Output>>> {
         let src = self.source.query(query, ctx).await?;
-        let rs = src
-            .map(move |tile| {
-                tile.and_then(|t| {
-                    let offset = t.properties.number_property::<f32>(&self.offset_key)?;
-                    let slope = t.properties.number_property::<f32>(&self.slope_key)?;
-                    Ok((t, offset, slope))
-                })
-            })
-            .and_then(move |(tile, offset, slope)| {
-                tokio::task::spawn_blocking(move || process_tile(tile, offset, slope))
-                    .map_err(Error::from)
-            });
+        let rs = src.and_then(move |tile| self.process_tile_async(tile, ctx.thread_pool().clone()));
         Ok(rs.boxed())
     }
 }
