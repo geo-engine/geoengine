@@ -2,8 +2,8 @@ use std::sync::Arc;
 
 use crate::engine::{
     ExecutionContext, InitializedRasterOperator, Operator, QueryContext, QueryProcessor,
-    RasterOperator, RasterQueryProcessor, RasterQueryRectangle, RasterResultDescriptor,
-    SingleRasterSource, TypedRasterQueryProcessor,
+    RasterOperator, RasterQueryProcessor, RasterResultDescriptor, SingleRasterSource,
+    TypedRasterQueryProcessor,
 };
 use crate::util::Result;
 use async_trait::async_trait;
@@ -15,7 +15,7 @@ use TypedRasterQueryProcessor::F32 as QueryProcessorOut;
 use crate::error::Error;
 use futures::stream::BoxStream;
 use futures::{StreamExt, TryStreamExt};
-use geoengine_datatypes::primitives::{Measurement, SpatialPartition2D};
+use geoengine_datatypes::primitives::{Measurement, RasterQueryRectangle, SpatialPartition2D};
 use geoengine_datatypes::raster::{
     EmptyGrid, Grid2D, GridShapeAccess, GridSize, NoDataValue, Pixel, RasterDataType,
     RasterPropertiesKey, RasterTile2D,
@@ -227,7 +227,7 @@ where
         let slope = tile.properties.number_property::<f64>(&self.slope_key)?;
         let mat_tile = tile.into_materialized_tile(); // NOTE: the tile is already materialized.
 
-        let temp_grid = tokio::task::spawn_blocking(move || {
+        let temp_grid = crate::util::spawn_blocking(move || {
             let lut = create_lookup_table(channel, offset, slope, &pool);
             process_tile(&mat_tile.grid_array, &lut, &pool)
         })
@@ -312,11 +312,12 @@ mod tests {
     use crate::processing::meteosat::test_util;
     use geoengine_datatypes::primitives::Measurement;
     use geoengine_datatypes::raster::{EmptyGrid2D, Grid2D};
+    use geoengine_datatypes::util::test::TestDefault;
     use std::collections::HashMap;
 
     // #[tokio::test]
     // async fn test_msg_raster() {
-    //     let mut ctx = MockExecutionContext::default();
+    //     let mut ctx = MockExecutionContext::test_default();
     //     let src = test_util::_create_gdal_src(&mut ctx);
     //
     //     let result = test_util::process(
@@ -337,7 +338,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_empty_ok() {
-        let ctx = MockExecutionContext::default();
+        let ctx = MockExecutionContext::test_default();
         let res = test_util::process(
             || {
                 let props = test_util::create_properties(Some(4), Some(1), Some(0.0), Some(1.0));
@@ -364,7 +365,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_ok() {
-        let ctx = MockExecutionContext::default();
+        let ctx = MockExecutionContext::test_default();
         let res = test_util::process(
             || {
                 let props = test_util::create_properties(Some(4), Some(1), Some(0.0), Some(1.0));
@@ -404,7 +405,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_ok_force_satellite() {
-        let ctx = MockExecutionContext::default();
+        let ctx = MockExecutionContext::test_default();
         let res = test_util::process(
             || {
                 let props = test_util::create_properties(Some(4), Some(1), Some(0.0), Some(1.0));
@@ -446,7 +447,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_fail_illegal_input() {
-        let ctx = MockExecutionContext::default();
+        let ctx = MockExecutionContext::test_default();
 
         let res = test_util::process(
             || {
@@ -474,7 +475,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_invalid_force_satellite() {
-        let ctx = MockExecutionContext::default();
+        let ctx = MockExecutionContext::test_default();
         let res = test_util::process(
             || {
                 let props = test_util::create_properties(Some(4), Some(1), Some(0.0), Some(1.0));
@@ -498,7 +499,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_missing_satellite() {
-        let ctx = MockExecutionContext::default();
+        let ctx = MockExecutionContext::test_default();
         let res = test_util::process(
             || {
                 let props = test_util::create_properties(Some(4), None, Some(0.0), Some(1.0));
@@ -520,7 +521,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_invalid_satellite() {
-        let ctx = MockExecutionContext::default();
+        let ctx = MockExecutionContext::test_default();
         let res = test_util::process(
             || {
                 let props = test_util::create_properties(Some(4), Some(42), Some(0.0), Some(1.0));
@@ -542,7 +543,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_missing_channel() {
-        let ctx = MockExecutionContext::default();
+        let ctx = MockExecutionContext::test_default();
         let res = test_util::process(
             || {
                 let props = test_util::create_properties(None, Some(1), Some(0.0), Some(1.0));
@@ -564,7 +565,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_invalid_channel() {
-        let ctx = MockExecutionContext::default();
+        let ctx = MockExecutionContext::test_default();
         let res = test_util::process(
             || {
                 let props = test_util::create_properties(Some(1), Some(1), Some(0.0), Some(1.0));
@@ -586,7 +587,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_missing_slope() {
-        let ctx = MockExecutionContext::default();
+        let ctx = MockExecutionContext::test_default();
         let res = test_util::process(
             || {
                 let props = test_util::create_properties(Some(4), Some(1), Some(0.0), None);
@@ -608,7 +609,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_missing_offset() {
-        let ctx = MockExecutionContext::default();
+        let ctx = MockExecutionContext::test_default();
         let res = test_util::process(
             || {
                 let props = test_util::create_properties(Some(4), Some(1), None, Some(1.0));
@@ -630,7 +631,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_invalid_measurement_unitless() {
-        let ctx = MockExecutionContext::default();
+        let ctx = MockExecutionContext::test_default();
         let res = test_util::process(
             || {
                 let props = test_util::create_properties(Some(4), Some(1), Some(0.0), Some(1.0));
@@ -653,7 +654,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_invalid_measurement_continuous() {
-        let ctx = MockExecutionContext::default();
+        let ctx = MockExecutionContext::test_default();
         let res = test_util::process(
             || {
                 let props = test_util::create_properties(Some(4), Some(1), Some(0.0), Some(1.0));
@@ -683,7 +684,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_invalid_measurement_classification() {
-        let ctx = MockExecutionContext::default();
+        let ctx = MockExecutionContext::test_default();
         let res = test_util::process(
             || {
                 let props = test_util::create_properties(Some(4), Some(1), Some(0.0), Some(1.0));

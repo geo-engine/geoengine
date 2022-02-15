@@ -1,11 +1,12 @@
 use arrow::error::ArrowError;
-use snafu::Snafu;
+use snafu::prelude::*;
 
 use crate::error::Error;
 use crate::primitives::PrimitivesError;
 
 #[derive(Debug, Snafu)]
-#[snafu(visibility = "pub(crate)")]
+#[snafu(visibility(pub(crate)))]
+#[snafu(context(suffix(false)))] // disables default `Snafu` suffix
 pub enum FeatureCollectionError {
     #[snafu(display("Arrow internal error: {:?}", source))]
     ArrowInternal {

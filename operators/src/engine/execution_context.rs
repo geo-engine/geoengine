@@ -1,12 +1,16 @@
-use super::{RasterQueryRectangle, VectorQueryRectangle};
-use crate::engine::{RasterResultDescriptor, ResultDescriptor, VectorResultDescriptor};
+use super::MockQueryContext;
+use crate::engine::{
+    ChunkByteSize, RasterResultDescriptor, ResultDescriptor, VectorResultDescriptor,
+};
 use crate::error::Error;
 use crate::mock::MockDatasetDataSourceLoadingInfo;
 use crate::source::{GdalLoadingInfo, OgrSourceDataset};
 use crate::util::{create_rayon_thread_pool, Result};
 use async_trait::async_trait;
 use geoengine_datatypes::dataset::DatasetId;
+use geoengine_datatypes::primitives::{RasterQueryRectangle, VectorQueryRectangle};
 use geoengine_datatypes::raster::TilingSpecification;
+use geoengine_datatypes::util::test::TestDefault;
 use rayon::ThreadPool;
 use serde::{Deserialize, Serialize};
 use std::any::Any;
@@ -60,21 +64,33 @@ pub struct MockExecutionContext {
     pub tiling_specification: TilingSpecification,
 }
 
-impl Default for MockExecutionContext {
-    fn default() -> Self {
+impl TestDefault for MockExecutionContext {
+    fn test_default() -> Self {
         Self {
             thread_pool: create_rayon_thread_pool(0),
             meta_data: HashMap::default(),
-            tiling_specification: TilingSpecification::default(),
+            tiling_specification: TilingSpecification::test_default(),
         }
     }
 }
 
 impl MockExecutionContext {
     pub fn new_with_tiling_spec(tiling_specification: TilingSpecification) -> Self {
-        MockExecutionContext {
+        Self {
+            thread_pool: create_rayon_thread_pool(0),
+            meta_data: HashMap::default(),
             tiling_specification,
-            ..Default::default()
+        }
+    }
+
+    pub fn new_with_tiling_spec_and_thread_count(
+        tiling_specification: TilingSpecification,
+        num_threads: usize,
+    ) -> Self {
+        Self {
+            thread_pool: create_rayon_thread_pool(num_threads),
+            meta_data: HashMap::default(),
+            tiling_specification,
         }
     }
 
@@ -89,6 +105,13 @@ impl MockExecutionContext {
     {
         self.meta_data
             .insert(dataset, Box::new(meta_data) as Box<dyn Any + Send + Sync>);
+    }
+
+    pub fn mock_query_context(&self, chunk_byte_size: ChunkByteSize) -> MockQueryContext {
+        MockQueryContext {
+            chunk_byte_size,
+            thread_pool: self.thread_pool.clone(),
+        }
     }
 }
 

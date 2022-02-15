@@ -1,5 +1,5 @@
 use serde::{Deserialize, Serialize};
-use snafu::ensure;
+use snafu::prelude::*;
 
 use crate::error;
 use crate::raster::GridShape2D;
@@ -191,6 +191,7 @@ impl SpatialPartition2D {
     }
 
     /// Align this partition by snapping bounds to the pixel borders defined by `origin` and `resolution`
+    #[must_use]
     pub fn snap_to_grid(&self, origin: Coordinate2D, resolution: SpatialResolution) -> Self {
         Self {
             upper_left_coordinate: (

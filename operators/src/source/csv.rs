@@ -8,6 +8,7 @@ use futures::stream::BoxStream;
 use futures::task::{Context, Poll};
 use futures::{Stream, StreamExt};
 use geoengine_datatypes::dataset::DatasetId;
+use geoengine_datatypes::primitives::VectorQueryRectangle;
 use serde::{Deserialize, Serialize};
 use snafu::{ensure, OptionExt, ResultExt};
 
@@ -19,11 +20,11 @@ use geoengine_datatypes::{
     spatial_reference::SpatialReference,
 };
 
+use crate::engine::QueryProcessor;
 use crate::engine::{
     InitializedVectorOperator, OperatorDatasets, QueryContext, SourceOperator,
     TypedVectorQueryProcessor, VectorOperator, VectorQueryProcessor, VectorResultDescriptor,
 };
-use crate::engine::{QueryProcessor, VectorQueryRectangle};
 use crate::error;
 use crate::util::Result;
 use async_trait::async_trait;
@@ -318,7 +319,7 @@ impl Stream for CsvSourceStream {
         let parameters = self.parameters.clone();
         let waker = cx.waker().clone();
 
-        tokio::task::spawn_blocking(move || {
+        crate::util::spawn_blocking(move || {
             let mut csv_reader = reader_state.lock().unwrap();
             let computation_result = || -> Result<Option<MultiPointCollection>> {
                 // TODO: is clone necessary?
@@ -340,7 +341,7 @@ impl Stream for CsvSourceStream {
                         None => break,
                     };
 
-                    let row = record.with_context(|| error::CsvSourceReader)?;
+                    let row = record.context(error::CsvSourceReader)?;
                     let parsed_row = CsvSourceStream::parse_row(header, &row)?;
 
                     // TODO: filter time

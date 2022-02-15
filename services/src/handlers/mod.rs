@@ -10,6 +10,8 @@ use std::fmt;
 use std::str::FromStr;
 
 pub mod datasets;
+#[cfg(feature = "ebv")]
+pub mod ebv;
 pub mod plots;
 pub mod projects;
 pub mod session;

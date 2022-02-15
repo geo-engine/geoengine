@@ -2,7 +2,7 @@ use crate::util::arrow::ArrowTyped;
 use arrow::array::{ArrayBuilder, BooleanArray, Float64Builder};
 use arrow::datatypes::{DataType, Field};
 use arrow::error::ArrowError;
-use ocl::OclPrm;
+use float_cmp::ApproxEq;
 #[cfg(feature = "postgres")]
 use postgres_types::{FromSql, ToSql};
 use proj::Coord;
@@ -20,9 +20,6 @@ pub struct Coordinate2D {
     pub x: f64,
     pub y: f64,
 }
-
-// Make coordinates transferable to OpenCl devices
-unsafe impl OclPrm for Coordinate2D {}
 
 impl Coordinate2D {
     /// Creates a new coordinate
@@ -42,6 +39,7 @@ impl Coordinate2D {
         Self { x, y }
     }
 
+    #[must_use]
     pub fn min_elements(&self, other: Self) -> Self {
         Coordinate2D {
             x: self.x.min(other.x),
@@ -49,6 +47,7 @@ impl Coordinate2D {
         }
     }
 
+    #[must_use]
     pub fn max_elements(&self, other: Self) -> Self {
         Coordinate2D {
             x: self.x.max(other.x),
@@ -299,6 +298,18 @@ impl Div<f64> for Coordinate2D {
 
     fn div(self, rhs: f64) -> Self::Output {
         Coordinate2D::new(self.x / rhs, self.y / rhs)
+    }
+}
+
+impl ApproxEq for Coordinate2D {
+    type Margin = float_cmp::F64Margin;
+
+    fn approx_eq<M>(self, other: Self, margin: M) -> bool
+    where
+        M: Into<Self::Margin>,
+    {
+        let m = margin.into();
+        self.x.approx_eq(other.x, m) && self.y.approx_eq(other.y, m)
     }
 }
 

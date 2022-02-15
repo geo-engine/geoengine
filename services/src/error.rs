@@ -1,17 +1,20 @@
-use crate::handlers::ErrorResponse;
 use crate::workflows::workflow::WorkflowId;
+use crate::{datasets::external::netcdfcf::NetCdfCf4DProviderError, handlers::ErrorResponse};
 use actix_web::http::StatusCode;
 use actix_web::HttpResponse;
 use geoengine_datatypes::{
     dataset::{DatasetId, DatasetProviderId},
     spatial_reference::SpatialReferenceOption,
 };
-use snafu::Snafu;
+use snafu::{prelude::*, AsErrorSource};
 use strum::IntoStaticStr;
+use tonic::Status;
 
 pub type Result<T, E = Error> = std::result::Result<T, E>;
+
 #[derive(Debug, Snafu, IntoStaticStr)]
-#[snafu(visibility = "pub(crate)")]
+#[snafu(visibility(pub(crate)))]
+#[snafu(context(suffix(false)))] // disables default `Snafu` suffix
 pub enum Error {
     DataType {
         source: geoengine_datatypes::error::Error,
@@ -291,6 +294,34 @@ pub enum Error {
         endpoint: WorkflowId,
         type_names: WorkflowId,
     },
+
+    Tonic {
+        source: tonic::Status,
+    },
+
+    TonicTransport {
+        source: tonic::transport::Error,
+    },
+
+    InvalidUri {
+        uri_string: String,
+    },
+
+    InvalidAPIToken {
+        message: String,
+    },
+    MissingNFDIMetaData,
+
+    #[snafu(context(false))]
+    NetCdfCf4DProvider {
+        source: NetCdfCf4DProviderError,
+    },
+
+    #[cfg(feature = "ebv")]
+    #[snafu(context(false))]
+    EbvHandler {
+        source: crate::handlers::ebv::EbvError,
+    },
 }
 
 impl actix_web::error::ResponseError for Error {
@@ -399,3 +430,27 @@ impl From<proj::ProjError> for Error {
         Self::Proj { source }
     }
 }
+
+impl From<tonic::Status> for Error {
+    fn from(source: Status) -> Self {
+        Self::Tonic { source }
+    }
+}
+
+impl From<tonic::transport::Error> for Error {
+    fn from(source: tonic::transport::Error) -> Self {
+        Self::TonicTransport { source }
+    }
+}
+
+impl From<tokio::task::JoinError> for Error {
+    fn from(source: tokio::task::JoinError) -> Self {
+        Error::TokioJoin { source }
+    }
+}
+
+pub trait ErrorSource: std::error::Error + Send + Sync + 'static + AsErrorSource {}
+
+impl ErrorSource for dyn std::error::Error + Send + Sync + 'static {}
+
+impl<T> ErrorSource for T where T: std::error::Error + Send + Sync + 'static {}

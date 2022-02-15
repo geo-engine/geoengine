@@ -7,6 +7,7 @@ use std::sync::Arc;
 use futures::stream::BoxStream;
 use futures::{StreamExt, TryStreamExt};
 use geoengine_datatypes::dataset::DatasetId;
+use geoengine_datatypes::primitives::VectorQueryRectangle;
 use rayon::ThreadPool;
 use serde::{Deserialize, Serialize};
 use snafu::ensure;
@@ -14,7 +15,7 @@ use snafu::ensure;
 use crate::adapters::FeatureCollectionChunkMerger;
 use crate::engine::{
     ExecutionContext, InitializedVectorOperator, Operator, QueryContext, TypedVectorQueryProcessor,
-    VectorOperator, VectorQueryProcessor, VectorQueryRectangle, VectorResultDescriptor,
+    VectorOperator, VectorQueryProcessor, VectorResultDescriptor,
 };
 use crate::engine::{OperatorDatasets, QueryProcessor};
 use crate::error;
@@ -150,7 +151,7 @@ impl PointInPolygonFilterProcessor {
             let time_intervals = points.time_intervals();
             let coordinates = points.coordinates();
 
-            for (chunk_index, chunk_result) in (&mut result).chunks_mut(chunk_size).enumerate() {
+            for (chunk_index, chunk_result) in result.chunks_mut(chunk_size).enumerate() {
                 let feature_index_start = chunk_index * chunk_size;
                 let features_index_end = min(feature_index_start + chunk_size, num_features);
                 let tester = tester.clone();
@@ -192,7 +193,7 @@ impl PointInPolygonFilterProcessor {
         let thread_pool = ctx.thread_pool().clone();
 
         let thread_points = points.clone();
-        let filter = tokio::task::spawn_blocking(move || {
+        let filter = crate::util::spawn_blocking(move || {
             Self::filter_parallel(&thread_points, &polygons, &thread_pool)
         })
         .await?;
@@ -271,10 +272,9 @@ mod tests {
     use geoengine_datatypes::primitives::{
         BoundingBox2D, Coordinate2D, MultiPoint, MultiPolygon, SpatialResolution, TimeInterval,
     };
+    use geoengine_datatypes::util::test::TestDefault;
 
-    use crate::engine::{
-        ChunkByteSize, MockExecutionContext, MockQueryContext, VectorQueryRectangle,
-    };
+    use crate::engine::{ChunkByteSize, MockExecutionContext, MockQueryContext};
     use crate::mock::MockFeatureCollectionSource;
 
     #[test]
@@ -364,7 +364,7 @@ mod tests {
             },
         }
         .boxed()
-        .initialize(&MockExecutionContext::default())
+        .initialize(&MockExecutionContext::test_default())
         .await?;
 
         let query_processor = operator.query_processor()?.multi_point().unwrap();
@@ -413,7 +413,7 @@ mod tests {
             },
         }
         .boxed()
-        .initialize(&MockExecutionContext::default())
+        .initialize(&MockExecutionContext::test_default())
         .await?;
 
         let query_processor = operator.query_processor()?.multi_point().unwrap();
@@ -475,7 +475,7 @@ mod tests {
             },
         }
         .boxed()
-        .initialize(&MockExecutionContext::default())
+        .initialize(&MockExecutionContext::test_default())
         .await?;
 
         let query_processor = operator.query_processor()?.multi_point().unwrap();
@@ -554,7 +554,7 @@ mod tests {
             },
         }
         .boxed()
-        .initialize(&MockExecutionContext::default())
+        .initialize(&MockExecutionContext::test_default())
         .await?;
 
         let query_processor = operator.query_processor()?.multi_point().unwrap();
@@ -630,7 +630,7 @@ mod tests {
             },
         }
         .boxed()
-        .initialize(&MockExecutionContext::default())
+        .initialize(&MockExecutionContext::test_default())
         .await
         .unwrap();
 
@@ -642,7 +642,7 @@ mod tests {
 
         let query_processor = operator.query_processor().unwrap().multi_point().unwrap();
 
-        let query_context = MockQueryContext::default();
+        let query_context = MockQueryContext::test_default();
 
         let query = query_processor
             .query(query_rectangle, &query_context)

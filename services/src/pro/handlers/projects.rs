@@ -267,6 +267,7 @@ mod tests {
     use actix_web::dev::ServiceResponse;
     use actix_web::{http::header, http::Method, test};
     use actix_web_httpauth::headers::authorization::Bearer;
+    use geoengine_datatypes::util::test::TestDefault;
 
     use crate::{
         contexts::Context,
@@ -286,7 +287,7 @@ mod tests {
 
     #[tokio::test]
     async fn load_version() {
-        let ctx = ProInMemoryContext::default();
+        let ctx = ProInMemoryContext::test_default();
 
         let (session, project) = create_project_helper(&ctx).await;
 
@@ -301,7 +302,7 @@ mod tests {
             .unwrap();
 
         let req = test::TestRequest::get()
-            .uri(&format!("/project/{}", project.to_string()))
+            .uri(&format!("/project/{}", project))
             .append_header((header::CONTENT_LENGTH, 0))
             .append_header((header::AUTHORIZATION, Bearer::new(session.id.to_string())));
         let res = send_pro_test_request(req, ctx.clone()).await;
@@ -322,11 +323,7 @@ mod tests {
         let version_id = versions.first().unwrap().id;
 
         let req = test::TestRequest::get()
-            .uri(&format!(
-                "/project/{}/{}",
-                project.to_string(),
-                version_id.to_string()
-            ))
+            .uri(&format!("/project/{}/{}", project, version_id))
             .append_header((header::CONTENT_LENGTH, 0))
             .append_header((header::AUTHORIZATION, Bearer::new(session.id.to_string())));
         let res = send_pro_test_request(req, ctx).await;
@@ -339,14 +336,14 @@ mod tests {
 
     #[tokio::test]
     async fn load_version_not_found() {
-        let ctx = ProInMemoryContext::default();
+        let ctx = ProInMemoryContext::test_default();
 
         let (session, project) = create_project_helper(&ctx).await;
 
         let req = test::TestRequest::get()
             .uri(&format!(
                 "/project/{}/00000000-0000-0000-0000-000000000000",
-                project.to_string()
+                project
             ))
             .append_header((header::CONTENT_LENGTH, 0))
             .append_header((header::AUTHORIZATION, Bearer::new(session.id.to_string())));
@@ -357,7 +354,7 @@ mod tests {
 
     #[tokio::test]
     async fn add_permission() {
-        let ctx = ProInMemoryContext::default();
+        let ctx = ProInMemoryContext::test_default();
 
         let (session, project) = create_project_helper(&ctx).await;
 
@@ -403,7 +400,7 @@ mod tests {
 
     #[tokio::test]
     async fn add_permission_missing_header() {
-        let ctx = ProInMemoryContext::default();
+        let ctx = ProInMemoryContext::test_default();
 
         let (_, project) = create_project_helper(&ctx).await;
 
@@ -446,7 +443,7 @@ mod tests {
 
     #[tokio::test]
     async fn remove_permission() {
-        let ctx = ProInMemoryContext::default();
+        let ctx = ProInMemoryContext::test_default();
 
         let (session, project) = create_project_helper(&ctx).await;
 
@@ -509,7 +506,7 @@ mod tests {
 
     #[tokio::test]
     async fn remove_permission_missing_header() {
-        let ctx = ProInMemoryContext::default();
+        let ctx = ProInMemoryContext::test_default();
 
         let (session, project) = create_project_helper(&ctx).await;
 
@@ -559,7 +556,7 @@ mod tests {
 
     #[tokio::test]
     async fn list_permissions() {
-        let ctx = ProInMemoryContext::default();
+        let ctx = ProInMemoryContext::test_default();
 
         let (session, project) = create_project_helper(&ctx).await;
 
@@ -593,7 +590,7 @@ mod tests {
             .unwrap();
 
         let req = test::TestRequest::get()
-            .uri(&format!("/project/{}/permissions", project.to_string()))
+            .uri(&format!("/project/{}/permissions", project))
             .append_header((header::CONTENT_LENGTH, 0))
             .append_header((header::AUTHORIZATION, Bearer::new(session.id.to_string())))
             .set_json(&permission);
@@ -607,7 +604,7 @@ mod tests {
 
     #[tokio::test]
     async fn list_permissions_missing_header() {
-        let ctx = ProInMemoryContext::default();
+        let ctx = ProInMemoryContext::test_default();
 
         let (session, project) = create_project_helper(&ctx).await;
 
@@ -641,7 +638,7 @@ mod tests {
             .unwrap();
 
         let req = test::TestRequest::get()
-            .uri(&format!("/project/{}/permissions", project.to_string()))
+            .uri(&format!("/project/{}/permissions", project))
             .append_header((header::CONTENT_LENGTH, 0))
             .set_json(&permission);
         let res = send_pro_test_request(req, ctx).await;
@@ -656,7 +653,7 @@ mod tests {
     }
 
     async fn versions_test_helper(method: Method) -> ServiceResponse {
-        let ctx = ProInMemoryContext::default();
+        let ctx = ProInMemoryContext::test_default();
 
         let (session, project) = create_project_helper(&ctx).await;
 
@@ -680,8 +677,6 @@ mod tests {
     }
 
     #[tokio::test]
-    // TODO: remove when https://github.com/tokio-rs/tokio/issues/4245 is fixed
-    #[allow(clippy::semicolon_if_nothing_returned)]
     async fn versions() {
         let res = versions_test_helper(Method::GET).await;
 
@@ -697,7 +692,7 @@ mod tests {
 
     #[tokio::test]
     async fn versions_missing_header() {
-        let ctx = ProInMemoryContext::default();
+        let ctx = ProInMemoryContext::test_default();
 
         let (session, project) = create_project_helper(&ctx).await;
 

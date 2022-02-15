@@ -1,4 +1,4 @@
-use snafu::Snafu;
+use snafu::prelude::*;
 use std::convert::Infallible;
 
 use crate::{
@@ -12,7 +12,8 @@ use crate::{
 };
 
 #[derive(Debug, Snafu)]
-#[snafu(visibility = "pub(crate)")]
+#[snafu(visibility(pub(crate)))]
+#[snafu(context(suffix(false)))] // disables default `Snafu` suffix
 pub enum Error {
     #[snafu(display("Arrow internal error: {:?}", source))]
     ArrowInternal {

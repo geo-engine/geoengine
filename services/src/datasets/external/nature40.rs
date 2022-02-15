@@ -18,16 +18,14 @@ use futures::future::join_all;
 use gdal::DatasetOptions;
 use gdal::Metadata;
 use geoengine_datatypes::dataset::{DatasetId, DatasetProviderId, ExternalDatasetId};
+use geoengine_datatypes::primitives::{RasterQueryRectangle, VectorQueryRectangle};
 use geoengine_operators::engine::TypedResultDescriptor;
 use geoengine_operators::source::GdalMetaDataStatic;
 use geoengine_operators::util::gdal::{
     gdal_open_dataset_ex, gdal_parameters_from_dataset, raster_descriptor_from_dataset,
 };
 use geoengine_operators::{
-    engine::{
-        MetaData, MetaDataProvider, RasterQueryRectangle, RasterResultDescriptor,
-        VectorQueryRectangle, VectorResultDescriptor,
-    },
+    engine::{MetaData, MetaDataProvider, RasterResultDescriptor, VectorResultDescriptor},
     mock::MockDatasetDataSourceLoadingInfo,
     source::{GdalLoadingInfo, OgrSourceDataset},
 };
@@ -224,7 +222,7 @@ impl Nature40DataProvider {
 
     async fn try_load_dataset(&self, db_url: String) -> Result<gdal::Dataset> {
         let auth = self.auth();
-        tokio::task::spawn_blocking(move || {
+        crate::util::spawn_blocking(move || {
             let dataset = gdal_open_dataset_ex(
                 Path::new(&db_url),
                 DatasetOptions {
@@ -412,16 +410,15 @@ mod tests {
     use std::{fs::File, io::Read, path::PathBuf, str::FromStr};
 
     use geoengine_datatypes::{
-        primitives::{Measurement, SpatialPartition2D, SpatialResolution, TimeInterval},
+        primitives::{
+            Measurement, QueryRectangle, SpatialPartition2D, SpatialResolution, TimeInterval,
+        },
         raster::RasterDataType,
         spatial_reference::{SpatialReference, SpatialReferenceAuthority},
     };
-    use geoengine_operators::{
-        engine::QueryRectangle,
-        source::{
-            FileNotFoundHandling, GdalDatasetGeoTransform, GdalDatasetParameters,
-            GdalLoadingInfoPart, GdalLoadingInfoPartIterator,
-        },
+    use geoengine_operators::source::{
+        FileNotFoundHandling, GdalDatasetGeoTransform, GdalDatasetParameters,
+        GdalLoadingInfoTemporalSlice, GdalLoadingInfoTemporalSliceIterator,
     };
     use httptest::{
         all_of,
@@ -869,14 +866,14 @@ mod tests {
             .await
             .unwrap();
 
-        if let GdalLoadingInfoPartIterator::Static { mut parts } = loading_info.info {
-            let params: GdalLoadingInfoPart = parts.next().unwrap();
+        if let GdalLoadingInfoTemporalSliceIterator::Static { mut parts } = loading_info.info {
+            let params: GdalLoadingInfoTemporalSlice = parts.next().unwrap();
 
             assert_eq!(
                 params,
-                GdalLoadingInfoPart {
+                GdalLoadingInfoTemporalSlice {
                     time: TimeInterval::default(),
-                    params: GdalDatasetParameters {
+                    params: Some(GdalDatasetParameters {
                         file_path: PathBuf::from(format!("WCS:{}rasterdb/lidar_2018_wetness_1m/wcs?VERSION=1.0.0&COVERAGE=lidar_2018_wetness_1m", server.url_str(""))),
                         rasterband_channel: 1,
                         geo_transform: GdalDatasetGeoTransform {
@@ -891,7 +888,7 @@ mod tests {
                         properties_mapping: None,
                         gdal_open_options: Some(vec!["UserPwd=geoengine:pwd".to_owned(), "HttpAuth=BASIC".to_owned()]),
                         gdal_config_options: None,
-                    }
+                    })
                 }
             );
 

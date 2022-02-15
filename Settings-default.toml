@@ -42,9 +42,6 @@ log_to_file = false
 # Changes the first part of the log filename.
 filename_prefix = "geo_engine"
 
-# Buffer log output to improve performance in production.
-enable_buffering = false
-
 # By default logs are saved in the current working directory.
 # Use this option if another folder should be used.
 #log_directory = "/var/log/"

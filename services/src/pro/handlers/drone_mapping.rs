@@ -286,7 +286,7 @@ async fn dataset_definition_from_geotiff(
     tiff_path: &Path,
 ) -> Result<DatasetDefinition, error::Error> {
     let tiff_path = tiff_path.to_owned();
-    tokio::task::spawn_blocking(move || {
+    crate::util::spawn_blocking(move || {
         let dataset = gdal_open_dataset(&tiff_path).context(error::Operator)?;
 
         let gdal_params = gdal_parameters_from_dataset(&dataset, 1, &tiff_path, None, None)
@@ -325,7 +325,7 @@ async fn unzip(zip_path: &Path, target_path: &Path) -> Result<(), error::Error> 
     let zip_path = zip_path.to_owned();
     let target_path = target_path.to_owned();
 
-    tokio::task::spawn_blocking(move || {
+    crate::util::spawn_blocking(move || {
         let zip_file_read = std::fs::File::open(&zip_path).context(error::Io)?;
         let mut archive = zip::ZipArchive::new(zip_file_read).unwrap(); // TODO
 
@@ -336,7 +336,7 @@ async fn unzip(zip_path: &Path, target_path: &Path) -> Result<(), error::Error> 
                 None => continue,
             };
 
-            if (&*file.name()).ends_with('/') {
+            if file.name().ends_with('/') {
                 std::fs::create_dir_all(&out_path).context(error::Io)?; // TODO
             } else {
                 if let Some(p) = out_path.parent() {
@@ -356,12 +356,15 @@ async fn unzip(zip_path: &Path, target_path: &Path) -> Result<(), error::Error> 
 
 #[cfg(test)]
 mod tests {
-    use geoengine_datatypes::primitives::{SpatialPartition2D, SpatialResolution, TimeInterval};
+    use geoengine_datatypes::primitives::{
+        RasterQueryRectangle, SpatialPartition2D, SpatialResolution, TimeInterval,
+    };
     use geoengine_datatypes::raster::RasterTile2D;
     use geoengine_datatypes::spatial_reference::SpatialReferenceAuthority;
+    use geoengine_datatypes::util::test::TestDefault;
     use geoengine_operators::source::{
         FileNotFoundHandling, GdalDatasetGeoTransform, GdalDatasetParameters, GdalLoadingInfo,
-        GdalLoadingInfoPart, GdalSource, GdalSourceParameters,
+        GdalLoadingInfoTemporalSlice, GdalSource, GdalSourceParameters,
     };
     use httptest::responders::status_code;
     use httptest::{matchers::request, responders::json_encoded, Expectation, Server};
@@ -383,9 +386,7 @@ mod tests {
     };
     use actix_web::{http::header, test};
     use actix_web_httpauth::headers::authorization::Bearer;
-    use geoengine_operators::engine::{
-        MetaData, MetaDataProvider, RasterOperator, RasterQueryRectangle,
-    };
+    use geoengine_operators::engine::{MetaData, MetaDataProvider, RasterOperator};
     use std::io::Write;
     use std::io::{Cursor, Read};
     use std::path::PathBuf;
@@ -424,7 +425,7 @@ mod tests {
         // manipulate config to use the mock nodeodm server
         config::set_config("odm.endpoint", mock_nodeodm.url_str("/")).unwrap();
 
-        let ctx = ProInMemoryContext::default();
+        let ctx = ProInMemoryContext::test_default();
         let session = create_session_helper(&ctx).await;
 
         // file upload into geo engine
@@ -527,7 +528,7 @@ mod tests {
         let part = loading_info.info.next().unwrap().unwrap();
         assert!(loading_info.info.next().is_none());
 
-        let file_path = &part.params.file_path;
+        let file_path = &part.params.as_ref().unwrap().file_path;
 
         assert_eq!(
             file_path,
@@ -541,9 +542,9 @@ mod tests {
 
         assert_eq!(
             part,
-            GdalLoadingInfoPart {
+            GdalLoadingInfoTemporalSlice {
                 time: TimeInterval::default(),
-                params: GdalDatasetParameters {
+                params: Some(GdalDatasetParameters {
                     file_path: file_path.clone(),
                     rasterband_channel: 1,
                     geo_transform: GdalDatasetGeoTransform {
@@ -558,7 +559,7 @@ mod tests {
                     properties_mapping: None,
                     gdal_open_options: None,
                     gdal_config_options: None,
-                },
+                }),
             }
         );
 
@@ -590,7 +591,7 @@ mod tests {
 
     /// create a zip file from the content of `source_dir` and its subfolders and output it as a byte vector
     async fn zip_dir(source_dir: PathBuf) -> Result<Vec<u8>> {
-        tokio::task::spawn_blocking(move || {
+        crate::util::spawn_blocking(move || {
             let mut output = vec![];
             {
                 let mut zip = zip::ZipWriter::new(Cursor::new(&mut output));
