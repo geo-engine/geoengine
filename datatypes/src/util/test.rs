@@ -65,6 +65,21 @@ where
     g1.shape.eq(&g2.shape) && g1.is_no_data(g2.no_data_value)
 }
 
+/// Save bytes into a file to be used for testing.
+///
+/// # Panics
+///
+/// This function panics if the file cannot be created or written.
+///
+pub fn save_test_bytes(bytes: &[u8], filename: &str) {
+    use std::io::Write;
+
+    std::fs::File::create(filename)
+        .unwrap()
+        .write_all(bytes)
+        .unwrap();
+}
+
 #[cfg(test)]
 mod tests {
     use crate::raster::{EmptyGrid, Grid2D, GridShape2D};
