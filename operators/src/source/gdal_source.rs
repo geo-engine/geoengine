@@ -698,7 +698,7 @@ where
 
         stream::iter(tiling_strategy.tile_information_iterator(query.spatial_bounds))
             .map(move |tile| Self::load_tile_async(info.params.clone(), tile, info.time))
-            .buffered(1) // TODO: find a good default and / or add to config.
+            .buffered(8) // TODO: find a good default and / or add to config.
     }
 }
 

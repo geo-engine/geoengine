@@ -34,7 +34,6 @@ uuid = { version = "0.8", features = ["serde", "v4", "v5"] }
 
 [dev-dependencies]
 criterion = "0.3"
-ndarray = "0.14"
 vega_lite_4 = { version = "0.6", features = ["ndarray", "show_vega"]}
 
 [[bench]]

@@ -17,15 +17,57 @@ tf.config.experimental.set_memory_growth(physical_devices[0], True)
 
 
 model = keras.models.Sequential()
+update = 50
+def weighted_standard_loss(weights):
+    def my_loss(y_true, y_pred):
+        nop = tf.size(y_true)
+        y_true = tf.squeeze(tf.one_hot(tf.cast(y_true, np.int32),  depth = 5), axis=3)
+        inter = tf.math.multiply(tf.math.multiply(tf.cast(y_true, np.float32), tf.math.log(tf.clip_by_value(y_pred, 1e-10, 1.0))), weights)
+        return tf.multiply(tf.math.reduce_sum(tf.math.negative(inter)), tf.cast(1/nop, np.float32))
+
+    return my_loss
+    
+def rwwce(marginal_cost_false_negativ, marginal_cost_false_positive):
+    def my_loss(y_true, y_pred):
+        fn_wt = K.constant(marginal_cost_false_negativ)
+        fp_wt = K.constant(marginal_cost_false_positive)
+
+
+        y_true = K.squeeze(K.one_hot(K.cast(y_true, np.int32), 5), axis=3)
+        tf.print(y_true.shape)
+        y_pred = K.clip(y_pred, K.epsilon(), 1-K.epsilon())
+
+        logs = K.log(y_pred)
+        logs_1_sub = K.log(1-y_pred)
+
+
+        m_full_fn_weights = K.dot(y_true, fn_wt)
+        m_full_fp_weights = K.dot(y_true, fp_wt)
+
+        return -K.mean(m_full_fn_weights * logs + m_full_fp_weights * logs_1_sub)
+
+    return my_loss
+
+
+def my_loss(y_true, y_pred):
+    nop = tf.size(y_true)
+    y_true = tf.squeeze(tf.one_hot(tf.cast(y_true, np.int32),  depth = 5), axis=3)
+    weights = tf.constant([[[[0.1,1.0,1.0,1.0,1.0]]]])
+    #tf.print(tf.multiply(y_true, weights))
+    #tf.print(y_pred)
+    #tf.print(y_true, summarize=-1)
+    inter = tf.math.multiply(tf.math.multiply(tf.cast(y_true, np.float32), tf.math.log(tf.clip_by_value(y_pred, 1e-10, 1.0))), weights)
+    tf.print(inter.shape)
+    return tf.multiply(tf.math.reduce_sum(tf.math.negative(inter)), tf.cast(1/nop, np.float32))
 
 def initUnet(num_classes, id, batch_size):
     print(tf.__version__)
-    inputs = keras.Input(shape=(512, 512, 7), batch_size=batch_size)
+    inputs = keras.Input(shape=(512, 512, 6), batch_size=batch_size)
 
     ### [First half of the network: downsampling inputs] ###
 
     # Entry block
-    x = layers.Conv2D(32, 3, strides=2, padding="same")(inputs)
+    x = layers.layers.Conv2D(32, 3, strides=2, padding="same")(inputs)
     x = layers.BatchNormalization()(x)
     x = layers.Activation("relu")(x)
 
@@ -44,7 +86,7 @@ def initUnet(num_classes, id, batch_size):
         x = layers.MaxPooling2D(3, strides=2, padding="same")(x)
 
         # Project residual
-        residual = layers.Conv2D(filters, 1, strides=2, padding="same")(
+        residual = layers.layers.Conv2D(filters, 1, strides=2, padding="same")(
             previous_block_activation
         )
         x = layers.add([x, residual])  # Add back residual
@@ -54,29 +96,32 @@ def initUnet(num_classes, id, batch_size):
 
     for filters in [256, 128, 64, 32]:
         x = layers.Activation("relu")(x)
-        x = layers.Conv2DTranspose(filters, 3, padding="same")(x)
+        x = layers.layers.Conv2DTranspose(filters, 3, padding="same")(x)
         x = layers.BatchNormalization()(x)
 
         x = layers.Activation("relu")(x)
-        x = layers.Conv2DTranspose(filters, 3, padding="same")(x)
+        x = layers.layers.Conv2DTranspose(filters, 3, padding="same")(x)
         x = layers.BatchNormalization()(x)
 
         x = layers.UpSampling2D(2)(x)
 
         # Project residual
         residual = layers.UpSampling2D(2)(previous_block_activation)
-        residual = layers.Conv2D(filters, 1, padding="same")(residual)
+        residual = layers.layers.Conv2D(filters, 1, padding="same")(residual)
         x = layers.add([x, residual])  # Add back residual
         previous_block_activation = x  # Set aside next residual
 
     # Add a per-pixel classification layer
-    outputs = layers.Conv2D(num_classes, 3, activation="softmax", padding="same")(x)
+    outputs = layers.layers.Conv2D(num_classes, 3, activation="softmax", padding="same")(x)
 
     # Define the model
     global model 
     model = keras.Model(inputs, outputs)
 
-    model.compile(optimizer='adam', loss='sparse_categorical_crossentropy', metrics=['sparse_categorical_accuracy'])
+    fn = np.array([[0.00001, 0.0, 0.0, 0.0, 0.0], [0.0, 1.0, 0.0, 0.0, 0.0], [0.0, 0.0, 1.0, 0.0, 0.0], [0.0, 0.0, 0.0, 1.0, 0.0], [0.0, 0.0, 0.0, 0.0, 5.0]])
+    fp = np.array([[0.0, 999.9, 999.9, 999.9, 999.9], [0.1, 0.0, 1.0, 1.0, 1.0], [0.1, 1.0, 0.0, 1.0, 1.0], [0.1, 99.0, 99.0, 0.0, 99.0], [0.1, 1.0, 1.0, 1.0, 0.0]])
+
+    model.compile(optimizer='adam', loss=rwwce(fn, fp), metrics=['sparse_categorical_accuracy'])
     model.summary()
     model.save('saved_model/{}'.format(id))
     print("Saved model under saved_model/{}".format(id))
@@ -87,20 +132,92 @@ def load(id):
     print('Loaded model from saved_model/{}'.format(id))
 
 call = callbacks.CSVLogger('logs.csv', ';', append=True)
-class_weight = {0: 1.0,
-                1: 50.0,
-                2: 50.0,
-                3: 50.0,
-                4: 50.0}
-def pauls_awesome_loss(y_true, y_pred):
-    return K.sqrt(K.sum(K.square(y_pred*K.cast(y_true>0, "float32") - y_pred)) / K.sum(K.cast(y_true>0, "float32") ))
+class_weight = tf.constant([0,1,1,1,1])
+
+def initUnet2(num_classes, id, batch_size):
+    print(tf.__version__)
+    inputs = keras.Input(shape=(512, 512, 6), batch_size=batch_size)
+
+    conv1 = layers.Conv2D(32, 3,activation = 'relu', padding = 'same')(inputs)
+    conv1 = layers.Conv2D(32, 3,activation = 'relu', padding = 'same')(conv1)
+    pool1 = layers.Conv2D(32, 3, strides=(2,2), padding = 'same')(conv1)
+    print('pool1')
+    print(pool1.shape)
+    conv2 = layers.Conv2D(64, 3, activation = 'relu', padding = 'same')(pool1)
+    conv2 = layers.Conv2D(64, 3, activation = 'relu', padding = 'same')(conv2)
+    pool2 = layers.Conv2D(64, 3, strides=(2,2), padding = 'same')(conv2)
+    print('pool2')
+    print(pool2.shape)
+    conv3 = layers.Conv2D(128, 3, activation = 'relu', padding = 'same')(pool2)
+    conv3 = layers.Conv2D(128, 3, activation = 'relu', padding = 'same')(conv3)
+    pool3 = layers.Conv2D(128, 3, strides=(2,2), padding = 'same')(conv3)
+    print('pool3')
+    print(pool3.shape)
+    conv4 = layers.Conv2D(256, 3, activation = 'relu', padding = 'same')(pool3)
+    conv4 = layers.Conv2D(256, 3, activation = 'relu', padding = 'same')(conv4)
+    drop4 = layers.Dropout(0.5)(conv4)
+    pool4 = layers.Conv2D(256, 3, strides=(2,2), padding = 'same')(drop4)
+    print('pool4')
+    print(pool4.shape)
+    conv5 = layers.Conv2D(512, 3, activation = 'relu', padding = 'same')(pool4)
+    conv5 = layers.Conv2D(512, 3, activation = 'relu', padding = 'same')(conv5)
+    drop5 = layers.Dropout(0.5)(conv5)
+    print('drop5')
+    print(drop5.shape)
+    up6 = layers.Conv2DTranspose(256, 2, strides=(2,2), padding= 'same', activation = 'relu')(drop5)
+    print('drop4')
+    print(drop4.shape)
+    crop4 = layers.Cropping2D(cropping=1)(drop4)
+    merge6 = layers.concatenate([drop4, up6])
+    conv6 = layers.Conv2D(256, 3, activation = 'relu', padding = 'same')(merge6)
+    conv6 = layers.Conv2D(256, 3, activation = 'relu', padding = 'same')(conv6)
+    print('conv6')
+    print(conv6.shape)
+    up7 = layers.Conv2DTranspose(128, 2, strides=(2,2), padding= 'same', activation = 'relu')(conv6)
+    print('CONV3')
+    print(conv3.shape)
+    crop3 = layers.Cropping2D(cropping=16)(conv3)
+    merge7 = layers.concatenate([conv3, up7])
+    conv7 = layers.Conv2D(128, 3, activation = 'relu', padding = 'same')(merge7)
+    conv7 = layers.Conv2D(128, 3, activation = 'relu', padding = 'same')(conv7)
+    print('conv7')
+    print(conv7.shape)
+    up8 = layers.Conv2DTranspose(64, 2, strides=(2,2), padding= 'same', activation = 'relu')(conv7)
+    crop2 = layers.Cropping2D(cropping=40)(conv2)
+    merge8 = layers.concatenate([conv2, up8])
+    conv8 = layers.Conv2D(64, 3, activation = 'relu', padding = 'same')(merge8)
+    conv8 = layers.Conv2D(64, 3, activation = 'relu', padding = 'same')(conv8)
+    print('conv8')
+    print(conv8.shape)
+    up9 = layers.Conv2DTranspose(32, 2, strides=(2,2), padding= 'same', activation = 'relu')(conv8)
+    crop1 = layers.Cropping2D(cropping=88)(conv1)
+    merge9 = layers.concatenate([conv1,up9])
+    conv9 = layers.Conv2D(32, 3, activation = 'relu', padding = 'same')(merge9)
+    conv9 = layers.Conv2D(32, 3, activation = 'relu', padding = 'same')(conv9)
+    print('conv9')
+    print(conv9.shape)
+    #_, _, out_classes = input_size
+#    conv9 = layers.Conv2D(5, 1, padding = 'same', activation = softMaxAxis(axis=channel_axis),  data_format=data_format)(conv9)
+    conv9 = layers.Conv2D(5, 1, padding = 'same')(conv9)
+
+    # Define the model
+    global model 
+    model = keras.Model(inputs, conv9)
+
+    fn = np.array([[0.1, 0.0, 0.0, 0.0, 0.0], [0.0, 1.0, 0.0, 0.0, 0.0], [0.0, 0.0, 1.0, 0.0, 0.0], [0.0, 0.0, 0.0, 1.0, 0.0], [0.0, 0.0, 0.0, 0.0, 1.0]])
+    fp = np.array([[0.0, 999.9, 999.9, 999.9, 999.9], [1.0, 0.0, 1.0, 1.0, 1.0], [1.0, 1.0, 0.0, 1.0, 1.0], [1.0, 1.0, 1.0, 0.0, 1.0], [1.0, 1.0, 1.0, 1.0, 0.0]])
+ 
+    model.compile(optimizer='adam', loss=rwwce(fn, fp), metrics=['sparse_categorical_accuracy'])
+    model.summary()
+    model.save('saved_model/{}'.format(id))
+    print("Saved model under saved_model/{}".format(id))
 def fit(X, y, batch_size):    
     global model
-    matplotlib.pyplot.imsave('ir_test.png', X[0][:,:,0])
-    matplotlib.pyplot.imsave('claas_test.png', y[0][:,:,0], vmin=0,vmax=3)
-    print(y.shape)
-    print(X.shape)
-    #TODO check wether nan's present?
+    global update
+    #matplotlib.pyplot.imsave('ir_test.png', X[0][:,:,0])
+    #matplotlib.pyplot.imsave('claas_test.png', y[0][:,:,0], vmin=0,vmax=3)
+    #print(y.shape)
+    #print(X.shape)
     #print("contains NaN's: {}".format(np.isnan(np.sum(X))))
     #print("contains inf's: {}".format(~np.all(~np.isinf(X))))
     #X = np.nan_to_num(X)
@@ -109,17 +226,19 @@ def fit(X, y, batch_size):
     
     global call
     model.fit(X, y, batch_size = batch_size, callbacks=[call])
-    # if update >= 499:
-    #     result = model.predict(X)
-    #     result = result[0]
-    #     classes = np.zeros((512,512))
-    #     for i in range(0,512):
-    #         for j in range(0,512):
-    #             max = np.argmax(result[i,j,:], axis=0)
-    #             classes[i,j]=max
-    #     matplotlib.pyplot.imsave('train_prediction.png', classes, vmin=0,vmax=3)
-    #     matplotlib.pyplot.imsave('train_claas.png', y[0][:,:,0], vmin=0,vmax=3)
-    #     matplotlib.pyplot.imsave('train_msg.png', X[0][:,:,1])
+    update = update + 1
+    if update >= 30:
+        update = 0
+        result = model.predict(X)
+        result = result[0]
+        classes = np.zeros((512,512))
+        for i in range(0,512):
+            for j in range(0,512):
+                max = np.argmax(result[i,j,:], axis=0)
+                classes[i,j]=max
+        matplotlib.pyplot.imsave('train_prediction.png', classes, vmin=0,vmax=4)
+        matplotlib.pyplot.imsave('train_claas.png', y[0][:,:,0], vmin=0,vmax=4)
+        matplotlib.pyplot.imsave('train_msg.png', X[0][:,:,1])
     
         
     
@@ -150,7 +269,7 @@ def predict(X, y, batchsize):
     
     return result
 
-def validate(X, y, batch_size):
+def sameate(X, y, batch_size):
     global model
     score = model.evaluate(x=X, y=y, batch_size=batch_size)
     #print(score)

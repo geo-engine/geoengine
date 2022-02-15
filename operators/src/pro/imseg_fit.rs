@@ -44,7 +44,7 @@ where
     let py_mod = PyModule::from_code(py, include_str!("tf_v2.py"),"filename.py", "modulename").unwrap();
     let name = PyUnicode::new(py, "test_model_1");
     //TODO change depreciated function
-    let _init = py_mod.call("initUnet", (5,name, batch_size), None).unwrap();
+    let _init = py_mod.call("initUnet2", (5,name, batch_size), None).unwrap();
     let _check_model_size = py_mod.call("get_model_memory_usage", (batch_size, ), None).unwrap();
     //since every 15 minutes an image is available...
     let step: i64 = (batch_size as i64 * 900_000) * batches_per_query as i64;
@@ -247,7 +247,7 @@ mod tests {
 
         let query_spatial_resolution = SpatialResolution::new(3000.4, 3000.4).unwrap();
 
-        let query_bbox = SpatialPartition2D::new((0.0, 3102413.6).into(), (30004.0, 3096412.8).into()).unwrap();
+        let query_bbox = SpatialPartition2D::new((-802607.8468561172485352, 5108186.3898038864135742).into(), (802607.8468561172485352, 3577980.7752370834350586).into()).unwrap();
         let no_data_value = Some(0.);
         let ir_016 = GdalMetaDataRegular{
             time_placeholders: hashmap! {
@@ -896,13 +896,13 @@ mod tests {
         //     phantom_data: Default::default(),
         // };
 
-        let x = imseg_fit(vec![proc_ir_016, proc_ir_039, proc_ir_087, proc_ir_097, proc_ir_108, proc_ir_120, proc_ir_134],proc_claas, QueryRectangle {
+        let x = imseg_fit(vec![proc_ir_039, proc_ir_087, proc_ir_097, proc_ir_108, proc_ir_120, proc_ir_134],proc_claas, QueryRectangle {
             spatial_bounds: query_bbox,
-            time_interval: TimeInterval::new(1104534000000, 1104534000000 + 900_000_000 )
+            time_interval: TimeInterval::new(1104534000000, 1104534000000 + 9_000_000_000 )
                 .unwrap(),
             spatial_resolution: query_spatial_resolution,
         }, ctx,
-    10 as usize,
+    1 as usize,
     1 as usize,
 0 as u8,
 [512,512],
