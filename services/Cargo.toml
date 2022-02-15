@@ -42,7 +42,7 @@ geo = "0.18"
 geoengine-datatypes = { path = "../datatypes" }
 geoengine-operators = { path = "../operators" }
 geojson = {version = "0.22", features = ["geo-types"]}
-image = "0.23"
+image = "0.24"
 lazy_static = "1.4"
 log = "0.4"
 mime = "0.3"
