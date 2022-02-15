@@ -374,8 +374,10 @@ async fn dataset_from_workflow_handler<C: Context>(
             GdalGeoTiffOptions {
                 compression_num_threads: get_config_element::<crate::util::config::Gdal>()?.compression_num_threads,
                 as_cog: info.as_cog,
+                force_big_tiff: false,
             },
             tile_limit,
+            
         ).await)?
     .map_err(error::Error::from)?;
 
@@ -1032,6 +1034,7 @@ mod tests {
                     .unwrap()
                     .compression_num_threads,
                 as_cog: false,
+                force_big_tiff: false,
             },
             None,
         )
