@@ -113,7 +113,7 @@ where
 const COG_BLOCK_SIZE: &str = "512";
 const COMPRESSION_FORMAT: &str = "LZW";
 const COMPRESSION_LEVEL: &str = "9"; // maximum compression
-const BIG_TIFF_BYTES: usize = 2_000_000_000; // ~ 2GB + 2GB for overviews + buffer for headers
+const BIG_TIFF_BYTE_THRESHOLD: usize = 2_000_000_000; // ~ 2GB + 2GB for overviews + buffer for headers
 
 #[derive(Debug)]
 struct GdalDatasetWriter<P: Pixel + GdalType> {
@@ -155,8 +155,9 @@ impl<P: Pixel + GdalType> GdalDatasetWriter<P> {
         );
         let output_bounds = query_rect.spatial_bounds;
 
-        let byte_size = width as usize * height as usize * std::mem::size_of::<P>();
-        let requires_big_tiff = gdal_tiff_options.force_big_tiff || byte_size >= BIG_TIFF_BYTES;
+        let uncompressed_byte_size = width as usize * height as usize * std::mem::size_of::<P>();
+        let requires_big_tiff =
+            gdal_tiff_options.force_big_tiff || uncompressed_byte_size >= BIG_TIFF_BYTE_THRESHOLD;
 
         let driver = Driver::get("GTiff")?;
         let options = create_gdal_tiff_options(
