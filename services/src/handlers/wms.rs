@@ -514,6 +514,8 @@ mod tests {
         .await
         .unwrap();
 
+        // geoengine_datatypes::util::test::save_test_bytes(&image_bytes, "raster_small.png");
+
         assert_eq!(
             include_bytes!("../../../test_data/wms/raster_small.png") as &[u8],
             image_bytes.as_slice()
@@ -547,9 +549,14 @@ mod tests {
         let res = get_map_test_helper(Method::GET, None).await;
 
         assert_eq!(res.status(), 200);
+
+        let image_bytes = actix_web::test::read_body(res).await;
+
+        // geoengine_datatypes::util::test::save_test_bytes(&image_bytes, "get_map.png");
+
         assert_eq!(
             include_bytes!("../../../test_data/wms/get_map.png") as &[u8],
-            actix_web::test::read_body(res).await
+            image_bytes
         );
     }
 
@@ -570,9 +577,13 @@ mod tests {
             actix_web::test::read_body(response).await
         );
 
+        let image_bytes = actix_web::test::read_body(response).await;
+
+        // geoengine_datatypes::util::test::save_test_bytes(&image_bytes, "get_map_ndvi.png");
+
         assert_eq!(
             include_bytes!("../../../test_data/wms/get_map_ndvi.png") as &[u8],
-            actix_web::test::read_body(response).await
+            image_bytes
         );
     }
 
@@ -598,9 +609,14 @@ mod tests {
         let res = send_test_request(req, ctx).await;
 
         assert_eq!(res.status(), 200);
+
+        let image_bytes = actix_web::test::read_body(res).await;
+
+        // geoengine_datatypes::util::test::save_test_bytes(&image_bytes, "get_map.png");
+
         assert_eq!(
             include_bytes!("../../../test_data/wms/get_map.png") as &[u8],
-            actix_web::test::read_body(res).await
+            image_bytes
         );
     }
 
@@ -677,9 +693,14 @@ mod tests {
         let res = send_test_request(req, ctx).await;
 
         assert_eq!(res.status(), 200);
+
+        let image_bytes = actix_web::test::read_body(res).await;
+
+        // geoengine_datatypes::util::test::save_test_bytes(&image_bytes, "get_map_colorizer.png");
+
         assert_eq!(
             include_bytes!("../../../test_data/wms/get_map_colorizer.png") as &[u8],
-            actix_web::test::read_body(res).await
+            image_bytes
         );
     }
 
