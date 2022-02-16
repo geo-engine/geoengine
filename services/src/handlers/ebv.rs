@@ -861,7 +861,9 @@ mod tests {
                 "authorInstitution": "Department of Biology and Biotechnology, Sapienza University of Rome",
                 "description": "Global habitat availability for 5,090 mammals in 5 year intervals (subset from 2015 to 2055).",
                 "license": "https://creativecommons.org/licenses/by/4.0",
-                "datasetPath": "/5/public/v1_rodinini_001.nc"
+                "datasetPath": "/5/public/v1_rodinini_001.nc",
+                "ebvClass": "Species populations",
+                "ebvName": "Species distributions"
             }])
             .to_string()
         );
@@ -1001,7 +1003,9 @@ mod tests {
                 "authorInstitution": "Department of Biology and Biotechnology, Sapienza University of Rome",
                 "description": "Global habitat availability for 5,090 mammals in 5 year intervals (subset from 2015 to 2055).",
                 "license": "https://creativecommons.org/licenses/by/4.0",
-                "datasetPath": "/5/public/v1_rodinini_001.nc"
+                "datasetPath": "/5/public/v1_rodinini_001.nc",
+                "ebvClass": "Species populations",
+                "ebvName": "Species distributions"
             })
             .to_string()
         );
