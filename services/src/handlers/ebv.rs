@@ -71,6 +71,7 @@ mod portal_responses {
         pub creator: EbvDatasetsResponseCreator,
         pub license: String,
         pub dataset: EbvDatasetsResponseDataset,
+        pub ebv: EbvDatasetsResponseEbv,
     }
 
     #[derive(Debug, Deserialize)]
@@ -82,6 +83,12 @@ mod portal_responses {
     #[derive(Debug, Deserialize)]
     pub struct EbvDatasetsResponseDataset {
         pub pathname: String,
+    }
+
+    #[derive(Debug, Deserialize)]
+    pub struct EbvDatasetsResponseEbv {
+        pub ebv_class: String,
+        pub ebv_name: String,
     }
 }
 
@@ -146,6 +153,8 @@ struct EbvDataset {
     description: String,
     license: String,
     dataset_path: String,
+    ebv_class: String,
+    ebv_name: String,
 }
 
 async fn get_ebv_datasets<C: Context>(
@@ -179,6 +188,8 @@ async fn get_ebv_datasets<C: Context>(
             description: data.summary,
             license: data.license,
             dataset_path: data.dataset.pathname,
+            ebv_class: data.ebv.ebv_class,
+            ebv_name: data.ebv.ebv_name,
         })
         .collect();
 
@@ -219,6 +230,8 @@ async fn get_dataset_metadata(base_url: &BaseUrl, id: usize) -> Result<EbvDatase
             description: data.summary,
             license: data.license,
             dataset_path: data.dataset.pathname,
+            ebv_class: data.ebv.ebv_class,
+            ebv_name: data.ebv.ebv_name,
         })
         .next();
 
