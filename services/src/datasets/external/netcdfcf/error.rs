@@ -41,6 +41,9 @@ pub enum NetCdfCf4DProviderError {
     CannotConvertTimeCoverageToInt {
         source: std::num::ParseIntError,
     },
+    CannotParseTimeCoverageDate {
+        source: chrono::format::ParseError,
+    },
     GeneratingResultDescriptorFromDataset {
         source: geoengine_operators::error::Error,
     },

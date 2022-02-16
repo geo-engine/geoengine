@@ -12,7 +12,7 @@ use crate::{
     util::user_input::Validated,
 };
 use async_trait::async_trait;
-use chrono::NaiveDate;
+use chrono::{Datelike, NaiveDate};
 use gdal::cpl::CslStringList;
 use gdal::errors::GdalError;
 use gdal::{Dataset, DatasetOptions, GdalOpenFlags};
@@ -613,7 +613,7 @@ impl NetCdfCfDataProvider {
             SpatialReference::from_str(&spatial_reference).context(error::CannotParseCrs)?;
 
         let entities = root_group
-            .dimension_as_string_array("entities")
+            .dimension_as_string_array("entity")
             .context(error::MissingEntities)?
             .into_iter()
             .enumerate()
@@ -851,28 +851,54 @@ fn parse_time_coverage(
     end: &str,
     resolution: &str,
 ) -> Result<(TimeInstance, TimeInstance, TimeStep)> {
-    let start = start
-        .parse::<i32>()
-        .context(error::CannotConvertTimeCoverageToInt)?;
-    let end = end
-        .parse::<i32>()
-        .context(error::CannotConvertTimeCoverageToInt)?;
+    let (start, end) = if start.contains('-') {
+        // parse as dates
+        let start = chrono::NaiveDate::parse_from_str(start, "%Y-%m-%d")
+            .context(error::CannotParseTimeCoverageDate)?;
+        let end = chrono::NaiveDate::parse_from_str(end, "%Y-%m-%d")
+            .context(error::CannotParseTimeCoverageDate)?;
+        (start, end)
+    } else {
+        // parse as years integer
+        let start = start
+            .parse::<i32>()
+            .context(error::CannotConvertTimeCoverageToInt)?;
+        let end = end
+            .parse::<i32>()
+            .context(error::CannotConvertTimeCoverageToInt)?;
+        (
+            NaiveDate::from_ymd(start, 1, 1),
+            NaiveDate::from_ymd(end, 1, 1),
+        )
+    };
+    // add one year to provide a right side boundary for the close-open interval
+    let end = NaiveDate::from_ymd(end.year() + 1, end.month(), end.day());
 
     Ok(match resolution {
-        "Yearly" | "every 1 year" => {
-            let start = TimeInstance::from(NaiveDate::from_ymd(start, 1, 1).and_hms(0, 0, 0));
+        "Yearly" | "every 1 year" | "annually" => {
+            let start = TimeInstance::from(start.and_hms(0, 0, 0));
             // end + 1 because it is exclusive for us but inclusive in the metadata
-            let end = TimeInstance::from(NaiveDate::from_ymd(end + 1, 1, 1).and_hms(0, 0, 0));
+            let end = TimeInstance::from(end.and_hms(0, 0, 0));
             let step = TimeStep {
                 granularity: TimeGranularity::Years,
                 step: 1,
             };
             (start, end, step)
         }
-        "decade" => {
-            let start = TimeInstance::from(NaiveDate::from_ymd(start, 1, 1).and_hms(0, 0, 0));
+        "Every 5 years" => {
+            let start = TimeInstance::from(start.and_hms(0, 0, 0));
             // end + 1 because it is exclusive for us but inclusive in the metadata
-            let end = TimeInstance::from(NaiveDate::from_ymd(end + 1, 1, 1).and_hms(0, 0, 0));
+            let end = TimeInstance::from(end.and_hms(0, 0, 0));
+            let step = TimeStep {
+                granularity: TimeGranularity::Years,
+                step: 5,
+            };
+            (start, end, step)
+        }
+        "decade" | "decadal" => {
+            let start = TimeInstance::from(start.and_hms(0, 0, 0));
+            // end + 1 because it is exclusive for us but inclusive in the metadata
+            let end = TimeInstance::from(end.and_hms(0, 0, 0));
             let step = TimeStep {
                 granularity: TimeGranularity::Years,
                 step: 10,
