@@ -98,4 +98,7 @@ pub enum NetCdfCf4DProviderError {
     },
     PathToDataIsEmpty,
     MissingDataType,
+    DatasetIsNotInProviderPath {
+        source: std::path::StripPrefixError,
+    },
 }

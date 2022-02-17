@@ -14,6 +14,7 @@ use geoengine_datatypes::test_data;
 use log::debug;
 use serde::Serialize;
 use snafu::{ResultExt, Snafu};
+use std::path::PathBuf;
 
 pub(crate) fn init_ebv_routes<C>(base_url: Option<String>) -> Box<dyn FnOnce(&mut ServiceConfig)>
 where
@@ -245,17 +246,19 @@ async fn get_ebv_subdatasets<C: Context>(
     let dataset = get_dataset_metadata(base_url.get_ref(), id.into_inner()).await?;
 
     let listing = {
-        let dataset_path = dataset.dataset_path.trim_start_matches('/');
+        let dataset_path = PathBuf::from(dataset.dataset_path.trim_start_matches('/'));
+
+        debug!("Accessing dataset {}", dataset_path.display());
 
         // TODO: make dir configurable
-        let data_path = test_data!("netcdf4d/").join(dataset_path);
+        let provider_path = test_data!("netcdf4d/").to_path_buf();
 
-        debug!("Accessing dataset {}", data_path.display());
-
-        crate::util::spawn_blocking(move || NetCdfCfDataProvider::build_netcdf_tree(&data_path))
-            .await?
-            .map_err(|e| Box::new(e) as _)
-            .context(error::CannotParseNetCdfFile)?
+        crate::util::spawn_blocking(move || {
+            NetCdfCfDataProvider::build_netcdf_tree(&provider_path, &dataset_path)
+        })
+        .await?
+        .map_err(|e| Box::new(e) as _)
+        .context(error::CannotParseNetCdfFile)?
     };
 
     Ok(web::Json(EbvHierarchy {

@@ -6,7 +6,6 @@ use std::str::FromStr;
 
 use crate::datasets::listing::DatasetListOptions;
 use crate::datasets::listing::{ExternalDatasetProvider, ProvenanceOutput};
-use crate::error::Error;
 use crate::{
     datasets::{listing::DatasetListing, storage::ExternalDatasetProviderDefinition},
     util::user_input::Validated,
@@ -583,9 +582,14 @@ pub(crate) struct NetCdfCf4DDatasetId {
 }
 
 impl NetCdfCfDataProvider {
-    pub(crate) fn build_netcdf_tree(path: &Path) -> Result<NetCdfOverview> {
+    pub(crate) fn build_netcdf_tree(
+        provider_path: &Path,
+        dataset_path: &Path,
+    ) -> Result<NetCdfOverview> {
+        let path = provider_path.join(dataset_path);
+
         let ds = gdal_open_dataset_ex(
-            path,
+            &path,
             DatasetOptions {
                 open_flags: GdalOpenFlags::GDAL_OF_MULTIDIM_RASTER,
                 allowed_drivers: Some(&["netCDF"]),
@@ -596,11 +600,6 @@ impl NetCdfCfDataProvider {
         .context(error::InvalidDatasetIdFile)?;
 
         let root_group = MdGroup::from_dataset(&ds)?;
-
-        let file_name = path
-            .file_name()
-            .ok_or(NetCdfCf4DProviderError::MissingFileName)?
-            .to_string_lossy();
 
         let title = root_group
             .attribute_as_string("title")
@@ -639,7 +638,11 @@ impl NetCdfCfDataProvider {
         let (time_start, time_end, time_step) = parse_time_coverage(&start, &end, &step)?;
 
         Ok(NetCdfOverview {
-            file_name: file_name.to_string(),
+            file_name: path
+                .strip_prefix(provider_path)
+                .context(error::DatasetIsNotInProviderPath)?
+                .to_string_lossy()
+                .to_string(),
             title,
             spatial_reference,
             groups,
@@ -652,9 +655,10 @@ impl NetCdfCfDataProvider {
 
     pub(crate) fn listing_from_netcdf(
         id: DatasetProviderId,
-        path: &Path,
+        provider_path: &Path,
+        dataset_path: &Path,
     ) -> Result<Vec<DatasetListing>> {
-        let tree = Self::build_netcdf_tree(path)?;
+        let tree = Self::build_netcdf_tree(provider_path, dataset_path)?;
 
         let mut paths: VecDeque<Vec<&NetCdfGroup>> = tree.groups.iter().map(|s| vec![s]).collect();
 
@@ -735,6 +739,11 @@ impl NetCdfCfDataProvider {
             serde_json::from_str(&dataset.dataset_id).context(error::CannotParseDatasetId)?;
 
         let path = self.path.join(dataset_id.file_name);
+
+        // check that file does not "escape" the provider path
+        if let Err(source) = path.strip_prefix(self.path.as_path()) {
+            return Err(NetCdfCf4DProviderError::DatasetIsNotInProviderPath { source });
+        }
 
         let gdal_path = format!(
             "NETCDF:{path}:/{group}/ebv_cube",
@@ -926,8 +935,9 @@ impl ExternalDatasetProvider for NetCdfCfDataProvider {
                 continue;
             }
 
+            let provider_path = self.path.clone();
             let listing = tokio::task::spawn_blocking(move || {
-                Self::listing_from_netcdf(NETCDF_CF_PROVIDER_ID, &entry.path())
+                Self::listing_from_netcdf(NETCDF_CF_PROVIDER_ID, &provider_path, &entry.path())
             })
             .await?;
 
@@ -968,13 +978,11 @@ impl MetaDataProvider<GdalLoadingInfo, RasterResultDescriptor, RasterQueryRectan
         geoengine_operators::error::Error,
     > {
         // TODO spawn blocking
-        self.meta_data(dataset)
-            .await
-            .map_err(|_| geoengine_operators::error::Error::LoadingInfo {
-                source: Box::new(Error::InvalidExternalDatasetId {
-                    provider: NETCDF_CF_PROVIDER_ID,
-                }),
-            })
+        self.meta_data(dataset).await.map_err(|error| {
+            geoengine_operators::error::Error::LoadingInfo {
+                source: Box::new(error),
+            }
+        })
     }
 }
 
@@ -1037,7 +1045,8 @@ mod tests {
 
         let listing = NetCdfCfDataProvider::listing_from_netcdf(
             provider_id,
-            test_data!("netcdf4d/dataset_m.nc"),
+            test_data!("netcdf4d"),
+            Path::new("dataset_m.nc"),
         )
         .unwrap();
 
@@ -1180,7 +1189,8 @@ mod tests {
 
         let listing = NetCdfCfDataProvider::listing_from_netcdf(
             provider_id,
-            test_data!("netcdf4d/dataset_sm.nc"),
+            test_data!("netcdf4d"),
+            Path::new("dataset_sm.nc"),
         )
         .unwrap();
 
