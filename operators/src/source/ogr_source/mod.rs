@@ -22,6 +22,7 @@ use gdal::vector::sql::ResultSet;
 use gdal::vector::{Feature, FieldValue, Layer, LayerCaps, OGRwkbGeometryType};
 use log::debug;
 use pin_project::pin_project;
+use postgres_protocol::escape::{escape_identifier, escape_literal};
 use serde::{Deserialize, Serialize};
 use snafu::ResultExt;
 use tokio::sync::Mutex;
@@ -40,6 +41,7 @@ use geoengine_datatypes::util::arrow::ArrowTyped;
 
 use crate::engine::{OperatorDatasets, QueryProcessor};
 use crate::error::Error;
+use crate::util::input::StringOrNumberRange;
 use crate::util::Result;
 use crate::{
     engine::{
@@ -60,6 +62,15 @@ use self::dataset_iterator::OgrDatasetIterator;
 pub struct OgrSourceParameters {
     pub dataset: DatasetId,
     pub attribute_projection: Option<Vec<String>>,
+    pub attribute_filters: Option<Vec<AttributeFilter>>,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct AttributeFilter {
+    pub attribute: String,
+    pub ranges: Vec<StringOrNumberRange>,
+    pub keep_nulls: bool,
 }
 
 impl OperatorDatasets for OgrSourceParameters {
@@ -284,6 +295,7 @@ impl Add<OgrSourceDurationSpec> for TimeInstance {
 pub struct OgrSourceState {
     dataset_information:
         Box<dyn MetaData<OgrSourceDataset, VectorResultDescriptor, VectorQueryRectangle>>,
+    attribute_filters: Vec<AttributeFilter>,
 }
 
 pub struct InitializedOgrSource {
@@ -304,10 +316,43 @@ impl VectorOperator for OgrSource {
             dyn MetaData<OgrSourceDataset, VectorResultDescriptor, VectorQueryRectangle>,
         > = context.meta_data(&self.params.dataset).await?;
 
+        let result_descriptor = info.result_descriptor().await?;
+
+        if let Some(ref attribute_filters) = self.params.attribute_filters {
+            for filter in attribute_filters {
+                if let Some(column_type) = result_descriptor.columns.get(&filter.attribute) {
+                    for range in &filter.ranges {
+                        match range {
+                            StringOrNumberRange::String(_) => {
+                                if column_type != &FeatureDataType::Text {
+                                    return Err(error::Error::InvalidFeatureDataType);
+                                }
+                            }
+                            StringOrNumberRange::Float(_) => {
+                                if column_type != &FeatureDataType::Float {
+                                    return Err(error::Error::InvalidFeatureDataType);
+                                }
+                            }
+                            StringOrNumberRange::Int(_) => {
+                                if column_type != &FeatureDataType::Int {
+                                    return Err(error::Error::InvalidFeatureDataType);
+                                }
+                            }
+                        }
+                    }
+                } else {
+                    return Err(error::Error::ColumnDoesNotExist {
+                        column: filter.attribute.clone(),
+                    });
+                }
+            }
+        }
+
         let initialized_source = InitializedOgrSource {
-            result_descriptor: info.result_descriptor().await?,
+            result_descriptor,
             state: OgrSourceState {
                 dataset_information: info,
+                attribute_filters: self.params.attribute_filters.unwrap_or_default(),
             },
         };
 
@@ -339,16 +384,32 @@ impl InitializedVectorOperator for InitializedOgrSource {
     fn query_processor(&self) -> Result<TypedVectorQueryProcessor> {
         Ok(match self.result_descriptor.data_type {
             VectorDataType::Data => TypedVectorQueryProcessor::Data(
-                OgrSourceProcessor::new(self.state.dataset_information.clone()).boxed(),
+                OgrSourceProcessor::new(
+                    self.state.dataset_information.clone(),
+                    self.state.attribute_filters.clone(),
+                )
+                .boxed(),
             ),
             VectorDataType::MultiPoint => TypedVectorQueryProcessor::MultiPoint(
-                OgrSourceProcessor::new(self.state.dataset_information.clone()).boxed(),
+                OgrSourceProcessor::new(
+                    self.state.dataset_information.clone(),
+                    self.state.attribute_filters.clone(),
+                )
+                .boxed(),
             ),
             VectorDataType::MultiLineString => TypedVectorQueryProcessor::MultiLineString(
-                OgrSourceProcessor::new(self.state.dataset_information.clone()).boxed(),
+                OgrSourceProcessor::new(
+                    self.state.dataset_information.clone(),
+                    self.state.attribute_filters.clone(),
+                )
+                .boxed(),
             ),
             VectorDataType::MultiPolygon => TypedVectorQueryProcessor::MultiPolygon(
-                OgrSourceProcessor::new(self.state.dataset_information.clone()).boxed(),
+                OgrSourceProcessor::new(
+                    self.state.dataset_information.clone(),
+                    self.state.attribute_filters.clone(),
+                )
+                .boxed(),
             ),
         })
     }
@@ -364,6 +425,7 @@ where
 {
     dataset_information:
         Box<dyn MetaData<OgrSourceDataset, VectorResultDescriptor, VectorQueryRectangle>>,
+    attribute_filters: Vec<AttributeFilter>,
     _collection_type: PhantomData<FeatureCollection<G>>,
 }
 
@@ -375,9 +437,11 @@ where
         dataset_information: Box<
             dyn MetaData<OgrSourceDataset, VectorResultDescriptor, VectorQueryRectangle>,
         >,
+        attribute_filters: Vec<AttributeFilter>,
     ) -> Self {
         Self {
             dataset_information,
+            attribute_filters,
             _collection_type: Default::default(),
         }
     }
@@ -401,6 +465,7 @@ where
             self.dataset_information.loading_info(query).await?,
             query,
             ctx.chunk_byte_size().into(),
+            self.attribute_filters.clone(),
         )
         .await?
         .boxed())
@@ -470,6 +535,74 @@ impl FeaturesProvider<'_> {
         Ok(())
     }
 
+    fn set_attribute_filters(&mut self, attribute_filters: &[AttributeFilter]) -> Result<()> {
+        for filter in attribute_filters {
+            let attribute = escape_identifier(&filter.attribute);
+            for range in &filter.ranges {
+                let sql = match &range {
+                    StringOrNumberRange::String(s) => {
+                        format!(
+                            "{attribute} >= {start} AND {attribute} <= {stop}",
+                            attribute = attribute,
+                            start = escape_literal(s.start()),
+                            stop = escape_literal(s.end())
+                        )
+                    }
+                    StringOrNumberRange::Float(n) => format!(
+                        "{attribute} >= {start} AND {attribute} <= {stop}",
+                        attribute = attribute,
+                        start = n.start(),
+                        stop = n.end()
+                    ),
+                    StringOrNumberRange::Int(n) => format!(
+                        "{attribute} >= {start} AND {attribute} <= {stop}",
+                        attribute = attribute,
+                        start = n.start(),
+                        stop = n.end()
+                    ),
+                };
+
+                self.set_attribute_filter(&sql)?;
+            }
+        }
+
+        Ok(())
+    }
+
+    fn set_attribute_filters_cast(&mut self, attribute_filters: &[AttributeFilter]) -> Result<()> {
+        for filter in attribute_filters {
+            let attribute = escape_identifier(&filter.attribute);
+            for range in &filter.ranges {
+                let sql = match &range {
+                    StringOrNumberRange::String(s) => {
+                        format!(
+                            "{attribute} >= {start} AND {attribute} <= {stop}",
+                            attribute = attribute,
+                            start = escape_literal(s.start()),
+                            stop = escape_literal(s.end())
+                        )
+                    }
+                    StringOrNumberRange::Float(n) => format!(
+                        "CAST({attribute} as float(8)) >= {start} AND CAST({attribute} as float(8)) <= {stop}",
+                        attribute = attribute,
+                        start = n.start(),
+                        stop = n.end()
+                    ),
+                    StringOrNumberRange::Int(n) => format!(
+                        "CAST({attribute} as bigint) >= {start} AND CAST({attribute} as bigint) <= {stop}",
+                        attribute = attribute,
+                        start = n.start(),
+                        stop = n.end()
+                    ),
+                };
+
+                self.set_attribute_filter(&sql)?;
+            }
+        }
+
+        Ok(())
+    }
+
     fn has_gdal_capability(&self, caps: LayerCaps) -> bool {
         self.layer_ref().has_capability(caps)
     }
@@ -484,9 +617,11 @@ where
         dataset_information: OgrSourceDataset,
         query_rectangle: VectorQueryRectangle,
         chunk_byte_size: usize,
+        attribute_filters: Vec<AttributeFilter>,
     ) -> Result<Self> {
         crate::util::spawn_blocking(move || {
-            let dataset_iterator = OgrDatasetIterator::new(&dataset_information, &query_rectangle)?;
+            let dataset_iterator =
+                OgrDatasetIterator::new(&dataset_information, &query_rectangle, attribute_filters)?;
 
             let (data_types, feature_collection_builder) =
                 Self::initialize_types_and_builder(&dataset_information);
@@ -1273,7 +1408,7 @@ mod tests {
             phantom: Default::default(),
         };
 
-        let query_processor = OgrSourceProcessor::<MultiPoint>::new(Box::new(info));
+        let query_processor = OgrSourceProcessor::<MultiPoint>::new(Box::new(info), vec![]);
 
         let context = MockQueryContext::new(ChunkByteSize::MAX);
         let query = query_processor
@@ -1322,7 +1457,7 @@ mod tests {
             phantom: Default::default(),
         };
 
-        let query_processor = OgrSourceProcessor::<MultiPoint>::new(Box::new(info));
+        let query_processor = OgrSourceProcessor::<MultiPoint>::new(Box::new(info), vec![]);
 
         let context = MockQueryContext::new(ChunkByteSize::MAX);
         let query = query_processor
@@ -1364,7 +1499,7 @@ mod tests {
             phantom: Default::default(),
         };
 
-        let query_processor = OgrSourceProcessor::<MultiPoint>::new(Box::new(info));
+        let query_processor = OgrSourceProcessor::<MultiPoint>::new(Box::new(info), vec![]);
 
         let context = MockQueryContext::new(ChunkByteSize::MAX);
         let query = query_processor
@@ -1411,7 +1546,7 @@ mod tests {
             phantom: Default::default(),
         };
 
-        let query_processor = OgrSourceProcessor::<MultiPoint>::new(Box::new(info));
+        let query_processor = OgrSourceProcessor::<MultiPoint>::new(Box::new(info), vec![]);
 
         let context = MockQueryContext::new(ChunkByteSize::MAX);
         let query = query_processor
@@ -1477,6 +1612,7 @@ mod tests {
             params: OgrSourceParameters {
                 dataset,
                 attribute_projection: None,
+                attribute_filters: None,
             },
         }
         .boxed()
@@ -1572,6 +1708,7 @@ mod tests {
             params: OgrSourceParameters {
                 dataset,
                 attribute_projection: None,
+                attribute_filters: None,
             },
         }
         .boxed()
@@ -1670,6 +1807,7 @@ mod tests {
             params: OgrSourceParameters {
                 dataset,
                 attribute_projection: None,
+                attribute_filters: None,
             },
         }
         .boxed()
@@ -1787,6 +1925,7 @@ mod tests {
             params: OgrSourceParameters {
                 dataset: id.clone(),
                 attribute_projection: None,
+                attribute_filters: None,
             },
         }
         .boxed()
@@ -1957,6 +2096,7 @@ mod tests {
             params: OgrSourceParameters {
                 dataset: id.clone(),
                 attribute_projection: None,
+                attribute_filters: None,
             },
         }
         .boxed()
@@ -3134,7 +3274,7 @@ mod tests {
             phantom: Default::default(),
         };
 
-        let query_processor = OgrSourceProcessor::<NoGeometry>::new(Box::new(info));
+        let query_processor = OgrSourceProcessor::<NoGeometry>::new(Box::new(info), vec![]);
 
         let context = MockQueryContext::new(ChunkByteSize::MAX);
         let query = query_processor
@@ -3229,7 +3369,7 @@ mod tests {
             phantom: Default::default(),
         };
 
-        let query_processor = OgrSourceProcessor::<MultiPoint>::new(Box::new(info));
+        let query_processor = OgrSourceProcessor::<MultiPoint>::new(Box::new(info), vec![]);
 
         let context = MockQueryContext::new(ChunkByteSize::MAX);
         let query = query_processor
@@ -3315,6 +3455,7 @@ mod tests {
             params: OgrSourceParameters {
                 dataset: id.clone(),
                 attribute_projection: None,
+                attribute_filters: None,
             },
         }
         .boxed()
@@ -3562,6 +3703,7 @@ mod tests {
             params: OgrSourceParameters {
                 dataset,
                 attribute_projection: None,
+                attribute_filters: None,
             },
         }
         .boxed()
@@ -3646,6 +3788,7 @@ mod tests {
             params: OgrSourceParameters {
                 dataset,
                 attribute_projection: None,
+                attribute_filters: None,
             },
         }
         .boxed()
@@ -3747,6 +3890,7 @@ mod tests {
             params: OgrSourceParameters {
                 dataset,
                 attribute_projection: None,
+                attribute_filters: None,
             },
         }
         .boxed()
@@ -3860,6 +4004,7 @@ mod tests {
             params: OgrSourceParameters {
                 dataset,
                 attribute_projection: None,
+                attribute_filters: None,
             },
         }
         .boxed()
@@ -3969,6 +4114,7 @@ mod tests {
             params: OgrSourceParameters {
                 dataset,
                 attribute_projection: None,
+                attribute_filters: None,
             },
         }
         .boxed()
@@ -4078,6 +4224,7 @@ mod tests {
             params: OgrSourceParameters {
                 dataset,
                 attribute_projection: None,
+                attribute_filters: None,
             },
         }
         .boxed()
@@ -4178,7 +4325,7 @@ mod tests {
             phantom: Default::default(),
         };
 
-        let query_processor = OgrSourceProcessor::<NoGeometry>::new(Box::new(info));
+        let query_processor = OgrSourceProcessor::<NoGeometry>::new(Box::new(info), vec![]);
 
         let context = MockQueryContext::new(ChunkByteSize::MAX);
         let query = query_processor
@@ -4224,6 +4371,354 @@ mod tests {
                 .collect(),
             )?
         );
+
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn attribute_filter_string() -> Result<()> {
+        let dataset_information = OgrSourceDataset {
+            file_name: test_data!("vector/data/plain_data.csv").into(),
+            layer_name: "plain_data".to_string(),
+            data_type: None,
+            time: OgrSourceDatasetTimeType::None,
+            default_geometry: None,
+            columns: Some(OgrSourceColumnSpec {
+                format_specifics: Some(Csv {
+                    header: CsvHeader::Yes,
+                }),
+                x: "".to_string(),
+                y: None,
+                float: vec!["b".to_string()],
+                int: vec!["a".to_string()],
+                text: vec!["c".to_string()],
+                rename: None,
+            }),
+            force_ogr_time_filter: false,
+            force_ogr_spatial_filter: false,
+            on_error: OgrSourceErrorSpec::Ignore,
+            sql_query: None,
+            attribute_query: None,
+        };
+
+        let info = StaticMetaData {
+            loading_info: dataset_information,
+            result_descriptor: VectorResultDescriptor {
+                data_type: VectorDataType::MultiPoint,
+                spatial_reference: SpatialReferenceOption::Unreferenced,
+                columns: [
+                    ("foo".to_string(), FeatureDataType::Int),
+                    ("b".to_string(), FeatureDataType::Float),
+                    ("c".to_string(), FeatureDataType::Text),
+                ]
+                .iter()
+                .cloned()
+                .collect(),
+            },
+            phantom: Default::default(),
+        };
+
+        let query_processor = OgrSourceProcessor::<NoGeometry>::new(
+            Box::new(info),
+            vec![AttributeFilter {
+                attribute: "c".to_owned(),
+                ranges: vec![StringOrNumberRange::String(
+                    "foo".to_owned()..="foo".to_owned(),
+                )],
+                keep_nulls: false,
+            }],
+        );
+
+        let context = MockQueryContext::new(ChunkByteSize::MAX);
+        let query = query_processor
+            .query(
+                VectorQueryRectangle {
+                    spatial_bounds: BoundingBox2D::new((0., 0.).into(), (1., 1.).into())?,
+                    time_interval: Default::default(),
+                    spatial_resolution: SpatialResolution::new(1., 1.)?,
+                },
+                &context,
+            )
+            .await
+            .unwrap();
+
+        let result: Vec<DataCollection> = query.try_collect().await?;
+
+        assert_eq!(result.len(), 1);
+
+        assert_eq!(
+            result[0],
+            DataCollection::from_data(
+                vec![],
+                vec![Default::default(); 1],
+                [
+                    ("a".to_string(), FeatureData::NullableInt(vec![Some(1)])),
+                    ("b".to_string(), FeatureData::NullableFloat(vec![Some(5.4)])),
+                    (
+                        "c".to_string(),
+                        FeatureData::NullableText(vec![Some("foo".to_string()),])
+                    ),
+                ]
+                .iter()
+                .cloned()
+                .collect(),
+            )?
+        );
+
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn attribute_filter_int() -> Result<()> {
+        let dataset_information = OgrSourceDataset {
+            file_name: test_data!("vector/data/plain_data.csv").into(),
+            layer_name: "plain_data".to_string(),
+            data_type: None,
+            time: OgrSourceDatasetTimeType::None,
+            default_geometry: None,
+            columns: Some(OgrSourceColumnSpec {
+                format_specifics: Some(Csv {
+                    header: CsvHeader::Yes,
+                }),
+                x: "".to_string(),
+                y: None,
+                float: vec!["b".to_string()],
+                int: vec!["a".to_string()],
+                text: vec!["c".to_string()],
+                rename: None,
+            }),
+            force_ogr_time_filter: false,
+            force_ogr_spatial_filter: false,
+            on_error: OgrSourceErrorSpec::Ignore,
+            sql_query: None,
+            attribute_query: None,
+        };
+
+        let info = StaticMetaData {
+            loading_info: dataset_information,
+            result_descriptor: VectorResultDescriptor {
+                data_type: VectorDataType::MultiPoint,
+                spatial_reference: SpatialReferenceOption::Unreferenced,
+                columns: [
+                    ("foo".to_string(), FeatureDataType::Int),
+                    ("b".to_string(), FeatureDataType::Float),
+                    ("c".to_string(), FeatureDataType::Text),
+                ]
+                .iter()
+                .cloned()
+                .collect(),
+            },
+            phantom: Default::default(),
+        };
+
+        let query_processor = OgrSourceProcessor::<NoGeometry>::new(
+            Box::new(info),
+            vec![AttributeFilter {
+                attribute: "a".to_owned(),
+                ranges: vec![StringOrNumberRange::Int(2..=2)],
+                keep_nulls: false,
+            }],
+        );
+
+        let context = MockQueryContext::new(ChunkByteSize::MAX);
+        let query = query_processor
+            .query(
+                VectorQueryRectangle {
+                    spatial_bounds: BoundingBox2D::new((0., 0.).into(), (1., 1.).into())?,
+                    time_interval: Default::default(),
+                    spatial_resolution: SpatialResolution::new(1., 1.)?,
+                },
+                &context,
+            )
+            .await
+            .unwrap();
+
+        let result: Vec<DataCollection> = query.try_collect().await?;
+
+        assert_eq!(result.len(), 1);
+
+        assert_eq!(
+            result[0],
+            DataCollection::from_data(
+                vec![],
+                vec![Default::default(); 1],
+                [
+                    ("a".to_string(), FeatureData::NullableInt(vec![Some(2)])),
+                    ("b".to_string(), FeatureData::NullableFloat(vec![None])),
+                    (
+                        "c".to_string(),
+                        FeatureData::NullableText(vec![Some("bar".to_string()),])
+                    ),
+                ]
+                .iter()
+                .cloned()
+                .collect(),
+            )?
+        );
+
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn attribute_filter_float() -> Result<()> {
+        let dataset_information = OgrSourceDataset {
+            file_name: test_data!("vector/data/plain_data.csv").into(),
+            layer_name: "plain_data".to_string(),
+            data_type: None,
+            time: OgrSourceDatasetTimeType::None,
+            default_geometry: None,
+            columns: Some(OgrSourceColumnSpec {
+                format_specifics: Some(Csv {
+                    header: CsvHeader::Yes,
+                }),
+                x: "".to_string(),
+                y: None,
+                float: vec!["b".to_string()],
+                int: vec!["a".to_string()],
+                text: vec!["c".to_string()],
+                rename: None,
+            }),
+            force_ogr_time_filter: false,
+            force_ogr_spatial_filter: false,
+            on_error: OgrSourceErrorSpec::Ignore,
+            sql_query: None,
+            attribute_query: None,
+        };
+
+        let info = StaticMetaData {
+            loading_info: dataset_information,
+            result_descriptor: VectorResultDescriptor {
+                data_type: VectorDataType::MultiPoint,
+                spatial_reference: SpatialReferenceOption::Unreferenced,
+                columns: [
+                    ("foo".to_string(), FeatureDataType::Int),
+                    ("b".to_string(), FeatureDataType::Float),
+                    ("c".to_string(), FeatureDataType::Text),
+                ]
+                .iter()
+                .cloned()
+                .collect(),
+            },
+            phantom: Default::default(),
+        };
+
+        let query_processor = OgrSourceProcessor::<NoGeometry>::new(
+            Box::new(info),
+            vec![AttributeFilter {
+                attribute: "b".to_owned(),
+                ranges: vec![StringOrNumberRange::Float(5.4..=5.4)],
+                keep_nulls: false,
+            }],
+        );
+
+        let context = MockQueryContext::new(ChunkByteSize::MAX);
+        let query = query_processor
+            .query(
+                VectorQueryRectangle {
+                    spatial_bounds: BoundingBox2D::new((0., 0.).into(), (1., 1.).into())?,
+                    time_interval: Default::default(),
+                    spatial_resolution: SpatialResolution::new(1., 1.)?,
+                },
+                &context,
+            )
+            .await
+            .unwrap();
+
+        let result: Vec<DataCollection> = query.try_collect().await?;
+
+        assert_eq!(result.len(), 1);
+
+        assert_eq!(
+            result[0],
+            DataCollection::from_data(
+                vec![],
+                vec![Default::default(); 1],
+                [
+                    ("a".to_string(), FeatureData::NullableInt(vec![Some(1)])),
+                    ("b".to_string(), FeatureData::NullableFloat(vec![Some(5.4)])),
+                    (
+                        "c".to_string(),
+                        FeatureData::NullableText(vec![Some("foo".to_string()),])
+                    ),
+                ]
+                .iter()
+                .cloned()
+                .collect(),
+            )?
+        );
+
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn attribute_filter_float_gpkg() -> Result<()> {
+        let dataset_information = OgrSourceDataset {
+            file_name: test_data!("vector/data/ne_10m_ports/ne_10m_ports.shp").into(),
+            layer_name: "ne_10m_ports".to_string(),
+            data_type: None,
+            time: OgrSourceDatasetTimeType::None,
+            default_geometry: None,
+            columns: Some(OgrSourceColumnSpec {
+                format_specifics: Some(Csv {
+                    header: CsvHeader::Yes,
+                }),
+                x: "".to_string(),
+                y: None,
+                float: vec!["natlscale".to_string()],
+                int: vec![],
+                text: vec!["name".to_string()],
+                rename: None,
+            }),
+            force_ogr_time_filter: false,
+            force_ogr_spatial_filter: false,
+            on_error: OgrSourceErrorSpec::Ignore,
+            sql_query: None,
+            attribute_query: None,
+        };
+
+        let info = StaticMetaData {
+            loading_info: dataset_information,
+            result_descriptor: VectorResultDescriptor {
+                data_type: VectorDataType::MultiPoint,
+                spatial_reference: SpatialReferenceOption::Unreferenced,
+                columns: [
+                    ("natlscale".to_string(), FeatureDataType::Float),
+                    ("name".to_string(), FeatureDataType::Text),
+                ]
+                .iter()
+                .cloned()
+                .collect(),
+            },
+            phantom: Default::default(),
+        };
+
+        let query_processor = OgrSourceProcessor::<NoGeometry>::new(
+            Box::new(info),
+            vec![AttributeFilter {
+                attribute: "natlscale".to_owned(),
+                ranges: vec![StringOrNumberRange::Float(75.0..=75.0)],
+                keep_nulls: false,
+            }],
+        );
+
+        let context = MockQueryContext::new(ChunkByteSize::MAX);
+        let query = query_processor
+            .query(
+                VectorQueryRectangle {
+                    spatial_bounds: BoundingBox2D::new((0., 0.).into(), (1., 1.).into())?,
+                    time_interval: Default::default(),
+                    spatial_resolution: SpatialResolution::new(1., 1.)?,
+                },
+                &context,
+            )
+            .await
+            .unwrap();
+
+        let result: Vec<DataCollection> = query.try_collect().await?;
+
+        assert_eq!(result.len(), 1);
+
+        assert_eq!(result[0].len(), 67);
 
         Ok(())
     }

@@ -1001,6 +1001,7 @@ mod tests {
             params: OgrSourceParameters {
                 dataset: dataset_id,
                 attribute_projection: None,
+                attribute_filters: None,
             },
         }
         .boxed()
