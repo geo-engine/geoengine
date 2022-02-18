@@ -11,7 +11,7 @@ use crate::{
     util::user_input::Validated,
 };
 use async_trait::async_trait;
-use chrono::{Datelike, NaiveDate};
+use chrono::NaiveDate;
 use gdal::cpl::CslStringList;
 use gdal::errors::GdalError;
 use gdal::{Dataset, DatasetOptions, GdalOpenFlags};
@@ -855,67 +855,48 @@ fn parse_geo_transform(input: &str) -> Result<GdalDatasetGeoTransform> {
     Ok(gdal_geo_transform.into())
 }
 
+fn parse_date(input: &str) -> Result<NaiveDate> {
+    input
+        .parse::<i32>()
+        .map(|year| NaiveDate::from_ymd(year, 1, 1))
+        .or_else(|_| NaiveDate::parse_from_str(input, "%Y-%m-%d"))
+        .context(error::CannotParseTimeCoverageDate)
+}
+
+fn parse_time_step(input: &str) -> Result<TimeStep> {
+    Ok(match input {
+        "Yearly" | "every 1 year" | "annually" => TimeStep {
+            granularity: TimeGranularity::Years,
+            step: 1,
+        },
+        "Every 5 years" => TimeStep {
+            granularity: TimeGranularity::Years,
+            step: 5,
+        },
+        "decade" | "decadal" => TimeStep {
+            granularity: TimeGranularity::Years,
+            step: 10,
+        },
+        // TODO: fix format and parse other options
+        _ => return Err(NetCdfCf4DProviderError::NotYetImplemented),
+    })
+}
+
 fn parse_time_coverage(
     start: &str,
     end: &str,
     resolution: &str,
 ) -> Result<(TimeInstance, TimeInstance, TimeStep)> {
-    let (start, end) = if start.contains('-') {
-        // parse as dates
-        let start = chrono::NaiveDate::parse_from_str(start, "%Y-%m-%d")
-            .context(error::CannotParseTimeCoverageDate)?;
-        let end = chrono::NaiveDate::parse_from_str(end, "%Y-%m-%d")
-            .context(error::CannotParseTimeCoverageDate)?;
-        (start, end)
-    } else {
-        // parse as years integer
-        let start = start
-            .parse::<i32>()
-            .context(error::CannotConvertTimeCoverageToInt)?;
-        let end = end
-            .parse::<i32>()
-            .context(error::CannotConvertTimeCoverageToInt)?;
-        (
-            NaiveDate::from_ymd(start, 1, 1),
-            NaiveDate::from_ymd(end, 1, 1),
-        )
-    };
-    // add one year to provide a right side boundary for the close-open interval
-    let end = NaiveDate::from_ymd(end.year() + 1, end.month(), end.day());
+    // TODO: parse datetimes
 
-    Ok(match resolution {
-        "Yearly" | "every 1 year" | "annually" => {
-            let start = TimeInstance::from(start.and_hms(0, 0, 0));
-            // end + 1 because it is exclusive for us but inclusive in the metadata
-            let end = TimeInstance::from(end.and_hms(0, 0, 0));
-            let step = TimeStep {
-                granularity: TimeGranularity::Years,
-                step: 1,
-            };
-            (start, end, step)
-        }
-        "Every 5 years" => {
-            let start = TimeInstance::from(start.and_hms(0, 0, 0));
-            // end + 1 because it is exclusive for us but inclusive in the metadata
-            let end = TimeInstance::from(end.and_hms(0, 0, 0));
-            let step = TimeStep {
-                granularity: TimeGranularity::Years,
-                step: 5,
-            };
-            (start, end, step)
-        }
-        "decade" | "decadal" => {
-            let start = TimeInstance::from(start.and_hms(0, 0, 0));
-            // end + 1 because it is exclusive for us but inclusive in the metadata
-            let end = TimeInstance::from(end.and_hms(0, 0, 0));
-            let step = TimeStep {
-                granularity: TimeGranularity::Years,
-                step: 10,
-            };
-            (start, end, step)
-        }
-        _ => return Err(NetCdfCf4DProviderError::NotYetImplemented), // TODO: fix format and parse other options
-    })
+    let start: TimeInstance = parse_date(start)?.and_hms(0, 0, 0).into();
+    let end: TimeInstance = parse_date(end)?.and_hms(0, 0, 0).into();
+    let step = parse_time_step(resolution)?;
+
+    // add one step to provide a right side boundary for the close-open interval
+    let end = (end + step).context(error::CannotDefineTimeCoverageEnd)?;
+
+    Ok((start, end, step))
 }
 
 #[async_trait]
@@ -1036,6 +1017,62 @@ mod tests {
     };
 
     use super::*;
+
+    #[test]
+    fn test_parse_time_coverage() {
+        let result = parse_time_coverage("2010", "2020", "annually").unwrap();
+        let expected = (
+            TimeInstance::from(NaiveDate::from_ymd(2010, 1, 1).and_hms(0, 0, 0)),
+            TimeInstance::from(NaiveDate::from_ymd(2021, 1, 1).and_hms(0, 0, 0)),
+            TimeStep {
+                granularity: TimeGranularity::Years,
+                step: 1,
+            },
+        );
+        assert_eq!(result, expected);
+    }
+
+    #[test]
+    fn test_parse_date() {
+        assert_eq!(parse_date("2010").unwrap(), NaiveDate::from_ymd(2010, 1, 1));
+        assert_eq!(
+            parse_date("-1000").unwrap(),
+            NaiveDate::from_ymd(-1000, 1, 1)
+        );
+        assert_eq!(
+            parse_date("2010-04-02").unwrap(),
+            NaiveDate::from_ymd(2010, 4, 2)
+        );
+        assert_eq!(
+            parse_date("-1000-04-02").unwrap(),
+            NaiveDate::from_ymd(-1000, 4, 2)
+        );
+    }
+
+    #[test]
+    fn test_parse_time_step() {
+        assert_eq!(
+            parse_time_step("every 1 year").unwrap(),
+            TimeStep {
+                granularity: TimeGranularity::Years,
+                step: 1,
+            }
+        );
+        assert_eq!(
+            parse_time_step("Every 5 years").unwrap(),
+            TimeStep {
+                granularity: TimeGranularity::Years,
+                step: 5,
+            }
+        );
+        assert_eq!(
+            parse_time_step("decade").unwrap(),
+            TimeStep {
+                granularity: TimeGranularity::Years,
+                step: 10,
+            }
+        );
+    }
 
     #[tokio::test]
     #[allow(clippy::too_many_lines)]
