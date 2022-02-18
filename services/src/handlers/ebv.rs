@@ -250,8 +250,22 @@ async fn get_ebv_subdatasets<C: Context>(
 
         debug!("Accessing dataset {}", dataset_path.display());
 
-        // TODO: make dir configurable
-        let provider_path = test_data!("netcdf4d/").to_path_buf();
+        #[cfg(test)]
+        let provider_path = test_data!("netcdf4d").to_path_buf();
+
+        #[cfg(not(test))]
+        let provider_path = {
+            use crate::datasets::external::netcdfcf::NetCdfCfDataProviderDefinition;
+            use std::fs::File;
+            use std::io::BufReader;
+
+            // TODO: do only once
+            let provider: NetCdfCfDataProviderDefinition = serde_json::from_reader(
+                BufReader::new(File::open(test_data!("provider_defs/netcdfcf.json"))?),
+            )?;
+
+            provider.path
+        };
 
         crate::util::spawn_blocking(move || {
             NetCdfCfDataProvider::build_netcdf_tree(&provider_path, &dataset_path)
