@@ -44,6 +44,14 @@ pub enum NetCdfCf4DProviderError {
     CannotParseTimeCoverageDate {
         source: chrono::format::ParseError,
     },
+    CannotParseTimeCoverageResolution {
+        source: chrono::format::ParseError,
+    },
+    TimeCoverageResolutionMustConsistsOnlyOfIntParts {
+        source: std::num::ParseIntError,
+    },
+    TimeCoverageResolutionPartsMustNotBeEmpty,
+    TimeCoverageResolutionMustStartWithP,
     CannotDefineTimeCoverageEnd {
         source: geoengine_datatypes::error::Error,
     },

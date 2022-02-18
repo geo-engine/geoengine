@@ -557,7 +557,7 @@ mod tests {
                     ],
                     "time": {
                         "start": 946_684_800_000_i64,
-                        "end": 1_609_459_200_000_i64
+                        "end": 1_893_456_000_000_i64
                     },
                     "timeStep": {
                         "granularity": "Years",

@@ -864,18 +864,34 @@ fn parse_date(input: &str) -> Result<NaiveDate> {
 }
 
 fn parse_time_step(input: &str) -> Result<TimeStep> {
-    Ok(match input {
-        "Yearly" | "every 1 year" | "annually" => TimeStep {
+    let duration_str = if let Some(duration_str) = input.strip_prefix('P') {
+        duration_str
+    } else {
+        return Err(NetCdfCf4DProviderError::TimeCoverageResolutionMustStartWithP);
+    };
+
+    let parts = duration_str
+        .split('-')
+        .map(str::parse)
+        .collect::<Result<Vec<u32>, std::num::ParseIntError>>()
+        .context(error::TimeCoverageResolutionMustConsistsOnlyOfIntParts)?;
+
+    if parts.is_empty() {
+        return Err(NetCdfCf4DProviderError::TimeCoverageResolutionPartsMustNotBeEmpty);
+    }
+
+    Ok(match parts.as_slice() {
+        [year, 0, 0, ..] => TimeStep {
             granularity: TimeGranularity::Years,
-            step: 1,
+            step: *year,
         },
-        "Every 5 years" => TimeStep {
-            granularity: TimeGranularity::Years,
-            step: 5,
+        [0, month, 0, ..] => TimeStep {
+            granularity: TimeGranularity::Months,
+            step: *month,
         },
-        "decade" | "decadal" => TimeStep {
-            granularity: TimeGranularity::Years,
-            step: 10,
+        [0, 0, day, ..] => TimeStep {
+            granularity: TimeGranularity::Days,
+            step: *day,
         },
         // TODO: fix format and parse other options
         _ => return Err(NetCdfCf4DProviderError::NotYetImplemented),
@@ -917,8 +933,15 @@ impl ExternalDatasetProvider for NetCdfCfDataProvider {
             }
 
             let provider_path = self.path.clone();
+            let relative_path = if let Ok(p) = entry.path().strip_prefix(&provider_path) {
+                p.to_path_buf()
+            } else {
+                // cannot actually happen since `entry` is listed from `provider_path`
+                continue;
+            };
+
             let listing = tokio::task::spawn_blocking(move || {
-                Self::listing_from_netcdf(NETCDF_CF_PROVIDER_ID, &provider_path, &entry.path())
+                Self::listing_from_netcdf(NETCDF_CF_PROVIDER_ID, &provider_path, &relative_path)
             })
             .await?;
 
@@ -1020,7 +1043,7 @@ mod tests {
 
     #[test]
     fn test_parse_time_coverage() {
-        let result = parse_time_coverage("2010", "2020", "annually").unwrap();
+        let result = parse_time_coverage("2010", "2020", "P0001-00-00").unwrap();
         let expected = (
             TimeInstance::from(NaiveDate::from_ymd(2010, 1, 1).and_hms(0, 0, 0)),
             TimeInstance::from(NaiveDate::from_ymd(2021, 1, 1).and_hms(0, 0, 0)),
@@ -1052,24 +1075,31 @@ mod tests {
     #[test]
     fn test_parse_time_step() {
         assert_eq!(
-            parse_time_step("every 1 year").unwrap(),
+            parse_time_step("P0001-00-00").unwrap(),
             TimeStep {
                 granularity: TimeGranularity::Years,
                 step: 1,
             }
         );
         assert_eq!(
-            parse_time_step("Every 5 years").unwrap(),
+            parse_time_step("P0005-00-00").unwrap(),
             TimeStep {
                 granularity: TimeGranularity::Years,
                 step: 5,
             }
         );
         assert_eq!(
-            parse_time_step("decade").unwrap(),
+            parse_time_step("P0010-00-00").unwrap(),
             TimeStep {
                 granularity: TimeGranularity::Years,
                 step: 10,
+            }
+        );
+        assert_eq!(
+            parse_time_step("P0000-06-00").unwrap(),
+            TimeStep {
+                granularity: TimeGranularity::Months,
+                step: 6,
             }
         );
     }
