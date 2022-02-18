@@ -9,8 +9,11 @@ use serde::{Deserialize, Serialize};
 use snafu::ensure;
 #[cfg(feature = "postgres")]
 use snafu::Error;
-use std::str::FromStr;
-use std::{convert::TryFrom, ops::Add};
+use std::{
+    convert::TryFrom,
+    ops::{Add, Sub},
+    str::FromStr,
+};
 
 #[derive(Clone, Copy, Serialize, PartialEq, Eq, PartialOrd, Ord, Debug)]
 #[repr(C)]
@@ -130,6 +133,14 @@ impl Add<i64> for TimeInstance {
 
     fn add(self, rhs: i64) -> Self::Output {
         TimeInstance::from_millis_unchecked(self.0 + rhs)
+    }
+}
+
+impl Sub<i64> for TimeInstance {
+    type Output = Self;
+
+    fn sub(self, rhs: i64) -> Self::Output {
+        TimeInstance::from_millis_unchecked(self.0 - rhs)
     }
 }
 
