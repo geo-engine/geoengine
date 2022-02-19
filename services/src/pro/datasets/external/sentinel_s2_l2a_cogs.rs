@@ -16,7 +16,7 @@ use geoengine_datatypes::operations::reproject::{
 };
 use geoengine_datatypes::primitives::{
     AxisAlignedRectangle, BoundingBox2D, Measurement, RasterQueryRectangle, SpatialPartitioned,
-    TimeInterval, VectorQueryRectangle,
+    TimeInstance, TimeInterval, VectorQueryRectangle,
 };
 use geoengine_datatypes::raster::RasterDataType;
 use geoengine_datatypes::spatial_reference::{SpatialReference, SpatialReferenceAuthority};
@@ -247,18 +247,37 @@ impl SentinelS2L2aCogsMetaData {
 
         features.sort_by_key(|a| a.properties.datetime);
 
+        let mut start_times: Vec<TimeInstance> = Vec::with_capacity(features.len());
+        for (i, feature) in features.iter().enumerate() {
+            let start = feature.properties.datetime;
+            let real_start = if i == 0 {
+                TimeInstance::from(start)
+            } else {
+                let prev_start = features[i - 1].properties.datetime;
+                if start == prev_start {
+                    log::warn!("duplicate start time: {}", start);
+                    start_times[i - 1] + 1
+                } else {
+                    TimeInstance::from(start)
+                }
+            };
+
+            start_times.push(real_start);
+        }
+
         let mut parts = vec![];
         let num_features = features.len();
         debug!("number of features in current zone: {}", num_features);
         for i in 0..num_features {
             let feature = &features[i];
 
-            let start = feature.properties.datetime;
+            let start = start_times[i];
+
             // feature is valid until next feature starts
             let end = if i < num_features - 1 {
-                features[i + 1].properties.datetime
+                start_times[i + 1]
             } else {
-                start + Duration::seconds(1) // TODO: determine correct validity for last tile
+                start + 1000 // TODO: determine correct validity for last tile
             };
 
             let time_interval = TimeInterval::new(start, end)?;
