@@ -255,7 +255,7 @@ impl SentinelS2L2aCogsMetaData {
             } else {
                 let prev_start = features[i - 1].properties.datetime;
                 if start == prev_start {
-                    log::warn!("duplicate start time: {}", start);
+                    log::debug!("duplicate start time: {}", start);
                     start_times[i - 1] + 1
                 } else {
                     TimeInstance::from(start)
