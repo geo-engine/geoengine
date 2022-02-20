@@ -247,23 +247,11 @@ impl SentinelS2L2aCogsMetaData {
 
         features.sort_by_key(|a| a.properties.datetime);
 
-        let mut start_times: Vec<TimeInstance> = Vec::with_capacity(features.len());
-        for (i, feature) in features.iter().enumerate() {
-            let start = feature.properties.datetime;
-            let real_start = if i == 0 {
-                TimeInstance::from(start)
-            } else {
-                let prev_start = features[i - 1].properties.datetime;
-                if start == prev_start {
-                    log::debug!("duplicate start time: {}", start);
-                    start_times[i - 1] + 1
-                } else {
-                    TimeInstance::from(start)
-                }
-            };
-
-            start_times.push(real_start);
-        }
+        let start_times_pre: Vec<TimeInstance> = features
+            .iter()
+            .map(|f| TimeInstance::from(f.properties.datetime))
+            .collect();
+        let start_times = Self::make_unique_start_times_from_sorted_features(&start_times_pre);
 
         let mut parts = vec![];
         let num_features = features.len();
@@ -310,6 +298,35 @@ impl SentinelS2L2aCogsMetaData {
                 parts: parts.into_iter(),
             },
         })
+    }
+
+    fn make_unique_start_times_from_sorted_features(
+        start_times: &[TimeInstance],
+    ) -> Vec<TimeInstance> {
+        let mut unique_start_times: Vec<TimeInstance> = Vec::with_capacity(start_times.len());
+        for (i, &t_start) in start_times.iter().enumerate() {
+            let real_start = if i == 0 {
+                t_start
+            } else {
+                let prev_start = start_times[i - 1];
+                if t_start == prev_start {
+                    let prev_u_start = unique_start_times[i - 1];
+                    let new_u_start = prev_u_start + 1;
+                    log::debug!(
+                        "duplicate start time: {} insert as {} following {}",
+                        t_start.as_rfc3339(),
+                        new_u_start.as_rfc3339(),
+                        prev_u_start.as_rfc3339()
+                    );
+                    new_u_start
+                } else {
+                    t_start
+                }
+            };
+
+            unique_start_times.push(real_start);
+        }
+        unique_start_times
     }
 
     fn create_loading_info_part(
@@ -856,5 +873,100 @@ mod tests {
                 }),
             }]
         );
+    }
+
+    #[test]
+    fn make_unique_timestamps_no_dups() {
+        let timestamps = vec![
+            TimeInstance::from_millis(1_632_384_644_000).unwrap(),
+            TimeInstance::from_millis(1_632_384_645_000).unwrap(),
+            TimeInstance::from_millis(1_632_384_646_000).unwrap(),
+            TimeInstance::from_millis(1_632_384_647_000).unwrap(),
+            TimeInstance::from_millis(1_632_384_648_000).unwrap(),
+            TimeInstance::from_millis(1_632_384_649_000).unwrap(),
+        ];
+
+        let uts =
+            SentinelS2L2aCogsMetaData::make_unique_start_times_from_sorted_features(&timestamps);
+
+        assert_eq!(uts, timestamps);
+    }
+
+    #[test]
+    fn make_unique_timestamps_two_dups() {
+        let timestamps = vec![
+            TimeInstance::from_millis(1_632_384_644_000).unwrap(),
+            TimeInstance::from_millis(1_632_384_645_000).unwrap(),
+            TimeInstance::from_millis(1_632_384_645_000).unwrap(),
+            TimeInstance::from_millis(1_632_384_646_000).unwrap(),
+            TimeInstance::from_millis(1_632_384_647_000).unwrap(),
+            TimeInstance::from_millis(1_632_384_648_000).unwrap(),
+        ];
+
+        let uts =
+            SentinelS2L2aCogsMetaData::make_unique_start_times_from_sorted_features(&timestamps);
+
+        let expected_timestamps = vec![
+            TimeInstance::from_millis(1_632_384_644_000).unwrap(),
+            TimeInstance::from_millis(1_632_384_645_000).unwrap(),
+            TimeInstance::from_millis(1_632_384_645_001).unwrap(),
+            TimeInstance::from_millis(1_632_384_646_000).unwrap(),
+            TimeInstance::from_millis(1_632_384_647_000).unwrap(),
+            TimeInstance::from_millis(1_632_384_648_000).unwrap(),
+        ];
+
+        assert_eq!(uts, expected_timestamps);
+    }
+
+    #[test]
+    fn make_unique_timestamps_three_dups() {
+        let timestamps = vec![
+            TimeInstance::from_millis(1_632_384_644_000).unwrap(),
+            TimeInstance::from_millis(1_632_384_645_000).unwrap(),
+            TimeInstance::from_millis(1_632_384_645_000).unwrap(),
+            TimeInstance::from_millis(1_632_384_645_000).unwrap(),
+            TimeInstance::from_millis(1_632_384_646_000).unwrap(),
+            TimeInstance::from_millis(1_632_384_647_000).unwrap(),
+        ];
+
+        let uts =
+            SentinelS2L2aCogsMetaData::make_unique_start_times_from_sorted_features(&timestamps);
+
+        let expected_timestamps = vec![
+            TimeInstance::from_millis(1_632_384_644_000).unwrap(),
+            TimeInstance::from_millis(1_632_384_645_000).unwrap(),
+            TimeInstance::from_millis(1_632_384_645_001).unwrap(),
+            TimeInstance::from_millis(1_632_384_645_002).unwrap(),
+            TimeInstance::from_millis(1_632_384_646_000).unwrap(),
+            TimeInstance::from_millis(1_632_384_647_000).unwrap(),
+        ];
+
+        assert_eq!(uts, expected_timestamps);
+    }
+
+    #[test]
+    fn make_unique_timestamps_four_dups() {
+        let timestamps = vec![
+            TimeInstance::from_millis(1_632_384_644_000).unwrap(),
+            TimeInstance::from_millis(1_632_384_645_000).unwrap(),
+            TimeInstance::from_millis(1_632_384_645_000).unwrap(),
+            TimeInstance::from_millis(1_632_384_645_000).unwrap(),
+            TimeInstance::from_millis(1_632_384_645_000).unwrap(),
+            TimeInstance::from_millis(1_632_384_646_000).unwrap(),
+        ];
+
+        let uts =
+            SentinelS2L2aCogsMetaData::make_unique_start_times_from_sorted_features(&timestamps);
+
+        let expected_timestamps = vec![
+            TimeInstance::from_millis(1_632_384_644_000).unwrap(),
+            TimeInstance::from_millis(1_632_384_645_000).unwrap(),
+            TimeInstance::from_millis(1_632_384_645_001).unwrap(),
+            TimeInstance::from_millis(1_632_384_645_002).unwrap(),
+            TimeInstance::from_millis(1_632_384_645_003).unwrap(),
+            TimeInstance::from_millis(1_632_384_646_000).unwrap(),
+        ];
+
+        assert_eq!(uts, expected_timestamps);
     }
 }
