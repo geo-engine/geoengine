@@ -364,7 +364,7 @@ mod tests {
     use geoengine_datatypes::util::test::TestDefault;
     use geoengine_operators::source::{
         FileNotFoundHandling, GdalDatasetGeoTransform, GdalDatasetParameters, GdalLoadingInfo,
-        GdalLoadingInfoPart, GdalSource, GdalSourceParameters,
+        GdalLoadingInfoTemporalSlice, GdalSource, GdalSourceParameters,
     };
     use httptest::responders::status_code;
     use httptest::{matchers::request, responders::json_encoded, Expectation, Server};
@@ -542,7 +542,7 @@ mod tests {
 
         assert_eq!(
             part,
-            GdalLoadingInfoPart {
+            GdalLoadingInfoTemporalSlice {
                 time: TimeInterval::default(),
                 params: Some(GdalDatasetParameters {
                     file_path: file_path.clone(),

@@ -225,7 +225,13 @@ impl TimeStep {
                     snapped_month = 12;
                 }
 
-                NaiveDate::from_ymd(snapped_year, snapped_month as u32, ref_date_time.day())
+                // TODO: _opt
+                NaiveDate::from_ymd_opt(snapped_year, snapped_month as u32, ref_date_time.day())
+                    .ok_or(Error::DateTimeOutOfBounds {
+                        year: snapped_year,
+                        month: snapped_month as u32,
+                        day: ref_date_time.day(),
+                    })?
                     .and_time(ref_date_time.time())
             }
             TimeGranularity::Years => {
@@ -233,12 +239,42 @@ impl TimeStep {
                 let snapped_year = ref_date_time.year()
                     + ((f64::from(diff) / f64::from(self.step)).floor() as i32 * self.step as i32);
 
-                NaiveDate::from_ymd(snapped_year, ref_date_time.month(), ref_date_time.day())
+                NaiveDate::from_ymd_opt(snapped_year, ref_date_time.month(), ref_date_time.day())
+                    .ok_or(Error::DateTimeOutOfBounds {
+                        year: snapped_year,
+                        month: ref_date_time.month(),
+                        day: ref_date_time.day(),
+                    })?
                     .and_time(ref_date_time.time())
             }
         };
 
         Ok(TimeInstance::from(snapped_date_time))
+    }
+
+    /// Snaps a `TimeInstance` relative to a given reference `TimeInstance`.
+    ///
+    /// This method keeps the result within `TimeInstance::MIN` and `TimeInstance::MAX`, respectively.
+    ///
+    pub fn snap_relative_preserve_bounds<T>(self, reference: T, time_to_snap: T) -> TimeInstance
+    where
+        T: Into<TimeInstance>,
+    {
+        let reference: TimeInstance = reference.into();
+        let time_to_snap: TimeInstance = time_to_snap.into();
+
+        match self.snap_relative(reference, time_to_snap) {
+            Ok(time_instance) => time_instance,
+            Err(_) => {
+                // since `snap_relative` snaps to the left,
+                // we can use this to determine if to return `TimeInstance::MIN` or `TimeInstance::MAX`
+                if time_to_snap < TimeInstance::MAX {
+                    TimeInstance::MIN
+                } else {
+                    TimeInstance::MAX
+                }
+            }
+        }
     }
 }
 
