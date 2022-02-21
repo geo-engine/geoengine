@@ -25,7 +25,6 @@ use snafu::{ensure, ResultExt, Snafu};
 /// This operator changes the temporal validity of the queried data.
 /// In order to query all valid data, it is necessary to change the query rectangle as well.
 ///
-// TODO: extend for rasters
 pub type TimeProjection = Operator<TimeProjectionParams, SingleVectorSource>;
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
