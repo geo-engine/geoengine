@@ -32,6 +32,7 @@ pub struct TimeProjectionParams {
     /// Specify the time step granularity and size
     step: TimeStep,
     /// Define an anchor point for `step`
+    /// If `None`, the anchor point is `1970-01-01T00:00:00Z` by default
     step_reference: Option<TimeInstance>,
 }
 
@@ -63,10 +64,7 @@ impl VectorOperator for TimeProjection {
 
         let source = self.sources.vector.initialize(context).await?;
 
-        debug!(
-            "Initializing `TemporalRasterAggregation` with {:?}.",
-            &self.params
-        );
+        debug!("Initializing `TimeProjection` with {:?}.", &self.params);
 
         let step_reference = self
             .params
