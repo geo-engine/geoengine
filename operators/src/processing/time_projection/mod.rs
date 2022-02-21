@@ -243,6 +243,7 @@ mod tests {
     };
 
     #[test]
+    #[allow(clippy::too_many_lines)]
     fn test_expand_query_time_interval() {
         fn assert_time_interval_transform<T1: TryInto<TimeInstance>, T2: TryInto<TimeInstance>>(
             t1: T1,
@@ -324,6 +325,18 @@ mod tests {
             TimeInstance::from(NaiveDate::from_ymd(2010, 3, 1).and_hms(0, 0, 0)),
             NaiveDate::from_ymd(2009, 3, 1).and_hms(0, 0, 0),
             NaiveDate::from_ymd(2010, 9, 1).and_hms(0, 0, 0),
+        );
+
+        assert_time_interval_transform(
+            NaiveDate::from_ymd(2009, 4, 3).and_hms(0, 0, 0),
+            NaiveDate::from_ymd(2010, 5, 14).and_hms(0, 0, 0),
+            TimeStep {
+                granularity: TimeGranularity::Months,
+                step: 6,
+            },
+            TimeInstance::from(NaiveDate::from_ymd(2020, 1, 1).and_hms(0, 0, 0)),
+            NaiveDate::from_ymd(2009, 1, 1).and_hms(0, 0, 0),
+            NaiveDate::from_ymd(2010, 7, 1).and_hms(0, 0, 0),
         );
 
         assert_time_interval_transform(
