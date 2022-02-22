@@ -540,6 +540,24 @@ impl FeaturesProvider<'_> {
             let attribute = escape_identifier(&filter.attribute);
             for range in &filter.ranges {
                 let sql = match &range {
+                    StringOrNumberRange::String(s) if s.start() == s.end() => {
+                        format!(
+                            "{attribute} = {start}",
+                            attribute = attribute,
+                            start = escape_literal(s.start()),
+                        )
+                    }
+                    #[allow(clippy::float_cmp)]
+                    StringOrNumberRange::Float(n) if n.start() == n.end() => format!(
+                        "{attribute} = {start}",
+                        attribute = attribute,
+                        start = n.start(),
+                    ),
+                    StringOrNumberRange::Int(n) if n.start() == n.end() => format!(
+                        "{attribute} = {start}",
+                        attribute = attribute,
+                        start = n.start(),
+                    ),
                     StringOrNumberRange::String(s) => {
                         format!(
                             "{attribute} >= {start} AND {attribute} <= {stop}",
@@ -574,6 +592,26 @@ impl FeaturesProvider<'_> {
             let attribute = escape_identifier(&filter.attribute);
             for range in &filter.ranges {
                 let sql = match &range {
+                    StringOrNumberRange::String(s) if s.start() == s.end() => {
+                        format!(
+                            "{attribute} = {start}",
+                            attribute = attribute,
+                            start = escape_literal(s.start()),
+
+                        )
+                    }
+                    #[allow(clippy::float_cmp)]
+                    StringOrNumberRange::Float(n) if n.start() == n.end() => format!(
+                        "CAST({attribute} as float(8)) = {start}",
+                        attribute = attribute,
+                        start = n.start(),
+                    ),
+                    StringOrNumberRange::Int(n) if n.start() == n.end() => format!(
+                        "CAST({attribute} as bigint) = {start}",
+                        attribute = attribute,
+                        start = n.start(),
+
+                    ),
                     StringOrNumberRange::String(s) => {
                         format!(
                             "{attribute} >= {start} AND {attribute} <= {stop}",
@@ -4697,6 +4735,79 @@ mod tests {
             vec![AttributeFilter {
                 attribute: "natlscale".to_owned(),
                 ranges: vec![StringOrNumberRange::Float(75.0..=75.0)],
+                keep_nulls: false,
+            }],
+        );
+
+        let context = MockQueryContext::new(ChunkByteSize::MAX);
+        let query = query_processor
+            .query(
+                VectorQueryRectangle {
+                    spatial_bounds: BoundingBox2D::new((0., 0.).into(), (1., 1.).into())?,
+                    time_interval: Default::default(),
+                    spatial_resolution: SpatialResolution::new(1., 1.)?,
+                },
+                &context,
+            )
+            .await
+            .unwrap();
+
+        let result: Vec<DataCollection> = query.try_collect().await?;
+
+        assert_eq!(result.len(), 1);
+
+        assert_eq!(result[0].len(), 67);
+
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn attribute_filter_range() -> Result<()> {
+        let dataset_information = OgrSourceDataset {
+            file_name: test_data!("vector/data/ne_10m_ports/ne_10m_ports.shp").into(),
+            layer_name: "ne_10m_ports".to_string(),
+            data_type: None,
+            time: OgrSourceDatasetTimeType::None,
+            default_geometry: None,
+            columns: Some(OgrSourceColumnSpec {
+                format_specifics: Some(Csv {
+                    header: CsvHeader::Yes,
+                }),
+                x: "".to_string(),
+                y: None,
+                float: vec!["natlscale".to_string()],
+                int: vec![],
+                text: vec!["name".to_string()],
+                rename: None,
+            }),
+            force_ogr_time_filter: false,
+            force_ogr_spatial_filter: false,
+            on_error: OgrSourceErrorSpec::Ignore,
+            sql_query: None,
+            attribute_query: None,
+        };
+
+        let info = StaticMetaData {
+            loading_info: dataset_information,
+            result_descriptor: VectorResultDescriptor {
+                data_type: VectorDataType::MultiPoint,
+                spatial_reference: SpatialReferenceOption::Unreferenced,
+                columns: [
+                    ("natlscale".to_string(), FeatureDataType::Float),
+                    ("name".to_string(), FeatureDataType::Text),
+                ]
+                .iter()
+                .cloned()
+                .collect(),
+            },
+            phantom: Default::default(),
+        };
+
+        let query_processor = OgrSourceProcessor::<NoGeometry>::new(
+            Box::new(info),
+            vec![AttributeFilter {
+                attribute: "natlscale".to_owned(),
+                ranges: vec![StringOrNumberRange::Float(75.0..=76.0)],
                 keep_nulls: false,
             }],
         );
