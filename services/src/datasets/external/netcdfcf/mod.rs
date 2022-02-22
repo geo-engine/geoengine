@@ -7,6 +7,7 @@ use std::str::FromStr;
 use crate::datasets::listing::DatasetListOptions;
 use crate::datasets::listing::{ExternalDatasetProvider, ProvenanceOutput};
 use crate::error::Error;
+use crate::projects::{RasterSymbology, Symbology};
 use crate::{
     datasets::{listing::DatasetListing, storage::ExternalDatasetProviderDefinition},
     util::user_input::Validated,
@@ -26,6 +27,7 @@ use gdal_sys::{
     OSRDestroySpatialReference, VSIFree,
 };
 use geoengine_datatypes::dataset::{DatasetId, DatasetProviderId, ExternalDatasetId};
+use geoengine_datatypes::operations::image::{Colorizer, RgbaColor};
 use geoengine_datatypes::primitives::{
     Measurement, RasterQueryRectangle, TimeGranularity, TimeInstance, TimeInterval, TimeStep,
     VectorQueryRectangle,
@@ -511,6 +513,7 @@ pub(crate) struct NetCdfOverview {
     pub entities: Vec<NetCdfEntity>,
     pub time: TimeInterval,
     pub time_step: TimeStep,
+    pub colorizer: Colorizer,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -638,6 +641,11 @@ impl NetCdfCfDataProvider {
 
         let (time_start, time_end, time_step) = parse_time_coverage(&start, &end, &step)?;
 
+        let colorizer = load_colorizer(path).or_else(|error| {
+            debug!("Use fallback colorizer: {:?}", error);
+            fallback_colorizer()
+        })?;
+
         Ok(NetCdfOverview {
             file_name: file_name.to_string(),
             title,
@@ -647,6 +655,7 @@ impl NetCdfCfDataProvider {
             time: TimeInterval::new(time_start, time_end)
                 .context(error::InvalidTimeRangeForDataset)?,
             time_step,
+            colorizer,
         })
     }
 
@@ -711,7 +720,10 @@ impl NetCdfCfDataProvider {
                         measurement: Measurement::Unitless, // TODO: where to get from file?
                         no_data_value: None, // we don't want to open the dataset at this point. We should get rid of the result descriptor in the listing in general
                     }),
-                    symbology: None,
+                    symbology: Some(Symbology::Raster(RasterSymbology {
+                        opacity: 1.0,
+                        colorizer: tree.colorizer.clone(),
+                    })),
                 });
             }
         }
@@ -825,6 +837,38 @@ impl NetCdfCfDataProvider {
             band_offset: dataset_id.entity as usize * dimensions.time,
         }))
     }
+}
+
+/// Load a colorizer from a path that is `path` with suffix `.colorizer.json`.
+fn load_colorizer(path: &Path) -> Result<Colorizer> {
+    use std::io::Read;
+
+    let colorizer_path = path.with_extension("colorizer.json");
+
+    let mut file = std::fs::File::open(colorizer_path).context(error::CannotOpenColorizerFile)?;
+
+    let mut contents = String::new();
+    file.read_to_string(&mut contents)
+        .context(error::CannotReadColorizerFile)?;
+
+    let colorizer: Colorizer =
+        serde_json::from_str(&contents).context(error::CannotParseColorizer)?;
+
+    Ok(colorizer)
+}
+
+/// A simple colorizer between 0 and 255
+/// TODO: generate better default by using `NetCDF` metadata
+fn fallback_colorizer() -> Result<Colorizer> {
+    Colorizer::linear_gradient(
+        vec![
+            (0.0.try_into().expect("not nan"), RgbaColor::black()).into(),
+            (255.0.try_into().expect("not nan"), RgbaColor::white()).into(),
+        ],
+        RgbaColor::transparent(),
+        RgbaColor::transparent(),
+    )
+    .context(error::CannotCreateFallbackColorizer)
 }
 
 fn parse_geo_transform(input: &str) -> Result<GdalDatasetGeoTransform> {
@@ -1025,6 +1069,22 @@ mod tests {
         }
         .into();
 
+        let symbology = Some(Symbology::Raster(RasterSymbology {
+            opacity: 1.0,
+            colorizer: Colorizer::LinearGradient {
+                breakpoints: vec![
+                    (0.0.try_into().unwrap(), RgbaColor::new(0, 0, 0, 255)).into(),
+                    (
+                        255.0.try_into().unwrap(),
+                        RgbaColor::new(255, 255, 255, 255),
+                    )
+                        .into(),
+                ],
+                no_data_color: RgbaColor::new(0, 0, 0, 0),
+                default_color: RgbaColor::new(0, 0, 0, 0),
+            },
+        }));
+
         assert_eq!(
             listing[0],
             DatasetListing {
@@ -1042,7 +1102,7 @@ mod tests {
                 tags: vec![],
                 source_operator: "GdalSource".into(),
                 result_descriptor: result_descriptor.clone(),
-                symbology: None
+                symbology: symbology.clone(),
             }
         );
         assert_eq!(
@@ -1062,7 +1122,7 @@ mod tests {
                 tags: vec![],
                 source_operator: "GdalSource".into(),
                 result_descriptor: result_descriptor.clone(),
-                symbology: None
+                symbology: symbology.clone(),
             }
         );
         assert_eq!(
@@ -1082,7 +1142,7 @@ mod tests {
                 tags: vec![],
                 source_operator: "GdalSource".into(),
                 result_descriptor: result_descriptor.clone(),
-                symbology: None
+                symbology: symbology.clone(),
             }
         );
         assert_eq!(
@@ -1102,7 +1162,7 @@ mod tests {
                 tags: vec![],
                 source_operator: "GdalSource".into(),
                 result_descriptor: result_descriptor.clone(),
-                symbology: None
+                symbology: symbology.clone(),
             }
         );
         assert_eq!(
@@ -1122,7 +1182,7 @@ mod tests {
                 tags: vec![],
                 source_operator: "GdalSource".into(),
                 result_descriptor: result_descriptor.clone(),
-                symbology: None
+                symbology: symbology.clone(),
             }
         );
         assert_eq!(
@@ -1142,7 +1202,7 @@ mod tests {
                 tags: vec![],
                 source_operator: "GdalSource".into(),
                 result_descriptor,
-                symbology: None
+                symbology,
             }
         );
     }
@@ -1168,6 +1228,19 @@ mod tests {
         }
         .into();
 
+        let symbology = Some(Symbology::Raster(RasterSymbology {
+            opacity: 1.0,
+            colorizer: Colorizer::LinearGradient {
+                breakpoints: vec![
+                    (0.0.try_into().unwrap(), RgbaColor::new(68, 1, 84, 255)).into(),
+                    (50.0.try_into().unwrap(), RgbaColor::new(33, 145, 140, 255)).into(),
+                    (100.0.try_into().unwrap(), RgbaColor::new(253, 231, 37, 255)).into(),
+                ],
+                no_data_color: RgbaColor::new(0, 0, 0, 0),
+                default_color: RgbaColor::new(0, 0, 0, 0),
+            },
+        }));
+
         assert_eq!(
             listing[0],
             DatasetListing {
@@ -1187,7 +1260,7 @@ mod tests {
                 tags: vec![],
                 source_operator: "GdalSource".into(),
                 result_descriptor: result_descriptor.clone(),
-                symbology: None
+                symbology: symbology.clone(),
             }
         );
         assert_eq!(
@@ -1207,13 +1280,11 @@ mod tests {
                 tags: vec![],
                 source_operator: "GdalSource".into(),
                 result_descriptor,
-                symbology: None
+                symbology,
             }
         );
     }
 
-    // TODO: verify
-    // TODO: do the samme for `dataset_m.nc`
     #[tokio::test]
     async fn test_metadata_from_netcdf_sm() {
         let provider = NetCdfCfDataProvider {

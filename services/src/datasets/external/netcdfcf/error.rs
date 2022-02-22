@@ -95,4 +95,16 @@ pub enum NetCdfCf4DProviderError {
     },
     PathToDataIsEmpty,
     MissingDataType,
+    CannotOpenColorizerFile {
+        source: std::io::Error,
+    },
+    CannotReadColorizerFile {
+        source: std::io::Error,
+    },
+    CannotParseColorizer {
+        source: serde_json::Error,
+    },
+    CannotCreateFallbackColorizer {
+        source: geoengine_datatypes::error::Error,
+    },
 }
