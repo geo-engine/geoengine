@@ -146,19 +146,19 @@ async fn session_view_handler<C: SimpleContext>(
 
 #[cfg(test)]
 mod tests {
+    use super::*;
+
+    use crate::contexts::Session;
+    use crate::handlers::ErrorResponse;
+    use crate::{
+        contexts::{InMemoryContext, SimpleSession},
+        util::tests::{check_allowed_http_methods, create_project_helper, send_test_request},
+    };
     use actix_web::dev::ServiceResponse;
     use actix_web::{http::header, http::Method, test};
     use actix_web_httpauth::headers::authorization::Bearer;
     use geoengine_datatypes::spatial_reference::SpatialReferenceOption;
     use geoengine_datatypes::util::test::TestDefault;
-
-    use crate::{
-        contexts::{InMemoryContext, SimpleSession},
-        util::tests::{check_allowed_http_methods, create_project_helper, send_test_request},
-    };
-
-    use super::*;
-    use crate::contexts::Session;
 
     #[tokio::test]
     async fn session() {
@@ -225,5 +225,45 @@ mod tests {
     #[tokio::test]
     async fn anonymous_invalid_method() {
         check_allowed_http_methods(anonymous_test_helper, &[Method::POST]).await;
+    }
+
+    #[tokio::test]
+    async fn it_disables_anonymous_access() {
+        config::set_config(
+            "session.anonymous_session_token",
+            "18fec623-6600-41af-b82b-24ccf47cb9f9",
+        )
+        .unwrap();
+
+        let ctx = InMemoryContext::test_default();
+
+        let req = test::TestRequest::post().uri("/anonymous");
+        let res = send_test_request(req, ctx.clone()).await;
+
+        assert_eq!(res.status(), 200);
+
+        let session: SimpleSession = actix_web::test::read_body_json(res).await;
+
+        assert_eq!(
+            session.id().to_string(),
+            "18fec623-6600-41af-b82b-24ccf47cb9f9"
+        );
+
+        config::set_config("session.anonymous_access", false).unwrap();
+
+        let ctx = InMemoryContext::test_default();
+
+        let req = test::TestRequest::post().uri("/anonymous");
+        let res = send_test_request(req, ctx.clone()).await;
+
+        config::set_config("session.anonymous_access", true).unwrap();
+
+        ErrorResponse::assert(
+            res,
+            401,
+            "AnonymousAccessDisabled",
+            "Anonymous access is disabled, please log in",
+        )
+        .await;
     }
 }

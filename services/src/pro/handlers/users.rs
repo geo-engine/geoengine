@@ -702,14 +702,14 @@ mod tests {
 
         assert_eq!(res.status(), 200);
 
-        config::set_config("user.anonymous_access", false).unwrap();
+        config::set_config("session.anonymous_access", false).unwrap();
 
         let ctx = ProInMemoryContext::test_default();
 
         let req = test::TestRequest::post().uri("/anonymous");
         let res = send_pro_test_request(req, ctx.clone()).await;
 
-        config::set_config("user.anonymous_access", true).unwrap();
+        config::set_config("session.anonymous_access", true).unwrap();
 
         ErrorResponse::assert(
             res,
