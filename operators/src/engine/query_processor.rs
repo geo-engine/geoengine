@@ -384,6 +384,38 @@ impl TypedVectorQueryProcessor {
     }
 }
 
+impl From<Box<dyn VectorQueryProcessor<VectorType = DataCollection>>>
+    for TypedVectorQueryProcessor
+{
+    fn from(value: Box<dyn VectorQueryProcessor<VectorType = DataCollection>>) -> Self {
+        TypedVectorQueryProcessor::Data(value)
+    }
+}
+
+impl From<Box<dyn VectorQueryProcessor<VectorType = MultiPointCollection>>>
+    for TypedVectorQueryProcessor
+{
+    fn from(value: Box<dyn VectorQueryProcessor<VectorType = MultiPointCollection>>) -> Self {
+        TypedVectorQueryProcessor::MultiPoint(value)
+    }
+}
+
+impl From<Box<dyn VectorQueryProcessor<VectorType = MultiLineStringCollection>>>
+    for TypedVectorQueryProcessor
+{
+    fn from(value: Box<dyn VectorQueryProcessor<VectorType = MultiLineStringCollection>>) -> Self {
+        TypedVectorQueryProcessor::MultiLineString(value)
+    }
+}
+
+impl From<Box<dyn VectorQueryProcessor<VectorType = MultiPolygonCollection>>>
+    for TypedVectorQueryProcessor
+{
+    fn from(value: Box<dyn VectorQueryProcessor<VectorType = MultiPolygonCollection>>) -> Self {
+        TypedVectorQueryProcessor::MultiPolygon(value)
+    }
+}
+
 /// An enum that contains all possible query processor variants
 pub enum TypedPlotQueryProcessor {
     JsonPlain(Box<dyn PlotQueryProcessor<OutputFormat = serde_json::Value>>),

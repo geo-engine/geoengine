@@ -278,6 +278,11 @@ pub enum Error {
     ExpressionOperator {
         source: crate::processing::ExpressionError,
     },
+
+    #[snafu(context(false))]
+    TimeProjectionOperator {
+        source: crate::processing::TimeProjectionError,
+    },
 }
 
 impl From<crate::adapters::SparseTilesFillAdapterError> for Error {
