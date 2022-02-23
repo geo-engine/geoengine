@@ -750,7 +750,7 @@ mod tests {
                 .await
                 .map_err(|e| e.to_string())?;
 
-            let processor: OgrSourceProcessor<MultiPoint> = OgrSourceProcessor::new(meta);
+            let processor: OgrSourceProcessor<MultiPoint> = OgrSourceProcessor::new(meta, vec![]);
 
             let query_rectangle = VectorQueryRectangle {
                 spatial_bounds: BoundingBox2D::new((0., -90.).into(), (180., 90.).into()).unwrap(),

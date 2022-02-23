@@ -14,6 +14,7 @@ use geoengine_datatypes::test_data;
 use log::debug;
 use serde::Serialize;
 use snafu::{ResultExt, Snafu};
+use std::path::PathBuf;
 
 pub(crate) fn init_ebv_routes<C>(base_url: Option<String>) -> Box<dyn FnOnce(&mut ServiceConfig)>
 where
@@ -71,6 +72,7 @@ mod portal_responses {
         pub creator: EbvDatasetsResponseCreator,
         pub license: String,
         pub dataset: EbvDatasetsResponseDataset,
+        pub ebv: EbvDatasetsResponseEbv,
     }
 
     #[derive(Debug, Deserialize)]
@@ -82,6 +84,12 @@ mod portal_responses {
     #[derive(Debug, Deserialize)]
     pub struct EbvDatasetsResponseDataset {
         pub pathname: String,
+    }
+
+    #[derive(Debug, Deserialize)]
+    pub struct EbvDatasetsResponseEbv {
+        pub ebv_class: String,
+        pub ebv_name: String,
     }
 }
 
@@ -146,6 +154,8 @@ struct EbvDataset {
     description: String,
     license: String,
     dataset_path: String,
+    ebv_class: String,
+    ebv_name: String,
 }
 
 async fn get_ebv_datasets<C: Context>(
@@ -179,6 +189,8 @@ async fn get_ebv_datasets<C: Context>(
             description: data.summary,
             license: data.license,
             dataset_path: data.dataset.pathname,
+            ebv_class: data.ebv.ebv_class,
+            ebv_name: data.ebv.ebv_name,
         })
         .collect();
 
@@ -219,6 +231,8 @@ async fn get_dataset_metadata(base_url: &BaseUrl, id: usize) -> Result<EbvDatase
             description: data.summary,
             license: data.license,
             dataset_path: data.dataset.pathname,
+            ebv_class: data.ebv.ebv_class,
+            ebv_name: data.ebv.ebv_name,
         })
         .next();
 
@@ -245,17 +259,33 @@ async fn get_ebv_subdatasets<C: Context>(
     let dataset = get_dataset_metadata(base_url.get_ref(), id.into_inner()).await?;
 
     let listing = {
-        let dataset_path = dataset.dataset_path.trim_start_matches('/');
+        let dataset_path = PathBuf::from(dataset.dataset_path.trim_start_matches('/'));
 
-        // TODO: make dir configurable
-        let data_path = test_data!("netcdf4d/").join(dataset_path);
+        debug!("Accessing dataset {}", dataset_path.display());
 
-        debug!("Accessing dataset {}", data_path.display());
+        #[cfg(test)]
+        let provider_path = test_data!("netcdf4d").to_path_buf();
 
-        crate::util::spawn_blocking(move || NetCdfCfDataProvider::build_netcdf_tree(&data_path))
-            .await?
-            .map_err(|e| Box::new(e) as _)
-            .context(error::CannotParseNetCdfFile)?
+        #[cfg(not(test))]
+        let provider_path = {
+            use crate::datasets::external::netcdfcf::NetCdfCfDataProviderDefinition;
+            use std::fs::File;
+            use std::io::BufReader;
+
+            // TODO: do only once
+            let provider: NetCdfCfDataProviderDefinition = serde_json::from_reader(
+                BufReader::new(File::open(test_data!("provider_defs/netcdfcf.json"))?),
+            )?;
+
+            provider.path
+        };
+
+        crate::util::spawn_blocking(move || {
+            NetCdfCfDataProvider::build_netcdf_tree(&provider_path, &dataset_path)
+        })
+        .await?
+        .map_err(|e| Box::new(e) as _)
+        .context(error::CannotParseNetCdfFile)?
     };
 
     Ok(web::Json(EbvHierarchy {
@@ -554,7 +584,7 @@ mod tests {
                     ],
                     "time": {
                         "start": 946_684_800_000_i64,
-                        "end": 1_609_459_200_000_i64
+                        "end": 1_893_456_000_000_i64
                     },
                     "timeStep": {
                         "granularity": "Years",
@@ -858,7 +888,9 @@ mod tests {
                 "authorInstitution": "Department of Biology and Biotechnology, Sapienza University of Rome",
                 "description": "Global habitat availability for 5,090 mammals in 5 year intervals (subset from 2015 to 2055).",
                 "license": "https://creativecommons.org/licenses/by/4.0",
-                "datasetPath": "/5/public/v1_rodinini_001.nc"
+                "datasetPath": "/5/public/v1_rodinini_001.nc",
+                "ebvClass": "Species populations",
+                "ebvName": "Species distributions"
             }])
             .to_string()
         );
@@ -998,7 +1030,9 @@ mod tests {
                 "authorInstitution": "Department of Biology and Biotechnology, Sapienza University of Rome",
                 "description": "Global habitat availability for 5,090 mammals in 5 year intervals (subset from 2015 to 2055).",
                 "license": "https://creativecommons.org/licenses/by/4.0",
-                "datasetPath": "/5/public/v1_rodinini_001.nc"
+                "datasetPath": "/5/public/v1_rodinini_001.nc",
+                "ebvClass": "Species populations",
+                "ebvName": "Species distributions"
             })
             .to_string()
         );

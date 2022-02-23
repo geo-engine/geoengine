@@ -41,6 +41,20 @@ pub enum NetCdfCf4DProviderError {
     CannotConvertTimeCoverageToInt {
         source: std::num::ParseIntError,
     },
+    CannotParseTimeCoverageDate {
+        source: chrono::format::ParseError,
+    },
+    CannotParseTimeCoverageResolution {
+        source: chrono::format::ParseError,
+    },
+    TimeCoverageResolutionMustConsistsOnlyOfIntParts {
+        source: std::num::ParseIntError,
+    },
+    TimeCoverageResolutionPartsMustNotBeEmpty,
+    TimeCoverageResolutionMustStartWithP,
+    CannotDefineTimeCoverageEnd {
+        source: geoengine_datatypes::error::Error,
+    },
     GeneratingResultDescriptorFromDataset {
         source: geoengine_operators::error::Error,
     },
@@ -106,5 +120,8 @@ pub enum NetCdfCf4DProviderError {
     },
     CannotCreateFallbackColorizer {
         source: geoengine_datatypes::error::Error,
+    },
+    DatasetIsNotInProviderPath {
+        source: std::path::StripPrefixError,
     },
 }
