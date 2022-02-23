@@ -58,7 +58,7 @@ impl TimeStep {
 
         let duration = end - start;
 
-        if duration.is_zero() {
+        if duration.is_zero() || self.step == 0 {
             return Ok(0);
         }
 

@@ -14,6 +14,7 @@ use geoengine_datatypes::test_data;
 use log::debug;
 use serde::Serialize;
 use snafu::{ResultExt, Snafu};
+use std::path::PathBuf;
 
 pub(crate) fn init_ebv_routes<C>(base_url: Option<String>) -> Box<dyn FnOnce(&mut ServiceConfig)>
 where
@@ -245,17 +246,33 @@ async fn get_ebv_subdatasets<C: Context>(
     let dataset = get_dataset_metadata(base_url.get_ref(), id.into_inner()).await?;
 
     let listing = {
-        let dataset_path = dataset.dataset_path.trim_start_matches('/');
+        let dataset_path = PathBuf::from(dataset.dataset_path.trim_start_matches('/'));
 
-        // TODO: make dir configurable
-        let data_path = test_data!("netcdf4d/").join(dataset_path);
+        debug!("Accessing dataset {}", dataset_path.display());
 
-        debug!("Accessing dataset {}", data_path.display());
+        #[cfg(test)]
+        let provider_path = test_data!("netcdf4d").to_path_buf();
 
-        crate::util::spawn_blocking(move || NetCdfCfDataProvider::build_netcdf_tree(&data_path))
-            .await?
-            .map_err(|e| Box::new(e) as _)
-            .context(error::CannotParseNetCdfFile)?
+        #[cfg(not(test))]
+        let provider_path = {
+            use crate::datasets::external::netcdfcf::NetCdfCfDataProviderDefinition;
+            use std::fs::File;
+            use std::io::BufReader;
+
+            // TODO: do only once
+            let provider: NetCdfCfDataProviderDefinition = serde_json::from_reader(
+                BufReader::new(File::open(test_data!("provider_defs/netcdfcf.json"))?),
+            )?;
+
+            provider.path
+        };
+
+        crate::util::spawn_blocking(move || {
+            NetCdfCfDataProvider::build_netcdf_tree(&provider_path, &dataset_path)
+        })
+        .await?
+        .map_err(|e| Box::new(e) as _)
+        .context(error::CannotParseNetCdfFile)?
     };
 
     Ok(web::Json(EbvHierarchy {
@@ -554,7 +571,7 @@ mod tests {
                     ],
                     "time": {
                         "start": 946_684_800_000_i64,
-                        "end": 1_609_459_200_000_i64
+                        "end": 1_893_456_000_000_i64
                     },
                     "timeStep": {
                         "granularity": "Years",
