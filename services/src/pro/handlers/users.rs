@@ -160,7 +160,7 @@ pub(crate) async fn logout_handler<C: ProContext>(
 /// }
 /// ```
 pub(crate) async fn anonymous_handler<C: ProContext>(ctx: web::Data<C>) -> Result<impl Responder> {
-    if !config::get_config_element::<crate::pro::util::config::User>()?.anonymous_access {
+    if !config::get_config_element::<crate::util::config::Session>()?.anonymous_access {
         return Err(error::Error::Authorization {
             source: Box::new(error::Error::AnonymousAccessDisabled),
         });

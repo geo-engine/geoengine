@@ -1,9 +1,10 @@
-use actix_web::{web, HttpResponse, Responder};
-
 use crate::{
     contexts::{Context, SimpleContext},
+    error::{self, Result},
     projects::{ProjectId, STRectangle},
+    util::config,
 };
+use actix_web::{web, HttpResponse, Responder};
 
 pub(crate) fn init_session_routes<C>(cfg: &mut web::ServiceConfig)
 where
@@ -43,8 +44,15 @@ where
 ///   "view": null
 /// }
 /// ```
-async fn anonymous_handler<C: SimpleContext>(ctx: web::Data<C>) -> impl Responder {
-    web::Json(ctx.default_session_ref().await.clone())
+async fn anonymous_handler<C: SimpleContext>(ctx: web::Data<C>) -> Result<impl Responder> {
+    if !config::get_config_element::<crate::util::config::Session>()?.anonymous_access {
+        return Err(error::Error::Authorization {
+            source: Box::new(error::Error::AnonymousAccessDisabled),
+        });
+    }
+
+    let session = ctx.default_session_ref().await.clone();
+    Ok(web::Json(session))
 }
 
 /// Retrieves details about the [Session].

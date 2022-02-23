@@ -5,7 +5,6 @@ use crate::util::parsing::deserialize_base_url;
 
 #[derive(Debug, Deserialize)]
 pub struct User {
-    pub anonymous_access: bool,
     pub user_registration: bool,
 }
 
