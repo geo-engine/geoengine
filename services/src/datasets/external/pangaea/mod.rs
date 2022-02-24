@@ -419,6 +419,7 @@ mod tests {
             params: OgrSourceParameters {
                 dataset: id,
                 attribute_projection: None,
+                attribute_filters: None,
             },
         }
         .boxed();
@@ -474,6 +475,7 @@ mod tests {
             params: OgrSourceParameters {
                 dataset: id,
                 attribute_projection: None,
+                attribute_filters: None,
             },
         }
         .boxed();
@@ -541,6 +543,7 @@ mod tests {
             params: OgrSourceParameters {
                 dataset: id,
                 attribute_projection: None,
+                attribute_filters: None,
             },
         }
         .boxed();
@@ -604,6 +607,7 @@ mod tests {
             params: OgrSourceParameters {
                 dataset: id,
                 attribute_projection: None,
+                attribute_filters: None,
             },
         }
         .boxed();

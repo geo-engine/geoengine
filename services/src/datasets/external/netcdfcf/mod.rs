@@ -6,7 +6,7 @@ use std::str::FromStr;
 
 use crate::datasets::listing::DatasetListOptions;
 use crate::datasets::listing::{ExternalDatasetProvider, ProvenanceOutput};
-use crate::error::Error;
+use crate::projects::{RasterSymbology, Symbology};
 use crate::{
     datasets::{listing::DatasetListing, storage::ExternalDatasetProviderDefinition},
     util::user_input::Validated,
@@ -26,6 +26,7 @@ use gdal_sys::{
     OSRDestroySpatialReference, VSIFree,
 };
 use geoengine_datatypes::dataset::{DatasetId, DatasetProviderId, ExternalDatasetId};
+use geoengine_datatypes::operations::image::{Colorizer, RgbaColor};
 use geoengine_datatypes::primitives::{
     Measurement, RasterQueryRectangle, TimeGranularity, TimeInstance, TimeInterval, TimeStep,
     VectorQueryRectangle,
@@ -511,6 +512,7 @@ pub(crate) struct NetCdfOverview {
     pub entities: Vec<NetCdfEntity>,
     pub time: TimeInterval,
     pub time_step: TimeStep,
+    pub colorizer: Colorizer,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -583,9 +585,14 @@ pub(crate) struct NetCdfCf4DDatasetId {
 }
 
 impl NetCdfCfDataProvider {
-    pub(crate) fn build_netcdf_tree(path: &Path) -> Result<NetCdfOverview> {
+    pub(crate) fn build_netcdf_tree(
+        provider_path: &Path,
+        dataset_path: &Path,
+    ) -> Result<NetCdfOverview> {
+        let path = provider_path.join(dataset_path);
+
         let ds = gdal_open_dataset_ex(
-            path,
+            &path,
             DatasetOptions {
                 open_flags: GdalOpenFlags::GDAL_OF_MULTIDIM_RASTER,
                 allowed_drivers: Some(&["netCDF"]),
@@ -596,11 +603,6 @@ impl NetCdfCfDataProvider {
         .context(error::InvalidDatasetIdFile)?;
 
         let root_group = MdGroup::from_dataset(&ds)?;
-
-        let file_name = path
-            .file_name()
-            .ok_or(NetCdfCf4DProviderError::MissingFileName)?
-            .to_string_lossy();
 
         let title = root_group
             .attribute_as_string("title")
@@ -613,7 +615,7 @@ impl NetCdfCfDataProvider {
             SpatialReference::from_str(&spatial_reference).context(error::CannotParseCrs)?;
 
         let entities = root_group
-            .dimension_as_string_array("entities")
+            .dimension_as_string_array("entity")
             .context(error::MissingEntities)?
             .into_iter()
             .enumerate()
@@ -638,8 +640,17 @@ impl NetCdfCfDataProvider {
 
         let (time_start, time_end, time_step) = parse_time_coverage(&start, &end, &step)?;
 
+        let colorizer = load_colorizer(&path).or_else(|error| {
+            debug!("Use fallback colorizer: {:?}", error);
+            fallback_colorizer()
+        })?;
+
         Ok(NetCdfOverview {
-            file_name: file_name.to_string(),
+            file_name: path
+                .strip_prefix(provider_path)
+                .context(error::DatasetIsNotInProviderPath)?
+                .to_string_lossy()
+                .to_string(),
             title,
             spatial_reference,
             groups,
@@ -647,14 +658,16 @@ impl NetCdfCfDataProvider {
             time: TimeInterval::new(time_start, time_end)
                 .context(error::InvalidTimeRangeForDataset)?,
             time_step,
+            colorizer,
         })
     }
 
     pub(crate) fn listing_from_netcdf(
         id: DatasetProviderId,
-        path: &Path,
+        provider_path: &Path,
+        dataset_path: &Path,
     ) -> Result<Vec<DatasetListing>> {
-        let tree = Self::build_netcdf_tree(path)?;
+        let tree = Self::build_netcdf_tree(provider_path, dataset_path)?;
 
         let mut paths: VecDeque<Vec<&NetCdfGroup>> = tree.groups.iter().map(|s| vec![s]).collect();
 
@@ -711,7 +724,10 @@ impl NetCdfCfDataProvider {
                         measurement: Measurement::Unitless, // TODO: where to get from file?
                         no_data_value: None, // we don't want to open the dataset at this point. We should get rid of the result descriptor in the listing in general
                     }),
-                    symbology: None,
+                    symbology: Some(Symbology::Raster(RasterSymbology {
+                        opacity: 1.0,
+                        colorizer: tree.colorizer.clone(),
+                    })),
                 });
             }
         }
@@ -735,6 +751,11 @@ impl NetCdfCfDataProvider {
             serde_json::from_str(&dataset.dataset_id).context(error::CannotParseDatasetId)?;
 
         let path = self.path.join(dataset_id.file_name);
+
+        // check that file does not "escape" the provider path
+        if let Err(source) = path.strip_prefix(self.path.as_path()) {
+            return Err(NetCdfCf4DProviderError::DatasetIsNotInProviderPath { source });
+        }
 
         let gdal_path = format!(
             "NETCDF:{path}:/{group}/ebv_cube",
@@ -827,6 +848,38 @@ impl NetCdfCfDataProvider {
     }
 }
 
+/// Load a colorizer from a path that is `path` with suffix `.colorizer.json`.
+fn load_colorizer(path: &Path) -> Result<Colorizer> {
+    use std::io::Read;
+
+    let colorizer_path = path.with_extension("colorizer.json");
+
+    let mut file = std::fs::File::open(colorizer_path).context(error::CannotOpenColorizerFile)?;
+
+    let mut contents = String::new();
+    file.read_to_string(&mut contents)
+        .context(error::CannotReadColorizerFile)?;
+
+    let colorizer: Colorizer =
+        serde_json::from_str(&contents).context(error::CannotParseColorizer)?;
+
+    Ok(colorizer)
+}
+
+/// A simple colorizer between 0 and 255
+/// TODO: generate better default by using `NetCDF` metadata
+fn fallback_colorizer() -> Result<Colorizer> {
+    Colorizer::linear_gradient(
+        vec![
+            (0.0.try_into().expect("not nan"), RgbaColor::black()).into(),
+            (255.0.try_into().expect("not nan"), RgbaColor::white()).into(),
+        ],
+        RgbaColor::transparent(),
+        RgbaColor::transparent(),
+    )
+    .context(error::CannotCreateFallbackColorizer)
+}
+
 fn parse_geo_transform(input: &str) -> Result<GdalDatasetGeoTransform> {
     let numbers: Vec<f64> = input
         .split_whitespace()
@@ -846,41 +899,64 @@ fn parse_geo_transform(input: &str) -> Result<GdalDatasetGeoTransform> {
     Ok(gdal_geo_transform.into())
 }
 
+fn parse_date(input: &str) -> Result<NaiveDate> {
+    input
+        .parse::<i32>()
+        .map(|year| NaiveDate::from_ymd(year, 1, 1))
+        .or_else(|_| NaiveDate::parse_from_str(input, "%Y-%m-%d"))
+        .context(error::CannotParseTimeCoverageDate)
+}
+
+fn parse_time_step(input: &str) -> Result<TimeStep> {
+    let duration_str = if let Some(duration_str) = input.strip_prefix('P') {
+        duration_str
+    } else {
+        return Err(NetCdfCf4DProviderError::TimeCoverageResolutionMustStartWithP);
+    };
+
+    let parts = duration_str
+        .split('-')
+        .map(str::parse)
+        .collect::<Result<Vec<u32>, std::num::ParseIntError>>()
+        .context(error::TimeCoverageResolutionMustConsistsOnlyOfIntParts)?;
+
+    if parts.is_empty() {
+        return Err(NetCdfCf4DProviderError::TimeCoverageResolutionPartsMustNotBeEmpty);
+    }
+
+    Ok(match parts.as_slice() {
+        [year, 0, 0, ..] => TimeStep {
+            granularity: TimeGranularity::Years,
+            step: *year,
+        },
+        [0, month, 0, ..] => TimeStep {
+            granularity: TimeGranularity::Months,
+            step: *month,
+        },
+        [0, 0, day, ..] => TimeStep {
+            granularity: TimeGranularity::Days,
+            step: *day,
+        },
+        // TODO: fix format and parse other options
+        _ => return Err(NetCdfCf4DProviderError::NotYetImplemented),
+    })
+}
+
 fn parse_time_coverage(
     start: &str,
     end: &str,
     resolution: &str,
 ) -> Result<(TimeInstance, TimeInstance, TimeStep)> {
-    let start = start
-        .parse::<i32>()
-        .context(error::CannotConvertTimeCoverageToInt)?;
-    let end = end
-        .parse::<i32>()
-        .context(error::CannotConvertTimeCoverageToInt)?;
+    // TODO: parse datetimes
 
-    Ok(match resolution {
-        "Yearly" | "every 1 year" => {
-            let start = TimeInstance::from(NaiveDate::from_ymd(start, 1, 1).and_hms(0, 0, 0));
-            // end + 1 because it is exclusive for us but inclusive in the metadata
-            let end = TimeInstance::from(NaiveDate::from_ymd(end + 1, 1, 1).and_hms(0, 0, 0));
-            let step = TimeStep {
-                granularity: TimeGranularity::Years,
-                step: 1,
-            };
-            (start, end, step)
-        }
-        "decade" => {
-            let start = TimeInstance::from(NaiveDate::from_ymd(start, 1, 1).and_hms(0, 0, 0));
-            // end + 1 because it is exclusive for us but inclusive in the metadata
-            let end = TimeInstance::from(NaiveDate::from_ymd(end + 1, 1, 1).and_hms(0, 0, 0));
-            let step = TimeStep {
-                granularity: TimeGranularity::Years,
-                step: 10,
-            };
-            (start, end, step)
-        }
-        _ => return Err(NetCdfCf4DProviderError::NotYetImplemented), // TODO: fix format and parse other options
-    })
+    let start: TimeInstance = parse_date(start)?.and_hms(0, 0, 0).into();
+    let end: TimeInstance = parse_date(end)?.and_hms(0, 0, 0).into();
+    let step = parse_time_step(resolution)?;
+
+    // add one step to provide a right side boundary for the close-open interval
+    let end = (end + step).context(error::CannotDefineTimeCoverageEnd)?;
+
+    Ok((start, end, step))
 }
 
 #[async_trait]
@@ -900,8 +976,16 @@ impl ExternalDatasetProvider for NetCdfCfDataProvider {
                 continue;
             }
 
+            let provider_path = self.path.clone();
+            let relative_path = if let Ok(p) = entry.path().strip_prefix(&provider_path) {
+                p.to_path_buf()
+            } else {
+                // cannot actually happen since `entry` is listed from `provider_path`
+                continue;
+            };
+
             let listing = tokio::task::spawn_blocking(move || {
-                Self::listing_from_netcdf(NETCDF_CF_PROVIDER_ID, &entry.path())
+                Self::listing_from_netcdf(NETCDF_CF_PROVIDER_ID, &provider_path, &relative_path)
             })
             .await?;
 
@@ -942,13 +1026,11 @@ impl MetaDataProvider<GdalLoadingInfo, RasterResultDescriptor, RasterQueryRectan
         geoengine_operators::error::Error,
     > {
         // TODO spawn blocking
-        self.meta_data(dataset)
-            .await
-            .map_err(|_| geoengine_operators::error::Error::LoadingInfo {
-                source: Box::new(Error::InvalidExternalDatasetId {
-                    provider: NETCDF_CF_PROVIDER_ID,
-                }),
-            })
+        self.meta_data(dataset).await.map_err(|error| {
+            geoengine_operators::error::Error::LoadingInfo {
+                source: Box::new(error),
+            }
+        })
     }
 }
 
@@ -1003,6 +1085,69 @@ mod tests {
 
     use super::*;
 
+    #[test]
+    fn test_parse_time_coverage() {
+        let result = parse_time_coverage("2010", "2020", "P0001-00-00").unwrap();
+        let expected = (
+            TimeInstance::from(NaiveDate::from_ymd(2010, 1, 1).and_hms(0, 0, 0)),
+            TimeInstance::from(NaiveDate::from_ymd(2021, 1, 1).and_hms(0, 0, 0)),
+            TimeStep {
+                granularity: TimeGranularity::Years,
+                step: 1,
+            },
+        );
+        assert_eq!(result, expected);
+    }
+
+    #[test]
+    fn test_parse_date() {
+        assert_eq!(parse_date("2010").unwrap(), NaiveDate::from_ymd(2010, 1, 1));
+        assert_eq!(
+            parse_date("-1000").unwrap(),
+            NaiveDate::from_ymd(-1000, 1, 1)
+        );
+        assert_eq!(
+            parse_date("2010-04-02").unwrap(),
+            NaiveDate::from_ymd(2010, 4, 2)
+        );
+        assert_eq!(
+            parse_date("-1000-04-02").unwrap(),
+            NaiveDate::from_ymd(-1000, 4, 2)
+        );
+    }
+
+    #[test]
+    fn test_parse_time_step() {
+        assert_eq!(
+            parse_time_step("P0001-00-00").unwrap(),
+            TimeStep {
+                granularity: TimeGranularity::Years,
+                step: 1,
+            }
+        );
+        assert_eq!(
+            parse_time_step("P0005-00-00").unwrap(),
+            TimeStep {
+                granularity: TimeGranularity::Years,
+                step: 5,
+            }
+        );
+        assert_eq!(
+            parse_time_step("P0010-00-00").unwrap(),
+            TimeStep {
+                granularity: TimeGranularity::Years,
+                step: 10,
+            }
+        );
+        assert_eq!(
+            parse_time_step("P0000-06-00").unwrap(),
+            TimeStep {
+                granularity: TimeGranularity::Months,
+                step: 6,
+            }
+        );
+    }
+
     #[tokio::test]
     #[allow(clippy::too_many_lines)]
     async fn test_listing_from_netcdf_m() {
@@ -1011,7 +1156,8 @@ mod tests {
 
         let listing = NetCdfCfDataProvider::listing_from_netcdf(
             provider_id,
-            test_data!("netcdf4d/dataset_m.nc"),
+            test_data!("netcdf4d"),
+            Path::new("dataset_m.nc"),
         )
         .unwrap();
 
@@ -1024,6 +1170,22 @@ mod tests {
             no_data_value: None,
         }
         .into();
+
+        let symbology = Some(Symbology::Raster(RasterSymbology {
+            opacity: 1.0,
+            colorizer: Colorizer::LinearGradient {
+                breakpoints: vec![
+                    (0.0.try_into().unwrap(), RgbaColor::new(0, 0, 0, 255)).into(),
+                    (
+                        255.0.try_into().unwrap(),
+                        RgbaColor::new(255, 255, 255, 255),
+                    )
+                        .into(),
+                ],
+                no_data_color: RgbaColor::new(0, 0, 0, 0),
+                default_color: RgbaColor::new(0, 0, 0, 0),
+            },
+        }));
 
         assert_eq!(
             listing[0],
@@ -1042,7 +1204,7 @@ mod tests {
                 tags: vec![],
                 source_operator: "GdalSource".into(),
                 result_descriptor: result_descriptor.clone(),
-                symbology: None
+                symbology: symbology.clone(),
             }
         );
         assert_eq!(
@@ -1062,7 +1224,7 @@ mod tests {
                 tags: vec![],
                 source_operator: "GdalSource".into(),
                 result_descriptor: result_descriptor.clone(),
-                symbology: None
+                symbology: symbology.clone(),
             }
         );
         assert_eq!(
@@ -1082,7 +1244,7 @@ mod tests {
                 tags: vec![],
                 source_operator: "GdalSource".into(),
                 result_descriptor: result_descriptor.clone(),
-                symbology: None
+                symbology: symbology.clone(),
             }
         );
         assert_eq!(
@@ -1102,7 +1264,7 @@ mod tests {
                 tags: vec![],
                 source_operator: "GdalSource".into(),
                 result_descriptor: result_descriptor.clone(),
-                symbology: None
+                symbology: symbology.clone(),
             }
         );
         assert_eq!(
@@ -1122,7 +1284,7 @@ mod tests {
                 tags: vec![],
                 source_operator: "GdalSource".into(),
                 result_descriptor: result_descriptor.clone(),
-                symbology: None
+                symbology: symbology.clone(),
             }
         );
         assert_eq!(
@@ -1142,7 +1304,7 @@ mod tests {
                 tags: vec![],
                 source_operator: "GdalSource".into(),
                 result_descriptor,
-                symbology: None
+                symbology,
             }
         );
     }
@@ -1154,7 +1316,8 @@ mod tests {
 
         let listing = NetCdfCfDataProvider::listing_from_netcdf(
             provider_id,
-            test_data!("netcdf4d/dataset_sm.nc"),
+            test_data!("netcdf4d"),
+            Path::new("dataset_sm.nc"),
         )
         .unwrap();
 
@@ -1167,6 +1330,19 @@ mod tests {
             no_data_value: None,
         }
         .into();
+
+        let symbology = Some(Symbology::Raster(RasterSymbology {
+            opacity: 1.0,
+            colorizer: Colorizer::LinearGradient {
+                breakpoints: vec![
+                    (0.0.try_into().unwrap(), RgbaColor::new(68, 1, 84, 255)).into(),
+                    (50.0.try_into().unwrap(), RgbaColor::new(33, 145, 140, 255)).into(),
+                    (100.0.try_into().unwrap(), RgbaColor::new(253, 231, 37, 255)).into(),
+                ],
+                no_data_color: RgbaColor::new(0, 0, 0, 0),
+                default_color: RgbaColor::new(0, 0, 0, 0),
+            },
+        }));
 
         assert_eq!(
             listing[0],
@@ -1187,7 +1363,7 @@ mod tests {
                 tags: vec![],
                 source_operator: "GdalSource".into(),
                 result_descriptor: result_descriptor.clone(),
-                symbology: None
+                symbology: symbology.clone(),
             }
         );
         assert_eq!(
@@ -1207,13 +1383,11 @@ mod tests {
                 tags: vec![],
                 source_operator: "GdalSource".into(),
                 result_descriptor,
-                symbology: None
+                symbology,
             }
         );
     }
 
-    // TODO: verify
-    // TODO: do the samme for `dataset_m.nc`
     #[tokio::test]
     async fn test_metadata_from_netcdf_sm() {
         let provider = NetCdfCfDataProvider {
