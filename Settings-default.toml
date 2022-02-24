@@ -65,10 +65,15 @@ provider_defs_path = "./test_data/provider_defs"
 # Use 0 for `ALL_CPUS` option or a number >0 for a specific number of threads.
 compression_num_threads = 8
 
+[session]
+# Whether to allow requests to `/anonymous` that return a valid session.
+anonymous_access = true
+# Specifies a fixed session token. Otherwise, a random token is generated.
+# This can be directly used for Bearer authentication in HTTP requests.
+# fixed_session_token = "18fec623-6600-41af-b82b-24ccf47cb9f9"
 
 # Settings for Geo Engine Pro
 [user]
-anonymous_access = true
 user_registration = true
 
 [odm]
