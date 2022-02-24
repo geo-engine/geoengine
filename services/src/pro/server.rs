@@ -104,8 +104,8 @@ pub async fn start_pro_server(static_files_dir: Option<PathBuf>) -> Result<()> {
         info!("Anonymous access is disabled");
     }
 
-    if session_config.anonymous_session_token.is_some() {
-        warn!("Fixed anonymous session token is set, but it will be ignored in Geo Engine Pro");
+    if session_config.fixed_session_token.is_some() {
+        warn!("Fixed session token is set, but it will be ignored in Geo Engine Pro");
     }
 
     if user_config.user_registration {

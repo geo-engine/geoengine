@@ -44,7 +44,7 @@ pub async fn start_server(static_files_dir: Option<PathBuf>) -> Result<()> {
         info!("Anonymous access is disabled");
     }
 
-    if let Some(session_token) = session_config.anonymous_session_token {
+    if let Some(session_token) = session_config.fixed_session_token {
         info!("Fixed session token is set, it is {session_token}");
     }
 

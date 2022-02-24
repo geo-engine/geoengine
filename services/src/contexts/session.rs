@@ -38,7 +38,7 @@ impl Default for SimpleSession {
     fn default() -> Self {
         let id = config::get_config_element::<crate::util::config::Session>()
             .ok()
-            .and_then(|session| session.anonymous_session_token)
+            .and_then(|session| session.fixed_session_token)
             .unwrap_or_else(SessionId::new);
 
         Self {

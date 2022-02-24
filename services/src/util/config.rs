@@ -325,7 +325,7 @@ impl ConfigElement for Gdal {
 #[derive(Debug, Deserialize)]
 pub struct Session {
     pub anonymous_access: bool,
-    pub anonymous_session_token: Option<SessionId>,
+    pub fixed_session_token: Option<SessionId>,
 }
 
 impl ConfigElement for Session {

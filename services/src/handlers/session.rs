@@ -230,7 +230,7 @@ mod tests {
     #[tokio::test]
     async fn it_disables_anonymous_access() {
         config::set_config(
-            "session.anonymous_session_token",
+            "session.fixed_session_token",
             "18fec623-6600-41af-b82b-24ccf47cb9f9",
         )
         .unwrap();
