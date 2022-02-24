@@ -589,6 +589,16 @@ mod tests {
                     "timeStep": {
                         "granularity": "Years",
                         "step": 10
+                    },
+                    "colorizer": {
+                        "type": "linearGradient",
+                        "breakpoints": [
+                            { "value": 0.0, "color": [68, 1, 84, 255] },
+                            { "value": 50.0, "color": [33, 145, 140, 255] },
+                            { "value": 100.0, "color": [253, 231, 37, 255] }
+                        ],
+                        "noDataColor": [0, 0, 0, 0],
+                        "defaultColor": [0, 0, 0, 0]
                     }
                 }
             })
