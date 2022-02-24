@@ -59,10 +59,6 @@ where
     <Tls as MakeTlsConnect<Socket>>::TlsConnect: Send,
     <<Tls as MakeTlsConnect<Socket>>::TlsConnect as TlsConnect<Socket>>::Future: Send,
 {
-    pub async fn new(config: Config, tls: Tls) -> Result<Self> {
-        Self::new_with_context_spec(config, tls, Default::default(), Default::default()).await
-    }
-
     pub async fn new_with_context_spec(
         config: Config,
         tls: Tls,
@@ -559,12 +555,14 @@ mod tests {
     };
     use geoengine_datatypes::primitives::{
         BoundingBox2D, Coordinate2D, FeatureDataType, SpatialResolution, TimeInterval,
+        VectorQueryRectangle,
     };
     use geoengine_datatypes::spatial_reference::{SpatialReference, SpatialReferenceOption};
+    use geoengine_datatypes::util::test::TestDefault;
     use geoengine_datatypes::util::Identifier;
     use geoengine_operators::engine::{
         MetaData, MultipleRasterSources, PlotOperator, StaticMetaData, TypedOperator,
-        TypedResultDescriptor, VectorOperator, VectorQueryRectangle, VectorResultDescriptor,
+        TypedResultDescriptor, VectorOperator, VectorResultDescriptor,
     };
     use geoengine_operators::mock::{MockPointSource, MockPointSourceParams};
     use geoengine_operators::plot::{Statistics, StatisticsParams};
@@ -630,9 +628,14 @@ mod tests {
             std::panic::catch_unwind(move || {
                 tokio::task::block_in_place(move || {
                     Handle::current().block_on(async move {
-                        let ctx = PostgresContext::new(pg_config.clone(), tokio_postgres::NoTls)
-                            .await
-                            .unwrap();
+                        let ctx = PostgresContext::new_with_context_spec(
+                            pg_config.clone(),
+                            tokio_postgres::NoTls,
+                            TestDefault::test_default(),
+                            TestDefault::test_default(),
+                        )
+                        .await
+                        .unwrap();
                         f(ctx, pg_config.clone()).await;
                     });
                 });
@@ -989,7 +992,7 @@ mod tests {
 
             drop(ctx);
 
-            let ctx = PostgresContext::new(pg_config.clone(), tokio_postgres::NoTls)
+            let ctx = PostgresContext::new_with_context_spec(pg_config.clone(), tokio_postgres::NoTls, TestDefault::test_default(), TestDefault::test_default())
                 .await
                 .unwrap();
 

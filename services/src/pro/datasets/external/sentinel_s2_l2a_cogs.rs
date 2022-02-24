@@ -15,18 +15,18 @@ use geoengine_datatypes::operations::reproject::{
     CoordinateProjection, CoordinateProjector, ReprojectClipped,
 };
 use geoengine_datatypes::primitives::{
-    AxisAlignedRectangle, BoundingBox2D, Measurement, SpatialPartitioned, TimeInterval,
+    AxisAlignedRectangle, BoundingBox2D, Measurement, RasterQueryRectangle, SpatialPartitioned,
+    TimeInstance, TimeInterval, VectorQueryRectangle,
 };
 use geoengine_datatypes::raster::RasterDataType;
 use geoengine_datatypes::spatial_reference::{SpatialReference, SpatialReferenceAuthority};
 use geoengine_operators::engine::{
-    MetaData, MetaDataProvider, RasterQueryRectangle, RasterResultDescriptor, VectorQueryRectangle,
-    VectorResultDescriptor,
+    MetaData, MetaDataProvider, RasterResultDescriptor, VectorResultDescriptor,
 };
 use geoengine_operators::mock::MockDatasetDataSourceLoadingInfo;
 use geoengine_operators::source::{
-    GdalDatasetGeoTransform, GdalDatasetParameters, GdalLoadingInfo, GdalLoadingInfoPart,
-    GdalLoadingInfoPartIterator, OgrSourceDataset,
+    GdalDatasetGeoTransform, GdalDatasetParameters, GdalLoadingInfo, GdalLoadingInfoTemporalSlice,
+    GdalLoadingInfoTemporalSliceIterator, OgrSourceDataset,
 };
 use log::debug;
 use reqwest::Client;
@@ -247,18 +247,25 @@ impl SentinelS2L2aCogsMetaData {
 
         features.sort_by_key(|a| a.properties.datetime);
 
+        let start_times_pre: Vec<TimeInstance> = features
+            .iter()
+            .map(|f| TimeInstance::from(f.properties.datetime))
+            .collect();
+        let start_times = Self::make_unique_start_times_from_sorted_features(&start_times_pre);
+
         let mut parts = vec![];
         let num_features = features.len();
         debug!("number of features in current zone: {}", num_features);
         for i in 0..num_features {
             let feature = &features[i];
 
-            let start = feature.properties.datetime;
+            let start = start_times[i];
+
             // feature is valid until next feature starts
             let end = if i < num_features - 1 {
-                features[i + 1].properties.datetime
+                start_times[i + 1]
             } else {
-                start + Duration::seconds(1) // TODO: determine correct validity for last tile
+                start + 1000 // TODO: determine correct validity for last tile
             };
 
             let time_interval = TimeInterval::new(start, end)?;
@@ -287,22 +294,51 @@ impl SentinelS2L2aCogsMetaData {
         debug!("number of generated loading infos: {}", parts.len());
 
         Ok(GdalLoadingInfo {
-            info: GdalLoadingInfoPartIterator::Static {
+            info: GdalLoadingInfoTemporalSliceIterator::Static {
                 parts: parts.into_iter(),
             },
         })
+    }
+
+    fn make_unique_start_times_from_sorted_features(
+        start_times: &[TimeInstance],
+    ) -> Vec<TimeInstance> {
+        let mut unique_start_times: Vec<TimeInstance> = Vec::with_capacity(start_times.len());
+        for (i, &t_start) in start_times.iter().enumerate() {
+            let real_start = if i == 0 {
+                t_start
+            } else {
+                let prev_start = start_times[i - 1];
+                if t_start == prev_start {
+                    let prev_u_start = unique_start_times[i - 1];
+                    let new_u_start = prev_u_start + 1;
+                    log::debug!(
+                        "duplicate start time: {} insert as {} following {}",
+                        t_start.as_rfc3339(),
+                        new_u_start.as_rfc3339(),
+                        prev_u_start.as_rfc3339()
+                    );
+                    new_u_start
+                } else {
+                    t_start
+                }
+            };
+
+            unique_start_times.push(real_start);
+        }
+        unique_start_times
     }
 
     fn create_loading_info_part(
         &self,
         time_interval: TimeInterval,
         asset: &StacAsset,
-    ) -> Result<GdalLoadingInfoPart> {
+    ) -> Result<GdalLoadingInfoTemporalSlice> {
         let [stac_shape_y, stac_shape_x] = asset.proj_shape.ok_or(error::Error::StacInvalidBbox)?;
 
-        Ok(GdalLoadingInfoPart {
+        Ok(GdalLoadingInfoTemporalSlice {
             time: time_interval,
-            params: GdalDatasetParameters {
+            params: Some(GdalDatasetParameters {
                 file_path: PathBuf::from(format!("/vsicurl/{}", asset.href)),
                 rasterband_channel: 1,
                 geo_transform: GdalDatasetGeoTransform::from(
@@ -317,7 +353,7 @@ impl SentinelS2L2aCogsMetaData {
                 properties_mapping: None,
                 gdal_open_options: None,
                 gdal_config_options: None,
-            },
+            }),
         })
     }
 
@@ -546,7 +582,10 @@ mod tests {
 
     use crate::test_data;
     use futures::StreamExt;
-    use geoengine_datatypes::primitives::{SpatialPartition2D, SpatialResolution};
+    use geoengine_datatypes::{
+        primitives::{SpatialPartition2D, SpatialResolution},
+        util::test::TestDefault,
+    };
     use geoengine_operators::{
         engine::{ChunkByteSize, MockExecutionContext, MockQueryContext, RasterOperator},
         source::{FileNotFoundHandling, GdalSource, GdalSourceParameters},
@@ -601,9 +640,9 @@ mod tests {
             .await
             .unwrap();
 
-        let expected = vec![GdalLoadingInfoPart {
+        let expected = vec![GdalLoadingInfoTemporalSlice {
             time: TimeInterval::new_unchecked(1_609_581_746_000, 1_609_581_747_000),
-            params: GdalDatasetParameters {
+            params: Some(GdalDatasetParameters {
                 file_path: "/vsicurl/https://sentinel-cogs.s3.us-west-2.amazonaws.com/sentinel-s2-l2a-cogs/32/R/PU/2021/1/S2B_32RPU_20210102_0_L2A/B01.tif".into(),
                 rasterband_channel: 1,
                 geo_transform: GdalDatasetGeoTransform {
@@ -618,10 +657,10 @@ mod tests {
                 properties_mapping: None,
                 gdal_open_options: None,
                 gdal_config_options: None,
-            },
+            }),
         }];
 
-        if let GdalLoadingInfoPartIterator::Static { parts } = loading_info.info {
+        if let GdalLoadingInfoTemporalSliceIterator::Static { parts } = loading_info.info {
             let result: Vec<_> = parts.collect();
 
             assert_eq!(result.len(), 1);
@@ -638,7 +677,7 @@ mod tests {
     async fn query_data() -> Result<()> {
         // TODO: mock STAC endpoint
 
-        let mut exe = MockExecutionContext::default();
+        let mut exe = MockExecutionContext::test_default();
 
         let def: Box<dyn ExternalDatasetProviderDefinition> =
             serde_json::from_reader(BufReader::new(File::open(test_data!(
@@ -805,17 +844,18 @@ mod tests {
         };
 
         let loading_info = meta.loading_info(query).await.unwrap();
-        let parts = if let GdalLoadingInfoPartIterator::Static { parts } = loading_info.info {
-            parts.collect::<Vec<_>>()
-        } else {
-            panic!("expected static parts");
-        };
+        let parts =
+            if let GdalLoadingInfoTemporalSliceIterator::Static { parts } = loading_info.info {
+                parts.collect::<Vec<_>>()
+            } else {
+                panic!("expected static parts");
+            };
 
         assert_eq!(
             parts,
-            vec![GdalLoadingInfoPart {
+            vec![GdalLoadingInfoTemporalSlice {
                 time: TimeInterval::new_unchecked(1_632_384_644_000, 1_632_384_645_000),
-                params: GdalDatasetParameters {
+                params: Some(GdalDatasetParameters {
                     file_path: "/vsicurl/https://sentinel-cogs.s3.us-west-2.amazonaws.com/sentinel-s2-l2a-cogs/36/M/WC/2021/9/S2B_36MWC_20210923_0_L2A/B04.tif".into(),
                     rasterband_channel: 1,
                     geo_transform: GdalDatasetGeoTransform {
@@ -830,8 +870,103 @@ mod tests {
                     properties_mapping: None,
                     gdal_open_options: None,
                     gdal_config_options: None,
-                },
+                }),
             }]
         );
+    }
+
+    #[test]
+    fn make_unique_timestamps_no_dups() {
+        let timestamps = vec![
+            TimeInstance::from_millis(1_632_384_644_000).unwrap(),
+            TimeInstance::from_millis(1_632_384_645_000).unwrap(),
+            TimeInstance::from_millis(1_632_384_646_000).unwrap(),
+            TimeInstance::from_millis(1_632_384_647_000).unwrap(),
+            TimeInstance::from_millis(1_632_384_648_000).unwrap(),
+            TimeInstance::from_millis(1_632_384_649_000).unwrap(),
+        ];
+
+        let uts =
+            SentinelS2L2aCogsMetaData::make_unique_start_times_from_sorted_features(&timestamps);
+
+        assert_eq!(uts, timestamps);
+    }
+
+    #[test]
+    fn make_unique_timestamps_two_dups() {
+        let timestamps = vec![
+            TimeInstance::from_millis(1_632_384_644_000).unwrap(),
+            TimeInstance::from_millis(1_632_384_645_000).unwrap(),
+            TimeInstance::from_millis(1_632_384_645_000).unwrap(),
+            TimeInstance::from_millis(1_632_384_646_000).unwrap(),
+            TimeInstance::from_millis(1_632_384_647_000).unwrap(),
+            TimeInstance::from_millis(1_632_384_648_000).unwrap(),
+        ];
+
+        let uts =
+            SentinelS2L2aCogsMetaData::make_unique_start_times_from_sorted_features(&timestamps);
+
+        let expected_timestamps = vec![
+            TimeInstance::from_millis(1_632_384_644_000).unwrap(),
+            TimeInstance::from_millis(1_632_384_645_000).unwrap(),
+            TimeInstance::from_millis(1_632_384_645_001).unwrap(),
+            TimeInstance::from_millis(1_632_384_646_000).unwrap(),
+            TimeInstance::from_millis(1_632_384_647_000).unwrap(),
+            TimeInstance::from_millis(1_632_384_648_000).unwrap(),
+        ];
+
+        assert_eq!(uts, expected_timestamps);
+    }
+
+    #[test]
+    fn make_unique_timestamps_three_dups() {
+        let timestamps = vec![
+            TimeInstance::from_millis(1_632_384_644_000).unwrap(),
+            TimeInstance::from_millis(1_632_384_645_000).unwrap(),
+            TimeInstance::from_millis(1_632_384_645_000).unwrap(),
+            TimeInstance::from_millis(1_632_384_645_000).unwrap(),
+            TimeInstance::from_millis(1_632_384_646_000).unwrap(),
+            TimeInstance::from_millis(1_632_384_647_000).unwrap(),
+        ];
+
+        let uts =
+            SentinelS2L2aCogsMetaData::make_unique_start_times_from_sorted_features(&timestamps);
+
+        let expected_timestamps = vec![
+            TimeInstance::from_millis(1_632_384_644_000).unwrap(),
+            TimeInstance::from_millis(1_632_384_645_000).unwrap(),
+            TimeInstance::from_millis(1_632_384_645_001).unwrap(),
+            TimeInstance::from_millis(1_632_384_645_002).unwrap(),
+            TimeInstance::from_millis(1_632_384_646_000).unwrap(),
+            TimeInstance::from_millis(1_632_384_647_000).unwrap(),
+        ];
+
+        assert_eq!(uts, expected_timestamps);
+    }
+
+    #[test]
+    fn make_unique_timestamps_four_dups() {
+        let timestamps = vec![
+            TimeInstance::from_millis(1_632_384_644_000).unwrap(),
+            TimeInstance::from_millis(1_632_384_645_000).unwrap(),
+            TimeInstance::from_millis(1_632_384_645_000).unwrap(),
+            TimeInstance::from_millis(1_632_384_645_000).unwrap(),
+            TimeInstance::from_millis(1_632_384_645_000).unwrap(),
+            TimeInstance::from_millis(1_632_384_646_000).unwrap(),
+        ];
+
+        let uts =
+            SentinelS2L2aCogsMetaData::make_unique_start_times_from_sorted_features(&timestamps);
+
+        let expected_timestamps = vec![
+            TimeInstance::from_millis(1_632_384_644_000).unwrap(),
+            TimeInstance::from_millis(1_632_384_645_000).unwrap(),
+            TimeInstance::from_millis(1_632_384_645_001).unwrap(),
+            TimeInstance::from_millis(1_632_384_645_002).unwrap(),
+            TimeInstance::from_millis(1_632_384_645_003).unwrap(),
+            TimeInstance::from_millis(1_632_384_646_000).unwrap(),
+        ];
+
+        assert_eq!(uts, expected_timestamps);
     }
 }

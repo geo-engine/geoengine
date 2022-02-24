@@ -15,15 +15,16 @@ xml = ["quick-xml"]
 postgres = ["postgres-types", "bb8-postgres"]
 odm = ["pro"]
 nfdi = ["postgres", "geoengine-datatypes/postgres", "scienceobjectsdb_rust_api"]
+ebv = []
 # This compiles Geo Engine Pro
 pro = ["postgres", "geoengine-operators/pro", "geoengine-datatypes/pro"]
 
 [dependencies]
-actix-files = "=0.6.0-beta.12"
-actix-http = "=3.0.0-beta.17"
-actix-multipart = "=0.4.0-beta.11"
-actix-rt = "2.5"
-actix-web = "=4.0.0-beta.18"
+actix-files = "=0.6.0-beta.16"
+actix-http = "=3.0.0-rc.2"
+actix-multipart = "=0.4.0-beta.13"
+actix-rt = "2.6"
+actix-web = "=4.0.0-rc.3"
 actix-web-httpauth = "=0.6.0-beta.7"
 async-trait = "0.1"
 base64 = "0.13"
@@ -31,19 +32,20 @@ bb8-postgres = { version = "0.7", features = ["with-uuid-0_8", "with-chrono-0_4"
 bytes = "1.0"
 chrono = { version = "0.4", features = ["serde"] }
 config = "0.11"
-flexi_logger = "0.22"
+flexi_logger = { version = "0.22", features = ["trc"] }
+float-cmp = "0.9"
 futures = "0.3"
 futures-util = "0.3"
-gdal = "0.11"
+gdal = "0.12"
+gdal-sys = "0.6"
 geo = "0.18"
 geoengine-datatypes = { path = "../datatypes" }
 geoengine-operators = { path = "../operators" }
 geojson = {version = "0.22", features = ["geo-types"]}
-image = "0.23"
+image = "0.24"
 lazy_static = "1.4"
 log = "0.4"
 mime = "0.3"
-num_cpus = "1.13" # TODO: remove and switch to std::thread::available_concurrency() when it is available
 num-traits = "0.2"
 paste = "1.0"
 postgres-types = { version = "0.2", features = ["derive"], optional = true }
@@ -53,7 +55,7 @@ pwhash = "1.0"
 quick-xml = { version = "0.22", optional = true }
 rayon = "1.5"
 reqwest = { version = "0.11", features = ["json", "multipart", "stream"] }
-scienceobjectsdb_rust_api = { git = "https://github.com/ScienceObjectsDB/rust-api", branch="main", optional = true }
+scienceobjectsdb_rust_api = { git = "https://github.com/ScienceObjectsDB/rust-api", rev="f3c2901f4a620eb34fe6232e16717c9d5503f1d0", optional = true }
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 serde_urlencoded = "0.7"
@@ -64,6 +66,9 @@ time = "0.3"
 tokio = { version = "1.15", features = ["macros", "fs", "signal", "sync", "rt-multi-thread"] }
 tokio-util = "0.6"
 tonic = { version = "0.6", features = ["tls", "tls-roots"] }
+tracing = "0.1"
+tracing-actix-web = "=0.5.0-rc.3"
+tracing-subscriber = { version = "0.3", features = ["local-time", "ansi"] }
 typetag = "0.1"
 url = { version = "2.2", features = ["serde"] }
 uuid = { version = "0.8", features = ["serde", "v4", "v5"] }
@@ -74,6 +79,7 @@ httptest = "0.15.2"
 rand = "0.8.4"
 tempfile = "3.1"
 walkdir = "2.3"
+wiremock-grpc = "0.0.3-alpha1"
 xml-rs = "0.8.3"
 
 [build-dependencies]

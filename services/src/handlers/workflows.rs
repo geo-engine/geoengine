@@ -14,12 +14,10 @@ use crate::workflows::workflow::{Workflow, WorkflowId};
 use actix_web::{web, FromRequest, Responder};
 use futures::future::join_all;
 use geoengine_datatypes::dataset::{DatasetId, InternalDatasetId};
-use geoengine_datatypes::primitives::AxisAlignedRectangle;
+use geoengine_datatypes::primitives::{AxisAlignedRectangle, RasterQueryRectangle};
 use geoengine_datatypes::spatial_reference::SpatialReference;
 use geoengine_datatypes::util::Identifier;
-use geoengine_operators::engine::{
-    OperatorDatasets, RasterQueryRectangle, TypedOperator, TypedResultDescriptor,
-};
+use geoengine_operators::engine::{OperatorDatasets, TypedOperator, TypedResultDescriptor};
 use geoengine_operators::source::{
     FileNotFoundHandling, GdalDatasetGeoTransform, GdalDatasetParameters, GdalMetaDataStatic,
 };
@@ -376,8 +374,10 @@ async fn dataset_from_workflow_handler<C: Context>(
             GdalGeoTiffOptions {
                 compression_num_threads: get_config_element::<crate::util::config::Gdal>()?.compression_num_threads,
                 as_cog: info.as_cog,
+                force_big_tiff: false,
             },
             tile_limit,
+            
         ).await)?
     .map_err(error::Error::from)?;
 
@@ -468,6 +468,7 @@ mod tests {
     };
     use geoengine_datatypes::raster::{GridShape, RasterDataType, TilingSpecification};
     use geoengine_datatypes::spatial_reference::SpatialReference;
+    use geoengine_datatypes::util::test::TestDefault;
     use geoengine_operators::engine::{MultipleRasterSources, PlotOperator, TypedOperator};
     use geoengine_operators::engine::{RasterOperator, RasterResultDescriptor, VectorOperator};
     use geoengine_operators::mock::{
@@ -480,7 +481,7 @@ mod tests {
     use serde_json::json;
 
     async fn register_test_helper(method: Method) -> ServiceResponse {
-        let ctx = InMemoryContext::default();
+        let ctx = InMemoryContext::test_default();
 
         let session_id = ctx.default_session_ref().await.id();
 
@@ -520,7 +521,7 @@ mod tests {
 
     #[tokio::test]
     async fn register_missing_header() {
-        let ctx = InMemoryContext::default();
+        let ctx = InMemoryContext::test_default();
 
         let workflow = Workflow {
             operator: MockPointSource {
@@ -550,7 +551,7 @@ mod tests {
 
     #[tokio::test]
     async fn register_invalid_body() {
-        let ctx = InMemoryContext::default();
+        let ctx = InMemoryContext::test_default();
 
         let session_id = ctx.default_session_ref().await.id();
 
@@ -574,7 +575,7 @@ mod tests {
 
     #[tokio::test]
     async fn register_missing_fields() {
-        let ctx = InMemoryContext::default();
+        let ctx = InMemoryContext::test_default();
 
         let session_id = ctx.default_session_ref().await.id();
 
@@ -598,7 +599,7 @@ mod tests {
     }
 
     async fn load_test_helper(method: Method) -> (Workflow, ServiceResponse) {
-        let ctx = InMemoryContext::default();
+        let ctx = InMemoryContext::test_default();
 
         let session_id = ctx.default_session_ref().await.id();
 
@@ -631,7 +632,7 @@ mod tests {
 
     #[tokio::test]
     async fn load_missing_header() {
-        let ctx = InMemoryContext::default();
+        let ctx = InMemoryContext::test_default();
 
         let (_, id) = register_ndvi_workflow_helper(&ctx).await;
 
@@ -649,7 +650,7 @@ mod tests {
 
     #[tokio::test]
     async fn load_not_exist() {
-        let ctx = InMemoryContext::default();
+        let ctx = InMemoryContext::test_default();
 
         let session_id = ctx.default_session_ref().await.id();
 
@@ -662,7 +663,7 @@ mod tests {
     }
 
     async fn vector_metadata_test_helper(method: Method) -> ServiceResponse {
-        let ctx = InMemoryContext::default();
+        let ctx = InMemoryContext::test_default();
 
         let session_id = ctx.default_session_ref().await.id();
 
@@ -724,7 +725,7 @@ mod tests {
 
     #[tokio::test]
     async fn raster_metadata() {
-        let ctx = InMemoryContext::default();
+        let ctx = InMemoryContext::test_default();
 
         let session_id = ctx.default_session_ref().await.id();
 
@@ -787,7 +788,7 @@ mod tests {
 
     #[tokio::test]
     async fn metadata_missing_header() {
-        let ctx = InMemoryContext::default();
+        let ctx = InMemoryContext::test_default();
 
         let workflow = Workflow {
             operator: MockFeatureCollectionSource::single(
@@ -830,7 +831,7 @@ mod tests {
 
     #[tokio::test]
     async fn plot_metadata() {
-        let ctx = InMemoryContext::default();
+        let ctx = InMemoryContext::test_default();
 
         let session_id = ctx.default_session_ref().await.id();
 
@@ -871,7 +872,7 @@ mod tests {
 
     #[tokio::test]
     async fn provenance() {
-        let ctx = InMemoryContext::default();
+        let ctx = InMemoryContext::test_default();
 
         let session_id = ctx.default_session_ref().await.id();
 
@@ -922,6 +923,7 @@ mod tests {
     }
 
     #[tokio::test]
+    #[allow(clippy::too_many_lines)]
     async fn dataset_from_workflow() {
         let exe_ctx_tiling_spec = TilingSpecification {
             origin_coordinate: (0., 0.).into(),
@@ -929,7 +931,10 @@ mod tests {
         };
 
         // override the pixel size since this test was designed for 600 x 600 pixel tiles
-        let ctx = InMemoryContext::new_with_context_spec(exe_ctx_tiling_spec, Default::default());
+        let ctx = InMemoryContext::new_with_context_spec(
+            exe_ctx_tiling_spec,
+            TestDefault::test_default(),
+        );
 
         let session_id = ctx.default_session_ref().await.id();
 
@@ -1029,6 +1034,7 @@ mod tests {
                     .unwrap()
                     .compression_num_threads,
                 as_cog: false,
+                force_big_tiff: false,
             },
             None,
         )
@@ -1044,7 +1050,7 @@ mod tests {
 
     #[tokio::test]
     async fn it_does_not_register_invalid_workflow() {
-        let ctx = InMemoryContext::default();
+        let ctx = InMemoryContext::test_default();
         let session_id = ctx.default_session_ref().await.id();
 
         let workflow = json!({

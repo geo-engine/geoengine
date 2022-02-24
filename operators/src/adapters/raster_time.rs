@@ -1,9 +1,10 @@
-use crate::engine::RasterQueryRectangle;
 use crate::util::Result;
 use futures::stream::{FusedStream, Zip};
 use futures::Stream;
 use futures::{ready, StreamExt};
-use geoengine_datatypes::primitives::{SpatialPartition2D, TimeInstance, TimeInterval};
+use geoengine_datatypes::primitives::{
+    RasterQueryRectangle, SpatialPartition2D, TimeInstance, TimeInterval,
+};
 use geoengine_datatypes::raster::{GridSize, Pixel, RasterTile2D, TileInformation, TilingStrategy};
 use pin_project::pin_project;
 use std::cmp::min;

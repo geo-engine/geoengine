@@ -98,32 +98,6 @@ pub enum Error {
         source: serde_json::Error,
     },
 
-    Ocl {
-        ocl_error: ocl::error::Error,
-    },
-
-    ClProgramInvalidRasterIndex,
-
-    ClProgramInvalidRasterDataType,
-
-    ClProgramInvalidFeaturesIndex,
-
-    ClProgramInvalidVectorDataType,
-
-    ClProgramInvalidGenericIndex,
-
-    ClProgramInvalidGenericDataType,
-
-    ClProgramUnspecifiedRaster,
-
-    ClProgramUnspecifiedFeatures,
-
-    ClProgramUnspecifiedGenericBuffer,
-
-    ClProgramInvalidColumn,
-
-    ClInvalidInputsForIterationType,
-
     InvalidExpression,
 
     InvalidNumberOfExpressionInputs,
@@ -295,6 +269,36 @@ pub enum Error {
     Statistics {
         source: crate::util::statistics::StatisticsError,
     },
+
+    #[snafu(display("SparseTilesFillAdapter error: {}", source))]
+    SparseTilesFillAdapter {
+        source: crate::adapters::SparseTilesFillAdapterError,
+    },
+    #[snafu(context(false))]
+    ExpressionOperator {
+        source: crate::processing::ExpressionError,
+    },
+
+    #[snafu(context(false))]
+    TimeProjectionOperator {
+        source: crate::processing::TimeProjectionError,
+    },
+}
+
+impl From<crate::adapters::SparseTilesFillAdapterError> for Error {
+    fn from(source: crate::adapters::SparseTilesFillAdapterError) -> Self {
+        Error::SparseTilesFillAdapter { source }
+    }
+}
+
+/// The error requires to be `Send`.
+/// This inner modules tries to enforce this.
+mod requirements {
+    use super::*;
+
+    trait RequiresSend: Send {}
+
+    impl RequiresSend for Error {}
 }
 
 impl From<geoengine_datatypes::error::Error> for Error {
@@ -328,12 +332,6 @@ impl From<serde_json::Error> for Error {
 impl From<chrono::format::ParseError> for Error {
     fn from(source: ParseError) -> Self {
         Self::TimeParse { source }
-    }
-}
-
-impl From<ocl::Error> for Error {
-    fn from(ocl_error: ocl::Error) -> Self {
-        Self::Ocl { ocl_error }
     }
 }
 

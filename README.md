@@ -9,10 +9,11 @@ This workspace contains the Geo Engine crates.
 
 - While Geo Engine should build on Linux and Windows environments, we currently only support Ubuntu Linux 20.04 LTS.
 - You need a recent Rust environment with a Rust nightly compiler. We recommend rustup to manage Rust `https://rustup.rs/`.
-- Geo Engine uses OpenCL and therefore requires a functional OpenCL environment. On Linux you can use POCL to run OpenCL on CPUs.
 
 ### Ubuntu Users
+
 We suggest to add the [UbuntuGIS PPA](https://wiki.ubuntu.com/UbuntuGIS) for a recent version of GDAL.
+
 ```
 # Add ppa
 add-apt-repository ppa:ubuntugis/ubuntugis-unstable
@@ -29,10 +30,6 @@ apt install build-essential
 apt install clang lld
 # GDAL (>= 3.2.1)
 apt install libgdal-dev gdal-bin
-# OpenCL
-apt install ocl-icd-opencl-dev
-# (optional) OpenCL POCL
-apt install pocl-opencl-icd
 # Proj build dependencies (if libproj >= 7.2 not installed)
 apt install cmake sqlite3
 ```

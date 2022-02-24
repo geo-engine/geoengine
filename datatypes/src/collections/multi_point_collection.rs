@@ -1163,41 +1163,56 @@ mod tests {
             ],
             {
                 let mut map = HashMap::new();
-                map.insert("numbers".into(), FeatureData::Float(vec![0., 1.]));
+                map.insert("numbers".into(), FeatureData::Int(vec![0, 1]));
                 map.insert(
                     "number_nulls".into(),
-                    FeatureData::NullableFloat(vec![Some(0.), None]),
+                    FeatureData::NullableInt(vec![Some(0), None]),
                 );
                 map
             },
         )
         .unwrap();
 
-        let pc_expected = MultiPointCollection::from_data(
-            MultiPoint::many(vec![
-                vec![MARBURG_EPSG_900_913, COLOGNE_EPSG_900_913],
-                vec![HAMBURG_EPSG_900_913],
-            ])
-            .unwrap(),
-            vec![
-                TimeInterval::new_unchecked(0, 1),
-                TimeInterval::new_unchecked(1, 2),
-            ],
-            {
-                let mut map = HashMap::new();
-                map.insert("numbers".into(), FeatureData::Float(vec![0., 1.]));
-                map.insert(
-                    "number_nulls".into(),
-                    FeatureData::NullableFloat(vec![Some(0.), None]),
-                );
-                map
-            },
-        )
+        let expected_points = MultiPoint::many(vec![
+            vec![MARBURG_EPSG_900_913, COLOGNE_EPSG_900_913],
+            vec![HAMBURG_EPSG_900_913],
+        ])
         .unwrap();
 
         let proj_pc = pc.reproject(&projector).unwrap();
 
-        assert_eq!(proj_pc, pc_expected);
+        // Assert geometrys are approx equal
+        proj_pc
+            .geometries()
+            .into_iter()
+            .zip(expected_points.iter())
+            .for_each(|(a, e)| {
+                assert!(approx_eq!(&MultiPoint, &a.into(), e, epsilon = 0.000_001));
+            });
+
+        // Assert that feature time intervals did not move around
+        assert_eq!(proj_pc.time_intervals().len(), 2);
+        assert_eq!(
+            proj_pc.time_intervals(),
+            &[
+                TimeInterval::new_unchecked(0, 1),
+                TimeInterval::new_unchecked(1, 2),
+            ]
+        );
+
+        // Assert that feature data did not magicaly disappear
+        if let FeatureDataRef::Int(numbers) = proj_pc.data("numbers").unwrap() {
+            assert_eq!(numbers.as_ref(), &[0, 1]);
+        } else {
+            unreachable!();
+        }
+
+        if let FeatureDataRef::Int(numbers) = proj_pc.data("number_nulls").unwrap() {
+            assert_eq!(numbers.as_ref()[1], 0);
+            assert_eq!(numbers.nulls(), vec![false, true]);
+        } else {
+            unreachable!();
+        }
     }
 
     #[test]
@@ -1220,7 +1235,7 @@ mod tests {
             .collect(),
         )
         .unwrap();
-        let mut iter = (&collection).into_iter();
+        let mut iter = collection.into_iter();
 
         let row = iter.next().unwrap();
         assert_eq!(&[Coordinate2D::new(0.0, 0.1)], row.geometry.points());

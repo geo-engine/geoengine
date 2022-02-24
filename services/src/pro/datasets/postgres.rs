@@ -23,10 +23,11 @@ use bb8_postgres::tokio_postgres::tls::{MakeTlsConnect, TlsConnect};
 use bb8_postgres::tokio_postgres::Socket;
 use bb8_postgres::PostgresConnectionManager;
 use geoengine_datatypes::dataset::{DatasetId, DatasetProviderId, InternalDatasetId};
+use geoengine_datatypes::primitives::RasterQueryRectangle;
+use geoengine_datatypes::primitives::VectorQueryRectangle;
 use geoengine_datatypes::util::Identifier;
 use geoengine_operators::engine::{
-    MetaData, RasterQueryRectangle, RasterResultDescriptor, StaticMetaData, TypedResultDescriptor,
-    VectorQueryRectangle, VectorResultDescriptor,
+    MetaData, RasterResultDescriptor, StaticMetaData, TypedResultDescriptor, VectorResultDescriptor,
 };
 use geoengine_operators::mock::MockDatasetDataSourceLoadingInfo;
 use geoengine_operators::source::{GdalLoadingInfo, OgrSourceDataset};
@@ -481,6 +482,12 @@ where
                 ))?,
             }),
             MetaDataDefinition::GdalStatic(d) => Ok(DatasetMetaDataJson {
+                meta_data: serde_json::to_value(self)?,
+                result_descriptor: serde_json::to_value(&TypedResultDescriptor::from(
+                    d.result_descriptor.clone(),
+                ))?,
+            }),
+            MetaDataDefinition::GdalMetadataNetCdfCf(d) => Ok(DatasetMetaDataJson {
                 meta_data: serde_json::to_value(self)?,
                 result_descriptor: serde_json::to_value(&TypedResultDescriptor::from(
                     d.result_descriptor.clone(),

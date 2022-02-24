@@ -65,8 +65,8 @@ impl<'a> PointInPolygonTester<'a> {
         ring_start_index: usize,
         ring_end_index: usize,
         polygon_coordinates: &[Coordinate2D],
-        constants: &mut Vec<f64>,
-        multiples: &mut Vec<f64>,
+        constants: &mut [f64],
+        multiples: &mut [f64],
     ) {
         let number_of_corners = ring_end_index - ring_start_index - 1;
         let mut j = number_of_corners - 1;

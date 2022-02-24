@@ -1,12 +1,12 @@
-use crate::handlers::ErrorResponse;
 use crate::workflows::workflow::WorkflowId;
+use crate::{datasets::external::netcdfcf::NetCdfCf4DProviderError, handlers::ErrorResponse};
 use actix_web::http::StatusCode;
 use actix_web::HttpResponse;
 use geoengine_datatypes::{
     dataset::{DatasetId, DatasetProviderId},
     spatial_reference::SpatialReferenceOption,
 };
-use snafu::prelude::*;
+use snafu::{prelude::*, AsErrorSource};
 use strum::IntoStaticStr;
 use tonic::Status;
 
@@ -311,6 +311,17 @@ pub enum Error {
         message: String,
     },
     MissingNFDIMetaData,
+
+    #[snafu(context(false))]
+    NetCdfCf4DProvider {
+        source: NetCdfCf4DProviderError,
+    },
+
+    #[cfg(feature = "ebv")]
+    #[snafu(context(false))]
+    EbvHandler {
+        source: crate::handlers::ebv::EbvError,
+    },
 }
 
 impl actix_web::error::ResponseError for Error {
@@ -431,3 +442,15 @@ impl From<tonic::transport::Error> for Error {
         Self::TonicTransport { source }
     }
 }
+
+impl From<tokio::task::JoinError> for Error {
+    fn from(source: tokio::task::JoinError) -> Self {
+        Error::TokioJoin { source }
+    }
+}
+
+pub trait ErrorSource: std::error::Error + Send + Sync + 'static + AsErrorSource {}
+
+impl ErrorSource for dyn std::error::Error + Send + Sync + 'static {}
+
+impl<T> ErrorSource for T where T: std::error::Error + Send + Sync + 'static {}

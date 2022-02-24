@@ -2,7 +2,9 @@ use actix_web::{web, FromRequest, HttpResponse};
 use reqwest::Url;
 use snafu::{ensure, ResultExt};
 
-use geoengine_datatypes::primitives::{AxisAlignedRectangle, SpatialPartition2D};
+use geoengine_datatypes::primitives::{
+    AxisAlignedRectangle, RasterQueryRectangle, SpatialPartition2D,
+};
 use geoengine_datatypes::{
     operations::image::Colorizer, primitives::SpatialResolution,
     spatial_reference::SpatialReference,
@@ -19,7 +21,7 @@ use crate::workflows::registry::WorkflowRegistry;
 use crate::workflows::workflow::WorkflowId;
 
 use geoengine_datatypes::primitives::{TimeInstance, TimeInterval};
-use geoengine_operators::engine::{RasterOperator, RasterQueryRectangle, ResultDescriptor};
+use geoengine_operators::engine::{RasterOperator, ResultDescriptor};
 use geoengine_operators::processing::{Reprojection, ReprojectionParams};
 use geoengine_operators::{
     call_on_generic_raster_processor, util::raster_stream_to_png::raster_stream_to_png_bytes,
@@ -371,16 +373,15 @@ mod tests {
     use geoengine_datatypes::operations::image::RgbaColor;
     use geoengine_datatypes::primitives::SpatialPartition2D;
     use geoengine_datatypes::raster::{GridShape2D, TilingSpecification};
-    use geoengine_operators::engine::{
-        ExecutionContext, RasterQueryProcessor, RasterQueryRectangle,
-    };
+    use geoengine_datatypes::util::test::TestDefault;
+    use geoengine_operators::engine::{ExecutionContext, RasterQueryProcessor};
     use geoengine_operators::source::GdalSourceProcessor;
     use geoengine_operators::util::gdal::create_ndvi_meta_data;
     use std::convert::TryInto;
     use xml::ParserConfig;
 
     async fn test_test_helper(method: Method, path: Option<&str>) -> ServiceResponse {
-        let ctx = InMemoryContext::default();
+        let ctx = InMemoryContext::test_default();
         let session_id = ctx.default_session_ref().await.id();
 
         let req = actix_web::test::TestRequest::default()
@@ -422,7 +423,7 @@ mod tests {
     }
 
     async fn get_capabilities_test_helper(method: Method) -> ServiceResponse {
-        let ctx = InMemoryContext::default();
+        let ctx = InMemoryContext::test_default();
         let session_id = ctx.default_session_ref().await.id();
 
         let (_, id) = register_ndvi_workflow_helper(&ctx).await;
@@ -483,13 +484,13 @@ mod tests {
 
     #[tokio::test]
     async fn png_from_stream_non_full() {
-        let ctx = InMemoryContext::default();
+        let ctx = InMemoryContext::test_default();
         let exe_ctx = ctx.execution_context(SimpleSession::default()).unwrap();
 
         let gdal_source = GdalSourceProcessor::<u8> {
             tiling_specification: exe_ctx.tiling_specification(),
             meta_data: Box::new(create_ndvi_meta_data()),
-            phantom_data: Default::default(),
+            no_data_value: None,
         };
 
         let query_partition =
@@ -513,6 +514,8 @@ mod tests {
         .await
         .unwrap();
 
+        // geoengine_datatypes::util::test::save_test_bytes(&image_bytes, "raster_small.png");
+
         assert_eq!(
             include_bytes!("../../../test_data/wms/raster_small.png") as &[u8],
             image_bytes.as_slice()
@@ -526,7 +529,10 @@ mod tests {
         };
 
         // override the pixel size since this test was designed for 600 x 600 pixel tiles
-        let ctx = InMemoryContext::new_with_context_spec(exe_ctx_tiling_spec, Default::default());
+        let ctx = InMemoryContext::new_with_context_spec(
+            exe_ctx_tiling_spec,
+            TestDefault::test_default(),
+        );
 
         let session_id = ctx.default_session_ref().await.id();
 
@@ -543,15 +549,20 @@ mod tests {
         let res = get_map_test_helper(Method::GET, None).await;
 
         assert_eq!(res.status(), 200);
+
+        let image_bytes = actix_web::test::read_body(res).await;
+
+        // geoengine_datatypes::util::test::save_test_bytes(&image_bytes, "get_map.png");
+
         assert_eq!(
             include_bytes!("../../../test_data/wms/get_map.png") as &[u8],
-            actix_web::test::read_body(res).await
+            image_bytes
         );
     }
 
     #[tokio::test]
     async fn get_map_ndvi() {
-        let ctx = InMemoryContext::default();
+        let ctx = InMemoryContext::test_default();
         let session_id = ctx.default_session_ref().await.id();
 
         let (_, id) = register_ndvi_workflow_helper(&ctx).await;
@@ -566,9 +577,13 @@ mod tests {
             actix_web::test::read_body(response).await
         );
 
+        let image_bytes = actix_web::test::read_body(response).await;
+
+        // geoengine_datatypes::util::test::save_test_bytes(&image_bytes, "get_map_ndvi.png");
+
         assert_eq!(
             include_bytes!("../../../test_data/wms/get_map_ndvi.png") as &[u8],
-            actix_web::test::read_body(response).await
+            image_bytes
         );
     }
 
@@ -581,7 +596,10 @@ mod tests {
         };
 
         // override the pixel size since this test was designed for 600 x 600 pixel tiles
-        let ctx = InMemoryContext::new_with_context_spec(exe_ctx_tiling_spec, Default::default());
+        let ctx = InMemoryContext::new_with_context_spec(
+            exe_ctx_tiling_spec,
+            TestDefault::test_default(),
+        );
 
         let session_id = ctx.default_session_ref().await.id();
 
@@ -591,9 +609,14 @@ mod tests {
         let res = send_test_request(req, ctx).await;
 
         assert_eq!(res.status(), 200);
+
+        let image_bytes = actix_web::test::read_body(res).await;
+
+        // geoengine_datatypes::util::test::save_test_bytes(&image_bytes, "get_map.png");
+
         assert_eq!(
             include_bytes!("../../../test_data/wms/get_map.png") as &[u8],
-            actix_web::test::read_body(res).await
+            image_bytes
         );
     }
 
@@ -624,7 +647,10 @@ mod tests {
         };
 
         // override the pixel size since this test was designed for 600 x 600 pixel tiles
-        let ctx = InMemoryContext::new_with_context_spec(exe_ctx_tiling_spec, Default::default());
+        let ctx = InMemoryContext::new_with_context_spec(
+            exe_ctx_tiling_spec,
+            TestDefault::test_default(),
+        );
 
         let session_id = ctx.default_session_ref().await.id();
 
@@ -667,15 +693,20 @@ mod tests {
         let res = send_test_request(req, ctx).await;
 
         assert_eq!(res.status(), 200);
+
+        let image_bytes = actix_web::test::read_body(res).await;
+
+        // geoengine_datatypes::util::test::save_test_bytes(&image_bytes, "get_map_colorizer.png");
+
         assert_eq!(
             include_bytes!("../../../test_data/wms/get_map_colorizer.png") as &[u8],
-            actix_web::test::read_body(res).await
+            image_bytes
         );
     }
 
     #[tokio::test]
     async fn it_zoomes_very_far() {
-        let ctx = InMemoryContext::default();
+        let ctx = InMemoryContext::test_default();
         let session_id = ctx.default_session_ref().await.id();
 
         let (_, id) = register_ndvi_workflow_helper(&ctx).await;

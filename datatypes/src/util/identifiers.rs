@@ -9,6 +9,12 @@ macro_rules! identifier {
         #[derive(Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize, Clone, Copy, Hash)]
         pub struct $id_name(pub uuid::Uuid);
 
+        impl $id_name {
+            pub const fn from_u128(v: u128) -> Self {
+                Self(uuid::Uuid::from_u128(v))
+            }
+        }
+
         impl crate::util::Identifier for $id_name {
             fn new() -> Self {
                 Self(uuid::Uuid::new_v4())

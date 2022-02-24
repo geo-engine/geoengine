@@ -8,7 +8,9 @@ use crate::projects::Symbology;
 use crate::util::user_input::{UserInput, Validated};
 use async_trait::async_trait;
 use geoengine_datatypes::dataset::{DatasetId, DatasetProviderId};
-use geoengine_operators::engine::{MetaData, VectorQueryRectangle};
+use geoengine_datatypes::primitives::VectorQueryRectangle;
+use geoengine_operators::engine::MetaData;
+use geoengine_operators::source::GdalMetadataNetCdfCf;
 use geoengine_operators::{engine::StaticMetaData, source::OgrSourceDataset};
 use geoengine_operators::{
     engine::TypedResultDescriptor, mock::MockDatasetDataSourceLoadingInfo,
@@ -169,6 +171,7 @@ pub enum MetaDataDefinition {
     OgrMetaData(StaticMetaData<OgrSourceDataset, VectorResultDescriptor, VectorQueryRectangle>),
     GdalMetaDataRegular(GdalMetaDataRegular),
     GdalStatic(GdalMetaDataStatic),
+    GdalMetadataNetCdfCf(GdalMetadataNetCdfCf),
 }
 
 impl MetaDataDefinition {
@@ -176,9 +179,9 @@ impl MetaDataDefinition {
         match self {
             MetaDataDefinition::MockMetaData(_) => "MockDatasetDataSource",
             MetaDataDefinition::OgrMetaData(_) => "OgrSource",
-            MetaDataDefinition::GdalMetaDataRegular(_) | MetaDataDefinition::GdalStatic(_) => {
-                "GdalSource"
-            }
+            MetaDataDefinition::GdalMetaDataRegular(_)
+            | MetaDataDefinition::GdalStatic(_)
+            | MetaDataDefinition::GdalMetadataNetCdfCf(_) => "GdalSource",
         }
     }
 
@@ -200,6 +203,11 @@ impl MetaDataDefinition {
                 .map(Into::into)
                 .context(error::Operator),
             MetaDataDefinition::GdalStatic(m) => m
+                .result_descriptor()
+                .await
+                .map(Into::into)
+                .context(error::Operator),
+            MetaDataDefinition::GdalMetadataNetCdfCf(m) => m
                 .result_descriptor()
                 .await
                 .map(Into::into)

@@ -124,7 +124,7 @@ impl Histogram {
     /// This method fails if the feature is not numeric.
     ///
     pub fn add_feature_data(&mut self, data: FeatureDataRef) -> Result<()> {
-        // TODO: implement efficiently OpenCL version
+        // TODO: implement efficiently multi-threaded version
         match data {
             FeatureDataRef::Float(value_ref) if !value_ref.has_nulls() => {
                 for &value in value_ref.as_ref() {

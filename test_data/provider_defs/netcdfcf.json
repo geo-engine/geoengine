@@ -1,0 +1,5 @@
+{
+  "type": "NetCdfCfDataProviderDefinition",
+  "name": "terranova",
+  "path": "test_data/netcdf4d/"
+}
