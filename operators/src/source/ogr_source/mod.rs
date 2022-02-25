@@ -4316,6 +4316,107 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn points_empty_field_csv() {
+        let dataset = DatasetId::Internal {
+            dataset_id: InternalDatasetId::new(),
+        };
+        let mut exe_ctx = MockExecutionContext::test_default();
+        exe_ctx.add_meta_data::<OgrSourceDataset, VectorResultDescriptor, VectorQueryRectangle>(
+            dataset.clone(),
+            Box::new(StaticMetaData {
+                loading_info: OgrSourceDataset {
+                    file_name: test_data!("vector/data/lonlat_empty_field.csv").into(),
+                    layer_name: "lonlat_empty_field".to_owned(),
+                    data_type: Some(VectorDataType::MultiPoint),
+                    time: OgrSourceDatasetTimeType::None,
+                    default_geometry: None,
+                    columns: Some(OgrSourceColumnSpec {
+                        format_specifics: Some(Csv {
+                            header: CsvHeader::Yes,
+                        }),
+                        x: "Longitude".to_owned(),
+                        y: Some("Latitude".to_owned()),
+                        int: vec![],
+                        float: vec![],
+                        text: vec!["Name".to_owned()],
+                        rename: None,
+                    }),
+                    force_ogr_time_filter: false,
+                    force_ogr_spatial_filter: false,
+                    on_error: OgrSourceErrorSpec::Abort,
+                    sql_query: None,
+                    attribute_query: None,
+                },
+                result_descriptor: VectorResultDescriptor {
+                    data_type: VectorDataType::MultiPoint,
+                    spatial_reference: SpatialReference::epsg_4326().into(),
+                    columns: [("Name".to_string(), FeatureDataType::Text)]
+                        .iter()
+                        .cloned()
+                        .collect(),
+                },
+                phantom: Default::default(),
+            }),
+        );
+
+        let source = OgrSource {
+            params: OgrSourceParameters {
+                dataset,
+                attribute_projection: None,
+                attribute_filters: None,
+            },
+        }
+            .boxed()
+            .initialize(&exe_ctx)
+            .await
+            .unwrap();
+
+        assert_eq!(
+            source.result_descriptor().data_type,
+            VectorDataType::MultiPoint
+        );
+        assert_eq!(
+            source.result_descriptor().spatial_reference,
+            SpatialReference::epsg_4326().into()
+        );
+
+        let query_processor = source.query_processor().unwrap().multi_point().unwrap();
+
+        let query_bbox = BoundingBox2D::new((-180.0, -90.0).into(), (180.00, 90.0).into()).unwrap();
+
+        let context = MockQueryContext::new((1024 * 1024).into());
+        let query = query_processor
+            .query(
+                VectorQueryRectangle {
+                    spatial_bounds: query_bbox,
+                    time_interval: Default::default(),
+                    spatial_resolution: SpatialResolution::new(1., 1.).unwrap(),
+                },
+                &context,
+            )
+            .await
+            .unwrap();
+
+        let result: Vec<MultiPointCollection> = query.try_collect().await.unwrap();
+
+        assert_eq!(result.len(), 1);
+        let result = result.into_iter().next().unwrap();
+
+        let pc = MultiPointCollection::from_data(
+            MultiPoint::many(vec![vec![(1.1, 2.2)], vec![(1.1, 2.2)]]).unwrap(),
+            vec![Default::default(); 2],
+            {
+                let mut map = HashMap::new();
+                map.insert("Name".into(), FeatureData::NullableText(vec![Some("foo".to_owned()), None]));
+                map
+            },
+        )
+            .unwrap();
+
+        assert_eq!(result, pc);
+    }
+
+    #[tokio::test]
     async fn rename() -> Result<()> {
         let dataset_information = OgrSourceDataset {
             file_name: test_data!("vector/data/plain_data.csv").into(),
