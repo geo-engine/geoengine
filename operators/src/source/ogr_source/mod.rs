@@ -4366,10 +4366,10 @@ mod tests {
                 attribute_filters: None,
             },
         }
-            .boxed()
-            .initialize(&exe_ctx)
-            .await
-            .unwrap();
+        .boxed()
+        .initialize(&exe_ctx)
+        .await
+        .unwrap();
 
         assert_eq!(
             source.result_descriptor().data_type,
@@ -4402,16 +4402,31 @@ mod tests {
         assert_eq!(result.len(), 1);
         let result = result.into_iter().next().unwrap();
 
+        let column = result.data("Name").unwrap();
+
+        assert_eq!(column.nulls(), vec![false, true]);
+        assert_eq!(
+            column.get_unchecked(0),
+            FeatureDataValue::NullableText(Some("foo".to_string()))
+        );
+        assert_eq!(
+            column.get_unchecked(1),
+            FeatureDataValue::NullableText(None)
+        );
+
         let pc = MultiPointCollection::from_data(
             MultiPoint::many(vec![vec![(1.1, 2.2)], vec![(1.1, 2.2)]]).unwrap(),
             vec![Default::default(); 2],
             {
                 let mut map = HashMap::new();
-                map.insert("Name".into(), FeatureData::NullableText(vec![Some("foo".to_owned()), None]));
+                map.insert(
+                    "Name".into(),
+                    FeatureData::NullableText(vec![Some("foo".to_owned()), None]),
+                );
                 map
             },
         )
-            .unwrap();
+        .unwrap();
 
         assert_eq!(result, pc);
     }
