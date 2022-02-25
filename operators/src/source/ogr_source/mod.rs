@@ -4371,15 +4371,6 @@ mod tests {
         .await
         .unwrap();
 
-        assert_eq!(
-            source.result_descriptor().data_type,
-            VectorDataType::MultiPoint
-        );
-        assert_eq!(
-            source.result_descriptor().spatial_reference,
-            SpatialReference::epsg_4326().into()
-        );
-
         let query_processor = source.query_processor().unwrap().multi_point().unwrap();
 
         let query_bbox = BoundingBox2D::new((-180.0, -90.0).into(), (180.00, 90.0).into()).unwrap();
