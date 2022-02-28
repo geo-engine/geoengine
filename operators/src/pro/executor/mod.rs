@@ -429,8 +429,10 @@ where
         F: Future<Output = Desc::ResultType> + Send + 'static,
     {
         let mut stream = self.submit_stream(key, futures::stream::once(f)).await?;
-
-        Ok(stream.next().await.unwrap())
+        Ok(stream
+            .next()
+            .await
+            .expect("Futures always produce a result."))
     }
 
     pub async fn close(self) -> Result<()> {
