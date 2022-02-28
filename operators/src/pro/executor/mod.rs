@@ -43,6 +43,9 @@ pub trait ExecutorTaskDescription: Clone + Send + Debug + 'static {
     fn slice_result(&self, result: &Self::ResultType) -> Option<Self::ResultType>;
 }
 
+/// Size of the task submission queue.
+const TASK_SUBMISSION_QUEUE_SIZE: usize = 128;
+
 type TerminationMessage<T> =
     std::result::Result<(), SendError<std::result::Result<Arc<T>, ExecutorError>>>;
 
@@ -382,7 +385,8 @@ where
     /// Creates a new `Executor` instance, ready to serve computations. The buffer
     /// size determines how much elements are at most kept  in memory per computation.
     pub fn new(buffer_size: usize) -> Executor<Desc> {
-        let (sender, receiver) = tokio::sync::mpsc::channel::<KeyedComputation<Desc>>(128);
+        let (sender, receiver) =
+            tokio::sync::mpsc::channel::<KeyedComputation<Desc>>(TASK_SUBMISSION_QUEUE_SIZE);
 
         let mut looper = ExecutorLooper::new(buffer_size, receiver);
 
