@@ -700,7 +700,7 @@ mod tests {
     use geoengine_operators::source::{OgrSource, OgrSourceDataset, OgrSourceParameters};
 
     mod wiremock_gen {
-        wiremock_grpc::generate!("api.services.v1", TestProjectServer);
+        wiremock_grpc::generate!("sciobjsdb.api.storage.services.v1", TestProjectServer);
     }
     use wiremock_gen::*;
     use wiremock_grpc::*;
@@ -997,7 +997,7 @@ mod tests {
 
         server.setup(
             MockBuilder::when()
-                .path("/api.services.v1.ProjectService/GetProjectDatasets")
+                .path("/sciobjsdb.api.storage.services.v1.ProjectService/GetProjectDatasets")
                 .then()
                 .return_status(tonic::Code::Ok)
                 .return_body(|| GetProjectDatasetsResponse {
@@ -1043,7 +1043,7 @@ mod tests {
 
         server.setup(
             MockBuilder::when()
-                .path("/api.services.v1.DatasetService/GetDataset")
+                .path("/sciobjsdb.api.storage.services.v1.DatasetService/GetDataset")
                 .then()
                 .return_status(tonic::Code::Ok)
                 .return_body(|| GetDatasetResponse {
@@ -1090,7 +1090,7 @@ mod tests {
 
         server.setup(
             MockBuilder::when()
-                .path("/api.services.v1.DatasetService/GetDataset")
+                .path("/sciobjsdb.api.storage.services.v1.DatasetService/GetDataset")
                 .then()
                 .return_status(tonic::Code::Ok)
                 .return_body(|| GetDatasetResponse {
@@ -1116,7 +1116,7 @@ mod tests {
 
         server.setup(
             MockBuilder::when()
-                .path("/api.services.v1.DatasetService/GetDatasetObjectGroups")
+                .path("/sciobjsdb.api.storage.services.v1.DatasetService/GetDatasetObjectGroups")
                 .then()
                 .return_status(tonic::Code::Ok)
                 .return_body(|| GetDatasetObjectGroupsResponse {
@@ -1177,7 +1177,7 @@ mod tests {
 
         server.setup(
             MockBuilder::when()
-                .path("/api.services.v1.DatasetService/GetDataset")
+                .path("/sciobjsdb.api.storage.services.v1.DatasetService/GetDataset")
                 .then()
                 .return_status(tonic::Code::Ok)
                 .return_body(|| GetDatasetResponse {
@@ -1203,7 +1203,7 @@ mod tests {
 
         server.setup(
             MockBuilder::when()
-                .path("/api.services.v1.DatasetService/GetDatasetObjectGroups")
+                .path("/sciobjsdb.api.storage.services.v1.DatasetService/GetDatasetObjectGroups")
                 .then()
                 .return_status(tonic::Code::Ok)
                 .return_body(|| GetDatasetObjectGroupsResponse {
@@ -1240,7 +1240,7 @@ mod tests {
 
         server.setup(
             MockBuilder::when()
-                .path("/api.services.v1.ObjectLoadService/CreateDownloadLink")
+                .path("/sciobjsdb.api.storage.services.v1.ObjectLoadService/CreateDownloadLink")
                 .then()
                 .return_status(tonic::Code::Ok)
                 .return_body(|| CreateDownloadLinkResponse {
