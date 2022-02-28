@@ -20,12 +20,12 @@ ebv = []
 pro = ["postgres", "geoengine-operators/pro", "geoengine-datatypes/pro"]
 
 [dependencies]
-actix-files = "=0.6.0-beta.16"
-actix-http = "=3.0.0-rc.2"
-actix-multipart = "=0.4.0-beta.13"
+actix-files = "0.6"
+actix-http = "3.0"
+actix-multipart = "0.4"
 actix-rt = "2.6"
-actix-web = "=4.0.0-rc.3"
-actix-web-httpauth = "=0.6.0-beta.7"
+actix-web = "4.0"
+actix-web-httpauth = "=0.6.0-beta.8"
 async-trait = "0.1"
 base64 = "0.13"
 bb8-postgres = { version = "0.7", features = ["with-uuid-0_8", "with-chrono-0_4", "with-serde_json-1"], optional = true }
@@ -67,7 +67,7 @@ tokio = { version = "1.15", features = ["macros", "fs", "signal", "sync", "rt-mu
 tokio-util = { version = "0.7", features = ["codec"] }
 tonic = { version = "0.6", features = ["tls", "tls-roots"] }
 tracing = "0.1"
-tracing-actix-web = "=0.5.0-rc.3"
+tracing-actix-web = "0.5"
 tracing-subscriber = { version = "0.3", features = ["local-time", "ansi"] }
 typetag = "0.1"
 url = { version = "2.2", features = ["serde"] }
