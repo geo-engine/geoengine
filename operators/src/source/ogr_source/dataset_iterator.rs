@@ -1,7 +1,7 @@
 // generated code of `_OgrDatasetIterator` needs this lint for the `peeked` field
 #![allow(clippy::option_option)]
 
-use super::{CsvHeader, FeaturesProvider, FormatSpecifics, OgrSourceDataset};
+use super::{AttributeFilter, CsvHeader, FeaturesProvider, FormatSpecifics, OgrSourceDataset};
 use crate::error::{self};
 use crate::util::gdal::gdal_open_dataset_ex;
 use crate::util::Result;
@@ -42,14 +42,21 @@ struct _OgrDatasetIterator {
 }
 
 impl OgrDatasetIterator {
+    #[allow(clippy::needless_pass_by_value)]
     pub fn new(
         dataset_information: &OgrSourceDataset,
         query_rectangle: &VectorQueryRectangle,
+        attribute_filters: Vec<AttributeFilter>,
     ) -> Result<OgrDatasetIterator> {
         let dataset_iterator = _OgrDatasetIteratorTryBuilder {
             dataset: Self::open_gdal_dataset(dataset_information)?,
             features_provider_builder: |dataset| {
-                Self::create_features_provider(dataset, dataset_information, query_rectangle)
+                Self::create_features_provider(
+                    dataset,
+                    dataset_information,
+                    query_rectangle,
+                    &attribute_filters,
+                )
             },
         }
         .try_build()?;
@@ -70,6 +77,7 @@ impl OgrDatasetIterator {
         dataset: &'d Dataset,
         dataset_information: &OgrSourceDataset,
         query_rectangle: &VectorQueryRectangle,
+        attribute_filters: &[AttributeFilter],
     ) -> Result<FeaturesProvider<'d>> {
         // TODO: add OGR time filter if forced
 
@@ -101,6 +109,12 @@ impl OgrDatasetIterator {
                 attribute_query, &dataset_information.layer_name
             );
             features_provider.set_attribute_filter(attribute_query)?;
+        }
+
+        if dataset.driver().short_name() == "CSV" {
+            features_provider.set_attribute_filters_cast(attribute_filters)?;
+        } else {
+            features_provider.set_attribute_filters(attribute_filters)?;
         }
 
         Ok(features_provider)

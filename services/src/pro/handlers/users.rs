@@ -160,7 +160,7 @@ pub(crate) async fn logout_handler<C: ProContext>(
 /// }
 /// ```
 pub(crate) async fn anonymous_handler<C: ProContext>(ctx: web::Data<C>) -> Result<impl Responder> {
-    if !config::get_config_element::<crate::pro::util::config::User>()?.anonymous_access {
+    if !config::get_config_element::<crate::util::config::Session>()?.anonymous_access {
         return Err(error::Error::Authorization {
             source: Box::new(error::Error::AnonymousAccessDisabled),
         });
@@ -702,14 +702,14 @@ mod tests {
 
         assert_eq!(res.status(), 200);
 
-        config::set_config("user.anonymous_access", false).unwrap();
+        config::set_config("session.anonymous_access", false).unwrap();
 
         let ctx = ProInMemoryContext::test_default();
 
         let req = test::TestRequest::post().uri("/anonymous");
         let res = send_pro_test_request(req, ctx.clone()).await;
 
-        config::set_config("user.anonymous_access", true).unwrap();
+        config::set_config("session.anonymous_access", true).unwrap();
 
         ErrorResponse::assert(
             res,

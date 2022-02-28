@@ -132,6 +132,22 @@ impl MetaData<GdalLoadingInfo, RasterResultDescriptor, RasterQueryRectangle>
     for GdalMetadataNetCdfCf
 {
     async fn loading_info(&self, query: RasterQueryRectangle) -> Result<GdalLoadingInfo> {
+        // special case: single step
+        if self.start == self.end || self.step.step == 0 {
+            let time = TimeInterval::new(self.start, self.end)?;
+
+            let mut params = self.params.clone();
+            params.rasterband_channel = 1;
+
+            return GdalMetaDataStatic {
+                time: Some(time),
+                params,
+                result_descriptor: self.result_descriptor.clone(),
+            }
+            .loading_info(query)
+            .await;
+        }
+
         let snapped_start = self
             .step
             .snap_relative(self.start, query.time_interval.start())?;
@@ -428,6 +444,68 @@ mod tests {
                 "/foo/bar_022000000.tiff"
             ]
         );
+    }
+
+    #[tokio::test]
+    async fn netcdf_cf_single_time_step() {
+        let time_start = TimeInstance::from(NaiveDate::from_ymd(2000, 1, 1).and_hms(0, 0, 0));
+        let time_end = TimeInstance::from(NaiveDate::from_ymd(2000, 1, 1).and_hms(0, 0, 0));
+        let time_step = TimeStep {
+            step: 0,
+            granularity: TimeGranularity::Years,
+        };
+
+        let metadata = GdalMetadataNetCdfCf {
+            result_descriptor: RasterResultDescriptor {
+                data_type: RasterDataType::U8,
+                spatial_reference: SpatialReference::epsg_4326().into(),
+                measurement: Measurement::Unitless,
+                no_data_value: None,
+            },
+            params: GdalDatasetParameters {
+                file_path: "path/to/ds".into(),
+                rasterband_channel: 0,
+                geo_transform: GdalDatasetGeoTransform {
+                    origin_coordinate: (0., 0.).into(),
+                    x_pixel_size: 1.,
+                    y_pixel_size: 1.,
+                },
+                width: 128,
+                height: 128,
+                file_not_found_handling: FileNotFoundHandling::Error,
+                no_data_value: None,
+                properties_mapping: None,
+                gdal_open_options: None,
+                gdal_config_options: None,
+            },
+            start: time_start,
+            end: time_end,
+            step: time_step,
+            band_offset: 0,
+        };
+
+        let query = RasterQueryRectangle {
+            spatial_bounds: SpatialPartition2D::new_unchecked((0., 128.).into(), (128., 0.).into()),
+            time_interval: TimeInterval::new(time_start, time_end).unwrap(),
+            spatial_resolution: SpatialResolution::one(),
+        };
+
+        let loading_info = metadata.loading_info(query).await.unwrap();
+        let mut iter = loading_info.info;
+
+        let step_1 = iter.next().unwrap().unwrap();
+
+        assert_eq!(
+            step_1.time,
+            TimeInterval::new(
+                TimeInstance::from(NaiveDate::from_ymd(2000, 1, 1).and_hms(0, 0, 0)),
+                TimeInstance::from(NaiveDate::from_ymd(2000, 1, 1).and_hms(0, 0, 0))
+            )
+            .unwrap()
+        );
+        assert_eq!(step_1.params.unwrap().rasterband_channel, 1);
+
+        assert!(iter.next().is_none());
     }
 
     #[tokio::test]
