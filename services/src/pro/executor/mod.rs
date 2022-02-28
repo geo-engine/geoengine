@@ -45,7 +45,7 @@ impl ExecutorTaskDescription for PlotDescription {
         &self.id
     }
 
-    fn can_join(&self, other: &Self) -> bool {
+    fn is_contained_in(&self, other: &Self) -> bool {
         self.temporal_bounds == other.temporal_bounds
             && approx_eq!(BoundingBox2D, self.spatial_bounds, other.spatial_bounds)
     }
@@ -130,7 +130,7 @@ where
         &self.id
     }
 
-    fn can_join(&self, other: &Self) -> bool {
+    fn is_contained_in(&self, other: &Self) -> bool {
         other.temporal_bounds.contains(&self.temporal_bounds)
             && (!G::IS_GEOMETRY || other.spatial_bounds.contains_bbox(&self.spatial_bounds))
     }
@@ -189,7 +189,7 @@ where
         &self.id
     }
 
-    fn can_join(&self, other: &Self) -> bool {
+    fn is_contained_in(&self, other: &Self) -> bool {
         other.temporal_bounds.contains(&self.temporal_bounds)
             && other.spatial_bounds.contains(&self.spatial_bounds)
     }
@@ -265,20 +265,20 @@ mod tests {
             data: Default::default(),
         });
 
-        assert!(pd1.can_join(&pd1));
-        assert!(!pd1.can_join(&pd2));
-        assert!(!pd1.can_join(&pd3));
-        assert!(!pd1.can_join(&pd4));
-        assert!(!pd2.can_join(&pd1));
-        assert!(!pd2.can_join(&pd1));
-        assert!(!pd2.can_join(&pd3));
-        assert!(!pd2.can_join(&pd4));
-        assert!(!pd3.can_join(&pd1));
-        assert!(!pd3.can_join(&pd2));
-        assert!(!pd3.can_join(&pd4));
-        assert!(!pd4.can_join(&pd1));
-        assert!(!pd4.can_join(&pd2));
-        assert!(!pd4.can_join(&pd3));
+        assert!(pd1.is_contained_in(&pd1));
+        assert!(!pd1.is_contained_in(&pd2));
+        assert!(!pd1.is_contained_in(&pd3));
+        assert!(!pd1.is_contained_in(&pd4));
+        assert!(!pd2.is_contained_in(&pd1));
+        assert!(!pd2.is_contained_in(&pd1));
+        assert!(!pd2.is_contained_in(&pd3));
+        assert!(!pd2.is_contained_in(&pd4));
+        assert!(!pd3.is_contained_in(&pd1));
+        assert!(!pd3.is_contained_in(&pd2));
+        assert!(!pd3.is_contained_in(&pd4));
+        assert!(!pd4.is_contained_in(&pd1));
+        assert!(!pd4.is_contained_in(&pd2));
+        assert!(!pd4.is_contained_in(&pd3));
 
         assert_eq!(
             result.as_ref().unwrap(),
@@ -319,11 +319,11 @@ mod tests {
         )
         .unwrap();
 
-        assert!(pd2.can_join(&pd1));
-        assert!(pd3.can_join(&pd1));
-        assert!(pd2.can_join(&pd3));
-        assert!(!pd1.can_join(&pd2));
-        assert!(!pd3.can_join(&pd2));
+        assert!(pd2.is_contained_in(&pd1));
+        assert!(pd3.is_contained_in(&pd1));
+        assert!(pd2.is_contained_in(&pd3));
+        assert!(!pd1.is_contained_in(&pd2));
+        assert!(!pd3.is_contained_in(&pd2));
 
         let sliced = pd2.slice_result(&Ok(collection.clone())).unwrap().unwrap();
 
@@ -371,12 +371,12 @@ mod tests {
         )
         .unwrap();
 
-        assert!(pd2.can_join(&pd1));
-        assert!(pd3.can_join(&pd1));
-        assert!(pd2.can_join(&pd3));
-        assert!(!pd1.can_join(&pd2));
-        assert!(!pd1.can_join(&pd3));
-        assert!(!pd3.can_join(&pd2));
+        assert!(pd2.is_contained_in(&pd1));
+        assert!(pd3.is_contained_in(&pd1));
+        assert!(pd2.is_contained_in(&pd3));
+        assert!(!pd1.is_contained_in(&pd2));
+        assert!(!pd1.is_contained_in(&pd3));
+        assert!(!pd3.is_contained_in(&pd2));
 
         let sliced = pd2.slice_result(&Ok(collection.clone())).unwrap().unwrap();
 
@@ -412,12 +412,12 @@ mod tests {
             TimeInterval::new(0, 10).unwrap(),
         );
 
-        assert!(pd2.can_join(&pd1));
-        assert!(pd3.can_join(&pd1));
-        assert!(!pd2.can_join(&pd3));
-        assert!(!pd1.can_join(&pd2));
-        assert!(!pd1.can_join(&pd3));
-        assert!(!pd3.can_join(&pd2));
+        assert!(pd2.is_contained_in(&pd1));
+        assert!(pd3.is_contained_in(&pd1));
+        assert!(!pd2.is_contained_in(&pd3));
+        assert!(!pd1.is_contained_in(&pd2));
+        assert!(!pd1.is_contained_in(&pd3));
+        assert!(!pd3.is_contained_in(&pd2));
 
         {
             let tile = RasterTile2D::<u8>::new(

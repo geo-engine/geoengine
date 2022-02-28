@@ -31,7 +31,7 @@ pub trait ExecutorTaskDescription: Clone + Send + Debug + 'static {
     /// of `other`. E.g., if the bounding box of `other` contains this tasks bounding box.
     ///
     /// Note: It is not required to check the `primary_key`s in this method.
-    fn can_join(&self, other: &Self) -> bool;
+    fn is_contained_in(&self, other: &Self) -> bool;
     /// Extracts the result for this task from the result of a possibly 'greater'
     /// result.
     ///
@@ -189,7 +189,7 @@ where
                 let entries = oe.get_mut();
                 let append = entries
                     .iter_mut()
-                    .filter(|ce| key.can_join(&ce.key))
+                    .filter(|ce| key.is_contained_in(&ce.key))
                     .find_map(|ce| match ce.sender.subscribe() {
                         Ok(rx) => Some((&ce.key, rx)),
                         Err(_) => None,
@@ -507,7 +507,7 @@ mod tests {
             self
         }
 
-        fn can_join(&self, other: &Self) -> bool {
+        fn is_contained_in(&self, other: &Self) -> bool {
             self == other
         }
 
@@ -691,7 +691,7 @@ mod tests {
             &self.key
         }
 
-        fn can_join(&self, other: &Self) -> bool {
+        fn is_contained_in(&self, other: &Self) -> bool {
             self.key == other.key
         }
 
