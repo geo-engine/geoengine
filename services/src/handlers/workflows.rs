@@ -464,7 +464,8 @@ mod tests {
     use actix_web_httpauth::headers::authorization::Bearer;
     use geoengine_datatypes::collections::MultiPointCollection;
     use geoengine_datatypes::primitives::{
-        FeatureData, Measurement, MultiPoint, SpatialPartition2D, SpatialResolution, TimeInterval,
+        ContinuousMeasurement, FeatureData, Measurement, MultiPoint, SpatialPartition2D,
+        SpatialResolution, TimeInterval,
     };
     use geoengine_datatypes::raster::{GridShape, RasterDataType, TilingSpecification};
     use geoengine_datatypes::spatial_reference::SpatialReference;
@@ -736,10 +737,10 @@ mod tests {
                     result_descriptor: RasterResultDescriptor {
                         data_type: RasterDataType::U8,
                         spatial_reference: SpatialReference::epsg_4326().into(),
-                        measurement: Measurement::Continuous {
+                        measurement: Measurement::Continuous(ContinuousMeasurement {
                             measurement: "radiation".to_string(),
                             unit: None,
-                        },
+                        }),
                         no_data_value: None,
                     },
                 },

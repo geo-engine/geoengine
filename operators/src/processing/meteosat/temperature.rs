@@ -15,7 +15,10 @@ use TypedRasterQueryProcessor::F32 as QueryProcessorOut;
 use crate::error::Error;
 use futures::stream::BoxStream;
 use futures::{StreamExt, TryStreamExt};
-use geoengine_datatypes::primitives::{Measurement, RasterQueryRectangle, SpatialPartition2D};
+use geoengine_datatypes::primitives::{
+    ClassificationMeasurement, ContinuousMeasurement, Measurement, RasterQueryRectangle,
+    SpatialPartition2D,
+};
 use geoengine_datatypes::raster::{
     EmptyGrid, Grid2D, GridShapeAccess, GridSize, NoDataValue, Pixel, RasterDataType,
     RasterPropertiesKey, RasterTile2D,
@@ -62,19 +65,19 @@ impl RasterOperator for Temperature {
         let in_desc = input.result_descriptor();
 
         match &in_desc.measurement {
-            Measurement::Continuous {
+            Measurement::Continuous(ContinuousMeasurement {
                 measurement: m,
                 unit: _,
-            } if m != "raw" => {
+            }) if m != "raw" => {
                 return Err(Error::InvalidMeasurement {
                     expected: "raw".into(),
                     found: m.clone(),
                 })
             }
-            Measurement::Classification {
+            Measurement::Classification(ClassificationMeasurement {
                 measurement: m,
                 classes: _,
-            } => {
+            }) => {
                 return Err(Error::InvalidMeasurement {
                     expected: "raw".into(),
                     found: m.clone(),
@@ -87,19 +90,19 @@ impl RasterOperator for Temperature {
                 })
             }
             // OK Case
-            Measurement::Continuous {
+            Measurement::Continuous(ContinuousMeasurement {
                 measurement: _,
                 unit: _,
-            } => {}
+            }) => {}
         }
 
         let out_desc = RasterResultDescriptor {
             spatial_reference: in_desc.spatial_reference,
             data_type: RasterOut,
-            measurement: Measurement::Continuous {
+            measurement: Measurement::Continuous(ContinuousMeasurement {
                 measurement: "temperature".into(),
                 unit: Some("k".into()),
-            },
+            }),
             no_data_value: Some(f64::from(OUT_NO_DATA_VALUE)),
         };
 
@@ -310,7 +313,9 @@ mod tests {
         Temperature, TemperatureParams, OUT_NO_DATA_VALUE,
     };
     use crate::processing::meteosat::test_util;
-    use geoengine_datatypes::primitives::Measurement;
+    use geoengine_datatypes::primitives::{
+        ClassificationMeasurement, ContinuousMeasurement, Measurement,
+    };
     use geoengine_datatypes::raster::{EmptyGrid2D, Grid2D};
     use geoengine_datatypes::util::test::TestDefault;
     use std::collections::HashMap;
@@ -661,10 +666,10 @@ mod tests {
                 let src = test_util::create_mock_source::<u8>(
                     props,
                     None,
-                    Some(Measurement::Continuous {
+                    Some(Measurement::Continuous(ContinuousMeasurement {
                         measurement: "invalid".into(),
                         unit: None,
-                    }),
+                    })),
                 );
 
                 RasterOperator::boxed(Temperature {
@@ -691,10 +696,10 @@ mod tests {
                 let src = test_util::create_mock_source::<u8>(
                     props,
                     None,
-                    Some(Measurement::Classification {
+                    Some(Measurement::Classification(ClassificationMeasurement {
                         measurement: "invalid".into(),
                         classes: HashMap::new(),
-                    }),
+                    })),
                 );
 
                 RasterOperator::boxed(Temperature {
