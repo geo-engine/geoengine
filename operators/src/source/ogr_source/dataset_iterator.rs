@@ -159,7 +159,6 @@ impl OgrDatasetIterator {
             let open_opts = &[
                 headers.as_str(),
                 // "AUTODETECT_TYPE=YES", // This breaks tests
-                "EMPTY_STRING_AS_NULL=YES",
             ];
             dataset_options.open_options = Some(open_opts);
             return gdal_open_dataset_ex(&dataset_info.file_name, dataset_options);
@@ -171,7 +170,6 @@ impl OgrDatasetIterator {
                 &format!("Y_POSSIBLE_NAMES={}", y),
                 headers.as_str(),
                 "AUTODETECT_TYPE=YES",
-                "EMPTY_STRING_AS_NULL=YES",
             ];
             dataset_options.open_options = Some(open_opts);
             return gdal_open_dataset_ex(&dataset_info.file_name, dataset_options);
@@ -181,7 +179,6 @@ impl OgrDatasetIterator {
             &format!("GEOM_POSSIBLE_NAMES={}", columns.x),
             headers.as_str(),
             "AUTODETECT_TYPE=YES",
-            "EMPTY_STRING_AS_NULL=YES",
         ];
         dataset_options.open_options = Some(open_opts);
         gdal_open_dataset_ex(&dataset_info.file_name, dataset_options)

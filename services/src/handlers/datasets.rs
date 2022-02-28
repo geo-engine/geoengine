@@ -465,7 +465,6 @@ fn gdal_autodetect(path: &Path, columns: &[String]) -> Option<GdalAutoDetect> {
                     &format!("X_POSSIBLE_NAMES={}", x),
                     &format!("Y_POSSIBLE_NAMES={}", y),
                     "AUTODETECT_TYPE=YES",
-                    "EMPTY_STRING_AS_NULL=YES",
                 ];
 
                 dataset_options.open_options = Some(open_opts);
@@ -491,7 +490,6 @@ fn gdal_autodetect(path: &Path, columns: &[String]) -> Option<GdalAutoDetect> {
                 let open_opts = &[
                     &format!("GEOM_POSSIBLE_NAMES={}", column),
                     "AUTODETECT_TYPE=YES",
-                    "EMPTY_STRING_AS_NULL=YES",
                 ];
 
                 dataset_options.open_options = Some(open_opts);
