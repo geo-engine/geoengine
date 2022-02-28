@@ -412,7 +412,7 @@ mod tests {
     #[tokio::test]
     async fn test_ok_no_solar_correction() {
         let result =
-            dbg!(process_mock(ReflectanceParams::default(), Some(1), Some(1), false, None).await);
+            process_mock(ReflectanceParams::default(), Some(1), Some(1), false, None).await;
 
         assert!(result.is_ok());
         assert!(geoengine_datatypes::util::test::eq_with_no_data(
