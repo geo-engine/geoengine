@@ -70,7 +70,7 @@ fn null_bytes() {
     assert_eq!(primitive_array.null_count(), 3);
 
     if let Some(null_bitmap) = primitive_array.data().null_bitmap() {
-        assert_eq!(null_bitmap.len(), 8); // len returns number of bits
+        assert_eq!(null_bitmap.bit_len(), 8); // bit_len returns number of bits
 
         assert_eq!(
             null_bitmap.clone().into_buffer().as_slice(), // must clone bitmap because there is no way to get a reference to the data
