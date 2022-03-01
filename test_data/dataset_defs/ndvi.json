@@ -312,7 +312,7 @@
         "reference": "start"
       }
     },
-    "start": 1388534400000,
+    "start": "2014-01-01T00:00:00.000Z",
     "step": {
       "granularity": "Months",
       "step": 1

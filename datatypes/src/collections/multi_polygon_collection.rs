@@ -349,14 +349,14 @@ impl From<Vec<geo::MultiPolygon<f64>>> for MultiPolygonCollection {
                 rings.push(coordinates.len() as i32);
 
                 let mut outer_coords: Vec<Coordinate2D> =
-                    polygon.exterior().points_iter().map(From::from).collect();
+                    polygon.exterior().points().map(From::from).collect();
 
                 coordinates.append(&mut outer_coords);
 
                 for inner_ring in polygon.interiors() {
                     rings.push(coordinates.len() as i32);
                     let mut inner_coords: Vec<Coordinate2D> =
-                        inner_ring.points_iter().map(From::from).collect();
+                        inner_ring.points().map(From::from).collect();
 
                     coordinates.append(&mut inner_coords);
                 }

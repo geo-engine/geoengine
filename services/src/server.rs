@@ -7,13 +7,17 @@ use crate::util::config::get_config_element;
 
 use actix_files::Files;
 use actix_http::body::{BoxBody, EitherBody, MessageBody};
-use actix_web::dev::ServiceResponse;
+use actix_http::uri::PathAndQuery;
+use actix_http::HttpMessage;
+use actix_web::dev::{ServiceRequest, ServiceResponse};
 use actix_web::error::{InternalError, JsonPayloadError, QueryPayloadError};
 use actix_web::{http, middleware, web, App, HttpResponse, HttpServer};
 use log::{debug, info};
 use std::net::SocketAddr;
 use std::num::NonZeroUsize;
 use std::path::PathBuf;
+use tracing::Span;
+use tracing_actix_web::{RequestId, RootSpanBuilder, TracingLogger};
 use url::Url;
 
 /// Starts the webserver for the Geo Engine API.
@@ -31,6 +35,18 @@ pub async fn start_server(static_files_dir: Option<PathBuf>) -> Result<()> {
             .external_address
             .unwrap_or(Url::parse(&format!("http://{}/", web_config.bind_address))?)
     );
+
+    let session_config: crate::util::config::Session = get_config_element()?;
+
+    if session_config.anonymous_access {
+        info!("Anonymous access is enabled");
+    } else {
+        info!("Anonymous access is disabled");
+    }
+
+    if let Some(session_token) = session_config.fixed_session_token {
+        info!("Fixed session token is set, it is {session_token}");
+    }
 
     info!("Using in memory backend");
 
@@ -79,7 +95,7 @@ where
                     .handler(http::StatusCode::NOT_FOUND, render_404)
                     .handler(http::StatusCode::METHOD_NOT_ALLOWED, render_405),
             )
-            .wrap(middleware::Logger::default())
+            .wrap(TracingLogger::<CustomRootSpanBuilder>::new())
             .wrap(middleware::NormalizePath::trim())
             .configure(configure_extractors)
             .configure(handlers::datasets::init_dataset_routes::<C>)
@@ -92,6 +108,13 @@ where
             .configure(handlers::wfs::init_wfs_routes::<C>)
             .configure(handlers::wms::init_wms_routes::<C>)
             .configure(handlers::workflows::init_workflow_routes::<C>);
+
+        #[cfg(feature = "ebv")]
+        {
+            app = app
+                .service(web::scope("/ebv").configure(handlers::ebv::init_ebv_routes::<C>(None)));
+        }
+
         #[cfg(feature = "nfdi")]
         {
             app = app.configure(handlers::gfbio::init_gfbio_routes::<C>);
@@ -110,6 +133,45 @@ where
     .run()
     .await
     .map_err(Into::into)
+}
+
+/// Custom root span for web requests that paste a request id to all logs.
+pub struct CustomRootSpanBuilder;
+
+impl RootSpanBuilder for CustomRootSpanBuilder {
+    fn on_request_start(request: &ServiceRequest) -> Span {
+        let request_id = request.extensions().get::<RequestId>().copied().unwrap();
+
+        let span = tracing::info_span!("Request", request_id = %request_id);
+
+        // Emit HTTP request at the beginng of the span.
+        {
+            let _entered = span.enter();
+
+            let head = request.head();
+            let http_method = head.method.as_str();
+
+            let http_route: std::borrow::Cow<'static, str> = request
+                .match_pattern()
+                .map_or_else(|| "default".into(), Into::into);
+
+            let http_target = request
+                .uri()
+                .path_and_query()
+                .map_or("", PathAndQuery::as_str);
+
+            tracing::info!(
+                target: "HTTP request",
+                method = %http_method,
+                route = %http_route,
+                target = %http_target,
+            );
+        }
+
+        span
+    }
+
+    fn on_request_end<B>(_span: Span, _outcome: &Result<ServiceResponse<B>, actix_web::Error>) {}
 }
 
 /// Calculate maximum number of blocking threads **per worker**.

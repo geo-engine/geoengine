@@ -360,8 +360,10 @@ async fn get_coverage<C: Context>(
             GdalGeoTiffOptions {
                 compression_num_threads: get_config_element::<crate::util::config::Gdal>()?.compression_num_threads,
                 as_cog: false,
+                force_big_tiff: false,
             },
             Some(get_config_element::<crate::util::config::Wcs>()?.tile_limit),
+            
         )
         .await)?
     .map_err(error::Error::from)?;

@@ -197,7 +197,7 @@ where
         let slope = tile.properties.number_property::<f32>(&self.slope_key)?;
         let mat_tile = tile.into_materialized_tile(); // NOTE: the tile is already materialized.
 
-        let rad_grid = tokio::task::spawn_blocking(move || {
+        let rad_grid = crate::util::spawn_blocking(move || {
             process_tile(&mat_tile.grid_array, offset, slope, &pool)
         })
         .await?;

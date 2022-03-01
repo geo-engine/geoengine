@@ -30,7 +30,7 @@ impl MetaData<GdalLoadingInfo, RasterResultDescriptor, RasterQueryRectangle>
         let valid = self.time.unwrap_or_default();
 
         let parts = if valid.intersects(&query.time_interval) {
-            vec![GdalLoadingInfoPart {
+            vec![GdalLoadingInfoTemporalSlice {
                 time: valid,
                 params: Some(self.params.clone()),
             }]
@@ -40,7 +40,7 @@ impl MetaData<GdalLoadingInfo, RasterResultDescriptor, RasterQueryRectangle>
         };
 
         Ok(GdalLoadingInfo {
-            info: GdalLoadingInfoPartIterator::Static { parts },
+            info: GdalLoadingInfoTemporalSliceIterator::Static { parts },
         })
     }
 
@@ -87,13 +87,15 @@ impl MetaData<GdalLoadingInfo, RasterResultDescriptor, RasterQueryRectangle>
             TimeStepIter::new_with_interval_incl_start(snapped_interval, self.step)?;
 
         Ok(GdalLoadingInfo {
-            info: GdalLoadingInfoPartIterator::Dynamic(DynamicGdalLoadingInfoPartIterator::new(
-                time_iterator,
-                self.params.clone(),
-                self.time_placeholders.clone(),
-                self.step,
-                query.time_interval.end(),
-            )?),
+            info: GdalLoadingInfoTemporalSliceIterator::Dynamic(
+                DynamicGdalLoadingInfoPartIterator::new(
+                    time_iterator,
+                    self.params.clone(),
+                    self.time_placeholders.clone(),
+                    self.step,
+                    query.time_interval.end(),
+                )?,
+            ),
         })
     }
 
@@ -130,6 +132,22 @@ impl MetaData<GdalLoadingInfo, RasterResultDescriptor, RasterQueryRectangle>
     for GdalMetadataNetCdfCf
 {
     async fn loading_info(&self, query: RasterQueryRectangle) -> Result<GdalLoadingInfo> {
+        // special case: single step
+        if self.start == self.end || self.step.step == 0 {
+            let time = TimeInterval::new(self.start, self.end)?;
+
+            let mut params = self.params.clone();
+            params.rasterband_channel = 1;
+
+            return GdalMetaDataStatic {
+                time: Some(time),
+                params,
+                result_descriptor: self.result_descriptor.clone(),
+            }
+            .loading_info(query)
+            .await;
+        }
+
         let snapped_start = self
             .step
             .snap_relative(self.start, query.time_interval.start())?;
@@ -141,14 +159,16 @@ impl MetaData<GdalLoadingInfo, RasterResultDescriptor, RasterQueryRectangle>
             TimeStepIter::new_with_interval_incl_start(snapped_interval, self.step)?;
 
         Ok(GdalLoadingInfo {
-            info: GdalLoadingInfoPartIterator::NetCdfCf(NetCdfCfGdalLoadingInfoPartIterator::new(
-                time_iterator,
-                self.params.clone(),
-                self.step,
-                self.start,
-                self.end,
-                self.band_offset,
-            )),
+            info: GdalLoadingInfoTemporalSliceIterator::NetCdfCf(
+                NetCdfCfGdalLoadingInfoPartIterator::new(
+                    time_iterator,
+                    self.params.clone(),
+                    self.step,
+                    self.start,
+                    self.end,
+                    self.band_offset,
+                ),
+            ),
         })
     }
 
@@ -201,7 +221,7 @@ impl DynamicGdalLoadingInfoPartIterator {
 }
 
 impl Iterator for DynamicGdalLoadingInfoPartIterator {
-    type Item = Result<GdalLoadingInfoPart>;
+    type Item = Result<GdalLoadingInfoTemporalSlice>;
 
     fn next(&mut self) -> Option<Self::Item> {
         let t1 = self.time_step_iter.next()?;
@@ -214,7 +234,7 @@ impl Iterator for DynamicGdalLoadingInfoPartIterator {
         let loading_info_part = self
             .params
             .replace_time_placeholders(&self.time_placeholders, time_interval)
-            .map(|loading_info_part_params| GdalLoadingInfoPart {
+            .map(|loading_info_part_params| GdalLoadingInfoTemporalSlice {
                 time: time_interval,
                 params: Some(loading_info_part_params),
             });
@@ -254,7 +274,7 @@ impl NetCdfCfGdalLoadingInfoPartIterator {
 }
 
 impl Iterator for NetCdfCfGdalLoadingInfoPartIterator {
-    type Item = Result<GdalLoadingInfoPart>;
+    type Item = Result<GdalLoadingInfoTemporalSlice>;
 
     fn next(&mut self) -> Option<Self::Item> {
         let t1 = self.time_step_iter.next()?;
@@ -269,7 +289,7 @@ impl Iterator for NetCdfCfGdalLoadingInfoPartIterator {
 
         // TODO: how to prevent generating loads of empty time intervals for a very small t1?
         if t1 < self.dataset_time_start {
-            return Some(Ok(GdalLoadingInfoPart {
+            return Some(Ok(GdalLoadingInfoTemporalSlice {
                 time: time_interval,
                 params: None,
             }));
@@ -293,7 +313,7 @@ impl Iterator for NetCdfCfGdalLoadingInfoPartIterator {
         let mut params = self.params.clone();
         params.rasterband_channel = self.band_offset + 1 + steps_between as usize;
 
-        Some(Ok(GdalLoadingInfoPart {
+        Some(Ok(GdalLoadingInfoTemporalSlice {
             time: time_interval,
             params: Some(params),
         }))
@@ -303,34 +323,34 @@ impl Iterator for NetCdfCfGdalLoadingInfoPartIterator {
 #[derive(Debug, Clone)]
 pub struct GdalLoadingInfo {
     /// partitions of dataset sorted by time
-    pub info: GdalLoadingInfoPartIterator,
+    pub info: GdalLoadingInfoTemporalSliceIterator,
 }
 
 #[allow(clippy::large_enum_variant)]
 #[derive(Debug, Clone)]
-pub enum GdalLoadingInfoPartIterator {
+pub enum GdalLoadingInfoTemporalSliceIterator {
     Static {
-        parts: std::vec::IntoIter<GdalLoadingInfoPart>,
+        parts: std::vec::IntoIter<GdalLoadingInfoTemporalSlice>,
     },
     Dynamic(DynamicGdalLoadingInfoPartIterator),
     NetCdfCf(NetCdfCfGdalLoadingInfoPartIterator),
 }
 
-impl Iterator for GdalLoadingInfoPartIterator {
-    type Item = Result<GdalLoadingInfoPart>;
+impl Iterator for GdalLoadingInfoTemporalSliceIterator {
+    type Item = Result<GdalLoadingInfoTemporalSlice>;
 
     fn next(&mut self) -> Option<Self::Item> {
         match self {
-            GdalLoadingInfoPartIterator::Static { parts } => parts.next().map(Result::Ok),
-            GdalLoadingInfoPartIterator::Dynamic(iter) => iter.next(),
-            GdalLoadingInfoPartIterator::NetCdfCf(iter) => iter.next(),
+            GdalLoadingInfoTemporalSliceIterator::Static { parts } => parts.next().map(Result::Ok),
+            GdalLoadingInfoTemporalSliceIterator::Dynamic(iter) => iter.next(),
+            GdalLoadingInfoTemporalSliceIterator::NetCdfCf(iter) => iter.next(),
         }
     }
 }
 
 /// one temporal slice of the dataset that requires reading from exactly one Gdal dataset
 #[derive(Debug, Clone, PartialEq)]
-pub struct GdalLoadingInfoPart {
+pub struct GdalLoadingInfoTemporalSlice {
     pub time: TimeInterval,
     pub params: Option<GdalDatasetParameters>,
 }
@@ -424,6 +444,68 @@ mod tests {
                 "/foo/bar_022000000.tiff"
             ]
         );
+    }
+
+    #[tokio::test]
+    async fn netcdf_cf_single_time_step() {
+        let time_start = TimeInstance::from(NaiveDate::from_ymd(2000, 1, 1).and_hms(0, 0, 0));
+        let time_end = TimeInstance::from(NaiveDate::from_ymd(2000, 1, 1).and_hms(0, 0, 0));
+        let time_step = TimeStep {
+            step: 0,
+            granularity: TimeGranularity::Years,
+        };
+
+        let metadata = GdalMetadataNetCdfCf {
+            result_descriptor: RasterResultDescriptor {
+                data_type: RasterDataType::U8,
+                spatial_reference: SpatialReference::epsg_4326().into(),
+                measurement: Measurement::Unitless,
+                no_data_value: None,
+            },
+            params: GdalDatasetParameters {
+                file_path: "path/to/ds".into(),
+                rasterband_channel: 0,
+                geo_transform: GdalDatasetGeoTransform {
+                    origin_coordinate: (0., 0.).into(),
+                    x_pixel_size: 1.,
+                    y_pixel_size: 1.,
+                },
+                width: 128,
+                height: 128,
+                file_not_found_handling: FileNotFoundHandling::Error,
+                no_data_value: None,
+                properties_mapping: None,
+                gdal_open_options: None,
+                gdal_config_options: None,
+            },
+            start: time_start,
+            end: time_end,
+            step: time_step,
+            band_offset: 0,
+        };
+
+        let query = RasterQueryRectangle {
+            spatial_bounds: SpatialPartition2D::new_unchecked((0., 128.).into(), (128., 0.).into()),
+            time_interval: TimeInterval::new(time_start, time_end).unwrap(),
+            spatial_resolution: SpatialResolution::one(),
+        };
+
+        let loading_info = metadata.loading_info(query).await.unwrap();
+        let mut iter = loading_info.info;
+
+        let step_1 = iter.next().unwrap().unwrap();
+
+        assert_eq!(
+            step_1.time,
+            TimeInterval::new(
+                TimeInstance::from(NaiveDate::from_ymd(2000, 1, 1).and_hms(0, 0, 0)),
+                TimeInstance::from(NaiveDate::from_ymd(2000, 1, 1).and_hms(0, 0, 0))
+            )
+            .unwrap()
+        );
+        assert_eq!(step_1.params.unwrap().rasterband_channel, 1);
+
+        assert!(iter.next().is_none());
     }
 
     #[tokio::test]

@@ -1,12 +1,12 @@
 use std::collections::VecDeque;
 use std::ffi::{c_void, CStr, CString};
-use std::os::raw::{c_char, c_int};
+use std::os::raw::c_char;
 use std::path::{Path, PathBuf};
 use std::str::FromStr;
 
 use crate::datasets::listing::DatasetListOptions;
 use crate::datasets::listing::{ExternalDatasetProvider, ProvenanceOutput};
-use crate::error::Error;
+use crate::projects::{RasterSymbology, Symbology};
 use crate::{
     datasets::{listing::DatasetListing, storage::ExternalDatasetProviderDefinition},
     util::user_input::Validated,
@@ -26,8 +26,9 @@ use gdal_sys::{
     OSRDestroySpatialReference, VSIFree,
 };
 use geoengine_datatypes::dataset::{DatasetId, DatasetProviderId, ExternalDatasetId};
+use geoengine_datatypes::operations::image::{Colorizer, RgbaColor};
 use geoengine_datatypes::primitives::{
-    Measurement, RasterQueryRectangle, TimeGranularity, TimeInstance, TimeStep,
+    Measurement, RasterQueryRectangle, TimeGranularity, TimeInstance, TimeInterval, TimeStep,
     VectorQueryRectangle,
 };
 use geoengine_datatypes::raster::{GdalGeoTransform, RasterDataType};
@@ -44,7 +45,7 @@ use geoengine_operators::{
 };
 use log::debug;
 use serde::{Deserialize, Serialize};
-use snafu::ResultExt;
+use snafu::{OptionExt, ResultExt};
 
 pub use self::error::NetCdfCf4DProviderError;
 
@@ -52,9 +53,12 @@ mod error;
 
 type Result<T, E = NetCdfCf4DProviderError> = std::result::Result<T, E>;
 
+/// Singleton Provider with id `1690c483-b17f-4d98-95c8-00a64849cd0b`
+pub const NETCDF_CF_PROVIDER_ID: DatasetProviderId =
+    DatasetProviderId::from_u128(0x1690_c483_b17f_4d98_95c8_00a6_4849_cd0b);
+
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct NetCdfCfDataProviderDefinition {
-    pub id: DatasetProviderId,
     pub name: String,
     pub path: PathBuf,
 }
@@ -63,10 +67,7 @@ pub struct NetCdfCfDataProviderDefinition {
 #[async_trait]
 impl ExternalDatasetProviderDefinition for NetCdfCfDataProviderDefinition {
     async fn initialize(self: Box<Self>) -> crate::error::Result<Box<dyn ExternalDatasetProvider>> {
-        Ok(Box::new(NetCdfCfDataProvider {
-            id: self.id,
-            path: self.path,
-        }))
+        Ok(Box::new(NetCdfCfDataProvider { path: self.path }))
     }
 
     fn type_name(&self) -> String {
@@ -78,12 +79,11 @@ impl ExternalDatasetProviderDefinition for NetCdfCfDataProviderDefinition {
     }
 
     fn id(&self) -> DatasetProviderId {
-        self.id
+        NETCDF_CF_PROVIDER_ID
     }
 }
 
 pub struct NetCdfCfDataProvider {
-    id: DatasetProviderId,
     path: PathBuf,
 }
 
@@ -219,7 +219,8 @@ impl<'d> MdGroup<'d> {
 
             let mut dim_count = 0;
 
-            let c_dimensions = GDALMDArrayGetDimensions(c_mdarray, &mut dim_count as *mut usize);
+            let c_dimensions =
+                GDALMDArrayGetDimensions(c_mdarray, std::ptr::addr_of_mut!(dim_count));
             let dimensions = std::slice::from_raw_parts_mut(c_dimensions, dim_count);
 
             let mut count = Vec::<usize>::with_capacity(dim_count);
@@ -431,7 +432,7 @@ impl<'g> MdArray<'g> {
         let mut has_nodata = 0;
 
         let no_data_value = unsafe {
-            GDALMDArrayGetNoDataValueAsDouble(self.c_mdarray, &mut has_nodata as *mut c_int)
+            GDALMDArrayGetNoDataValueAsDouble(self.c_mdarray, std::ptr::addr_of_mut!(has_nodata))
         };
 
         if has_nodata == 0 {
@@ -445,8 +446,10 @@ impl<'g> MdArray<'g> {
         let mut number_of_dimensions = 0;
 
         Ok(unsafe {
-            let c_dimensions =
-                GDALMDArrayGetDimensions(self.c_mdarray, &mut number_of_dimensions as *mut usize);
+            let c_dimensions = GDALMDArrayGetDimensions(
+                self.c_mdarray,
+                std::ptr::addr_of_mut!(number_of_dimensions),
+            );
 
             if number_of_dimensions != 4 {
                 return Err(NetCdfCf4DProviderError::MustBe4DDataset {
@@ -499,47 +502,97 @@ struct DimensionSizes {
     pub lon: usize,
 }
 
-#[derive(Debug)]
-struct GroupPath<'g> {
-    pub prefix: Vec<GroupPathSegment>,
-    pub current: MdGroup<'g>,
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct NetCdfOverview {
+    pub file_name: String,
+    pub title: String,
+    pub spatial_reference: SpatialReference,
+    pub groups: Vec<NetCdfGroup>,
+    pub entities: Vec<NetCdfEntity>,
+    pub time: TimeInterval,
+    pub time_step: TimeStep,
+    pub colorizer: Colorizer,
 }
 
-impl<'g> GroupPath<'g> {
-    fn new(current: MdGroup<'g>) -> Self {
-        Self {
-            prefix: vec![],
-            current,
-        }
-    }
-
-    fn extend(&self, group: MdGroup<'g>) -> Self {
-        let mut new_prefix = self.prefix.clone();
-        new_prefix.push(GroupPathSegment {
-            name: self.current.name.clone(),
-            title: self
-                .current
-                .attribute_as_string("standard_name")
-                .unwrap_or_default(),
-        });
-
-        Self {
-            prefix: new_prefix,
-            current: group,
-        }
-    }
-}
-
-#[derive(Debug, Clone)]
-struct GroupPathSegment {
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct NetCdfGroup {
     pub name: String,
     pub title: String,
+    pub description: String,
+    // TODO: would actually be nice if it were inside dataset/entity
+    pub data_type: Option<RasterDataType>,
+    pub groups: Vec<NetCdfGroup>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct NetCdfEntity {
+    pub id: usize,
+    pub name: String,
+}
+
+trait ToNetCdfSubgroup {
+    fn to_net_cdf_subgroup(&self) -> Result<NetCdfGroup>;
+}
+
+impl<'a> ToNetCdfSubgroup for MdGroup<'a> {
+    fn to_net_cdf_subgroup(&self) -> Result<NetCdfGroup> {
+        let name = self.name.clone();
+        let title = self
+            .attribute_as_string("standard_name")
+            .unwrap_or_default();
+        // TODO: how to get that?
+        let description = "".to_string();
+
+        let group_names = self.group_names();
+
+        if group_names.is_empty() {
+            let data_type = Some(self.datatype_of_numeric_array("ebv_cube")?);
+
+            return Ok(NetCdfGroup {
+                name,
+                title,
+                description,
+                data_type,
+                groups: Vec::new(),
+            });
+        }
+
+        let mut groups = Vec::with_capacity(group_names.len());
+
+        for subgroup in group_names {
+            groups.push(self.open_group(&subgroup)?.to_net_cdf_subgroup()?);
+        }
+
+        Ok(NetCdfGroup {
+            name,
+            title,
+            description,
+            data_type: None,
+            groups,
+        })
+    }
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct NetCdfCf4DDatasetId {
+    pub file_name: String,
+    pub group_names: Vec<String>,
+    pub entity: usize,
 }
 
 impl NetCdfCfDataProvider {
-    fn listing_from_netcdf(id: DatasetProviderId, path: &Path) -> Result<Vec<DatasetListing>> {
+    pub(crate) fn build_netcdf_tree(
+        provider_path: &Path,
+        dataset_path: &Path,
+    ) -> Result<NetCdfOverview> {
+        let path = provider_path.join(dataset_path);
+
         let ds = gdal_open_dataset_ex(
-            path,
+            &path,
             DatasetOptions {
                 open_flags: GdalOpenFlags::GDAL_OF_MULTIDIM_RASTER,
                 allowed_drivers: Some(&["netCDF"]),
@@ -551,11 +604,6 @@ impl NetCdfCfDataProvider {
 
         let root_group = MdGroup::from_dataset(&ds)?;
 
-        let file_name = path
-            .file_name()
-            .ok_or(NetCdfCf4DProviderError::MissingFileName)?
-            .to_string_lossy();
-
         let title = root_group
             .attribute_as_string("title")
             .context(error::MissingTitle)?;
@@ -563,79 +611,128 @@ impl NetCdfCfDataProvider {
         let spatial_reference = root_group
             .attribute_as_string("geospatial_bounds_crs")
             .context(error::MissingCrs)?;
-        let spatial_reference: SpatialReferenceOption =
-            SpatialReference::from_str(&spatial_reference)
-                .context(error::CannotParseCrs)?
-                .into();
+        let spatial_reference: SpatialReference =
+            SpatialReference::from_str(&spatial_reference).context(error::CannotParseCrs)?;
 
         let entities = root_group
-            .dimension_as_string_array("entities")
-            .context(error::MissingEntities)?;
-
-        let mut group_deque: VecDeque<GroupPath> = root_group
-            .group_names()
+            .dimension_as_string_array("entity")
+            .context(error::MissingEntities)?
             .into_iter()
-            .map(|name| Ok(GroupPath::new(root_group.open_group(&name)?)))
-            .collect::<Result<VecDeque<_>>>()?;
+            .enumerate()
+            .map(|(id, name)| NetCdfEntity { id, name })
+            .collect::<Vec<_>>();
 
-        let mut datasets = Vec::new();
+        let groups = root_group
+            .group_names()
+            .iter()
+            .map(|name| root_group.open_group(name)?.to_net_cdf_subgroup())
+            .collect::<Result<Vec<_>>>()?;
 
-        while let Some(group_path) = group_deque.pop_front() {
-            let subgroups = group_path
-                .current
-                .group_names()
-                .into_iter()
-                .map(|name| Ok(group_path.extend(group_path.current.open_group(&name)?)))
-                .collect::<Result<Vec<_>>>()?;
+        let start = root_group
+            .attribute_as_string("time_coverage_start")
+            .context(error::MissingTimeCoverageStart)?;
+        let end = root_group
+            .attribute_as_string("time_coverage_end")
+            .context(error::MissingTimeCoverageEnd)?;
+        let step = root_group
+            .attribute_as_string("time_coverage_resolution")
+            .context(error::MissingTimeCoverageResolution)?;
 
-            if !subgroups.is_empty() {
-                group_deque.extend(subgroups);
+        let (time_start, time_end, time_step) = parse_time_coverage(&start, &end, &step)?;
+
+        let colorizer = load_colorizer(&path).or_else(|error| {
+            debug!("Use fallback colorizer: {:?}", error);
+            fallback_colorizer()
+        })?;
+
+        Ok(NetCdfOverview {
+            file_name: path
+                .strip_prefix(provider_path)
+                .context(error::DatasetIsNotInProviderPath)?
+                .to_string_lossy()
+                .to_string(),
+            title,
+            spatial_reference,
+            groups,
+            entities,
+            time: TimeInterval::new(time_start, time_end)
+                .context(error::InvalidTimeRangeForDataset)?,
+            time_step,
+            colorizer,
+        })
+    }
+
+    pub(crate) fn listing_from_netcdf(
+        id: DatasetProviderId,
+        provider_path: &Path,
+        dataset_path: &Path,
+    ) -> Result<Vec<DatasetListing>> {
+        let tree = Self::build_netcdf_tree(provider_path, dataset_path)?;
+
+        let mut paths: VecDeque<Vec<&NetCdfGroup>> = tree.groups.iter().map(|s| vec![s]).collect();
+
+        let mut listings = Vec::new();
+
+        while let Some(path) = paths.pop_front() {
+            let tail = path.last().context(error::PathToDataIsEmpty)?;
+
+            if !tail.groups.is_empty() {
+                for subgroup in &tail.groups {
+                    let mut updated_path = path.clone();
+                    updated_path.push(subgroup);
+                    paths.push_back(updated_path);
+                }
 
                 continue;
             }
 
-            // Emit datasets
+            // emit datasets
 
-            let (mut group_names, mut group_titles): (Vec<String>, Vec<String>) = group_path
-                .prefix
-                .into_iter()
-                .map(|s| (s.name, s.title))
-                .unzip();
-            group_names.push(group_path.current.name.clone());
-            group_titles.push(
-                group_path
-                    .current
-                    .attribute_as_string("standard_name")
-                    .unwrap_or_default(),
-            );
+            let group_title_path = path
+                .iter()
+                .map(|s| s.title.as_str())
+                .collect::<Vec<&str>>()
+                .join(" > ");
 
-            let group_name_path = group_names.join("/");
-            let group_title_path = group_titles.join(" > ");
+            let group_names = path.iter().map(|s| s.name.clone()).collect::<Vec<String>>();
 
-            let data_type = group_path.current.datatype_of_numeric_array("ebv_cube")?;
+            let data_type = tail.data_type.context(error::MissingDataType)?;
 
-            for (entity_idx, entity_name) in entities.iter().enumerate() {
-                datasets.push(DatasetListing {
+            for entity in &tree.entities {
+                let dataset_id = NetCdfCf4DDatasetId {
+                    file_name: tree.file_name.clone(),
+                    group_names: group_names.clone(),
+                    entity: entity.id,
+                };
+
+                listings.push(DatasetListing {
                     id: DatasetId::External(ExternalDatasetId {
                         provider_id: id,
-                        dataset_id: format!("{file_name}::{group_name_path}::{entity_idx}"),
+                        dataset_id: serde_json::to_string(&dataset_id).unwrap_or_default(),
                     }),
-                    name: format!("{title}: {group_title_path} > {entity_name}"),
+                    name: format!(
+                        "{title}: {group_title_path} > {entity_name}",
+                        title = tree.title,
+                        entity_name = entity.name
+                    ),
                     description: "".to_owned(), // TODO: where to get from file?
                     tags: vec![],               // TODO: where to get from file?
                     source_operator: "GdalSource".to_owned(),
                     result_descriptor: TypedResultDescriptor::Raster(RasterResultDescriptor {
                         data_type,
-                        spatial_reference,
+                        spatial_reference: tree.spatial_reference.into(),
                         measurement: Measurement::Unitless, // TODO: where to get from file?
                         no_data_value: None, // we don't want to open the dataset at this point. We should get rid of the result descriptor in the listing in general
                     }),
-                    symbology: None,
+                    symbology: Some(Symbology::Raster(RasterSymbology {
+                        opacity: 1.0,
+                        colorizer: tree.colorizer.clone(),
+                    })),
                 });
             }
         }
 
-        Ok(datasets)
+        Ok(listings)
     }
 
     async fn meta_data(
@@ -643,29 +740,27 @@ impl NetCdfCfDataProvider {
         dataset: &DatasetId,
     ) -> Result<Box<dyn MetaData<GdalLoadingInfo, RasterResultDescriptor, RasterQueryRectangle>>>
     {
-        let dataset = dataset
-            .external()
-            .ok_or(NetCdfCf4DProviderError::InvalidExternalDatasetId { provider: self.id })?;
+        let dataset =
+            dataset
+                .external()
+                .ok_or(NetCdfCf4DProviderError::InvalidExternalDatasetId {
+                    provider: NETCDF_CF_PROVIDER_ID,
+                })?;
 
-        let split: Vec<_> = dataset.dataset_id.split("::").collect();
+        let dataset_id: NetCdfCf4DDatasetId =
+            serde_json::from_str(&dataset.dataset_id).context(error::CannotParseDatasetId)?;
 
-        let [path, group_path, entity_idx] = if let [path, group, entity_idx] = split.as_slice() {
-            [path, group, entity_idx]
-        } else {
-            return Err(NetCdfCf4DProviderError::InvalidDatasetIdLength {
-                length: split.len(),
-            });
-        };
-        let entity_idx = entity_idx
-            .parse::<u32>()
-            .context(error::DatasetIdEntityNotANumber)?;
+        let path = self.path.join(dataset_id.file_name);
 
-        let path = self.path.join(path);
+        // check that file does not "escape" the provider path
+        if let Err(source) = path.strip_prefix(self.path.as_path()) {
+            return Err(NetCdfCf4DProviderError::DatasetIsNotInProviderPath { source });
+        }
 
         let gdal_path = format!(
             "NETCDF:{path}:/{group}/ebv_cube",
             path = path.to_string_lossy(),
-            group = group_path
+            group = dataset_id.group_names.join("/")
         );
 
         let dataset = gdal_open_dataset_ex(
@@ -705,7 +800,7 @@ impl NetCdfCfDataProvider {
         let mut group_stack = vec![root_group];
 
         // let mut group = root_group;
-        for group_name in group_path.split('/') {
+        for group_name in &dataset_id.group_names {
             group_stack.push(
                 group_stack
                     .last()
@@ -748,9 +843,41 @@ impl NetCdfCfDataProvider {
             start,
             end, // TODO: Use this or time dimension size (number of steps)?
             step,
-            band_offset: entity_idx as usize * dimensions.time,
+            band_offset: dataset_id.entity as usize * dimensions.time,
         }))
     }
+}
+
+/// Load a colorizer from a path that is `path` with suffix `.colorizer.json`.
+fn load_colorizer(path: &Path) -> Result<Colorizer> {
+    use std::io::Read;
+
+    let colorizer_path = path.with_extension("colorizer.json");
+
+    let mut file = std::fs::File::open(colorizer_path).context(error::CannotOpenColorizerFile)?;
+
+    let mut contents = String::new();
+    file.read_to_string(&mut contents)
+        .context(error::CannotReadColorizerFile)?;
+
+    let colorizer: Colorizer =
+        serde_json::from_str(&contents).context(error::CannotParseColorizer)?;
+
+    Ok(colorizer)
+}
+
+/// A simple colorizer between 0 and 255
+/// TODO: generate better default by using `NetCDF` metadata
+fn fallback_colorizer() -> Result<Colorizer> {
+    Colorizer::linear_gradient(
+        vec![
+            (0.0.try_into().expect("not nan"), RgbaColor::black()).into(),
+            (255.0.try_into().expect("not nan"), RgbaColor::white()).into(),
+        ],
+        RgbaColor::transparent(),
+        RgbaColor::transparent(),
+    )
+    .context(error::CannotCreateFallbackColorizer)
 }
 
 fn parse_geo_transform(input: &str) -> Result<GdalDatasetGeoTransform> {
@@ -772,41 +899,64 @@ fn parse_geo_transform(input: &str) -> Result<GdalDatasetGeoTransform> {
     Ok(gdal_geo_transform.into())
 }
 
+fn parse_date(input: &str) -> Result<NaiveDate> {
+    input
+        .parse::<i32>()
+        .map(|year| NaiveDate::from_ymd(year, 1, 1))
+        .or_else(|_| NaiveDate::parse_from_str(input, "%Y-%m-%d"))
+        .context(error::CannotParseTimeCoverageDate)
+}
+
+fn parse_time_step(input: &str) -> Result<TimeStep> {
+    let duration_str = if let Some(duration_str) = input.strip_prefix('P') {
+        duration_str
+    } else {
+        return Err(NetCdfCf4DProviderError::TimeCoverageResolutionMustStartWithP);
+    };
+
+    let parts = duration_str
+        .split('-')
+        .map(str::parse)
+        .collect::<Result<Vec<u32>, std::num::ParseIntError>>()
+        .context(error::TimeCoverageResolutionMustConsistsOnlyOfIntParts)?;
+
+    if parts.is_empty() {
+        return Err(NetCdfCf4DProviderError::TimeCoverageResolutionPartsMustNotBeEmpty);
+    }
+
+    Ok(match parts.as_slice() {
+        [year, 0, 0, ..] => TimeStep {
+            granularity: TimeGranularity::Years,
+            step: *year,
+        },
+        [0, month, 0, ..] => TimeStep {
+            granularity: TimeGranularity::Months,
+            step: *month,
+        },
+        [0, 0, day, ..] => TimeStep {
+            granularity: TimeGranularity::Days,
+            step: *day,
+        },
+        // TODO: fix format and parse other options
+        _ => return Err(NetCdfCf4DProviderError::NotYetImplemented),
+    })
+}
+
 fn parse_time_coverage(
     start: &str,
     end: &str,
     resolution: &str,
 ) -> Result<(TimeInstance, TimeInstance, TimeStep)> {
-    let start = start
-        .parse::<i32>()
-        .context(error::CannotConvertTimeCoverageToInt)?;
-    let end = end
-        .parse::<i32>()
-        .context(error::CannotConvertTimeCoverageToInt)?;
+    // TODO: parse datetimes
 
-    Ok(match resolution {
-        "Yearly" | "every 1 year" => {
-            let start = TimeInstance::from(NaiveDate::from_ymd(start, 1, 1).and_hms(0, 0, 0));
-            // end + 1 because it is exclusive for us but inclusive in the metadata
-            let end = TimeInstance::from(NaiveDate::from_ymd(end + 1, 1, 1).and_hms(0, 0, 0));
-            let step = TimeStep {
-                granularity: TimeGranularity::Years,
-                step: 1,
-            };
-            (start, end, step)
-        }
-        "decade" => {
-            let start = TimeInstance::from(NaiveDate::from_ymd(start, 1, 1).and_hms(0, 0, 0));
-            // end + 1 because it is exclusive for us but inclusive in the metadata
-            let end = TimeInstance::from(NaiveDate::from_ymd(end + 1, 1, 1).and_hms(0, 0, 0));
-            let step = TimeStep {
-                granularity: TimeGranularity::Years,
-                step: 10,
-            };
-            (start, end, step)
-        }
-        _ => return Err(NetCdfCf4DProviderError::NotYetImplemented), // TODO: fix format and parse other options
-    })
+    let start: TimeInstance = parse_date(start)?.and_hms(0, 0, 0).into();
+    let end: TimeInstance = parse_date(end)?.and_hms(0, 0, 0).into();
+    let step = parse_time_step(resolution)?;
+
+    // add one step to provide a right side boundary for the close-open interval
+    let end = (end + step).context(error::CannotDefineTimeCoverageEnd)?;
+
+    Ok((start, end, step))
 }
 
 #[async_trait]
@@ -826,10 +976,18 @@ impl ExternalDatasetProvider for NetCdfCfDataProvider {
                 continue;
             }
 
-            let id = self.id;
-            let listing =
-                tokio::task::spawn_blocking(move || Self::listing_from_netcdf(id, &entry.path()))
-                    .await?;
+            let provider_path = self.path.clone();
+            let relative_path = if let Ok(p) = entry.path().strip_prefix(&provider_path) {
+                p.to_path_buf()
+            } else {
+                // cannot actually happen since `entry` is listed from `provider_path`
+                continue;
+            };
+
+            let listing = tokio::task::spawn_blocking(move || {
+                Self::listing_from_netcdf(NETCDF_CF_PROVIDER_ID, &provider_path, &relative_path)
+            })
+            .await?;
 
             match listing {
                 Ok(listing) => datasets.extend(listing),
@@ -868,11 +1026,11 @@ impl MetaDataProvider<GdalLoadingInfo, RasterResultDescriptor, RasterQueryRectan
         geoengine_operators::error::Error,
     > {
         // TODO spawn blocking
-        self.meta_data(dataset)
-            .await
-            .map_err(|_| geoengine_operators::error::Error::LoadingInfo {
-                source: Box::new(Error::InvalidExternalDatasetId { provider: self.id }),
-            })
+        self.meta_data(dataset).await.map_err(|error| {
+            geoengine_operators::error::Error::LoadingInfo {
+                source: Box::new(error),
+            }
+        })
     }
 }
 
@@ -921,10 +1079,74 @@ mod tests {
         test_data,
     };
     use geoengine_operators::source::{
-        FileNotFoundHandling, GdalDatasetGeoTransform, GdalDatasetParameters, GdalLoadingInfoPart,
+        FileNotFoundHandling, GdalDatasetGeoTransform, GdalDatasetParameters,
+        GdalLoadingInfoTemporalSlice,
     };
 
     use super::*;
+
+    #[test]
+    fn test_parse_time_coverage() {
+        let result = parse_time_coverage("2010", "2020", "P0001-00-00").unwrap();
+        let expected = (
+            TimeInstance::from(NaiveDate::from_ymd(2010, 1, 1).and_hms(0, 0, 0)),
+            TimeInstance::from(NaiveDate::from_ymd(2021, 1, 1).and_hms(0, 0, 0)),
+            TimeStep {
+                granularity: TimeGranularity::Years,
+                step: 1,
+            },
+        );
+        assert_eq!(result, expected);
+    }
+
+    #[test]
+    fn test_parse_date() {
+        assert_eq!(parse_date("2010").unwrap(), NaiveDate::from_ymd(2010, 1, 1));
+        assert_eq!(
+            parse_date("-1000").unwrap(),
+            NaiveDate::from_ymd(-1000, 1, 1)
+        );
+        assert_eq!(
+            parse_date("2010-04-02").unwrap(),
+            NaiveDate::from_ymd(2010, 4, 2)
+        );
+        assert_eq!(
+            parse_date("-1000-04-02").unwrap(),
+            NaiveDate::from_ymd(-1000, 4, 2)
+        );
+    }
+
+    #[test]
+    fn test_parse_time_step() {
+        assert_eq!(
+            parse_time_step("P0001-00-00").unwrap(),
+            TimeStep {
+                granularity: TimeGranularity::Years,
+                step: 1,
+            }
+        );
+        assert_eq!(
+            parse_time_step("P0005-00-00").unwrap(),
+            TimeStep {
+                granularity: TimeGranularity::Years,
+                step: 5,
+            }
+        );
+        assert_eq!(
+            parse_time_step("P0010-00-00").unwrap(),
+            TimeStep {
+                granularity: TimeGranularity::Years,
+                step: 10,
+            }
+        );
+        assert_eq!(
+            parse_time_step("P0000-06-00").unwrap(),
+            TimeStep {
+                granularity: TimeGranularity::Months,
+                step: 6,
+            }
+        );
+    }
 
     #[tokio::test]
     #[allow(clippy::too_many_lines)]
@@ -934,7 +1156,8 @@ mod tests {
 
         let listing = NetCdfCfDataProvider::listing_from_netcdf(
             provider_id,
-            test_data!("netcdf4d/dataset_m.nc"),
+            test_data!("netcdf4d"),
+            Path::new("dataset_m.nc"),
         )
         .unwrap();
 
@@ -948,19 +1171,40 @@ mod tests {
         }
         .into();
 
+        let symbology = Some(Symbology::Raster(RasterSymbology {
+            opacity: 1.0,
+            colorizer: Colorizer::LinearGradient {
+                breakpoints: vec![
+                    (0.0.try_into().unwrap(), RgbaColor::new(0, 0, 0, 255)).into(),
+                    (
+                        255.0.try_into().unwrap(),
+                        RgbaColor::new(255, 255, 255, 255),
+                    )
+                        .into(),
+                ],
+                no_data_color: RgbaColor::new(0, 0, 0, 0),
+                default_color: RgbaColor::new(0, 0, 0, 0),
+            },
+        }));
+
         assert_eq!(
             listing[0],
             DatasetListing {
                 id: DatasetId::External(ExternalDatasetId {
                     provider_id,
-                    dataset_id: "dataset_m.nc::metric_1::0".into(),
+                    dataset_id: serde_json::json!({
+                        "fileName": "dataset_m.nc",
+                        "groupNames": ["metric_1"],
+                        "entity": 0
+                    })
+                    .to_string(),
                 }),
                 name: "Test dataset metric: Random metric 1 > entity01".into(),
                 description: "".into(),
                 tags: vec![],
                 source_operator: "GdalSource".into(),
                 result_descriptor: result_descriptor.clone(),
-                symbology: None
+                symbology: symbology.clone(),
             }
         );
         assert_eq!(
@@ -968,14 +1212,19 @@ mod tests {
             DatasetListing {
                 id: DatasetId::External(ExternalDatasetId {
                     provider_id,
-                    dataset_id: "dataset_m.nc::metric_1::1".into(),
+                    dataset_id: serde_json::json!({
+                        "fileName": "dataset_m.nc",
+                        "groupNames": ["metric_1"],
+                        "entity": 1
+                    })
+                    .to_string(),
                 }),
                 name: "Test dataset metric: Random metric 1 > entity02".into(),
                 description: "".into(),
                 tags: vec![],
                 source_operator: "GdalSource".into(),
                 result_descriptor: result_descriptor.clone(),
-                symbology: None
+                symbology: symbology.clone(),
             }
         );
         assert_eq!(
@@ -983,14 +1232,19 @@ mod tests {
             DatasetListing {
                 id: DatasetId::External(ExternalDatasetId {
                     provider_id,
-                    dataset_id: "dataset_m.nc::metric_1::2".into(),
+                    dataset_id: serde_json::json!({
+                        "fileName": "dataset_m.nc",
+                        "groupNames": ["metric_1"],
+                        "entity": 2
+                    })
+                    .to_string(),
                 }),
                 name: "Test dataset metric: Random metric 1 > entity03".into(),
                 description: "".into(),
                 tags: vec![],
                 source_operator: "GdalSource".into(),
                 result_descriptor: result_descriptor.clone(),
-                symbology: None
+                symbology: symbology.clone(),
             }
         );
         assert_eq!(
@@ -998,14 +1252,19 @@ mod tests {
             DatasetListing {
                 id: DatasetId::External(ExternalDatasetId {
                     provider_id,
-                    dataset_id: "dataset_m.nc::metric_2::0".into(),
+                    dataset_id: serde_json::json!({
+                        "fileName": "dataset_m.nc",
+                        "groupNames": ["metric_2"],
+                        "entity": 0
+                    })
+                    .to_string(),
                 }),
                 name: "Test dataset metric: Random metric 2 > entity01".into(),
                 description: "".into(),
                 tags: vec![],
                 source_operator: "GdalSource".into(),
                 result_descriptor: result_descriptor.clone(),
-                symbology: None
+                symbology: symbology.clone(),
             }
         );
         assert_eq!(
@@ -1013,14 +1272,19 @@ mod tests {
             DatasetListing {
                 id: DatasetId::External(ExternalDatasetId {
                     provider_id,
-                    dataset_id: "dataset_m.nc::metric_2::1".into(),
+                    dataset_id: serde_json::json!({
+                        "fileName": "dataset_m.nc",
+                        "groupNames": ["metric_2"],
+                        "entity": 1
+                    })
+                    .to_string(),
                 }),
                 name: "Test dataset metric: Random metric 2 > entity02".into(),
                 description: "".into(),
                 tags: vec![],
                 source_operator: "GdalSource".into(),
                 result_descriptor: result_descriptor.clone(),
-                symbology: None
+                symbology: symbology.clone(),
             }
         );
         assert_eq!(
@@ -1028,14 +1292,19 @@ mod tests {
             DatasetListing {
                 id: DatasetId::External(ExternalDatasetId {
                     provider_id,
-                    dataset_id: "dataset_m.nc::metric_2::2".into(),
+                    dataset_id: serde_json::json!({
+                        "fileName": "dataset_m.nc",
+                        "groupNames": ["metric_2"],
+                        "entity": 2
+                    })
+                    .to_string(),
                 }),
                 name: "Test dataset metric: Random metric 2 > entity03".into(),
                 description: "".into(),
                 tags: vec![],
                 source_operator: "GdalSource".into(),
                 result_descriptor,
-                symbology: None
+                symbology,
             }
         );
     }
@@ -1047,7 +1316,8 @@ mod tests {
 
         let listing = NetCdfCfDataProvider::listing_from_netcdf(
             provider_id,
-            test_data!("netcdf4d/dataset_sm.nc"),
+            test_data!("netcdf4d"),
+            Path::new("dataset_sm.nc"),
         )
         .unwrap();
 
@@ -1061,12 +1331,30 @@ mod tests {
         }
         .into();
 
+        let symbology = Some(Symbology::Raster(RasterSymbology {
+            opacity: 1.0,
+            colorizer: Colorizer::LinearGradient {
+                breakpoints: vec![
+                    (0.0.try_into().unwrap(), RgbaColor::new(68, 1, 84, 255)).into(),
+                    (50.0.try_into().unwrap(), RgbaColor::new(33, 145, 140, 255)).into(),
+                    (100.0.try_into().unwrap(), RgbaColor::new(253, 231, 37, 255)).into(),
+                ],
+                no_data_color: RgbaColor::new(0, 0, 0, 0),
+                default_color: RgbaColor::new(0, 0, 0, 0),
+            },
+        }));
+
         assert_eq!(
             listing[0],
             DatasetListing {
                 id: DatasetId::External(ExternalDatasetId {
                     provider_id,
-                    dataset_id: "dataset_sm.nc::scenario_1/metric_1::0".into(),
+                    dataset_id: serde_json::json!({
+                        "fileName": "dataset_sm.nc",
+                        "groupNames": ["scenario_1", "metric_1"],
+                        "entity": 0
+                    })
+                    .to_string(),
                 }),
                 name:
                     "Test dataset metric and scenario: Sustainability > Random metric 1 > entity01"
@@ -1075,7 +1363,7 @@ mod tests {
                 tags: vec![],
                 source_operator: "GdalSource".into(),
                 result_descriptor: result_descriptor.clone(),
-                symbology: None
+                symbology: symbology.clone(),
             }
         );
         assert_eq!(
@@ -1083,31 +1371,38 @@ mod tests {
             DatasetListing {
                 id: DatasetId::External(ExternalDatasetId {
                     provider_id,
-                    dataset_id: "dataset_sm.nc::scenario_5/metric_2::1".into(),
+                    dataset_id: serde_json::json!({
+                        "fileName": "dataset_sm.nc",
+                        "groupNames": ["scenario_5", "metric_2"],
+                        "entity": 1
+                    })
+                    .to_string(),
                 }),
                 name: "Test dataset metric and scenario: Fossil-fueled Development > Random metric 2 > entity02".into(),
                 description: "".into(),
                 tags: vec![],
                 source_operator: "GdalSource".into(),
                 result_descriptor,
-                symbology: None
+                symbology,
             }
         );
     }
 
-    // TODO: verify
-    // TODO: do the samme for `dataset_m.nc`
     #[tokio::test]
     async fn test_metadata_from_netcdf_sm() {
         let provider = NetCdfCfDataProvider {
-            id: DatasetProviderId::from_str("bf6bb6ea-5d5d-467d-bad1-267bf3a54470").unwrap(),
             path: test_data!("netcdf4d/").to_path_buf(),
         };
 
         let metadata = provider
             .meta_data(&DatasetId::External(ExternalDatasetId {
-                provider_id: provider.id,
-                dataset_id: "dataset_sm.nc::scenario_5/metric_2::1".into(),
+                provider_id: NETCDF_CF_PROVIDER_ID,
+                dataset_id: serde_json::json!({
+                    "fileName": "dataset_sm.nc",
+                    "groupNames": ["scenario_5", "metric_2"],
+                    "entity": 1
+                })
+                .to_string(),
             }))
             .await
             .unwrap();
@@ -1140,7 +1435,7 @@ mod tests {
             .await
             .unwrap();
 
-        let mut loading_info_parts = Vec::<GdalLoadingInfoPart>::new();
+        let mut loading_info_parts = Vec::<GdalLoadingInfoTemporalSlice>::new();
         for part in loading_info.info {
             loading_info_parts.push(part.unwrap());
         }
@@ -1158,7 +1453,7 @@ mod tests {
 
         assert_eq!(
             loading_info_parts[0],
-            GdalLoadingInfoPart {
+            GdalLoadingInfoTemporalSlice {
                 time: TimeInterval::new_unchecked(946_684_800_000, 1_262_304_000_000),
                 params: Some(GdalDatasetParameters {
                     file_path,

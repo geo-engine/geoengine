@@ -17,9 +17,9 @@ use geoengine_operators::engine::{
 };
 use geoengine_operators::mock::MockDatasetDataSourceLoadingInfo;
 use geoengine_operators::source::{
-    FileNotFoundHandling, GdalDatasetParameters, GdalLoadingInfo, GdalLoadingInfoPart,
-    GdalLoadingInfoPartIterator, OgrSourceColumnSpec, OgrSourceDataset, OgrSourceDatasetTimeType,
-    OgrSourceDurationSpec, OgrSourceErrorSpec, OgrSourceTimeFormat,
+    FileNotFoundHandling, GdalDatasetParameters, GdalLoadingInfo, GdalLoadingInfoTemporalSlice,
+    GdalLoadingInfoTemporalSliceIterator, OgrSourceColumnSpec, OgrSourceDataset,
+    OgrSourceDatasetTimeType, OgrSourceDurationSpec, OgrSourceErrorSpec, OgrSourceTimeFormat,
 };
 use scienceobjectsdb_rust_api::sciobjectsdbapi::models::v1::Object;
 use scienceobjectsdb_rust_api::sciobjectsdbapi::services::v1::dataset_service_client::DatasetServiceClient;
@@ -364,7 +364,7 @@ impl NFDIDataProvider {
     /// This is required, since download links from the core-storage are only valid
     /// for 15 minutes.
     fn raster_loading_template(info: &RasterInfo, rd: &RasterResultDescriptor) -> GdalLoadingInfo {
-        let part = GdalLoadingInfoPart {
+        let part = GdalLoadingInfoTemporalSlice {
             time: info.time_interval,
             params: Some(GdalDatasetParameters {
                 file_path: PathBuf::from(format!("/vsicurl/{}", URL_REPLACEMENT)),
@@ -381,7 +381,7 @@ impl NFDIDataProvider {
         };
 
         GdalLoadingInfo {
-            info: GdalLoadingInfoPartIterator::Static {
+            info: GdalLoadingInfoTemporalSliceIterator::Static {
                 parts: vec![part].into_iter(),
             },
         }
@@ -580,7 +580,9 @@ impl ExpiringDownloadLink for GdalLoadingInfo {
         Self: Sized,
     {
         match &self.info {
-            GdalLoadingInfoPartIterator::Static { parts } if parts.as_slice().len() == 1 => {
+            GdalLoadingInfoTemporalSliceIterator::Static { parts }
+                if parts.as_slice().len() == 1 =>
+            {
                 let new_parts = parts
                     .as_slice()
                     .iter()
@@ -600,7 +602,7 @@ impl ExpiringDownloadLink for GdalLoadingInfo {
                     .collect::<std::vec::Vec<_>>();
 
                 Ok(Self {
-                    info: GdalLoadingInfoPartIterator::Static {
+                    info: GdalLoadingInfoTemporalSliceIterator::Static {
                         parts: new_parts.into_iter(),
                     },
                 })
@@ -1282,6 +1284,7 @@ mod tests {
             params: OgrSourceParameters {
                 dataset: id,
                 attribute_projection: None,
+                attribute_filters: None,
             },
         }
         .boxed();

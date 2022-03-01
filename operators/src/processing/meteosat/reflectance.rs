@@ -208,7 +208,7 @@ where
 
         let mat_tile = tile.into_materialized_tile(); // NOTE: the tile is already materialized.
 
-        let refl_tile = tokio::task::spawn_blocking(move || {
+        let refl_tile = crate::util::spawn_blocking(move || {
             process_tile(mat_tile, solar_correction, channel, &pool)
         })
         .await??;

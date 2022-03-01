@@ -2,6 +2,7 @@ use std::net::SocketAddr;
 use std::path::PathBuf;
 use std::sync::RwLock;
 
+use crate::contexts::SessionId;
 use crate::error::{self, Result};
 use crate::util::parsing::{deserialize_base_url, deserialize_base_url_option};
 
@@ -215,7 +216,6 @@ pub struct Logging {
     pub log_spec: String,
     pub log_to_file: bool,
     pub filename_prefix: String,
-    pub enable_buffering: bool,
     pub log_directory: Option<String>,
 }
 
@@ -321,6 +321,16 @@ pub struct Gdal {
 
 impl ConfigElement for Gdal {
     const KEY: &'static str = "gdal";
+}
+
+#[derive(Debug, Deserialize)]
+pub struct Session {
+    pub anonymous_access: bool,
+    pub fixed_session_token: Option<SessionId>,
+}
+
+impl ConfigElement for Session {
+    const KEY: &'static str = "session";
 }
 
 #[derive(Debug, Deserialize)]

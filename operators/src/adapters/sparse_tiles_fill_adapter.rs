@@ -408,10 +408,7 @@ where
 
                 let (next_idx, next_time) = match this.sc.maybe_next_idx() {
                     // the next GridIdx is in the current TimeInterval
-                    Some(idx) => {
-                        dbg!("0");
-                        (idx, this.sc.current_time)
-                    }
+                    Some(idx) => (idx, this.sc.current_time),
                     // the next GridIdx is in the next TimeInterval
                     None => {
                         if this

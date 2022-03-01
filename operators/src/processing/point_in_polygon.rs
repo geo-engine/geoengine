@@ -151,7 +151,7 @@ impl PointInPolygonFilterProcessor {
             let time_intervals = points.time_intervals();
             let coordinates = points.coordinates();
 
-            for (chunk_index, chunk_result) in (&mut result).chunks_mut(chunk_size).enumerate() {
+            for (chunk_index, chunk_result) in result.chunks_mut(chunk_size).enumerate() {
                 let feature_index_start = chunk_index * chunk_size;
                 let features_index_end = min(feature_index_start + chunk_size, num_features);
                 let tester = tester.clone();
@@ -193,7 +193,7 @@ impl PointInPolygonFilterProcessor {
         let thread_pool = ctx.thread_pool().clone();
 
         let thread_points = points.clone();
-        let filter = tokio::task::spawn_blocking(move || {
+        let filter = crate::util::spawn_blocking(move || {
             Self::filter_parallel(&thread_points, &polygons, &thread_pool)
         })
         .await?;
