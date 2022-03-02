@@ -79,3 +79,7 @@ user_registration = true
 [odm]
 endpoint = "http://localhost:3000/"
 # TODO: authentication
+
+# Settings for compile-feature `ebv` only
+[ebv]
+api_base_url = "https://portal.geobon.org/api/v1"
