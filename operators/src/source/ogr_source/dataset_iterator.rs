@@ -12,6 +12,7 @@ use geoengine_datatypes::primitives::VectorQueryRectangle;
 use log::debug;
 use ouroboros::self_referencing;
 use std::cell::Cell;
+use std::collections::HashMap;
 use std::ffi::OsStr;
 use std::iter::FusedIterator;
 
@@ -48,6 +49,9 @@ impl OgrDatasetIterator {
         query_rectangle: &VectorQueryRectangle,
         attribute_filters: Vec<AttributeFilter>,
     ) -> Result<OgrDatasetIterator> {
+        let adjusted_filters =
+            Self::adjust_filters_to_column_renaming(dataset_information, attribute_filters);
+
         let dataset_iterator = _OgrDatasetIteratorTryBuilder {
             dataset: Self::open_gdal_dataset(dataset_information)?,
             features_provider_builder: |dataset| {
@@ -55,7 +59,7 @@ impl OgrDatasetIterator {
                     dataset,
                     dataset_information,
                     query_rectangle,
-                    &attribute_filters,
+                    &adjusted_filters,
                 )
             },
         }
@@ -71,6 +75,42 @@ impl OgrDatasetIterator {
             has_ended: Cell::new(false),
             use_ogr_spatial_filter,
         })
+    }
+
+    /// Undo the column renaming to let OGR apply the filters
+    fn adjust_filters_to_column_renaming(
+        dataset_information: &OgrSourceDataset,
+        attribute_filters: Vec<AttributeFilter>,
+    ) -> Vec<AttributeFilter> {
+        match &dataset_information.columns {
+            Some(cspec) => {
+                match &cspec.rename {
+                    Some(mapping) => {
+                        // Build reverse mapping
+                        let r_mapping = mapping
+                            .iter()
+                            .map(|(k, v)| (v.to_string(), k.to_string()))
+                            .collect::<HashMap<_, _>>();
+
+                        attribute_filters
+                            .into_iter()
+                            .map(|f| match r_mapping.get(&f.attribute) {
+                                Some(name) => AttributeFilter {
+                                    attribute: name.to_string(),
+                                    ranges: f.ranges,
+                                    keep_nulls: f.keep_nulls,
+                                },
+                                None => f,
+                            })
+                            .collect::<Vec<_>>()
+                    }
+                    // No renaming
+                    None => attribute_filters,
+                }
+            }
+            // No column spec
+            None => attribute_filters,
+        }
     }
 
     fn create_features_provider<'d>(
