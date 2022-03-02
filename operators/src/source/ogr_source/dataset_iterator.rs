@@ -143,20 +143,26 @@ impl OgrDatasetIterator {
             features_provider.set_spatial_filter(&query_rectangle.spatial_bounds);
         }
 
-        if let Some(attribute_query) = &dataset_information.attribute_query {
+        let filter_string = if dataset.driver().short_name() == "CSV" {
+            FeaturesProvider::create_attribute_filter_string_cast(attribute_filters)
+        } else {
+            FeaturesProvider::create_attribute_filter_string(attribute_filters)
+        };
+
+        let final_filter = filter_string
+            .map(|f| match &dataset_information.attribute_query {
+                Some(a) => format!("({}) AND {}", a, f),
+                None => f,
+            })
+            .or_else(|| dataset_information.attribute_query.clone());
+
+        if let Some(filter) = final_filter {
             debug!(
                 "using attribute filter {:?} for layer {:?}",
-                attribute_query, &dataset_information.layer_name
+                &filter, &dataset_information.layer_name
             );
-            features_provider.set_attribute_filter(attribute_query)?;
+            features_provider.set_attribute_filter(filter.as_str())?;
         }
-
-        if dataset.driver().short_name() == "CSV" {
-            features_provider.set_attribute_filters_cast(attribute_filters)?;
-        } else {
-            features_provider.set_attribute_filters(attribute_filters)?;
-        }
-
         Ok(features_provider)
     }
 
