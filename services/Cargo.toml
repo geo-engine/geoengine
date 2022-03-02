@@ -32,6 +32,7 @@ bb8-postgres = { version = "0.7", features = ["with-uuid-0_8", "with-chrono-0_4"
 bytes = "1.0"
 chrono = { version = "0.4", features = ["serde"] }
 config = "0.11"
+downcast-rs = "1.2"
 flexi_logger = { version = "0.22", features = ["trc"] }
 float-cmp = "0.9"
 futures = "0.3"

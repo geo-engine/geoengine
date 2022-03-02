@@ -93,7 +93,7 @@ impl ExternalDatasetProviderDefinition for GfbioDataProviderDefinition {
 
 // TODO: make schema, table names and column names configurable like in crawler
 pub struct GfbioDataProvider {
-    id: DatasetProviderId,
+    pub(crate) id: DatasetProviderId,
     db_config: DatabaseConnectionConfig,
     pool: Pool<PostgresConnectionManager<NoTls>>,
     column_hash_to_name: HashMap<String, String>,
@@ -169,6 +169,23 @@ impl GfbioDataProvider {
 
     fn build_attribute_query(surrogate_key: i32) -> String {
         format!("surrogate_key = {surrogate}", surrogate = surrogate_key)
+    }
+
+    pub async fn resolve_surrogate_key(&self, dataset_id: &str) -> Result<Option<i32>> {
+        let conn = self.pool.get().await?;
+
+        let stmt = conn
+            .prepare(&format!(
+                r#"
+            SELECT surrogate_key
+            FROM {schema}.abcd_datasets WHERE dataset_id = $1;"#,
+                schema = self.db_config.schema
+            ))
+            .await?;
+
+        let row = conn.query_one(&stmt, &[&dataset_id]).await.ok();
+
+        Ok(row.map(|r| r.get::<usize, i32>(0)))
     }
 }
 

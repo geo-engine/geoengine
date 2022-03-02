@@ -6,6 +6,7 @@ use crate::projects::Symbology;
 use crate::util::config::{get_config_element, DatasetService};
 use crate::util::user_input::{UserInput, Validated};
 use async_trait::async_trait;
+use downcast_rs::{impl_downcast, Downcast};
 use geoengine_datatypes::dataset::DatasetId;
 use geoengine_datatypes::primitives::{RasterQueryRectangle, VectorQueryRectangle};
 use geoengine_operators::engine::{
@@ -121,12 +122,14 @@ pub trait ExternalDatasetProvider: Send
     + MetaDataProvider<MockDatasetDataSourceLoadingInfo, VectorResultDescriptor, VectorQueryRectangle>
     + MetaDataProvider<OgrSourceDataset, VectorResultDescriptor, VectorQueryRectangle>
     + MetaDataProvider<GdalLoadingInfo, RasterResultDescriptor, RasterQueryRectangle>
+    + Downcast
 {
     // TODO: authorization, filter, paging
     async fn list(&self, options: Validated<DatasetListOptions>) -> Result<Vec<DatasetListing>>;
 
     async fn provenance(&self, dataset: &DatasetId) -> Result<ProvenanceOutput>;
 }
+impl_downcast!(ExternalDatasetProvider);
 
 #[derive(Debug, Serialize, Deserialize, PartialEq, Eq, Hash)]
 pub struct ProvenanceOutput {
