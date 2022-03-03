@@ -535,23 +535,30 @@ impl FeaturesProvider<'_> {
         Ok(())
     }
 
+    ///  Creates an attribute filter string.
     fn create_attribute_filter_string(attribute_filters: &[AttributeFilter]) -> Option<String> {
-        Self::create_attribute_filter_string_int(
+        Self::create_attribute_filter_string_internal(
             attribute_filters,
             Self::create_range_filter_string,
         )
     }
 
+    ///  Creates an attribute filter string. This method casts
+    /// input data to the specified column type. This is especially
+    /// useful for data read from text files like CSV.
     fn create_attribute_filter_string_cast(
         attribute_filters: &[AttributeFilter],
     ) -> Option<String> {
-        Self::create_attribute_filter_string_int(
+        Self::create_attribute_filter_string_internal(
             attribute_filters,
             Self::create_range_filter_string_cast,
         )
     }
 
-    fn create_attribute_filter_string_int(
+    /// Creates an attribute filter string. The filter ranges
+    /// are mapped to the corresponding filter string with
+    /// the given `range_map` function.
+    fn create_attribute_filter_string_internal(
         attribute_filters: &[AttributeFilter],
         range_map: fn(&str, &StringOrNumberRange) -> String,
     ) -> Option<String> {
