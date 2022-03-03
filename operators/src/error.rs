@@ -270,10 +270,18 @@ pub enum Error {
         source: crate::util::statistics::StatisticsError,
     },
 
+    #[cfg(feature = "pro")]
+    #[snafu(display("Executor error: {}", source))]
+    Executor {
+        #[snafu(implicit)]
+        source: crate::pro::executor::error::ExecutorError,
+    },
+
     #[snafu(display("SparseTilesFillAdapter error: {}", source))]
     SparseTilesFillAdapter {
         source: crate::adapters::SparseTilesFillAdapterError,
     },
+
     #[snafu(context(false))]
     ExpressionOperator {
         source: crate::processing::ExpressionError,

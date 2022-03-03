@@ -4,6 +4,7 @@ use std::convert::TryFrom;
 use arrow::array::{Array, ArrayBuilder, ArrayData, ArrayRef, BooleanArray, JsonEqual};
 use arrow::datatypes::DataType;
 use arrow::error::ArrowError;
+use geo::prelude::Intersects;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
@@ -22,6 +23,12 @@ impl Geometry for NoGeometry {
     const DATA_TYPE: VectorDataType = VectorDataType::Data;
 
     fn intersects_bbox(&self, _bbox: &BoundingBox2D) -> bool {
+        true
+    }
+}
+
+impl Intersects<BoundingBox2D> for NoGeometry {
+    fn intersects(&self, _rhs: &BoundingBox2D) -> bool {
         true
     }
 }

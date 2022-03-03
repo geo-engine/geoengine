@@ -23,7 +23,7 @@ use std::ops::{Bound, RangeBounds};
 use std::rc::Rc;
 use std::sync::Arc;
 
-use crate::primitives::Coordinate2D;
+use crate::primitives::{BoundingBox2D, Coordinate2D};
 use crate::primitives::{
     CategoryDataRef, FeatureData, FeatureDataRef, FeatureDataType, FeatureDataValue, FloatDataRef,
     Geometry, IntDataRef, TextDataRef, TimeInterval,
@@ -39,6 +39,7 @@ use crate::{
     collections::{FeatureCollectionError, IntoGeometryOptionsIterator},
     operations::reproject::CoordinateProjection,
 };
+use geo::intersects::Intersects;
 use std::iter::FromIterator;
 
 use super::{geo_feature_collection::ReplaceRawArrayCoords, GeometryCollection};
@@ -808,6 +809,21 @@ impl<'a, GeometryRef> FeatureCollectionRow<'a, GeometryRef> {
 
     pub fn index(&self) -> usize {
         self.row_num
+    }
+}
+
+impl<'a, GR> Intersects<BoundingBox2D> for FeatureCollectionRow<'a, GR>
+where
+    GR: Intersects<BoundingBox2D>,
+{
+    fn intersects(&self, rhs: &BoundingBox2D) -> bool {
+        self.geometry.intersects(rhs)
+    }
+}
+
+impl<'a, GR> Intersects<TimeInterval> for FeatureCollectionRow<'a, GR> {
+    fn intersects(&self, rhs: &TimeInterval) -> bool {
+        self.time_interval.intersects(rhs)
     }
 }
 

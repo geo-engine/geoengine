@@ -1,6 +1,6 @@
 use crate::contexts::{ExecutionContextImpl, QueryContextImpl};
 use crate::error;
-use crate::pro::contexts::{Context, Db, ProContext};
+use crate::pro::contexts::{Context, Db, ProContext, TaskManager};
 use crate::pro::datasets::{add_datasets_from_directory, ProHashMapDatasetDb};
 use crate::pro::projects::ProHashMapProjectDb;
 use crate::pro::users::{HashMapUserDb, UserDb, UserSession};
@@ -27,6 +27,7 @@ pub struct ProInMemoryContext {
     thread_pool: Arc<ThreadPool>,
     exe_ctx_tiling_spec: TilingSpecification,
     query_ctx_chunk_size: ChunkByteSize,
+    task_manager: TaskManager,
 }
 
 impl TestDefault for ProInMemoryContext {
@@ -39,6 +40,7 @@ impl TestDefault for ProInMemoryContext {
             thread_pool: create_rayon_thread_pool(0),
             exe_ctx_tiling_spec: TestDefault::test_default(),
             query_ctx_chunk_size: TestDefault::test_default(),
+            task_manager: Default::default(),
         }
     }
 }
@@ -63,6 +65,7 @@ impl ProInMemoryContext {
             exe_ctx_tiling_spec,
             query_ctx_chunk_size,
             dataset_db: Arc::new(RwLock::new(db)),
+            task_manager: Default::default(),
         }
     }
 
@@ -78,6 +81,7 @@ impl ProInMemoryContext {
             thread_pool: create_rayon_thread_pool(0),
             exe_ctx_tiling_spec,
             query_ctx_chunk_size,
+            task_manager: Default::default(),
         }
     }
 }
@@ -94,6 +98,9 @@ impl ProContext for ProInMemoryContext {
     }
     async fn user_db_ref_mut(&self) -> RwLockWriteGuard<'_, Self::UserDB> {
         self.user_db.write().await
+    }
+    fn task_manager(&self) -> TaskManager {
+        self.task_manager.clone()
     }
 }
 

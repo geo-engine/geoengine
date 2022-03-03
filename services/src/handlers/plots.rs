@@ -37,6 +37,14 @@ pub(crate) struct GetPlot {
     pub spatial_resolution: SpatialResolution,
 }
 
+#[derive(Debug, Clone, PartialEq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct WrappedPlotOutput {
+    pub(crate) output_format: PlotOutputFormat,
+    pub(crate) plot_type: &'static str,
+    pub(crate) data: serde_json::Value,
+}
+
 /// Generates a [plot](WrappedPlotOutput).
 ///
 /// # Example
@@ -117,12 +125,23 @@ pub(crate) struct GetPlot {
 ///   ]
 /// }
 /// ```
+
 async fn get_plot_handler<C: Context>(
     id: web::Path<Uuid>,
     params: web::Query<GetPlot>,
     session: C::Session,
     ctx: web::Data<C>,
 ) -> Result<impl Responder> {
+    let output = process_plot_request(id, params, session, ctx).await?;
+    Ok(web::Json(output))
+}
+
+pub(crate) async fn process_plot_request<C: Context>(
+    id: web::Path<Uuid>,
+    params: web::Query<GetPlot>,
+    session: C::Session,
+    ctx: web::Data<C>,
+) -> Result<WrappedPlotOutput> {
     let workflow = ctx
         .workflow_registry_ref()
         .await
@@ -193,21 +212,11 @@ async fn get_plot_handler<C: Context>(
         }
     };
 
-    let output = WrappedPlotOutput {
+    Ok(WrappedPlotOutput {
         output_format,
         plot_type,
         data,
-    };
-
-    Ok(web::Json(output))
-}
-
-#[derive(Debug, Clone, PartialEq, Serialize)]
-#[serde(rename_all = "camelCase")]
-struct WrappedPlotOutput {
-    output_format: PlotOutputFormat,
-    plot_type: &'static str,
-    data: serde_json::Value,
+    })
 }
 
 #[cfg(test)]

@@ -310,9 +310,9 @@ pub enum Error {
     InvalidAPIToken {
         message: String,
     },
+
     MissingNFDIMetaData,
 
-    #[snafu(context(false))]
     NetCdfCf4DProvider {
         source: NetCdfCf4DProviderError,
     },
@@ -321,6 +321,19 @@ pub enum Error {
     #[snafu(context(false))]
     EbvHandler {
         source: crate::handlers::ebv::EbvError,
+    },
+
+    #[snafu(context(false))]
+    #[cfg(feature = "pro")]
+    #[snafu(display("Executor error: {}", source))]
+    Executor {
+        source: geoengine_operators::pro::executor::error::ExecutorError,
+    },
+
+    #[cfg(feature = "pro")]
+    #[snafu(display("Executor error: {}", message))]
+    ExecutorComputation {
+        message: String,
     },
 }
 

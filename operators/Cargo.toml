@@ -52,6 +52,7 @@ uuid = { version = "0.8", features = ["serde", "v4", "v5"] }
 [dev-dependencies]
 async-stream = "0.3"
 geo-rand = { git = "https://github.com/lelongg/geo-rand", tag = "v0.3.0" }
+tokio-util = "0.6"
 rand = "0.8"
 
 

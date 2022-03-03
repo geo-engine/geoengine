@@ -3,14 +3,14 @@ use std::convert::TryFrom;
 use arrow::array::{ArrayBuilder, BooleanArray};
 use arrow::error::ArrowError;
 use float_cmp::{ApproxEq, F64Margin};
-use geo::algorithm::intersects::Intersects;
+use geo::intersects::Intersects;
 use serde::{Deserialize, Serialize};
 use snafu::ensure;
 
 use crate::collections::VectorDataType;
 use crate::error::Error;
 use crate::primitives::{
-    error, BoundingBox2D, GeometryRef, MultiPoint, PrimitivesError, TypedGeometry,
+    error, BoundingBox2D, GeometryRef, MultiPoint, PrimitivesError, SpatialBounded, TypedGeometry,
 };
 use crate::primitives::{Coordinate2D, Geometry};
 use crate::util::arrow::{downcast_array, ArrowTyped};
@@ -280,6 +280,19 @@ impl<'g> MultiLineStringAccess for MultiLineStringRef<'g> {
         &self.point_coordinates
     }
 }
+impl<'g> SpatialBounded for MultiLineStringRef<'g> {
+    fn spatial_bounds(&self) -> BoundingBox2D {
+        let coords = self.point_coordinates.iter().flat_map(|&x| x.iter());
+        BoundingBox2D::from_coord_ref_iter(coords)
+            .expect("there must be at least one coordinate in a multilinestring")
+    }
+}
+
+impl<'g> Intersects<BoundingBox2D> for MultiLineStringRef<'g> {
+    fn intersects(&self, rhs: &BoundingBox2D) -> bool {
+        self.spatial_bounds().intersects_bbox(rhs)
+    }
+}
 
 impl<'g> From<MultiLineStringRef<'g>> for geojson::Geometry {
     fn from(geometry: MultiLineStringRef<'g>) -> geojson::Geometry {
@@ -351,6 +364,32 @@ mod tests {
         assert_eq!(
             aggregate(&multi_line_string),
             aggregate(&multi_line_string_ref)
+        );
+    }
+
+    #[test]
+    fn test_ref_intersects() {
+        let coordinates = vec![vec![(0.0, 0.0).into(), (10.0, 10.0).into()]];
+        let multi_line_string_ref =
+            MultiLineStringRef::new(coordinates.iter().map(AsRef::as_ref).collect()).unwrap();
+
+        assert!(
+            multi_line_string_ref.intersects(&BoundingBox2D::new_unchecked(
+                (-1., -1.,).into(),
+                (11., 11.).into()
+            ))
+        );
+        assert!(
+            multi_line_string_ref.intersects(&BoundingBox2D::new_unchecked(
+                (2., 2.,).into(),
+                (9., 9.).into()
+            ))
+        );
+        assert!(
+            !multi_line_string_ref.intersects(&BoundingBox2D::new_unchecked(
+                (-2., -2.,).into(),
+                (-2., 12.).into()
+            ))
         );
     }
 

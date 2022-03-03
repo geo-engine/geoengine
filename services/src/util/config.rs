@@ -331,3 +331,12 @@ pub struct Session {
 impl ConfigElement for Session {
     const KEY: &'static str = "session";
 }
+
+#[derive(Debug, Deserialize)]
+pub struct Executor {
+    pub queue_size: usize,
+}
+
+impl ConfigElement for Executor {
+    const KEY: &'static str = "executor";
+}
