@@ -106,6 +106,7 @@ impl Interceptor for APITokenInterceptor {
 /// API endpoints. Those stubs need to be cloned, because all calls require
 /// a mutable self reference. However, according to the docs, cloning
 /// is cheap.
+#[derive(Debug)]
 pub struct NFDIDataProvider {
     id: DatasetProviderId,
     project_id: String,
@@ -523,6 +524,10 @@ impl ExternalDatasetProvider for NFDIDataProvider {
             dataset: dataset.clone(),
             provenance: ds.provenance,
         })
+    }
+
+    fn as_any(&self) -> &dyn std::any::Any {
+        self
     }
 }
 

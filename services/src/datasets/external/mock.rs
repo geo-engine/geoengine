@@ -46,6 +46,7 @@ impl ExternalDatasetProviderDefinition for MockExternalDataProviderDefinition {
     }
 }
 
+#[derive(Debug)]
 pub struct MockExternalDataProvider {
     datasets: Vec<DatasetDefinition>,
 }
@@ -83,6 +84,10 @@ impl ExternalDatasetProvider for MockExternalDataProvider {
             dataset: dataset.clone(),
             provenance: None,
         })
+    }
+
+    fn as_any(&self) -> &dyn std::any::Any {
+        self
     }
 }
 

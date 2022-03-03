@@ -3,6 +3,8 @@
 //! Connects to <https://portal.geobon.org/api/v1/>.
 
 use crate::datasets::external::netcdfcf::{NetCdfOverview, NETCDF_CF_PROVIDER_ID};
+use crate::datasets::listing::ExternalDatasetProvider;
+use crate::datasets::storage::DatasetProviderDb;
 use crate::error::{ErrorSource, Result};
 use crate::{contexts::Context, datasets::external::netcdfcf::NetCdfCfDataProvider};
 use actix_web::{
@@ -10,7 +12,6 @@ use actix_web::{
     FromRequest, Responder,
 };
 use geoengine_datatypes::dataset::DatasetProviderId;
-use geoengine_datatypes::test_data;
 use log::debug;
 use serde::Serialize;
 use snafu::{ResultExt, Snafu};
@@ -107,6 +108,8 @@ pub enum EbvError {
     CannotParseNetCdfFile { source: Box<dyn ErrorSource> },
     #[snafu(display("Cannot lookup dataset with id {id}"))]
     CannotLookupDataset { id: usize },
+    #[snafu(display("Cannot find NetCdfCf provider with id {id}"))]
+    NoNetCdfCfProviderForId { id: DatasetProviderId },
 }
 
 #[derive(Debug, Serialize)]
@@ -259,8 +262,8 @@ async fn get_ebv_subdatasets<C: Context>(
     id: web::Path<usize>,
     _params: web::Query<()>,
     base_url: web::Data<BaseUrl>,
-    _session: C::Session,
-    _ctx: web::Data<C>,
+    session: C::Session,
+    ctx: web::Data<C>,
 ) -> Result<impl Responder> {
     let dataset = get_dataset_metadata(base_url.get_ref(), id.into_inner()).await?;
 
@@ -269,22 +272,7 @@ async fn get_ebv_subdatasets<C: Context>(
 
         debug!("Accessing dataset {}", dataset_path.display());
 
-        #[cfg(test)]
-        let provider_path = test_data!("netcdf4d").to_path_buf();
-
-        #[cfg(not(test))]
-        let provider_path = {
-            use crate::datasets::external::netcdfcf::NetCdfCfDataProviderDefinition;
-            use std::fs::File;
-            use std::io::BufReader;
-
-            // TODO: do only once
-            let provider: NetCdfCfDataProviderDefinition = serde_json::from_reader(
-                BufReader::new(File::open(test_data!("provider_defs/netcdfcf.json"))?),
-            )?;
-
-            provider.path
-        };
+        let provider_path = netcdfcf_provider_ref(ctx.as_ref(), &session).await?;
 
         crate::util::spawn_blocking(move || {
             NetCdfCfDataProvider::build_netcdf_tree(&provider_path, &dataset_path)
@@ -300,18 +288,41 @@ async fn get_ebv_subdatasets<C: Context>(
     }))
 }
 
+async fn netcdfcf_provider_ref<C: Context>(
+    ctx: &C,
+    session: &C::Session,
+) -> Result<PathBuf, EbvError> {
+    let provider: Box<dyn ExternalDatasetProvider> = ctx
+        .dataset_db_ref()
+        .await
+        .dataset_provider(session, NETCDF_CF_PROVIDER_ID)
+        .await
+        .map_err(|_| EbvError::NoNetCdfCfProviderForId {
+            id: NETCDF_CF_PROVIDER_ID,
+        })?;
+
+    if let Some(concrete_provider) = provider.as_any().downcast_ref::<NetCdfCfDataProvider>() {
+        Ok(concrete_provider.path.clone())
+    } else {
+        Err(EbvError::NoNetCdfCfProviderForId {
+            id: NETCDF_CF_PROVIDER_ID,
+        })
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
 
     use crate::{
         contexts::{InMemoryContext, Session, SimpleContext},
+        datasets::external::netcdfcf::NetCdfCfDataProviderDefinition,
         server::{configure_extractors, render_404, render_405},
         util::tests::read_body_string,
     };
     use actix_web::{dev::ServiceResponse, http, http::header, middleware, test, web, App};
     use actix_web_httpauth::headers::authorization::Bearer;
-    use geoengine_datatypes::util::test::TestDefault;
+    use geoengine_datatypes::{test_data, util::test::TestDefault};
     use httptest::{matchers::request, responders::status_code, Expectation};
     use serde_json::json;
 
@@ -347,6 +358,18 @@ mod tests {
     async fn test_get_subdatasets() {
         let ctx = InMemoryContext::test_default();
         let session_id = ctx.default_session_ref().await.id();
+
+        ctx.dataset_db_ref_mut()
+            .await
+            .add_dataset_provider(
+                &*ctx.default_session_ref().await,
+                Box::new(NetCdfCfDataProviderDefinition {
+                    name: "test".to_string(),
+                    path: test_data!("netcdf4d").to_path_buf(),
+                }),
+            )
+            .await
+            .unwrap();
 
         let mock_server = httptest::Server::run();
         mock_server.expect(
