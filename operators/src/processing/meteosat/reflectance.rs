@@ -16,7 +16,10 @@ use TypedRasterQueryProcessor::F32 as QueryProcessorOut;
 use crate::error::Error;
 use futures::stream::BoxStream;
 use futures::{StreamExt, TryStreamExt};
-use geoengine_datatypes::primitives::{Measurement, RasterQueryRectangle, SpatialPartition2D};
+use geoengine_datatypes::primitives::{
+    ClassificationMeasurement, ContinuousMeasurement, Measurement, RasterQueryRectangle,
+    SpatialPartition2D,
+};
 use geoengine_datatypes::raster::{
     EmptyGrid, Grid2D, GridShapeAccess, GridSize, MaterializedRasterTile2D, NoDataValue,
     RasterDataType, RasterPropertiesKey, RasterTile2D,
@@ -69,19 +72,19 @@ impl RasterOperator for Reflectance {
         let in_desc = input.result_descriptor();
 
         match &in_desc.measurement {
-            Measurement::Continuous {
+            Measurement::Continuous(ContinuousMeasurement {
                 measurement: m,
                 unit: _,
-            } if m != "radiance" => {
+            }) if m != "radiance" => {
                 return Err(Error::InvalidMeasurement {
                     expected: "radiance".into(),
                     found: m.clone(),
                 })
             }
-            Measurement::Classification {
+            Measurement::Classification(ClassificationMeasurement {
                 measurement: m,
                 classes: _,
-            } => {
+            }) => {
                 return Err(Error::InvalidMeasurement {
                     expected: "radiance".into(),
                     found: m.clone(),
@@ -94,19 +97,19 @@ impl RasterOperator for Reflectance {
                 })
             }
             // OK Case
-            Measurement::Continuous {
+            Measurement::Continuous(ContinuousMeasurement {
                 measurement: _,
                 unit: _,
-            } => {}
+            }) => {}
         }
 
         let out_desc = RasterResultDescriptor {
             spatial_reference: in_desc.spatial_reference,
             data_type: RasterOut,
-            measurement: Measurement::Continuous {
+            measurement: Measurement::Continuous(ContinuousMeasurement {
                 measurement: "reflectance".into(),
                 unit: Some("fraction".into()),
-            },
+            }),
             no_data_value: Some(f64::from(OUT_NO_DATA_VALUE)),
         };
 
@@ -330,7 +333,9 @@ mod tests {
     };
     use crate::processing::meteosat::test_util;
     use crate::util::Result;
-    use geoengine_datatypes::primitives::Measurement;
+    use geoengine_datatypes::primitives::{
+        ClassificationMeasurement, ContinuousMeasurement, Measurement,
+    };
     use geoengine_datatypes::raster::{EmptyGrid2D, Grid2D, RasterTile2D};
     use geoengine_datatypes::util::test::TestDefault;
     use std::collections::HashMap;
@@ -349,10 +354,10 @@ mod tests {
                 let cc = if empty { Some(Vec::new()) } else { None };
 
                 let m = measurement.or_else(|| {
-                    Some(Measurement::Continuous {
+                    Some(Measurement::Continuous(ContinuousMeasurement {
                         measurement: "radiance".into(),
                         unit: Some("W·m^(-2)·sr^(-1)·cm^(-1)".into()),
-                    })
+                    }))
                 });
 
                 let src = test_util::create_mock_source::<u8>(props, cc, m);
@@ -412,7 +417,7 @@ mod tests {
     #[tokio::test]
     async fn test_ok_no_solar_correction() {
         let result =
-            dbg!(process_mock(ReflectanceParams::default(), Some(1), Some(1), false, None).await);
+            process_mock(ReflectanceParams::default(), Some(1), Some(1), false, None).await;
 
         assert!(result.is_ok());
         assert!(geoengine_datatypes::util::test::eq_with_no_data(
@@ -572,10 +577,10 @@ mod tests {
             Some(1),
             Some(1),
             false,
-            Some(Measurement::Continuous {
+            Some(Measurement::Continuous(ContinuousMeasurement {
                 measurement: "invalid".into(),
                 unit: None,
-            }),
+            })),
         )
         .await;
         assert!(result.is_err());
@@ -589,10 +594,10 @@ mod tests {
             Some(1),
             Some(1),
             false,
-            Some(Measurement::Classification {
+            Some(Measurement::Classification(ClassificationMeasurement {
                 measurement: "invalid".into(),
                 classes: HashMap::new(),
-            }),
+            })),
         )
         .await;
         assert!(result.is_err());

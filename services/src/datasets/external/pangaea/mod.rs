@@ -49,6 +49,7 @@ impl ExternalDatasetProviderDefinition for PangaeaDataProviderDefinition {
     }
 }
 
+#[derive(Debug)]
 pub struct PangaeaDataProvider {
     client: Client,
     base_url: String,
@@ -105,6 +106,10 @@ impl ExternalDatasetProvider for PangaeaDataProvider {
                 uri: pmd.url.to_string(),
             }),
         })
+    }
+
+    fn as_any(&self) -> &dyn std::any::Any {
+        self
     }
 }
 
@@ -419,6 +424,7 @@ mod tests {
             params: OgrSourceParameters {
                 dataset: id,
                 attribute_projection: None,
+                attribute_filters: None,
             },
         }
         .boxed();
@@ -474,6 +480,7 @@ mod tests {
             params: OgrSourceParameters {
                 dataset: id,
                 attribute_projection: None,
+                attribute_filters: None,
             },
         }
         .boxed();
@@ -541,6 +548,7 @@ mod tests {
             params: OgrSourceParameters {
                 dataset: id,
                 attribute_projection: None,
+                attribute_filters: None,
             },
         }
         .boxed();
@@ -604,6 +612,7 @@ mod tests {
             params: OgrSourceParameters {
                 dataset: id,
                 attribute_projection: None,
+                attribute_filters: None,
             },
         }
         .boxed();

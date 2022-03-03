@@ -879,8 +879,6 @@ mod tests {
         let spatial_resolution =
             SpatialResolution::new_unchecked(x_query_resolution, y_query_resolution);
 
-        dbg!(&spatial_resolution);
-
         let qp = initialized_operator
             .query_processor()
             .unwrap()

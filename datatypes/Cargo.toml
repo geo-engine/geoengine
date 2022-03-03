@@ -14,11 +14,11 @@ postgres = ["postgres-types"]
 pro = ["postgres"]
 
 [dependencies]
-arrow = { version = "8.0", features = ["simd"] }
+arrow = { version = "9.1", features = ["simd"] }
 chrono = "0.4"
 float-cmp = "0.9"
 gdal = "0.12"
-geo = "0.18"
+geo = "0.19"
 geojson = "0.22"
 image = "0.24"
 num-traits = "0.2"

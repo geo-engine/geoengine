@@ -2,6 +2,7 @@ use std::net::SocketAddr;
 use std::path::PathBuf;
 use std::sync::RwLock;
 
+use crate::contexts::SessionId;
 use crate::error::{self, Result};
 use crate::util::parsing::{deserialize_base_url, deserialize_base_url_option};
 
@@ -319,4 +320,26 @@ pub struct Gdal {
 
 impl ConfigElement for Gdal {
     const KEY: &'static str = "gdal";
+}
+
+#[derive(Debug, Deserialize)]
+pub struct Session {
+    pub anonymous_access: bool,
+    pub fixed_session_token: Option<SessionId>,
+}
+
+impl ConfigElement for Session {
+    const KEY: &'static str = "session";
+}
+
+#[cfg(feature = "ebv")]
+#[derive(Debug, Deserialize)]
+pub struct Ebv {
+    #[serde(deserialize_with = "deserialize_base_url")]
+    pub api_base_url: url::Url,
+}
+
+#[cfg(feature = "ebv")]
+impl ConfigElement for Ebv {
+    const KEY: &'static str = "ebv";
 }

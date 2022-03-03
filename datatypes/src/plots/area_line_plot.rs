@@ -88,6 +88,8 @@ impl Plot for AreaLineChart {
 
 #[cfg(test)]
 mod tests {
+    use crate::primitives::ContinuousMeasurement;
+
     use super::*;
     use chrono::NaiveDate;
 
@@ -127,10 +129,10 @@ mod tests {
                 TimeInstance::from(NaiveDate::from_ymd(2014, 1, 1).and_hms(0, 0, 0)),
             ],
             vec![0., 1., 4., 9., 7.],
-            Measurement::Continuous {
+            Measurement::Continuous(ContinuousMeasurement {
                 measurement: "Joy".to_owned(),
                 unit: Some("Pct".to_owned()),
-            },
+            }),
             false,
         )
         .unwrap();

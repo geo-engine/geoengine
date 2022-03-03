@@ -3,6 +3,8 @@
 //! Connects to <https://portal.geobon.org/api/v1/>.
 
 use crate::datasets::external::netcdfcf::{NetCdfOverview, NETCDF_CF_PROVIDER_ID};
+use crate::datasets::listing::ExternalDatasetProvider;
+use crate::datasets::storage::DatasetProviderDb;
 use crate::error::{ErrorSource, Result};
 use crate::{contexts::Context, datasets::external::netcdfcf::NetCdfCfDataProvider};
 use actix_web::{
@@ -10,20 +12,28 @@ use actix_web::{
     FromRequest, Responder,
 };
 use geoengine_datatypes::dataset::DatasetProviderId;
-use geoengine_datatypes::test_data;
 use log::debug;
 use serde::Serialize;
 use snafu::{ResultExt, Snafu};
+use std::path::PathBuf;
+use url::Url;
 
-pub(crate) fn init_ebv_routes<C>(base_url: Option<String>) -> Box<dyn FnOnce(&mut ServiceConfig)>
+/// Initialize ebv routes
+///
+/// # Panics
+/// This route initializer panics if `base_url` is `None` and the `ebv` config is not defined.
+///
+pub(crate) fn init_ebv_routes<C>(base_url: Option<Url>) -> Box<dyn FnOnce(&mut ServiceConfig)>
 where
     C: Context,
     C::Session: FromRequest,
 {
     Box::new(move |cfg: &mut web::ServiceConfig| {
-        cfg.app_data(web::Data::new(BaseUrl(
-            base_url.unwrap_or_else(|| BASE_URL.to_owned()),
-        )))
+        cfg.app_data(web::Data::new(BaseUrl(base_url.unwrap_or_else(|| {
+            let ebv_config = crate::util::config::get_config_element::<crate::util::config::Ebv>()
+                .expect("ebv config must exist for this route");
+            ebv_config.api_base_url
+        }))))
         .service(web::resource("/classes").route(web::get().to(get_classes::<C>)))
         .service(web::resource("/datasets/{ebv_name}").route(web::get().to(get_ebv_datasets::<C>)))
         .service(web::resource("/dataset/{id}").route(web::get().to(get_ebv_dataset::<C>)))
@@ -34,12 +44,10 @@ where
     })
 }
 
-const BASE_URL: &str = "https://portal.geobon.org/api/v1";
+struct BaseUrl(Url);
 
-struct BaseUrl(String);
-
-impl AsRef<str> for BaseUrl {
-    fn as_ref(&self) -> &str {
+impl AsRef<Url> for BaseUrl {
+    fn as_ref(&self) -> &Url {
         &self.0
     }
 }
@@ -71,6 +79,7 @@ mod portal_responses {
         pub creator: EbvDatasetsResponseCreator,
         pub license: String,
         pub dataset: EbvDatasetsResponseDataset,
+        pub ebv: EbvDatasetsResponseEbv,
     }
 
     #[derive(Debug, Deserialize)]
@@ -83,6 +92,12 @@ mod portal_responses {
     pub struct EbvDatasetsResponseDataset {
         pub pathname: String,
     }
+
+    #[derive(Debug, Deserialize)]
+    pub struct EbvDatasetsResponseEbv {
+        pub ebv_class: String,
+        pub ebv_name: String,
+    }
 }
 
 #[derive(Debug, Snafu)]
@@ -93,6 +108,8 @@ pub enum EbvError {
     CannotParseNetCdfFile { source: Box<dyn ErrorSource> },
     #[snafu(display("Cannot lookup dataset with id {id}"))]
     CannotLookupDataset { id: usize },
+    #[snafu(display("Cannot find NetCdfCf provider with id {id}"))]
+    NoNetCdfCfProviderForId { id: DatasetProviderId },
 }
 
 #[derive(Debug, Serialize)]
@@ -146,6 +163,8 @@ struct EbvDataset {
     description: String,
     license: String,
     dataset_path: String,
+    ebv_class: String,
+    ebv_name: String,
 }
 
 async fn get_ebv_datasets<C: Context>(
@@ -179,6 +198,8 @@ async fn get_ebv_datasets<C: Context>(
             description: data.summary,
             license: data.license,
             dataset_path: data.dataset.pathname,
+            ebv_class: data.ebv.ebv_class,
+            ebv_name: data.ebv.ebv_name,
         })
         .collect();
 
@@ -219,6 +240,8 @@ async fn get_dataset_metadata(base_url: &BaseUrl, id: usize) -> Result<EbvDatase
             description: data.summary,
             license: data.license,
             dataset_path: data.dataset.pathname,
+            ebv_class: data.ebv.ebv_class,
+            ebv_name: data.ebv.ebv_name,
         })
         .next();
 
@@ -239,23 +262,24 @@ async fn get_ebv_subdatasets<C: Context>(
     id: web::Path<usize>,
     _params: web::Query<()>,
     base_url: web::Data<BaseUrl>,
-    _session: C::Session,
-    _ctx: web::Data<C>,
+    session: C::Session,
+    ctx: web::Data<C>,
 ) -> Result<impl Responder> {
     let dataset = get_dataset_metadata(base_url.get_ref(), id.into_inner()).await?;
 
     let listing = {
-        let dataset_path = dataset.dataset_path.trim_start_matches('/');
+        let dataset_path = PathBuf::from(dataset.dataset_path.trim_start_matches('/'));
 
-        // TODO: make dir configurable
-        let data_path = test_data!("netcdf4d/").join(dataset_path);
+        debug!("Accessing dataset {}", dataset_path.display());
 
-        debug!("Accessing dataset {}", data_path.display());
+        let provider_path = netcdfcf_provider_ref(ctx.as_ref(), &session).await?;
 
-        crate::util::spawn_blocking(move || NetCdfCfDataProvider::build_netcdf_tree(&data_path))
-            .await?
-            .map_err(|e| Box::new(e) as _)
-            .context(error::CannotParseNetCdfFile)?
+        crate::util::spawn_blocking(move || {
+            NetCdfCfDataProvider::build_netcdf_tree(&provider_path, &dataset_path)
+        })
+        .await?
+        .map_err(|e| Box::new(e) as _)
+        .context(error::CannotParseNetCdfFile)?
     };
 
     Ok(web::Json(EbvHierarchy {
@@ -264,18 +288,41 @@ async fn get_ebv_subdatasets<C: Context>(
     }))
 }
 
+async fn netcdfcf_provider_ref<C: Context>(
+    ctx: &C,
+    session: &C::Session,
+) -> Result<PathBuf, EbvError> {
+    let provider: Box<dyn ExternalDatasetProvider> = ctx
+        .dataset_db_ref()
+        .await
+        .dataset_provider(session, NETCDF_CF_PROVIDER_ID)
+        .await
+        .map_err(|_| EbvError::NoNetCdfCfProviderForId {
+            id: NETCDF_CF_PROVIDER_ID,
+        })?;
+
+    if let Some(concrete_provider) = provider.as_any().downcast_ref::<NetCdfCfDataProvider>() {
+        Ok(concrete_provider.path.clone())
+    } else {
+        Err(EbvError::NoNetCdfCfProviderForId {
+            id: NETCDF_CF_PROVIDER_ID,
+        })
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
 
     use crate::{
         contexts::{InMemoryContext, Session, SimpleContext},
+        datasets::external::netcdfcf::NetCdfCfDataProviderDefinition,
         server::{configure_extractors, render_404, render_405},
         util::tests::read_body_string,
     };
     use actix_web::{dev::ServiceResponse, http, http::header, middleware, test, web, App};
     use actix_web_httpauth::headers::authorization::Bearer;
-    use geoengine_datatypes::util::test::TestDefault;
+    use geoengine_datatypes::{test_data, util::test::TestDefault};
     use httptest::{matchers::request, responders::status_code, Expectation};
     use serde_json::json;
 
@@ -284,6 +331,8 @@ mod tests {
         ctx: C,
         mock_address: String,
     ) -> ServiceResponse {
+        let mock_address = mock_address.parse().unwrap();
+
         let app = test::init_service({
             let app = App::new()
                 .app_data(web::Data::new(ctx))
@@ -309,6 +358,18 @@ mod tests {
     async fn test_get_subdatasets() {
         let ctx = InMemoryContext::test_default();
         let session_id = ctx.default_session_ref().await.id();
+
+        ctx.dataset_db_ref_mut()
+            .await
+            .add_dataset_provider(
+                &*ctx.default_session_ref().await,
+                Box::new(NetCdfCfDataProviderDefinition {
+                    name: "test".to_string(),
+                    path: test_data!("netcdf4d").to_path_buf(),
+                }),
+            )
+            .await
+            .unwrap();
 
         let mock_server = httptest::Server::run();
         mock_server.expect(
@@ -554,11 +615,21 @@ mod tests {
                     ],
                     "time": {
                         "start": 946_684_800_000_i64,
-                        "end": 1_609_459_200_000_i64
+                        "end": 1_893_456_000_000_i64
                     },
                     "timeStep": {
                         "granularity": "Years",
                         "step": 10
+                    },
+                    "colorizer": {
+                        "type": "linearGradient",
+                        "breakpoints": [
+                            { "value": 0.0, "color": [68, 1, 84, 255] },
+                            { "value": 50.0, "color": [33, 145, 140, 255] },
+                            { "value": 100.0, "color": [253, 231, 37, 255] }
+                        ],
+                        "noDataColor": [0, 0, 0, 0],
+                        "defaultColor": [0, 0, 0, 0]
                     }
                 }
             })
@@ -848,7 +919,9 @@ mod tests {
                 "authorInstitution": "Department of Biology and Biotechnology, Sapienza University of Rome",
                 "description": "Global habitat availability for 5,090 mammals in 5 year intervals (subset from 2015 to 2055).",
                 "license": "https://creativecommons.org/licenses/by/4.0",
-                "datasetPath": "/5/public/v1_rodinini_001.nc"
+                "datasetPath": "/5/public/v1_rodinini_001.nc",
+                "ebvClass": "Species populations",
+                "ebvName": "Species distributions"
             }])
             .to_string()
         );
@@ -988,7 +1061,9 @@ mod tests {
                 "authorInstitution": "Department of Biology and Biotechnology, Sapienza University of Rome",
                 "description": "Global habitat availability for 5,090 mammals in 5 year intervals (subset from 2015 to 2055).",
                 "license": "https://creativecommons.org/licenses/by/4.0",
-                "datasetPath": "/5/public/v1_rodinini_001.nc"
+                "datasetPath": "/5/public/v1_rodinini_001.nc",
+                "ebvClass": "Species populations",
+                "ebvName": "Species distributions"
             })
             .to_string()
         );

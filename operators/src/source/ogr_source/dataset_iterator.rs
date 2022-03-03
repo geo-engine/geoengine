@@ -1,7 +1,7 @@
 // generated code of `_OgrDatasetIterator` needs this lint for the `peeked` field
 #![allow(clippy::option_option)]
 
-use super::{CsvHeader, FeaturesProvider, FormatSpecifics, OgrSourceDataset};
+use super::{AttributeFilter, CsvHeader, FeaturesProvider, FormatSpecifics, OgrSourceDataset};
 use crate::error::{self};
 use crate::util::gdal::gdal_open_dataset_ex;
 use crate::util::Result;
@@ -12,6 +12,7 @@ use geoengine_datatypes::primitives::VectorQueryRectangle;
 use log::debug;
 use ouroboros::self_referencing;
 use std::cell::Cell;
+use std::collections::HashMap;
 use std::ffi::OsStr;
 use std::iter::FusedIterator;
 
@@ -42,14 +43,24 @@ struct _OgrDatasetIterator {
 }
 
 impl OgrDatasetIterator {
+    #[allow(clippy::needless_pass_by_value)]
     pub fn new(
         dataset_information: &OgrSourceDataset,
         query_rectangle: &VectorQueryRectangle,
+        attribute_filters: Vec<AttributeFilter>,
     ) -> Result<OgrDatasetIterator> {
+        let adjusted_filters =
+            Self::adjust_filters_to_column_renaming(dataset_information, attribute_filters);
+
         let dataset_iterator = _OgrDatasetIteratorTryBuilder {
             dataset: Self::open_gdal_dataset(dataset_information)?,
             features_provider_builder: |dataset| {
-                Self::create_features_provider(dataset, dataset_information, query_rectangle)
+                Self::create_features_provider(
+                    dataset,
+                    dataset_information,
+                    query_rectangle,
+                    &adjusted_filters,
+                )
             },
         }
         .try_build()?;
@@ -66,10 +77,47 @@ impl OgrDatasetIterator {
         })
     }
 
+    /// Undo the column renaming to let OGR apply the filters
+    fn adjust_filters_to_column_renaming(
+        dataset_information: &OgrSourceDataset,
+        attribute_filters: Vec<AttributeFilter>,
+    ) -> Vec<AttributeFilter> {
+        match &dataset_information.columns {
+            Some(cspec) => {
+                match &cspec.rename {
+                    Some(mapping) => {
+                        // Build reverse mapping
+                        let r_mapping = mapping
+                            .iter()
+                            .map(|(k, v)| (v.to_string(), k.to_string()))
+                            .collect::<HashMap<_, _>>();
+
+                        attribute_filters
+                            .into_iter()
+                            .map(|f| match r_mapping.get(&f.attribute) {
+                                Some(name) => AttributeFilter {
+                                    attribute: name.to_string(),
+                                    ranges: f.ranges,
+                                    keep_nulls: f.keep_nulls,
+                                },
+                                None => f,
+                            })
+                            .collect::<Vec<_>>()
+                    }
+                    // No renaming
+                    None => attribute_filters,
+                }
+            }
+            // No column spec
+            None => attribute_filters,
+        }
+    }
+
     fn create_features_provider<'d>(
         dataset: &'d Dataset,
         dataset_information: &OgrSourceDataset,
         query_rectangle: &VectorQueryRectangle,
+        attribute_filters: &[AttributeFilter],
     ) -> Result<FeaturesProvider<'d>> {
         // TODO: add OGR time filter if forced
 
@@ -95,14 +143,26 @@ impl OgrDatasetIterator {
             features_provider.set_spatial_filter(&query_rectangle.spatial_bounds);
         }
 
-        if let Some(attribute_query) = &dataset_information.attribute_query {
+        let filter_string = if dataset.driver().short_name() == "CSV" {
+            FeaturesProvider::create_attribute_filter_string_cast(attribute_filters)
+        } else {
+            FeaturesProvider::create_attribute_filter_string(attribute_filters)
+        };
+
+        let final_filter = filter_string
+            .map(|f| match &dataset_information.attribute_query {
+                Some(a) => format!("({}) AND {}", a, f),
+                None => f,
+            })
+            .or_else(|| dataset_information.attribute_query.clone());
+
+        if let Some(filter) = final_filter {
             debug!(
                 "using attribute filter {:?} for layer {:?}",
-                attribute_query, &dataset_information.layer_name
+                &filter, &dataset_information.layer_name
             );
-            features_provider.set_attribute_filter(attribute_query)?;
+            features_provider.set_attribute_filter(filter.as_str())?;
         }
-
         Ok(features_provider)
     }
 

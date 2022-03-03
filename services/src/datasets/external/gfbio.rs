@@ -92,6 +92,7 @@ impl ExternalDatasetProviderDefinition for GfbioDataProviderDefinition {
 }
 
 // TODO: make schema, table names and column names configurable like in crawler
+#[derive(Debug)]
 pub struct GfbioDataProvider {
     id: DatasetProviderId,
     db_config: DatabaseConnectionConfig,
@@ -270,6 +271,10 @@ impl ExternalDatasetProvider for GfbioDataProvider {
                 uri: row.try_get(2).unwrap_or_else(|_| "".to_owned()),
             }),
         })
+    }
+
+    fn as_any(&self) -> &dyn std::any::Any {
+        self
     }
 }
 
@@ -750,7 +755,7 @@ mod tests {
                 .await
                 .map_err(|e| e.to_string())?;
 
-            let processor: OgrSourceProcessor<MultiPoint> = OgrSourceProcessor::new(meta);
+            let processor: OgrSourceProcessor<MultiPoint> = OgrSourceProcessor::new(meta, vec![]);
 
             let query_rectangle = VectorQueryRectangle {
                 spatial_bounds: BoundingBox2D::new((0., -90.).into(), (180., 90.).into()).unwrap(),
