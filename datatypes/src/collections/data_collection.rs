@@ -206,10 +206,10 @@ mod tests {
                 "foo".to_string(),
                 FeatureData::NullableText(vec![None, Some("".to_owned())]),
             )]
-                .into_iter()
-                .collect(),
+            .into_iter()
+            .collect(),
         )
-            .unwrap();
+        .unwrap();
         let column = pc.data("foo").unwrap();
 
         assert_eq!(column.nulls(), vec![true, false]);

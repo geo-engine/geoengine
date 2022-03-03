@@ -575,11 +575,11 @@ impl<'r> DataRef<'r, u8> for TextDataRef<'r> {
             let end = offsets[pos + 1];
 
             if start == end {
-                if self.is_valid(pos) {
-                    return serde_json::Value::String(String::default());
+                return if self.is_valid(pos) {
+                    serde_json::Value::String(String::default())
                 } else {
-                    return serde_json::Value::Null;
-                }
+                    serde_json::Value::Null
+                };
             }
 
             let text = unsafe {
@@ -759,11 +759,7 @@ impl<'r> TextDataRef<'r> {
         let end = self.offsets[pos + 1];
 
         if start == end {
-            if self.is_valid(pos) {
-                return Ok(Some(""));
-            } else {
-                return Ok(None);
-            }
+            return Ok(if self.is_valid(pos) { Some("") } else { None });
         }
 
         let text = unsafe {
