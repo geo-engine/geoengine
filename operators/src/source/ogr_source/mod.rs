@@ -535,23 +535,30 @@ impl FeaturesProvider<'_> {
         Ok(())
     }
 
+    ///  Creates an attribute filter string.
     fn create_attribute_filter_string(attribute_filters: &[AttributeFilter]) -> Option<String> {
-        Self::create_attribute_filter_string_int(
+        Self::create_attribute_filter_string_internal(
             attribute_filters,
             Self::create_range_filter_string,
         )
     }
 
+    ///  Creates an attribute filter string. This method casts
+    /// input data to the specified column type. This is especially
+    /// useful for data read from text files like CSV.
     fn create_attribute_filter_string_cast(
         attribute_filters: &[AttributeFilter],
     ) -> Option<String> {
-        Self::create_attribute_filter_string_int(
+        Self::create_attribute_filter_string_internal(
             attribute_filters,
             Self::create_range_filter_string_cast,
         )
     }
 
-    fn create_attribute_filter_string_int(
+    /// Creates an attribute filter string. The filter ranges
+    /// are mapped to the corresponding filter string with
+    /// the given `range_map` function.
+    fn create_attribute_filter_string_internal(
         attribute_filters: &[AttributeFilter],
         range_map: fn(&str, &StringOrNumberRange) -> String,
     ) -> Option<String> {
@@ -4371,7 +4378,7 @@ mod tests {
                 data_type: VectorDataType::MultiPoint,
                 spatial_reference: SpatialReferenceOption::Unreferenced,
                 columns: [
-                    ("foo".to_string(), FeatureDataType::Int),
+                    ("a".to_string(), FeatureDataType::Int),
                     ("b".to_string(), FeatureDataType::Float),
                     ("c".to_string(), FeatureDataType::Text),
                 ]
@@ -4464,7 +4471,7 @@ mod tests {
                 data_type: VectorDataType::MultiPoint,
                 spatial_reference: SpatialReferenceOption::Unreferenced,
                 columns: [
-                    ("foo".to_string(), FeatureDataType::Int),
+                    ("a".to_string(), FeatureDataType::Int),
                     ("b".to_string(), FeatureDataType::Float),
                     ("c".to_string(), FeatureDataType::Text),
                 ]
@@ -4557,7 +4564,7 @@ mod tests {
                 data_type: VectorDataType::MultiPoint,
                 spatial_reference: SpatialReferenceOption::Unreferenced,
                 columns: [
-                    ("foo".to_string(), FeatureDataType::Int),
+                    ("a".to_string(), FeatureDataType::Int),
                     ("b".to_string(), FeatureDataType::Float),
                     ("c".to_string(), FeatureDataType::Text),
                 ]
@@ -4648,7 +4655,7 @@ mod tests {
                 data_type: VectorDataType::MultiPoint,
                 spatial_reference: SpatialReferenceOption::Unreferenced,
                 columns: [
-                    ("foo".to_string(), FeatureDataType::Int),
+                    ("a".to_string(), FeatureDataType::Int),
                     ("b".to_string(), FeatureDataType::Float),
                     ("c".to_string(), FeatureDataType::Text),
                 ]
@@ -4696,6 +4703,101 @@ mod tests {
                     (
                         "c".to_string(),
                         FeatureData::NullableText(vec![Some("foo".to_string()),])
+                    ),
+                ]
+                .iter()
+                .cloned()
+                .collect(),
+            )?
+        );
+
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn attribute_filter_int_renamed() -> Result<()> {
+        let dataset_information = OgrSourceDataset {
+            file_name: test_data!("vector/data/plain_data.csv").into(),
+            layer_name: "plain_data".to_string(),
+            data_type: None,
+            time: OgrSourceDatasetTimeType::None,
+            default_geometry: None,
+            columns: Some(OgrSourceColumnSpec {
+                format_specifics: Some(Csv {
+                    header: CsvHeader::Yes,
+                }),
+                x: "".to_string(),
+                y: None,
+                float: vec!["b".to_string()],
+                int: vec!["a".to_string()],
+                text: vec!["c".to_string()],
+                rename: Some(
+                    [("a".to_string(), "d".to_string())]
+                        .into_iter()
+                        .collect::<HashMap<_, _>>(),
+                ),
+            }),
+            force_ogr_time_filter: false,
+            force_ogr_spatial_filter: false,
+            on_error: OgrSourceErrorSpec::Ignore,
+            sql_query: None,
+            attribute_query: None,
+        };
+
+        let info = StaticMetaData {
+            loading_info: dataset_information,
+            result_descriptor: VectorResultDescriptor {
+                data_type: VectorDataType::MultiPoint,
+                spatial_reference: SpatialReferenceOption::Unreferenced,
+                columns: [
+                    ("d".to_string(), FeatureDataType::Int),
+                    ("b".to_string(), FeatureDataType::Float),
+                    ("c".to_string(), FeatureDataType::Text),
+                ]
+                .iter()
+                .cloned()
+                .collect(),
+            },
+            phantom: Default::default(),
+        };
+
+        let query_processor = OgrSourceProcessor::<NoGeometry>::new(
+            Box::new(info),
+            vec![AttributeFilter {
+                attribute: "d".to_owned(),
+                ranges: vec![StringOrNumberRange::Int(2..=2)],
+                keep_nulls: false,
+            }],
+        );
+
+        let context = MockQueryContext::new(ChunkByteSize::MAX);
+        let query = query_processor
+            .query(
+                VectorQueryRectangle {
+                    spatial_bounds: BoundingBox2D::new((0., 0.).into(), (1., 1.).into())?,
+                    time_interval: Default::default(),
+                    spatial_resolution: SpatialResolution::new(1., 1.)?,
+                },
+                &context,
+            )
+            .await
+            .unwrap();
+
+        let result: Vec<DataCollection> = query.try_collect().await?;
+
+        assert_eq!(result.len(), 1);
+
+        assert_eq!(
+            result[0],
+            DataCollection::from_data(
+                vec![],
+                vec![Default::default(); 1],
+                [
+                    ("d".to_string(), FeatureData::NullableInt(vec![Some(2)])),
+                    ("b".to_string(), FeatureData::NullableFloat(vec![None])),
+                    (
+                        "c".to_string(),
+                        FeatureData::NullableText(vec![Some("bar".to_string()),])
                     ),
                 ]
                 .iter()
