@@ -15,16 +15,24 @@ use log::debug;
 use serde::Serialize;
 use snafu::{ResultExt, Snafu};
 use std::path::PathBuf;
+use url::Url;
 
-pub(crate) fn init_ebv_routes<C>(base_url: Option<String>) -> Box<dyn FnOnce(&mut ServiceConfig)>
+/// Initialize ebv routes
+///
+/// # Panics
+/// This route initializer panics if `base_url` is `None` and the `ebv` config is not defined.
+///
+pub(crate) fn init_ebv_routes<C>(base_url: Option<Url>) -> Box<dyn FnOnce(&mut ServiceConfig)>
 where
     C: Context,
     C::Session: FromRequest,
 {
     Box::new(move |cfg: &mut web::ServiceConfig| {
-        cfg.app_data(web::Data::new(BaseUrl(
-            base_url.unwrap_or_else(|| BASE_URL.to_owned()),
-        )))
+        cfg.app_data(web::Data::new(BaseUrl(base_url.unwrap_or_else(|| {
+            let ebv_config = crate::util::config::get_config_element::<crate::util::config::Ebv>()
+                .expect("ebv config must exist for this route");
+            ebv_config.api_base_url
+        }))))
         .service(web::resource("/classes").route(web::get().to(get_classes::<C>)))
         .service(web::resource("/datasets/{ebv_name}").route(web::get().to(get_ebv_datasets::<C>)))
         .service(web::resource("/dataset/{id}").route(web::get().to(get_ebv_dataset::<C>)))
@@ -35,12 +43,10 @@ where
     })
 }
 
-const BASE_URL: &str = "https://portal.geobon.org/api/v1";
+struct BaseUrl(Url);
 
-struct BaseUrl(String);
-
-impl AsRef<str> for BaseUrl {
-    fn as_ref(&self) -> &str {
+impl AsRef<Url> for BaseUrl {
+    fn as_ref(&self) -> &Url {
         &self.0
     }
 }
@@ -314,6 +320,8 @@ mod tests {
         ctx: C,
         mock_address: String,
     ) -> ServiceResponse {
+        let mock_address = mock_address.parse().unwrap();
+
         let app = test::init_service({
             let app = App::new()
                 .app_data(web::Data::new(ctx))
