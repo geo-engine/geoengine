@@ -28,7 +28,7 @@ pub use feature_data::{
 };
 pub use geometry::{Geometry, GeometryRef, TypedGeometry};
 pub use line::Line;
-pub use measurement::Measurement;
+pub use measurement::{ClassificationMeasurement, ContinuousMeasurement, Measurement};
 pub use multi_line_string::{MultiLineString, MultiLineStringAccess, MultiLineStringRef};
 pub use multi_point::{MultiPoint, MultiPointAccess, MultiPointRef};
 pub use multi_polygon::{MultiPolygon, MultiPolygonAccess, MultiPolygonRef};
