@@ -1,12 +1,17 @@
-use futures::{Future, FutureExt, TryFuture};
+use std::sync::Arc;
+
+use futures::{future::BoxFuture, Future, FutureExt, TryFuture, TryFutureExt};
 use geoengine_datatypes::{
-    primitives::{SpatialPartitioned, TimeInstance, TimeInterval, TimeStep},
+    primitives::{
+        QueryRectangle, RasterQueryRectangle, SpatialPartitioned, TimeInstance, TimeInterval,
+        TimeStep,
+    },
     raster::{EmptyGrid2D, Grid2D, GridOrEmpty, Pixel, RasterTile2D, TileInformation},
 };
+use rayon::ThreadPool;
 
 use crate::{
     adapters::{FoldTileAccu, FoldTileAccuMut, SubQueryTileAggregator},
-    engine::{QueryRectangle, RasterQueryRectangle},
     util::Result,
 };
 
@@ -151,6 +156,7 @@ where
     TemporalRasterAggregationTileAccu {
         accu_tile,
         initial_state: false,
+        pool: acc.pool,
     }
 }
 
@@ -162,8 +168,13 @@ where
     T: Pixel,
     C: NoDataIgnoringAccFunction,
 {
-    let mut acc_tile = acc.into_tile();
-    let grid = match (acc_tile.grid_array, tile.grid_array) {
+    let TemporalRasterAggregationTileAccu {
+        mut accu_tile,
+        initial_state: _initial_state,
+        pool,
+    } = acc;
+
+    let grid = match (accu_tile.grid_array, tile.grid_array) {
         (GridOrEmpty::Grid(mut a), GridOrEmpty::Grid(g)) => {
             a.data = a
                 .inner_ref()
@@ -179,10 +190,11 @@ where
         (GridOrEmpty::Empty(a), GridOrEmpty::Empty(_)) => GridOrEmpty::Empty(a),
     };
 
-    acc_tile.grid_array = grid;
+    accu_tile.grid_array = grid;
     TemporalRasterAggregationTileAccu {
-        accu_tile: acc_tile,
+        accu_tile,
         initial_state: false,
+        pool,
     }
 }
 
@@ -194,9 +206,11 @@ where
     T: Pixel,
     C: AccFunction,
 {
-    tokio::task::spawn_blocking(|| fold_fn::<T, C>(accu, tile)).then(async move |x| match x {
-        Ok(r) => Ok(r),
-        Err(e) => Err(e.into()),
+    crate::util::spawn_blocking(|| fold_fn::<T, C>(accu, tile)).then(|x| async move {
+        match x {
+            Ok(r) => Ok(r),
+            Err(e) => Err(e.into()),
+        }
     })
 }
 
@@ -208,10 +222,12 @@ where
     T: Pixel,
     C: NoDataIgnoringAccFunction,
 {
-    tokio::task::spawn_blocking(|| no_data_ignoring_fold_fn::<T, C>(accu, tile)).then(
-        async move |x| match x {
-            Ok(r) => Ok(r),
-            Err(e) => Err(e.into()),
+    crate::util::spawn_blocking(|| no_data_ignoring_fold_fn::<T, C>(accu, tile)).then(
+        |x| async move {
+            match x {
+                Ok(r) => Ok(r),
+                Err(e) => Err(e.into()),
+            }
         },
     )
 }
@@ -230,6 +246,7 @@ where
         TemporalRasterAggregationTileAccu {
             accu_tile: next_accu,
             initial_state: false,
+            pool: acc.pool,
         }
     } else {
         acc
@@ -243,9 +260,11 @@ pub fn first_tile_fold_future<T>(
 where
     T: Pixel,
 {
-    tokio::task::spawn_blocking(|| first_tile_fold_fn(accu, tile)).then(async move |x| match x {
-        Ok(r) => Ok(r),
-        Err(e) => Err(e.into()),
+    crate::util::spawn_blocking(|| first_tile_fold_fn(accu, tile)).then(move |x| async move {
+        match x {
+            Ok(r) => Ok(r),
+            Err(e) => Err(e.into()),
+        }
     })
 }
 
@@ -263,6 +282,7 @@ where
     TemporalRasterAggregationTileAccu {
         accu_tile: next_accu,
         initial_state: false,
+        pool: acc.pool,
     }
 }
 
@@ -273,9 +293,11 @@ pub fn last_tile_fold_future<T>(
 where
     T: Pixel,
 {
-    tokio::task::spawn_blocking(|| last_tile_fold_fn(accu, tile)).then(async move |x| match x {
-        Ok(r) => Ok(r),
-        Err(e) => Err(e.into()),
+    crate::util::spawn_blocking(|| last_tile_fold_fn(accu, tile)).then(move |x| async move {
+        match x {
+            Ok(r) => Ok(r),
+            Err(e) => Err(e.into()),
+        }
     })
 }
 
@@ -283,6 +305,7 @@ where
 pub struct TemporalRasterAggregationTileAccu<T> {
     accu_tile: RasterTile2D<T>,
     initial_state: bool,
+    pool: Arc<ThreadPool>,
 }
 
 impl<T: Pixel> FoldTileAccu for TemporalRasterAggregationTileAccu<T> {
@@ -290,6 +313,10 @@ impl<T: Pixel> FoldTileAccu for TemporalRasterAggregationTileAccu<T> {
 
     fn into_tile(self) -> RasterTile2D<Self::RasterType> {
         self.accu_tile
+    }
+
+    fn thread_pool(&self) -> &Arc<ThreadPool> {
+        &self.pool
     }
 }
 
@@ -307,13 +334,19 @@ pub struct TemporalRasterAggregationSubQuery<F, T: Pixel> {
     pub step: TimeStep,
 }
 
-impl<T, FoldM, FoldF> SubQueryTileAggregator<T> for TemporalRasterAggregationSubQuery<FoldM, T>
+impl<'a, T, FoldM, FoldF> SubQueryTileAggregator<'a, T>
+    for TemporalRasterAggregationSubQuery<FoldM, T>
 where
     T: Pixel,
-    FoldM: Send + Clone + Fn(TemporalRasterAggregationTileAccu<T>, RasterTile2D<T>) -> FoldF,
+    FoldM: Send
+        + Sync
+        + 'static
+        + Clone
+        + Fn(TemporalRasterAggregationTileAccu<T>, RasterTile2D<T>) -> FoldF,
     FoldF: Send + TryFuture<Ok = TemporalRasterAggregationTileAccu<T>, Error = crate::error::Error>,
 {
     type TileAccu = TemporalRasterAggregationTileAccu<T>;
+    type TileAccuFuture = BoxFuture<'a, Result<Self::TileAccu>>;
 
     type FoldFuture = FoldF;
 
@@ -323,25 +356,16 @@ where
         &self,
         tile_info: TileInformation,
         query_rect: RasterQueryRectangle,
-    ) -> Result<Self::TileAccu> {
-        let output_raster = if let Some(no_data_value) = self.no_data_value {
-            EmptyGrid2D::new(tile_info.tile_size_in_pixels, no_data_value).into()
-        } else {
-            Grid2D::new_filled(
-                tile_info.tile_size_in_pixels,
-                self.initial_value,
-                self.no_data_value,
-            )
-            .into()
-        };
-        Ok(TemporalRasterAggregationTileAccu {
-            accu_tile: RasterTile2D::new_with_tile_info(
-                query_rect.time_interval,
-                tile_info,
-                output_raster,
-            ),
-            initial_state: true,
-        })
+        pool: &Arc<ThreadPool>,
+    ) -> Self::TileAccuFuture {
+        build_temporal_accu(
+            query_rect,
+            tile_info,
+            pool.clone(),
+            self.no_data_value,
+            self.initial_value,
+        )
+        .boxed()
     }
 
     fn tile_query_rectangle(
@@ -360,6 +384,32 @@ where
     fn fold_method(&self) -> Self::FoldMethod {
         self.fold_fn.clone()
     }
+}
+
+fn build_temporal_accu<T: Pixel>(
+    query_rect: RasterQueryRectangle,
+    tile_info: TileInformation,
+    pool: Arc<ThreadPool>,
+    no_data_value: Option<T>,
+    initial_value: T,
+) -> impl Future<Output = Result<TemporalRasterAggregationTileAccu<T>>> {
+    crate::util::spawn_blocking(move || {
+        let output_raster = if let Some(no_data_value) = no_data_value {
+            EmptyGrid2D::new(tile_info.tile_size_in_pixels, no_data_value).into()
+        } else {
+            Grid2D::new_filled(tile_info.tile_size_in_pixels, initial_value, no_data_value).into()
+        };
+        TemporalRasterAggregationTileAccu {
+            accu_tile: RasterTile2D::new_with_tile_info(
+                query_rect.time_interval,
+                tile_info,
+                output_raster,
+            ),
+            initial_state: true,
+            pool,
+        }
+    })
+    .map_err(From::from)
 }
 
 #[derive(Debug, Clone)]
@@ -370,15 +420,19 @@ pub struct TemporalRasterAggregationSubQueryNoDataOnly<F, T: Pixel> {
     pub step: TimeStep,
 }
 
-impl<T, FoldM, FoldF> SubQueryTileAggregator<T>
+impl<'a, T, FoldM, FoldF> SubQueryTileAggregator<'a, T>
     for TemporalRasterAggregationSubQueryNoDataOnly<FoldM, T>
 where
     T: Pixel,
-    FoldM: Send + Clone + Fn(TemporalRasterAggregationTileAccu<T>, RasterTile2D<T>) -> FoldF,
+    FoldM: Send
+        + Sync
+        + 'static
+        + Clone
+        + Fn(TemporalRasterAggregationTileAccu<T>, RasterTile2D<T>) -> FoldF,
     FoldF: Send + TryFuture<Ok = TemporalRasterAggregationTileAccu<T>, Error = crate::error::Error>,
 {
     type TileAccu = TemporalRasterAggregationTileAccu<T>;
-
+    type TileAccuFuture = BoxFuture<'a, Result<Self::TileAccu>>;
     type FoldFuture = FoldF;
 
     type FoldMethod = FoldM;
@@ -387,18 +441,9 @@ where
         &self,
         tile_info: TileInformation,
         query_rect: RasterQueryRectangle,
-    ) -> Result<Self::TileAccu> {
-        let output_raster =
-            EmptyGrid2D::new(tile_info.tile_size_in_pixels, self.no_data_value).into();
-
-        Ok(TemporalRasterAggregationTileAccu {
-            accu_tile: RasterTile2D::new_with_tile_info(
-                query_rect.time_interval,
-                tile_info,
-                output_raster,
-            ),
-            initial_state: true,
-        })
+        pool: &Arc<ThreadPool>,
+    ) -> Self::TileAccuFuture {
+        build_temporal_no_data_accu(query_rect, tile_info, pool.clone(), self.no_data_value).boxed()
     }
 
     fn tile_query_rectangle(
@@ -417,4 +462,26 @@ where
     fn fold_method(&self) -> Self::FoldMethod {
         self.fold_fn.clone()
     }
+}
+
+fn build_temporal_no_data_accu<T: Pixel>(
+    query_rect: RasterQueryRectangle,
+    tile_info: TileInformation,
+    pool: Arc<ThreadPool>,
+    no_data_value: T,
+) -> impl Future<Output = Result<TemporalRasterAggregationTileAccu<T>>> {
+    crate::util::spawn_blocking(move || {
+        let output_raster = EmptyGrid2D::new(tile_info.tile_size_in_pixels, no_data_value).into();
+
+        TemporalRasterAggregationTileAccu {
+            accu_tile: RasterTile2D::new_with_tile_info(
+                query_rect.time_interval,
+                tile_info,
+                output_raster,
+            ),
+            initial_state: true,
+            pool,
+        }
+    })
+    .map_err(From::from)
 }

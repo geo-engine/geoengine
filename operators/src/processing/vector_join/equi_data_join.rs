@@ -2,8 +2,7 @@ use std::collections::HashMap;
 use std::sync::Arc;
 
 use float_cmp::approx_eq;
-use futures::stream;
-use futures::stream::BoxStream;
+use futures::stream::{self, BoxStream};
 use futures::StreamExt;
 
 use geoengine_datatypes::collections::{
@@ -11,12 +10,14 @@ use geoengine_datatypes::collections::{
     FeatureCollectionInfos, FeatureCollectionRowBuilder, GeoFeatureCollectionRowBuilder,
     GeometryRandomAccess,
 };
-use geoengine_datatypes::primitives::{BoundingBox2D, FeatureDataRef, Geometry, TimeInterval};
+use geoengine_datatypes::primitives::{
+    BoundingBox2D, FeatureDataRef, Geometry, TimeInterval, VectorQueryRectangle,
+};
 use geoengine_datatypes::util::arrow::ArrowTyped;
 
 use crate::adapters::FeatureCollectionChunkMerger;
+use crate::engine::QueryProcessor;
 use crate::engine::{QueryContext, VectorQueryProcessor};
-use crate::engine::{QueryProcessor, VectorQueryRectangle};
 use crate::error::Error;
 use crate::util::Result;
 use async_trait::async_trait;
@@ -356,7 +357,7 @@ where
             .left_processor
             .query(query, ctx)
             .await?
-            .and_then(async move |left_collection| {
+            .and_then(move |left_collection| async move {
                 // This implementation is a nested-loop join
                 let left_collection = Arc::new(left_collection);
 
@@ -395,6 +396,7 @@ mod tests {
     use geoengine_datatypes::primitives::{
         BoundingBox2D, FeatureData, MultiPoint, SpatialResolution, TimeInterval,
     };
+    use geoengine_datatypes::util::test::TestDefault;
 
     use crate::engine::{ChunkByteSize, MockExecutionContext, MockQueryContext, VectorOperator};
     use crate::mock::MockFeatureCollectionSource;
@@ -409,7 +411,7 @@ mod tests {
         right_join_column: &str,
         right_suffix: &str,
     ) -> Vec<MultiPointCollection> {
-        let execution_context = MockExecutionContext::default();
+        let execution_context = MockExecutionContext::test_default();
 
         let left = MockFeatureCollectionSource::single(left)
             .boxed()

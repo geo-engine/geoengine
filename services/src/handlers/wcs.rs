@@ -9,7 +9,9 @@ use log::info;
 use snafu::{ensure, ResultExt};
 use url::Url;
 
-use geoengine_datatypes::primitives::{AxisAlignedRectangle, SpatialPartition2D};
+use geoengine_datatypes::primitives::{
+    AxisAlignedRectangle, RasterQueryRectangle, SpatialPartition2D,
+};
 use geoengine_datatypes::{primitives::SpatialResolution, spatial_reference::SpatialReference};
 
 use crate::error::Result;
@@ -24,8 +26,8 @@ use crate::workflows::registry::WorkflowRegistry;
 use crate::workflows::workflow::WorkflowId;
 
 use geoengine_datatypes::primitives::{TimeInstance, TimeInterval};
+use geoengine_operators::engine::RasterOperator;
 use geoengine_operators::engine::ResultDescriptor;
-use geoengine_operators::engine::{RasterOperator, RasterQueryRectangle};
 use geoengine_operators::processing::{Reprojection, ReprojectionParams};
 
 pub(crate) fn init_wcs_routes<C>(cfg: &mut web::ServiceConfig)
@@ -338,7 +340,7 @@ async fn get_coverage<C: Context>(
             }
         };
 
-    let query_rect: RasterQueryRectangle = RasterQueryRectangle {
+    let query_rect = RasterQueryRectangle {
         spatial_bounds: request_partition,
         time_interval: request.time.unwrap_or_else(default_time_from_config),
         spatial_resolution,
@@ -358,8 +360,10 @@ async fn get_coverage<C: Context>(
             GdalGeoTiffOptions {
                 compression_num_threads: get_config_element::<crate::util::config::Gdal>()?.compression_num_threads,
                 as_cog: false,
+                force_big_tiff: false,
             },
             Some(get_config_element::<crate::util::config::Wcs>()?.tile_limit),
+            
         )
         .await)?
     .map_err(error::Error::from)?;
@@ -396,10 +400,11 @@ mod tests {
     use actix_web::test;
     use actix_web_httpauth::headers::authorization::Bearer;
     use geoengine_datatypes::raster::{GridShape2D, TilingSpecification};
+    use geoengine_datatypes::util::test::TestDefault;
 
     #[tokio::test]
     async fn get_capabilities() {
-        let ctx = InMemoryContext::default();
+        let ctx = InMemoryContext::test_default();
         let session_id = ctx.default_session_ref().await.id();
 
         let (_, id) = register_ndvi_workflow_helper(&ctx).await;
@@ -483,7 +488,7 @@ mod tests {
 
     #[tokio::test]
     async fn describe_coverage() {
-        let ctx = InMemoryContext::default();
+        let ctx = InMemoryContext::test_default();
         let session_id = ctx.default_session_ref().await.id();
 
         let (_, id) = register_ndvi_workflow_helper(&ctx).await;
@@ -551,7 +556,10 @@ mod tests {
         };
 
         // override the pixel size since this test was designed for 600 x 600 pixel tiles
-        let ctx = InMemoryContext::new_with_context_spec(exe_ctx_tiling_spec, Default::default());
+        let ctx = InMemoryContext::new_with_context_spec(
+            exe_ctx_tiling_spec,
+            TestDefault::test_default(),
+        );
         let session_id = ctx.default_session_ref().await.id();
 
         let (_, id) = register_ndvi_workflow_helper(&ctx).await;

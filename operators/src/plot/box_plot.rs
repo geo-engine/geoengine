@@ -1,5 +1,6 @@
 use async_trait::async_trait;
 use futures::StreamExt;
+use geoengine_datatypes::primitives::{PlotQueryRectangle, VectorQueryRectangle};
 use num_traits::AsPrimitive;
 use serde::{Deserialize, Serialize};
 
@@ -10,9 +11,8 @@ use geoengine_datatypes::raster::{GridOrEmpty, GridSize, NoDataValue};
 use crate::engine::{
     ExecutionContext, InitializedPlotOperator, InitializedRasterOperator,
     InitializedVectorOperator, MultipleRasterOrSingleVectorSource, Operator, PlotOperator,
-    PlotQueryProcessor, PlotQueryRectangle, PlotResultDescriptor, QueryContext, QueryProcessor,
-    ResultDescriptor, TypedPlotQueryProcessor, TypedRasterQueryProcessor,
-    TypedVectorQueryProcessor, VectorQueryRectangle,
+    PlotQueryProcessor, PlotResultDescriptor, QueryContext, QueryProcessor, ResultDescriptor,
+    TypedPlotQueryProcessor, TypedRasterQueryProcessor, TypedVectorQueryProcessor,
 };
 use crate::error::{self, Error};
 use crate::util::input::MultiRasterOrVectorOperator;
@@ -568,7 +568,7 @@ mod tests {
             sources: vector_source.into(),
         };
 
-        let execution_context = MockExecutionContext::default();
+        let execution_context = MockExecutionContext::test_default();
 
         let query_processor = box_plot
             .boxed()
@@ -635,7 +635,7 @@ mod tests {
             sources: vector_source.into(),
         };
 
-        let execution_context = MockExecutionContext::default();
+        let execution_context = MockExecutionContext::test_default();
 
         let query_processor = box_plot
             .boxed()
@@ -688,7 +688,7 @@ mod tests {
             sources: vector_source.into(),
         };
 
-        let execution_context = MockExecutionContext::default();
+        let execution_context = MockExecutionContext::test_default();
 
         let init = box_plot.boxed().initialize(&execution_context).await;
 
@@ -715,7 +715,7 @@ mod tests {
             sources: vector_source.into(),
         };
 
-        let execution_context = MockExecutionContext::default();
+        let execution_context = MockExecutionContext::test_default();
 
         let init = box_plot.boxed().initialize(&execution_context).await;
 
@@ -741,7 +741,7 @@ mod tests {
             sources: vector_source.into(),
         };
 
-        let execution_context = MockExecutionContext::default();
+        let execution_context = MockExecutionContext::test_default();
 
         let query_processor = box_plot
             .boxed()
@@ -793,7 +793,7 @@ mod tests {
             sources: vector_source.into(),
         };
 
-        let execution_context = MockExecutionContext::default();
+        let execution_context = MockExecutionContext::test_default();
 
         let query_processor = box_plot
             .boxed()
@@ -847,7 +847,7 @@ mod tests {
             sources: vector_source.into(),
         };
 
-        let execution_context = MockExecutionContext::default();
+        let execution_context = MockExecutionContext::test_default();
 
         let query_processor = box_plot
             .boxed()
@@ -922,7 +922,7 @@ mod tests {
             .into(),
         };
 
-        let execution_context = MockExecutionContext::default();
+        let execution_context = MockExecutionContext::test_default();
 
         let query_processor = box_plot
             .boxed()
@@ -985,7 +985,7 @@ mod tests {
             .into(),
         };
 
-        let execution_context = MockExecutionContext::default();
+        let execution_context = MockExecutionContext::test_default();
 
         let query_processor = box_plot
             .boxed()
@@ -1049,7 +1049,7 @@ mod tests {
             .into(),
         };
 
-        let execution_context = MockExecutionContext::default();
+        let execution_context = MockExecutionContext::test_default();
 
         let query_processor = box_plot
             .boxed()
@@ -1110,7 +1110,7 @@ mod tests {
             .into(),
         };
 
-        let execution_context = MockExecutionContext::default();
+        let execution_context = MockExecutionContext::test_default();
 
         let query_processor = box_plot
             .boxed()
@@ -1145,7 +1145,7 @@ mod tests {
 
     #[tokio::test]
     async fn single_value_raster_stream() {
-        let execution_context = MockExecutionContext::default();
+        let execution_context = MockExecutionContext::test_default();
 
         let no_data_value = None;
         let histogram = BoxPlot {
@@ -1199,7 +1199,7 @@ mod tests {
                     .unwrap(),
                     spatial_resolution: SpatialResolution::one(),
                 },
-                &MockQueryContext::default(),
+                &MockQueryContext::test_default(),
             )
             .await
             .unwrap();
@@ -1214,7 +1214,7 @@ mod tests {
 
     #[tokio::test]
     async fn raster_with_no_data_exclude_no_data() {
-        let execution_context = MockExecutionContext::default();
+        let execution_context = MockExecutionContext::test_default();
 
         let no_data_value = Some(0);
         let histogram = BoxPlot {
@@ -1268,7 +1268,7 @@ mod tests {
                     .unwrap(),
                     spatial_resolution: SpatialResolution::one(),
                 },
-                &MockQueryContext::default(),
+                &MockQueryContext::test_default(),
             )
             .await
             .unwrap();
@@ -1283,7 +1283,7 @@ mod tests {
 
     #[tokio::test]
     async fn raster_with_no_data_include_no_data() {
-        let execution_context = MockExecutionContext::default();
+        let execution_context = MockExecutionContext::test_default();
 
         let no_data_value = Some(0);
         let histogram = BoxPlot {
@@ -1337,7 +1337,7 @@ mod tests {
                     .unwrap(),
                     spatial_resolution: SpatialResolution::one(),
                 },
-                &MockQueryContext::default(),
+                &MockQueryContext::test_default(),
             )
             .await
             .unwrap();
@@ -1352,7 +1352,7 @@ mod tests {
 
     #[tokio::test]
     async fn multiple_rasters_with_no_data_exclude_no_data() {
-        let execution_context = MockExecutionContext::default();
+        let execution_context = MockExecutionContext::test_default();
         let no_data_value = Some(0);
 
         let src = MockRasterSource {
@@ -1411,7 +1411,7 @@ mod tests {
                     .unwrap(),
                     spatial_resolution: SpatialResolution::one(),
                 },
-                &MockQueryContext::default(),
+                &MockQueryContext::test_default(),
             )
             .await
             .unwrap();

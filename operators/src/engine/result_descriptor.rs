@@ -1,4 +1,5 @@
 use geoengine_datatypes::primitives::{FeatureDataType, Measurement};
+use geoengine_datatypes::raster::FromPrimitive;
 use geoengine_datatypes::{
     collections::VectorDataType, raster::RasterDataType, spatial_reference::SpatialReferenceOption,
 };
@@ -17,6 +18,7 @@ pub trait ResultDescriptor: Clone + Serialize {
     fn spatial_reference(&self) -> SpatialReferenceOption;
 
     /// Map one descriptor to another one
+    #[must_use]
     fn map<F>(&self, f: F) -> Self
     where
         F: Fn(&Self) -> Self,
@@ -25,11 +27,13 @@ pub trait ResultDescriptor: Clone + Serialize {
     }
 
     /// Map one descriptor to another one by modifying only the spatial reference
+    #[must_use]
     fn map_data_type<F>(&self, f: F) -> Self
     where
         F: Fn(&Self::DataType) -> Self::DataType;
 
     /// Map one descriptor to another one by modifying only the data type
+    #[must_use]
     fn map_spatial_reference<F>(&self, f: F) -> Self
     where
         F: Fn(&SpatialReferenceOption) -> SpatialReferenceOption;
@@ -79,6 +83,12 @@ impl ResultDescriptor for RasterResultDescriptor {
     }
 }
 
+impl RasterResultDescriptor {
+    pub fn no_data_value_as_<T: FromPrimitive<f64>>(&self) -> Option<T> {
+        self.no_data_value.map(|v| T::from_(v))
+    }
+}
+
 /// A `ResultDescriptor` for vector queries
 #[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -90,6 +100,7 @@ pub struct VectorResultDescriptor {
 
 impl VectorResultDescriptor {
     /// Create a new `VectorResultDescriptor` by only modifying the columns
+    #[must_use]
     pub fn map_columns<F>(&self, f: F) -> Self
     where
         F: Fn(&HashMap<String, FeatureDataType>) -> HashMap<String, FeatureDataType>,

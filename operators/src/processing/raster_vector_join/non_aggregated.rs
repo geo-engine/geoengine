@@ -2,7 +2,7 @@ use crate::adapters::FeatureCollectionStreamExt;
 use crate::processing::raster_vector_join::create_feature_aggregator;
 use futures::stream::BoxStream;
 use futures::{StreamExt, TryStreamExt};
-use geoengine_datatypes::primitives::{BoundingBox2D, Geometry};
+use geoengine_datatypes::primitives::{BoundingBox2D, Geometry, VectorQueryRectangle};
 use geoengine_datatypes::util::arrow::ArrowTyped;
 use std::marker::PhantomData;
 use std::sync::Arc;
@@ -15,7 +15,7 @@ use geoengine_datatypes::{
 use super::util::{CoveredPixels, PixelCoverCreator};
 use crate::engine::{
     QueryContext, QueryProcessor, RasterQueryProcessor, TypedRasterQueryProcessor,
-    VectorQueryProcessor, VectorQueryRectangle,
+    VectorQueryProcessor,
 };
 use crate::util::Result;
 use crate::{adapters::RasterStreamExt, error::Error};
@@ -61,7 +61,7 @@ where
         ctx: &'a dyn QueryContext,
         aggregation_method: FeatureAggregationMethod,
     ) -> BoxStream<'a, Result<FeatureCollection<G>>> {
-        let stream = collection.and_then(async move |collection| {
+        let stream = collection.and_then(move |collection| {
             Self::process_collection_chunk(
                 collection,
                 raster_processor,
@@ -70,7 +70,6 @@ where
                 ctx,
                 aggregation_method,
             )
-            .await
         });
 
         stream
@@ -281,7 +280,7 @@ mod tests {
 
     use crate::engine::{
         ChunkByteSize, MockExecutionContext, MockQueryContext, QueryProcessor, RasterOperator,
-        RasterResultDescriptor, VectorOperator, VectorQueryRectangle,
+        RasterResultDescriptor, VectorOperator,
     };
     use crate::mock::{MockFeatureCollectionSource, MockRasterSource, MockRasterSourceParams};
     use crate::source::{GdalSource, GdalSourceParameters};
@@ -321,7 +320,7 @@ mod tests {
         )
         .boxed();
 
-        let mut execution_context = MockExecutionContext::default();
+        let mut execution_context = MockExecutionContext::test_default();
 
         let raster_source = GdalSource {
             params: GdalSourceParameters {
@@ -414,7 +413,7 @@ mod tests {
         )
         .boxed();
 
-        let mut execution_context = MockExecutionContext::default();
+        let mut execution_context = MockExecutionContext::test_default();
 
         let raster_source = GdalSource {
             params: GdalSourceParameters {
@@ -514,7 +513,7 @@ mod tests {
         )
         .boxed();
 
-        let mut execution_context = MockExecutionContext::default();
+        let mut execution_context = MockExecutionContext::test_default();
 
         let raster_source = GdalSource {
             params: GdalSourceParameters {
@@ -617,7 +616,7 @@ mod tests {
         )
         .boxed();
 
-        let mut execution_context = MockExecutionContext::default();
+        let mut execution_context = MockExecutionContext::test_default();
 
         let raster_source = GdalSource {
             params: GdalSourceParameters {
@@ -775,10 +774,9 @@ mod tests {
         }
         .boxed();
 
-        let execution_context = MockExecutionContext {
-            tiling_specification: TilingSpecification::new((0., 0.).into(), [3, 2].into()),
-            ..Default::default()
-        };
+        let execution_context = MockExecutionContext::new_with_tiling_spec(
+            TilingSpecification::new((0., 0.).into(), [3, 2].into()),
+        );
 
         let raster = raster_source
             .initialize(&execution_context)
@@ -932,10 +930,9 @@ mod tests {
         }
         .boxed();
 
-        let execution_context = MockExecutionContext {
-            tiling_specification: TilingSpecification::new((0., 0.).into(), [3, 2].into()),
-            ..Default::default()
-        };
+        let execution_context = MockExecutionContext::new_with_tiling_spec(
+            TilingSpecification::new((0., 0.).into(), [3, 2].into()),
+        );
 
         let raster = raster_source
             .initialize(&execution_context)

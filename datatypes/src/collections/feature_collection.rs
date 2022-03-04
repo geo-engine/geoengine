@@ -127,6 +127,14 @@ impl<CollectionType> FeatureCollection<CollectionType> {
     }
 }
 
+impl<CollectionType> AsRef<FeatureCollection<CollectionType>>
+    for FeatureCollection<CollectionType>
+{
+    fn as_ref(&self) -> &FeatureCollection<CollectionType> {
+        self
+    }
+}
+
 /// A trait for common feature collection modifications that are independent of the geometry type
 pub trait FeatureCollectionModifications {
     type Output;

@@ -17,17 +17,16 @@ use bb8_postgres::tokio_postgres::{Config, NoTls};
 use bb8_postgres::PostgresConnectionManager;
 use geoengine_datatypes::collections::VectorDataType;
 use geoengine_datatypes::dataset::{DatasetId, DatasetProviderId, ExternalDatasetId};
-use geoengine_datatypes::primitives::FeatureDataType;
+use geoengine_datatypes::primitives::{
+    FeatureDataType, RasterQueryRectangle, VectorQueryRectangle,
+};
 use geoengine_datatypes::spatial_reference::SpatialReference;
 use geoengine_operators::engine::{StaticMetaData, TypedResultDescriptor};
 use geoengine_operators::source::{
     OgrSourceColumnSpec, OgrSourceDatasetTimeType, OgrSourceErrorSpec,
 };
 use geoengine_operators::{
-    engine::{
-        MetaData, MetaDataProvider, RasterQueryRectangle, RasterResultDescriptor,
-        VectorQueryRectangle, VectorResultDescriptor,
-    },
+    engine::{MetaData, MetaDataProvider, RasterResultDescriptor, VectorResultDescriptor},
     mock::MockDatasetDataSourceLoadingInfo,
     source::{GdalLoadingInfo, OgrSourceDataset},
 };
@@ -394,6 +393,7 @@ mod tests {
     use geoengine_datatypes::primitives::{
         BoundingBox2D, FeatureData, MultiPoint, SpatialResolution, TimeInterval,
     };
+    use geoengine_datatypes::util::test::TestDefault;
     use geoengine_operators::engine::QueryProcessor;
     use geoengine_operators::{engine::MockQueryContext, source::OgrSourceProcessor};
     use rand::RngCore;
@@ -754,14 +754,14 @@ mod tests {
                 .await
                 .map_err(|e| e.to_string())?;
 
-            let processor: OgrSourceProcessor<MultiPoint> = OgrSourceProcessor::new(meta);
+            let processor: OgrSourceProcessor<MultiPoint> = OgrSourceProcessor::new(meta, vec![]);
 
             let query_rectangle = VectorQueryRectangle {
                 spatial_bounds: BoundingBox2D::new((0., -90.).into(), (180., 90.).into()).unwrap(),
                 time_interval: TimeInterval::default(),
                 spatial_resolution: SpatialResolution::zero_point_one(),
             };
-            let ctx = MockQueryContext::default();
+            let ctx = MockQueryContext::test_default();
 
             let result: Vec<_> = processor
                 .query(query_rectangle, &ctx)

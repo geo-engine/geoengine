@@ -56,7 +56,6 @@ async fn upload_handler<C: Context>(
         let mut field = item?;
         let file_name = field
             .content_disposition()
-            .ok_or(error::Error::UploadFieldMissingFileName)?
             .get_filename()
             .ok_or(error::Error::UploadFieldMissingFileName)?
             .to_owned();
@@ -101,12 +100,13 @@ mod tests {
     use crate::util::tests::{send_test_request, SetMultipartBody, TestDataUploads};
     use actix_web::{http::header, test};
     use actix_web_httpauth::headers::authorization::Bearer;
+    use geoengine_datatypes::util::test::TestDefault;
 
     #[tokio::test]
     async fn upload() {
         let mut test_data = TestDataUploads::default(); // remember created folder and remove them on drop
 
-        let ctx = InMemoryContext::default();
+        let ctx = InMemoryContext::test_default();
         let session_id = ctx.default_session_ref().await.id();
 
         let body = vec![("bar.txt", "bar"), ("foo.txt", "foo")];

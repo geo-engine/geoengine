@@ -2,7 +2,9 @@ use actix_web::{web, FromRequest, HttpResponse};
 use reqwest::Url;
 use snafu::{ensure, ResultExt};
 
-use geoengine_datatypes::primitives::{AxisAlignedRectangle, SpatialPartition2D};
+use geoengine_datatypes::primitives::{
+    AxisAlignedRectangle, RasterQueryRectangle, SpatialPartition2D,
+};
 use geoengine_datatypes::{
     operations::image::Colorizer, primitives::SpatialResolution,
     spatial_reference::SpatialReference,
@@ -19,7 +21,7 @@ use crate::workflows::registry::WorkflowRegistry;
 use crate::workflows::workflow::WorkflowId;
 
 use geoengine_datatypes::primitives::{TimeInstance, TimeInterval};
-use geoengine_operators::engine::{RasterOperator, RasterQueryRectangle, ResultDescriptor};
+use geoengine_operators::engine::{RasterOperator, ResultDescriptor};
 use geoengine_operators::processing::{Reprojection, ReprojectionParams};
 use geoengine_operators::{
     call_on_generic_raster_processor, util::raster_stream_to_png::raster_stream_to_png_bytes,
@@ -43,7 +45,18 @@ async fn wms_handler<C: Context>(
 ) -> Result<HttpResponse> {
     match request.into_inner() {
         WmsRequest::GetCapabilities(request) => {
-            get_capabilities(&request, ctx.get_ref(), session, workflow.into_inner()).await
+            let external_address =
+                crate::util::config::get_config_element::<crate::util::config::Web>()?
+                    .external_address
+                    .ok_or(Error::ExternalAddressNotConfigured)?;
+            get_capabilities(
+                &request,
+                &external_address,
+                ctx.get_ref(),
+                session,
+                workflow.into_inner(),
+            )
+            .await
         }
         WmsRequest::GetMap(request) => {
             get_map(&request, ctx.get_ref(), session, workflow.into_inner()).await
@@ -115,6 +128,7 @@ async fn wms_handler<C: Context>(
 /// ```
 async fn get_capabilities<C>(
     _request: &GetCapabilities,
+    external_address: &Url,
     ctx: &C,
     session: C::Session,
     workflow_id: WorkflowId,
@@ -122,7 +136,7 @@ async fn get_capabilities<C>(
 where
     C: Context,
 {
-    let wms_url = wms_url(workflow_id)?;
+    let wms_url = wms_url(external_address, workflow_id)?;
 
     let workflow = ctx.workflow_registry_ref().await.load(&workflow_id).await?;
 
@@ -145,7 +159,7 @@ where
     <Service>
         <Name>WMS</Name>
         <Title>Geo Engine WMS</Title>
-        <OnlineResource xmlns:xlink="http://www.w3.org/1999/xlink" xlink:href="http://localhost"/>
+        <OnlineResource xmlns:xlink="http://www.w3.org/1999/xlink" xlink:href="{wms_url}"/>
     </Service>
     <Capability>
         <Request>
@@ -200,12 +214,9 @@ where
         .body(response))
 }
 
-fn wms_url(workflow: WorkflowId) -> Result<Url> {
-    let base = crate::util::config::get_config_element::<crate::util::config::Web>()?
-        .external_address
-        .ok_or(Error::ExternalAddressNotConfigured)?;
-
-    base.join("/wms/")?
+fn wms_url(external_address: &Url, workflow: WorkflowId) -> Result<Url> {
+    external_address
+        .join("wms/")?
         .join(&workflow.to_string())
         .map_err(Into::into)
 }
@@ -357,24 +368,23 @@ mod tests {
     };
     use actix_web::dev::ServiceResponse;
     use actix_web::http::header;
-    use actix_web::{http::Method, test};
+    use actix_web::http::Method;
     use actix_web_httpauth::headers::authorization::Bearer;
     use geoengine_datatypes::operations::image::RgbaColor;
     use geoengine_datatypes::primitives::SpatialPartition2D;
     use geoengine_datatypes::raster::{GridShape2D, TilingSpecification};
-    use geoengine_operators::engine::{
-        ExecutionContext, RasterQueryProcessor, RasterQueryRectangle,
-    };
+    use geoengine_datatypes::util::test::TestDefault;
+    use geoengine_operators::engine::{ExecutionContext, RasterQueryProcessor};
     use geoengine_operators::source::GdalSourceProcessor;
     use geoengine_operators::util::gdal::create_ndvi_meta_data;
     use std::convert::TryInto;
     use xml::ParserConfig;
 
     async fn test_test_helper(method: Method, path: Option<&str>) -> ServiceResponse {
-        let ctx = InMemoryContext::default();
+        let ctx = InMemoryContext::test_default();
         let session_id = ctx.default_session_ref().await.id();
 
-        let req = test::TestRequest::default()
+        let req = actix_web::test::TestRequest::default()
             .method(method)
             .uri(path.unwrap_or("/wms/df756642-c5a3-4d72-8ad7-629d312ae993?request=GetMap&service=WMS&version=1.3.0&layers=df756642-c5a3-4d72-8ad7-629d312ae993&bbox=1,2,3,4&width=100&height=100&crs=EPSG:4326&styles=ssss&format=image/png"))
             .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())));
@@ -413,12 +423,12 @@ mod tests {
     }
 
     async fn get_capabilities_test_helper(method: Method) -> ServiceResponse {
-        let ctx = InMemoryContext::default();
+        let ctx = InMemoryContext::test_default();
         let session_id = ctx.default_session_ref().await.id();
 
         let (_, id) = register_ndvi_workflow_helper(&ctx).await;
 
-        let req = test::TestRequest::with_uri(&format!(
+        let req = actix_web::test::TestRequest::with_uri(&format!(
             "/wms/{}?request=GetCapabilities&service=WMS",
             id
         ))
@@ -428,18 +438,43 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn get_capabilities() {
+    async fn test_get_capabilities() {
         let res = get_capabilities_test_helper(Method::GET).await;
 
         assert_eq!(res.status(), 200);
 
         // TODO: validate against schema
-        let body = test::read_body(res).await;
+        let body = actix_web::test::read_body(res).await;
         let reader = ParserConfig::default().create_reader(body.as_ref());
 
         for event in reader {
             assert!(event.is_ok());
         }
+    }
+
+    #[test]
+    fn test_wms_url() {
+        fn assert_wms_base(base: &str, result: &str) {
+            let base = Url::parse(base).unwrap();
+            let result = Url::parse(result).unwrap();
+
+            let workflow_id = WorkflowId::from_str("df756642-c5a3-4d72-8ad7-629d312ae993").unwrap();
+
+            assert_eq!(wms_url(&base, workflow_id).unwrap(), result);
+        }
+
+        assert_wms_base(
+            "http://localhost/",
+            "http://localhost/wms/df756642-c5a3-4d72-8ad7-629d312ae993",
+        );
+        assert_wms_base(
+            "https://localhost/api/",
+            "https://localhost/api/wms/df756642-c5a3-4d72-8ad7-629d312ae993",
+        );
+        assert_wms_base(
+            "https://www.foobar.de/path/to/wms/",
+            "https://www.foobar.de/path/to/wms/wms/df756642-c5a3-4d72-8ad7-629d312ae993",
+        );
     }
 
     #[tokio::test]
@@ -449,13 +484,13 @@ mod tests {
 
     #[tokio::test]
     async fn png_from_stream_non_full() {
-        let ctx = InMemoryContext::default();
+        let ctx = InMemoryContext::test_default();
         let exe_ctx = ctx.execution_context(SimpleSession::default()).unwrap();
 
         let gdal_source = GdalSourceProcessor::<u8> {
             tiling_specification: exe_ctx.tiling_specification(),
             meta_data: Box::new(create_ndvi_meta_data()),
-            phantom_data: Default::default(),
+            no_data_value: None,
         };
 
         let query_partition =
@@ -479,6 +514,8 @@ mod tests {
         .await
         .unwrap();
 
+        // geoengine_datatypes::util::test::save_test_bytes(&image_bytes, "raster_small.png");
+
         assert_eq!(
             include_bytes!("../../../test_data/wms/raster_small.png") as &[u8],
             image_bytes.as_slice()
@@ -492,13 +529,16 @@ mod tests {
         };
 
         // override the pixel size since this test was designed for 600 x 600 pixel tiles
-        let ctx = InMemoryContext::new_with_context_spec(exe_ctx_tiling_spec, Default::default());
+        let ctx = InMemoryContext::new_with_context_spec(
+            exe_ctx_tiling_spec,
+            TestDefault::test_default(),
+        );
 
         let session_id = ctx.default_session_ref().await.id();
 
         let (_, id) = register_ndvi_workflow_helper(&ctx).await;
 
-        let req = test::TestRequest::with_uri(path.unwrap_or(&format!("/wms/{id}?request=GetMap&service=WMS&version=1.3.0&layers={id}&bbox=20,-10,80,50&width=600&height=600&crs=EPSG:4326&styles=ssss&format=image/png&time=2014-01-01T00:00:00.0Z", id = id.to_string())))
+        let req = actix_web::test::TestRequest::with_uri(path.unwrap_or(&format!("/wms/{id}?request=GetMap&service=WMS&version=1.3.0&layers={id}&bbox=20,-10,80,50&width=600&height=600&crs=EPSG:4326&styles=ssss&format=image/png&time=2014-01-01T00:00:00.0Z", id = id.to_string())))
             .method(method)
             .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())));
         send_test_request(req, ctx).await
@@ -509,32 +549,41 @@ mod tests {
         let res = get_map_test_helper(Method::GET, None).await;
 
         assert_eq!(res.status(), 200);
+
+        let image_bytes = actix_web::test::read_body(res).await;
+
+        // geoengine_datatypes::util::test::save_test_bytes(&image_bytes, "get_map.png");
+
         assert_eq!(
             include_bytes!("../../../test_data/wms/get_map.png") as &[u8],
-            test::read_body(res).await
+            image_bytes
         );
     }
 
     #[tokio::test]
     async fn get_map_ndvi() {
-        let ctx = InMemoryContext::default();
+        let ctx = InMemoryContext::test_default();
         let session_id = ctx.default_session_ref().await.id();
 
         let (_, id) = register_ndvi_workflow_helper(&ctx).await;
 
-        let req = test::TestRequest::get().uri(&format!("/wms/{id}?service=WMS&version=1.3.0&request=GetMap&layers={id}&styles=&width=335&height=168&crs=EPSG:4326&bbox=-90.0,-180.0,90.0,180.0&format=image/png&transparent=FALSE&bgcolor=0xFFFFFF&exceptions=XML&time=2014-04-01T12%3A00%3A00.000%2B00%3A00", id = id.to_string())).append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())));
+        let req = actix_web::test::TestRequest::get().uri(&format!("/wms/{id}?service=WMS&version=1.3.0&request=GetMap&layers={id}&styles=&width=335&height=168&crs=EPSG:4326&bbox=-90.0,-180.0,90.0,180.0&format=image/png&transparent=FALSE&bgcolor=0xFFFFFF&exceptions=XML&time=2014-04-01T12%3A00%3A00.000%2B00%3A00", id = id.to_string())).append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())));
         let response = send_test_request(req, ctx).await;
 
         assert_eq!(
             response.status(),
             200,
             "{:?}",
-            test::read_body(response).await
+            actix_web::test::read_body(response).await
         );
+
+        let image_bytes = actix_web::test::read_body(response).await;
+
+        // geoengine_datatypes::util::test::save_test_bytes(&image_bytes, "get_map_ndvi.png");
 
         assert_eq!(
             include_bytes!("../../../test_data/wms/get_map_ndvi.png") as &[u8],
-            test::read_body(response).await
+            image_bytes
         );
     }
 
@@ -547,19 +596,27 @@ mod tests {
         };
 
         // override the pixel size since this test was designed for 600 x 600 pixel tiles
-        let ctx = InMemoryContext::new_with_context_spec(exe_ctx_tiling_spec, Default::default());
+        let ctx = InMemoryContext::new_with_context_spec(
+            exe_ctx_tiling_spec,
+            TestDefault::test_default(),
+        );
 
         let session_id = ctx.default_session_ref().await.id();
 
         let (_, id) = register_ndvi_workflow_helper(&ctx).await;
 
-        let req = test::TestRequest::get().uri(&format!("/wms/{id}?SERVICE=WMS&VERSION=1.3.0&REQUEST=GetMap&FORMAT=image%2Fpng&TRANSPARENT=true&LAYERS={id}&CRS=EPSG:4326&STYLES=&WIDTH=600&HEIGHT=600&BBOX=20,-10,80,50&time=2014-01-01T00:00:00.0Z", id = id.to_string())).append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())));
+        let req = actix_web::test::TestRequest::get().uri(&format!("/wms/{id}?SERVICE=WMS&VERSION=1.3.0&REQUEST=GetMap&FORMAT=image%2Fpng&TRANSPARENT=true&LAYERS={id}&CRS=EPSG:4326&STYLES=&WIDTH=600&HEIGHT=600&BBOX=20,-10,80,50&time=2014-01-01T00:00:00.0Z", id = id.to_string())).append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())));
         let res = send_test_request(req, ctx).await;
 
         assert_eq!(res.status(), 200);
+
+        let image_bytes = actix_web::test::read_body(res).await;
+
+        // geoengine_datatypes::util::test::save_test_bytes(&image_bytes, "get_map.png");
+
         assert_eq!(
             include_bytes!("../../../test_data/wms/get_map.png") as &[u8],
-            test::read_body(res).await
+            image_bytes
         );
     }
 
@@ -590,7 +647,10 @@ mod tests {
         };
 
         // override the pixel size since this test was designed for 600 x 600 pixel tiles
-        let ctx = InMemoryContext::new_with_context_spec(exe_ctx_tiling_spec, Default::default());
+        let ctx = InMemoryContext::new_with_context_spec(
+            exe_ctx_tiling_spec,
+            TestDefault::test_default(),
+        );
 
         let session_id = ctx.default_session_ref().await.id();
 
@@ -623,7 +683,7 @@ mod tests {
             ("time", "2014-01-01T00:00:00.0Z"),
         ];
 
-        let req = test::TestRequest::get()
+        let req = actix_web::test::TestRequest::get()
             .uri(&format!(
                 "/wms/{}?{}",
                 id,
@@ -633,15 +693,20 @@ mod tests {
         let res = send_test_request(req, ctx).await;
 
         assert_eq!(res.status(), 200);
+
+        let image_bytes = actix_web::test::read_body(res).await;
+
+        // geoengine_datatypes::util::test::save_test_bytes(&image_bytes, "get_map_colorizer.png");
+
         assert_eq!(
             include_bytes!("../../../test_data/wms/get_map_colorizer.png") as &[u8],
-            test::read_body(res).await
+            image_bytes
         );
     }
 
     #[tokio::test]
     async fn it_zoomes_very_far() {
-        let ctx = InMemoryContext::default();
+        let ctx = InMemoryContext::test_default();
         let session_id = ctx.default_session_ref().await.id();
 
         let (_, id) = register_ndvi_workflow_helper(&ctx).await;
@@ -676,7 +741,7 @@ mod tests {
             ("time", "2014-04-01T12:00:00.0Z"),
         ];
 
-        let req = test::TestRequest::get()
+        let req = actix_web::test::TestRequest::get()
             .uri(&format!(
                 "/wms/{}?{}",
                 id,

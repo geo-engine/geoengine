@@ -5,28 +5,28 @@ mod reflectance;
 mod satellite;
 mod temperature;
 
-fn slope_key() -> RasterPropertiesKey {
+fn new_slope_key() -> RasterPropertiesKey {
     RasterPropertiesKey {
         domain: Some("msg".into()),
         key: "calibration_slope".into(),
     }
 }
 
-fn offset_key() -> RasterPropertiesKey {
+fn new_offset_key() -> RasterPropertiesKey {
     RasterPropertiesKey {
         domain: Some("msg".into()),
         key: "calibration_offset".into(),
     }
 }
 
-fn channel_key() -> RasterPropertiesKey {
+fn new_channel_key() -> RasterPropertiesKey {
     RasterPropertiesKey {
         domain: Some("msg".into()),
         key: "channel_number".into(),
     }
 }
 
-fn satellite_key() -> RasterPropertiesKey {
+fn new_satellite_key() -> RasterPropertiesKey {
     RasterPropertiesKey {
         domain: Some("msg".into()),
         key: "satellite_number".into(),
@@ -43,8 +43,8 @@ mod test_util {
 
     use geoengine_datatypes::dataset::{DatasetId, InternalDatasetId};
     use geoengine_datatypes::primitives::{
-        Measurement, SpatialPartition2D, SpatialResolution, TimeGranularity, TimeInstance,
-        TimeInterval, TimeStep,
+        Measurement, RasterQueryRectangle, SpatialPartition2D, SpatialResolution, TimeGranularity,
+        TimeInstance, TimeInterval, TimeStep,
     };
     use geoengine_datatypes::raster::{
         EmptyGrid2D, Grid2D, GridOrEmpty, Pixel, RasterDataType, RasterProperties,
@@ -55,10 +55,12 @@ mod test_util {
 
     use crate::engine::{
         MockExecutionContext, MockQueryContext, QueryProcessor, RasterOperator,
-        RasterQueryRectangle, RasterResultDescriptor,
+        RasterResultDescriptor,
     };
     use crate::mock::{MockRasterSource, MockRasterSourceParams};
-    use crate::processing::meteosat::{channel_key, offset_key, satellite_key, slope_key};
+    use crate::processing::meteosat::{
+        new_channel_key, new_offset_key, new_satellite_key, new_slope_key,
+    };
     use crate::source::{
         FileNotFoundHandling, GdalDatasetGeoTransform, GdalDatasetParameters, GdalMetaDataRegular,
         GdalMetadataMapping, GdalSource, GdalSourceParameters, GdalSourceTimePlaceholder,
@@ -81,7 +83,7 @@ mod test_util {
 
         let processor = op.query_processor().unwrap().get_f32().unwrap();
 
-        let ctx = MockQueryContext::default();
+        let ctx = MockQueryContext::test_default();
         let result_stream = processor.query(query, &ctx).await.unwrap();
         let mut result: Vec<Result<RasterTile2D<f32>>> = result_stream.collect().await;
         assert_eq!(1, result.len());
@@ -99,25 +101,25 @@ mod test_util {
         if let Some(v) = channel {
             props
                 .properties_map
-                .insert(channel_key(), RasterPropertiesEntry::Number(v.as_()));
+                .insert(new_channel_key(), RasterPropertiesEntry::Number(v.as_()));
         }
 
         if let Some(v) = satellite {
             props
                 .properties_map
-                .insert(satellite_key(), RasterPropertiesEntry::Number(v.as_()));
+                .insert(new_satellite_key(), RasterPropertiesEntry::Number(v.as_()));
         }
 
         if let Some(v) = slope {
             props
                 .properties_map
-                .insert(slope_key(), RasterPropertiesEntry::Number(v));
+                .insert(new_slope_key(), RasterPropertiesEntry::Number(v));
         }
 
         if let Some(v) = offset {
             props
                 .properties_map
-                .insert(offset_key(), RasterPropertiesEntry::Number(v));
+                .insert(new_offset_key(), RasterPropertiesEntry::Number(v));
         }
         props
     }
@@ -240,12 +242,21 @@ mod test_util {
                 no_data_value,
                 properties_mapping: Some(vec![
                     GdalMetadataMapping::identity(
-                        satellite_key(),
+                        new_satellite_key(),
                         RasterPropertiesEntryType::Number,
                     ),
-                    GdalMetadataMapping::identity(channel_key(), RasterPropertiesEntryType::Number),
-                    GdalMetadataMapping::identity(offset_key(), RasterPropertiesEntryType::Number),
-                    GdalMetadataMapping::identity(slope_key(), RasterPropertiesEntryType::Number),
+                    GdalMetadataMapping::identity(
+                        new_channel_key(),
+                        RasterPropertiesEntryType::Number,
+                    ),
+                    GdalMetadataMapping::identity(
+                        new_offset_key(),
+                        RasterPropertiesEntryType::Number,
+                    ),
+                    GdalMetadataMapping::identity(
+                        new_slope_key(),
+                        RasterPropertiesEntryType::Number,
+                    ),
                 ]),
                 gdal_open_options: None,
                 gdal_config_options: None,

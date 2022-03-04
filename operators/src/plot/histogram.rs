@@ -1,5 +1,4 @@
 use crate::engine::QueryProcessor;
-use crate::engine::VectorQueryRectangle;
 use crate::error;
 use crate::error::Error;
 use crate::string_token;
@@ -19,7 +18,7 @@ use futures::stream::BoxStream;
 use futures::{StreamExt, TryFutureExt};
 use geoengine_datatypes::plots::{Plot, PlotData};
 use geoengine_datatypes::primitives::{
-    DataRef, FeatureDataRef, FeatureDataType, Geometry, Measurement,
+    DataRef, FeatureDataRef, FeatureDataType, Geometry, Measurement, VectorQueryRectangle,
 };
 use geoengine_datatypes::raster::{Pixel, RasterTile2D};
 use geoengine_datatypes::{
@@ -705,7 +704,7 @@ mod tests {
             sources: mock_raster_source().into(),
         };
 
-        let execution_context = MockExecutionContext::default();
+        let execution_context = MockExecutionContext::test_default();
 
         assert!(histogram
             .boxed()
@@ -752,7 +751,7 @@ mod tests {
             sources: mock_raster_source().into(),
         };
 
-        let execution_context = MockExecutionContext::default();
+        let execution_context = MockExecutionContext::test_default();
 
         let query_processor = histogram
             .boxed()
@@ -800,7 +799,7 @@ mod tests {
             sources: mock_raster_source().into(),
         };
 
-        let execution_context = MockExecutionContext::default();
+        let execution_context = MockExecutionContext::test_default();
 
         let query_processor = histogram
             .boxed()
@@ -864,7 +863,7 @@ mod tests {
             sources: vector_source.into(),
         };
 
-        let execution_context = MockExecutionContext::default();
+        let execution_context = MockExecutionContext::test_default();
 
         let query_processor = histogram
             .boxed()
@@ -932,7 +931,7 @@ mod tests {
             sources: vector_source.into(),
         };
 
-        let execution_context = MockExecutionContext::default();
+        let execution_context = MockExecutionContext::test_default();
 
         let query_processor = histogram
             .boxed()
@@ -993,7 +992,7 @@ mod tests {
         });
         let histogram: Histogram = serde_json::from_value(workflow).unwrap();
 
-        let mut execution_context = MockExecutionContext::default();
+        let mut execution_context = MockExecutionContext::test_default();
         execution_context.add_meta_data::<_, _, VectorQueryRectangle>(
             DatasetId::Internal { dataset_id },
             Box::new(StaticMetaData {
@@ -1086,7 +1085,7 @@ mod tests {
             .into(),
         };
 
-        let execution_context = MockExecutionContext::default();
+        let execution_context = MockExecutionContext::test_default();
 
         let query_processor = histogram
             .boxed()
@@ -1143,7 +1142,7 @@ mod tests {
             sources: vector_source.into(),
         };
 
-        let execution_context = MockExecutionContext::default();
+        let execution_context = MockExecutionContext::test_default();
 
         let query_processor = histogram
             .boxed()
@@ -1200,7 +1199,7 @@ mod tests {
             sources: vector_source.into(),
         };
 
-        let execution_context = MockExecutionContext::default();
+        let execution_context = MockExecutionContext::test_default();
 
         let query_processor = histogram
             .boxed()
@@ -1238,7 +1237,7 @@ mod tests {
 
     #[tokio::test]
     async fn single_value_raster_stream() {
-        let execution_context = MockExecutionContext::default();
+        let execution_context = MockExecutionContext::test_default();
 
         let no_data_value = None;
         let histogram = Histogram {

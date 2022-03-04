@@ -127,5 +127,7 @@ where
         app = app.configure(pro::handlers::drone_mapping::init_drone_mapping_routes::<C>);
     }
     let app = test::init_service(app).await;
-    test::call_service(&app, req.to_request()).await
+    test::call_service(&app, req.to_request())
+        .await
+        .map_into_boxed_body()
 }

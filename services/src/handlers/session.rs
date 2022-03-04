@@ -142,6 +142,7 @@ mod tests {
     use actix_web::{http::header, http::Method, test};
     use actix_web_httpauth::headers::authorization::Bearer;
     use geoengine_datatypes::spatial_reference::SpatialReferenceOption;
+    use geoengine_datatypes::util::test::TestDefault;
 
     use crate::{
         contexts::{InMemoryContext, SimpleSession},
@@ -153,7 +154,7 @@ mod tests {
 
     #[tokio::test]
     async fn session() {
-        let ctx = InMemoryContext::default();
+        let ctx = InMemoryContext::test_default();
 
         let session = ctx.default_session_ref().await.clone();
 
@@ -168,12 +169,12 @@ mod tests {
 
     #[tokio::test]
     async fn session_view_project() {
-        let ctx = InMemoryContext::default();
+        let ctx = InMemoryContext::test_default();
 
         let (session, project) = create_project_helper(&ctx).await;
 
         let req = test::TestRequest::post()
-            .uri(&format!("/session/project/{}", project.to_string()))
+            .uri(&format!("/session/project/{}", project))
             .append_header((header::AUTHORIZATION, Bearer::new(session.id().to_string())));
         let res = send_test_request(req, ctx.clone()).await;
 
@@ -196,7 +197,7 @@ mod tests {
     }
 
     async fn anonymous_test_helper(method: Method) -> ServiceResponse {
-        let ctx = InMemoryContext::default();
+        let ctx = InMemoryContext::test_default();
 
         let req = test::TestRequest::default()
             .method(method)
@@ -205,8 +206,6 @@ mod tests {
     }
 
     #[tokio::test]
-    // TODO: remove when https://github.com/tokio-rs/tokio/issues/4245 is fixed
-    #[allow(clippy::semicolon_if_nothing_returned)]
     async fn anonymous() {
         let res = anonymous_test_helper(Method::POST).await;
 

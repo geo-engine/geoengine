@@ -294,6 +294,9 @@ impl TimeInterval {
         }
     }
 
+    /// Returns the duration of the interval
+    /// This is the difference between the start and end time.
+    /// If the start and end time are equal i.e. the interval is an instant, the duration is 0.
     pub fn duration_ms(&self) -> u64 {
         self.end.inner().wrapping_sub(self.start.inner()) as u64
     }
@@ -304,6 +307,7 @@ impl TimeInterval {
 
     /// Extends a time interval with the bounds of another time interval.
     /// The result has the smaller `start` and the larger `end`.
+    #[must_use]
     pub fn extend(&self, other: &Self) -> TimeInterval {
         Self {
             start: self.start.min(other.start),

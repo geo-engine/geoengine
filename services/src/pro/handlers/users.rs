@@ -250,6 +250,7 @@ mod tests {
     use actix_web::{http::header, http::Method, test};
     use actix_web_httpauth::headers::authorization::Bearer;
     use geoengine_datatypes::spatial_reference::SpatialReferenceOption;
+    use geoengine_datatypes::util::test::TestDefault;
     use serde_json::json;
 
     async fn register_test_helper<C: ProContext>(
@@ -276,10 +277,8 @@ mod tests {
     }
 
     #[tokio::test]
-    // TODO: remove when https://github.com/tokio-rs/tokio/issues/4245 is fixed
-    #[allow(clippy::semicolon_if_nothing_returned)]
     async fn register() {
-        let ctx = ProInMemoryContext::default();
+        let ctx = ProInMemoryContext::test_default();
 
         let res = register_test_helper(ctx, Method::POST, "foo@bar.de").await;
 
@@ -290,7 +289,7 @@ mod tests {
 
     #[tokio::test]
     async fn register_fail() {
-        let ctx = ProInMemoryContext::default();
+        let ctx = ProInMemoryContext::test_default();
 
         let res = register_test_helper(ctx, Method::POST, "notanemail").await;
 
@@ -305,7 +304,7 @@ mod tests {
 
     #[tokio::test]
     async fn register_duplicate_email() {
-        let ctx = ProInMemoryContext::default();
+        let ctx = ProInMemoryContext::test_default();
 
         register_test_helper(ctx.clone(), Method::POST, "foo@bar.de").await;
 
@@ -323,7 +322,7 @@ mod tests {
 
     #[tokio::test]
     async fn register_invalid_method() {
-        let ctx = ProInMemoryContext::default();
+        let ctx = ProInMemoryContext::test_default();
 
         check_allowed_http_methods(
             |method| register_test_helper(ctx.clone(), method, "foo@bar.de"),
@@ -334,7 +333,7 @@ mod tests {
 
     #[tokio::test]
     async fn register_invalid_body() {
-        let ctx = ProInMemoryContext::default();
+        let ctx = ProInMemoryContext::test_default();
 
         // register user
         let req = test::TestRequest::post()
@@ -354,7 +353,7 @@ mod tests {
 
     #[tokio::test]
     async fn register_missing_fields() {
-        let ctx = ProInMemoryContext::default();
+        let ctx = ProInMemoryContext::test_default();
 
         let user = json!({
             "password": "secret123",
@@ -379,7 +378,7 @@ mod tests {
 
     #[tokio::test]
     async fn register_invalid_type() {
-        let ctx = ProInMemoryContext::default();
+        let ctx = ProInMemoryContext::test_default();
 
         // register user
         let req = test::TestRequest::post()
@@ -398,7 +397,7 @@ mod tests {
     }
 
     async fn login_test_helper(method: Method, password: &str) -> ServiceResponse {
-        let ctx = ProInMemoryContext::default();
+        let ctx = ProInMemoryContext::test_default();
 
         let user = Validated {
             user_input: UserRegistration {
@@ -424,8 +423,6 @@ mod tests {
     }
 
     #[tokio::test]
-    // TODO: remove when https://github.com/tokio-rs/tokio/issues/4245 is fixed
-    #[allow(clippy::semicolon_if_nothing_returned)]
     async fn login() {
         let res = login_test_helper(Method::POST, "secret123").await;
 
@@ -458,7 +455,7 @@ mod tests {
 
     #[tokio::test]
     async fn login_invalid_body() {
-        let ctx = ProInMemoryContext::default();
+        let ctx = ProInMemoryContext::test_default();
 
         let req = test::TestRequest::post()
             .uri("/login")
@@ -478,7 +475,7 @@ mod tests {
 
     #[tokio::test]
     async fn login_missing_fields() {
-        let ctx = ProInMemoryContext::default();
+        let ctx = ProInMemoryContext::test_default();
 
         let user = Validated {
             user_input: UserRegistration {
@@ -510,7 +507,7 @@ mod tests {
     }
 
     async fn logout_test_helper(method: Method) -> ServiceResponse {
-        let ctx = ProInMemoryContext::default();
+        let ctx = ProInMemoryContext::test_default();
 
         let user = Validated {
             user_input: UserRegistration {
@@ -553,7 +550,7 @@ mod tests {
 
     #[tokio::test]
     async fn logout_missing_header() {
-        let ctx = ProInMemoryContext::default();
+        let ctx = ProInMemoryContext::test_default();
 
         let req = test::TestRequest::post().uri("/logout");
         let res = send_pro_test_request(req, ctx).await;
@@ -569,7 +566,7 @@ mod tests {
 
     #[tokio::test]
     async fn logout_wrong_token() {
-        let ctx = ProInMemoryContext::default();
+        let ctx = ProInMemoryContext::test_default();
 
         let req = test::TestRequest::post().uri("/logout").append_header((
             header::AUTHORIZATION,
@@ -582,7 +579,7 @@ mod tests {
 
     #[tokio::test]
     async fn logout_wrong_scheme() {
-        let ctx = ProInMemoryContext::default();
+        let ctx = ProInMemoryContext::test_default();
 
         let req = test::TestRequest::post()
             .uri("/logout")
@@ -600,7 +597,7 @@ mod tests {
 
     #[tokio::test]
     async fn logout_invalid_token() {
-        let ctx = ProInMemoryContext::default();
+        let ctx = ProInMemoryContext::test_default();
 
         let req = test::TestRequest::post()
             .uri("/logout")
@@ -623,7 +620,7 @@ mod tests {
 
     #[tokio::test]
     async fn session() {
-        let ctx = ProInMemoryContext::default();
+        let ctx = ProInMemoryContext::test_default();
 
         let session = create_session_helper(&ctx).await;
 
@@ -651,12 +648,12 @@ mod tests {
 
     #[tokio::test]
     async fn session_view_project() {
-        let ctx = ProInMemoryContext::default();
+        let ctx = ProInMemoryContext::test_default();
 
         let (session, project) = create_project_helper(&ctx).await;
 
         let req = test::TestRequest::post()
-            .uri(&format!("/session/project/{}", project.to_string()))
+            .uri(&format!("/session/project/{}", project))
             .append_header((header::AUTHORIZATION, Bearer::new(session.id().to_string())));
         let res = send_pro_test_request(req, ctx.clone()).await;
 
@@ -698,7 +695,7 @@ mod tests {
 
     #[tokio::test]
     async fn it_disables_anonymous_access() {
-        let ctx = ProInMemoryContext::default();
+        let ctx = ProInMemoryContext::test_default();
 
         let req = test::TestRequest::post().uri("/anonymous");
         let res = send_pro_test_request(req, ctx.clone()).await;
@@ -707,7 +704,7 @@ mod tests {
 
         config::set_config("user.anonymous_access", false).unwrap();
 
-        let ctx = ProInMemoryContext::default();
+        let ctx = ProInMemoryContext::test_default();
 
         let req = test::TestRequest::post().uri("/anonymous");
         let res = send_pro_test_request(req, ctx.clone()).await;
@@ -725,7 +722,7 @@ mod tests {
 
     #[tokio::test]
     async fn it_disables_user_registration() {
-        let ctx = ProInMemoryContext::default();
+        let ctx = ProInMemoryContext::test_default();
 
         let user_reg = UserRegistration {
             email: "foo@bar.de".to_owned(),
@@ -743,7 +740,7 @@ mod tests {
 
         config::set_config("user.user_registration", false).unwrap();
 
-        let ctx = ProInMemoryContext::default();
+        let ctx = ProInMemoryContext::test_default();
 
         let req = test::TestRequest::post()
             .append_header((header::CONTENT_LENGTH, 0))

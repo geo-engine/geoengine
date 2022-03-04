@@ -6,12 +6,18 @@ use crate::util::config;
 use crate::util::config::get_config_element;
 
 use actix_files::Files;
-use actix_web::dev::{Body, ServiceResponse};
+use actix_http::body::{BoxBody, EitherBody, MessageBody};
+use actix_http::uri::PathAndQuery;
+use actix_http::HttpMessage;
+use actix_web::dev::{ServiceRequest, ServiceResponse};
 use actix_web::error::{InternalError, JsonPayloadError, QueryPayloadError};
 use actix_web::{http, middleware, web, App, HttpResponse, HttpServer};
 use log::{debug, info};
 use std::net::SocketAddr;
+use std::num::NonZeroUsize;
 use std::path::PathBuf;
+use tracing::Span;
+use tracing_actix_web::{RequestId, RootSpanBuilder, TracingLogger};
 use url::Url;
 
 /// Starts the webserver for the Geo Engine API.
@@ -77,7 +83,7 @@ where
                     .handler(http::StatusCode::NOT_FOUND, render_404)
                     .handler(http::StatusCode::METHOD_NOT_ALLOWED, render_405),
             )
-            .wrap(middleware::Logger::default())
+            .wrap(TracingLogger::<CustomRootSpanBuilder>::new())
             .wrap(middleware::NormalizePath::trim())
             .configure(configure_extractors)
             .configure(handlers::datasets::init_dataset_routes::<C>)
@@ -90,6 +96,13 @@ where
             .configure(handlers::wfs::init_wfs_routes::<C>)
             .configure(handlers::wms::init_wms_routes::<C>)
             .configure(handlers::workflows::init_workflow_routes::<C>);
+
+        #[cfg(feature = "ebv")]
+        {
+            app = app
+                .service(web::scope("/ebv").configure(handlers::ebv::init_ebv_routes::<C>(None)));
+        }
+
         if version_api {
             app = app.route("/version", web::get().to(show_version_handler));
         }
@@ -99,10 +112,71 @@ where
             app
         }
     })
+    .worker_max_blocking_threads(calculate_max_blocking_threads_per_worker())
     .bind(bind_address)?
     .run()
     .await
     .map_err(Into::into)
+}
+
+/// Custom root span for web requests that paste a request id to all logs.
+pub struct CustomRootSpanBuilder;
+
+impl RootSpanBuilder for CustomRootSpanBuilder {
+    fn on_request_start(request: &ServiceRequest) -> Span {
+        let request_id = request.extensions().get::<RequestId>().copied().unwrap();
+
+        let span = tracing::info_span!("Request", request_id = %request_id);
+
+        // Emit HTTP request at the beginng of the span.
+        {
+            let _entered = span.enter();
+
+            let head = request.head();
+            let http_method = head.method.as_str();
+
+            let http_route: std::borrow::Cow<'static, str> = request
+                .match_pattern()
+                .map_or_else(|| "default".into(), Into::into);
+
+            let http_target = request
+                .uri()
+                .path_and_query()
+                .map_or("", PathAndQuery::as_str);
+
+            tracing::info!(
+                target: "HTTP request",
+                method = %http_method,
+                route = %http_route,
+                target = %http_target,
+            );
+        }
+
+        span
+    }
+
+    fn on_request_end<B>(_span: Span, _outcome: &Result<ServiceResponse<B>, actix_web::Error>) {}
+}
+
+/// Calculate maximum number of blocking threads **per worker**.
+///
+/// By default set to 512 / workers.
+///
+/// TODO: use blocking threads globally instead of per worker.
+///
+pub(crate) fn calculate_max_blocking_threads_per_worker() -> usize {
+    const MIN_BLOCKING_THREADS_PER_WORKER: usize = 32;
+
+    // Taken from `actix_server::ServerBuilder`.
+    // By default, server uses number of available logical CPU as thread count.
+    let number_of_workers = std::thread::available_parallelism()
+        .map(NonZeroUsize::get)
+        .unwrap_or(1);
+
+    // Taken from `actix_server::ServerWorkerConfig`.
+    let max_blocking_threads = std::cmp::max(512 / number_of_workers, 1);
+
+    std::cmp::max(max_blocking_threads, MIN_BLOCKING_THREADS_PER_WORKER)
 }
 
 pub(crate) fn configure_extractors(cfg: &mut web::ServiceConfig) {
@@ -211,42 +285,42 @@ pub(crate) async fn show_version_handler() -> impl actix_web::Responder {
 
 #[allow(clippy::unnecessary_wraps)]
 pub(crate) fn render_404(
-    mut res: ServiceResponse,
-) -> actix_web::Result<middleware::ErrorHandlerResponse<Body>> {
-    res.headers_mut().insert(
+    mut response: ServiceResponse,
+) -> actix_web::Result<middleware::ErrorHandlerResponse<BoxBody>> {
+    response.headers_mut().insert(
         http::header::CONTENT_TYPE,
-        http::HeaderValue::from_static("application/json"),
+        http::header::HeaderValue::from_static("application/json"),
     );
-    let res = res.map_body(|_, _| {
-        Body::from(
-            serde_json::to_string(&ErrorResponse {
-                error: "NotFound".to_string(),
-                message: "Not Found".to_string(),
-            })
-            .unwrap(),
-        )
-    });
-    Ok(middleware::ErrorHandlerResponse::Response(res))
+
+    let response_json_string = serde_json::to_string(&ErrorResponse {
+        error: "NotFound".to_string(),
+        message: "Not Found".to_string(),
+    })
+    .expect("Serialization of fixed ErrorResponse must not fail");
+
+    let response = response.map_body(|_, _| EitherBody::new(response_json_string.boxed()));
+
+    Ok(middleware::ErrorHandlerResponse::Response(response))
 }
 
 #[allow(clippy::unnecessary_wraps)]
 pub(crate) fn render_405(
-    mut res: ServiceResponse,
-) -> actix_web::Result<middleware::ErrorHandlerResponse<Body>> {
-    res.headers_mut().insert(
+    mut response: ServiceResponse,
+) -> actix_web::Result<middleware::ErrorHandlerResponse<BoxBody>> {
+    response.headers_mut().insert(
         http::header::CONTENT_TYPE,
-        http::HeaderValue::from_static("application/json"),
+        http::header::HeaderValue::from_static("application/json"),
     );
-    let res = res.map_body(|_, _| {
-        Body::from(
-            serde_json::to_string(&ErrorResponse {
-                error: "MethodNotAllowed".to_string(),
-                message: "HTTP method not allowed.".to_string(),
-            })
-            .unwrap(),
-        )
-    });
-    Ok(middleware::ErrorHandlerResponse::Response(res))
+
+    let response_json_string = serde_json::to_string(&ErrorResponse {
+        error: "MethodNotAllowed".to_string(),
+        message: "HTTP method not allowed.".to_string(),
+    })
+    .expect("Serialization of fixed ErrorResponse must not fail");
+
+    let response = response.map_body(|_, _| EitherBody::new(response_json_string.boxed()));
+
+    Ok(middleware::ErrorHandlerResponse::Response(response))
 }
 
 #[cfg(test)]

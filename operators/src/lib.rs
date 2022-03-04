@@ -1,4 +1,3 @@
-#![feature(async_closure)]
 // configure default clippy lints
 #![deny(clippy::correctness)]
 #![warn(clippy::complexity, clippy::style, clippy::perf, clippy::pedantic)]
@@ -27,7 +26,6 @@ pub mod adapters;
 pub mod engine;
 pub mod error;
 pub mod mock;
-pub mod opencl;
 pub mod plot;
 pub mod processing;
 pub mod source;

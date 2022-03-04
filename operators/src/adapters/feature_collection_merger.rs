@@ -131,12 +131,15 @@ mod tests {
 
     use crate::engine::{
         MockExecutionContext, MockQueryContext, QueryProcessor, TypedVectorQueryProcessor,
-        VectorOperator, VectorQueryRectangle,
+        VectorOperator,
     };
     use crate::error::Error;
     use crate::mock::{MockFeatureCollectionSource, MockPointSource, MockPointSourceParams};
     use futures::{StreamExt, TryStreamExt};
-    use geoengine_datatypes::primitives::{BoundingBox2D, Coordinate2D, MultiPoint, TimeInterval};
+    use geoengine_datatypes::primitives::{
+        BoundingBox2D, Coordinate2D, MultiPoint, TimeInterval, VectorQueryRectangle,
+    };
+    use geoengine_datatypes::util::test::TestDefault;
     use geoengine_datatypes::{
         collections::{DataCollection, MultiPointCollection},
         primitives::SpatialResolution,
@@ -157,7 +160,7 @@ mod tests {
 
         let source = source
             .boxed()
-            .initialize(&MockExecutionContext::default())
+            .initialize(&MockExecutionContext::test_default())
             .await
             .unwrap();
 
@@ -179,7 +182,7 @@ mod tests {
             .query(qrect, &cx)
             .await
             .unwrap()
-            .fold(0_usize, async move |i, _| i + 1)
+            .fold(0_usize, |i, _| async move { i + 1 })
             .await;
         assert_eq!(number_of_source_chunks, 5);
 
@@ -229,7 +232,7 @@ mod tests {
     async fn empty() {
         let source = MockFeatureCollectionSource::single(DataCollection::empty())
             .boxed()
-            .initialize(&MockExecutionContext::default())
+            .initialize(&MockExecutionContext::test_default())
             .await
             .unwrap();
 

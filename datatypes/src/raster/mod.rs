@@ -1,8 +1,3 @@
-use crate::primitives::Coordinate2D;
-use crate::util::Result;
-
-use super::primitives::{SpatialBounded, TemporalBounded};
-
 pub use self::data_type::{
     DynamicRasterDataType, FromPrimitive, Pixel, RasterDataType, StaticRasterDataType, TypedValue,
 };
@@ -22,7 +17,10 @@ pub use self::grid_traits::{
     GridSize, GridSpaceToLinearSpace, GridStep,
 };
 pub use self::grid_typed::{TypedGrid, TypedGrid2D, TypedGrid3D};
-pub use self::operations::{blit::Blit, grid_blit::GridBlit};
+pub use self::operations::{
+    blit::Blit, convert_data_type::ConvertDataType, convert_data_type::ConvertDataTypeParallel,
+    grid_blit::GridBlit,
+};
 pub use self::raster_tile::{
     BaseTile, MaterializedRasterTile, MaterializedRasterTile2D, MaterializedRasterTile3D,
     RasterTile, RasterTile2D, RasterTile3D,
@@ -33,6 +31,9 @@ pub use self::typed_raster_tile::{TypedRasterTile2D, TypedRasterTile3D};
 pub use self::{
     grid_traits::ChangeGridBounds, grid_traits::GridShapeAccess, grid_traits::NoDataValue,
 };
+use super::primitives::{SpatialBounded, TemporalBounded};
+use crate::primitives::Coordinate2D;
+use crate::util::Result;
 pub use raster_properties::{
     RasterProperties, RasterPropertiesEntry, RasterPropertiesEntryType, RasterPropertiesKey,
 };
