@@ -43,8 +43,11 @@ async fn get_basket_handler<C: Context>(
         .await
         .dataset_provider(&session, config.gfbio_provider_id)
         .await
-        .ok()
-        .and_then(|b| b.downcast::<GfbioDataProvider>().ok());
+        .ok();
+
+    let abcd_ref = abcd_provider
+        .as_ref()
+        .and_then(|p| p.as_any().downcast_ref::<GfbioDataProvider>());
 
     let ec = ctx.execution_context(session)?;
 
@@ -63,7 +66,7 @@ async fn get_basket_handler<C: Context>(
         serde_json::from_str::<BasketInternal>(&response)?,
         ec,
         config.pangaea_provider_id,
-        abcd_provider,
+        abcd_ref,
         config.group_abcd_units,
     )
     .await?;
@@ -84,12 +87,9 @@ impl Basket {
         value: BasketInternal,
         ec: <C as Context>::ExecutionContext,
         pangaea_id: DatasetProviderId,
-        abcd_provider: Option<Box<GfbioDataProvider>>,
+        abcd: Option<&GfbioDataProvider>,
         group_abcd_units: bool,
     ) -> Result<Basket> {
-        let abcd: Option<&GfbioDataProvider> =
-            abcd_provider.as_ref().map(std::convert::AsRef::as_ref);
-
         let mut abcd_entries: Vec<AbcdEntry> = Vec::new();
         let mut pangaea_entries: Vec<PangaeaEntry> = Vec::new();
         let mut error_entries: Vec<BasketEntry> = Vec::new();
