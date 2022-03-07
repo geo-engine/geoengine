@@ -92,6 +92,7 @@ impl ExternalDatasetProviderDefinition for GfbioDataProviderDefinition {
 }
 
 // TODO: make schema, table names and column names configurable like in crawler
+#[derive(Debug)]
 pub struct GfbioDataProvider {
     pub(crate) id: DatasetProviderId,
     db_config: DatabaseConnectionConfig,
@@ -294,6 +295,10 @@ impl ExternalDatasetProvider for GfbioDataProvider {
                 uri: row.try_get(2).unwrap_or_else(|_| "".to_owned()),
             }),
         })
+    }
+
+    fn as_any(&self) -> &dyn std::any::Any {
+        self
     }
 }
 

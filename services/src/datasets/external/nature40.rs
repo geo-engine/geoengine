@@ -95,6 +95,7 @@ impl ExternalDatasetProviderDefinition for Nature40DataProviderDefinition {
     }
 }
 
+#[derive(Debug)]
 pub struct Nature40DataProvider {
     id: DatasetProviderId,
     base_url: Url,
@@ -199,6 +200,10 @@ impl ExternalDatasetProvider for Nature40DataProvider {
             dataset: dataset.clone(),
             provenance: None,
         })
+    }
+
+    fn as_any(&self) -> &dyn std::any::Any {
+        self
     }
 }
 

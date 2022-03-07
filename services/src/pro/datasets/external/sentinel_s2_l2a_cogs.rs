@@ -117,6 +117,7 @@ pub struct SentinelDataset {
     listing: DatasetListing,
 }
 
+#[derive(Debug)]
 pub struct SentinelS2L2aCogsDataProvider {
     api_url: String,
 
@@ -217,6 +218,10 @@ impl ExternalDatasetProvider for SentinelS2L2aCogsDataProvider {
             dataset: dataset.clone(),
             provenance: None, // TODO
         })
+    }
+
+    fn as_any(&self) -> &dyn std::any::Any {
+        self
     }
 }
 

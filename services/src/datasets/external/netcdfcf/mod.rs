@@ -83,8 +83,9 @@ impl ExternalDatasetProviderDefinition for NetCdfCfDataProviderDefinition {
     }
 }
 
+#[derive(Debug)]
 pub struct NetCdfCfDataProvider {
-    path: PathBuf,
+    pub path: PathBuf,
 }
 
 /// TODO: This should be part of the GDAL crate
@@ -1011,6 +1012,10 @@ impl ExternalDatasetProvider for NetCdfCfDataProvider {
             dataset: dataset.clone(),
             provenance: None,
         })
+    }
+
+    fn as_any(&self) -> &dyn std::any::Any {
+        self
     }
 }
 
