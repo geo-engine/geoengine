@@ -21,11 +21,11 @@ use geoengine_operators::source::{
     GdalLoadingInfoTemporalSliceIterator, OgrSourceColumnSpec, OgrSourceDataset,
     OgrSourceDatasetTimeType, OgrSourceDurationSpec, OgrSourceErrorSpec, OgrSourceTimeFormat,
 };
-use scienceobjectsdb_rust_api::sciobjectsdbapi::models::v1::Object;
-use scienceobjectsdb_rust_api::sciobjectsdbapi::services::v1::dataset_service_client::DatasetServiceClient;
-use scienceobjectsdb_rust_api::sciobjectsdbapi::services::v1::object_load_service_client::ObjectLoadServiceClient;
-use scienceobjectsdb_rust_api::sciobjectsdbapi::services::v1::project_service_client::ProjectServiceClient;
-use scienceobjectsdb_rust_api::sciobjectsdbapi::services::v1::{
+use scienceobjectsdb_rust_api::sciobjectsdb::sciobjsdb::api::storage::models::v1::Object;
+use scienceobjectsdb_rust_api::sciobjectsdb::sciobjsdb::api::storage::services::v1::dataset_service_client::DatasetServiceClient;
+use scienceobjectsdb_rust_api::sciobjectsdb::sciobjsdb::api::storage::services::v1::object_load_service_client::ObjectLoadServiceClient;
+use scienceobjectsdb_rust_api::sciobjectsdb::sciobjsdb::api::storage::services::v1::project_service_client::ProjectServiceClient;
+use scienceobjectsdb_rust_api::sciobjectsdb::sciobjsdb::api::storage::services::v1::{
     CreateDownloadLinkRequest, GetDatasetObjectGroupsRequest, GetDatasetRequest,
     GetProjectDatasetsRequest,
 };
@@ -152,7 +152,7 @@ impl NFDIDataProvider {
 
     /// Extracts the geoengine metadata from a Dataset returnd from the core store
     fn extract_metadata(
-        ds: &scienceobjectsdb_rust_api::sciobjectsdbapi::models::v1::Dataset,
+        ds: &scienceobjectsdb_rust_api::sciobjectsdb::sciobjsdb::api::storage::models::v1::Dataset,
     ) -> Result<GEMetadata> {
         Ok(serde_json::from_slice::<GEMetadata>(
             ds.metadata
@@ -184,7 +184,7 @@ impl NFDIDataProvider {
     /// Maps the `gRPC` dataset representation to geoengine's internal representation.
     fn map_dataset(
         &self,
-        ds: &scienceobjectsdb_rust_api::sciobjectsdbapi::models::v1::Dataset,
+        ds: &scienceobjectsdb_rust_api::sciobjectsdb::sciobjsdb::api::storage::models::v1::Dataset,
         md: &GEMetadata,
     ) -> Dataset {
         let id = DatasetId::External(ExternalDatasetId {
@@ -511,7 +511,7 @@ impl ExternalDatasetProvider for NFDIDataProvider {
             .into_inner();
 
         Ok(resp
-            .dataset
+            .datasets
             .into_iter()
             .map(|ds| Self::extract_metadata(&ds).map(|md| self.map_dataset(&ds, &md).listing()))
             .collect::<Result<Vec<DatasetListing>>>()?)
@@ -678,10 +678,10 @@ mod tests {
     use geoengine_datatypes::dataset::{DatasetId, DatasetProviderId, ExternalDatasetId};
     use httptest::responders::status_code;
     use httptest::{Expectation, Server};
-    use scienceobjectsdb_rust_api::sciobjectsdbapi::models::v1::{
+    use scienceobjectsdb_rust_api::sciobjectsdb::sciobjsdb::api::storage::models::v1::{
         Dataset, Metadata, Object, ObjectGroup,
     };
-    use scienceobjectsdb_rust_api::sciobjectsdbapi::services::v1::{
+    use scienceobjectsdb_rust_api::sciobjectsdb::sciobjsdb::api::storage::services::v1::{
         CreateDownloadLinkResponse, GetDatasetObjectGroupsResponse, GetDatasetResponse,
         GetProjectDatasetsResponse,
     };
@@ -705,7 +705,7 @@ mod tests {
     use geoengine_operators::source::{OgrSource, OgrSourceDataset, OgrSourceParameters};
 
     mod wiremock_gen {
-        wiremock_grpc::generate!("api.services.v1", TestProjectServer);
+        wiremock_grpc::generate!("sciobjsdb.api.storage.services.v1", TestProjectServer);
     }
     use wiremock_gen::*;
     use wiremock_grpc::*;
@@ -1002,11 +1002,11 @@ mod tests {
 
         server.setup(
             MockBuilder::when()
-                .path("/api.services.v1.ProjectService/GetProjectDatasets")
+                .path("/sciobjsdb.api.storage.services.v1.ProjectService/GetProjectDatasets")
                 .then()
                 .return_status(tonic::Code::Ok)
                 .return_body(|| GetProjectDatasetsResponse {
-                    dataset: vec![Dataset {
+                    datasets: vec![Dataset {
                         id: DATASET_ID.to_string(),
                         name: "Test".to_string(),
                         description: "Test".to_string(),
@@ -1048,7 +1048,7 @@ mod tests {
 
         server.setup(
             MockBuilder::when()
-                .path("/api.services.v1.DatasetService/GetDataset")
+                .path("/sciobjsdb.api.storage.services.v1.DatasetService/GetDataset")
                 .then()
                 .return_status(tonic::Code::Ok)
                 .return_body(|| GetDatasetResponse {
@@ -1095,7 +1095,7 @@ mod tests {
 
         server.setup(
             MockBuilder::when()
-                .path("/api.services.v1.DatasetService/GetDataset")
+                .path("/sciobjsdb.api.storage.services.v1.DatasetService/GetDataset")
                 .then()
                 .return_status(tonic::Code::Ok)
                 .return_body(|| GetDatasetResponse {
@@ -1121,7 +1121,7 @@ mod tests {
 
         server.setup(
             MockBuilder::when()
-                .path("/api.services.v1.DatasetService/GetDatasetObjectGroups")
+                .path("/sciobjsdb.api.storage.services.v1.DatasetService/GetDatasetObjectGroups")
                 .then()
                 .return_status(tonic::Code::Ok)
                 .return_body(|| GetDatasetObjectGroupsResponse {
@@ -1182,7 +1182,7 @@ mod tests {
 
         server.setup(
             MockBuilder::when()
-                .path("/api.services.v1.DatasetService/GetDataset")
+                .path("/sciobjsdb.api.storage.services.v1.DatasetService/GetDataset")
                 .then()
                 .return_status(tonic::Code::Ok)
                 .return_body(|| GetDatasetResponse {
@@ -1208,7 +1208,7 @@ mod tests {
 
         server.setup(
             MockBuilder::when()
-                .path("/api.services.v1.DatasetService/GetDatasetObjectGroups")
+                .path("/sciobjsdb.api.storage.services.v1.DatasetService/GetDatasetObjectGroups")
                 .then()
                 .return_status(tonic::Code::Ok)
                 .return_body(|| GetDatasetObjectGroupsResponse {
@@ -1245,7 +1245,7 @@ mod tests {
 
         server.setup(
             MockBuilder::when()
-                .path("/api.services.v1.ObjectLoadService/CreateDownloadLink")
+                .path("/sciobjsdb.api.storage.services.v1.ObjectLoadService/CreateDownloadLink")
                 .then()
                 .return_status(tonic::Code::Ok)
                 .return_body(|| CreateDownloadLinkResponse {
