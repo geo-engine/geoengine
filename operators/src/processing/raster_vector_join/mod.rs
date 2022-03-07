@@ -302,7 +302,8 @@ mod tests {
                 "vector": {
                     "type": "MockFeatureCollectionSourceMultiPoint",
                     "params": {
-                        "collections": []
+                        "collections": [],
+                        "spatialReference": "EPSG:4326"
                     }
                 },
                 "rasters": [],
