@@ -339,6 +339,7 @@ pub struct GFBio {
     pub basket_api_base_url: url::Url,
     pub pangaea_provider_id: DatasetProviderId,
     pub gfbio_provider_id: DatasetProviderId,
+    pub group_abcd_units: bool,
 }
 
 impl ConfigElement for GFBio {

@@ -171,21 +171,28 @@ impl GfbioDataProvider {
         format!("surrogate_key = {surrogate}", surrogate = surrogate_key)
     }
 
-    pub async fn resolve_surrogate_key(&self, dataset_id: &str) -> Result<Option<i32>> {
+    pub async fn resolve_title_surrogate_key_and_title(
+        &self,
+        dataset_id: &str,
+    ) -> Result<Option<(i32, String)>> {
         let conn = self.pool.get().await?;
 
         let stmt = conn
             .prepare(&format!(
                 r#"
-            SELECT surrogate_key
+            SELECT surrogate_key, "{title}"
             FROM {schema}.abcd_datasets WHERE dataset_id = $1;"#,
-                schema = self.db_config.schema
+                schema = self.db_config.schema,
+                title = self
+                    .column_name_to_hash
+                    .get("/DataSets/DataSet/Metadata/Description/Representation/Title")
+                    .expect("Title must be present")
             ))
             .await?;
 
         let row = conn.query_one(&stmt, &[&dataset_id]).await.ok();
 
-        Ok(row.map(|r| r.get::<usize, i32>(0)))
+        Ok(row.map(|r| (r.get::<usize, i32>(0), r.get::<usize, String>(1))))
     }
 }
 
