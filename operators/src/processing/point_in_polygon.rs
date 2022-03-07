@@ -61,18 +61,29 @@ impl VectorOperator for PointInPolygonFilter {
         let points = self.sources.points.initialize(context).await?;
         let polygons = self.sources.polygons.initialize(context).await?;
 
+        let points_rd = points.result_descriptor();
+        let polygons_rd = polygons.result_descriptor();
+
         ensure!(
-            points.result_descriptor().data_type == VectorDataType::MultiPoint,
+            points_rd.data_type == VectorDataType::MultiPoint,
             error::InvalidType {
                 expected: VectorDataType::MultiPoint.to_string(),
-                found: points.result_descriptor().data_type.to_string(),
+                found: points_rd.data_type.to_string(),
             }
         );
         ensure!(
-            polygons.result_descriptor().data_type == VectorDataType::MultiPolygon,
+            polygons_rd.data_type == VectorDataType::MultiPolygon,
             error::InvalidType {
                 expected: VectorDataType::MultiPolygon.to_string(),
-                found: polygons.result_descriptor().data_type.to_string(),
+                found: polygons_rd.data_type.to_string(),
+            }
+        );
+
+        ensure!(
+            points_rd.spatial_reference == polygons_rd.spatial_reference,
+            crate::error::InvalidSpatialReference {
+                expected: points_rd.spatial_reference,
+                found: polygons_rd.spatial_reference,
             }
         );
 

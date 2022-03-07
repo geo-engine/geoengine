@@ -90,9 +90,10 @@ impl VectorOperator for RasterVectorJoin {
         );
 
         let vector_source = self.sources.vector.initialize(context).await?;
+        let vector_rd = vector_source.result_descriptor();
 
         ensure!(
-            vector_source.result_descriptor().data_type != VectorDataType::Data,
+            vector_rd.data_type != VectorDataType::Data,
             error::InvalidType {
                 expected: format!(
                     "{}, {} or {}",
@@ -114,9 +115,24 @@ impl VectorOperator for RasterVectorJoin {
         .into_iter()
         .collect::<Result<Vec<_>>>()?;
 
+        let spatial_reference = vector_rd.spatial_reference;
+
+        for other_spatial_reference in raster_sources
+            .iter()
+            .map(|source| source.result_descriptor().spatial_reference)
+        {
+            ensure!(
+                spatial_reference == other_spatial_reference,
+                crate::error::InvalidSpatialReference {
+                    expected: spatial_reference,
+                    found: other_spatial_reference,
+                }
+            );
+        }
+
         let params = self.params;
 
-        let result_descriptor = vector_source.result_descriptor().map_columns(|columns| {
+        let result_descriptor = vector_rd.map_columns(|columns| {
             let mut columns = columns.clone();
             for (i, new_column_name) in params.names.iter().enumerate() {
                 let feature_data_type = match params.temporal_aggregation {
