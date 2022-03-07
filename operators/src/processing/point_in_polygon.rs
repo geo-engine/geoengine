@@ -278,9 +278,8 @@ where
 #[cfg(test)]
 mod tests {
 
-    use std::str::FromStr;
-
     use super::*;
+    use std::str::FromStr;
 
     use geoengine_datatypes::primitives::{
         BoundingBox2D, Coordinate2D, MultiPoint, MultiPolygon, SpatialResolution, TimeInterval,
@@ -710,12 +709,12 @@ mod tests {
         .initialize(&MockExecutionContext::test_default())
         .await;
 
-        match operator {
+        assert!(matches!(
+            operator,
             Err(Error::InvalidSpatialReference {
                 expected: _,
                 found: _,
-            }) => {}
-            _ => panic!("Expected error"),
-        }
+            })
+        ));
     }
 }

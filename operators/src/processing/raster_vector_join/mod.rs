@@ -258,9 +258,8 @@ pub fn create_feature_aggregator<P: Pixel>(
 
 #[cfg(test)]
 mod tests {
-    use std::str::FromStr;
-
     use super::*;
+    use std::str::FromStr;
 
     use crate::engine::{
         ChunkByteSize, MockExecutionContext, MockQueryContext, QueryProcessor, RasterOperator,
@@ -584,12 +583,12 @@ mod tests {
         .initialize(&exe_ctc)
         .await;
 
-        match operator {
+        assert!(matches!(
+            operator,
             Err(Error::InvalidSpatialReference {
                 expected: _,
                 found: _,
-            }) => {}
-            _ => panic!("Expected error"),
-        }
+            })
+        ));
     }
 }
