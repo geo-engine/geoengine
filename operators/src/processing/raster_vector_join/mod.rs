@@ -258,6 +258,8 @@ pub fn create_feature_aggregator<P: Pixel>(
 
 #[cfg(test)]
 mod tests {
+    use std::str::FromStr;
+
     use super::*;
 
     use crate::engine::{
@@ -274,6 +276,7 @@ mod tests {
         BoundingBox2D, DataRef, FeatureDataRef, MultiPoint, SpatialResolution, TimeInterval,
         VectorQueryRectangle,
     };
+    use geoengine_datatypes::spatial_reference::SpatialReference;
     use geoengine_datatypes::util::test::TestDefault;
     use serde_json::json;
 
@@ -542,5 +545,51 @@ mod tests {
         assert_eq!(data.as_ref(), &[0., 0., 0., 0.]);
 
         assert_eq!(data.nulls(), vec![true, true, true, true]);
+    }
+
+    #[tokio::test]
+    async fn it_checks_sref() {
+        let point_source = MockFeatureCollectionSource::with_collections_and_sref(
+            vec![MultiPointCollection::from_data(
+                MultiPoint::many(vec![
+                    (-13.95, 20.05),
+                    (-14.05, 20.05),
+                    (-13.95, 19.95),
+                    (-14.05, 19.95),
+                ])
+                .unwrap(),
+                vec![TimeInterval::default(); 4],
+                Default::default(),
+            )
+            .unwrap()],
+            SpatialReference::from_str("EPSG:3857").unwrap(),
+        )
+        .boxed();
+
+        let mut exe_ctc = MockExecutionContext::test_default();
+        let ndvi_id = add_ndvi_dataset(&mut exe_ctc);
+
+        let operator = RasterVectorJoin {
+            params: RasterVectorJoinParams {
+                names: vec!["ndvi".to_string()],
+                feature_aggregation: FeatureAggregationMethod::First,
+                temporal_aggregation: TemporalAggregationMethod::Mean,
+            },
+            sources: SingleVectorMultipleRasterSources {
+                vector: point_source,
+                rasters: vec![ndvi_source(ndvi_id.clone())],
+            },
+        }
+        .boxed()
+        .initialize(&exe_ctc)
+        .await;
+
+        match operator {
+            Err(Error::InvalidSpatialReference {
+                expected: _,
+                found: _,
+            }) => {}
+            _ => panic!("Expected error"),
+        }
     }
 }

@@ -278,14 +278,18 @@ where
 #[cfg(test)]
 mod tests {
 
+    use std::str::FromStr;
+
     use super::*;
 
     use geoengine_datatypes::primitives::{
         BoundingBox2D, Coordinate2D, MultiPoint, MultiPolygon, SpatialResolution, TimeInterval,
     };
+    use geoengine_datatypes::spatial_reference::SpatialReference;
     use geoengine_datatypes::util::test::TestDefault;
 
     use crate::engine::{ChunkByteSize, MockExecutionContext, MockQueryContext};
+    use crate::error::Error;
     use crate::mock::MockFeatureCollectionSource;
 
     #[test]
@@ -666,5 +670,52 @@ mod tests {
             .await;
 
         assert_eq!(result.len(), 0);
+    }
+
+    #[tokio::test]
+    async fn it_checks_sref() {
+        let point_collection =
+            MultiPointCollection::from_data(vec![], vec![], Default::default()).unwrap();
+
+        let polygon_collection = MultiPolygonCollection::from_data(
+            vec![MultiPolygon::new(vec![vec![vec![
+                (0.0, 0.0).into(),
+                (10.0, 0.0).into(),
+                (10.0, 10.0).into(),
+                (0.0, 10.0).into(),
+                (0.0, 0.0).into(),
+            ]]])
+            .unwrap()],
+            vec![TimeInterval::default()],
+            Default::default(),
+        )
+        .unwrap();
+
+        let operator = PointInPolygonFilter {
+            params: PointInPolygonFilterParams {},
+            sources: PointInPolygonFilterSource {
+                points: MockFeatureCollectionSource::with_collections_and_sref(
+                    vec![point_collection],
+                    SpatialReference::epsg_4326(),
+                )
+                .boxed(),
+                polygons: MockFeatureCollectionSource::with_collections_and_sref(
+                    vec![polygon_collection],
+                    SpatialReference::from_str("EPSG:3857").unwrap(),
+                )
+                .boxed(),
+            },
+        }
+        .boxed()
+        .initialize(&MockExecutionContext::test_default())
+        .await;
+
+        match operator {
+            Err(Error::InvalidSpatialReference {
+                expected: _,
+                found: _,
+            }) => {}
+            _ => panic!("Expected error"),
+        }
     }
 }
