@@ -148,26 +148,6 @@ impl GfbioDataProvider {
         ))
     }
 
-    fn build_sql_query(&self) -> String {
-        let mut columns: Vec<_> = self
-            .column_hash_to_name
-            .iter()
-            .filter(|(_, name)| name.starts_with("/DataSets/DataSet/Units/Unit/"))
-            .collect();
-
-        columns.sort_by(|a, b| a.1.cmp(b.1));
-
-        let columns = columns.iter().fold(String::new(), |query, (hash, _)| {
-            format!(r#"{}, "{}""#, query, hash)
-        });
-
-        format!(
-            r#"SELECT surrogate_key, geom {columns} FROM {schema}.abcd_units"#,
-            columns = columns,
-            schema = self.db_config.schema,
-        )
-    }
-
     fn build_attribute_query(surrogate_key: i32) -> String {
         format!("surrogate_key = {surrogate}", surrogate = surrogate_key)
     }
@@ -304,7 +284,7 @@ impl MetaDataProvider<OgrSourceDataset, VectorResultDescriptor, VectorQueryRecta
         Ok(Box::new(StaticMetaData {
             loading_info: OgrSourceDataset {
                 file_name: self.db_config.ogr_pg_config().into(),
-                layer_name: "".to_owned(),
+                layer_name: "abcd_units".to_owned(),
                 data_type: Some(VectorDataType::MultiPoint),
                 time: OgrSourceDatasetTimeType::None, // TODO
                 default_geometry: None,
@@ -333,7 +313,7 @@ impl MetaDataProvider<OgrSourceDataset, VectorResultDescriptor, VectorQueryRecta
                 force_ogr_time_filter: false,
                 force_ogr_spatial_filter: true,
                 on_error: OgrSourceErrorSpec::Ignore,
-                sql_query: Some(self.build_sql_query()),
+                sql_query: None,
                 attribute_query: Some(GfbioDataProvider::build_attribute_query(surrogate_key)),
             },
             result_descriptor: VectorResultDescriptor {
