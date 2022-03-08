@@ -283,7 +283,9 @@ impl Basket {
                 }
             }
         }
-        map.into_values().collect::<Vec<_>>()
+        let mut result = map.into_values().collect::<Vec<_>>();
+        result.sort_by(|l, r| Ord::cmp(&l.title, &r.title));
+        result
     }
 
     async fn generate_loading_info(
