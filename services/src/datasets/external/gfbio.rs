@@ -284,7 +284,7 @@ impl MetaDataProvider<OgrSourceDataset, VectorResultDescriptor, VectorQueryRecta
         Ok(Box::new(StaticMetaData {
             loading_info: OgrSourceDataset {
                 file_name: self.db_config.ogr_pg_config().into(),
-                layer_name: "abcd_units".to_owned(),
+                layer_name: format!("{}.abcd_units", self.db_config.schema),
                 data_type: Some(VectorDataType::MultiPoint),
                 time: OgrSourceDatasetTimeType::None, // TODO
                 default_geometry: None,
@@ -621,7 +621,7 @@ mod tests {
 
             let expected = OgrSourceDataset {
                 file_name: PathBuf::from(ogr_pg_string),
-                layer_name: "abcd_units".to_owned(),
+                layer_name: format!("{}.abcd_units", test_schema),
                 data_type: Some(VectorDataType::MultiPoint),
                 time: OgrSourceDatasetTimeType::None,
                 default_geometry: None,
