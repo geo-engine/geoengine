@@ -32,6 +32,9 @@ use geoengine_operators::{
 };
 use serde::{Deserialize, Serialize};
 
+pub const GFBIO_PROVIDER_ID: DatasetProviderId =
+    DatasetProviderId::from_u128(0x907f_9f5b_0304_4a0e_a5ef_28de_62d1_c0f9);
+
 #[derive(Clone, Debug, Serialize, Deserialize)]
 struct DatabaseConnectionConfig {
     host: String,
@@ -64,7 +67,6 @@ impl DatabaseConnectionConfig {
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct GfbioDataProviderDefinition {
-    id: DatasetProviderId,
     name: String,
     db_config: DatabaseConnectionConfig,
 }
@@ -73,9 +75,7 @@ pub struct GfbioDataProviderDefinition {
 #[async_trait]
 impl ExternalDatasetProviderDefinition for GfbioDataProviderDefinition {
     async fn initialize(self: Box<Self>) -> Result<Box<dyn ExternalDatasetProvider>> {
-        Ok(Box::new(
-            GfbioDataProvider::new(self.id, self.db_config).await?,
-        ))
+        Ok(Box::new(GfbioDataProvider::new(self.db_config).await?))
     }
 
     fn type_name(&self) -> String {
@@ -87,14 +87,13 @@ impl ExternalDatasetProviderDefinition for GfbioDataProviderDefinition {
     }
 
     fn id(&self) -> DatasetProviderId {
-        self.id
+        GFBIO_PROVIDER_ID
     }
 }
 
 // TODO: make schema, table names and column names configurable like in crawler
 #[derive(Debug)]
 pub struct GfbioDataProvider {
-    id: DatasetProviderId,
     db_config: DatabaseConnectionConfig,
     pool: Pool<PostgresConnectionManager<NoTls>>,
     column_hash_to_name: HashMap<String, String>,
@@ -105,7 +104,7 @@ impl GfbioDataProvider {
     const COLUMN_NAME_LONGITUDE: &'static str = "e9eefbe81d4343c6a114b7d522017bf493b89cef";
     const COLUMN_NAME_LATITUDE: &'static str = "506e190d0ad979d1c7a816223d1ded3604907d91";
 
-    async fn new(id: DatasetProviderId, db_config: DatabaseConnectionConfig) -> Result<Self> {
+    async fn new(db_config: DatabaseConnectionConfig) -> Result<Self> {
         let pg_mgr = PostgresConnectionManager::new(db_config.pg_config(), NoTls);
         let pool = Pool::builder().build(pg_mgr).await?;
 
@@ -113,7 +112,6 @@ impl GfbioDataProvider {
             Self::resolve_columns(pool.get().await?, &db_config.schema).await?;
 
         Ok(Self {
-            id,
             db_config,
             pool,
             column_hash_to_name,
@@ -151,6 +149,23 @@ impl GfbioDataProvider {
     fn build_attribute_query(surrogate_key: i32) -> String {
         format!("surrogate_key = {surrogate}", surrogate = surrogate_key)
     }
+
+    pub async fn resolve_surrogate_key(&self, dataset_id: &str) -> Result<Option<i32>> {
+        let conn = self.pool.get().await?;
+
+        let stmt = conn
+            .prepare(&format!(
+                r#"
+            SELECT surrogate_key
+            FROM {schema}.abcd_datasets WHERE dataset_id = $1;"#,
+                schema = self.db_config.schema,
+            ))
+            .await?;
+
+        let row = conn.query_one(&stmt, &[&dataset_id]).await.ok();
+
+        Ok(row.map(|r| r.get::<usize, i32>(0)))
+    }
 }
 
 #[async_trait]
@@ -181,7 +196,7 @@ impl ExternalDatasetProvider for GfbioDataProvider {
             .into_iter()
             .map(|row| DatasetListing {
                 id: DatasetId::External(ExternalDatasetId {
-                    provider_id: self.id,
+                    provider_id: GFBIO_PROVIDER_ID,
                     dataset_id: row.get::<usize, i32>(0).to_string(),
                 }),
                 name: row.get(1),
@@ -386,7 +401,7 @@ mod tests {
         datasets::listing::OrderBy,
         util::{config, user_input::UserInput},
     };
-    use std::{fs::File, io::Read, path::PathBuf, str::FromStr};
+    use std::{fs::File, io::Read, path::PathBuf};
 
     use super::*;
 
@@ -445,7 +460,6 @@ mod tests {
         let test_schema = create_test_data(&db_config).await;
 
         let provider = Box::new(GfbioDataProviderDefinition {
-            id: DatasetProviderId::from_str("d29f2430-5c5e-4748-a2fa-6423aa2af42d").unwrap(),
             name: "Gfbio".to_string(),
             db_config: DatabaseConnectionConfig {
                 host: db_config.host.clone(),
@@ -481,10 +495,7 @@ mod tests {
             listing,
             vec![DatasetListing {
                 id: DatasetId::External(ExternalDatasetId {
-                    provider_id: DatasetProviderId::from_str(
-                        "d29f2430-5c5e-4748-a2fa-6423aa2af42d"
-                    )
-                    .unwrap(),
+                    provider_id: GFBIO_PROVIDER_ID,
                     dataset_id: "1".to_string(),
                 }),
                 name: "Example Title".to_string(),
@@ -542,7 +553,6 @@ mod tests {
             let ogr_pg_string = provider_db_config.ogr_pg_config();
 
             let provider = Box::new(GfbioDataProviderDefinition {
-                id: DatasetProviderId::from_str("d29f2430-5c5e-4748-a2fa-6423aa2af42d").unwrap(),
                 name: "Gfbio".to_string(),
                 db_config: provider_db_config,
             })
@@ -554,10 +564,7 @@ mod tests {
                 dyn MetaData<OgrSourceDataset, VectorResultDescriptor, VectorQueryRectangle>,
             > = provider
                 .meta_data(&DatasetId::External(ExternalDatasetId {
-                    provider_id: DatasetProviderId::from_str(
-                        "d29f2430-5c5e-4748-a2fa-6423aa2af42d",
-                    )
-                    .unwrap(),
+                    provider_id: GFBIO_PROVIDER_ID,
                     dataset_id: "1".to_string(),
                 }))
                 .await
@@ -707,7 +714,6 @@ mod tests {
     async fn it_loads() {
         async fn test(db_config: &config::Postgres, test_schema: &str) -> Result<(), String> {
             let provider = Box::new(GfbioDataProviderDefinition {
-                id: DatasetProviderId::from_str("d29f2430-5c5e-4748-a2fa-6423aa2af42d").unwrap(),
                 name: "Gfbio".to_string(),
                 db_config: DatabaseConnectionConfig {
                     host: db_config.host.clone(),
@@ -726,10 +732,7 @@ mod tests {
                 dyn MetaData<OgrSourceDataset, VectorResultDescriptor, VectorQueryRectangle>,
             > = provider
                 .meta_data(&DatasetId::External(ExternalDatasetId {
-                    provider_id: DatasetProviderId::from_str(
-                        "d29f2430-5c5e-4748-a2fa-6423aa2af42d",
-                    )
-                    .unwrap(),
+                    provider_id: GFBIO_PROVIDER_ID,
                     dataset_id: "1".to_string(),
                 }))
                 .await
@@ -814,7 +817,6 @@ mod tests {
     async fn it_cites() {
         async fn test(db_config: &config::Postgres, test_schema: &str) -> Result<(), String> {
             let provider = Box::new(GfbioDataProviderDefinition {
-                id: DatasetProviderId::from_str("d29f2430-5c5e-4748-a2fa-6423aa2af42d").unwrap(),
                 name: "Gfbio".to_string(),
                 db_config: DatabaseConnectionConfig {
                     host: db_config.host.clone(),
@@ -830,8 +832,7 @@ mod tests {
             .map_err(|e| e.to_string())?;
 
             let dataset = DatasetId::External(ExternalDatasetId {
-                provider_id: DatasetProviderId::from_str("d29f2430-5c5e-4748-a2fa-6423aa2af42d")
-                    .unwrap(),
+                provider_id: GFBIO_PROVIDER_ID,
                 dataset_id: "1".to_owned(),
             });
 
@@ -842,10 +843,7 @@ mod tests {
 
             let expected = ProvenanceOutput {
                 dataset: DatasetId::External(ExternalDatasetId {
-                    provider_id: DatasetProviderId::from_str(
-                        "d29f2430-5c5e-4748-a2fa-6423aa2af42d",
-                    )
-                    .unwrap(),
+                    provider_id: GFBIO_PROVIDER_ID,
                     dataset_id: "1".to_owned(),
                 }),
                 provenance: Some(Provenance {
