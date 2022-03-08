@@ -308,7 +308,7 @@ impl MetaDataProvider<OgrSourceDataset, VectorResultDescriptor, VectorQueryRecta
         Ok(Box::new(StaticMetaData {
             loading_info: OgrSourceDataset {
                 file_name: self.db_config.ogr_pg_config().into(),
-                layer_name: "abcd_units".to_owned(),
+                layer_name: format!("{}.abcd_units", self.db_config.schema),
                 data_type: Some(VectorDataType::MultiPoint),
                 time: OgrSourceDatasetTimeType::None, // TODO
                 default_geometry: None,
@@ -645,7 +645,7 @@ mod tests {
 
             let expected = OgrSourceDataset {
                 file_name: PathBuf::from(ogr_pg_string),
-                layer_name: "".to_owned(),
+                layer_name: format!("{}.abcd_units", test_schema),
                 data_type: Some(VectorDataType::MultiPoint),
                 time: OgrSourceDatasetTimeType::None,
                 default_geometry: None,
@@ -705,7 +705,7 @@ mod tests {
                 force_ogr_time_filter: false,
                 force_ogr_spatial_filter: true,
                 on_error: OgrSourceErrorSpec::Ignore,
-                sql_query: Some(format!("SELECT surrogate_key, geom , \"150ac8760faba3bbf29ee77713fc0402641eea82\", \"6df446e57190f19d63fcf99ba25476510c5c8ce6\", \"09e05cff5522bf112eedf91c5c2f1432539e59aa\", \"8003ddd80b42736ebf36b87018e51db3ee84efaf\", \"9691f318c0f84b4e71e3c125492902af3ad22a81\", \"abc0ceb08b2723a43274e1db093dfe1f333fe453\", \"f65b72bbbd0b17e7345821a34c1da49d317ca28b\", \"d22ecb7dd0e5de6e8b2721977056d30aefda1b75\", \"bad2f7cae88e4219f2c3b186628189c5380f3c52\", \"624516976f697c1eacc7bccfb668d2c25ae7756e\", \"4f885a9545b143d322f3bf34bf2c5148e07d578a\", \"8603069b15071933545a8ce6563308da4d8ee019\", \"83fb54d8cfa58d729125f3dccac3a6820d95ccaa\", \"46b0ed7a1faa8d25b0c681fbbdc2cca60cecbdf0\", \"2598ba17aa170832b45c3c206f8133ddddc52c6e\", \"54a52959a34f3c19fa1b0e22cea2ae5c8ce78602\", \"7fdf1ed68add3ac2f4a1b2c89b75245260890dfe\", \"0dcf8788cadda41eaa5831f44227d8c531411953\", \"f2374ad051911a65bc0d0a46c13ada2625f55a10\", \"2b603312fc185489ffcffd5763bcd47c4b126f31\", \"adf8c075f2c6b97eaab5cee8f22e97abfdaf6b71\" FROM {}.abcd_units", test_schema)),
+                sql_query: None,
                 attribute_query: Some("surrogate_key = 1".to_string()),
             };
 
