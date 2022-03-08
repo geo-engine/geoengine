@@ -88,10 +88,6 @@ api_base_url = "https://portal.geobon.org/api/v1"
 [gfbio]
 # This is the basket API endpoint
 basket_api_base_url= "https://dev.gfbio.uni-jena.de/daisi-api/api/baskets/"
-# The id of the gfbio external dataset provider
-gfbio_provider_id = "907f9f5b-0304-4a0e-a5ef-28de62d1c0f9"
-# The id of the pangaea external dataset provider
-pangaea_provider_id = "e3b93bf3-1bc1-48db-80e8-97cfb0685e8d"
 # If this is set to true, basket entries that belong to the
 # same dataset AND species are grouped within a single layer.
 # This is the behavious of the old VAT system.

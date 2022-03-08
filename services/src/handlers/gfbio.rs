@@ -5,7 +5,7 @@ use actix_web::{web, FromRequest, Responder};
 use chrono::Utc;
 use futures::stream::FuturesUnordered;
 use futures::stream::StreamExt;
-use geoengine_datatypes::dataset::{DatasetId, DatasetProviderId, ExternalDatasetId};
+use geoengine_datatypes::dataset::{DatasetId, ExternalDatasetId};
 use geoengine_datatypes::primitives::VectorQueryRectangle;
 use geoengine_operators::engine::{
     MetaDataProvider, TypedResultDescriptor, VectorResultDescriptor,
@@ -16,7 +16,8 @@ use reqwest::Client;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
-use crate::datasets::external::gfbio::GfbioDataProvider;
+use crate::datasets::external::gfbio::{GfbioDataProvider, GFBIO_PROVIDER_ID};
+use crate::datasets::external::pangaea::PANGAEA_PROVIDER_ID;
 use crate::datasets::storage::DatasetProviderDb;
 use geoengine_datatypes::identifier;
 use geoengine_operators::util::input::StringOrNumberRange;
@@ -41,7 +42,7 @@ async fn get_basket_handler<C: Context>(
     let abcd_provider = ctx
         .dataset_db_ref()
         .await
-        .dataset_provider(&session, config.gfbio_provider_id)
+        .dataset_provider(&session, GFBIO_PROVIDER_ID)
         .await
         .ok();
 
@@ -65,7 +66,6 @@ async fn get_basket_handler<C: Context>(
     let basket = Basket::new::<C>(
         serde_json::from_str::<BasketInternal>(&response)?,
         ec,
-        config.pangaea_provider_id,
         abcd_ref,
         config.group_abcd_units,
     )
@@ -86,7 +86,6 @@ impl Basket {
     async fn new<C: Context>(
         value: BasketInternal,
         ec: <C as Context>::ExecutionContext,
-        pangaea_id: DatasetProviderId,
         abcd: Option<&GfbioDataProvider>,
         group_abcd_units: bool,
     ) -> Result<Basket> {
@@ -106,7 +105,7 @@ impl Basket {
         }
 
         let (mut pangaea, mut abcd) = tokio::join!(
-            Self::process_pangaea_entries::<C>(pangaea_id, &ec, pangaea_entries),
+            Self::process_pangaea_entries::<C>(&ec, pangaea_entries),
             Self::process_abcd_entries(abcd, abcd_entries, group_abcd_units)
         );
 
@@ -123,20 +122,18 @@ impl Basket {
     }
 
     async fn process_pangaea_entries<C: Context>(
-        provider_id: DatasetProviderId,
         ec: &<C as Context>::ExecutionContext,
         entries: Vec<PangaeaEntry>,
     ) -> Vec<BasketEntry> {
         entries
             .into_iter()
-            .map(|entry| Self::process_pangaea_entry::<C>(provider_id, ec, entry))
+            .map(|entry| Self::process_pangaea_entry::<C>(ec, entry))
             .collect::<FuturesUnordered<_>>()
             .collect::<Vec<_>>()
             .await
     }
 
     async fn process_pangaea_entry<C: Context>(
-        provider_id: DatasetProviderId,
         ec: &<C as Context>::ExecutionContext,
         entry: PangaeaEntry,
     ) -> BasketEntry {
@@ -148,7 +145,7 @@ impl Basket {
         }
 
         let id = DatasetId::External(ExternalDatasetId {
-            provider_id,
+            provider_id: PANGAEA_PROVIDER_ID,
             dataset_id: entry.doi,
         });
         let mdp = ec as &dyn MetaDataProvider<
@@ -198,10 +195,7 @@ impl Basket {
             };
         }
 
-        let (sg_id, _) = match provider
-            .resolve_title_surrogate_key_and_title(entry.id.as_str())
-            .await
-        {
+        let sg_id = match provider.resolve_surrogate_key(entry.id.as_str()).await {
             Ok(Some(s)) => s,
             Ok(None) => {
                 return BasketEntry {
@@ -224,7 +218,7 @@ impl Basket {
         };
 
         let id = DatasetId::External(ExternalDatasetId {
-            provider_id: provider.id,
+            provider_id: GFBIO_PROVIDER_ID,
             dataset_id: sg_id.to_string(),
         });
 

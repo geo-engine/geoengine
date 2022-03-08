@@ -349,8 +349,6 @@ impl ConfigElement for Ebv {
 pub struct GFBio {
     #[serde(deserialize_with = "deserialize_base_url")]
     pub basket_api_base_url: url::Url,
-    pub pangaea_provider_id: geoengine_datatypes::dataset::DatasetProviderId,
-    pub gfbio_provider_id: geoengine_datatypes::dataset::DatasetProviderId,
     pub group_abcd_units: bool,
 }
 

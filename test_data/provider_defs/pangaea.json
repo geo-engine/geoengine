@@ -1,6 +1,5 @@
 {
   "type": "PangaeaDataProviderDefinition",
-  "id": "e3b93bf3-1bc1-48db-80e8-97cfb0685e8d",
   "name": "Pangaea",
   "baseUrl": "https://doi.pangaea.de"
 }
