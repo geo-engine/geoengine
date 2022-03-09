@@ -14,7 +14,7 @@ nature40 = ["xml"]
 xml = ["quick-xml"]
 postgres = ["postgres-types", "bb8-postgres"]
 odm = ["pro"]
-nfdi = ["postgres", "geoengine-datatypes/postgres", "scienceobjectsdb_rust_api"]
+nfdi = ["postgres", "geoengine-datatypes/postgres", "scienceobjectsdb_rust_api", "pro"]
 ebv = []
 # This compiles Geo Engine Pro
 pro = ["postgres", "geoengine-operators/pro", "geoengine-datatypes/pro"]
