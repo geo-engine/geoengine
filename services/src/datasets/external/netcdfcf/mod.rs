@@ -22,8 +22,8 @@ use gdal_sys::{
     GDALExtendedDataTypeRelease, GDALGroupGetAttribute, GDALGroupGetGroupNames, GDALGroupHS,
     GDALGroupOpenGroup, GDALGroupOpenMDArray, GDALGroupRelease, GDALMDArrayGetAttribute,
     GDALMDArrayGetDataType, GDALMDArrayGetDimensions, GDALMDArrayGetNoDataValueAsDouble,
-    GDALMDArrayGetSpatialRef, GDALMDArrayH, GDALMDArrayRelease, GDALReleaseDimensions,
-    OSRDestroySpatialReference, VSIFree,
+    GDALMDArrayGetSpatialRef, GDALMDArrayGetUnit, GDALMDArrayH, GDALMDArrayRelease,
+    GDALReleaseDimensions, OSRDestroySpatialReference, VSIFree,
 };
 use geoengine_datatypes::dataset::{DatasetId, DatasetProviderId, ExternalDatasetId};
 use geoengine_datatypes::operations::image::{Colorizer, RgbaColor};
@@ -493,6 +493,20 @@ impl<'g> MdArray<'g> {
 
         Ok(value)
     }
+
+    fn unit(&self) -> Result<String, GdalError> {
+        let value = unsafe {
+            let c_attribute = GDALMDArrayGetUnit(self.c_mdarray);
+
+            if c_attribute.is_null() {
+                return Err(MdGroup::_last_null_pointer_err("GDALMDArrayGetUnit"));
+            }
+
+            MdGroup::_string(c_attribute)
+        };
+
+        Ok(value)
+    }
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -508,6 +522,7 @@ struct DimensionSizes {
 pub(crate) struct NetCdfOverview {
     pub file_name: String,
     pub title: String,
+    pub summary: String,
     pub spatial_reference: SpatialReference,
     pub groups: Vec<NetCdfGroup>,
     pub entities: Vec<NetCdfEntity>,
@@ -524,6 +539,8 @@ pub(crate) struct NetCdfGroup {
     pub description: String,
     // TODO: would actually be nice if it were inside dataset/entity
     pub data_type: Option<RasterDataType>,
+    // TODO: would actually be nice if it were inside dataset/entity
+    pub unit: String,
     pub groups: Vec<NetCdfGroup>,
 }
 
@@ -544,8 +561,8 @@ impl<'a> ToNetCdfSubgroup for MdGroup<'a> {
         let title = self
             .attribute_as_string("standard_name")
             .unwrap_or_default();
-        // TODO: how to get that?
-        let description = "".to_string();
+        let description = self.attribute_as_string("long_name").unwrap_or_default();
+        let unit = self.attribute_as_string("units").unwrap_or_default();
 
         let group_names = self.group_names();
 
@@ -557,6 +574,7 @@ impl<'a> ToNetCdfSubgroup for MdGroup<'a> {
                 title,
                 description,
                 data_type,
+                unit,
                 groups: Vec::new(),
             });
         }
@@ -572,6 +590,7 @@ impl<'a> ToNetCdfSubgroup for MdGroup<'a> {
             title,
             description,
             data_type: None,
+            unit,
             groups,
         })
     }
@@ -608,6 +627,10 @@ impl NetCdfCfDataProvider {
         let title = root_group
             .attribute_as_string("title")
             .context(error::MissingTitle)?;
+
+        let summary = root_group
+            .attribute_as_string("summary")
+            .context(error::MissingSummary)?;
 
         let spatial_reference = root_group
             .attribute_as_string("geospatial_bounds_crs")
@@ -653,6 +676,7 @@ impl NetCdfCfDataProvider {
                 .to_string_lossy()
                 .to_string(),
             title,
+            summary,
             spatial_reference,
             groups,
             entities,
@@ -716,13 +740,13 @@ impl NetCdfCfDataProvider {
                         title = tree.title,
                         entity_name = entity.name
                     ),
-                    description: "".to_owned(), // TODO: where to get from file?
-                    tags: vec![],               // TODO: where to get from file?
+                    description: tree.summary.clone(),
+                    tags: vec![], // TODO: where to get from file?
                     source_operator: "GdalSource".to_owned(),
                     result_descriptor: TypedResultDescriptor::Raster(RasterResultDescriptor {
                         data_type,
                         spatial_reference: tree.spatial_reference.into(),
-                        measurement: Measurement::Unitless, // TODO: where to get from file?
+                        measurement: derive_measurement(tail.unit.clone()),
                         no_data_value: None, // we don't want to open the dataset at this point. We should get rid of the result descriptor in the listing in general
                     }),
                     symbology: Some(Symbology::Raster(RasterSymbology {
@@ -821,7 +845,7 @@ impl NetCdfCfDataProvider {
         let result_descriptor = RasterResultDescriptor {
             data_type: data_array.data_type()?,
             spatial_reference: data_array.spatial_reference()?,
-            measurement: Measurement::Unitless, // TODO: where to get from file?
+            measurement: derive_measurement(data_array.unit().context(error::CannotRetrieveUnit)?),
             no_data_value: data_array.no_data_value(),
         };
 
@@ -847,6 +871,16 @@ impl NetCdfCfDataProvider {
             band_offset: dataset_id.entity as usize * dimensions.time,
         }))
     }
+}
+
+fn derive_measurement(unit: String) -> Measurement {
+    if unit.trim().is_empty() || unit == "no unit" {
+        return Measurement::Unitless;
+    }
+
+    // TODO: other types of measurements
+
+    Measurement::continuous(String::default(), Some(unit))
 }
 
 /// Load a colorizer from a path that is `path` with suffix `.colorizer.json`.
@@ -1205,7 +1239,7 @@ mod tests {
                     .to_string(),
                 }),
                 name: "Test dataset metric: Random metric 1 > entity01".into(),
-                description: "".into(),
+                description: "CFake description of test dataset with metric.".into(),
                 tags: vec![],
                 source_operator: "GdalSource".into(),
                 result_descriptor: result_descriptor.clone(),
@@ -1225,7 +1259,7 @@ mod tests {
                     .to_string(),
                 }),
                 name: "Test dataset metric: Random metric 1 > entity02".into(),
-                description: "".into(),
+                description: "CFake description of test dataset with metric.".into(),
                 tags: vec![],
                 source_operator: "GdalSource".into(),
                 result_descriptor: result_descriptor.clone(),
@@ -1245,7 +1279,7 @@ mod tests {
                     .to_string(),
                 }),
                 name: "Test dataset metric: Random metric 1 > entity03".into(),
-                description: "".into(),
+                description: "CFake description of test dataset with metric.".into(),
                 tags: vec![],
                 source_operator: "GdalSource".into(),
                 result_descriptor: result_descriptor.clone(),
@@ -1265,7 +1299,7 @@ mod tests {
                     .to_string(),
                 }),
                 name: "Test dataset metric: Random metric 2 > entity01".into(),
-                description: "".into(),
+                description: "CFake description of test dataset with metric.".into(),
                 tags: vec![],
                 source_operator: "GdalSource".into(),
                 result_descriptor: result_descriptor.clone(),
@@ -1285,7 +1319,7 @@ mod tests {
                     .to_string(),
                 }),
                 name: "Test dataset metric: Random metric 2 > entity02".into(),
-                description: "".into(),
+                description: "CFake description of test dataset with metric.".into(),
                 tags: vec![],
                 source_operator: "GdalSource".into(),
                 result_descriptor: result_descriptor.clone(),
@@ -1305,7 +1339,7 @@ mod tests {
                     .to_string(),
                 }),
                 name: "Test dataset metric: Random metric 2 > entity03".into(),
-                description: "".into(),
+                description: "CFake description of test dataset with metric.".into(),
                 tags: vec![],
                 source_operator: "GdalSource".into(),
                 result_descriptor,
@@ -1364,7 +1398,7 @@ mod tests {
                 name:
                     "Test dataset metric and scenario: Sustainability > Random metric 1 > entity01"
                         .into(),
-                description: "".into(),
+                description: "Fake description of test dataset with metric and scenario.".into(),
                 tags: vec![],
                 source_operator: "GdalSource".into(),
                 result_descriptor: result_descriptor.clone(),
@@ -1384,7 +1418,7 @@ mod tests {
                     .to_string(),
                 }),
                 name: "Test dataset metric and scenario: Fossil-fueled Development > Random metric 2 > entity02".into(),
-                description: "".into(),
+                description: "Fake description of test dataset with metric and scenario.".into(),
                 tags: vec![],
                 source_operator: "GdalSource".into(),
                 result_descriptor,
