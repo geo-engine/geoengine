@@ -12,7 +12,7 @@ use geoengine_datatypes::dataset::DatasetId;
 use geoengine_datatypes::primitives::{
     Geometry, MultiLineString, MultiPoint, MultiPolygon, NoGeometry, VectorQueryRectangle,
 };
-use geoengine_datatypes::spatial_reference::SpatialReference;
+use geoengine_datatypes::spatial_reference::{SpatialReference, SpatialReferenceOption};
 use geoengine_datatypes::util::arrow::ArrowTyped;
 use serde::{Deserialize, Serialize};
 
@@ -43,11 +43,13 @@ where
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct MockFeatureCollectionSourceParams<G>
 where
     G: Geometry + ArrowTyped,
 {
     pub collections: Vec<FeatureCollection<G>>,
+    pub spatial_reference: SpatialReferenceOption,
 }
 
 pub type MockFeatureCollectionSource<G> = SourceOperator<MockFeatureCollectionSourceParams<G>>;
@@ -69,7 +71,22 @@ where
 
     pub fn multiple(collections: Vec<FeatureCollection<G>>) -> Self {
         Self {
-            params: MockFeatureCollectionSourceParams { collections },
+            params: MockFeatureCollectionSourceParams {
+                collections,
+                spatial_reference: SpatialReference::epsg_4326().into(),
+            },
+        }
+    }
+
+    pub fn with_collections_and_sref(
+        collections: Vec<FeatureCollection<G>>,
+        spatial_reference: SpatialReference,
+    ) -> Self {
+        Self {
+            params: MockFeatureCollectionSourceParams {
+                collections,
+                spatial_reference: spatial_reference.into(),
+            },
         }
     }
 }
@@ -107,7 +124,7 @@ macro_rules! impl_mock_feature_collection_source {
             ) -> Result<Box<dyn InitializedVectorOperator>> {
                 let result_descriptor = VectorResultDescriptor {
                     data_type: <$geometry>::DATA_TYPE,
-                    spatial_reference: SpatialReference::epsg_4326().into(), // TODO: get from `FeatureCollection`
+                    spatial_reference: self.params.spatial_reference,
                     columns: self.params.collections[0].column_types(),
                 };
 
@@ -239,7 +256,8 @@ mod tests {
                         "types": {
                             "foobar": "int"
                         },
-                    }]
+                    }],
+                    "spatialReference": "EPSG:4326",
                 }
             })
             .to_string()

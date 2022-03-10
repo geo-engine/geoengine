@@ -115,6 +115,10 @@ where
                 .service(web::scope("/ebv").configure(handlers::ebv::init_ebv_routes::<C>(None)));
         }
 
+        #[cfg(feature = "nfdi")]
+        {
+            app = app.configure(handlers::gfbio::init_gfbio_routes::<C>);
+        }
         if version_api {
             app = app.route("/version", web::get().to(show_version_handler));
         }

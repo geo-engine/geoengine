@@ -82,3 +82,17 @@ user_registration = true
 [odm]
 endpoint = "http://localhost:3000/"
 # TODO: authentication
+
+# Settings for compile-feature `ebv` only
+[ebv]
+api_base_url = "https://portal.geobon.org/api/v1"
+
+# Settings for compile-feature `nfdi` only
+[gfbio]
+# This is the basket API endpoint
+basket_api_base_url= "https://dev.gfbio.uni-jena.de/daisi-api/api/baskets/"
+# If this is set to true, basket entries that belong to the
+# same dataset AND species are grouped within a single layer.
+# This is the behavious of the old VAT system.
+# If false, every basket entry translates into a layer on the map.
+group_abcd_units = true

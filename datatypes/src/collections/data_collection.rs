@@ -198,6 +198,32 @@ mod tests {
     }
 
     #[test]
+    fn distinguish_null_and_empty_strings() {
+        let pc = DataCollection::from_data(
+            vec![],
+            vec![TimeInterval::default(); 2],
+            [(
+                "foo".to_string(),
+                FeatureData::NullableText(vec![None, Some("".to_owned())]),
+            )]
+            .into_iter()
+            .collect(),
+        )
+        .unwrap();
+        let column = pc.data("foo").unwrap();
+
+        assert_eq!(column.nulls(), vec![true, false]);
+        assert_eq!(
+            column.get_unchecked(0),
+            FeatureDataValue::NullableText(None)
+        );
+        assert_eq!(
+            column.get_unchecked(1),
+            FeatureDataValue::NullableText(Some("".to_string()))
+        );
+    }
+
+    #[test]
     fn iterator() {
         let collection = DataCollection::from_data(
             vec![],

@@ -90,9 +90,10 @@ impl VectorOperator for RasterVectorJoin {
         );
 
         let vector_source = self.sources.vector.initialize(context).await?;
+        let vector_rd = vector_source.result_descriptor();
 
         ensure!(
-            vector_source.result_descriptor().data_type != VectorDataType::Data,
+            vector_rd.data_type != VectorDataType::Data,
             error::InvalidType {
                 expected: format!(
                     "{}, {} or {}",
@@ -114,9 +115,24 @@ impl VectorOperator for RasterVectorJoin {
         .into_iter()
         .collect::<Result<Vec<_>>>()?;
 
+        let spatial_reference = vector_rd.spatial_reference;
+
+        for other_spatial_reference in raster_sources
+            .iter()
+            .map(|source| source.result_descriptor().spatial_reference)
+        {
+            ensure!(
+                spatial_reference == other_spatial_reference,
+                crate::error::InvalidSpatialReference {
+                    expected: spatial_reference,
+                    found: other_spatial_reference,
+                }
+            );
+        }
+
         let params = self.params;
 
-        let result_descriptor = vector_source.result_descriptor().map_columns(|columns| {
+        let result_descriptor = vector_rd.map_columns(|columns| {
             let mut columns = columns.clone();
             for (i, new_column_name) in params.names.iter().enumerate() {
                 let feature_data_type = match params.temporal_aggregation {
@@ -243,6 +259,7 @@ pub fn create_feature_aggregator<P: Pixel>(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::str::FromStr;
 
     use crate::engine::{
         ChunkByteSize, MockExecutionContext, MockQueryContext, QueryProcessor, RasterOperator,
@@ -258,6 +275,7 @@ mod tests {
         BoundingBox2D, DataRef, FeatureDataRef, MultiPoint, SpatialResolution, TimeInterval,
         VectorQueryRectangle,
     };
+    use geoengine_datatypes::spatial_reference::SpatialReference;
     use geoengine_datatypes::util::test::TestDefault;
     use serde_json::json;
 
@@ -286,7 +304,8 @@ mod tests {
                 "vector": {
                     "type": "MockFeatureCollectionSourceMultiPoint",
                     "params": {
-                        "collections": []
+                        "collections": [],
+                        "spatialReference": "EPSG:4326"
                     }
                 },
                 "rasters": [],
@@ -525,5 +544,51 @@ mod tests {
         assert_eq!(data.as_ref(), &[0., 0., 0., 0.]);
 
         assert_eq!(data.nulls(), vec![true, true, true, true]);
+    }
+
+    #[tokio::test]
+    async fn it_checks_sref() {
+        let point_source = MockFeatureCollectionSource::with_collections_and_sref(
+            vec![MultiPointCollection::from_data(
+                MultiPoint::many(vec![
+                    (-13.95, 20.05),
+                    (-14.05, 20.05),
+                    (-13.95, 19.95),
+                    (-14.05, 19.95),
+                ])
+                .unwrap(),
+                vec![TimeInterval::default(); 4],
+                Default::default(),
+            )
+            .unwrap()],
+            SpatialReference::from_str("EPSG:3857").unwrap(),
+        )
+        .boxed();
+
+        let mut exe_ctc = MockExecutionContext::test_default();
+        let ndvi_id = add_ndvi_dataset(&mut exe_ctc);
+
+        let operator = RasterVectorJoin {
+            params: RasterVectorJoinParams {
+                names: vec!["ndvi".to_string()],
+                feature_aggregation: FeatureAggregationMethod::First,
+                temporal_aggregation: TemporalAggregationMethod::Mean,
+            },
+            sources: SingleVectorMultipleRasterSources {
+                vector: point_source,
+                rasters: vec![ndvi_source(ndvi_id.clone())],
+            },
+        }
+        .boxed()
+        .initialize(&exe_ctc)
+        .await;
+
+        assert!(matches!(
+            operator,
+            Err(Error::InvalidSpatialReference {
+                expected: _,
+                found: _,
+            })
+        ));
     }
 }

@@ -12,6 +12,8 @@ use std::str::FromStr;
 pub mod datasets;
 #[cfg(feature = "ebv")]
 pub mod ebv;
+#[cfg(feature = "nfdi")]
+pub mod gfbio;
 pub mod plots;
 pub mod projects;
 pub mod session;

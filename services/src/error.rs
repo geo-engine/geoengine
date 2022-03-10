@@ -313,6 +313,7 @@ pub enum Error {
 
     MissingNFDIMetaData,
 
+    #[snafu(context(false))]
     NetCdfCf4DProvider {
         source: NetCdfCf4DProviderError,
     },
@@ -321,6 +322,12 @@ pub enum Error {
     #[snafu(context(false))]
     EbvHandler {
         source: crate::handlers::ebv::EbvError,
+    },
+
+    #[cfg(feature = "nfdi")]
+    #[snafu(display("Could not parse GFBio basket: {}", message,))]
+    GFBioBasketParse {
+        message: String,
     },
 
     #[snafu(context(false))]
