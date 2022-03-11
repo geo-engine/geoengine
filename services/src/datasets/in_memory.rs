@@ -19,7 +19,7 @@ use geoengine_operators::engine::{
     MetaData, RasterResultDescriptor, StaticMetaData, TypedResultDescriptor, VectorResultDescriptor,
 };
 use geoengine_operators::source::{
-    GdalLoadingInfo, GdalMetaDataRegular, GdalMetadataNetCdfCf, OgrSourceDataset,
+    GdalLoadingInfo, GdalMetaDataList, GdalMetaDataRegular, GdalMetadataNetCdfCf, OgrSourceDataset,
 };
 use geoengine_operators::{mock::MockDatasetDataSourceLoadingInfo, source::GdalMetaDataStatic};
 use std::collections::HashMap;
@@ -115,6 +115,7 @@ impl HashMapStorable for MetaDataDefinition {
             MetaDataDefinition::GdalMetaDataRegular(d) => d.store(id, db),
             MetaDataDefinition::GdalStatic(d) => d.store(id, db),
             MetaDataDefinition::GdalMetadataNetCdfCf(d) => d.store(id, db),
+            MetaDataDefinition::GdalMetaDataList(d) => d.store(id, db),
         }
     }
 }
@@ -156,6 +157,13 @@ impl HashMapStorable for GdalMetaDataStatic {
 }
 
 impl HashMapStorable for GdalMetadataNetCdfCf {
+    fn store(&self, id: InternalDatasetId, db: &mut HashMapDatasetDb) -> TypedResultDescriptor {
+        db.gdal_datasets.insert(id, Box::new(self.clone()));
+        self.result_descriptor.clone().into()
+    }
+}
+
+impl HashMapStorable for GdalMetaDataList {
     fn store(&self, id: InternalDatasetId, db: &mut HashMapDatasetDb) -> TypedResultDescriptor {
         db.gdal_datasets.insert(id, Box::new(self.clone()));
         self.result_descriptor.clone().into()

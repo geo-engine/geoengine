@@ -262,6 +262,13 @@ fn adjust_user_path_to_upload_path(meta: &mut MetaDataDefinition, upload: &Uploa
         crate::datasets::storage::MetaDataDefinition::GdalMetadataNetCdfCf(m) => {
             m.params.file_path = upload.adjust_file_path(&m.params.file_path)?;
         }
+        crate::datasets::storage::MetaDataDefinition::GdalMetaDataList(m) => {
+            for p in &mut m.params {
+                if let Some(ref mut params) = p.params {
+                    params.file_path = upload.adjust_file_path(&params.file_path)?;
+                }
+            }
+        }
     }
     Ok(())
 }

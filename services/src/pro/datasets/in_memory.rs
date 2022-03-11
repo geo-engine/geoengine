@@ -25,7 +25,7 @@ use geoengine_operators::engine::{
     MetaData, RasterResultDescriptor, StaticMetaData, TypedResultDescriptor, VectorResultDescriptor,
 };
 use geoengine_operators::source::{
-    GdalLoadingInfo, GdalMetaDataRegular, GdalMetadataNetCdfCf, OgrSourceDataset,
+    GdalLoadingInfo, GdalMetaDataRegular, GdalMetadataNetCdfCf, OgrSourceDataset, GdalMetaDataList,
 };
 use geoengine_operators::{mock::MockDatasetDataSourceLoadingInfo, source::GdalMetaDataStatic};
 use log::{info, warn};
@@ -123,6 +123,7 @@ impl ProHashMapStorable for MetaDataDefinition {
             MetaDataDefinition::GdalMetaDataRegular(d) => d.store(id, db),
             MetaDataDefinition::GdalStatic(d) => d.store(id, db),
             MetaDataDefinition::GdalMetadataNetCdfCf(d) => d.store(id, db),
+            MetaDataDefinition::GdalMetaDataList(d) => d.store(id, db),
         }
     }
 }
@@ -164,6 +165,13 @@ impl ProHashMapStorable for GdalMetaDataStatic {
 }
 
 impl ProHashMapStorable for GdalMetadataNetCdfCf {
+    fn store(&self, id: InternalDatasetId, db: &mut ProHashMapDatasetDb) -> TypedResultDescriptor {
+        db.gdal_datasets.insert(id, Box::new(self.clone()));
+        self.result_descriptor.clone().into()
+    }
+}
+
+impl ProHashMapStorable for GdalMetaDataList {
     fn store(&self, id: InternalDatasetId, db: &mut ProHashMapDatasetDb) -> TypedResultDescriptor {
         db.gdal_datasets.insert(id, Box::new(self.clone()));
         self.result_descriptor.clone().into()

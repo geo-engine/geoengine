@@ -183,6 +183,43 @@ impl MetaData<GdalLoadingInfo, RasterResultDescriptor, RasterQueryRectangle>
     }
 }
 
+// TODO: custom deserializer that checks that that params are sorted and do not overlap
+#[derive(PartialEq, Serialize, Deserialize, Debug, Clone)]
+#[serde(rename_all = "camelCase")]
+pub struct GdalMetaDataList {
+    pub result_descriptor: RasterResultDescriptor,
+    pub params: Vec<GdalLoadingInfoTemporalSlice>,
+}
+
+#[async_trait]
+impl MetaData<GdalLoadingInfo, RasterResultDescriptor, RasterQueryRectangle> for GdalMetaDataList {
+    async fn loading_info(&self, query: RasterQueryRectangle) -> Result<GdalLoadingInfo> {
+        #[allow(clippy::needless_collect)]
+        let parts = self
+            .params
+            .iter()
+            .filter(|item| item.time.intersects(&query.time_interval))
+            .cloned()
+            .collect::<Vec<_>>();
+
+        Ok(GdalLoadingInfo {
+            info: GdalLoadingInfoTemporalSliceIterator::Static {
+                parts: parts.into_iter(),
+            },
+        })
+    }
+
+    async fn result_descriptor(&self) -> Result<RasterResultDescriptor> {
+        Ok(self.result_descriptor.clone())
+    }
+
+    fn box_clone(
+        &self,
+    ) -> Box<dyn MetaData<GdalLoadingInfo, RasterResultDescriptor, RasterQueryRectangle>> {
+        Box::new(self.clone())
+    }
+}
+
 #[derive(Debug, Clone)]
 pub struct DynamicGdalLoadingInfoPartIterator {
     time_step_iter: TimeStepIter,
@@ -349,7 +386,8 @@ impl Iterator for GdalLoadingInfoTemporalSliceIterator {
 }
 
 /// one temporal slice of the dataset that requires reading from exactly one Gdal dataset
-#[derive(Debug, Clone, PartialEq)]
+#[derive(PartialEq, Serialize, Deserialize, Debug, Clone)]
+#[serde(rename_all = "camelCase")]
 pub struct GdalLoadingInfoTemporalSlice {
     pub time: TimeInterval,
     pub params: Option<GdalDatasetParameters>,
