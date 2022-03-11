@@ -497,24 +497,28 @@ mod tests {
                 "tree": {
                     "fileName": "dataset_sm.nc",
                     "title": "Test dataset metric and scenario",
+                    "summary": "Fake description of test dataset with metric and scenario.",
                     "spatialReference": "EPSG:3035",
                     "groups": [{
                             "name": "scenario_1",
                             "title": "Sustainability",
-                            "description": "",
+                            "description": "SSP1-RCP2.6",
                             "dataType": null,
+                            "unit": "",
                             "groups": [{
                                     "name": "metric_1",
                                     "title": "Random metric 1",
-                                    "description": "",
+                                    "description": "Randomly created data",
                                     "dataType": "I16",
+                                    "unit": "",
                                     "groups": []
                                 },
                                 {
                                     "name": "metric_2",
                                     "title": "Random metric 2",
-                                    "description": "",
+                                    "description": "Randomly created data",
                                     "dataType": "I16",
+                                    "unit": "",
                                     "groups": []
                                 }
                             ]
@@ -522,20 +526,23 @@ mod tests {
                         {
                             "name": "scenario_2",
                             "title": "Middle of the Road ",
-                            "description": "",
+                            "description": "SSP2-RCP4.5",
                             "dataType": null,
+                            "unit": "",
                             "groups": [{
                                     "name": "metric_1",
                                     "title": "Random metric 1",
-                                    "description": "",
+                                    "description": "Randomly created data",
                                     "dataType": "I16",
+                                    "unit": "",
                                     "groups": []
                                 },
                                 {
                                     "name": "metric_2",
                                     "title": "Random metric 2",
-                                    "description": "",
+                                    "description": "Randomly created data",
                                     "dataType": "I16",
+                                    "unit": "",
                                     "groups": []
                                 }
                             ]
@@ -543,20 +550,23 @@ mod tests {
                         {
                             "name": "scenario_3",
                             "title": "Regional Rivalry",
-                            "description": "",
+                            "description": "SSP3-RCP6.0",
                             "dataType": null,
+                            "unit": "",
                             "groups": [{
                                     "name": "metric_1",
                                     "title": "Random metric 1",
-                                    "description": "",
+                                    "description": "Randomly created data",
                                     "dataType": "I16",
+                                    "unit": "",
                                     "groups": []
                                 },
                                 {
                                     "name": "metric_2",
                                     "title": "Random metric 2",
-                                    "description": "",
+                                    "description": "Randomly created data",
                                     "dataType": "I16",
+                                    "unit": "",
                                     "groups": []
                                 }
                             ]
@@ -564,20 +574,23 @@ mod tests {
                         {
                             "name": "scenario_4",
                             "title": "Inequality",
-                            "description": "",
+                            "description": "SSP4-RCP6.0",
                             "dataType": null,
+                            "unit": "",
                             "groups": [{
                                     "name": "metric_1",
                                     "title": "Random metric 1",
-                                    "description": "",
+                                    "description": "Randomly created data",
                                     "dataType": "I16",
+                                    "unit": "",
                                     "groups": []
                                 },
                                 {
                                     "name": "metric_2",
                                     "title": "Random metric 2",
-                                    "description": "",
+                                    "description": "Randomly created data",
                                     "dataType": "I16",
+                                    "unit": "",
                                     "groups": []
                                 }
                             ]
@@ -585,20 +598,23 @@ mod tests {
                         {
                             "name": "scenario_5",
                             "title": "Fossil-fueled Development",
-                            "description": "",
+                            "description": "SSP5-RCP8.5",
                             "dataType": null,
+                            "unit": "",
                             "groups": [{
                                     "name": "metric_1",
                                     "title": "Random metric 1",
-                                    "description": "",
+                                    "description": "Randomly created data",
                                     "dataType": "I16",
+                                    "unit": "",
                                     "groups": []
                                 },
                                 {
                                     "name": "metric_2",
                                     "title": "Random metric 2",
-                                    "description": "",
+                                    "description": "Randomly created data",
                                     "dataType": "I16",
+                                    "unit": "",
                                     "groups": []
                                 }
                             ]

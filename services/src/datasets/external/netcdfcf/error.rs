@@ -22,6 +22,9 @@ pub enum NetCdfCf4DProviderError {
     MissingTitle {
         source: GdalError,
     },
+    MissingSummary {
+        source: GdalError,
+    },
     MissingCrs {
         source: GdalError,
     },
@@ -123,5 +126,8 @@ pub enum NetCdfCf4DProviderError {
     },
     DatasetIsNotInProviderPath {
         source: std::path::StripPrefixError,
+    },
+    CannotRetrieveUnit {
+        source: GdalError,
     },
 }
