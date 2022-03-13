@@ -569,7 +569,7 @@ impl<'f> Iterator for BoolDataRefFloatOptionIter<'f> {
         Some(if self.data_ref.is_null(i) {
             None
         } else {
-            Some(f64::from(self.data_ref.as_ref()[i] as u8))
+            Some(f64::from(u8::from(self.data_ref.as_ref()[i])))
         })
     }
 }
@@ -811,7 +811,11 @@ impl<'r> DataRef<'r, u8> for TextDataRef<'r> {
             let end = offsets[pos + 1];
 
             if start == end {
-                return serde_json::Value::Null;
+                return if self.is_valid(pos) {
+                    serde_json::Value::String(String::default())
+                } else {
+                    serde_json::Value::Null
+                };
             }
 
             let text = unsafe {
@@ -853,12 +857,7 @@ impl<'r> DataRef<'r, u8> for TextDataRef<'r> {
     /// ```
     ///
     fn nulls(&self) -> Vec<bool> {
-        let mut nulls = Vec::with_capacity(self.offsets.len() - 1);
-        for window in self.offsets.windows(2) {
-            let (start, end) = (window[0], window[1]);
-            nulls.push(start == end);
-        }
-        nulls
+        null_bitmap_to_bools(self.valid_bitmap, self.offsets.len() - 1)
     }
 
     fn is_valid(&self, i: usize) -> bool {
@@ -996,7 +995,7 @@ impl<'r> TextDataRef<'r> {
         let end = self.offsets[pos + 1];
 
         if start == end {
-            return Ok(None);
+            return Ok(if self.is_valid(pos) { Some("") } else { None });
         }
 
         let text = unsafe {

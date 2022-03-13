@@ -1,0 +1,5 @@
+{
+  "type": "PangaeaDataProviderDefinition",
+  "name": "Pangaea",
+  "baseUrl": "https://doi.pangaea.de"
+}

@@ -36,6 +36,18 @@ pub async fn start_server(static_files_dir: Option<PathBuf>) -> Result<()> {
             .unwrap_or(Url::parse(&format!("http://{}/", web_config.bind_address))?)
     );
 
+    let session_config: crate::util::config::Session = get_config_element()?;
+
+    if session_config.anonymous_access {
+        info!("Anonymous access is enabled");
+    } else {
+        info!("Anonymous access is disabled");
+    }
+
+    if let Some(session_token) = session_config.fixed_session_token {
+        info!("Fixed session token is set, it is {session_token}");
+    }
+
     info!("Using in memory backend");
 
     let data_path_config: config::DataProvider = get_config_element()?;
@@ -103,6 +115,10 @@ where
                 .service(web::scope("/ebv").configure(handlers::ebv::init_ebv_routes::<C>(None)));
         }
 
+        #[cfg(feature = "nfdi")]
+        {
+            app = app.configure(handlers::gfbio::init_gfbio_routes::<C>);
+        }
         if version_api {
             app = app.route("/version", web::get().to(show_version_handler));
         }

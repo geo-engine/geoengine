@@ -645,7 +645,8 @@ mod tests {
                 "source": {
                     "type": "MockFeatureCollectionSourceMultiPoint",
                     "params": {
-                        "collections": []
+                        "collections": [],
+                        "spatialReference": "EPSG:4326"
                     }
                 }
             }
@@ -680,7 +681,8 @@ mod tests {
                 "source": {
                     "type": "MockFeatureCollectionSourceMultiPoint",
                     "params": {
-                        "collections": []
+                        "collections": [],
+                        "spatialReference": "EPSG:4326"
                     }
                 }
             }

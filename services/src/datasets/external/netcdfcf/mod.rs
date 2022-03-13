@@ -6,6 +6,7 @@ use std::str::FromStr;
 
 use crate::datasets::listing::DatasetListOptions;
 use crate::datasets::listing::{ExternalDatasetProvider, ProvenanceOutput};
+use crate::projects::{RasterSymbology, Symbology};
 use crate::{
     datasets::{listing::DatasetListing, storage::ExternalDatasetProviderDefinition},
     util::user_input::Validated,
@@ -21,10 +22,11 @@ use gdal_sys::{
     GDALExtendedDataTypeRelease, GDALGroupGetAttribute, GDALGroupGetGroupNames, GDALGroupHS,
     GDALGroupOpenGroup, GDALGroupOpenMDArray, GDALGroupRelease, GDALMDArrayGetAttribute,
     GDALMDArrayGetDataType, GDALMDArrayGetDimensions, GDALMDArrayGetNoDataValueAsDouble,
-    GDALMDArrayGetSpatialRef, GDALMDArrayH, GDALMDArrayRelease, GDALReleaseDimensions,
-    OSRDestroySpatialReference, VSIFree,
+    GDALMDArrayGetSpatialRef, GDALMDArrayGetUnit, GDALMDArrayH, GDALMDArrayRelease,
+    GDALReleaseDimensions, OSRDestroySpatialReference, VSIFree,
 };
 use geoengine_datatypes::dataset::{DatasetId, DatasetProviderId, ExternalDatasetId};
+use geoengine_datatypes::operations::image::{Colorizer, RgbaColor};
 use geoengine_datatypes::primitives::{
     Measurement, RasterQueryRectangle, TimeGranularity, TimeInstance, TimeInterval, TimeStep,
     VectorQueryRectangle,
@@ -81,8 +83,9 @@ impl ExternalDatasetProviderDefinition for NetCdfCfDataProviderDefinition {
     }
 }
 
+#[derive(Debug)]
 pub struct NetCdfCfDataProvider {
-    path: PathBuf,
+    pub path: PathBuf,
 }
 
 /// TODO: This should be part of the GDAL crate
@@ -490,6 +493,20 @@ impl<'g> MdArray<'g> {
 
         Ok(value)
     }
+
+    fn unit(&self) -> Result<String, GdalError> {
+        let value = unsafe {
+            let c_attribute = GDALMDArrayGetUnit(self.c_mdarray);
+
+            if c_attribute.is_null() {
+                return Err(MdGroup::_last_null_pointer_err("GDALMDArrayGetUnit"));
+            }
+
+            MdGroup::_string(c_attribute)
+        };
+
+        Ok(value)
+    }
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -505,11 +522,13 @@ struct DimensionSizes {
 pub(crate) struct NetCdfOverview {
     pub file_name: String,
     pub title: String,
+    pub summary: String,
     pub spatial_reference: SpatialReference,
     pub groups: Vec<NetCdfGroup>,
     pub entities: Vec<NetCdfEntity>,
     pub time: TimeInterval,
     pub time_step: TimeStep,
+    pub colorizer: Colorizer,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -520,6 +539,8 @@ pub(crate) struct NetCdfGroup {
     pub description: String,
     // TODO: would actually be nice if it were inside dataset/entity
     pub data_type: Option<RasterDataType>,
+    // TODO: would actually be nice if it were inside dataset/entity
+    pub unit: String,
     pub groups: Vec<NetCdfGroup>,
 }
 
@@ -540,8 +561,8 @@ impl<'a> ToNetCdfSubgroup for MdGroup<'a> {
         let title = self
             .attribute_as_string("standard_name")
             .unwrap_or_default();
-        // TODO: how to get that?
-        let description = "".to_string();
+        let description = self.attribute_as_string("long_name").unwrap_or_default();
+        let unit = self.attribute_as_string("units").unwrap_or_default();
 
         let group_names = self.group_names();
 
@@ -553,6 +574,7 @@ impl<'a> ToNetCdfSubgroup for MdGroup<'a> {
                 title,
                 description,
                 data_type,
+                unit,
                 groups: Vec::new(),
             });
         }
@@ -568,6 +590,7 @@ impl<'a> ToNetCdfSubgroup for MdGroup<'a> {
             title,
             description,
             data_type: None,
+            unit,
             groups,
         })
     }
@@ -605,6 +628,10 @@ impl NetCdfCfDataProvider {
             .attribute_as_string("title")
             .context(error::MissingTitle)?;
 
+        let summary = root_group
+            .attribute_as_string("summary")
+            .context(error::MissingSummary)?;
+
         let spatial_reference = root_group
             .attribute_as_string("geospatial_bounds_crs")
             .context(error::MissingCrs)?;
@@ -637,6 +664,11 @@ impl NetCdfCfDataProvider {
 
         let (time_start, time_end, time_step) = parse_time_coverage(&start, &end, &step)?;
 
+        let colorizer = load_colorizer(&path).or_else(|error| {
+            debug!("Use fallback colorizer: {:?}", error);
+            fallback_colorizer()
+        })?;
+
         Ok(NetCdfOverview {
             file_name: path
                 .strip_prefix(provider_path)
@@ -644,12 +676,14 @@ impl NetCdfCfDataProvider {
                 .to_string_lossy()
                 .to_string(),
             title,
+            summary,
             spatial_reference,
             groups,
             entities,
             time: TimeInterval::new(time_start, time_end)
                 .context(error::InvalidTimeRangeForDataset)?,
             time_step,
+            colorizer,
         })
     }
 
@@ -706,16 +740,19 @@ impl NetCdfCfDataProvider {
                         title = tree.title,
                         entity_name = entity.name
                     ),
-                    description: "".to_owned(), // TODO: where to get from file?
-                    tags: vec![],               // TODO: where to get from file?
+                    description: tree.summary.clone(),
+                    tags: vec![], // TODO: where to get from file?
                     source_operator: "GdalSource".to_owned(),
                     result_descriptor: TypedResultDescriptor::Raster(RasterResultDescriptor {
                         data_type,
                         spatial_reference: tree.spatial_reference.into(),
-                        measurement: Measurement::Unitless, // TODO: where to get from file?
+                        measurement: derive_measurement(tail.unit.clone()),
                         no_data_value: None, // we don't want to open the dataset at this point. We should get rid of the result descriptor in the listing in general
                     }),
-                    symbology: None,
+                    symbology: Some(Symbology::Raster(RasterSymbology {
+                        opacity: 1.0,
+                        colorizer: tree.colorizer.clone(),
+                    })),
                 });
             }
         }
@@ -808,7 +845,7 @@ impl NetCdfCfDataProvider {
         let result_descriptor = RasterResultDescriptor {
             data_type: data_array.data_type()?,
             spatial_reference: data_array.spatial_reference()?,
-            measurement: Measurement::Unitless, // TODO: where to get from file?
+            measurement: derive_measurement(data_array.unit().context(error::CannotRetrieveUnit)?),
             no_data_value: data_array.no_data_value(),
         };
 
@@ -834,6 +871,48 @@ impl NetCdfCfDataProvider {
             band_offset: dataset_id.entity as usize * dimensions.time,
         }))
     }
+}
+
+fn derive_measurement(unit: String) -> Measurement {
+    if unit.trim().is_empty() || unit == "no unit" {
+        return Measurement::Unitless;
+    }
+
+    // TODO: other types of measurements
+
+    Measurement::continuous(String::default(), Some(unit))
+}
+
+/// Load a colorizer from a path that is `path` with suffix `.colorizer.json`.
+fn load_colorizer(path: &Path) -> Result<Colorizer> {
+    use std::io::Read;
+
+    let colorizer_path = path.with_extension("colorizer.json");
+
+    let mut file = std::fs::File::open(colorizer_path).context(error::CannotOpenColorizerFile)?;
+
+    let mut contents = String::new();
+    file.read_to_string(&mut contents)
+        .context(error::CannotReadColorizerFile)?;
+
+    let colorizer: Colorizer =
+        serde_json::from_str(&contents).context(error::CannotParseColorizer)?;
+
+    Ok(colorizer)
+}
+
+/// A simple colorizer between 0 and 255
+/// TODO: generate better default by using `NetCDF` metadata
+fn fallback_colorizer() -> Result<Colorizer> {
+    Colorizer::linear_gradient(
+        vec![
+            (0.0.try_into().expect("not nan"), RgbaColor::black()).into(),
+            (255.0.try_into().expect("not nan"), RgbaColor::white()).into(),
+        ],
+        RgbaColor::transparent(),
+        RgbaColor::transparent(),
+    )
+    .context(error::CannotCreateFallbackColorizer)
 }
 
 fn parse_geo_transform(input: &str) -> Result<GdalDatasetGeoTransform> {
@@ -967,6 +1046,10 @@ impl ExternalDatasetProvider for NetCdfCfDataProvider {
             dataset: dataset.clone(),
             provenance: None,
         })
+    }
+
+    fn as_any(&self) -> &dyn std::any::Any {
+        self
     }
 }
 
@@ -1127,6 +1210,22 @@ mod tests {
         }
         .into();
 
+        let symbology = Some(Symbology::Raster(RasterSymbology {
+            opacity: 1.0,
+            colorizer: Colorizer::LinearGradient {
+                breakpoints: vec![
+                    (0.0.try_into().unwrap(), RgbaColor::new(0, 0, 0, 255)).into(),
+                    (
+                        255.0.try_into().unwrap(),
+                        RgbaColor::new(255, 255, 255, 255),
+                    )
+                        .into(),
+                ],
+                no_data_color: RgbaColor::new(0, 0, 0, 0),
+                default_color: RgbaColor::new(0, 0, 0, 0),
+            },
+        }));
+
         assert_eq!(
             listing[0],
             DatasetListing {
@@ -1140,11 +1239,11 @@ mod tests {
                     .to_string(),
                 }),
                 name: "Test dataset metric: Random metric 1 > entity01".into(),
-                description: "".into(),
+                description: "CFake description of test dataset with metric.".into(),
                 tags: vec![],
                 source_operator: "GdalSource".into(),
                 result_descriptor: result_descriptor.clone(),
-                symbology: None
+                symbology: symbology.clone(),
             }
         );
         assert_eq!(
@@ -1160,11 +1259,11 @@ mod tests {
                     .to_string(),
                 }),
                 name: "Test dataset metric: Random metric 1 > entity02".into(),
-                description: "".into(),
+                description: "CFake description of test dataset with metric.".into(),
                 tags: vec![],
                 source_operator: "GdalSource".into(),
                 result_descriptor: result_descriptor.clone(),
-                symbology: None
+                symbology: symbology.clone(),
             }
         );
         assert_eq!(
@@ -1180,11 +1279,11 @@ mod tests {
                     .to_string(),
                 }),
                 name: "Test dataset metric: Random metric 1 > entity03".into(),
-                description: "".into(),
+                description: "CFake description of test dataset with metric.".into(),
                 tags: vec![],
                 source_operator: "GdalSource".into(),
                 result_descriptor: result_descriptor.clone(),
-                symbology: None
+                symbology: symbology.clone(),
             }
         );
         assert_eq!(
@@ -1200,11 +1299,11 @@ mod tests {
                     .to_string(),
                 }),
                 name: "Test dataset metric: Random metric 2 > entity01".into(),
-                description: "".into(),
+                description: "CFake description of test dataset with metric.".into(),
                 tags: vec![],
                 source_operator: "GdalSource".into(),
                 result_descriptor: result_descriptor.clone(),
-                symbology: None
+                symbology: symbology.clone(),
             }
         );
         assert_eq!(
@@ -1220,11 +1319,11 @@ mod tests {
                     .to_string(),
                 }),
                 name: "Test dataset metric: Random metric 2 > entity02".into(),
-                description: "".into(),
+                description: "CFake description of test dataset with metric.".into(),
                 tags: vec![],
                 source_operator: "GdalSource".into(),
                 result_descriptor: result_descriptor.clone(),
-                symbology: None
+                symbology: symbology.clone(),
             }
         );
         assert_eq!(
@@ -1240,11 +1339,11 @@ mod tests {
                     .to_string(),
                 }),
                 name: "Test dataset metric: Random metric 2 > entity03".into(),
-                description: "".into(),
+                description: "CFake description of test dataset with metric.".into(),
                 tags: vec![],
                 source_operator: "GdalSource".into(),
                 result_descriptor,
-                symbology: None
+                symbology,
             }
         );
     }
@@ -1271,6 +1370,19 @@ mod tests {
         }
         .into();
 
+        let symbology = Some(Symbology::Raster(RasterSymbology {
+            opacity: 1.0,
+            colorizer: Colorizer::LinearGradient {
+                breakpoints: vec![
+                    (0.0.try_into().unwrap(), RgbaColor::new(68, 1, 84, 255)).into(),
+                    (50.0.try_into().unwrap(), RgbaColor::new(33, 145, 140, 255)).into(),
+                    (100.0.try_into().unwrap(), RgbaColor::new(253, 231, 37, 255)).into(),
+                ],
+                no_data_color: RgbaColor::new(0, 0, 0, 0),
+                default_color: RgbaColor::new(0, 0, 0, 0),
+            },
+        }));
+
         assert_eq!(
             listing[0],
             DatasetListing {
@@ -1286,11 +1398,11 @@ mod tests {
                 name:
                     "Test dataset metric and scenario: Sustainability > Random metric 1 > entity01"
                         .into(),
-                description: "".into(),
+                description: "Fake description of test dataset with metric and scenario.".into(),
                 tags: vec![],
                 source_operator: "GdalSource".into(),
                 result_descriptor: result_descriptor.clone(),
-                symbology: None
+                symbology: symbology.clone(),
             }
         );
         assert_eq!(
@@ -1306,17 +1418,15 @@ mod tests {
                     .to_string(),
                 }),
                 name: "Test dataset metric and scenario: Fossil-fueled Development > Random metric 2 > entity02".into(),
-                description: "".into(),
+                description: "Fake description of test dataset with metric and scenario.".into(),
                 tags: vec![],
                 source_operator: "GdalSource".into(),
                 result_descriptor,
-                symbology: None
+                symbology,
             }
         );
     }
 
-    // TODO: verify
-    // TODO: do the samme for `dataset_m.nc`
     #[tokio::test]
     async fn test_metadata_from_netcdf_sm() {
         let provider = NetCdfCfDataProvider {

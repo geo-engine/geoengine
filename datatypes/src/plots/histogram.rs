@@ -173,7 +173,7 @@ impl Histogram {
                 .fail();
             }
             FeatureDataRef::Bool(value_ref) if !value_ref.has_nulls() => {
-                for value in value_ref.as_ref().iter().map(|&v| f64::from(v as u8)) {
+                for value in value_ref.as_ref().iter().map(|&v| f64::from(u8::from(v))) {
                     self.handle_data_item(value, false);
                 }
             }
@@ -181,7 +181,7 @@ impl Histogram {
                 for (value, is_null) in value_ref
                     .as_ref()
                     .iter()
-                    .map(|&v| f64::from(v as u8))
+                    .map(|&v| f64::from(u8::from(v)))
                     .zip(value_ref.nulls())
                 {
                     self.handle_data_item(value, is_null);

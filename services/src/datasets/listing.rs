@@ -118,6 +118,7 @@ pub trait DatasetProvider<S: Session>:
 #[async_trait]
 pub trait ExternalDatasetProvider: Send
     + Sync
+    + std::fmt::Debug
     + MetaDataProvider<MockDatasetDataSourceLoadingInfo, VectorResultDescriptor, VectorQueryRectangle>
     + MetaDataProvider<OgrSourceDataset, VectorResultDescriptor, VectorQueryRectangle>
     + MetaDataProvider<GdalLoadingInfo, RasterResultDescriptor, RasterQueryRectangle>
@@ -126,6 +127,9 @@ pub trait ExternalDatasetProvider: Send
     async fn list(&self, options: Validated<DatasetListOptions>) -> Result<Vec<DatasetListing>>;
 
     async fn provenance(&self, dataset: &DatasetId) -> Result<ProvenanceOutput>;
+
+    /// Propagates `Any`-casting to the underlying provider
+    fn as_any(&self) -> &dyn std::any::Any;
 }
 
 #[derive(Debug, Serialize, Deserialize, PartialEq, Eq, Hash)]

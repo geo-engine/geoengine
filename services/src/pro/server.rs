@@ -14,7 +14,7 @@ use actix_files::Files;
 use actix_web::{http, middleware, web, App, HttpServer};
 #[cfg(feature = "postgres")]
 use bb8_postgres::tokio_postgres::NoTls;
-use log::info;
+use log::{info, warn};
 use std::net::SocketAddr;
 use std::path::PathBuf;
 use url::Url;
@@ -56,6 +56,10 @@ where
         {
             app = app.configure(pro::handlers::drone_mapping::init_drone_mapping_routes::<C>);
         }
+        #[cfg(feature = "nfdi")]
+        {
+            app = app.configure(handlers::gfbio::init_gfbio_routes::<C>);
+        }
         if version_api {
             app = app.route(
                 "/version",
@@ -95,12 +99,17 @@ pub async fn start_pro_server(static_files_dir: Option<PathBuf>) -> Result<()> {
             .unwrap_or(Url::parse(&format!("http://{}/", web_config.bind_address))?)
     );
 
+    let session_config: crate::util::config::Session = get_config_element()?;
     let user_config: crate::pro::util::config::User = get_config_element()?;
 
-    if user_config.anonymous_access {
+    if session_config.anonymous_access {
         info!("Anonymous access is enabled");
     } else {
         info!("Anonymous access is disabled");
+    }
+
+    if session_config.fixed_session_token.is_some() {
+        warn!("Fixed session token is set, but it will be ignored in Geo Engine Pro");
     }
 
     if user_config.user_registration {

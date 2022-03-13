@@ -22,6 +22,9 @@ pub enum NetCdfCf4DProviderError {
     MissingTitle {
         source: GdalError,
     },
+    MissingSummary {
+        source: GdalError,
+    },
     MissingCrs {
         source: GdalError,
     },
@@ -109,7 +112,22 @@ pub enum NetCdfCf4DProviderError {
     },
     PathToDataIsEmpty,
     MissingDataType,
+    CannotOpenColorizerFile {
+        source: std::io::Error,
+    },
+    CannotReadColorizerFile {
+        source: std::io::Error,
+    },
+    CannotParseColorizer {
+        source: serde_json::Error,
+    },
+    CannotCreateFallbackColorizer {
+        source: geoengine_datatypes::error::Error,
+    },
     DatasetIsNotInProviderPath {
         source: std::path::StripPrefixError,
+    },
+    CannotRetrieveUnit {
+        source: GdalError,
     },
 }
