@@ -25,7 +25,7 @@ use geoengine_operators::engine::{
     MetaData, RasterResultDescriptor, StaticMetaData, TypedResultDescriptor, VectorResultDescriptor,
 };
 use geoengine_operators::source::{
-    GdalLoadingInfo, GdalMetaDataRegular, GdalMetadataNetCdfCf, OgrSourceDataset, GdalMetaDataList,
+    GdalLoadingInfo, GdalMetaDataList, GdalMetaDataRegular, GdalMetadataNetCdfCf, OgrSourceDataset,
 };
 use geoengine_operators::{mock::MockDatasetDataSourceLoadingInfo, source::GdalMetaDataStatic};
 use log::{info, warn};
