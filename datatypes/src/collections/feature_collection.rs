@@ -43,56 +43,6 @@ use std::iter::FromIterator;
 
 use super::{geo_feature_collection::ReplaceRawArrayCoords, GeometryCollection};
 
-// -------------------------------------------------------------------------------------------------------
-// TODO: Remove when https://github.com/apache/arrow-rs/pull/977 is published
-// -------------------------------------------------------------------------------------------------------
-macro_rules! compare_op_scalar {
-    ($left:expr, $right:expr, $op:expr) => {{
-        let null_bit_buffer = $left
-            .data()
-            .null_buffer()
-            .map(|b| b.bit_slice($left.offset(), $left.len()));
-
-        // Safety:
-        // `i < $left.len()`
-        let comparison = (0..$left.len()).map(|i| unsafe { $op($left.value_unchecked(i), $right) });
-        // same as $left.len()
-        let buffer =
-            unsafe { arrow::buffer::MutableBuffer::from_trusted_len_iter_bool(comparison) };
-
-        let data = unsafe {
-            ArrayData::new_unchecked(
-                DataType::Boolean,
-                $left.len(),
-                None,
-                null_bit_buffer,
-                0,
-                vec![Buffer::from(buffer)],
-                vec![],
-            )
-        };
-        Ok(BooleanArray::from(data))
-    }};
-}
-/// Perform `left < right` operation on [`BooleanArray`] and a scalar
-fn lt_bool_scalar(left: &BooleanArray, right: bool) -> Result<BooleanArray, ArrowError> {
-    compare_op_scalar!(left, right, |a: bool, b: bool| !a & b)
-}
-/// Perform `left <= right` operation on [`BooleanArray`] and a scalar
-fn lt_eq_bool_scalar(left: &BooleanArray, right: bool) -> Result<BooleanArray, ArrowError> {
-    compare_op_scalar!(left, right, |a, b| a <= b)
-}
-/// Perform `left > right` operation on [`BooleanArray`] and a scalar
-#[allow(clippy::needless_bitwise_bool)]
-fn gt_bool_scalar(left: &BooleanArray, right: bool) -> Result<BooleanArray, ArrowError> {
-    compare_op_scalar!(left, right, |a: bool, b: bool| a & !b)
-}
-/// Perform `left >= right` operation on [`BooleanArray`] and a scalar
-fn gt_eq_bool_scalar(left: &BooleanArray, right: bool) -> Result<BooleanArray, ArrowError> {
-    compare_op_scalar!(left, right, |a, b| a >= b)
-}
-// -------------------------------------------------------------------------------------------------------
-
 #[allow(clippy::unsafe_derive_deserialize)]
 #[derive(Debug, Deserialize, Serialize)]
 pub struct FeatureCollection<CollectionType> {
@@ -521,10 +471,10 @@ where
                     as_boolean_array(column),
                     &mut filter_array,
                     ranges,
-                    gt_eq_bool_scalar,
-                    gt_bool_scalar,
-                    lt_eq_bool_scalar,
-                    lt_bool_scalar,
+                    arrow::compute::gt_eq_bool_scalar,
+                    arrow::compute::gt_bool_scalar,
+                    arrow::compute::lt_eq_bool_scalar,
+                    arrow::compute::lt_bool_scalar,
                 )?;
             }
             FeatureDataType::DateTime => {
