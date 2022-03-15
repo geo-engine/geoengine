@@ -1,6 +1,6 @@
 [package]
 name = "geoengine-datatypes"
-version = "0.1.0"
+version = "0.7.0"
 authors = [
     "Christian Beilschmidt <beilschmidt@mathematik.uni-marburg.de>",
     "Johannes Drönner <droenner@mathematik.uni-marburg.de>",
