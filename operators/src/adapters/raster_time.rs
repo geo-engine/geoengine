@@ -1,5 +1,7 @@
+use crate::engine::{QueryContext, RasterQueryProcessor};
 use crate::util::Result;
-use futures::stream::{FusedStream, Zip};
+use async_trait::async_trait;
+use futures::stream::{BoxStream, FusedStream, Zip};
 use futures::Stream;
 use futures::{ready, StreamExt};
 use geoengine_datatypes::primitives::{
@@ -16,14 +18,14 @@ use std::task::{Context, Poll};
 /// Assumes that raster tiles are contiguous temporally, with no-data-tiles filling gaps.
 /// Potentially queries the same tiles multiple times from its sources.
 #[pin_project(project = RasterTimeAdapterProjection)]
-pub struct RasterTimeAdapter<T1, T2, St1, St2, F1, F2>
+pub struct RasterTimeAdapter<T1, T2, F1, F2>
 where
     T1: Pixel,
     T2: Pixel,
-    St1: Stream<Item = Result<RasterTile2D<T1>>>,
-    St2: Stream<Item = Result<RasterTile2D<T2>>>,
-    F1: Fn(RasterQueryRectangle) -> St1,
-    F2: Fn(RasterQueryRectangle) -> St2,
+    F1: Queryable<T1>,
+    F2: Queryable<T2>,
+    F1::Output: Stream<Item = Result<RasterTile2D<T1>>>,
+    F2::Output: Stream<Item = Result<RasterTile2D<T2>>>,
 {
     source_a: F1,
     source_b: F2,
@@ -33,22 +35,25 @@ where
     num_spatial_tiles: Option<usize>,
     current_spatial_tile: usize,
     #[pin]
-    stream: Zip<St1, St2>,
+    stream: Zip<F1::Output, F2::Output>,
     ended: bool,
 }
 
-impl<T1, T2, St1, St2, F1, F2> RasterTimeAdapter<T1, T2, St1, St2, F1, F2>
+impl<T1, T2, F1, F2> RasterTimeAdapter<T1, T2, F1, F2>
 where
     T1: Pixel,
     T2: Pixel,
-    St1: Stream<Item = Result<RasterTile2D<T1>>>,
-    St2: Stream<Item = Result<RasterTile2D<T2>>>,
-    F1: Fn(RasterQueryRectangle) -> St1,
-    F2: Fn(RasterQueryRectangle) -> St2,
+    F1: Queryable<T1>,
+    F2: Queryable<T2>,
+    F1::Output: Stream<Item = Result<RasterTile2D<T1>>>,
+    F2::Output: Stream<Item = Result<RasterTile2D<T2>>>,
 {
-    pub fn new(source_a: F1, source_b: F2, query_rect: RasterQueryRectangle) -> Self {
+    pub async fn new(source_a: F1, source_b: F2, query_rect: RasterQueryRectangle) -> Self {
         Self {
-            stream: source_a(query_rect).zip(source_b(query_rect)),
+            stream: source_a
+                .query(query_rect)
+                .await
+                .zip(source_b.query(query_rect).await),
             source_a,
             source_b,
             query_rect,
@@ -87,14 +92,14 @@ where
     }
 }
 
-impl<T1, T2, St1, St2, F1, F2> Stream for RasterTimeAdapter<T1, T2, St1, St2, F1, F2>
+impl<T1, T2, F1, F2> Stream for RasterTimeAdapter<T1, T2, F1, F2>
 where
     T1: Pixel,
     T2: Pixel,
-    St1: Stream<Item = Result<RasterTile2D<T1>>>,
-    St2: Stream<Item = Result<RasterTile2D<T2>>>,
-    F1: Fn(RasterQueryRectangle) -> St1,
-    F2: Fn(RasterQueryRectangle) -> St2,
+    F1: Queryable<T1>,
+    F2: Queryable<T2>,
+    F1::Output: Stream<Item = Result<RasterTile2D<T1>>>,
+    F2::Output: Stream<Item = Result<RasterTile2D<T2>>>,
 {
     type Item = Result<(RasterTile2D<T1>, RasterTile2D<T2>)>;
 
@@ -134,9 +139,9 @@ where
                         query_rect.time_interval.end(),
                     );
                     *time_end = None;
-
-                    stream.set(source_a(next_qrect).zip(source_b(next_qrect)));
-                    *current_spatial_tile = 0;
+                    todo!();
+                    // stream.set(source_a(next_qrect).zip(source_b(next_qrect)));
+                    // *current_spatial_tile = 0;
                 } else {
                     *current_spatial_tile += 1;
                 }
@@ -155,263 +160,330 @@ where
     }
 }
 
-impl<T1, T2, St1, St2, F1, F2> FusedStream for RasterTimeAdapter<T1, T2, St1, St2, F1, F2>
+impl<T1, T2, F1, F2> FusedStream for RasterTimeAdapter<T1, T2, F1, F2>
 where
     T1: Pixel,
     T2: Pixel,
-    St1: Stream<Item = Result<RasterTile2D<T1>>>,
-    St2: Stream<Item = Result<RasterTile2D<T2>>>,
-    F1: Fn(RasterQueryRectangle) -> St1,
-    F2: Fn(RasterQueryRectangle) -> St2,
+    F1: Queryable<T1>,
+    F2: Queryable<T2>,
+    F1::Output: Stream<Item = Result<RasterTile2D<T1>>>,
+    F2::Output: Stream<Item = Result<RasterTile2D<T2>>>,
 {
     fn is_terminated(&self) -> bool {
         self.ended
     }
 }
 
-// TODO: make adapter work with async `query`
-// #[cfg(test)]
-// mod tests {
-//     use super::*;
-//     use crate::engine::{
-//         MockExecutionContext, MockQueryContext, QueryProcessor, QueryRectangle, RasterOperator,
-//         RasterResultDescriptor,
-//     };
-//     use crate::mock::{MockRasterSource, MockRasterSourceParams};
-//     use futures::StreamExt;
-//     use geoengine_datatypes::raster::{Grid, RasterDataType};
-//     use geoengine_datatypes::spatial_reference::SpatialReference;
-//     use geoengine_datatypes::{
-//         primitives::{BoundingBox2D, Measurement, SpatialResolution},
-//         raster::TilingSpecification,
-//     };
-//     use num_traits::AsPrimitive;
-//
-//     #[tokio::test]
-//     #[allow(clippy::too_many_lines)]
-//     async fn adapter() {
-//
-// let no_data_value = Some(0);
-// let mrs1 = MockRasterSource {
-//     params: MockRasterSourceParams {
-//         data: vec![
-//             RasterTile2D {
-//                 time: TimeInterval::new_unchecked(0, 5),
-//                 tile_position: [-1, 0].into(),
-//                 global_geo_transform: TestDefault::test_default(),
-//                 grid_array: Grid::new([3, 2].into(), vec![1, 2, 3, 4, 5, 6], no_data_value)
-//                     .unwrap()
-//                     .into(),
-//             },
-//             RasterTile2D {
-//                 time: TimeInterval::new_unchecked(0, 5),
-//                 tile_position: [-1, 1].into(),
-//                 global_geo_transform: TestDefault::test_default(),
-//                 grid_array: Grid::new(
-//                     [3, 2].into(),
-//                     vec![7, 8, 9, 10, 11, 12],
-//                     no_data_value,
-//                 )
-//                 .unwrap()
-//                 .into(),
-//             },
-//             RasterTile2D {
-//                 time: TimeInterval::new_unchecked(5, 10),
-//                 tile_position: [-1, 0].into(),
-//                 global_geo_transform: TestDefault::test_default(),
-//                 grid_array: Grid::new(
-//                     [3, 2].into(),
-//                     vec![13, 14, 15, 16, 17, 18],
-//                     no_data_value,
-//                 )
-//                 .unwrap()
-//                 .into(),
-//             },
-//             RasterTile2D {
-//                 time: TimeInterval::new_unchecked(5, 10),
-//                 tile_position: [-1, 1].into(),
-//                 global_geo_transform: TestDefault::test_default(),
-//                 grid_array: Grid::new(
-//                     [3, 2].into(),
-//                     vec![19, 20, 21, 22, 23, 24],
-//                     no_data_value,
-//                 )
-//                 .unwrap()
-//                 .into(),
-//             },
-//         ],
-//         result_descriptor: RasterResultDescriptor {
-//             data_type: RasterDataType::U8,
-//             spatial_reference: SpatialReference::epsg_4326().into(),
-//             measurement: Measurement::Unitless,
-//             no_data_value: no_data_value.map(AsPrimitive::as_),
-//         },
-//     },
-// }
-// .boxed();
-//
-// let mrs2 = MockRasterSource {
-//     params: MockRasterSourceParams {
-//         data: vec![
-//             RasterTile2D {
-//                 time: TimeInterval::new_unchecked(0, 3),
-//                 tile_position: [-1, 0].into(),
-//                 global_geo_transform: TestDefault::test_default(),
-//                 grid_array: Grid::new(
-//                     [3, 2].into(),
-//                     vec![101, 102, 103, 104, 105, 106],
-//                     no_data_value,
-//                 )
-//                 .unwrap()
-//                 .into(),
-//             },
-//             RasterTile2D {
-//                 time: TimeInterval::new_unchecked(0, 3),
-//                 tile_position: [-1, 1].into(),
-//                 global_geo_transform: TestDefault::test_default(),
-//                 grid_array: Grid::new(
-//                     [3, 2].into(),
-//                     vec![107, 108, 109, 110, 111, 112],
-//                     no_data_value,
-//                 )
-//                 .unwrap()
-//                 .into(),
-//             },
-//             RasterTile2D {
-//                 time: TimeInterval::new_unchecked(3, 6),
-//                 tile_position: [-1, 0].into(),
-//                 global_geo_transform: TestDefault::test_default(),
-//                 grid_array: Grid::new(
-//                     [3, 2].into(),
-//                     vec![113, 114, 115, 116, 117, 118],
-//                     no_data_value,
-//                 )
-//                 .unwrap()
-//                 .into(),
-//             },
-//             RasterTile2D {
-//                 time: TimeInterval::new_unchecked(3, 6),
-//                 tile_position: [-1, 1].into(),
-//                 global_geo_transform: TestDefault::test_default(),
-//                 grid_array: Grid::new(
-//                     [3, 2].into(),
-//                     vec![119, 120, 121, 122, 123, 124],
-//                     no_data_value,
-//                 )
-//                 .unwrap()
-//                 .into(),
-//             },
-//             RasterTile2D {
-//                 time: TimeInterval::new_unchecked(6, 10),
-//                 tile_position: [-1, 0].into(),
-//                 global_geo_transform: TestDefault::test_default(),
-//                 grid_array: Grid::new(
-//                     [3, 2].into(),
-//                     vec![125, 126, 127, 128, 129, 130],
-//                     no_data_value,
-//                 )
-//                 .unwrap()
-//                 .into(),
-//             },
-//             RasterTile2D {
-//                 time: TimeInterval::new_unchecked(6, 10),
-//                 tile_position: [-1, 1].into(),
-//                 global_geo_transform: TestDefault::test_default(),
-//                 grid_array: Grid::new(
-//                     [3, 2].into(),
-//                     vec![131, 132, 133, 134, 135, 136],
-//                     no_data_value,
-//                 )
-//                 .unwrap()
-//                 .into(),
-//             },
-//         ],
-//         result_descriptor: RasterResultDescriptor {
-//             data_type: RasterDataType::U8,
-//             spatial_reference: SpatialReference::epsg_4326().into(),
-//             measurement: Measurement::Unitless,
-//             no_data_value: no_data_value.map(AsPrimitive::as_),
-//         },
-//     },
-// }
-// .boxed();
-//
-// let exe_ctx = MockExecutionContext {
-//     tiling_specification: TilingSpecification::new((0., 0.).into(), [3, 2].into()),
-//     ..Default::default()
-// };
-// let query_rect = QueryRectangle {
-//     bbox: BoundingBox2D::new_unchecked((0., 0.).into(), (4., 3.).into()),
-//     time_interval: TimeInterval::new_unchecked(0, 10),
-//     spatial_resolution: SpatialResolution::one(),
-// };
-// let query_ctx = MockQueryContext {
-//     chunk_byte_size: 1024 * 1024,
-// };
-//
-// let qp1 = mrs1
-//     .initialize(&exe_ctx)
-//     .unwrap()
-//     .query_processor()
-//     .unwrap()
-//     .get_u8()
-//     .unwrap();
-//
-// let qp2 = mrs2
-//     .initialize(&exe_ctx)
-//     .unwrap()
-//     .query_processor()
-//     .unwrap()
-//     .get_u8()
-//     .unwrap();
-// let source_a = |query_rect| qp1.query(query_rect, &query_ctx).unwrap();
-//
-// let source_b = |query_rect| qp2.query(query_rect, &query_ctx).unwrap();
-//
-// let adapter = RasterTimeAdapter::new(source_a, source_b, query_rect);
-//
-// let result = adapter
-//     .map(Result::unwrap)
-//     .collect::<Vec<(RasterTile2D<u8>, RasterTile2D<u8>)>>()
-//     .await;
-//
-// let times: Vec<_> = result.iter().map(|(a, b)| (a.time, b.time)).collect();
-// assert_eq!(
-//     &times,
-//     &[
-//         (
-//             TimeInterval::new_unchecked(0, 3),
-//             TimeInterval::new_unchecked(0, 3)
-//         ),
-//         (
-//             TimeInterval::new_unchecked(0, 3),
-//             TimeInterval::new_unchecked(0, 3)
-//         ),
-//         (
-//             TimeInterval::new_unchecked(3, 5),
-//             TimeInterval::new_unchecked(3, 5)
-//         ),
-//         (
-//             TimeInterval::new_unchecked(3, 5),
-//             TimeInterval::new_unchecked(3, 5)
-//         ),
-//         (
-//             TimeInterval::new_unchecked(5, 6),
-//             TimeInterval::new_unchecked(5, 6)
-//         ),
-//         (
-//             TimeInterval::new_unchecked(5, 6),
-//             TimeInterval::new_unchecked(5, 6)
-//         ),
-//         (
-//             TimeInterval::new_unchecked(6, 10),
-//             TimeInterval::new_unchecked(6, 10)
-//         ),
-//         (
-//             TimeInterval::new_unchecked(6, 10),
-//             TimeInterval::new_unchecked(6, 10)
-//         )
-//     ]
-// );
+struct QueryWrapper<'a, P, T, C>
+where
+    P: RasterQueryProcessor<RasterType = T>,
+    T: Pixel,
+    C: QueryContext,
+{
+    p: &'a P,
+    ctx: &'a C,
+}
+
+// impl<'a, P, T, C> QueryWrapper<'a, P, T, C>
+// where
+//     P: RasterQueryProcessor<RasterType = T>,
+//     T: Pixel,
+//     C: QueryContext,
+// {
+//     async fn query(
+//         &'a self,
+//         rect: RasterQueryRectangle,
+//     ) -> Result<BoxStream<'a, Result<RasterTile2D<T>>>> {
+//         self.p.raster_query(rect, self.ctx).await
 //     }
 // }
+
+#[async_trait]
+pub trait Queryable<T>
+where
+    T: Pixel,
+{
+    type Output;
+
+    async fn query(&self, rect: RasterQueryRectangle) -> Self::Output;
+}
+
+#[async_trait]
+impl<'a, P, T, C> Queryable<T> for QueryWrapper<'a, P, T, C>
+where
+    P: RasterQueryProcessor<RasterType = T>,
+    T: Pixel,
+    C: QueryContext,
+{
+    type Output = BoxStream<'a, Result<RasterTile2D<T>>>;
+
+    async fn query(&self, rect: RasterQueryRectangle) -> BoxStream<'a, Result<RasterTile2D<T>>> {
+        self.p.raster_query(rect, self.ctx).await.unwrap()
+    }
+}
+
+// TODO: make adapter work with async `query`
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::engine::{
+        MockExecutionContext, MockQueryContext, RasterOperator, RasterResultDescriptor,
+    };
+    use crate::mock::{MockRasterSource, MockRasterSourceParams};
+    use futures::StreamExt;
+    use geoengine_datatypes::raster::{Grid, RasterDataType, RasterProperties};
+    use geoengine_datatypes::spatial_reference::SpatialReference;
+    use geoengine_datatypes::util::test::TestDefault;
+    use geoengine_datatypes::{
+        primitives::{Measurement, SpatialResolution},
+        raster::TilingSpecification,
+    };
+    use num_traits::AsPrimitive;
+
+    #[tokio::test]
+    #[allow(clippy::too_many_lines)]
+    async fn adapter() {
+        let no_data_value = Some(0);
+        let mrs1 = MockRasterSource {
+            params: MockRasterSourceParams::<u8> {
+                data: vec![
+                    RasterTile2D {
+                        time: TimeInterval::new_unchecked(0, 5),
+                        tile_position: [-1, 0].into(),
+                        global_geo_transform: TestDefault::test_default(),
+                        grid_array: Grid::new([3, 2].into(), vec![1, 2, 3, 4, 5, 6], no_data_value)
+                            .unwrap()
+                            .into(),
+                        properties: RasterProperties::default(),
+                    },
+                    RasterTile2D {
+                        time: TimeInterval::new_unchecked(0, 5),
+                        tile_position: [-1, 1].into(),
+                        global_geo_transform: TestDefault::test_default(),
+                        grid_array: Grid::new(
+                            [3, 2].into(),
+                            vec![7, 8, 9, 10, 11, 12],
+                            no_data_value,
+                        )
+                        .unwrap()
+                        .into(),
+                        properties: RasterProperties::default(),
+                    },
+                    RasterTile2D {
+                        time: TimeInterval::new_unchecked(5, 10),
+                        tile_position: [-1, 0].into(),
+                        global_geo_transform: TestDefault::test_default(),
+                        grid_array: Grid::new(
+                            [3, 2].into(),
+                            vec![13, 14, 15, 16, 17, 18],
+                            no_data_value,
+                        )
+                        .unwrap()
+                        .into(),
+                        properties: RasterProperties::default(),
+                    },
+                    RasterTile2D {
+                        time: TimeInterval::new_unchecked(5, 10),
+                        tile_position: [-1, 1].into(),
+                        global_geo_transform: TestDefault::test_default(),
+                        grid_array: Grid::new(
+                            [3, 2].into(),
+                            vec![19, 20, 21, 22, 23, 24],
+                            no_data_value,
+                        )
+                        .unwrap()
+                        .into(),
+                        properties: RasterProperties::default(),
+                    },
+                ],
+                result_descriptor: RasterResultDescriptor {
+                    data_type: RasterDataType::U8,
+                    spatial_reference: SpatialReference::epsg_4326().into(),
+                    measurement: Measurement::Unitless,
+                    no_data_value: no_data_value.map(AsPrimitive::as_),
+                },
+            },
+        }
+        .boxed();
+
+        let mrs2 = MockRasterSource {
+            params: MockRasterSourceParams {
+                data: vec![
+                    RasterTile2D {
+                        time: TimeInterval::new_unchecked(0, 3),
+                        tile_position: [-1, 0].into(),
+                        global_geo_transform: TestDefault::test_default(),
+                        grid_array: Grid::new(
+                            [3, 2].into(),
+                            vec![101, 102, 103, 104, 105, 106],
+                            no_data_value,
+                        )
+                        .unwrap()
+                        .into(),
+                        properties: RasterProperties::default(),
+                    },
+                    RasterTile2D {
+                        time: TimeInterval::new_unchecked(0, 3),
+                        tile_position: [-1, 1].into(),
+                        global_geo_transform: TestDefault::test_default(),
+                        grid_array: Grid::new(
+                            [3, 2].into(),
+                            vec![107, 108, 109, 110, 111, 112],
+                            no_data_value,
+                        )
+                        .unwrap()
+                        .into(),
+                        properties: RasterProperties::default(),
+                    },
+                    RasterTile2D {
+                        time: TimeInterval::new_unchecked(3, 6),
+                        tile_position: [-1, 0].into(),
+                        global_geo_transform: TestDefault::test_default(),
+                        grid_array: Grid::new(
+                            [3, 2].into(),
+                            vec![113, 114, 115, 116, 117, 118],
+                            no_data_value,
+                        )
+                        .unwrap()
+                        .into(),
+                        properties: RasterProperties::default(),
+                    },
+                    RasterTile2D {
+                        time: TimeInterval::new_unchecked(3, 6),
+                        tile_position: [-1, 1].into(),
+                        global_geo_transform: TestDefault::test_default(),
+                        grid_array: Grid::new(
+                            [3, 2].into(),
+                            vec![119, 120, 121, 122, 123, 124],
+                            no_data_value,
+                        )
+                        .unwrap()
+                        .into(),
+                        properties: RasterProperties::default(),
+                    },
+                    RasterTile2D {
+                        time: TimeInterval::new_unchecked(6, 10),
+                        tile_position: [-1, 0].into(),
+                        global_geo_transform: TestDefault::test_default(),
+                        grid_array: Grid::new(
+                            [3, 2].into(),
+                            vec![125, 126, 127, 128, 129, 130],
+                            no_data_value,
+                        )
+                        .unwrap()
+                        .into(),
+                        properties: RasterProperties::default(),
+                    },
+                    RasterTile2D {
+                        time: TimeInterval::new_unchecked(6, 10),
+                        tile_position: [-1, 1].into(),
+                        global_geo_transform: TestDefault::test_default(),
+                        grid_array: Grid::new(
+                            [3, 2].into(),
+                            vec![131, 132, 133, 134, 135, 136],
+                            no_data_value,
+                        )
+                        .unwrap()
+                        .into(),
+                        properties: RasterProperties::default(),
+                    },
+                ],
+                result_descriptor: RasterResultDescriptor {
+                    data_type: RasterDataType::U8,
+                    spatial_reference: SpatialReference::epsg_4326().into(),
+                    measurement: Measurement::Unitless,
+                    no_data_value: no_data_value.map(AsPrimitive::as_),
+                },
+            },
+        }
+        .boxed();
+
+        let exe_ctx = MockExecutionContext::new_with_tiling_spec(TilingSpecification::new(
+            (0., 0.).into(),
+            [3, 2].into(),
+        ));
+        let query_rect = RasterQueryRectangle {
+            spatial_bounds: SpatialPartition2D::new_unchecked((0., 3.).into(), (4., 0.).into()),
+            time_interval: TimeInterval::new_unchecked(0, 10),
+            spatial_resolution: SpatialResolution::one(),
+        };
+        let query_ctx = MockQueryContext::test_default();
+
+        let qp1 = mrs1
+            .initialize(&exe_ctx)
+            .await
+            .unwrap()
+            .query_processor()
+            .unwrap()
+            .get_u8()
+            .unwrap();
+
+        let qp2 = mrs2
+            .initialize(&exe_ctx)
+            .await
+            .unwrap()
+            .query_processor()
+            .unwrap()
+            .get_u8()
+            .unwrap();
+        // let source_a = |query_rect| async { qp1.query(query_rect, &query_ctx).await.unwrap() };
+
+        // let source_b = |query_rect| async { qp2.query(query_rect, &query_ctx).await.unwrap() };
+
+        let source_a = QueryWrapper {
+            p: &qp1,
+            ctx: &query_ctx,
+        };
+
+        let source_b = QueryWrapper {
+            p: &qp2,
+            ctx: &query_ctx,
+        };
+
+        let adapter = RasterTimeAdapter::new(source_a, source_b, query_rect).await;
+
+        let result = adapter
+            .map(Result::unwrap)
+            .collect::<Vec<(RasterTile2D<u8>, RasterTile2D<u8>)>>()
+            .await;
+
+        let times: Vec<_> = result.iter().map(|(a, b)| (a.time, b.time)).collect();
+        assert_eq!(
+            &times,
+            &[
+                (
+                    TimeInterval::new_unchecked(0, 3),
+                    TimeInterval::new_unchecked(0, 3)
+                ),
+                (
+                    TimeInterval::new_unchecked(0, 3),
+                    TimeInterval::new_unchecked(0, 3)
+                ),
+                (
+                    TimeInterval::new_unchecked(3, 5),
+                    TimeInterval::new_unchecked(3, 5)
+                ),
+                (
+                    TimeInterval::new_unchecked(3, 5),
+                    TimeInterval::new_unchecked(3, 5)
+                ),
+                (
+                    TimeInterval::new_unchecked(5, 6),
+                    TimeInterval::new_unchecked(5, 6)
+                ),
+                (
+                    TimeInterval::new_unchecked(5, 6),
+                    TimeInterval::new_unchecked(5, 6)
+                ),
+                (
+                    TimeInterval::new_unchecked(6, 10),
+                    TimeInterval::new_unchecked(6, 10)
+                ),
+                (
+                    TimeInterval::new_unchecked(6, 10),
+                    TimeInterval::new_unchecked(6, 10)
+                )
+            ]
+        );
+    }
+}
