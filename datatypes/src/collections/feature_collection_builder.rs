@@ -316,6 +316,8 @@ where
             .builders
             .values()
             .map(|builder| {
+                let mut bool_bytes = 0;
+
                 let data_type_size = if builder.as_any().is::<Float64Builder>() {
                     std::mem::size_of::<f64>()
                 } else if builder.as_any().is::<Int64Builder>() {
@@ -325,7 +327,9 @@ where
                 } else if builder.as_any().is::<StringBuilder>() {
                     0 // TODO: how to get this dynamic value
                 } else if builder.as_any().is::<BooleanBuilder>() {
-                    std::mem::size_of::<bool>() // TODO: is this correct because of possible bit packing?
+                    // arrow buffer internally packs 8 bools in 1 byte
+                    bool_bytes = arrow::util::bit_util::ceil(builder.len(), 8);
+                    0
                 } else if builder.as_any().is::<Date64Builder>() {
                     std::mem::size_of::<i64>()
                 } else {
@@ -335,7 +339,7 @@ where
                 let values_size = builder.len() * data_type_size;
                 let null_size_estimate = builder.len() / 8;
 
-                values_size + null_size_estimate + self.string_bytes
+                values_size + null_size_estimate + self.string_bytes + bool_bytes
             })
             .sum::<usize>();
 

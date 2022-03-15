@@ -303,7 +303,7 @@ impl NFDIDataProvider {
                 FeatureDataType::Float => float.push(k.to_string()),
                 FeatureDataType::Text => text.push(k.to_string()),
                 FeatureDataType::Bool => bool.push(k.to_string()),
-                FeatureDataType::DateTime => datetime.push(k.to_string())
+                FeatureDataType::DateTime => datetime.push(k.to_string()),
             }
         }
 
