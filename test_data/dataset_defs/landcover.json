@@ -1,0 +1,91 @@
+{
+  "properties": {
+    "id": {
+      "type": "internal",
+      "datasetId": "9ee3619e-d0f9-4ced-9c44-3d407c3aed69"
+    },
+    "name": "Land Cover",
+    "description": "Land Cover derived from MODIS/Terra+Aqua Land Cover",
+    "sourceOperator": "GdalSource",
+    "symbology": {
+      "type": "raster",
+      "colorizer": {
+        "type": "palette",
+        "colors": {
+          "0": [134, 201, 227, 255],
+          "1": [30, 129, 62, 255],
+          "2": [59, 194, 212, 65],
+          "3": [157, 194, 63, 255],
+          "4": [159, 225, 127, 255],
+          "5": [125, 194, 127, 255],
+          "6": [195, 127, 126, 255],
+          "7": [188, 221, 190, 255],
+          "8": [224, 223, 133, 255],
+          "9": [226, 221, 7, 255],
+          "10": [223, 192, 125, 255],
+          "11": [66, 128, 189, 255],
+          "12": [225, 222, 127, 255],
+          "13": [253, 2, 0, 255],
+          "14": [162, 159, 66, 255],
+          "15": [255, 255, 255, 255],
+          "16": [192, 192, 192, 255]
+        },
+        "noDataColor": [0, 0, 0, 0],
+        "defaultColor": [0, 0, 0, 0]
+      },
+      "opacity": 1.0
+    },
+    "provenance": {
+      "citation": "Friedl, M., D. Sulla-Menashe. MCD12C1 MODIS/Terra+Aqua Land Cover Type Yearly L3 Global 0.05Deg CMG V006. 2015, distributed by NASA EOSDIS Land Processes DAAC, https://doi.org/10.5067/MODIS/MCD12C1.006. Accessed 2022-03-16.",
+      "license": "All data distributed by the LP DAAC contain no restrictions on the data reuse. (https://lpdaac.usgs.gov/resources/faqs/#am-i-allowed-to-reuse-lp-daac-data)",
+      "uri": "https://doi.org/10.5067/MODIS/MCD12C1.006"
+    }
+  },
+  "metaData": {
+    "type": "GdalStatic",
+    "resultDescriptor": {
+      "dataType": "U8",
+      "spatialReference": "EPSG:4326",
+      "measurement": {
+        "type": "classification",
+        "measurement": "Land Cover",
+        "classes": {
+          "0": "Water Bodies",
+          "1": "Evergreen Needleleaf Forests",
+          "2": "Evergreen Broadleaf Forests",
+          "3": "Deciduous Needleleaf Forests",
+          "4": "Deciduous Broadleleaf Forests",
+          "5": "Mixed Forests",
+          "6": "Closed Shrublands",
+          "7": "Open Shrublands",
+          "8": "Woody Savannas",
+          "9": "Savannas",
+          "10": "Grasslands",
+          "11": "Permanent Wtlands",
+          "12": "Croplands",
+          "13": "Urban and Built-Up",
+          "14": "Cropland-Natural Vegetation Mosaics",
+          "15": "Snow and Ice",
+          "16": "Barren or Sparsely Vegetated"
+        }
+      },
+      "noDataValue": 255.0
+    },
+    "params": {
+      "filePath": "test_data/raster/landcover/landcover.tif",
+      "rasterbandChannel": 1,
+      "geoTransform": {
+        "originCoordinate": {
+          "x": -180.0,
+          "y": 90.0
+        },
+        "xPixelSize": 0.1,
+        "yPixelSize": -0.1
+      },
+      "width": 3600,
+      "height": 1800,
+      "fileNotFoundHandling": "NoData",
+      "noDataValue": 255.0
+    }
+  }
+}
