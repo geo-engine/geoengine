@@ -17,7 +17,7 @@ use futures::{
 };
 use futures::{Future, TryStreamExt};
 use gdal::raster::{GdalType, RasterBand as GdalRasterBand};
-use gdal::{DatasetOptions, Metadata as GdalMetadata};
+use gdal::{DatasetOptions, GdalOpenFlags, Metadata as GdalMetadata};
 use geoengine_datatypes::primitives::{
     Coordinate2D, RasterQueryRectangle, SpatialPartition2D, SpatialPartitioned,
 };

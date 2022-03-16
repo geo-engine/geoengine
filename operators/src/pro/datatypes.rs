@@ -3,7 +3,6 @@ use futures::task::{Context, Poll};
 use futures::stream::BoxStream;
 use futures::pin_mut;
 use pin_project::pin_project;
-use async_stream::stream;
 //use std::task::{Poll, Context};
 use core::pin::Pin;
 use std::time::{Instant};
@@ -145,56 +144,56 @@ where
 
 #[tokio::test]
 async fn main() {
-    let st1 = stream! {
-        for i in 1..=3 {
-            tokio::time::sleep(std::time::Duration::from_millis(1000)).await;
-            yield i;
-        }
-    };
+//     let st1 = stream! {
+//         for i in 1..=3 {
+//             tokio::time::sleep(std::time::Duration::from_millis(1000)).await;
+//             yield i;
+//         }
+//     };
 
-    let st2 = stream! {
-        for i in 1..=3 {
-            tokio::time::sleep(std::time::Duration::from_millis(1000)).await;
-            yield i * 10;
-        }
-    };
+//     let st2 = stream! {
+//         for i in 1..=3 {
+//             tokio::time::sleep(std::time::Duration::from_millis(1000)).await;
+//             yield i * 10;
+//         }
+//     };
 
-    let st1: BoxStream<'static, u32> = Box::pin(st1);
-    let st2: BoxStream<'static, u32> = Box::pin(st2);
+//     let st1: BoxStream<'static, u32> = Box::pin(st1);
+//     let st2: BoxStream<'static, u32> = Box::pin(st2);
 
-    let mut st_all = Zip::new(vec![st1, st2]);
+//     let mut st_all = Zip::new(vec![st1, st2]);
 
-    eprintln!();
-    eprintln!();
-    eprintln!();
+//     eprintln!();
+//     eprintln!();
+//     eprintln!();
 
-    let start = std::time::Instant::now();
+//     let start = std::time::Instant::now();
 
-    while let Some(value) = st_all.next().await {
-        println!("{:?}", value);
-    }
+//     while let Some(value) = st_all.next().await {
+//         println!("{:?}", value);
+//     }
 
-    eprint!(
-        "Elapsed = {} (should be ~3000)",
-        start.elapsed().as_millis()
-    );
+//     eprint!(
+//         "Elapsed = {} (should be ~3000)",
+//         start.elapsed().as_millis()
+//     );
 
-    let s = stream! {
-        for i in 1..=3 {
-            tokio::time::sleep(std::time::Duration::from_millis(1000)).await;
-            yield i;
-        }
-    };
-    pin_mut!(s);
+//     let s = stream! {
+//         for i in 1..=3 {
+//             tokio::time::sleep(std::time::Duration::from_millis(1000)).await;
+//             yield i;
+//         }
+//     };
+//     pin_mut!(s);
 
-    let start = std::time::Instant::now();
+//     let start = std::time::Instant::now();
 
-    while let Some(value) = s.next().await {
-        println!("{:?}", value);
-    }
+//     while let Some(value) = s.next().await {
+//         println!("{:?}", value);
+//     }
 
-    eprint!(
-        "Elapsed = {} (should be ~3000)",
-        start.elapsed().as_millis()
-    );
+//     eprint!(
+//         "Elapsed = {} (should be ~3000)",
+//         start.elapsed().as_millis()
+//     );
 }

@@ -5,12 +5,15 @@ from tensorflow.keras import layers
 from tensorflow.python.keras import callbacks
 import matplotlib.pyplot
 import keras.backend as K
+#from tensorflow.keras import mixed_precision
+#mixed_precision.set_global_policy(policy="mixed_float16")
 
 
 
 physical_devices = tf.config.experimental.list_physical_devices('GPU')
 print(physical_devices)
 print("Num GPUs:", len(physical_devices))
+#print(f"Global Policy: {mixed_precision.global_policy()}")
 
 tf.config.experimental.set_memory_growth(physical_devices[0], True)
 
@@ -20,10 +23,24 @@ model = keras.models.Sequential()
 update = 50
 def weighted_standard_loss(weights):
     def my_loss(y_true, y_pred):
-        nop = tf.size(y_true)
-        y_true = tf.squeeze(tf.one_hot(tf.cast(y_true, np.int32),  depth = 5), axis=3)
-        inter = tf.math.multiply(tf.math.multiply(tf.cast(y_true, np.float32), tf.math.log(tf.clip_by_value(y_pred, 1e-10, 1.0))), weights)
-        return tf.multiply(tf.math.reduce_sum(tf.math.negative(inter)), tf.cast(1/nop, np.float32))
+        weights_con = tf.constant(weights)
+        #nop = tf.size(y_true)
+        y_true = K.squeeze(K.one_hot(K.cast(y_true, np.int32), 5), axis=3)
+
+        y_pred = K.clip(y_pred, K.epsilon(), 1)
+
+        logs = K.log(y_pred)
+
+        m_full_weights = K.dot(y_true, weights_con)
+        #tf.print(m_full_weights * logs)
+        return -K.mean(m_full_weights * logs)
+        #y_true = tf.squeeze(tf.one_hot(tf.cast(y_true, np.int32),  depth = 5), axis=3)
+        tf.print(y_true.shape)
+
+        #tf.print(tf.math.multiply(tf.cast(y_true, np.float32), weights_con))
+        #inter = tf.math.multiply(tf.math.multiply(tf.cast(y_true, np.float32), weights_con), tf.math.#log(tf.clip_by_value(y_pred, 1e-10, 1.0)))
+        #tf.print(inter)
+        #return K.mean(tf.math.reduce_sum(tf.math.negative(inter)))
 
     return my_loss
     
@@ -32,9 +49,8 @@ def rwwce(marginal_cost_false_negativ, marginal_cost_false_positive):
         fn_wt = K.constant(marginal_cost_false_negativ)
         fp_wt = K.constant(marginal_cost_false_positive)
 
-
         y_true = K.squeeze(K.one_hot(K.cast(y_true, np.int32), 5), axis=3)
-        tf.print(y_true.shape)
+        #tf.print(y_true.shape)
         y_pred = K.clip(y_pred, K.epsilon(), 1-K.epsilon())
 
         logs = K.log(y_pred)
@@ -50,19 +66,21 @@ def rwwce(marginal_cost_false_negativ, marginal_cost_false_positive):
 
 
 def my_loss(y_true, y_pred):
-    nop = tf.size(y_true)
-    y_true = tf.squeeze(tf.one_hot(tf.cast(y_true, np.int32),  depth = 5), axis=3)
-    weights = tf.constant([[[[0.1,1.0,1.0,1.0,1.0]]]])
-    #tf.print(tf.multiply(y_true, weights))
-    #tf.print(y_pred)
-    #tf.print(y_true, summarize=-1)
-    inter = tf.math.multiply(tf.math.multiply(tf.cast(y_true, np.float32), tf.math.log(tf.clip_by_value(y_pred, 1e-10, 1.0))), weights)
-    tf.print(inter.shape)
-    return tf.multiply(tf.math.reduce_sum(tf.math.negative(inter)), tf.cast(1/nop, np.float32))
+    class_weights = tf.constant([[1.0, 1.0, 1.0, 1.0, 1.0]])
+    # deduce weights for batch samples based on their true label
+    onehot_labels = tf.squeeze(tf.one_hot(tf.cast(y_true, np.int32), depth=5), axis=3)
+    weights = tf.reduce_sum(class_weights * onehot_labels, axis=1)
+    # compute your (unweighted) softmax cross entropy loss
+    unweighted_losses = tf.nn.softmax_cross_entropy_with_logits(onehot_labels, y_pred)
+    # apply the weights, relying on broadcasting of the multiplication
+    weighted_losses = unweighted_losses * weights
+    # reduce the result to get your final loss
+    loss = tf.reduce_mean(weighted_losses)
+    return loss
 
 def initUnet(num_classes, id, batch_size):
     print(tf.__version__)
-    inputs = keras.Input(shape=(512, 512, 6), batch_size=batch_size)
+    inputs = keras.Input(shape=(512, 512, 6), batch_size=batch_size, dtype=tf.dtypes.float16)
 
     ### [First half of the network: downsampling inputs] ###
 
@@ -112,14 +130,14 @@ def initUnet(num_classes, id, batch_size):
         previous_block_activation = x  # Set aside next residual
 
     # Add a per-pixel classification layer
-    outputs = layers.layers.Conv2D(num_classes, 3, activation="softmax", padding="same")(x)
+    outputs = layers.layers.Conv2D(num_classes, 3, activation="softmax", padding="same", dtype=tf.dtypes.float32)(x)
 
     # Define the model
     global model 
     model = keras.Model(inputs, outputs)
 
-    fn = np.array([[0.00001, 0.0, 0.0, 0.0, 0.0], [0.0, 1.0, 0.0, 0.0, 0.0], [0.0, 0.0, 1.0, 0.0, 0.0], [0.0, 0.0, 0.0, 1.0, 0.0], [0.0, 0.0, 0.0, 0.0, 5.0]])
-    fp = np.array([[0.0, 999.9, 999.9, 999.9, 999.9], [0.1, 0.0, 1.0, 1.0, 1.0], [0.1, 1.0, 0.0, 1.0, 1.0], [0.1, 99.0, 99.0, 0.0, 99.0], [0.1, 1.0, 1.0, 1.0, 0.0]])
+    fn = np.array([[1.0, 0.0, 0.0, 0.0, 0.0], [0.0, 1.0, 0.0, 0.0, 0.0], [0.0, 0.0, 1.0, 0.0, 0.0], [0.0, 0.0, 0.0, 1.0, 0.0], [0.0, 0.0, 0.0, 0.0, 5.0]])
+    fp = np.array([[0.0, 999999.9, 999999.9, 999999.9, 999999.9], [0.1, 0.0, 1.0, 1.0, 1.0], [0.1, 1.0, 0.0, 1.0, 1.0], [0.1, 99.0, 99.0, 0.0, 99.0], [0.1, 1.0, 1.0, 1.0, 0.0]])
 
     model.compile(optimizer='adam', loss=rwwce(fn, fp), metrics=['sparse_categorical_accuracy'])
     model.summary()
@@ -128,7 +146,10 @@ def initUnet(num_classes, id, batch_size):
 
 def load(id):
     global model
-    model = keras.models.load_model('saved_model/{}'.format(id))
+    fn = np.array([[1.0, 0.0, 0.0, 0.0, 0.0], [0.0, 1.0, 0.0, 0.0, 0.0], [0.0, 0.0, 1.0, 0.0, 0.0], [0.0, 0.0, 0.0, 1.0, 0.0], [0.0, 0.0, 0.0, 0.0, 1.0]])
+    fp = np.array([[0.0, 999999.9, 999999.9, 999999.9, 999999.9], [1.0, 0.0, 10.0, 10.0, 1.0], [1.0, 1.0, 0.0, 1.0, 1.0], [1.0, 1.0, 1.0, 0.0, 1.0], [1.0, 1.0, 1.0, 1.0, 0.0]])
+    #model = keras.models.load_model('saved_model/{}'.format(id), custom_objects={ 'loss': rwwce(fn, fp)})
+    model = keras.models.load_model('saved_model/{}'.format(id), compile=False)
     print('Loaded model from saved_model/{}'.format(id))
 
 call = callbacks.CSVLogger('logs.csv', ';', append=True)
@@ -136,7 +157,7 @@ class_weight = tf.constant([0,1,1,1,1])
 
 def initUnet2(num_classes, id, batch_size):
     print(tf.__version__)
-    inputs = keras.Input(shape=(512, 512, 6), batch_size=batch_size)
+    inputs = keras.Input(shape=(512, 512, 11), batch_size=batch_size)
 
     conv1 = layers.Conv2D(32, 3,activation = 'relu', padding = 'same')(inputs)
     conv1 = layers.Conv2D(32, 3,activation = 'relu', padding = 'same')(conv1)
@@ -198,19 +219,20 @@ def initUnet2(num_classes, id, batch_size):
     print(conv9.shape)
     #_, _, out_classes = input_size
 #    conv9 = layers.Conv2D(5, 1, padding = 'same', activation = softMaxAxis(axis=channel_axis),  data_format=data_format)(conv9)
-    conv9 = layers.Conv2D(5, 1, padding = 'same')(conv9)
+    conv9 = layers.Conv2D(5, 1, padding = 'same', activation='softmax')(conv9)
 
     # Define the model
     global model 
     model = keras.Model(inputs, conv9)
 
-    fn = np.array([[0.1, 0.0, 0.0, 0.0, 0.0], [0.0, 1.0, 0.0, 0.0, 0.0], [0.0, 0.0, 1.0, 0.0, 0.0], [0.0, 0.0, 0.0, 1.0, 0.0], [0.0, 0.0, 0.0, 0.0, 1.0]])
-    fp = np.array([[0.0, 999.9, 999.9, 999.9, 999.9], [1.0, 0.0, 1.0, 1.0, 1.0], [1.0, 1.0, 0.0, 1.0, 1.0], [1.0, 1.0, 1.0, 0.0, 1.0], [1.0, 1.0, 1.0, 1.0, 0.0]])
+    fn = np.array([[1.0, 0.0, 0.0, 0.0, 0.0], [0.0, 1.0, 0.0, 0.0, 0.0], [0.0, 0.0, 1.0, 0.0, 0.0], [0.0, 0.0, 0.0, 1.0, 0.0], [0.0, 0.0, 0.0, 0.0, 1.0]])
+    fp = np.array([[0.0, 9999.9, 9999.9, 9999.9, 9999.9], [1.0, 0.0, 1.0, 1.0, 1.0], [1.0, 1.0, 0.0, 1.0, 1.0], [1.0, 1.0, 1.0, 0.0, 1.0], [1.0, 1.0, 1.0, 1.0, 0.0]])
  
-    model.compile(optimizer='adam', loss=rwwce(fn, fp), metrics=['sparse_categorical_accuracy'])
+    model.compile(optimizer=tf.keras.optimizers.Adam(), loss = 'sparse_categorical_crossentropy', metrics=['sparse_categorical_accuracy'])
     model.summary()
     model.save('saved_model/{}'.format(id))
     print("Saved model under saved_model/{}".format(id))
+
 def fit(X, y, batch_size):    
     global model
     global update
@@ -236,8 +258,12 @@ def fit(X, y, batch_size):
             for j in range(0,512):
                 max = np.argmax(result[i,j,:], axis=0)
                 classes[i,j]=max
-        matplotlib.pyplot.imsave('train_prediction.png', classes, vmin=0,vmax=4)
-        matplotlib.pyplot.imsave('train_claas.png', y[0][:,:,0], vmin=0,vmax=4)
+        #classes = np.unique(classes,return_inverse=True)[1].reshape(classes.shape)
+        #classes = classes/float(classes.max())
+        clist = ["purple", "blue", "red", "green", "yellow"]
+        cmap = matplotlib.colors.ListedColormap(clist)
+        matplotlib.pyplot.imsave('train_prediction.png', classes, vmin=0,vmax=4, cmap=cmap)
+        matplotlib.pyplot.imsave('train_claas.png', y[0][:,:,0], vmin=0,vmax=4, cmap=cmap)
         matplotlib.pyplot.imsave('train_msg.png', X[0][:,:,1])
     
         
@@ -245,7 +271,7 @@ def fit(X, y, batch_size):
     
 
 
-def predict(X, y, batchsize):
+def predict(X, batchsize):
     global model
     result = model.predict(X, batch_size = batchsize, verbose=1)
     #result_a = result[0]
