@@ -262,12 +262,11 @@ impl<'f> Iterator for &'f mut OgrDatasetIterator {
 
         let next = feature_iterator_next(features_provider);
 
-        if let Some(feature) = next {
-            Some(feature)
-        } else {
+        if next.is_none() {
             self.has_ended.set(true);
-            None
         }
+
+        next
     }
 }
 
