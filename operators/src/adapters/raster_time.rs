@@ -1,12 +1,10 @@
 use crate::engine::{QueryContext, RasterQueryProcessor};
 use crate::util::Result;
-use async_trait::async_trait;
+use futures::future::{self, BoxFuture, Join};
 use futures::stream::{BoxStream, FusedStream, Zip};
-use futures::Stream;
 use futures::{ready, StreamExt};
-use geoengine_datatypes::primitives::{
-    RasterQueryRectangle, SpatialPartition2D, TimeInstance, TimeInterval,
-};
+use futures::{Future, Stream};
+use geoengine_datatypes::primitives::{RasterQueryRectangle, SpatialPartition2D, TimeInterval};
 use geoengine_datatypes::raster::{GridSize, Pixel, RasterTile2D, TileInformation, TilingStrategy};
 use pin_project::pin_project;
 use std::cmp::min;
@@ -24,18 +22,21 @@ where
     T2: Pixel,
     F1: Queryable<T1>,
     F2: Queryable<T2>,
-    F1::Output: Stream<Item = Result<RasterTile2D<T1>>>,
-    F2::Output: Stream<Item = Result<RasterTile2D<T2>>>,
+    F1::Stream: Stream<Item = Result<RasterTile2D<T1>>>,
+    F2::Stream: Stream<Item = Result<RasterTile2D<T2>>>,
+    F1::Output: Future<Output = Result<F1::Stream>>,
+    F2::Output: Future<Output = Result<F2::Stream>>,
 {
     source_a: F1,
     source_b: F2,
+    #[pin]
+    query_a_b_fut: Option<Join<F1::Output, F2::Output>>,
     query_rect: RasterQueryRectangle,
-    time_end: Option<(TimeInstance, TimeInstance)>,
     // TODO: calculate at start when tiling info is available before querying first tile
     num_spatial_tiles: Option<usize>,
     current_spatial_tile: usize,
     #[pin]
-    stream: Zip<F1::Output, F2::Output>,
+    stream: Option<Zip<F1::Stream, F2::Stream>>,
     ended: bool,
 }
 
@@ -45,21 +46,20 @@ where
     T2: Pixel,
     F1: Queryable<T1>,
     F2: Queryable<T2>,
-    F1::Output: Stream<Item = Result<RasterTile2D<T1>>>,
-    F2::Output: Stream<Item = Result<RasterTile2D<T2>>>,
+    F1::Stream: Stream<Item = Result<RasterTile2D<T1>>>,
+    F2::Stream: Stream<Item = Result<RasterTile2D<T2>>>,
+    F1::Output: Future<Output = Result<F1::Stream>>,
+    F2::Output: Future<Output = Result<F2::Stream>>,
 {
-    pub async fn new(source_a: F1, source_b: F2, query_rect: RasterQueryRectangle) -> Self {
+    pub fn new(source_a: F1, source_b: F2, query_rect: RasterQueryRectangle) -> Self {
         Self {
-            stream: source_a
-                .query(query_rect)
-                .await
-                .zip(source_b.query(query_rect).await),
+            stream: None,
             source_a,
             source_b,
+            query_a_b_fut: None,
             query_rect,
             num_spatial_tiles: None,
             current_spatial_tile: 0,
-            time_end: None,
             ended: false,
         }
     }
@@ -98,8 +98,10 @@ where
     T2: Pixel,
     F1: Queryable<T1>,
     F2: Queryable<T2>,
-    F1::Output: Stream<Item = Result<RasterTile2D<T1>>>,
-    F2::Output: Stream<Item = Result<RasterTile2D<T2>>>,
+    F1::Stream: Stream<Item = Result<RasterTile2D<T1>>>,
+    F2::Stream: Stream<Item = Result<RasterTile2D<T2>>>,
+    F1::Output: Future<Output = Result<F1::Stream>>,
+    F2::Output: Future<Output = Result<F2::Stream>>,
 {
     type Item = Result<(RasterTile2D<T1>, RasterTile2D<T2>)>;
 
@@ -111,15 +113,44 @@ where
         let RasterTimeAdapterProjection {
             source_a,
             source_b,
+            mut query_a_b_fut,
             query_rect,
-            time_end,
             num_spatial_tiles,
             current_spatial_tile,
             mut stream,
             ended,
         } = self.project();
 
-        let next = ready!(stream.as_mut().poll_next(cx));
+        if stream.is_none() {
+            if query_a_b_fut.is_none() {
+                let fut1 = source_a.query(*query_rect);
+                let fut2 = source_b.query(*query_rect);
+                let join = future::join(fut1, fut2);
+
+                query_a_b_fut.set(Some(join));
+            }
+
+            if let Some(queries_fut) = query_a_b_fut.as_mut().as_pin_mut() {
+                let queries = ready!(queries_fut.poll(cx));
+                query_a_b_fut.set(None);
+
+                match queries {
+                    (Ok(stream_a), Ok(stream_b)) => {
+                        stream.set(Some(stream_a.zip(stream_b)));
+                    }
+                    (Err(e), _) | (_, Err(e)) => {
+                        *ended = true;
+                        return Poll::Ready(Some(Err(e)));
+                    }
+                }
+            }
+        }
+
+        let next = if let Some(stream) = stream.as_mut().as_pin_mut() {
+            ready!(stream.poll_next(cx))
+        } else {
+            panic!("stream is None")
+        };
 
         match next {
             Some((Ok(tile_a), Ok(tile_b))) => {
@@ -133,15 +164,13 @@ where
 
                 if *current_spatial_tile + 1 >= num_spatial_tiles.expect("checked") {
                     // time slice ended => query next time slice of sources
-                    let mut next_qrect = *query_rect;
-                    next_qrect.time_interval = TimeInterval::new_unchecked(
+                    query_rect.time_interval = TimeInterval::new_unchecked(
                         min(tile_a.time.end(), tile_b.time.end()),
                         query_rect.time_interval.end(),
                     );
-                    *time_end = None;
-                    todo!();
-                    // stream.set(source_a(next_qrect).zip(source_b(next_qrect)));
-                    // *current_spatial_tile = 0;
+
+                    stream.set(None);
+                    *current_spatial_tile = 0;
                 } else {
                     *current_spatial_tile += 1;
                 }
@@ -166,8 +195,10 @@ where
     T2: Pixel,
     F1: Queryable<T1>,
     F2: Queryable<T2>,
-    F1::Output: Stream<Item = Result<RasterTile2D<T1>>>,
-    F2::Output: Stream<Item = Result<RasterTile2D<T2>>>,
+    F1::Stream: Stream<Item = Result<RasterTile2D<T1>>>,
+    F2::Stream: Stream<Item = Result<RasterTile2D<T2>>>,
+    F1::Output: Future<Output = Result<F1::Stream>>,
+    F2::Output: Future<Output = Result<F2::Stream>>,
 {
     fn is_terminated(&self) -> bool {
         self.ended
@@ -184,45 +215,30 @@ where
     ctx: &'a C,
 }
 
-// impl<'a, P, T, C> QueryWrapper<'a, P, T, C>
-// where
-//     P: RasterQueryProcessor<RasterType = T>,
-//     T: Pixel,
-//     C: QueryContext,
-// {
-//     async fn query(
-//         &'a self,
-//         rect: RasterQueryRectangle,
-//     ) -> Result<BoxStream<'a, Result<RasterTile2D<T>>>> {
-//         self.p.raster_query(rect, self.ctx).await
-//     }
-// }
-
-#[async_trait]
 pub trait Queryable<T>
 where
     T: Pixel,
 {
+    type Stream;
     type Output;
 
-    async fn query(&self, rect: RasterQueryRectangle) -> Self::Output;
+    fn query(&self, rect: RasterQueryRectangle) -> Self::Output;
 }
 
-#[async_trait]
 impl<'a, P, T, C> Queryable<T> for QueryWrapper<'a, P, T, C>
 where
     P: RasterQueryProcessor<RasterType = T>,
     T: Pixel,
     C: QueryContext,
 {
-    type Output = BoxStream<'a, Result<RasterTile2D<T>>>;
+    type Stream = BoxStream<'a, Result<RasterTile2D<T>>>;
+    type Output = BoxFuture<'a, Result<Self::Stream>>;
 
-    async fn query(&self, rect: RasterQueryRectangle) -> BoxStream<'a, Result<RasterTile2D<T>>> {
-        self.p.raster_query(rect, self.ctx).await.unwrap()
+    fn query(&self, rect: RasterQueryRectangle) -> Self::Output {
+        self.p.raster_query(rect, self.ctx)
     }
 }
 
-// TODO: make adapter work with async `query`
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -440,7 +456,7 @@ mod tests {
             ctx: &query_ctx,
         };
 
-        let adapter = RasterTimeAdapter::new(source_a, source_b, query_rect).await;
+        let adapter = RasterTimeAdapter::new(source_a, source_b, query_rect);
 
         let result = adapter
             .map(Result::unwrap)
