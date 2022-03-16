@@ -7,6 +7,7 @@ use crate::workflows::workflow::WorkflowId;
 use actix_web::{web, FromRequest, HttpResponse};
 use geoengine_operators::call_on_generic_vector_processor;
 use geoengine_operators::pro::executor::operators::OneshotQueryProcessor;
+use std::sync::Arc;
 
 pub(crate) fn init_wfs_routes<C>(cfg: &mut web::ServiceConfig)
 where
@@ -50,15 +51,14 @@ async fn get_feature<C: ProContext>(
         crate::handlers::wfs::extract_operator_and_bounding_box(request, ctx, session, endpoint)
             .await?;
 
-    let query_ctx = ctx.query_context()?;
+    let query_ctx = Arc::new(ctx.query_context()?);
 
     let tm = ctx.task_manager();
     let json = call_on_generic_vector_processor!(processor, p => {
         let desc = FeatureCollectionTaskDescription::new(endpoint,
-                query_rect.spatial_bounds,
-                query_rect.time_interval);
+                query_rect);
         let stream = p.into_stream(query_rect, query_ctx).await?;
-        let stream = tm.get_feature_executor().submit_stream(&desc, stream).await?;
+        let stream = tm.get_feature_executor().submit_stream(desc, Box::pin(stream)).await?;
         crate::handlers::wfs::vector_stream_to_geojson(Box::pin(stream)).await
 
     })?;

@@ -2,7 +2,7 @@ use crate::engine::{QueryContext, RasterQueryProcessor, VectorQueryProcessor};
 use crate::util::Result;
 use futures::stream::BoxStream;
 use futures::task::{Context, Poll};
-use futures::{Future, Stream};
+use futures::Stream;
 use geoengine_datatypes::primitives::{
     AxisAlignedRectangle, BoundingBox2D, QueryRectangle, RasterQueryRectangle, SpatialPartition2D,
     VectorQueryRectangle,
@@ -10,69 +10,70 @@ use geoengine_datatypes::primitives::{
 use geoengine_datatypes::raster::{Pixel, RasterTile2D};
 use ouroboros::self_referencing;
 use std::pin::Pin;
+use std::sync::Arc;
 
 /// Turns a [`QueryProcessor`][crate::engine::QueryProcessor] into a [Stream] of results.
-pub trait OneshotQueryProcessor<C: QueryContext, Output> {
+#[async_trait::async_trait]
+pub trait OneshotQueryProcessor<Output> {
     type BBox: AxisAlignedRectangle;
-    type Output: Stream + 'static;
+    type Output: Stream + Send + 'static;
 
-    fn into_stream(
+    async fn into_stream(
         self,
         qr: QueryRectangle<Self::BBox>,
-        ctx: C,
-    ) -> Pin<Box<dyn Future<Output = Result<Self::Output>>>>;
+        ctx: Arc<dyn QueryContext + 'static>,
+    ) -> Result<Self::Output>;
 }
 
 /// Helper struct to tie together a [result stream][Stream] with the bounding [`VectorQueryProcessor`].
 #[self_referencing]
-struct FeatureStreamWrapper<V, C>
+struct FeatureStreamWrapper<V>
 where
-    V: 'static,
-    C: 'static,
+    V: 'static + Send,
 {
-    proc: Box<dyn VectorQueryProcessor<VectorType = V>>,
-    ctx: C,
+    proc: Arc<dyn VectorQueryProcessor<VectorType = V>>,
+    ctx: Arc<dyn QueryContext + 'static>,
     #[borrows(proc, ctx)]
     #[covariant]
     stream: BoxStream<'this, Result<V>>,
 }
 
 /// A helper to generate a static [`Stream`] for a given [`VectorQueryProcessor`].
-pub struct FeatureStreamBoxer<V, C>
+pub struct FeatureStreamBoxer<V>
 where
-    V: 'static,
-    C: 'static,
+    V: 'static + Send,
 {
-    h: FeatureStreamWrapper<V, C>,
+    h: FeatureStreamWrapper<V>,
 }
 
-impl<V, C> FeatureStreamBoxer<V, C>
+impl<V> FeatureStreamBoxer<V>
 where
-    V: 'static,
-    C: QueryContext + 'static,
+    V: 'static + Send,
 {
     /// Consumes a [`VectorQueryProcessor`], a [`VectorQueryRectangle`] and a [`QueryContext`] and
     /// returns a `'static` [`Stream`] that can be passed to an [`Executor`][crate::pro::executor::Executor].
     pub async fn new(
-        proc: Box<dyn VectorQueryProcessor<VectorType = V>>,
+        proc: Arc<dyn VectorQueryProcessor<VectorType = V>>,
         qr: VectorQueryRectangle,
-        ctx: C,
+        ctx: Arc<dyn QueryContext + 'static>,
     ) -> Result<Self> {
         let h = FeatureStreamWrapperAsyncTryBuilder {
             proc,
             ctx,
-            stream_builder: |proc, ctx| Box::pin(async move { proc.vector_query(qr, ctx).await }),
+            stream_builder: |proc, ctx| {
+                Box::pin(async move { proc.vector_query(qr, ctx.as_ref()).await })
+            },
         }
         .try_build()
         .await?;
+
         Ok(Self { h })
     }
 }
 
-impl<V, C> Stream for FeatureStreamBoxer<V, C>
+impl<V> Stream for FeatureStreamBoxer<V>
 where
-    V: 'static,
-    C: QueryContext + 'static,
+    V: 'static + Send,
 {
     type Item = Result<V>;
 
@@ -83,61 +84,77 @@ where
     }
 }
 
-impl<C, V> OneshotQueryProcessor<C, V> for Box<dyn VectorQueryProcessor<VectorType = V>>
+#[async_trait::async_trait]
+impl<V> OneshotQueryProcessor<V> for Box<dyn VectorQueryProcessor<VectorType = V>>
 where
-    V: 'static,
-    C: QueryContext + 'static,
+    V: 'static + Send,
 {
     type BBox = BoundingBox2D;
-    type Output = FeatureStreamBoxer<V, C>;
+    type Output = FeatureStreamBoxer<V>;
 
-    fn into_stream(
+    async fn into_stream(
         self,
         qr: QueryRectangle<Self::BBox>,
-        ctx: C,
-    ) -> Pin<Box<dyn Future<Output = Result<Self::Output>>>> {
-        Box::pin(FeatureStreamBoxer::new(self, qr, ctx))
+        ctx: Arc<dyn QueryContext + 'static>,
+    ) -> Result<Self::Output> {
+        FeatureStreamBoxer::new(self.into(), qr, ctx).await
+    }
+}
+
+#[async_trait::async_trait]
+impl<V> OneshotQueryProcessor<V> for Arc<dyn VectorQueryProcessor<VectorType = V>>
+where
+    V: 'static + Send,
+{
+    type BBox = BoundingBox2D;
+    type Output = FeatureStreamBoxer<V>;
+
+    async fn into_stream(
+        self,
+        qr: QueryRectangle<Self::BBox>,
+        ctx: Arc<dyn QueryContext + 'static>,
+    ) -> Result<Self::Output> {
+        FeatureStreamBoxer::new(self, qr, ctx).await
     }
 }
 
 /// Helper struct to tie together a [result stream][Stream] with the bounding [`RasterQueryProcessor`].
 #[self_referencing]
-struct RasterStreamWrapper<RasterType, C>
+struct RasterStreamWrapper<RasterType>
 where
-    RasterType: 'static,
-    C: 'static,
+    RasterType: 'static + Send,
 {
-    proc: Box<dyn RasterQueryProcessor<RasterType = RasterType>>,
-    ctx: C,
+    proc: Arc<dyn RasterQueryProcessor<RasterType = RasterType>>,
+    ctx: Arc<dyn QueryContext + 'static>,
     #[borrows(proc, ctx)]
     #[covariant]
     stream: BoxStream<'this, Result<RasterTile2D<RasterType>>>,
 }
 
-pub struct RasterStreamBoxer<RasterType, C>
+pub struct RasterStreamBoxer<RasterType>
 where
-    RasterType: 'static,
-    C: 'static,
+    RasterType: 'static + Send,
 {
-    h: RasterStreamWrapper<RasterType, C>,
+    h: RasterStreamWrapper<RasterType>,
 }
 
-impl<RasterType, C> RasterStreamBoxer<RasterType, C>
+impl<RasterType> RasterStreamBoxer<RasterType>
 where
-    RasterType: Pixel + 'static,
-    C: QueryContext + 'static,
+    RasterType: Pixel,
 {
     /// Consumes a [`RasterQueryProcessor`], a [`RasterQueryRectangle`] and a [`QueryContext`] and
     /// returns a `'static` [`Stream`] that can be passed to an [`Executor`][crate::pro::executor::Executor].
     pub async fn new(
-        proc: Box<dyn RasterQueryProcessor<RasterType = RasterType>>,
+        proc: Arc<dyn RasterQueryProcessor<RasterType = RasterType>>,
         qr: RasterQueryRectangle,
-        ctx: C,
+        ctx: Arc<dyn QueryContext + 'static>,
     ) -> Result<Self> {
         let h = RasterStreamWrapperAsyncTryBuilder {
             proc,
             ctx,
-            stream_builder: |proc, ctx| Box::pin(async move { proc.raster_query(qr, ctx).await }),
+            stream_builder: |proc, ctx| {
+                Box::pin(async move { proc.raster_query(qr, ctx.as_ref()).await })
+            },
         }
         .try_build()
         .await?;
@@ -145,10 +162,9 @@ where
     }
 }
 
-impl<RasterType, C> Stream for RasterStreamBoxer<RasterType, C>
+impl<RasterType> Stream for RasterStreamBoxer<RasterType>
 where
-    RasterType: Pixel + 'static,
-    C: QueryContext + 'static,
+    RasterType: Pixel,
 {
     type Item = Result<RasterTile2D<RasterType>>;
 
@@ -159,21 +175,39 @@ where
     }
 }
 
-impl<C, RasterType> OneshotQueryProcessor<C, RasterType>
+#[async_trait::async_trait]
+impl<RasterType> OneshotQueryProcessor<RasterType>
     for Box<dyn RasterQueryProcessor<RasterType = RasterType>>
 where
-    RasterType: Pixel + 'static,
-    C: QueryContext + 'static,
+    RasterType: Pixel,
 {
     type BBox = SpatialPartition2D;
-    type Output = RasterStreamBoxer<RasterType, C>;
+    type Output = RasterStreamBoxer<RasterType>;
 
-    fn into_stream(
+    async fn into_stream(
         self,
         qr: QueryRectangle<Self::BBox>,
-        ctx: C,
-    ) -> Pin<Box<dyn Future<Output = Result<Self::Output>>>> {
-        Box::pin(RasterStreamBoxer::new(self, qr, ctx))
+        ctx: Arc<dyn QueryContext + 'static>,
+    ) -> Result<Self::Output> {
+        RasterStreamBoxer::new(self.into(), qr, ctx).await
+    }
+}
+
+#[async_trait::async_trait]
+impl<RasterType> OneshotQueryProcessor<RasterType>
+    for Arc<dyn RasterQueryProcessor<RasterType = RasterType>>
+where
+    RasterType: Pixel,
+{
+    type BBox = SpatialPartition2D;
+    type Output = RasterStreamBoxer<RasterType>;
+
+    async fn into_stream(
+        self,
+        qr: QueryRectangle<Self::BBox>,
+        ctx: Arc<dyn QueryContext + 'static>,
+    ) -> Result<Self::Output> {
+        RasterStreamBoxer::new(self, qr, ctx).await
     }
 }
 
@@ -192,6 +226,7 @@ mod tests {
     };
     use geoengine_datatypes::raster::RasterTile2D;
     use geoengine_datatypes::util::test::TestDefault;
+    use std::sync::Arc;
 
     struct TestProcesor {
         fail: bool,
@@ -239,7 +274,7 @@ mod tests {
         let tp: Box<dyn VectorQueryProcessor<VectorType = NoGeometry>> =
             Box::new(TestProcesor { fail: false });
 
-        let ctx = MockQueryContext::test_default();
+        let ctx = Arc::new(MockQueryContext::test_default());
         let qr = VectorQueryRectangle {
             spatial_bounds: BoundingBox2D::new((0., 0.).into(), (10., 10.).into()).unwrap(),
             time_interval: TimeInterval::new(0, 10).unwrap(),
@@ -257,7 +292,7 @@ mod tests {
         let tp: Box<dyn VectorQueryProcessor<VectorType = NoGeometry>> =
             Box::new(TestProcesor { fail: true });
 
-        let ctx = MockQueryContext::test_default();
+        let ctx = Arc::new(MockQueryContext::test_default());
         let qr = VectorQueryRectangle {
             spatial_bounds: BoundingBox2D::new((0., 0.).into(), (10., 10.).into()).unwrap(),
             time_interval: TimeInterval::new(0, 10).unwrap(),
@@ -273,7 +308,7 @@ mod tests {
         let tp: Box<dyn RasterQueryProcessor<RasterType = u8>> =
             Box::new(TestProcesor { fail: false });
 
-        let ctx = MockQueryContext::test_default();
+        let ctx = Arc::new(MockQueryContext::test_default());
         let qr = RasterQueryRectangle {
             spatial_bounds: SpatialPartition2D::new((0., 10.).into(), (10., 0.).into()).unwrap(),
             time_interval: TimeInterval::new(0, 10).unwrap(),
@@ -291,7 +326,7 @@ mod tests {
         let tp: Box<dyn RasterQueryProcessor<RasterType = u8>> =
             Box::new(TestProcesor { fail: true });
 
-        let ctx = MockQueryContext::test_default();
+        let ctx = Arc::new(MockQueryContext::test_default());
         let qr = RasterQueryRectangle {
             spatial_bounds: SpatialPartition2D::new((0., 10.).into(), (10., 0.).into()).unwrap(),
             time_interval: TimeInterval::new(0, 10).unwrap(),

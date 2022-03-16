@@ -1,3 +1,4 @@
+use crate::error::Error;
 use snafu::Snafu;
 use tokio::sync::mpsc::error::SendError;
 use tokio::sync::oneshot::error::RecvError;
@@ -32,6 +33,14 @@ impl<T> From<SendError<T>> for ExecutorError {
 
 impl From<RecvError> for ExecutorError {
     fn from(e: RecvError) -> Self {
+        Self::Submission {
+            message: e.to_string(),
+        }
+    }
+}
+
+impl From<crate::error::Error> for ExecutorError {
+    fn from(e: Error) -> Self {
         Self::Submission {
             message: e.to_string(),
         }

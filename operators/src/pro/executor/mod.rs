@@ -20,9 +20,9 @@ pub mod replay;
 
 /// Description of an [Executor] task. The description consists provides a primary
 /// key to identify identical computations (`KeyType`).
-pub trait ExecutorTaskDescription: Clone + Send + Debug + 'static {
+pub trait ExecutorTaskDescription: Clone + Send + Sync + Debug + 'static {
     /// A unique identifier for the actual computation of a task
-    type KeyType: Clone + Send + PartialEq + Eq + Hash;
+    type KeyType: Debug + Clone + Send + PartialEq + Eq + Hash;
     /// The result type of the computation
     type ResultType: Sync + Send;
     /// Returns the unique identifies
@@ -58,8 +58,8 @@ where
     Desc: ExecutorTaskDescription,
 {
     key: Desc,
-    response: tokio::sync::oneshot::Sender<ReplayReceiver<Desc::ResultType>>,
-    stream: BoxStream<'static, Desc::ResultType>,
+    response: tokio::sync::oneshot::Sender<Result<ReplayReceiver<Desc::ResultType>>>,
+    stream_future: BoxFuture<'static, Result<BoxStream<'static, Desc::ResultType>>>,
 }
 
 /// A helper to retrieve a computation's key even if
@@ -182,7 +182,7 @@ where
     /// Handles a new computation request. It first tries to join
     /// a running computation. If this is not possible, a new
     /// computation is started.
-    fn handle_new_task(&mut self, kc: KeyedComputation<Desc>) {
+    async fn handle_new_task(&mut self, kc: KeyedComputation<Desc>) {
         let key = kc.key;
 
         let entry = self.computations.entry(key.primary_key().clone());
@@ -209,11 +209,17 @@ where
                     }
                     None => {
                         log::debug!("Stream progressed too far or results do not cover requested result. Starting new computation for request: {:?}", &key);
+
+                        let stream = match kc.stream_future.await {
+                            Ok(s) => s,
+                            Err(e) => return kc.response.send(Err(e)).unwrap_or(()),
+                        };
+
                         let (entry, rx) = Self::start_computation(
                             self.buffer_size,
                             Self::next_id(&mut self.id_seq),
                             key,
-                            kc.stream,
+                            stream,
                             &mut self.tasks,
                         );
                         entries.push(entry);
@@ -224,11 +230,17 @@ where
             // Start a new computation
             std::collections::hash_map::Entry::Vacant(ve) => {
                 log::debug!("Starting new computation for request: {:?}", &key);
+
+                let stream = match kc.stream_future.await {
+                    Ok(s) => s,
+                    Err(e) => return kc.response.send(Err(e)).unwrap_or(()),
+                };
+
                 let (entry, rx) = Self::start_computation(
                     self.buffer_size,
                     Self::next_id(&mut self.id_seq),
                     key,
-                    kc.stream,
+                    stream,
                     &mut self.tasks,
                 );
                 ve.insert(vec![entry]);
@@ -237,7 +249,7 @@ where
         };
 
         // This can only fail, if the receiver side is dropped
-        if kc.response.send(receiver).is_err() {
+        if kc.response.send(Ok(receiver)).is_err() {
             log::warn!("Result consumer dropped unexpectedly.");
         }
     }
@@ -344,7 +356,7 @@ where
             tokio::select! {
                 new_task = self.receiver.recv() => {
                     if let Some(kc) = new_task {
-                        self.handle_new_task(kc);
+                        self.handle_new_task(kc).await;
                     }
                     else {
                         log::info!("Executor terminated.");
@@ -401,20 +413,39 @@ where
     ///
     /// #Errors
     /// This call fails, if the `Executor` was already closed.
-    pub async fn submit_stream<F>(&self, key: &Desc, stream: F) -> Result<StreamReceiver<Desc>>
+    pub async fn submit_stream(
+        &self,
+        key: Desc,
+        stream: Pin<Box<dyn Stream<Item = Desc::ResultType> + Send + 'static>>,
+    ) -> Result<StreamReceiver<Desc>> {
+        self.submit_stream_future(key, futures::future::ok(stream))
+            .await
+    }
+
+    /// Submits a streaming computation to this executor.
+    ///
+    /// #Errors
+    /// This call fails, if the `Executor` was already closed.
+    pub async fn submit_stream_future<F>(
+        &self,
+        key: Desc,
+        stream_future: F,
+    ) -> Result<StreamReceiver<Desc>>
     where
-        F: Stream<Item = Desc::ResultType> + Send + 'static,
+        F: Future<Output = Result<Pin<Box<dyn Stream<Item = Desc::ResultType> + Send + 'static>>>>
+            + Send
+            + 'static,
     {
-        let (tx, rx) = tokio::sync::oneshot::channel::<ReplayReceiver<Desc::ResultType>>();
+        let (tx, rx) = tokio::sync::oneshot::channel();
 
         let kc = KeyedComputation {
             key: key.clone(),
-            stream: Box::pin(stream),
+            stream_future: Box::pin(stream_future),
             response: tx,
         };
 
         self.sender.send(kc).await?;
-        let res = rx.await?;
+        let res = rx.await??;
 
         Ok(StreamReceiver::new(key.clone(), res.into()))
     }
@@ -424,11 +455,13 @@ where
     /// #Errors
     /// This call fails, if the `Executor` was already closed.
     #[allow(clippy::missing_panics_doc)]
-    pub async fn submit<F>(&self, key: &Desc, f: F) -> Result<Desc::ResultType>
+    pub async fn submit<F>(&self, key: Desc, f: F) -> Result<Desc::ResultType>
     where
         F: Future<Output = Desc::ResultType> + Send + 'static,
     {
-        let mut stream = self.submit_stream(key, futures::stream::once(f)).await?;
+        let mut stream = self
+            .submit_stream(key, Box::pin(futures::stream::once(f)))
+            .await?;
         Ok(stream
             .next()
             .await

@@ -4,11 +4,12 @@ use crate::ogc::wms::request::{GetMap, WmsRequest};
 use crate::util::user_input::QueryEx;
 use crate::workflows::workflow::WorkflowId;
 use actix_web::{web, FromRequest, HttpResponse};
+use std::sync::Arc;
 
-use crate::pro::contexts::{GetRasterExecutor, ProContext};
+use crate::pro::contexts::{GetRasterScheduler, ProContext};
 use crate::pro::executor::RasterTaskDescription;
 use geoengine_operators::call_on_generic_raster_processor;
-use geoengine_operators::pro::executor::operators::OneshotQueryProcessor;
+use geoengine_operators::engine::RasterQueryProcessor;
 use geoengine_operators::util::raster_stream_to_png::raster_stream_to_png_bytes_stream;
 use num_traits::AsPrimitive;
 
@@ -72,22 +73,20 @@ async fn get_map<C: ProContext>(
         )
         .await?;
 
-    let query_ctx = ctx.query_context()?;
+    let query_ctx = Arc::new(ctx.query_context()?);
 
     let image_bytes = call_on_generic_raster_processor!(
         processor,
         p => {
+            let proc: Arc<dyn RasterQueryProcessor<RasterType = _>> = p.into();
+
             let desc = RasterTaskDescription::new(
                 endpoint,
-                query_rect.spatial_bounds,
-                query_rect.time_interval,
+                query_rect,
+                proc.clone(),
+                query_ctx.clone(),
             );
-            let stream = p.into_stream(query_rect,query_ctx).await?;
-            let stream = ctx
-                .task_manager()
-                .get_raster_executor()
-                .submit_stream(&desc, stream)
-                .await?;
+            let stream = ctx.task_manager().get_raster_scheduler().submit_stream(desc).await?;
             raster_stream_to_png_bytes_stream(Box::pin(stream), query_rect, request.width, request.height, request.time, colorizer, no_data_value.map(AsPrimitive::as_)).await
         }
     ).map_err(error::Error::from)?;

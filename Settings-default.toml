@@ -26,6 +26,8 @@ tile_shape_pixels_y = 512
 
 [executor]
 queue_size = 10
+scheduler_timeout_ms = 100
+scheduler_merge_threshold = 0.01
 
 [query_context]
 chunk_byte_size = 1048576 # TODO: find reasonable default

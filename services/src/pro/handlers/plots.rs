@@ -35,7 +35,7 @@ async fn get_plot_handler<C: ProContext>(
 
     let task = crate::handlers::plots::process_plot_request(id, params, session, ctx);
 
-    let result = task_manager.plot_executor().submit(&desc, task).await?;
+    let result = task_manager.plot_executor().submit(desc, task).await?;
 
     Ok(web::Json(result?))
 }
