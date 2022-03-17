@@ -1205,8 +1205,7 @@ impl TryFrom<&FeatureDataValue> for f64 {
 
     fn try_from(value: &FeatureDataValue) -> Result<Self, Self::Error> {
         Ok(match value {
-            FeatureDataValue::Float(v) => *v,
-            FeatureDataValue::NullableFloat(v) if v.is_some() => v.unwrap(),
+            FeatureDataValue::Float(v) | FeatureDataValue::NullableFloat(Some(v)) => *v,
             _ => return Err(crate::collections::FeatureCollectionError::WrongDataType),
         })
     }
@@ -1225,10 +1224,10 @@ impl TryFrom<&FeatureDataValue> for i64 {
 
     fn try_from(value: &FeatureDataValue) -> Result<i64, Self::Error> {
         Ok(match value {
-            FeatureDataValue::Int(v) => *v,
-            FeatureDataValue::NullableInt(v) if v.is_some() => v.unwrap(),
-            FeatureDataValue::DateTime(v) => v.inner(),
-            FeatureDataValue::NullableDateTime(v) if v.is_some() => v.unwrap().inner(),
+            FeatureDataValue::Int(v) | FeatureDataValue::NullableInt(Some(v)) => *v,
+            FeatureDataValue::DateTime(v) | FeatureDataValue::NullableDateTime(Some(v)) => {
+                v.inner()
+            }
             _ => return Err(crate::collections::FeatureCollectionError::WrongDataType),
         })
     }
@@ -1247,8 +1246,7 @@ impl<'s> TryFrom<&'s FeatureDataValue> for &'s str {
 
     fn try_from(value: &FeatureDataValue) -> Result<&str, Self::Error> {
         Ok(match value {
-            FeatureDataValue::Text(v) => v.as_ref(),
-            FeatureDataValue::NullableText(v) if v.is_some() => v.as_ref().unwrap(),
+            FeatureDataValue::Text(v) | FeatureDataValue::NullableText(Some(v)) => v.as_ref(),
             _ => return Err(crate::collections::FeatureCollectionError::WrongDataType),
         })
     }
@@ -1259,8 +1257,7 @@ impl TryFrom<&FeatureDataValue> for bool {
 
     fn try_from(value: &FeatureDataValue) -> Result<bool, Self::Error> {
         Ok(match value {
-            FeatureDataValue::Bool(v) => *v,
-            FeatureDataValue::NullableBool(v) if v.is_some() => v.unwrap(),
+            FeatureDataValue::Bool(v) | FeatureDataValue::NullableBool(Some(v)) => *v,
             _ => return Err(crate::collections::FeatureCollectionError::WrongDataType),
         })
     }
@@ -1271,8 +1268,7 @@ impl TryFrom<&FeatureDataValue> for TimeInstance {
 
     fn try_from(value: &FeatureDataValue) -> Result<TimeInstance, Self::Error> {
         Ok(match value {
-            FeatureDataValue::DateTime(v) => *v,
-            FeatureDataValue::NullableDateTime(v) if v.is_some() => v.unwrap(),
+            FeatureDataValue::DateTime(v) | FeatureDataValue::NullableDateTime(Some(v)) => *v,
             _ => return Err(crate::collections::FeatureCollectionError::WrongDataType),
         })
     }
