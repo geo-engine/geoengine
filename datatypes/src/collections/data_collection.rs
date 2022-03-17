@@ -224,6 +224,31 @@ mod tests {
     }
 
     #[test]
+    fn check_has_nulls() {
+        let pc = DataCollection::from_data(
+            vec![],
+            vec![TimeInterval::default(); 1],
+            [
+                ("int1".to_string(), FeatureData::NullableInt(vec![Some(42)])),
+                ("int2".to_string(), FeatureData::NullableInt(vec![None])),
+                (
+                    "text1".to_string(),
+                    FeatureData::NullableText(vec![Some("a".to_string())]),
+                ),
+                ("text2".to_string(), FeatureData::NullableText(vec![None])),
+            ]
+            .into_iter()
+            .collect(),
+        )
+        .unwrap();
+
+        assert_eq!(pc.data("int1").unwrap().has_nulls(), false);
+        assert_eq!(pc.data("int2").unwrap().has_nulls(), true);
+        assert_eq!(pc.data("text1").unwrap().has_nulls(), false);
+        assert_eq!(pc.data("text2").unwrap().has_nulls(), true);
+    }
+
+    #[test]
     fn iterator() {
         let collection = DataCollection::from_data(
             vec![],
@@ -247,7 +272,7 @@ mod tests {
         assert_eq!(TimeInterval::default(), row.time_interval);
         assert_eq!(Some(FeatureDataValue::Int(1)), row.get("foo"));
         assert_eq!(
-            Some(FeatureDataValue::NullableText(Some("a".to_string()))),
+            Some(FeatureDataValue::Text("a".to_string())),
             row.get("bar")
         );
 
