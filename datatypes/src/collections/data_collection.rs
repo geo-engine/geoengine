@@ -281,7 +281,7 @@ mod tests {
         assert_eq!(TimeInterval::default(), row.time_interval);
         assert_eq!(Some(FeatureDataValue::Int(2)), row.get("foo"));
         assert_eq!(
-            Some(FeatureDataValue::NullableText(Some("b".to_string()))),
+            Some(FeatureDataValue::Text("b".to_string())),
             row.get("bar")
         );
 
@@ -290,7 +290,7 @@ mod tests {
         assert_eq!(TimeInterval::default(), row.time_interval);
         assert_eq!(Some(FeatureDataValue::Int(3)), row.get("foo"));
         assert_eq!(
-            Some(FeatureDataValue::NullableText(Some("c".to_string()))),
+            Some(FeatureDataValue::Text("c".to_string())),
             row.get("bar")
         );
 
