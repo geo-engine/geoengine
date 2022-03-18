@@ -57,7 +57,7 @@ where
         qr: VectorQueryRectangle,
         ctx: Arc<dyn QueryContext + 'static>,
     ) -> Result<Self> {
-        let h = FeatureStreamWrapperAsyncTryBuilder {
+        let h = FeatureStreamWrapperAsyncSendTryBuilder {
             proc,
             ctx,
             stream_builder: |proc, ctx| {
@@ -149,7 +149,7 @@ where
         qr: RasterQueryRectangle,
         ctx: Arc<dyn QueryContext + 'static>,
     ) -> Result<Self> {
-        let h = RasterStreamWrapperAsyncTryBuilder {
+        let h = RasterStreamWrapperAsyncSendTryBuilder {
             proc,
             ctx,
             stream_builder: |proc, ctx| {

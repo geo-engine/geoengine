@@ -30,8 +30,9 @@ libloading = "0.7"
 log = "0.4"
 num-traits = "0.2"
 num = "0.4"
+# Wait until changes of PR (https://github.com/joshua-maros/ouroboros/pull/56) are published
 #ouroboros = "0.14"
-ouroboros = {  path = "/home/koerberm/Projekte/rust/ouroboros/ouroboros" }
+ouroboros = { git = "https://github.com/joshua-maros/ouroboros", branch = "main" }
 paste = "1.0"
 pest = "2.1"
 pest_derive = "2.1"
