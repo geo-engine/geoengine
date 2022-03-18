@@ -166,19 +166,11 @@ where
         };
 
         // check that data types match
-        // TODO: think of cheaper call for checking data type match
-        let data_type_variant = mem::discriminant(&FeatureDataType::from(&data));
-        match self.types.get(column) {
-            Some(data_type) if data_type_variant != mem::discriminant(data_type) => {
-                return Err(FeatureCollectionError::WrongDataType.into());
-            }
-            None => {
-                return Err(FeatureCollectionError::ColumnDoesNotExist {
-                    name: column.to_string(),
-                }
-                .into());
-            }
-            Some(_) => (),
+        let expected_type = mem::discriminant(self.types.get(column).expect("checked before"));
+        let given_type = mem::discriminant(&FeatureDataType::from(&data));
+
+        if expected_type != given_type {
+            return Err(FeatureCollectionError::WrongDataType.into());
         }
 
         match data {
