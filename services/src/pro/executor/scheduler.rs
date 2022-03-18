@@ -257,7 +257,7 @@ where
 {
     executor: Arc<Executor<Desc>>,
     tasks: SharedTaskMap<Desc>,
-    looper_handle: JoinHandle<()>,
+    _looper_handle: JoinHandle<()>,
     shutdown: ShutdownFlag,
 }
 
@@ -296,7 +296,7 @@ where
         Self {
             executor,
             tasks,
-            looper_handle,
+            _looper_handle: looper_handle,
             shutdown,
         }
     }

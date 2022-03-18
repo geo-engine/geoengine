@@ -11,20 +11,20 @@ use geoengine_datatypes::collections::{
 };
 use geoengine_datatypes::primitives::{
     AxisAlignedRectangle, BoundingBox2D, Coordinate2D, Geometry, MultiLineString, MultiPoint,
-    MultiPolygon, NoGeometry, RasterQueryRectangle, SpatialPartition2D, SpatialPartitioned,
-    TemporalBounded, TimeInstance, TimeInterval, VectorQueryRectangle,
+    MultiPolygon, NoGeometry, QueryRectangle, RasterQueryRectangle, SpatialPartition2D,
+    SpatialPartitioned, TemporalBounded, TimeInstance, TimeInterval, VectorQueryRectangle,
 };
 use geoengine_datatypes::raster::{Pixel, RasterTile2D};
 use geoengine_datatypes::util::arrow::ArrowTyped;
-use geoengine_operators::engine::{QueryContext, RasterQueryProcessor};
+use geoengine_operators::engine::{QueryContext, RasterQueryProcessor, VectorQueryProcessor};
 use geoengine_operators::pro::executor::operators::OneshotQueryProcessor;
 use geoengine_operators::pro::executor::ExecutorTaskDescription;
 use std::fmt::{Debug, Formatter};
-use std::marker::PhantomData;
 use std::sync::Arc;
 
 pub mod scheduler;
 
+/// Merges two time intervals  regardless if they actually intersect.
 fn merge_time_interval(l: &TimeInterval, r: &TimeInterval) -> TimeInterval {
     TimeInterval::new_unchecked(
         TimeInstance::min(l.start(), r.start()),
@@ -32,6 +32,8 @@ fn merge_time_interval(l: &TimeInterval, r: &TimeInterval) -> TimeInterval {
     )
 }
 
+/// Merges to rectangles regardless if they actually intersect and returns
+/// the lower left and upper right coordinate of the resulting rectangle.
 fn merge_rect<T: AxisAlignedRectangle>(l: &T, r: &T) -> (Coordinate2D, Coordinate2D) {
     let ll = Coordinate2D::new(
         f64_min(l.lower_left().x, r.lower_left().x),
@@ -46,6 +48,33 @@ fn merge_rect<T: AxisAlignedRectangle>(l: &T, r: &T) -> (Coordinate2D, Coordinat
     (ll, ur)
 }
 
+/// Calculates the dead space that occurs when merging two query rectangles. A value of 0 indicates
+/// that the merge is perfect in the sense that no superfluid calculations occur.
+fn merge_dead_space<Rect: AxisAlignedRectangle>(
+    l: &QueryRectangle<Rect>,
+    r: &QueryRectangle<Rect>,
+) -> f64 {
+    let t_sum = (l.time_interval.duration_ms() + 1 + r.time_interval.duration_ms() + 1) as f64;
+    let t_merged =
+        (merge_time_interval(&l.time_interval, &r.time_interval).duration_ms() + 1) as f64;
+
+    let (ll, ur) = merge_rect(&l.spatial_bounds, &r.spatial_bounds);
+    let merged_rect = BoundingBox2D::new_unchecked(ll, ur);
+
+    let x_merged = merged_rect.size_x();
+    let y_merged = merged_rect.size_y();
+
+    let x_sum = l.spatial_bounds.size_x() + r.spatial_bounds.size_x();
+    let y_sum = l.spatial_bounds.size_y() + r.spatial_bounds.size_y();
+
+    let vol_merged = t_merged * x_merged * y_merged;
+    let vol_sum = t_sum * x_sum * y_sum;
+
+    f64_max(0.0, vol_merged / vol_sum - 1.0)
+}
+
+/// Computes the minimum of two f64 values.
+/// This method has no proper handling for `f64::NAN` values.
 fn f64_min(l: f64, r: f64) -> f64 {
     if l < r {
         l
@@ -54,6 +83,8 @@ fn f64_min(l: f64, r: f64) -> f64 {
     }
 }
 
+/// Computes the maximum of two f64 values.
+/// This method has no proper handling for `f64::NAN` values.
 fn f64_max(l: f64, r: f64) -> f64 {
     if l > r {
         l
@@ -144,22 +175,52 @@ pub type MultiPolygonDescription = FeatureCollectionTaskDescription<MultiPolygon
 
 /// A [description][ExecutorTaskDescription] of an [`Executor`][geoengine_operators::pro::executor::Executor] task
 /// for feature data.
-#[derive(Clone, Debug)]
+#[derive(Clone)]
 pub struct FeatureCollectionTaskDescription<G> {
     pub id: WorkflowId,
     pub query_rectangle: VectorQueryRectangle,
-    _p: PhantomData<G>,
+    processor: Arc<dyn VectorQueryProcessor<VectorType = FeatureCollection<G>>>,
+    context: Arc<dyn QueryContext>,
 }
 
 impl<G> FeatureCollectionTaskDescription<G> {
-    pub fn new(id: WorkflowId, query_rectangle: VectorQueryRectangle) -> Self {
+    pub fn new<C: QueryContext + Send + 'static>(
+        id: WorkflowId,
+        query_rectangle: VectorQueryRectangle,
+        processor: Box<dyn VectorQueryProcessor<VectorType = FeatureCollection<G>>>,
+        context: C,
+    ) -> Self {
+        Self::new_arced(id, query_rectangle, processor.into(), Arc::new(context))
+    }
+
+    pub fn new_arced(
+        id: WorkflowId,
+        query_rectangle: VectorQueryRectangle,
+        processor: Arc<dyn VectorQueryProcessor<VectorType = FeatureCollection<G>>>,
+        context: Arc<dyn QueryContext>,
+    ) -> Self {
         Self {
             id,
             query_rectangle,
-            _p: Default::default(),
+            processor,
+            context,
         }
     }
 }
+
+impl<G> Debug for FeatureCollectionTaskDescription<G>
+where
+    G: Geometry + ArrowTyped + 'static,
+{
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "FeatureCollectionTaskDescription{{id={:?}, query_rectangle={:?}}}",
+            &self.id, &self.query_rectangle
+        )
+    }
+}
+
 impl<G> ExecutorTaskDescription for FeatureCollectionTaskDescription<G>
 where
     G: Geometry + ArrowTyped + 'static,
@@ -228,40 +289,13 @@ where
                 time_interval: merged_t,
                 spatial_resolution: self.query_rectangle.spatial_resolution,
             },
-            _p: Default::default(),
+            processor: self.processor.clone(),
+            context: self.context.clone(),
         }
     }
 
     fn merge_dead_space(&self, other: &Self) -> f64 {
-        let t_sum = (self.query_rectangle.time_interval.duration_ms()
-            + 1
-            + other.query_rectangle.time_interval.duration_ms()
-            + 1) as f64;
-        let t_merged = (merge_time_interval(
-            &self.query_rectangle.time_interval,
-            &other.query_rectangle.time_interval,
-        )
-        .duration_ms()
-            + 1) as f64;
-
-        let (ll, ur) = merge_rect(
-            &self.query_rectangle.spatial_bounds,
-            &other.query_rectangle.spatial_bounds,
-        );
-        let merged_rect = BoundingBox2D::new_unchecked(ll, ur);
-
-        let x_merged = merged_rect.size_x();
-        let y_merged = merged_rect.size_y();
-
-        let x_sum = self.query_rectangle.spatial_bounds.size_x()
-            + other.query_rectangle.spatial_bounds.size_x();
-        let y_sum = self.query_rectangle.spatial_bounds.size_y()
-            + other.query_rectangle.spatial_bounds.size_y();
-
-        let vol_merged = t_merged * x_merged * y_merged;
-        let vol_sum = t_sum * x_sum * y_sum;
-
-        f64_max(0.0, vol_merged / vol_sum - 1.0)
+        merge_dead_space(&self.query_rectangle, &other.query_rectangle)
     }
 
     fn execute(
@@ -270,7 +304,15 @@ where
         'static,
         geoengine_operators::pro::executor::error::Result<BoxStream<'static, Self::ResultType>>,
     > {
-        todo!()
+        let proc = self.processor.clone();
+        let qr = self.query_rectangle;
+        let ctx = self.context.clone();
+
+        let stream_future = proc.into_stream(qr, ctx).map(|result| match result {
+            Ok(rb) => Ok(Box::pin(rb) as BoxStream<'static, Self::ResultType>),
+            Err(e) => Err(geoengine_operators::pro::executor::error::ExecutorError::from(e)),
+        });
+        Box::pin(stream_future)
     }
 }
 
@@ -285,7 +327,6 @@ where
     pub query_rectangle: RasterQueryRectangle,
     processor: Arc<dyn RasterQueryProcessor<RasterType = P>>,
     context: Arc<dyn QueryContext>,
-    _p: PhantomData<P>,
 }
 
 impl<P> Debug for RasterTaskDescription<P>
@@ -295,7 +336,7 @@ where
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         write!(
             f,
-            "RasterTaskDescription[ id={:?}, query_rectangle={:?}]",
+            "RasterTaskDescription{{id={:?}, query_rectangle={:?}}}",
             &self.id, &self.query_rectangle
         )
     }
@@ -305,7 +346,16 @@ impl<P> RasterTaskDescription<P>
 where
     P: Pixel,
 {
-    pub fn new(
+    pub fn new<C: QueryContext + Send + 'static>(
+        id: WorkflowId,
+        query_rectangle: RasterQueryRectangle,
+        processor: Box<dyn RasterQueryProcessor<RasterType = P>>,
+        context: C,
+    ) -> Self {
+        Self::new_arced(id, query_rectangle, processor.into(), Arc::new(context))
+    }
+
+    pub fn new_arced(
         id: WorkflowId,
         query_rectangle: RasterQueryRectangle,
         processor: Arc<dyn RasterQueryProcessor<RasterType = P>>,
@@ -314,9 +364,8 @@ where
         Self {
             id,
             query_rectangle,
-            processor: processor,
+            processor,
             context,
-            _p: Default::default(),
         }
     }
 }
@@ -389,40 +438,11 @@ where
             },
             processor: self.processor.clone(),
             context: self.context.clone(),
-            _p: Default::default(),
         }
     }
 
     fn merge_dead_space(&self, other: &Self) -> f64 {
-        let t_sum = (self.query_rectangle.time_interval.duration_ms()
-            + 1
-            + other.query_rectangle.time_interval.duration_ms()
-            + 1) as f64;
-        let t_merged = (merge_time_interval(
-            &self.query_rectangle.time_interval,
-            &other.query_rectangle.time_interval,
-        )
-        .duration_ms()
-            + 1) as f64;
-
-        let (ll, ur) = merge_rect(
-            &self.query_rectangle.spatial_bounds,
-            &other.query_rectangle.spatial_bounds,
-        );
-        let merged_rect = BoundingBox2D::new_unchecked(ll, ur);
-
-        let x_merged = merged_rect.size_x();
-        let y_merged = merged_rect.size_y();
-
-        let x_sum = self.query_rectangle.spatial_bounds.size_x()
-            + other.query_rectangle.spatial_bounds.size_x();
-        let y_sum = self.query_rectangle.spatial_bounds.size_y()
-            + other.query_rectangle.spatial_bounds.size_y();
-
-        let vol_merged = t_merged * x_merged * y_merged;
-        let vol_sum = t_sum * x_sum * y_sum;
-
-        f64_max(0.0, vol_merged / vol_sum - 1.0)
+        merge_dead_space(&self.query_rectangle, &other.query_rectangle)
     }
 
     fn execute(
@@ -625,7 +645,7 @@ mod tests {
     fn test_raster() {
         let id = WorkflowId::new();
 
-        let pd1 = RasterTaskDescription::<u8>::new(
+        let pd1 = RasterTaskDescription::<u8>::new_arced(
             id,
             QueryRectangle {
                 spatial_bounds: SpatialPartition2D::new_unchecked(
@@ -637,14 +657,14 @@ mod tests {
             },
         );
 
-        let pd2 = RasterTaskDescription::<u8>::new(
+        let pd2 = RasterTaskDescription::<u8>::new_arced(
             id,
             SpatialPartition2D::new(Coordinate2D::new(0.0, 10.0), Coordinate2D::new(10.0, 0.0))
                 .unwrap(),
             TimeInterval::new(4, 6).unwrap(),
         );
 
-        let pd3 = RasterTaskDescription::<u8>::new(
+        let pd3 = RasterTaskDescription::<u8>::new_arced(
             id,
             SpatialPartition2D::new(Coordinate2D::new(4.0, 6.0), Coordinate2D::new(6.0, 4.0))
                 .unwrap(),
