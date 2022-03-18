@@ -242,10 +242,10 @@ mod tests {
         )
         .unwrap();
 
-        assert_eq!(pc.data("int1").unwrap().has_nulls(), false);
-        assert_eq!(pc.data("int2").unwrap().has_nulls(), true);
-        assert_eq!(pc.data("text1").unwrap().has_nulls(), false);
-        assert_eq!(pc.data("text2").unwrap().has_nulls(), true);
+        assert!(!pc.data("int1").unwrap().has_nulls());
+        assert!(pc.data("int2").unwrap().has_nulls());
+        assert!(!pc.data("text1").unwrap().has_nulls());
+        assert!(pc.data("text2").unwrap().has_nulls());
     }
 
     #[test]
