@@ -13,12 +13,19 @@ use std::vec;
 use tokio::sync::oneshot::{channel, Sender};
 use tokio::task::JoinHandle;
 
+/// An extension of the `ExecutorTaskDescription` that allows
+/// to merge tasks and schedule the resulting query
 #[async_trait::async_trait]
 pub trait MergableTaskDescription: ExecutorTaskDescription {
+    /// Merges two descriptions
+    #[must_use]
     fn merge(&self, other: &Self) -> Self;
 
+    /// Calculates the dead space that would result when merging the
+    /// two given descriptions.
     fn merge_dead_space(&self, other: &Self) -> f64;
 
+    /// Executes the query
     fn execute(
         &self,
     ) -> BoxFuture<
@@ -33,12 +40,15 @@ type SharedTaskMap<Desc> = Arc<Mutex<TaskMap<Desc>>>;
 
 type ShutdownFlag = Arc<AtomicBool>;
 
+/// An enum representing either a single task,
+/// or a set of merged tasks
 enum ScheduledTask<Desc: MergableTaskDescription> {
     Single(TaskEntry<Desc>),
     Merged(MergedTasks<Desc>),
 }
 
 impl<Desc: MergableTaskDescription> ScheduledTask<Desc> {
+    /// Calculates the resulting dead space when merging this task with the given one.
     fn merge_dead_space(&self, other: &Self) -> f64 {
         match (self, other) {
             (Self::Merged(l), Self::Merged(r)) => l.description.merge_dead_space(&r.description),
@@ -48,16 +58,20 @@ impl<Desc: MergableTaskDescription> ScheduledTask<Desc> {
         }
     }
 
+    /// Schedules this task to the executor.
     async fn schedule(self, executor: &Executor<Desc>) -> Result<()> {
         match self {
             Self::Single(t) => {
                 debug!("Scheduling single task: {:?}", &t.description);
                 let stream_future = t.description.execute();
-                if let Err(_) = t.response.send(
-                    executor
-                        .submit_stream_future(t.description, stream_future)
-                        .await,
-                ) {
+                if t.response
+                    .send(
+                        executor
+                            .submit_stream_future(t.description, stream_future)
+                            .await,
+                    )
+                    .is_err()
+                {
                     warn!("Stream consumer dropped unexpectedly");
                 }
             }
@@ -74,11 +88,15 @@ impl<Desc: MergableTaskDescription> ScheduledTask<Desc> {
                         &task.description, &parent_task.description
                     );
                     let task_future = task.description.execute();
-                    if let Err(_) = task.response.send(
-                        executor
-                            .submit_stream_future(task.description, task_future)
-                            .await,
-                    ) {
+                    if task
+                        .response
+                        .send(
+                            executor
+                                .submit_stream_future(task.description, task_future)
+                                .await,
+                        )
+                        .is_err()
+                    {
                         warn!("Stream consumer dropped unexpectedly");
                     }
                 }
@@ -87,6 +105,7 @@ impl<Desc: MergableTaskDescription> ScheduledTask<Desc> {
         Ok(())
     }
 
+    /// Merges this task with the given one.
     fn merge(self, other: Self) -> Self {
         let (desc, covered_tasks) = match (self, other) {
             (Self::Merged(l), Self::Merged(mut r)) => {
@@ -122,16 +141,26 @@ impl<Desc: MergableTaskDescription> From<TaskEntry<Desc>> for ScheduledTask<Desc
     }
 }
 
+/// Represents a set of merged tasks.
+/// The `description` covers the bounds of all merged tasks,
+/// `covered_tasks` contains all original tasks that were merged into this one.
 struct MergedTasks<Desc: MergableTaskDescription> {
     description: Desc,
     covered_tasks: Vec<TaskEntry<Desc>>,
 }
 
+/// A task send to the scheduler, `response` is used
+/// to return the result to the requesting task.
 struct TaskEntry<Desc: MergableTaskDescription> {
     description: Desc,
     response: Sender<Result<StreamReceiver<Desc>>>,
 }
 
+/// The looper ticks with a fixed interval and collects tasks.
+/// Every tick, all collected tasks are merged as far as possible
+/// and scheduled to the underlying executor.
+///
+/// Tasks are merged, if the occurring dead space is below `merge_dead_space_threshold`.
 struct MergeLooper<Desc>
 where
     Desc: MergableTaskDescription,
@@ -159,7 +188,7 @@ where
 
             {
                 let new_tasks = {
-                    let mut tasks = self.tasks.lock().unwrap();
+                    let mut tasks = geoengine_operators::util::safe_lock_mutex(&self.tasks);
                     tasks.drain().collect::<TaskMap<Desc>>()
                 };
 
@@ -178,15 +207,16 @@ where
         log::info!("Finished merger loop.");
     }
 
+    /// Schedules the given set of tasks. Merging of tasks is performed, if
+    /// the occurring dead space is below the given threshold.
     async fn schedule(executor: Arc<Executor<Desc>>, tasks: TaskMap<Desc>, threshold: f64) {
-        let merged_tasks =
-            tokio::task::spawn_blocking(move || Self::handle_tasks(tasks, threshold))
-                .await
-                .expect("Task merging must complete.");
+        let merged_tasks = tokio::task::spawn_blocking(move || Self::merge_tasks(tasks, threshold))
+            .await
+            .expect("Task merging must complete.");
 
         let futures = merged_tasks
             .into_values()
-            .flat_map(|x| x.into_iter())
+            .flat_map(std::iter::IntoIterator::into_iter)
             .map(|task| task.schedule(executor.as_ref()))
             .collect::<FuturesUnordered<_>>();
 
@@ -197,8 +227,9 @@ where
         }
     }
 
-    fn handle_tasks(tasks: TaskMap<Desc>, threshold: f64) -> TaskMap<Desc> {
-        let merged = tasks
+    /// Merges the tasks with the given threshold
+    fn merge_tasks(tasks: TaskMap<Desc>, threshold: f64) -> TaskMap<Desc> {
+        tasks
             .into_iter()
             .map(|(k, v)| {
                 debug!("Merging {} tasks for key {:?}", v.len(), &k);
@@ -210,10 +241,11 @@ where
                 );
                 (k, merged)
             })
-            .collect::<HashMap<_, _>>();
-        merged
+            .collect::<HashMap<_, _>>()
     }
 
+    /// Merges a set of homogeneous tasks. It performs `single_merge_pass` until
+    /// the resulting task list does not change anymore.
     fn handle_homogeneous_tasks(
         mut tasks: Vec<ScheduledTask<Desc>>,
         threshold: f64,
@@ -229,6 +261,11 @@ where
         tasks
     }
 
+    /// A single merge pass is a O(n^2) operation on the given task list.
+    /// It picks the first task from the list and tries to merge it
+    /// with all other tasks.
+    /// All tasks that could not be merged remain in the list and are processed
+    /// in a subsequent loop. This is repeated until the list unmerged tasks is empty.
     fn single_merge_pass(
         mut tasks: Vec<ScheduledTask<Desc>>,
         threshold: f64,
@@ -251,6 +288,11 @@ where
     }
 }
 
+/// The scheduler ticks with a fixed interval and collects tasks.
+/// Every tick, all collected tasks are merged as far as possible
+/// and scheduled to the underlying executor.
+///
+/// Tasks are merged, if the occurring dead space is below `merge_dead_space_threshold`.
 pub struct TaskScheduler<Desc>
 where
     Desc: MergableTaskDescription,
@@ -319,7 +361,7 @@ where
         };
 
         {
-            let mut tasks = self.tasks.lock().unwrap();
+            let mut tasks = geoengine_operators::util::safe_lock_mutex(&self.tasks);
             match tasks.entry(key.primary_key().clone()) {
                 Entry::Vacant(ve) => {
                     ve.insert(vec![task_entry.into()]);
@@ -331,9 +373,4 @@ where
         }
         rx.await?
     }
-
-    // pub async fn close(self) -> Result<()> {
-    //     self.shutdown.store(true, Ordering::Relaxed);
-    //     Ok(self.looper_handle.await?)
-    // }
 }

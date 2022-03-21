@@ -1,7 +1,6 @@
 use crate::error::Result;
 use crate::ogc::wfs::request::{GetFeature, WfsRequest};
-use crate::pro::contexts::{GetFeatureExecutor, ProContext};
-use crate::pro::executor::scheduler::MergableTaskDescription;
+use crate::pro::contexts::{GetFeatureScheduler, ProContext};
 use crate::pro::executor::FeatureCollectionTaskDescription;
 use crate::util::user_input::QueryEx;
 use crate::workflows::workflow::WorkflowId;
@@ -56,10 +55,8 @@ async fn get_feature<C: ProContext>(
     let json = call_on_generic_vector_processor!(processor, p => {
         let desc = FeatureCollectionTaskDescription::new(endpoint,
                 query_rect, p, query_ctx);
-        let stream = desc.execute().await?;
-        let stream = tm.get_feature_executor().submit_stream(desc, stream).await?;
+        let stream = tm.get_feature_scheduler().fastpath(desc).await?;
         crate::handlers::wfs::vector_stream_to_geojson(Box::pin(stream)).await
-
     })?;
     Ok(HttpResponse::Ok().json(json))
 }

@@ -476,14 +476,25 @@ mod tests {
     };
     use geoengine_datatypes::plots::PlotOutputFormat;
     use geoengine_datatypes::primitives::{
-        BoundingBox2D, Coordinate2D, MultiPoint, NoGeometry, QueryRectangle, SpatialPartition2D,
-        SpatialResolution, TimeInterval,
+        BoundingBox2D, Coordinate2D, Measurement, MultiPoint, NoGeometry, QueryRectangle,
+        SpatialPartition2D, SpatialResolution, TimeInterval, VectorQueryRectangle,
     };
     use geoengine_datatypes::raster::{
-        EmptyGrid2D, GeoTransform, GridIdx2D, GridOrEmpty, RasterTile2D,
+        EmptyGrid2D, GeoTransform, GridIdx2D, GridOrEmpty, RasterDataType, RasterTile2D,
+    };
+    use geoengine_datatypes::spatial_reference::SpatialReferenceOption;
+    use geoengine_datatypes::util::test::TestDefault;
+    use geoengine_operators::engine::{
+        MockExecutionContext, MockQueryContext, RasterOperator, RasterQueryProcessor,
+        RasterResultDescriptor, TypedRasterQueryProcessor, TypedVectorQueryProcessor,
+        VectorOperator, VectorQueryProcessor,
+    };
+    use geoengine_operators::mock::{
+        MockFeatureCollectionSource, MockRasterSource, MockRasterSourceParams,
     };
     use geoengine_operators::pro::executor::ExecutorTaskDescription;
     use std::collections::HashMap;
+    use std::sync::Arc;
 
     #[test]
     fn test_plot() {
@@ -540,27 +551,9 @@ mod tests {
         );
     }
 
-    #[test]
-    fn test_data() {
+    #[tokio::test]
+    async fn test_data() {
         let id = WorkflowId::new();
-
-        let pd1 = DataDescription::new(
-            id,
-            BoundingBox2D::new((0.0, 0.0).into(), (10.0, 10.0).into()).unwrap(),
-            TimeInterval::new(0, 10).unwrap(),
-        );
-
-        let pd2 = DataDescription::new(
-            id,
-            BoundingBox2D::new(Coordinate2D::new(4.0, 4.0), Coordinate2D::new(6.0, 6.0)).unwrap(),
-            TimeInterval::new(4, 6).unwrap(),
-        );
-
-        let pd3 = DataDescription::new(
-            id,
-            BoundingBox2D::new(Coordinate2D::new(4.0, 4.0), Coordinate2D::new(6.0, 6.0)).unwrap(),
-            TimeInterval::new(0, 10).unwrap(),
-        );
 
         let collection = DataCollection::from_data(
             vec![NoGeometry, NoGeometry, NoGeometry],
@@ -572,6 +565,67 @@ mod tests {
             HashMap::new(),
         )
         .unwrap();
+
+        let source = MockFeatureCollectionSource::single(collection.clone()).boxed();
+
+        let source = source
+            .initialize(&MockExecutionContext::test_default())
+            .await
+            .unwrap();
+
+        let proc: Arc<dyn VectorQueryProcessor<VectorType = DataCollection>> =
+            if let Ok(TypedVectorQueryProcessor::Data(p)) = source.query_processor() {
+                p
+            } else {
+                panic!()
+            }
+            .into();
+
+        let ctx = Arc::new(MockQueryContext::test_default());
+
+        let pd1 = DataDescription::new_arced(
+            id,
+            VectorQueryRectangle {
+                spatial_bounds: BoundingBox2D::new_unchecked(
+                    (0.0, 0.0).into(),
+                    (10.0, 10.0).into(),
+                ),
+                time_interval: TimeInterval::new_unchecked(0, 10),
+                spatial_resolution: SpatialResolution::one(),
+            },
+            proc.clone(),
+            ctx.clone(),
+        );
+
+        let pd2 = DataDescription::new_arced(
+            id,
+            VectorQueryRectangle {
+                spatial_bounds: BoundingBox2D::new(
+                    Coordinate2D::new(4.0, 4.0),
+                    Coordinate2D::new(6.0, 6.0),
+                )
+                .unwrap(),
+                time_interval: TimeInterval::new(4, 6).unwrap(),
+                spatial_resolution: SpatialResolution::one(),
+            },
+            proc.clone(),
+            ctx.clone(),
+        );
+
+        let pd3 = DataDescription::new_arced(
+            id,
+            VectorQueryRectangle {
+                spatial_bounds: BoundingBox2D::new(
+                    Coordinate2D::new(4.0, 4.0),
+                    Coordinate2D::new(6.0, 6.0),
+                )
+                .unwrap(),
+                time_interval: TimeInterval::new(0, 10).unwrap(),
+                spatial_resolution: SpatialResolution::one(),
+            },
+            proc,
+            ctx,
+        );
 
         assert!(pd2.is_contained_in(&pd1));
         assert!(pd3.is_contained_in(&pd1));
@@ -588,27 +642,9 @@ mod tests {
         assert_eq!(3, sliced.len());
     }
 
-    #[test]
-    fn test_vector() {
+    #[tokio::test]
+    async fn test_vector() {
         let id = WorkflowId::new();
-
-        let pd1 = MultiPointDescription::new(
-            id,
-            BoundingBox2D::new(Coordinate2D::new(0.0, 0.0), Coordinate2D::new(10.0, 10.0)).unwrap(),
-            TimeInterval::new(0, 10).unwrap(),
-        );
-
-        let pd2 = MultiPointDescription::new(
-            id,
-            BoundingBox2D::new(Coordinate2D::new(4.0, 4.0), Coordinate2D::new(6.0, 6.0)).unwrap(),
-            TimeInterval::new(4, 6).unwrap(),
-        );
-
-        let pd3 = MultiPointDescription::new(
-            id,
-            BoundingBox2D::new(Coordinate2D::new(4.0, 4.0), Coordinate2D::new(6.0, 6.0)).unwrap(),
-            TimeInterval::new(0, 10).unwrap(),
-        );
 
         let collection = MultiPointCollection::from_data(
             vec![
@@ -624,6 +660,68 @@ mod tests {
             HashMap::new(),
         )
         .unwrap();
+
+        let source = MockFeatureCollectionSource::single(collection.clone()).boxed();
+
+        let source = source
+            .initialize(&MockExecutionContext::test_default())
+            .await
+            .unwrap();
+
+        let proc: Arc<dyn VectorQueryProcessor<VectorType = MultiPointCollection>> =
+            if let Ok(TypedVectorQueryProcessor::MultiPoint(p)) = source.query_processor() {
+                p
+            } else {
+                panic!()
+            }
+            .into();
+
+        let ctx = Arc::new(MockQueryContext::test_default());
+
+        let pd1 = MultiPointDescription::new_arced(
+            id,
+            VectorQueryRectangle {
+                spatial_bounds: BoundingBox2D::new(
+                    Coordinate2D::new(0.0, 0.0),
+                    Coordinate2D::new(10.0, 10.0),
+                )
+                .unwrap(),
+                time_interval: TimeInterval::new(0, 10).unwrap(),
+                spatial_resolution: SpatialResolution::one(),
+            },
+            proc.clone(),
+            ctx.clone(),
+        );
+
+        let pd2 = MultiPointDescription::new_arced(
+            id,
+            VectorQueryRectangle {
+                spatial_bounds: BoundingBox2D::new(
+                    Coordinate2D::new(4.0, 4.0),
+                    Coordinate2D::new(6.0, 6.0),
+                )
+                .unwrap(),
+                time_interval: TimeInterval::new(4, 6).unwrap(),
+                spatial_resolution: SpatialResolution::one(),
+            },
+            proc.clone(),
+            ctx.clone(),
+        );
+
+        let pd3 = MultiPointDescription::new_arced(
+            id,
+            VectorQueryRectangle {
+                spatial_bounds: BoundingBox2D::new(
+                    Coordinate2D::new(4.0, 4.0),
+                    Coordinate2D::new(6.0, 6.0),
+                )
+                .unwrap(),
+                time_interval: TimeInterval::new(0, 10).unwrap(),
+                spatial_resolution: SpatialResolution::one(),
+            },
+            proc,
+            ctx,
+        );
 
         assert!(pd2.is_contained_in(&pd1));
         assert!(pd3.is_contained_in(&pd1));
@@ -641,9 +739,45 @@ mod tests {
         assert_eq!(2, sliced.len());
     }
 
-    #[test]
-    fn test_raster() {
+    #[tokio::test]
+    #[allow(clippy::too_many_lines)]
+    async fn test_raster() {
         let id = WorkflowId::new();
+
+        let tile = RasterTile2D::<u8>::new(
+            TimeInterval::new(0, 10).unwrap(),
+            GridIdx2D::new([0, 0]),
+            GeoTransform::new((0., 10.).into(), 1.0, -1.0),
+            GridOrEmpty::Empty(EmptyGrid2D::new([10, 10].into(), 0_u8)),
+        );
+
+        let source = MockRasterSource {
+            params: MockRasterSourceParams {
+                data: vec![tile.clone()],
+                result_descriptor: RasterResultDescriptor {
+                    data_type: RasterDataType::U8,
+                    spatial_reference: SpatialReferenceOption::Unreferenced,
+                    measurement: Measurement::Unitless,
+                    no_data_value: None,
+                },
+            },
+        }
+        .boxed();
+
+        let source = source
+            .initialize(&MockExecutionContext::test_default())
+            .await
+            .unwrap();
+
+        let proc: Arc<dyn RasterQueryProcessor<RasterType = u8>> =
+            if let Ok(TypedRasterQueryProcessor::U8(p)) = source.query_processor() {
+                p
+            } else {
+                panic!()
+            }
+            .into();
+
+        let ctx = Arc::new(MockQueryContext::test_default());
 
         let pd1 = RasterTaskDescription::<u8>::new_arced(
             id,
@@ -655,20 +789,38 @@ mod tests {
                 time_interval: TimeInterval::new_unchecked(0, 10),
                 spatial_resolution: SpatialResolution::one(),
             },
+            proc.clone(),
+            ctx.clone(),
         );
 
         let pd2 = RasterTaskDescription::<u8>::new_arced(
             id,
-            SpatialPartition2D::new(Coordinate2D::new(0.0, 10.0), Coordinate2D::new(10.0, 0.0))
+            QueryRectangle {
+                spatial_bounds: SpatialPartition2D::new(
+                    Coordinate2D::new(0.0, 10.0),
+                    Coordinate2D::new(10.0, 0.0),
+                )
                 .unwrap(),
-            TimeInterval::new(4, 6).unwrap(),
+                time_interval: TimeInterval::new(4, 6).unwrap(),
+                spatial_resolution: SpatialResolution::one(),
+            },
+            proc.clone(),
+            ctx.clone(),
         );
 
         let pd3 = RasterTaskDescription::<u8>::new_arced(
             id,
-            SpatialPartition2D::new(Coordinate2D::new(4.0, 6.0), Coordinate2D::new(6.0, 4.0))
+            QueryRectangle {
+                spatial_bounds: SpatialPartition2D::new(
+                    Coordinate2D::new(4.0, 6.0),
+                    Coordinate2D::new(6.0, 4.0),
+                )
                 .unwrap(),
-            TimeInterval::new(0, 10).unwrap(),
+                time_interval: TimeInterval::new(0, 10).unwrap(),
+                spatial_resolution: SpatialResolution::one(),
+            },
+            proc,
+            ctx,
         );
 
         assert!(pd2.is_contained_in(&pd1));

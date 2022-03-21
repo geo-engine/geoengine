@@ -560,7 +560,7 @@ mod tests {
         let e = Executor::<i32>::new(5);
 
         let sf1 = e
-            .submit_stream(&1, futures::stream::iter(Vec::<i32>::new()))
+            .submit_stream(1, Box::pin(futures::stream::iter(Vec::<i32>::new())))
             .await
             .unwrap();
 
@@ -575,7 +575,7 @@ mod tests {
         let e = Executor::<i32>::new(5);
 
         let sf1 = e
-            .submit_stream(&1, futures::stream::iter(vec![1, 2, 3]))
+            .submit_stream(1, Box::pin(futures::stream::iter(vec![1, 2, 3])))
             .await
             .unwrap();
 
@@ -589,8 +589,8 @@ mod tests {
     async fn test_stream_two_consumers() -> Result<(), ExecutorError> {
         let e = Executor::new(5);
 
-        let sf1 = e.submit_stream(&1, futures::stream::iter(vec![1, 2, 3]));
-        let sf2 = e.submit_stream(&1, futures::stream::iter(vec![1, 2, 3]));
+        let sf1 = e.submit_stream(1, Box::pin(futures::stream::iter(vec![1, 2, 3])));
+        let sf2 = e.submit_stream(1, Box::pin(futures::stream::iter(vec![1, 2, 3])));
 
         let (sf1, sf2) = tokio::join!(sf1, sf2);
 
@@ -633,7 +633,7 @@ mod tests {
     #[should_panic(expected = "Executor task panicked!")]
     async fn test_stream_propagate_panic() {
         let e = Executor::new(5);
-        let sf = e.submit_stream(&1, PanicStream {});
+        let sf = e.submit_stream(1, Box::pin(PanicStream {}));
         let mut sf = sf.await.unwrap();
         sf.next().await;
     }
@@ -642,7 +642,7 @@ mod tests {
     async fn test_stream_consumer_drop() {
         let e = Executor::new(2);
         let chk = {
-            e.submit_stream(&1, futures::stream::iter(vec![1, 2, 3]))
+            e.submit_stream(1, Box::pin(futures::stream::iter(vec![1, 2, 3])))
                 .await
                 .unwrap()
                 .next()
@@ -651,7 +651,7 @@ mod tests {
         // Assert that the task is dropped if all consumers are dropped.
         // Therefore, resubmit another one and ensure we produce new results.
         let chk2 = {
-            e.submit_stream(&1, futures::stream::iter(vec![2, 2, 3]))
+            e.submit_stream(1, Box::pin(futures::stream::iter(vec![2, 2, 3])))
                 .await
                 .unwrap()
                 .next()
@@ -665,11 +665,11 @@ mod tests {
     #[tokio::test]
     async fn test_simple() -> Result<(), ExecutorError> {
         let e = Executor::new(5);
-        let f = e.submit(&1, async { 2 });
+        let f = e.submit(1, async { 2 });
 
         assert_eq!(2, f.await?);
 
-        let f = e.submit(&1, async { 42 });
+        let f = e.submit(1, async { 42 });
         assert_eq!(42, f.await?);
 
         Ok(())
@@ -678,16 +678,16 @@ mod tests {
     #[tokio::test]
     async fn test_multi_consumers() -> Result<(), ExecutorError> {
         let e = Executor::new(5);
-        let f = e.submit(&1, async { 2 });
-        let f2 = e.submit(&1, async { 2 });
+        let f = e.submit(1, async { 2 });
+        let f2 = e.submit(1, async { 2 });
 
         let (r1, r2) = tokio::join!(f, f2);
         let (r1, r2) = (r1?, r2?);
 
         assert_eq!(r1, r2);
 
-        let f = e.submit(&1, async { 2 });
-        let f2 = e.submit(&1, async { 2 });
+        let f = e.submit(1, async { 2 });
+        let f2 = e.submit(1, async { 2 });
 
         let r1 = f.await?;
         let r2 = f2.await?;
@@ -700,7 +700,7 @@ mod tests {
     #[should_panic]
     async fn test_panic() {
         let e = Executor::new(5);
-        let f = e.submit(&1, async { panic!("booom") });
+        let f = e.submit(1, async { panic!("booom") });
 
         f.await.unwrap();
     }
@@ -708,7 +708,7 @@ mod tests {
     #[tokio::test]
     async fn test_close() -> Result<(), ExecutorError> {
         let e = Executor::new(5);
-        let f = e.submit(&1, async { 2 });
+        let f = e.submit(1, async { 2 });
         assert_eq!(2, f.await?);
         let c = e.close();
         c.await?;
@@ -759,16 +759,26 @@ mod tests {
 
         let mut s1 = e
             .submit_stream(
-                &d1,
-                futures::stream::iter(vec![Arc::new(1), Arc::new(2), Arc::new(3), Arc::new(4)]),
+                d1,
+                Box::pin(futures::stream::iter(vec![
+                    Arc::new(1),
+                    Arc::new(2),
+                    Arc::new(3),
+                    Arc::new(4),
+                ])),
             )
             .await
             .unwrap();
 
         let mut s2 = e
             .submit_stream(
-                &d2,
-                futures::stream::iter(vec![Arc::new(1), Arc::new(2), Arc::new(3), Arc::new(4)]),
+                d2,
+                Box::pin(futures::stream::iter(vec![
+                    Arc::new(1),
+                    Arc::new(2),
+                    Arc::new(3),
+                    Arc::new(4),
+                ])),
             )
             .await
             .unwrap();
