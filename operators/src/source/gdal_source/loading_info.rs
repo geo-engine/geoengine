@@ -486,6 +486,102 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn test_meta_data_list() {
+        let no_data_value = Some(0.);
+
+        let meta_data = GdalMetaDataList {
+            result_descriptor: RasterResultDescriptor {
+                data_type: RasterDataType::U8,
+                spatial_reference: SpatialReference::epsg_4326().into(),
+                measurement: Measurement::Unitless,
+                no_data_value,
+            },
+            params: vec![
+                GdalLoadingInfoTemporalSlice {
+                    time: TimeInterval::new_unchecked(0, 1),
+                    params: Some(GdalDatasetParameters {
+                        file_path: "/foo/bar_0.tiff".into(),
+                        rasterband_channel: 0,
+                        geo_transform: TestDefault::test_default(),
+                        width: 360,
+                        height: 180,
+                        file_not_found_handling: FileNotFoundHandling::NoData,
+                        no_data_value,
+                        properties_mapping: None,
+                        gdal_open_options: None,
+                        gdal_config_options: None,
+                    }),
+                },
+                GdalLoadingInfoTemporalSlice {
+                    time: TimeInterval::new_unchecked(1, 5),
+                    params: Some(GdalDatasetParameters {
+                        file_path: "/foo/bar_1.tiff".into(),
+                        rasterband_channel: 0,
+                        geo_transform: TestDefault::test_default(),
+                        width: 360,
+                        height: 180,
+                        file_not_found_handling: FileNotFoundHandling::NoData,
+                        no_data_value,
+                        properties_mapping: None,
+                        gdal_open_options: None,
+                        gdal_config_options: None,
+                    }),
+                },
+                GdalLoadingInfoTemporalSlice {
+                    time: TimeInterval::new_unchecked(5, 6),
+                    params: Some(GdalDatasetParameters {
+                        file_path: "/foo/bar_2.tiff".into(),
+                        rasterband_channel: 0,
+                        geo_transform: TestDefault::test_default(),
+                        width: 360,
+                        height: 180,
+                        file_not_found_handling: FileNotFoundHandling::NoData,
+                        no_data_value,
+                        properties_mapping: None,
+                        gdal_open_options: None,
+                        gdal_config_options: None,
+                    }),
+                },
+            ],
+        };
+
+        assert_eq!(
+            meta_data.result_descriptor().await.unwrap(),
+            RasterResultDescriptor {
+                data_type: RasterDataType::U8,
+                spatial_reference: SpatialReference::epsg_4326().into(),
+                measurement: Measurement::Unitless,
+                no_data_value: Some(0.)
+            }
+        );
+
+        assert_eq!(
+            meta_data
+                .loading_info(RasterQueryRectangle {
+                    spatial_bounds: SpatialPartition2D::new_unchecked(
+                        (0., 1.).into(),
+                        (1., 0.).into()
+                    ),
+                    time_interval: TimeInterval::new_unchecked(0, 3),
+                    spatial_resolution: SpatialResolution::one(),
+                })
+                .await
+                .unwrap()
+                .info
+                .map(|p| p
+                    .unwrap()
+                    .params
+                    .unwrap()
+                    .file_path
+                    .to_str()
+                    .unwrap()
+                    .to_owned())
+                .collect::<Vec<_>>(),
+            &["/foo/bar_0.tiff", "/foo/bar_1.tiff",]
+        );
+    }
+
+    #[tokio::test]
     async fn netcdf_cf_single_time_step() {
         let time_start = TimeInstance::from(NaiveDate::from_ymd(2000, 1, 1).and_hms(0, 0, 0));
         let time_end = TimeInstance::from(NaiveDate::from_ymd(2000, 1, 1).and_hms(0, 0, 0));
