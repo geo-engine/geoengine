@@ -233,12 +233,13 @@ impl DatasetProvider<UserSession> for ProHashMapDatasetDb {
             .iter()
             .filter(|p| session.roles.contains(&p.role))
             .filter_map(|p| {
-                if let Some(d) = self.datasets.get(&p.dataset) {
-                    Some(d)
-                } else {
+                let matching_dataset = self.datasets.get(&p.dataset);
+
+                if matching_dataset.is_none() {
                     warn!("Permission {:?} without a matching dataset", p);
-                    None
                 }
+
+                matching_dataset
             });
 
         let mut list: Vec<_> = if let Some(filter) = &options.filter {
