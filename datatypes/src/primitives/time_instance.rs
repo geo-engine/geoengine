@@ -11,6 +11,7 @@ use snafu::ensure;
 use snafu::Error;
 use std::{
     convert::TryFrom,
+    fmt::Formatter,
     ops::{Add, Sub},
     str::FromStr,
 };
@@ -64,6 +65,12 @@ impl TimeInstance {
 
     pub const MIN: Self = TimeInstance::from_millis_unchecked(-8_334_632_851_200_001 + 1);
     pub const MAX: Self = TimeInstance::from_millis_unchecked(8_210_298_412_800_000 - 1);
+}
+
+impl std::fmt::Display for TimeInstance {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.as_rfc3339())
+    }
 }
 
 impl From<NaiveDateTime> for TimeInstance {

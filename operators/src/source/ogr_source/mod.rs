@@ -191,6 +191,8 @@ impl Default for OgrSourceTimeFormat {
 ///  - float: an array of column names containing float values
 ///  - int: an array of column names containing int values
 ///  - text: an array of column names containing alpha-numeric values
+///  - bool: an array of column names containing boolean values
+///  - datetime: an array of column names containing timestamps or date strings
 ///  - rename: a. optional map of column names from data source to the name in the resulting collection
 #[derive(Clone, Debug, PartialEq, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -201,6 +203,8 @@ pub struct OgrSourceColumnSpec {
     pub int: Vec<String>,
     pub float: Vec<String>,
     pub text: Vec<String>,
+    pub bool: Vec<String>,
+    pub datetime: Vec<String>,
     pub rename: Option<HashMap<String, String>>,
 }
 
@@ -217,6 +221,9 @@ impl OgrSourceColumnSpec {
         self.float
             .retain(|attribute| attributes.contains(attribute));
         self.text.retain(|attribute| attributes.contains(attribute));
+        self.bool.retain(|attribute| attributes.contains(attribute));
+        self.datetime
+            .retain(|attribute| attributes.contains(attribute));
     }
 }
 
@@ -482,6 +489,8 @@ where
     data_types: Arc<HashMap<String, FeatureDataType>>,
     feature_collection_builder: FeatureCollectionBuilder<G>,
     time_extractor: Arc<Box<dyn Fn(&Feature) -> Result<TimeInterval> + Send + Sync + 'static>>,
+    time_attribute_parser:
+        Arc<Box<dyn Fn(FieldValue) -> Result<TimeInstance> + Send + Sync + 'static>>,
     query_rectangle: VectorQueryRectangle,
     chunk_byte_size: usize,
     #[pin]
@@ -692,6 +701,8 @@ where
 
             let dataset_information = Arc::new(dataset_information);
             let time_extractor = Self::initialize_time_extractors(dataset_information.time.clone());
+            let time_attribute_parser =
+                Self::initialize_time_attribute_parser(dataset_information.time.clone());
 
             Ok(Self {
                 dataset_information,
@@ -700,6 +711,7 @@ where
                 feature_collection_builder,
                 query_rectangle,
                 time_extractor: Arc::new(time_extractor),
+                time_attribute_parser: Arc::new(time_attribute_parser),
                 chunk_byte_size,
                 future: None,
                 has_ended: false,
@@ -709,6 +721,7 @@ where
         .await?
     }
 
+    #[allow(clippy::too_many_arguments)]
     async fn compute_batch_future(
         dataset_iterator: Arc<Mutex<OgrDatasetIterator>>,
         dataset_information: Arc<OgrSourceDataset>,
@@ -716,6 +729,7 @@ where
         data_types: Arc<HashMap<String, FeatureDataType>>,
         query_rectangle: VectorQueryRectangle,
         time_extractor: Arc<Box<dyn Fn(&Feature) -> Result<TimeInterval> + Send + Sync>>,
+        time_attribute_parser: Arc<Box<dyn Fn(FieldValue) -> Result<TimeInstance> + Send + Sync>>,
         chunk_byte_size: usize,
     ) -> Result<FeatureCollection<G>> {
         crate::util::spawn_blocking(move || {
@@ -728,6 +742,7 @@ where
                 &data_types,
                 &query_rectangle,
                 time_extractor.as_ref(),
+                time_attribute_parser.as_ref(),
                 chunk_byte_size,
             );
 
@@ -872,6 +887,21 @@ where
         }
     }
 
+    fn initialize_time_attribute_parser(
+        time: OgrSourceDatasetTimeType,
+    ) -> Box<dyn Fn(FieldValue) -> Result<TimeInstance> + Send + Sync> {
+        match time {
+            OgrSourceDatasetTimeType::None => {
+                Box::new(move |_field: FieldValue| Err(Error::OgrSourceColumnsSpecMissing))
+            }
+            OgrSourceDatasetTimeType::Start { start_format, .. }
+            | OgrSourceDatasetTimeType::StartEnd { start_format, .. }
+            | OgrSourceDatasetTimeType::StartDuration { start_format, .. } => {
+                Self::create_time_parser(start_format)
+            }
+        }
+    }
+
     fn initialize_types_and_builder(
         dataset_information: &OgrSourceDataset,
     ) -> (
@@ -901,6 +931,18 @@ where
                     .add_column(attribute.clone(), FeatureDataType::Text)
                     .unwrap();
             }
+            for attribute in &column_spec.bool {
+                data_types.insert(attribute.clone(), FeatureDataType::Bool);
+                feature_collection_builder
+                    .add_column(attribute.clone(), FeatureDataType::Bool)
+                    .unwrap();
+            }
+            for attribute in &column_spec.datetime {
+                data_types.insert(attribute.clone(), FeatureDataType::DateTime);
+                feature_collection_builder
+                    .add_column(attribute.clone(), FeatureDataType::DateTime)
+                    .unwrap();
+            }
         }
         (data_types, feature_collection_builder)
     }
@@ -913,6 +955,7 @@ where
         data_types: &HashMap<String, FeatureDataType>,
         query_rectangle: &VectorQueryRectangle,
         time_extractor: &dyn Fn(&Feature) -> Result<TimeInterval>,
+        time_attribute_parser: &dyn Fn(FieldValue) -> Result<TimeInstance>,
         chunk_byte_size: usize,
     ) -> Result<FeatureCollection<G>> {
         let was_spatial_filtered_by_ogr = feature_iterator.was_spatial_filtered_by_ogr();
@@ -931,6 +974,7 @@ where
                 data_types,
                 query_rectangle,
                 time_extractor,
+                time_attribute_parser,
                 &mut builder,
                 &feature,
                 dataset_information.force_ogr_time_filter,
@@ -950,6 +994,111 @@ where
         builder.build().map_err(Into::into)
     }
 
+    #[allow(clippy::too_many_lines)]
+    fn convert_field_value(
+        data_type: FeatureDataType,
+        field: Result<Option<FieldValue>, GdalError>,
+        time_attribute_parser: &dyn Fn(FieldValue) -> Result<TimeInstance>,
+        error_spec: OgrSourceErrorSpec,
+    ) -> Result<FeatureDataValue> {
+        match data_type {
+            FeatureDataType::Text => {
+                #[allow(clippy::match_same_arms)]
+                let text_option = match field {
+                    Ok(Some(FieldValue::IntegerValue(v))) => Some(v.to_string()),
+                    Ok(Some(FieldValue::Integer64Value(v))) => Some(v.to_string()),
+                    Ok(Some(FieldValue::StringValue(s))) => Some(s),
+                    Ok(Some(FieldValue::RealValue(v))) => Some(v.to_string()),
+                    Ok(Some(FieldValue::DateTimeValue(v))) => Some(v.to_string()), //TODO: allow multiple date columns
+                    Ok(Some(FieldValue::DateValue(v))) => Some(v.to_string()),
+                    Ok(None) => None,
+                    Ok(Some(v)) => error_spec.on_error(Error::OgrColumnFieldTypeMismatch {
+                        expected: "Text".to_string(),
+                        field_value: v,
+                    })?, // TODO: handle other types
+                    Err(e) => error_spec.on_error(Error::Gdal { source: e })?,
+                };
+
+                Ok(FeatureDataValue::NullableText(text_option))
+            }
+            FeatureDataType::Float => {
+                #[allow(clippy::match_same_arms)]
+                let value_option = match field {
+                    Ok(Some(FieldValue::IntegerValue(v))) => Some(f64::from(v)),
+                    Ok(Some(FieldValue::StringValue(s))) => f64::from_str(&s).ok(),
+                    Ok(Some(FieldValue::RealValue(v))) => Some(v),
+                    Ok(None) => None,
+                    Ok(Some(v)) => error_spec.on_error(Error::OgrColumnFieldTypeMismatch {
+                        expected: "Float".to_string(),
+                        field_value: v,
+                    })?, // TODO: handle other types
+                    Err(e) => error_spec.on_error(Error::Gdal { source: e })?,
+                };
+
+                Ok(FeatureDataValue::NullableFloat(value_option))
+            }
+            FeatureDataType::Int => {
+                #[allow(clippy::match_same_arms)]
+                let value_option = match field {
+                    Ok(Some(FieldValue::IntegerValue(v))) => Some(i64::from(v)),
+                    Ok(Some(FieldValue::Integer64Value(v))) => Some(v),
+                    Ok(Some(FieldValue::StringValue(s))) => i64::from_str(&s).ok(),
+                    Ok(Some(FieldValue::RealValue(v))) => Some(v as i64),
+                    Ok(None) => None,
+                    Ok(Some(v)) => error_spec.on_error(Error::OgrColumnFieldTypeMismatch {
+                        expected: "Int".to_string(),
+                        field_value: v,
+                    })?, // TODO: handle other types
+                    Err(e) => error_spec.on_error(Error::Gdal { source: e })?,
+                };
+
+                Ok(FeatureDataValue::NullableInt(value_option))
+            }
+            FeatureDataType::Category => {
+                #[allow(clippy::match_same_arms)]
+                let _value_option: Option<u8> = match field {
+                    Ok(None) => None,
+                    Ok(Some(v)) => error_spec.on_error(Error::OgrColumnFieldTypeMismatch {
+                        expected: "Category".to_string(),
+                        field_value: v,
+                    })?, // TODO: handle other types
+                    Err(e) => error_spec.on_error(Error::Gdal { source: e })?,
+                };
+
+                Err(Error::InvalidFeatureDataType) // TODO: ?
+            }
+            FeatureDataType::Bool => {
+                #[allow(clippy::match_same_arms)]
+                let value_option = match field {
+                    Ok(Some(FieldValue::IntegerValue(v))) => Some(v != 0),
+                    Ok(Some(FieldValue::Integer64Value(v))) => Some(v != 0),
+                    Ok(Some(FieldValue::StringValue(s))) => bool::from_str(&s.to_lowercase()).ok(),
+                    Ok(Some(FieldValue::RealValue(v))) => Some(v != 0.0),
+                    Ok(None) => None,
+                    Ok(Some(v)) => error_spec.on_error(Error::OgrColumnFieldTypeMismatch {
+                        expected: "Bool".to_string(),
+                        field_value: v,
+                    })?, // TODO: handle other types
+                    Err(e) => error_spec.on_error(Error::Gdal { source: e })?,
+                };
+
+                Ok(FeatureDataValue::NullableBool(value_option))
+            }
+            FeatureDataType::DateTime => {
+                let value_option = match field {
+                    Ok(None) => None,
+                    Ok(Some(v)) => match time_attribute_parser(v) {
+                        Ok(parsed) => Ok(Some(parsed)),
+                        Err(e) => error_spec.on_error(e),
+                    }?,
+                    Err(e) => error_spec.on_error(Error::Gdal { source: e })?,
+                };
+
+                Ok(FeatureDataValue::NullableDateTime(value_option))
+            }
+        }
+    }
+
     #[allow(clippy::too_many_arguments)]
     fn add_feature_to_batch(
         error_spec: OgrSourceErrorSpec,
@@ -957,6 +1106,7 @@ where
         data_types: &HashMap<String, FeatureDataType>,
         query_rectangle: &VectorQueryRectangle,
         time_extractor: &dyn Fn(&Feature) -> Result<TimeInterval, Error>,
+        time_attribute_parser: &dyn Fn(FieldValue) -> Result<TimeInstance>,
         builder: &mut FeatureCollectionRowBuilder<G>,
         feature: &Feature,
         was_time_filtered_by_ogr: bool,
@@ -998,72 +1148,9 @@ where
 
         for (column, data_type) in data_types {
             let field = feature.field(&column);
-
-            match data_type {
-                FeatureDataType::Text => {
-                    #[allow(clippy::match_same_arms)]
-                    let text_option = match field {
-                        Ok(Some(FieldValue::IntegerValue(v))) => Some(v.to_string()),
-                        Ok(Some(FieldValue::Integer64Value(v))) => Some(v.to_string()),
-                        Ok(Some(FieldValue::StringValue(s))) => Some(s),
-                        Ok(Some(FieldValue::RealValue(v))) => Some(v.to_string()),
-                        Ok(Some(FieldValue::DateTimeValue(v))) => Some(v.to_string()), //TODO: allow multiple date columns
-                        Ok(Some(FieldValue::DateValue(v))) => Some(v.to_string()),
-                        Ok(None) => None,
-                        Ok(Some(v)) => error_spec.on_error(Error::OgrColumnFieldTypeMismatch {
-                            expected: "Text".to_string(),
-                            field_value: v,
-                        })?, // TODO: handle other types
-                        Err(e) => error_spec.on_error(Error::Gdal { source: e })?,
-                    };
-
-                    builder.push_data(column, FeatureDataValue::NullableText(text_option))?;
-                }
-                FeatureDataType::Float => {
-                    #[allow(clippy::match_same_arms)]
-                    let value_option = match field {
-                        Ok(Some(FieldValue::IntegerValue(v))) => Some(f64::from(v)),
-                        Ok(Some(FieldValue::StringValue(s))) => f64::from_str(&s).ok(),
-                        Ok(Some(FieldValue::RealValue(v))) => Some(v),
-                        Ok(None) => None,
-                        Ok(Some(v)) => error_spec.on_error(Error::OgrColumnFieldTypeMismatch {
-                            expected: "Float".to_string(),
-                            field_value: v,
-                        })?, // TODO: handle other types
-                        Err(e) => error_spec.on_error(Error::Gdal { source: e })?,
-                    };
-
-                    builder.push_data(column, FeatureDataValue::NullableFloat(value_option))?;
-                }
-                FeatureDataType::Int => {
-                    #[allow(clippy::match_same_arms)]
-                    let value_option = match field {
-                        Ok(Some(FieldValue::IntegerValue(v))) => Some(i64::from(v)),
-                        Ok(Some(FieldValue::Integer64Value(v))) => Some(v),
-                        Ok(Some(FieldValue::StringValue(s))) => i64::from_str(&s).ok(),
-                        Ok(Some(FieldValue::RealValue(v))) => Some(v as i64),
-                        Ok(None) => None,
-                        Ok(Some(v)) => error_spec.on_error(Error::OgrColumnFieldTypeMismatch {
-                            expected: "Int".to_string(),
-                            field_value: v,
-                        })?, // TODO: handle other types
-                        Err(e) => error_spec.on_error(Error::Gdal { source: e })?,
-                    };
-
-                    builder.push_data(column, FeatureDataValue::NullableInt(value_option))?;
-                }
-                FeatureDataType::Category => {
-                    #[allow(clippy::match_same_arms)]
-                    let _value_option: Option<u8> = match field {
-                        Ok(None) => None,
-                        Ok(Some(v)) => error_spec.on_error(Error::OgrColumnFieldTypeMismatch {
-                            expected: "Category".to_string(),
-                            field_value: v,
-                        })?, // TODO: handle other types
-                        Err(e) => error_spec.on_error(Error::Gdal { source: e })?,
-                    };
-                }
-            }
+            let value =
+                Self::convert_field_value(*data_type, field, time_attribute_parser, error_spec)?;
+            builder.push_data(column, value)?;
         }
 
         builder.finish_row();
@@ -1128,6 +1215,7 @@ where
                 this.data_types.clone(),
                 *this.query_rectangle,
                 this.time_extractor.clone(),
+                this.time_attribute_parser.clone(),
                 *this.chunk_byte_size,
             );
 
@@ -1338,6 +1426,8 @@ mod tests {
                 float: vec!["num".to_string()],
                 int: vec!["dec1".to_string(), "dec2".to_string()],
                 text: vec!["text".to_string()],
+                bool: vec![],
+                datetime: vec![],
                 rename: None,
             }),
             force_ogr_time_filter: false,
@@ -1384,6 +1474,8 @@ mod tests {
                     "int": ["dec1", "dec2"],
                     "float": ["num"],
                     "text": ["text"],
+                    "bool": [],
+                    "datetime": [],
                     "rename": null
                 },
                 "forceOgrTimeFilter": false,
@@ -1428,7 +1520,9 @@ mod tests {
                     "y": "y",
                     "int": ["dec1", "dec2"],
                     "float": ["num"],
-                    "text": ["text"]
+                    "text": ["text"],
+                    "bool": [],
+                    "datetime": []
                 },
                 "forceOgrTimeFilter": false,
                 "forceOgrSpatialFilter": false,
@@ -1442,7 +1536,6 @@ mod tests {
             .to_string(),
         )
         .unwrap();
-
         assert_eq!(deserialized_spec, spec);
     }
 
@@ -1959,6 +2052,8 @@ mod tests {
                             "name".to_string(),
                             "website".to_string(),
                         ],
+                        bool: vec![],
+                        datetime: vec![],
                         rename: None,
                     }),
                     force_ogr_time_filter: false,
@@ -3312,6 +3407,8 @@ mod tests {
                 float: vec!["b".to_string()],
                 int: vec!["a".to_string()],
                 text: vec!["c".to_string()],
+                bool: vec![],
+                datetime: vec![],
                 rename: None,
             }),
             force_ogr_time_filter: false,
@@ -3407,6 +3504,8 @@ mod tests {
                 float: vec!["b".to_string()],
                 int: vec!["a".to_string()],
                 text: vec!["c".to_string()],
+                bool: vec![],
+                datetime: vec![],
                 rename: None,
             }),
             force_ogr_time_filter: false,
@@ -3831,6 +3930,8 @@ mod tests {
                         int: vec![],
                         float: vec![],
                         text: vec![],
+                        bool: vec![],
+                        datetime: vec![],
                         rename: None,
                     }),
                     force_ogr_time_filter: false,
@@ -3927,6 +4028,8 @@ mod tests {
                         int: vec!["num".to_owned()],
                         float: vec![],
                         text: vec!["txt".to_owned()],
+                        bool: vec![],
+                        datetime: vec![],
                         rename: None,
                     }),
                     force_ogr_time_filter: false,
@@ -4044,6 +4147,8 @@ mod tests {
                         int: vec![],
                         float: vec![],
                         text: vec!["Name".to_owned()],
+                        bool: vec![],
+                        datetime: vec![],
                         rename: None,
                     }),
                     force_ogr_time_filter: false,
@@ -4154,6 +4259,8 @@ mod tests {
                         int: vec![],
                         float: vec![],
                         text: vec!["Name".to_owned()],
+                        bool: vec![],
+                        datetime: vec![],
                         rename: None,
                     }),
                     force_ogr_time_filter: false,
@@ -4264,6 +4371,8 @@ mod tests {
                         int: vec![],
                         float: vec![],
                         text: vec!["Name".to_owned()],
+                        bool: vec![],
+                        datetime: vec![],
                         rename: None,
                     }),
                     force_ogr_time_filter: false,
@@ -4342,6 +4451,235 @@ mod tests {
     }
 
     #[tokio::test]
+    #[allow(clippy::too_many_lines)]
+    async fn vector_date_time_csv() {
+        let dataset = DatasetId::Internal {
+            dataset_id: InternalDatasetId::new(),
+        };
+        let mut exe_ctx = MockExecutionContext::test_default();
+        exe_ctx.add_meta_data::<OgrSourceDataset, VectorResultDescriptor, VectorQueryRectangle>(
+            dataset.clone(),
+            Box::new(StaticMetaData {
+                loading_info: OgrSourceDataset {
+                    file_name: test_data!("vector/data/lonlat_date_time.csv").into(),
+                    layer_name: "lonlat_date_time".to_owned(),
+                    data_type: Some(VectorDataType::MultiPoint),
+                    time: OgrSourceDatasetTimeType::Start {
+                        start_field: "DateTime".to_owned(),
+                        start_format: OgrSourceTimeFormat::Custom {
+                            custom_format: "%d.%m.%Y %H:%M:%S".to_owned(),
+                        },
+                        duration: OgrSourceDurationSpec::Value(TimeStep {
+                            granularity: TimeGranularity::Seconds,
+                            step: 84,
+                        }),
+                    },
+                    default_geometry: None,
+                    columns: Some(OgrSourceColumnSpec {
+                        format_specifics: Some(Csv {
+                            header: CsvHeader::Yes,
+                        }),
+                        x: "Longitude".to_owned(),
+                        y: Some("Latitude".to_owned()),
+                        int: vec![],
+                        float: vec![],
+                        text: vec!["Name".to_owned()],
+                        bool: vec![],
+                        datetime: vec!["DateTime".to_owned()],
+                        rename: None,
+                    }),
+                    force_ogr_time_filter: false,
+                    force_ogr_spatial_filter: false,
+                    on_error: OgrSourceErrorSpec::Abort,
+                    sql_query: None,
+                    attribute_query: None,
+                },
+                result_descriptor: VectorResultDescriptor {
+                    data_type: VectorDataType::MultiPoint,
+                    spatial_reference: SpatialReference::epsg_4326().into(),
+                    columns: [
+                        ("Name".to_string(), FeatureDataType::Text),
+                        ("DateTime".to_string(), FeatureDataType::DateTime),
+                    ]
+                    .iter()
+                    .cloned()
+                    .collect(),
+                },
+                phantom: Default::default(),
+            }),
+        );
+
+        let source = OgrSource {
+            params: OgrSourceParameters {
+                dataset,
+                attribute_projection: None,
+                attribute_filters: None,
+            },
+        }
+        .boxed()
+        .initialize(&exe_ctx)
+        .await
+        .unwrap();
+
+        assert_eq!(
+            source.result_descriptor().data_type,
+            VectorDataType::MultiPoint
+        );
+        assert_eq!(
+            source.result_descriptor().spatial_reference,
+            SpatialReference::epsg_4326().into()
+        );
+
+        let query_processor = source.query_processor().unwrap().multi_point().unwrap();
+
+        let query_bbox = BoundingBox2D::new((-180.0, -90.0).into(), (180.00, 90.0).into()).unwrap();
+
+        let context = MockQueryContext::new((1024 * 1024).into());
+        let query = query_processor
+            .query(
+                VectorQueryRectangle {
+                    spatial_bounds: query_bbox,
+                    time_interval: Default::default(),
+                    spatial_resolution: SpatialResolution::new(1., 1.).unwrap(),
+                },
+                &context,
+            )
+            .await
+            .unwrap();
+
+        let result: Vec<MultiPointCollection> = query.try_collect().await.unwrap();
+        assert_eq!(result.len(), 1);
+
+        let result = result.into_iter().next().unwrap();
+
+        let pc = MultiPointCollection::from_data(
+            MultiPoint::many(vec![vec![(1.1, 2.2)]]).unwrap(),
+            vec![TimeInterval::new(819_828_000_000, 819_828_084_000).unwrap()],
+            {
+                let mut map = HashMap::new();
+                map.insert(
+                    "DateTime".into(),
+                    FeatureData::DateTime(vec![TimeInstance::from_millis_unchecked(
+                        819_828_000_000,
+                    )]),
+                );
+                map.insert("Name".into(), FeatureData::Text(vec!["foo".to_owned()]));
+                map
+            },
+        )
+        .unwrap();
+
+        assert_eq!(result, pc);
+    }
+
+    #[tokio::test]
+    async fn points_bool_csv() {
+        let dataset = DatasetId::Internal {
+            dataset_id: InternalDatasetId::new(),
+        };
+        let mut exe_ctx = MockExecutionContext::test_default();
+        exe_ctx.add_meta_data::<OgrSourceDataset, VectorResultDescriptor, VectorQueryRectangle>(
+            dataset.clone(),
+            Box::new(StaticMetaData {
+                loading_info: OgrSourceDataset {
+                    file_name: test_data!("vector/data/points_with_bool.csv").into(),
+                    layer_name: "points_with_bool".to_owned(),
+                    data_type: Some(VectorDataType::MultiPoint),
+                    time: OgrSourceDatasetTimeType::None,
+                    default_geometry: None,
+                    columns: Some(OgrSourceColumnSpec {
+                        format_specifics: Some(Csv {
+                            header: CsvHeader::Yes,
+                        }),
+                        x: "x".to_owned(),
+                        y: Some("y".to_owned()),
+                        int: vec![],
+                        float: vec![],
+                        text: vec![],
+                        bool: vec!["bool".to_owned()],
+                        datetime: vec![],
+                        rename: None,
+                    }),
+                    force_ogr_time_filter: false,
+                    force_ogr_spatial_filter: false,
+                    on_error: OgrSourceErrorSpec::Abort,
+                    sql_query: None,
+                    attribute_query: None,
+                },
+                result_descriptor: VectorResultDescriptor {
+                    data_type: VectorDataType::MultiPoint,
+                    spatial_reference: SpatialReference::epsg_4326().into(),
+                    columns: [("bool".to_string(), FeatureDataType::Bool)]
+                        .iter()
+                        .cloned()
+                        .collect(),
+                },
+                phantom: Default::default(),
+            }),
+        );
+
+        let source = OgrSource {
+            params: OgrSourceParameters {
+                dataset,
+                attribute_projection: None,
+                attribute_filters: None,
+            },
+        }
+        .boxed()
+        .initialize(&exe_ctx)
+        .await
+        .unwrap();
+
+        assert_eq!(
+            source.result_descriptor().data_type,
+            VectorDataType::MultiPoint
+        );
+        assert_eq!(
+            source.result_descriptor().spatial_reference,
+            SpatialReference::epsg_4326().into()
+        );
+
+        let query_processor = source.query_processor().unwrap().multi_point().unwrap();
+
+        let query_bbox = BoundingBox2D::new((-180.0, -90.0).into(), (180.00, 90.0).into()).unwrap();
+
+        let context = MockQueryContext::new((1024 * 1024).into());
+        let query = query_processor
+            .query(
+                VectorQueryRectangle {
+                    spatial_bounds: query_bbox,
+                    time_interval: Default::default(),
+                    spatial_resolution: SpatialResolution::new(1., 1.).unwrap(),
+                },
+                &context,
+            )
+            .await
+            .unwrap();
+
+        let result: Vec<MultiPointCollection> = query.try_collect().await.unwrap();
+
+        assert_eq!(result.len(), 1);
+        let result = result.into_iter().next().unwrap();
+
+        let pc = MultiPointCollection::from_data(
+            MultiPoint::many(vec![vec![(1.1, 2.2)], vec![(3.3, 4.4)], vec![(7.2, 5.9)]]).unwrap(),
+            vec![
+                TimeInterval::default(),
+                TimeInterval::default(),
+                TimeInterval::default(),
+            ],
+            {
+                let mut map = HashMap::new();
+                map.insert("bool".into(), FeatureData::Bool(vec![true, false, true]));
+                map
+            },
+        )
+        .unwrap();
+
+        assert_eq!(result, pc);
+    }
+
+    #[tokio::test]
     async fn rename() -> Result<()> {
         let dataset_information = OgrSourceDataset {
             file_name: test_data!("vector/data/plain_data.csv").into(),
@@ -4358,6 +4696,8 @@ mod tests {
                 float: vec!["b".to_string()],
                 int: vec!["a".to_string()],
                 text: vec!["c".to_string()],
+                bool: vec![],
+                datetime: vec![],
                 rename: Some(
                     [("a".to_owned(), "foo".to_owned())]
                         .iter()
@@ -4456,6 +4796,8 @@ mod tests {
                 float: vec!["b".to_string()],
                 int: vec!["a".to_string()],
                 text: vec!["c".to_string()],
+                bool: vec![],
+                datetime: vec![],
                 rename: None,
             }),
             force_ogr_time_filter: false,
@@ -4549,6 +4891,8 @@ mod tests {
                 float: vec!["b".to_string()],
                 int: vec!["a".to_string()],
                 text: vec!["c".to_string()],
+                bool: vec![],
+                datetime: vec![],
                 rename: None,
             }),
             force_ogr_time_filter: false,
@@ -4640,6 +4984,8 @@ mod tests {
                 float: vec!["b".to_string()],
                 int: vec!["a".to_string()],
                 text: vec!["c".to_string()],
+                bool: vec![],
+                datetime: vec![],
                 rename: None,
             }),
             force_ogr_time_filter: false,
@@ -4731,6 +5077,8 @@ mod tests {
                 float: vec!["b".to_string()],
                 int: vec!["a".to_string()],
                 text: vec!["c".to_string()],
+                bool: vec![],
+                datetime: vec![],
                 rename: Some(
                     [("a".to_string(), "d".to_string())]
                         .into_iter()
@@ -4826,6 +5174,8 @@ mod tests {
                 float: vec!["b".to_string()],
                 int: vec!["a".to_string()],
                 text: vec!["c".to_string()],
+                bool: vec![],
+                datetime: vec![],
                 rename: None,
             }),
             force_ogr_time_filter: false,
@@ -4929,6 +5279,8 @@ mod tests {
                 float: vec!["b".to_string()],
                 int: vec!["a".to_string()],
                 text: vec!["c".to_string()],
+                bool: vec![],
+                datetime: vec![],
                 rename: None,
             }),
             force_ogr_time_filter: false,
@@ -5029,6 +5381,8 @@ mod tests {
                 float: vec!["b".to_string()],
                 int: vec!["a".to_string()],
                 text: vec!["c".to_string()],
+                bool: vec![],
+                datetime: vec![],
                 rename: None,
             }),
             force_ogr_time_filter: false,
@@ -5120,6 +5474,8 @@ mod tests {
                 float: vec!["natlscale".to_string()],
                 int: vec![],
                 text: vec!["name".to_string()],
+                bool: vec![],
+                datetime: vec![],
                 rename: None,
             }),
             force_ogr_time_filter: false,
@@ -5193,6 +5549,8 @@ mod tests {
                 float: vec!["natlscale".to_string()],
                 int: vec![],
                 text: vec!["name".to_string()],
+                bool: vec![],
+                datetime: vec![],
                 rename: None,
             }),
             force_ogr_time_filter: false,
@@ -5269,6 +5627,8 @@ mod tests {
                 float: vec!["natlscale".to_string()],
                 int: vec![],
                 text: vec!["name".to_string()],
+                bool: vec![],
+                datetime: vec![],
                 rename: None,
             }),
             force_ogr_time_filter: false,
@@ -5342,6 +5702,8 @@ mod tests {
                 float: vec!["natlscale".to_string()],
                 int: vec![],
                 text: vec!["name".to_string()],
+                bool: vec![],
+                datetime: vec![],
                 rename: None,
             }),
             force_ogr_time_filter: false,
