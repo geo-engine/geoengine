@@ -99,7 +99,7 @@ pub async fn start_pro_server(static_files_dir: Option<PathBuf>) -> Result<()> {
             .external_address
             .unwrap_or(Url::parse(&format!("http://{}/", web_config.bind_address))?)
     );
-    
+
     let session_config: crate::util::config::Session = get_config_element()?;
     let user_config: crate::pro::util::config::User = get_config_element()?;
 
