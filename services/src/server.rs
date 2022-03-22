@@ -30,7 +30,8 @@ pub async fn start_server(static_files_dir: Option<PathBuf>) -> Result<()> {
     let web_config: config::Web = get_config_element()?;
 
     info!(
-        "Starting server… {}",
+        "Starting server… local address: {}, external address: {}",
+        Url::parse(&format!("http://{}/", web_config.bind_address))?,
         web_config
             .external_address
             .unwrap_or(Url::parse(&format!("http://{}/", web_config.bind_address))?)
