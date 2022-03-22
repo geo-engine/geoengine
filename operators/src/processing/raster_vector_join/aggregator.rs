@@ -155,7 +155,7 @@ where
     }
 
     fn add_null(&mut self, feature_idx: usize) {
-        if !self.null[feature_idx] {
+        if self.pristine[feature_idx] {
             self.null[feature_idx] = true;
             self.number_of_non_null_values -= 1;
 
@@ -452,5 +452,18 @@ mod tests {
         assert!(aggregator.is_satisfied());
 
         assert_eq!(aggregator.nulls(), &[true, true]);
+    }
+
+    #[test]
+    fn value_then_null() {
+        let mut aggregator = FirstValueIntAggregator::new(1).into_typed();
+
+        aggregator.add_value(0, 1337, 1);
+        aggregator.add_null(0);
+
+        assert_eq!(
+            aggregator.into_data(),
+            FeatureData::NullableInt(vec![Some(1337)])
+        );
     }
 }
