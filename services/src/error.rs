@@ -210,8 +210,6 @@ pub enum Error {
     },
     RasterDataTypeNotSupportByGdal,
 
-    ExternalAddressNotConfigured,
-
     MissingSpatialReference,
 
     WcsVersionNotSupported,
