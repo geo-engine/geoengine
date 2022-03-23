@@ -433,11 +433,10 @@ mod tests {
     async fn test_get_capabilities() {
         let res = get_capabilities_test_helper(Method::GET).await;
 
-        // assert_eq!(res.status(), 200);
+        assert_eq!(res.status(), 200);
 
         // TODO: validate against schema
         let body = actix_web::test::read_body(res).await;
-        dbg!(&body);
         let reader = ParserConfig::default().create_reader(body.as_ref());
 
         for event in reader {
