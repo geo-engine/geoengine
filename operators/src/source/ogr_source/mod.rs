@@ -200,10 +200,15 @@ pub struct OgrSourceColumnSpec {
     pub format_specifics: Option<FormatSpecifics>,
     pub x: String,
     pub y: Option<String>,
+    #[serde(default)]
     pub int: Vec<String>,
+    #[serde(default)]
     pub float: Vec<String>,
+    #[serde(default)]
     pub text: Vec<String>,
+    #[serde(default)]
     pub bool: Vec<String>,
+    #[serde(default)]
     pub datetime: Vec<String>,
     pub rename: Option<HashMap<String, String>>,
 }
