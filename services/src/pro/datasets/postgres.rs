@@ -493,6 +493,12 @@ where
                     d.result_descriptor.clone(),
                 ))?,
             }),
+            MetaDataDefinition::GdalMetaDataList(d) => Ok(DatasetMetaDataJson {
+                meta_data: serde_json::to_value(self)?,
+                result_descriptor: serde_json::to_value(&TypedResultDescriptor::from(
+                    d.result_descriptor.clone(),
+                ))?,
+            }),
         }
     }
 }

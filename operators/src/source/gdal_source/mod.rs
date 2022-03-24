@@ -45,7 +45,7 @@ use std::time::Instant;
 
 pub use loading_info::{
     GdalLoadingInfo, GdalLoadingInfoTemporalSlice, GdalLoadingInfoTemporalSliceIterator,
-    GdalMetaDataRegular, GdalMetaDataStatic, GdalMetadataNetCdfCf,
+    GdalMetaDataList, GdalMetaDataRegular, GdalMetaDataStatic, GdalMetadataNetCdfCf,
 };
 
 mod loading_info;

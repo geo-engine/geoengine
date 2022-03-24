@@ -10,7 +10,7 @@ use async_trait::async_trait;
 use geoengine_datatypes::dataset::{DatasetId, DatasetProviderId};
 use geoengine_datatypes::primitives::VectorQueryRectangle;
 use geoengine_operators::engine::MetaData;
-use geoengine_operators::source::GdalMetadataNetCdfCf;
+use geoengine_operators::source::{GdalMetaDataList, GdalMetadataNetCdfCf};
 use geoengine_operators::{engine::StaticMetaData, source::OgrSourceDataset};
 use geoengine_operators::{
     engine::TypedResultDescriptor, mock::MockDatasetDataSourceLoadingInfo,
@@ -172,6 +172,7 @@ pub enum MetaDataDefinition {
     GdalMetaDataRegular(GdalMetaDataRegular),
     GdalStatic(GdalMetaDataStatic),
     GdalMetadataNetCdfCf(GdalMetadataNetCdfCf),
+    GdalMetaDataList(GdalMetaDataList),
 }
 
 impl MetaDataDefinition {
@@ -181,7 +182,8 @@ impl MetaDataDefinition {
             MetaDataDefinition::OgrMetaData(_) => "OgrSource",
             MetaDataDefinition::GdalMetaDataRegular(_)
             | MetaDataDefinition::GdalStatic(_)
-            | MetaDataDefinition::GdalMetadataNetCdfCf(_) => "GdalSource",
+            | MetaDataDefinition::GdalMetadataNetCdfCf(_)
+            | MetaDataDefinition::GdalMetaDataList(_) => "GdalSource",
         }
     }
 
@@ -208,6 +210,11 @@ impl MetaDataDefinition {
                 .map(Into::into)
                 .context(error::Operator),
             MetaDataDefinition::GdalMetadataNetCdfCf(m) => m
+                .result_descriptor()
+                .await
+                .map(Into::into)
+                .context(error::Operator),
+            MetaDataDefinition::GdalMetaDataList(m) => m
                 .result_descriptor()
                 .await
                 .map(Into::into)
