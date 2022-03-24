@@ -1,5 +1,5 @@
 use crate::error;
-use crate::primitives::PrimitivesError;
+use crate::primitives::{PrimitivesError, TimeInstance};
 use crate::util::Result;
 use arrow::bitmap::Bitmap;
 use gdal::vector::OGRFieldType;
@@ -18,6 +18,8 @@ pub enum FeatureDataType {
     Int,
     Float,
     Text,
+    Bool,
+    DateTime,
 }
 
 impl FeatureDataType {
@@ -26,6 +28,8 @@ impl FeatureDataType {
             OGRFieldType::OFTInteger | OGRFieldType::OFTInteger64 => Self::Int,
             OGRFieldType::OFTReal => Self::Float,
             OGRFieldType::OFTString => Self::Text,
+            OGRFieldType::OFTBinary => Self::Bool,
+            OGRFieldType::OFTDateTime | OGRFieldType::OFTDate => Self::DateTime,
             _ => return Err(error::Error::NoMatchingFeatureDataTypeForOgrFieldType),
         })
     }
@@ -45,6 +49,10 @@ pub enum FeatureData {
     NullableFloat(Vec<Option<f64>>),
     Text(Vec<String>),
     NullableText(Vec<Option<String>>),
+    Bool(Vec<bool>),
+    NullableBool(Vec<Option<bool>>),
+    DateTime(Vec<TimeInstance>),
+    NullableDateTime(Vec<Option<TimeInstance>>),
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize, PartialEq)]
@@ -57,6 +65,10 @@ pub enum FeatureDataValue {
     NullableFloat(Option<f64>),
     Text(String),
     NullableText(Option<String>),
+    Bool(bool),
+    NullableBool(Option<bool>),
+    DateTime(TimeInstance),
+    NullableDateTime(Option<TimeInstance>),
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -65,6 +77,8 @@ pub enum FeatureDataRef<'f> {
     Int(IntDataRef<'f>),
     Float(FloatDataRef<'f>),
     Text(TextDataRef<'f>),
+    Bool(BoolDataRef<'f>),
+    DateTime(DateTimeDataRef<'f>),
 }
 
 impl<'f> FeatureDataRef<'f> {
@@ -75,6 +89,8 @@ impl<'f> FeatureDataRef<'f> {
             FeatureDataRef::Float(data_ref) => data_ref.json_values(),
             FeatureDataRef::Int(data_ref) => data_ref.json_values(),
             FeatureDataRef::Category(data_ref) => data_ref.json_values(),
+            FeatureDataRef::Bool(data_ref) => data_ref.json_values(),
+            FeatureDataRef::DateTime(data_ref) => data_ref.json_values(),
         }
     }
 
@@ -85,6 +101,8 @@ impl<'f> FeatureDataRef<'f> {
             FeatureDataRef::Float(data_ref) => data_ref.nulls(),
             FeatureDataRef::Int(data_ref) => data_ref.nulls(),
             FeatureDataRef::Category(data_ref) => data_ref.nulls(),
+            FeatureDataRef::Bool(data_ref) => data_ref.nulls(),
+            FeatureDataRef::DateTime(data_ref) => data_ref.nulls(),
         }
     }
 
@@ -95,6 +113,8 @@ impl<'f> FeatureDataRef<'f> {
             FeatureDataRef::Float(data_ref) => data_ref.has_nulls(),
             FeatureDataRef::Int(data_ref) => data_ref.has_nulls(),
             FeatureDataRef::Category(data_ref) => data_ref.has_nulls(),
+            FeatureDataRef::Bool(data_ref) => data_ref.has_nulls(),
+            FeatureDataRef::DateTime(data_ref) => data_ref.has_nulls(),
         }
     }
 
@@ -105,6 +125,8 @@ impl<'f> FeatureDataRef<'f> {
             FeatureDataRef::Float(data_ref) => data_ref.get_unchecked(i),
             FeatureDataRef::Int(data_ref) => data_ref.get_unchecked(i),
             FeatureDataRef::Category(data_ref) => data_ref.get_unchecked(i),
+            FeatureDataRef::Bool(data_ref) => data_ref.get_unchecked(i),
+            FeatureDataRef::DateTime(data_ref) => data_ref.get_unchecked(i),
         }
     }
 
@@ -116,6 +138,8 @@ impl<'f> FeatureDataRef<'f> {
             FeatureDataRef::Float(data_ref) => Box::new(data_ref.strings_iter()),
             FeatureDataRef::Int(data_ref) => Box::new(data_ref.strings_iter()),
             FeatureDataRef::Category(data_ref) => Box::new(data_ref.strings_iter()),
+            FeatureDataRef::Bool(data_ref) => Box::new(data_ref.strings_iter()),
+            FeatureDataRef::DateTime(data_ref) => Box::new(data_ref.strings_iter()),
         }
     }
 
@@ -127,6 +151,8 @@ impl<'f> FeatureDataRef<'f> {
             FeatureDataRef::Float(data_ref) => Box::new(data_ref.float_options_iter()),
             FeatureDataRef::Int(data_ref) => Box::new(data_ref.float_options_iter()),
             FeatureDataRef::Category(data_ref) => Box::new(data_ref.float_options_iter()),
+            FeatureDataRef::Bool(data_ref) => Box::new(data_ref.float_options_iter()),
+            FeatureDataRef::DateTime(data_ref) => Box::new(data_ref.float_options_iter()),
         }
     }
 }
@@ -440,6 +466,216 @@ fn null_bitmap_to_bools(null_bitmap: &Option<Bitmap>, len: usize) -> Vec<bool> {
         (0..len).map(|i| !nulls.is_set(i)).collect()
     } else {
         vec![false; len]
+    }
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub struct BoolDataRef<'f> {
+    buffer: Vec<bool>,
+    valid_bitmap: &'f Option<arrow::bitmap::Bitmap>,
+}
+
+impl<'f> BoolDataRef<'f> {
+    pub fn new(buffer: Vec<bool>, null_bitmap: &'f Option<arrow::bitmap::Bitmap>) -> Self {
+        Self {
+            buffer,
+            valid_bitmap: null_bitmap,
+        }
+    }
+}
+
+impl<'f> DataRef<'f, bool> for BoolDataRef<'f> {
+    fn json_value(value: &bool) -> serde_json::Value {
+        (*value).into()
+    }
+
+    fn nulls(&self) -> Vec<bool> {
+        null_bitmap_to_bools(self.valid_bitmap, self.as_ref().len())
+    }
+
+    fn is_valid(&self, i: usize) -> bool {
+        self.valid_bitmap
+            .as_ref()
+            .map_or(true, |bitmap| bitmap.is_set(i))
+    }
+
+    fn has_nulls(&self) -> bool {
+        self.valid_bitmap.is_some()
+    }
+
+    fn get_unchecked(&self, i: usize) -> FeatureDataValue {
+        if self.has_nulls() {
+            FeatureDataValue::NullableBool(if self.is_null(i) {
+                None
+            } else {
+                Some(self.as_ref()[i])
+            })
+        } else {
+            FeatureDataValue::Bool(self.as_ref()[i])
+        }
+    }
+
+    type StringsIter = NumberDataRefStringIter<'f, Self, bool>;
+
+    fn strings_iter(&'f self) -> Self::StringsIter {
+        NumberDataRefStringIter::new(self)
+    }
+
+    fn len(&self) -> usize {
+        self.buffer.len()
+    }
+
+    type FloatOptionsIter = BoolDataRefFloatOptionIter<'f>;
+
+    fn float_options_iter(&'f self) -> Self::FloatOptionsIter {
+        BoolDataRefFloatOptionIter::new(self)
+    }
+}
+
+impl AsRef<[bool]> for BoolDataRef<'_> {
+    fn as_ref(&self) -> &[bool] {
+        &self.buffer
+    }
+}
+
+impl<'f> From<BoolDataRef<'f>> for FeatureDataRef<'f> {
+    fn from(data_ref: BoolDataRef<'f>) -> Self {
+        FeatureDataRef::Bool(data_ref)
+    }
+}
+
+pub struct BoolDataRefFloatOptionIter<'f> {
+    data_ref: &'f BoolDataRef<'f>,
+    i: usize,
+}
+
+impl<'f> BoolDataRefFloatOptionIter<'f> {
+    pub fn new(data_ref: &'f BoolDataRef<'f>) -> Self {
+        Self { data_ref, i: 0 }
+    }
+}
+
+impl<'f> Iterator for BoolDataRefFloatOptionIter<'f> {
+    type Item = Option<f64>;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        if self.i >= self.data_ref.len() {
+            return None;
+        }
+
+        let i = self.i;
+        self.i += 1;
+
+        Some(if self.data_ref.is_null(i) {
+            None
+        } else {
+            Some(f64::from(u8::from(self.data_ref.as_ref()[i])))
+        })
+    }
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub struct DateTimeDataRef<'f> {
+    buffer: &'f [TimeInstance],
+    valid_bitmap: &'f Option<arrow::bitmap::Bitmap>,
+}
+
+impl<'f> DateTimeDataRef<'f> {
+    pub fn new(buffer: &'f [TimeInstance], null_bitmap: &'f Option<arrow::bitmap::Bitmap>) -> Self {
+        Self {
+            buffer,
+            valid_bitmap: null_bitmap,
+        }
+    }
+}
+
+impl<'f> DataRef<'f, TimeInstance> for DateTimeDataRef<'f> {
+    fn json_value(value: &TimeInstance) -> serde_json::Value {
+        serde_json::to_value(value).expect("TimeInstance can be serialized")
+    }
+
+    fn nulls(&self) -> Vec<bool> {
+        null_bitmap_to_bools(self.valid_bitmap, self.as_ref().len())
+    }
+
+    fn is_valid(&self, i: usize) -> bool {
+        self.valid_bitmap
+            .as_ref()
+            .map_or(true, |bitmap| bitmap.is_set(i))
+    }
+
+    fn has_nulls(&self) -> bool {
+        self.valid_bitmap.is_some()
+    }
+
+    fn get_unchecked(&self, i: usize) -> FeatureDataValue {
+        if self.has_nulls() {
+            FeatureDataValue::NullableDateTime(if self.is_null(i) {
+                None
+            } else {
+                Some(self.as_ref()[i])
+            })
+        } else {
+            FeatureDataValue::DateTime(self.as_ref()[i])
+        }
+    }
+
+    type StringsIter = NumberDataRefStringIter<'f, Self, TimeInstance>;
+
+    fn strings_iter(&'f self) -> Self::StringsIter {
+        NumberDataRefStringIter::new(self)
+    }
+
+    fn len(&self) -> usize {
+        self.buffer.len()
+    }
+
+    type FloatOptionsIter = DateTimeDataRefFloatOptionIter<'f>;
+
+    fn float_options_iter(&'f self) -> Self::FloatOptionsIter {
+        Self::FloatOptionsIter::new(self)
+    }
+}
+
+impl AsRef<[TimeInstance]> for DateTimeDataRef<'_> {
+    fn as_ref(&self) -> &[TimeInstance] {
+        self.buffer
+    }
+}
+
+impl<'f> From<DateTimeDataRef<'f>> for FeatureDataRef<'f> {
+    fn from(data_ref: DateTimeDataRef<'f>) -> Self {
+        FeatureDataRef::DateTime(data_ref)
+    }
+}
+
+pub struct DateTimeDataRefFloatOptionIter<'f> {
+    data_ref: &'f DateTimeDataRef<'f>,
+    i: usize,
+}
+
+impl<'f> DateTimeDataRefFloatOptionIter<'f> {
+    pub fn new(data_ref: &'f DateTimeDataRef<'f>) -> Self {
+        Self { data_ref, i: 0 }
+    }
+}
+
+impl<'f> Iterator for DateTimeDataRefFloatOptionIter<'f> {
+    type Item = Option<f64>;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        if self.i >= self.data_ref.len() {
+            return None;
+        }
+
+        let i = self.i;
+        self.i += 1;
+
+        Some(if self.data_ref.is_null(i) {
+            None
+        } else {
+            Some(self.data_ref.as_ref()[i].inner() as f64)
+        })
     }
 }
 
@@ -780,6 +1016,8 @@ impl FeatureDataType {
             Self::Float => arrow::datatypes::DataType::Float64,
             Self::Int => arrow::datatypes::DataType::Int64,
             Self::Category => arrow::datatypes::DataType::UInt8,
+            Self::Bool => arrow::datatypes::DataType::Boolean,
+            Self::DateTime => arrow::datatypes::DataType::Date64,
         }
     }
 
@@ -794,6 +1032,8 @@ impl FeatureDataType {
             Self::Float => Box::new(arrow::array::Float64Builder::new(len)),
             Self::Int => Box::new(arrow::array::Int64Builder::new(len)),
             Self::Category => Box::new(arrow::array::UInt8Builder::new(len)),
+            Self::Bool => Box::new(arrow::array::BooleanBuilder::new(len)),
+            Self::DateTime => Box::new(arrow::array::Date64Builder::new(len)),
         }
     }
 }
@@ -817,6 +1057,10 @@ impl FeatureData {
             FeatureData::NullableInt(v) => v.len(),
             FeatureData::Category(v) => v.len(),
             FeatureData::NullableCategory(v) => v.len(),
+            FeatureData::Bool(v) => v.len(),
+            FeatureData::NullableBool(v) => v.len(),
+            FeatureData::DateTime(v) => v.len(),
+            FeatureData::NullableDateTime(v) => v.len(),
         }
     }
 
@@ -888,6 +1132,31 @@ impl FeatureData {
                 }
                 Box::new(builder)
             }
+            FeatureData::Bool(v) => {
+                let mut builder = arrow::array::BooleanBuilder::new(v.len());
+                builder.append_slice(v)?;
+                Box::new(builder)
+            }
+            FeatureData::NullableBool(v) => {
+                let mut builder = arrow::array::BooleanBuilder::new(v.len());
+                for &bool_option in v {
+                    builder.append_option(bool_option)?;
+                }
+                Box::new(builder)
+            }
+            FeatureData::DateTime(v) => {
+                let mut builder = arrow::array::Date64Builder::new(v.len());
+                let x: Vec<_> = v.iter().map(|x| x.inner()).collect();
+                builder.append_slice(&x)?;
+                Box::new(builder)
+            }
+            FeatureData::NullableDateTime(v) => {
+                let mut builder = arrow::array::Date64Builder::new(v.len());
+                for &dt_option in v {
+                    builder.append_option(dt_option.map(TimeInstance::inner))?;
+                }
+                Box::new(builder)
+            }
         })
     }
 }
@@ -899,6 +1168,8 @@ impl From<&FeatureData> for FeatureDataType {
             FeatureData::Float(_) | FeatureData::NullableFloat(_) => Self::Float,
             FeatureData::Int(_) | FeatureData::NullableInt(_) => Self::Int,
             FeatureData::Category(_) | FeatureData::NullableCategory(_) => Self::Category,
+            FeatureData::Bool(_) | FeatureData::NullableBool(_) => Self::Bool,
+            FeatureData::DateTime(_) | FeatureData::NullableDateTime(_) => Self::DateTime,
         }
     }
 }
@@ -910,6 +1181,8 @@ impl From<&FeatureDataValue> for FeatureDataType {
             FeatureDataValue::Float(_) | FeatureDataValue::NullableFloat(_) => Self::Float,
             FeatureDataValue::Int(_) | FeatureDataValue::NullableInt(_) => Self::Int,
             FeatureDataValue::Category(_) | FeatureDataValue::NullableCategory(_) => Self::Category,
+            FeatureDataValue::Bool(_) | FeatureDataValue::NullableBool(_) => Self::Bool,
+            FeatureDataValue::DateTime(_) | FeatureDataValue::NullableDateTime(_) => Self::DateTime,
         }
     }
 }
@@ -921,6 +1194,8 @@ impl<'f> From<&'f FeatureDataRef<'f>> for FeatureDataType {
             FeatureDataRef::Float(..) => Self::Float,
             FeatureDataRef::Int(_) => Self::Int,
             FeatureDataRef::Category(_) => Self::Category,
+            FeatureDataRef::Bool(_) => Self::Bool,
+            FeatureDataRef::DateTime(_) => Self::DateTime,
         }
     }
 }
@@ -930,8 +1205,7 @@ impl TryFrom<&FeatureDataValue> for f64 {
 
     fn try_from(value: &FeatureDataValue) -> Result<Self, Self::Error> {
         Ok(match value {
-            FeatureDataValue::Float(v) => *v,
-            FeatureDataValue::NullableFloat(v) if v.is_some() => v.unwrap(),
+            FeatureDataValue::Float(v) | FeatureDataValue::NullableFloat(Some(v)) => *v,
             _ => return Err(crate::collections::FeatureCollectionError::WrongDataType),
         })
     }
@@ -950,8 +1224,10 @@ impl TryFrom<&FeatureDataValue> for i64 {
 
     fn try_from(value: &FeatureDataValue) -> Result<i64, Self::Error> {
         Ok(match value {
-            FeatureDataValue::Int(v) => *v,
-            FeatureDataValue::NullableInt(v) if v.is_some() => v.unwrap(),
+            FeatureDataValue::Int(v) | FeatureDataValue::NullableInt(Some(v)) => *v,
+            FeatureDataValue::DateTime(v) | FeatureDataValue::NullableDateTime(Some(v)) => {
+                v.inner()
+            }
             _ => return Err(crate::collections::FeatureCollectionError::WrongDataType),
         })
     }
@@ -970,8 +1246,29 @@ impl<'s> TryFrom<&'s FeatureDataValue> for &'s str {
 
     fn try_from(value: &FeatureDataValue) -> Result<&str, Self::Error> {
         Ok(match value {
-            FeatureDataValue::Text(v) => v.as_ref(),
-            FeatureDataValue::NullableText(v) if v.is_some() => v.as_ref().unwrap(),
+            FeatureDataValue::Text(v) | FeatureDataValue::NullableText(Some(v)) => v.as_ref(),
+            _ => return Err(crate::collections::FeatureCollectionError::WrongDataType),
+        })
+    }
+}
+
+impl TryFrom<&FeatureDataValue> for bool {
+    type Error = crate::collections::FeatureCollectionError;
+
+    fn try_from(value: &FeatureDataValue) -> Result<bool, Self::Error> {
+        Ok(match value {
+            FeatureDataValue::Bool(v) | FeatureDataValue::NullableBool(Some(v)) => *v,
+            _ => return Err(crate::collections::FeatureCollectionError::WrongDataType),
+        })
+    }
+}
+
+impl TryFrom<&FeatureDataValue> for TimeInstance {
+    type Error = crate::collections::FeatureCollectionError;
+
+    fn try_from(value: &FeatureDataValue) -> Result<TimeInstance, Self::Error> {
+        Ok(match value {
+            FeatureDataValue::DateTime(v) | FeatureDataValue::NullableDateTime(Some(v)) => *v,
             _ => return Err(crate::collections::FeatureCollectionError::WrongDataType),
         })
     }
@@ -1005,6 +1302,18 @@ mod tests {
                         None,
                     ]),
                 ),
+                (
+                    "bools",
+                    FeatureData::NullableBool(vec![Some(true), Some(false), None]),
+                ),
+                (
+                    "dates",
+                    FeatureData::NullableDateTime(vec![
+                        Some(TimeInstance::from_millis_unchecked(946_681_200_000)),
+                        None,
+                        Some(TimeInstance::from_millis_unchecked(1_636_448_729_000)),
+                    ]),
+                ),
             ],
         )
         .unwrap();
@@ -1021,6 +1330,21 @@ mod tests {
         let from_strings_cmp: Vec<String> =
             ["a", "b", ""].iter().map(ToString::to_string).collect();
         assert_eq!(from_strings, from_strings_cmp);
+
+        let from_bools: Vec<String> = collection.data("bools").unwrap().strings_iter().collect();
+        let from_bools_cmp: Vec<String> = ["true", "false", ""]
+            .iter()
+            .map(ToString::to_string)
+            .collect();
+        assert_eq!(from_bools, from_bools_cmp);
+
+        let from_dates: Vec<String> = collection.data("dates").unwrap().strings_iter().collect();
+        let from_dates_cmp: Vec<String> =
+            ["1999-12-31T23:00:00+00:00", "", "2021-11-09T09:05:29+00:00"]
+                .iter()
+                .map(ToString::to_string)
+                .collect();
+        assert_eq!(from_dates, from_dates_cmp);
     }
 
     #[test]
@@ -1040,6 +1364,18 @@ mod tests {
                         Some("1".to_owned()),
                         Some("f".to_owned()),
                         None,
+                    ]),
+                ),
+                (
+                    "bools",
+                    FeatureData::NullableBool(vec![Some(true), Some(false), None]),
+                ),
+                (
+                    "dates",
+                    FeatureData::NullableDateTime(vec![
+                        Some(TimeInstance::from_millis_unchecked(946_681_200_000)),
+                        None,
+                        Some(TimeInstance::from_millis_unchecked(1_636_448_729_000)),
                     ]),
                 ),
             ],
@@ -1069,5 +1405,22 @@ mod tests {
             .collect();
         let from_strings_cmp: Vec<Option<f64>> = vec![Some(1.0), None, None];
         assert_eq!(from_strings, from_strings_cmp);
+
+        let from_bools: Vec<Option<f64>> = collection
+            .data("bools")
+            .unwrap()
+            .float_options_iter()
+            .collect();
+        let from_bools_cmp: Vec<Option<f64>> = vec![Some(1.0), Some(0.0), None];
+        assert_eq!(from_bools, from_bools_cmp);
+
+        let from_dates: Vec<Option<f64>> = collection
+            .data("dates")
+            .unwrap()
+            .float_options_iter()
+            .collect();
+        let from_dates_cmp: Vec<Option<f64>> =
+            vec![Some(946_681_200_000.0), None, Some(1_636_448_729_000.0)];
+        assert_eq!(from_dates, from_dates_cmp);
     }
 }

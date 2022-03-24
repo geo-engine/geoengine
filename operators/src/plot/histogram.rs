@@ -75,7 +75,7 @@ impl PlotOperator for Histogram {
                 ensure!(
                     self.params.column_name.is_none(),
                     error::InvalidOperatorSpec {
-                        reason: "Histogram on raster input must not have `column_name` field set"
+                        reason: "Histogram on raster input must not have `columnName` field set"
                             .to_string(),
                     }
                 );
@@ -96,7 +96,7 @@ impl PlotOperator for Histogram {
                         .column_name
                         .as_ref()
                         .context(error::InvalidOperatorSpec {
-                            reason: "Histogram on vector input is missing `column_name` field"
+                            reason: "Histogram on vector input is missing `columnName` field"
                                 .to_string(),
                         })?;
 
@@ -114,7 +114,12 @@ impl PlotOperator for Histogram {
                             reason: format!("column `{}` must be numerical", column_name),
                         });
                     }
-                    Some(FeatureDataType::Int | FeatureDataType::Float) => {
+                    Some(
+                        FeatureDataType::Int
+                        | FeatureDataType::Float
+                        | FeatureDataType::Bool
+                        | FeatureDataType::DateTime,
+                    ) => {
                         // okay
                     }
                 }
@@ -531,26 +536,14 @@ impl HistogramMetadataInProgress {
 
     #[inline]
     fn add_vector_batch(&mut self, values: FeatureDataRef) {
-        fn add_data_ref<'d, D, T>(metadata: &mut HistogramMetadataInProgress, data_ref: &D)
+        fn add_data_ref<'d, D, T>(metadata: &mut HistogramMetadataInProgress, data_ref: &'d D)
         where
             D: DataRef<'d, T>,
-            T: Pixel,
+            T: 'static,
         {
-            if data_ref.has_nulls() {
-                for (i, v) in data_ref.as_ref().iter().enumerate() {
-                    if data_ref.is_null(i) {
-                        continue;
-                    }
-
-                    metadata.n += 1;
-                    metadata.update_minmax(v.as_());
-                }
-            } else {
-                let values = data_ref.as_ref();
-                metadata.n += values.len();
-                for v in values {
-                    metadata.update_minmax(v.as_());
-                }
+            for v in data_ref.float_options_iter().flatten() {
+                metadata.n += 1;
+                metadata.update_minmax(v);
             }
         }
 
@@ -559,6 +552,12 @@ impl HistogramMetadataInProgress {
                 add_data_ref(self, &values);
             }
             FeatureDataRef::Float(values) => {
+                add_data_ref(self, &values);
+            }
+            FeatureDataRef::Bool(values) => {
+                add_data_ref(self, &values);
+            }
+            FeatureDataRef::DateTime(values) => {
                 add_data_ref(self, &values);
             }
             FeatureDataRef::Category(_) | FeatureDataRef::Text(_) => {
@@ -1016,6 +1015,8 @@ mod tests {
                             "name".to_string(),
                             "website".to_string(),
                         ],
+                        bool: vec![],
+                        datetime: vec![],
                         rename: None,
                     }),
                     force_ogr_time_filter: false,

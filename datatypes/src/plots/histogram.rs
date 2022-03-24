@@ -172,6 +172,36 @@ impl Histogram {
                 }
                 .fail();
             }
+            FeatureDataRef::Bool(value_ref) if !value_ref.has_nulls() => {
+                for value in value_ref.as_ref().iter().map(|&v| f64::from(u8::from(v))) {
+                    self.handle_data_item(value, false);
+                }
+            }
+            FeatureDataRef::Bool(value_ref) => {
+                for (value, is_null) in value_ref
+                    .as_ref()
+                    .iter()
+                    .map(|&v| f64::from(u8::from(v)))
+                    .zip(value_ref.nulls())
+                {
+                    self.handle_data_item(value, is_null);
+                }
+            }
+            FeatureDataRef::DateTime(value_ref) if !value_ref.has_nulls() => {
+                for value in value_ref.as_ref().iter().map(|&v| v.inner() as f64) {
+                    self.handle_data_item(value, false);
+                }
+            }
+            FeatureDataRef::DateTime(value_ref) => {
+                for (value, is_null) in value_ref
+                    .as_ref()
+                    .iter()
+                    .map(|&v| v.inner() as f64)
+                    .zip(value_ref.nulls())
+                {
+                    self.handle_data_item(value, is_null);
+                }
+            }
         }
 
         Ok(())

@@ -132,8 +132,18 @@ where
                         .cloned()
                         .map(|range| range.into_int_range().map(Into::into))
                         .collect(),
+                    FeatureDataType::Bool => ranges
+                        .iter()
+                        .cloned()
+                        .map(|range| range.into_int_range().map(Into::into))
+                        .collect(),
+                    FeatureDataType::DateTime => ranges
+                        .iter()
+                        .cloned()
+                        .map(|range| range.into_int_range().map(Into::into))
+                        .collect(),
                     FeatureDataType::Category => Err(error::Error::InvalidType {
-                        expected: "text, float, or int".to_string(),
+                        expected: "text, float, int, bool or datetime".to_string(),
                         found: "category".to_string(),
                     }),
                 };

@@ -200,7 +200,9 @@ async fn get_dataset_handler<C: Context>(
 ///             "y": null,
 ///             "text": [],
 ///             "float": [],
-///             "int": []
+///             "int": [],
+///             "bool": [],
+///             "datetime": [],
 ///           },
 ///           "forceOgrTimeFilter": false,
 ///           "onError": "ignore"
@@ -418,6 +420,8 @@ fn auto_detect_meta_data_definition(main_file_path: &Path) -> Result<MetaDataDef
                 int: columns_vecs.int,
                 float: columns_vecs.float,
                 text: columns_vecs.text,
+                bool: vec![],
+                datetime: columns_vecs.date,
                 rename: None,
             }),
             force_ogr_time_filter: false,
@@ -654,7 +658,8 @@ impl TryFrom<ColumnDataType> for FeatureDataType {
             ColumnDataType::Int => Ok(FeatureDataType::Int),
             ColumnDataType::Float => Ok(FeatureDataType::Float),
             ColumnDataType::Text => Ok(FeatureDataType::Text),
-            _ => Err(error::Error::NoFeatureDataTypeForColumnDataType),
+            ColumnDataType::Date => Ok(FeatureDataType::DateTime),
+            ColumnDataType::Unknown => Err(error::Error::NoFeatureDataTypeForColumnDataType),
         }
     }
 }
@@ -959,7 +964,9 @@ mod tests {
                             "y": null,
                             "float": ["natlscale"],
                             "int": ["scalerank"],
-                            "text": ["featurecla", "name", "website"]
+                            "text": ["featurecla", "name", "website"],
+                            "bool": [],
+                            "datetime": []
                         },
                         "forceOgrTimeGilter": false,
                         "onError": "ignore",
@@ -1107,6 +1114,8 @@ mod tests {
                             "name".to_string(),
                             "website".to_string(),
                         ],
+                        bool: vec![],
+                        datetime: vec![],
                         rename: None,
                     }),
                     force_ogr_time_filter: false,
@@ -1142,7 +1151,7 @@ mod tests {
 
         if let MetaDataDefinition::OgrMetaData(meta_data) = &mut meta_data {
             if let Some(columns) = &mut meta_data.loading_info.columns {
-                columns.text.sort();
+                columns.datetime.sort();
             }
         }
 
@@ -1167,6 +1176,8 @@ mod tests {
                         float: vec![],
                         int: vec![],
                         text: vec![],
+                        bool: vec![],
+                        datetime: vec!["time_end".to_owned(), "time_start".to_owned()],
                         rename: None,
                     }),
                     force_ogr_time_filter: false,
@@ -1178,7 +1189,13 @@ mod tests {
                 result_descriptor: VectorResultDescriptor {
                     data_type: VectorDataType::MultiPoint,
                     spatial_reference: SpatialReference::epsg_4326().into(),
-                    columns: [].iter().cloned().collect(),
+                    columns: [
+                        ("time_start".to_owned(), FeatureDataType::DateTime),
+                        ("time_end".to_owned(), FeatureDataType::DateTime)
+                    ]
+                    .iter()
+                    .cloned()
+                    .collect(),
                 },
                 phantom: Default::default()
             })
@@ -1193,7 +1210,7 @@ mod tests {
 
         if let MetaDataDefinition::OgrMetaData(meta_data) = &mut meta_data {
             if let Some(columns) = &mut meta_data.loading_info.columns {
-                columns.text.sort();
+                columns.datetime.sort();
             }
         }
 
@@ -1218,6 +1235,8 @@ mod tests {
                         float: vec![],
                         int: vec![],
                         text: vec![],
+                        bool: vec![],
+                        datetime: vec!["time_end".to_owned(), "time_start".to_owned()],
                         rename: None,
                     }),
                     force_ogr_time_filter: false,
@@ -1229,7 +1248,13 @@ mod tests {
                 result_descriptor: VectorResultDescriptor {
                     data_type: VectorDataType::MultiPoint,
                     spatial_reference: SpatialReference::epsg_4326().into(),
-                    columns: [].iter().cloned().collect(),
+                    columns: [
+                        ("time_start".to_owned(), FeatureDataType::DateTime),
+                        ("time_end".to_owned(), FeatureDataType::DateTime)
+                    ]
+                    .iter()
+                    .cloned()
+                    .collect(),
                 },
                 phantom: Default::default(),
             })
@@ -1244,7 +1269,7 @@ mod tests {
 
         if let MetaDataDefinition::OgrMetaData(meta_data) = &mut meta_data {
             if let Some(columns) = &mut meta_data.loading_info.columns {
-                columns.text.sort();
+                columns.datetime.sort();
             }
         }
 
@@ -1269,6 +1294,8 @@ mod tests {
                         float: vec![],
                         int: vec![],
                         text: vec![],
+                        bool: vec![],
+                        datetime: vec!["time_end".to_owned(), "time_start".to_owned()],
                         rename: None,
                     }),
                     force_ogr_time_filter: false,
@@ -1280,7 +1307,13 @@ mod tests {
                 result_descriptor: VectorResultDescriptor {
                     data_type: VectorDataType::MultiPoint,
                     spatial_reference: SpatialReference::epsg_4326().into(),
-                    columns: [].iter().cloned().collect(),
+                    columns: [
+                        ("time_end".to_owned(), FeatureDataType::DateTime),
+                        ("time_start".to_owned(), FeatureDataType::DateTime)
+                    ]
+                    .iter()
+                    .cloned()
+                    .collect(),
                 },
                 phantom: Default::default(),
             })
@@ -1289,16 +1322,10 @@ mod tests {
 
     #[test]
     fn it_detects_time_start_duration() {
-        let mut meta_data = auto_detect_meta_data_definition(test_data!(
+        let meta_data = auto_detect_meta_data_definition(test_data!(
             "vector/data/points_with_iso_start_duration.json"
         ))
         .unwrap();
-
-        if let MetaDataDefinition::OgrMetaData(meta_data) = &mut meta_data {
-            if let Some(columns) = &mut meta_data.loading_info.columns {
-                columns.text.sort();
-            }
-        }
 
         assert_eq!(
             meta_data,
@@ -1320,6 +1347,8 @@ mod tests {
                         float: vec![],
                         int: vec!["duration".to_owned()],
                         text: vec![],
+                        bool: vec![],
+                        datetime: vec!["time_start".to_owned()],
                         rename: None,
                     }),
                     force_ogr_time_filter: false,
@@ -1331,10 +1360,13 @@ mod tests {
                 result_descriptor: VectorResultDescriptor {
                     data_type: VectorDataType::MultiPoint,
                     spatial_reference: SpatialReference::epsg_4326().into(),
-                    columns: [("duration".to_owned(), FeatureDataType::Int)]
-                        .iter()
-                        .cloned()
-                        .collect(),
+                    columns: [
+                        ("time_start".to_owned(), FeatureDataType::DateTime),
+                        ("duration".to_owned(), FeatureDataType::Int)
+                    ]
+                    .iter()
+                    .cloned()
+                    .collect(),
                 },
                 phantom: Default::default()
             })
@@ -1372,6 +1404,8 @@ mod tests {
                             "Longitude".to_string(),
                             "Name".to_string()
                         ],
+                        bool: vec![],
+                        datetime: vec![],
                         rename: None,
                     }),
                     force_ogr_time_filter: false,

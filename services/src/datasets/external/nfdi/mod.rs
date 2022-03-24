@@ -294,12 +294,16 @@ impl NFDIDataProvider {
         let mut int = vec![];
         let mut float = vec![];
         let mut text = vec![];
+        let mut bool = vec![];
+        let mut datetime = vec![];
 
         for (k, v) in &rd.columns {
             match v {
                 FeatureDataType::Category | FeatureDataType::Int => int.push(k.to_string()),
                 FeatureDataType::Float => float.push(k.to_string()),
                 FeatureDataType::Text => text.push(k.to_string()),
+                FeatureDataType::Bool => bool.push(k.to_string()),
+                FeatureDataType::DateTime => datetime.push(k.to_string()),
             }
         }
 
@@ -312,6 +316,8 @@ impl NFDIDataProvider {
             int,
             float,
             text,
+            bool,
+            datetime,
             rename: None,
         };
 

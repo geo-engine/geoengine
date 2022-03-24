@@ -1,10 +1,11 @@
 use crate::collections::batch_builder::RawFeatureCollectionBuilder;
 use crate::collections::{error, FeatureCollection, FeatureCollectionError};
-use crate::primitives::{FeatureDataType, FeatureDataValue, Geometry, TimeInterval};
+use crate::primitives::{FeatureDataType, FeatureDataValue, Geometry, TimeInstance, TimeInterval};
 use crate::util::arrow::{downcast_mut_array, ArrowTyped};
 use crate::util::Result;
 use arrow::array::{
-    ArrayBuilder, Float64Builder, Int64Builder, StringBuilder, StructBuilder, UInt8Builder,
+    ArrayBuilder, BooleanBuilder, Date64Builder, Float64Builder, Int64Builder, StringBuilder,
+    StructBuilder, UInt8Builder,
 };
 use arrow::datatypes::Field;
 use snafu::ensure;
@@ -222,6 +223,22 @@ where
                 let category_builder: &mut UInt8Builder = downcast_mut_array(data_builder.as_mut());
                 category_builder.append_option(value)?;
             }
+            FeatureDataValue::Bool(value) => {
+                let bool_builder: &mut BooleanBuilder = downcast_mut_array(data_builder.as_mut());
+                bool_builder.append_value(value)?;
+            }
+            FeatureDataValue::NullableBool(value) => {
+                let bool_builder: &mut BooleanBuilder = downcast_mut_array(data_builder.as_mut());
+                bool_builder.append_option(value)?;
+            }
+            FeatureDataValue::DateTime(value) => {
+                let dt_builder: &mut Date64Builder = downcast_mut_array(data_builder.as_mut());
+                dt_builder.append_value(value.inner())?;
+            }
+            FeatureDataValue::NullableDateTime(value) => {
+                let dt_builder: &mut Date64Builder = downcast_mut_array(data_builder.as_mut());
+                dt_builder.append_option(value.map(TimeInstance::inner))?;
+            }
         }
 
         Ok(())
@@ -258,6 +275,14 @@ where
                     downcast_mut_array(data_builder.as_mut());
                 category_builder.append_null()?;
             }
+            FeatureDataType::Bool => {
+                let bool_builder: &mut BooleanBuilder = downcast_mut_array(data_builder.as_mut());
+                bool_builder.append_null()?;
+            }
+            FeatureDataType::DateTime => {
+                let dt_builder: &mut Date64Builder = downcast_mut_array(data_builder.as_mut());
+                dt_builder.append_null()?;
+            }
         }
 
         Ok(())
@@ -291,19 +316,23 @@ where
             .builders
             .values()
             .map(|builder| {
-                let data_type_size = if builder.as_any().is::<Float64Builder>() {
-                    std::mem::size_of::<f64>()
+                let values_size = if builder.as_any().is::<Float64Builder>() {
+                    builder.len() * std::mem::size_of::<f64>()
                 } else if builder.as_any().is::<Int64Builder>() {
-                    std::mem::size_of::<i64>()
+                    builder.len() * std::mem::size_of::<i64>()
                 } else if builder.as_any().is::<UInt8Builder>() {
-                    std::mem::size_of::<u8>()
+                    builder.len() * std::mem::size_of::<u8>()
                 } else if builder.as_any().is::<StringBuilder>() {
                     0 // TODO: how to get this dynamic value
+                } else if builder.as_any().is::<BooleanBuilder>() {
+                    // arrow buffer internally packs 8 bools in 1 byte
+                    arrow::util::bit_util::ceil(builder.len(), 8)
+                } else if builder.as_any().is::<Date64Builder>() {
+                    builder.len() * std::mem::size_of::<i64>()
                 } else {
                     unreachable!("This type is not an attribute type");
                 };
 
-                let values_size = builder.len() * data_type_size;
                 let null_size_estimate = builder.len() / 8;
 
                 values_size + null_size_estimate + self.string_bytes
