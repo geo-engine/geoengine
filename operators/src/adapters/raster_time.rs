@@ -11,6 +11,31 @@ use std::cmp::min;
 use std::pin::Pin;
 use std::task::{Context, Poll};
 
+#[pin_project(project = StateProjection)]
+enum State<T1, T2, F1, F2>
+where
+    T1: Pixel,
+    T2: Pixel,
+    F1: Queryable<T1>,
+    F2: Queryable<T2>,
+    F1::Stream: Stream<Item = Result<RasterTile2D<T1>>>,
+    F2::Stream: Stream<Item = Result<RasterTile2D<T2>>>,
+    F1::Output: Future<Output = Result<F1::Stream>>,
+    F2::Output: Future<Output = Result<F2::Stream>>,
+{
+    Initial,
+    AwaitingQuery {
+        #[pin]
+        query_a_b_fut: Join<F1::Output, F2::Output>,
+    },
+    ConsumingStream {
+        #[pin]
+        stream: Zip<F1::Stream, F2::Stream>,
+        current_spatial_tile: usize,
+    },
+    Finished,
+}
+
 /// Merges two raster sources by aligning the temporal validity.
 /// Assumes that the raster tiles already align spatially.
 /// Assumes that raster tiles are contiguous temporally, with no-data-tiles filling gaps.
@@ -32,21 +57,10 @@ where
     // the second source (wrapped QueryProcessor)
     source_b: F2,
     #[pin]
-    // place for storing the output of the `query` method of the two sources
-    // and "awaiting" it
-    query_a_b_fut: Option<Join<F1::Output, F2::Output>>,
+    state: State<T1, T2, F1, F2>,
     // the current query rectangle, which is advanced over time by increasing the start time
     query_rect: RasterQueryRectangle,
-    // the number of spatial tiles in the stream for each time step
-    // TODO: calculate at start when tiling info is available before querying first tile
     num_spatial_tiles: Option<usize>,
-    // running index over the spatial tiles to compute when the next time step starts
-    current_spatial_tile: usize,
-    #[pin]
-    // the stream of the current time step that zips the two sources' streams
-    stream: Option<Zip<F1::Stream, F2::Stream>>,
-    // flag indicating whether the stream has ended
-    ended: bool,
 }
 
 impl<T1, T2, F1, F2> RasterTimeAdapter<T1, T2, F1, F2>
@@ -62,14 +76,11 @@ where
 {
     pub fn new(source_a: F1, source_b: F2, query_rect: RasterQueryRectangle) -> Self {
         Self {
-            stream: None,
             source_a,
             source_b,
-            query_a_b_fut: None,
             query_rect,
+            state: State::Initial,
             num_spatial_tiles: None,
-            current_spatial_tile: 0,
-            ended: false,
         }
     }
 
@@ -120,94 +131,84 @@ where
         // for the same time (minimum of both). Then both queries are reset to start at the end
         // of the previous time step.
 
-        if self.is_terminated() {
-            return Poll::Ready(None);
-        }
-
         let RasterTimeAdapterProjection {
             source_a,
             source_b,
-            mut query_a_b_fut,
+            mut state,
             query_rect,
             num_spatial_tiles,
-            current_spatial_tile,
-            mut stream,
-            ended,
         } = self.project();
 
-        // The `stream` is a `Zip` of the two input streams.
-        if stream.is_none() {
-            // the `stream` is not initialized and we need to query both sources and "await" their results
-            if query_a_b_fut.is_none() {
-                // the queries are not initialized and we need to query both sources and "await" their results
-                let fut1 = source_a.query(*query_rect);
-                let fut2 = source_b.query(*query_rect);
-                let join = future::join(fut1, fut2);
+        loop {
+            match state.as_mut().project() {
+                StateProjection::Initial => {
+                    let fut1 = source_a.query(*query_rect);
+                    let fut2 = source_b.query(*query_rect);
+                    let join = future::join(fut1, fut2);
 
-                query_a_b_fut.set(Some(join));
-            }
+                    state.set(State::AwaitingQuery {
+                        query_a_b_fut: join,
+                    });
+                }
+                StateProjection::AwaitingQuery { query_a_b_fut } => {
+                    let queries = ready!(query_a_b_fut.poll(cx));
 
-            if let Some(queries_fut) = query_a_b_fut.as_mut().as_pin_mut() {
-                // poll the queries, if they are not ready yet, return, otherwise take the result and reset the future
-                let queries = ready!(queries_fut.poll(cx));
-                query_a_b_fut.set(None);
-
-                match queries {
-                    (Ok(stream_a), Ok(stream_b)) => {
-                        // both sources produced an output, set the stream to be consumed
-                        stream.set(Some(stream_a.zip(stream_b)));
+                    match queries {
+                        (Ok(stream_a), Ok(stream_b)) => {
+                            // both sources produced an output, set the stream to be consumed
+                            state.set(State::ConsumingStream {
+                                stream: stream_a.zip(stream_b),
+                                current_spatial_tile: 0,
+                            });
+                        }
+                        (Err(e), _) | (_, Err(e)) => {
+                            // at least one source failed, output error and end the stream
+                            state.set(State::Finished);
+                            return Poll::Ready(Some(Err(e)));
+                        }
                     }
-                    (Err(e), _) | (_, Err(e)) => {
-                        // at least one source failed, output error and end the stream
-                        *ended = true;
-                        return Poll::Ready(Some(Err(e)));
+                }
+                StateProjection::ConsumingStream {
+                    stream,
+                    current_spatial_tile,
+                } => {
+                    match ready!(stream.poll_next(cx)) {
+                        Some((Ok(tile_a), Ok(tile_b))) => {
+                            // TODO: calculate at start when tiling info is available before querying first tile
+                            if num_spatial_tiles.is_none() {
+                                *num_spatial_tiles = Some(Self::number_of_tiles_in_partition(
+                                    &tile_a.tile_information(),
+                                    query_rect.spatial_bounds,
+                                ));
+                            }
+
+                            if *current_spatial_tile + 1 >= num_spatial_tiles.expect("checked") {
+                                // time slice ended => query next time slice of sources
+
+                                // advance current query rectangle
+                                query_rect.time_interval = TimeInterval::new_unchecked(
+                                    min(tile_a.time.end(), tile_b.time.end()),
+                                    query_rect.time_interval.end(),
+                                );
+
+                                state.set(State::Initial);
+                            } else {
+                                *current_spatial_tile += 1;
+                            }
+
+                            return Poll::Ready(Some(Ok(Self::align_tiles(tile_a, tile_b))));
+                        }
+                        Some((Ok(_), Err(e)) | (Err(e), Ok(_) | Err(_))) => {
+                            state.set(State::Finished);
+                            return Poll::Ready(Some(Err(e)));
+                        }
+                        None => {
+                            state.set(State::Finished);
+                            return Poll::Ready(None);
+                        }
                     }
                 }
-            }
-        }
-
-        // get the next pair of tiles from the stream. As the stream has to exist, this is safe.
-        let next = if let Some(stream) = stream.as_mut().as_pin_mut() {
-            ready!(stream.poll_next(cx))
-        } else {
-            panic!("stream is None")
-        };
-
-        match next {
-            Some((Ok(tile_a), Ok(tile_b))) => {
-                // TODO: calculate at start when tiling info is available before querying first tile
-                if num_spatial_tiles.is_none() {
-                    *num_spatial_tiles = Some(Self::number_of_tiles_in_partition(
-                        &tile_a.tile_information(),
-                        query_rect.spatial_bounds,
-                    ));
-                }
-
-                if *current_spatial_tile + 1 >= num_spatial_tiles.expect("checked") {
-                    // time slice ended => query next time slice of sources
-
-                    // advance current query rectangle
-                    query_rect.time_interval = TimeInterval::new_unchecked(
-                        min(tile_a.time.end(), tile_b.time.end()),
-                        query_rect.time_interval.end(),
-                    );
-
-                    // reset the stream, the new stream will be created in the next iteration
-                    stream.set(None);
-                    *current_spatial_tile = 0;
-                } else {
-                    *current_spatial_tile += 1;
-                }
-
-                Poll::Ready(Some(Ok(Self::align_tiles(tile_a, tile_b))))
-            }
-            Some((Ok(_), Err(e)) | (Err(e), Ok(_) | Err(_))) => {
-                *ended = true;
-                Poll::Ready(Some(Err(e)))
-            }
-            None => {
-                *ended = true;
-                Poll::Ready(None)
+                StateProjection::Finished => return Poll::Ready(None),
             }
         }
     }
@@ -225,7 +226,7 @@ where
     F2::Output: Future<Output = Result<F2::Stream>>,
 {
     fn is_terminated(&self) -> bool {
-        self.ended
+        matches!(self.state, State::Finished)
     }
 }
 
