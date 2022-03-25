@@ -117,10 +117,9 @@ pub type FirstValueIntAggregator = FirstValueAggregator<i64>;
 /// Aggregation function that uses only the first value occurrence
 pub struct FirstValueAggregator<T> {
     values: Vec<T>,
-    pristine: Vec<bool>,
+    not_pristine: Vec<bool>,
     null: Vec<bool>,
     number_of_pristine_values: usize,
-    number_of_non_null_values: usize,
 }
 
 impl<T> Aggregator for FirstValueAggregator<T>
@@ -132,10 +131,9 @@ where
     fn new(number_of_features: usize) -> Self {
         Self {
             values: vec![T::zero(); number_of_features],
-            pristine: vec![true; number_of_features],
+            not_pristine: vec![false; number_of_features],
             null: vec![false; number_of_features],
             number_of_pristine_values: number_of_features,
-            number_of_non_null_values: number_of_features,
         }
     }
 
@@ -143,25 +141,25 @@ where
     where
         P: Pixel + AsPrimitive<Self::Output>,
     {
-        if self.null[feature_idx] {
+        if self.not_pristine[feature_idx] {
             return;
         }
 
-        if self.pristine[feature_idx] {
-            self.values[feature_idx] = pixel.as_();
-            self.pristine[feature_idx] = false;
-            self.number_of_pristine_values -= 1;
-        }
+        self.values[feature_idx] = pixel.as_();
+
+        self.not_pristine[feature_idx] = true;
+        self.number_of_pristine_values -= 1;
     }
 
     fn add_null(&mut self, feature_idx: usize) {
-        if self.pristine[feature_idx] {
-            self.null[feature_idx] = true;
-            self.number_of_non_null_values -= 1;
-
-            self.pristine[feature_idx] = false;
-            self.number_of_pristine_values -= 1;
+        if self.not_pristine[feature_idx] {
+            return;
         }
+
+        self.null[feature_idx] = true;
+
+        self.not_pristine[feature_idx] = true;
+        self.number_of_pristine_values -= 1;
     }
 
     fn feature_data_type() -> FeatureDataType {
@@ -189,7 +187,7 @@ where
     }
 
     fn is_satisfied(&self) -> bool {
-        self.number_of_pristine_values == 0 || self.number_of_non_null_values == 0
+        self.number_of_pristine_values == 0
     }
 
     fn add_feature_data(&mut self, data: FeatureData, weight: u64) -> Result<()> {
@@ -292,10 +290,12 @@ impl Aggregator for MeanValueAggregator {
     }
 
     fn add_null(&mut self, feature_idx: usize) {
-        if !self.null[feature_idx] {
-            self.null[feature_idx] = true;
-            self.number_of_non_null_values -= 1;
+        if self.null[feature_idx] {
+            return;
         }
+
+        self.null[feature_idx] = true;
+        self.number_of_non_null_values -= 1;
     }
 
     fn feature_data_type() -> FeatureDataType {
