@@ -18,6 +18,7 @@ use crate::error::Result;
 use crate::error::{self, Error};
 use crate::handlers::spatial_references::{spatial_reference_specification, AxisOrder};
 use crate::handlers::Context;
+use crate::ogc::util::{ogc_endpoint_url, OgcProtocol};
 use crate::ogc::wcs::request::{DescribeCoverage, GetCapabilities, GetCoverage, WcsRequest};
 use crate::util::config;
 use crate::util::config::get_config_element;
@@ -58,13 +59,12 @@ async fn wcs_handler<C: Context>(
 }
 
 fn wcs_url(workflow: WorkflowId) -> Result<Url> {
-    let base = crate::util::config::get_config_element::<crate::util::config::Web>()?
+    let web_config = crate::util::config::get_config_element::<crate::util::config::Web>()?;
+    let base = web_config
         .external_address
-        .ok_or(Error::ExternalAddressNotConfigured)?;
+        .unwrap_or(Url::parse(&format!("http://{}/", web_config.bind_address))?);
 
-    base.join("/wcs/")?
-        .join(&workflow.to_string())
-        .map_err(Into::into)
+    ogc_endpoint_url(&base, OgcProtocol::Wcs, workflow)
 }
 
 #[allow(clippy::unused_async)]
@@ -435,7 +435,7 @@ mod tests {
             xmlns:ogc="http://www.opengis.net/ogc"
             xmlns:ows="http://www.opengis.net/ows/1.1"
             xmlns:gml="http://www.opengis.net/gml"
-            xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.opengis.net/wcs/1.1.1 http://localhost:3030/wcs/{workflow_id}/schemas/wcs/1.1.1/wcsGetCapabilities.xsd" updateSequence="152">
+            xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.opengis.net/wcs/1.1.1 http://127.0.0.1:3030/wcs/{workflow_id}/schemas/wcs/1.1.1/wcsGetCapabilities.xsd" updateSequence="152">
             <ows:ServiceIdentification>
                 <ows:Title>Web Coverage Service</ows:Title>
                 <ows:ServiceType>WCS</ows:ServiceType>
@@ -450,21 +450,21 @@ mod tests {
                 <ows:Operation name="GetCapabilities">
                     <ows:DCP>
                         <ows:HTTP>
-                                <ows:Get xlink:href="http://localhost:3030/wcs/{workflow_id}?"/>
+                                <ows:Get xlink:href="http://127.0.0.1:3030/wcs/{workflow_id}?"/>
                         </ows:HTTP>
                     </ows:DCP>
                 </ows:Operation>
                 <ows:Operation name="DescribeCoverage">
                     <ows:DCP>
                         <ows:HTTP>
-                                <ows:Get xlink:href="http://localhost:3030/wcs/{workflow_id}?"/>
+                                <ows:Get xlink:href="http://127.0.0.1:3030/wcs/{workflow_id}?"/>
                         </ows:HTTP>
                     </ows:DCP>
                 </ows:Operation>
                 <ows:Operation name="GetCoverage">
                     <ows:DCP>
                         <ows:HTTP>
-                                <ows:Get xlink:href="http://localhost:3030/wcs/{workflow_id}?"/>
+                                <ows:Get xlink:href="http://127.0.0.1:3030/wcs/{workflow_id}?"/>
                         </ows:HTTP>
                     </ows:DCP>
                 </ows:Operation>
@@ -519,7 +519,7 @@ mod tests {
         xmlns:ogc="http://www.opengis.net/ogc"
         xmlns:ows="http://www.opengis.net/ows/1.1"
         xmlns:gml="http://www.opengis.net/gml"
-        xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.opengis.net/wcs/1.1.1 http://localhost:3030/wcs/{workflow_id}/schemas/wcs/1.1.1/wcsDescribeCoverage.xsd">
+        xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.opengis.net/wcs/1.1.1 http://127.0.0.1:3030/wcs/{workflow_id}/schemas/wcs/1.1.1/wcsDescribeCoverage.xsd">
         <wcs:CoverageDescription>
             <ows:Title>Workflow {workflow_id}</ows:Title>
             <wcs:Identifier>{workflow_id}</wcs:Identifier>
