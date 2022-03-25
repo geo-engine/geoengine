@@ -13,6 +13,7 @@ use geoengine_datatypes::{
 use crate::error;
 use crate::error::Result;
 use crate::handlers::Context;
+use crate::ogc::util::{ogc_endpoint_url, OgcProtocol};
 use crate::ogc::wms::request::{GetCapabilities, GetLegendGraphic, GetMap, WmsRequest};
 use crate::util::config;
 use crate::util::config::get_config_element;
@@ -208,9 +209,7 @@ fn wms_url(workflow: WorkflowId) -> Result<Url> {
         .external_address
         .unwrap_or(Url::parse(&format!("http://{}/", web_config.bind_address))?);
 
-    base.join("/wms/")?
-        .join(&workflow.to_string())
-        .map_err(Into::into)
+    ogc_endpoint_url(&base, OgcProtocol::Wms, workflow)
 }
 
 /// Renders a map as raster image.
@@ -442,16 +441,6 @@ mod tests {
         for event in reader {
             assert!(event.is_ok());
         }
-    }
-
-    #[test]
-    fn test_wms_url() {
-        let workflow_id = WorkflowId::from_str("df756642-c5a3-4d72-8ad7-629d312ae993").unwrap();
-
-        assert_eq!(
-            wms_url(workflow_id).unwrap(),
-            Url::parse("http://127.0.0.1:3030/wms/df756642-c5a3-4d72-8ad7-629d312ae993").unwrap()
-        );
     }
 
     #[tokio::test]

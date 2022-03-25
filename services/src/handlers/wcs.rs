@@ -18,6 +18,7 @@ use crate::error::Result;
 use crate::error::{self, Error};
 use crate::handlers::spatial_references::{spatial_reference_specification, AxisOrder};
 use crate::handlers::Context;
+use crate::ogc::util::{ogc_endpoint_url, OgcProtocol};
 use crate::ogc::wcs::request::{DescribeCoverage, GetCapabilities, GetCoverage, WcsRequest};
 use crate::util::config;
 use crate::util::config::get_config_element;
@@ -63,9 +64,7 @@ fn wcs_url(workflow: WorkflowId) -> Result<Url> {
         .external_address
         .unwrap_or(Url::parse(&format!("http://{}/", web_config.bind_address))?);
 
-    base.join("/wcs/")?
-        .join(&workflow.to_string())
-        .map_err(Into::into)
+    ogc_endpoint_url(&base, OgcProtocol::Wcs, workflow)
 }
 
 #[allow(clippy::unused_async)]

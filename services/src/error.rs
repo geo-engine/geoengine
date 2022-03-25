@@ -326,6 +326,8 @@ pub enum Error {
     GFBioBasketParse {
         message: String,
     },
+
+    BaseUrlMustEndWithSlash,
 }
 
 impl actix_web::error::ResponseError for Error {

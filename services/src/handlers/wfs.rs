@@ -6,6 +6,7 @@ use snafu::{ensure, ResultExt};
 use crate::error;
 use crate::error::Result;
 use crate::handlers::Context;
+use crate::ogc::util::{ogc_endpoint_url, OgcProtocol};
 use crate::ogc::wfs::request::{GetCapabilities, GetFeature, WfsRequest};
 use crate::util::config;
 use crate::util::config::get_config_element;
@@ -284,9 +285,7 @@ fn wfs_url(workflow: WorkflowId) -> Result<Url> {
         .external_address
         .unwrap_or(Url::parse(&format!("http://{}/", web_config.bind_address))?);
 
-    base.join("/wfs/")?
-        .join(&workflow.to_string())
-        .map_err(Into::into)
+    ogc_endpoint_url(&base, OgcProtocol::Wfs, workflow)
 }
 
 /// Retrieves feature data objects.
