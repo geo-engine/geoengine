@@ -897,7 +897,7 @@ mod tests {
     use super::*;
     use crate::engine::{MockExecutionContext, MockQueryContext};
     use crate::test_data;
-    use crate::util::gdal::add_ndvi_dataset;
+    use crate::util::gdal::{add_ndvi_dataset, hide_gdal_errors_in_test};
     use crate::util::Result;
 
     use geoengine_datatypes::hashmap;
@@ -1386,6 +1386,8 @@ mod tests {
 
     #[tokio::test]
     async fn test_nodata() {
+        hide_gdal_errors_in_test();
+
         let mut exe_ctx = MockExecutionContext::test_default();
         let query_ctx = MockQueryContext::test_default();
         let id = add_ndvi_dataset(&mut exe_ctx);

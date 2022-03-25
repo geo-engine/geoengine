@@ -73,6 +73,17 @@ pub fn add_ndvi_dataset(ctx: &mut MockExecutionContext) -> DatasetId {
     id
 }
 
+// TODO: move test helper somewhere else?
+pub fn hide_gdal_errors_in_test() {
+    #[cfg(not(target_os = "windows"))]
+    let null_file = "/dev/null";
+
+    #[cfg(target_os = "windows")]
+    let null_file = "NUL";
+
+    gdal::config::set_config_option("CPL_LOG", null_file).unwrap();
+}
+
 /// Opens a Gdal Dataset with the given `path`.
 /// Other crates should use this method for Gdal Dataset access as a workaround to avoid strange errors.
 pub fn gdal_open_dataset(path: &Path) -> Result<Dataset> {
