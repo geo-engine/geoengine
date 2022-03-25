@@ -10,8 +10,8 @@ use arrow::datatypes::Field;
 use snafu::ensure;
 use std::collections::hash_map::Entry;
 use std::collections::HashMap;
+use std::iter;
 use std::marker::PhantomData;
-use std::{iter, mem};
 
 pub trait BuilderProvider {
     type CollectionType: Geometry + ArrowTyped;
@@ -156,8 +156,10 @@ where
     ///
     pub fn push_data(&mut self, column: &str, data: FeatureDataValue) -> Result<()> {
         // also checks that column exists
-        let data_builder = if let Some(builder) = self.builders.get_mut(column) {
-            builder
+        let (data_builder, column_type) = if let (Some(builder), Some(column_type)) =
+            (self.builders.get_mut(column), self.types.get(column))
+        {
+            (builder, column_type)
         } else {
             return Err(FeatureCollectionError::ColumnDoesNotExist {
                 name: column.to_string(),
@@ -166,10 +168,7 @@ where
         };
 
         // check that data types match
-        let expected_type = mem::discriminant(self.types.get(column).expect("checked before"));
-        let given_type = mem::discriminant(&FeatureDataType::from(&data));
-
-        if expected_type != given_type {
+        if column_type != &FeatureDataType::from(&data) {
             return Err(FeatureCollectionError::WrongDataType.into());
         }
 
