@@ -1,3 +1,8 @@
+use crate::util::Result;
+use crate::{
+    engine::{QueryContext, RasterQueryProcessor},
+    error::Error,
+};
 use futures::StreamExt;
 use gdal::raster::{Buffer, GdalType, RasterCreationOption};
 use gdal::{Dataset, Driver};
@@ -8,16 +13,11 @@ use geoengine_datatypes::raster::{
     ChangeGridBounds, GeoTransform, Grid2D, GridBlit, GridIdx, GridSize, Pixel, RasterTile2D,
 };
 use geoengine_datatypes::spatial_reference::SpatialReference;
+use log::debug;
 use serde::{Deserialize, Serialize};
 use std::convert::TryInto;
 use std::path::Path;
 use std::path::PathBuf;
-
-use crate::util::Result;
-use crate::{
-    engine::{QueryContext, RasterQueryProcessor},
-    error::Error,
-};
 
 pub async fn raster_stream_to_geotiff_bytes<T, C: QueryContext + 'static>(
     processor: Box<dyn RasterQueryProcessor<RasterType = T>>,
@@ -128,6 +128,7 @@ struct GdalDatasetWriter<P: Pixel + GdalType> {
     x_pixel_size: f64,
     y_pixel_size: f64,
     _type: std::marker::PhantomData<P>,
+    use_big_tiff: bool,
 }
 
 impl<P: Pixel + GdalType> GdalDatasetWriter<P> {
@@ -156,14 +157,19 @@ impl<P: Pixel + GdalType> GdalDatasetWriter<P> {
         let output_bounds = query_rect.spatial_bounds;
 
         let uncompressed_byte_size = width as usize * height as usize * std::mem::size_of::<P>();
-        let requires_big_tiff =
+        let use_big_tiff =
             gdal_tiff_options.force_big_tiff || uncompressed_byte_size >= BIG_TIFF_BYTE_THRESHOLD;
+
+        debug!(
+            "use_big_tiff: {}, forced: {}",
+            use_big_tiff, gdal_tiff_options.force_big_tiff
+        );
 
         let driver = Driver::get("GTiff")?;
         let options = create_gdal_tiff_options(
             &compression_num_threads,
             gdal_tiff_options.as_cog,
-            requires_big_tiff,
+            use_big_tiff,
         );
 
         let mut dataset = driver.create_with_band_type_with_options::<P, _>(
@@ -195,6 +201,7 @@ impl<P: Pixel + GdalType> GdalDatasetWriter<P> {
             x_pixel_size,
             y_pixel_size,
             _type: Default::default(),
+            use_big_tiff,
         })
     }
 
@@ -265,7 +272,7 @@ impl<P: Pixel + GdalType> GdalDatasetWriter<P> {
                 &self.intermediate_file_path,
                 &self.output_file_path,
                 self.gdal_tiff_options.compression_num_threads,
-                self.gdal_tiff_options.force_big_tiff,
+                self.use_big_tiff,
             )
         } else {
             let driver = self.dataset.driver();

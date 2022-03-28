@@ -19,12 +19,14 @@ use serde::{Deserialize, Serialize};
 
 mod meta;
 
+pub const PANGAEA_PROVIDER_ID: DatasetProviderId =
+    DatasetProviderId::from_u128(0xe3b9_3bf3_1bc1_48db_80e8_97cf_b068_5e8d);
+
 /// The pangaea provider allows to include datasets from
 /// <http://pangaea.de/>
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct PangaeaDataProviderDefinition {
-    id: DatasetProviderId,
     name: String,
     base_url: String,
 }
@@ -45,7 +47,7 @@ impl ExternalDatasetProviderDefinition for PangaeaDataProviderDefinition {
     }
 
     fn id(&self) -> DatasetProviderId {
-        self.id
+        PANGAEA_PROVIDER_ID
     }
 }
 
@@ -195,7 +197,7 @@ impl
 
 #[cfg(test)]
 mod tests {
-    use crate::datasets::external::pangaea::PangaeaDataProviderDefinition;
+    use crate::datasets::external::pangaea::{PangaeaDataProviderDefinition, PANGAEA_PROVIDER_ID};
     use crate::datasets::listing::ExternalDatasetProvider;
     use crate::datasets::storage::ExternalDatasetProviderDefinition;
     use crate::error::Error;
@@ -204,7 +206,7 @@ mod tests {
         DataCollection, FeatureCollectionInfos, IntoGeometryIterator, MultiPointCollection,
         MultiPolygonCollection, VectorDataType,
     };
-    use geoengine_datatypes::dataset::{DatasetId, DatasetProviderId, ExternalDatasetId};
+    use geoengine_datatypes::dataset::{DatasetId, ExternalDatasetId};
     use geoengine_datatypes::primitives::{
         BoundingBox2D, Coordinate2D, MultiPointAccess, SpatialResolution, TimeInterval,
         VectorQueryRectangle,
@@ -223,11 +225,8 @@ mod tests {
     };
     use std::ops::RangeInclusive;
     use std::path::PathBuf;
-    use std::str::FromStr;
     use tokio::fs::OpenOptions;
     use tokio::io::AsyncReadExt;
-
-    const PROVIDER_ID: &str = "39f8a6e4-3145-46f8-ab59-80376a264874";
 
     pub fn test_data_path(file_name: &str) -> PathBuf {
         crate::test_data!(String::from("pangaea/") + file_name).into()
@@ -235,7 +234,6 @@ mod tests {
 
     async fn create_provider(server: &Server) -> Result<Box<dyn ExternalDatasetProvider>, Error> {
         Box::new(PangaeaDataProviderDefinition {
-            id: DatasetProviderId::from_str(PROVIDER_ID).unwrap(),
             name: "Pangaea".to_string(),
             base_url: server.url_str("").strip_suffix('/').unwrap().to_owned(),
         })
@@ -245,7 +243,7 @@ mod tests {
 
     fn create_id(doi: &str) -> DatasetId {
         DatasetId::External(ExternalDatasetId {
-            provider_id: DatasetProviderId::from_str(PROVIDER_ID).unwrap(),
+            provider_id: PANGAEA_PROVIDER_ID,
             dataset_id: doi.to_owned(),
         })
     }

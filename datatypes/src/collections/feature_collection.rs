@@ -1,12 +1,12 @@
 use arrow::error::ArrowError;
 use arrow::{
     array::FixedSizeListArray,
-    datatypes::{DataType, Field, Float64Type, Int64Type},
+    datatypes::{DataType, Date64Type, Field, Float64Type, Int64Type},
 };
 use arrow::{
     array::{
-        as_primitive_array, as_string_array, Array, ArrayData, ArrayRef, BooleanArray, ListArray,
-        StructArray,
+        as_boolean_array, as_primitive_array, as_string_array, Array, ArrayData, ArrayRef,
+        BooleanArray, ListArray, StructArray,
     },
     buffer::Buffer,
 };
@@ -18,12 +18,12 @@ use std::collections::hash_map;
 use std::collections::{HashMap, HashSet};
 use std::convert::{TryFrom, TryInto};
 use std::marker::PhantomData;
-use std::mem;
 use std::ops::{Bound, RangeBounds};
 use std::rc::Rc;
 use std::sync::Arc;
+use std::{mem, slice};
 
-use crate::primitives::Coordinate2D;
+use crate::primitives::{BoolDataRef, Coordinate2D, DateTimeDataRef, TimeInstance};
 use crate::primitives::{
     CategoryDataRef, FeatureData, FeatureDataRef, FeatureDataType, FeatureDataValue, FloatDataRef,
     Geometry, IntDataRef, TextDataRef, TimeInterval,
@@ -466,6 +466,28 @@ where
                     arrow::compute::lt_utf8_scalar,
                 )?;
             }
+            FeatureDataType::Bool => {
+                apply_filters(
+                    as_boolean_array(column),
+                    &mut filter_array,
+                    ranges,
+                    arrow::compute::gt_eq_bool_scalar,
+                    arrow::compute::gt_bool_scalar,
+                    arrow::compute::lt_eq_bool_scalar,
+                    arrow::compute::lt_bool_scalar,
+                )?;
+            }
+            FeatureDataType::DateTime => {
+                apply_filters(
+                    as_primitive_array::<Date64Type>(column),
+                    &mut filter_array,
+                    ranges,
+                    arrow::compute::gt_eq_scalar,
+                    arrow::compute::gt_scalar,
+                    arrow::compute::lt_eq_scalar,
+                    arrow::compute::lt_scalar,
+                )?;
+            }
             FeatureDataType::Category => {
                 return Err(error::FeatureCollectionError::WrongDataType.into());
             }
@@ -813,7 +835,7 @@ impl<'a, GeometryRef> FeatureCollectionRow<'a, GeometryRef> {
 
 pub struct FeatureCollectionIterator<'a, GeometryIter> {
     geometries: GeometryIter,
-    time_intervals: std::slice::Iter<'a, TimeInterval>,
+    time_intervals: slice::Iter<'a, TimeInterval>,
     data: Rc<HashMap<String, FeatureDataRef<'a>>>,
     row_num: usize,
 }
@@ -991,12 +1013,12 @@ where
                 }
                 FeatureDataType::Text => {
                     let array: &arrow::array::StringArray = downcast_array(column);
-                    TextDataRef::new(
-                        array.value_data(),
-                        array.value_offsets(),
-                        array.data_ref().null_bitmap(),
-                    )
-                    .into()
+                    let fixed_nulls = if column.null_count() > 0 {
+                        array.data_ref().null_bitmap()
+                    } else {
+                        &None //StringBuilder assigns some null_bitmap even if there are no nulls
+                    };
+                    TextDataRef::new(array.value_data(), array.value_offsets(), fixed_nulls).into()
                 }
                 FeatureDataType::Int => {
                     let array: &arrow::array::Int64Array = downcast_array(column);
@@ -1005,6 +1027,22 @@ where
                 FeatureDataType::Category => {
                     let array: &arrow::array::UInt8Array = downcast_array(column);
                     CategoryDataRef::new(array.values(), array.data_ref().null_bitmap()).into()
+                }
+                FeatureDataType::Bool => {
+                    let array: &arrow::array::BooleanArray = downcast_array(column);
+                    // TODO: This operation is quite expensive for getting a reference
+                    let transformed: Vec<_> = array.iter().map(|x| x.unwrap_or(false)).collect();
+                    BoolDataRef::new(transformed, array.data_ref().null_bitmap()).into()
+                }
+                FeatureDataType::DateTime => {
+                    let array: &arrow::array::Date64Array = downcast_array(column);
+                    let timestamps = unsafe {
+                        slice::from_raw_parts(
+                            array.values().as_ptr().cast::<TimeInstance>(),
+                            array.len(),
+                        )
+                    };
+                    DateTimeDataRef::new(timestamps, array.data_ref().null_bitmap()).into()
                 }
             },
         )
@@ -1023,7 +1061,7 @@ where
         let timestamps: &arrow::array::Int64Array = downcast_array(&timestamps_ref);
 
         unsafe {
-            std::slice::from_raw_parts(
+            slice::from_raw_parts(
                 timestamps.values().as_ptr().cast::<TimeInterval>(),
                 number_of_time_intervals,
             )
@@ -1501,7 +1539,7 @@ where
 
         // transform the coordinates into a byte slice and create a Buffer from it.
         let coords_buffer = unsafe {
-            let coord_bytes: &[u8] = std::slice::from_raw_parts(
+            let coord_bytes: &[u8] = slice::from_raw_parts(
                 projected_coords.as_ptr().cast::<u8>(),
                 projected_coords.len() * std::mem::size_of::<Coordinate2D>(),
             );

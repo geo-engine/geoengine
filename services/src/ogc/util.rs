@@ -2,14 +2,16 @@ use chrono::FixedOffset;
 use geoengine_datatypes::primitives::{AxisAlignedRectangle, BoundingBox2D};
 use geoengine_datatypes::primitives::{Coordinate2D, SpatialResolution, TimeInterval};
 use geoengine_datatypes::spatial_reference::SpatialReference;
+use reqwest::Url;
 use serde::de::Error;
 use serde::{Deserialize, Serialize};
-use snafu::ResultExt;
+use snafu::{ensure, ResultExt};
 use std::str::FromStr;
 
 use super::wcs::request::WcsBoundingbox;
 use crate::error::{self, Result};
 use crate::handlers::spatial_references::{spatial_reference_specification, AxisOrder};
+use crate::workflows::workflow::WorkflowId;
 
 #[derive(PartialEq, Debug, Deserialize, Serialize, Clone, Copy)]
 pub struct OgcBoundingBox {
@@ -260,6 +262,31 @@ pub fn tuple_from_ogc_params(
     }
 }
 
+#[derive(Clone, Copy)]
+pub enum OgcProtocol {
+    Wcs,
+    Wms,
+    Wfs,
+}
+
+impl OgcProtocol {
+    fn url_path(self) -> &'static str {
+        match self {
+            OgcProtocol::Wcs => "wcs/",
+            OgcProtocol::Wms => "wms/",
+            OgcProtocol::Wfs => "wfs/",
+        }
+    }
+}
+
+pub fn ogc_endpoint_url(base: &Url, protocol: OgcProtocol, workflow: WorkflowId) -> Result<Url> {
+    ensure!(base.path().ends_with('/'), error::BaseUrlMustEndWithSlash);
+
+    base.join(protocol.url_path())?
+        .join(&workflow.to_string())
+        .map_err(Into::into)
+}
+
 #[cfg(test)]
 mod tests {
     use chrono::{TimeZone, Utc};
@@ -409,6 +436,40 @@ mod tests {
         assert_eq!(
             parse_coordinate(to_deserializer(s)).unwrap(),
             Coordinate2D::new(1.1, 2.2)
+        );
+    }
+
+    #[test]
+    fn it_builds_correct_endpoint_urls() {
+        assert_eq!(
+            ogc_endpoint_url(
+                &Url::parse("http://example.com/").unwrap(),
+                OgcProtocol::Wms,
+                WorkflowId::from_str("b9a7b1a0-efd6-4de9-9973-c3aeaf9282bd").unwrap(),
+            )
+            .unwrap(),
+            Url::parse("http://example.com/wms/b9a7b1a0-efd6-4de9-9973-c3aeaf9282bd").unwrap()
+        );
+
+        assert_eq!(
+            ogc_endpoint_url(
+                &Url::parse("http://example.com/a/").unwrap(),
+                OgcProtocol::Wms,
+                WorkflowId::from_str("b9a7b1a0-efd6-4de9-9973-c3aeaf9282bd").unwrap(),
+            )
+            .unwrap(),
+            Url::parse("http://example.com/a/wms/b9a7b1a0-efd6-4de9-9973-c3aeaf9282bd").unwrap()
+        );
+
+        assert_eq!(
+            ogc_endpoint_url(
+                &Url::parse("http://example.com/a/sub/folder/").unwrap(),
+                OgcProtocol::Wms,
+                WorkflowId::from_str("b9a7b1a0-efd6-4de9-9973-c3aeaf9282bd").unwrap(),
+            )
+            .unwrap(),
+            Url::parse("http://example.com/a/sub/folder/wms/b9a7b1a0-efd6-4de9-9973-c3aeaf9282bd")
+                .unwrap()
         );
     }
 }

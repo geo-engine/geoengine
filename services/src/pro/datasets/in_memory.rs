@@ -25,7 +25,7 @@ use geoengine_operators::engine::{
     MetaData, RasterResultDescriptor, StaticMetaData, TypedResultDescriptor, VectorResultDescriptor,
 };
 use geoengine_operators::source::{
-    GdalLoadingInfo, GdalMetaDataRegular, GdalMetadataNetCdfCf, OgrSourceDataset,
+    GdalLoadingInfo, GdalMetaDataList, GdalMetaDataRegular, GdalMetadataNetCdfCf, OgrSourceDataset,
 };
 use geoengine_operators::{mock::MockDatasetDataSourceLoadingInfo, source::GdalMetaDataStatic};
 use log::{info, warn};
@@ -123,6 +123,7 @@ impl ProHashMapStorable for MetaDataDefinition {
             MetaDataDefinition::GdalMetaDataRegular(d) => d.store(id, db),
             MetaDataDefinition::GdalStatic(d) => d.store(id, db),
             MetaDataDefinition::GdalMetadataNetCdfCf(d) => d.store(id, db),
+            MetaDataDefinition::GdalMetaDataList(d) => d.store(id, db),
         }
     }
 }
@@ -164,6 +165,13 @@ impl ProHashMapStorable for GdalMetaDataStatic {
 }
 
 impl ProHashMapStorable for GdalMetadataNetCdfCf {
+    fn store(&self, id: InternalDatasetId, db: &mut ProHashMapDatasetDb) -> TypedResultDescriptor {
+        db.gdal_datasets.insert(id, Box::new(self.clone()));
+        self.result_descriptor.clone().into()
+    }
+}
+
+impl ProHashMapStorable for GdalMetaDataList {
     fn store(&self, id: InternalDatasetId, db: &mut ProHashMapDatasetDb) -> TypedResultDescriptor {
         db.gdal_datasets.insert(id, Box::new(self.clone()));
         self.result_descriptor.clone().into()
@@ -225,12 +233,13 @@ impl DatasetProvider<UserSession> for ProHashMapDatasetDb {
             .iter()
             .filter(|p| session.roles.contains(&p.role))
             .filter_map(|p| {
-                if let Some(d) = self.datasets.get(&p.dataset) {
-                    Some(d)
-                } else {
+                let matching_dataset = self.datasets.get(&p.dataset);
+
+                if matching_dataset.is_none() {
                     warn!("Permission {:?} without a matching dataset", p);
-                    None
                 }
+
+                matching_dataset
             });
 
         let mut list: Vec<_> = if let Some(filter) = &options.filter {

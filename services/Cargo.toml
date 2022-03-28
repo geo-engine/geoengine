@@ -1,6 +1,6 @@
 [package]
 name = "geoengine-services"
-version = "0.1.0"
+version = "0.7.0"
 authors = [
     "Christian Beilschmidt <beilschmidt@mathematik.uni-marburg.de>",
     "Johannes Drönner <droenner@mathematik.uni-marburg.de>",
@@ -14,7 +14,7 @@ nature40 = ["xml"]
 xml = ["quick-xml"]
 postgres = ["postgres-types", "bb8-postgres"]
 odm = ["pro"]
-nfdi = ["postgres", "geoengine-datatypes/postgres", "scienceobjectsdb_rust_api"]
+nfdi = ["postgres", "geoengine-datatypes/postgres", "scienceobjectsdb_rust_api", "pro"]
 ebv = []
 # This compiles Geo Engine Pro
 pro = ["postgres", "geoengine-operators/pro", "geoengine-datatypes/pro"]
@@ -25,7 +25,7 @@ actix-http = "3.0"
 actix-multipart = "0.4"
 actix-rt = "2.6"
 actix-web = "4.0"
-actix-web-httpauth = "=0.6.0-beta.8"
+actix-web-httpauth = "0.6"
 async-trait = "0.1"
 base64 = "0.13"
 bb8-postgres = { version = "0.7", features = ["with-uuid-0_8", "with-chrono-0_4", "with-serde_json-1"], optional = true }
@@ -54,8 +54,9 @@ proj-sys = "0.19"
 pwhash = "1.0"
 quick-xml = { version = "0.22", optional = true }
 rayon = "1.5"
+regex = "1.5"
 reqwest = { version = "0.11", features = ["json", "multipart", "stream"] }
-scienceobjectsdb_rust_api = { git = "https://github.com/ScienceObjectsDB/rust-api", rev="f3c2901f4a620eb34fe6232e16717c9d5503f1d0", optional = true }
+scienceobjectsdb_rust_api = { version = "0.2.0-rc1", optional = true }
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 serde_urlencoded = "0.7"
@@ -83,4 +84,4 @@ wiremock-grpc = "0.0.3-alpha1"
 xml-rs = "0.8.3"
 
 [build-dependencies]
-vergen = "6"
+vergen = "7"

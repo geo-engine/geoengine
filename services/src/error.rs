@@ -210,8 +210,6 @@ pub enum Error {
     },
     RasterDataTypeNotSupportByGdal,
 
-    ExternalAddressNotConfigured,
-
     MissingSpatialReference,
 
     WcsVersionNotSupported,
@@ -322,6 +320,14 @@ pub enum Error {
     EbvHandler {
         source: crate::handlers::ebv::EbvError,
     },
+
+    #[cfg(feature = "nfdi")]
+    #[snafu(display("Could not parse GFBio basket: {}", message,))]
+    GFBioBasketParse {
+        message: String,
+    },
+
+    BaseUrlMustEndWithSlash,
 }
 
 impl actix_web::error::ResponseError for Error {

@@ -30,7 +30,8 @@ pub async fn start_server(static_files_dir: Option<PathBuf>) -> Result<()> {
     let web_config: config::Web = get_config_element()?;
 
     info!(
-        "Starting server… {}",
+        "Starting server… local address: {}, external address: {}",
+        Url::parse(&format!("http://{}/", web_config.bind_address))?,
         web_config
             .external_address
             .unwrap_or(Url::parse(&format!("http://{}/", web_config.bind_address))?)
@@ -115,6 +116,10 @@ where
                 .service(web::scope("/ebv").configure(handlers::ebv::init_ebv_routes::<C>(None)));
         }
 
+        #[cfg(feature = "nfdi")]
+        {
+            app = app.configure(handlers::gfbio::init_gfbio_routes::<C>);
+        }
         if version_api {
             app = app.route("/version", web::get().to(show_version_handler));
         }

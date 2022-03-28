@@ -226,7 +226,7 @@ mod tests {
     use crate::operations::reproject::Reproject;
     use crate::primitives::{
         DataRef, FeatureData, FeatureDataRef, FeatureDataType, FeatureDataValue, MultiPointAccess,
-        TimeInterval,
+        TimeInstance, TimeInterval,
     };
     use float_cmp::approx_eq;
     use serde_json::{from_str, json};
@@ -912,6 +912,80 @@ mod tests {
     }
 
     #[test]
+    fn range_filter_bool() {
+        let collection = MultiPointCollection::from_data(
+            MultiPoint::many(vec![
+                (0.0, 0.1),
+                (1.0, 1.1),
+                (2.0, 3.1),
+                (3.0, 3.1),
+                (4.0, 4.1),
+            ])
+            .unwrap(),
+            vec![TimeInterval::new_unchecked(0, 1); 5],
+            [(
+                "foo".to_string(),
+                FeatureData::Bool(vec![false, false, true, true, true]),
+            )]
+            .iter()
+            .cloned()
+            .collect(),
+        )
+        .unwrap();
+
+        assert_eq!(
+            collection
+                .column_range_filter("foo", &[FeatureDataValue::Bool(true)..], false)
+                .unwrap(),
+            collection
+                .filter(vec![false, false, true, true, true])
+                .unwrap()
+        );
+    }
+
+    #[test]
+    fn range_filter_datetime() {
+        let collection = MultiPointCollection::from_data(
+            MultiPoint::many(vec![
+                (0.0, 0.1),
+                (1.0, 1.1),
+                (2.0, 3.1),
+                (3.0, 3.1),
+                (4.0, 4.1),
+            ])
+            .unwrap(),
+            vec![TimeInterval::new_unchecked(0, 1); 5],
+            [(
+                "foo".to_string(),
+                FeatureData::DateTime(vec![
+                    TimeInstance::from_millis_unchecked(0),
+                    TimeInstance::from_millis_unchecked(10),
+                    TimeInstance::from_millis_unchecked(20),
+                    TimeInstance::from_millis_unchecked(30),
+                    TimeInstance::from_millis_unchecked(40),
+                ]),
+            )]
+            .iter()
+            .cloned()
+            .collect(),
+        )
+        .unwrap();
+
+        assert_eq!(
+            collection
+                .column_range_filter(
+                    "foo",
+                    &[FeatureDataValue::DateTime(TimeInstance::from_millis_unchecked(15))..],
+                    false
+                )
+                .unwrap(),
+            collection
+                .filter(vec![false, false, true, true, true])
+                .unwrap()
+        );
+    }
+
+    #[test]
     fn range_filter_null() {
         let collection = MultiPointCollection::from_data(
             MultiPoint::many(vec![
@@ -1242,7 +1316,7 @@ mod tests {
         assert_eq!(TimeInterval::new_unchecked(0, 1), row.time_interval);
         assert_eq!(Some(FeatureDataValue::NullableInt(Some(0))), row.get("foo"));
         assert_eq!(
-            Some(FeatureDataValue::NullableText(Some("a".to_string()))),
+            Some(FeatureDataValue::Text("a".to_string())),
             row.get("bar")
         );
 
@@ -1252,7 +1326,7 @@ mod tests {
 
         assert_eq!(Some(FeatureDataValue::NullableInt(None)), row.get("foo"));
         assert_eq!(
-            Some(FeatureDataValue::NullableText(Some("b".to_string()))),
+            Some(FeatureDataValue::Text("b".to_string())),
             row.get("bar")
         );
 
@@ -1261,7 +1335,7 @@ mod tests {
         assert_eq!(TimeInterval::new_unchecked(0, 1), row.time_interval);
         assert_eq!(Some(FeatureDataValue::NullableInt(Some(2))), row.get("foo"));
         assert_eq!(
-            Some(FeatureDataValue::NullableText(Some("c".to_string()))),
+            Some(FeatureDataValue::Text("c".to_string())),
             row.get("bar")
         );
 

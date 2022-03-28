@@ -61,18 +61,29 @@ impl VectorOperator for PointInPolygonFilter {
         let points = self.sources.points.initialize(context).await?;
         let polygons = self.sources.polygons.initialize(context).await?;
 
+        let points_rd = points.result_descriptor();
+        let polygons_rd = polygons.result_descriptor();
+
         ensure!(
-            points.result_descriptor().data_type == VectorDataType::MultiPoint,
+            points_rd.data_type == VectorDataType::MultiPoint,
             error::InvalidType {
                 expected: VectorDataType::MultiPoint.to_string(),
-                found: points.result_descriptor().data_type.to_string(),
+                found: points_rd.data_type.to_string(),
             }
         );
         ensure!(
-            polygons.result_descriptor().data_type == VectorDataType::MultiPolygon,
+            polygons_rd.data_type == VectorDataType::MultiPolygon,
             error::InvalidType {
                 expected: VectorDataType::MultiPolygon.to_string(),
-                found: polygons.result_descriptor().data_type.to_string(),
+                found: polygons_rd.data_type.to_string(),
+            }
+        );
+
+        ensure!(
+            points_rd.spatial_reference == polygons_rd.spatial_reference,
+            crate::error::InvalidSpatialReference {
+                expected: points_rd.spatial_reference,
+                found: polygons_rd.spatial_reference,
             }
         );
 
@@ -268,13 +279,16 @@ where
 mod tests {
 
     use super::*;
+    use std::str::FromStr;
 
     use geoengine_datatypes::primitives::{
         BoundingBox2D, Coordinate2D, MultiPoint, MultiPolygon, SpatialResolution, TimeInterval,
     };
+    use geoengine_datatypes::spatial_reference::SpatialReference;
     use geoengine_datatypes::util::test::TestDefault;
 
     use crate::engine::{ChunkByteSize, MockExecutionContext, MockQueryContext};
+    use crate::error::Error;
     use crate::mock::MockFeatureCollectionSource;
 
     #[test]
@@ -655,5 +669,52 @@ mod tests {
             .await;
 
         assert_eq!(result.len(), 0);
+    }
+
+    #[tokio::test]
+    async fn it_checks_sref() {
+        let point_collection =
+            MultiPointCollection::from_data(vec![], vec![], Default::default()).unwrap();
+
+        let polygon_collection = MultiPolygonCollection::from_data(
+            vec![MultiPolygon::new(vec![vec![vec![
+                (0.0, 0.0).into(),
+                (10.0, 0.0).into(),
+                (10.0, 10.0).into(),
+                (0.0, 10.0).into(),
+                (0.0, 0.0).into(),
+            ]]])
+            .unwrap()],
+            vec![TimeInterval::default()],
+            Default::default(),
+        )
+        .unwrap();
+
+        let operator = PointInPolygonFilter {
+            params: PointInPolygonFilterParams {},
+            sources: PointInPolygonFilterSource {
+                points: MockFeatureCollectionSource::with_collections_and_sref(
+                    vec![point_collection],
+                    SpatialReference::epsg_4326(),
+                )
+                .boxed(),
+                polygons: MockFeatureCollectionSource::with_collections_and_sref(
+                    vec![polygon_collection],
+                    SpatialReference::from_str("EPSG:3857").unwrap(),
+                )
+                .boxed(),
+            },
+        }
+        .boxed()
+        .initialize(&MockExecutionContext::test_default())
+        .await;
+
+        assert!(matches!(
+            operator,
+            Err(Error::InvalidSpatialReference {
+                expected: _,
+                found: _,
+            })
+        ));
     }
 }
