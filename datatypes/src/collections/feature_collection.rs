@@ -23,7 +23,7 @@ use std::rc::Rc;
 use std::sync::Arc;
 use std::{mem, slice};
 
-use crate::primitives::{BoundingBox2D, BoolDataRef, Coordinate2D, DateTimeDataRef, TimeInstance};
+use crate::primitives::{BoolDataRef, BoundingBox2D, Coordinate2D, DateTimeDataRef, TimeInstance};
 use crate::primitives::{
     CategoryDataRef, FeatureData, FeatureDataRef, FeatureDataType, FeatureDataValue, FloatDataRef,
     Geometry, IntDataRef, TextDataRef, TimeInterval,
