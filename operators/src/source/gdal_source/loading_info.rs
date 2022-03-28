@@ -183,6 +183,43 @@ impl MetaData<GdalLoadingInfo, RasterResultDescriptor, RasterQueryRectangle>
     }
 }
 
+// TODO: custom deserializer that checks that that params are sorted and do not overlap
+#[derive(PartialEq, Serialize, Deserialize, Debug, Clone)]
+#[serde(rename_all = "camelCase")]
+pub struct GdalMetaDataList {
+    pub result_descriptor: RasterResultDescriptor,
+    pub params: Vec<GdalLoadingInfoTemporalSlice>,
+}
+
+#[async_trait]
+impl MetaData<GdalLoadingInfo, RasterResultDescriptor, RasterQueryRectangle> for GdalMetaDataList {
+    async fn loading_info(&self, query: RasterQueryRectangle) -> Result<GdalLoadingInfo> {
+        #[allow(clippy::needless_collect)]
+        let parts = self
+            .params
+            .iter()
+            .filter(|item| item.time.intersects(&query.time_interval))
+            .cloned()
+            .collect::<Vec<_>>();
+
+        Ok(GdalLoadingInfo {
+            info: GdalLoadingInfoTemporalSliceIterator::Static {
+                parts: parts.into_iter(),
+            },
+        })
+    }
+
+    async fn result_descriptor(&self) -> Result<RasterResultDescriptor> {
+        Ok(self.result_descriptor.clone())
+    }
+
+    fn box_clone(
+        &self,
+    ) -> Box<dyn MetaData<GdalLoadingInfo, RasterResultDescriptor, RasterQueryRectangle>> {
+        Box::new(self.clone())
+    }
+}
+
 #[derive(Debug, Clone)]
 pub struct DynamicGdalLoadingInfoPartIterator {
     time_step_iter: TimeStepIter,
@@ -350,7 +387,8 @@ impl Iterator for GdalLoadingInfoTemporalSliceIterator {
 }
 
 /// one temporal slice of the dataset that requires reading from exactly one Gdal dataset
-#[derive(Debug, Clone, PartialEq)]
+#[derive(PartialEq, Serialize, Deserialize, Debug, Clone)]
+#[serde(rename_all = "camelCase")]
 pub struct GdalLoadingInfoTemporalSlice {
     pub time: TimeInterval,
     pub params: Option<GdalDatasetParameters>,
@@ -444,6 +482,102 @@ mod tests {
                 "/foo/bar_011000000.tiff",
                 "/foo/bar_022000000.tiff"
             ]
+        );
+    }
+
+    #[tokio::test]
+    async fn test_meta_data_list() {
+        let no_data_value = Some(0.);
+
+        let meta_data = GdalMetaDataList {
+            result_descriptor: RasterResultDescriptor {
+                data_type: RasterDataType::U8,
+                spatial_reference: SpatialReference::epsg_4326().into(),
+                measurement: Measurement::Unitless,
+                no_data_value,
+            },
+            params: vec![
+                GdalLoadingInfoTemporalSlice {
+                    time: TimeInterval::new_unchecked(0, 1),
+                    params: Some(GdalDatasetParameters {
+                        file_path: "/foo/bar_0.tiff".into(),
+                        rasterband_channel: 0,
+                        geo_transform: TestDefault::test_default(),
+                        width: 360,
+                        height: 180,
+                        file_not_found_handling: FileNotFoundHandling::NoData,
+                        no_data_value,
+                        properties_mapping: None,
+                        gdal_open_options: None,
+                        gdal_config_options: None,
+                    }),
+                },
+                GdalLoadingInfoTemporalSlice {
+                    time: TimeInterval::new_unchecked(1, 5),
+                    params: Some(GdalDatasetParameters {
+                        file_path: "/foo/bar_1.tiff".into(),
+                        rasterband_channel: 0,
+                        geo_transform: TestDefault::test_default(),
+                        width: 360,
+                        height: 180,
+                        file_not_found_handling: FileNotFoundHandling::NoData,
+                        no_data_value,
+                        properties_mapping: None,
+                        gdal_open_options: None,
+                        gdal_config_options: None,
+                    }),
+                },
+                GdalLoadingInfoTemporalSlice {
+                    time: TimeInterval::new_unchecked(5, 6),
+                    params: Some(GdalDatasetParameters {
+                        file_path: "/foo/bar_2.tiff".into(),
+                        rasterband_channel: 0,
+                        geo_transform: TestDefault::test_default(),
+                        width: 360,
+                        height: 180,
+                        file_not_found_handling: FileNotFoundHandling::NoData,
+                        no_data_value,
+                        properties_mapping: None,
+                        gdal_open_options: None,
+                        gdal_config_options: None,
+                    }),
+                },
+            ],
+        };
+
+        assert_eq!(
+            meta_data.result_descriptor().await.unwrap(),
+            RasterResultDescriptor {
+                data_type: RasterDataType::U8,
+                spatial_reference: SpatialReference::epsg_4326().into(),
+                measurement: Measurement::Unitless,
+                no_data_value: Some(0.)
+            }
+        );
+
+        assert_eq!(
+            meta_data
+                .loading_info(RasterQueryRectangle {
+                    spatial_bounds: SpatialPartition2D::new_unchecked(
+                        (0., 1.).into(),
+                        (1., 0.).into()
+                    ),
+                    time_interval: TimeInterval::new_unchecked(0, 3),
+                    spatial_resolution: SpatialResolution::one(),
+                })
+                .await
+                .unwrap()
+                .info
+                .map(|p| p
+                    .unwrap()
+                    .params
+                    .unwrap()
+                    .file_path
+                    .to_str()
+                    .unwrap()
+                    .to_owned())
+                .collect::<Vec<_>>(),
+            &["/foo/bar_0.tiff", "/foo/bar_1.tiff",]
         );
     }
 

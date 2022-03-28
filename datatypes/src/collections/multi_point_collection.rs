@@ -1316,7 +1316,7 @@ mod tests {
         assert_eq!(TimeInterval::new_unchecked(0, 1), row.time_interval);
         assert_eq!(Some(FeatureDataValue::NullableInt(Some(0))), row.get("foo"));
         assert_eq!(
-            Some(FeatureDataValue::NullableText(Some("a".to_string()))),
+            Some(FeatureDataValue::Text("a".to_string())),
             row.get("bar")
         );
 
@@ -1326,7 +1326,7 @@ mod tests {
 
         assert_eq!(Some(FeatureDataValue::NullableInt(None)), row.get("foo"));
         assert_eq!(
-            Some(FeatureDataValue::NullableText(Some("b".to_string()))),
+            Some(FeatureDataValue::Text("b".to_string())),
             row.get("bar")
         );
 
@@ -1335,7 +1335,7 @@ mod tests {
         assert_eq!(TimeInterval::new_unchecked(0, 1), row.time_interval);
         assert_eq!(Some(FeatureDataValue::NullableInt(Some(2))), row.get("foo"));
         assert_eq!(
-            Some(FeatureDataValue::NullableText(Some("c".to_string()))),
+            Some(FeatureDataValue::Text("c".to_string())),
             row.get("bar")
         );
 

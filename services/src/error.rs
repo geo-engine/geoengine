@@ -210,8 +210,6 @@ pub enum Error {
     },
     RasterDataTypeNotSupportByGdal,
 
-    ExternalAddressNotConfigured,
-
     MissingSpatialReference,
 
     WcsVersionNotSupported,
@@ -329,6 +327,8 @@ pub enum Error {
     GFBioBasketParse {
         message: String,
     },
+
+    BaseUrlMustEndWithSlash,
 
     #[snafu(context(false))]
     #[cfg(feature = "pro")]
