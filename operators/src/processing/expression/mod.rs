@@ -28,6 +28,9 @@ mod query_processor;
 /// * `output_type` is the data type of the produced raster tiles.
 /// * `output_no_data_value` is the no data value of the output raster
 /// * `output_measurement` is the measurement description of the output
+///
+/// # Warning // TODO
+/// The operator *currently* only temporally aligns the inputs when there are exactly two sources
 #[derive(Debug, Serialize, Deserialize, PartialEq, Clone)]
 #[serde(rename_all = "camelCase")]
 pub struct ExpressionParams {
