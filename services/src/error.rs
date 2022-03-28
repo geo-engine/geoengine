@@ -212,6 +212,8 @@ pub enum Error {
 
     MissingSpatialReference,
 
+    ExternalAddressNotConfigured,
+
     WcsVersionNotSupported,
     WcsGridOriginMustEqualBoundingboxUpperLeft,
     WcsBoundingboxCrsMustEqualGridBaseCrs,
