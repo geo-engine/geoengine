@@ -55,7 +55,7 @@ async fn get_feature<C: ProContext>(
     let json = call_on_generic_vector_processor!(processor, p => {
         let desc = FeatureCollectionTaskDescription::new(endpoint,
                 query_rect, p, query_ctx);
-        let stream = tm.get_feature_scheduler().fastpath(desc).await?;
+        let stream = tm.get_feature_scheduler().schedule_stream(desc).await?;
         crate::handlers::wfs::vector_stream_to_geojson(Box::pin(stream)).await
     })?;
     Ok(HttpResponse::Ok().json(json))

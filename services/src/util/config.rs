@@ -360,8 +360,10 @@ impl ConfigElement for GFBio {
 #[derive(Debug, Deserialize)]
 pub struct Executor {
     pub queue_size: usize,
-    pub scheduler_timeout_ms: u64,
-    pub scheduler_merge_threshold: f64,
+    pub raster_scheduler_timeout_ms: u64,
+    pub raster_scheduler_merge_threshold: f64,
+    pub feature_scheduler_timeout_ms: u64,
+    pub feature_scheduler_merge_threshold: f64,
 }
 
 impl ConfigElement for Executor {

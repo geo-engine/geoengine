@@ -26,8 +26,14 @@ tile_shape_pixels_y = 512
 
 [executor]
 queue_size = 10
-scheduler_timeout_ms = 100
-scheduler_merge_threshold = 0.01
+# Timeout for the raster scheduler in ms (a value of 0 means that the scheduler makes no attempt to merge tasks)
+raster_scheduler_timeout_ms = 100
+# Determines how much dead space in percent (viewing queries as a 3D Cube) is allowed when mergin 2 requests
+raster_scheduler_merge_threshold = 0.01
+# Timeout for the feature scheduler in ms (a value of 0 means that the scheduler makes no attempt to merge tasks)
+feature_scheduler_timeout_ms=0
+# Determines how much dead space in percent (viewing queries as a 3D Cube) is allowed when mergin 2 requests
+feature_scheduler_merge_threshold = 0.01
 
 [query_context]
 chunk_byte_size = 1048576 # TODO: find reasonable default

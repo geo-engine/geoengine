@@ -318,18 +318,34 @@ impl Default for TaskManager {
     fn default() -> Self {
         let queue_size =
             get_config_element::<crate::util::config::Executor>().map_or(5, |it| it.queue_size);
-        let timeout = Duration::from_millis(
+        let raster_timeout = Duration::from_millis(
             get_config_element::<crate::util::config::Executor>()
-                .map_or(100, |it| it.scheduler_timeout_ms),
+                .map_or(0, |it| it.raster_scheduler_timeout_ms),
         );
-        let threshold = get_config_element::<crate::util::config::Executor>()
-            .map_or(0.01, |it| it.scheduler_merge_threshold);
+        let feature_timeout = Duration::from_millis(
+            get_config_element::<crate::util::config::Executor>()
+                .map_or(0, |it| it.feature_scheduler_timeout_ms),
+        );
+
+        let raster_threshold = get_config_element::<crate::util::config::Executor>()
+            .map_or(0.01, |it| it.raster_scheduler_merge_threshold);
+
+        let feature_threshold = get_config_element::<crate::util::config::Executor>()
+            .map_or(0.01, |it| it.feature_scheduler_merge_threshold);
 
         TaskManager {
             executors: Arc::new(Executors {
                 plot_executor: Executor::new(queue_size),
-                vector_schedulers: FeatureExecutors::new(queue_size, threshold, timeout),
-                raster_schedulers: RasterSchedulers::new(queue_size, threshold, timeout),
+                vector_schedulers: FeatureExecutors::new(
+                    queue_size,
+                    feature_threshold,
+                    feature_timeout,
+                ),
+                raster_schedulers: RasterSchedulers::new(
+                    queue_size,
+                    raster_threshold,
+                    raster_timeout,
+                ),
             }),
         }
     }

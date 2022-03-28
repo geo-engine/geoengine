@@ -299,6 +299,7 @@ where
 {
     executor: Arc<Executor<Desc>>,
     tasks: SharedTaskMap<Desc>,
+    timeout: Duration,
     _looper_handle: JoinHandle<()>,
     shutdown: ShutdownFlag,
 }
@@ -316,6 +317,7 @@ impl<Desc> TaskScheduler<Desc>
 where
     Desc: MergableTaskDescription,
 {
+    /// Creates a new scheduler with the given dead space and timeout.
     pub fn new(
         executor_buffer_size: usize,
         merge_dead_space_threshold: f64,
@@ -338,21 +340,29 @@ where
         Self {
             executor,
             tasks,
+            timeout,
             _looper_handle: looper_handle,
             shutdown,
         }
     }
 
+    /// Returns the backing executor
     pub fn executor(&self) -> &Executor<Desc> {
         self.executor.as_ref()
     }
 
+    /// Directly submits a task to the executor, bypassing scheduling
     pub async fn fastpath(&self, key: Desc) -> Result<StreamReceiver<Desc>> {
         let stream = key.execute().await?;
         self.executor.submit_stream(key, stream).await
     }
 
-    pub async fn submit_stream(&self, key: Desc) -> Result<StreamReceiver<Desc>> {
+    /// Schedules the given task.
+    pub async fn schedule_stream(&self, key: Desc) -> Result<StreamReceiver<Desc>> {
+        if self.timeout.is_zero() {
+            return self.fastpath(key).await;
+        }
+
         let (tx, rx) = channel();
 
         let task_entry = TaskEntry {

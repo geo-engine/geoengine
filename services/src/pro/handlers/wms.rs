@@ -83,7 +83,7 @@ async fn get_map<C: ProContext>(
                 p,
                 query_ctx,
             );
-            let stream = ctx.task_manager().get_raster_scheduler().submit_stream(desc).await?;
+            let stream = ctx.task_manager().get_raster_scheduler().schedule_stream(desc).await?;
             raster_stream_to_png_bytes_stream(Box::pin(stream), query_rect, request.width, request.height, request.time, colorizer, no_data_value.map(AsPrimitive::as_)).await
         }
     ).map_err(error::Error::from)?;
