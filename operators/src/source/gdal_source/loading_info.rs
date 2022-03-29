@@ -2,7 +2,7 @@ use std::collections::HashMap;
 
 use async_trait::async_trait;
 use geoengine_datatypes::primitives::{
-    RasterQueryRectangle, TimeInstance, TimeInterval, TimeStep, TimeStepIter,
+    RasterQueryRectangle, TimeGranularity, TimeInstance, TimeInterval, TimeStep, TimeStepIter,
 };
 use serde::{Deserialize, Serialize};
 
@@ -37,6 +37,176 @@ impl MetaData<GdalLoadingInfo, RasterResultDescriptor, RasterQueryRectangle>
             .into_iter()
         } else {
             vec![].into_iter()
+        };
+
+        Ok(GdalLoadingInfo {
+            info: GdalLoadingInfoTemporalSliceIterator::Static { parts },
+        })
+    }
+
+    async fn result_descriptor(&self) -> Result<RasterResultDescriptor> {
+        Ok(self.result_descriptor.clone())
+    }
+
+    fn box_clone(
+        &self,
+    ) -> Box<dyn MetaData<GdalLoadingInfo, RasterResultDescriptor, RasterQueryRectangle>> {
+        Box::new(self.clone())
+    }
+}
+#[derive(PartialEq, Serialize, Deserialize, Debug, Clone)]
+#[serde(rename_all = "camelCase")]
+pub struct GdalMetadataFixedTimes {
+    pub time_steps: Vec<TimeInterval>,
+    pub params: GdalDatasetParameters,
+    pub result_descriptor: RasterResultDescriptor,
+    pub time_placeholders: HashMap<String, GdalSourceTimePlaceholder>,
+}
+
+impl GdalMetadataFixedTimes {
+    #[allow(dead_code)]
+    pub fn new(
+        time_steps: Vec<TimeInterval>,
+        params: GdalDatasetParameters,
+        result_descriptor: RasterResultDescriptor,
+        time_placeholders: HashMap<String, GdalSourceTimePlaceholder>,
+    ) -> Self {
+        let mut sorted_time_steps = time_steps;
+        sorted_time_steps.sort_by(|a, b| a.end().partial_cmp(&b.start()).unwrap());
+
+        GdalMetadataFixedTimes {
+            time_steps: sorted_time_steps,
+            params,
+            result_descriptor,
+            time_placeholders,
+        }
+    }
+}
+
+#[async_trait]
+impl MetaData<GdalLoadingInfo, RasterResultDescriptor, RasterQueryRectangle>
+    for GdalMetadataFixedTimes
+{
+    async fn loading_info(&self, query: RasterQueryRectangle) -> Result<GdalLoadingInfo> {
+        let minimum_step = TimeStep {
+            granularity: TimeGranularity::Millis,
+            step: 1,
+        };
+
+        let sorted_time_steps = if self
+            .time_steps
+            .windows(2)
+            .all(|w| w[0].end() <= w[1].start())
+        {
+            self.time_steps.clone()
+        } else {
+            let mut sorted_time_steps = self.time_steps.clone();
+            sorted_time_steps.sort_by(|a, b| a.end().partial_cmp(&b.start()).unwrap());
+            sorted_time_steps
+        };
+
+        let mut time_steps_no_gaps = sorted_time_steps.clone();
+
+        for (index, time) in sorted_time_steps.iter().enumerate() {
+            if index < sorted_time_steps.len() - 1 {
+                if time.is_instant() {
+                    time_steps_no_gaps.push(TimeInterval::new(
+                        (time.end() + minimum_step)?,
+                        sorted_time_steps[index + 1].start(),
+                    )?);
+                } else {
+                    time_steps_no_gaps.push(TimeInterval::new(
+                        time.end(),
+                        sorted_time_steps[index + 1].start(),
+                    )?);
+                }
+            }
+        }
+
+        time_steps_no_gaps.sort_by(|a, b| a.start().partial_cmp(&b.start()).unwrap());
+
+        let valid_duration = TimeInterval::new(
+            time_steps_no_gaps[0].start(),
+            time_steps_no_gaps[time_steps_no_gaps.len() - 1].start(),
+        )?;
+
+        let parts = match valid_duration.intersect(&query.time_interval) {
+            Some(time_interval) => {
+                let mut loading_info_parts: Vec<GdalLoadingInfoTemporalSlice> = Vec::new();
+
+                if query.time_interval.start() < time_interval.start() {
+                    let gap =
+                        TimeInterval::new(query.time_interval.start(), time_interval.start())?;
+
+                    loading_info_parts.push(
+                        self.params
+                            .replace_time_placeholders(&self.time_placeholders, gap)
+                            .map(|_| GdalLoadingInfoTemporalSlice {
+                                time: gap,
+                                params: None,
+                            })?,
+                    );
+                }
+                for time_position in &time_steps_no_gaps {
+                    if let Some(step_interval) = time_interval.intersect(time_position) {
+                        if sorted_time_steps
+                            .iter()
+                            .any(|&i| i.intersects(&step_interval))
+                        {
+                            loading_info_parts.push(
+                                self.params
+                                    .replace_time_placeholders(
+                                        &self.time_placeholders,
+                                        step_interval,
+                                    )
+                                    .map(|loading_info_part_params| {
+                                        GdalLoadingInfoTemporalSlice {
+                                            time: step_interval,
+                                            params: Some(loading_info_part_params),
+                                        }
+                                    })?,
+                            );
+                        } else {
+                            loading_info_parts.push(
+                                self.params
+                                    .replace_time_placeholders(
+                                        &self.time_placeholders,
+                                        step_interval,
+                                    )
+                                    .map(|_| GdalLoadingInfoTemporalSlice {
+                                        time: step_interval,
+                                        params: None,
+                                    })?,
+                            );
+                        }
+                    }
+                }
+
+                if query.time_interval.end() > time_interval.end() {
+                    let gap = TimeInterval::new(time_interval.end(), query.time_interval.end())?;
+
+                    loading_info_parts.push(
+                        self.params
+                            .replace_time_placeholders(&self.time_placeholders, gap)
+                            .map(|_| GdalLoadingInfoTemporalSlice {
+                                time: gap,
+                                params: None,
+                            })?,
+                    );
+                }
+
+                loading_info_parts
+            }
+            .into_iter(),
+
+            None => vec![self
+                .params
+                .replace_time_placeholders(&self.time_placeholders, query.time_interval)
+                .map(|_| GdalLoadingInfoTemporalSlice {
+                    time: query.time_interval,
+                    params: None,
+                })?]
+            .into_iter(),
         };
 
         Ok(GdalLoadingInfo {
@@ -578,6 +748,239 @@ mod tests {
                     .to_owned())
                 .collect::<Vec<_>>(),
             &["/foo/bar_0.tiff", "/foo/bar_1.tiff",]
+        );
+    }
+
+    #[allow(clippy::suspicious_map)]
+    #[allow(clippy::too_many_lines)]
+    #[tokio::test]
+    async fn test_step_time_instance() {
+        let result_descriptor = RasterResultDescriptor {
+            data_type: RasterDataType::U8,
+            spatial_reference: SpatialReference::epsg_4326().into(),
+            measurement: Measurement::Unitless,
+            no_data_value: Some(0.),
+        };
+        let params = GdalDatasetParameters {
+            file_path: "/foo/bar_step_%TIME%.tiff".into(),
+            rasterband_channel: 0,
+            geo_transform: TestDefault::test_default(),
+            width: 360,
+            height: 180,
+            file_not_found_handling: FileNotFoundHandling::NoData,
+            no_data_value: Some(0.),
+            properties_mapping: None,
+            gdal_open_options: None,
+            gdal_config_options: None,
+        };
+        let time_steps = vec![
+            TimeInterval::new_instant(30).unwrap(),
+            TimeInterval::new_instant(5).unwrap(),
+            TimeInterval::new_instant(10).unwrap(),
+            TimeInterval::new_instant(20).unwrap(),
+            TimeInterval::new_instant(15).unwrap(),
+        ];
+        let time_placeholders = hashmap! {
+            "%TIME%".to_string() => GdalSourceTimePlaceholder {
+                format: "%f".to_string(),
+                reference: TimeReference::Start,
+            },
+        };
+
+        let meta_data =
+            GdalMetadataFixedTimes::new(time_steps, params, result_descriptor, time_placeholders);
+
+        assert_eq!(
+            meta_data.result_descriptor().await.unwrap(),
+            RasterResultDescriptor {
+                data_type: RasterDataType::U8,
+                spatial_reference: SpatialReference::epsg_4326().into(),
+                measurement: Measurement::Unitless,
+                no_data_value: Some(0.)
+            }
+        );
+
+        assert_eq!(
+            meta_data
+                .loading_info(RasterQueryRectangle {
+                    spatial_bounds: SpatialPartition2D::new_unchecked(
+                        (0., 1.).into(),
+                        (1., 0.).into()
+                    ),
+                    time_interval: TimeInterval::new_unchecked(6, 18),
+                    spatial_resolution: SpatialResolution::one(),
+                })
+                .await
+                .unwrap()
+                .info
+                .map(|p| match p.unwrap().params {
+                    Some(b) => b.file_path.to_str().unwrap().to_owned(),
+                    None => String::from("NODATA"),
+                })
+                .collect::<Vec<_>>(),
+            &[
+                "NODATA",
+                "/foo/bar_step_010000000.tiff",
+                "NODATA",
+                "/foo/bar_step_015000000.tiff",
+                "NODATA"
+            ]
+        );
+
+        assert_eq!(
+            meta_data
+                .loading_info(RasterQueryRectangle {
+                    spatial_bounds: SpatialPartition2D::new_unchecked(
+                        (0., 1.).into(),
+                        (1., 0.).into()
+                    ),
+                    time_interval: TimeInterval::new_unchecked(22, 32),
+                    spatial_resolution: SpatialResolution::one(),
+                })
+                .await
+                .unwrap()
+                .info
+                .map(|p| match p.unwrap().params {
+                    Some(b) => b.file_path.to_str().unwrap().to_owned(),
+                    None => String::from("NODATA"),
+                })
+                .collect::<Vec<_>>(),
+            &["NODATA", "NODATA"]
+        );
+
+        assert_eq!(
+            meta_data
+                .loading_info(RasterQueryRectangle {
+                    spatial_bounds: SpatialPartition2D::new_unchecked(
+                        (0., 1.).into(),
+                        (1., 0.).into()
+                    ),
+                    time_interval: TimeInterval::new_unchecked(40, 50),
+                    spatial_resolution: SpatialResolution::one(),
+                })
+                .await
+                .unwrap()
+                .info
+                .map(|p| match p.unwrap().params {
+                    Some(b) => b.file_path.to_str().unwrap().to_owned(),
+                    None => String::from("NODATA"),
+                })
+                .collect::<Vec<_>>(),
+            &["NODATA"]
+        );
+    }
+
+    #[allow(clippy::suspicious_map)]
+    #[tokio::test]
+    async fn test_step_time_interval() {
+        let result_descriptor = RasterResultDescriptor {
+            data_type: RasterDataType::U8,
+            spatial_reference: SpatialReference::epsg_4326().into(),
+            measurement: Measurement::Unitless,
+            no_data_value: Some(0.),
+        };
+        let params = GdalDatasetParameters {
+            file_path: "/foo/bar_step_%TIME%.tiff".into(),
+            rasterband_channel: 0,
+            geo_transform: TestDefault::test_default(),
+            width: 360,
+            height: 180,
+            file_not_found_handling: FileNotFoundHandling::NoData,
+            no_data_value: Some(0.),
+            properties_mapping: None,
+            gdal_open_options: None,
+            gdal_config_options: None,
+        };
+        let time_steps = vec![
+            TimeInterval::new_instant(30).unwrap(),
+            TimeInterval::new_unchecked(10, 20),
+            TimeInterval::new_unchecked(22, 25),
+        ];
+        let time_placeholders = hashmap! {
+            "%TIME%".to_string() => GdalSourceTimePlaceholder {
+                format: "%f".to_string(),
+                reference: TimeReference::Start,
+            },
+        };
+
+        let meta_data =
+            GdalMetadataFixedTimes::new(time_steps, params, result_descriptor, time_placeholders);
+
+        assert_eq!(
+            meta_data.result_descriptor().await.unwrap(),
+            RasterResultDescriptor {
+                data_type: RasterDataType::U8,
+                spatial_reference: SpatialReference::epsg_4326().into(),
+                measurement: Measurement::Unitless,
+                no_data_value: Some(0.)
+            }
+        );
+
+        assert_eq!(
+            meta_data
+                .loading_info(RasterQueryRectangle {
+                    spatial_bounds: SpatialPartition2D::new_unchecked(
+                        (0., 1.).into(),
+                        (1., 0.).into()
+                    ),
+                    time_interval: TimeInterval::new_unchecked(14, 18),
+                    spatial_resolution: SpatialResolution::one(),
+                })
+                .await
+                .unwrap()
+                .info
+                .map(|p| match p.unwrap().params {
+                    Some(b) => b.file_path.to_str().unwrap().to_owned(),
+                    None => String::from("NODATA"),
+                })
+                .collect::<Vec<_>>(),
+            &["/foo/bar_step_014000000.tiff"]
+        );
+
+        assert_eq!(
+            meta_data
+                .loading_info(RasterQueryRectangle {
+                    spatial_bounds: SpatialPartition2D::new_unchecked(
+                        (0., 1.).into(),
+                        (1., 0.).into()
+                    ),
+                    time_interval: TimeInterval::new_unchecked(15, 24),
+                    spatial_resolution: SpatialResolution::one(),
+                })
+                .await
+                .unwrap()
+                .info
+                .map(|p| match p.unwrap().params {
+                    Some(b) => b.file_path.to_str().unwrap().to_owned(),
+                    None => String::from("NODATA"),
+                })
+                .collect::<Vec<_>>(),
+            &[
+                "/foo/bar_step_015000000.tiff",
+                "NODATA",
+                "/foo/bar_step_022000000.tiff"
+            ]
+        );
+
+        assert_eq!(
+            meta_data
+                .loading_info(RasterQueryRectangle {
+                    spatial_bounds: SpatialPartition2D::new_unchecked(
+                        (0., 1.).into(),
+                        (1., 0.).into()
+                    ),
+                    time_interval: TimeInterval::new_unchecked(5, 15),
+                    spatial_resolution: SpatialResolution::one(),
+                })
+                .await
+                .unwrap()
+                .info
+                .map(|p| match p.unwrap().params {
+                    Some(b) => b.file_path.to_str().unwrap().to_owned(),
+                    None => String::from("NODATA"),
+                })
+                .collect::<Vec<_>>(),
+            &["NODATA", "/foo/bar_step_010000000.tiff"]
         );
     }
 
