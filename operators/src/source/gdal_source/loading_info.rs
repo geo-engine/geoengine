@@ -81,6 +81,28 @@ impl GdalMetadataFixedTimes {
             time_placeholders,
         }
     }
+
+    fn create_temporal_slice(
+        &self,
+        step_interval: TimeInterval,
+        empty: bool,
+    ) -> Result<GdalLoadingInfoTemporalSlice> {
+        self.params
+            .replace_time_placeholders(&self.time_placeholders, step_interval)
+            .map(|loading_info_part_params| {
+                if empty {
+                    GdalLoadingInfoTemporalSlice {
+                        time: step_interval,
+                        params: None,
+                    }
+                } else {
+                    GdalLoadingInfoTemporalSlice {
+                        time: step_interval,
+                        params: Some(loading_info_part_params),
+                    }
+                }
+            })
+    }
 }
 
 #[async_trait]
@@ -138,14 +160,7 @@ impl MetaData<GdalLoadingInfo, RasterResultDescriptor, RasterQueryRectangle>
                     let gap =
                         TimeInterval::new(query.time_interval.start(), time_interval.start())?;
 
-                    loading_info_parts.push(
-                        self.params
-                            .replace_time_placeholders(&self.time_placeholders, gap)
-                            .map(|_| GdalLoadingInfoTemporalSlice {
-                                time: gap,
-                                params: None,
-                            })?,
-                    );
+                    loading_info_parts.push(self.create_temporal_slice(gap, true)?);
                 }
                 for time_position in &time_steps_no_gaps {
                     if let Some(step_interval) = time_interval.intersect(time_position) {
@@ -153,31 +168,11 @@ impl MetaData<GdalLoadingInfo, RasterResultDescriptor, RasterQueryRectangle>
                             .iter()
                             .any(|&i| i.intersects(&step_interval))
                         {
-                            loading_info_parts.push(
-                                self.params
-                                    .replace_time_placeholders(
-                                        &self.time_placeholders,
-                                        step_interval,
-                                    )
-                                    .map(|loading_info_part_params| {
-                                        GdalLoadingInfoTemporalSlice {
-                                            time: step_interval,
-                                            params: Some(loading_info_part_params),
-                                        }
-                                    })?,
-                            );
+                            loading_info_parts
+                                .push(self.create_temporal_slice(step_interval, false)?);
                         } else {
-                            loading_info_parts.push(
-                                self.params
-                                    .replace_time_placeholders(
-                                        &self.time_placeholders,
-                                        step_interval,
-                                    )
-                                    .map(|_| GdalLoadingInfoTemporalSlice {
-                                        time: step_interval,
-                                        params: None,
-                                    })?,
-                            );
+                            loading_info_parts
+                                .push(self.create_temporal_slice(step_interval, true)?);
                         }
                     }
                 }
@@ -185,28 +180,14 @@ impl MetaData<GdalLoadingInfo, RasterResultDescriptor, RasterQueryRectangle>
                 if query.time_interval.end() > time_interval.end() {
                     let gap = TimeInterval::new(time_interval.end(), query.time_interval.end())?;
 
-                    loading_info_parts.push(
-                        self.params
-                            .replace_time_placeholders(&self.time_placeholders, gap)
-                            .map(|_| GdalLoadingInfoTemporalSlice {
-                                time: gap,
-                                params: None,
-                            })?,
-                    );
+                    loading_info_parts.push(self.create_temporal_slice(gap, true)?);
                 }
 
                 loading_info_parts
             }
             .into_iter(),
 
-            None => vec![self
-                .params
-                .replace_time_placeholders(&self.time_placeholders, query.time_interval)
-                .map(|_| GdalLoadingInfoTemporalSlice {
-                    time: query.time_interval,
-                    params: None,
-                })?]
-            .into_iter(),
+            None => vec![self.create_temporal_slice(query.time_interval, true)?].into_iter(),
         };
 
         Ok(GdalLoadingInfo {
@@ -871,6 +852,7 @@ mod tests {
     }
 
     #[allow(clippy::suspicious_map)]
+    #[allow(clippy::too_many_lines)]
     #[tokio::test]
     async fn test_step_time_interval() {
         let result_descriptor = RasterResultDescriptor {
