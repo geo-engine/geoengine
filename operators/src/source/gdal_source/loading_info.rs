@@ -57,10 +57,11 @@ impl MetaData<GdalLoadingInfo, RasterResultDescriptor, RasterQueryRectangle>
 #[derive(PartialEq, Serialize, Deserialize, Debug, Clone)]
 #[serde(rename_all = "camelCase")]
 pub struct GdalMetadataFixedTimes {
-    pub time_steps: Vec<TimeInterval>,
-    pub params: GdalDatasetParameters,
-    pub result_descriptor: RasterResultDescriptor,
-    pub time_placeholders: HashMap<String, GdalSourceTimePlaceholder>,
+    time_steps: Vec<TimeInterval>,
+    time_steps_no_gaps: Vec<TimeInterval>,
+    params: GdalDatasetParameters,
+    result_descriptor: RasterResultDescriptor,
+    time_placeholders: HashMap<String, GdalSourceTimePlaceholder>,
 }
 
 impl GdalMetadataFixedTimes {
@@ -70,16 +71,32 @@ impl GdalMetadataFixedTimes {
         params: GdalDatasetParameters,
         result_descriptor: RasterResultDescriptor,
         time_placeholders: HashMap<String, GdalSourceTimePlaceholder>,
-    ) -> Self {
+    ) -> Result<Self> {
         let mut sorted_time_steps = time_steps;
         sorted_time_steps.sort_by(|a, b| a.end().partial_cmp(&b.start()).unwrap());
 
-        GdalMetadataFixedTimes {
+        let mut time_steps_no_gaps = sorted_time_steps.clone();
+
+        for (index, time) in sorted_time_steps.iter().enumerate() {
+            if index < sorted_time_steps.len() - 1
+                && time.end() < sorted_time_steps[index + 1].start()
+            {
+                time_steps_no_gaps.push(TimeInterval::new(
+                    time.end(),
+                    sorted_time_steps[index + 1].start(),
+                )?);
+            }
+        }
+
+        time_steps_no_gaps.sort_by(|a, b| a.start().partial_cmp(&b.start()).unwrap());
+
+        Ok(GdalMetadataFixedTimes {
             time_steps: sorted_time_steps,
+            time_steps_no_gaps,
             params,
             result_descriptor,
             time_placeholders,
-        }
+        })
     }
 
     fn create_temporal_slice(
@@ -110,36 +127,9 @@ impl MetaData<GdalLoadingInfo, RasterResultDescriptor, RasterQueryRectangle>
     for GdalMetadataFixedTimes
 {
     async fn loading_info(&self, query: RasterQueryRectangle) -> Result<GdalLoadingInfo> {
-        let sorted_time_steps = if self
-            .time_steps
-            .windows(2)
-            .all(|w| w[0].end() <= w[1].start())
-        {
-            self.time_steps.clone()
-        } else {
-            let mut sorted_time_steps = self.time_steps.clone();
-            sorted_time_steps.sort_by(|a, b| a.end().partial_cmp(&b.start()).unwrap());
-            sorted_time_steps
-        };
-
-        let mut time_steps_no_gaps = sorted_time_steps.clone();
-
-        for (index, time) in sorted_time_steps.iter().enumerate() {
-            if index < sorted_time_steps.len() - 1
-                && time.end() < sorted_time_steps[index + 1].start()
-            {
-                time_steps_no_gaps.push(TimeInterval::new(
-                    time.end(),
-                    sorted_time_steps[index + 1].start(),
-                )?);
-            }
-        }
-
-        time_steps_no_gaps.sort_by(|a, b| a.start().partial_cmp(&b.start()).unwrap());
-
         let valid_duration = TimeInterval::new(
-            time_steps_no_gaps[0].start(),
-            time_steps_no_gaps[time_steps_no_gaps.len() - 1].start(),
+            self.time_steps_no_gaps[0].start(),
+            self.time_steps_no_gaps[self.time_steps_no_gaps.len() - 1].start(),
         )?;
 
         let parts = match valid_duration.intersect(&query.time_interval) {
@@ -152,12 +142,9 @@ impl MetaData<GdalLoadingInfo, RasterResultDescriptor, RasterQueryRectangle>
 
                     loading_info_parts.push(self.create_temporal_slice(gap, true)?);
                 }
-                for time_position in &time_steps_no_gaps {
+                for time_position in &self.time_steps_no_gaps {
                     if let Some(step_interval) = time_interval.intersect(time_position) {
-                        if sorted_time_steps
-                            .iter()
-                            .any(|&i| i.contains(&step_interval))
-                        {
+                        if self.time_steps.iter().any(|&i| i.contains(&step_interval)) {
                             loading_info_parts
                                 .push(self.create_temporal_slice(step_interval, false)?);
                         } else {
@@ -760,7 +747,8 @@ mod tests {
         };
 
         let meta_data =
-            GdalMetadataFixedTimes::new(time_steps, params, result_descriptor, time_placeholders);
+            GdalMetadataFixedTimes::new(time_steps, params, result_descriptor, time_placeholders)
+                .unwrap();
 
         assert_eq!(
             meta_data.result_descriptor().await.unwrap(),
@@ -879,7 +867,8 @@ mod tests {
         };
 
         let meta_data =
-            GdalMetadataFixedTimes::new(time_steps, params, result_descriptor, time_placeholders);
+            GdalMetadataFixedTimes::new(time_steps, params, result_descriptor, time_placeholders)
+                .unwrap();
 
         assert_eq!(
             meta_data.result_descriptor().await.unwrap(),
