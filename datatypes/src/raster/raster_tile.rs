@@ -4,9 +4,10 @@ use super::{
     GridIndexAccess, GridIndexAccessMut, GridShape, GridShape2D, GridShape3D, GridShapeAccess,
     GridSize, NoDataValue, Raster, TileInformation,
 };
+use crate::collections::{BuilderProvider, GeoFeatureCollectionRowBuilder, MultiPolygonCollection};
 use crate::primitives::{
-    Coordinate2D, SpatialBounded, SpatialPartition2D, SpatialPartitioned, TemporalBounded,
-    TimeInterval,
+    AxisAlignedRectangle, Coordinate2D, MultiPolygon, SpatialBounded, SpatialPartition2D,
+    SpatialPartitioned, TemporalBounded, TimeInterval,
 };
 use crate::raster::{CoordinatePixelAccess, Pixel};
 use crate::util::Result;
@@ -350,6 +351,65 @@ where
             time: mat_tile.time,
             properties: mat_tile.properties,
         }
+    }
+}
+
+impl<T> RasterTile2D<T>
+where
+    T: Pixel,
+{
+    pub fn to_feature_collection(&self) -> Result<MultiPolygonCollection> {
+        let upper_left = self.tile_information().spatial_partition().upper_left();
+        let x_pixel_size = self.tile_geo_transform().x_pixel_size();
+        let y_pixel_size = self.tile_geo_transform().y_pixel_size();
+
+        let size_x = self.tile_information().tile_size_in_pixels().axis_size_x() as isize;
+        let size_y = self.tile_information().tile_size_in_pixels().axis_size_y() as isize;
+
+        let mut builder = MultiPolygonCollection::builder();
+        builder.add_column(
+            "value".to_owned(),
+            crate::primitives::FeatureDataType::Float,
+        )?;
+        let mut builder = builder.finish_header();
+
+        for y in 0..size_y {
+            for x in 0..size_x {
+                let pixel_value = self.get_at_grid_index([y, x])?;
+
+                let ul = Coordinate2D::new(
+                    upper_left.x + x as f64 * x_pixel_size,
+                    upper_left.y + y as f64 * y_pixel_size,
+                );
+
+                let ur = Coordinate2D::new(
+                    upper_left.x + (x as f64 + 1.) * x_pixel_size,
+                    upper_left.y + y as f64 * y_pixel_size,
+                );
+
+                let lr = Coordinate2D::new(
+                    upper_left.x + (x as f64 + 1.) * x_pixel_size,
+                    upper_left.y + (y as f64 + 1.) * y_pixel_size,
+                );
+
+                let ll = Coordinate2D::new(
+                    upper_left.x + x as f64 * x_pixel_size,
+                    upper_left.y + (y as f64 + 1.) * y_pixel_size,
+                );
+
+                builder.push_data(
+                    "value",
+                    crate::primitives::FeatureDataValue::Float(pixel_value.as_()),
+                )?;
+
+                builder.push_time_interval(Default::default())?;
+
+                builder.push_geometry(MultiPolygon::new(vec![vec![vec![ul, ur, lr, ll, ul]]])?)?;
+
+                builder.finish_row();
+            }
+        }
+        builder.build()
     }
 }
 

@@ -1,5 +1,6 @@
 use futures::StreamExt;
 use geoengine_datatypes::{
+    collections::ToGeoJson,
     operations::image::{Colorizer, RgbaColor, ToPng},
     primitives::{AxisAlignedRectangle, RasterQueryRectangle, TimeInterval},
     raster::{Blit, EmptyGrid2D, GeoTransform, Grid2D, Pixel, RasterTile2D},
@@ -53,6 +54,16 @@ where
         query_geo_transform,
         output_grid,
     ));
+
+    let json = output_tile
+        .as_ref()
+        .unwrap()
+        .to_feature_collection()?
+        .to_geo_json();
+    geoengine_datatypes::util::test::save_test_bytes(
+        json.to_string().as_bytes(),
+        "output_tile.json",
+    );
 
     let output_tile = tile_stream
         .fold(output_tile, |raster2d, tile| {

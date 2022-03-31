@@ -127,6 +127,20 @@ fn build_accu<T: Pixel>(
             Grid2D::new_filled(tile_info.tile_size_in_pixels, None, None)
         };
 
+        // let mut s = String::new();
+
+        // for (idx, coord) in projected_coords.data.iter().enumerate() {
+        //     if idx % 32 == 0 {
+        //         s.push('\n');
+        //     }
+        //     match coord {
+        //         Some(coord) => s.push('█'),
+        //         None => s.push(' '),
+        //     }
+        // }
+
+        // debug!("my cool tile::::\n{}", s);
+
         Ok(TileWithProjectionCoordinates {
             accu_tile: RasterTile2D::new_with_tile_info(
                 query_rect.time_interval,
@@ -141,6 +155,7 @@ fn build_accu<T: Pixel>(
     .and_then(|x| async { x }) // flatten Ok(Ok())
 }
 
+#[allow(clippy::too_many_lines)]
 fn projected_coordinate_grid_parallel(
     pool: &ThreadPool,
     tile_info: TileInformation,
@@ -198,28 +213,58 @@ fn projected_coordinate_grid_parallel(
                         tile_geo_transform.grid_idx_to_upper_left_coordinate_2d(grid_idx)
                     })
                     .collect::<Vec<Coordinate2D>>();
+                // debug!("first row: {:?}", &out_coords[..512]);
 
-                let chunk_bounds =
-                    SpatialPartition2D::new_unchecked(out_coords[0], out_coords[chunk_len - 1]);
+                let oob_coord = {
+                    let x_idx = axis_size_x;
+                    let y_idx = chunk_len / axis_size_x + chunk_start_y;
+                    let grid_idx = GridIdx2D::from([y_idx as isize, x_idx as isize]);
+                    tile_geo_transform.grid_idx_to_upper_left_coordinate_2d(grid_idx)
+                };
+
+                let chunk_bounds = SpatialPartition2D::new_unchecked(out_coords[0], oob_coord);
+
+                debug!("[{}] THEM BOUNDS {:?}", chunk_idx, chunk_bounds);
 
                 let proj = CoordinateProjector::from_known_srs(out_srs, in_srs)?;
 
                 if valid_out_area.contains(&chunk_bounds) {
-                    debug!("reproject whole tile chunk");
+                    debug!("[{}] reproject whole tile chunk", chunk_idx);
                     let in_coords = proj.project_coordinates(&out_coords)?;
+
                     opt_coord_slice
                         .iter_mut()
                         .zip(in_coords.into_iter())
                         .for_each(|(opt_coord, in_coord)| *opt_coord = Some(in_coord));
                 } else if valid_out_area.intersects(&chunk_bounds) {
-                    debug!("reproject part of tile chunk");
+                    debug!("[{}] reproject part of tile chunk", chunk_idx);
+
+                    debug!(
+                        "[{}] opt_coord_slice len: {}, out_coords len: {}",
+                        chunk_idx,
+                        opt_coord_slice.len(),
+                        out_coords.len()
+                    );
                     opt_coord_slice
                         .iter_mut()
                         .zip(out_coords.into_iter())
-                        .for_each(|(opt_coord, idx_coord)| {
+                        .enumerate()
+                        .for_each(|(i, (opt_coord, idx_coord))| {
                             let in_coord = if valid_out_area.contains_coordinate(&idx_coord) {
-                                proj.project_coordinate(idx_coord).ok()
+                                match proj.project_coordinate(idx_coord) {
+                                    Ok(a) => Some(a),
+                                    Err(e) => {
+                                        debug!("[{}] Projectin failed because {:?}", chunk_idx, e);
+                                        None
+                                    }
+                                }
                             } else {
+                                // if i % 512 == 0 {
+                                //     debug!(
+                                //         "None branch {:?} valid: {:?}",
+                                //         idx_coord, valid_out_area
+                                //     );
+                                // }
                                 None
                             };
                             *opt_coord = in_coord;
@@ -229,16 +274,24 @@ fn projected_coordinate_grid_parallel(
                 }
                 Result::<(), crate::error::Error>::Ok(())
             });
+
+        debug!("DA FEHLT WAT");
+        coord_grid
+            .data
+            .iter()
+            .enumerate()
+            .filter(|(i, a)| a.is_none())
+            .for_each(|(i, a)| print!("{:?},", i));
         res.map(|_| coord_grid)
     });
     debug!(
         "projected_coordinate_grid_parallel took {} (ns)",
         start.elapsed().as_nanos()
     );
+
     res
 }
 
-#[allow(dead_code)]
 pub fn fold_by_coordinate_lookup_future<T>(
     accu: TileWithProjectionCoordinates<T>,
     tile: RasterTile2D<T>,
@@ -257,7 +310,6 @@ where
     )
 }
 
-#[allow(dead_code)]
 #[allow(clippy::type_complexity)]
 #[allow(clippy::needless_pass_by_value)]
 pub fn fold_by_coordinate_lookup_impl<T>(
@@ -318,6 +370,20 @@ where
                 });
             });
     });
+
+    // let mut s = String::new();
+
+    // for (idx, coord) in materialized_accu_tile.grid_array.data.iter().enumerate() {
+    //     if idx % 32 == 0 {
+    //         s.push('\n');
+    //     }
+    //     match coord {
+    //         _ => s.push('█'),
+    //         a if materialized_accu_tile.grid_array.no_data_value.unwrap() == *a => s.push(' '),
+    //     }
+    // }
+
+    // debug!("my materialized accu::::\n{}", s);
 
     Ok(TileWithProjectionCoordinates {
         accu_tile: materialized_accu_tile.into(),

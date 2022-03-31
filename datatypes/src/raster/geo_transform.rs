@@ -127,9 +127,9 @@ impl GeoTransform {
     #[inline]
     pub fn coordinate_to_grid_idx_2d(&self, coord: Coordinate2D) -> GridIdx2D {
         let grid_x_index =
-            ((coord.x - self.origin_coordinate.x) / self.x_pixel_size).floor() as isize;
+            dbg!(((coord.x - self.origin_coordinate.x) / self.x_pixel_size)).floor() as isize;
         let grid_y_index =
-            ((coord.y - self.origin_coordinate.y) / self.y_pixel_size).floor() as isize;
+            dbg!(((coord.y - self.origin_coordinate.y) / self.y_pixel_size)).floor() as isize;
         [grid_y_index, grid_x_index].into()
     }
 
@@ -450,5 +450,79 @@ mod tests {
         let test = GeoTransform::deserialize_with_check(&mut de);
 
         assert!(test.is_err());
+    }
+
+    #[test]
+    fn back_and_forth() {
+        let geo_transform = GeoTransform {
+            origin_coordinate: Coordinate2D {
+                x: -7905423.213366069,
+                y: 2896046.127668758,
+            },
+            x_pixel_size: 19567.87924100512,
+            y_pixel_size: -19567.87924100512,
+        };
+
+        let c1 = Coordinate2D {
+            x: -8140237.76425813,
+            y: 3130860.6785608195,
+        };
+
+        let idx = geo_transform.coordinate_to_grid_idx_2d(c1);
+        let c2 = geo_transform.grid_idx_to_upper_left_coordinate_2d(idx);
+
+        assert_eq!(c1, c2);
+    }
+
+    #[test]
+    fn neighbor_grids() {
+        let geo_transform = GeoTransform {
+            origin_coordinate: Coordinate2D {
+                x: -7905423.213366069,
+                y: 2896046.127668758,
+            },
+            x_pixel_size: 19567.87924100512,
+            y_pixel_size: -19567.87924100512,
+        };
+
+        let part1 = SpatialPartition2D::new(
+            Coordinate2D {
+                x: -8140237.76425813,
+                y: 3130860.6785608195,
+            },
+            Coordinate2D {
+                x: -7514065.628545966,
+                y: 2504688.5428486555,
+            },
+        )
+        .unwrap();
+
+        // Ausdehnung
+        // -8140237.7642581304535270,2504688.5428486554883420 : -7514065.6285459669306874,3130860.6785608194768429
+
+        let part2 = SpatialPartition2D::new(
+            Coordinate2D {
+                x: -7514065.628545966,
+                y: 3130860.6785608195,
+            },
+            Coordinate2D {
+                x: -6887893.4928338025,
+                y: 2504688.5428486555,
+            },
+        )
+        .unwrap();
+
+        let idx1 = geo_transform.coordinate_to_grid_idx_2d(part1.upper_left());
+        let idx2 = geo_transform.coordinate_to_grid_idx_2d(part2.upper_left());
+
+        dbg!(geo_transform.grid_idx_to_upper_left_coordinate_2d(idx2));
+
+        // -7513632,3130588
+
+        // assert_eq!(part1.size_x() / geo_transform.x_pixel_size(), 32.);
+        // assert_eq!(part1.size_y() / geo_transform.y_pixel_size(), 32.);
+
+        assert_eq!((idx1.inner()[0] - idx2.inner()[0]).abs(), 0);
+        assert_eq!((idx1.inner()[1] - idx2.inner()[1]).abs(), 32);
     }
 }
