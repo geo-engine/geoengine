@@ -1,7 +1,10 @@
 use crate::primitives::TimeInstance;
 use crate::util::arrow::{downcast_array, ArrowTyped};
 use crate::util::Result;
-use crate::{error, util::ranges::value_in_range};
+use crate::{
+    error,
+    util::ranges::{value_in_range, value_in_range_inclusive},
+};
 use arrow::array::{Array, ArrayBuilder, BooleanArray};
 use arrow::datatypes::{DataType, Field};
 use arrow::error::ArrowError;
@@ -212,6 +215,8 @@ impl TimeInterval {
         other == self
             || value_in_range(self.start, other.start, other.end)
             || value_in_range(other.start, self.start, self.end)
+            || { value_in_range_inclusive(self.start, other.start, other.end) && self.is_instant() }
+            || { value_in_range_inclusive(other.start, self.start, self.end) && other.is_instant() }
     }
 
     /// Unites this interval with another one.

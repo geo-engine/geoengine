@@ -2,7 +2,7 @@ use std::collections::HashMap;
 
 use async_trait::async_trait;
 use geoengine_datatypes::primitives::{
-    RasterQueryRectangle, TimeGranularity, TimeInstance, TimeInterval, TimeStep, TimeStepIter,
+    RasterQueryRectangle, TimeInstance, TimeInterval, TimeStep, TimeStepIter,
 };
 use serde::{Deserialize, Serialize};
 
@@ -64,7 +64,7 @@ pub struct GdalMetadataFixedTimes {
 }
 
 impl GdalMetadataFixedTimes {
-    #[allow(dead_code)]
+    #[allow(unused)]
     pub fn new(
         time_steps: Vec<TimeInterval>,
         params: GdalDatasetParameters,
@@ -110,11 +110,6 @@ impl MetaData<GdalLoadingInfo, RasterResultDescriptor, RasterQueryRectangle>
     for GdalMetadataFixedTimes
 {
     async fn loading_info(&self, query: RasterQueryRectangle) -> Result<GdalLoadingInfo> {
-        let minimum_step = TimeStep {
-            granularity: TimeGranularity::Millis,
-            step: 1,
-        };
-
         let sorted_time_steps = if self
             .time_steps
             .windows(2)
@@ -130,18 +125,13 @@ impl MetaData<GdalLoadingInfo, RasterResultDescriptor, RasterQueryRectangle>
         let mut time_steps_no_gaps = sorted_time_steps.clone();
 
         for (index, time) in sorted_time_steps.iter().enumerate() {
-            if index < sorted_time_steps.len() - 1 {
-                if time.is_instant() {
-                    time_steps_no_gaps.push(TimeInterval::new(
-                        (time.end() + minimum_step)?,
-                        sorted_time_steps[index + 1].start(),
-                    )?);
-                } else {
-                    time_steps_no_gaps.push(TimeInterval::new(
-                        time.end(),
-                        sorted_time_steps[index + 1].start(),
-                    )?);
-                }
+            if index < sorted_time_steps.len() - 1
+                && time.end() < sorted_time_steps[index + 1].start()
+            {
+                time_steps_no_gaps.push(TimeInterval::new(
+                    time.end(),
+                    sorted_time_steps[index + 1].start(),
+                )?);
             }
         }
 
@@ -166,7 +156,7 @@ impl MetaData<GdalLoadingInfo, RasterResultDescriptor, RasterQueryRectangle>
                     if let Some(step_interval) = time_interval.intersect(time_position) {
                         if sorted_time_steps
                             .iter()
-                            .any(|&i| i.intersects(&step_interval))
+                            .any(|&i| i.contains(&step_interval))
                         {
                             loading_info_parts
                                 .push(self.create_temporal_slice(step_interval, false)?);
@@ -760,6 +750,7 @@ mod tests {
             TimeInterval::new_instant(10).unwrap(),
             TimeInterval::new_instant(20).unwrap(),
             TimeInterval::new_instant(15).unwrap(),
+            TimeInterval::new_instant(6).unwrap(),
         ];
         let time_placeholders = hashmap! {
             "%TIME%".to_string() => GdalSourceTimePlaceholder {
@@ -800,6 +791,7 @@ mod tests {
                 })
                 .collect::<Vec<_>>(),
             &[
+                "/foo/bar_step_006000000.tiff",
                 "NODATA",
                 "/foo/bar_step_010000000.tiff",
                 "NODATA",
@@ -826,7 +818,7 @@ mod tests {
                     None => String::from("NODATA"),
                 })
                 .collect::<Vec<_>>(),
-            &["NODATA", "NODATA"]
+            &["NODATA", "/foo/bar_step_030000000.tiff", "NODATA"]
         );
 
         assert_eq!(
@@ -877,6 +869,7 @@ mod tests {
             TimeInterval::new_instant(30).unwrap(),
             TimeInterval::new_unchecked(10, 20),
             TimeInterval::new_unchecked(22, 25),
+            TimeInterval::new_unchecked(25, 28),
         ];
         let time_placeholders = hashmap! {
             "%TIME%".to_string() => GdalSourceTimePlaceholder {
@@ -926,7 +919,7 @@ mod tests {
                         (0., 1.).into(),
                         (1., 0.).into()
                     ),
-                    time_interval: TimeInterval::new_unchecked(15, 24),
+                    time_interval: TimeInterval::new_unchecked(15, 27),
                     spatial_resolution: SpatialResolution::one(),
                 })
                 .await
@@ -940,7 +933,8 @@ mod tests {
             &[
                 "/foo/bar_step_015000000.tiff",
                 "NODATA",
-                "/foo/bar_step_022000000.tiff"
+                "/foo/bar_step_022000000.tiff",
+                "/foo/bar_step_025000000.tiff"
             ]
         );
 
