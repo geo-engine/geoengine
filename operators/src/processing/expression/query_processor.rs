@@ -16,6 +16,7 @@ use rayon::iter::{
 };
 
 use crate::{
+    adapters::{QueryWrapper, RasterTimeAdapter},
     engine::{BoxRasterQueryProcessor, QueryContext, QueryProcessor},
     util::{stream_zip::StreamTupleZip, Result},
 };
@@ -223,13 +224,11 @@ where
         query: RasterQueryRectangle,
         ctx: &'a dyn QueryContext,
     ) -> Result<BoxStream<'a, Result<Self::Tuple>>> {
-        // TODO: tile alignment
+        let source_a = QueryWrapper { p: &self.0, ctx };
 
-        let queries = try_join!(self.0.query(query, ctx), self.1.query(query, ctx))?;
+        let source_b = QueryWrapper { p: &self.1, ctx };
 
-        let stream = StreamTupleZip::new(queries).map(|rasters| Ok((rasters.0?, rasters.1?)));
-
-        Ok(stream.boxed())
+        Ok(Box::pin(RasterTimeAdapter::new(source_a, source_b, query)))
     }
 
     #[inline]
