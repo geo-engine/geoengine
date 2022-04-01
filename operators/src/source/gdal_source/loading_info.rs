@@ -72,7 +72,7 @@ impl GdalMetadataFixedTimes {
         time_placeholders: HashMap<String, GdalSourceTimePlaceholder>,
     ) -> Result<Self> {
         let mut sorted_time_steps = time_steps;
-        sorted_time_steps.sort_by(|a, b| a.end().partial_cmp(&b.start()).unwrap()); //TODO: remove unwrap
+        sorted_time_steps.sort_by_key(TimeInterval::start);
 
         let mut time_steps_no_gaps = sorted_time_steps.clone();
 
@@ -87,7 +87,7 @@ impl GdalMetadataFixedTimes {
             }
         }
 
-        time_steps_no_gaps.sort_by(|a, b| a.start().partial_cmp(&b.start()).unwrap()); //TODO: remove unwrap
+        time_steps_no_gaps.sort_by_key(TimeInterval::start);
 
         Ok(GdalMetadataFixedTimes {
             time_steps: sorted_time_steps,
