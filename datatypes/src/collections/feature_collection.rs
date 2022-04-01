@@ -1490,7 +1490,7 @@ mod struct_serde {
         {
             let cursor = Cursor::new(v);
 
-            let mut reader = arrow::ipc::reader::FileReader::try_new(cursor)
+            let mut reader = arrow::ipc::reader::FileReader::try_new(cursor, None)
                 .map_err(|error| E::custom(error.to_string()))?;
 
             if reader.num_batches() != 1 {
