@@ -1,10 +1,9 @@
-use std::collections::HashMap;
-
 use async_trait::async_trait;
 use geoengine_datatypes::primitives::{
     RasterQueryRectangle, TimeInstance, TimeInterval, TimeStep, TimeStepIter,
 };
 use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
 
 use crate::{
     engine::{MetaData, RasterResultDescriptor},
@@ -73,7 +72,7 @@ impl GdalMetadataFixedTimes {
         time_placeholders: HashMap<String, GdalSourceTimePlaceholder>,
     ) -> Result<Self> {
         let mut sorted_time_steps = time_steps;
-        sorted_time_steps.sort_by(|a, b| a.end().partial_cmp(&b.start()).unwrap());
+        sorted_time_steps.sort_by(|a, b| a.end().partial_cmp(&b.start()).unwrap()); //TODO: remove unwrap
 
         let mut time_steps_no_gaps = sorted_time_steps.clone();
 
@@ -88,7 +87,7 @@ impl GdalMetadataFixedTimes {
             }
         }
 
-        time_steps_no_gaps.sort_by(|a, b| a.start().partial_cmp(&b.start()).unwrap());
+        time_steps_no_gaps.sort_by(|a, b| a.start().partial_cmp(&b.start()).unwrap()); //TODO: remove unwrap
 
         Ok(GdalMetadataFixedTimes {
             time_steps: sorted_time_steps,
