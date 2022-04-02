@@ -174,8 +174,18 @@ pub enum OgrSourceTimeFormat {
     Custom {
         custom_format: String,
     },
-    Seconds,
+    #[serde(rename_all = "camelCase")]
+    UnixTimeStamp {
+        timestamp_type: UnixTimeStampType,
+    },
     Auto,
+}
+
+#[derive(Clone, Debug, PartialEq, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub enum UnixTimeStampType {
+    EpochSeconds,
+    EpochMilliseconds,
 }
 
 impl Default for OgrSourceTimeFormat {
@@ -793,18 +803,27 @@ where
                     });
                 Ok(date_time_result?.try_into()?)
             }),
-            OgrSourceTimeFormat::Seconds => Box::new(move |field: FieldValue| match field {
-                FieldValue::IntegerValue(v) => {
-                    TimeInstance::from_millis(i64::from(v) * 1000).context(error::DataType)
-                }
-                FieldValue::Integer64Value(v) => {
-                    TimeInstance::from_millis(v * 1000).context(error::DataType)
-                }
-                FieldValue::StringValue(v) => DateTime::parse_from_str(&v, "%s")
-                    .context(error::TimeParse)
-                    .and_then(|d| d.timestamp_millis().try_into().context(error::DataType)),
-                _ => Err(Error::OgrFieldValueIsNotValidForSeconds),
-            }),
+            OgrSourceTimeFormat::UnixTimeStamp { timestamp_type } => {
+                Box::new(move |field: FieldValue| {
+                    let factor = match timestamp_type {
+                        UnixTimeStampType::EpochSeconds => 1000,
+                        UnixTimeStampType::EpochMilliseconds => 1,
+                    };
+                    match field {
+                        FieldValue::IntegerValue(v) => {
+                            TimeInstance::from_millis(i64::from(v) * factor)
+                                .context(error::DataType)
+                        }
+                        FieldValue::Integer64Value(v) => {
+                            TimeInstance::from_millis(v * factor).context(error::DataType)
+                        }
+                        FieldValue::StringValue(v) => DateTime::parse_from_str(&v, "%s")
+                            .context(error::TimeParse)
+                            .and_then(|d| d.timestamp_millis().try_into().context(error::DataType)),
+                        _ => Err(Error::OgrFieldValueIsNotValidForTimestamp),
+                    }
+                })
+            }
         }
     }
 
@@ -879,7 +898,7 @@ where
                         let duration = i64::from(
                             duration_field_value
                                 .into_int()
-                                .ok_or(Error::OgrFieldValueIsNotValidForSeconds)?,
+                                .ok_or(Error::OgrFieldValueIsNotValidForTimestamp)?,
                         );
 
                         TimeInterval::new(time_start, time_start + duration).map_err(Into::into)
