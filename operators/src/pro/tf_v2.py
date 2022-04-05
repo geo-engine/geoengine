@@ -136,18 +136,13 @@ def initUnet(num_classes, id, batch_size):
     global model 
     model = keras.Model(inputs, outputs)
 
-    fn = np.array([[1.0, 0.0, 0.0, 0.0, 0.0], [0.0, 1.0, 0.0, 0.0, 0.0], [0.0, 0.0, 1.0, 0.0, 0.0], [0.0, 0.0, 0.0, 1.0, 0.0], [0.0, 0.0, 0.0, 0.0, 5.0]])
-    fp = np.array([[0.0, 999999.9, 999999.9, 999999.9, 999999.9], [0.1, 0.0, 1.0, 1.0, 1.0], [0.1, 1.0, 0.0, 1.0, 1.0], [0.1, 99.0, 99.0, 0.0, 99.0], [0.1, 1.0, 1.0, 1.0, 0.0]])
-
-    model.compile(optimizer='adam', loss=rwwce(fn, fp), metrics=['sparse_categorical_accuracy'])
+    model.compile(optimizer='adam', loss='sparse_categorical_crossentropy', metrics=['sparse_categorical_accuracy'])
     model.summary()
     model.save('saved_model/{}'.format(id))
     print("Saved model under saved_model/{}".format(id))
 
 def load(id):
     global model
-    fn = np.array([[1.0, 0.0, 0.0, 0.0, 0.0], [0.0, 1.0, 0.0, 0.0, 0.0], [0.0, 0.0, 1.0, 0.0, 0.0], [0.0, 0.0, 0.0, 1.0, 0.0], [0.0, 0.0, 0.0, 0.0, 1.0]])
-    fp = np.array([[0.0, 999999.9, 999999.9, 999999.9, 999999.9], [1.0, 0.0, 10.0, 10.0, 1.0], [1.0, 1.0, 0.0, 1.0, 1.0], [1.0, 1.0, 1.0, 0.0, 1.0], [1.0, 1.0, 1.0, 1.0, 0.0]])
     #model = keras.models.load_model('saved_model/{}'.format(id), custom_objects={ 'loss': rwwce(fn, fp)})
     model = keras.models.load_model('saved_model/{}'.format(id), compile=False)
     print('Loaded model from saved_model/{}'.format(id))
@@ -233,6 +228,77 @@ def initUnet2(num_classes, id, batch_size):
     model.save('saved_model/{}'.format(id))
     print("Saved model under saved_model/{}".format(id))
 
+def initCustomModel(num_classes, id, batch_size):
+    print("Started")
+
+    class custom_model(tf.keras.Model):
+        def __init__(self, *args, **kwargs):
+            super(custom_model, self).__init__(*args, **kwargs)
+            inputs = keras.Input(shape=(512, 512, 11), batch_size=batch_size)
+
+            conv1 = layers.Conv2D(32, 3,activation = 'relu', padding = 'same')(inputs)
+            conv1 = layers.Conv2D(32, 3,activation = 'relu', padding = 'same')(conv1)
+            pool1 = layers.Conv2D(32, 3, strides=(2,2), padding = 'same')(conv1)
+            
+            conv2 = layers.Conv2D(64, 3, activation = 'relu', padding = 'same')(pool1)
+            conv2 = layers.Conv2D(64, 3, activation = 'relu', padding = 'same')(conv2)
+            pool2 = layers.Conv2D(64, 3, strides=(2,2), padding = 'same')(conv2)
+    
+            conv3 = layers.Conv2D(128, 3, activation = 'relu', padding = 'same')(pool2)
+            conv3 = layers.Conv2D(128, 3, activation = 'relu', padding = 'same')(conv3)
+            pool3 = layers.Conv2D(128, 3, strides=(2,2), padding = 'same')(conv3)
+    
+            conv4 = layers.Conv2D(256, 3, activation = 'relu', padding = 'same')(pool3)
+            conv4 = layers.Conv2D(256, 3, activation = 'relu', padding = 'same')(conv4)
+            drop4 = layers.Dropout(0.5)(conv4)
+            pool4 = layers.Conv2D(256, 3, strides=(2,2), padding = 'same')(drop4)
+    
+            conv5 = layers.Conv2D(512, 3, activation = 'relu', padding = 'same')(pool4)
+            conv5 = layers.Conv2D(512, 3, activation = 'relu', padding = 'same')(conv5)
+            drop5 = layers.Dropout(0.5)(conv5)
+    
+            up6 = layers.Conv2DTranspose(256, 2, strides=(2,2), padding= 'same', activation = 'relu')(drop5)
+    
+            merge6 = layers.concatenate([drop4, up6])
+            conv6 = layers.Conv2D(256, 3, activation = 'relu', padding = 'same')(merge6)
+            conv6 = layers.Conv2D(256, 3, activation = 'relu', padding = 'same')(conv6)
+
+            up7 = layers.Conv2DTranspose(128, 2, strides=(2,2), padding= 'same', activation = 'relu')(conv6)
+
+            merge7 = layers.concatenate([conv3, up7])
+            conv7 = layers.Conv2D(128, 3, activation = 'relu', padding = 'same')(merge7)
+            conv7 = layers.Conv2D(128, 3, activation = 'relu', padding = 'same')(conv7)
+
+            up8 = layers.Conv2DTranspose(64, 2, strides=(2,2), padding= 'same', activation = 'relu')(conv7)
+
+            merge8 = layers.concatenate([conv2, up8])
+            conv8 = layers.Conv2D(64, 3, activation = 'relu', padding = 'same')(merge8)
+            conv8 = layers.Conv2D(64, 3, activation = 'relu', padding = 'same')(conv8)
+
+            up9 = layers.Conv2DTranspose(32, 2, strides=(2,2), padding= 'same', activation = 'relu')(conv8)
+
+            merge9 = layers.concatenate([conv1,up9])
+            conv9 = layers.Conv2D(32, 3, activation = 'relu', padding = 'same')(merge9)
+            conv9 = layers.Conv2D(32, 3, activation = 'relu', padding = 'same')(conv9)
+
+            outputs = layers.Conv2D(5, 1, padding = 'same', activation='softmax')(conv9)
+
+            self.preds = tf.keras.Model(inputs, outputs)
+        @tf.function
+        def call(self, inputs):
+            return self.preds(inputs)
+        #return self.preds(inputs)
+        @tf.function
+        def training(self, data):
+            loss = self.train_step(data)['loss']
+            return loss
+
+    output = custom_model.call.get_concrete_function(tf.TensorSpec(shape=[batch_size, 512, 512, 11], dtype=tf.float32, 
+    name='inputs'))
+
+    training_output = custom_model.training.get_concrete_function((tf.TensorSpec(shape=[batch_size, 512, 512, 11], dtype=tf.float32, name="training_input"), tf.TensorSpec(shape=[batch_size, 512, 512, 1], dtype=tf.float32, name="training_target")))
+
+    custom_model.save('saved_model/{}'.format(id), save_format='tf', signatures={'train': training_output, 'predict': output})
 def fit(X, y, batch_size):    
     global model
     global update

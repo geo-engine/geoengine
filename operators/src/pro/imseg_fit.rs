@@ -42,10 +42,10 @@ where
     let mut time = Instant::now();
 
     let py_mod = PyModule::from_code(py, include_str!("tf_v2.py"),"filename.py", "modulename").unwrap();
-    let name = PyUnicode::new(py, "big_model_1");
+    let name = PyUnicode::new(py, "bindings_test");
     //TODO change depreciated function
     let _init = py_mod.call("initUnet2", (5,name, batch_size), None).unwrap();
-    let _check_model_size = py_mod.call("get_model_memory_usage", (batch_size, ), None).unwrap();
+    //let _check_model_size = py_mod.call("get_model_memory_usage", (batch_size, ), None).unwrap();
     //since every 15 minutes an image is available...
     let step: i64 = (batch_size as i64 * 900_000) * batches_per_query as i64;
     println!("Step: {}", step);
@@ -59,6 +59,8 @@ where
     let nop = processors.len();
     let mut final_buff_proc: Vec<Vec<Vec<T>>> = Vec::new();
     let mut final_buff_truth: Vec<Vec<u8>> = Vec::new();
+
+
     while !queries.is_empty() {
         let queries_left = queries.len();
         println!("queries left: {:?}", queries_left);
@@ -173,14 +175,18 @@ where
                         
     
                     }
-                    
-                    let pool = unsafe {py.new_pool()};
-                    let py = pool.python();
                     let py_img = PyArray::from_owned_array(py, arr_proc_final);
                     let py_truth = PyArray::from_owned_array(py, arr_truth_final);
 
+                    
+                    
+
                     time_data_processing = time_data_processing + time.elapsed().as_millis();
                     time = Instant::now();
+
+                    let pool = unsafe {py.new_pool()};
+                    let py = pool.python();
+                    
                     let _result = py_mod.call("fit", (py_img, py_truth, batch_size), None).unwrap();
         
                     time_python = time_python + time.elapsed().as_millis();

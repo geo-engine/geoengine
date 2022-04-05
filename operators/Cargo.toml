@@ -58,7 +58,7 @@ futures-core = "0.3.18"
 async-stream = "0.3"
 geo-rand = { git = "https://github.com/lelongg/geo-rand", tag = "v0.3.0" }
 rand = "0.8"
-tensorflow = "0.17.0"
+
 
 
 [[bench]]
