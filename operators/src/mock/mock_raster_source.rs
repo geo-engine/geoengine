@@ -313,7 +313,13 @@ mod tests {
 
         let deserialized: Box<dyn RasterOperator> = serde_json::from_str(&serialized).unwrap();
 
-        let execution_context = MockExecutionContext::test_default();
+        let tile_size_in_pixels = [3, 2].into();
+        let tiling_specification = TilingSpecification {
+            origin_coordinate: [0.0, 0.0].into(),
+            tile_size_in_pixels,
+        };
+
+        let execution_context = MockExecutionContext::new_with_tiling_spec(tiling_specification);
 
         let initialized = deserialized.initialize(&execution_context).await.unwrap();
 
