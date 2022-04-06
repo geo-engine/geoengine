@@ -602,7 +602,9 @@ mod tests {
     use geoengine_datatypes::primitives::{
         BoundingBox2D, FeatureData, NoGeometry, SpatialResolution, TimeInterval,
     };
-    use geoengine_datatypes::raster::{Grid2D, RasterDataType, RasterTile2D, TileInformation};
+    use geoengine_datatypes::raster::{
+        Grid2D, RasterDataType, RasterTile2D, TileInformation, TilingSpecification,
+    };
     use geoengine_datatypes::spatial_reference::SpatialReference;
     use geoengine_datatypes::util::test::TestDefault;
     use geoengine_datatypes::util::Identifier;
@@ -743,6 +745,13 @@ mod tests {
 
     #[tokio::test]
     async fn simple_raster() {
+        let tile_size_in_pixels = [3, 2].into();
+        let tiling_specification = TilingSpecification {
+            origin_coordinate: [0.0, 0.0].into(),
+            tile_size_in_pixels,
+        };
+        let execution_context = MockExecutionContext::new_with_tiling_spec(tiling_specification);
+
         let histogram = Histogram {
             params: HistogramParams {
                 column_name: None,
@@ -752,8 +761,6 @@ mod tests {
             },
             sources: mock_raster_source().into(),
         };
-
-        let execution_context = MockExecutionContext::test_default();
 
         let query_processor = histogram
             .boxed()
@@ -768,8 +775,7 @@ mod tests {
         let result = query_processor
             .plot_query(
                 VectorQueryRectangle {
-                    spatial_bounds: BoundingBox2D::new((-180., -90.).into(), (180., 90.).into())
-                        .unwrap(),
+                    spatial_bounds: BoundingBox2D::new((0., -3.).into(), (2., 0.).into()).unwrap(),
                     time_interval: TimeInterval::default(),
                     spatial_resolution: SpatialResolution::one(),
                 },
@@ -791,6 +797,13 @@ mod tests {
 
     #[tokio::test]
     async fn simple_raster_without_spec() {
+        let tile_size_in_pixels = [3, 2].into();
+        let tiling_specification = TilingSpecification {
+            origin_coordinate: [0.0, 0.0].into(),
+            tile_size_in_pixels,
+        };
+        let execution_context = MockExecutionContext::new_with_tiling_spec(tiling_specification);
+
         let histogram = Histogram {
             params: HistogramParams {
                 column_name: None,
@@ -800,8 +813,6 @@ mod tests {
             },
             sources: mock_raster_source().into(),
         };
-
-        let execution_context = MockExecutionContext::test_default();
 
         let query_processor = histogram
             .boxed()
@@ -816,8 +827,7 @@ mod tests {
         let result = query_processor
             .plot_query(
                 VectorQueryRectangle {
-                    spatial_bounds: BoundingBox2D::new((-180., -90.).into(), (180., 90.).into())
-                        .unwrap(),
+                    spatial_bounds: BoundingBox2D::new((0., -3.).into(), (2., 0.).into()).unwrap(),
                     time_interval: TimeInterval::default(),
                     spatial_resolution: SpatialResolution::one(),
                 },
@@ -1054,6 +1064,13 @@ mod tests {
 
     #[tokio::test]
     async fn no_data_raster() {
+        let tile_size_in_pixels = [3, 2].into();
+        let tiling_specification = TilingSpecification {
+            origin_coordinate: [0.0, 0.0].into(),
+            tile_size_in_pixels,
+        };
+        let execution_context = MockExecutionContext::new_with_tiling_spec(tiling_specification);
+
         let no_data_value = Some(0);
         let histogram = Histogram {
             params: HistogramParams {
@@ -1069,9 +1086,9 @@ mod tests {
                         TileInformation {
                             global_geo_transform: TestDefault::test_default(),
                             global_tile_position: [0, 0].into(),
-                            tile_size_in_pixels: [3, 2].into(),
+                            tile_size_in_pixels,
                         },
-                        Grid2D::new([3, 2].into(), vec![0, 0, 0, 0, 0, 0], no_data_value)
+                        Grid2D::new(tile_size_in_pixels, vec![0, 0, 0, 0, 0, 0], no_data_value)
                             .unwrap()
                             .into(),
                     )],
@@ -1087,8 +1104,6 @@ mod tests {
             .into(),
         };
 
-        let execution_context = MockExecutionContext::test_default();
-
         let query_processor = histogram
             .boxed()
             .initialize(&execution_context)
@@ -1102,8 +1117,7 @@ mod tests {
         let result = query_processor
             .plot_query(
                 VectorQueryRectangle {
-                    spatial_bounds: BoundingBox2D::new((-180., -90.).into(), (180., 90.).into())
-                        .unwrap(),
+                    spatial_bounds: BoundingBox2D::new((0., -3.).into(), (2., 0.).into()).unwrap(),
                     time_interval: TimeInterval::default(),
                     spatial_resolution: SpatialResolution::one(),
                 },
@@ -1239,7 +1253,12 @@ mod tests {
 
     #[tokio::test]
     async fn single_value_raster_stream() {
-        let execution_context = MockExecutionContext::test_default();
+        let tile_size_in_pixels = [3, 2].into();
+        let tiling_specification = TilingSpecification {
+            origin_coordinate: [0.0, 0.0].into(),
+            tile_size_in_pixels,
+        };
+        let execution_context = MockExecutionContext::new_with_tiling_spec(tiling_specification);
 
         let no_data_value = None;
         let histogram = Histogram {
@@ -1256,9 +1275,9 @@ mod tests {
                         TileInformation {
                             global_geo_transform: TestDefault::test_default(),
                             global_tile_position: [0, 0].into(),
-                            tile_size_in_pixels: [3, 2].into(),
+                            tile_size_in_pixels,
                         },
-                        Grid2D::new([3, 2].into(), vec![4; 6], no_data_value)
+                        Grid2D::new(tile_size_in_pixels, vec![4; 6], no_data_value)
                             .unwrap()
                             .into(),
                     )],
@@ -1287,8 +1306,7 @@ mod tests {
         let result = query_processor
             .plot_query(
                 VectorQueryRectangle {
-                    spatial_bounds: BoundingBox2D::new((-180., -90.).into(), (180., 90.).into())
-                        .unwrap(),
+                    spatial_bounds: BoundingBox2D::new((0., -3.).into(), (2., 0.).into()).unwrap(),
                     time_interval: TimeInterval::new_instant(
                         NaiveDate::from_ymd(2013, 12, 1).and_hms(12, 0, 0),
                     )

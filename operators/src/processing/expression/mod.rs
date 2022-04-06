@@ -530,7 +530,7 @@ mod tests {
     use geoengine_datatypes::primitives::{
         Measurement, RasterQueryRectangle, SpatialPartition2D, SpatialResolution, TimeInterval,
     };
-    use geoengine_datatypes::raster::{Grid2D, RasterTile2D, TileInformation};
+    use geoengine_datatypes::raster::{Grid2D, RasterTile2D, TileInformation, TilingSpecification};
     use geoengine_datatypes::spatial_reference::SpatialReference;
     use geoengine_datatypes::util::test::TestDefault;
 
@@ -606,6 +606,13 @@ mod tests {
     async fn basic_unary() {
         let no_data_value = 3;
         let no_data_value_option = Some(no_data_value);
+        let tile_size_in_pixels = [3, 2].into();
+        let tiling_specification = TilingSpecification {
+            origin_coordinate: [0.0, 0.0].into(),
+            tile_size_in_pixels,
+        };
+
+        let ctx = MockExecutionContext::new_with_tiling_spec(tiling_specification);
 
         let raster_a = make_raster(Some(3));
 
@@ -629,7 +636,7 @@ mod tests {
             },
         }
         .boxed()
-        .initialize(&MockExecutionContext::test_default())
+        .initialize(&ctx)
         .await
         .unwrap();
 
@@ -640,8 +647,8 @@ mod tests {
             .query(
                 RasterQueryRectangle {
                     spatial_bounds: SpatialPartition2D::new_unchecked(
-                        (0., 4.).into(),
-                        (3., 0.).into(),
+                        (0., 3.).into(),
+                        (2., 0.).into(),
                     ),
                     time_interval: Default::default(),
                     spatial_resolution: SpatialResolution::one(),
@@ -671,6 +678,13 @@ mod tests {
     async fn unary_map_no_data() {
         let no_data_value = 3;
         let no_data_value_option = Some(no_data_value);
+        let tile_size_in_pixels = [3, 2].into();
+        let tiling_specification = TilingSpecification {
+            origin_coordinate: [0.0, 0.0].into(),
+            tile_size_in_pixels,
+        };
+
+        let ctx = MockExecutionContext::new_with_tiling_spec(tiling_specification);
 
         let raster_a = make_raster(Some(3));
 
@@ -694,7 +708,7 @@ mod tests {
             },
         }
         .boxed()
-        .initialize(&MockExecutionContext::test_default())
+        .initialize(&ctx)
         .await
         .unwrap();
 
@@ -705,8 +719,8 @@ mod tests {
             .query(
                 RasterQueryRectangle {
                     spatial_bounds: SpatialPartition2D::new_unchecked(
-                        (0., 4.).into(),
-                        (3., 0.).into(),
+                        (0., 3.).into(),
+                        (2., 0.).into(),
                     ),
                     time_interval: Default::default(),
                     spatial_resolution: SpatialResolution::one(),
@@ -736,6 +750,13 @@ mod tests {
     async fn basic_binary() {
         let no_data_value = 42;
         let no_data_value_option = Some(no_data_value);
+        let tile_size_in_pixels = [3, 2].into();
+        let tiling_specification = TilingSpecification {
+            origin_coordinate: [0.0, 0.0].into(),
+            tile_size_in_pixels,
+        };
+
+        let ctx = MockExecutionContext::new_with_tiling_spec(tiling_specification);
 
         let raster_a = make_raster(None);
         let raster_b = make_raster(None);
@@ -760,7 +781,7 @@ mod tests {
             },
         }
         .boxed()
-        .initialize(&MockExecutionContext::test_default())
+        .initialize(&ctx)
         .await
         .unwrap();
 
@@ -771,8 +792,8 @@ mod tests {
             .query(
                 RasterQueryRectangle {
                     spatial_bounds: SpatialPartition2D::new_unchecked(
-                        (0., 4.).into(),
-                        (3., 0.).into(),
+                        (0., 3.).into(),
+                        (2., 0.).into(),
                     ),
                     time_interval: Default::default(),
                     spatial_resolution: SpatialResolution::one(),
@@ -802,6 +823,13 @@ mod tests {
     async fn basic_coalesce() {
         let no_data_value = 42;
         let no_data_value_option = Some(no_data_value);
+        let tile_size_in_pixels = [3, 2].into();
+        let tiling_specification = TilingSpecification {
+            origin_coordinate: [0.0, 0.0].into(),
+            tile_size_in_pixels,
+        };
+
+        let ctx = MockExecutionContext::new_with_tiling_spec(tiling_specification);
 
         let raster_a = make_raster(Some(3));
         let raster_b = make_raster(None);
@@ -833,7 +861,7 @@ mod tests {
             },
         }
         .boxed()
-        .initialize(&MockExecutionContext::test_default())
+        .initialize(&ctx)
         .await
         .unwrap();
 
@@ -844,8 +872,8 @@ mod tests {
             .query(
                 RasterQueryRectangle {
                     spatial_bounds: SpatialPartition2D::new_unchecked(
-                        (0., 4.).into(),
-                        (3., 0.).into(),
+                        (0., 3.).into(),
+                        (2., 0.).into(),
                     ),
                     time_interval: Default::default(),
                     spatial_resolution: SpatialResolution::one(),
@@ -872,6 +900,14 @@ mod tests {
         let no_data_value = 3;
         let no_data_value_option = Some(no_data_value);
 
+        let tile_size_in_pixels = [3, 2].into();
+        let tiling_specification = TilingSpecification {
+            origin_coordinate: [0.0, 0.0].into(),
+            tile_size_in_pixels,
+        };
+
+        let ctx = MockExecutionContext::new_with_tiling_spec(tiling_specification);
+
         let raster_a = make_raster(no_data_value_option);
         let raster_b = make_raster(no_data_value_option);
         let raster_c = make_raster(no_data_value_option);
@@ -896,7 +932,7 @@ mod tests {
             },
         }
         .boxed()
-        .initialize(&MockExecutionContext::test_default())
+        .initialize(&ctx)
         .await
         .unwrap();
 
@@ -907,8 +943,8 @@ mod tests {
             .query(
                 RasterQueryRectangle {
                     spatial_bounds: SpatialPartition2D::new_unchecked(
-                        (0., 4.).into(),
-                        (3., 0.).into(),
+                        (0., 3.).into(),
+                        (2., 0.).into(),
                     ),
                     time_interval: Default::default(),
                     spatial_resolution: SpatialResolution::one(),
@@ -939,6 +975,14 @@ mod tests {
         let no_data_value = 0;
         let no_data_value_option = Some(no_data_value);
 
+        let tile_size_in_pixels = [3, 2].into();
+        let tiling_specification = TilingSpecification {
+            origin_coordinate: [0.0, 0.0].into(),
+            tile_size_in_pixels,
+        };
+
+        let ctx = MockExecutionContext::new_with_tiling_spec(tiling_specification);
+
         let raster_a = make_raster(no_data_value_option);
         let raster_b = make_raster(no_data_value_option);
         let raster_c = make_raster(no_data_value_option);
@@ -968,7 +1012,7 @@ mod tests {
             },
         }
         .boxed()
-        .initialize(&MockExecutionContext::test_default())
+        .initialize(&ctx)
         .await
         .unwrap();
 
@@ -979,8 +1023,8 @@ mod tests {
             .query(
                 RasterQueryRectangle {
                     spatial_bounds: SpatialPartition2D::new_unchecked(
-                        (0., 4.).into(),
-                        (3., 0.).into(),
+                        (0., 3.).into(),
+                        (2., 0.).into(),
                     ),
                     time_interval: Default::default(),
                     spatial_resolution: SpatialResolution::one(),
@@ -1011,6 +1055,14 @@ mod tests {
         let no_data_value = 42;
         let no_data_value_option = Some(no_data_value);
 
+        let tile_size_in_pixels = [3, 2].into();
+        let tiling_specification = TilingSpecification {
+            origin_coordinate: [0.0, 0.0].into(),
+            tile_size_in_pixels,
+        };
+
+        let ectx = MockExecutionContext::new_with_tiling_spec(tiling_specification);
+
         let raster_a = make_raster(Some(no_data_value));
 
         let o = Expression {
@@ -1033,7 +1085,7 @@ mod tests {
             },
         }
         .boxed()
-        .initialize(&MockExecutionContext::test_default())
+        .initialize(&ectx)
         .await
         .unwrap();
 
@@ -1044,8 +1096,8 @@ mod tests {
             .query(
                 RasterQueryRectangle {
                     spatial_bounds: SpatialPartition2D::new_unchecked(
-                        (0., 4.).into(),
-                        (3., 0.).into(),
+                        (0., 3.).into(),
+                        (2., 0.).into(),
                     ),
                     time_interval: Default::default(),
                     spatial_resolution: SpatialResolution::one(),

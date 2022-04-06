@@ -237,7 +237,7 @@ mod tests {
     #[tokio::test]
     async fn single_raster() {
         let no_data_value = Some(15);
-        let tile_size_in_pixels = [3, 2].into();
+        let tile_size_in_pixels = [3,2].into();
         let tiling_specification = TilingSpecification {
             origin_coordinate: [0.0, 0.0].into(),
             tile_size_in_pixels,
