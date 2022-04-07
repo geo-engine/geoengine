@@ -207,7 +207,9 @@ mod tests {
     use geoengine_datatypes::primitives::{
         BoundingBox2D, Measurement, SpatialResolution, TimeInterval,
     };
-    use geoengine_datatypes::raster::{Grid2D, RasterDataType, RasterTile2D, TileInformation};
+    use geoengine_datatypes::raster::{
+        Grid2D, RasterDataType, RasterTile2D, TileInformation, TilingSpecification,
+    };
     use geoengine_datatypes::spatial_reference::SpatialReference;
     use num_traits::AsPrimitive;
 
@@ -234,7 +236,13 @@ mod tests {
 
     #[tokio::test]
     async fn single_raster() {
-        let no_data_value = None;
+        let no_data_value = Some(15);
+        let tile_size_in_pixels = [3, 2].into();
+        let tiling_specification = TilingSpecification {
+            origin_coordinate: [0.0, 0.0].into(),
+            tile_size_in_pixels,
+        };
+
         let raster_source = MockRasterSource {
             params: MockRasterSourceParams {
                 data: vec![RasterTile2D::new_with_tile_info(
@@ -242,7 +250,7 @@ mod tests {
                     TileInformation {
                         global_geo_transform: TestDefault::test_default(),
                         global_tile_position: [0, 0].into(),
-                        tile_size_in_pixels: [3, 2].into(),
+                        tile_size_in_pixels,
                     },
                     Grid2D::new([3, 2].into(), vec![1, 2, 3, 4, 5, 6], no_data_value)
                         .unwrap()
@@ -263,7 +271,7 @@ mod tests {
             sources: vec![raster_source].into(),
         };
 
-        let execution_context = MockExecutionContext::test_default();
+        let execution_context = MockExecutionContext::new_with_tiling_spec(tiling_specification);
 
         let statistics = statistics
             .boxed()
@@ -290,7 +298,7 @@ mod tests {
             result.to_string(),
             json!([{
                 "pixelCount": 6,
-                "nanCount": 0,
+                "nanCount": 64_794, // (360*180)-6
                 "min": 1.0,
                 "max": 6.0,
                 "mean": 3.5,

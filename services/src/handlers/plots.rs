@@ -222,10 +222,14 @@ mod tests {
     use actix_web_httpauth::headers::authorization::Bearer;
     use chrono::NaiveDate;
     use geoengine_datatypes::primitives::Measurement;
-    use geoengine_datatypes::raster::{Grid2D, RasterDataType, RasterTile2D, TileInformation};
+    use geoengine_datatypes::raster::{
+        Grid2D, RasterDataType, RasterTile2D, TileInformation, TilingSpecification,
+    };
     use geoengine_datatypes::spatial_reference::SpatialReference;
     use geoengine_datatypes::util::test::TestDefault;
-    use geoengine_operators::engine::{PlotOperator, RasterOperator, RasterResultDescriptor};
+    use geoengine_operators::engine::{
+        ChunkByteSize, PlotOperator, RasterOperator, RasterResultDescriptor,
+    };
     use geoengine_operators::mock::{MockRasterSource, MockRasterSourceParams};
     use geoengine_operators::plot::{
         Histogram, HistogramBounds, HistogramParams, Statistics, StatisticsParams,
@@ -262,7 +266,11 @@ mod tests {
 
     #[tokio::test]
     async fn json() {
-        let ctx = InMemoryContext::test_default();
+        let tiling_specification = TilingSpecification::new([0.0, 0.0].into(), [3, 2].into());
+        let ctx = InMemoryContext::new_with_context_spec(
+            tiling_specification,
+            ChunkByteSize::test_default(),
+        );
         let session_id = ctx.default_session_ref().await.id();
 
         let workflow = Workflow {
@@ -283,7 +291,7 @@ mod tests {
             .unwrap();
 
         let params = &[
-            ("bbox", "-180,-90,180,90"),
+            ("bbox", "0,-0.3,0.2,0"),
             ("crs", "EPSG:4326"),
             ("time", "2020-01-01T00:00:00.0Z"),
             ("spatialResolution", "0.1,0.1"),
@@ -319,7 +327,11 @@ mod tests {
 
     #[tokio::test]
     async fn json_vega() {
-        let ctx = InMemoryContext::test_default();
+        let tiling_specification = TilingSpecification::new([0.0, 0.0].into(), [3, 2].into());
+        let ctx = InMemoryContext::new_with_context_spec(
+            tiling_specification,
+            ChunkByteSize::test_default(),
+        );
         let session_id = ctx.default_session_ref().await.id();
 
         let workflow = Workflow {
@@ -348,7 +360,7 @@ mod tests {
             .unwrap();
 
         let params = &[
-            ("bbox", "-180,-90,180,90"),
+            ("bbox", "0,-0.3,0.2,0"),
             ("crs", "EPSG:4326"),
             ("time", "2020-01-01T00:00:00.0Z"),
             ("spatialResolution", "0.1,0.1"),

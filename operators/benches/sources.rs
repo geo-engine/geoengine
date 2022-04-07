@@ -53,6 +53,8 @@ fn setup_mock_source(tiling_spec: TilingSpecification) -> MockRasterSourceProces
             RasterTile2D::new(time, [1, 0].into(), geo_transform, grid.clone()),
             RasterTile2D::new(time, [1, 1].into(), geo_transform, grid),
         ],
+        no_data_value,
+        tiling_specification: tiling_spec,
     }
 }
 

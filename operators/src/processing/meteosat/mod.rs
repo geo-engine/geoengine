@@ -146,7 +146,7 @@ mod test_util {
 
     pub(crate) fn create_mock_query() -> RasterQueryRectangle {
         RasterQueryRectangle {
-            spatial_bounds: SpatialPartition2D::new_unchecked((0., 4.).into(), (3., 0.).into()),
+            spatial_bounds: SpatialPartition2D::new_unchecked((0., 3.).into(), (2., 0.).into()),
             time_interval: Default::default(),
             spatial_resolution: SpatialResolution::one(),
         }
