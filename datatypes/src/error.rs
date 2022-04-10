@@ -1,4 +1,4 @@
-use snafu::prelude::*;
+use snafu::{prelude::*, AsErrorSource};
 use std::convert::Infallible;
 
 use crate::{
@@ -10,6 +10,20 @@ use crate::{
     primitives::{Coordinate2D, PrimitivesError, TimeInterval},
     raster::RasterDataType,
 };
+
+pub trait ErrorSource: std::error::Error + Send + Sync + 'static + AsErrorSource {
+    // fn boxed(self) -> Box<Self>;
+}
+
+// pub trait SizedErrorSource: ErrorSource + Sized {}
+
+impl<T> ErrorSource for T where T: std::error::Error + Send + Sync + 'static {}
+
+// impl<T> SizedErrorSource for T where T: ErrorSource + Sized {}
+
+// impl ErrorSource for dyn std::error::Error + Send + Sync + 'static {}
+
+// impl<T> ErrorSource for Box<T> where T: std::error::Error + Send + Sync + 'static {}
 
 #[derive(Debug, Snafu)]
 #[snafu(visibility(pub(crate)))]

@@ -10,9 +10,6 @@ use std::str::FromStr;
 use std::sync::Arc;
 use std::task::Poll;
 
-use chrono::DateTime;
-use chrono::NaiveDate;
-use chrono::NaiveDateTime;
 use futures::future::BoxFuture;
 use futures::stream::{BoxStream, FusedStream};
 use futures::task::Context;
@@ -33,9 +30,9 @@ use geoengine_datatypes::collections::{
     VectorDataType,
 };
 use geoengine_datatypes::primitives::{
-    AxisAlignedRectangle, BoundingBox2D, Coordinate2D, FeatureDataType, FeatureDataValue, Geometry,
-    MultiLineString, MultiPoint, MultiPolygon, NoGeometry, TimeInstance, TimeInterval, TimeStep,
-    TypedGeometry, VectorQueryRectangle,
+    AxisAlignedRectangle, BoundingBox2D, Coordinate2D, DateTime, DateTimeParseFormat,
+    FeatureDataType, FeatureDataValue, Geometry, MultiLineString, MultiPoint, MultiPolygon,
+    NoGeometry, TimeInstance, TimeInterval, TimeStep, TypedGeometry, VectorQueryRectangle,
 };
 use geoengine_datatypes::util::arrow::ArrowTyped;
 
@@ -775,23 +772,20 @@ where
 
         match time_format {
             OgrSourceTimeFormat::Auto => Box::new(move |field: FieldValue| match field {
-                FieldValue::DateValue(value) => Ok(value.and_hms(0, 0, 0).naive_utc().into()),
-                FieldValue::DateTimeValue(value) => Ok(value.naive_utc().into()),
+                FieldValue::DateValue(value) => Ok(DateTime::from(value.and_hms(0, 0, 0)).into()),
+                FieldValue::DateTimeValue(value) => Ok(DateTime::from(value).into()),
                 _ => Err(Error::OgrFieldValueIsNotDateTime),
             }),
             OgrSourceTimeFormat::Custom { custom_format } => Box::new(move |field: FieldValue| {
                 let date = field.into_string().ok_or(Error::OgrFieldValueIsNotString)?;
-                let date_time_result = DateTime::parse_from_str(&date, &custom_format)
-                    .map(|t| t.timestamp_millis())
-                    .or_else(|_| {
-                        NaiveDateTime::parse_from_str(&date, &custom_format)
-                            .map(|n| n.timestamp_millis())
-                    })
-                    .or_else(|_| {
-                        NaiveDate::parse_from_str(&date, &custom_format)
-                            .map(|d| d.and_hms(0, 0, 0).timestamp_millis())
-                    });
-                Ok(date_time_result?.try_into()?)
+                // TODO: create only once
+                let fmt = DateTimeParseFormat::custom(custom_format.clone());
+                let datetime =
+                    DateTime::parse_from_str(&date, &fmt).map_err(|e| Error::TimeParse {
+                        source: Box::new(e),
+                    })?;
+
+                Ok(TimeInstance::from(datetime))
             }),
             OgrSourceTimeFormat::Seconds => Box::new(move |field: FieldValue| match field {
                 FieldValue::IntegerValue(v) => {
@@ -800,9 +794,13 @@ where
                 FieldValue::Integer64Value(v) => {
                     TimeInstance::from_millis(v * 1000).context(error::DataType)
                 }
-                FieldValue::StringValue(v) => DateTime::parse_from_str(&v, "%s")
-                    .context(error::TimeParse)
-                    .and_then(|d| d.timestamp_millis().try_into().context(error::DataType)),
+                FieldValue::StringValue(v) => {
+                    DateTime::parse_from_str(&v, &DateTimeParseFormat::Unix)
+                        .map_err(|e| Error::TimeParse {
+                            source: Box::new(e),
+                        })
+                        .map(TimeInstance::from)
+                }
                 _ => Err(Error::OgrFieldValueIsNotValidForSeconds),
             }),
         }
@@ -1412,7 +1410,7 @@ mod tests {
             time: OgrSourceDatasetTimeType::Start {
                 start_field: "start".to_string(),
                 start_format: OgrSourceTimeFormat::Custom {
-                    custom_format: "YYYY-MM-DD".to_string(),
+                    custom_format: "[year]-[month]-[day]".to_string(),
                 },
                 duration: OgrSourceDurationSpec::Value(TimeStep {
                     granularity: TimeGranularity::Seconds,
@@ -1455,7 +1453,7 @@ mod tests {
                     "startField": "start",
                     "startFormat": {
                         "format": "custom",
-                        "customFormat": "YYYY-MM-DD"
+                        "customFormat": "[year]-[month]-[day]"
                     },
                     "duration": {
                         "type": "value",
@@ -1502,7 +1500,7 @@ mod tests {
                     "startField": "start",
                     "startFormat": {
                         "format": "custom",
-                        "customFormat": "YYYY-MM-DD"
+                        "customFormat": "[year]-[month]-[day]"
                     },
                     "duration": {
                         "type": "value",
@@ -4135,7 +4133,7 @@ mod tests {
                     time: OgrSourceDatasetTimeType::Start {
                         start_field: "Date".to_owned(),
                         start_format: OgrSourceTimeFormat::Custom {
-                            custom_format: "%d.%m.%Y".to_owned(),
+                            custom_format: "[day].[month].[year]".to_owned(),
                         },
                         duration: OgrSourceDurationSpec::Value(TimeStep {
                             granularity: TimeGranularity::Seconds,
@@ -4247,7 +4245,8 @@ mod tests {
                     time: OgrSourceDatasetTimeType::Start {
                         start_field: "DateTime".to_owned(),
                         start_format: OgrSourceTimeFormat::Custom {
-                            custom_format: "%d.%m.%Y %H:%M:%S".to_owned(),
+                            custom_format: "[day].[month].[year] [hour]:[minute]:[second]"
+                                .to_owned(),
                         },
                         duration: OgrSourceDurationSpec::Value(TimeStep {
                             granularity: TimeGranularity::Seconds,
@@ -4359,7 +4358,8 @@ mod tests {
                     time: OgrSourceDatasetTimeType::Start {
                         start_field: "DateTimeTz".to_owned(),
                         start_format: OgrSourceTimeFormat::Custom {
-                            custom_format: "%d.%m.%Y %H:%M:%S %z".to_owned(),
+                            custom_format: "[day].[month].[year] [hour]:[minute]:[second] [tz]"
+                                .to_owned(),
                         },
                         duration: OgrSourceDurationSpec::Value(TimeStep {
                             granularity: TimeGranularity::Seconds,
@@ -4472,7 +4472,8 @@ mod tests {
                     time: OgrSourceDatasetTimeType::Start {
                         start_field: "DateTime".to_owned(),
                         start_format: OgrSourceTimeFormat::Custom {
-                            custom_format: "%d.%m.%Y %H:%M:%S".to_owned(),
+                            custom_format: "[day].[month].[year] [hour]:[minute]:[second]"
+                                .to_owned(),
                         },
                         duration: OgrSourceDurationSpec::Value(TimeStep {
                             granularity: TimeGranularity::Seconds,

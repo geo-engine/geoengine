@@ -35,7 +35,6 @@ fn new_satellite_key() -> RasterPropertiesKey {
 
 #[cfg(test)]
 mod test_util {
-    use chrono::{TimeZone, Utc};
     use futures::StreamExt;
     use geoengine_datatypes::hashmap;
     use geoengine_datatypes::util::test::TestDefault;
@@ -43,7 +42,7 @@ mod test_util {
 
     use geoengine_datatypes::dataset::{DatasetId, InternalDatasetId};
     use geoengine_datatypes::primitives::{
-        ContinuousMeasurement, Measurement, RasterQueryRectangle, SpatialPartition2D,
+        ContinuousMeasurement, DateTime, Measurement, RasterQueryRectangle, SpatialPartition2D,
         SpatialResolution, TimeGranularity, TimeInstance, TimeInterval, TimeStep,
     };
     use geoengine_datatypes::raster::{
@@ -131,14 +130,8 @@ mod test_util {
         RasterQueryRectangle {
             spatial_bounds: SpatialPartition2D::new_unchecked(ul, lr),
             time_interval: TimeInterval::new_unchecked(
-                TimeInstance::from(
-                    Utc.datetime_from_str("20121212_1200", "%Y%m%d_%H%M")
-                        .unwrap(),
-                ),
-                TimeInstance::from(
-                    Utc.datetime_from_str("20121212_1215", "%Y%m%d_%H%M")
-                        .unwrap(),
-                ),
+                TimeInstance::from(DateTime::new_utc(2012, 12, 12, 12, 0, 0)),
+                TimeInstance::from(DateTime::new_utc(2012, 12, 12, 12, 15, 0)),
             ),
             spatial_resolution: sr,
         }
@@ -213,9 +206,7 @@ mod test_util {
     pub(crate) fn _create_gdal_src(ctx: &mut MockExecutionContext) -> GdalSource {
         let dataset_id: DatasetId = InternalDatasetId::new().into();
 
-        let timestamp = Utc
-            .datetime_from_str("20121212_1200", "%Y%m%d_%H%M")
-            .unwrap();
+        let timestamp = DateTime::new_utc(2012, 12, 12, 12, 0, 0);
 
         let no_data_value = Some(0.);
         let meta = GdalMetaDataRegular {

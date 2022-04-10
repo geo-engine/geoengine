@@ -1,6 +1,5 @@
 use crate::primitives::error;
 use crate::util::Result;
-use chrono::{DateTime, NaiveDateTime, TimeZone, Utc};
 #[cfg(feature = "postgres")]
 use postgres_types::private::BytesMut;
 #[cfg(feature = "postgres")]
@@ -15,6 +14,9 @@ use std::{
     ops::{Add, Sub},
     str::FromStr,
 };
+
+use super::datetime::DateTimeError;
+use super::{DateTime, Duration};
 
 #[derive(Clone, Copy, Serialize, PartialEq, Eq, PartialOrd, Ord, Debug)]
 #[repr(C)]
@@ -38,19 +40,11 @@ impl TimeInstance {
         TimeInstance(millis)
     }
 
-    pub fn as_utc_date_time(self) -> Option<DateTime<Utc>> {
-        Utc.timestamp_millis_opt(self.0).single()
-    }
-
-    pub fn as_naive_date_time(self) -> Option<NaiveDateTime> {
-        self.as_utc_date_time().map(|t| t.naive_utc())
-    }
-
     pub fn as_rfc3339(self) -> String {
         let instance = self.clamp(TimeInstance::MIN, TimeInstance::MAX);
 
         instance
-            .as_utc_date_time()
+            .as_date_time()
             .expect("TimeInstance is not valid")
             .to_rfc3339()
     }
@@ -60,7 +54,13 @@ impl TimeInstance {
     }
 
     pub fn now() -> Self {
-        Self::from(chrono::offset::Utc::now())
+        Self::from(DateTime::now())
+    }
+
+    /// Converts a `TimeInstance` to a `DateTime`.
+    /// If this would overflow the range of `DateTime`, the result is `None`.
+    pub fn as_date_time(self) -> Option<DateTime> {
+        DateTime::try_from(self).ok()
     }
 
     pub const MIN: Self = TimeInstance::from_millis_unchecked(-8_334_632_851_200_001 + 1);
@@ -70,18 +70,6 @@ impl TimeInstance {
 impl std::fmt::Display for TimeInstance {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         write!(f, "{}", self.as_rfc3339())
-    }
-}
-
-impl From<NaiveDateTime> for TimeInstance {
-    fn from(date_time: NaiveDateTime) -> Self {
-        TimeInstance::from_millis(date_time.timestamp_millis()).expect("valid for chrono datetimes")
-    }
-}
-
-impl From<DateTime<Utc>> for TimeInstance {
-    fn from(date_time: DateTime<Utc>) -> Self {
-        TimeInstance::from_millis(date_time.timestamp_millis()).expect("valid for chrono datetimes")
     }
 }
 
@@ -105,14 +93,14 @@ impl ToSql for TimeInstance {
     where
         Self: Sized,
     {
-        self.as_utc_date_time().unwrap().to_sql(ty, out)
+        self.as_date_time().to_sql(ty, out)
     }
 
     fn accepts(ty: &Type) -> bool
     where
         Self: Sized,
     {
-        <DateTime<Utc> as ToSql>::accepts(ty)
+        <DateTime as ToSql>::accepts(ty)
     }
 
     fn to_sql_checked(
@@ -120,18 +108,18 @@ impl ToSql for TimeInstance {
         ty: &Type,
         out: &mut BytesMut,
     ) -> Result<IsNull, Box<dyn Error + Sync + Send>> {
-        self.as_utc_date_time().unwrap().to_sql_checked(ty, out)
+        self.as_date_time().to_sql_checked(ty, out)
     }
 }
 
 #[cfg(feature = "postgres")]
 impl<'a> FromSql<'a> for TimeInstance {
     fn from_sql(ty: &Type, raw: &'a [u8]) -> Result<Self, Box<dyn Error + Sync + Send>> {
-        DateTime::<Utc>::from_sql(ty, raw).map(Into::into)
+        DateTime::from_sql(ty, raw).map(Into::into)
     }
 
     fn accepts(ty: &Type) -> bool {
-        <DateTime<Utc> as FromSql>::accepts(ty)
+        <DateTime as FromSql>::accepts(ty)
     }
 }
 
@@ -151,12 +139,19 @@ impl Sub<i64> for TimeInstance {
     }
 }
 
+impl Sub<TimeInstance> for TimeInstance {
+    type Output = Duration;
+
+    fn sub(self, rhs: Self) -> Self::Output {
+        Duration::milliseconds(self.0 - rhs.0)
+    }
+}
+
 impl FromStr for TimeInstance {
-    type Err = chrono::ParseError;
+    type Err = DateTimeError;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        let date_time = DateTime::<chrono::FixedOffset>::parse_from_rfc3339(s)?;
-        let date_time = date_time.with_timezone(&Utc);
+        let date_time = DateTime::parse_from_rfc3339(s)?;
         Ok(date_time.into())
     }
 }
@@ -207,7 +202,7 @@ mod tests {
 
     #[test]
     fn bounds_wrt_chrono() {
-        assert_eq!(TimeInstance::MIN, TimeInstance::from(chrono::MIN_DATETIME));
-        assert_eq!(TimeInstance::MAX, TimeInstance::from(chrono::MAX_DATETIME));
+        assert_eq!(TimeInstance::MIN, TimeInstance::from(DateTime::MIN));
+        assert_eq!(TimeInstance::MAX, TimeInstance::from(DateTime::MAX));
     }
 }

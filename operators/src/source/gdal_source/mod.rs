@@ -19,7 +19,7 @@ use futures::{Future, TryStreamExt};
 use gdal::raster::{GdalType, RasterBand as GdalRasterBand};
 use gdal::{DatasetOptions, GdalOpenFlags, Metadata as GdalMetadata};
 use geoengine_datatypes::primitives::{
-    Coordinate2D, RasterQueryRectangle, SpatialPartition2D, SpatialPartitioned,
+    Coordinate2D, DateTimeParseFormat, RasterQueryRectangle, SpatialPartition2D, SpatialPartitioned,
 };
 use geoengine_datatypes::raster::{
     EmptyGrid, GeoTransform, Grid2D, GridShape2D, GridShapeAccess, Pixel, RasterDataType,
@@ -266,10 +266,12 @@ impl GdalDatasetParameters {
                 TimeReference::End => time.end(),
             };
             let time_string = time
-                .as_naive_date_time()
+                .as_date_time()
                 .ok_or(Error::TimeInstanceNotDisplayable)?
-                .format(&time_placeholder.format)
-                .to_string();
+                // TODO: create only once
+                .format(&DateTimeParseFormat::custom(
+                    time_placeholder.format.clone(),
+                ));
 
             // TODO: use more efficient algorithm for replacing multiple placeholders, e.g. aho-corasick
             file_path = file_path.replace(placeholder, &time_string);
