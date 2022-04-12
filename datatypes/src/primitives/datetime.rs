@@ -180,7 +180,6 @@ impl DateTime {
     }
 
     pub fn day_of_year(&self) -> u16 {
-        // TODO: calculate offset?
         self.datetime.ordinal() as u16
     }
 
