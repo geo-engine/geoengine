@@ -1,20 +1,20 @@
 use futures::{StreamExt, Stream};
 use geoengine_datatypes::{primitives::{SpatialPartition2D, TimeInstance, TimeInterval}, raster::{GridOrEmpty, Pixel}};
 use crate::engine::{QueryContext, RasterQueryProcessor};
-use pyo3::{types::{PyModule, PyUnicode}};
 use ndarray::{Array2};
-use numpy::{PyArray};
 use rand::prelude::*;
 use crate::util::Result;
 use core::pin::Pin;
 use geoengine_datatypes::{primitives::QueryRectangle, raster::{BaseTile,GridShape}};
 use crate::error::Error;
-use crate::pro::datatypes::{RasterResult, Zip};
-use std::time::{Instant};
+use crate::pro::datatypes::{RasterResult, Zip, PythonTrainingSession};
 
+///Performs the training. 
 #[allow(clippy::too_many_arguments)]
 pub async fn imseg_fit<T, C: QueryContext>(
+    //The input channels, which have to be of the same datatype
     processors: Vec<Box<dyn RasterQueryProcessor<RasterType=T>>>,
+    //The ground truth whcih is of type u8
     processor_truth: Box<dyn RasterQueryProcessor<RasterType = u8>>,
     query_rect: QueryRectangle<SpatialPartition2D>,
     query_ctx: C,
@@ -23,29 +23,22 @@ pub async fn imseg_fit<T, C: QueryContext>(
     no_data_value: u8,
     tile_size: [usize;2],
     default_value: T,
+    debugging: bool,
 ) -> Result<()>
 where
     T: Pixel + numpy::Element,
     C: 'static,
 {
 
-    //For some reason we need that now...
-    pyo3::prepare_freethreaded_python();
-    let gil = pyo3::Python::acquire_gil();
-    let py = gil.python();
-
     let mut rng = rand::thread_rng();
-    let mut time_general_processing: u128 = 0;
-    let mut time_waiting: u128 = 0;
-    let mut time_data_processing: u128 = 0;
-    let mut time_python: u128 = 0;
-    let mut time = Instant::now();
 
-    let py_mod = PyModule::from_code(py, include_str!("tf_v2.py"),"filename.py", "modulename").unwrap();
-    let name = PyUnicode::new(py, "big_model_1");
-    //TODO change depreciated function
-    let _init = py_mod.call("initUnet2", (5,name, batch_size), None).unwrap();
-    let _check_model_size = py_mod.call("get_model_memory_usage", (batch_size, ), None).unwrap();
+    let mut pts: PythonTrainingSession<T> = PythonTrainingSession::new();
+    
+    let mut init_pts = pts.init();
+    init_pts.load_module(include_str!("tf_v2.py"));
+    
+
+    init_pts.initiate_model("test_model_1", 5, batch_size as u8);
     //since every 15 minutes an image is available...
     let step: i64 = (batch_size as i64 * 900_000) * batches_per_query as i64;
     println!("Step: {}", step);
@@ -54,11 +47,11 @@ where
 
     let mut rand_index: usize; 
     
-    let mut checkoint = 0;
-   
     let nop = processors.len();
+
     let mut final_buff_proc: Vec<Vec<Vec<T>>> = Vec::new();
     let mut final_buff_truth: Vec<Vec<u8>> = Vec::new();
+
     while !queries.is_empty() {
         let queries_left = queries.len();
         println!("queries left: {:?}", queries_left);
@@ -67,9 +60,9 @@ where
             rand_index = rng.gen_range(0..queries_left-1);
         } else {
             rand_index = 0;
-        }           
+        }         
+
         let the_chosen_one = queries.remove(rand_index);
-        checkoint = checkoint + 1;
 
         println!("{:?}", the_chosen_one.time_interval.start().as_naive_date_time().unwrap());
 
@@ -80,22 +73,14 @@ where
 
         let mut truth_stream = processor_truth.raster_query(the_chosen_one, &query_ctx).await?;
 
-
-        
-
-        //let x = bffr[0].next().await;
-
         
             let mut zip = Zip::new(bffr);
             
 
             let mut buffer_proc: Vec<RasterResult<T>> = Vec::with_capacity(nop);
             let mut truth_int: RasterResult<u8>;
-            time_general_processing = time_general_processing + time.elapsed().as_millis();
-            time = Instant::now();
+
             while let (Some(proc), Some(truth)) = (zip.next().await, truth_stream.next().await) {
-                time_waiting = time_waiting + time.elapsed().as_millis();
-                time = Instant::now();
                 for processor in proc {
                     match processor {
                         Ok(processor) => {
@@ -133,17 +118,16 @@ where
                         if let RasterResult::Some(x) = x {
                             return x;
                         } else {
-                            panic!("!!!");
+                            unreachable!();
                         }
                     }).collect());
                     if let RasterResult::Some(x) = truth_int{
                         final_buff_truth.push(x);
                     } else {
-                        panic!("!!!");
+                        unreachable!();
                     }            
                 }
-                time_general_processing = time_general_processing + time.elapsed().as_millis();
-                time = Instant::now();
+      
                 
                 
                 if final_buff_proc.len() == batch_size {
@@ -174,21 +158,9 @@ where
     
                     }
                     
-                    let pool = unsafe {py.new_pool()};
-                    let py = pool.python();
-                    let py_img = PyArray::from_owned_array(py, arr_proc_final);
-                    let py_truth = PyArray::from_owned_array(py, arr_truth_final);
-
-                    time_data_processing = time_data_processing + time.elapsed().as_millis();
-                    time = Instant::now();
-                    let _result = py_mod.call("fit", (py_img, py_truth, batch_size), None).unwrap();
-        
-                    time_python = time_python + time.elapsed().as_millis();
-                    time = Instant::now();
+                    init_pts.training_step(arr_proc_final, arr_truth_final);
                 }
                 buffer_proc.drain(..);
-                time_general_processing = time_general_processing + time.elapsed().as_millis();
-                time = Instant::now();
             }
             
                 
@@ -197,25 +169,30 @@ where
         
     }
 
-    println!("Time general processing: {}", time_general_processing);
-    println!("Time waiting for data: {}", time_waiting);
-    println!("Time data processing: {}", time_data_processing);
-    println!("Time python: {}", time_python);
-    //TODO change depreciated function
-    let _save = py_mod.call("save", (name, ), None).unwrap();
+    init_pts.save("test_model_1");
     Ok(())
     
     
 }
-/// Splits time intervals into smaller intervalls of length step.
+/// Splits time intervals into smaller intervalls of length step. Step has to be in milliseconds and larger than 1000!
 fn split_time_intervals(query_rect: QueryRectangle<SpatialPartition2D>, step: i64 ) -> Result<Vec<QueryRectangle<SpatialPartition2D>>> {
+
+    assert!(step >= 1000);
+
     let mut start = query_rect.time_interval.start();
     let mut inter_end = query_rect.time_interval.start();
     let end = query_rect.time_interval.end();
+
     let mut queries: Vec<QueryRectangle<SpatialPartition2D>> = Vec::new();
-    while start.as_utc_date_time().unwrap().timestamp() * 1000 + step<= (end.as_utc_date_time().unwrap().timestamp() * 1000){
-        let end_time_new = (inter_end.as_utc_date_time().unwrap().timestamp() * 1000) + step;
+
+    let mut start_plus_step = start.as_utc_date_time().unwrap().timestamp() * 1000 + step;
+    let mut end_time = end.as_utc_date_time().unwrap().timestamp() * 1000;
+
+    while start_plus_step <= end_time {
+
+        let end_time_new = inter_end.as_utc_date_time().unwrap().timestamp() * 1000 + step;
         inter_end = TimeInstance::from_millis(end_time_new)?;
+        
         
         let new_rect = QueryRectangle{
             spatial_bounds: query_rect.spatial_bounds,
@@ -223,8 +200,11 @@ fn split_time_intervals(query_rect: QueryRectangle<SpatialPartition2D>, step: i6
             spatial_resolution: query_rect.spatial_resolution
         };
         queries.push(new_rect);
-        let start_time_new = (start.as_utc_date_time().unwrap().timestamp() * 1000) + step;
+        
+        let start_time_new = start.as_utc_date_time().unwrap().timestamp() * 1000 + step;
         start = TimeInstance::from_millis(start_time_new)?;
+
+        start_plus_step = start.as_utc_date_time().unwrap().timestamp() * 1000 + step;
         
     }
     Ok(queries)
@@ -232,7 +212,7 @@ fn split_time_intervals(query_rect: QueryRectangle<SpatialPartition2D>, step: i6
 
 #[cfg(test)]
 mod tests {
-    use geoengine_datatypes::{dataset::{DatasetId, InternalDatasetId}, hashmap, primitives::{Coordinate2D, TimeInterval, SpatialResolution,  Measurement, TimeGranularity, TimeInstance, TimeStep}, raster::{RasterDataType}, raster::{TilingSpecification}, spatial_reference::{SpatialReference, SpatialReferenceAuthority, SpatialReferenceOption}};
+    use geoengine_datatypes::{dataset::{DatasetId, InternalDatasetId}, hashmap, primitives::{Coordinate2D, TimeInterval, SpatialResolution, Measurement, TimeGranularity, TimeInstance, TimeStep}, raster::{RasterDataType}, raster::{TilingSpecification}, spatial_reference::{SpatialReference, SpatialReferenceAuthority, SpatialReferenceOption}};
     use geoengine_datatypes::{util::Identifier, raster::{RasterPropertiesEntryType}};
     use std::{path::PathBuf};
     use crate::{engine::{MockExecutionContext,MockQueryContext, RasterOperator, RasterResultDescriptor}, source::{FileNotFoundHandling, GdalDatasetParameters, GdalMetaDataRegular, GdalSource, GdalSourceParameters,GdalMetadataMapping, GdalSourceTimePlaceholder, TimeReference, GdalDatasetGeoTransform}};
@@ -242,6 +222,35 @@ mod tests {
 
     use super::*;
 
+    #[tokio::test]
+    async fn split_time_intervals_test() {
+
+        let mock_rectangle = QueryRectangle {
+            spatial_bounds: SpatialPartition2D::new((0.0, 1.0).into(), (1.0, 0.0).into()).unwrap(),
+            time_interval: TimeInterval::new(0, 1_000_000)
+                .unwrap(),
+            spatial_resolution: SpatialResolution::one(),
+        };
+
+        let splitted_rectangles = split_time_intervals(mock_rectangle, 250_000).unwrap();
+
+        assert!(splitted_rectangles.len() == (1_000_000/250_000));
+
+        let first_interval = splitted_rectangles.get(0).unwrap().time_interval;
+        assert!(first_interval.start().as_utc_date_time().unwrap().timestamp() * 1000 == 0);
+        assert!(first_interval.end().as_utc_date_time().unwrap().timestamp() * 1000 == 250_000);
+
+        let second_interval = splitted_rectangles.get(1).unwrap().time_interval;
+        assert!(second_interval.start().as_utc_date_time().unwrap().timestamp() * 1000 == 250_000);
+        assert!(second_interval.end().as_utc_date_time().unwrap().timestamp() * 1000 == 500_000);
+
+
+        let last_interval = splitted_rectangles.last().unwrap().time_interval;
+        assert!(last_interval.start().as_utc_date_time().unwrap().timestamp() * 1000 == 750_000);
+        assert!(last_interval.end().as_utc_date_time().unwrap().timestamp() * 1000 == 1_000_000);
+    }
+
+    //Training on the MSG and CLAAS data. If this runs it works.
     #[tokio::test]
     async fn imseg_fit_test() {
         let ctx = MockQueryContext::test_default();
@@ -1198,11 +1207,12 @@ mod tests {
                 .unwrap(),
             spatial_resolution: query_spatial_resolution,
         }, ctx,
-    24 as usize,
+    1 as usize,
     32 as usize,
 0 as u8,
 [512,512],
-0.0).await.unwrap();
+0.0,
+true).await.unwrap();
     }
 }
 //1136005200000

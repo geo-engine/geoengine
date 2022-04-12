@@ -6,7 +6,96 @@ use pin_project::pin_project;
 //use std::task::{Poll, Context};
 use core::pin::Pin;
 use std::time::{Instant};
+use pyo3::{Python, GILGuard, types::{PyModule, PyUnicode}};
+use ndarray::{ArrayBase, OwnedRepr, Dim};
+use std::marker::PhantomData;
+use numpy::PyArray;
 
+
+///Python session, which keeps a GIL guard. Creates an intiated training session.
+pub struct PythonTrainingSession<T> {
+    gil_guard: GILGuard,
+    phantom_data: PhantomData<T>,
+}
+///Initialized session can be used to perform all training related tasks. Can load any python file as module. File MUST have methods for intializing model(initUnet), loading model(load), training(train), prediction(pred) and saving(save).
+pub struct InitializedPythonTrainingSession<'a, T> {
+    py: Python<'a>,
+    py_mod: Option<&'a PyModule>,
+    phantom_data: PhantomData<T>,
+}
+
+impl<'a, T> PythonTrainingSession<T> where T: numpy::Element {
+    pub fn new() -> Self {
+        pyo3::prepare_freethreaded_python();
+        PythonTrainingSession {
+            gil_guard: pyo3::Python::acquire_gil(),
+            phantom_data: PhantomData,
+        }
+    }
+
+    pub fn init(&'a mut self) -> InitializedPythonTrainingSession<'a, T> {
+
+        InitializedPythonTrainingSession {
+            py: self.gil_guard.python(),
+            py_mod: None,
+            phantom_data: PhantomData,
+        }
+
+    }
+
+
+}
+
+impl<'a, T> InitializedPythonTrainingSession<'a, T> where T: numpy::Element {
+
+    pub fn load_module(&mut self, module_name: &'static str) -> () {
+        self.py_mod = Some(PyModule::from_code(self.py, module_name,"filename.py", "modulename").unwrap());
+    }
+
+    //Load an existing model.
+    pub fn load_model(&self, name: &'static str) -> () {
+        if(self.py_mod.is_some()) {
+            let model_name = PyUnicode::new(self.py, name);
+            self.py_mod.unwrap().call("load", (model_name,), None).unwrap();
+        } else {
+            println!("Initiate session first");
+            
+        }
+    }
+    //Initiates new model under the given name
+    pub fn initiate_model(&self, name: &'static str, number_of_classes: u8, batch_size: u8) -> () {
+        if(self.py_mod.is_some()) {
+            let model_name = PyUnicode::new(self.py, name);
+            self.py_mod.unwrap().call("initUnet2", (number_of_classes,model_name,batch_size), None).unwrap();
+        } else {
+            println!("Initiate session first");
+            
+        }
+    }
+
+    //Performs one training step
+    pub fn training_step(&self, regressors: ArrayBase<OwnedRepr<T>, Dim<[usize; 4]>>, ground_truth: ArrayBase<OwnedRepr<u8>, Dim<[usize; 4]>>) -> () {
+
+        let pool = unsafe {self.py.new_pool()};
+        let pool_py = pool.python();
+
+        let py_img = PyArray::from_owned_array(pool_py, regressors);
+        let py_truth = PyArray::from_owned_array(pool_py, ground_truth);
+
+        let _result = self.py_mod.unwrap().call("fit", (py_img, py_truth), None).unwrap();
+    }
+
+    pub fn save(&self, name: &'static str) -> () {
+        if(self.py_mod.is_some()) {
+            let model_name = PyUnicode::new(self.py, name);
+            self.py_mod.unwrap().call("save", (model_name,), None).unwrap();
+        } else {
+            println!("Initiate session first");
+            
+        }
+    }
+
+}
 
 #[derive(PartialEq, Clone)]
 pub enum RasterResult<T>{
@@ -140,6 +229,19 @@ where
     }
 }
 
+#[cfg(test)]
+mod tests {
+
+    use super::*; 
+
+    #[tokio::test]
+    async fn python_training_session_test() {
+        let mut pts: PythonTrainingSession<i32> = PythonTrainingSession::new();
+        let mut init_pts = pts.init();
+        init_pts.load_module(include_str!("tf_v2.py"));
+
+    }
+}
 
 
 #[tokio::test]

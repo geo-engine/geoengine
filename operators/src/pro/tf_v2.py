@@ -233,21 +233,12 @@ def initUnet2(num_classes, id, batch_size):
     model.save('saved_model/{}'.format(id))
     print("Saved model under saved_model/{}".format(id))
 
-def fit(X, y, batch_size):    
+def fit(X, y):    
     global model
     global update
-    #matplotlib.pyplot.imsave('ir_test.png', X[0][:,:,0])
-    #matplotlib.pyplot.imsave('claas_test.png', y[0][:,:,0], vmin=0,vmax=3)
-    #print(y.shape)
-    #print(X.shape)
-    #print("contains NaN's: {}".format(np.isnan(np.sum(X))))
-    #print("contains inf's: {}".format(~np.all(~np.isinf(X))))
-    #X = np.nan_to_num(X)
-    #matplotlib.pyplot.imsave('train_claas.png', y[0][:,:,0], vmin=0,vmax=3)
-    #matplotlib.pyplot.imsave('train_msg.png', X[0][:,:,1])
     
     global call
-    model.fit(X, y, batch_size = batch_size, callbacks=[call])
+    model.fit(X, y, callbacks=[call])
     update = update + 1
     if update >= 30:
         update = 0
@@ -258,8 +249,7 @@ def fit(X, y, batch_size):
             for j in range(0,512):
                 max = np.argmax(result[i,j,:], axis=0)
                 classes[i,j]=max
-        #classes = np.unique(classes,return_inverse=True)[1].reshape(classes.shape)
-        #classes = classes/float(classes.max())
+
         clist = ["purple", "blue", "red", "green", "yellow"]
         cmap = matplotlib.colors.ListedColormap(clist)
         matplotlib.pyplot.imsave('train_prediction.png', classes, vmin=0,vmax=4, cmap=cmap)
@@ -274,25 +264,6 @@ def fit(X, y, batch_size):
 def predict(X, batchsize):
     global model
     result = model.predict(X, batch_size = batchsize, verbose=1)
-    #result_a = result[0]
-    #classes = np.zeros((512,512))
-    #for i in range(0,512):
-    #    for j in range(0,512):
-    #        max = np.argmax(result_a[i,j,:], axis=0)
-    #        classes[i,j]=max
-
-    #classes = result[0][:,:,0].argmax()
-    #matplotlib.pyplot.imsave('prediction_val.png', classes, vmin=0,vmax=3)
-    #matplotlib.pyplot.imsave('groundtruth_val.png', y[0][:,:,0], vmin=0,vmax=3)
-    #matplotlib.pyplot.imsave('ir_val.png', X[0][:,:,0])
-    
-    #model.summary()
-    #print(result.shape)
-    #print(result[0][0][0])
-    #print(result[0][0][1])
-    #print(result[0][0][2])
-    #print(result[0][0][3])
-    
     return result
 
 def sameate(X, y, batch_size):
