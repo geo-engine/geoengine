@@ -1,9 +1,10 @@
 use crate::error::ErrorSource;
 use crate::primitives::TimeInstance;
-use chrono::{Datelike, NaiveDate, NaiveDateTime, Offset, Timelike};
+use chrono::{Datelike, NaiveDate, Timelike};
 use serde::{Deserialize, Serialize};
 use snafu::Snafu;
 use std::cmp::Ordering;
+use std::fmt::Display;
 use std::ops::{Add, Sub};
 use std::str::FromStr;
 
@@ -12,17 +13,6 @@ use std::str::FromStr;
 pub struct DateTime {
     datetime: chrono::DateTime<chrono::Utc>,
 }
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub struct UtcOffset {
-    hours: i8,
-    minutes: i8,
-}
-
-pub const UTC: UtcOffset = UtcOffset {
-    hours: 0,
-    minutes: 0,
-};
 
 impl DateTime {
     /// The minimum possible `DateTime`.
@@ -172,17 +162,6 @@ impl DateTime {
         Ok(date_time.into())
     }
 
-    // TODO: is this inprecise?
-    pub fn parse_relaxed(input: &str) -> Result<Self, DateTimeError> {
-        let date_time = chrono::DateTime::<chrono::FixedOffset>::from_str(input).map_err(|e| {
-            DateTimeError::DateParse {
-                source: Box::new(e),
-            }
-        })?;
-
-        Ok(date_time.into())
-    }
-
     pub fn format(&self, format: &DateTimeParseFormat) -> String {
         let chrono_date_time: chrono::DateTime<chrono::FixedOffset> = self.into();
         let parse_format = format._to_parse_format();
@@ -243,29 +222,28 @@ impl DateTime {
     }
 }
 
-impl UtcOffset {
-    fn _to_fixed_offset(self) -> chrono::FixedOffset {
-        let minute_in_secs = 60;
-        let hour_in_secs = 3600;
-        chrono::FixedOffset::east(
-            i32::from(self.hours) * hour_in_secs + i32::from(self.minutes) * minute_in_secs,
-        )
+impl FromStr for DateTime {
+    type Err = DateTimeError;
+
+    fn from_str(input: &str) -> Result<Self, Self::Err> {
+        let date_time = chrono::DateTime::<chrono::FixedOffset>::from_str(input).map_err(|e| {
+            DateTimeError::DateParse {
+                source: Box::new(e),
+            }
+        })?;
+
+        Ok(date_time.into())
     }
+}
 
-    fn _from_fixed_offset(offset: chrono::FixedOffset) -> Self {
-        let offset_seconds = offset.local_minus_utc();
-
-        if offset_seconds == 0 {
-            return UTC;
-        }
-
-        let minute_in_secs = 60;
-        let hour_in_secs = 3600;
-
-        let hours = (offset.local_minus_utc() / hour_in_secs) as i8;
-        let minutes = (offset.local_minus_utc() % hour_in_secs / minute_in_secs) as i8;
-
-        Self { hours, minutes }
+impl Display for DateTime {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "{}",
+            self.datetime
+                .to_rfc3339_opts(chrono::SecondsFormat::Millis, true)
+        )
     }
 }
 
@@ -326,64 +304,68 @@ impl From<&DateTime> for chrono::DateTime<chrono::FixedOffset> {
     }
 }
 
-pub enum DateTimeParseFormat {
-    Ymd,
-    Unix,
-    Custom {
-        fmt: String,
-        has_tz: bool,
-        has_time: bool,
-    },
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct DateTimeParseFormat {
+    fmt: String,
+    chrono_fmt: String,
+    has_tz: bool,
+    has_time: bool,
 }
 
 impl DateTimeParseFormat {
     pub fn custom(fmt: String) -> Self {
         let has_tz = fmt.contains("[tz]");
+        // TODO: optimize
         let has_time = fmt.contains("[hour]")
             || fmt.contains("[minute]")
             || fmt.contains("[second]")
-            || fmt.contains("[millis]");
-        let fmt = Self::_parse_custom_format(fmt);
-        DateTimeParseFormat::Custom {
+            || fmt.contains("[millis]")
+            || fmt.contains("[unix_seconds]");
+        let chrono_fmt = Self::_parse_custom_format(fmt.clone());
+        DateTimeParseFormat {
             fmt,
+            chrono_fmt,
             has_tz,
             has_time,
         }
     }
 
-    fn has_tz(&self) -> bool {
-        match self {
-            DateTimeParseFormat::Ymd | DateTimeParseFormat::Unix => false,
-            DateTimeParseFormat::Custom {
-                fmt: _,
-                has_tz,
-                has_time: _,
-            } => *has_tz,
+    pub fn unix() -> Self {
+        let fmt = "[unix_seconds]".to_owned();
+        let chrono_fmt = Self::_parse_custom_format(fmt.clone());
+        Self {
+            fmt,
+            chrono_fmt,
+            has_tz: false,
+            has_time: true,
         }
+    }
+
+    pub fn ymd() -> Self {
+        let fmt = "[year]-[month]-[day]".to_owned();
+        let chrono_fmt = Self::_parse_custom_format(fmt.clone());
+        Self {
+            fmt,
+            chrono_fmt,
+            has_tz: false,
+            has_time: false,
+        }
+    }
+
+    fn has_tz(&self) -> bool {
+        self.has_tz
     }
 
     fn has_time(&self) -> bool {
-        match self {
-            DateTimeParseFormat::Ymd => false,
-            DateTimeParseFormat::Unix => true,
-            DateTimeParseFormat::Custom {
-                fmt: _,
-                has_tz: _,
-                has_time,
-            } => *has_time,
-        }
+        self.has_time
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.fmt.is_empty()
     }
 
     fn _to_parse_format(&self) -> &str {
-        match self {
-            DateTimeParseFormat::Ymd => "%Y-%m-%d",
-            DateTimeParseFormat::Unix => "%s",
-            DateTimeParseFormat::Custom {
-                fmt,
-                has_tz: _,
-                has_time: _,
-            } => fmt,
-        }
+        &self.chrono_fmt
     }
 
     fn _parse_custom_format(mut fmt: String) -> String {
@@ -395,8 +377,28 @@ impl DateTimeParseFormat {
         fmt = fmt.replace("[minute]", "%M");
         fmt = fmt.replace("[second]", "%S");
         fmt = fmt.replace("[millis]", "%.f");
+        fmt = fmt.replace("[unix_seconds]", "%s");
         fmt = fmt.replace("[tz]", "%z");
         fmt
+    }
+}
+
+impl<'de> Deserialize<'de> for DateTimeParseFormat {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        let s = String::deserialize(deserializer)?;
+        Ok(Self::custom(s))
+    }
+}
+
+impl Serialize for DateTimeParseFormat {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        serializer.serialize_str(&self.fmt)
     }
 }
 
@@ -418,9 +420,7 @@ impl<'de> Deserialize<'de> for DateTime {
         D: serde::Deserializer<'de>,
     {
         let s = String::deserialize(deserializer)?;
-        let chrono_datatime = chrono::DateTime::<chrono::FixedOffset>::parse_from_rfc3339(&s)
-            .map_err(serde::de::Error::custom)?;
-        Ok(chrono_datatime.into())
+        <Self as FromStr>::from_str(&s).map_err(serde::de::Error::custom)
     }
 }
 
@@ -429,22 +429,19 @@ impl Serialize for DateTime {
     where
         S: serde::Serializer,
     {
-        let chrono_data_time = chrono::DateTime::<chrono::FixedOffset>::from(self);
-        serializer.serialize_str(&chrono_data_time.to_rfc3339())
+        serializer.serialize_str(&self.datetime.to_string())
     }
 }
 
 impl PartialOrd for DateTime {
     fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
-        chrono::DateTime::<chrono::FixedOffset>::from(self)
-            .partial_cmp(&chrono::DateTime::<chrono::FixedOffset>::from(other))
+        self.datetime.partial_cmp(&other.datetime)
     }
 }
 
 impl Ord for DateTime {
     fn cmp(&self, other: &Self) -> Ordering {
-        chrono::DateTime::<chrono::FixedOffset>::from(self)
-            .cmp(&chrono::DateTime::<chrono::FixedOffset>::from(other))
+        self.datetime.cmp(&other.datetime)
     }
 }
 
@@ -476,7 +473,6 @@ impl Sub<Duration> for DateTime {
 
 #[cfg(feature = "postgres")]
 mod sql {
-    /// TODO: we cannot store `UtcOffset` in postgres, so we have to stick with UTC or store it separately.
     use super::*;
     use postgres_protocol::types::{timestamp_from_sql, timestamp_to_sql};
     use postgres_types::{
@@ -615,5 +611,29 @@ mod tests {
         let expected = DateTime::new_utc_with_millis(2020, 1, 2, 3, 4, 5, 6);
 
         assert_eq!(result, expected);
+    }
+
+    #[test]
+    fn to_string() {
+        assert_eq!(
+            DateTime::new_utc(2010, 1, 2, 3, 4, 5).to_string(),
+            "2010-01-02T03:04:05.000Z"
+        );
+        assert_eq!(
+            DateTime::new_utc(-2010, 1, 2, 3, 4, 5).to_string(),
+            "-2010-01-02T03:04:05.000Z"
+        );
+    }
+
+    #[test]
+    fn from_string() {
+        assert_eq!(
+            DateTime::new_utc(2010, 1, 2, 3, 4, 5),
+            DateTime::from_str("2010-01-02T03:04:05.000Z").unwrap()
+        );
+        assert_eq!(
+            DateTime::new_utc(-2010, 1, 2, 3, 4, 5),
+            DateTime::from_str("-2010-01-02T03:04:05.000Z").unwrap()
+        );
     }
 }

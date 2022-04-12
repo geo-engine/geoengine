@@ -169,10 +169,22 @@ impl Default for OgrSourceDatasetTimeType {
 pub enum OgrSourceTimeFormat {
     #[serde(rename_all = "camelCase")]
     Custom {
-        custom_format: String,
+        custom_format: DateTimeParseFormat,
     },
-    Seconds,
+    Seconds {
+        #[serde(skip)]
+        #[serde(default = "DateTimeParseFormat::unix")]
+        fmt: DateTimeParseFormat,
+    },
     Auto,
+}
+
+impl OgrSourceTimeFormat {
+    pub fn seconds() -> Self {
+        Self::Seconds {
+            fmt: DateTimeParseFormat::unix(),
+        }
+    }
 }
 
 impl Default for OgrSourceTimeFormat {
@@ -778,31 +790,30 @@ where
             }),
             OgrSourceTimeFormat::Custom { custom_format } => Box::new(move |field: FieldValue| {
                 let date = field.into_string().ok_or(Error::OgrFieldValueIsNotString)?;
-                // TODO: create only once
-                let fmt = DateTimeParseFormat::custom(custom_format.clone());
-                let datetime =
-                    DateTime::parse_from_str(&date, &fmt).map_err(|e| Error::TimeParse {
+                let datetime = DateTime::parse_from_str(&date, &custom_format).map_err(|e| {
+                    Error::TimeParse {
                         source: Box::new(e),
-                    })?;
+                    }
+                })?;
 
                 Ok(TimeInstance::from(datetime))
             }),
-            OgrSourceTimeFormat::Seconds => Box::new(move |field: FieldValue| match field {
-                FieldValue::IntegerValue(v) => {
-                    TimeInstance::from_millis(i64::from(v) * 1000).context(error::DataType)
-                }
-                FieldValue::Integer64Value(v) => {
-                    TimeInstance::from_millis(v * 1000).context(error::DataType)
-                }
-                FieldValue::StringValue(v) => {
-                    DateTime::parse_from_str(&v, &DateTimeParseFormat::Unix)
+            OgrSourceTimeFormat::Seconds { fmt } => {
+                Box::new(move |field: FieldValue| match field {
+                    FieldValue::IntegerValue(v) => {
+                        TimeInstance::from_millis(i64::from(v) * 1000).context(error::DataType)
+                    }
+                    FieldValue::Integer64Value(v) => {
+                        TimeInstance::from_millis(v * 1000).context(error::DataType)
+                    }
+                    FieldValue::StringValue(v) => DateTime::parse_from_str(&v, &fmt)
                         .map_err(|e| Error::TimeParse {
                             source: Box::new(e),
                         })
-                        .map(TimeInstance::from)
-                }
-                _ => Err(Error::OgrFieldValueIsNotValidForSeconds),
-            }),
+                        .map(TimeInstance::from),
+                    _ => Err(Error::OgrFieldValueIsNotValidForSeconds),
+                })
+            }
         }
     }
 
@@ -1410,7 +1421,7 @@ mod tests {
             time: OgrSourceDatasetTimeType::Start {
                 start_field: "start".to_string(),
                 start_format: OgrSourceTimeFormat::Custom {
-                    custom_format: "[year]-[month]-[day]".to_string(),
+                    custom_format: DateTimeParseFormat::custom("[year]-[month]-[day]".to_string()),
                 },
                 duration: OgrSourceDurationSpec::Value(TimeStep {
                     granularity: TimeGranularity::Seconds,
@@ -4118,6 +4129,7 @@ mod tests {
     }
 
     #[tokio::test]
+    #[allow(clippy::too_many_lines)]
     async fn points_date_csv() {
         let dataset = DatasetId::Internal {
             dataset_id: InternalDatasetId::new(),
@@ -4133,7 +4145,9 @@ mod tests {
                     time: OgrSourceDatasetTimeType::Start {
                         start_field: "Date".to_owned(),
                         start_format: OgrSourceTimeFormat::Custom {
-                            custom_format: "[day].[month].[year]".to_owned(),
+                            custom_format: DateTimeParseFormat::custom(
+                                "[day].[month].[year]".to_owned(),
+                            ),
                         },
                         duration: OgrSourceDurationSpec::Value(TimeStep {
                             granularity: TimeGranularity::Seconds,
@@ -4230,6 +4244,7 @@ mod tests {
     }
 
     #[tokio::test]
+    #[allow(clippy::too_many_lines)]
     async fn points_date_time_csv() {
         let dataset = DatasetId::Internal {
             dataset_id: InternalDatasetId::new(),
@@ -4245,8 +4260,9 @@ mod tests {
                     time: OgrSourceDatasetTimeType::Start {
                         start_field: "DateTime".to_owned(),
                         start_format: OgrSourceTimeFormat::Custom {
-                            custom_format: "[day].[month].[year] [hour]:[minute]:[second]"
-                                .to_owned(),
+                            custom_format: DateTimeParseFormat::custom(
+                                "[day].[month].[year] [hour]:[minute]:[second]".to_owned(),
+                            ),
                         },
                         duration: OgrSourceDurationSpec::Value(TimeStep {
                             granularity: TimeGranularity::Seconds,
@@ -4343,6 +4359,7 @@ mod tests {
     }
 
     #[tokio::test]
+    #[allow(clippy::too_many_lines)]
     async fn points_date_time_tz_csv() {
         let dataset = DatasetId::Internal {
             dataset_id: InternalDatasetId::new(),
@@ -4358,8 +4375,9 @@ mod tests {
                     time: OgrSourceDatasetTimeType::Start {
                         start_field: "DateTimeTz".to_owned(),
                         start_format: OgrSourceTimeFormat::Custom {
-                            custom_format: "[day].[month].[year] [hour]:[minute]:[second] [tz]"
-                                .to_owned(),
+                            custom_format: DateTimeParseFormat::custom(
+                                "[day].[month].[year] [hour]:[minute]:[second] [tz]".to_owned(),
+                            ),
                         },
                         duration: OgrSourceDurationSpec::Value(TimeStep {
                             granularity: TimeGranularity::Seconds,
@@ -4472,8 +4490,9 @@ mod tests {
                     time: OgrSourceDatasetTimeType::Start {
                         start_field: "DateTime".to_owned(),
                         start_format: OgrSourceTimeFormat::Custom {
-                            custom_format: "[day].[month].[year] [hour]:[minute]:[second]"
-                                .to_owned(),
+                            custom_format: DateTimeParseFormat::custom(
+                                "[day].[month].[year] [hour]:[minute]:[second]".to_owned(),
+                            ),
                         },
                         duration: OgrSourceDurationSpec::Value(TimeStep {
                             granularity: TimeGranularity::Seconds,

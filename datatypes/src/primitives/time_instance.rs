@@ -69,7 +69,11 @@ impl TimeInstance {
 
 impl std::fmt::Display for TimeInstance {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}", self.as_rfc3339())
+        let instance = self.clamp(&TimeInstance::MIN, &TimeInstance::MAX);
+        let datetime = instance
+            .as_date_time()
+            .expect("time instance was clamped into valid range");
+        write!(f, "{}", datetime)
     }
 }
 
@@ -151,7 +155,7 @@ impl FromStr for TimeInstance {
     type Err = DateTimeError;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        let date_time = DateTime::parse_from_rfc3339(s)?;
+        let date_time = DateTime::from_str(s)?;
         Ok(date_time.into())
     }
 }

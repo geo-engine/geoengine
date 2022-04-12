@@ -399,7 +399,8 @@ mod tests {
     use geoengine_datatypes::{
         hashmap,
         primitives::{
-            DateTime, Measurement, SpatialPartition2D, SpatialResolution, TimeGranularity,
+            DateTime, DateTimeParseFormat, Measurement, SpatialPartition2D, SpatialResolution,
+            TimeGranularity,
         },
         raster::RasterDataType,
         spatial_reference::SpatialReference,
@@ -435,7 +436,7 @@ mod tests {
             },
             time_placeholders: hashmap! {
                 "%TIME%".to_string() => GdalSourceTimePlaceholder {
-                    format: "%f".to_string(),
+                    format: DateTimeParseFormat::custom("%f".to_string()),
                     reference: TimeReference::Start,
                 },
             },

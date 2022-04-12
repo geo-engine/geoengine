@@ -939,7 +939,7 @@ fn parse_date(input: &str) -> Result<DateTime> {
             .context(error::TimeCoverageYearOverflows { year });
     }
 
-    DateTime::parse_from_str(input, &DateTimeParseFormat::Ymd).map_err(|e| {
+    DateTime::parse_from_str(input, &DateTimeParseFormat::ymd()).map_err(|e| {
         NetCdfCf4DProviderError::CannotParseTimeCoverageDate {
             source: Box::new(e),
         }

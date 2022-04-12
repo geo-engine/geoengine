@@ -42,8 +42,9 @@ mod test_util {
 
     use geoengine_datatypes::dataset::{DatasetId, InternalDatasetId};
     use geoengine_datatypes::primitives::{
-        ContinuousMeasurement, DateTime, Measurement, RasterQueryRectangle, SpatialPartition2D,
-        SpatialResolution, TimeGranularity, TimeInstance, TimeInterval, TimeStep,
+        ContinuousMeasurement, DateTime, DateTimeParseFormat, Measurement, RasterQueryRectangle,
+        SpatialPartition2D, SpatialResolution, TimeGranularity, TimeInstance, TimeInterval,
+        TimeStep,
     };
     use geoengine_datatypes::raster::{
         EmptyGrid2D, Grid2D, GridOrEmpty, Pixel, RasterDataType, RasterProperties,
@@ -217,7 +218,7 @@ mod test_util {
             },
             time_placeholders: hashmap! {
                 "%_START_TIME_%".to_string() => GdalSourceTimePlaceholder {
-                    format: "%Y%m%d_%H%M".to_string(),
+                    format: DateTimeParseFormat::custom("%Y%m%d_%H%M".to_string()),
                     reference: TimeReference::Start,
                 },
             },

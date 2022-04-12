@@ -97,7 +97,7 @@ type GdalMetaData =
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(rename_all = "camelCase")]
 pub struct GdalSourceTimePlaceholder {
-    pub format: String,
+    pub format: DateTimeParseFormat,
     pub reference: TimeReference,
 }
 
@@ -268,10 +268,7 @@ impl GdalDatasetParameters {
             let time_string = time
                 .as_date_time()
                 .ok_or(Error::TimeInstanceNotDisplayable)?
-                // TODO: create only once
-                .format(&DateTimeParseFormat::custom(
-                    time_placeholder.format.clone(),
-                ));
+                .format(&time_placeholder.format);
 
             // TODO: use more efficient algorithm for replacing multiple placeholders, e.g. aho-corasick
             file_path = file_path.replace(placeholder, &time_string);
@@ -1170,7 +1167,7 @@ mod tests {
             .replace_time_placeholders(
                 &hashmap! {
                     "%TIME%".to_string() => GdalSourceTimePlaceholder {
-                        format: "%f".to_string(),
+                        format: DateTimeParseFormat::custom("%f".to_string()),
                         reference: TimeReference::Start,
                     },
                 },
