@@ -207,7 +207,7 @@ macro_rules! generate_generic_raster_tile_2d {
         match $type_enum {
             $(
                 $crate::raster::RasterDataType::$variant => {
-                    crate::raster::TypedRasterTile2D::$variant($function_call)
+                    $crate::raster::TypedRasterTile2D::$variant($function_call)
                 }
             )+
         }

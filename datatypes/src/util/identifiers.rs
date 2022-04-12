@@ -4,6 +4,7 @@ pub trait Identifier: Sized {
 }
 
 #[macro_export]
+#[allow(clippy::crate_in_macro_def)]
 macro_rules! identifier {
     ($id_name: ident) => {
         #[derive(Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize, Clone, Copy, Hash)]
