@@ -10,8 +10,7 @@ use std::str::FromStr;
 /// An object that composes the date and a timestamp with time zone.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct DateTime {
-    datetime: NaiveDateTime,
-    offset: UtcOffset,
+    datetime: chrono::DateTime<chrono::Utc>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
@@ -28,13 +27,11 @@ pub const UTC: UtcOffset = UtcOffset {
 impl DateTime {
     /// The minimum possible `DateTime`.
     pub const MIN: DateTime = DateTime {
-        datetime: chrono::naive::MIN_DATETIME,
-        offset: UTC,
+        datetime: chrono::MIN_DATETIME,
     };
     /// The maximum possible `DateTime`.
     pub const MAX: DateTime = DateTime {
-        datetime: chrono::naive::MAX_DATETIME,
-        offset: UTC,
+        datetime: chrono::MAX_DATETIME,
     };
 
     /// Creates a new `DateTime` from year, month day and hour, minute, second values.
@@ -49,11 +46,9 @@ impl DateTime {
             minute.into(),
             second.into(),
         );
+        let datetime = chrono::DateTime::<chrono::Utc>::from_utc(datetime, chrono::Utc);
 
-        Self {
-            datetime,
-            offset: UTC,
-        }
+        Self { datetime }
     }
 
     /// Creates a new `DateTime` from year, month day and hour, minute, second values.
@@ -71,11 +66,9 @@ impl DateTime {
     ) -> Option<Self> {
         let date = NaiveDate::from_ymd_opt(year, month.into(), day.into())?;
         let datetime = date.and_hms_opt(hour.into(), minute.into(), second.into())?;
+        let datetime = chrono::DateTime::<chrono::Utc>::from_utc(datetime, chrono::Utc);
 
-        Some(Self {
-            datetime,
-            offset: UTC,
-        })
+        Some(Self { datetime })
     }
 
     /// Creates a new `DateTime` from year, month day and hour, minute, second values.
@@ -99,11 +92,9 @@ impl DateTime {
             second.into(),
             millis.into(),
         );
+        let datetime = chrono::DateTime::<chrono::Utc>::from_utc(datetime, chrono::Utc);
 
-        Self {
-            datetime,
-            offset: UTC,
-        }
+        Self { datetime }
     }
 
     /// Creates a new `DateTime` from year, month day and hour, minute, second values.
@@ -123,23 +114,9 @@ impl DateTime {
         let date = NaiveDate::from_ymd_opt(year, month.into(), day.into())?;
         let datetime =
             date.and_hms_milli_opt(hour.into(), minute.into(), second.into(), millis.into())?;
+        let datetime = chrono::DateTime::<chrono::Utc>::from_utc(datetime, chrono::Utc);
 
-        Some(Self {
-            datetime,
-            offset: UTC,
-        })
-    }
-
-    #[must_use]
-    pub fn into_utc(self) -> Self {
-        if self.offset == UTC {
-            return self;
-        }
-
-        Self {
-            datetime: self.datetime + self.offset._to_fixed_offset(),
-            offset: UTC,
-        }
+        Some(Self { datetime })
     }
 
     pub fn parse_from_str(
@@ -157,8 +134,7 @@ impl DateTime {
                 })?;
 
                 Ok(Self {
-                    datetime: datetime.naive_utc(),
-                    offset: UtcOffset::_from_fixed_offset(datetime.offset().fix()),
+                    datetime: datetime.into(),
                 })
             }
             (true, false) => {
@@ -169,8 +145,7 @@ impl DateTime {
                         })?;
 
                 Ok(Self {
-                    datetime,
-                    offset: UTC,
+                    datetime: chrono::DateTime::<chrono::Utc>::from_utc(datetime, chrono::Utc),
                 })
             }
             (false, true) => Err(DateTimeError::CannotParseOnlyDateWithTimeZone),
@@ -182,8 +157,7 @@ impl DateTime {
                     .and_hms(0, 0, 0);
 
                 Ok(Self {
-                    datetime,
-                    offset: UTC,
+                    datetime: chrono::DateTime::<chrono::Utc>::from_utc(datetime, chrono::Utc),
                 })
             }
         }
@@ -265,7 +239,6 @@ impl DateTime {
     pub fn with_year(&self, year: i32) -> Option<Self> {
         Some(Self {
             datetime: self.datetime.with_year(year)?,
-            offset: self.offset,
         })
     }
 }
@@ -319,10 +292,7 @@ impl TryFrom<TimeInstance> for DateTime {
         }
 
         match chrono::Utc.timestamp_millis_opt(time_instance.inner()) {
-            chrono::LocalResult::Single(datetime) => Ok(Self {
-                datetime: datetime.naive_utc(),
-                offset: UTC,
-            }),
+            chrono::LocalResult::Single(datetime) => Ok(Self { datetime }),
             chrono::LocalResult::None | chrono::LocalResult::Ambiguous(_, _) => {
                 Err(DateTimeError::OutOfBounds)
             }
@@ -332,34 +302,15 @@ impl TryFrom<TimeInstance> for DateTime {
 
 impl From<chrono::DateTime<chrono::FixedOffset>> for DateTime {
     fn from(datetime: chrono::DateTime<chrono::FixedOffset>) -> Self {
-        let offset_secs = datetime.offset().fix().local_minus_utc();
-
-        if offset_secs == 0 {
-            return Self {
-                datetime: datetime.naive_utc(),
-                offset: UTC,
-            };
-        }
-
-        let hours = offset_secs / 3600;
-        let minutes = (offset_secs - hours * 3600) / 60;
-
         Self {
-            datetime: datetime.naive_utc(),
-            offset: UtcOffset {
-                hours: hours as i8,
-                minutes: minutes as i8,
-            },
+            datetime: datetime.into(),
         }
     }
 }
 
 impl From<chrono::DateTime<chrono::Utc>> for DateTime {
     fn from(datetime: chrono::DateTime<chrono::Utc>) -> Self {
-        Self {
-            datetime: datetime.naive_utc(),
-            offset: UTC,
-        }
+        Self { datetime }
     }
 }
 
@@ -371,7 +322,7 @@ impl From<DateTime> for chrono::DateTime<chrono::FixedOffset> {
 
 impl From<&DateTime> for chrono::DateTime<chrono::FixedOffset> {
     fn from(datetime: &DateTime) -> Self {
-        chrono::DateTime::from_utc(datetime.datetime, datetime.offset._to_fixed_offset())
+        datetime.datetime.into()
     }
 }
 
