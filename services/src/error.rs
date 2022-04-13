@@ -81,6 +81,10 @@ pub enum Error {
     MissingAuthorizationHeader,
     #[snafu(display("Authentication scheme must be Bearer."))]
     InvalidAuthorizationScheme,
+    #[snafu(display("Authentication scheme must be Bearer."))]
+    InvalidAuthorizationIdentifier {
+        source: geoengine_datatypes::error::Error,
+    },
 
     #[snafu(display("Authorization error: {:?}", source))]
     Authorization {
@@ -332,6 +336,8 @@ pub enum Error {
 
 impl actix_web::error::ResponseError for Error {
     fn error_response(&self) -> HttpResponse {
+        // TODO: rethink this error handling since errors
+        // only have `Display`, `Debug` and `Error` implementations
         let (error, message) = match self {
             Error::Authorization { source } => (
                 Into::<&str>::into(source.as_ref()).to_string(),
