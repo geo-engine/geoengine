@@ -81,10 +81,6 @@ pub enum Error {
     MissingAuthorizationHeader,
     #[snafu(display("Authentication scheme must be Bearer."))]
     InvalidAuthorizationScheme,
-    #[snafu(display("Authentication scheme must be Bearer."))]
-    InvalidAuthorizationIdentifier {
-        source: geoengine_datatypes::error::Error,
-    },
 
     #[snafu(display("Authorization error: {:?}", source))]
     Authorization {
@@ -124,7 +120,9 @@ pub enum Error {
     TokioPostgresTimeout,
 
     #[snafu(display("Identifier does not have the right format."))]
-    InvalidUuid,
+    InvalidUuid {
+        source: geoengine_datatypes::error::Error,
+    },
     SessionNotInitialized,
 
     ConfigLockFailed,
