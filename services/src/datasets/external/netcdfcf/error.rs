@@ -130,4 +130,7 @@ pub enum NetCdfCf4DProviderError {
     CannotRetrieveUnit {
         source: GdalError,
     },
+    CannotReadDimensions {
+        source: GdalError,
+    },
 }
