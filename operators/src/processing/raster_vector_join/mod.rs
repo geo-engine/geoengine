@@ -266,7 +266,7 @@ mod tests {
     };
     use crate::mock::MockFeatureCollectionSource;
     use crate::source::{GdalSource, GdalSourceParameters};
-    use crate::util::gdal::{add_ndvi_dataset, hide_gdal_errors_in_test};
+    use crate::util::gdal::add_ndvi_dataset;
     use chrono::NaiveDate;
     use futures::StreamExt;
     use geoengine_datatypes::collections::{FeatureCollectionInfos, MultiPointCollection};
@@ -276,7 +276,7 @@ mod tests {
         VectorQueryRectangle,
     };
     use geoengine_datatypes::spatial_reference::SpatialReference;
-    use geoengine_datatypes::util::test::TestDefault;
+    use geoengine_datatypes::util::{gdal::hide_gdal_errors, test::TestDefault};
     use serde_json::json;
 
     #[test]
@@ -482,7 +482,7 @@ mod tests {
     #[tokio::test]
     #[allow(clippy::float_cmp)]
     async fn ndvi_with_default_time() {
-        hide_gdal_errors_in_test();
+        hide_gdal_errors();
 
         let point_source = MockFeatureCollectionSource::single(
             MultiPointCollection::from_data(

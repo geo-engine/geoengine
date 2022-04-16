@@ -897,13 +897,14 @@ mod tests {
     use super::*;
     use crate::engine::{MockExecutionContext, MockQueryContext};
     use crate::test_data;
-    use crate::util::gdal::{add_ndvi_dataset, hide_gdal_errors_in_test};
+    use crate::util::gdal::add_ndvi_dataset;
     use crate::util::Result;
 
     use geoengine_datatypes::hashmap;
     use geoengine_datatypes::primitives::{AxisAlignedRectangle, SpatialPartition2D, TimeInstance};
     use geoengine_datatypes::raster::{EmptyGrid2D, GridIdx2D};
     use geoengine_datatypes::raster::{TileInformation, TilingStrategy};
+    use geoengine_datatypes::util::gdal::hide_gdal_errors;
     use geoengine_datatypes::{primitives::SpatialResolution, raster::GridShape2D};
 
     async fn query_gdal_source(
@@ -1386,7 +1387,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_nodata() {
-        hide_gdal_errors_in_test();
+        hide_gdal_errors();
 
         let mut exe_ctx = MockExecutionContext::test_default();
         let query_ctx = MockQueryContext::test_default();
