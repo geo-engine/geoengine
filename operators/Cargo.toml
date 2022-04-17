@@ -48,6 +48,7 @@ tokio = { version = "1.15", features = ["macros", "signal", "sync", "rt-multi-th
 tracing = "0.1"
 typetag = "0.1"
 uuid = { version = "0.8", features = ["serde", "v4", "v5"] }
+utoipa = "0.1.1"
 
 [dev-dependencies]
 async-stream = "0.3"

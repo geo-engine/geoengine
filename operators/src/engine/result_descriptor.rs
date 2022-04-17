@@ -5,6 +5,7 @@ use geoengine_datatypes::{
 };
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
+use utoipa::Component;
 
 /// A descriptor that contains information about the query result, for instance, the data type
 /// and spatial reference.
@@ -177,7 +178,7 @@ impl ResultDescriptor for PlotResultDescriptor {
         *self
     }
 }
-#[derive(Debug, Serialize, Deserialize, Clone, PartialEq)]
+#[derive(Debug, Serialize, Deserialize, Clone, PartialEq, Component)]
 #[serde(rename_all = "camelCase", tag = "type")]
 pub enum TypedResultDescriptor {
     Plot(PlotResultDescriptor),

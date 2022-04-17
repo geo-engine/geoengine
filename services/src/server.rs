@@ -5,6 +5,9 @@ use crate::handlers::ErrorResponse;
 use crate::util::config;
 use crate::util::config::get_config_element;
 
+use crate::util::IdResponse;
+use crate::workflows::workflow::Workflow;
+use crate::workflows::workflow::WorkflowId;
 use actix_files::Files;
 use actix_http::body::{BoxBody, EitherBody, MessageBody};
 use actix_http::uri::PathAndQuery;
@@ -12,6 +15,8 @@ use actix_http::HttpMessage;
 use actix_web::dev::{ServiceRequest, ServiceResponse};
 use actix_web::error::{InternalError, JsonPayloadError, QueryPayloadError};
 use actix_web::{http, middleware, web, App, HttpResponse, HttpServer};
+use geoengine_operators::engine::TypedOperator;
+use geoengine_operators::engine::TypedResultDescriptor;
 use log::{debug, info};
 use std::net::SocketAddr;
 use std::num::NonZeroUsize;
@@ -19,6 +24,43 @@ use std::path::PathBuf;
 use tracing::Span;
 use tracing_actix_web::{RequestId, RootSpanBuilder, TracingLogger};
 use url::Url;
+use utoipa::openapi::security::{HttpAuthScheme, HttpBuilder, SecurityScheme};
+use utoipa::{Modify, OpenApi};
+use utoipa_swagger_ui::SwaggerUi;
+
+#[derive(OpenApi)]
+#[openapi(
+    handlers(
+        handlers::workflows::register_workflow_handler,
+        handlers::workflows::load_workflow_handler,
+        handlers::workflows::get_workflow_metadata_handler,
+    ),
+    components(
+        Workflow,
+        IdResponse<WorkflowId>,
+        TypedOperator,
+        TypedResultDescriptor
+    ),
+    modifiers(&SecurityAddon)
+)]
+struct ApiDoc;
+
+struct SecurityAddon;
+
+impl Modify for SecurityAddon {
+    fn modify(&self, openapi: &mut utoipa::openapi::OpenApi) {
+        let components = openapi.components.as_mut().unwrap();
+        components.add_security_scheme(
+            "session_token",
+            SecurityScheme::Http(
+                HttpBuilder::new()
+                    .scheme(HttpAuthScheme::Bearer)
+                    .bearer_format("UUID")
+                    .build(),
+            ),
+        );
+    }
+}
 
 /// Starts the webserver for the Geo Engine API.
 ///
@@ -108,7 +150,11 @@ where
             .configure(handlers::wcs::init_wcs_routes::<C>)
             .configure(handlers::wfs::init_wfs_routes::<C>)
             .configure(handlers::wms::init_wms_routes::<C>)
-            .configure(handlers::workflows::init_workflow_routes::<C>);
+            .configure(handlers::workflows::init_workflow_routes::<C>)
+            .service(
+                SwaggerUi::new("/swagger-ui/{_:.*}")
+                    .url("/api-doc/openapi.json", ApiDoc::openapi()),
+            );
 
         #[cfg(feature = "ebv")]
         {

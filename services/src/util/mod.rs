@@ -1,5 +1,6 @@
 use serde::de::Error;
 use serde::{Deserialize, Serialize};
+use utoipa::Component;
 
 use std::str::FromStr;
 
@@ -12,8 +13,9 @@ pub mod retry;
 pub mod tests;
 pub mod user_input;
 
-#[derive(Debug, Serialize, Deserialize, Clone, Copy)]
+#[derive(Debug, Serialize, Deserialize, Clone, Copy, Component)]
 pub struct IdResponse<T> {
+    #[component(value_type = String)]
     pub id: T,
 }
 

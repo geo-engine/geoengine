@@ -80,6 +80,19 @@ where
 ///   "id": "cee25e8c-18a0-5f1b-a504-0bc30de21e06"
 /// }
 /// ```
+#[utoipa::path(
+    post,
+    path = "/workflow",
+    request_body = Workflow,
+    responses(
+        (status = 200, description = "OK", body = IdResponse,
+            example = json!({"id": "cee25e8c-18a0-5f1b-a504-0bc30de21e06"})
+        )
+    ),
+    security(
+        ("session_token" = [])
+    )
+)]
 async fn register_workflow_handler<C: Context>(
     session: C::Session,
     ctx: web::Data<C>,
@@ -144,6 +157,21 @@ async fn register_workflow_handler<C: Context>(
 ///   }
 /// }
 /// ```
+#[utoipa::path(
+    get,
+    path = "/workflow/{id}",
+    responses(
+        (status = 200, description = "Workflow loaded from database", body = Workflow,
+            example = json!({"type": "Vector", "operator": {"type": "MockPointSource", "params": {"points": [{"x": 0.0, "y": 0.1}, {"x": 1.0, "y": 1.1}]}}})
+        )
+    ),
+    params(
+        ("id", description = "Workflow id")
+    ),
+    security(
+        ("session_token" = [])
+    )
+)]
 async fn load_workflow_handler<C: Context>(
     id: web::Path<WorkflowId>,
     _session: C::Session,
@@ -173,6 +201,21 @@ async fn load_workflow_handler<C: Context>(
 ///   "columns": {}
 /// }
 /// ```
+#[utoipa::path(
+    get,
+    path = "/workflow/{id}/metadata",
+    responses(
+        (status = 200, description = "Workflow loaded from database", body = TypedResultDescriptor,
+            example = json!({"dataType": "MultiPoint", "spatialReference": "EPSG: 4326", "columns": {}})
+    )
+    ),
+    params(
+        ("id", description = "Workflow id")
+    ),
+    security(
+        ("session_token" = [])
+    )
+)]
 async fn get_workflow_metadata_handler<C: Context>(
     id: web::Path<WorkflowId>,
     session: C::Session,
