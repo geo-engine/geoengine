@@ -22,7 +22,7 @@ float-cmp = "0.9"
 futures = "0.3"
 gdal = "0.12"
 gdal-sys = "0.6"
-geo = "0.19"
+geo = "0.20"
 geoengine-datatypes = { path = "../datatypes" }
 itertools = "0.10"
 lazy_static = "1.4"
