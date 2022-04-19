@@ -258,7 +258,6 @@ mod tests {
         source::GdalSourceParameters,
     };
     use chrono::NaiveDate;
-    use geoengine_datatypes::spatial_reference::SpatialReference;
     use geoengine_datatypes::{
         dataset::InternalDatasetId,
         plots::{PlotData, PlotMetaData},
@@ -267,6 +266,7 @@ mod tests {
         primitives::{BoundingBox2D, Measurement, SpatialResolution, TimeInterval},
         util::Identifier,
     };
+    use geoengine_datatypes::{raster::TilingSpecification, spatial_reference::SpatialReference};
     use geoengine_datatypes::{
         raster::{Grid2D, RasterDataType, TileInformation},
         util::test::TestDefault,
@@ -322,6 +322,13 @@ mod tests {
 
     #[tokio::test]
     async fn single_raster() {
+        let tile_size_in_pixels = [3, 2].into();
+        let tiling_specification = TilingSpecification {
+            origin_coordinate: [0.0, 0.0].into(),
+            tile_size_in_pixels,
+        };
+        let execution_context = MockExecutionContext::new_with_tiling_spec(tiling_specification);
+
         let temporal_raster_mean_plot = MeanRasterPixelValuesOverTime {
             params: MeanRasterPixelValuesOverTimeParams {
                 time_position: MeanRasterPixelValuesOverTimePosition::Center,
@@ -338,8 +345,6 @@ mod tests {
                 ),
             },
         };
-
-        let execution_context = MockExecutionContext::test_default();
 
         let temporal_raster_mean_plot = temporal_raster_mean_plot
             .boxed()
@@ -415,6 +420,13 @@ mod tests {
 
     #[tokio::test]
     async fn raster_series() {
+        let tile_size_in_pixels = [3, 2].into();
+        let tiling_specification = TilingSpecification {
+            origin_coordinate: [0.0, 0.0].into(),
+            tile_size_in_pixels,
+        };
+        let execution_context = MockExecutionContext::new_with_tiling_spec(tiling_specification);
+
         let temporal_raster_mean_plot = MeanRasterPixelValuesOverTime {
             params: MeanRasterPixelValuesOverTimeParams {
                 time_position: MeanRasterPixelValuesOverTimePosition::Start,
@@ -448,8 +460,6 @@ mod tests {
                 ),
             },
         };
-
-        let execution_context = MockExecutionContext::test_default();
 
         let temporal_raster_mean_plot = temporal_raster_mean_plot
             .boxed()

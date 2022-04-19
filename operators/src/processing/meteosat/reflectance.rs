@@ -336,8 +336,7 @@ mod tests {
     use geoengine_datatypes::primitives::{
         ClassificationMeasurement, ContinuousMeasurement, Measurement,
     };
-    use geoengine_datatypes::raster::{EmptyGrid2D, Grid2D, RasterTile2D};
-    use geoengine_datatypes::util::test::TestDefault;
+    use geoengine_datatypes::raster::{EmptyGrid2D, Grid2D, RasterTile2D, TilingSpecification};
     use std::collections::HashMap;
 
     async fn process_mock(
@@ -347,7 +346,14 @@ mod tests {
         empty: bool,
         measurement: Option<Measurement>,
     ) -> Result<RasterTile2D<f32>> {
-        let ctx = MockExecutionContext::test_default();
+        let tile_size_in_pixels = [3, 2].into();
+        let tiling_specification = TilingSpecification {
+            origin_coordinate: [0.0, 0.0].into(),
+            tile_size_in_pixels,
+        };
+
+        let ctx = MockExecutionContext::new_with_tiling_spec(tiling_specification);
+
         test_util::process(
             || {
                 let props = test_util::create_properties(channel, satellite, None, None);

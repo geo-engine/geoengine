@@ -120,7 +120,9 @@ pub enum Error {
     TokioPostgresTimeout,
 
     #[snafu(display("Identifier does not have the right format."))]
-    InvalidUuid,
+    InvalidUuid {
+        source: geoengine_datatypes::error::Error,
+    },
     SessionNotInitialized,
 
     ConfigLockFailed,
@@ -332,6 +334,8 @@ pub enum Error {
 
 impl actix_web::error::ResponseError for Error {
     fn error_response(&self) -> HttpResponse {
+        // TODO: rethink this error handling since errors
+        // only have `Display`, `Debug` and `Error` implementations
         let (error, message) = match self {
             Error::Authorization { source } => (
                 Into::<&str>::into(source.as_ref()).to_string(),

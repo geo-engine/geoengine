@@ -39,34 +39,34 @@ macro_rules! call_generic_raster_processor {
     ($type_enum:expr, $function_call:expr) => {
         match $type_enum {
             geoengine_datatypes::raster::RasterDataType::U8 => {
-                crate::engine::TypedRasterQueryProcessor::U8($function_call)
+                $crate::engine::TypedRasterQueryProcessor::U8($function_call)
             }
             geoengine_datatypes::raster::RasterDataType::U16 => {
-                crate::engine::TypedRasterQueryProcessor::U16($function_call)
+                $crate::engine::TypedRasterQueryProcessor::U16($function_call)
             }
             geoengine_datatypes::raster::RasterDataType::U32 => {
-                crate::engine::TypedRasterQueryProcessor::U32($function_call)
+                $crate::engine::TypedRasterQueryProcessor::U32($function_call)
             }
             geoengine_datatypes::raster::RasterDataType::U64 => {
-                crate::engine::TypedRasterQueryProcessor::U64($function_call)
+                $crate::engine::TypedRasterQueryProcessor::U64($function_call)
             }
             geoengine_datatypes::raster::RasterDataType::I8 => {
-                crate::engine::TypedRasterQueryProcessor::I8($function_call)
+                $crate::engine::TypedRasterQueryProcessor::I8($function_call)
             }
             geoengine_datatypes::raster::RasterDataType::I16 => {
-                crate::engine::TypedRasterQueryProcessor::I16($function_call)
+                $crate::engine::TypedRasterQueryProcessor::I16($function_call)
             }
             geoengine_datatypes::raster::RasterDataType::I32 => {
-                crate::engine::TypedRasterQueryProcessor::I32($function_call)
+                $crate::engine::TypedRasterQueryProcessor::I32($function_call)
             }
             geoengine_datatypes::raster::RasterDataType::I64 => {
-                crate::engine::TypedRasterQueryProcessor::I64($function_call)
+                $crate::engine::TypedRasterQueryProcessor::I64($function_call)
             }
             geoengine_datatypes::raster::RasterDataType::F32 => {
-                crate::engine::TypedRasterQueryProcessor::F32($function_call)
+                $crate::engine::TypedRasterQueryProcessor::F32($function_call)
             }
             geoengine_datatypes::raster::RasterDataType::F64 => {
-                crate::engine::TypedRasterQueryProcessor::F64($function_call)
+                $crate::engine::TypedRasterQueryProcessor::F64($function_call)
             }
         }
     };

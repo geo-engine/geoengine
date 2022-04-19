@@ -15,7 +15,7 @@ macro_rules! identifier {
             }
         }
 
-        impl crate::util::Identifier for $id_name {
+        impl $crate::util::Identifier for $id_name {
             fn new() -> Self {
                 Self(uuid::Uuid::new_v4())
             }
@@ -28,11 +28,11 @@ macro_rules! identifier {
         }
 
         impl std::str::FromStr for $id_name {
-            type Err = crate::error::Error;
+            type Err = $crate::error::Error;
 
             fn from_str(s: &str) -> Result<Self, Self::Err> {
                 Ok(Self(
-                    uuid::Uuid::from_str(s).map_err(|_error| crate::error::Error::InvalidUuid)?,
+                    uuid::Uuid::from_str(s).map_err(|_error| $crate::error::Error::InvalidUuid)?,
                 ))
             }
         }
