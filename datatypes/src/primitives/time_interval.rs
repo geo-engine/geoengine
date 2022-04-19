@@ -215,8 +215,8 @@ impl TimeInterval {
         other == self
             || value_in_range(self.start, other.start, other.end)
             || value_in_range(other.start, self.start, self.end)
-            || { value_in_range_inclusive(self.start, other.start, other.end) && self.is_instant() }
-            || { value_in_range_inclusive(other.start, self.start, self.end) && other.is_instant() }
+            || (value_in_range_inclusive(self.start, other.start, other.end) && self.is_instant())
+            || (value_in_range_inclusive(other.start, self.start, self.end) && other.is_instant())
     }
 
     /// Unites this interval with another one.
@@ -646,6 +646,22 @@ mod tests {
     #[test]
     fn intersects_inside_instance_b() {
         let a = TimeInterval::new_instant(3).unwrap();
+        let b = TimeInterval::new(2, 4).unwrap();
+
+        assert!(b.intersects(&a));
+    }
+
+    #[test]
+    fn intersects_inside_instance_a_end() {
+        let a = TimeInterval::new_instant(4).unwrap();
+        let b = TimeInterval::new(2, 4).unwrap();
+
+        assert!(a.intersects(&b));
+    }
+
+    #[test]
+    fn intersects_inside_instance_b_end() {
+        let a = TimeInterval::new_instant(4).unwrap();
         let b = TimeInterval::new(2, 4).unwrap();
 
         assert!(b.intersects(&a));
