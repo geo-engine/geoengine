@@ -191,6 +191,8 @@ pub enum Error {
 
     EmptyInput,
 
+    EmptyTimeSteps,
+
     OgrFieldValueIsNotDateTime,
     OgrFieldValueIsNotString,
     OgrFieldValueIsNotValidForSeconds,

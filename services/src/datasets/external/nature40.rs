@@ -425,28 +425,6 @@ impl MetaDataProvider<GdalLoadingInfo, RasterResultDescriptor, RasterQueryRectan
                     }
                 })?;
 
-            // Ok(Box::new(GdalMetadataFixedTimes {
-            //     time_steps,
-            //     params: gdal_parameters_from_dataset(
-            //         &dataset,
-            //         band_index,
-            //         Path::new(&db_url),
-            //         None,
-            //         Some(self.auth().to_vec()),
-            //     )?,
-            //     result_descriptor: raster_descriptor_from_dataset(
-            //         &dataset,
-            //         band_index as isize,
-            //         None,
-            //     )?,
-            //     time_placeholders: hashmap! {
-            //         "%TIME%".to_string() => GdalSourceTimePlaceholder {
-            //             format: "%Y-%m-%dT%H:%M".to_string(),
-            //             reference: TimeReference::Start,
-            //         },
-            //     },
-            // }))
-
             Ok(Box::new(GdalMetadataFixedTimes::new(
                 time_steps,
                 gdal_parameters_from_dataset(
@@ -463,7 +441,7 @@ impl MetaDataProvider<GdalLoadingInfo, RasterResultDescriptor, RasterQueryRectan
                         reference: TimeReference::Start,
                     },
                 },
-            )?))
+            )))
         }
     }
 }
