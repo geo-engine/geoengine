@@ -144,7 +144,7 @@ impl MetaData<GdalLoadingInfo, RasterResultDescriptor, RasterQueryRectangle>
                         break;
                     }
 
-                    if let Some(step_interval) = time_interval.intersect(time_position) {
+                    if let Some(step_interval) = time_interval.intersect_inclusive(time_position) {
                         loading_info_parts.push(self.create_temporal_slice(step_interval, false)?);
                     }
                 }

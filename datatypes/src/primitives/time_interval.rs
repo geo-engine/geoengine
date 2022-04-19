@@ -215,6 +215,13 @@ impl TimeInterval {
         other == self
             || value_in_range(self.start, other.start, other.end)
             || value_in_range(other.start, self.start, self.end)
+    }
+
+    /// Returns whether the given interval or instance intersects this interval
+    pub fn intersects_inclusive(&self, other: &Self) -> bool {
+        other == self
+            || value_in_range(self.start, other.start, other.end)
+            || value_in_range(other.start, self.start, self.end)
             || (value_in_range_inclusive(self.start, other.start, other.end) && self.is_instant())
             || (value_in_range_inclusive(other.start, self.start, self.end) && other.is_instant())
     }
@@ -291,6 +298,18 @@ impl TimeInterval {
     /// `None` if the intervals are disjoint
     pub fn intersect(self, other: &Self) -> Option<TimeInterval> {
         if self.intersects(other) {
+            let start = std::cmp::max(self.start, other.start);
+            let end = std::cmp::min(self.end, other.end);
+            Some(Self::new_unchecked(start, end))
+        } else {
+            None
+        }
+    }
+
+    /// Return a new time interval that is the intersection with the `other` time interval or instance, or
+    /// `None` if the intervals or instances are disjoint
+    pub fn intersect_inclusive(self, other: &Self) -> Option<TimeInterval> {
+        if self.intersects_inclusive(other) {
             let start = std::cmp::max(self.start, other.start);
             let end = std::cmp::min(self.end, other.end);
             Some(Self::new_unchecked(start, end))
@@ -652,19 +671,83 @@ mod tests {
     }
 
     #[test]
-    fn intersects_inside_instance_a_end() {
-        let a = TimeInterval::new_instant(4).unwrap();
+    fn intersects_inclusive_overlap_right() {
+        let a = TimeInterval::new(1, 3).unwrap();
         let b = TimeInterval::new(2, 4).unwrap();
 
-        assert!(a.intersects(&b));
+        assert!(b.intersects_inclusive(&a));
     }
 
     #[test]
-    fn intersects_inside_instance_b_end() {
+    fn intersects_inclusive_after() {
+        let a = TimeInterval::new(1, 2).unwrap();
+        let b = TimeInterval::new(2, 3).unwrap();
+
+        assert!(!b.intersects_inclusive(&a));
+    }
+
+    #[test]
+    fn intersects_inclusive_same() {
+        let a = TimeInterval::new(2, 4).unwrap();
+        let b = TimeInterval::new(2, 4).unwrap();
+
+        assert!(a.intersects_inclusive(&b));
+    }
+
+    #[test]
+    fn intersects_inclusive_before() {
+        let a = TimeInterval::new(1, 2).unwrap();
+        let b = TimeInterval::new(2, 3).unwrap();
+
+        assert!(!a.intersects_inclusive(&b));
+    }
+
+    #[test]
+    fn intersects_inclusive_overlap_left() {
+        let a = TimeInterval::new(1, 3).unwrap();
+        let b = TimeInterval::new(2, 4).unwrap();
+
+        assert!(a.intersects_inclusive(&b));
+    }
+
+    #[test]
+    fn intersects_inclusive_inside() {
+        let a = TimeInterval::new(3, 4).unwrap();
+        let b = TimeInterval::new(2, 4).unwrap();
+
+        assert!(a.intersects_inclusive(&b));
+    }
+
+    #[test]
+    fn intersects_inclusive_inside_instance_a() {
+        let a = TimeInterval::new_instant(3).unwrap();
+        let b = TimeInterval::new(2, 4).unwrap();
+
+        assert!(a.intersects_inclusive(&b));
+    }
+
+    #[test]
+    fn intersects_inclusive_inside_instance_b() {
+        let a = TimeInterval::new_instant(3).unwrap();
+        let b = TimeInterval::new(2, 4).unwrap();
+
+        assert!(b.intersects_inclusive(&a));
+    }
+
+    #[test]
+    fn intersects_inclusive_inside_instance_a_end() {
         let a = TimeInterval::new_instant(4).unwrap();
         let b = TimeInterval::new(2, 4).unwrap();
 
-        assert!(b.intersects(&a));
+        assert!(a.intersects_inclusive(&b));
+    }
+
+    #[test]
+    fn intersects_inclusive_inside_instance_b_end() {
+        let a = TimeInterval::new_instant(4).unwrap();
+        let b = TimeInterval::new(2, 4).unwrap();
+
+        assert!(b.intersects_inclusive(&a));
     }
 
     #[test]
