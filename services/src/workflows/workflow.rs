@@ -4,6 +4,10 @@ use uuid::Uuid;
 use geoengine_datatypes::identifier;
 use geoengine_operators::engine::TypedOperator;
 
+use crate::error::Result;
+use crate::storage::Storable;
+use crate::util::user_input::UserInput;
+
 identifier!(WorkflowId);
 
 impl WorkflowId {
@@ -21,6 +25,23 @@ impl WorkflowId {
 pub struct Workflow {
     #[serde(flatten)]
     pub operator: TypedOperator,
+}
+
+impl Storable for Workflow {
+    type Id = WorkflowId;
+    type Item = Workflow;
+    type ItemListing = WorkflowListing;
+    type ListOptions = ();
+}
+
+pub struct WorkflowListing {
+    pub id: WorkflowId,
+}
+
+impl UserInput for Workflow {
+    fn validate(&self) -> Result<()> {
+        Ok(())
+    }
 }
 
 #[cfg(test)]

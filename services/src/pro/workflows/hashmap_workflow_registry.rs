@@ -1,12 +1,13 @@
-use super::workflow::{Workflow, WorkflowId, WorkflowListing};
-use crate::error;
-use crate::error::Result;
-use crate::storage::{InMemoryStore, Store};
+use crate::error::{self, Result};
+use crate::pro::contexts::ProInMemoryStore;
+use crate::storage::Store;
 use crate::util::user_input::Validated;
+use crate::workflows::workflow::{Workflow, WorkflowId, WorkflowListing};
+
 use async_trait::async_trait;
 
 #[async_trait]
-impl Store<Workflow> for InMemoryStore {
+impl Store<Workflow> for ProInMemoryStore {
     async fn create(&mut self, item: Validated<Workflow>) -> Result<WorkflowId> {
         let workflow = item.user_input;
         let id = WorkflowId::from_hash(&workflow);

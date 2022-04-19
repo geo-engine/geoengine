@@ -8,10 +8,10 @@ use crate::error::Result;
 use crate::handlers::Context;
 use crate::ogc::util::{ogc_endpoint_url, OgcProtocol};
 use crate::ogc::wfs::request::{GetCapabilities, GetFeature, WfsRequest};
+use crate::storage::Store;
 use crate::util::config;
 use crate::util::config::get_config_element;
 use crate::util::user_input::QueryEx;
-use crate::workflows::registry::WorkflowRegistry;
 use crate::workflows::workflow::{Workflow, WorkflowId};
 use futures::StreamExt;
 use geoengine_datatypes::collections::ToGeoJson;
@@ -165,7 +165,7 @@ where
 {
     let wfs_url = wfs_url(workflow_id)?;
 
-    let workflow = ctx.workflow_registry_ref().await.load(&workflow_id).await?;
+    let workflow = ctx.store_ref().await.read(&workflow_id).await?;
 
     let exe_ctx = ctx.execution_context(session)?;
     let operator = workflow
@@ -420,7 +420,7 @@ async fn get_feature<C: Context>(
         return get_feature_mock(request);
     }
 
-    let workflow: Workflow = ctx.workflow_registry_ref().await.load(&type_names).await?;
+    let workflow: Workflow = ctx.store_ref().await.read(&type_names).await?;
 
     let operator = workflow.operator.get_vector().context(error::Operator)?;
 
@@ -737,15 +737,11 @@ x;y
                     time: CsvTimeSpecification::None,
                 },
             })),
-        };
+        }
+        .validated()
+        .unwrap();
 
-        let workflow_id = ctx
-            .workflow_registry()
-            .write()
-            .await
-            .register(workflow)
-            .await
-            .unwrap();
+        let workflow_id = ctx.store().write().await.create(workflow).await.unwrap();
 
         let req = test::TestRequest::with_uri(&format!(
             "/wfs/{}?request=GetCapabilities&service=WFS",
@@ -805,13 +801,15 @@ x;y
                     time: CsvTimeSpecification::None,
                 },
             })),
-        };
+        }
+        .validated()
+        .unwrap();
 
         let id = ctx
-            .workflow_registry()
+            .store()
             .write()
             .await
-            .register(workflow.clone())
+            .create(workflow.clone())
             .await
             .unwrap();
 
@@ -923,15 +921,11 @@ x;y
                     time: CsvTimeSpecification::None,
                 },
             })),
-        };
+        }
+        .validated()
+        .unwrap();
 
-        let workflow_id = ctx
-            .workflow_registry()
-            .write()
-            .await
-            .register(workflow)
-            .await
-            .unwrap();
+        let workflow_id = ctx.store().write().await.create(workflow).await.unwrap();
 
         let params = &[
             ("request", "GetFeature"),
@@ -1109,15 +1103,10 @@ x;y
 
         let json = serde_json::to_string(&workflow).unwrap();
 
-        let workflow = serde_json::from_str(&json).unwrap();
+        let workflow: Workflow = serde_json::from_str(&json).unwrap();
+        let workflow = workflow.validated().unwrap();
 
-        let workflow_id = ctx
-            .workflow_registry()
-            .write()
-            .await
-            .register(workflow)
-            .await
-            .unwrap();
+        let workflow_id = ctx.store().write().await.create(workflow).await.unwrap();
 
         let params = &[
             ("request", "GetFeature"),

@@ -6,10 +6,10 @@ use crate::datasets::upload::{UploadId, UploadRootPath};
 use crate::error;
 use crate::error::Result;
 use crate::handlers::Context;
+use crate::storage::Store;
 use crate::util::config::get_config_element;
 use crate::util::user_input::UserInput;
 use crate::util::IdResponse;
-use crate::workflows::registry::WorkflowRegistry;
 use crate::workflows::workflow::{Workflow, WorkflowId};
 use actix_web::{web, FromRequest, Responder};
 use futures::future::join_all;
@@ -85,11 +85,11 @@ async fn register_workflow_handler<C: Context>(
     ctx: web::Data<C>,
     workflow: web::Json<Workflow>,
 ) -> Result<impl Responder> {
-    let workflow = workflow.into_inner();
+    let workflow = workflow.into_inner().validated()?;
 
     // ensure the workflow is valid by initializing it
     let execution_context = ctx.execution_context(session)?;
-    match workflow.clone().operator {
+    match workflow.user_input.clone().operator {
         TypedOperator::Vector(o) => {
             o.initialize(&execution_context)
                 .await
@@ -107,11 +107,7 @@ async fn register_workflow_handler<C: Context>(
         }
     }
 
-    let id = ctx
-        .workflow_registry_ref_mut()
-        .await
-        .register(workflow)
-        .await?;
+    let id = ctx.store_ref_mut().await.create(workflow).await?;
     Ok(web::Json(IdResponse::from(id)))
 }
 
@@ -149,11 +145,7 @@ async fn load_workflow_handler<C: Context>(
     _session: C::Session,
     ctx: web::Data<C>,
 ) -> Result<impl Responder> {
-    let wf = ctx
-        .workflow_registry_ref()
-        .await
-        .load(&id.into_inner())
-        .await?;
+    let wf = ctx.store_ref().await.read(&id.into_inner()).await?;
     Ok(web::Json(wf))
 }
 
@@ -178,11 +170,7 @@ async fn get_workflow_metadata_handler<C: Context>(
     session: C::Session,
     ctx: web::Data<C>,
 ) -> Result<impl Responder> {
-    let workflow = ctx
-        .workflow_registry_ref()
-        .await
-        .load(&id.into_inner())
-        .await?;
+    let workflow = ctx.store_ref().await.read(&id.into_inner()).await?;
 
     let execution_context = ctx.execution_context(session)?;
 
@@ -235,11 +223,7 @@ async fn get_workflow_provenance_handler<C: Context>(
     session: C::Session,
     ctx: web::Data<C>,
 ) -> Result<impl Responder> {
-    let workflow = ctx
-        .workflow_registry_ref()
-        .await
-        .load(&id.into_inner())
-        .await?;
+    let workflow = ctx.store_ref().await.read(&id.into_inner()).await?;
 
     let datasets = workflow.operator.datasets();
 
@@ -333,7 +317,7 @@ async fn dataset_from_workflow_handler<C: Context>(
 ) -> Result<impl Responder> {
     // TODO: support datasets with multiple time steps
 
-    let workflow = ctx.workflow_registry_ref().await.load(&workflow_id).await?;
+    let workflow = ctx.store_ref().await.read(&workflow_id).await?;
 
     let operator = workflow.operator.get_raster().context(error::Operator)?;
 
@@ -458,7 +442,6 @@ mod tests {
         read_body_string, register_ndvi_workflow_helper, send_test_request, TestDataUploads,
     };
     use crate::util::IdResponse;
-    use crate::workflows::registry::WorkflowRegistry;
     use actix_web::dev::ServiceResponse;
     use actix_web::{http::header, http::Method, test};
     use actix_web_httpauth::headers::authorization::Bearer;
@@ -685,13 +668,15 @@ mod tests {
             )
             .boxed()
             .into(),
-        };
+        }
+        .validated()
+        .unwrap();
 
         let id = ctx
-            .workflow_registry()
+            .store()
             .write()
             .await
-            .register(workflow.clone())
+            .create(workflow.clone())
             .await
             .unwrap();
 
@@ -747,13 +732,15 @@ mod tests {
             }
             .boxed()
             .into(),
-        };
+        }
+        .validated()
+        .unwrap();
 
         let id = ctx
-            .workflow_registry()
+            .store()
             .write()
             .await
-            .register(workflow.clone())
+            .create(workflow.clone())
             .await
             .unwrap();
 
@@ -808,13 +795,15 @@ mod tests {
             )
             .boxed()
             .into(),
-        };
+        }
+        .validated()
+        .unwrap();
 
         let id = ctx
-            .workflow_registry()
+            .store()
             .write()
             .await
-            .register(workflow.clone())
+            .create(workflow.clone())
             .await
             .unwrap();
 
@@ -843,13 +832,15 @@ mod tests {
             }
             .boxed()
             .into(),
-        };
+        }
+        .validated()
+        .unwrap();
 
         let id = ctx
-            .workflow_registry()
+            .store()
             .write()
             .await
-            .register(workflow.clone())
+            .create(workflow.clone())
             .await
             .unwrap();
 
@@ -888,13 +879,15 @@ mod tests {
                 }
                 .boxed(),
             ),
-        };
+        }
+        .validated()
+        .unwrap();
 
         let id = ctx
-            .workflow_registry()
+            .store()
             .write()
             .await
-            .register(workflow.clone())
+            .create(workflow.clone())
             .await
             .unwrap();
 
@@ -950,14 +943,11 @@ mod tests {
                 }
                 .boxed(),
             ),
-        };
+        }
+        .validated()
+        .unwrap();
 
-        let workflow_id = ctx
-            .workflow_registry_ref_mut()
-            .await
-            .register(workflow)
-            .await
-            .unwrap();
+        let workflow_id = ctx.store_ref_mut().await.create(workflow).await.unwrap();
 
         // create dataset from workflow
         let req = test::TestRequest::post()

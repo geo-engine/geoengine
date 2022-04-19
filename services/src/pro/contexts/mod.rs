@@ -3,9 +3,9 @@ mod in_memory;
 #[cfg(feature = "postgres")]
 mod postgres;
 
-pub use in_memory::ProInMemoryContext;
+pub use in_memory::{ProInMemoryContext, ProInMemoryStore};
 #[cfg(feature = "postgres")]
-pub use postgres::PostgresContext;
+pub use postgres::{PostgresContext, PostgresStore};
 
 use crate::contexts::{Context, Db};
 use crate::pro::users::{UserDb, UserSession};

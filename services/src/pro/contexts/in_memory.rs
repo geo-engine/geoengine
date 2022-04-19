@@ -4,7 +4,8 @@ use crate::pro::contexts::{Context, Db, ProContext};
 use crate::pro::datasets::{add_datasets_from_directory, ProHashMapDatasetDb};
 use crate::pro::projects::ProHashMapProjectDb;
 use crate::pro::users::{HashMapUserDb, UserDb, UserSession};
-use crate::workflows::registry::HashMapRegistry;
+use crate::storage::GeoEngineStore;
+use crate::workflows::workflow::{Workflow, WorkflowId};
 use crate::{datasets::add_from_directory::add_providers_from_directory, error::Result};
 use async_trait::async_trait;
 use geoengine_datatypes::raster::TilingSpecification;
@@ -13,6 +14,7 @@ use geoengine_operators::engine::ChunkByteSize;
 use geoengine_operators::util::create_rayon_thread_pool;
 use rayon::ThreadPool;
 use snafu::ResultExt;
+use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::Arc;
 use tokio::sync::{RwLock, RwLockReadGuard, RwLockWriteGuard};
@@ -21,8 +23,8 @@ use tokio::sync::{RwLock, RwLockReadGuard, RwLockWriteGuard};
 #[derive(Clone)]
 pub struct ProInMemoryContext {
     user_db: Db<HashMapUserDb>,
+    store: Db<ProInMemoryStore>,
     project_db: Db<ProHashMapProjectDb>,
-    workflow_registry: Db<HashMapRegistry>,
     dataset_db: Db<ProHashMapDatasetDb>,
     thread_pool: Arc<ThreadPool>,
     exe_ctx_tiling_spec: TilingSpecification,
@@ -33,8 +35,8 @@ impl TestDefault for ProInMemoryContext {
     fn test_default() -> Self {
         Self {
             user_db: Default::default(),
+            store: Default::default(),
             project_db: Default::default(),
-            workflow_registry: Default::default(),
             dataset_db: Default::default(),
             thread_pool: create_rayon_thread_pool(0),
             exe_ctx_tiling_spec: TestDefault::test_default(),
@@ -57,8 +59,8 @@ impl ProInMemoryContext {
 
         Self {
             user_db: Default::default(),
+            store: Default::default(),
             project_db: Default::default(),
-            workflow_registry: Default::default(),
             thread_pool: create_rayon_thread_pool(0),
             exe_ctx_tiling_spec,
             query_ctx_chunk_size,
@@ -72,8 +74,8 @@ impl ProInMemoryContext {
     ) -> Self {
         ProInMemoryContext {
             user_db: Default::default(),
+            store: Default::default(),
             project_db: Default::default(),
-            workflow_registry: Default::default(),
             dataset_db: Default::default(),
             thread_pool: create_rayon_thread_pool(0),
             exe_ctx_tiling_spec,
@@ -100,8 +102,8 @@ impl ProContext for ProInMemoryContext {
 #[async_trait]
 impl Context for ProInMemoryContext {
     type Session = UserSession;
+    type Store = ProInMemoryStore;
     type ProjectDB = ProHashMapProjectDb;
-    type WorkflowRegistry = HashMapRegistry;
     type DatasetDB = ProHashMapDatasetDb;
     type QueryContext = QueryContextImpl;
     type ExecutionContext = ExecutionContextImpl<UserSession, ProHashMapDatasetDb>;
@@ -116,14 +118,14 @@ impl Context for ProInMemoryContext {
         self.project_db.write().await
     }
 
-    fn workflow_registry(&self) -> Db<Self::WorkflowRegistry> {
-        self.workflow_registry.clone()
+    fn store(&self) -> Db<Self::Store> {
+        self.store.clone()
     }
-    async fn workflow_registry_ref(&self) -> RwLockReadGuard<'_, Self::WorkflowRegistry> {
-        self.workflow_registry.read().await
+    async fn store_ref(&self) -> RwLockReadGuard<'_, Self::Store> {
+        self.store.read().await
     }
-    async fn workflow_registry_ref_mut(&self) -> RwLockWriteGuard<'_, Self::WorkflowRegistry> {
-        self.workflow_registry.write().await
+    async fn store_ref_mut(&self) -> RwLockWriteGuard<'_, Self::Store> {
+        self.store.write().await
     }
 
     fn dataset_db(&self) -> Db<Self::DatasetDB> {
@@ -163,3 +165,10 @@ impl Context for ProInMemoryContext {
             .context(error::Authorization)
     }
 }
+
+#[derive(Debug, Default)]
+pub struct ProInMemoryStore {
+    pub(crate) workflows: HashMap<WorkflowId, Workflow>,
+}
+
+impl GeoEngineStore for ProInMemoryStore {}

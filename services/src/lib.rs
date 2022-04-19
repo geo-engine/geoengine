@@ -29,6 +29,7 @@ pub mod ogc;
 pub mod projects;
 pub mod server;
 pub mod stac;
+pub mod storage;
 #[macro_use]
 pub mod util;
 pub mod workflows;

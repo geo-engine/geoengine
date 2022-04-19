@@ -1,5 +1,6 @@
 use crate::error::Result;
-use crate::{projects::ProjectDb, workflows::registry::WorkflowRegistry};
+use crate::projects::ProjectDb;
+use crate::storage::GeoEngineStore;
 use async_trait::async_trait;
 use geoengine_datatypes::primitives::{RasterQueryRectangle, VectorQueryRectangle};
 use rayon::ThreadPool;
@@ -35,8 +36,8 @@ pub type Db<T> = Arc<RwLock<T>>;
 #[async_trait]
 pub trait Context: 'static + Send + Sync + Clone {
     type Session: MockableSession + Clone; // TODO: change to `[Session]` when workarounds are gone
+    type Store: GeoEngineStore;
     type ProjectDB: ProjectDb<Self::Session>;
-    type WorkflowRegistry: WorkflowRegistry;
     type DatasetDB: DatasetDb<Self::Session>;
     type QueryContext: QueryContext;
     type ExecutionContext: ExecutionContext;
@@ -45,9 +46,9 @@ pub trait Context: 'static + Send + Sync + Clone {
     async fn project_db_ref(&self) -> RwLockReadGuard<Self::ProjectDB>;
     async fn project_db_ref_mut(&self) -> RwLockWriteGuard<Self::ProjectDB>;
 
-    fn workflow_registry(&self) -> Db<Self::WorkflowRegistry>;
-    async fn workflow_registry_ref(&self) -> RwLockReadGuard<Self::WorkflowRegistry>;
-    async fn workflow_registry_ref_mut(&self) -> RwLockWriteGuard<Self::WorkflowRegistry>;
+    fn store(&self) -> Db<Self::Store>;
+    async fn store_ref(&self) -> RwLockReadGuard<Self::Store>;
+    async fn store_ref_mut(&self) -> RwLockWriteGuard<Self::Store>;
 
     fn dataset_db(&self) -> Db<Self::DatasetDB>;
     async fn dataset_db_ref(&self) -> RwLockReadGuard<Self::DatasetDB>;

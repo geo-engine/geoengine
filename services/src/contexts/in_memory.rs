@@ -6,11 +6,12 @@ use super::{Session, SimpleContext};
 use crate::contexts::{ExecutionContextImpl, QueryContextImpl, SessionId};
 use crate::datasets::in_memory::HashMapDatasetDb;
 use crate::error::Error;
+use crate::projects::hashmap_projectdb::HashMapProjectDb;
+use crate::storage::InMemoryStore;
 use crate::{
     datasets::add_from_directory::{add_datasets_from_directory, add_providers_from_directory},
     error::Result,
 };
-use crate::{projects::hashmap_projectdb::HashMapProjectDb, workflows::registry::HashMapRegistry};
 use async_trait::async_trait;
 use geoengine_datatypes::raster::TilingSpecification;
 use geoengine_datatypes::util::test::TestDefault;
@@ -22,8 +23,8 @@ use tokio::sync::{RwLock, RwLockReadGuard, RwLockWriteGuard};
 /// A context with references to in-memory versions of the individual databases.
 #[derive(Clone)]
 pub struct InMemoryContext {
+    store: Db<InMemoryStore>,
     project_db: Db<HashMapProjectDb>,
-    workflow_registry: Db<HashMapRegistry>,
     dataset_db: Db<HashMapDatasetDb>,
     session: Db<SimpleSession>,
     thread_pool: Arc<ThreadPool>,
@@ -34,8 +35,8 @@ pub struct InMemoryContext {
 impl TestDefault for InMemoryContext {
     fn test_default() -> Self {
         Self {
+            store: Default::default(),
             project_db: Default::default(),
-            workflow_registry: Default::default(),
             dataset_db: Default::default(),
             session: Default::default(),
             thread_pool: create_rayon_thread_pool(0),
@@ -57,8 +58,8 @@ impl InMemoryContext {
         add_providers_from_directory(&mut db, provider_defs_path).await;
 
         Self {
+            store: Default::default(),
             project_db: Default::default(),
-            workflow_registry: Default::default(),
             session: Default::default(),
             thread_pool: create_rayon_thread_pool(0),
             exe_ctx_tiling_spec,
@@ -72,8 +73,8 @@ impl InMemoryContext {
         query_ctx_chunk_size: ChunkByteSize,
     ) -> Self {
         Self {
+            store: Default::default(),
             project_db: Default::default(),
-            workflow_registry: Default::default(),
             dataset_db: Default::default(),
             session: Default::default(),
             thread_pool: create_rayon_thread_pool(0),
@@ -86,8 +87,8 @@ impl InMemoryContext {
 #[async_trait]
 impl Context for InMemoryContext {
     type Session = SimpleSession;
+    type Store = InMemoryStore;
     type ProjectDB = HashMapProjectDb;
-    type WorkflowRegistry = HashMapRegistry;
     type DatasetDB = HashMapDatasetDb;
     type QueryContext = QueryContextImpl;
     type ExecutionContext = ExecutionContextImpl<SimpleSession, HashMapDatasetDb>;
@@ -102,14 +103,14 @@ impl Context for InMemoryContext {
         self.project_db.write().await
     }
 
-    fn workflow_registry(&self) -> Db<Self::WorkflowRegistry> {
-        self.workflow_registry.clone()
+    fn store(&self) -> Db<Self::Store> {
+        self.store.clone()
     }
-    async fn workflow_registry_ref(&self) -> RwLockReadGuard<'_, Self::WorkflowRegistry> {
-        self.workflow_registry.read().await
+    async fn store_ref(&self) -> RwLockReadGuard<'_, Self::Store> {
+        self.store.read().await
     }
-    async fn workflow_registry_ref_mut(&self) -> RwLockWriteGuard<'_, Self::WorkflowRegistry> {
-        self.workflow_registry.write().await
+    async fn store_ref_mut(&self) -> RwLockWriteGuard<'_, Self::Store> {
+        self.store.write().await
     }
 
     fn dataset_db(&self) -> Db<Self::DatasetDB> {

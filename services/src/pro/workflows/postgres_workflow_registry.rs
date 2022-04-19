@@ -1,44 +1,25 @@
+use crate::error;
 use crate::error::Result;
-use crate::workflows::workflow::{Workflow, WorkflowId};
-use crate::{error, workflows::registry::WorkflowRegistry};
+use crate::pro::contexts::PostgresStore;
+use crate::storage::Store;
+use crate::util::user_input::Validated;
+use crate::workflows::workflow::{Workflow, WorkflowId, WorkflowListing};
 use async_trait::async_trait;
 use bb8_postgres::{
-    bb8::Pool, tokio_postgres::tls::MakeTlsConnect, tokio_postgres::tls::TlsConnect,
-    tokio_postgres::Socket, PostgresConnectionManager,
+    tokio_postgres::tls::MakeTlsConnect, tokio_postgres::tls::TlsConnect, tokio_postgres::Socket,
 };
 use snafu::ResultExt;
 
-pub struct PostgresWorkflowRegistry<Tls>
-where
-    Tls: MakeTlsConnect<Socket> + Clone + Send + Sync + 'static,
-    <Tls as MakeTlsConnect<Socket>>::Stream: Send + Sync,
-    <Tls as MakeTlsConnect<Socket>>::TlsConnect: Send,
-    <<Tls as MakeTlsConnect<Socket>>::TlsConnect as TlsConnect<Socket>>::Future: Send,
-{
-    conn_pool: Pool<PostgresConnectionManager<Tls>>,
-}
-
-impl<Tls> PostgresWorkflowRegistry<Tls>
-where
-    Tls: MakeTlsConnect<Socket> + Clone + Send + Sync + 'static,
-    <Tls as MakeTlsConnect<Socket>>::Stream: Send + Sync,
-    <Tls as MakeTlsConnect<Socket>>::TlsConnect: Send,
-    <<Tls as MakeTlsConnect<Socket>>::TlsConnect as TlsConnect<Socket>>::Future: Send,
-{
-    pub fn new(conn_pool: Pool<PostgresConnectionManager<Tls>>) -> Self {
-        Self { conn_pool }
-    }
-}
-
 #[async_trait]
-impl<Tls> WorkflowRegistry for PostgresWorkflowRegistry<Tls>
+impl<Tls> Store<Workflow> for PostgresStore<Tls>
 where
     Tls: MakeTlsConnect<Socket> + Clone + Send + Sync + 'static,
     <Tls as MakeTlsConnect<Socket>>::Stream: Send + Sync,
     <Tls as MakeTlsConnect<Socket>>::TlsConnect: Send,
     <<Tls as MakeTlsConnect<Socket>>::TlsConnect as TlsConnect<Socket>>::Future: Send,
 {
-    async fn register(&mut self, workflow: Workflow) -> Result<WorkflowId> {
+    async fn create(&mut self, workflow: Validated<Workflow>) -> Result<WorkflowId> {
+        let workflow = workflow.user_input;
         let conn = self.conn_pool.get().await?;
         let stmt = conn
             .prepare(
@@ -61,7 +42,7 @@ where
         Ok(workflow_id)
     }
 
-    async fn load(&self, id: &WorkflowId) -> Result<Workflow> {
+    async fn read(&self, id: &WorkflowId) -> Result<Workflow> {
         // TODO: authorization
         let conn = self.conn_pool.get().await?;
         let stmt = conn
@@ -71,5 +52,17 @@ where
         let row = conn.query_one(&stmt, &[&id]).await?;
 
         Ok(serde_json::from_value(row.get(0)).context(error::SerdeJson)?)
+    }
+
+    async fn update(&mut self, _id: &WorkflowId, _workflow: Validated<Workflow>) -> Result<()> {
+        todo!()
+    }
+
+    async fn delete(&mut self, _id: &WorkflowId) -> Result<()> {
+        todo!()
+    }
+
+    async fn list(&self, _options: ()) -> Result<Vec<WorkflowListing>> {
+        todo!()
     }
 }

@@ -11,9 +11,9 @@ use crate::projects::{
     Symbology, UpdateProject,
 };
 use crate::server::{configure_extractors, render_404, render_405};
+use crate::storage::Store;
 use crate::util::user_input::UserInput;
 use crate::util::Identifier;
-use crate::workflows::registry::WorkflowRegistry;
 use crate::workflows::workflow::{Workflow, WorkflowId};
 use crate::{
     contexts::{Context, InMemoryContext},
@@ -97,17 +97,19 @@ pub async fn register_ndvi_workflow_helper(ctx: &InMemoryContext) -> (Workflow, 
             }
             .boxed(),
         ),
-    };
+    }
+    .validated()
+    .unwrap();
 
     let id = ctx
-        .workflow_registry()
+        .store()
         .write()
         .await
-        .register(workflow.clone())
+        .create(workflow.clone())
         .await
         .unwrap();
 
-    (workflow, id)
+    (workflow.user_input, id)
 }
 
 pub async fn add_ndvi_to_datasets(ctx: &InMemoryContext) -> DatasetId {
