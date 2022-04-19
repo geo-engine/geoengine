@@ -286,11 +286,21 @@ pub enum Error {
     TimeProjectionOperator {
         source: crate::processing::TimeProjectionError,
     },
+    #[snafu(display("MockRasterSource error: {}", source))]
+    MockRasterSource {
+        source: crate::mock::MockRasterSourceError,
+    },
 }
 
 impl From<crate::adapters::SparseTilesFillAdapterError> for Error {
     fn from(source: crate::adapters::SparseTilesFillAdapterError) -> Self {
         Error::SparseTilesFillAdapter { source }
+    }
+}
+
+impl From<crate::mock::MockRasterSourceError> for Error {
+    fn from(source: crate::mock::MockRasterSourceError) -> Self {
+        Error::MockRasterSource { source }
     }
 }
 

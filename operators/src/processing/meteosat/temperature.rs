@@ -316,8 +316,7 @@ mod tests {
     use geoengine_datatypes::primitives::{
         ClassificationMeasurement, ContinuousMeasurement, Measurement,
     };
-    use geoengine_datatypes::raster::{EmptyGrid2D, Grid2D};
-    use geoengine_datatypes::util::test::TestDefault;
+    use geoengine_datatypes::raster::{EmptyGrid2D, Grid2D, TilingSpecification};
     use std::collections::HashMap;
 
     // #[tokio::test]
@@ -343,7 +342,9 @@ mod tests {
 
     #[tokio::test]
     async fn test_empty_ok() {
-        let ctx = MockExecutionContext::test_default();
+        let tiling_specification = TilingSpecification::new([0.0, 0.0].into(), [3, 2].into());
+        let ctx = MockExecutionContext::new_with_tiling_spec(tiling_specification);
+
         let res = test_util::process(
             || {
                 let props = test_util::create_properties(Some(4), Some(1), Some(0.0), Some(1.0));
@@ -370,7 +371,9 @@ mod tests {
 
     #[tokio::test]
     async fn test_ok() {
-        let ctx = MockExecutionContext::test_default();
+        let tiling_specification = TilingSpecification::new([0.0, 0.0].into(), [3, 2].into());
+        let ctx = MockExecutionContext::new_with_tiling_spec(tiling_specification);
+
         let res = test_util::process(
             || {
                 let props = test_util::create_properties(Some(4), Some(1), Some(0.0), Some(1.0));
@@ -410,7 +413,9 @@ mod tests {
 
     #[tokio::test]
     async fn test_ok_force_satellite() {
-        let ctx = MockExecutionContext::test_default();
+        let tiling_specification = TilingSpecification::new([0.0, 0.0].into(), [3, 2].into());
+        let ctx = MockExecutionContext::new_with_tiling_spec(tiling_specification);
+
         let res = test_util::process(
             || {
                 let props = test_util::create_properties(Some(4), Some(1), Some(0.0), Some(1.0));
@@ -452,7 +457,8 @@ mod tests {
 
     #[tokio::test]
     async fn test_fail_illegal_input() {
-        let ctx = MockExecutionContext::test_default();
+        let tiling_specification = TilingSpecification::new([0.0, 0.0].into(), [3, 2].into());
+        let ctx = MockExecutionContext::new_with_tiling_spec(tiling_specification);
 
         let res = test_util::process(
             || {
@@ -480,7 +486,9 @@ mod tests {
 
     #[tokio::test]
     async fn test_invalid_force_satellite() {
-        let ctx = MockExecutionContext::test_default();
+        let tiling_specification = TilingSpecification::new([0.0, 0.0].into(), [3, 2].into());
+        let ctx = MockExecutionContext::new_with_tiling_spec(tiling_specification);
+
         let res = test_util::process(
             || {
                 let props = test_util::create_properties(Some(4), Some(1), Some(0.0), Some(1.0));
@@ -504,7 +512,9 @@ mod tests {
 
     #[tokio::test]
     async fn test_missing_satellite() {
-        let ctx = MockExecutionContext::test_default();
+        let tiling_specification = TilingSpecification::new([0.0, 0.0].into(), [3, 2].into());
+        let ctx = MockExecutionContext::new_with_tiling_spec(tiling_specification);
+
         let res = test_util::process(
             || {
                 let props = test_util::create_properties(Some(4), None, Some(0.0), Some(1.0));
@@ -526,7 +536,9 @@ mod tests {
 
     #[tokio::test]
     async fn test_invalid_satellite() {
-        let ctx = MockExecutionContext::test_default();
+        let tiling_specification = TilingSpecification::new([0.0, 0.0].into(), [3, 2].into());
+        let ctx = MockExecutionContext::new_with_tiling_spec(tiling_specification);
+
         let res = test_util::process(
             || {
                 let props = test_util::create_properties(Some(4), Some(42), Some(0.0), Some(1.0));
@@ -548,7 +560,9 @@ mod tests {
 
     #[tokio::test]
     async fn test_missing_channel() {
-        let ctx = MockExecutionContext::test_default();
+        let tiling_specification = TilingSpecification::new([0.0, 0.0].into(), [3, 2].into());
+        let ctx = MockExecutionContext::new_with_tiling_spec(tiling_specification);
+
         let res = test_util::process(
             || {
                 let props = test_util::create_properties(None, Some(1), Some(0.0), Some(1.0));
@@ -570,7 +584,9 @@ mod tests {
 
     #[tokio::test]
     async fn test_invalid_channel() {
-        let ctx = MockExecutionContext::test_default();
+        let tiling_specification = TilingSpecification::new([0.0, 0.0].into(), [3, 2].into());
+        let ctx = MockExecutionContext::new_with_tiling_spec(tiling_specification);
+
         let res = test_util::process(
             || {
                 let props = test_util::create_properties(Some(1), Some(1), Some(0.0), Some(1.0));
@@ -592,7 +608,9 @@ mod tests {
 
     #[tokio::test]
     async fn test_missing_slope() {
-        let ctx = MockExecutionContext::test_default();
+        let tiling_specification = TilingSpecification::new([0.0, 0.0].into(), [3, 2].into());
+        let ctx = MockExecutionContext::new_with_tiling_spec(tiling_specification);
+
         let res = test_util::process(
             || {
                 let props = test_util::create_properties(Some(4), Some(1), Some(0.0), None);
@@ -614,7 +632,9 @@ mod tests {
 
     #[tokio::test]
     async fn test_missing_offset() {
-        let ctx = MockExecutionContext::test_default();
+        let tiling_specification = TilingSpecification::new([0.0, 0.0].into(), [3, 2].into());
+        let ctx = MockExecutionContext::new_with_tiling_spec(tiling_specification);
+
         let res = test_util::process(
             || {
                 let props = test_util::create_properties(Some(4), Some(1), None, Some(1.0));
@@ -636,7 +656,9 @@ mod tests {
 
     #[tokio::test]
     async fn test_invalid_measurement_unitless() {
-        let ctx = MockExecutionContext::test_default();
+        let tiling_specification = TilingSpecification::new([0.0, 0.0].into(), [3, 2].into());
+        let ctx = MockExecutionContext::new_with_tiling_spec(tiling_specification);
+
         let res = test_util::process(
             || {
                 let props = test_util::create_properties(Some(4), Some(1), Some(0.0), Some(1.0));
@@ -659,7 +681,9 @@ mod tests {
 
     #[tokio::test]
     async fn test_invalid_measurement_continuous() {
-        let ctx = MockExecutionContext::test_default();
+        let tiling_specification = TilingSpecification::new([0.0, 0.0].into(), [3, 2].into());
+        let ctx = MockExecutionContext::new_with_tiling_spec(tiling_specification);
+
         let res = test_util::process(
             || {
                 let props = test_util::create_properties(Some(4), Some(1), Some(0.0), Some(1.0));
@@ -689,7 +713,10 @@ mod tests {
 
     #[tokio::test]
     async fn test_invalid_measurement_classification() {
-        let ctx = MockExecutionContext::test_default();
+        let tiling_specification = TilingSpecification::new([0.0, 0.0].into(), [3, 2].into());
+
+        let ctx = MockExecutionContext::new_with_tiling_spec(tiling_specification);
+
         let res = test_util::process(
             || {
                 let props = test_util::create_properties(Some(4), Some(1), Some(0.0), Some(1.0));

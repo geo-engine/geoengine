@@ -455,7 +455,7 @@ mod tests {
         BoundingBox2D, FeatureData, Measurement, NoGeometry, SpatialResolution, TimeInterval,
     };
     use geoengine_datatypes::raster::{
-        EmptyGrid2D, Grid2D, RasterDataType, RasterTile2D, TileInformation,
+        EmptyGrid2D, Grid2D, RasterDataType, RasterTile2D, TileInformation, TilingSpecification,
     };
     use geoengine_datatypes::spatial_reference::SpatialReference;
     use geoengine_datatypes::util::test::TestDefault;
@@ -894,6 +894,11 @@ mod tests {
     #[tokio::test]
     async fn no_data_raster_exclude_no_data() {
         let no_data_value = Some(0);
+        let tile_size_in_pixels = [3, 2].into();
+        let tiling_specification = TilingSpecification {
+            origin_coordinate: [0.0, 0.0].into(),
+            tile_size_in_pixels,
+        };
         let box_plot = BoxPlot {
             params: BoxPlotParams {
                 column_names: vec![],
@@ -906,9 +911,9 @@ mod tests {
                         TileInformation {
                             global_geo_transform: TestDefault::test_default(),
                             global_tile_position: [0, 0].into(),
-                            tile_size_in_pixels: [3, 2].into(),
+                            tile_size_in_pixels,
                         },
-                        Grid2D::new([3, 2].into(), vec![0, 0, 0, 0, 0, 0], no_data_value)
+                        Grid2D::new(tile_size_in_pixels, vec![0, 0, 0, 0, 0, 0], no_data_value)
                             .unwrap()
                             .into(),
                     )],
@@ -924,7 +929,7 @@ mod tests {
             .into(),
         };
 
-        let execution_context = MockExecutionContext::test_default();
+        let execution_context = MockExecutionContext::new_with_tiling_spec(tiling_specification);
 
         let query_processor = box_plot
             .boxed()
@@ -956,6 +961,11 @@ mod tests {
 
     #[tokio::test]
     async fn no_data_raster_include_no_data() {
+        let tile_size_in_pixels = [3, 2].into();
+        let tiling_specification = TilingSpecification {
+            origin_coordinate: [0.0, 0.0].into(),
+            tile_size_in_pixels,
+        };
         let no_data_value = Some(0);
         let box_plot = BoxPlot {
             params: BoxPlotParams {
@@ -969,9 +979,9 @@ mod tests {
                         TileInformation {
                             global_geo_transform: TestDefault::test_default(),
                             global_tile_position: [0, 0].into(),
-                            tile_size_in_pixels: [3, 2].into(),
+                            tile_size_in_pixels,
                         },
-                        Grid2D::new([3, 2].into(), vec![0, 0, 0, 0, 0, 0], no_data_value)
+                        Grid2D::new(tile_size_in_pixels, vec![0, 0, 0, 0, 0, 0], no_data_value)
                             .unwrap()
                             .into(),
                     )],
@@ -987,7 +997,7 @@ mod tests {
             .into(),
         };
 
-        let execution_context = MockExecutionContext::test_default();
+        let execution_context = MockExecutionContext::new_with_tiling_spec(tiling_specification);
 
         let query_processor = box_plot
             .boxed()
@@ -1002,8 +1012,7 @@ mod tests {
         let result = query_processor
             .plot_query(
                 VectorQueryRectangle {
-                    spatial_bounds: BoundingBox2D::new((-180., -90.).into(), (180., 90.).into())
-                        .unwrap(),
+                    spatial_bounds: BoundingBox2D::new((0., -3.).into(), (2., 0.).into()).unwrap(),
                     time_interval: TimeInterval::default(),
                     spatial_resolution: SpatialResolution::one(),
                 },
@@ -1022,6 +1031,11 @@ mod tests {
 
     #[tokio::test]
     async fn empty_tile_raster_exclude_no_data() {
+        let tile_size_in_pixels = [3, 2].into();
+        let tiling_specification = TilingSpecification {
+            origin_coordinate: [0.0, 0.0].into(),
+            tile_size_in_pixels,
+        };
         let no_data_value = Some(0_u8);
         let box_plot = BoxPlot {
             params: BoxPlotParams {
@@ -1035,9 +1049,9 @@ mod tests {
                         TileInformation {
                             global_geo_transform: TestDefault::test_default(),
                             global_tile_position: [0, 0].into(),
-                            tile_size_in_pixels: [3, 2].into(),
+                            tile_size_in_pixels,
                         },
-                        EmptyGrid2D::new([3, 2].into(), no_data_value.unwrap()).into(),
+                        EmptyGrid2D::new(tile_size_in_pixels, no_data_value.unwrap()).into(),
                     )],
                     result_descriptor: RasterResultDescriptor {
                         data_type: RasterDataType::U8,
@@ -1051,7 +1065,7 @@ mod tests {
             .into(),
         };
 
-        let execution_context = MockExecutionContext::test_default();
+        let execution_context = MockExecutionContext::new_with_tiling_spec(tiling_specification);
 
         let query_processor = box_plot
             .boxed()
@@ -1083,6 +1097,11 @@ mod tests {
 
     #[tokio::test]
     async fn empty_tile_raster_include_no_data() {
+        let tile_size_in_pixels = [3, 2].into();
+        let tiling_specification = TilingSpecification {
+            origin_coordinate: [0.0, 0.0].into(),
+            tile_size_in_pixels,
+        };
         let no_data_value = Some(0_u8);
         let box_plot = BoxPlot {
             params: BoxPlotParams {
@@ -1096,9 +1115,9 @@ mod tests {
                         TileInformation {
                             global_geo_transform: TestDefault::test_default(),
                             global_tile_position: [0, 0].into(),
-                            tile_size_in_pixels: [3, 2].into(),
+                            tile_size_in_pixels,
                         },
-                        EmptyGrid2D::new([3, 2].into(), no_data_value.unwrap()).into(),
+                        EmptyGrid2D::new(tile_size_in_pixels, no_data_value.unwrap()).into(),
                     )],
                     result_descriptor: RasterResultDescriptor {
                         data_type: RasterDataType::U8,
@@ -1112,7 +1131,7 @@ mod tests {
             .into(),
         };
 
-        let execution_context = MockExecutionContext::test_default();
+        let execution_context = MockExecutionContext::new_with_tiling_spec(tiling_specification);
 
         let query_processor = box_plot
             .boxed()
@@ -1127,8 +1146,7 @@ mod tests {
         let result = query_processor
             .plot_query(
                 VectorQueryRectangle {
-                    spatial_bounds: BoundingBox2D::new((-180., -90.).into(), (180., 90.).into())
-                        .unwrap(),
+                    spatial_bounds: BoundingBox2D::new((0., -3.).into(), (2., 0.).into()).unwrap(),
                     time_interval: TimeInterval::default(),
                     spatial_resolution: SpatialResolution::one(),
                 },
@@ -1147,7 +1165,12 @@ mod tests {
 
     #[tokio::test]
     async fn single_value_raster_stream() {
-        let execution_context = MockExecutionContext::test_default();
+        let tile_size_in_pixels = [3, 2].into();
+        let tiling_specification = TilingSpecification {
+            origin_coordinate: [0.0, 0.0].into(),
+            tile_size_in_pixels,
+        };
+        let execution_context = MockExecutionContext::new_with_tiling_spec(tiling_specification);
 
         let no_data_value = None;
         let histogram = BoxPlot {
@@ -1162,9 +1185,9 @@ mod tests {
                         TileInformation {
                             global_geo_transform: TestDefault::test_default(),
                             global_tile_position: [0, 0].into(),
-                            tile_size_in_pixels: [3, 2].into(),
+                            tile_size_in_pixels,
                         },
-                        Grid2D::new([3, 2].into(), vec![4; 6], no_data_value)
+                        Grid2D::new(tile_size_in_pixels, vec![4; 6], no_data_value)
                             .unwrap()
                             .into(),
                     )],
@@ -1216,7 +1239,12 @@ mod tests {
 
     #[tokio::test]
     async fn raster_with_no_data_exclude_no_data() {
-        let execution_context = MockExecutionContext::test_default();
+        let tile_size_in_pixels = [4, 2].into();
+        let tiling_specification = TilingSpecification {
+            origin_coordinate: [0.0, 0.0].into(),
+            tile_size_in_pixels,
+        };
+        let execution_context = MockExecutionContext::new_with_tiling_spec(tiling_specification);
 
         let no_data_value = Some(0);
         let histogram = BoxPlot {
@@ -1231,11 +1259,15 @@ mod tests {
                         TileInformation {
                             global_geo_transform: TestDefault::test_default(),
                             global_tile_position: [0, 0].into(),
-                            tile_size_in_pixels: [4, 2].into(),
+                            tile_size_in_pixels,
                         },
-                        Grid2D::new([4, 2].into(), vec![1, 2, 0, 4, 0, 6, 7, 0], no_data_value)
-                            .unwrap()
-                            .into(),
+                        Grid2D::new(
+                            tile_size_in_pixels,
+                            vec![1, 2, 0, 4, 0, 6, 7, 0],
+                            no_data_value,
+                        )
+                        .unwrap()
+                        .into(),
                     )],
                     result_descriptor: RasterResultDescriptor {
                         data_type: RasterDataType::U8,
@@ -1262,8 +1294,7 @@ mod tests {
         let result = query_processor
             .plot_query(
                 VectorQueryRectangle {
-                    spatial_bounds: BoundingBox2D::new((-180., -90.).into(), (180., 90.).into())
-                        .unwrap(),
+                    spatial_bounds: BoundingBox2D::new((0., -4.).into(), (2., 0.).into()).unwrap(),
                     time_interval: TimeInterval::new_instant(
                         NaiveDate::from_ymd(2013, 12, 1).and_hms(12, 0, 0),
                     )
@@ -1285,7 +1316,12 @@ mod tests {
 
     #[tokio::test]
     async fn raster_with_no_data_include_no_data() {
-        let execution_context = MockExecutionContext::test_default();
+        let tile_size_in_pixels = [4, 2].into();
+        let tiling_specification = TilingSpecification {
+            origin_coordinate: [0.0, 0.0].into(),
+            tile_size_in_pixels,
+        };
+        let execution_context = MockExecutionContext::new_with_tiling_spec(tiling_specification);
 
         let no_data_value = Some(0);
         let histogram = BoxPlot {
@@ -1300,11 +1336,15 @@ mod tests {
                         TileInformation {
                             global_geo_transform: TestDefault::test_default(),
                             global_tile_position: [0, 0].into(),
-                            tile_size_in_pixels: [4, 2].into(),
+                            tile_size_in_pixels,
                         },
-                        Grid2D::new([4, 2].into(), vec![1, 2, 0, 4, 0, 6, 7, 0], no_data_value)
-                            .unwrap()
-                            .into(),
+                        Grid2D::new(
+                            tile_size_in_pixels,
+                            vec![1, 2, 0, 4, 0, 6, 7, 0],
+                            no_data_value,
+                        )
+                        .unwrap()
+                        .into(),
                     )],
                     result_descriptor: RasterResultDescriptor {
                         data_type: RasterDataType::U8,
@@ -1331,8 +1371,7 @@ mod tests {
         let result = query_processor
             .plot_query(
                 VectorQueryRectangle {
-                    spatial_bounds: BoundingBox2D::new((-180., -90.).into(), (180., 90.).into())
-                        .unwrap(),
+                    spatial_bounds: BoundingBox2D::new((0., -4.).into(), (2., 0.).into()).unwrap(),
                     time_interval: TimeInterval::new_instant(
                         NaiveDate::from_ymd(2013, 12, 1).and_hms(12, 0, 0),
                     )
@@ -1354,7 +1393,12 @@ mod tests {
 
     #[tokio::test]
     async fn multiple_rasters_with_no_data_exclude_no_data() {
-        let execution_context = MockExecutionContext::test_default();
+        let tile_size_in_pixels = [4, 2].into();
+        let tiling_specification = TilingSpecification {
+            origin_coordinate: [0.0, 0.0].into(),
+            tile_size_in_pixels,
+        };
+        let execution_context = MockExecutionContext::new_with_tiling_spec(tiling_specification);
         let no_data_value = Some(0);
 
         let src = MockRasterSource {
@@ -1364,11 +1408,15 @@ mod tests {
                     TileInformation {
                         global_geo_transform: TestDefault::test_default(),
                         global_tile_position: [0, 0].into(),
-                        tile_size_in_pixels: [4, 2].into(),
+                        tile_size_in_pixels,
                     },
-                    Grid2D::new([4, 2].into(), vec![1, 2, 0, 4, 0, 6, 7, 0], no_data_value)
-                        .unwrap()
-                        .into(),
+                    Grid2D::new(
+                        tile_size_in_pixels,
+                        vec![1, 2, 0, 4, 0, 6, 7, 0],
+                        no_data_value,
+                    )
+                    .unwrap()
+                    .into(),
                 )],
                 result_descriptor: RasterResultDescriptor {
                     data_type: RasterDataType::U8,

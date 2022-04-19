@@ -271,8 +271,7 @@ mod tests {
     use geoengine_datatypes::primitives::{
         ClassificationMeasurement, ContinuousMeasurement, Measurement,
     };
-    use geoengine_datatypes::raster::{EmptyGrid2D, Grid2D};
-    use geoengine_datatypes::util::test::TestDefault;
+    use geoengine_datatypes::raster::{EmptyGrid2D, Grid2D, TilingSpecification};
     use std::collections::HashMap;
 
     // #[tokio::test]
@@ -299,7 +298,13 @@ mod tests {
     #[tokio::test]
     async fn test_ok() {
         let no_data_value_option = Some(super::OUT_NO_DATA_VALUE);
-        let ctx = MockExecutionContext::test_default();
+        let tile_size_in_pixels = [3, 2].into();
+        let tiling_specification = TilingSpecification {
+            origin_coordinate: [0.0, 0.0].into(),
+            tile_size_in_pixels,
+        };
+
+        let ctx = MockExecutionContext::new_with_tiling_spec(tiling_specification);
 
         let result = test_util::process(
             || {
@@ -332,7 +337,13 @@ mod tests {
     #[tokio::test]
     async fn test_empty_raster() {
         let no_data_value_option = Some(super::OUT_NO_DATA_VALUE);
-        let ctx = MockExecutionContext::test_default();
+        let tile_size_in_pixels = [3, 2].into();
+        let tiling_specification = TilingSpecification {
+            origin_coordinate: [0.0, 0.0].into(),
+            tile_size_in_pixels,
+        };
+
+        let ctx = MockExecutionContext::new_with_tiling_spec(tiling_specification);
 
         let result = test_util::process(
             || {
@@ -358,8 +369,13 @@ mod tests {
 
     #[tokio::test]
     async fn test_missing_offset() {
-        let ctx = MockExecutionContext::test_default();
+        let tile_size_in_pixels = [3, 2].into();
+        let tiling_specification = TilingSpecification {
+            origin_coordinate: [0.0, 0.0].into(),
+            tile_size_in_pixels,
+        };
 
+        let ctx = MockExecutionContext::new_with_tiling_spec(tiling_specification);
         let result = test_util::process(
             || {
                 let props = test_util::create_properties(None, None, None, Some(2.0));
@@ -381,7 +397,13 @@ mod tests {
 
     #[tokio::test]
     async fn test_missing_slope() {
-        let ctx = MockExecutionContext::test_default();
+        let tile_size_in_pixels = [3, 2].into();
+        let tiling_specification = TilingSpecification {
+            origin_coordinate: [0.0, 0.0].into(),
+            tile_size_in_pixels,
+        };
+
+        let ctx = MockExecutionContext::new_with_tiling_spec(tiling_specification);
 
         let result = test_util::process(
             || {
@@ -404,7 +426,13 @@ mod tests {
 
     #[tokio::test]
     async fn test_invalid_measurement_unitless() {
-        let ctx = MockExecutionContext::test_default();
+        let tile_size_in_pixels = [3, 2].into();
+        let tiling_specification = TilingSpecification {
+            origin_coordinate: [0.0, 0.0].into(),
+            tile_size_in_pixels,
+        };
+
+        let ctx = MockExecutionContext::new_with_tiling_spec(tiling_specification);
 
         let res = test_util::process(
             || {
@@ -428,7 +456,13 @@ mod tests {
 
     #[tokio::test]
     async fn test_invalid_measurement_continuous() {
-        let ctx = MockExecutionContext::test_default();
+        let tile_size_in_pixels = [3, 2].into();
+        let tiling_specification = TilingSpecification {
+            origin_coordinate: [0.0, 0.0].into(),
+            tile_size_in_pixels,
+        };
+
+        let ctx = MockExecutionContext::new_with_tiling_spec(tiling_specification);
 
         let res = test_util::process(
             || {
@@ -459,7 +493,13 @@ mod tests {
 
     #[tokio::test]
     async fn test_invalid_measurement_classification() {
-        let ctx = MockExecutionContext::test_default();
+        let tile_size_in_pixels = [3, 2].into();
+        let tiling_specification = TilingSpecification {
+            origin_coordinate: [0.0, 0.0].into(),
+            tile_size_in_pixels,
+        };
+
+        let ctx = MockExecutionContext::new_with_tiling_spec(tiling_specification);
 
         let res = test_util::process(
             || {

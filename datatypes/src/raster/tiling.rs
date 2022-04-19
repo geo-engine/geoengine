@@ -3,7 +3,9 @@ use crate::{
     util::test::TestDefault,
 };
 
-use super::{GeoTransform, GridBoundingBox2D, GridIdx, GridIdx2D, GridShape2D, GridSize};
+use super::{
+    GeoTransform, GridBoundingBox2D, GridIdx, GridIdx2D, GridShape2D, GridShapeAccess, GridSize,
+};
 
 use serde::{Deserialize, Serialize};
 
@@ -28,6 +30,18 @@ impl TilingSpecification {
         debug_assert!(y_pixel_size < 0.0);
 
         TilingStrategy::new_with_tiling_spec(self, x_pixel_size, y_pixel_size)
+    }
+}
+
+impl GridShapeAccess for TilingSpecification {
+    type ShapeArray = [usize; 2];
+
+    fn grid_shape_array(&self) -> Self::ShapeArray {
+        self.tile_size_in_pixels.shape_array
+    }
+
+    fn grid_shape(&self) -> GridShape2D {
+        self.tile_size_in_pixels
     }
 }
 
