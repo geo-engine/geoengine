@@ -5,7 +5,7 @@ use geoengine_datatypes::identifier;
 use geoengine_operators::engine::TypedOperator;
 
 use crate::error::Result;
-use crate::storage::Storable;
+use crate::storage::{ListOption, Listable, Storable};
 use crate::util::user_input::UserInput;
 
 identifier!(WorkflowId);
@@ -27,20 +27,71 @@ pub struct Workflow {
     pub operator: TypedOperator,
 }
 
+// impl IdDerivation for Workflow {
+//     type Item = Workflow; // TODO redundant?
+//     type Id = WorkflowId;
+
+//     fn id(item: &Self::Item) -> Self::Id {
+//         WorkflowId::from_hash(item)
+//     }
+// }
+
 impl Storable for Workflow {
     type Id = WorkflowId;
+    // type IdDerivation = ;
     type Item = Workflow;
     type ItemListing = WorkflowListing;
-    type ListOptions = ();
+    type ListOptions = WorkflowListOptions;
 }
 
 pub struct WorkflowListing {
     pub id: WorkflowId,
 }
 
+impl Listable<Workflow> for Workflow {
+    fn list(&self, id: &WorkflowId) -> WorkflowListing {
+        WorkflowListing { id: *id }
+    }
+}
+
 impl UserInput for Workflow {
     fn validate(&self) -> Result<()> {
         Ok(())
+    }
+}
+
+#[derive(Clone)]
+pub struct WorkflowListOptions {
+    offset: u32,
+    limit: u32,
+}
+
+impl UserInput for WorkflowListOptions {
+    fn validate(&self) -> Result<()> {
+        // TODO
+        Ok(())
+    }
+}
+
+impl ListOption for WorkflowListOptions {
+    type Item = Workflow;
+
+    fn offset(&self) -> u32 {
+        self.offset
+    }
+
+    fn limit(&self) -> u32 {
+        self.limit
+    }
+
+    fn compare_items(&self, a: &Self::Item, b: &Self::Item) -> std::cmp::Ordering {
+        // TODO
+        std::cmp::Ordering::Equal
+    }
+
+    fn retain(&self, item: &Self::Item) -> bool {
+        // TODO
+        true
     }
 }
 

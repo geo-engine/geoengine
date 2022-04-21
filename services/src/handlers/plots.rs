@@ -4,7 +4,7 @@ use crate::handlers::Context;
 use crate::ogc::util::{parse_bbox, parse_time};
 use crate::storage::Store;
 use crate::util::parsing::parse_spatial_resolution;
-use crate::workflows::workflow::WorkflowId;
+use crate::workflows::workflow::{Workflow, WorkflowId};
 use actix_web::{web, FromRequest, Responder};
 use geoengine_datatypes::operations::reproject::reproject_query;
 use geoengine_datatypes::plots::PlotOutputFormat;
@@ -124,7 +124,7 @@ async fn get_plot_handler<C: Context>(
     ctx: web::Data<C>,
 ) -> Result<impl Responder> {
     let workflow = ctx
-        .store_ref()
+        .store_ref::<Workflow>()
         .await
         .read(&WorkflowId(id.into_inner()))
         .await?;
@@ -285,7 +285,12 @@ mod tests {
         .validated()
         .unwrap();
 
-        let id = ctx.store().write().await.create(workflow).await.unwrap();
+        let id = ctx
+            .store_ref_mut::<Workflow>()
+            .await
+            .create(workflow)
+            .await
+            .unwrap();
 
         let params = &[
             ("bbox", "0,-0.3,0.2,0"),
@@ -350,7 +355,12 @@ mod tests {
         .validated()
         .unwrap();
 
-        let id = ctx.store().write().await.create(workflow).await.unwrap();
+        let id = ctx
+            .store_ref_mut::<Workflow>()
+            .await
+            .create(workflow)
+            .await
+            .unwrap();
 
         let params = &[
             ("bbox", "0,-0.3,0.2,0"),
@@ -425,7 +435,12 @@ mod tests {
             .validated()
             .unwrap();
 
-            let id = ctx.store().write().await.create(workflow).await.unwrap();
+            let id = ctx
+                .store_ref_mut::<Workflow>()
+                .await
+                .create(workflow)
+                .await
+                .unwrap();
 
             let params = &[
                 ("bbox", "-180,-90,180,90"),

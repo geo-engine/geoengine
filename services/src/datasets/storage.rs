@@ -5,11 +5,12 @@ use crate::datasets::upload::UploadId;
 use crate::error;
 use crate::error::Result;
 use crate::projects::Symbology;
+use crate::storage::{ListOption, Listable, Storable};
 use crate::util::user_input::{UserInput, Validated};
 use async_trait::async_trait;
-use geoengine_datatypes::dataset::{DatasetId, DatasetProviderId};
+use geoengine_datatypes::dataset::{DatasetId, DatasetProviderId, InternalDatasetId};
 use geoengine_datatypes::primitives::VectorQueryRectangle;
-use geoengine_operators::engine::MetaData;
+use geoengine_operators::engine::{MetaData, MetaDataLookupResult};
 use geoengine_operators::source::{GdalMetaDataList, GdalMetadataNetCdfCf};
 use geoengine_operators::{engine::StaticMetaData, source::OgrSourceDataset};
 use geoengine_operators::{
@@ -21,24 +22,30 @@ use serde::{Deserialize, Serialize};
 use snafu::{ensure, ResultExt};
 use std::fmt::Debug;
 
-use super::listing::Provenance;
+use super::listing::{DatasetListOptions, Provenance};
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 #[serde(rename_all = "camelCase")]
 pub struct Dataset {
-    pub id: DatasetId,
     pub name: String,
     pub description: String,
-    pub result_descriptor: TypedResultDescriptor,
+    pub result_descriptor: TypedResultDescriptor, // TODO: store separately like `MetaDataDefinition`
     pub source_operator: String,
     pub symbology: Option<Symbology>,
     pub provenance: Option<Provenance>,
 }
 
-impl Dataset {
-    pub fn listing(&self) -> DatasetListing {
+impl Storable for Dataset {
+    type Id = InternalDatasetId; // TODO: internal dataset id?
+    type Item = Dataset;
+    type ItemListing = DatasetListing;
+    type ListOptions = DatasetListOptions;
+}
+
+impl Listable<Dataset> for Dataset {
+    fn list(&self, id: &InternalDatasetId) -> DatasetListing {
         DatasetListing {
-            id: self.id.clone(),
+            id: (*id).into(),
             name: self.name.clone(),
             description: self.description.clone(),
             tags: vec![], // TODO
@@ -46,6 +53,37 @@ impl Dataset {
             result_descriptor: self.result_descriptor.clone(),
             symbology: self.symbology.clone(),
         }
+    }
+}
+
+impl ListOption for DatasetListOptions {
+    type Item = Dataset;
+
+    fn offset(&self) -> u32 {
+        self.offset
+    }
+
+    fn limit(&self) -> u32 {
+        self.limit
+    }
+
+    fn compare_items(&self, a: &Dataset, b: &Dataset) -> std::cmp::Ordering {
+        match self.order {
+            super::listing::OrderBy::NameAsc => a.name.cmp(&b.name),
+            super::listing::OrderBy::NameDesc => b.name.cmp(&a.name),
+        }
+    }
+
+    fn retain(&self, item: &Self::Item) -> bool {
+        // TODO
+        true
+    }
+}
+
+impl UserInput for Dataset {
+    fn validate(&self) -> Result<()> {
+        // TODO
+        Ok(())
     }
 }
 
@@ -76,6 +114,26 @@ pub struct DatasetProviderListing {
     // more meta data (number of datasets, ...)
 }
 
+impl
+    From<(
+        DatasetProviderId,
+        Box<dyn ExternalDatasetProviderDefinition>,
+    )> for DatasetProviderListing
+{
+    fn from(
+        v: (
+            DatasetProviderId,
+            Box<dyn ExternalDatasetProviderDefinition>,
+        ),
+    ) -> Self {
+        Self {
+            id: v.0,
+            type_name: v.1.type_name(),
+            name: v.1.name(),
+        }
+    }
+}
+
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub enum AddDatasetProvider {
     AddMockDatasetProvider(AddMockDatasetProvider),
@@ -100,6 +158,28 @@ pub struct DatasetProviderListOptions {
     pub limit: u32,
 }
 
+impl ListOption for DatasetProviderListOptions {
+    type Item = Box<dyn ExternalDatasetProviderDefinition>;
+
+    fn offset(&self) -> u32 {
+        self.offset
+    }
+
+    fn limit(&self) -> u32 {
+        self.limit
+    }
+
+    fn compare_items(&self, a: &Self::Item, b: &Self::Item) -> std::cmp::Ordering {
+        // TODO
+        std::cmp::Ordering::Equal
+    }
+
+    fn retain(&self, item: &Self::Item) -> bool {
+        // TODO
+        true
+    }
+}
+
 impl UserInput for DatasetProviderListOptions {
     fn validate(&self) -> Result<()> {
         // TODO
@@ -109,14 +189,35 @@ impl UserInput for DatasetProviderListOptions {
 #[derive(Deserialize, Serialize, Debug, Clone)]
 #[serde(rename_all = "camelCase")]
 pub struct DatasetDefinition {
-    pub properties: AddDataset,
+    pub properties: Dataset,
     pub meta_data: MetaDataDefinition,
+}
+
+#[derive(Deserialize, Serialize, Debug, Clone)]
+#[serde(rename_all = "camelCase")]
+pub struct AddDatasetDefinition {
+    pub properties: AddDataset,
+    pub meta_data: MetaDataDefinition, // TODO: refactor into result_descriptor as separate field because every dataset needs it independently of the meta data
+}
+
+impl AddDatasetDefinition {
+    // TODO: make sync again when result_descriptor is available as a field
+    pub async fn dataset(&self) -> Result<Dataset> {
+        Ok(Dataset {
+            name: self.properties.name.clone(),
+            description: self.properties.description.clone(),
+            result_descriptor: self.meta_data.result_descriptor().await?,
+            source_operator: self.properties.source_operator.clone(),
+            symbology: self.properties.symbology.clone(),
+            provenance: self.properties.provenance.clone(),
+        })
+    }
 }
 
 #[derive(Deserialize, Serialize, Debug, Clone)]
 pub struct CreateDataset {
     pub upload: UploadId,
-    pub definition: DatasetDefinition,
+    pub definition: AddDatasetDefinition,
 }
 
 #[derive(Deserialize, Serialize, Debug, Clone)]
@@ -223,6 +324,76 @@ impl MetaDataDefinition {
     }
 }
 
+impl From<MetaDataDefinition> for MetaDataLookupResult {
+    fn from(definition: MetaDataDefinition) -> Self {
+        match definition {
+            MetaDataDefinition::MockMetaData(m) => Self::Mock(Box::new(m)),
+            MetaDataDefinition::OgrMetaData(m) => Self::Ogr(Box::new(m)),
+            MetaDataDefinition::GdalMetaDataRegular(m) => Self::Gdal(Box::new(m)),
+            MetaDataDefinition::GdalStatic(m) => Self::Gdal(Box::new(m)),
+            MetaDataDefinition::GdalMetadataNetCdfCf(m) => Self::Gdal(Box::new(m)),
+            MetaDataDefinition::GdalMetaDataList(m) => Self::Gdal(Box::new(m)),
+        }
+    }
+}
+
+impl UserInput for MetaDataDefinition {
+    fn validate(&self) -> Result<()> {
+        // TODO
+        Ok(())
+    }
+}
+
+impl Storable for MetaDataDefinition {
+    type Id = InternalDatasetId;
+    type Item = MetaDataDefinition;
+    type ItemListing = MetaDataDefinitionListing; // TODO
+    type ListOptions = MetaDataDefinitionListOptions;
+}
+
+#[derive(Clone)]
+pub struct MetaDataDefinitionListOptions {
+    pub offset: u32,
+    pub limit: u32,
+}
+
+impl ListOption for MetaDataDefinitionListOptions {
+    type Item = MetaDataDefinition;
+
+    fn offset(&self) -> u32 {
+        self.offset
+    }
+
+    fn limit(&self) -> u32 {
+        self.limit
+    }
+
+    fn compare_items(&self, a: &Self::Item, b: &Self::Item) -> std::cmp::Ordering {
+        // TODO
+        std::cmp::Ordering::Equal
+    }
+
+    fn retain(&self, item: &Self::Item) -> bool {
+        // TODO
+        true
+    }
+}
+
+impl UserInput for MetaDataDefinitionListOptions {
+    fn validate(&self) -> Result<()> {
+        // TODO
+        Ok(())
+    }
+}
+
+pub struct MetaDataDefinitionListing {}
+
+impl Listable<MetaDataDefinition> for MetaDataDefinition {
+    fn list(&self, id: &InternalDatasetId) -> MetaDataDefinitionListing {
+        MetaDataDefinitionListing {}
+    }
+}
+
 /// Handling of datasets provided by geo engine internally, staged and by external providers
 #[async_trait]
 pub trait DatasetDb<S: Session>:
@@ -268,7 +439,7 @@ pub trait DatasetStore<S: Session>: DatasetStorer {
     async fn add_dataset(
         &mut self,
         session: &S,
-        dataset: Validated<AddDataset>,
+        dataset: Validated<Dataset>,
         meta_data: Self::StorageType,
     ) -> Result<DatasetId>;
 
@@ -311,5 +482,41 @@ where
 impl Clone for Box<dyn ExternalDatasetProviderDefinition> {
     fn clone(&self) -> Box<dyn ExternalDatasetProviderDefinition> {
         self.clone_boxed_provider()
+    }
+}
+
+impl UserInput for Box<dyn ExternalDatasetProviderDefinition> {
+    fn validate(&self) -> Result<()> {
+        // TODO
+        Ok(())
+    }
+}
+
+impl<T> UserInput for Box<T>
+where
+    T: ExternalDatasetProviderDefinition + Clone,
+{
+    fn validate(&self) -> Result<()> {
+        // TODO
+        Ok(())
+    }
+}
+
+impl Storable for Box<dyn ExternalDatasetProviderDefinition> {
+    type Id = DatasetProviderId;
+    type Item = Box<dyn ExternalDatasetProviderDefinition>;
+    type ItemListing = DatasetProviderListing;
+    type ListOptions = DatasetProviderListOptions;
+}
+
+impl Listable<Box<dyn ExternalDatasetProviderDefinition>>
+    for Box<dyn ExternalDatasetProviderDefinition>
+{
+    fn list(&self, id: &DatasetProviderId) -> DatasetProviderListing {
+        DatasetProviderListing {
+            id: *id,
+            name: self.name(),
+            type_name: self.type_name(),
+        }
     }
 }

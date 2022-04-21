@@ -316,7 +316,6 @@ pub enum Error {
     NetCdfCf4DProvider {
         source: NetCdfCf4DProviderError,
     },
-
     #[cfg(feature = "ebv")]
     #[snafu(context(false))]
     EbvHandler {

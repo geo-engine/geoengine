@@ -33,13 +33,13 @@ use geoengine_datatypes::primitives::{
 };
 use geoengine_datatypes::raster::{GdalGeoTransform, RasterDataType};
 use geoengine_datatypes::spatial_reference::{SpatialReference, SpatialReferenceOption};
-use geoengine_operators::engine::TypedResultDescriptor;
+use geoengine_operators::engine::{MetaDataLookupResult, TypedResultDescriptor};
 use geoengine_operators::source::{
     FileNotFoundHandling, GdalDatasetGeoTransform, GdalDatasetParameters, GdalMetadataNetCdfCf,
 };
 use geoengine_operators::util::gdal::gdal_open_dataset_ex;
 use geoengine_operators::{
-    engine::{MetaData, MetaDataProvider, RasterResultDescriptor, VectorResultDescriptor},
+    engine::{MetaData, RasterResultDescriptor, VectorResultDescriptor},
     mock::MockDatasetDataSourceLoadingInfo,
     source::{GdalLoadingInfo, OgrSourceDataset},
 };
@@ -1051,62 +1051,13 @@ impl ExternalDatasetProvider for NetCdfCfDataProvider {
     fn as_any(&self) -> &dyn std::any::Any {
         self
     }
-}
 
-#[async_trait]
-impl MetaDataProvider<GdalLoadingInfo, RasterResultDescriptor, RasterQueryRectangle>
-    for NetCdfCfDataProvider
-{
-    async fn meta_data(
-        &self,
-        dataset: &DatasetId,
-    ) -> Result<
-        Box<dyn MetaData<GdalLoadingInfo, RasterResultDescriptor, RasterQueryRectangle>>,
-        geoengine_operators::error::Error,
-    > {
+    async fn meta_data(&self, dataset: &DatasetId) -> crate::error::Result<MetaDataLookupResult> {
         // TODO spawn blocking
-        self.meta_data(dataset).await.map_err(|error| {
-            geoengine_operators::error::Error::LoadingInfo {
-                source: Box::new(error),
-            }
-        })
-    }
-}
-
-#[async_trait]
-impl
-    MetaDataProvider<MockDatasetDataSourceLoadingInfo, VectorResultDescriptor, VectorQueryRectangle>
-    for NetCdfCfDataProvider
-{
-    async fn meta_data(
-        &self,
-        _dataset: &DatasetId,
-    ) -> Result<
-        Box<
-            dyn MetaData<
-                MockDatasetDataSourceLoadingInfo,
-                VectorResultDescriptor,
-                VectorQueryRectangle,
-            >,
-        >,
-        geoengine_operators::error::Error,
-    > {
-        Err(geoengine_operators::error::Error::NotYetImplemented)
-    }
-}
-
-#[async_trait]
-impl MetaDataProvider<OgrSourceDataset, VectorResultDescriptor, VectorQueryRectangle>
-    for NetCdfCfDataProvider
-{
-    async fn meta_data(
-        &self,
-        _dataset: &DatasetId,
-    ) -> Result<
-        Box<dyn MetaData<OgrSourceDataset, VectorResultDescriptor, VectorQueryRectangle>>,
-        geoengine_operators::error::Error,
-    > {
-        Err(geoengine_operators::error::Error::NotYetImplemented)
+        self.meta_data(dataset)
+            .await
+            .map(|m| MetaDataLookupResult::Gdal(m))
+            .map_err(Into::into)
     }
 }
 

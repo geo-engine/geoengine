@@ -4,39 +4,50 @@ use std::{
     path::Path,
 };
 
-use crate::datasets::listing::DatasetProvider;
-use crate::datasets::storage::{AddDataset, DatasetStore, MetaDataSuggestion, SuggestMetaData};
-use crate::datasets::storage::{DatasetProviderDb, DatasetProviderListOptions};
-use crate::datasets::upload::UploadRootPath;
+use crate::datasets::{listing::DatasetProvider, storage::Dataset};
+use crate::datasets::{storage::ExternalDatasetProviderDefinition, upload::UploadRootPath};
 use crate::datasets::{
     storage::{CreateDataset, MetaDataDefinition},
     upload::Upload,
 };
 use crate::error;
 use crate::error::Result;
+use crate::storage::Storable;
 use crate::util::user_input::UserInput;
 use crate::{contexts::Context, datasets::storage::AutoCreateDataset};
+use crate::{
+    datasets::storage::{DatasetProviderDb, DatasetProviderListOptions},
+    storage::Store,
+};
 use crate::{
     datasets::{listing::DatasetListOptions, upload::UploadDb},
     util::IdResponse,
 };
+use crate::{
+    datasets::{
+        listing::{DatasetListing, Provenance},
+        storage::{DatasetStore, MetaDataSuggestion, SuggestMetaData},
+    },
+    projects::Symbology,
+};
 use actix_web::{web, FromRequest, Responder};
-use gdal::{vector::Layer, Dataset};
+use gdal::vector::Layer;
 use gdal::{vector::OGRFieldType, DatasetOptions};
 use geoengine_datatypes::{
     collections::VectorDataType,
-    dataset::{DatasetProviderId, InternalDatasetId},
+    dataset::{DatasetId, DatasetProviderId, InternalDatasetId},
     primitives::{FeatureDataType, VectorQueryRectangle},
     spatial_reference::{SpatialReference, SpatialReferenceOption},
 };
 use geoengine_operators::{
-    engine::{StaticMetaData, VectorResultDescriptor},
+    engine::{StaticMetaData, TypedResultDescriptor, VectorResultDescriptor},
     source::{
         OgrSourceColumnSpec, OgrSourceDataset, OgrSourceDatasetTimeType, OgrSourceDurationSpec,
         OgrSourceTimeFormat,
     },
     util::gdal::{gdal_open_dataset, gdal_open_dataset_ex},
 };
+use serde::Serialize;
 use snafu::ResultExt;
 
 pub(crate) fn init_dataset_routes<C>(cfg: &mut web::ServiceConfig)
@@ -69,9 +80,9 @@ async fn list_providers_handler<C: Context>(
     options: web::Query<DatasetProviderListOptions>,
 ) -> Result<impl Responder> {
     let list = ctx
-        .dataset_db_ref()
+        .store_ref::<Box<dyn ExternalDatasetProviderDefinition>>()
         .await
-        .list_dataset_providers(&session, options.into_inner().validated()?)
+        .list(options.into_inner().validated()?)
         .await?;
     Ok(web::Json(list))
 }
@@ -84,9 +95,11 @@ async fn list_external_datasets_handler<C: Context>(
 ) -> Result<impl Responder> {
     let options = options.into_inner().validated()?;
     let list = ctx
-        .dataset_db_ref()
+        .store_ref::<Box<dyn ExternalDatasetProviderDefinition>>()
         .await
-        .dataset_provider(&session, provider.into_inner())
+        .read(&provider.into_inner())
+        .await?
+        .initialize()
         .await?
         .list(options) // TODO: authorization
         .await?;
@@ -128,7 +141,7 @@ async fn list_datasets_handler<C: Context>(
     options: web::Query<DatasetListOptions>,
 ) -> Result<impl Responder> {
     let options = options.into_inner().validated()?;
-    let list = ctx.dataset_db_ref().await.list(&session, options).await?;
+    let list: Vec<DatasetListing> = ctx.store_ref::<Dataset>().await.list(options).await?;
     Ok(web::Json(list))
 }
 
@@ -163,12 +176,30 @@ async fn get_dataset_handler<C: Context>(
     session: C::Session,
     ctx: web::Data<C>,
 ) -> Result<impl Responder> {
-    let dataset = ctx
-        .dataset_db_ref()
-        .await
-        .load(&session, &dataset.into_inner().into())
-        .await?;
-    Ok(web::Json(dataset))
+    let id: InternalDatasetId = dataset.into_inner().into();
+    let dataset = ctx.store_ref::<Dataset>().await.read(&id.into()).await?;
+    let response = DatasetResponse {
+        id: DatasetId::Internal { dataset_id: id },
+        name: dataset.name,
+        description: dataset.description,
+        result_descriptor: dataset.result_descriptor,
+        source_operator: dataset.source_operator,
+        symbology: dataset.symbology,
+        provenance: dataset.provenance,
+    };
+    Ok(web::Json(response))
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct DatasetResponse {
+    id: DatasetId,
+    name: String,
+    description: String,
+    result_descriptor: TypedResultDescriptor,
+    source_operator: String,
+    pub symbology: Option<Symbology>,
+    pub provenance: Option<Provenance>,
 }
 
 /// Creates a new [Dataset](CreateDataset) using previously uploaded files.
@@ -230,23 +261,30 @@ async fn create_dataset_handler<C: Context>(
     ctx: web::Data<C>,
     create: web::Json<CreateDataset>,
 ) -> Result<impl Responder> {
-    let upload = ctx
-        .dataset_db_ref()
-        .await
-        .get_upload(&session, create.upload)
-        .await?;
+    let upload = ctx.store_ref::<Upload>().await.read(&create.upload).await?;
 
     let mut definition = create.into_inner().definition;
 
     adjust_user_path_to_upload_path(&mut definition.meta_data, &upload)?;
 
-    let mut db = ctx.dataset_db_ref_mut().await;
-    let meta_data = db.wrap_meta_data(definition.meta_data);
-    let id = db
-        .add_dataset(&session, definition.properties.validated()?, meta_data)
+    let dataset: Dataset = definition.dataset().await?;
+
+    let id = ctx
+        .store_ref_mut::<Dataset>()
+        .await
+        .create(dataset.validated()?)
         .await?;
 
-    Ok(web::Json(IdResponse::from(id)))
+    ctx.store_ref_mut::<MetaDataDefinition>()
+        .await
+        .create_with_id(&id, definition.meta_data.validated()?)
+        .await?;
+
+    // TODO: delete dataset if metadata creation failed
+
+    Ok(web::Json(IdResponse::from(DatasetId::Internal {
+        dataset_id: id,
+    })))
 }
 
 fn adjust_user_path_to_upload_path(meta: &mut MetaDataDefinition, upload: &Upload) -> Result<()> {
@@ -304,31 +342,34 @@ async fn auto_create_dataset_handler<C: Context>(
     ctx: web::Data<C>,
     create: web::Json<AutoCreateDataset>,
 ) -> Result<impl Responder> {
-    let upload = ctx
-        .dataset_db_ref()
-        .await
-        .get_upload(&session, create.upload)
-        .await?;
+    let upload = ctx.store_ref::<Upload>().await.read(&create.upload).await?;
 
     let create = create.into_inner().validated()?.user_input;
 
     let main_file_path = upload.id.root_path()?.join(&create.main_file);
     let meta_data = auto_detect_meta_data_definition(&main_file_path)?;
 
-    let properties = AddDataset {
-        id: None,
+    let properties = Dataset {
         name: create.dataset_name,
         description: create.dataset_description,
         source_operator: meta_data.source_operator_type().to_owned(),
         symbology: None,
         provenance: None,
+        result_descriptor: meta_data.result_descriptor().await?,
     };
 
-    let mut db = ctx.dataset_db_ref_mut().await;
-    let meta_data = db.wrap_meta_data(meta_data);
-    let id = db
-        .add_dataset(&session, properties.validated()?, meta_data)
+    let id = ctx
+        .store_ref_mut::<Dataset>()
+        .await
+        .create(properties.validated()?)
         .await?;
+
+    ctx.store_ref_mut::<MetaDataDefinition>()
+        .await
+        .create_with_id(&id, meta_data.validated()?)
+        .await?;
+
+    // TODO: delete dataset if metadata creation failed
 
     Ok(web::Json(IdResponse::from(id)))
 }
@@ -339,9 +380,9 @@ async fn suggest_meta_data_handler<C: Context>(
     suggest: web::Query<SuggestMetaData>,
 ) -> Result<impl Responder> {
     let upload = ctx
-        .dataset_db_ref()
+        .store_ref::<Upload>()
         .await
-        .get_upload(&session, suggest.upload)
+        .read(&suggest.upload)
         .await?;
 
     let main_file = suggest
@@ -601,7 +642,7 @@ fn detect_time_type(columns: &Columns) -> OgrSourceDatasetTimeType {
     }
 }
 
-fn detect_vector_geometry(dataset: &Dataset) -> DetectedGeometry {
+fn detect_vector_geometry(dataset: &gdal::Dataset) -> DetectedGeometry {
     for layer in dataset.layers() {
         for g in layer.defn().geom_fields() {
             if let Ok(data_type) = VectorDataType::try_from_ogr_type_code(g.field_type()) {
@@ -631,7 +672,7 @@ fn detect_vector_geometry(dataset: &Dataset) -> DetectedGeometry {
 }
 
 struct GdalAutoDetect {
-    dataset: Dataset,
+    dataset: gdal::Dataset,
     x: String,
     y: Option<String>,
 }
@@ -719,7 +760,7 @@ fn column_map_to_column_vecs(columns: &HashMap<String, ColumnDataType>) -> Colum
 mod tests {
     use super::*;
     use crate::contexts::{InMemoryContext, Session, SessionId, SimpleContext, SimpleSession};
-    use crate::datasets::storage::{AddDataset, DatasetStore};
+    use crate::datasets::storage::DatasetStore;
     use crate::datasets::upload::UploadId;
     use crate::error::Result;
     use crate::projects::{PointSymbology, Symbology};
@@ -762,17 +803,15 @@ mod tests {
             columns: Default::default(),
         };
 
-        let id = DatasetId::Internal {
-            dataset_id: InternalDatasetId::from_str("370e99ec-9fd8-401d-828d-d67b431a8742")
-                .unwrap(),
-        };
-        let ds = AddDataset {
-            id: Some(id),
+        let id = InternalDatasetId::from_str("370e99ec-9fd8-401d-828d-d67b431a8742").unwrap();
+
+        let ds = Dataset {
             name: "OgrDataset".to_string(),
             description: "My Ogr dataset".to_string(),
             source_operator: "OgrSource".to_string(),
             symbology: None,
             provenance: None,
+            result_descriptor: descriptor.clone().into(),
         };
 
         let meta = StaticMetaData {
@@ -794,22 +833,24 @@ mod tests {
         };
 
         let _id = ctx
-            .dataset_db_ref_mut()
+            .store_ref_mut::<Dataset>()
             .await
-            .add_dataset(&SimpleSession::default(), ds.validated()?, Box::new(meta))
+            .create_with_id(&id, ds.validated()?)
             .await?;
 
-        let id2 = DatasetId::Internal {
-            dataset_id: InternalDatasetId::from_str("370e99ec-9fd8-401d-828d-d67b431a8742")
-                .unwrap(),
-        };
-        let ds = AddDataset {
-            id: Some(id2),
+        ctx.store_ref_mut::<MetaDataDefinition>()
+            .await
+            .create_with_id(&id, MetaDataDefinition::OgrMetaData(meta).validated()?)
+            .await?;
+
+        let id2 = InternalDatasetId::from_str("36d52597-808e-4341-b9f7-e7631a97395e").unwrap();
+        let ds = Dataset {
             name: "OgrDataset2".to_string(),
             description: "My Ogr dataset2".to_string(),
             source_operator: "OgrSource".to_string(),
             symbology: Some(Symbology::Point(PointSymbology::default())),
             provenance: None,
+            result_descriptor: descriptor.clone().into(),
         };
 
         let meta = StaticMetaData {
@@ -831,9 +872,14 @@ mod tests {
         };
 
         let _id2 = ctx
-            .dataset_db_ref_mut()
+            .store_ref_mut::<Dataset>()
             .await
-            .add_dataset(&SimpleSession::default(), ds.validated()?, Box::new(meta))
+            .create_with_id(&id2, ds.validated()?)
+            .await?;
+
+        ctx.store_ref_mut::<MetaDataDefinition>()
+            .await
+            .create_with_id(&id2, MetaDataDefinition::OgrMetaData(meta).validated()?)
             .await?;
 
         let req = actix_web::test::TestRequest::get()
@@ -857,7 +903,7 @@ mod tests {
             json!([{
                 "id": {
                     "type": "internal",
-                    "datasetId": "370e99ec-9fd8-401d-828d-d67b431a8742"
+                    "datasetId": "36d52597-808e-4341-b9f7-e7631a97395e"
                 },
                 "name": "OgrDataset2",
                 "description": "My Ogr dataset2",
@@ -1450,13 +1496,13 @@ mod tests {
             columns: Default::default(),
         };
 
-        let ds = AddDataset {
-            id: None,
+        let ds = Dataset {
             name: "OgrDataset".to_string(),
             description: "My Ogr dataset".to_string(),
             source_operator: "OgrSource".to_string(),
             symbology: None,
             provenance: None,
+            result_descriptor: descriptor.clone().into(),
         };
 
         let meta = StaticMetaData {
@@ -1478,17 +1524,18 @@ mod tests {
         };
 
         let id = ctx
-            .dataset_db_ref_mut()
+            .store_ref_mut::<Dataset>()
             .await
-            .add_dataset(
-                &*ctx.default_session_ref().await,
-                ds.validated()?,
-                Box::new(meta),
-            )
+            .create(ds.validated()?)
+            .await?;
+
+        ctx.store_ref_mut::<MetaDataDefinition>()
+            .await
+            .create_with_id(&id, MetaDataDefinition::OgrMetaData(meta).validated()?)
             .await?;
 
         let req = actix_web::test::TestRequest::get()
-            .uri(&format!("/dataset/internal/{}", id.internal().unwrap()))
+            .uri(&format!("/dataset/internal/{}", id))
             .append_header((header::CONTENT_LENGTH, 0))
             .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())));
         let res = send_test_request(req, ctx).await;
@@ -1502,7 +1549,7 @@ mod tests {
             json!({
                 "id": {
                     "type": "internal",
-                    "datasetId": id.internal().unwrap()
+                    "datasetId": id
                 },
                 "name": "OgrDataset",
                 "description": "My Ogr dataset",

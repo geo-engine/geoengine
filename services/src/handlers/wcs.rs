@@ -24,7 +24,7 @@ use crate::storage::Store;
 use crate::util::config;
 use crate::util::config::get_config_element;
 use crate::util::user_input::QueryEx;
-use crate::workflows::workflow::WorkflowId;
+use crate::workflows::workflow::{Workflow, WorkflowId};
 
 use geoengine_datatypes::primitives::{TimeInstance, TimeInterval};
 use geoengine_operators::engine::RasterOperator;
@@ -162,7 +162,7 @@ async fn describe_coverage<C: Context>(
 
     let wcs_url = wcs_url(identifiers)?;
 
-    let workflow = ctx.store_ref().await.read(&identifiers).await?;
+    let workflow = ctx.store_ref::<Workflow>().await.read(&identifiers).await?;
 
     let exe_ctx = ctx.execution_context(session)?;
     let operator = workflow
@@ -288,7 +288,7 @@ async fn get_coverage<C: Context>(
         );
     }
 
-    let workflow = ctx.store_ref().await.read(&identifier).await?;
+    let workflow = ctx.store_ref::<Workflow>().await.read(&identifier).await?;
 
     let operator = workflow.operator.get_raster().context(error::Operator)?;
 

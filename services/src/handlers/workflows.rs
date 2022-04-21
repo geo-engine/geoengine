@@ -1,12 +1,14 @@
 use std::collections::HashSet;
 
-use crate::datasets::listing::DatasetProvider;
-use crate::datasets::storage::{AddDataset, DatasetDefinition, DatasetStore, MetaDataDefinition};
+use crate::datasets::listing::{DatasetProvider, ProvenanceOutput};
+use crate::datasets::storage::{
+    Dataset, DatasetDefinition, DatasetStore, ExternalDatasetProviderDefinition, MetaDataDefinition,
+};
 use crate::datasets::upload::{UploadId, UploadRootPath};
 use crate::error;
 use crate::error::Result;
 use crate::handlers::Context;
-use crate::storage::Store;
+use crate::storage::{GeoEngineStore, Store};
 use crate::util::config::get_config_element;
 use crate::util::user_input::UserInput;
 use crate::util::IdResponse;
@@ -107,7 +109,11 @@ async fn register_workflow_handler<C: Context>(
         }
     }
 
-    let id = ctx.store_ref_mut().await.create(workflow).await?;
+    let id = ctx
+        .store_ref_mut::<Workflow>()
+        .await
+        .create(workflow)
+        .await?;
     Ok(web::Json(IdResponse::from(id)))
 }
 
@@ -145,7 +151,11 @@ async fn load_workflow_handler<C: Context>(
     _session: C::Session,
     ctx: web::Data<C>,
 ) -> Result<impl Responder> {
-    let wf = ctx.store_ref().await.read(&id.into_inner()).await?;
+    let wf = ctx
+        .store_ref::<Workflow>()
+        .await
+        .read(&id.into_inner())
+        .await?;
     Ok(web::Json(wf))
 }
 
@@ -170,7 +180,11 @@ async fn get_workflow_metadata_handler<C: Context>(
     session: C::Session,
     ctx: web::Data<C>,
 ) -> Result<impl Responder> {
-    let workflow = ctx.store_ref().await.read(&id.into_inner()).await?;
+    let workflow = ctx
+        .store_ref::<Workflow>()
+        .await
+        .read(&id.into_inner())
+        .await?;
 
     let execution_context = ctx.execution_context(session)?;
 
@@ -223,15 +237,19 @@ async fn get_workflow_provenance_handler<C: Context>(
     session: C::Session,
     ctx: web::Data<C>,
 ) -> Result<impl Responder> {
-    let workflow = ctx.store_ref().await.read(&id.into_inner()).await?;
+    let workflow = ctx
+        .store_ref::<Workflow>()
+        .await
+        .read(&id.into_inner())
+        .await?;
 
     let datasets = workflow.operator.datasets();
 
-    let db = ctx.dataset_db_ref().await;
+    let ctx = ctx.into_inner();
 
     let provenance: Vec<_> = datasets
         .iter()
-        .map(|id| db.provenance(&session, id))
+        .map(|id| dataset_provenance(&*ctx, id))
         .collect();
     let provenance: Result<Vec<_>> = join_all(provenance).await.into_iter().collect();
 
@@ -240,6 +258,30 @@ async fn get_workflow_provenance_handler<C: Context>(
     let provenance: Vec<_> = provenance.into_iter().collect();
 
     Ok(web::Json(provenance))
+}
+
+async fn dataset_provenance<C: Context>(ctx: &C, id: &DatasetId) -> Result<ProvenanceOutput> {
+    // TODO: avoid aquiring lock for each individual lookup
+    let dataset_store = ctx.store_ref::<Dataset>().await;
+    let provider_store = ctx
+        .store_ref::<Box<dyn ExternalDatasetProviderDefinition>>()
+        .await;
+
+    match id {
+        DatasetId::Internal { dataset_id } => Ok(ProvenanceOutput {
+            dataset: id.clone(),
+            provenance: dataset_store.read(dataset_id).await?.provenance,
+        }),
+        DatasetId::External(external_id) => {
+            provider_store
+                .read(&external_id.provider_id)
+                .await?
+                .initialize()
+                .await?
+                .provenance(id)
+                .await
+        }
+    }
 }
 
 /// parameter for the dataset from workflow handler (body)
@@ -317,7 +359,7 @@ async fn dataset_from_workflow_handler<C: Context>(
 ) -> Result<impl Responder> {
     // TODO: support datasets with multiple time steps
 
-    let workflow = ctx.store_ref().await.read(&workflow_id).await?;
+    let workflow = ctx.store_ref::<Workflow>().await.read(&workflow_id).await?;
 
     let operator = workflow.operator.get_raster().context(error::Operator)?;
 
@@ -388,15 +430,14 @@ async fn create_dataset<C: Context>(
     ctx: &C,
     session: <C as Context>::Session,
 ) -> Result<geoengine_datatypes::dataset::DatasetId> {
-    let dataset_id = InternalDatasetId::new().into();
     let dataset_definition = DatasetDefinition {
-        properties: AddDataset {
-            id: Some(dataset_id),
+        properties: Dataset {
             name: info.name,
             description: info.description.unwrap_or_default(),
             source_operator: "GdalSource".to_owned(),
             symbology: None,  // TODO add symbology?
             provenance: None, // TODO add provenance that references the workflow
+            result_descriptor: result_descriptor.clone().into(),
         },
         meta_data: MetaDataDefinition::GdalStatic(GdalMetaDataStatic {
             time: Some(info.query.time_interval),
@@ -424,12 +465,20 @@ async fn create_dataset<C: Context>(
 
     // TODO: build pyramides, prefereably in the background
 
-    let mut db = ctx.dataset_db_ref_mut().await;
-    let meta = db.wrap_meta_data(dataset_definition.meta_data);
-    let dataset = db
-        .add_dataset(&session, dataset_definition.properties.validated()?, meta)
+    let id = ctx
+        .store_ref_mut::<Dataset>()
+        .await
+        .create(dataset_definition.properties.validated()?)
         .await?;
-    Ok(dataset)
+
+    ctx.store_ref_mut::<MetaDataDefinition>()
+        .await
+        .create_with_id(&id, dataset_definition.meta_data.validated()?)
+        .await?;
+
+    // TODO: delete dataset if metadata creation failed
+
+    Ok(id.into())
 }
 
 #[cfg(test)]
@@ -673,8 +722,7 @@ mod tests {
         .unwrap();
 
         let id = ctx
-            .store()
-            .write()
+            .store_ref_mut::<Workflow>()
             .await
             .create(workflow.clone())
             .await
@@ -737,8 +785,7 @@ mod tests {
         .unwrap();
 
         let id = ctx
-            .store()
-            .write()
+            .store_ref_mut::<Workflow>()
             .await
             .create(workflow.clone())
             .await
@@ -800,8 +847,7 @@ mod tests {
         .unwrap();
 
         let id = ctx
-            .store()
-            .write()
+            .store_ref_mut::<Workflow>()
             .await
             .create(workflow.clone())
             .await
@@ -837,8 +883,7 @@ mod tests {
         .unwrap();
 
         let id = ctx
-            .store()
-            .write()
+            .store_ref_mut::<Workflow>()
             .await
             .create(workflow.clone())
             .await
@@ -884,8 +929,7 @@ mod tests {
         .unwrap();
 
         let id = ctx
-            .store()
-            .write()
+            .store_ref_mut::<Workflow>()
             .await
             .create(workflow.clone())
             .await
@@ -947,7 +991,12 @@ mod tests {
         .validated()
         .unwrap();
 
-        let workflow_id = ctx.store_ref_mut().await.create(workflow).await.unwrap();
+        let workflow_id = ctx
+            .store_ref_mut::<Workflow>()
+            .await
+            .create(workflow)
+            .await
+            .unwrap();
 
         // create dataset from workflow
         let req = test::TestRequest::post()

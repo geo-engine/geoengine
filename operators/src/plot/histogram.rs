@@ -589,8 +589,9 @@ mod tests {
     use super::*;
 
     use crate::engine::{
-        ChunkByteSize, MockExecutionContext, MockQueryContext, RasterOperator,
-        RasterResultDescriptor, StaticMetaData, VectorOperator, VectorResultDescriptor,
+        ChunkByteSize, MetaDataLookupResult, MockExecutionContext, MockQueryContext,
+        RasterOperator, RasterResultDescriptor, StaticMetaData, VectorOperator,
+        VectorResultDescriptor,
     };
     use crate::mock::{MockFeatureCollectionSource, MockRasterSource, MockRasterSourceParams};
     use crate::source::{
@@ -1005,9 +1006,9 @@ mod tests {
         let histogram: Histogram = serde_json::from_value(workflow).unwrap();
 
         let mut execution_context = MockExecutionContext::test_default();
-        execution_context.add_meta_data::<_, _, VectorQueryRectangle>(
+        execution_context.add_meta_data(
             DatasetId::Internal { dataset_id },
-            Box::new(StaticMetaData {
+            MetaDataLookupResult::Ogr(Box::new(StaticMetaData {
                 loading_info: OgrSourceDataset {
                     file_name: test_data!("vector/data/ne_10m_ports/ne_10m_ports.shp").into(),
                     layer_name: "ne_10m_ports".to_string(),
@@ -1050,7 +1051,7 @@ mod tests {
                     .collect(),
                 },
                 phantom: Default::default(),
-            }),
+            })),
         );
 
         if let Err(Error::InvalidOperatorSpec { reason }) =

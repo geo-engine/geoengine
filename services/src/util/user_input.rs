@@ -29,6 +29,12 @@ pub trait UserInput: Clone {
     }
 }
 
+impl UserInput for () {
+    fn validate(&self) -> Result<()> {
+        Ok(())
+    }
+}
+
 #[derive(Debug, Clone)]
 pub struct Validated<T: UserInput + Clone> {
     pub user_input: T,

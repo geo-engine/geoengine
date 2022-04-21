@@ -19,7 +19,7 @@ use crate::storage::Store;
 use crate::util::config;
 use crate::util::config::get_config_element;
 use crate::util::user_input::QueryEx;
-use crate::workflows::workflow::WorkflowId;
+use crate::workflows::workflow::{Workflow, WorkflowId};
 
 use geoengine_datatypes::primitives::{TimeInstance, TimeInterval};
 use geoengine_operators::engine::{RasterOperator, ResultDescriptor};
@@ -127,7 +127,7 @@ where
 {
     let wms_url = wms_url(workflow_id)?;
 
-    let workflow = ctx.store_ref().await.read(&workflow_id).await?;
+    let workflow = ctx.store_ref::<Workflow>().await.read(&workflow_id).await?;
 
     let exe_ctx = ctx.execution_context(session)?;
     let operator = workflow
@@ -237,7 +237,7 @@ async fn get_map<C: Context>(
     // TODO: validate request further
 
     let workflow = ctx
-        .store_ref()
+        .store_ref::<Workflow>()
         .await
         .read(&WorkflowId::from_str(&request.layers)?)
         .await?;

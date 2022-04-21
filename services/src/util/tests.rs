@@ -1,7 +1,7 @@
 use crate::contexts::SimpleContext;
 use crate::contexts::SimpleSession;
 use crate::datasets::listing::Provenance;
-use crate::datasets::storage::AddDataset;
+use crate::datasets::storage::Dataset;
 use crate::datasets::storage::DatasetStore;
 use crate::datasets::upload::UploadId;
 use crate::datasets::upload::UploadRootPath;
@@ -26,6 +26,7 @@ use flexi_logger::Logger;
 use geoengine_datatypes::dataset::DatasetId;
 use geoengine_datatypes::operations::image::Colorizer;
 use geoengine_datatypes::spatial_reference::SpatialReferenceOption;
+use geoengine_operators::engine::MetaData;
 use geoengine_operators::engine::{RasterOperator, TypedOperator};
 use geoengine_operators::source::{GdalSource, GdalSourceParameters};
 use geoengine_operators::util::gdal::create_ndvi_meta_data;
@@ -102,8 +103,7 @@ pub async fn register_ndvi_workflow_helper(ctx: &InMemoryContext) -> (Workflow, 
     .unwrap();
 
     let id = ctx
-        .store()
-        .write()
+        .store_ref_mut::<Workflow>()
         .await
         .create(workflow.clone())
         .await
@@ -113,9 +113,9 @@ pub async fn register_ndvi_workflow_helper(ctx: &InMemoryContext) -> (Workflow, 
 }
 
 pub async fn add_ndvi_to_datasets(ctx: &InMemoryContext) -> DatasetId {
+    let meta_data = create_ndvi_meta_data();
     let ndvi = DatasetDefinition {
-        properties: AddDataset {
-            id: None,
+        properties: Dataset {
             name: "NDVI".to_string(),
             description: "NDVI data from MODIS".to_string(),
             source_operator: "GdalSource".to_string(),
@@ -125,21 +125,27 @@ pub async fn add_ndvi_to_datasets(ctx: &InMemoryContext) -> DatasetId {
                 license: "Sample License".to_owned(),
                 uri: "http://example.org/".to_owned(),
             }),
+            result_descriptor: meta_data.result_descriptor().await.unwrap().into(),
         },
-        meta_data: MetaDataDefinition::GdalMetaDataRegular(create_ndvi_meta_data()),
+        meta_data: MetaDataDefinition::GdalMetaDataRegular(meta_data),
     };
 
-    ctx.dataset_db_ref_mut()
+    let id = ctx
+        .store_ref_mut::<Dataset>()
         .await
-        .add_dataset(
-            &SimpleSession::default(),
-            ndvi.properties
-                .validated()
-                .expect("valid dataset description"),
-            Box::new(ndvi.meta_data),
-        )
+        .create(ndvi.properties.validated().unwrap())
         .await
-        .expect("dataset db access")
+        .unwrap();
+
+    ctx.store_ref_mut::<MetaDataDefinition>()
+        .await
+        .create_with_id(&id, ndvi.meta_data.validated().unwrap())
+        .await
+        .unwrap();
+
+    // TODO: delete dataset if metadata creation failed
+
+    id.into()
 }
 
 pub async fn check_allowed_http_methods2<T, TRes, P, PParam>(

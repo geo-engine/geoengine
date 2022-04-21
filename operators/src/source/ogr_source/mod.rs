@@ -324,9 +324,10 @@ impl VectorOperator for OgrSource {
     ) -> Result<Box<dyn crate::engine::InitializedVectorOperator>> {
         // TODO: check rename of fields are valid
 
-        let info: Box<
-            dyn MetaData<OgrSourceDataset, VectorResultDescriptor, VectorQueryRectangle>,
-        > = context.meta_data(&self.params.dataset).await?;
+        let info = context
+            .meta_data(&self.params.dataset)
+            .await?
+            .ogr_meta_data()?;
 
         let result_descriptor = info.result_descriptor().await?;
 
@@ -1385,7 +1386,9 @@ impl FeatureCollectionBuilderGeometryHandler<NoGeometry>
 mod tests {
     use super::*;
 
-    use crate::engine::{ChunkByteSize, MockExecutionContext, MockQueryContext, StaticMetaData};
+    use crate::engine::{
+        ChunkByteSize, MetaDataLookupResult, MockExecutionContext, MockQueryContext, StaticMetaData,
+    };
     use crate::source::ogr_source::FormatSpecifics::Csv;
     use crate::test_data;
     use futures::{StreamExt, TryStreamExt};
@@ -1745,9 +1748,9 @@ mod tests {
             dataset_id: InternalDatasetId::new(),
         };
         let mut exe_ctx = MockExecutionContext::test_default();
-        exe_ctx.add_meta_data::<OgrSourceDataset, VectorResultDescriptor, VectorQueryRectangle>(
+        exe_ctx.add_meta_data(
             dataset.clone(),
-            Box::new(StaticMetaData {
+            MetaDataLookupResult::Ogr(Box::new(StaticMetaData {
                 loading_info: OgrSourceDataset {
                     file_name: test_data!("vector/data/ne_10m_ports/ne_10m_ports.shp").into(),
                     layer_name: "ne_10m_ports".to_string(),
@@ -1767,7 +1770,7 @@ mod tests {
                     columns: Default::default(),
                 },
                 phantom: Default::default(),
-            }),
+            })),
         );
 
         let source = OgrSource {
@@ -1841,9 +1844,9 @@ mod tests {
             dataset_id: InternalDatasetId::new(),
         };
         let mut exe_ctx = MockExecutionContext::test_default();
-        exe_ctx.add_meta_data::<OgrSourceDataset, VectorResultDescriptor, VectorQueryRectangle>(
+        exe_ctx.add_meta_data(
             dataset.clone(),
-            Box::new(StaticMetaData {
+            MetaDataLookupResult::Ogr(Box::new(StaticMetaData {
                 loading_info: OgrSourceDataset {
                     file_name: test_data!("vector/data/ne_10m_ports/ne_10m_ports.shp").into(),
                     layer_name: "ne_10m_ports".to_string(),
@@ -1863,7 +1866,7 @@ mod tests {
                     columns: Default::default(),
                 },
                 phantom: Default::default(),
-            }),
+            })),
         );
 
         let source = OgrSource {
@@ -1937,9 +1940,9 @@ mod tests {
             dataset_id: InternalDatasetId::new(),
         };
         let mut exe_ctx = MockExecutionContext::test_default();
-        exe_ctx.add_meta_data::<OgrSourceDataset, VectorResultDescriptor, VectorQueryRectangle>(
+        exe_ctx.add_meta_data(
             dataset.clone(),
-            Box::new(StaticMetaData {
+            MetaDataLookupResult::Ogr(Box::new(StaticMetaData {
                 loading_info: OgrSourceDataset {
                     file_name: test_data!(
                         "vector/data/ne_10m_ports/with_spatial_index/ne_10m_ports.gpkg"
@@ -1962,7 +1965,7 @@ mod tests {
                     columns: Default::default(),
                 },
                 phantom: Default::default(),
-            }),
+            })),
         );
 
         let source = OgrSource {
@@ -2037,9 +2040,9 @@ mod tests {
             dataset_id: InternalDatasetId::new(),
         };
         let mut exe_ctx = MockExecutionContext::test_default();
-        exe_ctx.add_meta_data::<OgrSourceDataset, VectorResultDescriptor, VectorQueryRectangle>(
+        exe_ctx.add_meta_data(
             id.clone(),
-            Box::new(StaticMetaData {
+            MetaDataLookupResult::Ogr(Box::new(StaticMetaData {
                 loading_info: OgrSourceDataset {
                     file_name: test_data!("vector/data/ne_10m_ports/ne_10m_ports.shp").into(),
                     layer_name: "ne_10m_ports".to_string(),
@@ -2082,7 +2085,7 @@ mod tests {
                     .collect(),
                 },
                 phantom: Default::default(),
-            }),
+            })),
         );
 
         let source = OgrSource {
@@ -2231,9 +2234,9 @@ mod tests {
             dataset_id: InternalDatasetId::new(),
         };
         let mut exe_ctx = MockExecutionContext::test_default();
-        exe_ctx.add_meta_data::<OgrSourceDataset, VectorResultDescriptor, VectorQueryRectangle>(
+        exe_ctx.add_meta_data(
             id.clone(),
-            Box::new(StaticMetaData {
+            MetaDataLookupResult::Ogr(Box::new(StaticMetaData {
                 loading_info: OgrSourceDataset {
                     file_name: test_data!("vector/data/ne_10m_ports/ne_10m_ports.shp").into(),
                     layer_name: "ne_10m_ports".to_string(),
@@ -2253,7 +2256,7 @@ mod tests {
                     columns: Default::default(),
                 },
                 phantom: Default::default(),
-            }),
+            })),
         );
 
         let source = OgrSource {
@@ -3594,9 +3597,9 @@ mod tests {
             dataset_id: InternalDatasetId::new(),
         };
         let mut exe_ctx = MockExecutionContext::test_default();
-        exe_ctx.add_meta_data::<OgrSourceDataset, VectorResultDescriptor, VectorQueryRectangle>(
+        exe_ctx.add_meta_data(
             id.clone(),
-            Box::new(StaticMetaData {
+            MetaDataLookupResult::Ogr(Box::new(StaticMetaData {
                 loading_info: OgrSourceDataset {
                     file_name: test_data!("vector/data/ne_10m_ports/ne_10m_ports.shp").into(),
                     layer_name: "ne_10m_ports".to_string(),
@@ -3616,7 +3619,7 @@ mod tests {
                     columns: Default::default(),
                 },
                 phantom: Default::default(),
-            }),
+            })),
         );
 
         let source = OgrSource {
@@ -3842,9 +3845,9 @@ mod tests {
             dataset_id: InternalDatasetId::new(),
         };
         let mut exe_ctx = MockExecutionContext::test_default();
-        exe_ctx.add_meta_data::<OgrSourceDataset, VectorResultDescriptor, VectorQueryRectangle>(
+        exe_ctx.add_meta_data(
             dataset.clone(),
-            Box::new(StaticMetaData {
+            MetaDataLookupResult::Ogr(Box::new(StaticMetaData {
                 loading_info: OgrSourceDataset {
                     file_name: test_data!("vector/data/ne_10m_ports/ne_10m_ports.shp").into(),
                     layer_name: "ne_10m_ports".to_string(),
@@ -3864,7 +3867,7 @@ mod tests {
                     columns: Default::default(),
                 },
                 phantom: Default::default(),
-            }),
+            })),
         );
 
         let source = OgrSource {
@@ -3919,9 +3922,9 @@ mod tests {
             dataset_id: InternalDatasetId::new(),
         };
         let mut exe_ctx = MockExecutionContext::test_default();
-        exe_ctx.add_meta_data::<OgrSourceDataset, VectorResultDescriptor, VectorQueryRectangle>(
+        exe_ctx.add_meta_data(
             dataset.clone(),
-            Box::new(StaticMetaData {
+            MetaDataLookupResult::Ogr(Box::new(StaticMetaData {
                 loading_info: OgrSourceDataset {
                     file_name: test_data!("vector/data/germany_polygon.gpkg").into(),
                     layer_name: "test_germany".to_owned(),
@@ -3951,7 +3954,7 @@ mod tests {
                     columns: Default::default(),
                 },
                 phantom: Default::default(),
-            }),
+            })),
         );
 
         let source = OgrSource {
@@ -4015,9 +4018,9 @@ mod tests {
             dataset_id: InternalDatasetId::new(),
         };
         let mut exe_ctx = MockExecutionContext::test_default();
-        exe_ctx.add_meta_data::<OgrSourceDataset, VectorResultDescriptor, VectorQueryRectangle>(
+        exe_ctx.add_meta_data(
             dataset.clone(),
-            Box::new(StaticMetaData {
+            MetaDataLookupResult::Ogr(Box::new(StaticMetaData {
                 loading_info: OgrSourceDataset {
                     file_name: test_data!("vector/data/points.csv").into(),
                     layer_name: "points".to_owned(),
@@ -4055,7 +4058,7 @@ mod tests {
                     .collect(),
                 },
                 phantom: Default::default(),
-            }),
+            })),
         );
 
         let source = OgrSource {
@@ -4125,9 +4128,9 @@ mod tests {
             dataset_id: InternalDatasetId::new(),
         };
         let mut exe_ctx = MockExecutionContext::test_default();
-        exe_ctx.add_meta_data::<OgrSourceDataset, VectorResultDescriptor, VectorQueryRectangle>(
+        exe_ctx.add_meta_data(
             dataset.clone(),
-            Box::new(StaticMetaData {
+            MetaDataLookupResult::Ogr(Box::new(StaticMetaData {
                 loading_info: OgrSourceDataset {
                     file_name: test_data!("vector/data/lonlat_date.csv").into(),
                     layer_name: "lonlat_date".to_owned(),
@@ -4171,7 +4174,7 @@ mod tests {
                         .collect(),
                 },
                 phantom: Default::default(),
-            }),
+            })),
         );
 
         let source = OgrSource {
@@ -4237,9 +4240,9 @@ mod tests {
             dataset_id: InternalDatasetId::new(),
         };
         let mut exe_ctx = MockExecutionContext::test_default();
-        exe_ctx.add_meta_data::<OgrSourceDataset, VectorResultDescriptor, VectorQueryRectangle>(
+        exe_ctx.add_meta_data(
             dataset.clone(),
-            Box::new(StaticMetaData {
+            MetaDataLookupResult::Ogr(Box::new(StaticMetaData {
                 loading_info: OgrSourceDataset {
                     file_name: test_data!("vector/data/lonlat_date_time.csv").into(),
                     layer_name: "lonlat_date_time".to_owned(),
@@ -4283,7 +4286,7 @@ mod tests {
                         .collect(),
                 },
                 phantom: Default::default(),
-            }),
+            })),
         );
 
         let source = OgrSource {
@@ -4349,9 +4352,9 @@ mod tests {
             dataset_id: InternalDatasetId::new(),
         };
         let mut exe_ctx = MockExecutionContext::test_default();
-        exe_ctx.add_meta_data::<OgrSourceDataset, VectorResultDescriptor, VectorQueryRectangle>(
+        exe_ctx.add_meta_data(
             dataset.clone(),
-            Box::new(StaticMetaData {
+            MetaDataLookupResult::Ogr(Box::new(StaticMetaData {
                 loading_info: OgrSourceDataset {
                     file_name: test_data!("vector/data/lonlat_date_time_tz.csv").into(),
                     layer_name: "lonlat_date_time_tz".to_owned(),
@@ -4395,7 +4398,7 @@ mod tests {
                         .collect(),
                 },
                 phantom: Default::default(),
-            }),
+            })),
         );
 
         let source = OgrSource {
@@ -4462,9 +4465,9 @@ mod tests {
             dataset_id: InternalDatasetId::new(),
         };
         let mut exe_ctx = MockExecutionContext::test_default();
-        exe_ctx.add_meta_data::<OgrSourceDataset, VectorResultDescriptor, VectorQueryRectangle>(
+        exe_ctx.add_meta_data(
             dataset.clone(),
-            Box::new(StaticMetaData {
+            MetaDataLookupResult::Ogr(Box::new(StaticMetaData {
                 loading_info: OgrSourceDataset {
                     file_name: test_data!("vector/data/lonlat_date_time.csv").into(),
                     layer_name: "lonlat_date_time".to_owned(),
@@ -4511,7 +4514,7 @@ mod tests {
                     .collect(),
                 },
                 phantom: Default::default(),
-            }),
+            })),
         );
 
         let source = OgrSource {
@@ -4583,9 +4586,9 @@ mod tests {
             dataset_id: InternalDatasetId::new(),
         };
         let mut exe_ctx = MockExecutionContext::test_default();
-        exe_ctx.add_meta_data::<OgrSourceDataset, VectorResultDescriptor, VectorQueryRectangle>(
+        exe_ctx.add_meta_data(
             dataset.clone(),
-            Box::new(StaticMetaData {
+            MetaDataLookupResult::Ogr(Box::new(StaticMetaData {
                 loading_info: OgrSourceDataset {
                     file_name: test_data!("vector/data/points_with_bool.csv").into(),
                     layer_name: "points_with_bool".to_owned(),
@@ -4620,7 +4623,7 @@ mod tests {
                         .collect(),
                 },
                 phantom: Default::default(),
-            }),
+            })),
         );
 
         let source = OgrSource {

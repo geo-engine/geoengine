@@ -165,7 +165,7 @@ where
 {
     let wfs_url = wfs_url(workflow_id)?;
 
-    let workflow = ctx.store_ref().await.read(&workflow_id).await?;
+    let workflow = ctx.store_ref::<Workflow>().await.read(&workflow_id).await?;
 
     let exe_ctx = ctx.execution_context(session)?;
     let operator = workflow
@@ -420,7 +420,7 @@ async fn get_feature<C: Context>(
         return get_feature_mock(request);
     }
 
-    let workflow: Workflow = ctx.store_ref().await.read(&type_names).await?;
+    let workflow: Workflow = ctx.store_ref::<Workflow>().await.read(&type_names).await?;
 
     let operator = workflow.operator.get_vector().context(error::Operator)?;
 
@@ -594,7 +594,9 @@ mod tests {
     use super::*;
 
     use crate::contexts::{Session, SimpleContext};
-    use crate::datasets::storage::{DatasetDefinition, DatasetStore};
+    use crate::datasets::storage::{
+        AddDatasetDefinition, Dataset, DatasetDefinition, DatasetStore, MetaDataDefinition,
+    };
     use crate::handlers::ErrorResponse;
     use crate::util::tests::{check_allowed_http_methods, read_body_string, send_test_request};
     use crate::util::user_input::UserInput;
@@ -741,7 +743,12 @@ x;y
         .validated()
         .unwrap();
 
-        let workflow_id = ctx.store().write().await.create(workflow).await.unwrap();
+        let workflow_id = ctx
+            .store_ref_mut::<Workflow>()
+            .await
+            .create(workflow)
+            .await
+            .unwrap();
 
         let req = test::TestRequest::with_uri(&format!(
             "/wfs/{}?request=GetCapabilities&service=WFS",
@@ -806,8 +813,7 @@ x;y
         .unwrap();
 
         let id = ctx
-            .store()
-            .write()
+            .store_ref_mut::<Workflow>()
             .await
             .create(workflow.clone())
             .await
@@ -925,7 +931,12 @@ x;y
         .validated()
         .unwrap();
 
-        let workflow_id = ctx.store().write().await.create(workflow).await.unwrap();
+        let workflow_id = ctx
+            .store_ref_mut::<Workflow>()
+            .await
+            .create(workflow)
+            .await
+            .unwrap();
 
         let params = &[
             ("request", "GetFeature"),
@@ -1036,17 +1047,23 @@ x;y
     ) -> DatasetId {
         let data = fs::read_to_string(dataset_definition_path).unwrap();
         let data = data.replace("test_data/", test_data!("./").to_str().unwrap());
-        let def: DatasetDefinition = serde_json::from_str(&data).unwrap();
+        let def: AddDatasetDefinition = serde_json::from_str(&data).unwrap();
 
-        let mut db = ctx.dataset_db_ref_mut().await;
+        let dataset = def.dataset().await.unwrap();
 
-        db.add_dataset(
-            &*ctx.default_session_ref().await,
-            def.properties.validated().unwrap(),
-            Box::new(def.meta_data),
-        )
-        .await
-        .unwrap()
+        let id = ctx
+            .store_ref_mut::<Dataset>()
+            .await
+            .create(dataset.validated().unwrap())
+            .await
+            .unwrap();
+
+        ctx.store_ref_mut::<MetaDataDefinition>()
+            .await
+            .create_with_id(&id, def.meta_data.validated().unwrap())
+            .await
+            .unwrap()
+            .into()
     }
 
     #[tokio::test]
@@ -1106,7 +1123,12 @@ x;y
         let workflow: Workflow = serde_json::from_str(&json).unwrap();
         let workflow = workflow.validated().unwrap();
 
-        let workflow_id = ctx.store().write().await.create(workflow).await.unwrap();
+        let workflow_id = ctx
+            .store_ref_mut::<Workflow>()
+            .await
+            .create(workflow)
+            .await
+            .unwrap();
 
         let params = &[
             ("request", "GetFeature"),

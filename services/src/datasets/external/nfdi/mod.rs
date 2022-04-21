@@ -12,8 +12,8 @@ use geoengine_datatypes::primitives::{
 };
 use geoengine_datatypes::spatial_reference::SpatialReferenceOption;
 use geoengine_operators::engine::{
-    MetaData, MetaDataProvider, RasterResultDescriptor, ResultDescriptor, TypedResultDescriptor,
-    VectorResultDescriptor,
+    MetaData, RasterResultDescriptor, ResultDescriptor, TypedResultDescriptor,
+    VectorResultDescriptor, MetaDataLookupResult,
 };
 use geoengine_operators::mock::MockDatasetDataSourceLoadingInfo;
 use geoengine_operators::source::{
@@ -211,7 +211,6 @@ impl NFDIDataProvider {
         };
 
         Dataset {
-            id,
             name: ds.name.clone(),
             description: ds.description.clone(),
             source_operator,
@@ -396,115 +395,6 @@ impl NFDIDataProvider {
 }
 
 #[async_trait::async_trait]
-impl
-    MetaDataProvider<MockDatasetDataSourceLoadingInfo, VectorResultDescriptor, VectorQueryRectangle>
-    for NFDIDataProvider
-{
-    async fn meta_data(
-        &self,
-        _dataset: &DatasetId,
-    ) -> geoengine_operators::util::Result<
-        Box<
-            dyn MetaData<
-                MockDatasetDataSourceLoadingInfo,
-                VectorResultDescriptor,
-                VectorQueryRectangle,
-            >,
-        >,
-    > {
-        Err(geoengine_operators::error::Error::NotYetImplemented)
-    }
-}
-
-#[async_trait::async_trait]
-impl MetaDataProvider<OgrSourceDataset, VectorResultDescriptor, VectorQueryRectangle>
-    for NFDIDataProvider
-{
-    async fn meta_data(
-        &self,
-        dataset: &DatasetId,
-    ) -> geoengine_operators::util::Result<
-        Box<dyn MetaData<OgrSourceDataset, VectorResultDescriptor, VectorQueryRectangle>>,
-    > {
-        let (_, md) = self.dataset_info(dataset).await.map_err(|e| {
-            geoengine_operators::error::Error::DatasetMetaData {
-                source: Box::new(e),
-            }
-        })?;
-
-        let object = self.get_single_file_object(dataset).await.map_err(|e| {
-            geoengine_operators::error::Error::DatasetMetaData {
-                source: Box::new(e),
-            }
-        })?;
-
-        match md.data_type {
-            DataType::SingleVectorFile(info) => {
-                let result_descriptor = Self::create_vector_result_descriptor(md.crs.into(), &info);
-                let template = Self::vector_loading_template(&info, &result_descriptor);
-
-                let res = NFDIMetaData {
-                    object_id: object.id,
-                    template,
-                    result_descriptor,
-                    _phantom: Default::default(),
-                    object_stub: self.object_stub.clone(),
-                };
-                Ok(Box::new(res))
-            }
-            DataType::SingleRasterFile(_) => Err(geoengine_operators::error::Error::InvalidType {
-                found: md.data_type.to_string(),
-                expected: "SingleVectorFile".to_string(),
-            }),
-        }
-    }
-}
-
-#[async_trait::async_trait]
-impl MetaDataProvider<GdalLoadingInfo, RasterResultDescriptor, RasterQueryRectangle>
-    for NFDIDataProvider
-{
-    async fn meta_data(
-        &self,
-        dataset: &DatasetId,
-    ) -> geoengine_operators::util::Result<
-        Box<dyn MetaData<GdalLoadingInfo, RasterResultDescriptor, RasterQueryRectangle>>,
-    > {
-        let (_, md) = self.dataset_info(dataset).await.map_err(|e| {
-            geoengine_operators::error::Error::DatasetMetaData {
-                source: Box::new(e),
-            }
-        })?;
-
-        let object = self.get_single_file_object(dataset).await.map_err(|e| {
-            geoengine_operators::error::Error::DatasetMetaData {
-                source: Box::new(e),
-            }
-        })?;
-
-        match &md.data_type {
-            DataType::SingleRasterFile(info) => {
-                let result_descriptor = Self::create_raster_result_descriptor(md.crs.into(), info);
-                let template = Self::raster_loading_template(info, &result_descriptor);
-
-                let res = NFDIMetaData {
-                    object_id: object.id,
-                    template,
-                    result_descriptor,
-                    _phantom: Default::default(),
-                    object_stub: self.object_stub.clone(),
-                };
-                Ok(Box::new(res))
-            }
-            DataType::SingleVectorFile(_) => Err(geoengine_operators::error::Error::InvalidType {
-                found: md.data_type.to_string(),
-                expected: "SingleRasterFile".to_string(),
-            }),
-        }
-    }
-}
-
-#[async_trait::async_trait]
 impl ExternalDatasetProvider for NFDIDataProvider {
     async fn list(&self, _options: Validated<DatasetListOptions>) -> Result<Vec<DatasetListing>> {
         let mut project_stub = self.project_stub.clone();
@@ -534,6 +424,49 @@ impl ExternalDatasetProvider for NFDIDataProvider {
 
     fn as_any(&self) -> &dyn std::any::Any {
         self
+    }
+
+    async fn meta_data(&self, dataset: &DatasetId) -> Result<MetaDataLookupResult> {
+        let (_, md) = self.dataset_info(dataset).await.map_err(|e| {
+            geoengine_operators::error::Error::DatasetMetaData {
+                source: Box::new(e),
+            }
+        })?;
+
+        let object = self.get_single_file_object(dataset).await.map_err(|e| {
+            geoengine_operators::error::Error::DatasetMetaData {
+                source: Box::new(e),
+            }
+        })?;
+
+        match md.data_type {
+            DataType::SingleVectorFile(info) => {
+                let result_descriptor = Self::create_vector_result_descriptor(md.crs.into(), &info);
+                let template = Self::vector_loading_template(&info, &result_descriptor);
+
+                let res = NFDIMetaData {
+                    object_id: object.id,
+                    template,
+                    result_descriptor,
+                    _phantom: Default::default(),
+                    object_stub: self.object_stub.clone(),
+                };
+                Ok(Box::new(res))
+            }
+            DataType::SingleRasterFile(info) => {
+                let result_descriptor = Self::create_raster_result_descriptor(md.crs.into(), &info);
+                let template = Self::raster_loading_template(&info, &result_descriptor);
+
+                let res = NFDIMetaData {
+                    object_id: object.id,
+                    template,
+                    result_descriptor,
+                    _phantom: Default::default(),
+                    object_stub: self.object_stub.clone(),
+                };
+                Ok(Box::new(res))
+            }
+        }
     }
 }
 
@@ -705,7 +638,7 @@ mod tests {
     };
     use geoengine_datatypes::util::test::TestDefault;
     use geoengine_operators::engine::{
-        MetaData, MetaDataProvider, MockExecutionContext, MockQueryContext, QueryProcessor,
+        MetaData, MockExecutionContext, MockQueryContext, QueryProcessor,
         TypedVectorQueryProcessor, VectorOperator, VectorResultDescriptor,
     };
     use geoengine_operators::source::{OgrSource, OgrSourceDataset, OgrSourceParameters};

@@ -4,10 +4,10 @@ use std::sync::Arc;
 use super::{Context, Db, SimpleSession};
 use super::{Session, SimpleContext};
 use crate::contexts::{ExecutionContextImpl, QueryContextImpl, SessionId};
-use crate::datasets::in_memory::HashMapDatasetDb;
 use crate::error::Error;
 use crate::projects::hashmap_projectdb::HashMapProjectDb;
-use crate::storage::InMemoryStore;
+use crate::storage::in_memory::InMemoryStore;
+use crate::storage::{GeoEngineStore, Storable, Store};
 use crate::{
     datasets::add_from_directory::{add_datasets_from_directory, add_providers_from_directory},
     error::Result,
@@ -18,14 +18,13 @@ use geoengine_datatypes::util::test::TestDefault;
 use geoengine_operators::engine::ChunkByteSize;
 use geoengine_operators::util::create_rayon_thread_pool;
 use rayon::ThreadPool;
-use tokio::sync::{RwLock, RwLockReadGuard, RwLockWriteGuard};
+use tokio::sync::{RwLock, RwLockMappedWriteGuard, RwLockReadGuard, RwLockWriteGuard};
 
 /// A context with references to in-memory versions of the individual databases.
 #[derive(Clone)]
 pub struct InMemoryContext {
     store: Db<InMemoryStore>,
     project_db: Db<HashMapProjectDb>,
-    dataset_db: Db<HashMapDatasetDb>,
     session: Db<SimpleSession>,
     thread_pool: Arc<ThreadPool>,
     exe_ctx_tiling_spec: TilingSpecification,
@@ -37,7 +36,6 @@ impl TestDefault for InMemoryContext {
         Self {
             store: Default::default(),
             project_db: Default::default(),
-            dataset_db: Default::default(),
             session: Default::default(),
             thread_pool: create_rayon_thread_pool(0),
             exe_ctx_tiling_spec: TestDefault::test_default(),
@@ -53,18 +51,17 @@ impl InMemoryContext {
         exe_ctx_tiling_spec: TilingSpecification,
         query_ctx_chunk_size: ChunkByteSize,
     ) -> Self {
-        let mut db = HashMapDatasetDb::default();
-        add_datasets_from_directory(&mut db, dataset_defs_path).await;
-        add_providers_from_directory(&mut db, provider_defs_path).await;
+        let mut store = InMemoryStore::default();
+        add_datasets_from_directory(&mut store, dataset_defs_path).await;
+        add_providers_from_directory(&mut store, provider_defs_path).await;
 
         Self {
-            store: Default::default(),
+            store: Arc::new(RwLock::new(store)),
             project_db: Default::default(),
             session: Default::default(),
             thread_pool: create_rayon_thread_pool(0),
             exe_ctx_tiling_spec,
             query_ctx_chunk_size,
-            dataset_db: Arc::new(RwLock::new(db)),
         }
     }
 
@@ -75,7 +72,6 @@ impl InMemoryContext {
         Self {
             store: Default::default(),
             project_db: Default::default(),
-            dataset_db: Default::default(),
             session: Default::default(),
             thread_pool: create_rayon_thread_pool(0),
             exe_ctx_tiling_spec,
@@ -89,13 +85,13 @@ impl Context for InMemoryContext {
     type Session = SimpleSession;
     type Store = InMemoryStore;
     type ProjectDB = HashMapProjectDb;
-    type DatasetDB = HashMapDatasetDb;
     type QueryContext = QueryContextImpl;
-    type ExecutionContext = ExecutionContextImpl<SimpleSession, HashMapDatasetDb>;
+    type ExecutionContext = ExecutionContextImpl<InMemoryStore>;
 
     fn project_db(&self) -> Db<Self::ProjectDB> {
         self.project_db.clone()
     }
+
     async fn project_db_ref(&self) -> RwLockReadGuard<'_, Self::ProjectDB> {
         self.project_db.read().await
     }
@@ -106,21 +102,23 @@ impl Context for InMemoryContext {
     fn store(&self) -> Db<Self::Store> {
         self.store.clone()
     }
-    async fn store_ref(&self) -> RwLockReadGuard<'_, Self::Store> {
-        self.store.read().await
-    }
-    async fn store_ref_mut(&self) -> RwLockWriteGuard<'_, Self::Store> {
-        self.store.write().await
+
+    async fn store_ref<S>(&self) -> RwLockReadGuard<'_, dyn Store<S>>
+    where
+        InMemoryStore: Store<S>,
+        S: Storable,
+    {
+        let guard = self.store.read().await;
+        RwLockReadGuard::map(guard, |s| s as &dyn Store<S>)
     }
 
-    fn dataset_db(&self) -> Db<Self::DatasetDB> {
-        self.dataset_db.clone()
-    }
-    async fn dataset_db_ref(&self) -> RwLockReadGuard<'_, Self::DatasetDB> {
-        self.dataset_db.read().await
-    }
-    async fn dataset_db_ref_mut(&self) -> RwLockWriteGuard<'_, Self::DatasetDB> {
-        self.dataset_db.write().await
+    async fn store_ref_mut<S>(&self) -> RwLockMappedWriteGuard<'_, dyn Store<S>>
+    where
+        InMemoryStore: Store<S>,
+        S: Storable,
+    {
+        let guard = self.store.write().await;
+        RwLockWriteGuard::map(guard, |s| s as &mut dyn Store<S>)
     }
 
     fn query_context(&self) -> Result<Self::QueryContext> {
@@ -131,14 +129,11 @@ impl Context for InMemoryContext {
     }
 
     fn execution_context(&self, session: SimpleSession) -> Result<Self::ExecutionContext> {
-        Ok(
-            ExecutionContextImpl::<SimpleSession, HashMapDatasetDb>::new(
-                self.dataset_db.clone(),
-                self.thread_pool.clone(),
-                session,
-                self.exe_ctx_tiling_spec,
-            ),
-        )
+        Ok(ExecutionContextImpl::<InMemoryStore>::new(
+            self.store.clone(),
+            self.thread_pool.clone(),
+            self.exe_ctx_tiling_spec,
+        ))
     }
 
     async fn session_by_id(&self, session_id: SessionId) -> Result<Self::Session> {

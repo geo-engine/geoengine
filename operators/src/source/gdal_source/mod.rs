@@ -563,7 +563,10 @@ impl RasterOperator for GdalSource {
         self: Box<Self>,
         context: &dyn crate::engine::ExecutionContext,
     ) -> Result<Box<dyn InitializedRasterOperator>> {
-        let meta_data: GdalMetaData = context.meta_data(&self.params.dataset).await?;
+        let meta_data = context
+            .meta_data(&self.params.dataset)
+            .await?
+            .gdal_meta_data()?;
 
         debug!("Initializing GdalSource for {:?}.", &self.params.dataset);
 
