@@ -20,7 +20,7 @@ use crate::handlers::spatial_references::{spatial_reference_specification, AxisO
 use crate::handlers::Context;
 use crate::ogc::util::{ogc_endpoint_url, OgcProtocol};
 use crate::ogc::wcs::request::{DescribeCoverage, GetCapabilities, GetCoverage, WcsRequest};
-use crate::storage::Store;
+use crate::storage::{Store, StoreAs};
 use crate::util::config;
 use crate::util::config::get_config_element;
 use crate::util::user_input::QueryEx;
@@ -162,7 +162,7 @@ async fn describe_coverage<C: Context>(
 
     let wcs_url = wcs_url(identifiers)?;
 
-    let workflow = ctx.store_ref::<Workflow>().await.read(&identifiers).await?;
+    let workflow = ctx.store().as_::<Workflow>().read(&identifiers).await?;
 
     let exe_ctx = ctx.execution_context(session)?;
     let operator = workflow
@@ -288,7 +288,7 @@ async fn get_coverage<C: Context>(
         );
     }
 
-    let workflow = ctx.store_ref::<Workflow>().await.read(&identifier).await?;
+    let workflow = ctx.store().as_::<Workflow>().read(&identifier).await?;
 
     let operator = workflow.operator.get_raster().context(error::Operator)?;
 

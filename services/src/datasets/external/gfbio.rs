@@ -285,7 +285,7 @@ impl ExternalDatasetProvider for GfbioDataProvider {
                 source: Box::new(e),
             })?;
 
-        Ok(Box::new(StaticMetaData {
+        Ok(MetaDataLookupResult::Ogr(Box::new(StaticMetaData {
             loading_info: OgrSourceDataset {
                 file_name: self.db_config.ogr_pg_config().into(),
                 layer_name: format!("{}.abcd_units", self.db_config.schema),
@@ -333,7 +333,7 @@ impl ExternalDatasetProvider for GfbioDataProvider {
                     .collect(),
             },
             phantom: PhantomData::default(),
-        }))
+        })))
     }
 }
 
@@ -522,6 +522,8 @@ mod tests {
                     dataset_id: "1".to_string(),
                 }))
                 .await
+                .map_err(|e| e.to_string())?
+                .ogr_meta_data()
                 .map_err(|e| e.to_string())?;
 
             let expected = VectorResultDescriptor {
@@ -692,6 +694,8 @@ mod tests {
                     dataset_id: "1".to_string(),
                 }))
                 .await
+                .map_err(|e| e.to_string())?
+                .ogr_meta_data()
                 .map_err(|e| e.to_string())?;
 
             let processor: OgrSourceProcessor<MultiPoint> = OgrSourceProcessor::new(meta, vec![]);

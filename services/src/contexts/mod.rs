@@ -45,15 +45,7 @@ pub trait Context: 'static + Send + Sync + Clone {
     async fn project_db_ref(&self) -> RwLockReadGuard<Self::ProjectDB>;
     async fn project_db_ref_mut(&self) -> RwLockWriteGuard<Self::ProjectDB>;
 
-    fn store(&self) -> Db<Self::Store>;
-    async fn store_ref<S>(&self) -> RwLockReadGuard<'_, dyn Store<S>>
-    where
-        Self::Store: Store<S>,
-        S: Storable;
-    async fn store_ref_mut<S>(&self) -> RwLockMappedWriteGuard<'_, dyn Store<S>>
-    where
-        Self::Store: Store<S>,
-        S: Storable;
+    fn store(&self) -> Self::Store;
 
     fn query_context(&self) -> Result<Self::QueryContext>;
 
@@ -90,7 +82,7 @@ pub struct ExecutionContextImpl<S>
 where
     S: Store<MetaDataDefinition>,
 {
-    store: Db<S>,
+    store: S,
     thread_pool: Arc<ThreadPool>,
     tiling_specification: TilingSpecification,
 }
@@ -100,7 +92,7 @@ where
     S: Store<MetaDataDefinition>,
 {
     pub fn new(
-        store: Db<S>,
+        store: S,
         thread_pool: Arc<ThreadPool>,
         tiling_specification: TilingSpecification,
     ) -> Self {
@@ -131,14 +123,11 @@ where
     ) -> geoengine_operators::util::Result<MetaDataLookupResult> {
         match dataset {
             DatasetId::Internal { dataset_id } => {
-                let definition: MetaDataDefinition = self
-                    .store
-                    .read()
-                    .await
-                    .read(dataset_id)
-                    .await
-                    .map_err(|e| geoengine_operators::error::Error::LoadingInfo {
-                        source: Box::new(e),
+                let definition: MetaDataDefinition =
+                    self.store.read(dataset_id).await.map_err(|e| {
+                        geoengine_operators::error::Error::LoadingInfo {
+                            source: Box::new(e),
+                        }
                     })?;
                 Ok(definition.into())
             }

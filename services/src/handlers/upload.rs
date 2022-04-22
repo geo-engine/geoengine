@@ -9,6 +9,7 @@ use crate::datasets::upload::{FileId, FileUpload, Upload, UploadDb, UploadId, Up
 use crate::error;
 use crate::error::Result;
 use crate::handlers::Context;
+use crate::storage::StoreAs;
 use crate::util::user_input::UserInput;
 use crate::util::IdResponse;
 use snafu::ResultExt;
@@ -80,8 +81,8 @@ async fn upload_handler<C: Context>(
         });
     }
 
-    ctx.store_ref_mut::<Upload>()
-        .await
+    ctx.store()
+        .as_mut_::<Upload>()
         .create_with_id(
             &upload_id,
             Upload {

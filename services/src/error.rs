@@ -329,6 +329,7 @@ pub enum Error {
     },
 
     BaseUrlMustEndWithSlash,
+    MetaDataMissmatch, // TODO: details
 }
 
 impl actix_web::error::ResponseError for Error {

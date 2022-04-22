@@ -8,7 +8,7 @@ use crate::error::Result;
 use crate::handlers::Context;
 use crate::ogc::util::{ogc_endpoint_url, OgcProtocol};
 use crate::ogc::wfs::request::{GetCapabilities, GetFeature, WfsRequest};
-use crate::storage::Store;
+use crate::storage::{Store, StoreAs};
 use crate::util::config;
 use crate::util::config::get_config_element;
 use crate::util::user_input::QueryEx;
@@ -165,7 +165,7 @@ where
 {
     let wfs_url = wfs_url(workflow_id)?;
 
-    let workflow = ctx.store_ref::<Workflow>().await.read(&workflow_id).await?;
+    let workflow = ctx.store().as_::<Workflow>().read(&workflow_id).await?;
 
     let exe_ctx = ctx.execution_context(session)?;
     let operator = workflow
@@ -420,7 +420,7 @@ async fn get_feature<C: Context>(
         return get_feature_mock(request);
     }
 
-    let workflow: Workflow = ctx.store_ref::<Workflow>().await.read(&type_names).await?;
+    let workflow: Workflow = ctx.store().as_::<Workflow>().read(&type_names).await?;
 
     let operator = workflow.operator.get_vector().context(error::Operator)?;
 
@@ -598,6 +598,7 @@ mod tests {
         AddDatasetDefinition, Dataset, DatasetDefinition, DatasetStore, MetaDataDefinition,
     };
     use crate::handlers::ErrorResponse;
+    use crate::storage::StoreAs;
     use crate::util::tests::{check_allowed_http_methods, read_body_string, send_test_request};
     use crate::util::user_input::UserInput;
     use crate::{contexts::InMemoryContext, workflows::workflow::Workflow};
@@ -744,8 +745,8 @@ x;y
         .unwrap();
 
         let workflow_id = ctx
-            .store_ref_mut::<Workflow>()
-            .await
+            .store()
+            .as_mut_::<Workflow>()
             .create(workflow)
             .await
             .unwrap();
@@ -813,8 +814,8 @@ x;y
         .unwrap();
 
         let id = ctx
-            .store_ref_mut::<Workflow>()
-            .await
+            .store()
+            .as_mut_::<Workflow>()
             .create(workflow.clone())
             .await
             .unwrap();
@@ -932,8 +933,8 @@ x;y
         .unwrap();
 
         let workflow_id = ctx
-            .store_ref_mut::<Workflow>()
-            .await
+            .store()
+            .as_mut_::<Workflow>()
             .create(workflow)
             .await
             .unwrap();
@@ -1052,14 +1053,14 @@ x;y
         let dataset = def.dataset().await.unwrap();
 
         let id = ctx
-            .store_ref_mut::<Dataset>()
-            .await
+            .store()
+            .as_mut_::<Dataset>()
             .create(dataset.validated().unwrap())
             .await
             .unwrap();
 
-        ctx.store_ref_mut::<MetaDataDefinition>()
-            .await
+        ctx.store()
+            .as_mut_::<MetaDataDefinition>()
             .create_with_id(&id, def.meta_data.validated().unwrap())
             .await
             .unwrap()
@@ -1124,8 +1125,8 @@ x;y
         let workflow = workflow.validated().unwrap();
 
         let workflow_id = ctx
-            .store_ref_mut::<Workflow>()
-            .await
+            .store()
+            .as_mut_::<Workflow>()
             .create(workflow)
             .await
             .unwrap();

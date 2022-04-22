@@ -2,7 +2,7 @@ use crate::error;
 use crate::error::Result;
 use crate::handlers::Context;
 use crate::ogc::util::{parse_bbox, parse_time};
-use crate::storage::Store;
+use crate::storage::{Store, StoreAs};
 use crate::util::parsing::parse_spatial_resolution;
 use crate::workflows::workflow::{Workflow, WorkflowId};
 use actix_web::{web, FromRequest, Responder};
@@ -124,8 +124,8 @@ async fn get_plot_handler<C: Context>(
     ctx: web::Data<C>,
 ) -> Result<impl Responder> {
     let workflow = ctx
-        .store_ref::<Workflow>()
-        .await
+        .store()
+        .as_::<Workflow>()
         .read(&WorkflowId(id.into_inner()))
         .await?;
 
@@ -286,8 +286,8 @@ mod tests {
         .unwrap();
 
         let id = ctx
-            .store_ref_mut::<Workflow>()
-            .await
+            .store()
+            .as_mut_::<Workflow>()
             .create(workflow)
             .await
             .unwrap();
@@ -356,8 +356,8 @@ mod tests {
         .unwrap();
 
         let id = ctx
-            .store_ref_mut::<Workflow>()
-            .await
+            .store()
+            .as_mut_::<Workflow>()
             .create(workflow)
             .await
             .unwrap();
@@ -436,8 +436,8 @@ mod tests {
             .unwrap();
 
             let id = ctx
-                .store_ref_mut::<Workflow>()
-                .await
+                .store()
+                .as_mut_::<Workflow>()
                 .create(workflow)
                 .await
                 .unwrap();

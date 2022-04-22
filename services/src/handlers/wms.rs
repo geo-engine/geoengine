@@ -15,7 +15,7 @@ use crate::error::Result;
 use crate::handlers::Context;
 use crate::ogc::util::{ogc_endpoint_url, OgcProtocol};
 use crate::ogc::wms::request::{GetCapabilities, GetLegendGraphic, GetMap, WmsRequest};
-use crate::storage::Store;
+use crate::storage::{Store, StoreAs};
 use crate::util::config;
 use crate::util::config::get_config_element;
 use crate::util::user_input::QueryEx;
@@ -127,7 +127,7 @@ where
 {
     let wms_url = wms_url(workflow_id)?;
 
-    let workflow = ctx.store_ref::<Workflow>().await.read(&workflow_id).await?;
+    let workflow = ctx.store().as_::<Workflow>().read(&workflow_id).await?;
 
     let exe_ctx = ctx.execution_context(session)?;
     let operator = workflow
@@ -237,8 +237,8 @@ async fn get_map<C: Context>(
     // TODO: validate request further
 
     let workflow = ctx
-        .store_ref::<Workflow>()
-        .await
+        .store()
+        .as_::<Workflow>()
         .read(&WorkflowId::from_str(&request.layers)?)
         .await?;
 

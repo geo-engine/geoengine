@@ -12,6 +12,7 @@ use crate::projects::{
 };
 use crate::server::{configure_extractors, render_404, render_405};
 use crate::storage::Store;
+use crate::storage::StoreAs;
 use crate::util::user_input::UserInput;
 use crate::util::Identifier;
 use crate::workflows::workflow::{Workflow, WorkflowId};
@@ -103,8 +104,8 @@ pub async fn register_ndvi_workflow_helper(ctx: &InMemoryContext) -> (Workflow, 
     .unwrap();
 
     let id = ctx
-        .store_ref_mut::<Workflow>()
-        .await
+        .store()
+        .as_mut_::<Workflow>()
         .create(workflow.clone())
         .await
         .unwrap();
@@ -131,14 +132,14 @@ pub async fn add_ndvi_to_datasets(ctx: &InMemoryContext) -> DatasetId {
     };
 
     let id = ctx
-        .store_ref_mut::<Dataset>()
-        .await
+        .store()
+        .as_mut_::<Dataset>()
         .create(ndvi.properties.validated().unwrap())
         .await
         .unwrap();
 
-    ctx.store_ref_mut::<MetaDataDefinition>()
-        .await
+    ctx.store()
+        .as_mut_::<MetaDataDefinition>()
         .create_with_id(&id, ndvi.meta_data.validated().unwrap())
         .await
         .unwrap();

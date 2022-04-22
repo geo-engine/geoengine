@@ -6,7 +6,7 @@ use super::{Session, SimpleContext};
 use crate::contexts::{ExecutionContextImpl, QueryContextImpl, SessionId};
 use crate::error::Error;
 use crate::projects::hashmap_projectdb::HashMapProjectDb;
-use crate::storage::in_memory::InMemoryStore;
+use crate::storage::in_memory::{InMemoryStore, InMemoryStoreBackend};
 use crate::storage::{GeoEngineStore, Storable, Store};
 use crate::{
     datasets::add_from_directory::{add_datasets_from_directory, add_providers_from_directory},
@@ -23,7 +23,7 @@ use tokio::sync::{RwLock, RwLockMappedWriteGuard, RwLockReadGuard, RwLockWriteGu
 /// A context with references to in-memory versions of the individual databases.
 #[derive(Clone)]
 pub struct InMemoryContext {
-    store: Db<InMemoryStore>,
+    store_backend: Db<InMemoryStoreBackend>,
     project_db: Db<HashMapProjectDb>,
     session: Db<SimpleSession>,
     thread_pool: Arc<ThreadPool>,
@@ -34,7 +34,7 @@ pub struct InMemoryContext {
 impl TestDefault for InMemoryContext {
     fn test_default() -> Self {
         Self {
-            store: Default::default(),
+            store_backend: Default::default(),
             project_db: Default::default(),
             session: Default::default(),
             thread_pool: create_rayon_thread_pool(0),
@@ -51,12 +51,13 @@ impl InMemoryContext {
         exe_ctx_tiling_spec: TilingSpecification,
         query_ctx_chunk_size: ChunkByteSize,
     ) -> Self {
-        let mut store = InMemoryStore::default();
+        let mut store_backend = Arc::new(RwLock::new(InMemoryStoreBackend::default()));
+        let mut store = InMemoryStore::new(store_backend.clone());
         add_datasets_from_directory(&mut store, dataset_defs_path).await;
         add_providers_from_directory(&mut store, provider_defs_path).await;
 
         Self {
-            store: Arc::new(RwLock::new(store)),
+            store_backend,
             project_db: Default::default(),
             session: Default::default(),
             thread_pool: create_rayon_thread_pool(0),
@@ -70,7 +71,7 @@ impl InMemoryContext {
         query_ctx_chunk_size: ChunkByteSize,
     ) -> Self {
         Self {
-            store: Default::default(),
+            store_backend: Default::default(),
             project_db: Default::default(),
             session: Default::default(),
             thread_pool: create_rayon_thread_pool(0),
@@ -99,26 +100,8 @@ impl Context for InMemoryContext {
         self.project_db.write().await
     }
 
-    fn store(&self) -> Db<Self::Store> {
-        self.store.clone()
-    }
-
-    async fn store_ref<S>(&self) -> RwLockReadGuard<'_, dyn Store<S>>
-    where
-        InMemoryStore: Store<S>,
-        S: Storable,
-    {
-        let guard = self.store.read().await;
-        RwLockReadGuard::map(guard, |s| s as &dyn Store<S>)
-    }
-
-    async fn store_ref_mut<S>(&self) -> RwLockMappedWriteGuard<'_, dyn Store<S>>
-    where
-        InMemoryStore: Store<S>,
-        S: Storable,
-    {
-        let guard = self.store.write().await;
-        RwLockWriteGuard::map(guard, |s| s as &mut dyn Store<S>)
+    fn store(&self) -> Self::Store {
+        InMemoryStore::new(self.store_backend.clone())
     }
 
     fn query_context(&self) -> Result<Self::QueryContext> {
@@ -130,7 +113,7 @@ impl Context for InMemoryContext {
 
     fn execution_context(&self, session: SimpleSession) -> Result<Self::ExecutionContext> {
         Ok(ExecutionContextImpl::<InMemoryStore>::new(
-            self.store.clone(),
+            self.store(),
             self.thread_pool.clone(),
             self.exe_ctx_tiling_spec,
         ))

@@ -38,6 +38,7 @@ mod tests {
     use super::*;
     use crate::contexts::{Context, InMemoryContext};
     use crate::datasets::listing::OrderBy;
+    use crate::storage::StoreAs;
     use crate::util::user_input::UserInput;
     use geoengine_datatypes::collections::VectorDataType;
     use geoengine_datatypes::spatial_reference::SpatialReferenceOption;
@@ -86,13 +87,13 @@ mod tests {
         let meta = MetaDataDefinition::OgrMetaData(meta);
 
         let id = ctx
-            .store_ref_mut::<Dataset>()
-            .await
+            .store()
+            .as_mut_::<Dataset>()
             .create(ds.validated()?)
             .await?;
 
-        ctx.store_ref_mut::<MetaDataDefinition>()
-            .await
+        ctx.store()
+            .as_mut_::<MetaDataDefinition>()
             .create_with_id(&id, meta.validated()?)
             .await?;
 
@@ -117,8 +118,8 @@ mod tests {
         );
 
         let ds = ctx
-            .store_ref_mut::<Dataset>()
-            .await
+            .store()
+            .as_mut_::<Dataset>()
             .list(
                 DatasetListOptions {
                     filter: None,

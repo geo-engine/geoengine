@@ -1,6 +1,7 @@
-use std::collections::HashMap;
+use std::{collections::HashMap, sync::Arc};
 
 use geoengine_datatypes::dataset::{DatasetId, DatasetProviderId, InternalDatasetId};
+use tokio::sync::RwLock;
 
 use crate::{
     datasets::{
@@ -19,12 +20,22 @@ use crate::{
 use super::{GeoEngineStore, StoredDataset};
 
 #[derive(Debug, Default)]
-pub struct InMemoryStore {
+pub struct InMemoryStoreBackend {
     pub(crate) workflows: HashMap<WorkflowId, Workflow>,
     pub(crate) datasets: HashMap<InternalDatasetId, Dataset>,
     pub(crate) metadata: HashMap<InternalDatasetId, MetaDataDefinition>,
     pub(crate) uploads: HashMap<UploadId, Upload>,
     pub(crate) providers: HashMap<DatasetProviderId, Box<dyn ExternalDatasetProviderDefinition>>,
+}
+
+pub struct InMemoryStore {
+    pub(crate) backend: Arc<RwLock<InMemoryStoreBackend>>,
+}
+
+impl InMemoryStore {
+    pub fn new(backend: Arc<RwLock<InMemoryStoreBackend>>) -> Self {
+        Self { backend }
+    }
 }
 
 impl GeoEngineStore for InMemoryStore {}
@@ -41,7 +52,7 @@ macro_rules! impl_in_memory_store {
             ) -> $crate::error::Result<$item_id> {
                 let item = item.user_input;
                 let id = <$item_id as geoengine_datatypes::util::Identifier>::new(); // TODO: derive possibly, e.g. for Workflows by hashing
-                self.$map_name.insert(id, item);
+                self.backend.write().await.$map_name.insert(id, item);
                 Ok(id)
             }
 
@@ -51,12 +62,15 @@ macro_rules! impl_in_memory_store {
                 item: $crate::util::user_input::Validated<$item>,
             ) -> $crate::error::Result<$item_id> {
                 let workflow = item.user_input;
-                self.$map_name.insert(*id, workflow);
+                self.backend.write().await.$map_name.insert(*id, workflow);
                 Ok(*id)
             }
 
             async fn read(&self, id: &$item_id) -> $crate::error::Result<$item> {
-                self.$map_name
+                self.backend
+                    .read()
+                    .await
+                    .$map_name
                     .get(id)
                     .cloned()
                     .ok_or($crate::error::Error::NoWorkflowForGivenId) // TODO: use correct error
@@ -68,12 +82,12 @@ macro_rules! impl_in_memory_store {
                 item: $crate::util::user_input::Validated<$item>,
             ) -> $crate::error::Result<()> {
                 let workflow = item.user_input;
-                self.$map_name.insert(*id, workflow);
+                self.backend.write().await.$map_name.insert(*id, workflow);
                 Ok(())
             }
 
             async fn delete(&mut self, id: &$item_id) -> $crate::error::Result<()> {
-                self.$map_name.remove(id);
+                self.backend.write().await.$map_name.remove(id);
                 Ok(())
             }
 
@@ -83,8 +97,9 @@ macro_rules! impl_in_memory_store {
             ) -> $crate::error::Result<Vec<$item_listing>> {
                 let options = options.user_input;
 
-                let mut items: Vec<_> = self
-                    .$map_name
+                let item_map = &self.backend.read().await.$map_name;
+
+                let mut items: Vec<_> = item_map
                     .iter()
                     .filter(|(_, item)| options.retain(item))
                     .collect();

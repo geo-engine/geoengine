@@ -4,6 +4,7 @@ use crate::datasets::listing::{
 };
 use crate::datasets::storage::{Dataset, ExternalDatasetProviderDefinition};
 use crate::error::{Error, Result};
+use crate::storage::Listable;
 use crate::util::user_input::Validated;
 use geoengine_datatypes::collections::VectorDataType;
 use geoengine_datatypes::dataset::{DatasetId, DatasetProviderId, ExternalDatasetId};
@@ -177,7 +178,7 @@ impl NFDIDataProvider {
         resp.dataset.ok_or(Error::InvalidDatasetId).and_then(|ds| {
             // Extract and parse geoengine metadata
             let md = Self::extract_metadata(&ds)?;
-            Ok((self.map_dataset(&ds, &md), md))
+            Ok((self.map_dataset(&ds, &md).1, md))
         })
     }
 
@@ -186,7 +187,7 @@ impl NFDIDataProvider {
         &self,
         ds: &scienceobjectsdb_rust_api::sciobjectsdb::sciobjsdb::api::storage::models::v1::Dataset,
         md: &GEMetadata,
-    ) -> Dataset {
+    ) -> (DatasetId, Dataset) {
         let id = DatasetId::External(ExternalDatasetId {
             provider_id: self.id,
             dataset_id: ds.id.clone(),
@@ -210,14 +211,17 @@ impl NFDIDataProvider {
             ),
         };
 
-        Dataset {
-            name: ds.name.clone(),
-            description: ds.description.clone(),
-            source_operator,
-            result_descriptor,
-            symbology: None,
-            provenance: md.provenance.clone(),
-        }
+        (
+            id,
+            Dataset {
+                name: ds.name.clone(),
+                description: ds.description.clone(),
+                source_operator,
+                result_descriptor,
+                symbology: None,
+                provenance: md.provenance.clone(),
+            },
+        )
     }
 
     /// Creates a result descriptor for vector data
@@ -409,7 +413,12 @@ impl ExternalDatasetProvider for NFDIDataProvider {
         Ok(resp
             .datasets
             .into_iter()
-            .map(|ds| Self::extract_metadata(&ds).map(|md| self.map_dataset(&ds, &md).listing()))
+            .map(|ds| {
+                Self::extract_metadata(&ds).map(|md| {
+                    let (id, dataset) = self.map_dataset(&ds, &md);
+                    dataset.list_external(id)
+                })
+            })
             .collect::<Result<Vec<DatasetListing>>>()?)
     }
 
@@ -451,7 +460,7 @@ impl ExternalDatasetProvider for NFDIDataProvider {
                     _phantom: Default::default(),
                     object_stub: self.object_stub.clone(),
                 };
-                Ok(Box::new(res))
+                Ok(MetaDataLookupResult::Ogr(Box::new(res)))
             }
             DataType::SingleRasterFile(info) => {
                 let result_descriptor = Self::create_raster_result_descriptor(md.crs.into(), &info);
@@ -464,7 +473,7 @@ impl ExternalDatasetProvider for NFDIDataProvider {
                     _phantom: Default::default(),
                     object_stub: self.object_stub.clone(),
                 };
-                Ok(Box::new(res))
+                Ok(MetaDataLookupResult::Gdal(Box::new(res)))
             }
         }
     }
@@ -811,7 +820,7 @@ mod tests {
             md.data_type,
             super::metadata::DataType::SingleVectorFile(_)
         ));
-        assert_eq!("OgrSource".to_string(), ds.source_operator);
+        assert_eq!("OgrSource".to_string(), ds.1.source_operator);
     }
 
     #[tokio::test]
@@ -846,7 +855,7 @@ mod tests {
 
         let ds = provider.map_dataset(&ds, &md);
 
-        assert_eq!("GdalSource".to_string(), ds.source_operator);
+        assert_eq!("GdalSource".to_string(), ds.1.source_operator);
     }
 
     #[tokio::test]
@@ -1103,11 +1112,11 @@ mod tests {
         let addr = format!("http://{}", server.address());
         let provider = new_provider_with_url(addr).await;
 
-        let res: geoengine_operators::util::Result<
-            Box<dyn MetaData<OgrSourceDataset, VectorResultDescriptor, VectorQueryRectangle>>,
-        > = provider.meta_data(&id).await;
+        let res = provider.meta_data(&id).await;
 
         assert!(res.is_ok());
+
+        assert!(res.unwrap().ogr_meta_data().is_ok());
     }
 
     #[tokio::test]
@@ -1217,9 +1226,7 @@ mod tests {
 
         let provider = new_provider_with_url(addr).await;
 
-        let meta: Box<
-            dyn MetaData<OgrSourceDataset, VectorResultDescriptor, VectorQueryRectangle>,
-        > = provider.meta_data(&id).await.unwrap();
+        let meta = provider.meta_data(&id).await.unwrap();
 
         let mut context = MockExecutionContext::test_default();
         context.add_meta_data(id.clone(), meta);

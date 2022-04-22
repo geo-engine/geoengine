@@ -6,6 +6,7 @@ use crate::datasets::external::netcdfcf::{NetCdfOverview, NETCDF_CF_PROVIDER_ID}
 use crate::datasets::listing::ExternalDatasetProvider;
 use crate::datasets::storage::{DatasetProviderDb, ExternalDatasetProviderDefinition};
 use crate::error::{ErrorSource, Result};
+use crate::storage::StoreAs;
 use crate::{contexts::Context, datasets::external::netcdfcf::NetCdfCfDataProvider};
 use actix_web::{
     web::{self, ServiceConfig},
@@ -302,8 +303,8 @@ async fn netcdfcf_provider_ref<C: Context>(
     session: &C::Session,
 ) -> Result<PathBuf, EbvError> {
     let provider: Box<dyn ExternalDatasetProvider> = ctx
-        .store_ref::<Box<dyn ExternalDatasetProviderDefinition>>()
-        .await
+        .store()
+        .as_::<Box<dyn ExternalDatasetProviderDefinition>>()
         .read(&NETCDF_CF_PROVIDER_ID)
         .await
         .map_err(|_| EbvError::NoNetCdfCfProviderForId {
@@ -380,8 +381,8 @@ mod tests {
                 path: test_data!("netcdf4d").to_path_buf(),
             });
 
-        ctx.store_ref_mut::<Box<dyn ExternalDatasetProviderDefinition>>()
-            .await
+        ctx.store()
+            .as_mut_::<Box<dyn ExternalDatasetProviderDefinition>>()
             .create_with_id(&NETCDF_CF_PROVIDER_ID, provider.validated().unwrap())
             .await
             .unwrap();

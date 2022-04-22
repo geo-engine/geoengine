@@ -25,6 +25,35 @@ pub trait GeoEngineStore:
 {
 }
 
+pub trait StoreAs {
+    fn as_<S>(&self) -> &dyn Store<S>
+    where
+        S: Storable,
+        Self: Store<S>;
+    fn as_mut_<S>(&mut self) -> &mut dyn Store<S>
+    where
+        S: Storable,
+        Self: Store<S>;
+}
+
+impl<T> StoreAs for T {
+    fn as_<S>(&self) -> &dyn Store<S>
+    where
+        S: Storable,
+        Self: Store<S>,
+    {
+        self as &dyn Store<S>
+    }
+
+    fn as_mut_<S>(&mut self) -> &mut dyn Store<S>
+    where
+        S: Storable,
+        Self: Store<S>,
+    {
+        self as &mut dyn Store<S>
+    }
+}
+
 pub trait Storable: Listable<Self> + Send + Sync + Sized {
     type Id;
     type Item: UserInput; // TODO: redundant? just require Storable to be UserInput

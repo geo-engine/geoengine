@@ -4,7 +4,6 @@ use std::{
     path::Path,
 };
 
-use crate::datasets::{listing::DatasetProvider, storage::Dataset};
 use crate::datasets::{storage::ExternalDatasetProviderDefinition, upload::UploadRootPath};
 use crate::datasets::{
     storage::{CreateDataset, MetaDataDefinition},
@@ -22,6 +21,13 @@ use crate::{
 use crate::{
     datasets::{listing::DatasetListOptions, upload::UploadDb},
     util::IdResponse,
+};
+use crate::{
+    datasets::{
+        listing::DatasetProvider,
+        storage::{Dataset, DatasetProviderListing},
+    },
+    storage::StoreAs,
 };
 use crate::{
     datasets::{
@@ -79,9 +85,9 @@ async fn list_providers_handler<C: Context>(
     ctx: web::Data<C>,
     options: web::Query<DatasetProviderListOptions>,
 ) -> Result<impl Responder> {
-    let list = ctx
-        .store_ref::<Box<dyn ExternalDatasetProviderDefinition>>()
-        .await
+    let list: Vec<DatasetProviderListing> = ctx
+        .store()
+        .as_::<Box<dyn ExternalDatasetProviderDefinition>>()
         .list(options.into_inner().validated()?)
         .await?;
     Ok(web::Json(list))
@@ -95,8 +101,8 @@ async fn list_external_datasets_handler<C: Context>(
 ) -> Result<impl Responder> {
     let options = options.into_inner().validated()?;
     let list = ctx
-        .store_ref::<Box<dyn ExternalDatasetProviderDefinition>>()
-        .await
+        .store()
+        .as_::<Box<dyn ExternalDatasetProviderDefinition>>()
         .read(&provider.into_inner())
         .await?
         .initialize()
@@ -141,7 +147,7 @@ async fn list_datasets_handler<C: Context>(
     options: web::Query<DatasetListOptions>,
 ) -> Result<impl Responder> {
     let options = options.into_inner().validated()?;
-    let list: Vec<DatasetListing> = ctx.store_ref::<Dataset>().await.list(options).await?;
+    let list: Vec<DatasetListing> = ctx.store().as_::<Dataset>().list(options).await?;
     Ok(web::Json(list))
 }
 
@@ -177,7 +183,7 @@ async fn get_dataset_handler<C: Context>(
     ctx: web::Data<C>,
 ) -> Result<impl Responder> {
     let id: InternalDatasetId = dataset.into_inner().into();
-    let dataset = ctx.store_ref::<Dataset>().await.read(&id.into()).await?;
+    let dataset = ctx.store().as_::<Dataset>().read(&id.into()).await?;
     let response = DatasetResponse {
         id: DatasetId::Internal { dataset_id: id },
         name: dataset.name,
@@ -261,7 +267,7 @@ async fn create_dataset_handler<C: Context>(
     ctx: web::Data<C>,
     create: web::Json<CreateDataset>,
 ) -> Result<impl Responder> {
-    let upload = ctx.store_ref::<Upload>().await.read(&create.upload).await?;
+    let upload = ctx.store().as_::<Upload>().read(&create.upload).await?;
 
     let mut definition = create.into_inner().definition;
 
@@ -270,13 +276,13 @@ async fn create_dataset_handler<C: Context>(
     let dataset: Dataset = definition.dataset().await?;
 
     let id = ctx
-        .store_ref_mut::<Dataset>()
-        .await
+        .store()
+        .as_mut_::<Dataset>()
         .create(dataset.validated()?)
         .await?;
 
-    ctx.store_ref_mut::<MetaDataDefinition>()
-        .await
+    ctx.store()
+        .as_mut_::<MetaDataDefinition>()
         .create_with_id(&id, definition.meta_data.validated()?)
         .await?;
 
@@ -342,7 +348,7 @@ async fn auto_create_dataset_handler<C: Context>(
     ctx: web::Data<C>,
     create: web::Json<AutoCreateDataset>,
 ) -> Result<impl Responder> {
-    let upload = ctx.store_ref::<Upload>().await.read(&create.upload).await?;
+    let upload = ctx.store().as_::<Upload>().read(&create.upload).await?;
 
     let create = create.into_inner().validated()?.user_input;
 
@@ -359,13 +365,13 @@ async fn auto_create_dataset_handler<C: Context>(
     };
 
     let id = ctx
-        .store_ref_mut::<Dataset>()
-        .await
+        .store()
+        .as_mut_::<Dataset>()
         .create(properties.validated()?)
         .await?;
 
-    ctx.store_ref_mut::<MetaDataDefinition>()
-        .await
+    ctx.store()
+        .as_mut_::<MetaDataDefinition>()
         .create_with_id(&id, meta_data.validated()?)
         .await?;
 
@@ -379,11 +385,7 @@ async fn suggest_meta_data_handler<C: Context>(
     ctx: web::Data<C>,
     suggest: web::Query<SuggestMetaData>,
 ) -> Result<impl Responder> {
-    let upload = ctx
-        .store_ref::<Upload>()
-        .await
-        .read(&suggest.upload)
-        .await?;
+    let upload = ctx.store().as_::<Upload>().read(&suggest.upload).await?;
 
     let main_file = suggest
         .into_inner()
@@ -833,13 +835,13 @@ mod tests {
         };
 
         let _id = ctx
-            .store_ref_mut::<Dataset>()
-            .await
+            .store()
+            .as_mut_::<Dataset>()
             .create_with_id(&id, ds.validated()?)
             .await?;
 
-        ctx.store_ref_mut::<MetaDataDefinition>()
-            .await
+        ctx.store()
+            .as_mut_::<MetaDataDefinition>()
             .create_with_id(&id, MetaDataDefinition::OgrMetaData(meta).validated()?)
             .await?;
 
@@ -872,13 +874,13 @@ mod tests {
         };
 
         let _id2 = ctx
-            .store_ref_mut::<Dataset>()
-            .await
+            .store()
+            .as_mut_::<Dataset>()
             .create_with_id(&id2, ds.validated()?)
             .await?;
 
-        ctx.store_ref_mut::<MetaDataDefinition>()
-            .await
+        ctx.store()
+            .as_mut_::<MetaDataDefinition>()
             .create_with_id(&id2, MetaDataDefinition::OgrMetaData(meta).validated()?)
             .await?;
 
@@ -1524,13 +1526,13 @@ mod tests {
         };
 
         let id = ctx
-            .store_ref_mut::<Dataset>()
-            .await
+            .store()
+            .as_mut_::<Dataset>()
             .create(ds.validated()?)
             .await?;
 
-        ctx.store_ref_mut::<MetaDataDefinition>()
-            .await
+        ctx.store()
+            .as_mut_::<MetaDataDefinition>()
             .create_with_id(&id, MetaDataDefinition::OgrMetaData(meta).validated()?)
             .await?;
 

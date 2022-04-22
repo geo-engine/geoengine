@@ -143,7 +143,7 @@ impl ExternalDatasetProvider for PangaeaDataProvider {
             }
         })?;
 
-        Ok(Box::new(smd))
+        Ok(MetaDataLookupResult::Ogr(Box::new(smd)))
     }
 }
 
@@ -333,14 +333,13 @@ mod tests {
         let provider = create_provider(&server).await.unwrap();
         let id = create_id(doi);
 
-        let meta: Result<
-            Box<dyn MetaData<OgrSourceDataset, VectorResultDescriptor, VectorQueryRectangle>>,
-            _,
-        > = provider.meta_data(&id).await;
+        let meta = provider.meta_data(&id).await;
 
         server.verify_and_clear();
 
         assert!(meta.is_ok());
+
+        let meta = meta.unwrap().ogr_meta_data();
 
         if let VectorDataType::Data = meta.unwrap().result_descriptor().await.unwrap().data_type {
         } else {
@@ -360,9 +359,7 @@ mod tests {
         let provider = create_provider(&server).await.unwrap();
         let id = create_id(doi);
 
-        let meta: Box<
-            dyn MetaData<OgrSourceDataset, VectorResultDescriptor, VectorQueryRectangle>,
-        > = provider.meta_data(&id).await.unwrap();
+        let meta = provider.meta_data(&id).await.unwrap();
 
         server.verify_and_clear();
         setup_vsicurl(&mut server, doi, "pangaea_geo_none.tsv").await;
@@ -416,9 +413,7 @@ mod tests {
         let provider = create_provider(&server).await.unwrap();
         let id = create_id(doi);
 
-        let meta: Box<
-            dyn MetaData<OgrSourceDataset, VectorResultDescriptor, VectorQueryRectangle>,
-        > = provider.meta_data(&id).await.unwrap();
+        let meta = provider.meta_data(&id).await.unwrap();
 
         server.verify_and_clear();
         setup_vsicurl(&mut server, doi, "pangaea_geo_point.tsv").await;
@@ -484,9 +479,7 @@ mod tests {
         let provider = create_provider(&server).await.unwrap();
         let id = create_id(doi);
 
-        let meta: Box<
-            dyn MetaData<OgrSourceDataset, VectorResultDescriptor, VectorQueryRectangle>,
-        > = provider.meta_data(&id).await.unwrap();
+        let meta = provider.meta_data(&id).await.unwrap();
 
         server.verify_and_clear();
         setup_vsicurl(&mut server, doi, "pangaea_geo_box.tsv").await;
@@ -548,9 +541,7 @@ mod tests {
         let provider = create_provider(&server).await.unwrap();
         let id = create_id(doi);
 
-        let meta: Box<
-            dyn MetaData<OgrSourceDataset, VectorResultDescriptor, VectorQueryRectangle>,
-        > = provider.meta_data(&id).await.unwrap();
+        let meta = provider.meta_data(&id).await.unwrap();
 
         server.verify_and_clear();
         setup_vsicurl(&mut server, doi, "pangaea_geo_lat_lon.tsv").await;

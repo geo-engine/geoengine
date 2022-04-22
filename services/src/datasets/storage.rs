@@ -56,6 +56,20 @@ impl Listable<Dataset> for Dataset {
     }
 }
 
+impl Dataset {
+    pub fn list_external(&self, id: DatasetId) -> DatasetListing {
+        DatasetListing {
+            id,
+            name: self.name.clone(),
+            description: self.description.clone(),
+            tags: vec![], // TODO
+            source_operator: self.source_operator.clone(),
+            result_descriptor: self.result_descriptor.clone(),
+            symbology: self.symbology.clone(),
+        }
+    }
+}
+
 impl ListOption for DatasetListOptions {
     type Item = Dataset;
 
