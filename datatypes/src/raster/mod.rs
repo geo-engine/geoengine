@@ -19,8 +19,10 @@ pub use self::grid_traits::{
 pub use self::grid_typed::{TypedGrid, TypedGrid2D, TypedGrid3D};
 pub use self::operations::{
     blit::Blit, convert_data_type::ConvertDataType, convert_data_type::ConvertDataTypeParallel,
-    grid_blit::GridBlit, map_pixels::MapPixels, map_pixels::MapPixelsParallel,
-    pixel_methods::scale_pixel, pixel_methods::unscale_pixel,
+    element_scaling::ScaleConvert, element_scaling::ScaleConvertElements,
+    element_scaling::ScaleConvertElementsParallel, element_scaling::UnscaleConvert,
+    element_scaling::UnscaleConvertElementsParallel, grid_blit::GridBlit, map_pixels::MapPixels,
+    map_pixels::MapPixelsParallel,
 };
 pub use self::raster_tile::{
     BaseTile, MaterializedRasterTile, MaterializedRasterTile2D, MaterializedRasterTile3D,
