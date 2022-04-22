@@ -31,7 +31,6 @@ pub type Db<T> = Arc<RwLock<T>>;
 
 /// A context bundles access to shared resources like databases and session specific information
 /// about the user to pass to the services handlers.
-// TODO: avoid locking the individual DBs here IF they are already thread safe (e.g. guaranteed by postgres)
 #[async_trait]
 pub trait Context: 'static + Send + Sync + Clone {
     type Session: MockableSession + Clone; // TODO: change to `[Session]` when workarounds are gone
