@@ -50,7 +50,7 @@ where
 {
     // TODO: clean up expired sessions?
 
-    async fn register(&mut self, user: Validated<UserRegistration>) -> Result<UserId> {
+    async fn register(&self, user: Validated<UserRegistration>) -> Result<UserId> {
         let mut conn = self.conn_pool.get().await?;
 
         let tx = conn.build_transaction().start().await?;
@@ -96,7 +96,7 @@ where
         Ok(user.id)
     }
 
-    async fn anonymous(&mut self) -> Result<UserSession> {
+    async fn anonymous(&self) -> Result<UserSession> {
         let mut conn = self.conn_pool.get().await?;
 
         let tx = conn.build_transaction().start().await?;
@@ -165,7 +165,7 @@ where
         })
     }
 
-    async fn login(&mut self, user_credentials: UserCredentials) -> Result<UserSession> {
+    async fn login(&self, user_credentials: UserCredentials) -> Result<UserSession> {
         let conn = self.conn_pool.get().await?;
         let stmt = conn
             .prepare("SELECT id, password_hash, email, real_name FROM users WHERE email = $1;")
@@ -234,7 +234,7 @@ where
         }
     }
 
-    async fn logout(&mut self, session: SessionId) -> Result<()> {
+    async fn logout(&self, session: SessionId) -> Result<()> {
         let conn = self.conn_pool.get().await?;
         let stmt = conn
             .prepare("DELETE FROM sessions WHERE id = $1;") // TODO: only invalidate session?
@@ -284,11 +284,7 @@ where
         })
     }
 
-    async fn set_session_project(
-        &mut self,
-        session: &UserSession,
-        project: ProjectId,
-    ) -> Result<()> {
+    async fn set_session_project(&self, session: &UserSession, project: ProjectId) -> Result<()> {
         let conn = self.conn_pool.get().await?;
         PostgresContext::check_user_project_permission(
             &conn,
@@ -312,7 +308,7 @@ where
         Ok(())
     }
 
-    async fn set_session_view(&mut self, session: &UserSession, view: STRectangle) -> Result<()> {
+    async fn set_session_view(&self, session: &UserSession, view: STRectangle) -> Result<()> {
         let conn = self.conn_pool.get().await?;
         let stmt = conn
             .prepare("UPDATE sessions SET view = $1 WHERE id = $2;")

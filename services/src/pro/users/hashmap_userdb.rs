@@ -4,7 +4,7 @@ use async_trait::async_trait;
 use pwhash::bcrypt;
 use snafu::ensure;
 
-use crate::contexts::SessionId;
+use crate::contexts::{Db, SessionId};
 use crate::error::{self, Result};
 use crate::pro::datasets::Role;
 use crate::pro::users::{
@@ -16,17 +16,21 @@ use geoengine_datatypes::util::Identifier;
 
 #[derive(Default)]
 pub struct HashMapUserDb {
-    users: HashMap<String, User>,
-    sessions: HashMap<SessionId, UserSession>,
+    users: Db<HashMap<String, User>>,
+    sessions: Db<HashMap<SessionId, UserSession>>,
 }
 
 #[async_trait]
 impl UserDb for HashMapUserDb {
     /// Register a user
-    async fn register(&mut self, user_registration: Validated<UserRegistration>) -> Result<UserId> {
+    async fn register(&self, user_registration: Validated<UserRegistration>) -> Result<UserId> {
         let user_registration = user_registration.user_input;
         ensure!(
-            !self.users.contains_key(&user_registration.email),
+            !self
+                .users
+                .read()
+                .await
+                .contains_key(&user_registration.email),
             error::Duplicate {
                 reason: "E-mail already exists"
             }
@@ -34,11 +38,14 @@ impl UserDb for HashMapUserDb {
 
         let user = User::from(user_registration.clone());
         let id = user.id;
-        self.users.insert(user_registration.email, user);
+        self.users
+            .write()
+            .await
+            .insert(user_registration.email, user);
         Ok(id)
     }
 
-    async fn anonymous(&mut self) -> Result<UserSession> {
+    async fn anonymous(&self) -> Result<UserSession> {
         let id = UserId::new();
         let user = User {
             id,
@@ -48,7 +55,7 @@ impl UserDb for HashMapUserDb {
             active: true,
         };
 
-        self.users.insert(id.to_string(), user);
+        self.users.write().await.insert(id.to_string(), user);
 
         let session = UserSession {
             id: SessionId::new(),
@@ -64,13 +71,16 @@ impl UserDb for HashMapUserDb {
             roles: vec![id.into(), Role::anonymous_role_id()],
         };
 
-        self.sessions.insert(session.id, session.clone());
+        self.sessions
+            .write()
+            .await
+            .insert(session.id, session.clone());
         Ok(session)
     }
 
     /// Log user in
-    async fn login(&mut self, user_credentials: UserCredentials) -> Result<UserSession> {
-        match self.users.get(&user_credentials.email) {
+    async fn login(&self, user_credentials: UserCredentials) -> Result<UserSession> {
+        match self.users.read().await.get(&user_credentials.email) {
             Some(user) if bcrypt::verify(user_credentials.password, &user.password_hash) => {
                 let session = UserSession {
                     id: SessionId::new(),
@@ -87,7 +97,10 @@ impl UserDb for HashMapUserDb {
                     roles: vec![user.id.into(), Role::user_role_id()],
                 };
 
-                self.sessions.insert(session.id, session.clone());
+                self.sessions
+                    .write()
+                    .await
+                    .insert(session.id, session.clone());
                 Ok(session)
             }
             _ => Err(error::Error::LoginFailed),
@@ -95,27 +108,23 @@ impl UserDb for HashMapUserDb {
     }
 
     /// Log user out
-    async fn logout(&mut self, session: SessionId) -> Result<()> {
-        match self.sessions.remove(&session) {
+    async fn logout(&self, session: SessionId) -> Result<()> {
+        match self.sessions.write().await.remove(&session) {
             Some(_) => Ok(()),
             None => Err(error::Error::LogoutFailed),
         }
     }
 
     async fn session(&self, session: SessionId) -> Result<UserSession> {
-        match self.sessions.get(&session) {
+        match self.sessions.read().await.get(&session) {
             Some(session) => Ok(session.clone()),
             None => Err(error::Error::InvalidSession),
         }
     }
 
-    async fn set_session_project(
-        &mut self,
-        session: &UserSession,
-        project: ProjectId,
-    ) -> Result<()> {
+    async fn set_session_project(&self, session: &UserSession, project: ProjectId) -> Result<()> {
         // TODO: check project exists
-        match self.sessions.get_mut(&session.id) {
+        match self.sessions.write().await.get_mut(&session.id) {
             Some(session) => {
                 session.project = Some(project);
                 Ok(())
@@ -124,8 +133,8 @@ impl UserDb for HashMapUserDb {
         }
     }
 
-    async fn set_session_view(&mut self, session: &UserSession, view: STRectangle) -> Result<()> {
-        match self.sessions.get_mut(&session.id) {
+    async fn set_session_view(&self, session: &UserSession, view: STRectangle) -> Result<()> {
+        match self.sessions.write().await.get_mut(&session.id) {
             Some(session) => {
                 session.view = Some(view);
                 Ok(())
@@ -142,7 +151,7 @@ mod tests {
 
     #[tokio::test]
     async fn register() {
-        let mut user_db = HashMapUserDb::default();
+        let user_db = HashMapUserDb::default();
 
         let user_registration = UserRegistration {
             email: "foo@bar.de".into(),
@@ -157,7 +166,7 @@ mod tests {
 
     #[tokio::test]
     async fn login() {
-        let mut user_db = HashMapUserDb::default();
+        let user_db = HashMapUserDb::default();
 
         let user_registration = UserRegistration {
             email: "foo@bar.de".into(),
@@ -179,7 +188,7 @@ mod tests {
 
     #[tokio::test]
     async fn logout() {
-        let mut user_db = HashMapUserDb::default();
+        let user_db = HashMapUserDb::default();
 
         let user_registration = UserRegistration {
             email: "foo@bar.de".into(),
@@ -203,7 +212,7 @@ mod tests {
 
     #[tokio::test]
     async fn session() {
-        let mut user_db = HashMapUserDb::default();
+        let user_db = HashMapUserDb::default();
 
         let user_registration = UserRegistration {
             email: "foo@bar.de".into(),

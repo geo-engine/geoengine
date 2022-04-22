@@ -1,6 +1,6 @@
 use crate::contexts::{ExecutionContextImpl, QueryContextImpl};
 use crate::error;
-use crate::pro::contexts::{Context, Db, ProContext};
+use crate::pro::contexts::{Context, ProContext};
 use crate::pro::datasets::{add_datasets_from_directory, ProHashMapDatasetDb};
 use crate::pro::projects::ProHashMapProjectDb;
 use crate::pro::users::{HashMapUserDb, UserDb, UserSession};
@@ -15,15 +15,14 @@ use rayon::ThreadPool;
 use snafu::ResultExt;
 use std::path::PathBuf;
 use std::sync::Arc;
-use tokio::sync::{RwLock, RwLockReadGuard, RwLockWriteGuard};
 
 /// A context with references to in-memory versions of the individual databases.
 #[derive(Clone)]
 pub struct ProInMemoryContext {
-    user_db: Db<HashMapUserDb>,
-    project_db: Db<ProHashMapProjectDb>,
-    workflow_registry: Db<HashMapRegistry>,
-    dataset_db: Db<ProHashMapDatasetDb>,
+    user_db: Arc<HashMapUserDb>,
+    project_db: Arc<ProHashMapProjectDb>,
+    workflow_registry: Arc<HashMapRegistry>,
+    dataset_db: Arc<ProHashMapDatasetDb>,
     thread_pool: Arc<ThreadPool>,
     exe_ctx_tiling_spec: TilingSpecification,
     query_ctx_chunk_size: ChunkByteSize,
@@ -62,7 +61,7 @@ impl ProInMemoryContext {
             thread_pool: create_rayon_thread_pool(0),
             exe_ctx_tiling_spec,
             query_ctx_chunk_size,
-            dataset_db: Arc::new(RwLock::new(db)),
+            dataset_db: Arc::new(db),
         }
     }
 
@@ -86,14 +85,11 @@ impl ProInMemoryContext {
 impl ProContext for ProInMemoryContext {
     type UserDB = HashMapUserDb;
 
-    fn user_db(&self) -> Db<Self::UserDB> {
+    fn user_db(&self) -> Arc<Self::UserDB> {
         self.user_db.clone()
     }
-    async fn user_db_ref(&self) -> RwLockReadGuard<'_, Self::UserDB> {
-        self.user_db.read().await
-    }
-    async fn user_db_ref_mut(&self) -> RwLockWriteGuard<'_, Self::UserDB> {
-        self.user_db.write().await
+    fn user_db_ref(&self) -> &Self::UserDB {
+        &self.user_db
     }
 }
 
@@ -106,34 +102,25 @@ impl Context for ProInMemoryContext {
     type QueryContext = QueryContextImpl;
     type ExecutionContext = ExecutionContextImpl<UserSession, ProHashMapDatasetDb>;
 
-    fn project_db(&self) -> Db<Self::ProjectDB> {
+    fn project_db(&self) -> Arc<Self::ProjectDB> {
         self.project_db.clone()
     }
-    async fn project_db_ref(&self) -> RwLockReadGuard<'_, Self::ProjectDB> {
-        self.project_db.read().await
-    }
-    async fn project_db_ref_mut(&self) -> RwLockWriteGuard<'_, Self::ProjectDB> {
-        self.project_db.write().await
+    fn project_db_ref(&self) -> &Self::ProjectDB {
+        &self.project_db
     }
 
-    fn workflow_registry(&self) -> Db<Self::WorkflowRegistry> {
+    fn workflow_registry(&self) -> Arc<Self::WorkflowRegistry> {
         self.workflow_registry.clone()
     }
-    async fn workflow_registry_ref(&self) -> RwLockReadGuard<'_, Self::WorkflowRegistry> {
-        self.workflow_registry.read().await
-    }
-    async fn workflow_registry_ref_mut(&self) -> RwLockWriteGuard<'_, Self::WorkflowRegistry> {
-        self.workflow_registry.write().await
+    fn workflow_registry_ref(&self) -> &Self::WorkflowRegistry {
+        &self.workflow_registry
     }
 
-    fn dataset_db(&self) -> Db<Self::DatasetDB> {
+    fn dataset_db(&self) -> Arc<Self::DatasetDB> {
         self.dataset_db.clone()
     }
-    async fn dataset_db_ref(&self) -> RwLockReadGuard<'_, Self::DatasetDB> {
-        self.dataset_db.read().await
-    }
-    async fn dataset_db_ref_mut(&self) -> RwLockWriteGuard<'_, Self::DatasetDB> {
-        self.dataset_db.write().await
+    fn dataset_db_ref(&self) -> &Self::DatasetDB {
+        &self.dataset_db
     }
 
     fn query_context(&self) -> Result<Self::QueryContext> {
@@ -156,7 +143,6 @@ impl Context for ProInMemoryContext {
 
     async fn session_by_id(&self, session_id: crate::contexts::SessionId) -> Result<Self::Session> {
         self.user_db_ref()
-            .await
             .session(session_id)
             .await
             .map_err(Box::new)

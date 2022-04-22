@@ -70,7 +70,6 @@ async fn list_providers_handler<C: Context>(
 ) -> Result<impl Responder> {
     let list = ctx
         .dataset_db_ref()
-        .await
         .list_dataset_providers(&session, options.into_inner().validated()?)
         .await?;
     Ok(web::Json(list))
@@ -85,7 +84,6 @@ async fn list_external_datasets_handler<C: Context>(
     let options = options.into_inner().validated()?;
     let list = ctx
         .dataset_db_ref()
-        .await
         .dataset_provider(&session, provider.into_inner())
         .await?
         .list(options) // TODO: authorization
@@ -128,7 +126,7 @@ async fn list_datasets_handler<C: Context>(
     options: web::Query<DatasetListOptions>,
 ) -> Result<impl Responder> {
     let options = options.into_inner().validated()?;
-    let list = ctx.dataset_db_ref().await.list(&session, options).await?;
+    let list = ctx.dataset_db_ref().list(&session, options).await?;
     Ok(web::Json(list))
 }
 
@@ -165,7 +163,6 @@ async fn get_dataset_handler<C: Context>(
 ) -> Result<impl Responder> {
     let dataset = ctx
         .dataset_db_ref()
-        .await
         .load(&session, &dataset.into_inner().into())
         .await?;
     Ok(web::Json(dataset))
@@ -232,7 +229,6 @@ async fn create_dataset_handler<C: Context>(
 ) -> Result<impl Responder> {
     let upload = ctx
         .dataset_db_ref()
-        .await
         .get_upload(&session, create.upload)
         .await?;
 
@@ -240,7 +236,7 @@ async fn create_dataset_handler<C: Context>(
 
     adjust_user_path_to_upload_path(&mut definition.meta_data, &upload)?;
 
-    let mut db = ctx.dataset_db_ref_mut().await;
+    let db = ctx.dataset_db_ref();
     let meta_data = db.wrap_meta_data(definition.meta_data);
     let id = db
         .add_dataset(&session, definition.properties.validated()?, meta_data)
@@ -306,7 +302,6 @@ async fn auto_create_dataset_handler<C: Context>(
 ) -> Result<impl Responder> {
     let upload = ctx
         .dataset_db_ref()
-        .await
         .get_upload(&session, create.upload)
         .await?;
 
@@ -324,7 +319,7 @@ async fn auto_create_dataset_handler<C: Context>(
         provenance: None,
     };
 
-    let mut db = ctx.dataset_db_ref_mut().await;
+    let db = ctx.dataset_db_ref();
     let meta_data = db.wrap_meta_data(meta_data);
     let id = db
         .add_dataset(&session, properties.validated()?, meta_data)
@@ -340,7 +335,6 @@ async fn suggest_meta_data_handler<C: Context>(
 ) -> Result<impl Responder> {
     let upload = ctx
         .dataset_db_ref()
-        .await
         .get_upload(&session, suggest.upload)
         .await?;
 
@@ -794,8 +788,7 @@ mod tests {
         };
 
         let _id = ctx
-            .dataset_db_ref_mut()
-            .await
+            .dataset_db_ref()
             .add_dataset(&SimpleSession::default(), ds.validated()?, Box::new(meta))
             .await?;
 
@@ -831,8 +824,7 @@ mod tests {
         };
 
         let _id2 = ctx
-            .dataset_db_ref_mut()
-            .await
+            .dataset_db_ref()
             .add_dataset(&SimpleSession::default(), ds.validated()?, Box::new(meta))
             .await?;
 
@@ -1478,8 +1470,7 @@ mod tests {
         };
 
         let id = ctx
-            .dataset_db_ref_mut()
-            .await
+            .dataset_db_ref()
             .add_dataset(
                 &*ctx.default_session_ref().await,
                 ds.validated()?,

@@ -38,7 +38,7 @@ where
     <Tls as MakeTlsConnect<Socket>>::TlsConnect: Send,
     <<Tls as MakeTlsConnect<Socket>>::TlsConnect as TlsConnect<Socket>>::Future: Send,
 {
-    async fn register(&mut self, workflow: Workflow) -> Result<WorkflowId> {
+    async fn register(&self, workflow: Workflow) -> Result<WorkflowId> {
         let conn = self.conn_pool.get().await?;
         let stmt = conn
             .prepare(
