@@ -5,11 +5,13 @@ use crate::engine::{
 use crate::util::Result;
 use async_trait::async_trait;
 use futures::{StreamExt, TryStreamExt};
-use geoengine_datatypes::raster::{scale_pixel, unscale_pixel, MapPixelsParallel, NoDataValue};
-use geoengine_datatypes::raster::{Pixel, RasterProperties, RasterTile2D};
+use geoengine_datatypes::raster::{UnscaleConvert, UnscaleConvertElementsParallel};
 use geoengine_datatypes::{
     primitives::Measurement,
-    raster::{RasterDataType, RasterPropertiesKey},
+    raster::{
+        NoDataValue, Pixel, RasterDataType, RasterProperties, RasterPropertiesKey, RasterTile2D,
+        ScaleConvert, ScaleConvertElementsParallel,
+    },
 };
 use num::FromPrimitive;
 use num_traits::AsPrimitive;
@@ -19,7 +21,7 @@ use std::sync::Arc;
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 #[serde(rename_all = "camelCase")]
-pub struct RasterUnscaleParams {
+pub struct RasterScalingParams {
     scale_with: PropertiesKeyOrValue,
     offset_by: PropertiesKeyOrValue,
     output_no_data_value: Option<f64>,
@@ -54,9 +56,9 @@ enum PropertiesKeyOrValue {
 ///
 /// - offset: `msg.calibration_offset`
 /// - slope: `msg.calibration_slope`
-pub type RasterUnscaleOperator = Operator<RasterUnscaleParams, SingleRasterSource>;
+pub type RasterScalingOperator = Operator<RasterScalingParams, SingleRasterSource>;
 
-pub struct InitializedRasterUnscaleOperator {
+pub struct InitializedRasterScalingOperator {
     scale_with: PropertiesKeyOrValue,
     offset_by: PropertiesKeyOrValue,
     result_descriptor: RasterResultDescriptor,
@@ -66,7 +68,7 @@ pub struct InitializedRasterUnscaleOperator {
 
 #[typetag::serde]
 #[async_trait]
-impl RasterOperator for RasterUnscaleOperator {
+impl RasterOperator for RasterScalingOperator {
     async fn initialize(
         self: Box<Self>,
         context: &dyn ExecutionContext,
@@ -84,7 +86,7 @@ impl RasterOperator for RasterUnscaleOperator {
             no_data_value: self.params.output_no_data_value,
         };
 
-        let initialized_operator = InitializedRasterUnscaleOperator {
+        let initialized_operator = InitializedRasterScalingOperator {
             scale_with: self.params.scale_with,
             offset_by: self.params.offset_by,
             result_descriptor: out_desc,
@@ -96,7 +98,7 @@ impl RasterOperator for RasterUnscaleOperator {
     }
 }
 
-impl InitializedRasterOperator for InitializedRasterUnscaleOperator {
+impl InitializedRasterOperator for InitializedRasterScalingOperator {
     fn result_descriptor(&self) -> &RasterResultDescriptor {
         &self.result_descriptor
     }
@@ -109,13 +111,119 @@ impl InitializedRasterOperator for InitializedRasterUnscaleOperator {
         let source = self.source.query_processor()?;
         let scaling_mode = self.scaling_mode;
 
-        let res_op = call_on_generic_raster_processor!(source, source_proc => {
-            call_generic_raster_processor!(out_data_type,
-                RasterUnscaleProcessor::create_boxed(scale_with, offset_by, no_data_value, source_proc, scaling_mode)
-            )
-        });
+        let res_op = match scaling_mode {
+            ScalingMode::Scale => {
+                call_on_generic_raster_processor!(source, source_proc => {
+                call_generic_raster_processor!(out_data_type,
+                    RasterScaleProcessor::create_boxed(scale_with, offset_by, no_data_value, source_proc)
+                )})
+            }
+
+            ScalingMode::Unscale => {
+                call_on_generic_raster_processor!(source, source_proc => {
+                call_generic_raster_processor!(out_data_type,
+                    RasterUnscaleProcessor::create_boxed(scale_with, offset_by, no_data_value, source_proc)
+                )})
+            }
+        };
 
         Ok(res_op)
+    }
+}
+
+struct RasterScaleProcessor<Q, In, Out>
+where
+    Q: RasterQueryProcessor<RasterType = In>,
+{
+    source: Q,
+    scale_with: PropertiesKeyOrValue,
+    offset_by: PropertiesKeyOrValue,
+    no_data_value: Option<Out>,
+}
+
+impl<Q, In, Out> RasterScaleProcessor<Q, In, Out>
+where
+    Q: RasterQueryProcessor<RasterType = In> + 'static,
+    In: Pixel + ScaleConvert<Out>,
+    Out: Pixel,
+    Out: FromPrimitive,
+    In: AsPrimitive<Out> + FromPrimitive,
+    f64: AsPrimitive<Out> + AsPrimitive<In>,
+{
+    pub fn create_boxed(
+        scale_with: PropertiesKeyOrValue,
+        offset_by: PropertiesKeyOrValue,
+        no_data_value_option: Option<f64>,
+        source: Q,
+    ) -> Box<dyn RasterQueryProcessor<RasterType = Out>> {
+        let no_data_value = no_data_value_option.map(|v| v.as_());
+        RasterScaleProcessor {
+            source,
+            scale_with,
+            offset_by,
+            no_data_value,
+        }
+        .boxed()
+    }
+    async fn scale_tile_async(
+        &self,
+        tile: RasterTile2D<In>,
+        pool: Arc<ThreadPool>,
+    ) -> Result<RasterTile2D<Out>> {
+        let offset_by = Self::prop_value_in(&self.offset_by, &tile.properties)?;
+        let scale_with = Self::prop_value_in(&self.scale_with, &tile.properties)?;
+
+        let no_data_value = self
+            .no_data_value
+            .or(tile
+                .no_data_value()
+                .and_then(|n| n.scale_convert(scale_with, offset_by)))
+            .unwrap_or_else(Out::zero);
+
+        let res_tile = crate::util::spawn_blocking_with_thread_pool(pool, move || {
+            tile.scale_convert_elements_parallel(scale_with, offset_by, no_data_value)
+        })
+        .await?;
+
+        Ok(res_tile)
+    }
+
+    fn prop_value_in(
+        prop_key_or_value: &PropertiesKeyOrValue,
+        props: &RasterProperties,
+    ) -> Result<In> {
+        let value = match prop_key_or_value {
+            PropertiesKeyOrValue::MetadataKey(key) => props.number_property::<In>(key)?,
+            PropertiesKeyOrValue::Value(value) => value.as_(),
+        };
+        Ok(value)
+    }
+}
+
+#[async_trait]
+impl<Q, In, Out> RasterQueryProcessor for RasterScaleProcessor<Q, In, Out>
+where
+    In: Pixel + AsPrimitive<Out> + FromPrimitive,
+    Out: Pixel + FromPrimitive,
+    f64: AsPrimitive<Out> + AsPrimitive<In>,
+    Q: RasterQueryProcessor<RasterType = In> + Sync + Send + 'static,
+    In: Pixel + ScaleConvert<Out>,
+{
+    type RasterType = Out;
+
+    async fn raster_query<'a>(
+        &'a self,
+        query: geoengine_datatypes::primitives::RasterQueryRectangle,
+        ctx: &'a dyn crate::engine::QueryContext,
+    ) -> Result<
+        futures::stream::BoxStream<
+            'a,
+            Result<geoengine_datatypes::raster::RasterTile2D<Self::RasterType>>,
+        >,
+    > {
+        let src = self.source.raster_query(query, ctx).await?;
+        let rs = src.and_then(move |tile| self.scale_tile_async(tile, ctx.thread_pool().clone()));
+        Ok(rs.boxed())
     }
 }
 
@@ -127,7 +235,6 @@ where
     scale_with: PropertiesKeyOrValue,
     offset_by: PropertiesKeyOrValue,
     no_data_value: Option<Out>,
-    scaling_mode: ScalingMode,
 }
 
 impl<Q, In, Out> RasterUnscaleProcessor<Q, In, Out>
@@ -135,7 +242,7 @@ where
     Q: RasterQueryProcessor<RasterType = In> + 'static,
     In: Pixel,
     Out: Pixel,
-    Out: FromPrimitive,
+    Out: UnscaleConvert<In> + FromPrimitive,
     In: AsPrimitive<Out> + FromPrimitive,
     f64: AsPrimitive<Out> + AsPrimitive<In>,
 {
@@ -144,7 +251,6 @@ where
         offset_by: PropertiesKeyOrValue,
         no_data_value_option: Option<f64>,
         source: Q,
-        scaling_mode: ScalingMode,
     ) -> Box<dyn RasterQueryProcessor<RasterType = Out>> {
         let no_data_value = no_data_value_option.map(|v| v.as_());
         RasterUnscaleProcessor {
@@ -152,20 +258,8 @@ where
             scale_with,
             offset_by,
             no_data_value,
-            scaling_mode,
         }
         .boxed()
-    }
-
-    async fn process_tile_async(
-        &self,
-        tile: RasterTile2D<In>,
-        pool: Arc<ThreadPool>,
-    ) -> Result<RasterTile2D<Out>> {
-        match self.scaling_mode {
-            ScalingMode::Scale => self.scale_tile_async(tile, pool).await,
-            ScalingMode::Unscale => self.unscale_tile_async(tile, pool).await,
-        }
     }
 
     async fn unscale_tile_async(
@@ -180,34 +274,11 @@ where
             .no_data_value
             .or(tile
                 .no_data_value()
-                .and_then(|n| unscale_pixel(n, scale_with, offset_by)))
+                .and_then(|n| UnscaleConvert::unscale_convert(n, scale_with, offset_by)))
             .unwrap_or_else(Out::zero);
 
         let res_tile = crate::util::spawn_blocking_with_thread_pool(pool, move || {
-            tile.map_pixels_parallel(|p| unscale_pixel(p, scale_with, offset_by), no_data_value)
-        })
-        .await?;
-
-        Ok(res_tile)
-    }
-
-    async fn scale_tile_async(
-        &self,
-        tile: RasterTile2D<In>,
-        pool: Arc<ThreadPool>,
-    ) -> Result<RasterTile2D<Out>> {
-        let offset_by = Self::prop_value_in(&self.offset_by, &tile.properties)?;
-        let scale_with = Self::prop_value_in(&self.scale_with, &tile.properties)?;
-
-        let no_data_value = self
-            .no_data_value
-            .or(tile
-                .no_data_value()
-                .and_then(|n| scale_pixel(n, scale_with, offset_by)))
-            .unwrap_or_else(Out::zero);
-
-        let res_tile = crate::util::spawn_blocking_with_thread_pool(pool, move || {
-            tile.map_pixels_parallel(|p| scale_pixel(p, scale_with, offset_by), no_data_value)
+            tile.unscale_convert_elements_parallel(scale_with, offset_by, no_data_value)
         })
         .await?;
 
@@ -224,24 +295,13 @@ where
         };
         Ok(value)
     }
-
-    fn prop_value_in(
-        prop_key_or_value: &PropertiesKeyOrValue,
-        props: &RasterProperties,
-    ) -> Result<In> {
-        let value = match prop_key_or_value {
-            PropertiesKeyOrValue::MetadataKey(key) => props.number_property::<In>(key)?,
-            PropertiesKeyOrValue::Value(value) => value.as_(),
-        };
-        Ok(value)
-    }
 }
 
 #[async_trait]
 impl<Q, In, Out> RasterQueryProcessor for RasterUnscaleProcessor<Q, In, Out>
 where
     In: Pixel + AsPrimitive<Out> + FromPrimitive,
-    Out: Pixel + FromPrimitive,
+    Out: Pixel + FromPrimitive + UnscaleConvert<In>,
     f64: AsPrimitive<Out> + AsPrimitive<In>,
     Q: RasterQueryProcessor<RasterType = In> + Sync + Send + 'static,
 {
@@ -258,7 +318,7 @@ where
         >,
     > {
         let src = self.source.raster_query(query, ctx).await?;
-        let rs = src.and_then(move |tile| self.process_tile_async(tile, ctx.thread_pool().clone()));
+        let rs = src.and_then(move |tile| self.unscale_tile_async(tile, ctx.thread_pool().clone()));
         Ok(rs.boxed())
     }
 }
