@@ -1,5 +1,6 @@
 use crate::identifier;
 use serde::{Deserialize, Serialize};
+use utoipa::Component;
 
 identifier!(DatasetProviderId);
 
@@ -7,7 +8,7 @@ identifier!(InternalDatasetId);
 
 identifier!(StagingDatasetId);
 
-#[derive(Debug, Clone, Hash, Eq, PartialEq, Deserialize, Serialize)]
+#[derive(Debug, Clone, Hash, Eq, PartialEq, Deserialize, Serialize, Component)]
 #[serde(rename_all = "camelCase", tag = "type")]
 pub enum DatasetId {
     #[serde(rename_all = "camelCase")]
@@ -17,7 +18,7 @@ pub enum DatasetId {
     External(ExternalDatasetId),
 }
 
-#[derive(Debug, Clone, Hash, Eq, PartialEq, Deserialize, Serialize)]
+#[derive(Debug, Clone, Hash, Eq, PartialEq, Deserialize, Serialize, Component)]
 #[serde(rename_all = "camelCase")]
 pub struct ExternalDatasetId {
     pub provider_id: DatasetProviderId,

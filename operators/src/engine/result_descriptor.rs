@@ -50,6 +50,12 @@ pub struct RasterResultDescriptor {
     pub no_data_value: Option<f64>,
 }
 
+impl utoipa::Component for RasterResultDescriptor {
+    fn component() -> utoipa::openapi::Component {
+        todo!();
+    }
+}
+
 impl ResultDescriptor for RasterResultDescriptor {
     type DataType = RasterDataType;
 
@@ -97,6 +103,12 @@ pub struct VectorResultDescriptor {
     pub data_type: VectorDataType,
     pub spatial_reference: SpatialReferenceOption,
     pub columns: HashMap<String, FeatureDataType>,
+}
+
+impl utoipa::Component for VectorResultDescriptor {
+    fn component() -> utoipa::openapi::Component {
+        todo!();
+    }
 }
 
 impl VectorResultDescriptor {
@@ -155,6 +167,18 @@ pub struct PlotResultDescriptor {
     pub spatial_reference: SpatialReferenceOption,
 }
 
+impl utoipa::Component for PlotResultDescriptor {
+    fn component() -> utoipa::openapi::Component {
+        utoipa::openapi::ObjectBuilder::new()
+            .property(
+                "spatialReference",
+                utoipa::openapi::Ref::from_component_name("SpatialReferenceOption")
+            )
+            .required("spatialReference")
+            .into()
+    }
+}
+
 impl ResultDescriptor for PlotResultDescriptor {
     type DataType = (); // TODO: maybe distinguish between image, interactive plot, etc.
 
@@ -178,12 +202,18 @@ impl ResultDescriptor for PlotResultDescriptor {
         *self
     }
 }
-#[derive(Debug, Serialize, Deserialize, Clone, PartialEq, Component)]
+#[derive(Debug, Serialize, Deserialize, Clone, PartialEq)]
 #[serde(rename_all = "camelCase", tag = "type")]
 pub enum TypedResultDescriptor {
     Plot(PlotResultDescriptor),
     Raster(RasterResultDescriptor),
     Vector(VectorResultDescriptor),
+}
+
+impl utoipa::Component for TypedResultDescriptor {
+    fn component() -> utoipa::openapi::Component {
+        todo!();
+    }
 }
 
 impl From<PlotResultDescriptor> for TypedResultDescriptor {

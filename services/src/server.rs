@@ -5,9 +5,9 @@ use crate::handlers::ErrorResponse;
 use crate::util::config;
 use crate::util::config::get_config_element;
 
+use crate::datasets::listing::{Provenance, ProvenanceOutput};
 use crate::util::IdResponse;
-use crate::workflows::workflow::Workflow;
-use crate::workflows::workflow::WorkflowId;
+use crate::workflows::workflow::{Workflow, WorkflowId};
 use actix_files::Files;
 use actix_http::body::{BoxBody, EitherBody, MessageBody};
 use actix_http::uri::PathAndQuery;
@@ -15,8 +15,19 @@ use actix_http::HttpMessage;
 use actix_web::dev::{ServiceRequest, ServiceResponse};
 use actix_web::error::{InternalError, JsonPayloadError, QueryPayloadError};
 use actix_web::{http, middleware, web, App, HttpResponse, HttpServer};
-use geoengine_operators::engine::TypedOperator;
-use geoengine_operators::engine::TypedResultDescriptor;
+use geoengine_datatypes::collections::VectorDataType;
+use geoengine_datatypes::dataset::{
+    DatasetId, DatasetProviderId, ExternalDatasetId, InternalDatasetId,
+};
+use geoengine_datatypes::primitives::{
+    ClassificationMeasurement, ContinuousMeasurement, Measurement,
+};
+use geoengine_datatypes::raster::RasterDataType;
+use geoengine_datatypes::spatial_reference::SpatialReferenceOption;
+use geoengine_operators::engine::{
+    PlotResultDescriptor, RasterResultDescriptor, TypedOperator, TypedResultDescriptor,
+    VectorResultDescriptor,
+};
 use log::{debug, info};
 use std::net::SocketAddr;
 use std::num::NonZeroUsize;
@@ -34,12 +45,32 @@ use utoipa_swagger_ui::SwaggerUi;
         handlers::workflows::register_workflow_handler,
         handlers::workflows::load_workflow_handler,
         handlers::workflows::get_workflow_metadata_handler,
+        handlers::workflows::get_workflow_provenance_handler
     ),
     components(
-        Workflow,
+        DatasetId,
+        InternalDatasetId,
+        ExternalDatasetId,
+        DatasetProviderId,
+        WorkflowId,
         IdResponse<WorkflowId>,
+
+        Workflow,
         TypedOperator,
-        TypedResultDescriptor
+        TypedResultDescriptor,
+        PlotResultDescriptor,
+        RasterResultDescriptor,
+        RasterDataType,
+        VectorResultDescriptor,
+        VectorDataType,
+        SpatialReferenceOption,
+
+        Measurement,
+        ContinuousMeasurement,
+        ClassificationMeasurement,
+
+        ProvenanceOutput,
+        Provenance
     ),
     modifiers(&SecurityAddon)
 )]

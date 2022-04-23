@@ -2,8 +2,9 @@ use serde::{Deserialize, Serialize};
 use std::collections::{BTreeMap, HashMap};
 use std::fmt;
 use std::str::FromStr;
+use utoipa::Component;
 
-#[derive(Clone, Debug, PartialEq, Eq, Deserialize, Serialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Deserialize, Serialize, Component)]
 #[serde(rename_all = "camelCase", tag = "type")]
 pub enum Measurement {
     Unitless,
@@ -24,13 +25,13 @@ impl Measurement {
     }
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, Deserialize, Serialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Deserialize, Serialize, Component)]
 pub struct ContinuousMeasurement {
     pub measurement: String,
     pub unit: Option<String>,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, Deserialize, Serialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Deserialize, Serialize, Component)]
 #[serde(
     try_from = "SerializableClassificationMeasurement",
     into = "SerializableClassificationMeasurement"

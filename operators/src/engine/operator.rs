@@ -4,7 +4,6 @@ use crate::error;
 use crate::util::Result;
 use async_trait::async_trait;
 use geoengine_datatypes::dataset::DatasetId;
-use utoipa::openapi::Component;
 
 use super::{
     query_processor::{TypedRasterQueryProcessor, TypedVectorQueryProcessor},
@@ -172,7 +171,7 @@ pub enum TypedOperator {
 }
 
 impl utoipa::Component for TypedOperator {
-    fn component() -> Component {
+    fn component() -> utoipa::openapi::Component {
         utoipa::openapi::ObjectBuilder::new()
             .property(
                 "type",

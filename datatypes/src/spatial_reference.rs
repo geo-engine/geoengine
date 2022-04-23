@@ -230,6 +230,12 @@ pub enum SpatialReferenceOption {
     Unreferenced,
 }
 
+impl utoipa::Component for SpatialReferenceOption {
+    fn component() -> utoipa::openapi::Component {
+        utoipa::openapi::Property::new(utoipa::openapi::ComponentType::String).into()
+    }
+}
+
 impl SpatialReferenceOption {
     pub fn is_spatial_ref(self) -> bool {
         match self {

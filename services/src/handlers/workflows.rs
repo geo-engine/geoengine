@@ -205,9 +205,9 @@ async fn load_workflow_handler<C: Context>(
     get,
     path = "/workflow/{id}/metadata",
     responses(
-        (status = 200, description = "Workflow loaded from database", body = TypedResultDescriptor,
-            example = json!({"dataType": "MultiPoint", "spatialReference": "EPSG: 4326", "columns": {}})
-    )
+        (status = 200, description = "Metadata of specified workflow", body = TypedResultDescriptor,
+            example = json!({"dataType": "MultiPoint", "spatialReference": "EPSG:4326", "columns": {}})
+        )
     ),
     params(
         ("id", description = "Workflow id")
@@ -273,6 +273,21 @@ async fn get_workflow_metadata_handler<C: Context>(
 ///   "uri": "http://example.org/"
 /// }]
 /// ```
+#[utoipa::path(
+    get,
+    path = "/workflow/{id}/provenance",
+    responses(
+        (status = 200, description = "Provenance of the data used in the specified workflow", body = [ProvenanceOutput],
+            example = json!([{"id": {"type": "internal", "datasetId": "846a823a-6859-4b94-ab0a-c1de80f593d8"}, "citation": "Author, Dataset Tile", "license": "Some license", "uri": "http://example.org/"}, {"id": {"type": "internal", "datasetId": "453cd398-f271-437b-9c3d-7f42213ea30a"}, "citation": "Another Author, Another Dataset Tile", "license": "Some other license", "uri": "http://example.org/"}])
+        )
+    ),
+    params(
+        ("id", description = "Workflow id")
+    ),
+    security(
+        ("session_token" = [])
+    )
+)]
 async fn get_workflow_provenance_handler<C: Context>(
     id: web::Path<WorkflowId>,
     session: C::Session,
