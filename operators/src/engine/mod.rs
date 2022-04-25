@@ -166,3 +166,74 @@ macro_rules! call_on_bi_generic_raster_processor {
     };
 
 }
+
+#[macro_export]
+macro_rules! map_generic_raster_processor {
+    (
+        $input_a:expr, $input_b:expr,
+        ( $processor_a:ident ) => $function_call:expr,
+        $(($variant_a:tt,$variant_b:tt)),+
+    ) => {
+        match ($input_a, $input_b) {
+            $(
+                (
+                    $crate::engine::TypedRasterQueryProcessor::$variant_a($processor_a),
+                    geoengine_datatypes::raster::RasterDataType::$variant_b,
+                ) => Some($crate::engine::TypedRasterQueryProcessor::$variant_b($function_call)),
+            )+
+            _=> None,
+        }
+    };
+}
+
+#[cfg(test)]
+mod tests {
+    use futures::executor::block_on;
+    use geoengine_datatypes::{
+        primitives::{Measurement, TimeInterval},
+        raster::{Grid2D, RasterDataType, RasterTile2D, TileInformation},
+        spatial_reference::SpatialReference,
+        util::test::TestDefault,
+    };
+    use num_traits::AsPrimitive;
+
+    use crate::mock::{MockRasterSource, MockRasterSourceParams};
+
+    use super::*;
+
+    #[test]
+    fn test_name() {
+        let no_data_value = Some(0);
+        let raster = Grid2D::new([3, 2].into(), vec![1_u8, 2, 3, 4, 5, 6], no_data_value).unwrap();
+
+        let raster_tile = RasterTile2D::new_with_tile_info(
+            TimeInterval::default(),
+            TileInformation {
+                global_geo_transform: TestDefault::test_default(),
+                global_tile_position: [0, 0].into(),
+                tile_size_in_pixels: [3, 2].into(),
+            },
+            raster.into(),
+        );
+
+        let mrs = MockRasterSource {
+            params: MockRasterSourceParams {
+                data: vec![raster_tile],
+                result_descriptor: RasterResultDescriptor {
+                    data_type: RasterDataType::U16,
+                    spatial_reference: SpatialReference::epsg_4326().into(),
+                    measurement: Measurement::Unitless,
+                    no_data_value: no_data_value.map(AsPrimitive::as_),
+                },
+            },
+        }
+        .boxed();
+
+        let ctx = MockExecutionContext::test_default();
+        let mro = block_on(mrs.initialize(&ctx)).unwrap();
+        let mrp = mro.query_processor().unwrap();
+
+        let t: RasterDataType = RasterDataType::U16;
+        let _op = map_generic_raster_processor!(mrp, t, (i) => i, (U16, U16)).unwrap();
+    }
+}

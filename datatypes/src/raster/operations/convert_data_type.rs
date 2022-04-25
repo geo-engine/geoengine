@@ -1,6 +1,8 @@
-use crate::raster::{BaseTile, EmptyGrid, Grid, GridOrEmpty, GridSize};
+use crate::raster::{
+    data_type::DefaultNoDataValue, BaseTile, EmptyGrid, Grid, GridOrEmpty, GridSize, MapPixels,
+    MapPixelsParallel,
+};
 use num_traits::AsPrimitive;
-use rayon::iter::{IndexedParallelIterator, IntoParallelIterator, ParallelIterator};
 
 pub trait ConvertDataType<Output> {
     fn convert_data_type(self) -> Output;
@@ -8,22 +10,21 @@ pub trait ConvertDataType<Output> {
 
 impl<In, Out, G> ConvertDataType<Grid<G, Out>> for Grid<G, In>
 where
-    In: AsPrimitive<Out> + Copy,
-    Out: Copy + 'static,
+    In: AsPrimitive<Out> + Copy + PartialEq,
+    Out: Copy + 'static + DefaultNoDataValue,
+    G: GridSize + Clone,
 {
     fn convert_data_type(self) -> Grid<G, Out> {
-        Grid {
-            shape: self.shape,
-            data: self.data.iter().map(|&pixel| pixel.as_()).collect(),
-            no_data_value: self.no_data_value.map(AsPrimitive::as_),
-        }
+        let no_data_value = self.no_data_value.map(AsPrimitive::as_);
+        self.map_pixels(|p| Some(p.as_()), no_data_value)
     }
 }
 
 impl<In, Out, G> ConvertDataType<EmptyGrid<G, Out>> for EmptyGrid<G, In>
 where
-    In: AsPrimitive<Out> + Copy,
-    Out: Copy + 'static,
+    In: AsPrimitive<Out> + Copy + PartialEq,
+    Out: Copy + 'static + DefaultNoDataValue,
+    G: GridSize + Clone,
 {
     fn convert_data_type(self) -> EmptyGrid<G, Out> {
         EmptyGrid {
@@ -35,8 +36,9 @@ where
 
 impl<In, Out, G> ConvertDataType<GridOrEmpty<G, Out>> for GridOrEmpty<G, In>
 where
-    In: AsPrimitive<Out> + Copy,
-    Out: Copy + 'static,
+    In: AsPrimitive<Out> + Copy + PartialEq,
+    Out: Copy + 'static + DefaultNoDataValue,
+    G: GridSize + Clone,
 {
     fn convert_data_type(self) -> GridOrEmpty<G, Out> {
         match self {
@@ -67,31 +69,21 @@ pub trait ConvertDataTypeParallel<Output> {
 
 impl<In, Out, G> ConvertDataTypeParallel<Grid<G, Out>> for Grid<G, In>
 where
-    G: GridSize,
-    In: AsPrimitive<Out> + Copy + Send + Sync + 'static,
-    Out: Copy + Send + Sync + 'static,
+    G: GridSize + Clone + Send + Sync,
+    In: AsPrimitive<Out> + Copy + Send + Sync + 'static + PartialEq,
+    Out: Copy + Send + Sync + 'static + DefaultNoDataValue,
 {
     fn convert_data_type_parallel(self) -> Grid<G, Out> {
-        let lowest_dim_size = self.shape.axis_size_x();
-
-        Grid {
-            shape: self.shape,
-            data: self
-                .data
-                .into_par_iter()
-                .with_min_len(lowest_dim_size)
-                .map(AsPrimitive::as_)
-                .collect(),
-            no_data_value: self.no_data_value.map(AsPrimitive::as_),
-        }
+        let no_data_value = self.no_data_value.map(AsPrimitive::as_);
+        self.map_pixels_parallel(|p| Some(p.as_()), no_data_value)
     }
 }
 
 impl<In, Out, G> ConvertDataTypeParallel<GridOrEmpty<G, Out>> for GridOrEmpty<G, In>
 where
-    G: GridSize,
-    In: AsPrimitive<Out> + Copy + Send + Sync + 'static,
-    Out: Copy + Send + Sync + 'static,
+    G: GridSize + Clone + Send + Sync,
+    In: AsPrimitive<Out> + Copy + Send + Sync + 'static + PartialEq,
+    Out: Copy + Send + Sync + 'static + DefaultNoDataValue,
 {
     fn convert_data_type_parallel(self) -> GridOrEmpty<G, Out> {
         match self {

@@ -1,5 +1,6 @@
 pub use self::data_type::{
-    DynamicRasterDataType, FromPrimitive, Pixel, RasterDataType, StaticRasterDataType, TypedValue,
+    DefaultNoDataValue, DynamicRasterDataType, FromPrimitive, Pixel, RasterDataType,
+    StaticRasterDataType, TypedValue,
 };
 pub use self::empty_grid::{EmptyGrid, EmptyGrid1D, EmptyGrid2D, EmptyGrid3D};
 pub use self::geo_transform::{GdalGeoTransform, GeoTransform};
@@ -18,10 +19,15 @@ pub use self::grid_traits::{
 };
 pub use self::grid_typed::{TypedGrid, TypedGrid2D, TypedGrid3D};
 pub use self::operations::{
-    blit::Blit, convert_data_type::ConvertDataType, convert_data_type::ConvertDataTypeParallel,
-    element_scaling::ScaleConvert, element_scaling::ScaleConvertElements,
-    element_scaling::ScaleConvertElementsParallel, element_scaling::UnscaleConvert,
-    element_scaling::UnscaleConvertElementsParallel, grid_blit::GridBlit, map_pixels::MapPixels,
+    blit::Blit,
+    cast_and_scaling::{
+        Scale, ScaleElements, ScaleElementsParallel, Unscale, UnscaleElements,
+        UnscaleElementsParallel,
+    },
+    convert_data_type::ConvertDataType,
+    convert_data_type::ConvertDataTypeParallel,
+    grid_blit::GridBlit,
+    map_pixels::MapPixels,
     map_pixels::MapPixelsParallel,
 };
 pub use self::raster_tile::{
