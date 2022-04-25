@@ -43,6 +43,7 @@ pub trait Pixel:
     + RgbaTransmutable
     + TypedRasterConversion<GridShape2D>
     + TypedRasterConversion<GridShape3D>
+    + DefaultNoDataValue
 {
 }
 
@@ -289,6 +290,51 @@ where
     fn raster_data_type(&self) -> RasterDataType {
         R::TYPE
     }
+}
+
+pub trait DefaultNoDataValue {
+    /// The value that is used as default to represent no data for a data type
+    const DEFAULT_NO_DATA_VALUE: Self;
+}
+
+impl DefaultNoDataValue for u8 {
+    const DEFAULT_NO_DATA_VALUE: Self = Self::MAX;
+}
+
+impl DefaultNoDataValue for u16 {
+    const DEFAULT_NO_DATA_VALUE: Self = Self::MAX;
+}
+
+impl DefaultNoDataValue for u32 {
+    const DEFAULT_NO_DATA_VALUE: Self = Self::MAX;
+}
+
+impl DefaultNoDataValue for u64 {
+    const DEFAULT_NO_DATA_VALUE: Self = Self::MAX;
+}
+
+impl DefaultNoDataValue for i8 {
+    const DEFAULT_NO_DATA_VALUE: Self = Self::MAX;
+}
+
+impl DefaultNoDataValue for i16 {
+    const DEFAULT_NO_DATA_VALUE: Self = Self::MAX;
+}
+
+impl DefaultNoDataValue for i32 {
+    const DEFAULT_NO_DATA_VALUE: Self = Self::MAX;
+}
+
+impl DefaultNoDataValue for i64 {
+    const DEFAULT_NO_DATA_VALUE: Self = Self::MAX;
+}
+
+impl DefaultNoDataValue for f32 {
+    const DEFAULT_NO_DATA_VALUE: Self = Self::NAN;
+}
+
+impl DefaultNoDataValue for f64 {
+    const DEFAULT_NO_DATA_VALUE: Self = Self::NAN;
 }
 
 #[cfg(test)]
