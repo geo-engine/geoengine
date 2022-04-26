@@ -2,7 +2,6 @@ use async_trait::async_trait;
 use geoengine_datatypes::primitives::{
     RasterQueryRectangle, TimeInstance, TimeInterval, TimeStep, TimeStepIter,
 };
-use geoengine_datatypes::util::ranges::{value_in_range, value_in_range_inclusive};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
@@ -82,23 +81,6 @@ impl GdalMetadataFixedTimes {
         }
     }
 
-    fn intersect_inclusive(this: &TimeInterval, other: &TimeInterval) -> Option<TimeInterval> {
-        if other == this
-            || value_in_range(this.start(), other.start(), other.end())
-            || value_in_range(other.start(), this.start(), this.end())
-            || (value_in_range_inclusive(this.start(), other.start(), other.end())
-                && this.is_instant())
-            || (value_in_range_inclusive(other.start(), this.start(), this.end())
-                && other.is_instant())
-        {
-            let start = std::cmp::max(this.start(), other.start());
-            let end = std::cmp::min(this.end(), other.end());
-            Some(TimeInterval::new_unchecked(start, end))
-        } else {
-            None
-        }
-    }
-
     fn create_temporal_slice(
         &self,
         step_interval: TimeInterval,
@@ -165,9 +147,7 @@ impl MetaData<GdalLoadingInfo, RasterResultDescriptor, RasterQueryRectangle>
                         break;
                     }
 
-                    if let Some(step_interval) =
-                        GdalMetadataFixedTimes::intersect_inclusive(&time_interval, time_position)
-                    {
+                    if let Some(step_interval) = time_interval.intersect(time_position) {
                         loading_info_parts.push(self.create_temporal_slice(step_interval, false)?);
                     }
                 }
@@ -822,7 +802,7 @@ mod tests {
                     None => String::from("NODATA"),
                 })
                 .collect::<Vec<_>>(),
-            &["NODATA", "/foo/bar_step_030000000.tiff", "NODATA"]
+            &["NODATA", "NODATA"]
         );
 
         assert_eq!(
