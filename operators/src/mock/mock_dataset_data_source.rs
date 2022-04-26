@@ -116,7 +116,10 @@ impl VectorOperator for MockDatasetDataSource {
         self: Box<Self>,
         context: &dyn ExecutionContext,
     ) -> Result<Box<dyn InitializedVectorOperator>> {
-        let loading_info = context.meta_data(&self.params.dataset).await?;
+        let loading_info = context
+            .meta_data(&self.params.dataset)
+            .await?
+            .mock_meta_data()?;
 
         Ok(InitializedMockDatasetDataSource {
             result_descriptor: loading_info.result_descriptor().await?,
@@ -157,7 +160,7 @@ impl InitializedVectorOperator
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::engine::QueryProcessor;
+    use crate::engine::{MetaDataLookupResult, QueryProcessor};
     use crate::engine::{MockExecutionContext, MockQueryContext};
     use futures::executor::block_on_stream;
     use geoengine_datatypes::collections::FeatureCollectionInfos;
@@ -175,9 +178,9 @@ mod tests {
         };
         execution_context.add_meta_data(
             id.clone(),
-            Box::new(MockDatasetDataSourceLoadingInfo {
+            MetaDataLookupResult::Mock(Box::new(MockDatasetDataSourceLoadingInfo {
                 points: vec![Coordinate2D::new(1., 2.); 3],
-            }),
+            })),
         );
 
         let mps = MockDatasetDataSource {

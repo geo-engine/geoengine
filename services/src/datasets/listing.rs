@@ -9,8 +9,8 @@ use async_trait::async_trait;
 use geoengine_datatypes::dataset::DatasetId;
 use geoengine_datatypes::primitives::{RasterQueryRectangle, VectorQueryRectangle};
 use geoengine_operators::engine::{
-    MetaData, MetaDataProvider, RasterResultDescriptor, ResultDescriptor, TypedResultDescriptor,
-    VectorResultDescriptor,
+    MetaData, MetaDataLookupResult, RasterResultDescriptor, ResultDescriptor,
+    TypedResultDescriptor, VectorResultDescriptor,
 };
 use geoengine_operators::mock::MockDatasetDataSourceLoadingInfo;
 use geoengine_operators::source::{GdalLoadingInfo, OgrSourceDataset};
@@ -116,13 +116,7 @@ pub trait DatasetProvider<S: Session>:
 //       checks that the necessary information is present and how they are incorporated in
 //       the requests.
 #[async_trait]
-pub trait ExternalDatasetProvider: Send
-    + Sync
-    + std::fmt::Debug
-    + MetaDataProvider<MockDatasetDataSourceLoadingInfo, VectorResultDescriptor, VectorQueryRectangle>
-    + MetaDataProvider<OgrSourceDataset, VectorResultDescriptor, VectorQueryRectangle>
-    + MetaDataProvider<GdalLoadingInfo, RasterResultDescriptor, RasterQueryRectangle>
-{
+pub trait ExternalDatasetProvider: Send + Sync + std::fmt::Debug {
     // TODO: authorization, filter, paging
     async fn list(&self, options: Validated<DatasetListOptions>) -> Result<Vec<DatasetListing>>;
 
@@ -130,6 +124,8 @@ pub trait ExternalDatasetProvider: Send
 
     /// Propagates `Any`-casting to the underlying provider
     fn as_any(&self) -> &dyn std::any::Any;
+
+    async fn meta_data(&self, dataset: &DatasetId) -> Result<MetaDataLookupResult>;
 }
 
 #[derive(Debug, Serialize, Deserialize, PartialEq, Eq, Hash)]

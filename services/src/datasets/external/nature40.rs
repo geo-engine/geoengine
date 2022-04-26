@@ -19,13 +19,13 @@ use gdal::DatasetOptions;
 use gdal::Metadata;
 use geoengine_datatypes::dataset::{DatasetId, DatasetProviderId, ExternalDatasetId};
 use geoengine_datatypes::primitives::{RasterQueryRectangle, VectorQueryRectangle};
-use geoengine_operators::engine::TypedResultDescriptor;
+use geoengine_operators::engine::{MetaDataLookupResult, TypedResultDescriptor};
 use geoengine_operators::source::GdalMetaDataStatic;
 use geoengine_operators::util::gdal::{
     gdal_open_dataset_ex, gdal_parameters_from_dataset, raster_descriptor_from_dataset,
 };
 use geoengine_operators::{
-    engine::{MetaData, MetaDataProvider, RasterResultDescriptor, VectorResultDescriptor},
+    engine::{MetaData, RasterResultDescriptor, VectorResultDescriptor},
     mock::MockDatasetDataSourceLoadingInfo,
     source::{GdalLoadingInfo, OgrSourceDataset},
 };
@@ -205,6 +205,43 @@ impl ExternalDatasetProvider for Nature40DataProvider {
     fn as_any(&self) -> &dyn std::any::Any {
         self
     }
+
+    async fn meta_data(&self, dataset: &DatasetId) -> Result<MetaDataLookupResult> {
+        let dataset = dataset
+            .external()
+            .ok_or(geoengine_operators::error::Error::LoadingInfo {
+                source: Box::new(Error::InvalidExternalDatasetId { provider: self.id }),
+            })?;
+        let split: Vec<_> = dataset.dataset_id.split(':').collect();
+
+        let (db_name, band_index) = match *split.as_slice() {
+            [db, band_index] => {
+                if let Ok(band_index) = band_index.parse::<usize>() {
+                    (db, band_index)
+                } else {
+                    return Err(Error::InvalidExternalDatasetId { provider: self.id });
+                }
+            }
+            _ => {
+                return Err(Error::InvalidExternalDatasetId { provider: self.id });
+            }
+        };
+
+        let db_url = RasterDb::url_from_name(&self.base_url, db_name)?;
+        let dataset = self.load_dataset(db_url.clone()).await?;
+
+        Ok(MetaDataLookupResult::Gdal(Box::new(GdalMetaDataStatic {
+            time: None,
+            params: gdal_parameters_from_dataset(
+                &dataset,
+                band_index,
+                Path::new(&db_url),
+                None,
+                Some(self.auth().to_vec()),
+            )?,
+            result_descriptor: raster_descriptor_from_dataset(&dataset, band_index as isize, None)?,
+        })))
+    }
 }
 
 impl Nature40DataProvider {
@@ -310,103 +347,6 @@ impl Nature40DataProvider {
             buf.clear();
         }
         Ok(txt)
-    }
-}
-
-#[async_trait]
-impl MetaDataProvider<GdalLoadingInfo, RasterResultDescriptor, RasterQueryRectangle>
-    for Nature40DataProvider
-{
-    async fn meta_data(
-        &self,
-        dataset: &DatasetId,
-    ) -> Result<
-        Box<dyn MetaData<GdalLoadingInfo, RasterResultDescriptor, RasterQueryRectangle>>,
-        geoengine_operators::error::Error,
-    > {
-        let dataset = dataset
-            .external()
-            .ok_or(geoengine_operators::error::Error::LoadingInfo {
-                source: Box::new(Error::InvalidExternalDatasetId { provider: self.id }),
-            })?;
-        let split: Vec<_> = dataset.dataset_id.split(':').collect();
-
-        let (db_name, band_index) = match *split.as_slice() {
-            [db, band_index] => {
-                if let Ok(band_index) = band_index.parse::<usize>() {
-                    (db, band_index)
-                } else {
-                    return Err(geoengine_operators::error::Error::LoadingInfo {
-                        source: Box::new(Error::InvalidExternalDatasetId { provider: self.id }),
-                    });
-                }
-            }
-            _ => {
-                return Err(geoengine_operators::error::Error::LoadingInfo {
-                    source: Box::new(Error::InvalidExternalDatasetId { provider: self.id }),
-                })
-            }
-        };
-
-        let db_url = RasterDb::url_from_name(&self.base_url, db_name).map_err(|e| {
-            geoengine_operators::error::Error::LoadingInfo {
-                source: Box::new(e),
-            }
-        })?;
-        let dataset = self.load_dataset(db_url.clone()).await.map_err(|e| {
-            geoengine_operators::error::Error::LoadingInfo {
-                source: Box::new(e),
-            }
-        })?;
-
-        Ok(Box::new(GdalMetaDataStatic {
-            time: None,
-            params: gdal_parameters_from_dataset(
-                &dataset,
-                band_index,
-                Path::new(&db_url),
-                None,
-                Some(self.auth().to_vec()),
-            )?,
-            result_descriptor: raster_descriptor_from_dataset(&dataset, band_index as isize, None)?,
-        }))
-    }
-}
-
-#[async_trait]
-impl
-    MetaDataProvider<MockDatasetDataSourceLoadingInfo, VectorResultDescriptor, VectorQueryRectangle>
-    for Nature40DataProvider
-{
-    async fn meta_data(
-        &self,
-        _dataset: &DatasetId,
-    ) -> Result<
-        Box<
-            dyn MetaData<
-                MockDatasetDataSourceLoadingInfo,
-                VectorResultDescriptor,
-                VectorQueryRectangle,
-            >,
-        >,
-        geoengine_operators::error::Error,
-    > {
-        Err(geoengine_operators::error::Error::NotYetImplemented)
-    }
-}
-
-#[async_trait]
-impl MetaDataProvider<OgrSourceDataset, VectorResultDescriptor, VectorQueryRectangle>
-    for Nature40DataProvider
-{
-    async fn meta_data(
-        &self,
-        _dataset: &DatasetId,
-    ) -> Result<
-        Box<dyn MetaData<OgrSourceDataset, VectorResultDescriptor, VectorQueryRectangle>>,
-        geoengine_operators::error::Error,
-    > {
-        Err(geoengine_operators::error::Error::NotYetImplemented)
     }
 }
 
@@ -843,6 +783,8 @@ mod tests {
                     dataset_id: "lidar_2018_wetness_1m:1".to_owned(),
                 }))
                 .await
+                .unwrap()
+                .gdal_meta_data()
                 .unwrap();
 
         assert_eq!(

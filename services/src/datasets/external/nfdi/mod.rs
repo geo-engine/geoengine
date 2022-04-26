@@ -4,6 +4,7 @@ use crate::datasets::listing::{
 };
 use crate::datasets::storage::{Dataset, ExternalDatasetProviderDefinition};
 use crate::error::{Error, Result};
+use crate::storage::Listable;
 use crate::util::user_input::Validated;
 use geoengine_datatypes::collections::VectorDataType;
 use geoengine_datatypes::dataset::{DatasetId, DatasetProviderId, ExternalDatasetId};
@@ -12,8 +13,8 @@ use geoengine_datatypes::primitives::{
 };
 use geoengine_datatypes::spatial_reference::SpatialReferenceOption;
 use geoengine_operators::engine::{
-    MetaData, MetaDataProvider, RasterResultDescriptor, ResultDescriptor, TypedResultDescriptor,
-    VectorResultDescriptor,
+    MetaData, RasterResultDescriptor, ResultDescriptor, TypedResultDescriptor,
+    VectorResultDescriptor, MetaDataLookupResult,
 };
 use geoengine_operators::mock::MockDatasetDataSourceLoadingInfo;
 use geoengine_operators::source::{
@@ -177,7 +178,7 @@ impl NFDIDataProvider {
         resp.dataset.ok_or(Error::InvalidDatasetId).and_then(|ds| {
             // Extract and parse geoengine metadata
             let md = Self::extract_metadata(&ds)?;
-            Ok((self.map_dataset(&ds, &md), md))
+            Ok((self.map_dataset(&ds, &md).1, md))
         })
     }
 
@@ -186,7 +187,7 @@ impl NFDIDataProvider {
         &self,
         ds: &scienceobjectsdb_rust_api::sciobjectsdb::sciobjsdb::api::storage::models::v1::Dataset,
         md: &GEMetadata,
-    ) -> Dataset {
+    ) -> (DatasetId, Dataset) {
         let id = DatasetId::External(ExternalDatasetId {
             provider_id: self.id,
             dataset_id: ds.id.clone(),
@@ -210,15 +211,17 @@ impl NFDIDataProvider {
             ),
         };
 
-        Dataset {
+        (
             id,
-            name: ds.name.clone(),
-            description: ds.description.clone(),
-            source_operator,
-            result_descriptor,
-            symbology: None,
-            provenance: md.provenance.clone(),
-        }
+            Dataset {
+                name: ds.name.clone(),
+                description: ds.description.clone(),
+                source_operator,
+                result_descriptor,
+                symbology: None,
+                provenance: md.provenance.clone(),
+            },
+        )
     }
 
     /// Creates a result descriptor for vector data
@@ -396,36 +399,43 @@ impl NFDIDataProvider {
 }
 
 #[async_trait::async_trait]
-impl
-    MetaDataProvider<MockDatasetDataSourceLoadingInfo, VectorResultDescriptor, VectorQueryRectangle>
-    for NFDIDataProvider
-{
-    async fn meta_data(
-        &self,
-        _dataset: &DatasetId,
-    ) -> geoengine_operators::util::Result<
-        Box<
-            dyn MetaData<
-                MockDatasetDataSourceLoadingInfo,
-                VectorResultDescriptor,
-                VectorQueryRectangle,
-            >,
-        >,
-    > {
-        Err(geoengine_operators::error::Error::NotYetImplemented)
-    }
-}
+impl ExternalDatasetProvider for NFDIDataProvider {
+    async fn list(&self, _options: Validated<DatasetListOptions>) -> Result<Vec<DatasetListing>> {
+        let mut project_stub = self.project_stub.clone();
 
-#[async_trait::async_trait]
-impl MetaDataProvider<OgrSourceDataset, VectorResultDescriptor, VectorQueryRectangle>
-    for NFDIDataProvider
-{
-    async fn meta_data(
-        &self,
-        dataset: &DatasetId,
-    ) -> geoengine_operators::util::Result<
-        Box<dyn MetaData<OgrSourceDataset, VectorResultDescriptor, VectorQueryRectangle>>,
-    > {
+        let resp = project_stub
+            .get_project_datasets(GetProjectDatasetsRequest {
+                id: self.project_id.clone(),
+            })
+            .await?
+            .into_inner();
+
+        Ok(resp
+            .datasets
+            .into_iter()
+            .map(|ds| {
+                Self::extract_metadata(&ds).map(|md| {
+                    let (id, dataset) = self.map_dataset(&ds, &md);
+                    dataset.list_external(id)
+                })
+            })
+            .collect::<Result<Vec<DatasetListing>>>()?)
+    }
+
+    async fn provenance(&self, dataset: &DatasetId) -> Result<ProvenanceOutput> {
+        let (ds, _) = self.dataset_info(dataset).await?;
+
+        Ok(ProvenanceOutput {
+            dataset: dataset.clone(),
+            provenance: ds.provenance,
+        })
+    }
+
+    fn as_any(&self) -> &dyn std::any::Any {
+        self
+    }
+
+    async fn meta_data(&self, dataset: &DatasetId) -> Result<MetaDataLookupResult> {
         let (_, md) = self.dataset_info(dataset).await.map_err(|e| {
             geoengine_operators::error::Error::DatasetMetaData {
                 source: Box::new(e),
@@ -450,42 +460,11 @@ impl MetaDataProvider<OgrSourceDataset, VectorResultDescriptor, VectorQueryRecta
                     _phantom: Default::default(),
                     object_stub: self.object_stub.clone(),
                 };
-                Ok(Box::new(res))
+                Ok(MetaDataLookupResult::Ogr(Box::new(res)))
             }
-            DataType::SingleRasterFile(_) => Err(geoengine_operators::error::Error::InvalidType {
-                found: md.data_type.to_string(),
-                expected: "SingleVectorFile".to_string(),
-            }),
-        }
-    }
-}
-
-#[async_trait::async_trait]
-impl MetaDataProvider<GdalLoadingInfo, RasterResultDescriptor, RasterQueryRectangle>
-    for NFDIDataProvider
-{
-    async fn meta_data(
-        &self,
-        dataset: &DatasetId,
-    ) -> geoengine_operators::util::Result<
-        Box<dyn MetaData<GdalLoadingInfo, RasterResultDescriptor, RasterQueryRectangle>>,
-    > {
-        let (_, md) = self.dataset_info(dataset).await.map_err(|e| {
-            geoengine_operators::error::Error::DatasetMetaData {
-                source: Box::new(e),
-            }
-        })?;
-
-        let object = self.get_single_file_object(dataset).await.map_err(|e| {
-            geoengine_operators::error::Error::DatasetMetaData {
-                source: Box::new(e),
-            }
-        })?;
-
-        match &md.data_type {
             DataType::SingleRasterFile(info) => {
-                let result_descriptor = Self::create_raster_result_descriptor(md.crs.into(), info);
-                let template = Self::raster_loading_template(info, &result_descriptor);
+                let result_descriptor = Self::create_raster_result_descriptor(md.crs.into(), &info);
+                let template = Self::raster_loading_template(&info, &result_descriptor);
 
                 let res = NFDIMetaData {
                     object_id: object.id,
@@ -494,46 +473,9 @@ impl MetaDataProvider<GdalLoadingInfo, RasterResultDescriptor, RasterQueryRectan
                     _phantom: Default::default(),
                     object_stub: self.object_stub.clone(),
                 };
-                Ok(Box::new(res))
+                Ok(MetaDataLookupResult::Gdal(Box::new(res)))
             }
-            DataType::SingleVectorFile(_) => Err(geoengine_operators::error::Error::InvalidType {
-                found: md.data_type.to_string(),
-                expected: "SingleRasterFile".to_string(),
-            }),
         }
-    }
-}
-
-#[async_trait::async_trait]
-impl ExternalDatasetProvider for NFDIDataProvider {
-    async fn list(&self, _options: Validated<DatasetListOptions>) -> Result<Vec<DatasetListing>> {
-        let mut project_stub = self.project_stub.clone();
-
-        let resp = project_stub
-            .get_project_datasets(GetProjectDatasetsRequest {
-                id: self.project_id.clone(),
-            })
-            .await?
-            .into_inner();
-
-        Ok(resp
-            .datasets
-            .into_iter()
-            .map(|ds| Self::extract_metadata(&ds).map(|md| self.map_dataset(&ds, &md).listing()))
-            .collect::<Result<Vec<DatasetListing>>>()?)
-    }
-
-    async fn provenance(&self, dataset: &DatasetId) -> Result<ProvenanceOutput> {
-        let (ds, _) = self.dataset_info(dataset).await?;
-
-        Ok(ProvenanceOutput {
-            dataset: dataset.clone(),
-            provenance: ds.provenance,
-        })
-    }
-
-    fn as_any(&self) -> &dyn std::any::Any {
-        self
     }
 }
 
@@ -705,7 +647,7 @@ mod tests {
     };
     use geoengine_datatypes::util::test::TestDefault;
     use geoengine_operators::engine::{
-        MetaData, MetaDataProvider, MockExecutionContext, MockQueryContext, QueryProcessor,
+        MetaData, MockExecutionContext, MockQueryContext, QueryProcessor,
         TypedVectorQueryProcessor, VectorOperator, VectorResultDescriptor,
     };
     use geoengine_operators::source::{OgrSource, OgrSourceDataset, OgrSourceParameters};
@@ -878,7 +820,7 @@ mod tests {
             md.data_type,
             super::metadata::DataType::SingleVectorFile(_)
         ));
-        assert_eq!("OgrSource".to_string(), ds.source_operator);
+        assert_eq!("OgrSource".to_string(), ds.1.source_operator);
     }
 
     #[tokio::test]
@@ -913,7 +855,7 @@ mod tests {
 
         let ds = provider.map_dataset(&ds, &md);
 
-        assert_eq!("GdalSource".to_string(), ds.source_operator);
+        assert_eq!("GdalSource".to_string(), ds.1.source_operator);
     }
 
     #[tokio::test]
@@ -1170,11 +1112,11 @@ mod tests {
         let addr = format!("http://{}", server.address());
         let provider = new_provider_with_url(addr).await;
 
-        let res: geoengine_operators::util::Result<
-            Box<dyn MetaData<OgrSourceDataset, VectorResultDescriptor, VectorQueryRectangle>>,
-        > = provider.meta_data(&id).await;
+        let res = provider.meta_data(&id).await;
 
         assert!(res.is_ok());
+
+        assert!(res.unwrap().ogr_meta_data().is_ok());
     }
 
     #[tokio::test]
@@ -1284,9 +1226,7 @@ mod tests {
 
         let provider = new_provider_with_url(addr).await;
 
-        let meta: Box<
-            dyn MetaData<OgrSourceDataset, VectorResultDescriptor, VectorQueryRectangle>,
-        > = provider.meta_data(&id).await.unwrap();
+        let meta = provider.meta_data(&id).await.unwrap();
 
         let mut context = MockExecutionContext::test_default();
         context.add_meta_data(id.clone(), meta);

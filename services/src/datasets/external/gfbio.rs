@@ -21,12 +21,12 @@ use geoengine_datatypes::primitives::{
     FeatureDataType, RasterQueryRectangle, VectorQueryRectangle,
 };
 use geoengine_datatypes::spatial_reference::SpatialReference;
-use geoengine_operators::engine::{StaticMetaData, TypedResultDescriptor};
+use geoengine_operators::engine::{MetaDataLookupResult, StaticMetaData, TypedResultDescriptor};
 use geoengine_operators::source::{
     OgrSourceColumnSpec, OgrSourceDatasetTimeType, OgrSourceErrorSpec,
 };
 use geoengine_operators::{
-    engine::{MetaData, MetaDataProvider, RasterResultDescriptor, VectorResultDescriptor},
+    engine::{MetaData, RasterResultDescriptor, VectorResultDescriptor},
     mock::MockDatasetDataSourceLoadingInfo,
     source::{GdalLoadingInfo, OgrSourceDataset},
 };
@@ -271,19 +271,8 @@ impl ExternalDatasetProvider for GfbioDataProvider {
     fn as_any(&self) -> &dyn std::any::Any {
         self
     }
-}
 
-#[async_trait]
-impl MetaDataProvider<OgrSourceDataset, VectorResultDescriptor, VectorQueryRectangle>
-    for GfbioDataProvider
-{
-    async fn meta_data(
-        &self,
-        dataset: &DatasetId,
-    ) -> Result<
-        Box<dyn MetaData<OgrSourceDataset, VectorResultDescriptor, VectorQueryRectangle>>,
-        geoengine_operators::error::Error,
-    > {
+    async fn meta_data(&self, dataset: &DatasetId) -> Result<MetaDataLookupResult> {
         let surrogate_key: i32 = dataset
             .external()
             .ok_or(Error::InvalidDatasetId)
@@ -296,7 +285,7 @@ impl MetaDataProvider<OgrSourceDataset, VectorResultDescriptor, VectorQueryRecta
                 source: Box::new(e),
             })?;
 
-        Ok(Box::new(StaticMetaData {
+        Ok(MetaDataLookupResult::Ogr(Box::new(StaticMetaData {
             loading_info: OgrSourceDataset {
                 file_name: self.db_config.ogr_pg_config().into(),
                 layer_name: format!("{}.abcd_units", self.db_config.schema),
@@ -344,44 +333,7 @@ impl MetaDataProvider<OgrSourceDataset, VectorResultDescriptor, VectorQueryRecta
                     .collect(),
             },
             phantom: PhantomData::default(),
-        }))
-    }
-}
-
-#[async_trait]
-impl MetaDataProvider<GdalLoadingInfo, RasterResultDescriptor, RasterQueryRectangle>
-    for GfbioDataProvider
-{
-    async fn meta_data(
-        &self,
-        _dataset: &DatasetId,
-    ) -> Result<
-        Box<dyn MetaData<GdalLoadingInfo, RasterResultDescriptor, RasterQueryRectangle>>,
-        geoengine_operators::error::Error,
-    > {
-        Err(geoengine_operators::error::Error::NotYetImplemented)
-    }
-}
-
-#[async_trait]
-impl
-    MetaDataProvider<MockDatasetDataSourceLoadingInfo, VectorResultDescriptor, VectorQueryRectangle>
-    for GfbioDataProvider
-{
-    async fn meta_data(
-        &self,
-        _dataset: &DatasetId,
-    ) -> Result<
-        Box<
-            dyn MetaData<
-                MockDatasetDataSourceLoadingInfo,
-                VectorResultDescriptor,
-                VectorQueryRectangle,
-            >,
-        >,
-        geoengine_operators::error::Error,
-    > {
-        Err(geoengine_operators::error::Error::NotYetImplemented)
+        })))
     }
 }
 
@@ -570,6 +522,8 @@ mod tests {
                     dataset_id: "1".to_string(),
                 }))
                 .await
+                .map_err(|e| e.to_string())?
+                .ogr_meta_data()
                 .map_err(|e| e.to_string())?;
 
             let expected = VectorResultDescriptor {
@@ -740,6 +694,8 @@ mod tests {
                     dataset_id: "1".to_string(),
                 }))
                 .await
+                .map_err(|e| e.to_string())?
+                .ogr_meta_data()
                 .map_err(|e| e.to_string())?;
 
             let processor: OgrSourceProcessor<MultiPoint> = OgrSourceProcessor::new(meta, vec![]);

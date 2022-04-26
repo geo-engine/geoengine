@@ -7,7 +7,7 @@ use async_trait::async_trait;
 use geoengine_datatypes::dataset::{DatasetId, DatasetProviderId};
 use geoengine_datatypes::primitives::{RasterQueryRectangle, VectorQueryRectangle};
 use geoengine_operators::engine::{
-    MetaData, MetaDataProvider, RasterResultDescriptor, VectorResultDescriptor,
+    MetaData, MetaDataLookupResult, RasterResultDescriptor, VectorResultDescriptor,
 };
 use geoengine_operators::source::{GdalLoadingInfo, OgrSourceDataset};
 use reqwest::Client;
@@ -113,19 +113,8 @@ impl ExternalDatasetProvider for PangaeaDataProvider {
     fn as_any(&self) -> &dyn std::any::Any {
         self
     }
-}
 
-#[async_trait]
-impl MetaDataProvider<OgrSourceDataset, VectorResultDescriptor, VectorQueryRectangle>
-    for PangaeaDataProvider
-{
-    async fn meta_data(
-        &self,
-        dataset: &DatasetId,
-    ) -> Result<
-        Box<dyn MetaData<OgrSourceDataset, VectorResultDescriptor, VectorQueryRectangle>>,
-        geoengine_operators::error::Error,
-    > {
+    async fn meta_data(&self, dataset: &DatasetId) -> Result<MetaDataLookupResult> {
         let doi = dataset
             .external()
             .ok_or(Error::InvalidDatasetId)
@@ -154,44 +143,7 @@ impl MetaDataProvider<OgrSourceDataset, VectorResultDescriptor, VectorQueryRecta
             }
         })?;
 
-        Ok(Box::new(smd))
-    }
-}
-
-#[async_trait]
-impl MetaDataProvider<GdalLoadingInfo, RasterResultDescriptor, RasterQueryRectangle>
-    for PangaeaDataProvider
-{
-    async fn meta_data(
-        &self,
-        _dataset: &DatasetId,
-    ) -> Result<
-        Box<dyn MetaData<GdalLoadingInfo, RasterResultDescriptor, RasterQueryRectangle>>,
-        geoengine_operators::error::Error,
-    > {
-        Err(geoengine_operators::error::Error::NotImplemented)
-    }
-}
-
-#[async_trait]
-impl
-    MetaDataProvider<MockDatasetDataSourceLoadingInfo, VectorResultDescriptor, VectorQueryRectangle>
-    for PangaeaDataProvider
-{
-    async fn meta_data(
-        &self,
-        _dataset: &DatasetId,
-    ) -> Result<
-        Box<
-            dyn MetaData<
-                MockDatasetDataSourceLoadingInfo,
-                VectorResultDescriptor,
-                VectorQueryRectangle,
-            >,
-        >,
-        geoengine_operators::error::Error,
-    > {
-        Err(geoengine_operators::error::Error::NotImplemented)
+        Ok(MetaDataLookupResult::Ogr(Box::new(smd)))
     }
 }
 
@@ -381,14 +333,13 @@ mod tests {
         let provider = create_provider(&server).await.unwrap();
         let id = create_id(doi);
 
-        let meta: Result<
-            Box<dyn MetaData<OgrSourceDataset, VectorResultDescriptor, VectorQueryRectangle>>,
-            _,
-        > = provider.meta_data(&id).await;
+        let meta = provider.meta_data(&id).await;
 
         server.verify_and_clear();
 
         assert!(meta.is_ok());
+
+        let meta = meta.unwrap().ogr_meta_data();
 
         if let VectorDataType::Data = meta.unwrap().result_descriptor().await.unwrap().data_type {
         } else {
@@ -408,9 +359,7 @@ mod tests {
         let provider = create_provider(&server).await.unwrap();
         let id = create_id(doi);
 
-        let meta: Box<
-            dyn MetaData<OgrSourceDataset, VectorResultDescriptor, VectorQueryRectangle>,
-        > = provider.meta_data(&id).await.unwrap();
+        let meta = provider.meta_data(&id).await.unwrap();
 
         server.verify_and_clear();
         setup_vsicurl(&mut server, doi, "pangaea_geo_none.tsv").await;
@@ -464,9 +413,7 @@ mod tests {
         let provider = create_provider(&server).await.unwrap();
         let id = create_id(doi);
 
-        let meta: Box<
-            dyn MetaData<OgrSourceDataset, VectorResultDescriptor, VectorQueryRectangle>,
-        > = provider.meta_data(&id).await.unwrap();
+        let meta = provider.meta_data(&id).await.unwrap();
 
         server.verify_and_clear();
         setup_vsicurl(&mut server, doi, "pangaea_geo_point.tsv").await;
@@ -532,9 +479,7 @@ mod tests {
         let provider = create_provider(&server).await.unwrap();
         let id = create_id(doi);
 
-        let meta: Box<
-            dyn MetaData<OgrSourceDataset, VectorResultDescriptor, VectorQueryRectangle>,
-        > = provider.meta_data(&id).await.unwrap();
+        let meta = provider.meta_data(&id).await.unwrap();
 
         server.verify_and_clear();
         setup_vsicurl(&mut server, doi, "pangaea_geo_box.tsv").await;
@@ -596,9 +541,7 @@ mod tests {
         let provider = create_provider(&server).await.unwrap();
         let id = create_id(doi);
 
-        let meta: Box<
-            dyn MetaData<OgrSourceDataset, VectorResultDescriptor, VectorQueryRectangle>,
-        > = provider.meta_data(&id).await.unwrap();
+        let meta = provider.meta_data(&id).await.unwrap();
 
         server.verify_and_clear();
         setup_vsicurl(&mut server, doi, "pangaea_geo_lat_lon.tsv").await;

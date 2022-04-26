@@ -15,7 +15,7 @@ use geoengine_datatypes::{
 use snafu::ResultExt;
 
 use crate::{
-    engine::{MockExecutionContext, RasterResultDescriptor},
+    engine::{MetaDataLookupResult, MockExecutionContext, RasterResultDescriptor},
     error::{self, Error},
     source::{
         FileNotFoundHandling, GdalDatasetGeoTransform, GdalDatasetParameters, GdalMetaDataRegular,
@@ -69,7 +69,10 @@ pub fn create_ndvi_meta_data() -> GdalMetaDataRegular {
 // TODO: move test helper somewhere else?
 pub fn add_ndvi_dataset(ctx: &mut MockExecutionContext) -> DatasetId {
     let id: DatasetId = InternalDatasetId::new().into();
-    ctx.add_meta_data(id.clone(), Box::new(create_ndvi_meta_data()));
+    ctx.add_meta_data(
+        id.clone(),
+        MetaDataLookupResult::Gdal(Box::new(create_ndvi_meta_data())),
+    );
     id
 }
 

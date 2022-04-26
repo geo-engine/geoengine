@@ -2,9 +2,9 @@ use crate::error;
 use crate::error::Result;
 use crate::handlers::Context;
 use crate::ogc::util::{parse_bbox, parse_time};
+use crate::storage::{Store, StoreAs};
 use crate::util::parsing::parse_spatial_resolution;
-use crate::workflows::registry::WorkflowRegistry;
-use crate::workflows::workflow::WorkflowId;
+use crate::workflows::workflow::{Workflow, WorkflowId};
 use actix_web::{web, FromRequest, Responder};
 use geoengine_datatypes::operations::reproject::reproject_query;
 use geoengine_datatypes::plots::PlotOutputFormat;
@@ -124,9 +124,9 @@ async fn get_plot_handler<C: Context>(
     ctx: web::Data<C>,
 ) -> Result<impl Responder> {
     let workflow = ctx
-        .workflow_registry_ref()
-        .await
-        .load(&WorkflowId(id.into_inner()))
+        .store()
+        .as_::<Workflow>()
+        .read(&WorkflowId(id.into_inner()))
         .await?;
 
     let operator = workflow.operator.get_plot().context(error::Operator)?;
@@ -215,6 +215,7 @@ mod tests {
     use super::*;
     use crate::contexts::{InMemoryContext, Session, SimpleContext};
     use crate::util::tests::{check_allowed_http_methods, read_body_string, send_test_request};
+    use crate::util::user_input::UserInput;
     use crate::workflows::workflow::Workflow;
     use actix_web;
     use actix_web::dev::ServiceResponse;
@@ -280,13 +281,14 @@ mod tests {
             }
             .boxed()
             .into(),
-        };
+        }
+        .validated()
+        .unwrap();
 
         let id = ctx
-            .workflow_registry()
-            .write()
-            .await
-            .register(workflow)
+            .store()
+            .as_mut_::<Workflow>()
+            .create(workflow)
             .await
             .unwrap();
 
@@ -349,13 +351,14 @@ mod tests {
             }
             .boxed()
             .into(),
-        };
+        }
+        .validated()
+        .unwrap();
 
         let id = ctx
-            .workflow_registry()
-            .write()
-            .await
-            .register(workflow)
+            .store()
+            .as_mut_::<Workflow>()
+            .create(workflow)
             .await
             .unwrap();
 
@@ -428,13 +431,14 @@ mod tests {
                 }
                 .boxed()
                 .into(),
-            };
+            }
+            .validated()
+            .unwrap();
 
             let id = ctx
-                .workflow_registry()
-                .write()
-                .await
-                .register(workflow)
+                .store()
+                .as_mut_::<Workflow>()
+                .create(workflow)
                 .await
                 .unwrap();
 

@@ -4,7 +4,7 @@ use crate::engine::{
 };
 use crate::error::Error;
 use crate::mock::MockDatasetDataSourceLoadingInfo;
-use crate::source::{GdalLoadingInfo, OgrSourceDataset};
+use crate::source::{GdalLoadingInfo, GdalMetaDataStatic, OgrSourceDataset};
 use crate::util::{create_rayon_thread_pool, Result};
 use async_trait::async_trait;
 use geoengine_datatypes::dataset::DatasetId;
@@ -20,22 +20,71 @@ use std::marker::PhantomData;
 use std::sync::Arc;
 
 /// A context that provides certain utility access during operator initialization
-pub trait ExecutionContext: Send
-    + Sync
-    + MetaDataProvider<MockDatasetDataSourceLoadingInfo, VectorResultDescriptor, VectorQueryRectangle>
-    + MetaDataProvider<OgrSourceDataset, VectorResultDescriptor, VectorQueryRectangle>
-    + MetaDataProvider<GdalLoadingInfo, RasterResultDescriptor, RasterQueryRectangle>
-{
+#[async_trait]
+pub trait ExecutionContext: Send + Sync {
     fn thread_pool(&self) -> &Arc<ThreadPool>;
     fn tiling_specification(&self) -> TilingSpecification;
+    async fn meta_data(&self, dataset: &DatasetId) -> Result<MetaDataLookupResult>; // TODO: separate trait?
 }
 
-#[async_trait]
-pub trait MetaDataProvider<L, R, Q>
-where
-    R: ResultDescriptor,
-{
-    async fn meta_data(&self, dataset: &DatasetId) -> Result<Box<dyn MetaData<L, R, Q>>>;
+#[derive(Clone)]
+pub enum MetaDataLookupResult {
+    Mock(
+        Box<
+            dyn MetaData<
+                MockDatasetDataSourceLoadingInfo,
+                VectorResultDescriptor,
+                VectorQueryRectangle,
+            >,
+        >,
+    ),
+    Ogr(Box<dyn MetaData<OgrSourceDataset, VectorResultDescriptor, VectorQueryRectangle>>),
+    Gdal(Box<dyn MetaData<GdalLoadingInfo, RasterResultDescriptor, RasterQueryRectangle>>),
+}
+
+impl MetaDataLookupResult {
+    pub fn mock_meta_data(
+        &self,
+    ) -> Result<
+        Box<
+            dyn MetaData<
+                MockDatasetDataSourceLoadingInfo,
+                VectorResultDescriptor,
+                VectorQueryRectangle,
+            >,
+        >,
+    > {
+        match self {
+            MetaDataLookupResult::Mock(meta_data) => Ok(meta_data.clone()),
+            _ => Err(Error::MetaDataMissmatch),
+        }
+    }
+
+    pub fn ogr_meta_data(
+        &self,
+    ) -> Result<Box<dyn MetaData<OgrSourceDataset, VectorResultDescriptor, VectorQueryRectangle>>>
+    {
+        match self {
+            MetaDataLookupResult::Ogr(meta_data) => Ok(meta_data.clone()),
+            _ => Err(Error::MetaDataMissmatch),
+        }
+    }
+
+    pub fn gdal_meta_data(
+        &self,
+    ) -> Result<Box<dyn MetaData<GdalLoadingInfo, RasterResultDescriptor, RasterQueryRectangle>>>
+    {
+        match self {
+            MetaDataLookupResult::Gdal(meta_data) => Ok(meta_data.clone()),
+            _ => Err(Error::MetaDataMissmatch),
+        }
+    }
+}
+
+impl From<GdalMetaDataStatic> for MetaDataLookupResult {
+    fn from(meta_data: GdalMetaDataStatic) -> Self {
+        MetaDataLookupResult::Gdal(Box::new(meta_data))
+    }
 }
 
 #[async_trait]
@@ -60,7 +109,7 @@ where
 
 pub struct MockExecutionContext {
     pub thread_pool: Arc<ThreadPool>,
-    pub meta_data: HashMap<DatasetId, Box<dyn Any + Send + Sync>>,
+    pub meta_data: HashMap<DatasetId, MetaDataLookupResult>,
     pub tiling_specification: TilingSpecification,
 }
 
@@ -94,17 +143,8 @@ impl MockExecutionContext {
         }
     }
 
-    pub fn add_meta_data<L, R, Q>(
-        &mut self,
-        dataset: DatasetId,
-        meta_data: Box<dyn MetaData<L, R, Q>>,
-    ) where
-        L: Send + Sync + 'static,
-        R: Send + Sync + 'static + ResultDescriptor,
-        Q: Send + Sync + 'static,
-    {
-        self.meta_data
-            .insert(dataset, Box::new(meta_data) as Box<dyn Any + Send + Sync>);
+    pub fn add_meta_data(&mut self, dataset: DatasetId, meta_data: MetaDataLookupResult) {
+        self.meta_data.insert(dataset, meta_data);
     }
 
     pub fn mock_query_context(&self, chunk_byte_size: ChunkByteSize) -> MockQueryContext {
@@ -115,6 +155,7 @@ impl MockExecutionContext {
     }
 }
 
+#[async_trait]
 impl ExecutionContext for MockExecutionContext {
     fn thread_pool(&self) -> &Arc<ThreadPool> {
         &self.thread_pool
@@ -123,24 +164,12 @@ impl ExecutionContext for MockExecutionContext {
     fn tiling_specification(&self) -> TilingSpecification {
         self.tiling_specification
     }
-}
 
-#[async_trait]
-impl<L, R, Q> MetaDataProvider<L, R, Q> for MockExecutionContext
-where
-    L: 'static,
-    R: 'static + ResultDescriptor,
-    Q: 'static,
-{
-    async fn meta_data(&self, dataset: &DatasetId) -> Result<Box<dyn MetaData<L, R, Q>>> {
-        let meta_data = self
-            .meta_data
+    async fn meta_data(&self, dataset: &DatasetId) -> Result<MetaDataLookupResult> {
+        self.meta_data
             .get(dataset)
-            .ok_or(Error::UnknownDatasetId)?
-            .downcast_ref::<Box<dyn MetaData<L, R, Q>>>()
-            .ok_or(Error::DatasetLoadingInfoProviderMismatch)?;
-
-        Ok(meta_data.clone())
+            .cloned()
+            .ok_or(Error::UnknownDatasetId)
     }
 }
 

@@ -17,7 +17,9 @@ use geoengine_datatypes::{
     raster::{GridSize, RasterTile2D, TilingSpecification},
 };
 use geoengine_operators::call_on_generic_raster_processor;
-use geoengine_operators::engine::{MetaData, RasterResultDescriptor, SingleRasterOrVectorSource};
+use geoengine_operators::engine::{
+    MetaData, MetaDataLookupResult, RasterResultDescriptor, SingleRasterOrVectorSource,
+};
 use geoengine_operators::mock::{MockRasterSource, MockRasterSourceParams};
 use geoengine_operators::processing::{
     Expression, ExpressionParams, ExpressionSources, Reprojection, ReprojectionParams,
@@ -612,7 +614,10 @@ fn bench_gdal_source_operator_tile_size(bench_collector: &mut BenchmarkCollector
         |ts, num_threads| {
             let mut mex =
                 MockExecutionContext::new_with_tiling_spec_and_thread_count(ts, num_threads);
-            mex.add_meta_data(id.clone(), meta_data.box_clone());
+            mex.add_meta_data(
+                id.clone(),
+                MetaDataLookupResult::Gdal(meta_data.box_clone()),
+            );
             mex
         },
         [ChunkByteSize::MAX],
@@ -675,7 +680,10 @@ fn bench_gdal_source_operator_with_expression_tile_size(bench_collector: &mut Be
         |ts, num_threads| {
             let mut mex =
                 MockExecutionContext::new_with_tiling_spec_and_thread_count(ts, num_threads);
-            mex.add_meta_data(id.clone(), meta_data.box_clone());
+            mex.add_meta_data(
+                id.clone(),
+                MetaDataLookupResult::Gdal(meta_data.box_clone()),
+            );
             mex
         },
         [ChunkByteSize::MAX],
@@ -734,7 +742,10 @@ fn bench_gdal_source_operator_with_identity_reprojection(bench_collector: &mut B
         |ts, num_threads| {
             let mut mex =
                 MockExecutionContext::new_with_tiling_spec_and_thread_count(ts, num_threads);
-            mex.add_meta_data(id.clone(), meta_data.box_clone());
+            mex.add_meta_data(
+                id.clone(),
+                MetaDataLookupResult::Gdal(meta_data.box_clone()),
+            );
             mex
         },
         [ChunkByteSize::MAX],
@@ -801,7 +812,10 @@ fn bench_gdal_source_operator_with_4326_to_3857_reprojection(
         |ts, num_threads| {
             let mut mex =
                 MockExecutionContext::new_with_tiling_spec_and_thread_count(ts, num_threads);
-            mex.add_meta_data(id.clone(), meta_data.box_clone());
+            mex.add_meta_data(
+                id.clone(),
+                MetaDataLookupResult::Gdal(meta_data.box_clone()),
+            );
             mex
         },
         [ChunkByteSize::MAX],

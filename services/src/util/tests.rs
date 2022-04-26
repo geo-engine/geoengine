@@ -1,7 +1,7 @@
 use crate::contexts::SimpleContext;
 use crate::contexts::SimpleSession;
 use crate::datasets::listing::Provenance;
-use crate::datasets::storage::AddDataset;
+use crate::datasets::storage::Dataset;
 use crate::datasets::storage::DatasetStore;
 use crate::datasets::upload::UploadId;
 use crate::datasets::upload::UploadRootPath;
@@ -11,9 +11,10 @@ use crate::projects::{
     Symbology, UpdateProject,
 };
 use crate::server::{configure_extractors, render_404, render_405};
+use crate::storage::Store;
+use crate::storage::StoreAs;
 use crate::util::user_input::UserInput;
 use crate::util::Identifier;
-use crate::workflows::registry::WorkflowRegistry;
 use crate::workflows::workflow::{Workflow, WorkflowId};
 use crate::{
     contexts::{Context, InMemoryContext},
@@ -26,6 +27,7 @@ use flexi_logger::Logger;
 use geoengine_datatypes::dataset::DatasetId;
 use geoengine_datatypes::operations::image::Colorizer;
 use geoengine_datatypes::spatial_reference::SpatialReferenceOption;
+use geoengine_operators::engine::MetaData;
 use geoengine_operators::engine::{RasterOperator, TypedOperator};
 use geoengine_operators::source::{GdalSource, GdalSourceParameters};
 use geoengine_operators::util::gdal::create_ndvi_meta_data;
@@ -97,23 +99,24 @@ pub async fn register_ndvi_workflow_helper(ctx: &InMemoryContext) -> (Workflow, 
             }
             .boxed(),
         ),
-    };
+    }
+    .validated()
+    .unwrap();
 
     let id = ctx
-        .workflow_registry()
-        .write()
-        .await
-        .register(workflow.clone())
+        .store()
+        .as_mut_::<Workflow>()
+        .create(workflow.clone())
         .await
         .unwrap();
 
-    (workflow, id)
+    (workflow.user_input, id)
 }
 
 pub async fn add_ndvi_to_datasets(ctx: &InMemoryContext) -> DatasetId {
+    let meta_data = create_ndvi_meta_data();
     let ndvi = DatasetDefinition {
-        properties: AddDataset {
-            id: None,
+        properties: Dataset {
             name: "NDVI".to_string(),
             description: "NDVI data from MODIS".to_string(),
             source_operator: "GdalSource".to_string(),
@@ -123,21 +126,27 @@ pub async fn add_ndvi_to_datasets(ctx: &InMemoryContext) -> DatasetId {
                 license: "Sample License".to_owned(),
                 uri: "http://example.org/".to_owned(),
             }),
+            result_descriptor: meta_data.result_descriptor().await.unwrap().into(),
         },
-        meta_data: MetaDataDefinition::GdalMetaDataRegular(create_ndvi_meta_data()),
+        meta_data: MetaDataDefinition::GdalMetaDataRegular(meta_data),
     };
 
-    ctx.dataset_db_ref_mut()
+    let id = ctx
+        .store()
+        .as_mut_::<Dataset>()
+        .create(ndvi.properties.validated().unwrap())
         .await
-        .add_dataset(
-            &SimpleSession::default(),
-            ndvi.properties
-                .validated()
-                .expect("valid dataset description"),
-            Box::new(ndvi.meta_data),
-        )
+        .unwrap();
+
+    ctx.store()
+        .as_mut_::<MetaDataDefinition>()
+        .create_with_id(&id, ndvi.meta_data.validated().unwrap())
         .await
-        .expect("dataset db access")
+        .unwrap();
+
+    // TODO: delete dataset if metadata creation failed
+
+    id.into()
 }
 
 pub async fn check_allowed_http_methods2<T, TRes, P, PParam>(

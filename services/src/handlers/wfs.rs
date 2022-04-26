@@ -8,10 +8,10 @@ use crate::error::Result;
 use crate::handlers::Context;
 use crate::ogc::util::{ogc_endpoint_url, OgcProtocol};
 use crate::ogc::wfs::request::{GetCapabilities, GetFeature, WfsRequest};
+use crate::storage::{Store, StoreAs};
 use crate::util::config;
 use crate::util::config::get_config_element;
 use crate::util::user_input::QueryEx;
-use crate::workflows::registry::WorkflowRegistry;
 use crate::workflows::workflow::{Workflow, WorkflowId};
 use futures::StreamExt;
 use geoengine_datatypes::collections::ToGeoJson;
@@ -165,7 +165,7 @@ where
 {
     let wfs_url = wfs_url(workflow_id)?;
 
-    let workflow = ctx.workflow_registry_ref().await.load(&workflow_id).await?;
+    let workflow = ctx.store().as_::<Workflow>().read(&workflow_id).await?;
 
     let exe_ctx = ctx.execution_context(session)?;
     let operator = workflow
@@ -420,7 +420,7 @@ async fn get_feature<C: Context>(
         return get_feature_mock(request);
     }
 
-    let workflow: Workflow = ctx.workflow_registry_ref().await.load(&type_names).await?;
+    let workflow: Workflow = ctx.store().as_::<Workflow>().read(&type_names).await?;
 
     let operator = workflow.operator.get_vector().context(error::Operator)?;
 
@@ -594,8 +594,11 @@ mod tests {
     use super::*;
 
     use crate::contexts::{Session, SimpleContext};
-    use crate::datasets::storage::{DatasetDefinition, DatasetStore};
+    use crate::datasets::storage::{
+        AddDatasetDefinition, Dataset, DatasetDefinition, DatasetStore, MetaDataDefinition,
+    };
     use crate::handlers::ErrorResponse;
+    use crate::storage::StoreAs;
     use crate::util::tests::{check_allowed_http_methods, read_body_string, send_test_request};
     use crate::util::user_input::UserInput;
     use crate::{contexts::InMemoryContext, workflows::workflow::Workflow};
@@ -737,13 +740,14 @@ x;y
                     time: CsvTimeSpecification::None,
                 },
             })),
-        };
+        }
+        .validated()
+        .unwrap();
 
         let workflow_id = ctx
-            .workflow_registry()
-            .write()
-            .await
-            .register(workflow)
+            .store()
+            .as_mut_::<Workflow>()
+            .create(workflow)
             .await
             .unwrap();
 
@@ -805,13 +809,14 @@ x;y
                     time: CsvTimeSpecification::None,
                 },
             })),
-        };
+        }
+        .validated()
+        .unwrap();
 
         let id = ctx
-            .workflow_registry()
-            .write()
-            .await
-            .register(workflow.clone())
+            .store()
+            .as_mut_::<Workflow>()
+            .create(workflow.clone())
             .await
             .unwrap();
 
@@ -923,13 +928,14 @@ x;y
                     time: CsvTimeSpecification::None,
                 },
             })),
-        };
+        }
+        .validated()
+        .unwrap();
 
         let workflow_id = ctx
-            .workflow_registry()
-            .write()
-            .await
-            .register(workflow)
+            .store()
+            .as_mut_::<Workflow>()
+            .create(workflow)
             .await
             .unwrap();
 
@@ -1042,17 +1048,23 @@ x;y
     ) -> DatasetId {
         let data = fs::read_to_string(dataset_definition_path).unwrap();
         let data = data.replace("test_data/", test_data!("./").to_str().unwrap());
-        let def: DatasetDefinition = serde_json::from_str(&data).unwrap();
+        let def: AddDatasetDefinition = serde_json::from_str(&data).unwrap();
 
-        let mut db = ctx.dataset_db_ref_mut().await;
+        let dataset = def.dataset().await.unwrap();
 
-        db.add_dataset(
-            &*ctx.default_session_ref().await,
-            def.properties.validated().unwrap(),
-            Box::new(def.meta_data),
-        )
-        .await
-        .unwrap()
+        let id = ctx
+            .store()
+            .as_mut_::<Dataset>()
+            .create(dataset.validated().unwrap())
+            .await
+            .unwrap();
+
+        ctx.store()
+            .as_mut_::<MetaDataDefinition>()
+            .create_with_id(&id, def.meta_data.validated().unwrap())
+            .await
+            .unwrap()
+            .into()
     }
 
     #[tokio::test]
@@ -1109,13 +1121,13 @@ x;y
 
         let json = serde_json::to_string(&workflow).unwrap();
 
-        let workflow = serde_json::from_str(&json).unwrap();
+        let workflow: Workflow = serde_json::from_str(&json).unwrap();
+        let workflow = workflow.validated().unwrap();
 
         let workflow_id = ctx
-            .workflow_registry()
-            .write()
-            .await
-            .register(workflow)
+            .store()
+            .as_mut_::<Workflow>()
+            .create(workflow)
             .await
             .unwrap();
 

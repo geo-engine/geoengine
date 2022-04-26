@@ -3,8 +3,8 @@ use crate::error::{self, Result};
 use crate::pro::datasets::{add_datasets_from_directory, PostgresDatasetDb, Role};
 use crate::pro::projects::ProjectPermission;
 use crate::pro::users::{UserDb, UserId, UserSession};
-use crate::pro::workflows::postgres_workflow_registry::PostgresWorkflowRegistry;
 use crate::projects::ProjectId;
+use crate::storage::GeoEngineStore;
 use crate::{
     contexts::{Context, Db},
     pro::users::PostgresUserDb,
@@ -43,9 +43,9 @@ where
     <Tls as MakeTlsConnect<Socket>>::TlsConnect: Send,
     <<Tls as MakeTlsConnect<Socket>>::TlsConnect as TlsConnect<Socket>>::Future: Send,
 {
+    store: Db<PostgresStore<Tls>>,
     user_db: Db<PostgresUserDb<Tls>>,
     project_db: Db<PostgresProjectDb<Tls>>,
-    workflow_registry: Db<PostgresWorkflowRegistry<Tls>>,
     dataset_db: Db<PostgresDatasetDb<Tls>>,
     thread_pool: Arc<ThreadPool>,
     exe_ctx_tiling_spec: TilingSpecification,
@@ -72,9 +72,9 @@ where
         Self::update_schema(pool.get().await?).await?;
 
         Ok(Self {
+            store: Arc::new(RwLock::new(PostgresStore::new(pool.clone()))),
             user_db: Arc::new(RwLock::new(PostgresUserDb::new(pool.clone()))),
             project_db: Arc::new(RwLock::new(PostgresProjectDb::new(pool.clone()))),
-            workflow_registry: Arc::new(RwLock::new(PostgresWorkflowRegistry::new(pool.clone()))),
             dataset_db: Arc::new(RwLock::new(PostgresDatasetDb::new(pool.clone()))),
             thread_pool: create_rayon_thread_pool(0),
             exe_ctx_tiling_spec,
@@ -103,9 +103,9 @@ where
         add_providers_from_directory(&mut dataset_db, provider_defs_path.join("pro")).await;
 
         Ok(Self {
+            store: Arc::new(RwLock::new(PostgresStore::new(pool.clone()))),
             user_db: Arc::new(RwLock::new(PostgresUserDb::new(pool.clone()))),
             project_db: Arc::new(RwLock::new(PostgresProjectDb::new(pool.clone()))),
-            workflow_registry: Arc::new(RwLock::new(PostgresWorkflowRegistry::new(pool.clone()))),
             dataset_db: Arc::new(RwLock::new(dataset_db)),
             thread_pool: create_rayon_thread_pool(0),
             exe_ctx_tiling_spec,
@@ -453,8 +453,8 @@ where
     <<Tls as MakeTlsConnect<Socket>>::TlsConnect as TlsConnect<Socket>>::Future: Send,
 {
     type Session = UserSession;
+    type Store = PostgresStore<Tls>;
     type ProjectDB = PostgresProjectDb<Tls>;
-    type WorkflowRegistry = PostgresWorkflowRegistry<Tls>;
     type DatasetDB = PostgresDatasetDb<Tls>;
     type QueryContext = QueryContextImpl;
     type ExecutionContext = ExecutionContextImpl<UserSession, PostgresDatasetDb<Tls>>;
@@ -469,14 +469,14 @@ where
         self.project_db.write().await
     }
 
-    fn workflow_registry(&self) -> Db<Self::WorkflowRegistry> {
-        self.workflow_registry.clone()
+    fn store(&self) -> Db<Self::Store> {
+        self.store.clone()
     }
-    async fn workflow_registry_ref(&self) -> RwLockReadGuard<'_, Self::WorkflowRegistry> {
-        self.workflow_registry.read().await
+    async fn store_ref(&self) -> RwLockReadGuard<'_, Self::Store> {
+        self.store.read().await
     }
-    async fn workflow_registry_ref_mut(&self) -> RwLockWriteGuard<'_, Self::WorkflowRegistry> {
-        self.workflow_registry.write().await
+    async fn store_ref_mut(&self) -> RwLockWriteGuard<'_, Self::Store> {
+        self.store.write().await
     }
 
     fn dataset_db(&self) -> Db<Self::DatasetDB> {
@@ -520,6 +520,37 @@ where
     }
 }
 
+pub struct PostgresStore<Tls>
+where
+    Tls: MakeTlsConnect<Socket> + Clone + Send + Sync + 'static,
+    <Tls as MakeTlsConnect<Socket>>::Stream: Send + Sync,
+    <Tls as MakeTlsConnect<Socket>>::TlsConnect: Send,
+    <<Tls as MakeTlsConnect<Socket>>::TlsConnect as TlsConnect<Socket>>::Future: Send,
+{
+    pub(crate) conn_pool: Pool<PostgresConnectionManager<Tls>>,
+}
+
+impl<Tls> PostgresStore<Tls>
+where
+    Tls: MakeTlsConnect<Socket> + Clone + Send + Sync + 'static,
+    <Tls as MakeTlsConnect<Socket>>::Stream: Send + Sync,
+    <Tls as MakeTlsConnect<Socket>>::TlsConnect: Send,
+    <<Tls as MakeTlsConnect<Socket>>::TlsConnect as TlsConnect<Socket>>::Future: Send,
+{
+    pub fn new(conn_pool: Pool<PostgresConnectionManager<Tls>>) -> Self {
+        Self { conn_pool }
+    }
+}
+
+impl<Tls> GeoEngineStore for PostgresStore<Tls>
+where
+    Tls: MakeTlsConnect<Socket> + Clone + Send + Sync + 'static,
+    <Tls as MakeTlsConnect<Socket>>::Stream: Send + Sync,
+    <Tls as MakeTlsConnect<Socket>>::TlsConnect: Send,
+    <<Tls as MakeTlsConnect<Socket>>::TlsConnect as TlsConnect<Socket>>::Future: Send,
+{
+}
+
 #[cfg(test)]
 mod tests {
     use std::str::FromStr;
@@ -542,9 +573,9 @@ mod tests {
         CreateProject, Layer, LayerUpdate, OrderBy, Plot, PlotUpdate, PointSymbology, ProjectDb,
         ProjectFilter, ProjectId, ProjectListOptions, ProjectListing, STRectangle, UpdateProject,
     };
+    use crate::storage::Store;
     use crate::util::config::{get_config_element, Postgres};
     use crate::util::user_input::UserInput;
-    use crate::workflows::registry::WorkflowRegistry;
     use crate::workflows::workflow::Workflow;
     use bb8_postgres::bb8::ManageConnection;
     use bb8_postgres::tokio_postgres::{self, NoTls};
@@ -799,48 +830,46 @@ mod tests {
             .unwrap();
 
         let layer_workflow_id = ctx
-            .workflow_registry_ref_mut()
+            .store_ref_mut()
             .await
-            .register(Workflow {
-                operator: TypedOperator::Vector(
-                    MockPointSource {
-                        params: MockPointSourceParams {
-                            points: vec![Coordinate2D::new(1., 2.); 3],
-                        },
-                    }
-                    .boxed(),
-                ),
-            })
+            .create(
+                Workflow {
+                    operator: TypedOperator::Vector(
+                        MockPointSource {
+                            params: MockPointSourceParams {
+                                points: vec![Coordinate2D::new(1., 2.); 3],
+                            },
+                        }
+                        .boxed(),
+                    ),
+                }
+                .validated()
+                .unwrap(),
+            )
             .await
             .unwrap();
 
-        assert!(ctx
-            .workflow_registry_ref()
-            .await
-            .load(&layer_workflow_id)
-            .await
-            .is_ok());
+        assert!(ctx.store_ref().await.read(&layer_workflow_id).await.is_ok());
 
         let plot_workflow_id = ctx
-            .workflow_registry_ref_mut()
+            .store_ref_mut()
             .await
-            .register(Workflow {
-                operator: Statistics {
-                    params: StatisticsParams {},
-                    sources: MultipleRasterSources { rasters: vec![] },
+            .create(
+                Workflow {
+                    operator: Statistics {
+                        params: StatisticsParams {},
+                        sources: MultipleRasterSources { rasters: vec![] },
+                    }
+                    .boxed()
+                    .into(),
                 }
-                .boxed()
-                .into(),
-            })
+                .validated()
+                .unwrap(),
+            )
             .await
             .unwrap();
 
-        assert!(ctx
-            .workflow_registry_ref()
-            .await
-            .load(&plot_workflow_id)
-            .await
-            .is_ok());
+        assert!(ctx.store_ref().await.read(&plot_workflow_id).await.is_ok());
 
         let update = UpdateProject {
             id: project.id,
@@ -981,12 +1010,12 @@ mod tests {
                     }
                     .boxed(),
                 ),
-            };
+            }.validated().unwrap();
 
             let id = ctx
-                .workflow_registry_ref_mut()
+                .store_ref_mut()
                 .await
-                .register(workflow)
+                .create(workflow)
                 .await
                 .unwrap();
 
@@ -996,7 +1025,7 @@ mod tests {
                 .await
                 .unwrap();
 
-            let workflow = ctx.workflow_registry_ref().await.load(&id).await.unwrap();
+            let workflow = ctx.store_ref().await.read(&id).await.unwrap();
 
             let json = serde_json::to_string(&workflow).unwrap();
             assert_eq!(json, r#"{"type":"Vector","operator":{"type":"MockPointSource","params":{"points":[{"x":1.0,"y":2.0},{"x":1.0,"y":2.0},{"x":1.0,"y":2.0}]}}}"#);

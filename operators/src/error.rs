@@ -288,6 +288,8 @@ pub enum Error {
     MockRasterSource {
         source: crate::mock::MockRasterSourceError,
     },
+
+    MetaDataMissmatch, // TODO: details
 }
 
 impl From<crate::adapters::SparseTilesFillAdapterError> for Error {

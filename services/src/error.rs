@@ -316,7 +316,6 @@ pub enum Error {
     NetCdfCf4DProvider {
         source: NetCdfCf4DProviderError,
     },
-
     #[cfg(feature = "ebv")]
     #[snafu(context(false))]
     EbvHandler {
@@ -330,6 +329,7 @@ pub enum Error {
     },
 
     BaseUrlMustEndWithSlash,
+    MetaDataMissmatch, // TODO: details
 }
 
 impl actix_web::error::ResponseError for Error {

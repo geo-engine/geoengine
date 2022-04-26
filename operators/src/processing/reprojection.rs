@@ -473,7 +473,7 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::engine::{MockExecutionContext, MockQueryContext};
+    use crate::engine::{MetaDataLookupResult, MockExecutionContext, MockQueryContext};
     use crate::mock::MockFeatureCollectionSource;
     use crate::mock::{MockRasterSource, MockRasterSourceParams};
     use crate::{
@@ -989,7 +989,7 @@ mod tests {
         };
 
         let id: DatasetId = InternalDatasetId::new().into();
-        exe_ctx.add_meta_data(id.clone(), Box::new(m));
+        exe_ctx.add_meta_data(id.clone(), MetaDataLookupResult::Gdal(Box::new(m)));
 
         exe_ctx.tiling_specification = TilingSpecification::new((0.0, 0.0).into(), [60, 60].into());
 
@@ -1118,7 +1118,7 @@ mod tests {
         };
 
         let id: DatasetId = InternalDatasetId::new().into();
-        exe_ctx.add_meta_data(id.clone(), Box::new(m));
+        exe_ctx.add_meta_data(id.clone(), MetaDataLookupResult::Gdal(Box::new(m)));
 
         exe_ctx.tiling_specification =
             TilingSpecification::new((0.0, 0.0).into(), [600, 600].into());

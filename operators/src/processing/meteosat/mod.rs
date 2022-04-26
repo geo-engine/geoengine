@@ -54,8 +54,8 @@ mod test_util {
     use geoengine_datatypes::util::Identifier;
 
     use crate::engine::{
-        MockExecutionContext, MockQueryContext, QueryProcessor, RasterOperator,
-        RasterResultDescriptor,
+        MetaDataLookupResult, MockExecutionContext, MockQueryContext, QueryProcessor,
+        RasterOperator, RasterResultDescriptor,
     };
     use crate::mock::{MockRasterSource, MockRasterSourceParams};
     use crate::processing::meteosat::{
@@ -274,7 +274,10 @@ mod test_util {
                 no_data_value,
             },
         };
-        ctx.add_meta_data(dataset_id.clone(), Box::new(meta));
+        ctx.add_meta_data(
+            dataset_id.clone(),
+            MetaDataLookupResult::Gdal(Box::new(meta)),
+        );
 
         GdalSource {
             params: GdalSourceParameters {

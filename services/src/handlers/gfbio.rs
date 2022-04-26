@@ -1,5 +1,7 @@
 use crate::contexts::Context;
+use crate::datasets::listing::ExternalDatasetProvider;
 use crate::error::Result;
+use crate::storage::StoreAs;
 use crate::util::config::{get_config_element, GFBio};
 use actix_web::{web, FromRequest, Responder};
 use chrono::Utc;
@@ -8,7 +10,7 @@ use futures::stream::StreamExt;
 use geoengine_datatypes::dataset::{DatasetId, ExternalDatasetId};
 use geoengine_datatypes::primitives::VectorQueryRectangle;
 use geoengine_operators::engine::{
-    MetaDataProvider, TypedResultDescriptor, VectorResultDescriptor,
+    ExecutionContext, MetaDataLookupResult, TypedResultDescriptor, VectorResultDescriptor,
 };
 use geoengine_operators::source::{AttributeFilter, OgrSourceDataset};
 use regex::Regex;
@@ -18,7 +20,7 @@ use std::collections::HashMap;
 
 use crate::datasets::external::gfbio::{GfbioDataProvider, GFBIO_PROVIDER_ID};
 use crate::datasets::external::pangaea::PANGAEA_PROVIDER_ID;
-use crate::datasets::storage::DatasetProviderDb;
+use crate::datasets::storage::{DatasetProviderDb, ExternalDatasetProviderDefinition};
 use geoengine_datatypes::identifier;
 use geoengine_operators::util::input::StringOrNumberRange;
 
@@ -40,9 +42,11 @@ async fn get_basket_handler<C: Context>(
     // Get basket content
     let config = get_config_element::<GFBio>()?;
     let abcd_provider = ctx
-        .dataset_db_ref()
-        .await
-        .dataset_provider(&session, GFBIO_PROVIDER_ID)
+        .store()
+        .as_::<Box<dyn ExternalDatasetProviderDefinition>>()
+        .read(&GFBIO_PROVIDER_ID)
+        .await?
+        .initialize()
         .await
         .ok();
 
@@ -148,13 +152,10 @@ impl Basket {
             provider_id: PANGAEA_PROVIDER_ID,
             dataset_id: entry.doi,
         });
-        let mdp = ec as &dyn MetaDataProvider<
-            OgrSourceDataset,
-            VectorResultDescriptor,
-            VectorQueryRectangle,
-        >;
 
-        Self::generate_loading_info(entry.title, id, mdp, None).await
+        let meta_data = ec.meta_data(&id).await.map_err(Into::into);
+
+        Self::generate_loading_info(entry.title, id, meta_data, None).await
     }
 
     async fn process_abcd_entries(
@@ -222,13 +223,6 @@ impl Basket {
             dataset_id: sg_id.to_string(),
         });
 
-        let mdp = provider
-            as &dyn MetaDataProvider<
-                OgrSourceDataset,
-                VectorResultDescriptor,
-                VectorQueryRectangle,
-            >;
-
         // Apply filter
         let filter = if entry.units.is_empty() {
             None
@@ -246,7 +240,9 @@ impl Basket {
             }])
         };
 
-        Self::generate_loading_info(entry.title, id, mdp, filter).await
+        let meta_data = provider.meta_data(&id).await;
+
+        Self::generate_loading_info(entry.title, id, meta_data, filter).await
     }
 
     fn group_abcd_entries(entries: Vec<AbcdEntry>) -> Vec<AbcdEntry> {
@@ -285,10 +281,13 @@ impl Basket {
     async fn generate_loading_info(
         title: String,
         id: DatasetId,
-        mdp: &dyn MetaDataProvider<OgrSourceDataset, VectorResultDescriptor, VectorQueryRectangle>,
+        meta_data: Result<MetaDataLookupResult>,
         filter: Option<Vec<AttributeFilter>>,
     ) -> BasketEntry {
-        let md = match mdp.meta_data(&id).await {
+        let md = match meta_data.and_then(|r| {
+            r.ogr_meta_data()
+                .map_err(|_| crate::error::Error::MetaDataMissmatch)
+        }) {
             Ok(md) => md,
             Err(e) => {
                 return BasketEntry {
