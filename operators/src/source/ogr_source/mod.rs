@@ -171,7 +171,9 @@ pub enum OgrSourceTimeFormat {
     Custom {
         custom_format: DateTimeParseFormat,
     },
-    Seconds {
+    #[serde(rename_all = "camelCase")]
+    UnixTimeStamp {
+        timestamp_type: UnixTimeStampType,
         #[serde(skip)]
         #[serde(default = "DateTimeParseFormat::unix")]
         fmt: DateTimeParseFormat,
@@ -181,10 +183,25 @@ pub enum OgrSourceTimeFormat {
 
 impl OgrSourceTimeFormat {
     pub fn seconds() -> Self {
-        Self::Seconds {
+        Self::UnixTimeStamp {
+            timestamp_type: UnixTimeStampType::EpochSeconds,
             fmt: DateTimeParseFormat::unix(),
         }
     }
+
+    pub fn milliseconds() -> Self {
+        Self::UnixTimeStamp {
+            timestamp_type: UnixTimeStampType::EpochMilliseconds,
+            fmt: DateTimeParseFormat::unix(),
+        }
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub enum UnixTimeStampType {
+    EpochSeconds,
+    EpochMilliseconds,
 }
 
 impl Default for OgrSourceTimeFormat {
@@ -798,22 +815,35 @@ where
 
                 Ok(TimeInstance::from(datetime))
             }),
-            OgrSourceTimeFormat::Seconds { fmt } => {
-                Box::new(move |field: FieldValue| match field {
+            OgrSourceTimeFormat::UnixTimeStamp {
+                timestamp_type,
+                fmt,
+            } => Box::new(move |field: FieldValue| {
+                let factor = match timestamp_type {
+                    UnixTimeStampType::EpochSeconds => 1000,
+                    UnixTimeStampType::EpochMilliseconds => 1,
+                };
+                match field {
                     FieldValue::IntegerValue(v) => {
-                        TimeInstance::from_millis(i64::from(v) * 1000).context(error::DataType)
+                        TimeInstance::from_millis(i64::from(v) * factor).context(error::DataType)
                     }
                     FieldValue::Integer64Value(v) => {
-                        TimeInstance::from_millis(v * 1000).context(error::DataType)
+                        TimeInstance::from_millis(v * factor).context(error::DataType)
                     }
                     FieldValue::StringValue(v) => DateTime::parse_from_str(&v, &fmt)
                         .map_err(|e| Error::TimeParse {
                             source: Box::new(e),
                         })
                         .map(TimeInstance::from),
-                    _ => Err(Error::OgrFieldValueIsNotValidForSeconds),
-                })
-            }
+                    FieldValue::RealValue(v)
+                        if timestamp_type == UnixTimeStampType::EpochSeconds =>
+                    {
+                        TimeInstance::from_millis((v * (factor as f64)) as i64)
+                            .context(error::DataType)
+                    }
+                    _ => Err(Error::OgrFieldValueIsNotValidForTimestamp),
+                }
+            }),
         }
     }
 
@@ -888,7 +918,7 @@ where
                         let duration = i64::from(
                             duration_field_value
                                 .into_int()
-                                .ok_or(Error::OgrFieldValueIsNotValidForSeconds)?,
+                                .ok_or(Error::OgrFieldValueIsNotValidForTimestamp)?,
                         );
 
                         TimeInterval::new(time_start, time_start + duration).map_err(Into::into)
@@ -4460,6 +4490,116 @@ mod tests {
         let pc = MultiPointCollection::from_data(
             MultiPoint::many(vec![vec![(1.1, 2.2)]]).unwrap(),
             vec![TimeInterval::new(819_842_400_000, 819_842_484_000).unwrap()],
+            {
+                let mut map = HashMap::new();
+                map.insert("Name".into(), FeatureData::Text(vec!["foo".to_owned()]));
+                map
+            },
+        )
+        .unwrap();
+
+        assert_eq!(result, pc);
+    }
+
+    #[tokio::test]
+    async fn points_unix_date() {
+        let dataset = DatasetId::Internal {
+            dataset_id: InternalDatasetId::new(),
+        };
+        let mut exe_ctx = MockExecutionContext::test_default();
+        exe_ctx.add_meta_data::<OgrSourceDataset, VectorResultDescriptor, VectorQueryRectangle>(
+            dataset.clone(),
+            Box::new(StaticMetaData {
+                loading_info: OgrSourceDataset {
+                    file_name: test_data!("vector/data/lonlat_unix_date.csv").into(),
+                    layer_name: "lonlat_unix_date".to_owned(),
+                    data_type: Some(VectorDataType::MultiPoint),
+                    time: OgrSourceDatasetTimeType::Start {
+                        start_field: "DateTime".to_owned(),
+                        start_format: OgrSourceTimeFormat::seconds(),
+                        duration: OgrSourceDurationSpec::Value(TimeStep {
+                            granularity: TimeGranularity::Seconds,
+                            step: 84,
+                        }),
+                    },
+                    default_geometry: None,
+                    columns: Some(OgrSourceColumnSpec {
+                        format_specifics: Some(Csv {
+                            header: CsvHeader::Yes,
+                        }),
+                        x: "Longitude".to_owned(),
+                        y: Some("Latitude".to_owned()),
+                        int: vec![],
+                        float: vec![],
+                        text: vec!["Name".to_owned()],
+                        bool: vec![],
+                        datetime: vec![],
+                        rename: None,
+                    }),
+                    force_ogr_time_filter: false,
+                    force_ogr_spatial_filter: false,
+                    on_error: OgrSourceErrorSpec::Abort,
+                    sql_query: None,
+                    attribute_query: None,
+                },
+                result_descriptor: VectorResultDescriptor {
+                    data_type: VectorDataType::MultiPoint,
+                    spatial_reference: SpatialReference::epsg_4326().into(),
+                    columns: [("Name".to_string(), FeatureDataType::Text)]
+                        .iter()
+                        .cloned()
+                        .collect(),
+                },
+                phantom: Default::default(),
+            }),
+        );
+
+        let source = OgrSource {
+            params: OgrSourceParameters {
+                dataset,
+                attribute_projection: None,
+                attribute_filters: None,
+            },
+        }
+        .boxed()
+        .initialize(&exe_ctx)
+        .await
+        .unwrap();
+
+        assert_eq!(
+            source.result_descriptor().data_type,
+            VectorDataType::MultiPoint
+        );
+        assert_eq!(
+            source.result_descriptor().spatial_reference,
+            SpatialReference::epsg_4326().into()
+        );
+
+        let query_processor = source.query_processor().unwrap().multi_point().unwrap();
+
+        let query_bbox = BoundingBox2D::new((-180.0, -90.0).into(), (180.00, 90.0).into()).unwrap();
+
+        let context = MockQueryContext::new((1024 * 1024).into());
+        let query = query_processor
+            .query(
+                VectorQueryRectangle {
+                    spatial_bounds: query_bbox,
+                    time_interval: Default::default(),
+                    spatial_resolution: SpatialResolution::new(1., 1.).unwrap(),
+                },
+                &context,
+            )
+            .await
+            .unwrap();
+
+        let result: Vec<MultiPointCollection> = query.try_collect().await.unwrap();
+
+        assert_eq!(result.len(), 1);
+        let result = result.into_iter().next().unwrap();
+
+        let pc = MultiPointCollection::from_data(
+            MultiPoint::many(vec![vec![(1.1, 2.2)]]).unwrap(),
+            vec![TimeInterval::new(819_824_400_500, 819_824_484_500).unwrap()],
             {
                 let mut map = HashMap::new();
                 map.insert("Name".into(), FeatureData::Text(vec!["foo".to_owned()]));
