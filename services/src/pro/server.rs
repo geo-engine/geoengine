@@ -43,14 +43,14 @@ where
             .wrap(middleware::NormalizePath::trim())
             .configure(configure_extractors)
             .configure(handlers::datasets::init_dataset_routes::<C>)
-            .configure(handlers::plots::init_plot_routes::<C>)
+            .configure(pro::handlers::plots::init_plot_routes::<C>)
             .configure(pro::handlers::projects::init_project_routes::<C>)
             .configure(pro::handlers::users::init_user_routes::<C>)
             .configure(handlers::spatial_references::init_spatial_reference_routes::<C>)
             .configure(handlers::upload::init_upload_routes::<C>)
             .configure(handlers::wcs::init_wcs_routes::<C>)
-            .configure(handlers::wfs::init_wfs_routes::<C>)
-            .configure(handlers::wms::init_wms_routes::<C>)
+            .configure(pro::handlers::wfs::init_wfs_routes::<C>)
+            .configure(pro::handlers::wms::init_wms_routes::<C>)
             .configure(handlers::workflows::init_workflow_routes::<C>);
         #[cfg(feature = "odm")]
         {

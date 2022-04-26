@@ -2,6 +2,7 @@
 
 pub mod contexts;
 pub mod datasets;
+pub mod executor;
 pub mod handlers;
 pub mod projects;
 pub mod server;

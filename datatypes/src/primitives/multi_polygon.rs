@@ -10,7 +10,8 @@ use snafu::ensure;
 use crate::collections::VectorDataType;
 use crate::error::Error;
 use crate::primitives::{
-    error, BoundingBox2D, GeometryRef, MultiLineString, PrimitivesError, TypedGeometry,
+    error, BoundingBox2D, GeometryRef, MultiLineString, PrimitivesError, SpatialBounded,
+    TypedGeometry,
 };
 use crate::primitives::{Coordinate2D, Geometry};
 use crate::util::arrow::{downcast_array, ArrowTyped};
@@ -356,6 +357,25 @@ impl<'g> MultiPolygonAccess for MultiPolygonRef<'g> {
     }
 }
 
+impl<'g> SpatialBounded for MultiPolygonRef<'g> {
+    fn spatial_bounds(&self) -> BoundingBox2D {
+        let outer_ring_coords = self
+            .polygons
+            .iter()
+            // Use exterior ring (first ring of a polygon)
+            .filter_map(|p| p.iter().next())
+            .flat_map(|&exterior| exterior.iter());
+        BoundingBox2D::from_coord_ref_iter(outer_ring_coords)
+            .expect("there must be at least one coordinate in a multipolygon")
+    }
+}
+
+impl<'g> Intersects<BoundingBox2D> for MultiPolygonRef<'g> {
+    fn intersects(&self, rhs: &BoundingBox2D) -> bool {
+        self.spatial_bounds().intersects_bbox(rhs)
+    }
+}
+
 impl<'g> From<MultiPolygonRef<'g>> for geojson::Geometry {
     fn from(geometry: MultiPolygonRef<'g>) -> geojson::Geometry {
         geojson::Geometry::new(match geometry.polygons.len() {
@@ -479,6 +499,48 @@ mod tests {
 
         assert_eq!(aggregate(&multi_polygon), (1, 2, 8));
         assert_eq!(aggregate(&multi_polygon), aggregate(&multi_polygon_ref));
+    }
+
+    #[test]
+    fn test_ref_intersects() {
+        let coordinates = vec![vec![
+            vec![
+                (0.0, 0.0).into(),
+                (10.0, 0.0).into(),
+                (10.0, 10.0).into(),
+                (0.0, 10.0).into(),
+                (0.0, 0.0).into(),
+            ],
+            vec![
+                (4.0, 4.0).into(),
+                (6.0, 4.0).into(),
+                (6.0, 6.0).into(),
+                (4.0, 6.0).into(),
+                (4.0, 4.0).into(),
+            ],
+        ]];
+        let multi_polygon_ref = MultiPolygonRef::new(
+            coordinates
+                .iter()
+                .map(|r| r.iter().map(AsRef::as_ref).collect())
+                .collect(),
+        )
+        .unwrap();
+
+        assert!(multi_polygon_ref.intersects(&BoundingBox2D::new_unchecked(
+            (-1., -1.,).into(),
+            (11., 11.).into()
+        )));
+
+        assert!(multi_polygon_ref.intersects(&BoundingBox2D::new_unchecked(
+            (4.5, 4.5,).into(),
+            (5.5, 5.5).into()
+        )));
+
+        assert!(!multi_polygon_ref.intersects(&BoundingBox2D::new_unchecked(
+            (-11., -1.,).into(),
+            (-1., 11.).into()
+        )));
     }
 
     #[test]

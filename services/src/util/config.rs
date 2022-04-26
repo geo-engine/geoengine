@@ -361,3 +361,16 @@ pub struct GFBio {
 impl ConfigElement for GFBio {
     const KEY: &'static str = "gfbio";
 }
+
+#[derive(Debug, Deserialize)]
+pub struct Executor {
+    pub queue_size: usize,
+    pub raster_scheduler_timeout_ms: u64,
+    pub raster_scheduler_merge_threshold: f64,
+    pub feature_scheduler_timeout_ms: u64,
+    pub feature_scheduler_merge_threshold: f64,
+}
+
+impl ConfigElement for Executor {
+    const KEY: &'static str = "executor";
+}

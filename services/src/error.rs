@@ -214,6 +214,8 @@ pub enum Error {
 
     MissingSpatialReference,
 
+    ExternalAddressNotConfigured,
+
     WcsVersionNotSupported,
     WcsGridOriginMustEqualBoundingboxUpperLeft,
     WcsBoundingboxCrsMustEqualGridBaseCrs,
@@ -310,6 +312,7 @@ pub enum Error {
     InvalidAPIToken {
         message: String,
     },
+
     MissingNFDIMetaData,
 
     #[snafu(context(false))]
@@ -330,6 +333,19 @@ pub enum Error {
     },
 
     BaseUrlMustEndWithSlash,
+
+    #[snafu(context(false))]
+    #[cfg(feature = "pro")]
+    #[snafu(display("Executor error: {}", source))]
+    Executor {
+        source: geoengine_operators::pro::executor::error::ExecutorError,
+    },
+
+    #[cfg(feature = "pro")]
+    #[snafu(display("Executor error: {}", message))]
+    ExecutorComputation {
+        message: String,
+    },
 }
 
 impl actix_web::error::ResponseError for Error {

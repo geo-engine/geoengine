@@ -3,6 +3,7 @@ use std::convert::{TryFrom, TryInto};
 use arrow::array::{ArrayBuilder, BooleanArray};
 use arrow::error::ArrowError;
 use float_cmp::{ApproxEq, F64Margin};
+use geo::intersects::Intersects;
 use serde::{Deserialize, Serialize};
 use snafu::ensure;
 
@@ -286,6 +287,14 @@ where
     }
 }
 
+impl<'f> Intersects<BoundingBox2D> for MultiPointRef<'f> {
+    fn intersects(&self, rhs: &BoundingBox2D) -> bool {
+        self.point_coordinates
+            .iter()
+            .any(|c| rhs.contains_coordinate(c))
+    }
+}
+
 impl ApproxEq for &MultiPoint {
     type Margin = F64Margin;
 
@@ -391,5 +400,24 @@ mod tests {
         .unwrap();
 
         assert!(!approx_eq!(&MultiPoint, &a, &b, F64Margin::default()));
+    }
+
+    #[test]
+    fn ref_intersects_bbox() -> Result<()> {
+        let bbox = BoundingBox2D::new((0.0, 0.0).into(), (1.0, 1.0).into())?;
+
+        let v1: Vec<Coordinate2D> = vec![(0.5, 0.5).into()];
+        let v2: Vec<Coordinate2D> = vec![(1.0, 1.0).into()];
+        let v3: Vec<Coordinate2D> = vec![(0.5, 0.5).into(), (1.5, 1.5).into()];
+        let v4: Vec<Coordinate2D> = vec![(1.1, 1.1).into()];
+        let v5: Vec<Coordinate2D> = vec![(-0.1, -0.1).into(), (1.1, 1.1).into()];
+
+        assert!(MultiPointRef::new(&v1)?.intersects(&bbox));
+        assert!(MultiPointRef::new(&v2)?.intersects(&bbox));
+        assert!(MultiPointRef::new(&v3)?.intersects(&bbox));
+        assert!(!MultiPointRef::new(&v4)?.intersects(&bbox));
+        assert!(!MultiPointRef::new(&v5)?.intersects(&bbox));
+
+        Ok(())
     }
 }

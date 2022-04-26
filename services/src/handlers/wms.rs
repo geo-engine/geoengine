@@ -3,7 +3,7 @@ use reqwest::Url;
 use snafu::{ensure, ResultExt};
 
 use geoengine_datatypes::primitives::{
-    AxisAlignedRectangle, RasterQueryRectangle, SpatialPartition2D,
+    AxisAlignedRectangle, QueryRectangle, RasterQueryRectangle, SpatialPartition2D,
 };
 use geoengine_datatypes::{
     operations::image::Colorizer, primitives::SpatialResolution,
@@ -22,7 +22,7 @@ use crate::workflows::registry::WorkflowRegistry;
 use crate::workflows::workflow::WorkflowId;
 
 use geoengine_datatypes::primitives::{TimeInstance, TimeInterval};
-use geoengine_operators::engine::{RasterOperator, ResultDescriptor};
+use geoengine_operators::engine::{RasterOperator, ResultDescriptor, TypedRasterQueryProcessor};
 use geoengine_operators::processing::{Reprojection, ReprojectionParams};
 use geoengine_operators::{
     call_on_generic_raster_processor, util::raster_stream_to_png::raster_stream_to_png_bytes,
@@ -116,7 +116,7 @@ async fn wms_handler<C: Context>(
 /// </Capability>
 /// </WMS_Capabilities>
 /// ```
-async fn get_capabilities<C>(
+pub(crate) async fn get_capabilities<C>(
     _request: &GetCapabilities,
     ctx: &C,
     session: C::Session,
@@ -227,6 +227,33 @@ async fn get_map<C: Context>(
     session: C::Session,
     endpoint: WorkflowId,
 ) -> Result<HttpResponse> {
+    let (processor, query_rect, colorizer, no_data_value) =
+        extract_operator_and_bounding_box_and_colorizer(request, ctx, session, endpoint).await?;
+
+    let query_ctx = ctx.query_context()?;
+
+    let image_bytes = call_on_generic_raster_processor!(
+        processor,
+        p =>
+            raster_stream_to_png_bytes(p, query_rect, query_ctx, request.width, request.height, request.time, colorizer, no_data_value.map(AsPrimitive::as_)).await
+    ).map_err(error::Error::from)?;
+
+    Ok(HttpResponse::Ok()
+        .content_type(mime::IMAGE_PNG)
+        .body(image_bytes))
+}
+
+pub(crate) async fn extract_operator_and_bounding_box_and_colorizer<C: Context>(
+    request: &GetMap,
+    ctx: &C,
+    session: C::Session,
+    endpoint: WorkflowId,
+) -> Result<(
+    TypedRasterQueryProcessor,
+    QueryRectangle<SpatialPartition2D>,
+    Option<Colorizer>,
+    Option<f64>,
+)> {
     let layer = WorkflowId::from_str(&request.layers)?;
 
     ensure!(
@@ -296,19 +323,9 @@ async fn get_map<C: Context>(
         ),
     };
 
-    let query_ctx = ctx.query_context()?;
-
     let colorizer = colorizer_from_style(&request.styles)?;
 
-    let image_bytes = call_on_generic_raster_processor!(
-        processor,
-        p =>
-            raster_stream_to_png_bytes(p, query_rect, query_ctx, request.width, request.height, request.time, colorizer, no_data_value.map(AsPrimitive::as_)).await
-    ).map_err(error::Error::from)?;
-
-    Ok(HttpResponse::Ok()
-        .content_type(mime::IMAGE_PNG)
-        .body(image_bytes))
+    Ok((processor, query_rect, colorizer, no_data_value))
 }
 
 fn colorizer_from_style(styles: &str) -> Result<Option<Colorizer>> {
@@ -319,7 +336,7 @@ fn colorizer_from_style(styles: &str) -> Result<Option<Colorizer>> {
 }
 
 #[allow(clippy::unnecessary_wraps)] // TODO: remove line once implemented fully
-fn get_legend_graphic<C: Context>(
+pub(crate) fn get_legend_graphic<C: Context>(
     _request: &GetLegendGraphic,
     _ctx: &C,
     _endpoint: WorkflowId,

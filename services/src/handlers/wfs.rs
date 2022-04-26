@@ -1,5 +1,5 @@
 use actix_web::{web, FromRequest, HttpResponse};
-use geoengine_datatypes::primitives::VectorQueryRectangle;
+use geoengine_datatypes::primitives::{BoundingBox2D, QueryRectangle, VectorQueryRectangle};
 use reqwest::Url;
 use snafu::{ensure, ResultExt};
 
@@ -13,6 +13,7 @@ use crate::util::config::get_config_element;
 use crate::util::user_input::QueryEx;
 use crate::workflows::registry::WorkflowRegistry;
 use crate::workflows::workflow::{Workflow, WorkflowId};
+use futures::stream::BoxStream;
 use futures::StreamExt;
 use geoengine_datatypes::collections::ToGeoJson;
 use geoengine_datatypes::{
@@ -23,10 +24,9 @@ use geoengine_datatypes::{
     primitives::{FeatureData, Geometry, MultiPoint, TimeInstance, TimeInterval},
     spatial_reference::SpatialReference,
 };
-use geoengine_operators::engine::{
-    QueryContext, ResultDescriptor, TypedVectorQueryProcessor, VectorQueryProcessor,
-};
+use geoengine_operators::call_on_generic_vector_processor;
 use geoengine_operators::engine::{QueryProcessor, VectorOperator};
+use geoengine_operators::engine::{ResultDescriptor, TypedVectorQueryProcessor};
 use geoengine_operators::processing::{Reprojection, ReprojectionParams};
 use serde_json::json;
 use std::str::FromStr;
@@ -154,7 +154,7 @@ async fn wfs_handler<C: Context>(
 /// </wfs:WFS_Capabilities>
 /// ```
 #[allow(clippy::too_many_lines)]
-async fn get_capabilities<C>(
+pub(crate) async fn get_capabilities<C>(
     _request: &GetCapabilities,
     ctx: &C,
     session: C::Session,
@@ -399,6 +399,28 @@ async fn get_feature<C: Context>(
     session: C::Session,
     endpoint: WorkflowId,
 ) -> Result<HttpResponse> {
+    if request.type_names.feature_type == "93d6785e-5eea-4e0e-8074-e7f78733d988" {
+        return get_feature_mock(request);
+    }
+
+    let (processor, query_rect) =
+        extract_operator_and_bounding_box(request, ctx, session.clone(), endpoint).await?;
+
+    let query_ctx = ctx.query_context()?;
+
+    let json = call_on_generic_vector_processor!(processor, p => {
+        let stream = p.query(query_rect, &query_ctx).await?;
+        vector_stream_to_geojson(stream).await
+    })?;
+    Ok(HttpResponse::Ok().json(json))
+}
+
+pub(crate) async fn extract_operator_and_bounding_box<C: Context>(
+    request: &GetFeature,
+    ctx: &C,
+    session: C::Session,
+    endpoint: WorkflowId,
+) -> Result<(TypedVectorQueryProcessor, QueryRectangle<BoundingBox2D>)> {
     let type_names = match request.type_names.namespace.as_deref() {
         None => WorkflowId::from_str(&request.type_names.feature_type)?,
         Some(_) => {
@@ -413,12 +435,6 @@ async fn get_feature<C: Context>(
             type_names
         }
     );
-
-    // TODO: validate request further
-
-    if request.type_names.feature_type == "93d6785e-5eea-4e0e-8074-e7f78733d988" {
-        return get_feature_mock(request);
-    }
 
     let workflow: Workflow = ctx.workflow_registry_ref().await.load(&type_names).await?;
 
@@ -469,39 +485,18 @@ async fn get_feature<C: Context>(
             // TODO: find a reasonable fallback, e.g., dependent on the SRS or BBox
             .unwrap_or_else(SpatialResolution::zero_point_one),
     };
-    let query_ctx = ctx.query_context()?;
 
-    let json = match processor {
-        TypedVectorQueryProcessor::Data(p) => {
-            vector_stream_to_geojson(p, query_rect, &query_ctx).await
-        }
-        TypedVectorQueryProcessor::MultiPoint(p) => {
-            vector_stream_to_geojson(p, query_rect, &query_ctx).await
-        }
-        TypedVectorQueryProcessor::MultiLineString(p) => {
-            vector_stream_to_geojson(p, query_rect, &query_ctx).await
-        }
-        TypedVectorQueryProcessor::MultiPolygon(p) => {
-            vector_stream_to_geojson(p, query_rect, &query_ctx).await
-        }
-    }?;
-
-    Ok(HttpResponse::Ok().json(json))
+    Ok((processor, query_rect))
 }
 
-async fn vector_stream_to_geojson<G>(
-    processor: Box<dyn VectorQueryProcessor<VectorType = FeatureCollection<G>>>,
-    query_rect: VectorQueryRectangle,
-    query_ctx: &dyn QueryContext,
+pub(crate) async fn vector_stream_to_geojson<G>(
+    stream: BoxStream<'_, geoengine_operators::util::Result<FeatureCollection<G>>>,
 ) -> Result<serde_json::Value>
 where
     G: Geometry + 'static,
     for<'c> FeatureCollection<G>: ToGeoJson<'c>,
 {
     let features: Vec<serde_json::Value> = Vec::new();
-
-    // TODO: more efficient merging of the partial feature collections
-    let stream = processor.query(query_rect, query_ctx).await?;
 
     let features = stream
         .fold(
