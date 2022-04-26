@@ -19,9 +19,7 @@ use actix_web::{http, middleware, test, web, App};
 
 #[allow(clippy::missing_panics_doc)]
 pub async fn create_session_helper<C: ProContext>(ctx: &C) -> UserSession {
-    ctx.user_db()
-        .write()
-        .await
+    ctx.user_db_ref()
         .register(
             UserRegistration {
                 email: "foo@bar.de".to_string(),
@@ -34,9 +32,7 @@ pub async fn create_session_helper<C: ProContext>(ctx: &C) -> UserSession {
         .await
         .unwrap();
 
-    ctx.user_db()
-        .write()
-        .await
+    ctx.user_db_ref()
         .login(UserCredentials {
             email: "foo@bar.de".to_string(),
             password: "secret123".to_string(),
@@ -68,9 +64,7 @@ pub async fn create_project_helper<C: ProContext>(ctx: &C) -> (UserSession, Proj
     let session = create_session_helper(ctx).await;
 
     let project = ctx
-        .project_db()
-        .write()
-        .await
+        .project_db_ref()
         .create(
             &session,
             CreateProject {

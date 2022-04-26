@@ -64,7 +64,7 @@ pub struct DatasetProviderPermission {
 #[async_trait]
 pub trait UpdateDatasetPermissions {
     async fn add_dataset_permission(
-        &mut self,
+        &self,
         session: &UserSession,
         permission: DatasetPermission,
     ) -> Result<()>;

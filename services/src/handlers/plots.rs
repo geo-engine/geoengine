@@ -125,7 +125,6 @@ async fn get_plot_handler<C: Context>(
 ) -> Result<impl Responder> {
     let workflow = ctx
         .workflow_registry_ref()
-        .await
         .load(&WorkflowId(id.into_inner()))
         .await?;
 
@@ -283,9 +282,7 @@ mod tests {
         };
 
         let id = ctx
-            .workflow_registry()
-            .write()
-            .await
+            .workflow_registry_ref()
             .register(workflow)
             .await
             .unwrap();
@@ -351,13 +348,7 @@ mod tests {
             .into(),
         };
 
-        let id = ctx
-            .workflow_registry()
-            .write()
-            .await
-            .register(workflow)
-            .await
-            .unwrap();
+        let id = ctx.workflow_registry().register(workflow).await.unwrap();
 
         let params = &[
             ("bbox", "0,-0.3,0.2,0"),
@@ -431,9 +422,7 @@ mod tests {
             };
 
             let id = ctx
-                .workflow_registry()
-                .write()
-                .await
+                .workflow_registry_ref()
                 .register(workflow)
                 .await
                 .unwrap();

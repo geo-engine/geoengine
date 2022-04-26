@@ -5,10 +5,7 @@ use crate::pro::projects::ProjectPermission;
 use crate::pro::users::{UserDb, UserId, UserSession};
 use crate::pro::workflows::postgres_workflow_registry::PostgresWorkflowRegistry;
 use crate::projects::ProjectId;
-use crate::{
-    contexts::{Context, Db},
-    pro::users::PostgresUserDb,
-};
+use crate::{contexts::Context, pro::users::PostgresUserDb};
 use crate::{
     contexts::{ExecutionContextImpl, QueryContextImpl},
     pro::projects::PostgresProjectDb,
@@ -28,7 +25,6 @@ use rayon::ThreadPool;
 use snafu::ResultExt;
 use std::path::PathBuf;
 use std::sync::Arc;
-use tokio::sync::{RwLock, RwLockReadGuard, RwLockWriteGuard};
 
 use super::ProContext;
 
@@ -43,10 +39,10 @@ where
     <Tls as MakeTlsConnect<Socket>>::TlsConnect: Send,
     <<Tls as MakeTlsConnect<Socket>>::TlsConnect as TlsConnect<Socket>>::Future: Send,
 {
-    user_db: Db<PostgresUserDb<Tls>>,
-    project_db: Db<PostgresProjectDb<Tls>>,
-    workflow_registry: Db<PostgresWorkflowRegistry<Tls>>,
-    dataset_db: Db<PostgresDatasetDb<Tls>>,
+    user_db: Arc<PostgresUserDb<Tls>>,
+    project_db: Arc<PostgresProjectDb<Tls>>,
+    workflow_registry: Arc<PostgresWorkflowRegistry<Tls>>,
+    dataset_db: Arc<PostgresDatasetDb<Tls>>,
     thread_pool: Arc<ThreadPool>,
     exe_ctx_tiling_spec: TilingSpecification,
     query_ctx_chunk_size: ChunkByteSize,
@@ -72,10 +68,10 @@ where
         Self::update_schema(pool.get().await?).await?;
 
         Ok(Self {
-            user_db: Arc::new(RwLock::new(PostgresUserDb::new(pool.clone()))),
-            project_db: Arc::new(RwLock::new(PostgresProjectDb::new(pool.clone()))),
-            workflow_registry: Arc::new(RwLock::new(PostgresWorkflowRegistry::new(pool.clone()))),
-            dataset_db: Arc::new(RwLock::new(PostgresDatasetDb::new(pool.clone()))),
+            user_db: Arc::new(PostgresUserDb::new(pool.clone())),
+            project_db: Arc::new(PostgresProjectDb::new(pool.clone())),
+            workflow_registry: Arc::new(PostgresWorkflowRegistry::new(pool.clone())),
+            dataset_db: Arc::new(PostgresDatasetDb::new(pool.clone())),
             thread_pool: create_rayon_thread_pool(0),
             exe_ctx_tiling_spec,
             query_ctx_chunk_size,
@@ -103,10 +99,10 @@ where
         add_providers_from_directory(&mut dataset_db, provider_defs_path.join("pro")).await;
 
         Ok(Self {
-            user_db: Arc::new(RwLock::new(PostgresUserDb::new(pool.clone()))),
-            project_db: Arc::new(RwLock::new(PostgresProjectDb::new(pool.clone()))),
-            workflow_registry: Arc::new(RwLock::new(PostgresWorkflowRegistry::new(pool.clone()))),
-            dataset_db: Arc::new(RwLock::new(dataset_db)),
+            user_db: Arc::new(PostgresUserDb::new(pool.clone())),
+            project_db: Arc::new(PostgresProjectDb::new(pool.clone())),
+            workflow_registry: Arc::new(PostgresWorkflowRegistry::new(pool.clone())),
+            dataset_db: Arc::new(dataset_db),
             thread_pool: create_rayon_thread_pool(0),
             exe_ctx_tiling_spec,
             query_ctx_chunk_size,
@@ -433,14 +429,11 @@ where
 {
     type UserDB = PostgresUserDb<Tls>;
 
-    fn user_db(&self) -> Db<Self::UserDB> {
+    fn user_db(&self) -> Arc<Self::UserDB> {
         self.user_db.clone()
     }
-    async fn user_db_ref(&self) -> RwLockReadGuard<'_, Self::UserDB> {
-        self.user_db.read().await
-    }
-    async fn user_db_ref_mut(&self) -> RwLockWriteGuard<'_, Self::UserDB> {
-        self.user_db.write().await
+    fn user_db_ref(&self) -> &Self::UserDB {
+        &self.user_db
     }
 }
 
@@ -459,36 +452,25 @@ where
     type QueryContext = QueryContextImpl;
     type ExecutionContext = ExecutionContextImpl<UserSession, PostgresDatasetDb<Tls>>;
 
-    fn project_db(&self) -> Db<Self::ProjectDB> {
+    fn project_db(&self) -> Arc<Self::ProjectDB> {
         self.project_db.clone()
     }
-    async fn project_db_ref(&self) -> RwLockReadGuard<'_, Self::ProjectDB> {
-        self.project_db.read().await
-    }
-    async fn project_db_ref_mut(&self) -> RwLockWriteGuard<'_, Self::ProjectDB> {
-        self.project_db.write().await
+    fn project_db_ref(&self) -> &Self::ProjectDB {
+        &self.project_db
     }
 
-    fn workflow_registry(&self) -> Db<Self::WorkflowRegistry> {
+    fn workflow_registry(&self) -> Arc<Self::WorkflowRegistry> {
         self.workflow_registry.clone()
     }
-    async fn workflow_registry_ref(&self) -> RwLockReadGuard<'_, Self::WorkflowRegistry> {
-        self.workflow_registry.read().await
-    }
-    async fn workflow_registry_ref_mut(&self) -> RwLockWriteGuard<'_, Self::WorkflowRegistry> {
-        self.workflow_registry.write().await
+    fn workflow_registry_ref(&self) -> &Self::WorkflowRegistry {
+        &self.workflow_registry
     }
 
-    fn dataset_db(&self) -> Db<Self::DatasetDB> {
+    fn dataset_db(&self) -> Arc<Self::DatasetDB> {
         self.dataset_db.clone()
     }
-
-    async fn dataset_db_ref(&self) -> RwLockReadGuard<'_, Self::DatasetDB> {
-        self.dataset_db.read().await
-    }
-
-    async fn dataset_db_ref_mut(&self) -> RwLockWriteGuard<'_, Self::DatasetDB> {
-        self.dataset_db.write().await
+    fn dataset_db_ref(&self) -> &Self::DatasetDB {
+        &self.dataset_db
     }
 
     fn query_context(&self) -> Result<Self::QueryContext> {
@@ -512,7 +494,6 @@ where
 
     async fn session_by_id(&self, session_id: crate::contexts::SessionId) -> Result<Self::Session> {
         self.user_db_ref()
-            .await
             .session(session_id)
             .await
             .map_err(Box::new)
@@ -658,9 +639,7 @@ mod tests {
             let _user_id = user_reg_login(&ctx).await;
 
             let session = ctx
-                .user_db()
-                .write()
-                .await
+                .user_db_ref()
                 .login(UserCredentials {
                     email: "foo@bar.de".into(),
                     password: "secret123".into(),
@@ -691,7 +670,7 @@ mod tests {
             password: "secret123".into(),
         };
 
-        let mut user_db = ctx.user_db_ref_mut().await;
+        let user_db = ctx.user_db_ref();
 
         let session = user_db.login(credentials).await.unwrap();
 
@@ -718,15 +697,13 @@ mod tests {
         session: &UserSession,
         project_id: ProjectId,
     ) {
-        ctx.project_db_ref_mut()
-            .await
+        ctx.project_db_ref()
             .delete(session, project_id)
             .await
             .unwrap();
 
         assert!(ctx
             .project_db_ref()
-            .await
             .load(session, project_id)
             .await
             .is_err());
@@ -739,7 +716,6 @@ mod tests {
     ) {
         assert_eq!(
             ctx.project_db_ref()
-                .await
                 .list_permissions(session, project_id)
                 .await
                 .unwrap()
@@ -748,8 +724,7 @@ mod tests {
         );
 
         let user2 = ctx
-            .user_db_ref_mut()
-            .await
+            .user_db_ref()
             .register(
                 UserRegistration {
                     email: "user2@example.com".into(),
@@ -762,8 +737,7 @@ mod tests {
             .await
             .unwrap();
 
-        ctx.project_db_ref_mut()
-            .await
+        ctx.project_db_ref()
             .add_permission(
                 session,
                 UserProjectPermission {
@@ -777,7 +751,6 @@ mod tests {
 
         assert_eq!(
             ctx.project_db_ref()
-                .await
                 .list_permissions(session, project_id)
                 .await
                 .unwrap()
@@ -792,15 +765,13 @@ mod tests {
         project_id: ProjectId,
     ) {
         let project = ctx
-            .project_db_ref_mut()
-            .await
+            .project_db_ref()
             .load_version(session, project_id, LoadVersion::Latest)
             .await
             .unwrap();
 
         let layer_workflow_id = ctx
-            .workflow_registry_ref_mut()
-            .await
+            .workflow_registry_ref()
             .register(Workflow {
                 operator: TypedOperator::Vector(
                     MockPointSource {
@@ -816,14 +787,12 @@ mod tests {
 
         assert!(ctx
             .workflow_registry_ref()
-            .await
             .load(&layer_workflow_id)
             .await
             .is_ok());
 
         let plot_workflow_id = ctx
-            .workflow_registry_ref_mut()
-            .await
+            .workflow_registry_ref()
             .register(Workflow {
                 operator: Statistics {
                     params: StatisticsParams {},
@@ -837,7 +806,6 @@ mod tests {
 
         assert!(ctx
             .workflow_registry_ref()
-            .await
             .load(&plot_workflow_id)
             .await
             .is_ok());
@@ -859,15 +827,13 @@ mod tests {
             bounds: None,
             time_step: None,
         };
-        ctx.project_db_ref_mut()
-            .await
+        ctx.project_db_ref()
             .update(session, update.validated().unwrap())
             .await
             .unwrap();
 
         let versions = ctx
             .project_db_ref()
-            .await
             .versions(session, project_id)
             .await
             .unwrap();
@@ -886,12 +852,7 @@ mod tests {
         }
         .validated()
         .unwrap();
-        let projects = ctx
-            .project_db_ref_mut()
-            .await
-            .list(session, options)
-            .await
-            .unwrap();
+        let projects = ctx.project_db_ref().list(session, options).await.unwrap();
 
         assert_eq!(projects.len(), 2);
         assert_eq!(projects[0].name, "Test9");
@@ -918,17 +879,12 @@ mod tests {
             }
             .validated()
             .unwrap();
-            ctx.project_db_ref_mut()
-                .await
-                .create(session, create)
-                .await
-                .unwrap();
+            ctx.project_db_ref().create(session, create).await.unwrap();
         }
     }
 
     async fn user_reg_login(ctx: &PostgresContext<NoTls>) -> UserId {
-        let user_db = ctx.user_db();
-        let mut db = user_db.write().await;
+        let db = ctx.user_db_ref();
 
         let user_registration = UserRegistration {
             email: "foo@bar.de".into(),
@@ -957,8 +913,7 @@ mod tests {
     }
 
     async fn anonymous(ctx: &PostgresContext<NoTls>) {
-        let user_db = ctx.user_db();
-        let mut db = user_db.write().await;
+        let db = ctx.user_db_ref();
 
         let session = db.anonymous().await.unwrap();
 
@@ -984,8 +939,7 @@ mod tests {
             };
 
             let id = ctx
-                .workflow_registry_ref_mut()
-                .await
+                .workflow_registry_ref()
                 .register(workflow)
                 .await
                 .unwrap();
@@ -996,7 +950,7 @@ mod tests {
                 .await
                 .unwrap();
 
-            let workflow = ctx.workflow_registry_ref().await.load(&id).await.unwrap();
+            let workflow = ctx.workflow_registry_ref().load(&id).await.unwrap();
 
             let json = serde_json::to_string(&workflow).unwrap();
             assert_eq!(json, r#"{"type":"Vector","operator":{"type":"MockPointSource","params":{"points":[{"x":1.0,"y":2.0},{"x":1.0,"y":2.0},{"x":1.0,"y":2.0}]}}}"#);
@@ -1008,9 +962,6 @@ mod tests {
     #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
     async fn it_persists_datasets() {
         with_temp_context(|ctx, _| async move {
-            let db_ = ctx.dataset_db();
-            let mut db = db_.write().await;
-
             let dataset_id = DatasetId::Internal {
                 dataset_id: InternalDatasetId::from_str("2e8af98d-3b98-4e2c-a35b-e487bffad7b6")
                     .unwrap(),
@@ -1062,8 +1013,9 @@ mod tests {
                 phantom: Default::default(),
             });
 
-            let session = ctx.user_db_ref_mut().await.anonymous().await.unwrap();
+            let session = ctx.user_db_ref().anonymous().await.unwrap();
 
+            let db = ctx.dataset_db_ref();
             let wrap = db.wrap_meta_data(meta_data);
             db.add_dataset(
                 &session,
@@ -1160,8 +1112,7 @@ mod tests {
     #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
     async fn it_persists_uploads() {
         with_temp_context(|ctx, _| async move {
-            let db_ = ctx.dataset_db();
-            let mut db = db_.write().await;
+            let db = ctx.dataset_db_ref();
 
             let id = UploadId::from_str("2de18cd8-4a38-4111-a445-e3734bc18a80").unwrap();
             let input = Upload {
@@ -1173,7 +1124,7 @@ mod tests {
                 }],
             };
 
-            let session = ctx.user_db_ref_mut().await.anonymous().await.unwrap();
+            let session = ctx.user_db_ref().anonymous().await.unwrap();
             db.create_upload(&session, input.clone()).await.unwrap();
 
             let upload = db.get_upload(&session, id).await.unwrap();
@@ -1187,10 +1138,9 @@ mod tests {
     #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
     async fn it_persists_dataset_providers() {
         with_temp_context(|ctx, _| async move {
-            let db_ = ctx.dataset_db();
-            let mut db = db_.write().await;
+            let db = ctx.dataset_db_ref();
 
-            let session = ctx.user_db_ref_mut().await.anonymous().await.unwrap();
+            let session = ctx.user_db_ref().anonymous().await.unwrap();
 
             let provider_id =
                 DatasetProviderId::from_str("7b20c8d7-d754-4f8f-ad44-dddd25df22d2").unwrap();
@@ -1311,8 +1261,8 @@ mod tests {
     #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
     async fn it_lists_only_permitted_datasets() {
         with_temp_context(|ctx, _| async move {
-            let session1 = ctx.user_db_ref_mut().await.anonymous().await.unwrap();
-            let session2 = ctx.user_db_ref_mut().await.anonymous().await.unwrap();
+            let session1 = ctx.user_db_ref().anonymous().await.unwrap();
+            let session2 = ctx.user_db_ref().anonymous().await.unwrap();
 
             let descriptor = VectorResultDescriptor {
                 data_type: VectorDataType::Data,
@@ -1348,20 +1298,17 @@ mod tests {
             };
 
             let meta = ctx
-                .dataset_db_ref_mut()
-                .await
+                .dataset_db_ref()
                 .wrap_meta_data(MetaDataDefinition::OgrMetaData(meta));
 
             let _id = ctx
-                .dataset_db_ref_mut()
-                .await
+                .dataset_db_ref()
                 .add_dataset(&session1, ds.validated().unwrap(), meta)
                 .await
                 .unwrap();
 
             let list1 = ctx
                 .dataset_db_ref()
-                .await
                 .list(
                     &session1,
                     DatasetListOptions {
@@ -1380,7 +1327,6 @@ mod tests {
 
             let list2 = ctx
                 .dataset_db_ref()
-                .await
                 .list(
                     &session2,
                     DatasetListOptions {
@@ -1403,8 +1349,8 @@ mod tests {
     #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
     async fn it_shows_only_permitted_provenance() {
         with_temp_context(|ctx, _| async move {
-            let session1 = ctx.user_db_ref_mut().await.anonymous().await.unwrap();
-            let session2 = ctx.user_db_ref_mut().await.anonymous().await.unwrap();
+            let session1 = ctx.user_db_ref().anonymous().await.unwrap();
+            let session2 = ctx.user_db_ref().anonymous().await.unwrap();
 
             let descriptor = VectorResultDescriptor {
                 data_type: VectorDataType::Data,
@@ -1440,27 +1386,23 @@ mod tests {
             };
 
             let meta = ctx
-                .dataset_db_ref_mut()
-                .await
+                .dataset_db_ref()
                 .wrap_meta_data(MetaDataDefinition::OgrMetaData(meta));
 
             let id = ctx
-                .dataset_db_ref_mut()
-                .await
+                .dataset_db_ref()
                 .add_dataset(&session1, ds.validated().unwrap(), meta)
                 .await
                 .unwrap();
 
             assert!(ctx
                 .dataset_db_ref()
-                .await
                 .provenance(&session1, &id)
                 .await
                 .is_ok());
 
             assert!(ctx
                 .dataset_db_ref()
-                .await
                 .provenance(&session2, &id)
                 .await
                 .is_err());
@@ -1471,8 +1413,8 @@ mod tests {
     #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
     async fn it_updates_permissions() {
         with_temp_context(|ctx, _| async move {
-            let session1 = ctx.user_db_ref_mut().await.anonymous().await.unwrap();
-            let session2 = ctx.user_db_ref_mut().await.anonymous().await.unwrap();
+            let session1 = ctx.user_db_ref().anonymous().await.unwrap();
+            let session2 = ctx.user_db_ref().anonymous().await.unwrap();
 
             let descriptor = VectorResultDescriptor {
                 data_type: VectorDataType::Data,
@@ -1508,33 +1450,20 @@ mod tests {
             };
 
             let meta = ctx
-                .dataset_db_ref_mut()
-                .await
+                .dataset_db_ref()
                 .wrap_meta_data(MetaDataDefinition::OgrMetaData(meta));
 
             let id = ctx
-                .dataset_db_ref_mut()
-                .await
+                .dataset_db_ref()
                 .add_dataset(&session1, ds.validated().unwrap(), meta)
                 .await
                 .unwrap();
 
-            assert!(ctx
-                .dataset_db_ref()
-                .await
-                .load(&session1, &id)
-                .await
-                .is_ok());
+            assert!(ctx.dataset_db_ref().load(&session1, &id).await.is_ok());
 
-            assert!(ctx
-                .dataset_db_ref()
-                .await
-                .load(&session2, &id)
-                .await
-                .is_err());
+            assert!(ctx.dataset_db_ref().load(&session2, &id).await.is_err());
 
-            ctx.dataset_db_ref_mut()
-                .await
+            ctx.dataset_db_ref()
                 .add_dataset_permission(
                     &session1,
                     DatasetPermission {
@@ -1546,12 +1475,7 @@ mod tests {
                 .await
                 .unwrap();
 
-            assert!(ctx
-                .dataset_db_ref()
-                .await
-                .load(&session2, &id)
-                .await
-                .is_ok());
+            assert!(ctx.dataset_db_ref().load(&session2, &id).await.is_ok());
         })
         .await;
     }
@@ -1559,8 +1483,8 @@ mod tests {
     #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
     async fn it_uses_roles_for_permissions() {
         with_temp_context(|ctx, _| async move {
-            let session1 = ctx.user_db_ref_mut().await.anonymous().await.unwrap();
-            let session2 = ctx.user_db_ref_mut().await.anonymous().await.unwrap();
+            let session1 = ctx.user_db_ref().anonymous().await.unwrap();
+            let session2 = ctx.user_db_ref().anonymous().await.unwrap();
 
             let descriptor = VectorResultDescriptor {
                 data_type: VectorDataType::Data,
@@ -1596,33 +1520,20 @@ mod tests {
             };
 
             let meta = ctx
-                .dataset_db_ref_mut()
-                .await
+                .dataset_db_ref()
                 .wrap_meta_data(MetaDataDefinition::OgrMetaData(meta));
 
             let id = ctx
-                .dataset_db_ref_mut()
-                .await
+                .dataset_db_ref()
                 .add_dataset(&session1, ds.validated().unwrap(), meta)
                 .await
                 .unwrap();
 
-            assert!(ctx
-                .dataset_db_ref()
-                .await
-                .load(&session1, &id)
-                .await
-                .is_ok());
+            assert!(ctx.dataset_db_ref().load(&session1, &id).await.is_ok());
 
-            assert!(ctx
-                .dataset_db_ref()
-                .await
-                .load(&session2, &id)
-                .await
-                .is_err());
+            assert!(ctx.dataset_db_ref().load(&session2, &id).await.is_err());
 
-            ctx.dataset_db_ref_mut()
-                .await
+            ctx.dataset_db_ref()
                 .add_dataset_permission(
                     &session1,
                     DatasetPermission {
@@ -1634,12 +1545,7 @@ mod tests {
                 .await
                 .unwrap();
 
-            assert!(ctx
-                .dataset_db_ref()
-                .await
-                .load(&session2, &id)
-                .await
-                .is_ok());
+            assert!(ctx.dataset_db_ref().load(&session2, &id).await.is_ok());
         })
         .await;
     }
@@ -1647,8 +1553,8 @@ mod tests {
     #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
     async fn it_secures_meta_data() {
         with_temp_context(|ctx, _| async move {
-            let session1 = ctx.user_db_ref_mut().await.anonymous().await.unwrap();
-            let session2 = ctx.user_db_ref_mut().await.anonymous().await.unwrap();
+            let session1 = ctx.user_db_ref().anonymous().await.unwrap();
+            let session2 = ctx.user_db_ref().anonymous().await.unwrap();
 
             let descriptor = VectorResultDescriptor {
                 data_type: VectorDataType::Data,
@@ -1684,39 +1590,28 @@ mod tests {
             };
 
             let meta = ctx
-                .dataset_db_ref_mut()
-                .await
+                .dataset_db_ref()
                 .wrap_meta_data(MetaDataDefinition::OgrMetaData(meta));
 
             let id = ctx
-                .dataset_db_ref_mut()
-                .await
+                .dataset_db_ref()
                 .add_dataset(&session1, ds.validated().unwrap(), meta)
                 .await
                 .unwrap();
 
             let meta: Result<
                 Box<dyn MetaData<OgrSourceDataset, VectorResultDescriptor, VectorQueryRectangle>>,
-            > = ctx
-                .dataset_db_ref()
-                .await
-                .session_meta_data(&session1, &id)
-                .await;
+            > = ctx.dataset_db_ref().session_meta_data(&session1, &id).await;
 
             assert!(meta.is_ok());
 
             let meta: Result<
                 Box<dyn MetaData<OgrSourceDataset, VectorResultDescriptor, VectorQueryRectangle>>,
-            > = ctx
-                .dataset_db_ref()
-                .await
-                .session_meta_data(&session2, &id)
-                .await;
+            > = ctx.dataset_db_ref().session_meta_data(&session2, &id).await;
 
             assert!(meta.is_err());
 
-            ctx.dataset_db_ref_mut()
-                .await
+            ctx.dataset_db_ref()
                 .add_dataset_permission(
                     &session1,
                     DatasetPermission {
@@ -1730,11 +1625,7 @@ mod tests {
 
             let meta: Result<
                 Box<dyn MetaData<OgrSourceDataset, VectorResultDescriptor, VectorQueryRectangle>>,
-            > = ctx
-                .dataset_db_ref()
-                .await
-                .session_meta_data(&session2, &id)
-                .await;
+            > = ctx.dataset_db_ref().session_meta_data(&session2, &id).await;
 
             assert!(meta.is_ok());
         })
@@ -1744,8 +1635,8 @@ mod tests {
     #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
     async fn it_secures_uploads() {
         with_temp_context(|ctx, _| async move {
-            let session1 = ctx.user_db_ref_mut().await.anonymous().await.unwrap();
-            let session2 = ctx.user_db_ref_mut().await.anonymous().await.unwrap();
+            let session1 = ctx.user_db_ref().anonymous().await.unwrap();
+            let session2 = ctx.user_db_ref().anonymous().await.unwrap();
 
             let upload_id = UploadId::new();
 
@@ -1758,22 +1649,19 @@ mod tests {
                 }],
             };
 
-            ctx.dataset_db_ref_mut()
-                .await
+            ctx.dataset_db_ref()
                 .create_upload(&session1, upload)
                 .await
                 .unwrap();
 
             assert!(ctx
                 .dataset_db_ref()
-                .await
                 .get_upload(&session1, upload_id)
                 .await
                 .is_ok());
 
             assert!(ctx
                 .dataset_db_ref()
-                .await
                 .get_upload(&session2, upload_id)
                 .await
                 .is_err());

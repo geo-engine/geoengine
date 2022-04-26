@@ -79,8 +79,7 @@ async fn upload_handler<C: Context>(
         });
     }
 
-    ctx.dataset_db_ref_mut()
-        .await
+    ctx.dataset_db_ref()
         .create_upload(
             &session,
             Upload {

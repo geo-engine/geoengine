@@ -41,7 +41,6 @@ async fn get_basket_handler<C: Context>(
     let config = get_config_element::<GFBio>()?;
     let abcd_provider = ctx
         .dataset_db_ref()
-        .await
         .dataset_provider(&session, GFBIO_PROVIDER_ID)
         .await
         .ok();

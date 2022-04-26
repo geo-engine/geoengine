@@ -107,11 +107,7 @@ async fn register_workflow_handler<C: Context>(
         }
     }
 
-    let id = ctx
-        .workflow_registry_ref_mut()
-        .await
-        .register(workflow)
-        .await?;
+    let id = ctx.workflow_registry_ref().register(workflow).await?;
     Ok(web::Json(IdResponse::from(id)))
 }
 
@@ -149,11 +145,7 @@ async fn load_workflow_handler<C: Context>(
     _session: C::Session,
     ctx: web::Data<C>,
 ) -> Result<impl Responder> {
-    let wf = ctx
-        .workflow_registry_ref()
-        .await
-        .load(&id.into_inner())
-        .await?;
+    let wf = ctx.workflow_registry_ref().load(&id.into_inner()).await?;
     Ok(web::Json(wf))
 }
 
@@ -178,11 +170,7 @@ async fn get_workflow_metadata_handler<C: Context>(
     session: C::Session,
     ctx: web::Data<C>,
 ) -> Result<impl Responder> {
-    let workflow = ctx
-        .workflow_registry_ref()
-        .await
-        .load(&id.into_inner())
-        .await?;
+    let workflow = ctx.workflow_registry_ref().load(&id.into_inner()).await?;
 
     let execution_context = ctx.execution_context(session)?;
 
@@ -235,15 +223,11 @@ async fn get_workflow_provenance_handler<C: Context>(
     session: C::Session,
     ctx: web::Data<C>,
 ) -> Result<impl Responder> {
-    let workflow = ctx
-        .workflow_registry_ref()
-        .await
-        .load(&id.into_inner())
-        .await?;
+    let workflow = ctx.workflow_registry_ref().load(&id.into_inner()).await?;
 
     let datasets = workflow.operator.datasets();
 
-    let db = ctx.dataset_db_ref().await;
+    let db = ctx.dataset_db_ref();
 
     let provenance: Vec<_> = datasets
         .iter()
@@ -333,7 +317,7 @@ async fn dataset_from_workflow_handler<C: Context>(
 ) -> Result<impl Responder> {
     // TODO: support datasets with multiple time steps
 
-    let workflow = ctx.workflow_registry_ref().await.load(&workflow_id).await?;
+    let workflow = ctx.workflow_registry_ref().load(&workflow_id).await?;
 
     let operator = workflow.operator.get_raster().context(error::Operator)?;
 
@@ -440,7 +424,7 @@ async fn create_dataset<C: Context>(
 
     // TODO: build pyramides, prefereably in the background
 
-    let mut db = ctx.dataset_db_ref_mut().await;
+    let db = ctx.dataset_db_ref();
     let meta = db.wrap_meta_data(dataset_definition.meta_data);
     let dataset = db
         .add_dataset(&session, dataset_definition.properties.validated()?, meta)
@@ -688,9 +672,7 @@ mod tests {
         };
 
         let id = ctx
-            .workflow_registry()
-            .write()
-            .await
+            .workflow_registry_ref()
             .register(workflow.clone())
             .await
             .unwrap();
@@ -750,9 +732,7 @@ mod tests {
         };
 
         let id = ctx
-            .workflow_registry()
-            .write()
-            .await
+            .workflow_registry_ref()
             .register(workflow.clone())
             .await
             .unwrap();
@@ -811,9 +791,7 @@ mod tests {
         };
 
         let id = ctx
-            .workflow_registry()
-            .write()
-            .await
+            .workflow_registry_ref()
             .register(workflow.clone())
             .await
             .unwrap();
@@ -846,9 +824,7 @@ mod tests {
         };
 
         let id = ctx
-            .workflow_registry()
-            .write()
-            .await
+            .workflow_registry_ref()
             .register(workflow.clone())
             .await
             .unwrap();
@@ -891,9 +867,7 @@ mod tests {
         };
 
         let id = ctx
-            .workflow_registry()
-            .write()
-            .await
+            .workflow_registry_ref()
             .register(workflow.clone())
             .await
             .unwrap();
@@ -953,8 +927,7 @@ mod tests {
         };
 
         let workflow_id = ctx
-            .workflow_registry_ref_mut()
-            .await
+            .workflow_registry_ref()
             .register(workflow)
             .await
             .unwrap();
