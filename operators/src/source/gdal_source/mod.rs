@@ -904,6 +904,7 @@ mod tests {
     use geoengine_datatypes::primitives::{AxisAlignedRectangle, SpatialPartition2D, TimeInstance};
     use geoengine_datatypes::raster::{EmptyGrid2D, GridIdx2D};
     use geoengine_datatypes::raster::{TileInformation, TilingStrategy};
+    use geoengine_datatypes::util::gdal::hide_gdal_errors;
     use geoengine_datatypes::{primitives::SpatialResolution, raster::GridShape2D};
 
     async fn query_gdal_source(
@@ -1386,6 +1387,8 @@ mod tests {
 
     #[tokio::test]
     async fn test_nodata() {
+        hide_gdal_errors();
+
         let mut exe_ctx = MockExecutionContext::test_default();
         let query_ctx = MockQueryContext::test_default();
         let id = add_ndvi_dataset(&mut exe_ctx);
