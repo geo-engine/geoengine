@@ -25,12 +25,9 @@ impl UserDb for HashMapUserDb {
     /// Register a user
     async fn register(&self, user_registration: Validated<UserRegistration>) -> Result<UserId> {
         let user_registration = user_registration.user_input;
+        let mut users = self.users.write().await;
         ensure!(
-            !self
-                .users
-                .read()
-                .await
-                .contains_key(&user_registration.email),
+            !users.contains_key(&user_registration.email),
             error::Duplicate {
                 reason: "E-mail already exists"
             }
@@ -38,10 +35,7 @@ impl UserDb for HashMapUserDb {
 
         let user = User::from(user_registration.clone());
         let id = user.id;
-        self.users
-            .write()
-            .await
-            .insert(user_registration.email, user);
+        users.insert(user_registration.email, user);
         Ok(id)
     }
 

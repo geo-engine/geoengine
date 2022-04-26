@@ -349,10 +349,9 @@ impl DatasetProvider<UserSession> for ProHashMapDatasetDb {
     }
 
     async fn load(&self, session: &UserSession, dataset: &DatasetId) -> Result<Dataset> {
+        let backend = self.backend.read().await;
         ensure!(
-            self.backend
-                .read()
-                .await
+            backend
                 .dataset_permissions
                 .iter()
                 .any(|p| session.roles.contains(&p.role)),
@@ -361,9 +360,7 @@ impl DatasetProvider<UserSession> for ProHashMapDatasetDb {
             }
         );
 
-        self.backend
-            .read()
-            .await
+        backend
             .datasets
             .get(dataset)
             .map(Clone::clone)
@@ -375,12 +372,11 @@ impl DatasetProvider<UserSession> for ProHashMapDatasetDb {
         session: &UserSession,
         dataset: &DatasetId,
     ) -> Result<ProvenanceOutput> {
+        let backend = self.backend.read().await;
         match dataset {
             DatasetId::Internal { dataset_id: _ } => {
                 ensure!(
-                    self.backend
-                        .read()
-                        .await
+                    backend
                         .dataset_permissions
                         .iter()
                         .any(|p| session.roles.contains(&p.role)),
@@ -389,9 +385,7 @@ impl DatasetProvider<UserSession> for ProHashMapDatasetDb {
                     }
                 );
 
-                self.backend
-                    .read()
-                    .await
+                backend
                     .datasets
                     .get(dataset)
                     .map(|d| ProvenanceOutput {
@@ -470,10 +464,9 @@ impl
             >,
         >,
     > {
+        let backend = self.backend.read().await;
         ensure!(
-            self.backend
-                .read()
-                .await
+            backend
                 .dataset_permissions
                 .iter()
                 .any(|p| p.dataset == *dataset && session.roles.contains(&p.role)),
@@ -483,9 +476,7 @@ impl
         );
 
         Ok(Box::new(
-            self.backend
-                .read()
-                .await
+            backend
                 .mock_datasets
                 .get(
                     &dataset
@@ -513,10 +504,9 @@ impl
         dataset: &DatasetId,
     ) -> Result<Box<dyn MetaData<OgrSourceDataset, VectorResultDescriptor, VectorQueryRectangle>>>
     {
+        let backend = self.backend.read().await;
         ensure!(
-            self.backend
-                .read()
-                .await
+            backend
                 .dataset_permissions
                 .iter()
                 .any(|p| p.dataset == *dataset && session.roles.contains(&p.role)),
@@ -526,9 +516,7 @@ impl
         );
 
         Ok(Box::new(
-            self.backend
-                .read()
-                .await
+            backend
                 .ogr_datasets
                 .get(
                     &dataset
@@ -556,10 +544,9 @@ impl
         dataset: &DatasetId,
     ) -> Result<Box<dyn MetaData<GdalLoadingInfo, RasterResultDescriptor, RasterQueryRectangle>>>
     {
+        let backend = self.backend.read().await;
         ensure!(
-            self.backend
-                .read()
-                .await
+            backend
                 .dataset_permissions
                 .iter()
                 .any(|p| p.dataset == *dataset && session.roles.contains(&p.role)),
@@ -572,10 +559,7 @@ impl
             .internal()
             .ok_or(error::Error::DatasetIdTypeMissMatch)?;
 
-        Ok(self
-            .backend
-            .read()
-            .await
+        Ok(backend
             .gdal_datasets
             .get(&id)
             .ok_or(error::Error::UnknownDatasetId)?
