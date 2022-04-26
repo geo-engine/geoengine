@@ -471,9 +471,7 @@ mod tests {
         t_in: &str,
         t_expect: &str,
     ) {
-        let format = DateTimeParseFormat::custom(
-            "[year]-[month]-[day]T[hour]:[minute]:[second][millis]".to_string(),
-        );
+        let format = DateTimeParseFormat::custom("%Y-%m-%dT%H:%M:%S%.3f".to_string());
 
         let t_ref = TimeInstance::from(DateTime::parse_from_str(t_start, &format).unwrap());
         let t_1 = TimeInstance::from(DateTime::parse_from_str(t_in, &format).unwrap());
@@ -494,9 +492,7 @@ mod tests {
         t_2: &str,
         steps_expect: u32,
     ) {
-        let format = DateTimeParseFormat::custom(
-            "[year]-[month]-[day]T[hour]:[minute]:[second][millis]".to_string(),
-        );
+        let format = DateTimeParseFormat::custom("%Y-%m-%dT%H:%M:%S%.3f".to_string());
 
         let t_1 = TimeInstance::from(DateTime::parse_from_str(t_1, &format).unwrap());
         let t_2 = TimeInstance::from(DateTime::parse_from_str(t_2, &format).unwrap());
@@ -515,9 +511,7 @@ mod tests {
     }
 
     fn test_add(granularity: TimeGranularity, t_step: u32, t_1: &str, t_expect: &str) {
-        let format = DateTimeParseFormat::custom(
-            "[year]-[month]-[day]T[hour]:[minute]:[second][millis]".to_string(),
-        );
+        let format = DateTimeParseFormat::custom("%Y-%m-%dT%H:%M:%S%.3f".to_string());
 
         let t_1 = TimeInstance::from(DateTime::parse_from_str(t_1, &format).unwrap());
         let t_expect = TimeInstance::from(DateTime::parse_from_str(t_expect, &format).unwrap());

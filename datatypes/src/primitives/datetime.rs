@@ -4,6 +4,7 @@ use chrono::{Datelike, NaiveDate, Timelike};
 use serde::{Deserialize, Serialize};
 use snafu::Snafu;
 use std::cmp::Ordering;
+use std::collections::HashSet;
 use std::fmt::Display;
 use std::ops::{Add, Sub};
 use std::str::FromStr;
@@ -303,49 +304,122 @@ impl From<&DateTime> for chrono::DateTime<chrono::FixedOffset> {
     }
 }
 
+/// We allow C's strftime parameters:
+///
+/// | Specifier |                               Replaced By                              |          Example         |
+/// |:---------:|:----------------------------------------------------------------------:|:------------------------:|
+/// | %a        | Abbreviated weekday name                                               | Sun                      |
+/// | %A        | Full weekday name                                                      | Sunday                   |
+/// | %b        | Abbreviated month name                                                 | Mar                      |
+/// | %B        | Full month name                                                        | March                    |
+/// | %c        | Date and time representation                                           | Sun Aug 19 02:56:02 2012 |
+/// | %d        | Day of the month (01-31)                                               | 19                       |
+/// | %H        | Hour in 24h format (00-23)                                             | 14                       |
+/// | %I        | Hour in 12h format (01-12)                                             | 05                       |
+/// | %j        | Day of the year (001-366)                                              | 231                      |
+/// | %m        | Month as a decimal number (01-12)                                      | 08                       |
+/// | %M        | Minute (00-59)                                                         | 55                       |
+/// | %p        | AM or PM designation                                                   | PM                       |
+/// | %S        | Second (00-61)                                                         | 02                       |
+/// | %U        | Week number with the first Sunday as the first day of week one (00-53) | 33                       |
+/// | %w        | Weekday as a decimal number with Sunday as 0 (0-6)                     | 4                        |
+/// | %W        | Week number with the first Monday as the first day of week one (00-53) | 34                       |
+/// | %x        | Date representation                                                    | 08/19/12                 |
+/// | %X        | Time representation                                                    | 02:50:06                 |
+/// | %y        | Year, last two digits (00-99)                                          | 01                       |
+/// | %Y        | Year                                                                   | 2012                     |
+/// | %Z        | Timezone name or abbreviation                                          | CDT                      |
+/// | %z        | Timezone offset                                                        | +0930                    |
+/// | %:z       | Timezone offset with colon                                             | +09:30                   |
+/// | %%        | A % sign                                                               | %                        |
+///
+/// Additionally, we allow some specifiers for subseconds:
+///
+/// | Specifier | Replaced By                                                            | Example    |
+/// |-----------|------------------------------------------------------------------------|------------|
+/// | %f        | The fractional seconds (in nanoseconds) since last whole second. 6     | 026490000  |
+/// | %.f       | Similar to .%f but left-aligned. These all consume the leading dot. 6  | .026490    |
+/// | %.3f      | Similar to .%f but left-aligned but fixed to a length of 3. 6          | .026       |
+/// | %.6f      | Similar to .%f but left-aligned but fixed to a length of 6. 6          | .026490    |
+/// | %.9f      | Similar to .%f but left-aligned but fixed to a length of 9. 6          | .026490000 |
+/// | %3f       | Similar to %.3f but without the leading dot. 6                         | 026        |
+/// | %6f       | Similar to %.6f but without the leading dot. 6                         | 026490     |
+/// | %9f       | Similar to %.9f but without the leading dot. 6                         | 026490000  |
+///
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct DateTimeParseFormat {
     fmt: String,
-    chrono_fmt: String,
     has_tz: bool,
     has_time: bool,
 }
 
+enum FormatStrLoopState {
+    Normal,
+    Percent(String),
+}
+
 impl DateTimeParseFormat {
     pub fn custom(fmt: String) -> Self {
-        let has_tz = fmt.contains("[tz]");
-        // TODO: optimize
-        let has_time = fmt.contains("[hour]")
-            || fmt.contains("[minute]")
-            || fmt.contains("[second]")
-            || fmt.contains("[millis]")
-            || fmt.contains("[unix_seconds]");
-        let chrono_fmt = Self::_parse_custom_format(fmt.clone());
+        let (has_tz, has_time) = {
+            let mut has_tz = false;
+            let mut has_time = false;
+
+            let has_tz_values: HashSet<&str> = ["%Z", "%z", "%:z"].into();
+            let has_time_values: HashSet<&str> =
+                ["%a", "%A", "%M", "%p", "%S", "%X", "%H", "%I"].into();
+
+            let mut state = FormatStrLoopState::Normal;
+
+            for c in fmt.chars() {
+                match state {
+                    FormatStrLoopState::Normal => {
+                        if c == '%' {
+                            state = FormatStrLoopState::Percent("%".to_string());
+                        }
+                    }
+                    FormatStrLoopState::Percent(ref mut s) => {
+                        s.push(c);
+
+                        if c == '%' {
+                            // was escaped percentage
+                            state = FormatStrLoopState::Normal;
+                        } else if c.is_ascii_alphabetic() {
+                            if has_tz_values.contains(s.as_str()) {
+                                has_tz = true;
+                            }
+                            if has_time_values.contains(s.as_str()) {
+                                has_time = true;
+                            }
+
+                            state = FormatStrLoopState::Normal;
+                        }
+                    }
+                }
+            }
+
+            (has_tz, has_time)
+        };
+
         DateTimeParseFormat {
             fmt,
-            chrono_fmt,
             has_tz,
             has_time,
         }
     }
 
     pub fn unix() -> Self {
-        let fmt = "[unix_seconds]".to_owned();
-        let chrono_fmt = Self::_parse_custom_format(fmt.clone());
+        let fmt = "%s".to_owned();
         Self {
             fmt,
-            chrono_fmt,
             has_tz: false,
             has_time: true,
         }
     }
 
     pub fn ymd() -> Self {
-        let fmt = "[year]-[month]-[day]".to_owned();
-        let chrono_fmt = Self::_parse_custom_format(fmt.clone());
+        let fmt = "%Y-%m-%d".to_owned();
         Self {
             fmt,
-            chrono_fmt,
             has_tz: false,
             has_time: false,
         }
@@ -364,21 +438,7 @@ impl DateTimeParseFormat {
     }
 
     fn _to_parse_format(&self) -> &str {
-        &self.chrono_fmt
-    }
-
-    fn _parse_custom_format(mut fmt: String) -> String {
-        // TODO: speed up with proper parser
-        fmt = fmt.replace("[year]", "%Y");
-        fmt = fmt.replace("[month]", "%m");
-        fmt = fmt.replace("[day]", "%d");
-        fmt = fmt.replace("[hour]", "%H");
-        fmt = fmt.replace("[minute]", "%M");
-        fmt = fmt.replace("[second]", "%S");
-        fmt = fmt.replace("[millis]", "%.f");
-        fmt = fmt.replace("[unix_seconds]", "%s");
-        fmt = fmt.replace("[tz]", "%z");
-        fmt
+        &self.fmt
     }
 }
 
@@ -602,9 +662,7 @@ mod tests {
 
     #[test]
     fn parse() {
-        let format = DateTimeParseFormat::custom(
-            "[year]-[month]-[day]T[hour]:[minute]:[second][millis]".to_string(),
-        );
+        let format = DateTimeParseFormat::custom("%Y-%m-%dT%H:%M:%S%.3f".to_string());
 
         let result = DateTime::parse_from_str("2020-01-02T03:04:05.006", &format).unwrap();
         let expected = DateTime::new_utc_with_millis(2020, 1, 2, 3, 4, 5, 6);
@@ -634,5 +692,17 @@ mod tests {
             DateTime::new_utc(-2010, 1, 2, 3, 4, 5),
             DateTime::from_str("-2010-01-02T03:04:05.000Z").unwrap()
         );
+    }
+
+    #[test]
+    fn has_tz() {
+        assert!(!DateTimeParseFormat::custom("%Y-%m-%dT%H:%M:%S%.3f".to_string()).has_tz());
+        assert!(DateTimeParseFormat::custom("%Y-%m-%dT%H:%M:%S%z".to_string()).has_tz());
+    }
+
+    #[test]
+    fn has_time() {
+        assert!(!DateTimeParseFormat::custom("%Y-%m-%d".to_string()).has_time());
+        assert!(DateTimeParseFormat::custom("%Y-%m-%dT%H:%M:%S%z".to_string()).has_time());
     }
 }

@@ -1421,7 +1421,7 @@ mod tests {
             time: OgrSourceDatasetTimeType::Start {
                 start_field: "start".to_string(),
                 start_format: OgrSourceTimeFormat::Custom {
-                    custom_format: DateTimeParseFormat::custom("[year]-[month]-[day]".to_string()),
+                    custom_format: DateTimeParseFormat::custom("%Y-%m-%d".to_string()),
                 },
                 duration: OgrSourceDurationSpec::Value(TimeStep {
                     granularity: TimeGranularity::Seconds,
@@ -1464,7 +1464,7 @@ mod tests {
                     "startField": "start",
                     "startFormat": {
                         "format": "custom",
-                        "customFormat": "[year]-[month]-[day]"
+                        "customFormat": "%Y-%m-%d"
                     },
                     "duration": {
                         "type": "value",
@@ -1511,7 +1511,7 @@ mod tests {
                     "startField": "start",
                     "startFormat": {
                         "format": "custom",
-                        "customFormat": "[year]-[month]-[day]"
+                        "customFormat": "%Y-%m-%d"
                     },
                     "duration": {
                         "type": "value",
@@ -4145,9 +4145,7 @@ mod tests {
                     time: OgrSourceDatasetTimeType::Start {
                         start_field: "Date".to_owned(),
                         start_format: OgrSourceTimeFormat::Custom {
-                            custom_format: DateTimeParseFormat::custom(
-                                "[day].[month].[year]".to_owned(),
-                            ),
+                            custom_format: DateTimeParseFormat::custom("%d.%m.%Y".to_owned()),
                         },
                         duration: OgrSourceDurationSpec::Value(TimeStep {
                             granularity: TimeGranularity::Seconds,
@@ -4261,7 +4259,7 @@ mod tests {
                         start_field: "DateTime".to_owned(),
                         start_format: OgrSourceTimeFormat::Custom {
                             custom_format: DateTimeParseFormat::custom(
-                                "[day].[month].[year] [hour]:[minute]:[second]".to_owned(),
+                                "%d.%m.%Y %H:%M:%S".to_owned(),
                             ),
                         },
                         duration: OgrSourceDurationSpec::Value(TimeStep {
@@ -4376,7 +4374,7 @@ mod tests {
                         start_field: "DateTimeTz".to_owned(),
                         start_format: OgrSourceTimeFormat::Custom {
                             custom_format: DateTimeParseFormat::custom(
-                                "[day].[month].[year] [hour]:[minute]:[second] [tz]".to_owned(),
+                                "%d.%m.%Y %H:%M:%S %:z".to_owned(),
                             ),
                         },
                         duration: OgrSourceDurationSpec::Value(TimeStep {
@@ -4491,7 +4489,7 @@ mod tests {
                         start_field: "DateTime".to_owned(),
                         start_format: OgrSourceTimeFormat::Custom {
                             custom_format: DateTimeParseFormat::custom(
-                                "[day].[month].[year] [hour]:[minute]:[second]".to_owned(),
+                                "%d.%m.%Y %H:%M:%S".to_owned(),
                             ),
                         },
                         duration: OgrSourceDurationSpec::Value(TimeStep {
