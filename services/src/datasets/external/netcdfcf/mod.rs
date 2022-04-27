@@ -29,14 +29,18 @@ use log::debug;
 use serde::{Deserialize, Serialize};
 use snafu::{OptionExt, ResultExt};
 use std::collections::VecDeque;
+use std::io::BufReader;
 use std::path::{Path, PathBuf};
 use std::str::FromStr;
+use walkdir::{DirEntry, WalkDir};
 
 pub use self::error::NetCdfCf4DProviderError;
 use self::gdalmd::MdGroup;
+use self::overviews::{create_overviews, METADATA_FILE_NAME};
 
 mod error;
 pub mod gdalmd;
+mod overviews;
 
 type Result<T, E = NetCdfCf4DProviderError> = std::result::Result<T, E>;
 
@@ -48,18 +52,23 @@ pub const NETCDF_CF_PROVIDER_ID: DatasetProviderId =
 pub struct NetCdfCfDataProviderDefinition {
     pub name: String,
     pub path: PathBuf,
+    pub overviews: PathBuf,
 }
 
 #[derive(Debug)]
 pub struct NetCdfCfDataProvider {
     pub path: PathBuf,
+    pub overviews: PathBuf,
 }
 
 #[typetag::serde]
 #[async_trait]
 impl ExternalDatasetProviderDefinition for NetCdfCfDataProviderDefinition {
     async fn initialize(self: Box<Self>) -> crate::error::Result<Box<dyn ExternalDatasetProvider>> {
-        Ok(Box::new(NetCdfCfDataProvider { path: self.path }))
+        Ok(Box::new(NetCdfCfDataProvider {
+            path: self.path,
+            overviews: self.overviews,
+        }))
     }
 
     fn type_name(&self) -> String {
@@ -75,7 +84,7 @@ impl ExternalDatasetProviderDefinition for NetCdfCfDataProviderDefinition {
     }
 }
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct NetCdfOverview {
     pub file_name: String,
@@ -89,7 +98,7 @@ pub struct NetCdfOverview {
     pub colorizer: Colorizer,
 }
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct NetCdfGroup {
     pub name: String,
@@ -102,7 +111,7 @@ pub struct NetCdfGroup {
     pub groups: Vec<NetCdfGroup>,
 }
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct NetCdfEntity {
     pub id: usize,
@@ -163,7 +172,27 @@ pub(crate) struct NetCdfCf4DDatasetId {
 }
 
 impl NetCdfCfDataProvider {
-    pub fn build_netcdf_tree(provider_path: &Path, dataset_path: &Path) -> Result<NetCdfOverview> {
+    fn netcdf_tree_from_overviews(
+        overview_path: &Path,
+        dataset_path: &Path,
+    ) -> Option<NetCdfOverview> {
+        let tree_file_path = overview_path.join(dataset_path).join(METADATA_FILE_NAME);
+        let file = std::fs::File::open(&tree_file_path).ok()?;
+        let buf_reader = BufReader::new(file);
+        serde_json::from_reader::<_, NetCdfOverview>(buf_reader).ok()
+    }
+
+    pub fn build_netcdf_tree(
+        provider_path: &Path,
+        overview_path: Option<&Path>,
+        dataset_path: &Path,
+    ) -> Result<NetCdfOverview> {
+        if let Some(netcdf_tree) = overview_path.and_then(|overview_path| {
+            NetCdfCfDataProvider::netcdf_tree_from_overviews(overview_path, dataset_path)
+        }) {
+            return Ok(netcdf_tree);
+        }
+
         let path = provider_path.join(dataset_path);
 
         let ds = gdal_open_dataset_ex(
@@ -245,9 +274,10 @@ impl NetCdfCfDataProvider {
     pub(crate) fn listing_from_netcdf(
         id: DatasetProviderId,
         provider_path: &Path,
+        overview_path: Option<&Path>,
         dataset_path: &Path,
     ) -> Result<Vec<DatasetListing>> {
-        let tree = Self::build_netcdf_tree(provider_path, dataset_path)?;
+        let tree = Self::build_netcdf_tree(provider_path, overview_path, dataset_path)?;
 
         let mut paths: VecDeque<Vec<&NetCdfGroup>> = tree.groups.iter().map(|s| vec![s]).collect();
 
@@ -330,18 +360,28 @@ impl NetCdfCfDataProvider {
         let dataset_id: NetCdfCf4DDatasetId =
             serde_json::from_str(&dataset.dataset_id).context(error::CannotParseDatasetId)?;
 
-        let path = self.path.join(dataset_id.file_name);
+        let path = self.path.join(&dataset_id.file_name);
 
         // check that file does not "escape" the provider path
         if let Err(source) = path.strip_prefix(self.path.as_path()) {
             return Err(NetCdfCf4DProviderError::DatasetIsNotInProviderPath { source });
         }
 
-        let gdal_path = format!(
-            "NETCDF:{path}:/{group}/ebv_cube",
-            path = path.to_string_lossy(),
-            group = dataset_id.group_names.join("/")
-        );
+        // TODO: read all params from overviews if possible
+        let group_path = dataset_id.group_names.join("/");
+        let overview_file = self
+            .overviews
+            .join(&dataset_id.file_name)
+            .join(&group_path)
+            .join("ebv_cube.tiff");
+        let gdal_path = if overview_file.exists() {
+            overview_file.to_string_lossy().to_string()
+        } else {
+            format!(
+                "NETCDF:{path}:/{group_path}/ebv_cube",
+                path = path.to_string_lossy()
+            )
+        };
 
         let dataset = gdal_open_dataset_ex(
             &path,
@@ -425,6 +465,44 @@ impl NetCdfCfDataProvider {
             step,
             band_offset: dataset_id.entity as usize * dimensions.time,
         }))
+    }
+
+    pub fn list_files(&self) -> Result<Vec<PathBuf>> {
+        let is_overview_dir = |e: &DirEntry| -> bool { e.path() == self.overviews };
+
+        let mut files = vec![];
+
+        for entry in WalkDir::new(&self.path)
+            .into_iter()
+            .filter_entry(|e| !is_overview_dir(e))
+        {
+            let entry = entry.map_err(|e| NetCdfCf4DProviderError::InvalidDirectory {
+                source: Box::new(e),
+            })?;
+            let path = entry.path();
+
+            if !path.is_file() {
+                continue;
+            }
+            if path.extension().map_or(true, |extension| extension != "nc") {
+                continue;
+            }
+
+            // let mut path = path.to_owned();
+            match path.strip_prefix(&self.path) {
+                Ok(path) => files.push(path.to_owned()),
+                Err(_) => {
+                    // we can safely ignore it since it must be a file in the provider path
+                    continue;
+                }
+            };
+        }
+
+        Ok(files)
+    }
+
+    pub fn create_overviews(&self, dataset_path: &Path) -> Result<()> {
+        create_overviews(&self.path, dataset_path, &self.overviews)
     }
 }
 
@@ -572,6 +650,7 @@ impl ExternalDatasetProvider for NetCdfCfDataProvider {
             }
 
             let provider_path = self.path.clone();
+            let overviews_path = self.overviews.clone();
             let relative_path = if let Ok(p) = entry.path().strip_prefix(&provider_path) {
                 p.to_path_buf()
             } else {
@@ -580,7 +659,12 @@ impl ExternalDatasetProvider for NetCdfCfDataProvider {
             };
 
             let listing = tokio::task::spawn_blocking(move || {
-                Self::listing_from_netcdf(NETCDF_CF_PROVIDER_ID, &provider_path, &relative_path)
+                Self::listing_from_netcdf(
+                    NETCDF_CF_PROVIDER_ID,
+                    &provider_path,
+                    Some(&overviews_path),
+                    &relative_path,
+                )
             })
             .await?;
 
@@ -759,6 +843,7 @@ mod tests {
         let listing = NetCdfCfDataProvider::listing_from_netcdf(
             provider_id,
             test_data!("netcdf4d"),
+            None,
             Path::new("dataset_m.nc"),
         )
         .unwrap();
@@ -919,6 +1004,7 @@ mod tests {
         let listing = NetCdfCfDataProvider::listing_from_netcdf(
             provider_id,
             test_data!("netcdf4d"),
+            None,
             Path::new("dataset_sm.nc"),
         )
         .unwrap();
@@ -994,6 +1080,7 @@ mod tests {
     async fn test_metadata_from_netcdf_sm() {
         let provider = NetCdfCfDataProvider {
             path: test_data!("netcdf4d/").to_path_buf(),
+            overviews: test_data!("netcdf4d/overviews").to_path_buf(),
         };
 
         let metadata = provider
@@ -1074,5 +1161,17 @@ mod tests {
                 })
             }
         );
+    }
+
+    #[test]
+    fn list_files() {
+        let provider = NetCdfCfDataProvider {
+            path: test_data!("netcdf4d/").to_path_buf(),
+            overviews: test_data!("netcdf4d/overviews").to_path_buf(),
+        };
+
+        let expected_files: Vec<PathBuf> = vec!["dataset_sm.nc".into(), "dataset_m.nc".into()];
+
+        assert_eq!(provider.list_files().unwrap(), expected_files);
     }
 }

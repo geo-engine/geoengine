@@ -12,7 +12,7 @@ use actix_web::{
     FromRequest, Responder,
 };
 use geoengine_datatypes::dataset::DatasetProviderId;
-use log::debug;
+use log::{debug, warn};
 use serde::Serialize;
 use snafu::{ResultExt, Snafu};
 use std::path::PathBuf;
@@ -40,7 +40,8 @@ where
         .service(
             web::resource("/dataset/{id}/subdatasets")
                 .route(web::get().to(get_ebv_subdatasets::<C>)),
-        );
+        )
+        .service(web::resource("/create_overviews").route(web::post().to(create_overviews::<C>)));
     })
 }
 
@@ -110,6 +111,8 @@ pub enum EbvError {
     CannotLookupDataset { id: usize },
     #[snafu(display("Cannot find NetCdfCf provider with id {id}"))]
     NoNetCdfCfProviderForId { id: DatasetProviderId },
+    #[snafu(display("NetCdfCf provider with id {id} cannot list files"))]
+    CdfCfProviderCannotListFiles { id: DatasetProviderId },
 }
 
 #[derive(Debug, Serialize)]
@@ -272,10 +275,14 @@ async fn get_ebv_subdatasets<C: Context>(
 
         debug!("Accessing dataset {}", dataset_path.display());
 
-        let provider_path = netcdfcf_provider_ref(ctx.as_ref(), &session).await?;
+        let provider_paths = netcdfcf_provider_path(ctx.as_ref(), &session).await?;
 
         crate::util::spawn_blocking(move || {
-            NetCdfCfDataProvider::build_netcdf_tree(&provider_path, &dataset_path)
+            NetCdfCfDataProvider::build_netcdf_tree(
+                &provider_paths.provider_path,
+                Some(&provider_paths.overview_path),
+                &dataset_path,
+            )
         })
         .await?
         .map_err(|e| Box::new(e) as _)
@@ -288,10 +295,29 @@ async fn get_ebv_subdatasets<C: Context>(
     }))
 }
 
-async fn netcdfcf_provider_ref<C: Context>(
+struct NetCdfCfDataProviderPaths {
+    pub provider_path: PathBuf,
+    pub overview_path: PathBuf,
+}
+
+async fn netcdfcf_provider_path<C: Context>(
     ctx: &C,
     session: &C::Session,
-) -> Result<PathBuf, EbvError> {
+) -> Result<NetCdfCfDataProviderPaths, EbvError> {
+    with_netcdfcf_provider(ctx, session, |concrete_provider| {
+        Ok(NetCdfCfDataProviderPaths {
+            provider_path: concrete_provider.path.clone(),
+            overview_path: concrete_provider.overviews.clone(),
+        })
+    })
+    .await
+}
+
+async fn with_netcdfcf_provider<C: Context, T>(
+    ctx: &C,
+    session: &C::Session,
+    f: impl FnOnce(&NetCdfCfDataProvider) -> Result<T, EbvError>,
+) -> Result<T, EbvError> {
     let provider: Box<dyn ExternalDatasetProvider> = ctx
         .dataset_db_ref()
         .dataset_provider(session, NETCDF_CF_PROVIDER_ID)
@@ -301,12 +327,57 @@ async fn netcdfcf_provider_ref<C: Context>(
         })?;
 
     if let Some(concrete_provider) = provider.as_any().downcast_ref::<NetCdfCfDataProvider>() {
-        Ok(concrete_provider.path.clone())
+        f(concrete_provider)
     } else {
         Err(EbvError::NoNetCdfCfProviderForId {
             id: NETCDF_CF_PROVIDER_ID,
         })
     }
+}
+
+#[derive(Debug, Serialize)]
+struct NetCdfCfOverviewResponse {
+    success: Vec<PathBuf>,
+    error: Vec<PathBuf>,
+    // skip: Vec<PathBuf>,
+}
+
+async fn create_overviews<C: Context>(
+    _base_url: web::Data<BaseUrl>,
+    session: C::Session,
+    ctx: web::Data<C>,
+) -> Result<impl Responder> {
+    let response = with_netcdfcf_provider(ctx.as_ref(), &session, |provider| {
+        let mut success = vec![];
+        let mut error = vec![];
+        // let mut skip = vec![];
+
+        // TODO: spawn task
+
+        for file in provider
+            .list_files()
+            .map_err(|_| EbvError::CdfCfProviderCannotListFiles {
+                id: NETCDF_CF_PROVIDER_ID,
+            })?
+        {
+            match provider.create_overviews(&file) {
+                Ok(()) => success.push(file),
+                Err(e) => {
+                    warn!("Failed to create overviews for {}: {e}", file.display());
+                    error.push(file);
+                }
+            }
+        }
+
+        Ok(NetCdfCfOverviewResponse {
+            success,
+            error,
+            // skip,
+        })
+    })
+    .await?;
+
+    Ok(web::Json(response))
 }
 
 #[cfg(test)]
@@ -364,6 +435,7 @@ mod tests {
                 Box::new(NetCdfCfDataProviderDefinition {
                     name: "test".to_string(),
                     path: test_data!("netcdf4d").to_path_buf(),
+                    overviews: test_data!("netcdf4d/overviews").to_path_buf(),
                 }),
             )
             .await

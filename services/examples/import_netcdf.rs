@@ -173,6 +173,7 @@ fn store_metadata(file_path: &Path, out_folder_path: &Path) -> Result<(), snafu:
         file_path
             .parent()
             .whatever_context("Input dataset has no containing directory")?,
+        None,
         file_path
             .file_name()
             .map(Path::new)

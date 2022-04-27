@@ -138,4 +138,21 @@ pub enum NetCdfCf4DProviderError {
     CannotReadDimensions {
         source: GdalError,
     },
+    InvalidDirectory {
+        source: Box<dyn ErrorSource>,
+    },
+    CannotCreateOverviews {
+        source: Box<dyn ErrorSource>,
+    },
+    CannotWriteMetadataFile {
+        source: Box<dyn ErrorSource>,
+    },
+    CannotReadMetadataFileDir {},
+    CannotReadInputFileDir,
+    CannotOpenNetCdfSubdataset {
+        source: Box<dyn ErrorSource>,
+    },
+    CannotGenerateLoadingInfo {
+        source: Box<dyn ErrorSource>,
+    },
 }
