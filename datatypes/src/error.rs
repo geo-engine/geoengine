@@ -1,4 +1,4 @@
-use snafu::prelude::*;
+use snafu::{prelude::*, AsErrorSource};
 use std::convert::Infallible;
 
 use crate::{
@@ -10,6 +10,10 @@ use crate::{
     primitives::{Coordinate2D, PrimitivesError, TimeInterval},
     raster::RasterDataType,
 };
+
+pub trait ErrorSource: std::error::Error + Send + Sync + 'static + AsErrorSource {}
+
+impl<T> ErrorSource for T where T: std::error::Error + Send + Sync + 'static {}
 
 #[derive(Debug, Snafu)]
 #[snafu(visibility(pub(crate)))]

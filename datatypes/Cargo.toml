@@ -9,7 +9,7 @@ authors = [
 edition = "2021"
 
 [features]
-postgres = ["postgres-types"]
+postgres = ["postgres-types", "postgres-protocol"]
 # This compiles Geo Engine Pro
 pro = ["postgres"]
 
@@ -24,6 +24,7 @@ image = "0.24"
 num-traits = "0.2"
 ordered-float = { version= "2.0", features = ["serde"] }
 paste = "1.0"
+postgres-protocol = { version = "0.6", optional = true }
 postgres-types = { version = "0.2", features = ["derive", "with-chrono-0_4", "with-uuid-0_8"], optional = true }
 proj = "0.22"
 rayon = "1.5"

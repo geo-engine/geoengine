@@ -396,10 +396,12 @@ pub struct GdalLoadingInfoTemporalSlice {
 
 #[cfg(test)]
 mod tests {
-    use chrono::NaiveDate;
     use geoengine_datatypes::{
         hashmap,
-        primitives::{Measurement, SpatialPartition2D, SpatialResolution, TimeGranularity},
+        primitives::{
+            DateTime, DateTimeParseFormat, Measurement, SpatialPartition2D, SpatialResolution,
+            TimeGranularity,
+        },
         raster::RasterDataType,
         spatial_reference::SpatialReference,
         util::test::TestDefault,
@@ -434,7 +436,7 @@ mod tests {
             },
             time_placeholders: hashmap! {
                 "%TIME%".to_string() => GdalSourceTimePlaceholder {
-                    format: "%f".to_string(),
+                    format: DateTimeParseFormat::custom("%f".to_string()),
                     reference: TimeReference::Start,
                 },
             },
@@ -583,8 +585,8 @@ mod tests {
 
     #[tokio::test]
     async fn netcdf_cf_single_time_step() {
-        let time_start = TimeInstance::from(NaiveDate::from_ymd(2000, 1, 1).and_hms(0, 0, 0));
-        let time_end = TimeInstance::from(NaiveDate::from_ymd(2000, 1, 1).and_hms(0, 0, 0));
+        let time_start = TimeInstance::from(DateTime::new_utc(2000, 1, 1, 0, 0, 0));
+        let time_end = TimeInstance::from(DateTime::new_utc(2000, 1, 1, 0, 0, 0));
         let time_step = TimeStep {
             step: 0,
             granularity: TimeGranularity::Years,
@@ -633,8 +635,8 @@ mod tests {
         assert_eq!(
             step_1.time,
             TimeInterval::new(
-                TimeInstance::from(NaiveDate::from_ymd(2000, 1, 1).and_hms(0, 0, 0)),
-                TimeInstance::from(NaiveDate::from_ymd(2000, 1, 1).and_hms(0, 0, 0))
+                TimeInstance::from(DateTime::new_utc(2000, 1, 1, 0, 0, 0)),
+                TimeInstance::from(DateTime::new_utc(2000, 1, 1, 0, 0, 0))
             )
             .unwrap()
         );
@@ -645,8 +647,8 @@ mod tests {
 
     #[tokio::test]
     async fn netcdf_cf_single_time_step_with_offset() {
-        let time_start = TimeInstance::from(NaiveDate::from_ymd(2000, 1, 1).and_hms(0, 0, 0));
-        let time_end = TimeInstance::from(NaiveDate::from_ymd(2000, 1, 1).and_hms(0, 0, 0));
+        let time_start = TimeInstance::from(DateTime::new_utc(2000, 1, 1, 0, 0, 0));
+        let time_end = TimeInstance::from(DateTime::new_utc(2000, 1, 1, 0, 0, 0));
         let time_step = TimeStep {
             step: 0,
             granularity: TimeGranularity::Years,
@@ -695,8 +697,8 @@ mod tests {
         assert_eq!(
             step_1.time,
             TimeInterval::new(
-                TimeInstance::from(NaiveDate::from_ymd(2000, 1, 1).and_hms(0, 0, 0)),
-                TimeInstance::from(NaiveDate::from_ymd(2000, 1, 1).and_hms(0, 0, 0))
+                TimeInstance::from(DateTime::new_utc(2000, 1, 1, 0, 0, 0)),
+                TimeInstance::from(DateTime::new_utc(2000, 1, 1, 0, 0, 0))
             )
             .unwrap()
         );
@@ -707,8 +709,8 @@ mod tests {
 
     #[tokio::test]
     async fn netcdf_cf_time_steps_before_after() {
-        let time_start = TimeInstance::from(NaiveDate::from_ymd(2010, 1, 1).and_hms(0, 0, 0));
-        let time_end = TimeInstance::from(NaiveDate::from_ymd(2012, 1, 1).and_hms(0, 0, 0));
+        let time_start = TimeInstance::from(DateTime::new_utc(2010, 1, 1, 0, 0, 0));
+        let time_end = TimeInstance::from(DateTime::new_utc(2012, 1, 1, 0, 0, 0));
         let time_step = TimeStep {
             step: 1,
             granularity: TimeGranularity::Years,
@@ -746,8 +748,8 @@ mod tests {
         let query = RasterQueryRectangle {
             spatial_bounds: SpatialPartition2D::new_unchecked((0., 128.).into(), (128., 0.).into()),
             time_interval: TimeInterval::new_unchecked(
-                TimeInstance::from(NaiveDate::from_ymd(2009, 7, 1).and_hms(0, 0, 0)),
-                TimeInstance::from(NaiveDate::from_ymd(2013, 3, 1).and_hms(0, 0, 0)),
+                TimeInstance::from(DateTime::new_utc(2009, 7, 1, 0, 0, 0)),
+                TimeInstance::from(DateTime::new_utc(2013, 3, 1, 0, 0, 0)),
             ),
             spatial_resolution: SpatialResolution::one(),
         };
@@ -760,8 +762,8 @@ mod tests {
         assert_eq!(
             step_1.time,
             TimeInterval::new(
-                TimeInstance::from(NaiveDate::from_ymd(2009, 1, 1).and_hms(0, 0, 0)),
-                TimeInstance::from(NaiveDate::from_ymd(2010, 1, 1).and_hms(0, 0, 0))
+                TimeInstance::from(DateTime::new_utc(2009, 1, 1, 0, 0, 0)),
+                TimeInstance::from(DateTime::new_utc(2010, 1, 1, 0, 0, 0))
             )
             .unwrap()
         );
@@ -772,8 +774,8 @@ mod tests {
         assert_eq!(
             step_2.time,
             TimeInterval::new(
-                TimeInstance::from(NaiveDate::from_ymd(2010, 1, 1).and_hms(0, 0, 0)),
-                TimeInstance::from(NaiveDate::from_ymd(2011, 1, 1).and_hms(0, 0, 0))
+                TimeInstance::from(DateTime::new_utc(2010, 1, 1, 0, 0, 0)),
+                TimeInstance::from(DateTime::new_utc(2011, 1, 1, 0, 0, 0))
             )
             .unwrap()
         );
@@ -784,8 +786,8 @@ mod tests {
         assert_eq!(
             step_3.time,
             TimeInterval::new(
-                TimeInstance::from(NaiveDate::from_ymd(2011, 1, 1).and_hms(0, 0, 0)),
-                TimeInstance::from(NaiveDate::from_ymd(2012, 1, 1).and_hms(0, 0, 0))
+                TimeInstance::from(DateTime::new_utc(2011, 1, 1, 0, 0, 0)),
+                TimeInstance::from(DateTime::new_utc(2012, 1, 1, 0, 0, 0))
             )
             .unwrap()
         );
@@ -796,8 +798,8 @@ mod tests {
 
     #[test]
     fn netcdf_cf_time_steps() {
-        let time_start = TimeInstance::from(NaiveDate::from_ymd(2010, 1, 1).and_hms(0, 0, 0));
-        let time_end = TimeInstance::from(NaiveDate::from_ymd(2022, 1, 1).and_hms(0, 0, 0));
+        let time_start = TimeInstance::from(DateTime::new_utc(2010, 1, 1, 0, 0, 0));
+        let time_end = TimeInstance::from(DateTime::new_utc(2022, 1, 1, 0, 0, 0));
         let time_step = TimeStep {
             step: 1,
             granularity: TimeGranularity::Years,
@@ -835,8 +837,8 @@ mod tests {
         assert_eq!(
             step_1.time,
             TimeInterval::new(
-                TimeInstance::from(NaiveDate::from_ymd(2010, 1, 1).and_hms(0, 0, 0)),
-                TimeInstance::from(NaiveDate::from_ymd(2011, 1, 1).and_hms(0, 0, 0))
+                TimeInstance::from(DateTime::new_utc(2010, 1, 1, 0, 0, 0)),
+                TimeInstance::from(DateTime::new_utc(2011, 1, 1, 0, 0, 0))
             )
             .unwrap()
         );
@@ -847,8 +849,8 @@ mod tests {
         assert_eq!(
             step_2.time,
             TimeInterval::new(
-                TimeInstance::from(NaiveDate::from_ymd(2011, 1, 1).and_hms(0, 0, 0)),
-                TimeInstance::from(NaiveDate::from_ymd(2012, 1, 1).and_hms(0, 0, 0))
+                TimeInstance::from(DateTime::new_utc(2011, 1, 1, 0, 0, 0)),
+                TimeInstance::from(DateTime::new_utc(2012, 1, 1, 0, 0, 0))
             )
             .unwrap()
         );
@@ -859,8 +861,8 @@ mod tests {
         assert_eq!(
             step_3.time,
             TimeInterval::new(
-                TimeInstance::from(NaiveDate::from_ymd(2012, 1, 1).and_hms(0, 0, 0)),
-                TimeInstance::from(NaiveDate::from_ymd(2013, 1, 1).and_hms(0, 0, 0))
+                TimeInstance::from(DateTime::new_utc(2012, 1, 1, 0, 0, 0)),
+                TimeInstance::from(DateTime::new_utc(2013, 1, 1, 0, 0, 0))
             )
             .unwrap()
         );
@@ -905,25 +907,22 @@ mod tests {
                     gdal_config_options: None,
                 },
                 step: time_step,
-                dataset_time_start: TimeInstance::from(
-                    NaiveDate::from_ymd(2010, 1, 1).and_hms(0, 0, 0),
-                ),
-                max_t2: TimeInstance::from(NaiveDate::from_ymd(2022, 1, 1).and_hms(0, 0, 0)),
+                dataset_time_start: TimeInstance::from(DateTime::new_utc(2010, 1, 1, 0, 0, 0)),
+                max_t2: TimeInstance::from(DateTime::new_utc(2022, 1, 1, 0, 0, 0)),
                 band_offset: 0,
             }
         }
 
-        let mut iter = iter_for_instance(TimeInstance::from(
-            NaiveDate::from_ymd(2014, 1, 1).and_hms(0, 0, 0),
-        ));
+        let mut iter =
+            iter_for_instance(TimeInstance::from(DateTime::new_utc(2014, 1, 1, 0, 0, 0)));
 
         let step = iter.next().unwrap().unwrap();
 
         assert_eq!(
             step.time,
             TimeInterval::new(
-                TimeInstance::from(NaiveDate::from_ymd(2014, 1, 1).and_hms(0, 0, 0)),
-                TimeInstance::from(NaiveDate::from_ymd(2015, 1, 1).and_hms(0, 0, 0))
+                TimeInstance::from(DateTime::new_utc(2014, 1, 1, 0, 0, 0)),
+                TimeInstance::from(DateTime::new_utc(2015, 1, 1, 0, 0, 0))
             )
             .unwrap()
         );
@@ -931,17 +930,16 @@ mod tests {
 
         assert!(iter.next().is_none());
 
-        let mut iter = iter_for_instance(TimeInstance::from(
-            NaiveDate::from_ymd(2010, 1, 1).and_hms(0, 0, 0),
-        ));
+        let mut iter =
+            iter_for_instance(TimeInstance::from(DateTime::new_utc(2010, 1, 1, 0, 0, 0)));
 
         let step = iter.next().unwrap().unwrap();
 
         assert_eq!(
             step.time,
             TimeInterval::new(
-                TimeInstance::from(NaiveDate::from_ymd(2010, 1, 1).and_hms(0, 0, 0)),
-                TimeInstance::from(NaiveDate::from_ymd(2011, 1, 1).and_hms(0, 0, 0))
+                TimeInstance::from(DateTime::new_utc(2010, 1, 1, 0, 0, 0)),
+                TimeInstance::from(DateTime::new_utc(2011, 1, 1, 0, 0, 0))
             )
             .unwrap()
         );
@@ -949,17 +947,16 @@ mod tests {
 
         assert!(iter.next().is_none());
 
-        let mut iter = iter_for_instance(TimeInstance::from(
-            NaiveDate::from_ymd(2021, 1, 1).and_hms(0, 0, 0),
-        ));
+        let mut iter =
+            iter_for_instance(TimeInstance::from(DateTime::new_utc(2021, 1, 1, 0, 0, 0)));
 
         let step = iter.next().unwrap().unwrap();
 
         assert_eq!(
             step.time,
             TimeInterval::new(
-                TimeInstance::from(NaiveDate::from_ymd(2021, 1, 1).and_hms(0, 0, 0)),
-                TimeInstance::from(NaiveDate::from_ymd(2022, 1, 1).and_hms(0, 0, 0))
+                TimeInstance::from(DateTime::new_utc(2021, 1, 1, 0, 0, 0)),
+                TimeInstance::from(DateTime::new_utc(2022, 1, 1, 0, 0, 0))
             )
             .unwrap()
         );
@@ -967,26 +964,24 @@ mod tests {
 
         assert!(iter.next().is_none());
 
-        let iter = iter_for_instance(TimeInstance::from(
-            NaiveDate::from_ymd(2009, 1, 1).and_hms(0, 0, 0),
-        ))
-        .next()
-        .unwrap()
-        .unwrap();
+        let iter = iter_for_instance(TimeInstance::from(DateTime::new_utc(2009, 1, 1, 0, 0, 0)))
+            .next()
+            .unwrap()
+            .unwrap();
         assert_eq!(
             iter.time,
             TimeInterval::new(
-                TimeInstance::from(NaiveDate::from_ymd(2009, 1, 1).and_hms(0, 0, 0)),
-                TimeInstance::from(NaiveDate::from_ymd(2010, 1, 1).and_hms(0, 0, 0))
+                TimeInstance::from(DateTime::new_utc(2009, 1, 1, 0, 0, 0)),
+                TimeInstance::from(DateTime::new_utc(2010, 1, 1, 0, 0, 0))
             )
             .unwrap(),
         );
         assert!(iter.params.is_none());
 
-        assert!(iter_for_instance(TimeInstance::from(
-            NaiveDate::from_ymd(2022, 1, 1).and_hms(0, 0, 0),
-        ))
-        .next()
-        .is_none());
+        assert!(
+            iter_for_instance(TimeInstance::from(DateTime::new_utc(2022, 1, 1, 0, 0, 0),))
+                .next()
+                .is_none()
+        );
     }
 }

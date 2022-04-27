@@ -2,11 +2,10 @@ use crate::contexts::Context;
 use crate::error::Result;
 use crate::util::config::{get_config_element, GFBio};
 use actix_web::{web, FromRequest, Responder};
-use chrono::Utc;
 use futures::stream::FuturesUnordered;
 use futures::stream::StreamExt;
 use geoengine_datatypes::dataset::{DatasetId, ExternalDatasetId};
-use geoengine_datatypes::primitives::VectorQueryRectangle;
+use geoengine_datatypes::primitives::{DateTime, VectorQueryRectangle};
 use geoengine_operators::engine::{
     MetaDataProvider, TypedResultDescriptor, VectorResultDescriptor,
 };
@@ -77,8 +76,8 @@ struct Basket {
     basket_id: BasketId,
     content: Vec<BasketEntry>,
     user_id: Option<String>,
-    created: chrono::DateTime<Utc>,
-    updated: chrono::DateTime<Utc>,
+    created: DateTime,
+    updated: DateTime,
 }
 
 impl Basket {
@@ -350,9 +349,9 @@ struct BasketInternal {
     #[serde(rename = "userId")]
     user_id: Option<String>,
     #[serde(rename = "createdAt")]
-    created: chrono::DateTime<Utc>,
+    created: DateTime,
     #[serde(rename = "updatedAt")]
-    updated: chrono::DateTime<Utc>,
+    updated: DateTime,
 }
 
 #[derive(Debug, Deserialize)]

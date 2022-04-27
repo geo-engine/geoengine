@@ -10,9 +10,6 @@ use std::str::FromStr;
 use std::sync::Arc;
 use std::task::Poll;
 
-use chrono::DateTime;
-use chrono::NaiveDate;
-use chrono::NaiveDateTime;
 use futures::future::BoxFuture;
 use futures::stream::{BoxStream, FusedStream};
 use futures::task::Context;
@@ -33,9 +30,9 @@ use geoengine_datatypes::collections::{
     VectorDataType,
 };
 use geoengine_datatypes::primitives::{
-    AxisAlignedRectangle, BoundingBox2D, Coordinate2D, FeatureDataType, FeatureDataValue, Geometry,
-    MultiLineString, MultiPoint, MultiPolygon, NoGeometry, TimeInstance, TimeInterval, TimeStep,
-    TypedGeometry, VectorQueryRectangle,
+    AxisAlignedRectangle, BoundingBox2D, Coordinate2D, DateTime, DateTimeParseFormat,
+    FeatureDataType, FeatureDataValue, Geometry, MultiLineString, MultiPoint, MultiPolygon,
+    NoGeometry, TimeInstance, TimeInterval, TimeStep, TypedGeometry, VectorQueryRectangle,
 };
 use geoengine_datatypes::util::arrow::ArrowTyped;
 
@@ -172,13 +169,32 @@ impl Default for OgrSourceDatasetTimeType {
 pub enum OgrSourceTimeFormat {
     #[serde(rename_all = "camelCase")]
     Custom {
-        custom_format: String,
+        custom_format: DateTimeParseFormat,
     },
     #[serde(rename_all = "camelCase")]
     UnixTimeStamp {
         timestamp_type: UnixTimeStampType,
+        #[serde(skip)]
+        #[serde(default = "DateTimeParseFormat::unix")]
+        fmt: DateTimeParseFormat,
     },
     Auto,
+}
+
+impl OgrSourceTimeFormat {
+    pub fn seconds() -> Self {
+        Self::UnixTimeStamp {
+            timestamp_type: UnixTimeStampType::EpochSeconds,
+            fmt: DateTimeParseFormat::unix(),
+        }
+    }
+
+    pub fn milliseconds() -> Self {
+        Self::UnixTimeStamp {
+            timestamp_type: UnixTimeStampType::EpochMilliseconds,
+            fmt: DateTimeParseFormat::unix(),
+        }
+    }
 }
 
 #[derive(Clone, Debug, PartialEq, Deserialize, Serialize)]
@@ -785,51 +801,49 @@ where
 
         match time_format {
             OgrSourceTimeFormat::Auto => Box::new(move |field: FieldValue| match field {
-                FieldValue::DateValue(value) => Ok(value.and_hms(0, 0, 0).naive_utc().into()),
-                FieldValue::DateTimeValue(value) => Ok(value.naive_utc().into()),
+                FieldValue::DateValue(value) => Ok(DateTime::from(value.and_hms(0, 0, 0)).into()),
+                FieldValue::DateTimeValue(value) => Ok(DateTime::from(value).into()),
                 _ => Err(Error::OgrFieldValueIsNotDateTime),
             }),
             OgrSourceTimeFormat::Custom { custom_format } => Box::new(move |field: FieldValue| {
                 let date = field.into_string().ok_or(Error::OgrFieldValueIsNotString)?;
-                let date_time_result = DateTime::parse_from_str(&date, &custom_format)
-                    .map(|t| t.timestamp_millis())
-                    .or_else(|_| {
-                        NaiveDateTime::parse_from_str(&date, &custom_format)
-                            .map(|n| n.timestamp_millis())
-                    })
-                    .or_else(|_| {
-                        NaiveDate::parse_from_str(&date, &custom_format)
-                            .map(|d| d.and_hms(0, 0, 0).timestamp_millis())
-                    });
-                Ok(date_time_result?.try_into()?)
-            }),
-            OgrSourceTimeFormat::UnixTimeStamp { timestamp_type } => {
-                Box::new(move |field: FieldValue| {
-                    let factor = match timestamp_type {
-                        UnixTimeStampType::EpochSeconds => 1000,
-                        UnixTimeStampType::EpochMilliseconds => 1,
-                    };
-                    match field {
-                        FieldValue::IntegerValue(v) => {
-                            TimeInstance::from_millis(i64::from(v) * factor)
-                                .context(error::DataType)
-                        }
-                        FieldValue::Integer64Value(v) => {
-                            TimeInstance::from_millis(v * factor).context(error::DataType)
-                        }
-                        FieldValue::StringValue(v) => DateTime::parse_from_str(&v, "%s")
-                            .context(error::TimeParse)
-                            .and_then(|d| d.timestamp_millis().try_into().context(error::DataType)),
-                        FieldValue::RealValue(v)
-                            if timestamp_type == UnixTimeStampType::EpochSeconds =>
-                        {
-                            TimeInstance::from_millis((v * (factor as f64)) as i64)
-                                .context(error::DataType)
-                        }
-                        _ => Err(Error::OgrFieldValueIsNotValidForTimestamp),
+                let datetime = DateTime::parse_from_str(&date, &custom_format).map_err(|e| {
+                    Error::TimeParse {
+                        source: Box::new(e),
                     }
-                })
-            }
+                })?;
+
+                Ok(TimeInstance::from(datetime))
+            }),
+            OgrSourceTimeFormat::UnixTimeStamp {
+                timestamp_type,
+                fmt,
+            } => Box::new(move |field: FieldValue| {
+                let factor = match timestamp_type {
+                    UnixTimeStampType::EpochSeconds => 1000,
+                    UnixTimeStampType::EpochMilliseconds => 1,
+                };
+                match field {
+                    FieldValue::IntegerValue(v) => {
+                        TimeInstance::from_millis(i64::from(v) * factor).context(error::DataType)
+                    }
+                    FieldValue::Integer64Value(v) => {
+                        TimeInstance::from_millis(v * factor).context(error::DataType)
+                    }
+                    FieldValue::StringValue(v) => DateTime::parse_from_str(&v, &fmt)
+                        .map_err(|e| Error::TimeParse {
+                            source: Box::new(e),
+                        })
+                        .map(TimeInstance::from),
+                    FieldValue::RealValue(v)
+                        if timestamp_type == UnixTimeStampType::EpochSeconds =>
+                    {
+                        TimeInstance::from_millis((v * (factor as f64)) as i64)
+                            .context(error::DataType)
+                    }
+                    _ => Err(Error::OgrFieldValueIsNotValidForTimestamp),
+                }
+            }),
         }
     }
 
@@ -1437,7 +1451,7 @@ mod tests {
             time: OgrSourceDatasetTimeType::Start {
                 start_field: "start".to_string(),
                 start_format: OgrSourceTimeFormat::Custom {
-                    custom_format: "YYYY-MM-DD".to_string(),
+                    custom_format: DateTimeParseFormat::custom("%Y-%m-%d".to_string()),
                 },
                 duration: OgrSourceDurationSpec::Value(TimeStep {
                     granularity: TimeGranularity::Seconds,
@@ -1480,7 +1494,7 @@ mod tests {
                     "startField": "start",
                     "startFormat": {
                         "format": "custom",
-                        "customFormat": "YYYY-MM-DD"
+                        "customFormat": "%Y-%m-%d"
                     },
                     "duration": {
                         "type": "value",
@@ -1527,7 +1541,7 @@ mod tests {
                     "startField": "start",
                     "startFormat": {
                         "format": "custom",
-                        "customFormat": "YYYY-MM-DD"
+                        "customFormat": "%Y-%m-%d"
                     },
                     "duration": {
                         "type": "value",
@@ -4145,6 +4159,7 @@ mod tests {
     }
 
     #[tokio::test]
+    #[allow(clippy::too_many_lines)]
     async fn points_date_csv() {
         let dataset = DatasetId::Internal {
             dataset_id: InternalDatasetId::new(),
@@ -4160,7 +4175,7 @@ mod tests {
                     time: OgrSourceDatasetTimeType::Start {
                         start_field: "Date".to_owned(),
                         start_format: OgrSourceTimeFormat::Custom {
-                            custom_format: "%d.%m.%Y".to_owned(),
+                            custom_format: DateTimeParseFormat::custom("%d.%m.%Y".to_owned()),
                         },
                         duration: OgrSourceDurationSpec::Value(TimeStep {
                             granularity: TimeGranularity::Seconds,
@@ -4257,6 +4272,7 @@ mod tests {
     }
 
     #[tokio::test]
+    #[allow(clippy::too_many_lines)]
     async fn points_date_time_csv() {
         let dataset = DatasetId::Internal {
             dataset_id: InternalDatasetId::new(),
@@ -4272,7 +4288,9 @@ mod tests {
                     time: OgrSourceDatasetTimeType::Start {
                         start_field: "DateTime".to_owned(),
                         start_format: OgrSourceTimeFormat::Custom {
-                            custom_format: "%d.%m.%Y %H:%M:%S".to_owned(),
+                            custom_format: DateTimeParseFormat::custom(
+                                "%d.%m.%Y %H:%M:%S".to_owned(),
+                            ),
                         },
                         duration: OgrSourceDurationSpec::Value(TimeStep {
                             granularity: TimeGranularity::Seconds,
@@ -4369,6 +4387,7 @@ mod tests {
     }
 
     #[tokio::test]
+    #[allow(clippy::too_many_lines)]
     async fn points_date_time_tz_csv() {
         let dataset = DatasetId::Internal {
             dataset_id: InternalDatasetId::new(),
@@ -4384,7 +4403,9 @@ mod tests {
                     time: OgrSourceDatasetTimeType::Start {
                         start_field: "DateTimeTz".to_owned(),
                         start_format: OgrSourceTimeFormat::Custom {
-                            custom_format: "%d.%m.%Y %H:%M:%S %z".to_owned(),
+                            custom_format: DateTimeParseFormat::custom(
+                                "%d.%m.%Y %H:%M:%S %:z".to_owned(),
+                            ),
                         },
                         duration: OgrSourceDurationSpec::Value(TimeStep {
                             granularity: TimeGranularity::Seconds,
@@ -4495,9 +4516,7 @@ mod tests {
                     data_type: Some(VectorDataType::MultiPoint),
                     time: OgrSourceDatasetTimeType::Start {
                         start_field: "DateTime".to_owned(),
-                        start_format: OgrSourceTimeFormat::UnixTimeStamp {
-                            timestamp_type: UnixTimeStampType::EpochSeconds,
-                        },
+                        start_format: OgrSourceTimeFormat::seconds(),
                         duration: OgrSourceDurationSpec::Value(TimeStep {
                             granularity: TimeGranularity::Seconds,
                             step: 84,
@@ -4609,7 +4628,9 @@ mod tests {
                     time: OgrSourceDatasetTimeType::Start {
                         start_field: "DateTime".to_owned(),
                         start_format: OgrSourceTimeFormat::Custom {
-                            custom_format: "%d.%m.%Y %H:%M:%S".to_owned(),
+                            custom_format: DateTimeParseFormat::custom(
+                                "%d.%m.%Y %H:%M:%S".to_owned(),
+                            ),
                         },
                         duration: OgrSourceDurationSpec::Value(TimeStep {
                             granularity: TimeGranularity::Seconds,

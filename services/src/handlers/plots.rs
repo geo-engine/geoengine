@@ -219,8 +219,7 @@ mod tests {
     use actix_web::dev::ServiceResponse;
     use actix_web::http::{header, Method};
     use actix_web_httpauth::headers::authorization::Bearer;
-    use chrono::NaiveDate;
-    use geoengine_datatypes::primitives::Measurement;
+    use geoengine_datatypes::primitives::{DateTime, Measurement};
     use geoengine_datatypes::raster::{
         Grid2D, RasterDataType, RasterTile2D, TileInformation, TilingSpecification,
     };
@@ -397,8 +396,8 @@ mod tests {
                 bbox: BoundingBox2D::new((-180., -90.).into(), (180., 90.).into()).unwrap(),
                 crs: SpatialReference::epsg_4326().into(),
                 time: TimeInterval::new(
-                    NaiveDate::from_ymd(2020, 1, 1).and_hms(0, 0, 0),
-                    NaiveDate::from_ymd(2020, 1, 1).and_hms(0, 0, 0),
+                    DateTime::new_utc(2020, 1, 1, 0, 0, 0),
+                    DateTime::new_utc(2020, 1, 1, 0, 0, 0),
                 )
                 .unwrap(),
                 spatial_resolution: SpatialResolution::zero_point_one(),

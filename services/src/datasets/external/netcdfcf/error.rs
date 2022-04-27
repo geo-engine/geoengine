@@ -2,6 +2,8 @@ use gdal::errors::GdalError;
 use geoengine_datatypes::dataset::DatasetProviderId;
 use snafu::Snafu;
 
+use crate::error::ErrorSource;
+
 #[derive(Debug, Snafu)]
 #[snafu(visibility(pub(crate)))]
 #[snafu(context(suffix(false)))] // disables default `Snafu` suffix
@@ -45,7 +47,10 @@ pub enum NetCdfCf4DProviderError {
         source: std::num::ParseIntError,
     },
     CannotParseTimeCoverageDate {
-        source: chrono::format::ParseError,
+        source: Box<dyn ErrorSource>,
+    },
+    TimeCoverageYearOverflows {
+        year: i32,
     },
     CannotParseTimeCoverageResolution {
         source: chrono::format::ParseError,

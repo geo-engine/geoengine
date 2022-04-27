@@ -1,5 +1,3 @@
-use serde::{Deserialize, Serialize};
-
 use crate::contexts::{Context, MockableSession, Session, SessionId};
 use crate::error;
 use crate::handlers::get_token;
@@ -11,10 +9,11 @@ use crate::util::Identifier;
 use actix_http::Payload;
 use actix_web::{web, FromRequest, HttpRequest};
 use bb8_postgres::tokio_postgres::NoTls;
-use chrono::{DateTime, Utc};
 use futures::future::err;
 use futures_util::future::LocalBoxFuture;
 use futures_util::FutureExt;
+use geoengine_datatypes::primitives::DateTime;
+use serde::{Deserialize, Serialize};
 
 #[derive(Debug, PartialEq, Serialize, Deserialize, Clone)]
 #[serde(rename_all = "camelCase")]
@@ -29,8 +28,8 @@ pub struct UserInfo {
 pub struct UserSession {
     pub id: SessionId,
     pub user: UserInfo,
-    pub created: DateTime<Utc>,
-    pub valid_until: DateTime<Utc>,
+    pub created: DateTime,
+    pub valid_until: DateTime,
     pub project: Option<ProjectId>,
     pub view: Option<STRectangle>,
     pub roles: Vec<RoleId>, // a user has a default role (= its user id) and other additonal roles
@@ -47,8 +46,8 @@ impl UserSession {
                 email: None,
                 real_name: None,
             },
-            created: chrono::Utc::now(),
-            valid_until: chrono::Utc::now(),
+            created: DateTime::now(),
+            valid_until: DateTime::now(),
             project: None,
             view: None,
             roles: vec![role],
@@ -66,8 +65,8 @@ impl MockableSession for UserSession {
                 email: None,
                 real_name: None,
             },
-            created: chrono::Utc::now(),
-            valid_until: chrono::Utc::now(),
+            created: DateTime::now(),
+            valid_until: DateTime::now(),
             project: None,
             view: None,
             roles: vec![user_id.into(), Role::user_role_id()],
@@ -80,11 +79,11 @@ impl Session for UserSession {
         self.id
     }
 
-    fn created(&self) -> &DateTime<Utc> {
+    fn created(&self) -> &DateTime {
         &self.created
     }
 
-    fn valid_until(&self) -> &DateTime<Utc> {
+    fn valid_until(&self) -> &DateTime {
         &self.valid_until
     }
 

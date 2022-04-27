@@ -254,12 +254,13 @@ impl<const LENGTH: usize> FeatureAttributeValues<LENGTH> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use chrono::NaiveDate;
     use geoengine_datatypes::util::test::TestDefault;
     use geoengine_datatypes::{
         collections::MultiPointCollection,
         plots::PlotMetaData,
-        primitives::{BoundingBox2D, FeatureData, MultiPoint, SpatialResolution, TimeInterval},
+        primitives::{
+            BoundingBox2D, DateTime, FeatureData, MultiPoint, SpatialResolution, TimeInterval,
+        },
     };
 
     use crate::{
@@ -279,16 +280,16 @@ mod tests {
                 .unwrap(),
                 vec![
                     TimeInterval::new_unchecked(
-                        NaiveDate::from_ymd(2014, 1, 1).and_hms(0, 0, 0),
-                        NaiveDate::from_ymd(2014, 2, 1).and_hms(0, 0, 0),
+                        DateTime::new_utc(2014, 1, 1, 0, 0, 0),
+                        DateTime::new_utc(2014, 2, 1, 0, 0, 0),
                     ),
                     TimeInterval::new_unchecked(
-                        NaiveDate::from_ymd(2014, 1, 1).and_hms(0, 0, 0),
-                        NaiveDate::from_ymd(2014, 3, 1).and_hms(0, 0, 0),
+                        DateTime::new_utc(2014, 1, 1, 0, 0, 0),
+                        DateTime::new_utc(2014, 3, 1, 0, 0, 0),
                     ),
                     TimeInterval::new_unchecked(
-                        NaiveDate::from_ymd(2014, 2, 1).and_hms(0, 0, 0),
-                        NaiveDate::from_ymd(2014, 3, 1).and_hms(0, 0, 0),
+                        DateTime::new_utc(2014, 2, 1, 0, 0, 0),
+                        DateTime::new_utc(2014, 3, 1, 0, 0, 0),
                     ),
                 ],
                 [
@@ -356,24 +357,24 @@ mod tests {
                 .unwrap(),
                 vec![
                     TimeInterval::new_unchecked(
-                        NaiveDate::from_ymd(2014, 1, 1).and_hms(0, 0, 0),
-                        NaiveDate::from_ymd(2014, 2, 1).and_hms(0, 0, 0),
+                        DateTime::new_utc(2014, 1, 1, 0, 0, 0),
+                        DateTime::new_utc(2014, 2, 1, 0, 0, 0),
                     ),
                     TimeInterval::new_unchecked(
-                        NaiveDate::from_ymd(2014, 1, 1).and_hms(0, 0, 0),
-                        NaiveDate::from_ymd(2014, 3, 1).and_hms(0, 0, 0),
+                        DateTime::new_utc(2014, 1, 1, 0, 0, 0),
+                        DateTime::new_utc(2014, 3, 1, 0, 0, 0),
                     ),
                     TimeInterval::new_unchecked(
-                        NaiveDate::from_ymd(2014, 2, 1).and_hms(0, 0, 0),
-                        NaiveDate::from_ymd(2014, 3, 1).and_hms(0, 0, 0),
+                        DateTime::new_utc(2014, 2, 1, 0, 0, 0),
+                        DateTime::new_utc(2014, 3, 1, 0, 0, 0),
                     ),
                     TimeInterval::new_unchecked(
-                        NaiveDate::from_ymd(2014, 1, 1).and_hms(0, 0, 0),
-                        NaiveDate::from_ymd(2014, 3, 1).and_hms(0, 0, 0),
+                        DateTime::new_utc(2014, 1, 1, 0, 0, 0),
+                        DateTime::new_utc(2014, 3, 1, 0, 0, 0),
                     ),
                     TimeInterval::new_unchecked(
-                        NaiveDate::from_ymd(2014, 2, 1).and_hms(0, 0, 0),
-                        NaiveDate::from_ymd(2014, 3, 1).and_hms(0, 0, 0),
+                        DateTime::new_utc(2014, 2, 1, 0, 0, 0),
+                        DateTime::new_utc(2014, 3, 1, 0, 0, 0),
                     ),
                 ],
                 [
@@ -455,20 +456,20 @@ mod tests {
                 .unwrap(),
                 vec![
                     TimeInterval::new_unchecked(
-                        NaiveDate::from_ymd(2014, 1, 1).and_hms(0, 0, 0),
-                        NaiveDate::from_ymd(2014, 2, 1).and_hms(0, 0, 0),
+                        DateTime::new_utc(2014, 1, 1, 0, 0, 0),
+                        DateTime::new_utc(2014, 2, 1, 0, 0, 0),
                     ),
                     TimeInterval::new_unchecked(
-                        NaiveDate::from_ymd(2014, 1, 1).and_hms(0, 0, 0),
-                        NaiveDate::from_ymd(2014, 3, 1).and_hms(0, 0, 0),
+                        DateTime::new_utc(2014, 1, 1, 0, 0, 0),
+                        DateTime::new_utc(2014, 3, 1, 0, 0, 0),
                     ),
                     TimeInterval::new_unchecked(
-                        NaiveDate::from_ymd(2014, 2, 1).and_hms(0, 0, 0),
-                        NaiveDate::from_ymd(2014, 3, 1).and_hms(0, 0, 0),
+                        DateTime::new_utc(2014, 2, 1, 0, 0, 0),
+                        DateTime::new_utc(2014, 3, 1, 0, 0, 0),
                     ),
                     TimeInterval::new_unchecked(
-                        NaiveDate::from_ymd(2014, 2, 1).and_hms(0, 0, 0),
-                        NaiveDate::from_ymd(2014, 3, 1).and_hms(0, 0, 0),
+                        DateTime::new_utc(2014, 2, 1, 0, 0, 0),
+                        DateTime::new_utc(2014, 3, 1, 0, 0, 0),
                     ),
                 ],
                 [
