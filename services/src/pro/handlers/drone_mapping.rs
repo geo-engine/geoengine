@@ -268,7 +268,7 @@ where
 
     let dataset_definition = dataset_definition_from_geotiff(&tiff_path).await?;
 
-    let mut db = ctx.dataset_db_ref_mut().await;
+    let db = ctx.dataset_db_ref();
     let meta = db.wrap_meta_data(dataset_definition.meta_data);
 
     let dataset = db

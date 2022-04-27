@@ -77,7 +77,7 @@ where
     <<Tls as MakeTlsConnect<Socket>>::TlsConnect as TlsConnect<Socket>>::Future: Send,
 {
     async fn add_dataset_provider(
-        &mut self,
+        &self,
         _session: &UserSession,
         provider: Box<dyn ExternalDatasetProviderDefinition>,
     ) -> Result<DatasetProviderId> {
@@ -512,7 +512,7 @@ where
     <<Tls as MakeTlsConnect<Socket>>::TlsConnect as TlsConnect<Socket>>::Future: Send,
 {
     async fn add_dataset(
-        &mut self,
+        &self,
         session: &UserSession,
         dataset: Validated<AddDataset>,
         meta_data: Box<dyn PostgresStorable<Tls>>,
@@ -602,7 +602,7 @@ where
     <<Tls as MakeTlsConnect<Socket>>::TlsConnect as TlsConnect<Socket>>::Future: Send,
 {
     async fn add_dataset_permission(
-        &mut self,
+        &self,
         session: &UserSession,
         permission: DatasetPermission,
     ) -> Result<()> {
@@ -732,7 +732,7 @@ where
         })
     }
 
-    async fn create_upload(&mut self, session: &UserSession, upload: Upload) -> Result<()> {
+    async fn create_upload(&self, session: &UserSession, upload: Upload) -> Result<()> {
         let conn = self.conn_pool.get().await?;
 
         let stmt = conn

@@ -38,14 +38,14 @@ pub trait ProProjectDb: ProjectDb<UserSession> {
 
     /// Add a `permission` if the `user` is owner of the permission's target project
     async fn add_permission(
-        &mut self,
+        &self,
         session: &UserSession,
         permission: UserProjectPermission,
     ) -> Result<()>;
 
     /// Remove a `permission` if the `user` is owner of the target project
     async fn remove_permission(
-        &mut self,
+        &self,
         session: &UserSession,
         permission: UserProjectPermission,
     ) -> Result<()>;

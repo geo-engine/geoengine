@@ -17,14 +17,14 @@ use geoengine_datatypes::util::test::TestDefault;
 use geoengine_operators::engine::ChunkByteSize;
 use geoengine_operators::util::create_rayon_thread_pool;
 use rayon::ThreadPool;
-use tokio::sync::{RwLock, RwLockReadGuard, RwLockWriteGuard};
+use tokio::sync::{RwLockReadGuard, RwLockWriteGuard};
 
 /// A context with references to in-memory versions of the individual databases.
 #[derive(Clone)]
 pub struct InMemoryContext {
-    project_db: Db<HashMapProjectDb>,
-    workflow_registry: Db<HashMapRegistry>,
-    dataset_db: Db<HashMapDatasetDb>,
+    project_db: Arc<HashMapProjectDb>,
+    workflow_registry: Arc<HashMapRegistry>,
+    dataset_db: Arc<HashMapDatasetDb>,
     session: Db<SimpleSession>,
     thread_pool: Arc<ThreadPool>,
     exe_ctx_tiling_spec: TilingSpecification,
@@ -63,7 +63,7 @@ impl InMemoryContext {
             thread_pool: create_rayon_thread_pool(0),
             exe_ctx_tiling_spec,
             query_ctx_chunk_size,
-            dataset_db: Arc::new(RwLock::new(db)),
+            dataset_db: Arc::new(db),
         }
     }
 
@@ -92,34 +92,25 @@ impl Context for InMemoryContext {
     type QueryContext = QueryContextImpl;
     type ExecutionContext = ExecutionContextImpl<SimpleSession, HashMapDatasetDb>;
 
-    fn project_db(&self) -> Db<Self::ProjectDB> {
+    fn project_db(&self) -> Arc<Self::ProjectDB> {
         self.project_db.clone()
     }
-    async fn project_db_ref(&self) -> RwLockReadGuard<'_, Self::ProjectDB> {
-        self.project_db.read().await
-    }
-    async fn project_db_ref_mut(&self) -> RwLockWriteGuard<'_, Self::ProjectDB> {
-        self.project_db.write().await
+    fn project_db_ref(&self) -> &Self::ProjectDB {
+        &self.project_db
     }
 
-    fn workflow_registry(&self) -> Db<Self::WorkflowRegistry> {
+    fn workflow_registry(&self) -> Arc<Self::WorkflowRegistry> {
         self.workflow_registry.clone()
     }
-    async fn workflow_registry_ref(&self) -> RwLockReadGuard<'_, Self::WorkflowRegistry> {
-        self.workflow_registry.read().await
-    }
-    async fn workflow_registry_ref_mut(&self) -> RwLockWriteGuard<'_, Self::WorkflowRegistry> {
-        self.workflow_registry.write().await
+    fn workflow_registry_ref(&self) -> &Self::WorkflowRegistry {
+        &self.workflow_registry
     }
 
-    fn dataset_db(&self) -> Db<Self::DatasetDB> {
+    fn dataset_db(&self) -> Arc<Self::DatasetDB> {
         self.dataset_db.clone()
     }
-    async fn dataset_db_ref(&self) -> RwLockReadGuard<'_, Self::DatasetDB> {
-        self.dataset_db.read().await
-    }
-    async fn dataset_db_ref_mut(&self) -> RwLockWriteGuard<'_, Self::DatasetDB> {
-        self.dataset_db.write().await
+    fn dataset_db_ref(&self) -> &Self::DatasetDB {
+        &self.dataset_db
     }
 
     fn query_context(&self) -> Result<Self::QueryContext> {

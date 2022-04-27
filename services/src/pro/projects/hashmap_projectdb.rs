@@ -1,3 +1,4 @@
+use crate::contexts::Db;
 use crate::error;
 use crate::error::Result;
 use crate::pro::projects::{ProProjectDb, ProjectPermission, UserProjectPermission};
@@ -15,8 +16,8 @@ use super::LoadVersion;
 
 #[derive(Default)]
 pub struct ProHashMapProjectDb {
-    projects: HashMap<ProjectId, Vec<Project>>,
-    permissions: Vec<UserProjectPermission>,
+    projects: Db<HashMap<ProjectId, Vec<Project>>>,
+    permissions: Db<Vec<UserProjectPermission>>,
 }
 
 #[async_trait]
@@ -33,12 +34,17 @@ impl ProjectDb<UserSession> for ProHashMapProjectDb {
             offset,
             limit,
         } = options.user_input;
+
+        let all_projects = self.projects.read().await;
+
         #[allow(clippy::flat_map_option)]
         let mut projects = self
             .permissions
+            .read()
+            .await
             .iter()
             .filter(|p| p.user == session.user.id) // && permissions.contains(&p.permission))
-            .flat_map(|p| self.projects.get(&p.project).and_then(|p| p.last()))
+            .flat_map(|p| all_projects.get(&p.project).and_then(|p| p.last()))
             .map(ProjectListing::from)
             .filter(|p| match &filter {
                 ProjectFilter::Name { term } => p.name == *term,
@@ -63,14 +69,14 @@ impl ProjectDb<UserSession> for ProHashMapProjectDb {
 
     /// Create a project
     async fn create(
-        &mut self,
+        &self,
         session: &UserSession,
         create: Validated<CreateProject>,
     ) -> Result<ProjectId> {
         let project: Project = Project::from_create_project(create.user_input);
         let id = project.id;
-        self.projects.insert(id, vec![project]);
-        self.permissions.push(UserProjectPermission {
+        self.projects.write().await.insert(id, vec![project]);
+        self.permissions.write().await.push(UserProjectPermission {
             project: id,
             permission: ProjectPermission::Owner,
             user: session.user.id,
@@ -79,23 +85,24 @@ impl ProjectDb<UserSession> for ProHashMapProjectDb {
     }
 
     /// Update a project
-    async fn update(
-        &mut self,
-        session: &UserSession,
-        update: Validated<UpdateProject>,
-    ) -> Result<()> {
+    async fn update(&self, session: &UserSession, update: Validated<UpdateProject>) -> Result<()> {
         let update = update.user_input;
 
         ensure!(
-            self.permissions.iter().any(|p| p.project == update.id
-                && p.user == session.user.id
-                && (p.permission == ProjectPermission::Write
-                    || p.permission == ProjectPermission::Owner)),
+            self.permissions
+                .read()
+                .await
+                .iter()
+                .any(|p| p.project == update.id
+                    && p.user == session.user.id
+                    && (p.permission == ProjectPermission::Write
+                        || p.permission == ProjectPermission::Owner)),
             error::ProjectUpdateFailed
         );
 
-        let project_versions = self
-            .projects
+        let mut projects = self.projects.write().await;
+
+        let project_versions = projects
             .get_mut(&update.id)
             .ok_or(error::Error::ProjectUpdateFailed)?;
         let project = project_versions
@@ -110,15 +117,21 @@ impl ProjectDb<UserSession> for ProHashMapProjectDb {
     }
 
     /// Delete a project
-    async fn delete(&mut self, session: &UserSession, project: ProjectId) -> Result<()> {
+    async fn delete(&self, session: &UserSession, project: ProjectId) -> Result<()> {
         ensure!(
-            self.permissions.iter().any(|p| p.project == project
-                && p.user == session.user.id
-                && p.permission == ProjectPermission::Owner),
+            self.permissions
+                .read()
+                .await
+                .iter()
+                .any(|p| p.project == project
+                    && p.user == session.user.id
+                    && p.permission == ProjectPermission::Owner),
             error::ProjectUpdateFailed
         );
 
         self.projects
+            .write()
+            .await
             .remove(&project)
             .map(|_| ())
             .ok_or(error::Error::ProjectDeleteFailed)
@@ -141,12 +154,16 @@ impl ProProjectDb for ProHashMapProjectDb {
     ) -> Result<Project> {
         ensure!(
             self.permissions
+                .read()
+                .await
                 .iter()
                 .any(|p| p.project == project && p.user == session.user.id),
             error::ProjectLoadFailed
         );
-        let project_versions = self
-            .projects
+
+        let projects = self.projects.read().await;
+
+        let project_versions = projects
             .get(&project)
             .ok_or(error::Error::ProjectLoadFailed)?;
         if let LoadVersion::Version(version) = version {
@@ -172,6 +189,8 @@ impl ProProjectDb for ProHashMapProjectDb {
         // TODO: pagination?
         ensure!(
             self.permissions
+                .read()
+                .await
                 .iter()
                 .any(|p| p.project == project && p.user == session.user.id),
             error::ProjectLoadFailed
@@ -179,6 +198,8 @@ impl ProProjectDb for ProHashMapProjectDb {
 
         Ok(self
             .projects
+            .read()
+            .await
             .get(&project)
             .ok_or(error::Error::ProjectLoadFailed)?
             .iter()
@@ -194,6 +215,8 @@ impl ProProjectDb for ProHashMapProjectDb {
     ) -> Result<Vec<UserProjectPermission>> {
         ensure!(
             self.permissions
+                .read()
+                .await
                 .iter()
                 .any(|p| p.project == project && p.user == session.user.id),
             error::ProjectLoadFailed
@@ -201,6 +224,8 @@ impl ProProjectDb for ProHashMapProjectDb {
 
         Ok(self
             .permissions
+            .read()
+            .await
             .iter()
             .filter(|p| p.project == project)
             .cloned()
@@ -209,47 +234,46 @@ impl ProProjectDb for ProHashMapProjectDb {
 
     /// Add a permissions on a project
     async fn add_permission(
-        &mut self,
+        &self,
         session: &UserSession,
         permission: UserProjectPermission,
     ) -> Result<()> {
+        let mut permissions = self.permissions.write().await;
         ensure!(
-            self.permissions
-                .iter()
-                .any(|p| p.project == permission.project
-                    && p.user == session.user.id
-                    && p.permission == ProjectPermission::Owner),
+            permissions.iter().any(|p| p.project == permission.project
+                && p.user == session.user.id
+                && p.permission == ProjectPermission::Owner),
             error::ProjectUpdateFailed
         );
 
-        if !self.permissions.contains(&permission) {
-            self.permissions.push(permission);
+        if !permissions.contains(&permission) {
+            permissions.push(permission);
         }
         Ok(())
     }
 
     /// Remove a permissions from a project
     async fn remove_permission(
-        &mut self,
+        &self,
         session: &UserSession,
         permission: UserProjectPermission,
     ) -> Result<()> {
+        let mut permissions = self.permissions.write().await;
+
         ensure!(
-            self.permissions
-                .iter()
-                .any(|p| p.project == permission.project
-                    && p.user == session.user.id
-                    && p.permission == ProjectPermission::Owner),
+            permissions.iter().any(|p| p.project == permission.project
+                && p.user == session.user.id
+                && p.permission == ProjectPermission::Owner),
             error::ProjectUpdateFailed
         );
 
-        self.permissions
-            .iter()
-            .position(|p| p == &permission)
-            .map_or(Err(error::Error::PermissionFailed), |i| {
-                self.permissions.remove(i);
+        permissions.iter().position(|p| p == &permission).map_or(
+            Err(error::Error::PermissionFailed),
+            |i| {
+                permissions.remove(i);
                 Ok(())
-            })
+            },
+        )
     }
 }
 
@@ -276,7 +300,7 @@ mod test {
 
     #[tokio::test]
     async fn list_permitted() {
-        let mut project_db = ProHashMapProjectDb::default();
+        let project_db = ProHashMapProjectDb::default();
 
         let session1 = create_random_user_session_helper();
         let session2 = create_random_user_session_helper();
@@ -366,7 +390,7 @@ mod test {
 
     #[tokio::test]
     async fn list() {
-        let mut project_db = ProHashMapProjectDb::default();
+        let project_db = ProHashMapProjectDb::default();
         let session = create_random_user_session_helper();
 
         for i in 0..10 {
@@ -406,7 +430,7 @@ mod test {
 
     #[tokio::test]
     async fn load() {
-        let mut project_db = ProHashMapProjectDb::default();
+        let project_db = ProHashMapProjectDb::default();
         let session = create_random_user_session_helper();
 
         let create = CreateProject {
@@ -431,7 +455,7 @@ mod test {
 
     #[tokio::test]
     async fn create() {
-        let mut project_db = ProHashMapProjectDb::default();
+        let project_db = ProHashMapProjectDb::default();
         let session = create_random_user_session_helper();
 
         let create = CreateProject {
@@ -451,7 +475,7 @@ mod test {
 
     #[tokio::test]
     async fn update() {
-        let mut project_db = ProHashMapProjectDb::default();
+        let project_db = ProHashMapProjectDb::default();
         let session = create_random_user_session_helper();
 
         let create = CreateProject {
@@ -485,7 +509,7 @@ mod test {
 
     #[tokio::test]
     async fn delete() {
-        let mut project_db = ProHashMapProjectDb::default();
+        let project_db = ProHashMapProjectDb::default();
         let session = create_random_user_session_helper();
 
         let create = CreateProject {
@@ -505,7 +529,7 @@ mod test {
 
     #[tokio::test]
     async fn versions() {
-        let mut project_db = ProHashMapProjectDb::default();
+        let project_db = ProHashMapProjectDb::default();
         let session = create_random_user_session_helper();
 
         let create = CreateProject {
@@ -544,7 +568,7 @@ mod test {
 
     #[tokio::test]
     async fn permissions() {
-        let mut project_db = ProHashMapProjectDb::default();
+        let project_db = ProHashMapProjectDb::default();
         let session = create_random_user_session_helper();
 
         let create = CreateProject {
@@ -592,7 +616,7 @@ mod test {
 
     #[tokio::test]
     async fn add_permission() {
-        let mut project_db = ProHashMapProjectDb::default();
+        let project_db = ProHashMapProjectDb::default();
         let session = create_random_user_session_helper();
 
         let create = CreateProject {
@@ -640,7 +664,7 @@ mod test {
 
     #[tokio::test]
     async fn remove_permission() {
-        let mut project_db = ProHashMapProjectDb::default();
+        let project_db = ProHashMapProjectDb::default();
         let session = create_random_user_session_helper();
 
         let create = CreateProject {

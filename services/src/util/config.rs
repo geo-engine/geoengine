@@ -6,9 +6,8 @@ use crate::contexts::SessionId;
 use crate::error::{self, Result};
 use crate::util::parsing::{deserialize_base_url, deserialize_base_url_option};
 
-use chrono::{DateTime, FixedOffset};
 use config::{Config, Environment, File};
-use geoengine_datatypes::primitives::{TimeInstance, TimeInterval};
+use geoengine_datatypes::primitives::{DateTime, TimeInstance, TimeInterval};
 use geoengine_operators::util::raster_stream_to_geotiff::GdalCompressionNumThreads;
 use lazy_static::lazy_static;
 use serde::Deserialize;
@@ -16,7 +15,7 @@ use snafu::ResultExt;
 
 lazy_static! {
     static ref SETTINGS: RwLock<Config> = RwLock::new({
-        let mut settings = Config::default();
+        let mut settings = Config::builder();
 
         let dir: PathBuf = retrieve_settings_dir().expect("settings directory must exist");
 
@@ -27,22 +26,22 @@ lazy_static! {
         let files = ["Settings-default.toml", "Settings.toml"];
 
         #[allow(clippy::filter_map)]
-        let files: Vec<File<_>> = files
+        let files: Vec<File<_, _>> = files
             .iter()
             .map(|f| dir.join(f))
             .filter(|p| p.exists())
             .map(File::from)
             .collect();
 
-        settings.merge(files).unwrap();
+        settings = settings.add_source(files);
 
         // Override config with environment variables that start with `GEOENGINE_`,
         // e.g. `GEOENGINE_WEB__EXTERNAL_ADDRESS=https://path.to.geoengine.io`
         // Note: Since variables contain underscores, we need to use something different
         // for seperating groups, for instance double underscores `__`
-        settings.merge(Environment::with_prefix("geoengine").separator("__")).unwrap();
+        settings = settings.add_source(Environment::with_prefix("geoengine").separator("__"));
 
-        settings
+        settings.build().unwrap()
     });
 }
 
@@ -79,11 +78,16 @@ pub fn set_config<T>(key: &str, value: T) -> Result<()>
 where
     T: Into<config::Value>,
 {
-    SETTINGS
+    let mut settings = SETTINGS
         .write()
-        .map_err(|_error| error::Error::ConfigLockFailed)?
-        .set(key, value)
+        .map_err(|_error| error::Error::ConfigLockFailed)?;
+
+    let builder = Config::builder()
+        .add_source(settings.clone())
+        .set_override(key, value)
         .context(error::Config)?;
+
+    *settings = builder.build().context(error::Config)?;
     Ok(())
 }
 
@@ -235,12 +239,10 @@ impl OgcDefaultTime {
     pub fn time_interval(&self) -> TimeInterval {
         match self {
             OgcDefaultTime::Now => {
-                TimeInterval::new_instant(TimeInstance::from(chrono::offset::Utc::now()))
-                    .expect("config error")
+                TimeInterval::new_instant(TimeInstance::now()).expect("config error")
             }
             OgcDefaultTime::Value(value) => {
-                TimeInterval::new(value.start.timestamp_millis(), value.end.timestamp_millis())
-                    .expect("config error")
+                TimeInterval::new(&value.start, &value.end).expect("config error")
             }
         }
     }
@@ -252,8 +254,8 @@ pub trait DefaultTime {
 
 #[derive(Debug, Deserialize)]
 pub struct TimeStartEnd {
-    pub start: DateTime<FixedOffset>,
-    pub end: DateTime<FixedOffset>,
+    pub start: DateTime,
+    pub end: DateTime,
 }
 
 #[derive(Debug, Deserialize)]

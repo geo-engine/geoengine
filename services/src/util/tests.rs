@@ -37,9 +37,7 @@ pub async fn create_project_helper<C: SimpleContext>(ctx: &C) -> (SimpleSession,
     let session = ctx.default_session_ref().await;
 
     let project = ctx
-        .project_db()
-        .write()
-        .await
+        .project_db_ref()
         .create(
             &session,
             CreateProject {
@@ -100,9 +98,7 @@ pub async fn register_ndvi_workflow_helper(ctx: &InMemoryContext) -> (Workflow, 
     };
 
     let id = ctx
-        .workflow_registry()
-        .write()
-        .await
+        .workflow_registry_ref()
         .register(workflow.clone())
         .await
         .unwrap();
@@ -127,8 +123,7 @@ pub async fn add_ndvi_to_datasets(ctx: &InMemoryContext) -> DatasetId {
         meta_data: MetaDataDefinition::GdalMetaDataRegular(create_ndvi_meta_data()),
     };
 
-    ctx.dataset_db_ref_mut()
-        .await
+    ctx.dataset_db_ref()
         .add_dataset(
             &SimpleSession::default(),
             ndvi.properties

@@ -19,12 +19,11 @@ pub trait ProjectDb<S: Session>: Send + Sync {
     async fn load(&self, session: &S, project: ProjectId) -> Result<Project>;
 
     /// Create a new `project` for the `user`
-    async fn create(&mut self, session: &S, project: Validated<CreateProject>)
-        -> Result<ProjectId>;
+    async fn create(&self, session: &S, project: Validated<CreateProject>) -> Result<ProjectId>;
 
     /// Update a `project` for the `user`. A new version is created
-    async fn update(&mut self, session: &S, project: Validated<UpdateProject>) -> Result<()>;
+    async fn update(&self, session: &S, project: Validated<UpdateProject>) -> Result<()>;
 
     /// Delete the `project` if `user` is an owner
-    async fn delete(&mut self, session: &S, project: ProjectId) -> Result<()>;
+    async fn delete(&self, session: &S, project: ProjectId) -> Result<()>;
 }

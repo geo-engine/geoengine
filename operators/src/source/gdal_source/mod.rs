@@ -19,7 +19,7 @@ use futures::{Future, TryStreamExt};
 use gdal::raster::{GdalType, RasterBand as GdalRasterBand};
 use gdal::{DatasetOptions, GdalOpenFlags, Metadata as GdalMetadata};
 use geoengine_datatypes::primitives::{
-    Coordinate2D, RasterQueryRectangle, SpatialPartition2D, SpatialPartitioned,
+    Coordinate2D, DateTimeParseFormat, RasterQueryRectangle, SpatialPartition2D, SpatialPartitioned,
 };
 use geoengine_datatypes::raster::{
     EmptyGrid, GeoTransform, Grid2D, GridShape2D, GridShapeAccess, Pixel, RasterDataType,
@@ -97,7 +97,7 @@ type GdalMetaData =
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(rename_all = "camelCase")]
 pub struct GdalSourceTimePlaceholder {
-    pub format: String,
+    pub format: DateTimeParseFormat,
     pub reference: TimeReference,
 }
 
@@ -266,10 +266,9 @@ impl GdalDatasetParameters {
                 TimeReference::End => time.end(),
             };
             let time_string = time
-                .as_naive_date_time()
+                .as_date_time()
                 .ok_or(Error::TimeInstanceNotDisplayable)?
-                .format(&time_placeholder.format)
-                .to_string();
+                .format(&time_placeholder.format);
 
             // TODO: use more efficient algorithm for replacing multiple placeholders, e.g. aho-corasick
             file_path = file_path.replace(placeholder, &time_string);
@@ -904,6 +903,7 @@ mod tests {
     use geoengine_datatypes::primitives::{AxisAlignedRectangle, SpatialPartition2D, TimeInstance};
     use geoengine_datatypes::raster::{EmptyGrid2D, GridIdx2D};
     use geoengine_datatypes::raster::{TileInformation, TilingStrategy};
+    use geoengine_datatypes::util::gdal::hide_gdal_errors;
     use geoengine_datatypes::{primitives::SpatialResolution, raster::GridShape2D};
 
     async fn query_gdal_source(
@@ -1168,7 +1168,7 @@ mod tests {
             .replace_time_placeholders(
                 &hashmap! {
                     "%TIME%".to_string() => GdalSourceTimePlaceholder {
-                        format: "%f".to_string(),
+                        format: DateTimeParseFormat::custom("%f".to_string()),
                         reference: TimeReference::Start,
                     },
                 },
@@ -1386,6 +1386,8 @@ mod tests {
 
     #[tokio::test]
     async fn test_nodata() {
+        hide_gdal_errors();
+
         let mut exe_ctx = MockExecutionContext::test_default();
         let query_ctx = MockQueryContext::test_default();
         let id = add_ndvi_dataset(&mut exe_ctx);

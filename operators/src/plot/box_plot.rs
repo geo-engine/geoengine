@@ -452,7 +452,8 @@ mod tests {
     use serde_json::json;
 
     use geoengine_datatypes::primitives::{
-        BoundingBox2D, FeatureData, Measurement, NoGeometry, SpatialResolution, TimeInterval,
+        BoundingBox2D, DateTime, FeatureData, Measurement, NoGeometry, SpatialResolution,
+        TimeInterval,
     };
     use geoengine_datatypes::raster::{
         EmptyGrid2D, Grid2D, RasterDataType, RasterTile2D, TileInformation, TilingSpecification,
@@ -468,7 +469,6 @@ mod tests {
     use crate::mock::{MockFeatureCollectionSource, MockRasterSource, MockRasterSourceParams};
 
     use super::*;
-    use chrono::NaiveDate;
 
     #[test]
     fn serialization() {
@@ -1218,9 +1218,9 @@ mod tests {
                 VectorQueryRectangle {
                     spatial_bounds: BoundingBox2D::new((-180., -90.).into(), (180., 90.).into())
                         .unwrap(),
-                    time_interval: TimeInterval::new_instant(
-                        NaiveDate::from_ymd(2013, 12, 1).and_hms(12, 0, 0),
-                    )
+                    time_interval: TimeInterval::new_instant(DateTime::new_utc(
+                        2013, 12, 1, 12, 0, 0,
+                    ))
                     .unwrap(),
                     spatial_resolution: SpatialResolution::one(),
                 },
@@ -1295,9 +1295,9 @@ mod tests {
             .plot_query(
                 VectorQueryRectangle {
                     spatial_bounds: BoundingBox2D::new((0., -4.).into(), (2., 0.).into()).unwrap(),
-                    time_interval: TimeInterval::new_instant(
-                        NaiveDate::from_ymd(2013, 12, 1).and_hms(12, 0, 0),
-                    )
+                    time_interval: TimeInterval::new_instant(DateTime::new_utc(
+                        2013, 12, 1, 12, 0, 0,
+                    ))
                     .unwrap(),
                     spatial_resolution: SpatialResolution::one(),
                 },
@@ -1372,9 +1372,9 @@ mod tests {
             .plot_query(
                 VectorQueryRectangle {
                     spatial_bounds: BoundingBox2D::new((0., -4.).into(), (2., 0.).into()).unwrap(),
-                    time_interval: TimeInterval::new_instant(
-                        NaiveDate::from_ymd(2013, 12, 1).and_hms(12, 0, 0),
-                    )
+                    time_interval: TimeInterval::new_instant(DateTime::new_utc(
+                        2013, 12, 1, 12, 0, 0,
+                    ))
                     .unwrap(),
                     spatial_resolution: SpatialResolution::one(),
                 },
@@ -1455,9 +1455,9 @@ mod tests {
                 VectorQueryRectangle {
                     spatial_bounds: BoundingBox2D::new((-180., -90.).into(), (180., 90.).into())
                         .unwrap(),
-                    time_interval: TimeInterval::new_instant(
-                        NaiveDate::from_ymd(2013, 12, 1).and_hms(12, 0, 0),
-                    )
+                    time_interval: TimeInterval::new_instant(DateTime::new_utc(
+                        2013, 12, 1, 12, 0, 0,
+                    ))
                     .unwrap(),
                     spatial_resolution: SpatialResolution::one(),
                 },

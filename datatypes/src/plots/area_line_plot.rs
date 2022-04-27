@@ -88,20 +88,19 @@ impl Plot for AreaLineChart {
 
 #[cfg(test)]
 mod tests {
-    use crate::primitives::ContinuousMeasurement;
+    use crate::primitives::{ContinuousMeasurement, DateTime};
 
     use super::*;
-    use chrono::NaiveDate;
 
     #[test]
     fn serialization() {
         let chart = AreaLineChart::new(
             vec![
-                TimeInstance::from(NaiveDate::from_ymd(2010, 1, 1).and_hms(0, 0, 0)),
-                TimeInstance::from(NaiveDate::from_ymd(2011, 1, 1).and_hms(0, 0, 0)),
-                TimeInstance::from(NaiveDate::from_ymd(2012, 1, 1).and_hms(0, 0, 0)),
-                TimeInstance::from(NaiveDate::from_ymd(2013, 1, 1).and_hms(0, 0, 0)),
-                TimeInstance::from(NaiveDate::from_ymd(2014, 1, 1).and_hms(0, 0, 0)),
+                TimeInstance::from(DateTime::new_utc(2010, 1, 1, 0, 0, 0)),
+                TimeInstance::from(DateTime::new_utc(2011, 1, 1, 0, 0, 0)),
+                TimeInstance::from(DateTime::new_utc(2012, 1, 1, 0, 0, 0)),
+                TimeInstance::from(DateTime::new_utc(2013, 1, 1, 0, 0, 0)),
+                TimeInstance::from(DateTime::new_utc(2014, 1, 1, 0, 0, 0)),
             ],
             vec![0., 1., 4., 9., 7.],
             Measurement::Unitless,
@@ -122,11 +121,11 @@ mod tests {
     fn without_area() {
         let chart = AreaLineChart::new(
             vec![
-                TimeInstance::from(NaiveDate::from_ymd(2010, 1, 1).and_hms(0, 0, 0)),
-                TimeInstance::from(NaiveDate::from_ymd(2011, 1, 1).and_hms(0, 0, 0)),
-                TimeInstance::from(NaiveDate::from_ymd(2012, 1, 1).and_hms(0, 0, 0)),
-                TimeInstance::from(NaiveDate::from_ymd(2013, 1, 1).and_hms(0, 0, 0)),
-                TimeInstance::from(NaiveDate::from_ymd(2014, 1, 1).and_hms(0, 0, 0)),
+                TimeInstance::from(DateTime::new_utc(2010, 1, 1, 0, 0, 0)),
+                TimeInstance::from(DateTime::new_utc(2011, 1, 1, 0, 0, 0)),
+                TimeInstance::from(DateTime::new_utc(2012, 1, 1, 0, 0, 0)),
+                TimeInstance::from(DateTime::new_utc(2013, 1, 1, 0, 0, 0)),
+                TimeInstance::from(DateTime::new_utc(2014, 1, 1, 0, 0, 0)),
             ],
             vec![0., 1., 4., 9., 7.],
             Measurement::Continuous(ContinuousMeasurement {

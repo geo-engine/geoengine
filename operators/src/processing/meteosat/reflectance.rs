@@ -17,7 +17,7 @@ use crate::error::Error;
 use futures::stream::BoxStream;
 use futures::{StreamExt, TryStreamExt};
 use geoengine_datatypes::primitives::{
-    ClassificationMeasurement, ContinuousMeasurement, Measurement, RasterQueryRectangle,
+    ClassificationMeasurement, ContinuousMeasurement, DateTime, Measurement, RasterQueryRectangle,
     SpatialPartition2D,
 };
 use geoengine_datatypes::raster::{
@@ -31,7 +31,6 @@ type PixelOut = f32;
 use crate::processing::meteosat::satellite::{Channel, Satellite};
 use crate::processing::meteosat::{new_channel_key, new_satellite_key};
 use crate::util::sunpos::SunPos;
-use chrono::{DateTime, Datelike, Utc};
 use RasterDataType::F32 as RasterOut;
 
 const OUT_NO_DATA_VALUE: PixelOut = PixelOut::NAN;
@@ -230,7 +229,7 @@ fn process_tile(
         let timestamp = tile
             .time
             .start()
-            .as_utc_date_time()
+            .as_date_time()
             .ok_or(Error::InvalidUTCTimestamp)?;
 
         // get extra terrestrial solar radiation (...) and ESD (solar position)
@@ -299,8 +298,8 @@ fn process_tile(
     })
 }
 
-fn calculate_esd(timestamp: &DateTime<Utc>) -> f64 {
-    let perihelion = f64::from(timestamp.ordinal()) - 3.0;
+fn calculate_esd(timestamp: &DateTime) -> f64 {
+    let perihelion = f64::from(timestamp.day_of_year()) - 3.0;
     let e = 0.0167;
     let theta = std::f64::consts::TAU * (perihelion / 365.0);
     1.0 - e * theta.cos()
