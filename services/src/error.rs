@@ -330,6 +330,8 @@ pub enum Error {
     },
 
     BaseUrlMustEndWithSlash,
+
+    NoLayerForGivenId,
 }
 
 impl actix_web::error::ResponseError for Error {

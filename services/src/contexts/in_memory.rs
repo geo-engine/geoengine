@@ -6,6 +6,10 @@ use super::{Session, SimpleContext};
 use crate::contexts::{ExecutionContextImpl, QueryContextImpl, SessionId};
 use crate::datasets::in_memory::HashMapDatasetDb;
 use crate::error::Error;
+use crate::layers::add_from_directory::{
+    add_layer_collections_from_directory, add_layers_from_directory,
+};
+use crate::layers::storage::HashMapLayerDb;
 use crate::{
     datasets::add_from_directory::{add_datasets_from_directory, add_providers_from_directory},
     error::Result,
@@ -25,6 +29,7 @@ pub struct InMemoryContext {
     project_db: Arc<HashMapProjectDb>,
     workflow_registry: Arc<HashMapRegistry>,
     dataset_db: Arc<HashMapDatasetDb>,
+    layer_db: Arc<HashMapLayerDb>,
     session: Db<SimpleSession>,
     thread_pool: Arc<ThreadPool>,
     exe_ctx_tiling_spec: TilingSpecification,
@@ -37,6 +42,7 @@ impl TestDefault for InMemoryContext {
             project_db: Default::default(),
             workflow_registry: Default::default(),
             dataset_db: Default::default(),
+            layer_db: Default::default(),
             session: Default::default(),
             thread_pool: create_rayon_thread_pool(0),
             exe_ctx_tiling_spec: TestDefault::test_default(),
@@ -49,21 +55,29 @@ impl InMemoryContext {
     pub async fn new_with_data(
         dataset_defs_path: PathBuf,
         provider_defs_path: PathBuf,
+        layer_defs_path: PathBuf,
+        layer_collection_defs_path: PathBuf,
         exe_ctx_tiling_spec: TilingSpecification,
         query_ctx_chunk_size: ChunkByteSize,
     ) -> Self {
-        let mut db = HashMapDatasetDb::default();
-        add_datasets_from_directory(&mut db, dataset_defs_path).await;
-        add_providers_from_directory(&mut db, provider_defs_path).await;
+        let mut dataset_db = HashMapDatasetDb::default();
+        add_datasets_from_directory(&mut dataset_db, dataset_defs_path).await;
+        add_providers_from_directory(&mut dataset_db, provider_defs_path).await;
+
+        let mut workflow_registry = HashMapRegistry::default();
+        let mut layer_db = HashMapLayerDb::default();
+        add_layers_from_directory(&mut layer_db, &mut workflow_registry, layer_defs_path).await;
+        add_layer_collections_from_directory(&mut layer_db, layer_collection_defs_path).await;
 
         Self {
             project_db: Default::default(),
-            workflow_registry: Default::default(),
+            workflow_registry: Arc::new(workflow_registry),
+            layer_db: Arc::new(layer_db),
             session: Default::default(),
             thread_pool: create_rayon_thread_pool(0),
             exe_ctx_tiling_spec,
             query_ctx_chunk_size,
-            dataset_db: Arc::new(db),
+            dataset_db: Arc::new(dataset_db),
         }
     }
 
@@ -75,6 +89,7 @@ impl InMemoryContext {
             project_db: Default::default(),
             workflow_registry: Default::default(),
             dataset_db: Default::default(),
+            layer_db: Default::default(),
             session: Default::default(),
             thread_pool: create_rayon_thread_pool(0),
             exe_ctx_tiling_spec,
@@ -89,6 +104,7 @@ impl Context for InMemoryContext {
     type ProjectDB = HashMapProjectDb;
     type WorkflowRegistry = HashMapRegistry;
     type DatasetDB = HashMapDatasetDb;
+    type LayerDB = HashMapLayerDb;
     type QueryContext = QueryContextImpl;
     type ExecutionContext = ExecutionContextImpl<SimpleSession, HashMapDatasetDb>;
 
@@ -111,6 +127,13 @@ impl Context for InMemoryContext {
     }
     fn dataset_db_ref(&self) -> &Self::DatasetDB {
         &self.dataset_db
+    }
+
+    fn layer_db(&self) -> Arc<Self::LayerDB> {
+        self.layer_db.clone()
+    }
+    fn layer_db_ref(&self) -> &Self::LayerDB {
+        &self.layer_db
     }
 
     fn query_context(&self) -> Result<Self::QueryContext> {

@@ -312,6 +312,8 @@ impl ConfigElement for Odm {
 pub struct DataProvider {
     pub dataset_defs_path: PathBuf,
     pub provider_defs_path: PathBuf,
+    pub layer_defs_path: PathBuf,
+    pub layer_collection_defs_path: PathBuf,
 }
 
 impl ConfigElement for DataProvider {

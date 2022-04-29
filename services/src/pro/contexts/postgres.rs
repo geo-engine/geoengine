@@ -1,6 +1,10 @@
 use crate::datasets::add_from_directory::add_providers_from_directory;
 use crate::error::{self, Result};
+use crate::layers::add_from_directory::{
+    add_layer_collections_from_directory, add_layers_from_directory,
+};
 use crate::pro::datasets::{add_datasets_from_directory, PostgresDatasetDb, Role};
+use crate::pro::layers::postgres_layer_db::PostgresLayerDb;
 use crate::pro::projects::ProjectPermission;
 use crate::pro::users::{UserDb, UserId, UserSession};
 use crate::pro::workflows::postgres_workflow_registry::PostgresWorkflowRegistry;
@@ -43,6 +47,7 @@ where
     project_db: Arc<PostgresProjectDb<Tls>>,
     workflow_registry: Arc<PostgresWorkflowRegistry<Tls>>,
     dataset_db: Arc<PostgresDatasetDb<Tls>>,
+    layer_db: Arc<PostgresLayerDb<Tls>>,
     thread_pool: Arc<ThreadPool>,
     exe_ctx_tiling_spec: TilingSpecification,
     query_ctx_chunk_size: ChunkByteSize,
@@ -72,6 +77,7 @@ where
             project_db: Arc::new(PostgresProjectDb::new(pool.clone())),
             workflow_registry: Arc::new(PostgresWorkflowRegistry::new(pool.clone())),
             dataset_db: Arc::new(PostgresDatasetDb::new(pool.clone())),
+            layer_db: Arc::new(PostgresLayerDb::new(pool.clone())),
             thread_pool: create_rayon_thread_pool(0),
             exe_ctx_tiling_spec,
             query_ctx_chunk_size,
@@ -79,11 +85,14 @@ where
     }
 
     // TODO: check if the datasets exist already and don't output warnings when skipping them
+    #[allow(clippy::too_many_arguments)]
     pub async fn new_with_data(
         config: Config,
         tls: Tls,
         dataset_defs_path: PathBuf,
         provider_defs_path: PathBuf,
+        layer_defs_path: PathBuf,
+        layer_collection_defs_path: PathBuf,
         exe_ctx_tiling_spec: TilingSpecification,
         query_ctx_chunk_size: ChunkByteSize,
     ) -> Result<Self> {
@@ -98,11 +107,18 @@ where
         add_providers_from_directory(&mut dataset_db, provider_defs_path.clone()).await;
         add_providers_from_directory(&mut dataset_db, provider_defs_path.join("pro")).await;
 
+        let mut workflow_db = PostgresWorkflowRegistry::new(pool.clone());
+        let mut layer_db = PostgresLayerDb::new(pool.clone());
+
+        add_layers_from_directory(&mut layer_db, &mut workflow_db, layer_defs_path).await;
+        add_layer_collections_from_directory(&mut layer_db, layer_collection_defs_path).await;
+
         Ok(Self {
             user_db: Arc::new(PostgresUserDb::new(pool.clone())),
             project_db: Arc::new(PostgresProjectDb::new(pool.clone())),
-            workflow_registry: Arc::new(PostgresWorkflowRegistry::new(pool.clone())),
+            workflow_registry: Arc::new(workflow_db),
             dataset_db: Arc::new(dataset_db),
+            layer_db: Arc::new(layer_db),
             thread_pool: create_rayon_thread_pool(0),
             exe_ctx_tiling_spec,
             query_ctx_chunk_size,
@@ -449,6 +465,7 @@ where
     type ProjectDB = PostgresProjectDb<Tls>;
     type WorkflowRegistry = PostgresWorkflowRegistry<Tls>;
     type DatasetDB = PostgresDatasetDb<Tls>;
+    type LayerDB = PostgresLayerDb<Tls>;
     type QueryContext = QueryContextImpl;
     type ExecutionContext = ExecutionContextImpl<UserSession, PostgresDatasetDb<Tls>>;
 
@@ -471,6 +488,13 @@ where
     }
     fn dataset_db_ref(&self) -> &Self::DatasetDB {
         &self.dataset_db
+    }
+
+    fn layer_db(&self) -> Arc<Self::LayerDB> {
+        self.layer_db.clone()
+    }
+    fn layer_db_ref(&self) -> &Self::LayerDB {
+        &self.layer_db
     }
 
     fn query_context(&self) -> Result<Self::QueryContext> {

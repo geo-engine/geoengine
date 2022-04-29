@@ -133,6 +133,8 @@ pub async fn start_pro_server(static_files_dir: Option<PathBuf>) -> Result<()> {
             let ctx = ProInMemoryContext::new_with_data(
                 data_path_config.dataset_defs_path,
                 data_path_config.provider_defs_path,
+                data_path_config.layer_defs_path,
+                data_path_config.layer_collection_defs_path,
                 tiling_spec,
                 chunk_byte_size,
             )
@@ -166,6 +168,8 @@ pub async fn start_pro_server(static_files_dir: Option<PathBuf>) -> Result<()> {
                     NoTls,
                     data_path_config.dataset_defs_path,
                     data_path_config.provider_defs_path,
+                    data_path_config.layer_defs_path,
+                    data_path_config.layer_collection_defs_path,
                     tiling_spec,
                     chunk_byte_size,
                 )

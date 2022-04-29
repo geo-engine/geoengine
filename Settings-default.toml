@@ -60,6 +60,8 @@ tile_limit = 4
 [dataprovider]
 dataset_defs_path = "./test_data/dataset_defs"
 provider_defs_path = "./test_data/provider_defs"
+layer_defs_path = "./test_data/layer_defs"
+layer_collection_defs_path = "./test_data/layer_collection_defs"
 
 [gdal]
 # TODO: find good default
