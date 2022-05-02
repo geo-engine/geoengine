@@ -489,6 +489,7 @@ mod tests {
     use float_cmp::approx_eq;
     use futures::StreamExt;
     use geoengine_datatypes::collections::IntoGeometryIterator;
+    use geoengine_datatypes::primitives::DateTimeParseFormat;
     use geoengine_datatypes::{
         collections::{
             GeometryCollection, MultiLineStringCollection, MultiPointCollection,
@@ -956,7 +957,7 @@ mod tests {
             },
             time_placeholders: hashmap! {
                 "%_START_TIME_%".to_string() => GdalSourceTimePlaceholder {
-                    format: "%Y-%m-%d".to_string(),
+                    format: DateTimeParseFormat::custom("%Y-%m-%d".to_string()),
                     reference: TimeReference::Start,
                 },
             },

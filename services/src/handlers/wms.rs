@@ -127,7 +127,7 @@ where
 {
     let wms_url = wms_url(workflow_id)?;
 
-    let workflow = ctx.workflow_registry_ref().await.load(&workflow_id).await?;
+    let workflow = ctx.workflow_registry_ref().load(&workflow_id).await?;
 
     let exe_ctx = ctx.execution_context(session)?;
     let operator = workflow
@@ -238,7 +238,6 @@ async fn get_map<C: Context>(
 
     let workflow = ctx
         .workflow_registry_ref()
-        .await
         .load(&WorkflowId::from_str(&request.layers)?)
         .await?;
 

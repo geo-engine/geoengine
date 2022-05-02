@@ -7,7 +7,7 @@ use gdal::{raster::GDALDataType, Dataset, DatasetOptions};
 use geoengine_datatypes::{
     dataset::{DatasetId, InternalDatasetId},
     hashmap,
-    primitives::{Measurement, TimeGranularity, TimeInstance, TimeStep},
+    primitives::{DateTimeParseFormat, Measurement, TimeGranularity, TimeInstance, TimeStep},
     raster::RasterDataType,
     spatial_reference::SpatialReference,
     util::Identifier,
@@ -37,7 +37,7 @@ pub fn create_ndvi_meta_data() -> GdalMetaDataRegular {
         },
         time_placeholders: hashmap! {
             "%_START_TIME_%".to_string() => GdalSourceTimePlaceholder {
-                format: "%Y-%m-%d".to_string(),
+                format: DateTimeParseFormat::custom("%Y-%m-%d".to_string()),
                 reference: TimeReference::Start,
             },
         },

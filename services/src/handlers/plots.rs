@@ -125,7 +125,6 @@ async fn get_plot_handler<C: Context>(
 ) -> Result<impl Responder> {
     let workflow = ctx
         .workflow_registry_ref()
-        .await
         .load(&WorkflowId(id.into_inner()))
         .await?;
 
@@ -220,8 +219,7 @@ mod tests {
     use actix_web::dev::ServiceResponse;
     use actix_web::http::{header, Method};
     use actix_web_httpauth::headers::authorization::Bearer;
-    use chrono::NaiveDate;
-    use geoengine_datatypes::primitives::Measurement;
+    use geoengine_datatypes::primitives::{DateTime, Measurement};
     use geoengine_datatypes::raster::{
         Grid2D, RasterDataType, RasterTile2D, TileInformation, TilingSpecification,
     };
@@ -283,9 +281,7 @@ mod tests {
         };
 
         let id = ctx
-            .workflow_registry()
-            .write()
-            .await
+            .workflow_registry_ref()
             .register(workflow)
             .await
             .unwrap();
@@ -351,13 +347,7 @@ mod tests {
             .into(),
         };
 
-        let id = ctx
-            .workflow_registry()
-            .write()
-            .await
-            .register(workflow)
-            .await
-            .unwrap();
+        let id = ctx.workflow_registry().register(workflow).await.unwrap();
 
         let params = &[
             ("bbox", "0,-0.3,0.2,0"),
@@ -406,8 +396,8 @@ mod tests {
                 bbox: BoundingBox2D::new((-180., -90.).into(), (180., 90.).into()).unwrap(),
                 crs: SpatialReference::epsg_4326().into(),
                 time: TimeInterval::new(
-                    NaiveDate::from_ymd(2020, 1, 1).and_hms(0, 0, 0),
-                    NaiveDate::from_ymd(2020, 1, 1).and_hms(0, 0, 0),
+                    DateTime::new_utc(2020, 1, 1, 0, 0, 0),
+                    DateTime::new_utc(2020, 1, 1, 0, 0, 0),
                 )
                 .unwrap(),
                 spatial_resolution: SpatialResolution::zero_point_one(),
@@ -431,9 +421,7 @@ mod tests {
             };
 
             let id = ctx
-                .workflow_registry()
-                .write()
-                .await
+                .workflow_registry_ref()
                 .register(workflow)
                 .await
                 .unwrap();

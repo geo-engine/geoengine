@@ -236,7 +236,7 @@ pub trait DatasetProviderDb<S: Session> {
     /// Add an external dataset `provider` by `user`
     // TODO: require special privilege to be able to add external dataset provider and to access external data in general
     async fn add_dataset_provider(
-        &mut self,
+        &self,
         session: &S,
         provider: Box<dyn ExternalDatasetProviderDefinition>,
     ) -> Result<DatasetProviderId>;
@@ -266,7 +266,7 @@ pub trait DatasetStorer: Send + Sync {
 #[async_trait]
 pub trait DatasetStore<S: Session>: DatasetStorer {
     async fn add_dataset(
-        &mut self,
+        &self,
         session: &S,
         dataset: Validated<AddDataset>,
         meta_data: Self::StorageType,

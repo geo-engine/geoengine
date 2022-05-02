@@ -1,6 +1,7 @@
 mod bounding_box;
 mod circle;
 mod coordinate;
+mod datetime;
 pub(self) mod error;
 mod feature_data;
 mod geometry;
@@ -21,6 +22,7 @@ mod time_step;
 pub use bounding_box::BoundingBox2D;
 pub use circle::Circle;
 pub use coordinate::Coordinate2D;
+pub use datetime::{DateTime, DateTimeParseFormat, Duration};
 pub(crate) use error::PrimitivesError;
 pub use feature_data::{
     BoolDataRef, CategoryDataRef, DataRef, DateTimeDataRef, FeatureData, FeatureDataRef,
