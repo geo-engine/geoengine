@@ -143,17 +143,34 @@ where
         no_data_value: Option<f64>,
         scaling_mode: ScalingMode,
     ) -> Box<dyn RasterQueryProcessor<RasterType = P>> {
+        RasterScalingProcessor::create(
+            scale_with,
+            offset_by,
+            source,
+            no_data_value
+                .map(|v| v.as_())
+                .unwrap_or(P::DEFAULT_NO_DATA_VALUE),
+            scaling_mode,
+        )
+        .boxed()
+    }
+
+    pub fn create(
+        scale_with: PropertiesKeyOrValue,
+        offset_by: PropertiesKeyOrValue,
+        source: Q,
+        no_data_value: P,
+        scaling_mode: ScalingMode,
+    ) -> RasterScalingProcessor<Q, P> {
         RasterScalingProcessor {
             source,
             scale_with,
             offset_by,
-            no_data_value: no_data_value
-                .map(|v| v.as_())
-                .unwrap_or(P::DEFAULT_NO_DATA_VALUE),
+            no_data_value,
             scaling_mode,
         }
-        .boxed()
     }
+
     async fn scale_tile_async(
         &self,
         tile: RasterTile2D<P>,
@@ -163,12 +180,16 @@ where
         let scale_with = Self::prop_value(&self.scale_with, &tile.properties)?;
         let scaling_mode = self.scaling_mode;
 
-        let _no_data_value = self.no_data_value;
+        let no_data_value = self.no_data_value;
 
         let res_tile =
             crate::util::spawn_blocking_with_thread_pool(pool, move || match scaling_mode {
-                ScalingMode::Scale => tile.scale_elements_parallel(scale_with, offset_by),
-                ScalingMode::Unscale => tile.unscale_elements_parallel(scale_with, offset_by),
+                ScalingMode::Scale => {
+                    tile.scale_elements_parallel(scale_with, offset_by, no_data_value)
+                }
+                ScalingMode::Unscale => {
+                    tile.unscale_elements_parallel(scale_with, offset_by, no_data_value)
+                }
             })
             .await?;
 
@@ -206,5 +227,134 @@ where
         let src = self.source.raster_query(query, ctx).await?;
         let rs = src.and_then(move |tile| self.scale_tile_async(tile, ctx.thread_pool().clone()));
         Ok(rs.boxed())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use geoengine_datatypes::{
+        primitives::{SpatialPartition2D, SpatialResolution, TimeInterval},
+        raster::{Grid2D, GridOrEmpty2D, RasterDataType, TileInformation, TilingSpecification},
+        spatial_reference::SpatialReference,
+        util::test::TestDefault,
+    };
+
+    use crate::{
+        engine::{ChunkByteSize, MockExecutionContext},
+        mock::{MockRasterSource, MockRasterSourceParams},
+    };
+
+    use super::*;
+
+    #[tokio::test]
+    async fn test_scaling() {
+        let grid_shape = [2, 2].into();
+
+        let tiling_specification = TilingSpecification {
+            origin_coordinate: [0.0, 0.0].into(),
+            tile_size_in_pixels: grid_shape,
+        };
+
+        let no_data_value = 6;
+
+        let raster = Grid2D::new(grid_shape, vec![7_u8, 7, 7, 6], Some(no_data_value)).unwrap();
+
+        let ctx = MockExecutionContext::new_with_tiling_spec(tiling_specification);
+        let query_ctx = ctx.mock_query_context(ChunkByteSize::test_default());
+
+        let mut raster_props = RasterProperties::default();
+        raster_props.set_scale(2.0);
+        raster_props.set_offset(1.0);
+
+        let raster_tile = RasterTile2D::new_with_tile_info_and_properties(
+            TimeInterval::default(),
+            TileInformation {
+                global_geo_transform: TestDefault::test_default(),
+                global_tile_position: [0, 0].into(),
+                tile_size_in_pixels: grid_shape,
+            },
+            raster.into(),
+            raster_props,
+        );
+
+        let mrs = MockRasterSource {
+            params: MockRasterSourceParams {
+                data: vec![raster_tile],
+                result_descriptor: RasterResultDescriptor {
+                    data_type: RasterDataType::U8,
+                    spatial_reference: SpatialReference::epsg_4326().into(),
+                    measurement: Measurement::Unitless,
+                    no_data_value: Some(no_data_value as f64),
+                },
+            },
+        }
+        .boxed();
+
+        let scale_with = PropertiesKeyOrValue::MetadataKey(RasterPropertiesKey {
+            domain: None,
+            key: "scale".to_string(),
+        });
+        let offset_by = PropertiesKeyOrValue::MetadataKey(RasterPropertiesKey {
+            domain: None,
+            key: "offset".to_string(),
+        });
+
+        let scaling_mode = ScalingMode::Unscale;
+
+        let output_measurement = None;
+
+        let op = RasterScalingOperator {
+            params: RasterScalingParams {
+                scale_with,
+                offset_by,
+                output_no_data_value: 255.,
+                output_measurement,
+                scaling_mode,
+            },
+            sources: SingleRasterSource { raster: mrs },
+        }
+        .boxed();
+
+        let initialized_op = op.initialize(&ctx).await.unwrap();
+
+        let result_descriptor = initialized_op.result_descriptor();
+
+        assert_eq!(result_descriptor.data_type, RasterDataType::U8);
+        assert_eq!(result_descriptor.measurement, Measurement::Unitless);
+
+        let query_processor = initialized_op.query_processor().unwrap();
+
+        let query = geoengine_datatypes::primitives::RasterQueryRectangle {
+            spatial_bounds: SpatialPartition2D::new((0., 0.).into(), (2., -2.).into()).unwrap(),
+            spatial_resolution: SpatialResolution::one(),
+            time_interval: TimeInterval::default(),
+        };
+
+        let typed_processor = match query_processor {
+            TypedRasterQueryProcessor::U8(rqp) => rqp,
+            _ => panic!("expected TypedRasterQueryProcessor::U8"),
+        };
+
+        let stream = typed_processor
+            .raster_query(query, &query_ctx)
+            .await
+            .unwrap();
+
+        let results = stream.collect::<Vec<Result<RasterTile2D<u8>>>>().await;
+
+        // assert_eq!((&results).len(), 1);
+
+        let result_tile = results.as_slice()[0].as_ref().unwrap();
+
+        let result_grid = result_tile.grid_array.clone();
+
+        match result_grid {
+            GridOrEmpty2D::Grid(grid) => {
+                assert_eq!(grid.shape, [2, 2].into());
+                assert_eq!(grid.data, &[15, 15, 15, 255]);
+                assert_eq!(grid.no_data_value, Some(255));
+            }
+            _ => panic!("expected GridOrEmpty2D::Grid"),
+        }
     }
 }

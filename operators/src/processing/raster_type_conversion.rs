@@ -1,8 +1,8 @@
 use async_trait::async_trait;
 use futures::{stream::BoxStream, StreamExt, TryFutureExt, TryStreamExt};
 use geoengine_datatypes::{
-    primitives::{Measurement, RasterQueryRectangle, SpatialPartition2D},
-    raster::{ConvertDataTypeParallel, DefaultNoDataValue, Pixel, RasterTile2D},
+    primitives::{RasterQueryRectangle, SpatialPartition2D},
+    raster::{ConvertDataTypeParallel, DefaultNoDataValue, Pixel, RasterDataType, RasterTile2D},
 };
 use num_traits::AsPrimitive;
 use serde::{Deserialize, Serialize};
@@ -17,8 +17,7 @@ use crate::util::Result;
 #[derive(Debug, Serialize, Deserialize, Clone)]
 #[serde(rename_all = "camelCase")]
 pub struct RasterTypeConversionParams {
-    // output_no_data_value: Option<f64>, TODO: discuss
-    output_measurement: Option<Measurement>,
+    output_data_type: RasterDataType,
 }
 
 pub type RasterTypeConversionOperator = Operator<RasterTypeConversionParams, SingleRasterSource>;
@@ -39,14 +38,12 @@ impl RasterOperator for RasterTypeConversionOperator {
         let in_desc = input.result_descriptor();
 
         let out_no_data_value = in_desc.no_data_value;
+        let out_data_type = self.params.output_data_type;
 
         let out_desc = RasterResultDescriptor {
             spatial_reference: in_desc.spatial_reference,
-            data_type: in_desc.data_type,
-            measurement: self
-                .params
-                .output_measurement
-                .unwrap_or(in_desc.measurement.clone()),
+            data_type: out_data_type,
+            measurement: in_desc.measurement.clone(),
             no_data_value: out_no_data_value,
         };
 
@@ -130,5 +127,110 @@ where
         });
 
         Ok(converted_stream.boxed())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use geoengine_datatypes::{
+        primitives::{Measurement, SpatialPartition2D, SpatialResolution, TimeInterval},
+        raster::{Grid2D, GridOrEmpty2D, RasterDataType, TileInformation, TilingSpecification},
+        spatial_reference::SpatialReference,
+        util::test::TestDefault,
+    };
+
+    use crate::{
+        engine::{ChunkByteSize, MockExecutionContext},
+        mock::{MockRasterSource, MockRasterSourceParams},
+    };
+
+    use super::*;
+
+    #[tokio::test]
+    async fn test_type_conversion() {
+        let grid_shape = [2, 2].into();
+
+        let tiling_specification = TilingSpecification {
+            origin_coordinate: [0.0, 0.0].into(),
+            tile_size_in_pixels: grid_shape,
+        };
+
+        let no_data_value = 6;
+
+        let raster = Grid2D::new(grid_shape, vec![7_u8, 7, 7, 6], Some(no_data_value)).unwrap();
+
+        let ctx = MockExecutionContext::new_with_tiling_spec(tiling_specification);
+        let query_ctx = ctx.mock_query_context(ChunkByteSize::test_default());
+
+        let raster_tile = RasterTile2D::new_with_tile_info(
+            TimeInterval::default(),
+            TileInformation {
+                global_geo_transform: TestDefault::test_default(),
+                global_tile_position: [0, 0].into(),
+                tile_size_in_pixels: grid_shape,
+            },
+            raster.into(),
+        );
+
+        let mrs = MockRasterSource {
+            params: MockRasterSourceParams {
+                data: vec![raster_tile],
+                result_descriptor: RasterResultDescriptor {
+                    data_type: RasterDataType::U8,
+                    spatial_reference: SpatialReference::epsg_4326().into(),
+                    measurement: Measurement::Unitless,
+                    no_data_value: Some(no_data_value as f64),
+                },
+            },
+        }
+        .boxed();
+
+        let op = RasterTypeConversionOperator {
+            params: RasterTypeConversionParams {
+                output_data_type: RasterDataType::F32,
+            },
+            sources: SingleRasterSource { raster: mrs },
+        }
+        .boxed();
+
+        let initialized_op = op.initialize(&ctx).await.unwrap();
+
+        let result_descriptor = initialized_op.result_descriptor();
+
+        assert_eq!(result_descriptor.data_type, RasterDataType::F32);
+        assert_eq!(result_descriptor.measurement, Measurement::Unitless);
+
+        let query_processor = initialized_op.query_processor().unwrap();
+
+        let query = geoengine_datatypes::primitives::RasterQueryRectangle {
+            spatial_bounds: SpatialPartition2D::new((0., 0.).into(), (2., -2.).into()).unwrap(),
+            spatial_resolution: SpatialResolution::one(),
+            time_interval: TimeInterval::default(),
+        };
+
+        let typed_processor = match query_processor {
+            TypedRasterQueryProcessor::F32(rqp) => rqp,
+            _ => panic!("expected TypedRasterQueryProcessor::U8"),
+        };
+
+        let stream = typed_processor
+            .raster_query(query, &query_ctx)
+            .await
+            .unwrap();
+
+        let results = stream.collect::<Vec<Result<RasterTile2D<f32>>>>().await;
+
+        let result_tile = results.as_slice()[0].as_ref().unwrap();
+
+        let result_grid = result_tile.grid_array.clone();
+
+        match result_grid {
+            GridOrEmpty2D::Grid(grid) => {
+                assert_eq!(grid.shape, [2, 2].into());
+                assert_eq!(grid.data, &[7., 7., 7., 6.]);
+                assert_eq!(grid.no_data_value, Some(6.));
+            }
+            _ => panic!("expected GridOrEmpty2D::Grid"),
+        }
     }
 }
