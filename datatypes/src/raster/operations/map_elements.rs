@@ -73,7 +73,9 @@ where
     fn map_elements(self, map_fn: F, out_no_data: Option<Out>) -> Self::Output {
         match self {
             GridOrEmpty::Grid(grid) => GridOrEmpty::Grid(grid.map_elements(map_fn, out_no_data)),
-            GridOrEmpty::Empty(empty) => GridOrEmpty::Empty(empty.map_elements(map_fn, out_no_data)),
+            GridOrEmpty::Empty(empty) => {
+                GridOrEmpty::Empty(empty.map_elements(map_fn, out_no_data))
+            }
         }
     }
 }
@@ -143,7 +145,9 @@ where
             GridOrEmpty::Grid(grid) => {
                 GridOrEmpty::Grid(grid.map_elements_parallel(map_fn, out_no_data))
             }
-            GridOrEmpty::Empty(empty) => GridOrEmpty::Empty(empty.map_elements(map_fn, out_no_data)),
+            GridOrEmpty::Empty(empty) => {
+                GridOrEmpty::Empty(empty.map_elements(map_fn, out_no_data))
+            }
         }
     }
 }
@@ -170,48 +174,70 @@ where
 
 #[cfg(test)]
 mod tests {
-    use crate::{raster::{Grid2D, GeoTransform, EmptyGrid2D}, primitives::TimeInterval, util::test::TestDefault};
+    use crate::{
+        primitives::TimeInterval,
+        raster::{EmptyGrid2D, GeoTransform, Grid2D},
+        util::test::TestDefault,
+    };
 
     use super::*;
 
     #[test]
     fn map_grid() {
         let dim = [2, 2];
-        let data = vec![7,7,8,255];
+        let data = vec![7, 7, 8, 255];
         let no_data = 255;
 
         let r1 = Grid2D::new(dim.into(), data, Some(no_data)).unwrap();
-        let scaled_r1 = r1.map_elements(|p| {if p == 7 {Some(p*2+1)} else {None}}, Some(no_data));
-        
-        let expected = [15,15,255,255];
-        assert_eq!(scaled_r1.data, expected);        
+        let scaled_r1 = r1.map_elements(
+            |p| {
+                if p == 7 {
+                    Some(p * 2 + 1)
+                } else {
+                    None
+                }
+            },
+            Some(no_data),
+        );
+
+        let expected = [15, 15, 255, 255];
+        assert_eq!(scaled_r1.data, expected);
     }
 
     #[test]
     fn map_grid_or_empty() {
         let dim = [2, 2];
-        let data = vec![7,7,8,255];
+        let data = vec![7, 7, 8, 255];
         let no_data = 255;
 
         let r1 = GridOrEmpty::Grid(Grid2D::new(dim.into(), data, Some(no_data)).unwrap());
-        let scaled_r1 = r1.map_elements(|p| {if p == 7 {Some(p*2+1)} else {None}}, Some(no_data));
-        
-        let expected = [15,15,255,255];
+        let scaled_r1 = r1.map_elements(
+            |p| {
+                if p == 7 {
+                    Some(p * 2 + 1)
+                } else {
+                    None
+                }
+            },
+            Some(no_data),
+        );
+
+        let expected = [15, 15, 255, 255];
 
         match scaled_r1 {
             GridOrEmpty::Grid(g) => {
                 assert_eq!(g.data, expected);
-            },
+            }
             GridOrEmpty::Empty(_) => assert!(false),
         }
 
         let r2 = GridOrEmpty::Empty(EmptyGrid2D::new(dim.into(), no_data));
-        let scaled_r2 = r2.map_elements(|p| Some(p-10), Some(8));
+        let scaled_r2 = r2.map_elements(|p| Some(p - 10), Some(8));
 
         match scaled_r2 {
             GridOrEmpty::Grid(_) => {
                 assert!(false);
-            },
+            }
             GridOrEmpty::Empty(e) => {
                 assert_eq!(e.shape, dim.into());
                 assert_eq!(e.no_data_value, 8);
@@ -222,60 +248,86 @@ mod tests {
     #[test]
     fn map_raster_tile() {
         let dim = [2, 2];
-        let data = vec![7,7,8,255];
+        let data = vec![7, 7, 8, 255];
         let no_data = 255;
         let geo = GeoTransform::test_default();
 
         let r1 = GridOrEmpty::Grid(Grid2D::new(dim.into(), data, Some(no_data)).unwrap());
-        let t1 = RasterTile2D::new(TimeInterval::default(), [0,0].into(),  geo, r1);
+        let t1 = RasterTile2D::new(TimeInterval::default(), [0, 0].into(), geo, r1);
 
-        let scaled_r1 = t1.map_elements(|p| {if p == 7 {Some(p*2+1)} else {None}}, Some(no_data));
+        let scaled_r1 = t1.map_elements(
+            |p| {
+                if p == 7 {
+                    Some(p * 2 + 1)
+                } else {
+                    None
+                }
+            },
+            Some(no_data),
+        );
         let mat_scaled_r1 = scaled_r1.into_materialized_tile();
-        
-        let expected = [15,15,255,255];
+
+        let expected = [15, 15, 255, 255];
 
         assert_eq!(mat_scaled_r1.grid_array.data, expected);
-        
     }
 
     #[test]
     fn map_grid_parallel() {
         let dim = [2, 2];
-        let data = vec![7,7,8,255];
+        let data = vec![7, 7, 8, 255];
         let no_data = 255;
 
         let r1 = Grid2D::new(dim.into(), data, Some(no_data)).unwrap();
-        let scaled_r1 = r1.map_elements_parallel(|p| {if p == 7 {Some(p*2+1)} else {None}}, Some(no_data));
-        
-        let expected = [15,15,255,255];
-        assert_eq!(scaled_r1.data, expected);        
+        let scaled_r1 = r1.map_elements_parallel(
+            |p| {
+                if p == 7 {
+                    Some(p * 2 + 1)
+                } else {
+                    None
+                }
+            },
+            Some(no_data),
+        );
+
+        let expected = [15, 15, 255, 255];
+        assert_eq!(scaled_r1.data, expected);
     }
 
     #[test]
     fn map_grid_or_empty_parallel() {
         let dim = [2, 2];
-        let data = vec![7,7,8,255];
+        let data = vec![7, 7, 8, 255];
         let no_data = 255;
 
         let r1 = GridOrEmpty::Grid(Grid2D::new(dim.into(), data, Some(no_data)).unwrap());
-        let scaled_r1 = r1.map_elements_parallel(|p| {if p == 7 {Some(p*2+1)} else {None}}, Some(no_data));
-        
-        let expected = [15,15,255,255];
+        let scaled_r1 = r1.map_elements_parallel(
+            |p| {
+                if p == 7 {
+                    Some(p * 2 + 1)
+                } else {
+                    None
+                }
+            },
+            Some(no_data),
+        );
+
+        let expected = [15, 15, 255, 255];
 
         match scaled_r1 {
             GridOrEmpty::Grid(g) => {
                 assert_eq!(g.data, expected);
-            },
+            }
             GridOrEmpty::Empty(_) => assert!(false),
         }
 
         let r2 = GridOrEmpty::Empty(EmptyGrid2D::new(dim.into(), no_data));
-        let scaled_r2 = r2.map_elements_parallel(|p| Some(p-10), Some(8));
+        let scaled_r2 = r2.map_elements_parallel(|p| Some(p - 10), Some(8));
 
         match scaled_r2 {
             GridOrEmpty::Grid(_) => {
                 assert!(false);
-            },
+            }
             GridOrEmpty::Empty(e) => {
                 assert_eq!(e.shape, dim.into());
                 assert_eq!(e.no_data_value, 8);
@@ -286,19 +338,27 @@ mod tests {
     #[test]
     fn map_raster_tile_parallel() {
         let dim = [2, 2];
-        let data = vec![7,7,8,255];
+        let data = vec![7, 7, 8, 255];
         let no_data = 255;
         let geo = GeoTransform::test_default();
 
         let r1 = GridOrEmpty::Grid(Grid2D::new(dim.into(), data, Some(no_data)).unwrap());
-        let t1 = RasterTile2D::new(TimeInterval::default(), [0,0].into(),  geo, r1);
+        let t1 = RasterTile2D::new(TimeInterval::default(), [0, 0].into(), geo, r1);
 
-        let scaled_r1 = t1.map_elements_parallel(|p| {if p == 7 {Some(p*2+1)} else {None}}, Some(no_data));
+        let scaled_r1 = t1.map_elements_parallel(
+            |p| {
+                if p == 7 {
+                    Some(p * 2 + 1)
+                } else {
+                    None
+                }
+            },
+            Some(no_data),
+        );
         let mat_scaled_r1 = scaled_r1.into_materialized_tile();
-        
-        let expected = [15,15,255,255];
+
+        let expected = [15, 15, 255, 255];
 
         assert_eq!(mat_scaled_r1.grid_array.data, expected);
-        
     }
 }
