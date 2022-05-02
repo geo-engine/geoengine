@@ -7,6 +7,7 @@ use std::ops::{Add, Div, Mul, Sub};
 
 /// scales the value with `(value - offset_by) / scale_with`.
 #[inline]
+#[allow(clippy::unnecessary_wraps)]
 fn scale<T>(value: T, scale_with: T, offset_by: T) -> Option<T>
 where
     T: Copy + 'static + Sub<Output = T> + Div<Output = T>,
@@ -16,6 +17,7 @@ where
 
 /// unscales the value with `value * scale_with + offset_by`.
 #[inline]
+#[allow(clippy::unnecessary_wraps)]
 fn unscale<T>(value: T, scale_with: T, offset_by: T) -> Option<T>
 where
     T: Copy + 'static + Add<Output = T> + Mul<Output = T>,
@@ -358,6 +360,7 @@ mod tests {
     use super::*;
 
     #[test]
+    #[allow(clippy::float_cmp)]
     fn unscale_float() {
         let unscaled = unscale(7., 2., 1.).unwrap();
         assert_eq!(unscaled, 15.);
@@ -376,6 +379,7 @@ mod tests {
     }
 
     #[test]
+    #[allow(clippy::float_cmp)]
     fn scale_float() {
         let scaled = scale(15., 2., 1.).unwrap();
         assert_eq!(scaled, 7.);
@@ -391,6 +395,7 @@ mod tests {
     }
 
     #[test]
+    #[allow(clippy::float_cmp)]
     fn unscale_float_self() {
         let unscaled = (7.).unscale(2., 1.).unwrap();
         assert_eq!(unscaled, 15.);
@@ -409,6 +414,7 @@ mod tests {
     }
 
     #[test]
+    #[allow(clippy::float_cmp)]
     fn scale_float_self() {
         let scaled = (15.).scale(2., 1.).unwrap();
         assert_eq!(scaled, 7.);
@@ -451,7 +457,7 @@ mod tests {
             GridOrEmpty::Grid(g) => {
                 assert_eq!(g.data, expected);
             }
-            GridOrEmpty::Empty(_) => assert!(false),
+            GridOrEmpty::Empty(_) => panic!("Expected grid"),
         }
     }
 
@@ -501,7 +507,7 @@ mod tests {
             GridOrEmpty::Grid(g) => {
                 assert_eq!(g.data, expected);
             }
-            GridOrEmpty::Empty(_) => assert!(false),
+            GridOrEmpty::Empty(_) => panic!("Expected grid"),
         }
     }
 
@@ -551,7 +557,7 @@ mod tests {
             GridOrEmpty::Grid(g) => {
                 assert_eq!(g.data, expected);
             }
-            GridOrEmpty::Empty(_) => assert!(false),
+            GridOrEmpty::Empty(_) => panic!("Expected grid"),
         }
     }
 
@@ -601,7 +607,7 @@ mod tests {
             GridOrEmpty::Grid(g) => {
                 assert_eq!(g.data, expected);
             }
-            GridOrEmpty::Empty(_) => assert!(false),
+            GridOrEmpty::Empty(_) => panic!("Expected grid"),
         }
     }
 
