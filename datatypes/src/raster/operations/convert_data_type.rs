@@ -1,6 +1,6 @@
 use crate::raster::{
-    data_type::DefaultNoDataValue, BaseTile, EmptyGrid, Grid, GridOrEmpty, GridSize, MapPixels,
-    MapPixelsParallel,
+    data_type::DefaultNoDataValue, BaseTile, EmptyGrid, Grid, GridOrEmpty, GridSize, MapElements,
+    MapElementsParallel,
 };
 use num_traits::AsPrimitive;
 
@@ -16,7 +16,7 @@ where
 {
     fn convert_data_type(self) -> Grid<G, Out> {
         let no_data_value = self.no_data_value.map(AsPrimitive::as_);
-        self.map_pixels(|p| Some(p.as_()), no_data_value)
+        self.map_elements(|p| Some(p.as_()), no_data_value)
     }
 }
 
@@ -75,7 +75,7 @@ where
 {
     fn convert_data_type_parallel(self) -> Grid<G, Out> {
         let no_data_value = self.no_data_value.map(AsPrimitive::as_);
-        self.map_pixels_parallel(|p| Some(p.as_()), no_data_value)
+        self.map_elements_parallel(|p| Some(p.as_()), no_data_value)
     }
 }
 

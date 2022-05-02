@@ -20,15 +20,15 @@ pub use self::grid_traits::{
 pub use self::grid_typed::{TypedGrid, TypedGrid2D, TypedGrid3D};
 pub use self::operations::{
     blit::Blit,
-    cast_and_scaling::{
-        Scale, ScaleElements, ScaleElementsParallel, Unscale, UnscaleElements,
-        UnscaleElementsParallel,
-    },
     convert_data_type::ConvertDataType,
     convert_data_type::ConvertDataTypeParallel,
     grid_blit::GridBlit,
-    map_pixels::MapPixels,
-    map_pixels::MapPixelsParallel,
+    map_elements::MapElements,
+    map_elements::MapElementsParallel,
+    scaling::{
+        Scale, ScaleElements, ScaleElementsParallel, Unscale, UnscaleElements,
+        UnscaleElementsParallel,
+    },
 };
 pub use self::raster_tile::{
     BaseTile, MaterializedRasterTile, MaterializedRasterTile2D, MaterializedRasterTile3D,
