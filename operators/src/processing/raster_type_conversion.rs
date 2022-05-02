@@ -147,6 +147,7 @@ mod tests {
     use super::*;
 
     #[tokio::test]
+    #[allow(clippy::float_cmp)]
     async fn test_type_conversion() {
         let grid_shape = [2, 2].into();
 
@@ -179,7 +180,7 @@ mod tests {
                     data_type: RasterDataType::U8,
                     spatial_reference: SpatialReference::epsg_4326().into(),
                     measurement: Measurement::Unitless,
-                    no_data_value: Some(no_data_value as f64),
+                    no_data_value: Some(f64::from(no_data_value)),
                 },
             },
         }
@@ -230,7 +231,7 @@ mod tests {
                 assert_eq!(grid.data, &[7., 7., 7., 6.]);
                 assert_eq!(grid.no_data_value, Some(6.));
             }
-            _ => panic!("expected GridOrEmpty2D::Grid"),
+            GridOrEmpty2D::Empty(_) => panic!("expected GridOrEmpty2D::Grid"),
         }
     }
 }

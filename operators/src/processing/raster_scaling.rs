@@ -85,7 +85,7 @@ impl RasterOperator for RasterScalingOperator {
             measurement: self
                 .params
                 .output_measurement
-                .unwrap_or(in_desc.measurement.clone()),
+                .unwrap_or_else(|| in_desc.measurement.clone()),
             no_data_value: Some(out_no_data_value),
         };
 
@@ -147,9 +147,7 @@ where
             scale_with,
             offset_by,
             source,
-            no_data_value
-                .map(|v| v.as_())
-                .unwrap_or(P::DEFAULT_NO_DATA_VALUE),
+            no_data_value.map_or(P::DEFAULT_NO_DATA_VALUE, num_traits::AsPrimitive::as_),
             scaling_mode,
         )
         .boxed()
@@ -284,7 +282,7 @@ mod tests {
                     data_type: RasterDataType::U8,
                     spatial_reference: SpatialReference::epsg_4326().into(),
                     measurement: Measurement::Unitless,
-                    no_data_value: Some(no_data_value as f64),
+                    no_data_value: Some(f64::from(no_data_value)),
                 },
             },
         }
@@ -354,7 +352,7 @@ mod tests {
                 assert_eq!(grid.data, &[15, 15, 15, 255]);
                 assert_eq!(grid.no_data_value, Some(255));
             }
-            _ => panic!("expected GridOrEmpty2D::Grid"),
+            GridOrEmpty2D::Empty(_) => panic!("expected GridOrEmpty2D::Grid"),
         }
     }
 }

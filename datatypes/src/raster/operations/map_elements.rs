@@ -228,7 +228,7 @@ mod tests {
             GridOrEmpty::Grid(g) => {
                 assert_eq!(g.data, expected);
             }
-            GridOrEmpty::Empty(_) => assert!(false),
+            GridOrEmpty::Empty(_) => panic!("Expected grid"),
         }
 
         let r2 = GridOrEmpty::Empty(EmptyGrid2D::new(dim.into(), no_data));
@@ -236,7 +236,7 @@ mod tests {
 
         match scaled_r2 {
             GridOrEmpty::Grid(_) => {
-                assert!(false);
+                panic!("Expected empty grid")
             }
             GridOrEmpty::Empty(e) => {
                 assert_eq!(e.shape, dim.into());
@@ -318,7 +318,7 @@ mod tests {
             GridOrEmpty::Grid(g) => {
                 assert_eq!(g.data, expected);
             }
-            GridOrEmpty::Empty(_) => assert!(false),
+            GridOrEmpty::Empty(_) => panic!("Expected grid"),
         }
 
         let r2 = GridOrEmpty::Empty(EmptyGrid2D::new(dim.into(), no_data));
@@ -326,7 +326,7 @@ mod tests {
 
         match scaled_r2 {
             GridOrEmpty::Grid(_) => {
-                assert!(false);
+                panic!("Expected empty grid")
             }
             GridOrEmpty::Empty(e) => {
                 assert_eq!(e.shape, dim.into());
