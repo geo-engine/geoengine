@@ -62,30 +62,44 @@ pub trait LayerDb: Send + Sync {
 }
 
 #[derive(Default, Debug)]
+pub struct HashMapLayerDbBackend {
+    layers: HashMap<LayerId, AddLayer>,
+    collections: HashMap<LayerCollectionId, AddLayerCollection>,
+    collection_children: HashMap<LayerCollectionId, Vec<LayerCollectionId>>,
+    collection_layers: HashMap<LayerCollectionId, Vec<LayerId>>,
+}
+
+#[derive(Default, Debug)]
 pub struct HashMapLayerDb {
-    layers: Db<HashMap<LayerId, AddLayer>>,
-    collections: Db<HashMap<LayerCollectionId, AddLayerCollection>>,
-    collection_children: Db<HashMap<LayerCollectionId, Vec<LayerCollectionId>>>,
-    collection_layers: Db<HashMap<LayerCollectionId, Vec<LayerId>>>,
+    backend: Db<HashMapLayerDbBackend>,
 }
 
 #[async_trait]
 impl LayerDb for HashMapLayerDb {
     async fn add_layer(&self, layer: Validated<AddLayer>) -> Result<LayerId> {
         let id = LayerId::new();
-        self.layers.write().await.insert(id, layer.user_input);
+        self.backend
+            .write()
+            .await
+            .layers
+            .insert(id, layer.user_input);
         Ok(id)
     }
 
     async fn add_layer_with_id(&self, id: LayerId, layer: Validated<AddLayer>) -> Result<()> {
-        self.layers.write().await.insert(id, layer.user_input);
+        self.backend
+            .write()
+            .await
+            .layers
+            .insert(id, layer.user_input);
         Ok(())
     }
 
     async fn get_layer(&self, id: LayerId) -> Result<Layer> {
-        let layers = self.layers.read().await;
+        let backend = self.backend.read().await;
 
-        let layer = layers
+        let layer = backend
+            .layers
             .get(&id)
             .ok_or(LayerDbError::NoLayerForGivenId { id })?;
 
@@ -103,9 +117,10 @@ impl LayerDb for HashMapLayerDb {
         collection: LayerCollectionId,
     ) -> Result<()> {
         // TODO: check if layer is already in collection
-        self.collection_layers
+        self.backend
             .write()
             .await
+            .collection_layers
             .entry(collection)
             .or_default()
             .push(layer);
@@ -121,9 +136,10 @@ impl LayerDb for HashMapLayerDb {
     ) -> Result<LayerCollectionId> {
         let id = LayerCollectionId::new();
 
-        self.collections
+        self.backend
             .write()
             .await
+            .collections
             .insert(id, collection.user_input);
 
         Ok(id)
@@ -134,9 +150,10 @@ impl LayerDb for HashMapLayerDb {
         id: LayerCollectionId,
         collection: Validated<AddLayerCollection>,
     ) -> Result<()> {
-        self.collections
+        self.backend
             .write()
             .await
+            .collections
             .insert(id, collection.user_input);
         Ok(())
     }
@@ -148,9 +165,10 @@ impl LayerDb for HashMapLayerDb {
     ) -> Result<()> {
         // TODO: check if collection is already in collection
 
-        self.collection_children
+        self.backend
             .write()
             .await
+            .collection_children
             .entry(parent)
             .or_default()
             .push(collection);
@@ -165,19 +183,18 @@ impl LayerDb for HashMapLayerDb {
     ) -> Result<Vec<CollectionItem>> {
         let options = options.user_input;
 
-        let collections = self.collections.read().await;
-        let layers = self.layers.read().await;
-        let collection_children = self.collection_children.read().await;
-        let collection_layers = self.collection_layers.read().await;
+        let backend = self.backend.read().await;
 
         let empty = vec![];
 
-        let collections = collection_children
+        let collections = backend
+            .collection_children
             .get(&collection)
             .unwrap_or(&empty)
             .iter()
             .map(|c| {
-                let collection = collections
+                let collection = backend
+                    .collections
                     .get(c)
                     .expect("collections reference existing collections as children");
                 CollectionItem::Collection(LayerCollectionListing {
@@ -189,12 +206,14 @@ impl LayerDb for HashMapLayerDb {
 
         let empty = vec![];
 
-        let layers = collection_layers
+        let layers = backend
+            .collection_layers
             .get(&collection)
             .unwrap_or(&empty)
             .iter()
             .map(|l| {
-                let layer = layers
+                let layer = backend
+                    .layers
                     .get(l)
                     .expect("collections reference existing layers as items");
 
@@ -219,13 +238,11 @@ impl LayerDb for HashMapLayerDb {
     ) -> Result<Vec<CollectionItem>> {
         let options = options.user_input;
 
-        let collections = self.collections.read().await;
-        let layers = self.layers.read().await;
-        let collection_children = self.collection_children.read().await;
-        let collection_layers = self.collection_layers.read().await;
+        let backend = self.backend.read().await;
 
-        let collections = collections.iter().filter_map(|(id, c)| {
-            if collection_children
+        let collections = backend.collections.iter().filter_map(|(id, c)| {
+            if backend
+                .collection_children
                 .values()
                 .any(|collections| collections.contains(id))
             {
@@ -239,8 +256,12 @@ impl LayerDb for HashMapLayerDb {
             }))
         });
 
-        let layers = layers.iter().filter_map(|(id, l)| {
-            if collection_layers.values().any(|layers| layers.contains(id)) {
+        let layers = backend.layers.iter().filter_map(|(id, l)| {
+            if backend
+                .collection_layers
+                .values()
+                .any(|layers| layers.contains(id))
+            {
                 return None;
             }
 
