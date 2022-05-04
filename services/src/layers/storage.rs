@@ -4,13 +4,19 @@ use super::layer::{
     AddLayer, AddLayerCollection, CollectionItem, Layer, LayerCollectionId,
     LayerCollectionListOptions, LayerCollectionListing, LayerId,
 };
-use crate::{
-    contexts::Db,
-    error::{self, Result},
-    util::user_input::Validated,
-};
+use crate::error::Result;
+use crate::{contexts::Db, util::user_input::Validated};
 use async_trait::async_trait;
 use geoengine_datatypes::util::Identifier;
+use snafu::Snafu;
+
+#[derive(Debug, Snafu)]
+#[snafu(visibility(pub(crate)))]
+#[snafu(module(error), context(suffix(false)))] // disables default `Snafu` suffix
+pub enum LayerDbError {
+    #[snafu(display("There is no layer with the given id {id}"))]
+    NoLayerForGivenId { id: LayerId },
+}
 
 #[async_trait]
 pub trait LayerDb: Send + Sync {
@@ -79,7 +85,9 @@ impl LayerDb for HashMapLayerDb {
     async fn get_layer(&self, id: LayerId) -> Result<Layer> {
         let layers = self.layers.read().await;
 
-        let layer = layers.get(&id).ok_or(error::Error::NoLayerForGivenId)?;
+        let layer = layers
+            .get(&id)
+            .ok_or(LayerDbError::NoLayerForGivenId { id })?;
 
         Ok(Layer {
             id,
