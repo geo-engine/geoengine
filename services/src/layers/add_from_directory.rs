@@ -1,5 +1,6 @@
 use std::{
     collections::HashMap,
+    ffi::OsStr,
     fs::{self, DirEntry, File},
     io::BufReader,
     path::PathBuf,
@@ -54,17 +55,20 @@ pub async fn add_layers_from_directory<L: LayerDb, W: WorkflowRegistry>(
     let dir = dir.expect("checked");
 
     for entry in dir {
-        if let Ok(entry) = entry {
-            match add_layer_from_dir_entry(layer_db, workflow_db, &entry).await {
-                Ok(_) => info!("Added layer from directory entry: {:?}", entry),
-                Err(e) => warn!(
-                    "Skipped adding layer from directory entry: {:?} error: {}",
-                    entry,
-                    e.to_string()
-                ),
+        match entry {
+            Ok(entry) if entry.path().extension() == Some(OsStr::new("json")) => {
+                match add_layer_from_dir_entry(layer_db, workflow_db, &entry).await {
+                    Ok(_) => info!("Added layer from directory entry: {:?}", entry),
+                    Err(e) => warn!(
+                        "Skipped adding layer from directory entry: {:?} error: {}",
+                        entry,
+                        e.to_string()
+                    ),
+                }
             }
-        } else {
-            warn!("Skipped adding layer from directory entry: {:?}", entry);
+            _ => {
+                warn!("Skipped adding layer from directory entry: {:?}", entry);
+            }
         }
     }
 }
@@ -105,22 +109,25 @@ pub async fn add_layer_collections_from_directory<L: LayerDb>(db: &mut L, file_p
     let mut collection_defs = vec![];
 
     for entry in dir {
-        if let Ok(entry) = entry {
-            match get_layer_collection_from_dir_entry(&entry) {
-                Ok(def) => collection_defs.push(def),
-                Err(e) => {
-                    warn!(
-                        "Skipped adding layer collection from directory entry: {:?} error: {}",
-                        entry,
-                        e.to_string()
-                    );
+        match entry {
+            Ok(entry) if entry.path().extension() == Some(OsStr::new("json")) => {
+                match get_layer_collection_from_dir_entry(&entry) {
+                    Ok(def) => collection_defs.push(def),
+                    Err(e) => {
+                        warn!(
+                            "Skipped adding layer collection from directory entry: {:?} error: {}",
+                            entry,
+                            e.to_string()
+                        );
+                    }
                 }
             }
-        } else {
-            warn!(
-                "Skipped adding layer collection from directory entry: {:?}",
-                entry
-            );
+            _ => {
+                warn!(
+                    "Skipped adding layer collection from directory entry: {:?}",
+                    entry
+                );
+            }
         }
     }
 
