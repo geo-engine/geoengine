@@ -499,8 +499,9 @@ impl ArrowTyped for TimeInterval {
 
 #[cfg(test)]
 mod tests {
+    use crate::primitives::DateTime;
+
     use super::*;
-    use chrono::NaiveDate;
 
     #[test]
     fn to_geo_json_event() {
@@ -550,8 +551,8 @@ mod tests {
         );
 
         let time_interval = TimeInterval::new(
-            TimeInstance::from(NaiveDate::from_ymd(1990, 1, 1).and_hms(0, 0, 0)),
-            TimeInstance::from(NaiveDate::from_ymd(2000, 1, 1).and_hms(0, 0, 0)),
+            TimeInstance::from(DateTime::new_utc(1990, 1, 1, 0, 0, 0)),
+            TimeInstance::from(DateTime::new_utc(2000, 1, 1, 0, 0, 0)),
         )
         .unwrap();
 

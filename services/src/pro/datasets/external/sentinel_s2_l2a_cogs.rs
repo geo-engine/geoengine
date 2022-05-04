@@ -8,15 +8,14 @@ use crate::stac::{Feature as StacFeature, FeatureCollection as StacCollection, S
 use crate::util::retry::retry;
 use crate::util::user_input::Validated;
 use async_trait::async_trait;
-use chrono::{DateTime, Duration, Utc};
 use geoengine_datatypes::dataset::{DatasetId, DatasetProviderId, ExternalDatasetId};
 use geoengine_datatypes::operations::image::{Colorizer, RgbaColor};
 use geoengine_datatypes::operations::reproject::{
     CoordinateProjection, CoordinateProjector, ReprojectClipped,
 };
 use geoengine_datatypes::primitives::{
-    AxisAlignedRectangle, BoundingBox2D, Measurement, RasterQueryRectangle, SpatialPartitioned,
-    TimeInstance, TimeInterval, VectorQueryRectangle,
+    AxisAlignedRectangle, BoundingBox2D, DateTime, Duration, Measurement, RasterQueryRectangle,
+    SpatialPartitioned, TimeInstance, TimeInterval, VectorQueryRectangle,
 };
 use geoengine_datatypes::raster::RasterDataType;
 use geoengine_datatypes::spatial_reference::{SpatialReference, SpatialReferenceAuthority};
@@ -456,10 +455,10 @@ impl SentinelS2L2aCogsMetaData {
         .await
     }
 
-    fn time_range_request(time: &TimeInterval) -> Result<(DateTime<Utc>, DateTime<Utc>)> {
+    fn time_range_request(time: &TimeInterval) -> Result<(DateTime, DateTime)> {
         let t_start =
             time.start()
-                .as_utc_date_time()
+                .as_date_time()
                 .ok_or(geoengine_operators::error::Error::DataType {
                     source: geoengine_datatypes::error::Error::NoDateTimeValid {
                         time_instance: time.start(),
@@ -471,7 +470,7 @@ impl SentinelS2L2aCogsMetaData {
 
         let t_end =
             time.end()
-                .as_utc_date_time()
+                .as_date_time()
                 .ok_or(geoengine_operators::error::Error::DataType {
                     source: geoengine_datatypes::error::Error::NoDateTimeValid {
                         time_instance: time.end(),
@@ -635,11 +634,7 @@ mod tests {
                     (166_021.44, 0.00).into(),
                     (534_994.66, 9_329_005.18).into(),
                 ),
-                time_interval: TimeInterval::new_instant(
-                    DateTime::parse_from_rfc3339("2021-01-02T10:02:26Z")
-                        .unwrap()
-                        .timestamp_millis(),
-                )?,
+                time_interval: TimeInterval::new_instant(DateTime::new_utc(2021, 1, 2, 10, 2, 26))?,
                 spatial_resolution: SpatialResolution::one(),
             })
             .await
@@ -736,11 +731,7 @@ mod tests {
                 (166_021.44, 9_329_005.18).into(),
                 (534_994.66, 0.00).into(),
             ),
-            time_interval: TimeInterval::new_instant(
-                DateTime::parse_from_rfc3339("2021-01-02T10:02:26Z")
-                    .unwrap()
-                    .timestamp_millis(),
-            )?,
+            time_interval: TimeInterval::new_instant(DateTime::new_utc(2021, 1, 2, 10, 2, 26))?,
             spatial_resolution: SpatialResolution::new_unchecked(
                 166_021.44 / 256.,
                 (9_329_005.18 - 534_994.66) / 256.,
@@ -839,12 +830,8 @@ mod tests {
                 (600_000.00, 9_750_100.).into(),
                 (600_100.0, 9_750_000.).into(),
             ),
-            time_interval: TimeInterval::new_instant(
-                DateTime::parse_from_rfc3339("2021-09-23T08:10:44Z")
-                    .unwrap()
-                    .timestamp_millis(),
-            )
-            .unwrap(),
+            time_interval: TimeInterval::new_instant(DateTime::new_utc(2021, 9, 23, 8, 10, 44))
+                .unwrap(),
             spatial_resolution: SpatialResolution::new_unchecked(10., 10.),
         };
 

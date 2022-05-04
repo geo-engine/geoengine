@@ -2,10 +2,10 @@
 //! applying solar correction
 //! This was ported from C-code available at: <http://www.psa.es/sdg/sunpos.htm>
 
-use chrono::{DateTime, Datelike, TimeZone, Timelike};
-
 const EARTH_MEAN_RADIUS: f64 = 6371.01; // In km
 const ASTRONOMICAL_UNIT: f64 = 149_597_890.0; // In km
+
+use geoengine_datatypes::primitives::DateTime;
 
 #[derive(Debug, Copy, Clone)]
 pub struct SunPos {
@@ -42,7 +42,7 @@ impl SunPos {
     }
 
     /// Compute the sunpos at the given date.
-    pub fn new<T: TimeZone>(timestamp: &DateTime<T>) -> SunPos {
+    pub fn new(timestamp: &DateTime) -> SunPos {
         let (decimal_hours, elapsed_julian_days) = Self::elapsed_julian_days(timestamp);
         let (ecliptic_longitude, ecliptic_obliquity) =
             Self::ecliptic_coordinates(elapsed_julian_days);
@@ -62,7 +62,7 @@ impl SunPos {
 
     /// Calculates difference in days between the current Julian Day
     /// and JD 2451545.0, which is noon 1 January 2000 Universal Time
-    fn elapsed_julian_days<T: TimeZone>(timestamp: &DateTime<T>) -> (f64, f64) {
+    fn elapsed_julian_days(timestamp: &DateTime) -> (f64, f64) {
         let year = i64::from(timestamp.year());
         let month = i64::from(timestamp.month());
         let day = i64::from(timestamp.day());
@@ -121,12 +121,13 @@ impl SunPos {
 
 #[cfg(test)]
 mod tests {
+    use super::*;
+
     use crate::util::sunpos::SunPos;
-    use chrono::{TimeZone, Utc};
 
     #[tokio::test]
     async fn test_ok() {
-        let ts = Utc.datetime_from_str("190001010000", "%Y%m%d%H%M").unwrap();
+        let ts = DateTime::new_utc(1900, 1, 1, 0, 0, 0);
         let chk = SunPos::new(&ts);
         let (lat, lon) = (8.810_983_605_709_731, 50.809_415_350_423_98);
         let (azimuth, zenith) = chk.solar_azimuth_zenith(lat, lon);

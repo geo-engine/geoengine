@@ -267,13 +267,12 @@ mod tests {
     use crate::mock::MockFeatureCollectionSource;
     use crate::source::{GdalSource, GdalSourceParameters};
     use crate::util::gdal::add_ndvi_dataset;
-    use chrono::NaiveDate;
     use futures::StreamExt;
     use geoengine_datatypes::collections::{FeatureCollectionInfos, MultiPointCollection};
     use geoengine_datatypes::dataset::DatasetId;
     use geoengine_datatypes::primitives::{
-        BoundingBox2D, DataRef, FeatureDataRef, MultiPoint, SpatialResolution, TimeInterval,
-        VectorQueryRectangle,
+        BoundingBox2D, DataRef, DateTime, FeatureDataRef, MultiPoint, SpatialResolution,
+        TimeInterval, VectorQueryRectangle,
     };
     use geoengine_datatypes::spatial_reference::SpatialReference;
     use geoengine_datatypes::util::{gdal::hide_gdal_errors, test::TestDefault};
@@ -339,8 +338,8 @@ mod tests {
                 .unwrap(),
                 vec![
                     TimeInterval::new(
-                        NaiveDate::from_ymd(2014, 1, 1).and_hms(0, 0, 0),
-                        NaiveDate::from_ymd(2014, 1, 1).and_hms(0, 0, 0),
+                        DateTime::new_utc(2014, 1, 1, 0, 0, 0),
+                        DateTime::new_utc(2014, 1, 1, 0, 0, 0),
                     )
                     .unwrap();
                     4
@@ -412,8 +411,8 @@ mod tests {
                 .unwrap(),
                 vec![
                     TimeInterval::new(
-                        NaiveDate::from_ymd(2014, 1, 1).and_hms(0, 0, 0),
-                        NaiveDate::from_ymd(2014, 3, 1).and_hms(0, 0, 0),
+                        DateTime::new_utc(2014, 1, 1, 0, 0, 0),
+                        DateTime::new_utc(2014, 3, 1, 0, 0, 0),
                     )
                     .unwrap();
                     4

@@ -6,10 +6,10 @@ use crate::projects::STRectangle;
 use crate::util::config;
 use actix_http::Payload;
 use actix_web::{web, FromRequest, HttpRequest};
-use chrono::{DateTime, Utc, MAX_DATETIME, MIN_DATETIME};
 use futures::future::{err, LocalBoxFuture};
 use futures_util::FutureExt;
 use geoengine_datatypes::identifier;
+use geoengine_datatypes::primitives::DateTime;
 use geoengine_datatypes::util::Identifier;
 use serde::{Deserialize, Serialize};
 
@@ -17,8 +17,8 @@ identifier!(SessionId);
 
 pub trait Session: Send + Sync + Serialize {
     fn id(&self) -> SessionId;
-    fn created(&self) -> &DateTime<Utc>;
-    fn valid_until(&self) -> &DateTime<Utc>;
+    fn created(&self) -> &DateTime;
+    fn valid_until(&self) -> &DateTime;
     fn project(&self) -> Option<ProjectId>;
     fn view(&self) -> Option<&STRectangle>;
 }
@@ -54,12 +54,12 @@ impl Session for SimpleSession {
         self.id
     }
 
-    fn created(&self) -> &DateTime<Utc> {
-        &MIN_DATETIME
+    fn created(&self) -> &DateTime {
+        &DateTime::MIN
     }
 
-    fn valid_until(&self) -> &DateTime<Utc> {
-        &MAX_DATETIME
+    fn valid_until(&self) -> &DateTime {
+        &DateTime::MAX
     }
 
     fn project(&self) -> Option<ProjectId> {

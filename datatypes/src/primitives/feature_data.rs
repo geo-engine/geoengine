@@ -1340,7 +1340,7 @@ mod tests {
 
         let from_dates: Vec<String> = collection.data("dates").unwrap().strings_iter().collect();
         let from_dates_cmp: Vec<String> =
-            ["1999-12-31T23:00:00+00:00", "", "2021-11-09T09:05:29+00:00"]
+            ["1999-12-31T23:00:00.000Z", "", "2021-11-09T09:05:29.000Z"]
                 .iter()
                 .map(ToString::to_string)
                 .collect();

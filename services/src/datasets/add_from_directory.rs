@@ -1,3 +1,4 @@
+use std::ffi::OsStr;
 use std::{
     fs::{self, DirEntry, File},
     io::BufReader,
@@ -41,16 +42,19 @@ pub async fn add_datasets_from_directory<S: MockableSession, D: DatasetDb<S>>(
     let dir = dir.expect("checked");
 
     for entry in dir {
-        if let Ok(entry) = entry {
-            if let Err(e) = add_dataset_definition_from_dir_entry(db, &entry).await {
-                warn!(
-                    "Skipped adding dataset from directory entry: {:?} error: {}",
-                    entry,
-                    e.to_string()
-                );
+        match entry {
+            Ok(entry) if entry.path().extension() == Some(OsStr::new("json")) => {
+                if let Err(e) = add_dataset_definition_from_dir_entry(db, &entry).await {
+                    warn!(
+                        "Skipped adding dataset from directory entry: {:?} error: {}",
+                        entry,
+                        e.to_string()
+                    );
+                }
             }
-        } else {
-            warn!("Skipped adding dataset from directory entry: {:?}", entry);
+            _ => {
+                warn!("Skipped adding dataset from directory entry: {:?}", entry);
+            }
         }
     }
 }

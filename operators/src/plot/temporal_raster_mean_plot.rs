@@ -257,10 +257,10 @@ mod tests {
         mock::{MockRasterSource, MockRasterSourceParams},
         source::GdalSourceParameters,
     };
-    use chrono::NaiveDate;
     use geoengine_datatypes::{
         dataset::InternalDatasetId,
         plots::{PlotData, PlotMetaData},
+        primitives::DateTime,
     };
     use geoengine_datatypes::{
         primitives::{BoundingBox2D, Measurement, SpatialResolution, TimeInterval},
@@ -337,8 +337,8 @@ mod tests {
             sources: SingleRasterSource {
                 raster: generate_mock_raster_source(
                     vec![TimeInterval::new(
-                        TimeInstance::from(NaiveDate::from_ymd(1990, 1, 1).and_hms(0, 0, 0)),
-                        TimeInstance::from(NaiveDate::from_ymd(2000, 1, 1).and_hms(0, 0, 0)),
+                        TimeInstance::from(DateTime::new_utc(1990, 1, 1, 0, 0, 0)),
+                        TimeInstance::from(DateTime::new_utc(2000, 1, 1, 0, 0, 0)),
                     )
                     .unwrap()],
                     vec![vec![1, 2, 3, 4, 5, 6]],
@@ -437,18 +437,18 @@ mod tests {
                 raster: generate_mock_raster_source(
                     vec![
                         TimeInterval::new(
-                            TimeInstance::from(NaiveDate::from_ymd(1990, 1, 1).and_hms(0, 0, 0)),
-                            TimeInstance::from(NaiveDate::from_ymd(1995, 1, 1).and_hms(0, 0, 0)),
+                            TimeInstance::from(DateTime::new_utc(1990, 1, 1, 0, 0, 0)),
+                            TimeInstance::from(DateTime::new_utc(1995, 1, 1, 0, 0, 0)),
                         )
                         .unwrap(),
                         TimeInterval::new(
-                            TimeInstance::from(NaiveDate::from_ymd(1995, 1, 1).and_hms(0, 0, 0)),
-                            TimeInstance::from(NaiveDate::from_ymd(2000, 1, 1).and_hms(0, 0, 0)),
+                            TimeInstance::from(DateTime::new_utc(1995, 1, 1, 0, 0, 0)),
+                            TimeInstance::from(DateTime::new_utc(2000, 1, 1, 0, 0, 0)),
                         )
                         .unwrap(),
                         TimeInterval::new(
-                            TimeInstance::from(NaiveDate::from_ymd(2000, 1, 1).and_hms(0, 0, 0)),
-                            TimeInstance::from(NaiveDate::from_ymd(2005, 1, 1).and_hms(0, 0, 0)),
+                            TimeInstance::from(DateTime::new_utc(2000, 1, 1, 0, 0, 0)),
+                            TimeInstance::from(DateTime::new_utc(2005, 1, 1, 0, 0, 0)),
                         )
                         .unwrap(),
                     ],
@@ -490,9 +490,9 @@ mod tests {
             result,
             AreaLineChart::new(
                 vec![
-                    TimeInstance::from(NaiveDate::from_ymd(1990, 1, 1).and_hms(0, 0, 0)),
-                    TimeInstance::from(NaiveDate::from_ymd(1995, 1, 1).and_hms(0, 0, 0)),
-                    TimeInstance::from(NaiveDate::from_ymd(2000, 1, 1).and_hms(0, 0, 0))
+                    TimeInstance::from(DateTime::new_utc(1990, 1, 1, 0, 0, 0)),
+                    TimeInstance::from(DateTime::new_utc(1995, 1, 1, 0, 0, 0)),
+                    TimeInstance::from(DateTime::new_utc(2000, 1, 1, 0, 0, 0))
                 ],
                 vec![3.5, 8.5, 5.5],
                 Measurement::Unitless,

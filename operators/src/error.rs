@@ -1,6 +1,6 @@
 use crate::util::statistics::StatisticsError;
-use chrono::ParseError;
 use geoengine_datatypes::dataset::DatasetId;
+use geoengine_datatypes::error::ErrorSource;
 use geoengine_datatypes::primitives::FeatureDataType;
 use snafu::prelude::*;
 use std::ops::Range;
@@ -148,7 +148,7 @@ pub enum Error {
     TimeIntervalDurationMissing,
 
     TimeParse {
-        source: chrono::format::ParseError,
+        source: Box<dyn ErrorSource>,
     },
 
     TimeInstanceNotDisplayable,
@@ -337,12 +337,6 @@ impl From<serde_json::Error> for Error {
         Self::SerdeJson {
             source: serde_json_error,
         }
-    }
-}
-
-impl From<chrono::format::ParseError> for Error {
-    fn from(source: ParseError) -> Self {
-        Self::TimeParse { source }
     }
 }
 
