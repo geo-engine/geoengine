@@ -116,16 +116,12 @@ impl LayerDb for HashMapLayerDb {
         layer: LayerId,
         collection: LayerCollectionId,
     ) -> Result<()> {
-        // TODO: check if layer is already in collection
-        self.backend
-            .write()
-            .await
-            .collection_layers
-            .entry(collection)
-            .or_default()
-            .push(layer);
+        let mut backend = self.backend.write().await;
+        let layers = backend.collection_layers.entry(collection).or_default();
 
-        // TODO: add layers to hashmap
+        if !layers.contains(&layer) {
+            layers.push(layer);
+        }
 
         Ok(())
     }
@@ -163,15 +159,12 @@ impl LayerDb for HashMapLayerDb {
         collection: LayerCollectionId,
         parent: LayerCollectionId,
     ) -> Result<()> {
-        // TODO: check if collection is already in collection
+        let mut backend = self.backend.write().await;
+        let children = backend.collection_children.entry(parent).or_default();
 
-        self.backend
-            .write()
-            .await
-            .collection_children
-            .entry(parent)
-            .or_default()
-            .push(collection);
+        if !children.contains(&collection) {
+            children.push(collection);
+        }
 
         Ok(())
     }
