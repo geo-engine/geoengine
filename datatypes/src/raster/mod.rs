@@ -26,8 +26,8 @@ pub use self::operations::{
     map_elements::MapElements,
     map_elements::MapElementsParallel,
     scaling::{
-        Scale, ScaleElements, ScaleElementsParallel, Unscale, UnscaleElements,
-        UnscaleElementsParallel,
+        LinearTransformation, Scale, ScaleTransformation, TransformElements,
+        TransformElementsParallel, Unscale, UnscaleTransformation,
     },
 };
 pub use self::raster_tile::{

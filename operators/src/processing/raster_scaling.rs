@@ -5,7 +5,10 @@ use crate::engine::{
 use crate::util::Result;
 use async_trait::async_trait;
 use futures::{StreamExt, TryStreamExt};
-use geoengine_datatypes::raster::{Scale, ScaleElementsParallel, Unscale, UnscaleElementsParallel};
+use geoengine_datatypes::raster::{
+    LinearTransformation, Scale, ScaleTransformation, TransformElementsParallel, Unscale,
+    UnscaleTransformation,
+};
 use geoengine_datatypes::{
     primitives::Measurement,
     raster::{Pixel, RasterProperties, RasterPropertiesKey, RasterTile2D},
@@ -14,6 +17,7 @@ use num::FromPrimitive;
 use num_traits::AsPrimitive;
 use rayon::ThreadPool;
 use serde::{Deserialize, Serialize};
+use std::marker::PhantomData;
 use std::sync::Arc;
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -113,13 +117,20 @@ impl InitializedRasterOperator for InitializedRasterScalingOperator {
         let source = self.source.query_processor()?;
         let scaling_mode = self.scaling_mode;
 
-        let res_op = call_on_generic_raster_processor!(source, source_proc => { TypedRasterQueryProcessor::from(RasterScalingProcessor::create_boxed(scale_with, offset_by,  source_proc, no_data_value, scaling_mode)) });
+        let res = match scaling_mode {
+            ScalingMode::Scale => {
+                call_on_generic_raster_processor!(source, source_proc => { TypedRasterQueryProcessor::from(create_boxed_processor::<_,_, ScaleTransformation>(scale_with, offset_by,  source_proc, no_data_value)) })
+            }
+            ScalingMode::Unscale => {
+                call_on_generic_raster_processor!(source, source_proc => { TypedRasterQueryProcessor::from(create_boxed_processor::<_,_, UnscaleTransformation>(scale_with, offset_by,  source_proc, no_data_value)) })
+            }
+        };
 
-        Ok(res_op)
+        Ok(res)
     }
 }
 
-struct RasterScalingProcessor<Q, P>
+struct RasterTransformationProcessor<Q, P, S>
 where
     Q: RasterQueryProcessor<RasterType = P>,
 {
@@ -127,45 +138,49 @@ where
     scale_with: PropertiesKeyOrValue,
     offset_by: PropertiesKeyOrValue,
     no_data_value: P,
-    scaling_mode: ScalingMode,
+    _transformation: PhantomData<S>,
 }
 
-impl<Q, P> RasterScalingProcessor<Q, P>
+fn create_boxed_processor<Q, P, S>(
+    scale_with: PropertiesKeyOrValue,
+    offset_by: PropertiesKeyOrValue,
+    source: Q,
+    no_data_value: Option<f64>,
+) -> Box<dyn RasterQueryProcessor<RasterType = P>>
 where
     Q: RasterQueryProcessor<RasterType = P> + 'static,
-    P: Pixel + Scale + Unscale + FromPrimitive,
+    P: Pixel + FromPrimitive + Scale + Unscale + 'static,
     f64: AsPrimitive<P>,
+    S: Send + Sync + 'static + LinearTransformation<P>,
 {
-    pub fn create_boxed(
-        scale_with: PropertiesKeyOrValue,
-        offset_by: PropertiesKeyOrValue,
-        source: Q,
-        no_data_value: Option<f64>,
-        scaling_mode: ScalingMode,
-    ) -> Box<dyn RasterQueryProcessor<RasterType = P>> {
-        RasterScalingProcessor::create(
-            scale_with,
-            offset_by,
-            source,
-            no_data_value.map_or(P::DEFAULT_NO_DATA_VALUE, num_traits::AsPrimitive::as_),
-            scaling_mode,
-        )
-        .boxed()
-    }
+    RasterTransformationProcessor::<Q, P, S>::create(
+        scale_with,
+        offset_by,
+        source,
+        no_data_value.map_or(P::DEFAULT_NO_DATA_VALUE, num_traits::AsPrimitive::as_),
+    )
+    .boxed()
+}
 
+impl<Q, P, S> RasterTransformationProcessor<Q, P, S>
+where
+    Q: RasterQueryProcessor<RasterType = P> + 'static,
+    P: Pixel + FromPrimitive + Scale + Unscale,
+    f64: AsPrimitive<P>,
+    S: Send + Sync + 'static + LinearTransformation<P>,
+{
     pub fn create(
         scale_with: PropertiesKeyOrValue,
         offset_by: PropertiesKeyOrValue,
         source: Q,
         no_data_value: P,
-        scaling_mode: ScalingMode,
-    ) -> RasterScalingProcessor<Q, P> {
-        RasterScalingProcessor {
+    ) -> RasterTransformationProcessor<Q, P, S> {
+        RasterTransformationProcessor {
             source,
             scale_with,
             offset_by,
             no_data_value,
-            scaling_mode,
+            _transformation: PhantomData,
         }
     }
 
@@ -176,20 +191,13 @@ where
     ) -> Result<RasterTile2D<P>> {
         let offset_by = Self::prop_value(&self.offset_by, &tile.properties)?;
         let scale_with = Self::prop_value(&self.scale_with, &tile.properties)?;
-        let scaling_mode = self.scaling_mode;
 
         let no_data_value = self.no_data_value;
 
-        let res_tile =
-            crate::util::spawn_blocking_with_thread_pool(pool, move || match scaling_mode {
-                ScalingMode::Scale => {
-                    tile.scale_elements_parallel(scale_with, offset_by, no_data_value)
-                }
-                ScalingMode::Unscale => {
-                    tile.unscale_elements_parallel(scale_with, offset_by, no_data_value)
-                }
-            })
-            .await?;
+        let res_tile = crate::util::spawn_blocking_with_thread_pool(pool, move || {
+            tile.transform_elements_parallel::<S>(scale_with, offset_by, no_data_value)
+        })
+        .await?;
 
         Ok(res_tile)
     }
@@ -204,11 +212,12 @@ where
 }
 
 #[async_trait]
-impl<Q, P> RasterQueryProcessor for RasterScalingProcessor<Q, P>
+impl<Q, P, S> RasterQueryProcessor for RasterTransformationProcessor<Q, P, S>
 where
-    P: Pixel + Scale + Unscale + FromPrimitive,
+    P: Pixel + FromPrimitive + Scale + Unscale,
     f64: AsPrimitive<P>,
     Q: RasterQueryProcessor<RasterType = P> + 'static,
+    S: Send + Sync + 'static + LinearTransformation<P>,
 {
     type RasterType = P;
 

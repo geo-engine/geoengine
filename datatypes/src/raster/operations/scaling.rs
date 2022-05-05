@@ -105,54 +105,104 @@ impl_unscale_conv!(i64, unscale_checked);
 impl_unscale_conv!(f32, unscale);
 impl_unscale_conv!(f64, unscale);
 
-pub trait ScaleElements<P> {
-    type Output;
-    /// casts the elements of the collection to the output type and then scales them with `(self - offset_by) / scale_with`. Overflows produce `None`.
-    fn scale_elements(self, scale_with: P, offset_by: P, out_no_data: P) -> Self::Output;
+pub trait LinearTransformation<T> {
+    fn transform(value: T, scale_with: T, offset_by: T) -> Option<T>;
 }
 
-impl<P, G> ScaleElements<P> for Grid<G, P>
+/// scales the value with `(value - offset_by) / scale_with`. Overflows produce `None`.
+pub struct ScaleTransformation;
+
+impl<T> LinearTransformation<T> for ScaleTransformation
+where
+    T: Scale,
+{
+    fn transform(value: T, scale_with: T, offset_by: T) -> Option<T> {
+        value.scale(scale_with, offset_by)
+    }
+}
+
+/// unscales with `self * scale_with + offset_by`. Overflows produce `None`.
+pub struct UnscaleTransformation;
+
+impl<T> LinearTransformation<T> for UnscaleTransformation
+where
+    T: Unscale,
+{
+    fn transform(value: T, scale_with: T, offset_by: T) -> Option<T> {
+        value.unscale(scale_with, offset_by)
+    }
+}
+
+pub trait TransformElements<P> {
+    type Output;
+    fn transform_elements<E: LinearTransformation<P>>(
+        self,
+        scale_with: P,
+        offset_by: P,
+        out_no_data: P,
+    ) -> Self::Output;
+}
+
+impl<P, G> TransformElements<P> for Grid<G, P>
 where
     P: Scale + Copy + 'static + PartialEq + DefaultNoDataValue,
     G: GridSize + Clone,
 {
     type Output = Grid<G, P>;
 
-    fn scale_elements(self, scale_with: P, offset_by: P, out_no_data: P) -> Self::Output {
-        self.map_elements(|p| p.scale(scale_with, offset_by), Some(out_no_data))
+    fn transform_elements<E: LinearTransformation<P>>(
+        self,
+        scale_with: P,
+        offset_by: P,
+        out_no_data: P,
+    ) -> Self::Output {
+        self.map_elements(
+            |p| E::transform(p, scale_with, offset_by),
+            Some(out_no_data),
+        )
     }
 }
 
-impl<P, G> ScaleElements<P> for GridOrEmpty<G, P>
+impl<P, G> TransformElements<P> for GridOrEmpty<G, P>
 where
     P: Scale + Copy + 'static + PartialEq + DefaultNoDataValue,
     G: GridSize + Clone,
-    Grid<G, P>: ScaleElements<P, Output = Grid<G, P>>,
+    Grid<G, P>: TransformElements<P, Output = Grid<G, P>>,
 {
     type Output = GridOrEmpty<G, P>;
 
-    fn scale_elements(self, scale_with: P, offset_by: P, out_no_data: P) -> Self::Output {
+    fn transform_elements<E: LinearTransformation<P>>(
+        self,
+        scale_with: P,
+        offset_by: P,
+        out_no_data: P,
+    ) -> Self::Output {
         match self {
             GridOrEmpty::Grid(g) => {
-                GridOrEmpty::Grid(g.scale_elements(scale_with, offset_by, out_no_data))
+                GridOrEmpty::Grid(g.transform_elements::<E>(scale_with, offset_by, out_no_data))
             }
             GridOrEmpty::Empty(e) => GridOrEmpty::Empty(EmptyGrid::new(e.shape, out_no_data)),
         }
     }
 }
 
-impl<P> ScaleElements<P> for RasterTile2D<P>
+impl<P> TransformElements<P> for RasterTile2D<P>
 where
     P: Scale + 'static + Copy + PartialEq + DefaultNoDataValue,
-    GridOrEmpty2D<P>: ScaleElements<P, Output = GridOrEmpty2D<P>>,
+    GridOrEmpty2D<P>: TransformElements<P, Output = GridOrEmpty2D<P>>,
 {
     type Output = RasterTile2D<P>;
 
-    fn scale_elements(self, scale_with: P, offset_by: P, out_no_data: P) -> Self::Output {
+    fn transform_elements<E: LinearTransformation<P>>(
+        self,
+        scale_with: P,
+        offset_by: P,
+        out_no_data: P,
+    ) -> Self::Output {
         RasterTile2D {
             grid_array: self
                 .grid_array
-                .scale_elements(scale_with, offset_by, out_no_data),
+                .transform_elements::<E>(scale_with, offset_by, out_no_data),
             global_geo_transform: self.global_geo_transform,
             properties: self.properties,
             tile_position: self.tile_position,
@@ -161,171 +211,78 @@ where
     }
 }
 
-pub trait ScaleElementsParallel<P> {
+pub trait TransformElementsParallel<P> {
     type Output;
 
     /// scales the values of the collection (parallel) with `(self - offset_by) / scale_with`. Overflows produce `None`.
-    fn scale_elements_parallel(self, scale_with: P, offset_by: P, out_no_data: P) -> Self::Output;
+    fn transform_elements_parallel<E: LinearTransformation<P>>(
+        self,
+        scale_with: P,
+        offset_by: P,
+        out_no_data: P,
+    ) -> Self::Output;
 }
 
-impl<P, G> ScaleElementsParallel<P> for Grid<G, P>
+impl<P, G> TransformElementsParallel<P> for Grid<G, P>
 where
     P: Scale + Copy + PartialEq + 'static + Send + Sync + DefaultNoDataValue,
     G: GridSize + Clone + Send + Sync,
 {
     type Output = Grid<G, P>;
 
-    fn scale_elements_parallel(self, scale_with: P, offset_by: P, out_no_data: P) -> Self::Output {
-        self.map_elements_parallel(|p| p.scale(scale_with, offset_by), Some(out_no_data))
+    fn transform_elements_parallel<E: LinearTransformation<P>>(
+        self,
+        scale_with: P,
+        offset_by: P,
+        out_no_data: P,
+    ) -> Self::Output {
+        self.map_elements_parallel(
+            |p| E::transform(p, scale_with, offset_by),
+            Some(out_no_data),
+        )
     }
 }
 
-impl<P, G> ScaleElementsParallel<P> for GridOrEmpty<G, P>
+impl<P, G> TransformElementsParallel<P> for GridOrEmpty<G, P>
 where
     P: Scale + Copy + PartialEq + 'static + Send + Sync + DefaultNoDataValue,
     G: GridSize + Clone + Send + Sync,
-    Grid<G, P>: ScaleElementsParallel<P, Output = Grid<G, P>>,
+    Grid<G, P>: TransformElementsParallel<P, Output = Grid<G, P>>,
 {
     type Output = GridOrEmpty<G, P>;
 
-    fn scale_elements_parallel(self, scale_with: P, offset_by: P, out_no_data: P) -> Self::Output {
+    fn transform_elements_parallel<E: LinearTransformation<P>>(
+        self,
+        scale_with: P,
+        offset_by: P,
+        out_no_data: P,
+    ) -> Self::Output {
         match self {
-            GridOrEmpty::Grid(g) => {
-                GridOrEmpty::Grid(g.scale_elements_parallel(scale_with, offset_by, out_no_data))
-            }
+            GridOrEmpty::Grid(g) => GridOrEmpty::Grid(g.transform_elements_parallel::<E>(
+                scale_with,
+                offset_by,
+                out_no_data,
+            )),
             GridOrEmpty::Empty(e) => GridOrEmpty::Empty(EmptyGrid::new(e.shape, out_no_data)),
         }
     }
 }
 
-impl<P> ScaleElementsParallel<P> for RasterTile2D<P>
+impl<P> TransformElementsParallel<P> for RasterTile2D<P>
 where
     P: Scale + 'static + Copy + PartialEq + DefaultNoDataValue,
-    GridOrEmpty2D<P>: ScaleElementsParallel<P, Output = GridOrEmpty2D<P>>,
+    GridOrEmpty2D<P>: TransformElementsParallel<P, Output = GridOrEmpty2D<P>>,
 {
     type Output = RasterTile2D<P>;
 
-    fn scale_elements_parallel(self, scale_with: P, offset_by: P, out_no_data: P) -> Self::Output {
-        RasterTile2D {
-            grid_array: self
-                .grid_array
-                .scale_elements_parallel(scale_with, offset_by, out_no_data),
-            global_geo_transform: self.global_geo_transform,
-            properties: self.properties,
-            tile_position: self.tile_position,
-            time: self.time,
-        }
-    }
-}
-
-pub trait UnscaleElements<P> {
-    type Output;
-    fn unscale_elements(self, scale_with: P, offset_by: P, out_no_data: P) -> Self::Output;
-}
-
-impl<P, G> UnscaleElements<P> for Grid<G, P>
-where
-    P: Unscale + Copy + PartialEq + 'static + DefaultNoDataValue,
-    G: GridSize + Clone,
-{
-    type Output = Grid<G, P>;
-    fn unscale_elements(self, scale_with: P, offset_by: P, out_no_data: P) -> Self::Output {
-        self.map_elements(|p| p.unscale(scale_with, offset_by), Some(out_no_data))
-    }
-}
-impl<P, G> UnscaleElements<P> for GridOrEmpty<G, P>
-where
-    P: Unscale + Copy + PartialEq + 'static + DefaultNoDataValue,
-    G: GridSize + Clone,
-    Grid<G, P>: UnscaleElements<P, Output = Grid<G, P>>,
-{
-    type Output = GridOrEmpty<G, P>;
-    fn unscale_elements(self, scale_with: P, offset_by: P, out_no_data: P) -> Self::Output {
-        match self {
-            GridOrEmpty::Grid(g) => {
-                GridOrEmpty::Grid(g.unscale_elements(scale_with, offset_by, out_no_data))
-            }
-            GridOrEmpty::Empty(e) => GridOrEmpty::Empty(EmptyGrid::new(e.shape, out_no_data)),
-        }
-    }
-}
-
-impl<P> UnscaleElements<P> for RasterTile2D<P>
-where
-    P: Unscale + Copy + PartialEq + 'static,
-    GridOrEmpty2D<P>: UnscaleElements<P, Output = GridOrEmpty2D<P>>,
-{
-    type Output = RasterTile2D<P>;
-    fn unscale_elements(self, scale_with: P, offset_by: P, out_no_data: P) -> Self::Output {
-        RasterTile2D {
-            grid_array: self
-                .grid_array
-                .unscale_elements(scale_with, offset_by, out_no_data),
-            global_geo_transform: self.global_geo_transform,
-            properties: self.properties,
-            tile_position: self.tile_position,
-            time: self.time,
-        }
-    }
-}
-
-pub trait UnscaleElementsParallel<P> {
-    type Output;
-    fn unscale_elements_parallel(self, scale_with: P, offset_by: P, out_no_data: P)
-        -> Self::Output;
-}
-
-impl<P, G> UnscaleElementsParallel<P> for Grid<G, P>
-where
-    P: Unscale + Copy + PartialEq + 'static + Send + Sync + DefaultNoDataValue,
-    G: GridSize + Clone + Send + Sync,
-{
-    type Output = Grid<G, P>;
-    fn unscale_elements_parallel(
-        self,
-        scale_with: P,
-        offset_by: P,
-        out_no_data: P,
-    ) -> Self::Output {
-        self.map_elements_parallel(|p| p.unscale(scale_with, offset_by), Some(out_no_data))
-    }
-}
-impl<P, G> UnscaleElementsParallel<P> for GridOrEmpty<G, P>
-where
-    P: Unscale + Copy + PartialEq + 'static + DefaultNoDataValue,
-    G: GridSize + Clone,
-    Grid<G, P>: UnscaleElementsParallel<P, Output = Grid<G, P>>,
-{
-    type Output = GridOrEmpty<G, P>;
-    fn unscale_elements_parallel(
-        self,
-        scale_with: P,
-        offset_by: P,
-        out_no_data: P,
-    ) -> Self::Output {
-        match self {
-            GridOrEmpty::Grid(g) => {
-                GridOrEmpty::Grid(g.unscale_elements_parallel(scale_with, offset_by, out_no_data))
-            }
-            GridOrEmpty::Empty(e) => GridOrEmpty::Empty(EmptyGrid::new(e.shape, out_no_data)),
-        }
-    }
-}
-
-impl<P> UnscaleElementsParallel<P> for RasterTile2D<P>
-where
-    P: Unscale + Copy + PartialEq + 'static,
-    GridOrEmpty2D<P>: UnscaleElementsParallel<P, Output = GridOrEmpty2D<P>>,
-{
-    type Output = RasterTile2D<P>;
-    fn unscale_elements_parallel(
+    fn transform_elements_parallel<E: LinearTransformation<P>>(
         self,
         scale_with: P,
         offset_by: P,
         out_no_data: P,
     ) -> Self::Output {
         RasterTile2D {
-            grid_array: self.grid_array.unscale_elements_parallel(
+            grid_array: self.grid_array.transform_elements_parallel::<E>(
                 scale_with,
                 offset_by,
                 out_no_data,
@@ -426,7 +383,7 @@ mod tests {
         let no_data = 255;
 
         let r1 = Grid2D::new(dim.into(), data, Some(no_data)).unwrap();
-        let scaled_r1 = r1.unscale_elements(2, 1, no_data);
+        let scaled_r1 = r1.transform_elements::<UnscaleTransformation>(2, 1, no_data);
 
         let expected = [15, 15, 15, 15];
         assert_eq!(scaled_r1.data, expected);
@@ -439,7 +396,7 @@ mod tests {
         let no_data = 255;
 
         let r1 = GridOrEmpty::Grid(Grid2D::new(dim.into(), data, Some(no_data)).unwrap());
-        let scaled_r1 = r1.unscale_elements(2, 1, no_data);
+        let scaled_r1 = r1.transform_elements::<UnscaleTransformation>(2, 1, no_data);
 
         let expected = [15, 15, 15, 15];
 
@@ -461,7 +418,7 @@ mod tests {
         let r1 = GridOrEmpty::Grid(Grid2D::new(dim.into(), data, Some(no_data)).unwrap());
         let t1 = RasterTile2D::new(TimeInterval::default(), [0, 0].into(), geo, r1);
 
-        let scaled_r1 = t1.unscale_elements(2, 1, no_data);
+        let scaled_r1 = t1.transform_elements::<UnscaleTransformation>(2, 1, no_data);
         let mat_scaled_r1 = scaled_r1.into_materialized_tile();
 
         let expected = [15, 15, 15, 15];
@@ -476,7 +433,7 @@ mod tests {
         let no_data = 255;
 
         let r1 = Grid2D::new(dim.into(), data, Some(no_data)).unwrap();
-        let scaled_r1 = r1.scale_elements(2, 1, no_data);
+        let scaled_r1 = r1.transform_elements::<ScaleTransformation>(2, 1, no_data);
 
         let expected = [7, 7, 7, 7];
         assert_eq!(scaled_r1.data, expected);
@@ -489,7 +446,7 @@ mod tests {
         let no_data = 255;
 
         let r1 = GridOrEmpty::Grid(Grid2D::new(dim.into(), data, Some(no_data)).unwrap());
-        let scaled_r1 = r1.scale_elements(2, 1, no_data);
+        let scaled_r1 = r1.transform_elements::<ScaleTransformation>(2, 1, no_data);
 
         let expected = [7, 7, 7, 7];
 
@@ -511,7 +468,7 @@ mod tests {
         let r1 = GridOrEmpty::Grid(Grid2D::new(dim.into(), data, Some(no_data)).unwrap());
         let t1 = RasterTile2D::new(TimeInterval::default(), [0, 0].into(), geo, r1);
 
-        let scaled_r1 = t1.scale_elements(2, 1, no_data);
+        let scaled_r1 = t1.transform_elements::<ScaleTransformation>(2, 1, no_data);
         let mat_scaled_r1 = scaled_r1.into_materialized_tile();
 
         let expected = [7, 7, 7, 7];
@@ -526,7 +483,7 @@ mod tests {
         let no_data = 255;
 
         let r1 = Grid2D::new(dim.into(), data, Some(no_data)).unwrap();
-        let scaled_r1 = r1.unscale_elements_parallel(2, 1, no_data);
+        let scaled_r1 = r1.transform_elements_parallel::<UnscaleTransformation>(2, 1, no_data);
 
         let expected = [15, 15, 15, 15];
         assert_eq!(scaled_r1.data, expected);
@@ -539,7 +496,7 @@ mod tests {
         let no_data = 255;
 
         let r1 = GridOrEmpty::Grid(Grid2D::new(dim.into(), data, Some(no_data)).unwrap());
-        let scaled_r1 = r1.unscale_elements_parallel(2, 1, no_data);
+        let scaled_r1 = r1.transform_elements_parallel::<UnscaleTransformation>(2, 1, no_data);
 
         let expected = [15, 15, 15, 15];
 
@@ -561,7 +518,7 @@ mod tests {
         let r1 = GridOrEmpty::Grid(Grid2D::new(dim.into(), data, Some(no_data)).unwrap());
         let t1 = RasterTile2D::new(TimeInterval::default(), [0, 0].into(), geo, r1);
 
-        let scaled_r1 = t1.unscale_elements_parallel(2, 1, no_data);
+        let scaled_r1 = t1.transform_elements_parallel::<UnscaleTransformation>(2, 1, no_data);
         let mat_scaled_r1 = scaled_r1.into_materialized_tile();
 
         let expected = [15, 15, 15, 15];
@@ -576,7 +533,7 @@ mod tests {
         let no_data = 255;
 
         let r1 = Grid2D::new(dim.into(), data, Some(no_data)).unwrap();
-        let scaled_r1 = r1.scale_elements_parallel(2, 1, no_data);
+        let scaled_r1 = r1.transform_elements_parallel::<ScaleTransformation>(2, 1, no_data);
 
         let expected = [7, 7, 7, 7];
         assert_eq!(scaled_r1.data, expected);
@@ -589,7 +546,7 @@ mod tests {
         let no_data = 255;
 
         let r1 = GridOrEmpty::Grid(Grid2D::new(dim.into(), data, Some(no_data)).unwrap());
-        let scaled_r1 = r1.scale_elements_parallel(2, 1, no_data);
+        let scaled_r1 = r1.transform_elements_parallel::<ScaleTransformation>(2, 1, no_data);
 
         let expected = [7, 7, 7, 7];
 
@@ -611,7 +568,7 @@ mod tests {
         let r1 = GridOrEmpty::Grid(Grid2D::new(dim.into(), data, Some(no_data)).unwrap());
         let t1 = RasterTile2D::new(TimeInterval::default(), [0, 0].into(), geo, r1);
 
-        let scaled_r1 = t1.scale_elements_parallel(2, 1, no_data);
+        let scaled_r1 = t1.transform_elements_parallel::<ScaleTransformation>(2, 1, no_data);
         let mat_scaled_r1 = scaled_r1.into_materialized_tile();
 
         let expected = [7, 7, 7, 7];
