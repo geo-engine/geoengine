@@ -84,7 +84,7 @@ impl ExternalDatasetProviderDefinition for NetCdfCfDataProviderDefinition {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(rename_all = "camelCase")]
 pub struct NetCdfOverview {
     pub file_name: String,
@@ -98,7 +98,7 @@ pub struct NetCdfOverview {
     pub colorizer: Colorizer,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(rename_all = "camelCase")]
 pub struct NetCdfGroup {
     pub name: String,
@@ -111,7 +111,7 @@ pub struct NetCdfGroup {
     pub groups: Vec<NetCdfGroup>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(rename_all = "camelCase")]
 pub struct NetCdfEntity {
     pub id: usize,

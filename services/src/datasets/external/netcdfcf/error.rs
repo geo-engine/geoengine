@@ -149,6 +149,9 @@ pub enum NetCdfCf4DProviderError {
     },
     CannotReadMetadataFileDir {},
     CannotReadInputFileDir,
+    CannotOpenNetCdfDataset {
+        source: Box<dyn ErrorSource>,
+    },
     CannotOpenNetCdfSubdataset {
         source: Box<dyn ErrorSource>,
     },
