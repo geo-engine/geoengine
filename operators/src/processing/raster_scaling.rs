@@ -349,8 +349,6 @@ mod tests {
 
         let results = stream.collect::<Vec<Result<RasterTile2D<u8>>>>().await;
 
-        // assert_eq!((&results).len(), 1);
-
         let result_tile = results.as_slice()[0].as_ref().unwrap();
 
         let result_grid = result_tile.grid_array.clone();
