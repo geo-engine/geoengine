@@ -245,12 +245,7 @@ where
             GridOrEmpty::Grid(g) => {
                 GridOrEmpty::Grid(g.unscale_elements(scale_with, offset_by, out_no_data))
             }
-            GridOrEmpty::Empty(e) => GridOrEmpty::Empty(EmptyGrid::new(
-                e.shape,
-                e.no_data_value
-                    .unscale(scale_with, offset_by)
-                    .unwrap_or(P::DEFAULT_NO_DATA_VALUE),
-            )),
+            GridOrEmpty::Empty(e) => GridOrEmpty::Empty(EmptyGrid::new(e.shape, out_no_data)),
         }
     }
 }
@@ -312,12 +307,7 @@ where
             GridOrEmpty::Grid(g) => {
                 GridOrEmpty::Grid(g.unscale_elements_parallel(scale_with, offset_by, out_no_data))
             }
-            GridOrEmpty::Empty(e) => GridOrEmpty::Empty(EmptyGrid::new(
-                e.shape,
-                e.no_data_value
-                    .unscale(scale_with, offset_by)
-                    .unwrap_or(P::DEFAULT_NO_DATA_VALUE),
-            )),
+            GridOrEmpty::Empty(e) => GridOrEmpty::Empty(EmptyGrid::new(e.shape, out_no_data)),
         }
     }
 }
