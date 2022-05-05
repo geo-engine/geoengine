@@ -4,6 +4,7 @@ use geoengine_datatypes::identifier;
 
 use crate::{
     error::Result,
+    projects::Symbology,
     util::user_input::UserInput,
     workflows::workflow::{Workflow, WorkflowId},
 };
@@ -17,7 +18,15 @@ pub struct Layer {
     pub name: String,
     pub description: String,
     pub workflow: WorkflowId,
-    // TODO: symbology
+    pub symbology: Option<Symbology>,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone, PartialEq)]
+pub struct LayerListing {
+    pub id: LayerId,
+    pub name: String,
+    pub description: String,
+    pub workflow: WorkflowId,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -25,7 +34,7 @@ pub struct AddLayer {
     pub name: String,
     pub description: String,
     pub workflow: WorkflowId,
-    // TODO: symbology
+    pub symbology: Option<Symbology>,
 }
 
 impl UserInput for AddLayer {
@@ -41,6 +50,7 @@ pub struct LayerDefinition {
     pub name: String,
     pub description: String,
     pub workflow: Workflow,
+    pub symbology: Option<Symbology>,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -62,7 +72,7 @@ pub struct LayerCollectionListing {
 #[serde(tag = "type", rename_all = "camelCase")]
 pub enum CollectionItem {
     Collection(LayerCollectionListing),
-    Layer(Layer),
+    Layer(LayerListing),
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]

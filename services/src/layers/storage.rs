@@ -2,7 +2,7 @@ use std::collections::HashMap;
 
 use super::layer::{
     AddLayer, AddLayerCollection, CollectionItem, Layer, LayerCollectionId,
-    LayerCollectionListOptions, LayerCollectionListing, LayerId,
+    LayerCollectionListOptions, LayerCollectionListing, LayerId, LayerListing,
 };
 use crate::error::Result;
 use crate::{contexts::Db, util::user_input::Validated};
@@ -108,6 +108,7 @@ impl LayerDb for HashMapLayerDb {
             name: layer.name.clone(),
             description: layer.description.clone(),
             workflow: layer.workflow,
+            symbology: layer.symbology.clone(),
         })
     }
 
@@ -210,7 +211,7 @@ impl LayerDb for HashMapLayerDb {
                     .get(l)
                     .expect("collections reference existing layers as items");
 
-                CollectionItem::Layer(Layer {
+                CollectionItem::Layer(LayerListing {
                     id: *l,
                     name: layer.name.clone(),
                     description: layer.description.clone(),
@@ -258,7 +259,7 @@ impl LayerDb for HashMapLayerDb {
                 return None;
             }
 
-            Some(CollectionItem::Layer(Layer {
+            Some(CollectionItem::Layer(LayerListing {
                 id: *id,
                 name: l.name.clone(),
                 description: l.description.clone(),
@@ -290,6 +291,7 @@ mod tests {
             name: "layer".to_string(),
             description: "description".to_string(),
             workflow: workflow_id,
+            symbology: None,
         }
         .validated()?;
 
@@ -333,7 +335,7 @@ mod tests {
                     name: "empty collection".to_string(),
                     description: "description".to_string()
                 }),
-                CollectionItem::Layer(Layer {
+                CollectionItem::Layer(LayerListing {
                     id: l_id,
                     name: "layer".to_string(),
                     description: "description".to_string(),

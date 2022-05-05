@@ -39,6 +39,7 @@ pub async fn add_layers_from_directory<L: LayerDb, W: WorkflowRegistry>(
                     name: def.name,
                     description: def.description,
                     workflow: workflow_id,
+                    symbology: def.symbology,
                 }
                 .validated()?,
             )

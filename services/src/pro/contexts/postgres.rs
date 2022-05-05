@@ -383,6 +383,33 @@ where
                             FROM 
                                 user_roles r JOIN dataset_permissions p ON (r.role_id = p.role_id);
 
+
+                        CREATE TABLE layer_collections (
+                            id UUID PRIMARY KEY,
+                            name text NOT NULL,
+                            description text NOT NULL
+                        );
+
+                        CREATE TABLE layers (
+                            id UUID PRIMARY KEY,
+                            name text NOT NULL,
+                            description text NOT NULL,
+                            workflow UUID REFERENCES workflows NOT NULL,
+                            symbology json 
+                        );
+
+                        CREATE TABLE collection_layers (
+                            collection UUID REFERENCES layer_collections(id) ON DELETE CASCADE NOT NULL,
+                            layer UUID REFERENCES layers(id) ON DELETE CASCADE NOT NULL,
+                            PRIMARY KEY (collection, layer)
+                        );
+
+                        CREATE TABLE collection_children (
+                            parent UUID REFERENCES layer_collections(id) ON DELETE CASCADE NOT NULL,
+                            child UUID REFERENCES layer_collections(id) ON DELETE CASCADE NOT NULL,
+                            PRIMARY KEY (parent, child)
+                        );
+
                         -- TODO: uploads, providers permissions
 
                         -- TODO: relationship between uploads and datasets?                        
@@ -540,6 +567,11 @@ mod tests {
     };
     use crate::datasets::upload::{FileId, UploadId};
     use crate::datasets::upload::{FileUpload, Upload, UploadDb};
+    use crate::layers::layer::{
+        AddLayer, AddLayerCollection, CollectionItem, LayerCollectionListOptions,
+        LayerCollectionListing, LayerListing,
+    };
+    use crate::layers::storage::LayerDb;
     use crate::pro::datasets::{DatasetPermission, Permission, UpdateDatasetPermissions};
     use crate::pro::projects::{LoadVersion, ProProjectDb, UserProjectPermission};
     use crate::pro::users::{UserCredentials, UserDb, UserRegistration};
@@ -1689,6 +1721,162 @@ mod tests {
                 .get_upload(&session2, upload_id)
                 .await
                 .is_err());
+        })
+        .await;
+    }
+
+    #[allow(clippy::too_many_lines)]
+    #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
+    async fn it_collects_layers() {
+        with_temp_context(|ctx, _| async move {
+            let layer_db = ctx.layer_db_ref();
+            let workflow_db = ctx.workflow_registry_ref();
+
+            let workflow = workflow_db
+                .register(Workflow {
+                    operator: TypedOperator::Vector(
+                        MockPointSource {
+                            params: MockPointSourceParams {
+                                points: vec![Coordinate2D::new(1., 2.); 3],
+                            },
+                        }
+                        .boxed(),
+                    ),
+                })
+                .await
+                .unwrap();
+
+            let layer1 = layer_db
+                .add_layer(
+                    AddLayer {
+                        name: "Layer1".to_string(),
+                        description: "Layer 1".to_string(),
+                        symbology: None,
+                        workflow,
+                    }
+                    .validated()
+                    .unwrap(),
+                )
+                .await
+                .unwrap();
+
+            assert_eq!(
+                layer_db.get_layer(layer1).await.unwrap(),
+                crate::layers::layer::Layer {
+                    id: layer1,
+                    name: "Layer1".to_string(),
+                    description: "Layer 1".to_string(),
+                    symbology: None,
+                    workflow
+                }
+            );
+
+            let layer2 = layer_db
+                .add_layer(
+                    AddLayer {
+                        name: "Layer2".to_string(),
+                        description: "Layer 2".to_string(),
+                        symbology: None,
+                        workflow,
+                    }
+                    .validated()
+                    .unwrap(),
+                )
+                .await
+                .unwrap();
+
+            let collection1 = layer_db
+                .add_collection(
+                    AddLayerCollection {
+                        name: "Collection1".to_string(),
+                        description: "Collection 1".to_string(),
+                    }
+                    .validated()
+                    .unwrap(),
+                )
+                .await
+                .unwrap();
+
+            let collection2 = layer_db
+                .add_collection(
+                    AddLayerCollection {
+                        name: "Collection2".to_string(),
+                        description: "Collection 2".to_string(),
+                    }
+                    .validated()
+                    .unwrap(),
+                )
+                .await
+                .unwrap();
+
+            layer_db
+                .add_layer_to_collection(layer1, collection1)
+                .await
+                .unwrap();
+
+            layer_db
+                .add_collection_to_parent(collection2, collection1)
+                .await
+                .unwrap();
+
+            let root_list = layer_db
+                .get_root_collection_items(
+                    LayerCollectionListOptions {
+                        offset: 0,
+                        limit: 20,
+                    }
+                    .validated()
+                    .unwrap(),
+                )
+                .await
+                .unwrap();
+
+            assert_eq!(
+                root_list,
+                vec![
+                    CollectionItem::Collection(LayerCollectionListing {
+                        id: collection1,
+                        name: "Collection1".to_string(),
+                        description: "Collection 1".to_string(),
+                    }),
+                    CollectionItem::Layer(LayerListing {
+                        id: layer2,
+                        name: "Layer2".to_string(),
+                        description: "Layer 2".to_string(),
+                        workflow
+                    })
+                ]
+            );
+
+            let collection1_list = layer_db
+                .get_collection_items(
+                    collection1,
+                    LayerCollectionListOptions {
+                        offset: 0,
+                        limit: 20,
+                    }
+                    .validated()
+                    .unwrap(),
+                )
+                .await
+                .unwrap();
+
+            assert_eq!(
+                collection1_list,
+                vec![
+                    CollectionItem::Collection(LayerCollectionListing {
+                        id: collection2,
+                        name: "Collection2".to_string(),
+                        description: "Collection 2".to_string(),
+                    }),
+                    CollectionItem::Layer(LayerListing {
+                        id: layer1,
+                        name: "Layer1".to_string(),
+                        description: "Layer 1".to_string(),
+                        workflow
+                    })
+                ]
+            );
         })
         .await;
     }
