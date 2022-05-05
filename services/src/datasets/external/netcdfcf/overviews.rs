@@ -340,22 +340,24 @@ mod tests {
     use crate::datasets::external::netcdfcf::{
         NetCdfEntity, NetCdfGroup as FullNetCdfGroup, NetCdfOverview,
     };
-    use std::io::BufReader;
-
     use geoengine_datatypes::{
         operations::image::{Colorizer, RgbaColor},
         primitives::{DateTime, Measurement, TimeGranularity, TimeInterval},
         raster::RasterDataType,
         spatial_reference::SpatialReference,
         test_data,
+        util::gdal::hide_gdal_errors,
     };
     use geoengine_operators::{
         engine::RasterResultDescriptor,
         source::{FileNotFoundHandling, GdalDatasetGeoTransform, GdalDatasetParameters},
     };
+    use std::io::BufReader;
 
     #[test]
     fn test_generate_loading_info() {
+        hide_gdal_errors();
+
         let netcdf_path_str = format!(
             "NETCDF:\"{}\":/metric_1/ebv_cube",
             test_data!("netcdf4d/dataset_m.nc").display()
@@ -425,6 +427,8 @@ mod tests {
 
     #[test]
     fn test_index_subdataset() {
+        hide_gdal_errors();
+
         let dataset_in = format!(
             "NETCDF:\"{}\":/metric_1/ebv_cube",
             test_data!("netcdf4d/dataset_m.nc").display()
@@ -456,6 +460,8 @@ mod tests {
 
     #[test]
     fn test_store_metadata() {
+        hide_gdal_errors();
+
         let out_folder = tempfile::tempdir().unwrap();
 
         let metadata_file_path = out_folder.path().join(METADATA_FILE_NAME);
@@ -540,6 +546,8 @@ mod tests {
 
     #[test]
     fn test_create_overviews() {
+        hide_gdal_errors();
+
         let overview_folder = tempfile::tempdir().unwrap();
 
         create_overviews(
