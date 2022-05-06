@@ -165,7 +165,7 @@ where
 {
     let wfs_url = wfs_url(workflow_id)?;
 
-    let workflow = ctx.workflow_registry_ref().await.load(&workflow_id).await?;
+    let workflow = ctx.workflow_registry_ref().load(&workflow_id).await?;
 
     let exe_ctx = ctx.execution_context(session)?;
     let operator = workflow
@@ -420,7 +420,7 @@ async fn get_feature<C: Context>(
         return get_feature_mock(request);
     }
 
-    let workflow: Workflow = ctx.workflow_registry_ref().await.load(&type_names).await?;
+    let workflow: Workflow = ctx.workflow_registry_ref().load(&type_names).await?;
 
     let operator = workflow.operator.get_vector().context(error::Operator)?;
 
@@ -740,9 +740,7 @@ x;y
         };
 
         let workflow_id = ctx
-            .workflow_registry()
-            .write()
-            .await
+            .workflow_registry_ref()
             .register(workflow)
             .await
             .unwrap();
@@ -808,9 +806,7 @@ x;y
         };
 
         let id = ctx
-            .workflow_registry()
-            .write()
-            .await
+            .workflow_registry_ref()
             .register(workflow.clone())
             .await
             .unwrap();
@@ -926,9 +922,7 @@ x;y
         };
 
         let workflow_id = ctx
-            .workflow_registry()
-            .write()
-            .await
+            .workflow_registry_ref()
             .register(workflow)
             .await
             .unwrap();
@@ -1044,7 +1038,7 @@ x;y
         let data = data.replace("test_data/", test_data!("./").to_str().unwrap());
         let def: DatasetDefinition = serde_json::from_str(&data).unwrap();
 
-        let mut db = ctx.dataset_db_ref_mut().await;
+        let db = ctx.dataset_db_ref();
 
         db.add_dataset(
             &*ctx.default_session_ref().await,
@@ -1112,9 +1106,7 @@ x;y
         let workflow = serde_json::from_str(&json).unwrap();
 
         let workflow_id = ctx
-            .workflow_registry()
-            .write()
-            .await
+            .workflow_registry_ref()
             .register(workflow)
             .await
             .unwrap();

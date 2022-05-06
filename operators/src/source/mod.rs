@@ -15,5 +15,5 @@ pub use self::gdal_source::{
 pub use self::ogr_source::{
     AttributeFilter, CsvHeader, FormatSpecifics, OgrSource, OgrSourceColumnSpec, OgrSourceDataset,
     OgrSourceDatasetTimeType, OgrSourceDurationSpec, OgrSourceErrorSpec, OgrSourceParameters,
-    OgrSourceProcessor, OgrSourceTimeFormat,
+    OgrSourceProcessor, OgrSourceTimeFormat, UnixTimeStampType,
 };

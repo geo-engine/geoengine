@@ -294,7 +294,6 @@ async fn netcdfcf_provider_ref<C: Context>(
 ) -> Result<PathBuf, EbvError> {
     let provider: Box<dyn ExternalDatasetProvider> = ctx
         .dataset_db_ref()
-        .await
         .dataset_provider(session, NETCDF_CF_PROVIDER_ID)
         .await
         .map_err(|_| EbvError::NoNetCdfCfProviderForId {
@@ -359,8 +358,7 @@ mod tests {
         let ctx = InMemoryContext::test_default();
         let session_id = ctx.default_session_ref().await.id();
 
-        ctx.dataset_db_ref_mut()
-            .await
+        ctx.dataset_db_ref()
             .add_dataset_provider(
                 &*ctx.default_session_ref().await,
                 Box::new(NetCdfCfDataProviderDefinition {

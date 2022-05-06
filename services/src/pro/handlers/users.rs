@@ -68,7 +68,7 @@ pub(crate) async fn register_user_handler<C: ProContext>(
     );
 
     let user = user.into_inner().validated()?;
-    let id = ctx.user_db_ref_mut().await.register(user).await?;
+    let id = ctx.user_db_ref().register(user).await?;
     Ok(web::Json(IdResponse::from(id)))
 }
 
@@ -108,8 +108,7 @@ pub(crate) async fn login_handler<C: ProContext>(
     ctx: web::Data<C>,
 ) -> Result<impl Responder> {
     let session = ctx
-        .user_db_ref_mut()
-        .await
+        .user_db_ref()
         .login(user.into_inner())
         .await
         .map_err(Box::new)
@@ -133,7 +132,7 @@ pub(crate) async fn logout_handler<C: ProContext>(
     session: UserSession,
     ctx: web::Data<C>,
 ) -> Result<impl Responder> {
-    ctx.user_db_ref_mut().await.logout(session.id).await?;
+    ctx.user_db_ref().logout(session.id).await?;
     Ok(HttpResponse::Ok())
 }
 
@@ -166,7 +165,7 @@ pub(crate) async fn anonymous_handler<C: ProContext>(ctx: web::Data<C>) -> Resul
         });
     }
 
-    let session = ctx.user_db_ref_mut().await.anonymous().await?;
+    let session = ctx.user_db_ref().anonymous().await?;
     Ok(web::Json(session))
 }
 
@@ -187,8 +186,7 @@ pub(crate) async fn session_project_handler<C: ProContext>(
     session: UserSession,
     ctx: web::Data<C>,
 ) -> Result<impl Responder> {
-    ctx.user_db_ref_mut()
-        .await
+    ctx.user_db_ref()
         .set_session_project(&session, project.into_inner())
         .await?;
 
@@ -225,8 +223,7 @@ pub(crate) async fn session_view_handler<C: ProContext>(
     ctx: web::Data<C>,
     view: web::Json<STRectangle>,
 ) -> Result<impl Responder> {
-    ctx.user_db_ref_mut()
-        .await
+    ctx.user_db_ref()
         .set_session_view(&session, view.into_inner())
         .await?;
 
@@ -407,7 +404,7 @@ mod tests {
             },
         };
 
-        ctx.user_db().write().await.register(user).await.unwrap();
+        ctx.user_db_ref().register(user).await.unwrap();
 
         let credentials = UserCredentials {
             email: "foo@bar.de".to_string(),
@@ -485,7 +482,7 @@ mod tests {
             },
         };
 
-        ctx.user_db().write().await.register(user).await.unwrap();
+        ctx.user_db_ref().register(user).await.unwrap();
 
         let credentials = json!({
             "email": "foo@bar.de",
@@ -517,20 +514,14 @@ mod tests {
             },
         };
 
-        ctx.user_db().write().await.register(user).await.unwrap();
+        ctx.user_db_ref().register(user).await.unwrap();
 
         let credentials = UserCredentials {
             email: "foo@bar.de".to_string(),
             password: "secret123".to_string(),
         };
 
-        let session = ctx
-            .user_db()
-            .write()
-            .await
-            .login(credentials)
-            .await
-            .unwrap();
+        let session = ctx.user_db_ref().login(credentials).await.unwrap();
 
         let req = test::TestRequest::default()
             .method(method)
@@ -631,12 +622,7 @@ mod tests {
 
         let session: UserSession = test::read_body_json(res).await;
 
-        ctx.user_db()
-            .write()
-            .await
-            .logout(session.id)
-            .await
-            .unwrap();
+        ctx.user_db_ref().logout(session.id).await.unwrap();
 
         let req = test::TestRequest::get()
             .uri("/session")
@@ -660,13 +646,7 @@ mod tests {
         assert_eq!(res.status(), 200);
 
         assert_eq!(
-            ctx.user_db()
-                .read()
-                .await
-                .session(session.id)
-                .await
-                .unwrap()
-                .project,
+            ctx.user_db_ref().session(session.id).await.unwrap().project,
             Some(project)
         );
 
@@ -682,18 +662,12 @@ mod tests {
         assert_eq!(res.status(), 200);
 
         assert_eq!(
-            ctx.user_db()
-                .read()
-                .await
-                .session(session.id())
-                .await
-                .unwrap()
-                .view,
+            ctx.user_db_ref().session(session.id()).await.unwrap().view,
             Some(rect)
         );
     }
 
-    #[tokio::test]
+    #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
     async fn it_disables_anonymous_access() {
         let ctx = ProInMemoryContext::test_default();
 
@@ -720,7 +694,7 @@ mod tests {
         .await;
     }
 
-    #[tokio::test]
+    #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
     async fn it_disables_user_registration() {
         let ctx = ProInMemoryContext::test_default();
 

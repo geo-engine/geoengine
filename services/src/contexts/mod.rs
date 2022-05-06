@@ -4,7 +4,7 @@ use async_trait::async_trait;
 use geoengine_datatypes::primitives::{RasterQueryRectangle, VectorQueryRectangle};
 use rayon::ThreadPool;
 use std::sync::Arc;
-use tokio::sync::{RwLock, RwLockReadGuard, RwLockWriteGuard};
+use tokio::sync::RwLock;
 
 mod in_memory;
 mod session;
@@ -31,7 +31,6 @@ pub type Db<T> = Arc<RwLock<T>>;
 
 /// A context bundles access to shared resources like databases and session specific information
 /// about the user to pass to the services handlers.
-// TODO: avoid locking the individual DBs here IF they are already thread safe (e.g. guaranteed by postgres)
 #[async_trait]
 pub trait Context: 'static + Send + Sync + Clone {
     type Session: MockableSession + Clone; // TODO: change to `[Session]` when workarounds are gone
@@ -41,17 +40,14 @@ pub trait Context: 'static + Send + Sync + Clone {
     type QueryContext: QueryContext;
     type ExecutionContext: ExecutionContext;
 
-    fn project_db(&self) -> Db<Self::ProjectDB>;
-    async fn project_db_ref(&self) -> RwLockReadGuard<Self::ProjectDB>;
-    async fn project_db_ref_mut(&self) -> RwLockWriteGuard<Self::ProjectDB>;
+    fn project_db(&self) -> Arc<Self::ProjectDB>;
+    fn project_db_ref(&self) -> &Self::ProjectDB;
 
-    fn workflow_registry(&self) -> Db<Self::WorkflowRegistry>;
-    async fn workflow_registry_ref(&self) -> RwLockReadGuard<Self::WorkflowRegistry>;
-    async fn workflow_registry_ref_mut(&self) -> RwLockWriteGuard<Self::WorkflowRegistry>;
+    fn workflow_registry(&self) -> Arc<Self::WorkflowRegistry>;
+    fn workflow_registry_ref(&self) -> &Self::WorkflowRegistry;
 
-    fn dataset_db(&self) -> Db<Self::DatasetDB>;
-    async fn dataset_db_ref(&self) -> RwLockReadGuard<Self::DatasetDB>;
-    async fn dataset_db_ref_mut(&self) -> RwLockWriteGuard<Self::DatasetDB>;
+    fn dataset_db(&self) -> Arc<Self::DatasetDB>;
+    fn dataset_db_ref(&self) -> &Self::DatasetDB;
 
     fn query_context(&self) -> Result<Self::QueryContext>;
 
@@ -89,7 +85,7 @@ where
     D: DatasetDb<S>,
     S: Session,
 {
-    dataset_db: Db<D>,
+    dataset_db: Arc<D>,
     thread_pool: Arc<ThreadPool>,
     session: S,
     tiling_specification: TilingSpecification,
@@ -101,7 +97,7 @@ where
     S: Session,
 {
     pub fn new(
-        dataset_db: Db<D>,
+        dataset_db: Arc<D>,
         thread_pool: Arc<ThreadPool>,
         session: S,
         tiling_specification: TilingSpecification,
@@ -167,8 +163,6 @@ where
         match dataset_id {
             DatasetId::Internal { dataset_id: _ } => self
                 .dataset_db
-                .read()
-                .await
                 .session_meta_data(&self.session, dataset_id)
                 .await
                 .map_err(|e| geoengine_operators::error::Error::LoadingInfo {
@@ -176,8 +170,6 @@ where
                 }),
             DatasetId::External(external) => {
                 self.dataset_db
-                    .read()
-                    .await
                     .dataset_provider(&self.session, external.provider_id)
                     .await
                     .map_err(|e| geoengine_operators::error::Error::DatasetMetaData {
@@ -209,8 +201,6 @@ where
         match dataset_id {
             DatasetId::Internal { dataset_id: _ } => self
                 .dataset_db
-                .read()
-                .await
                 .session_meta_data(&self.session, dataset_id)
                 .await
                 .map_err(|e| geoengine_operators::error::Error::LoadingInfo {
@@ -218,8 +208,6 @@ where
                 }),
             DatasetId::External(external) => {
                 self.dataset_db
-                    .read()
-                    .await
                     .dataset_provider(&self.session, external.provider_id)
                     .await
                     .map_err(|e| geoengine_operators::error::Error::DatasetMetaData {
@@ -251,8 +239,6 @@ where
         match dataset_id {
             DatasetId::Internal { dataset_id: _ } => self
                 .dataset_db
-                .read()
-                .await
                 .session_meta_data(&self.session, dataset_id)
                 .await
                 .map_err(|e| geoengine_operators::error::Error::LoadingInfo {
@@ -260,8 +246,6 @@ where
                 }),
             DatasetId::External(external) => {
                 self.dataset_db
-                    .read()
-                    .await
                     .dataset_provider(&self.session, external.provider_id)
                     .await
                     .map_err(|e| geoengine_operators::error::Error::DatasetMetaData {

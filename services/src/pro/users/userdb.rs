@@ -13,7 +13,7 @@ pub trait UserDb: Send + Sync {
     ///
     /// This call fails if the `UserRegistration` is invalid.
     ///
-    async fn register(&mut self, user: Validated<UserRegistration>) -> Result<UserId>;
+    async fn register(&self, user: Validated<UserRegistration>) -> Result<UserId>;
 
     /// Creates session for anonymous user
     ///
@@ -21,7 +21,7 @@ pub trait UserDb: Send + Sync {
     ///
     /// This call fails if the `UserRegistration` is invalid.
     ///
-    async fn anonymous(&mut self) -> Result<UserSession>;
+    async fn anonymous(&self) -> Result<UserSession>;
 
     /// Creates a `Session` by providing `UserCredentials`
     ///
@@ -29,7 +29,7 @@ pub trait UserDb: Send + Sync {
     ///
     /// This call fails if the `UserCredentials` are invalid.
     ///
-    async fn login(&mut self, user: UserCredentials) -> Result<UserSession>;
+    async fn login(&self, user: UserCredentials) -> Result<UserSession>;
 
     /// Removes a session from the `UserDB`
     ///
@@ -37,7 +37,7 @@ pub trait UserDb: Send + Sync {
     ///
     /// This call fails if the session is invalid.
     ///
-    async fn logout(&mut self, session: SessionId) -> Result<()>;
+    async fn logout(&self, session: SessionId) -> Result<()>;
 
     /// Get session by id
     ///
@@ -53,11 +53,7 @@ pub trait UserDb: Send + Sync {
     ///
     /// This call fails if the session is invalid
     ///
-    async fn set_session_project(
-        &mut self,
-        session: &UserSession,
-        project: ProjectId,
-    ) -> Result<()>;
+    async fn set_session_project(&self, session: &UserSession, project: ProjectId) -> Result<()>;
 
     /// Sets the session view
     ///
@@ -65,5 +61,5 @@ pub trait UserDb: Send + Sync {
     ///
     /// This call fails if the session is invalid
     ///
-    async fn set_session_view(&mut self, session: &UserSession, view: STRectangle) -> Result<()>;
+    async fn set_session_view(&self, session: &UserSession, view: STRectangle) -> Result<()>;
 }

@@ -1,4 +1,4 @@
-use crate::contexts::MockableSession;
+use crate::contexts::{Db, MockableSession};
 use crate::datasets::listing::SessionMetaDataProvider;
 use crate::datasets::listing::{
     DatasetListOptions, DatasetListing, DatasetProvider, ExternalDatasetProvider, OrderBy,
@@ -36,7 +36,7 @@ use super::storage::UpdateDatasetPermissions;
 use super::DatasetPermission;
 
 #[derive(Default)]
-pub struct ProHashMapDatasetDb {
+pub struct ProHashMapDatasetDbBackend {
     datasets: HashMap<DatasetId, Dataset>,
     dataset_permissions: Vec<DatasetPermission>,
     ogr_datasets: HashMap<
@@ -59,18 +59,27 @@ pub struct ProHashMapDatasetDb {
     external_providers: HashMap<DatasetProviderId, Box<dyn ExternalDatasetProviderDefinition>>,
 }
 
+#[derive(Default)]
+pub struct ProHashMapDatasetDb {
+    pub backend: Db<ProHashMapDatasetDbBackend>,
+}
+
 impl DatasetDb<UserSession> for ProHashMapDatasetDb {}
 
 #[async_trait]
 impl DatasetProviderDb<UserSession> for ProHashMapDatasetDb {
     async fn add_dataset_provider(
-        &mut self,
+        &self,
         _session: &UserSession,
         provider: Box<dyn ExternalDatasetProviderDefinition>,
     ) -> Result<DatasetProviderId> {
         // TODO: authorization
         let id = provider.id();
-        self.external_providers.insert(id, provider);
+        self.backend
+            .write()
+            .await
+            .external_providers
+            .insert(id, provider);
         Ok(id)
     }
 
@@ -82,6 +91,9 @@ impl DatasetProviderDb<UserSession> for ProHashMapDatasetDb {
         // TODO: authorization
         // TODO: use options
         Ok(self
+            .backend
+            .read()
+            .await
             .external_providers
             .iter()
             .map(|(id, d)| DatasetProviderListing {
@@ -98,7 +110,10 @@ impl DatasetProviderDb<UserSession> for ProHashMapDatasetDb {
         provider: DatasetProviderId,
     ) -> Result<Box<dyn ExternalDatasetProvider>> {
         // TODO: authorization
-        self.external_providers
+        self.backend
+            .read()
+            .await
+            .external_providers
             .get(&provider)
             .cloned()
             .ok_or(error::Error::UnknownProviderId)?
@@ -107,36 +122,53 @@ impl DatasetProviderDb<UserSession> for ProHashMapDatasetDb {
     }
 }
 
+#[async_trait]
 pub trait ProHashMapStorable: Send + Sync {
-    fn store(&self, id: InternalDatasetId, db: &mut ProHashMapDatasetDb) -> TypedResultDescriptor;
+    async fn store(&self, id: InternalDatasetId, db: &ProHashMapDatasetDb)
+        -> TypedResultDescriptor;
 }
 
 impl DatasetStorer for ProHashMapDatasetDb {
     type StorageType = Box<dyn ProHashMapStorable>;
 }
 
+#[async_trait]
 impl ProHashMapStorable for MetaDataDefinition {
-    fn store(&self, id: InternalDatasetId, db: &mut ProHashMapDatasetDb) -> TypedResultDescriptor {
+    async fn store(
+        &self,
+        id: InternalDatasetId,
+        db: &ProHashMapDatasetDb,
+    ) -> TypedResultDescriptor {
         match self {
-            MetaDataDefinition::MockMetaData(d) => d.store(id, db),
-            MetaDataDefinition::OgrMetaData(d) => d.store(id, db),
-            MetaDataDefinition::GdalMetaDataRegular(d) => d.store(id, db),
-            MetaDataDefinition::GdalStatic(d) => d.store(id, db),
-            MetaDataDefinition::GdalMetadataNetCdfCf(d) => d.store(id, db),
-            MetaDataDefinition::GdalMetaDataList(d) => d.store(id, db),
+            MetaDataDefinition::MockMetaData(d) => d.store(id, db).await,
+            MetaDataDefinition::OgrMetaData(d) => d.store(id, db).await,
+            MetaDataDefinition::GdalMetaDataRegular(d) => d.store(id, db).await,
+            MetaDataDefinition::GdalStatic(d) => d.store(id, db).await,
+            MetaDataDefinition::GdalMetadataNetCdfCf(d) => d.store(id, db).await,
+            MetaDataDefinition::GdalMetaDataList(d) => d.store(id, db).await,
         }
     }
 }
 
+#[async_trait]
 impl ProHashMapStorable
     for StaticMetaData<OgrSourceDataset, VectorResultDescriptor, VectorQueryRectangle>
 {
-    fn store(&self, id: InternalDatasetId, db: &mut ProHashMapDatasetDb) -> TypedResultDescriptor {
-        db.ogr_datasets.insert(id, self.clone());
+    async fn store(
+        &self,
+        id: InternalDatasetId,
+        db: &ProHashMapDatasetDb,
+    ) -> TypedResultDescriptor {
+        db.backend
+            .write()
+            .await
+            .ogr_datasets
+            .insert(id, self.clone());
         self.result_descriptor.clone().into()
     }
 }
 
+#[async_trait]
 impl ProHashMapStorable
     for StaticMetaData<
         MockDatasetDataSourceLoadingInfo,
@@ -144,36 +176,80 @@ impl ProHashMapStorable
         VectorQueryRectangle,
     >
 {
-    fn store(&self, id: InternalDatasetId, db: &mut ProHashMapDatasetDb) -> TypedResultDescriptor {
-        db.mock_datasets.insert(id, self.clone());
+    async fn store(
+        &self,
+        id: InternalDatasetId,
+        db: &ProHashMapDatasetDb,
+    ) -> TypedResultDescriptor {
+        db.backend
+            .write()
+            .await
+            .mock_datasets
+            .insert(id, self.clone());
         self.result_descriptor.clone().into()
     }
 }
 
+#[async_trait]
 impl ProHashMapStorable for GdalMetaDataRegular {
-    fn store(&self, id: InternalDatasetId, db: &mut ProHashMapDatasetDb) -> TypedResultDescriptor {
-        db.gdal_datasets.insert(id, Box::new(self.clone()));
+    async fn store(
+        &self,
+        id: InternalDatasetId,
+        db: &ProHashMapDatasetDb,
+    ) -> TypedResultDescriptor {
+        db.backend
+            .write()
+            .await
+            .gdal_datasets
+            .insert(id, Box::new(self.clone()));
         self.result_descriptor.clone().into()
     }
 }
 
+#[async_trait]
 impl ProHashMapStorable for GdalMetaDataStatic {
-    fn store(&self, id: InternalDatasetId, db: &mut ProHashMapDatasetDb) -> TypedResultDescriptor {
-        db.gdal_datasets.insert(id, Box::new(self.clone()));
+    async fn store(
+        &self,
+        id: InternalDatasetId,
+        db: &ProHashMapDatasetDb,
+    ) -> TypedResultDescriptor {
+        db.backend
+            .write()
+            .await
+            .gdal_datasets
+            .insert(id, Box::new(self.clone()));
         self.result_descriptor.clone().into()
     }
 }
 
+#[async_trait]
 impl ProHashMapStorable for GdalMetadataNetCdfCf {
-    fn store(&self, id: InternalDatasetId, db: &mut ProHashMapDatasetDb) -> TypedResultDescriptor {
-        db.gdal_datasets.insert(id, Box::new(self.clone()));
+    async fn store(
+        &self,
+        id: InternalDatasetId,
+        db: &ProHashMapDatasetDb,
+    ) -> TypedResultDescriptor {
+        db.backend
+            .write()
+            .await
+            .gdal_datasets
+            .insert(id, Box::new(self.clone()));
         self.result_descriptor.clone().into()
     }
 }
 
+#[async_trait]
 impl ProHashMapStorable for GdalMetaDataList {
-    fn store(&self, id: InternalDatasetId, db: &mut ProHashMapDatasetDb) -> TypedResultDescriptor {
-        db.gdal_datasets.insert(id, Box::new(self.clone()));
+    async fn store(
+        &self,
+        id: InternalDatasetId,
+        db: &ProHashMapDatasetDb,
+    ) -> TypedResultDescriptor {
+        db.backend
+            .write()
+            .await
+            .gdal_datasets
+            .insert(id, Box::new(self.clone()));
         self.result_descriptor.clone().into()
     }
 }
@@ -181,7 +257,7 @@ impl ProHashMapStorable for GdalMetaDataList {
 #[async_trait]
 impl DatasetStore<UserSession> for ProHashMapDatasetDb {
     async fn add_dataset(
-        &mut self,
+        &self,
         session: &UserSession,
         dataset: Validated<AddDataset>,
         meta_data: Box<dyn ProHashMapStorable>,
@@ -192,7 +268,9 @@ impl DatasetStore<UserSession> for ProHashMapDatasetDb {
         let id = dataset
             .id
             .unwrap_or_else(|| InternalDatasetId::new().into());
-        let result_descriptor = meta_data.store(id.internal().expect("from AddDataset"), self);
+        let result_descriptor = meta_data
+            .store(id.internal().expect("from AddDataset"), self)
+            .await;
 
         let d: Dataset = Dataset {
             id: id.clone(),
@@ -203,13 +281,17 @@ impl DatasetStore<UserSession> for ProHashMapDatasetDb {
             symbology: dataset.symbology,
             provenance: dataset.provenance,
         };
-        self.datasets.insert(id.clone(), d);
+        self.backend.write().await.datasets.insert(id.clone(), d);
 
-        self.dataset_permissions.push(DatasetPermission {
-            role: session.user.id.into(),
-            dataset: id.clone(),
-            permission: Permission::Owner,
-        });
+        self.backend
+            .write()
+            .await
+            .dataset_permissions
+            .push(DatasetPermission {
+                role: session.user.id.into(),
+                dataset: id.clone(),
+                permission: Permission::Owner,
+            });
 
         Ok(id)
     }
@@ -228,12 +310,14 @@ impl DatasetProvider<UserSession> for ProHashMapDatasetDb {
     ) -> Result<Vec<DatasetListing>> {
         let options = options.user_input;
 
-        let iter = self
+        let backend = self.backend.read().await;
+
+        let iter = backend
             .dataset_permissions
             .iter()
             .filter(|p| session.roles.contains(&p.role))
             .filter_map(|p| {
-                let matching_dataset = self.datasets.get(&p.dataset);
+                let matching_dataset = backend.datasets.get(&p.dataset);
 
                 if matching_dataset.is_none() {
                     warn!("Permission {:?} without a matching dataset", p);
@@ -265,8 +349,10 @@ impl DatasetProvider<UserSession> for ProHashMapDatasetDb {
     }
 
     async fn load(&self, session: &UserSession, dataset: &DatasetId) -> Result<Dataset> {
+        let backend = self.backend.read().await;
         ensure!(
-            self.dataset_permissions
+            backend
+                .dataset_permissions
                 .iter()
                 .any(|p| session.roles.contains(&p.role)),
             error::DatasetPermissionDenied {
@@ -274,7 +360,8 @@ impl DatasetProvider<UserSession> for ProHashMapDatasetDb {
             }
         );
 
-        self.datasets
+        backend
+            .datasets
             .get(dataset)
             .map(Clone::clone)
             .ok_or(error::Error::UnknownDatasetId)
@@ -285,10 +372,12 @@ impl DatasetProvider<UserSession> for ProHashMapDatasetDb {
         session: &UserSession,
         dataset: &DatasetId,
     ) -> Result<ProvenanceOutput> {
+        let backend = self.backend.read().await;
         match dataset {
             DatasetId::Internal { dataset_id: _ } => {
                 ensure!(
-                    self.dataset_permissions
+                    backend
+                        .dataset_permissions
                         .iter()
                         .any(|p| session.roles.contains(&p.role)),
                     error::DatasetPermissionDenied {
@@ -296,7 +385,8 @@ impl DatasetProvider<UserSession> for ProHashMapDatasetDb {
                     }
                 );
 
-                self.datasets
+                backend
+                    .datasets
                     .get(dataset)
                     .map(|d| ProvenanceOutput {
                         dataset: d.id.clone(),
@@ -317,14 +407,17 @@ impl DatasetProvider<UserSession> for ProHashMapDatasetDb {
 #[async_trait]
 impl UpdateDatasetPermissions for ProHashMapDatasetDb {
     async fn add_dataset_permission(
-        &mut self,
+        &self,
         session: &UserSession,
         permission: DatasetPermission,
     ) -> Result<()> {
         info!("Add dataset permission {:?}", permission);
 
+        let mut backend = self.backend.write().await;
+
         ensure!(
-            self.dataset_permissions
+            backend
+                .dataset_permissions
                 .iter()
                 .any(|p| session.roles.contains(&p.role) && p.permission == Permission::Owner),
             error::UpateDatasetPermission {
@@ -335,7 +428,7 @@ impl UpdateDatasetPermissions for ProHashMapDatasetDb {
         );
 
         ensure!(
-            !self.dataset_permissions.contains(&permission),
+            !backend.dataset_permissions.contains(&permission),
             error::DuplicateDatasetPermission {
                 role: session.user.id.to_string(),
                 dataset: permission.dataset,
@@ -343,7 +436,7 @@ impl UpdateDatasetPermissions for ProHashMapDatasetDb {
             }
         );
 
-        self.dataset_permissions.push(permission);
+        backend.dataset_permissions.push(permission);
 
         Ok(())
     }
@@ -371,8 +464,10 @@ impl
             >,
         >,
     > {
+        let backend = self.backend.read().await;
         ensure!(
-            self.dataset_permissions
+            backend
+                .dataset_permissions
                 .iter()
                 .any(|p| p.dataset == *dataset && session.roles.contains(&p.role)),
             error::DatasetPermissionDenied {
@@ -381,7 +476,8 @@ impl
         );
 
         Ok(Box::new(
-            self.mock_datasets
+            backend
+                .mock_datasets
                 .get(
                     &dataset
                         .internal()
@@ -408,8 +504,10 @@ impl
         dataset: &DatasetId,
     ) -> Result<Box<dyn MetaData<OgrSourceDataset, VectorResultDescriptor, VectorQueryRectangle>>>
     {
+        let backend = self.backend.read().await;
         ensure!(
-            self.dataset_permissions
+            backend
+                .dataset_permissions
                 .iter()
                 .any(|p| p.dataset == *dataset && session.roles.contains(&p.role)),
             error::DatasetPermissionDenied {
@@ -418,7 +516,8 @@ impl
         );
 
         Ok(Box::new(
-            self.ogr_datasets
+            backend
+                .ogr_datasets
                 .get(
                     &dataset
                         .internal()
@@ -445,8 +544,10 @@ impl
         dataset: &DatasetId,
     ) -> Result<Box<dyn MetaData<GdalLoadingInfo, RasterResultDescriptor, RasterQueryRectangle>>>
     {
+        let backend = self.backend.read().await;
         ensure!(
-            self.dataset_permissions
+            backend
+                .dataset_permissions
                 .iter()
                 .any(|p| p.dataset == *dataset && session.roles.contains(&p.role)),
             error::DatasetPermissionDenied {
@@ -458,7 +559,7 @@ impl
             .internal()
             .ok_or(error::Error::DatasetIdTypeMissMatch)?;
 
-        Ok(self
+        Ok(backend
             .gdal_datasets
             .get(&id)
             .ok_or(error::Error::UnknownDatasetId)?
@@ -469,14 +570,20 @@ impl
 #[async_trait]
 impl UploadDb<UserSession> for ProHashMapDatasetDb {
     async fn get_upload(&self, session: &UserSession, upload: UploadId) -> Result<Upload> {
-        self.uploads
+        self.backend
+            .read()
+            .await
+            .uploads
             .get(&session.user.id)
             .and_then(|u| u.get(&upload).map(Clone::clone))
             .ok_or(error::Error::UnknownUploadId)
     }
 
-    async fn create_upload(&mut self, session: &UserSession, upload: Upload) -> Result<()> {
-        self.uploads
+    async fn create_upload(&self, session: &UserSession, upload: Upload) -> Result<()> {
+        self.backend
+            .write()
+            .await
+            .uploads
             .entry(session.user.id)
             .or_insert_with(HashMap::new)
             .insert(upload.id, upload);
@@ -539,8 +646,7 @@ mod tests {
         };
 
         let id = ctx
-            .dataset_db_ref_mut()
-            .await
+            .dataset_db_ref()
             .add_dataset(&session, ds.validated()?, Box::new(meta))
             .await?;
 
@@ -561,7 +667,6 @@ mod tests {
 
         let ds = ctx
             .dataset_db_ref()
-            .await
             .list(
                 &session,
                 DatasetListOptions {
@@ -633,14 +738,12 @@ mod tests {
         };
 
         let _id = ctx
-            .dataset_db_ref_mut()
-            .await
+            .dataset_db_ref()
             .add_dataset(&session1, ds.validated()?, Box::new(meta))
             .await?;
 
         let list1 = ctx
             .dataset_db_ref()
-            .await
             .list(
                 &session1,
                 DatasetListOptions {
@@ -657,7 +760,6 @@ mod tests {
 
         let list2 = ctx
             .dataset_db_ref()
-            .await
             .list(
                 &session2,
                 DatasetListOptions {
@@ -716,21 +818,18 @@ mod tests {
         };
 
         let id = ctx
-            .dataset_db_ref_mut()
-            .await
+            .dataset_db_ref()
             .add_dataset(&session1, ds.validated()?, Box::new(meta))
             .await?;
 
         assert!(ctx
             .dataset_db_ref()
-            .await
             .provenance(&session1, &id)
             .await
             .is_ok());
 
         assert!(ctx
             .dataset_db_ref()
-            .await
             .provenance(&session2, &id)
             .await
             .is_err());
@@ -779,27 +878,15 @@ mod tests {
         };
 
         let id = ctx
-            .dataset_db_ref_mut()
-            .await
+            .dataset_db_ref()
             .add_dataset(&session1, ds.validated()?, Box::new(meta))
             .await?;
 
-        assert!(ctx
-            .dataset_db_ref()
-            .await
-            .load(&session1, &id)
-            .await
-            .is_ok());
+        assert!(ctx.dataset_db_ref().load(&session1, &id).await.is_ok());
 
-        assert!(ctx
-            .dataset_db_ref()
-            .await
-            .load(&session2, &id)
-            .await
-            .is_err());
+        assert!(ctx.dataset_db_ref().load(&session2, &id).await.is_err());
 
-        ctx.dataset_db_ref_mut()
-            .await
+        ctx.dataset_db_ref()
             .add_dataset_permission(
                 &session1,
                 DatasetPermission {
@@ -810,12 +897,7 @@ mod tests {
             )
             .await?;
 
-        assert!(ctx
-            .dataset_db_ref()
-            .await
-            .load(&session2, &id)
-            .await
-            .is_ok());
+        assert!(ctx.dataset_db_ref().load(&session2, &id).await.is_ok());
 
         Ok(())
     }
@@ -861,27 +943,15 @@ mod tests {
         };
 
         let id = ctx
-            .dataset_db_ref_mut()
-            .await
+            .dataset_db_ref()
             .add_dataset(&session1, ds.validated()?, Box::new(meta))
             .await?;
 
-        assert!(ctx
-            .dataset_db_ref()
-            .await
-            .load(&session1, &id)
-            .await
-            .is_ok());
+        assert!(ctx.dataset_db_ref().load(&session1, &id).await.is_ok());
 
-        assert!(ctx
-            .dataset_db_ref()
-            .await
-            .load(&session2, &id)
-            .await
-            .is_err());
+        assert!(ctx.dataset_db_ref().load(&session2, &id).await.is_err());
 
-        ctx.dataset_db_ref_mut()
-            .await
+        ctx.dataset_db_ref()
             .add_dataset_permission(
                 &session1,
                 DatasetPermission {
@@ -892,12 +962,7 @@ mod tests {
             )
             .await?;
 
-        assert!(ctx
-            .dataset_db_ref()
-            .await
-            .load(&session2, &id)
-            .await
-            .is_ok());
+        assert!(ctx.dataset_db_ref().load(&session2, &id).await.is_ok());
 
         Ok(())
     }
@@ -943,33 +1008,23 @@ mod tests {
         };
 
         let id = ctx
-            .dataset_db_ref_mut()
-            .await
+            .dataset_db_ref()
             .add_dataset(&session1, ds.validated()?, Box::new(meta))
             .await?;
 
         let meta: Result<
             Box<dyn MetaData<OgrSourceDataset, VectorResultDescriptor, VectorQueryRectangle>>,
-        > = ctx
-            .dataset_db_ref()
-            .await
-            .session_meta_data(&session1, &id)
-            .await;
+        > = ctx.dataset_db_ref().session_meta_data(&session1, &id).await;
 
         assert!(meta.is_ok());
 
         let meta: Result<
             Box<dyn MetaData<OgrSourceDataset, VectorResultDescriptor, VectorQueryRectangle>>,
-        > = ctx
-            .dataset_db_ref()
-            .await
-            .session_meta_data(&session2, &id)
-            .await;
+        > = ctx.dataset_db_ref().session_meta_data(&session2, &id).await;
 
         assert!(meta.is_err());
 
-        ctx.dataset_db_ref_mut()
-            .await
+        ctx.dataset_db_ref()
             .add_dataset_permission(
                 &session1,
                 DatasetPermission {
@@ -982,11 +1037,7 @@ mod tests {
 
         let meta: Result<
             Box<dyn MetaData<OgrSourceDataset, VectorResultDescriptor, VectorQueryRectangle>>,
-        > = ctx
-            .dataset_db_ref()
-            .await
-            .session_meta_data(&session2, &id)
-            .await;
+        > = ctx.dataset_db_ref().session_meta_data(&session2, &id).await;
 
         assert!(meta.is_ok());
 
@@ -1011,21 +1062,18 @@ mod tests {
             }],
         };
 
-        ctx.dataset_db_ref_mut()
-            .await
+        ctx.dataset_db_ref()
             .create_upload(&session1, upload)
             .await?;
 
         assert!(ctx
             .dataset_db_ref()
-            .await
             .get_upload(&session1, upload_id)
             .await
             .is_ok());
 
         assert!(ctx
             .dataset_db_ref()
-            .await
             .get_upload(&session2, upload_id)
             .await
             .is_err());

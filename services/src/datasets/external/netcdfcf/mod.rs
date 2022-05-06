@@ -12,7 +12,6 @@ use crate::{
     util::user_input::Validated,
 };
 use async_trait::async_trait;
-use chrono::NaiveDate;
 use gdal::cpl::CslStringList;
 use gdal::errors::GdalError;
 use gdal::{Dataset, DatasetOptions, GdalOpenFlags};
@@ -28,8 +27,8 @@ use gdal_sys::{
 use geoengine_datatypes::dataset::{DatasetId, DatasetProviderId, ExternalDatasetId};
 use geoengine_datatypes::operations::image::{Colorizer, RgbaColor};
 use geoengine_datatypes::primitives::{
-    Measurement, RasterQueryRectangle, TimeGranularity, TimeInstance, TimeInterval, TimeStep,
-    VectorQueryRectangle,
+    DateTime, DateTimeParseFormat, Measurement, RasterQueryRectangle, TimeGranularity,
+    TimeInstance, TimeInterval, TimeStep, VectorQueryRectangle,
 };
 use geoengine_datatypes::raster::{GdalGeoTransform, RasterDataType};
 use geoengine_datatypes::spatial_reference::{SpatialReference, SpatialReferenceOption};
@@ -934,12 +933,17 @@ fn parse_geo_transform(input: &str) -> Result<GdalDatasetGeoTransform> {
     Ok(gdal_geo_transform.into())
 }
 
-fn parse_date(input: &str) -> Result<NaiveDate> {
-    input
-        .parse::<i32>()
-        .map(|year| NaiveDate::from_ymd(year, 1, 1))
-        .or_else(|_| NaiveDate::parse_from_str(input, "%Y-%m-%d"))
-        .context(error::CannotParseTimeCoverageDate)
+fn parse_date(input: &str) -> Result<DateTime> {
+    if let Ok(year) = input.parse::<i32>() {
+        return DateTime::new_utc_checked(year, 1, 1, 0, 0, 0)
+            .context(error::TimeCoverageYearOverflows { year });
+    }
+
+    DateTime::parse_from_str(input, &DateTimeParseFormat::ymd()).map_err(|e| {
+        NetCdfCf4DProviderError::CannotParseTimeCoverageDate {
+            source: Box::new(e),
+        }
+    })
 }
 
 fn parse_time_step(input: &str) -> Result<TimeStep> {
@@ -984,8 +988,8 @@ fn parse_time_coverage(
 ) -> Result<(TimeInstance, TimeInstance, TimeStep)> {
     // TODO: parse datetimes
 
-    let start: TimeInstance = parse_date(start)?.and_hms(0, 0, 0).into();
-    let end: TimeInstance = parse_date(end)?.and_hms(0, 0, 0).into();
+    let start: TimeInstance = parse_date(start)?.into();
+    let end: TimeInstance = parse_date(end)?.into();
     let step = parse_time_step(resolution)?;
 
     // add one step to provide a right side boundary for the close-open interval
@@ -1128,8 +1132,8 @@ mod tests {
     fn test_parse_time_coverage() {
         let result = parse_time_coverage("2010", "2020", "P0001-00-00").unwrap();
         let expected = (
-            TimeInstance::from(NaiveDate::from_ymd(2010, 1, 1).and_hms(0, 0, 0)),
-            TimeInstance::from(NaiveDate::from_ymd(2021, 1, 1).and_hms(0, 0, 0)),
+            TimeInstance::from(DateTime::new_utc(2010, 1, 1, 0, 0, 0)),
+            TimeInstance::from(DateTime::new_utc(2021, 1, 1, 0, 0, 0)),
             TimeStep {
                 granularity: TimeGranularity::Years,
                 step: 1,
@@ -1140,18 +1144,21 @@ mod tests {
 
     #[test]
     fn test_parse_date() {
-        assert_eq!(parse_date("2010").unwrap(), NaiveDate::from_ymd(2010, 1, 1));
+        assert_eq!(
+            parse_date("2010").unwrap(),
+            DateTime::new_utc(2010, 1, 1, 0, 0, 0)
+        );
         assert_eq!(
             parse_date("-1000").unwrap(),
-            NaiveDate::from_ymd(-1000, 1, 1)
+            DateTime::new_utc(-1000, 1, 1, 0, 0, 0)
         );
         assert_eq!(
             parse_date("2010-04-02").unwrap(),
-            NaiveDate::from_ymd(2010, 4, 2)
+            DateTime::new_utc(2010, 4, 2, 0, 0, 0)
         );
         assert_eq!(
             parse_date("-1000-04-02").unwrap(),
-            NaiveDate::from_ymd(-1000, 4, 2)
+            DateTime::new_utc(-1000, 4, 2, 0, 0, 0)
         );
     }
 
@@ -1464,8 +1471,7 @@ mod tests {
                     (44.033_203_125, 0.703_125_25).into(),
                 )
                 .unwrap(),
-                time_interval: TimeInstance::from(NaiveDate::from_ymd(2001, 4, 1).and_hms(0, 0, 0))
-                    .into(),
+                time_interval: TimeInstance::from(DateTime::new_utc(2001, 4, 1, 0, 0, 0)).into(),
                 spatial_resolution: SpatialResolution::new_unchecked(
                     0.000_343_322_7, // 256 pixel
                     0.000_343_322_7, // 256 pixel

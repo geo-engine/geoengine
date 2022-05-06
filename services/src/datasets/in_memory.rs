@@ -1,4 +1,4 @@
-use crate::contexts::SimpleSession;
+use crate::contexts::{Db, SimpleSession};
 use crate::datasets::listing::{
     DatasetListOptions, DatasetListing, DatasetProvider, ExternalDatasetProvider, OrderBy,
 };
@@ -32,7 +32,7 @@ use super::{
 };
 
 #[derive(Default)]
-pub struct HashMapDatasetDb {
+struct HashMapDatasetDbBackend {
     datasets: Vec<Dataset>,
     ogr_datasets: HashMap<
         InternalDatasetId,
@@ -54,17 +54,26 @@ pub struct HashMapDatasetDb {
     external_providers: HashMap<DatasetProviderId, Box<dyn ExternalDatasetProviderDefinition>>,
 }
 
+#[derive(Default)]
+pub struct HashMapDatasetDb {
+    backend: Db<HashMapDatasetDbBackend>,
+}
+
 impl DatasetDb<SimpleSession> for HashMapDatasetDb {}
 
 #[async_trait]
 impl DatasetProviderDb<SimpleSession> for HashMapDatasetDb {
     async fn add_dataset_provider(
-        &mut self,
+        &self,
         _session: &SimpleSession,
         provider: Box<dyn ExternalDatasetProviderDefinition>,
     ) -> Result<DatasetProviderId> {
         let id = provider.id();
-        self.external_providers.insert(id, provider);
+        self.backend
+            .write()
+            .await
+            .external_providers
+            .insert(id, provider);
         Ok(id)
     }
 
@@ -75,6 +84,9 @@ impl DatasetProviderDb<SimpleSession> for HashMapDatasetDb {
     ) -> Result<Vec<DatasetProviderListing>> {
         // TODO: use options
         Ok(self
+            .backend
+            .read()
+            .await
             .external_providers
             .iter()
             .map(|(id, d)| DatasetProviderListing {
@@ -90,7 +102,10 @@ impl DatasetProviderDb<SimpleSession> for HashMapDatasetDb {
         _session: &SimpleSession,
         provider: DatasetProviderId,
     ) -> Result<Box<dyn ExternalDatasetProvider>> {
-        self.external_providers
+        self.backend
+            .read()
+            .await
+            .external_providers
             .get(&provider)
             .cloned()
             .ok_or(error::Error::UnknownProviderId)?
@@ -99,36 +114,44 @@ impl DatasetProviderDb<SimpleSession> for HashMapDatasetDb {
     }
 }
 
+#[async_trait]
 pub trait HashMapStorable: Send + Sync {
-    fn store(&self, id: InternalDatasetId, db: &mut HashMapDatasetDb) -> TypedResultDescriptor;
+    async fn store(&self, id: InternalDatasetId, db: &HashMapDatasetDb) -> TypedResultDescriptor;
 }
 
 impl DatasetStorer for HashMapDatasetDb {
     type StorageType = Box<dyn HashMapStorable>;
 }
 
+#[async_trait]
 impl HashMapStorable for MetaDataDefinition {
-    fn store(&self, id: InternalDatasetId, db: &mut HashMapDatasetDb) -> TypedResultDescriptor {
+    async fn store(&self, id: InternalDatasetId, db: &HashMapDatasetDb) -> TypedResultDescriptor {
         match self {
-            MetaDataDefinition::MockMetaData(d) => d.store(id, db),
-            MetaDataDefinition::OgrMetaData(d) => d.store(id, db),
-            MetaDataDefinition::GdalMetaDataRegular(d) => d.store(id, db),
-            MetaDataDefinition::GdalStatic(d) => d.store(id, db),
-            MetaDataDefinition::GdalMetadataNetCdfCf(d) => d.store(id, db),
-            MetaDataDefinition::GdalMetaDataList(d) => d.store(id, db),
+            MetaDataDefinition::MockMetaData(d) => d.store(id, db).await,
+            MetaDataDefinition::OgrMetaData(d) => d.store(id, db).await,
+            MetaDataDefinition::GdalMetaDataRegular(d) => d.store(id, db).await,
+            MetaDataDefinition::GdalStatic(d) => d.store(id, db).await,
+            MetaDataDefinition::GdalMetadataNetCdfCf(d) => d.store(id, db).await,
+            MetaDataDefinition::GdalMetaDataList(d) => d.store(id, db).await,
         }
     }
 }
 
+#[async_trait]
 impl HashMapStorable
     for StaticMetaData<OgrSourceDataset, VectorResultDescriptor, VectorQueryRectangle>
 {
-    fn store(&self, id: InternalDatasetId, db: &mut HashMapDatasetDb) -> TypedResultDescriptor {
-        db.ogr_datasets.insert(id, self.clone());
+    async fn store(&self, id: InternalDatasetId, db: &HashMapDatasetDb) -> TypedResultDescriptor {
+        db.backend
+            .write()
+            .await
+            .ogr_datasets
+            .insert(id, self.clone());
         self.result_descriptor.clone().into()
     }
 }
 
+#[async_trait]
 impl HashMapStorable
     for StaticMetaData<
         MockDatasetDataSourceLoadingInfo,
@@ -136,36 +159,60 @@ impl HashMapStorable
         VectorQueryRectangle,
     >
 {
-    fn store(&self, id: InternalDatasetId, db: &mut HashMapDatasetDb) -> TypedResultDescriptor {
-        db.mock_datasets.insert(id, self.clone());
+    async fn store(&self, id: InternalDatasetId, db: &HashMapDatasetDb) -> TypedResultDescriptor {
+        db.backend
+            .write()
+            .await
+            .mock_datasets
+            .insert(id, self.clone());
         self.result_descriptor.clone().into()
     }
 }
 
+#[async_trait]
 impl HashMapStorable for GdalMetaDataRegular {
-    fn store(&self, id: InternalDatasetId, db: &mut HashMapDatasetDb) -> TypedResultDescriptor {
-        db.gdal_datasets.insert(id, Box::new(self.clone()));
+    async fn store(&self, id: InternalDatasetId, db: &HashMapDatasetDb) -> TypedResultDescriptor {
+        db.backend
+            .write()
+            .await
+            .gdal_datasets
+            .insert(id, Box::new(self.clone()));
         self.result_descriptor.clone().into()
     }
 }
 
+#[async_trait]
 impl HashMapStorable for GdalMetaDataStatic {
-    fn store(&self, id: InternalDatasetId, db: &mut HashMapDatasetDb) -> TypedResultDescriptor {
-        db.gdal_datasets.insert(id, Box::new(self.clone()));
+    async fn store(&self, id: InternalDatasetId, db: &HashMapDatasetDb) -> TypedResultDescriptor {
+        db.backend
+            .write()
+            .await
+            .gdal_datasets
+            .insert(id, Box::new(self.clone()));
         self.result_descriptor.clone().into()
     }
 }
 
+#[async_trait]
 impl HashMapStorable for GdalMetadataNetCdfCf {
-    fn store(&self, id: InternalDatasetId, db: &mut HashMapDatasetDb) -> TypedResultDescriptor {
-        db.gdal_datasets.insert(id, Box::new(self.clone()));
+    async fn store(&self, id: InternalDatasetId, db: &HashMapDatasetDb) -> TypedResultDescriptor {
+        db.backend
+            .write()
+            .await
+            .gdal_datasets
+            .insert(id, Box::new(self.clone()));
         self.result_descriptor.clone().into()
     }
 }
 
+#[async_trait]
 impl HashMapStorable for GdalMetaDataList {
-    fn store(&self, id: InternalDatasetId, db: &mut HashMapDatasetDb) -> TypedResultDescriptor {
-        db.gdal_datasets.insert(id, Box::new(self.clone()));
+    async fn store(&self, id: InternalDatasetId, db: &HashMapDatasetDb) -> TypedResultDescriptor {
+        db.backend
+            .write()
+            .await
+            .gdal_datasets
+            .insert(id, Box::new(self.clone()));
         self.result_descriptor.clone().into()
     }
 }
@@ -173,7 +220,7 @@ impl HashMapStorable for GdalMetaDataList {
 #[async_trait]
 impl DatasetStore<SimpleSession> for HashMapDatasetDb {
     async fn add_dataset(
-        &mut self,
+        &self,
         _session: &SimpleSession,
         dataset: Validated<AddDataset>,
         meta_data: Box<dyn HashMapStorable>,
@@ -182,7 +229,9 @@ impl DatasetStore<SimpleSession> for HashMapDatasetDb {
         let id = dataset
             .id
             .unwrap_or_else(|| InternalDatasetId::new().into());
-        let result_descriptor = meta_data.store(id.internal().expect("from AddDataset"), self);
+        let result_descriptor = meta_data
+            .store(id.internal().expect("from AddDataset"), self)
+            .await;
 
         let d: Dataset = Dataset {
             id: id.clone(),
@@ -193,7 +242,7 @@ impl DatasetStore<SimpleSession> for HashMapDatasetDb {
             symbology: dataset.symbology,
             provenance: dataset.provenance,
         };
-        self.datasets.push(d);
+        self.backend.write().await.datasets.push(d);
 
         Ok(id)
     }
@@ -215,13 +264,16 @@ impl DatasetProvider<SimpleSession> for HashMapDatasetDb {
         // TODO: include datasets from external dataset providers
         let options = options.user_input;
 
+        let backend = self.backend.read().await;
+
         let mut list: Vec<_> = if let Some(filter) = &options.filter {
-            self.datasets
+            backend
+                .datasets
                 .iter()
                 .filter(|d| d.name.contains(filter) || d.description.contains(filter))
                 .collect()
         } else {
-            self.datasets.iter().collect()
+            backend.datasets.iter().collect()
         };
 
         match options.order {
@@ -242,7 +294,10 @@ impl DatasetProvider<SimpleSession> for HashMapDatasetDb {
     async fn load(&self, _session: &SimpleSession, dataset: &DatasetId) -> Result<Dataset> {
         // TODO: permissions
 
-        self.datasets
+        self.backend
+            .read()
+            .await
+            .datasets
             .iter()
             .find(|d| d.id == *dataset)
             .cloned()
@@ -256,6 +311,9 @@ impl DatasetProvider<SimpleSession> for HashMapDatasetDb {
     ) -> Result<ProvenanceOutput> {
         match dataset {
             DatasetId::Internal { dataset_id: _ } => self
+                .backend
+                .read()
+                .await
                 .datasets
                 .iter()
                 .find(|d| d.id == *dataset)
@@ -297,7 +355,10 @@ impl
         >,
     > {
         Ok(Box::new(
-            self.mock_datasets
+            self.backend
+                .read()
+                .await
+                .mock_datasets
                 .get(
                     &dataset
                         .internal()
@@ -325,7 +386,10 @@ impl
     ) -> Result<Box<dyn MetaData<OgrSourceDataset, VectorResultDescriptor, VectorQueryRectangle>>>
     {
         Ok(Box::new(
-            self.ogr_datasets
+            self.backend
+                .read()
+                .await
+                .ogr_datasets
                 .get(&dataset.internal().ok_or(
                     geoengine_operators::error::Error::DatasetMetaData {
                         source: Box::new(error::Error::DatasetIdTypeMissMatch),
@@ -359,6 +423,9 @@ impl
             .ok_or(error::Error::DatasetIdTypeMissMatch)?;
 
         Ok(self
+            .backend
+            .read()
+            .await
             .gdal_datasets
             .get(&id)
             .ok_or(error::Error::UnknownDatasetId)?
@@ -369,14 +436,17 @@ impl
 #[async_trait]
 impl UploadDb<SimpleSession> for HashMapDatasetDb {
     async fn get_upload(&self, _session: &SimpleSession, upload: UploadId) -> Result<Upload> {
-        self.uploads
+        self.backend
+            .read()
+            .await
+            .uploads
             .get(&upload)
             .map(Clone::clone)
             .ok_or(error::Error::UnknownUploadId)
     }
 
-    async fn create_upload(&mut self, _session: &SimpleSession, upload: Upload) -> Result<()> {
-        self.uploads.insert(upload.id, upload);
+    async fn create_upload(&self, _session: &SimpleSession, upload: Upload) -> Result<()> {
+        self.backend.write().await.uploads.insert(upload.id, upload);
         Ok(())
     }
 }
@@ -433,8 +503,7 @@ mod tests {
         };
 
         let id = ctx
-            .dataset_db_ref_mut()
-            .await
+            .dataset_db_ref()
             .add_dataset(&session, ds.validated()?, Box::new(meta))
             .await?;
 
@@ -455,7 +524,6 @@ mod tests {
 
         let ds = ctx
             .dataset_db_ref()
-            .await
             .list(
                 &session,
                 DatasetListOptions {

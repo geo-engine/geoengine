@@ -268,7 +268,7 @@ where
 
     let dataset_definition = dataset_definition_from_geotiff(&tiff_path).await?;
 
-    let mut db = ctx.dataset_db_ref_mut().await;
+    let db = ctx.dataset_db_ref();
     let meta = db.wrap_meta_data(dataset_definition.meta_data);
 
     let dataset = db
@@ -392,7 +392,7 @@ mod tests {
     use std::path::PathBuf;
 
     #[allow(clippy::too_many_lines)]
-    #[tokio::test]
+    #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
     async fn it_works() -> Result<()> {
         let mut test_data = TestDataUploads::default(); // remember created folder and remove them on drop
 
