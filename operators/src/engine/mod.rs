@@ -31,7 +31,8 @@ mod operator;
 mod operator_impl;
 mod query;
 #[macro_use]
-mod query_processor;
+// changed to public
+pub mod query_processor;
 mod result_descriptor;
 
 #[macro_export]

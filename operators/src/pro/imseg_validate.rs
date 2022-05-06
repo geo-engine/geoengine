@@ -9,7 +9,7 @@ use crate::util::Result;
 use core::pin::Pin;
 use geoengine_datatypes::{primitives::QueryRectangle, raster::{BaseTile,GridShape}};
 use crate::error::Error;
-use crate::pro::datatypes::{RasterResult, Zip};
+use crate::pro::datatypes::{RasterResult, GeoZip};
 use std::time::{Instant};
 use eval_metrics::classification::{MultiConfusionMatrix, Averaging};
 
@@ -88,7 +88,7 @@ where
         //let x = bffr[0].next().await;
 
         
-            let mut zip = Zip::new(bffr);
+            let mut zip = GeoZip::new(bffr);
             
 
             let mut buffer_proc: Vec<RasterResult<T>> = Vec::with_capacity(nop);

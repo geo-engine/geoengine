@@ -1,14 +1,14 @@
 use futures::{StreamExt, Stream};
 use geoengine_datatypes::{primitives::{SpatialPartition2D, TimeInstance, TimeInterval}, raster::{GridOrEmpty, Pixel}};
 use crate::engine::{QueryContext, RasterQueryProcessor};
-use ndarray::{Array2};
+use ndarray::{Array2, ArrayBase, Dim, OwnedRepr};
 use rand::prelude::*;
 use crate::util::Result;
 use core::pin::Pin;
 use geoengine_datatypes::{primitives::QueryRectangle, raster::{BaseTile,GridShape}};
 use crate::error::Error;
-use crate::pro::datatypes::{RasterResult, Zip, PythonTrainingSession};
-
+use crate::pro::datatypes::{RasterResult, GeoZip, PythonTrainingSession};
+use futures::stream::{Zip, Map};
 ///Performs the training. 
 #[allow(clippy::too_many_arguments)]
 pub async fn imseg_fit<T, C: QueryContext>(
@@ -32,12 +32,15 @@ where
 
     let mut rng = rand::thread_rng();
 
+    //Load a Training Session with datatype T
     let mut pts: PythonTrainingSession<T> = PythonTrainingSession::new();
     
+    //Initiate the Session
     let mut init_pts = pts.init();
+    //Load the right module to be used by the session
     init_pts.load_module(include_str!("tf_v2.py"));
     
-
+    //Create a model
     init_pts.initiate_model("test_model_1", 5, batch_size as u8);
     //since every 15 minutes an image is available...
     let step: i64 = (batch_size as i64 * 900_000) * batches_per_query as i64;
@@ -53,128 +56,56 @@ where
     let mut final_buff_truth: Vec<Vec<u8>> = Vec::new();
 
     while !queries.is_empty() {
+
         let queries_left = queries.len();
         println!("queries left: {:?}", queries_left);
         
-        if queries_left > 1 {
-            rand_index = rng.gen_range(0..queries_left-1);
-        } else {
-            rand_index = 0;
-        }         
+        rand_index = get_random_index(&queries, &mut rng);
 
         let the_chosen_one = queries.remove(rand_index);
 
         println!("{:?}", the_chosen_one.time_interval.start().as_naive_date_time().unwrap());
 
-        let mut bffr: Vec<Pin<Box<dyn Stream<Item = Result<BaseTile<GridOrEmpty<GridShape<[usize; 2]>, T>>, Error>> + Send, >>> = Vec::new();           
-        for element in processors.iter() {
-           bffr.push(element.raster_query(the_chosen_one, &query_ctx).await?);
+        let mut query_stream = perform_query_on_training_data(&processors,&processor_truth, the_chosen_one, &query_ctx).await.unwrap();
+
+        while let Some(Some((processor, ground_truth))) = query_stream.next().await {
+            final_buff_proc.push(processor);
+            final_buff_truth.push(ground_truth);
+
+            if final_buff_proc.len() >= batch_size {
+                let (arr_proc_final, arr_truth_final) = build_arrays(&mut final_buff_proc, &mut final_buff_truth, batch_size, tile_size, nop, no_data_value, default_value);
+
+                init_pts.training_step(arr_proc_final, arr_truth_final);
+            }
+
+            
         }
 
-        let mut truth_stream = processor_truth.raster_query(the_chosen_one, &query_ctx).await?;
+        // final_buff_proc.append(&mut inter_buff_proc);
+        // final_buff_truth.append(&mut inter_buff_truth);
 
-        
-            let mut zip = Zip::new(bffr);
-            
-
-            let mut buffer_proc: Vec<RasterResult<T>> = Vec::with_capacity(nop);
-            let mut truth_int: RasterResult<u8>;
-
-            while let (Some(proc), Some(truth)) = (zip.next().await, truth_stream.next().await) {
-                for processor in proc {
-                    match processor {
-                        Ok(processor) => {
-                            match processor.grid_array {
-                                GridOrEmpty::Grid(processor) => {
-                                    buffer_proc.push(RasterResult::Some(processor.data));
-                                },
-                                _ => {
-                                    buffer_proc.push(RasterResult::Empty);
-                                }
-                            }
-                        },
-                        _ => {
-                            buffer_proc.push(RasterResult::Error);
-                        }
-                    }
-                }
-                match truth {
-                    Ok(truth) => {
-                        match truth.grid_array {
-                            GridOrEmpty::Grid(truth) => {
-                                truth_int = RasterResult::Some(truth.data);
-                            },
-                            _ => {
-                                truth_int = RasterResult::Empty;
-                            }
-                        }
-                    },
-                    _ => {
-                        truth_int = RasterResult::Error;
-                    }
-                }
-                if buffer_proc.iter().all(|x| matches!(x, &RasterResult::Some(_))) && buffer_proc.len() == nop && matches!(truth_int, RasterResult::Some(_)) {
-                    final_buff_proc.push(buffer_proc.clone().into_iter().map(|x| {
-                        if let RasterResult::Some(x) = x {
-                            return x;
-                        } else {
-                            unreachable!();
-                        }
-                    }).collect());
-                    if let RasterResult::Some(x) = truth_int{
-                        final_buff_truth.push(x);
-                    } else {
-                        unreachable!();
-                    }            
-                }
-      
                 
-                
-                if final_buff_proc.len() == batch_size {
-                    let mut arr_proc_final = ndarray::Array::from_elem((batch_size, tile_size[0], tile_size[1], nop), default_value);
-                    let mut arr_truth_final = ndarray::Array::from_elem((batch_size, tile_size[0], tile_size[1],1), no_data_value);
-                    assert!(final_buff_truth.len() == batch_size);
-                    for j in 0..batch_size {
-                        let mut proc = final_buff_proc.remove(0);
-                        //println!("{:?}", proc);
-                        
-                        let truth = final_buff_truth.remove(0);
-                        //println!("{:?}", truth);
-                        
-                        let mut arr_proc = ndarray::Array::from_elem((tile_size[0], tile_size[1], nop), default_value);
-                        for i in 0 .. proc.len() {
-                            let arr_x: ndarray::Array<T, _> = 
-                            Array2::from_shape_vec((tile_size[0], tile_size[1]), proc.remove(0))
-                            .unwrap(); 
-                            arr_proc.slice_mut(ndarray::s![..,..,i]).assign(&arr_x);
-                            
-                            //slice = arr_x.view_mut();
-                        }
-                        arr_proc_final.slice_mut(ndarray::s![j,..,..,..]).assign(&arr_proc);
-    
-                        let arr_t = Array2::from_shape_vec((tile_size[0], tile_size[1]), truth).unwrap();
-                        arr_truth_final.slice_mut(ndarray::s![j,..,..,0]).assign(&arr_t);
-                        
-    
-                    }
-                    
-                    init_pts.training_step(arr_proc_final, arr_truth_final);
-                }
-                buffer_proc.drain(..);
-            }
+        while final_buff_proc.len() >= batch_size {
+
+            let (arr_proc_final, arr_truth_final) = build_arrays(&mut final_buff_proc, &mut final_buff_truth, batch_size, tile_size, nop, no_data_value, default_value);
+
+            init_pts.training_step(arr_proc_final, arr_truth_final);
+        }
+                //buffer_proc.drain(..);
+    }
             
                 
                 
        
         
-    }
+
 
     init_pts.save("test_model_1");
     Ok(())
     
     
 }
-/// Splits time intervals into smaller intervalls of length step. Step has to be in milliseconds and larger than 1000!
+/// Splits time intervals into smaller intervalls of length step. Step has to be in milliseconds and >= 1000!
 fn split_time_intervals(query_rect: QueryRectangle<SpatialPartition2D>, step: i64 ) -> Result<Vec<QueryRectangle<SpatialPartition2D>>> {
 
     assert!(step >= 1000);
@@ -186,7 +117,7 @@ fn split_time_intervals(query_rect: QueryRectangle<SpatialPartition2D>, step: i6
     let mut queries: Vec<QueryRectangle<SpatialPartition2D>> = Vec::new();
 
     let mut start_plus_step = start.as_utc_date_time().unwrap().timestamp() * 1000 + step;
-    let mut end_time = end.as_utc_date_time().unwrap().timestamp() * 1000;
+    let end_time = end.as_utc_date_time().unwrap().timestamp() * 1000;
 
     while start_plus_step <= end_time {
 
@@ -209,7 +140,147 @@ fn split_time_intervals(query_rect: QueryRectangle<SpatialPartition2D>, step: i6
     }
     Ok(queries)
 }
+///Returns a random index from the vector. Needs o be provided with a RandomThread.
+fn get_random_index<T>(queries: &Vec<T>, rng: &mut ThreadRng) -> usize {
+    let queries_left = queries.len();
+    
+    if queries_left > 1 {
+        return rng.gen_range(0..queries_left-1);
+    } else {
+        return 0;
+    }
+}
 
+//Queries everything that is available and returns it in a stream
+async fn perform_query_on_training_data<'a, T>(processors: &'a Vec<Box<dyn                           RasterQueryProcessor<RasterType=T>>>,
+ground_truth: &'a Box<dyn RasterQueryProcessor<RasterType = u8>>, query_rect: QueryRectangle<SpatialPartition2D>, query_ctx: &'a dyn QueryContext) -> Result<Pin<Box<dyn Stream<Item = Option<(Vec<Vec<T>>, Vec<u8>)>> + 'a>>>
+//For reasons beyond my understanding this is needed...
+//TODO There might be a better way to solve this.
+where dyn crate::engine::query_processor::RasterQueryProcessor<RasterType = T>: crate::engine::query_processor::RasterQueryProcessor, T: Clone + Sized {
+        
+    let mut bffr: Vec<Pin<Box<dyn Stream<Item = Result<BaseTile<GridOrEmpty<GridShape<[usize; 2]>, T>>, Error>> + Send, >>> = Vec::new();   
+
+    let nop = processors.len();
+    
+
+    for element in processors.iter() {
+        bffr.push(element.raster_query(query_rect, query_ctx).await?);
+    }
+
+
+    let mut truth_stream = ground_truth.raster_query(query_rect, query_ctx).await?;
+
+    let mut zip = GeoZip::new(bffr);
+    
+    let zipped = zip.zip(truth_stream);        
+    
+    let output = zipped.map(|data| extract_data(data, 11));
+    
+    Ok(Box::pin(output))
+}
+
+fn extract_data<T>(input: (Vec<Result<BaseTile<GridOrEmpty<GridShape<[usize; 2]>, T>>, Error>>, Result<BaseTile<GridOrEmpty<GridShape<[usize; 2]>, u8>>, Error>), nop: usize) -> Option<(Vec<Vec<T>>, Vec<u8>)> where T: Clone{
+    
+    let mut buffer_proc: Vec<RasterResult<T>> = Vec::with_capacity(nop);
+    let truth_int: RasterResult<u8>;
+
+    let mut final_buff_proc: Vec<Vec<Vec<T>>> = Vec::new(); 
+    let mut final_buff_truth: Vec<Vec<u8>> = Vec::new();
+    
+    let (proc, truth) = input;
+
+    for processor in proc {
+        match processor {
+            Ok(processor) => {
+                match processor.grid_array {
+                    GridOrEmpty::Grid(processor) => {
+                        buffer_proc.push(RasterResult::Some(processor.data));
+                    },
+                    _ => {
+                        buffer_proc.push(RasterResult::Empty);
+                    }
+                }
+            },
+            _ => {
+                buffer_proc.push(RasterResult::Error);
+            }
+        }
+    }
+    match truth {
+        Ok(truth) => {
+            match truth.grid_array {
+                GridOrEmpty::Grid(truth) => {
+                    truth_int = RasterResult::Some(truth.data);
+                },
+                _ => {
+                    truth_int = RasterResult::Empty;
+                }
+            }
+        },
+        _ => {
+            truth_int = RasterResult::Error;
+        }
+    }
+    if buffer_proc.iter().all(|x| matches!(x, &RasterResult::Some(_))) && buffer_proc.len() == nop && matches!(truth_int, RasterResult::Some(_)) {
+        final_buff_proc.push(buffer_proc.into_iter().map(|x| {
+            if let RasterResult::Some(x) = x {
+                
+                
+                return x;
+            } else {
+                unreachable!();
+            }
+        }).collect());
+        if let RasterResult::Some(x) = truth_int{
+            final_buff_truth.push(x);
+        } else {
+            unreachable!();
+        }            
+    }
+
+    match (final_buff_proc.get(0), final_buff_truth.get(0)) {
+        (Some(x), Some(y)) => {
+            return (Some((x.to_vec(), y.to_vec())))
+        },
+        _ => {
+            return None
+        }
+    }
+    None
+}
+
+
+fn build_arrays<T>(processors_buffer:  &mut Vec<Vec<Vec<T>>>, ground_truth_buffer: &mut Vec<Vec<u8>>, batch_size: usize, tile_size: [usize;2], nop: usize, no_data_value: u8, default_value: T) -> (ArrayBase<OwnedRepr<T>, Dim<[usize; 4]>>, ArrayBase<OwnedRepr<u8>, Dim<[usize; 4]>>) 
+where T: Clone + Copy{
+
+    let mut arr_proc_final = ndarray::Array::from_elem((batch_size, tile_size[0], tile_size[1], nop), default_value);
+    let mut arr_truth_final = ndarray::Array::from_elem((batch_size, tile_size[0], tile_size[1],1), no_data_value);
+    assert!(processors_buffer.len() >= batch_size);
+    assert!(ground_truth_buffer.len() >= batch_size);
+    for j in 0..batch_size {
+        let mut proc = processors_buffer.remove(0);
+        //println!("{:?}", proc);
+                        
+        let truth = ground_truth_buffer.remove(0);
+        //println!("{:?}", truth);
+                        
+        let mut arr_proc = ndarray::Array::from_elem((tile_size[0], tile_size[1], nop), default_value);
+        for i in 0 .. proc.len() {
+            let arr_x: ndarray::Array<T, _> = 
+            Array2::from_shape_vec((tile_size[0], tile_size[1]), proc.remove(0))
+            .unwrap(); 
+            arr_proc.slice_mut(ndarray::s![..,..,i]).assign(&arr_x);
+                            
+            //slice = arr_x.view_mut();
+        }
+        arr_proc_final.slice_mut(ndarray::s![j,..,..,..]).assign(&arr_proc);
+    
+        let arr_t = Array2::from_shape_vec((tile_size[0], tile_size[1]), truth).unwrap();
+        arr_truth_final.slice_mut(ndarray::s![j,..,..,0]).assign(&arr_t);
+    }
+
+    return (arr_proc_final, arr_truth_final)
+}
 #[cfg(test)]
 mod tests {
     use geoengine_datatypes::{dataset::{DatasetId, InternalDatasetId}, hashmap, primitives::{Coordinate2D, TimeInterval, SpatialResolution, Measurement, TimeGranularity, TimeInstance, TimeStep}, raster::{RasterDataType}, raster::{TilingSpecification}, spatial_reference::{SpatialReference, SpatialReferenceAuthority, SpatialReferenceOption}};
@@ -222,8 +293,8 @@ mod tests {
 
     use super::*;
 
-    #[tokio::test]
-    async fn split_time_intervals_test() {
+    #[test]
+    fn split_time_intervals_test() {
 
         let mock_rectangle = QueryRectangle {
             spatial_bounds: SpatialPartition2D::new((0.0, 1.0).into(), (1.0, 0.0).into()).unwrap(),
@@ -250,6 +321,31 @@ mod tests {
         assert!(last_interval.end().as_utc_date_time().unwrap().timestamp() * 1000 == 1_000_000);
     }
 
+    #[test]
+    fn random_index_test(){
+        let vc_1 = vec![0,1,2,3,4];
+        let range_1 = 0..5;
+
+        let mut rng = rand::thread_rng();
+
+        let index_1 = get_random_index(&vc_1, &mut rng);
+
+        assert!(range_1.contains(&index_1));
+
+        let vc_2 = vec![0,1];
+        let range_2 = 0..2;
+
+        let index_2 = get_random_index(&vc_2, &mut rng);
+
+        assert!(range_2.contains(&index_2));
+
+        let vc_3 = vec![0];
+        let range_3 = 0..1;
+
+        let index_3 = get_random_index(&vc_3, &mut rng);
+
+        assert!(range_3.contains(&index_3));
+    }
     //Training on the MSG and CLAAS data. If this runs it works.
     #[tokio::test]
     async fn imseg_fit_test() {
@@ -1207,8 +1303,8 @@ mod tests {
                 .unwrap(),
             spatial_resolution: query_spatial_resolution,
         }, ctx,
-    1 as usize,
-    32 as usize,
+    24 as usize,
+    20 as usize,
 0 as u8,
 [512,512],
 0.0,
