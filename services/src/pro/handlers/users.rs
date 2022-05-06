@@ -667,7 +667,7 @@ mod tests {
         );
     }
 
-    #[tokio::test]
+    #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
     async fn it_disables_anonymous_access() {
         let ctx = ProInMemoryContext::test_default();
 
@@ -694,7 +694,7 @@ mod tests {
         .await;
     }
 
-    #[tokio::test]
+    #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
     async fn it_disables_user_registration() {
         let ctx = ProInMemoryContext::test_default();
 
