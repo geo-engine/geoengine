@@ -392,7 +392,9 @@ impl MetaDataProvider<GdalLoadingInfo, RasterResultDescriptor, RasterQueryRectan
                 source: Box::new(e),
             })?;
 
-        if time_positions.is_empty() {
+        let empty_time_position = "---".to_owned();
+
+        if time_positions.contains(&empty_time_position) {
             Ok(Box::new(GdalMetaDataStatic {
                 time: None,
                 params: gdal_parameters_from_dataset(
@@ -412,10 +414,22 @@ impl MetaDataProvider<GdalLoadingInfo, RasterResultDescriptor, RasterQueryRectan
             let time_steps = time_positions
                 .iter()
                 .map(|time_position| {
-                    NaiveDateTime::parse_from_str(time_position, "%Y-%m-%dT%H:%M").unwrap()
+                    NaiveDateTime::parse_from_str(time_position, "%Y-%m-%dT%H:%M")
+                        .map_err(|e| geoengine_operators::error::Error::TimeParse { source: e })
                 })
-                .map(TimeInstance::from)
-                .map(|time_istance| TimeInterval::new_instant(time_istance).unwrap())
+                .map(
+                    |date_time: Result<NaiveDateTime, geoengine_operators::error::Error>| {
+                        let time_instance = TimeInstance::from(date_time?);
+                        Ok(time_instance)
+                    },
+                )
+                .map(
+                    |time_instance: Result<TimeInstance, geoengine_operators::error::Error>| {
+                        let time_step = TimeInterval::new_instant(time_instance?)?;
+                        Ok(time_step)
+                    },
+                )
+                .filter_map(|t: Result<TimeInterval, geoengine_operators::error::Error>| t.ok())
                 .collect::<Vec<_>>();
 
             let db_url =
@@ -575,6 +589,9 @@ mod tests {
                                     <gml:offsetVector>0.0 -1.0</gml:offsetVector>
                                 </gml:RectifiedGrid>
                             </spatialDomain>
+                            <temporalDomain>
+                                <gml:timePosition>---</gml:timePosition>
+                            </temporalDomain>
                         </domainSet>
                         <rangeSet>
                             <RangeSet>
@@ -621,6 +638,7 @@ mod tests {
         );
     }
 
+    #[allow(clippy::too_many_lines)]
     fn expect_lidar_requests(server: &mut Server) {
         server.expect(
             Expectation::matching(all_of![
@@ -664,27 +682,30 @@ mod tests {
                         <name>RSDB WCS</name>
                         <label>lidar_2018_wetness_1m</label>
                         <domainSet>
-                        <spatialDomain>
-                            <gml:Envelope srsName="EPSG:25832">
-                                <gml:pos>473923.0 5630763.0</gml:pos>
-                                <gml:pos>478218.0 5634057.0</gml:pos>
-                            </gml:Envelope>
-                            <gml:RectifiedGrid dimension="2">
-                                <gml:limits>
-                                    <gml:GridEnvelope>
-                                        <gml:low>0 0</gml:low>
-                                        <gml:high>4294 3293</gml:high>
-                                    </gml:GridEnvelope>
-                                </gml:limits>
-                                <gml:axisName>x</gml:axisName>
-                                <gml:axisName>y</gml:axisName>
-                                <gml:origin>
-                                    <gml:pos>473923.0 5634057.0</gml:pos>
-                                </gml:origin>
-                                <gml:offsetVector>1.0 0.0</gml:offsetVector>
-                                <gml:offsetVector>0.0 -1.0</gml:offsetVector>
-                            </gml:RectifiedGrid>
-                        </spatialDomain>
+                            <spatialDomain>
+                                <gml:Envelope srsName="EPSG:25832">
+                                    <gml:pos>473923.0 5630763.0</gml:pos>
+                                    <gml:pos>478218.0 5634057.0</gml:pos>
+                                </gml:Envelope>
+                                <gml:RectifiedGrid dimension="2">
+                                    <gml:limits>
+                                        <gml:GridEnvelope>
+                                            <gml:low>0 0</gml:low>
+                                            <gml:high>4294 3293</gml:high>
+                                        </gml:GridEnvelope>
+                                    </gml:limits>
+                                    <gml:axisName>x</gml:axisName>
+                                    <gml:axisName>y</gml:axisName>
+                                    <gml:origin>
+                                        <gml:pos>473923.0 5634057.0</gml:pos>
+                                    </gml:origin>
+                                    <gml:offsetVector>1.0 0.0</gml:offsetVector>
+                                    <gml:offsetVector>0.0 -1.0</gml:offsetVector>
+                                </gml:RectifiedGrid>
+                            </spatialDomain>
+                            <temporalDomain>
+                                <gml:timePosition>---</gml:timePosition>
+                            </temporalDomain>
                         </domainSet>
                         <rangeSet>
                             <RangeSet>
