@@ -7,7 +7,6 @@ use std::ops::RangeBounds;
 use utoipa::Component;
 
 use serde::{Deserialize, Serialize};
-use utoipa::Component;
 
 use crate::collections::{
     DataCollection, FeatureCollectionError, FeatureCollectionInfos, FeatureCollectionModifications,
