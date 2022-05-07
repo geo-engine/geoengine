@@ -28,6 +28,7 @@ use geoengine_operators::{call_on_generic_raster_processor_gdal_types, call_on_t
 use serde::{Deserialize, Serialize};
 use snafu::ResultExt;
 use tokio::fs;
+use utoipa::Component;
 
 pub(crate) fn init_workflow_routes<C>(cfg: &mut web::ServiceConfig)
 where
@@ -205,9 +206,9 @@ async fn load_workflow_handler<C: Context>(
     get,
     path = "/workflow/{id}/metadata",
     responses(
-        (status = 200, description = "Workflow loaded from database", body = TypedResultDescriptor,
-            example = json!({"dataType": "MultiPoint", "spatialReference": "EPSG: 4326", "columns": {}})
-    )
+        (status = 200, description = "Metadata of loaded workflow", body = TypedResultDescriptor,
+            example = json!({"type": "vector", "dataType": "MultiPoint", "spatialReference": "EPSG:4326", "columns": {}})
+        )
     ),
     params(
         ("id", description = "Workflow id")
@@ -273,6 +274,21 @@ async fn get_workflow_metadata_handler<C: Context>(
 ///   "uri": "http://example.org/"
 /// }]
 /// ```
+#[utoipa::path(
+    get,
+    path = "/workflow/{id}/provenance",
+    responses(
+        (status = 200, description = "Provenance of used datasets", body = [ProvenanceOutput],
+            example = json!([{"id": {"type": "internal", "datasetId": "846a823a-6859-4b94-ab0a-c1de80f593d8"}, "citation": "Author, Dataset Tile", "license": "Some license", "uri": "http://example.org/"}, {"id": {"type": "internal", "datasetId": "453cd398-f271-437b-9c3d-7f42213ea30a"}, "citation": "Another Author, Another Dataset Tile", "license": "Some other license", "uri": "http://example.org/"}])
+        )
+    ),
+    params(
+        ("id", description = "Workflow id")
+    ),
+    security(
+        ("session_token" = [])
+    )
+)]
 async fn get_workflow_provenance_handler<C: Context>(
     id: web::Path<WorkflowId>,
     session: C::Session,
@@ -302,11 +318,13 @@ async fn get_workflow_provenance_handler<C: Context>(
 }
 
 /// parameter for the dataset from workflow handler (body)
-#[derive(Clone, Debug, Deserialize, Serialize)]
-struct RasterDatasetFromWorkflow {
+#[derive(Clone, Debug, Deserialize, Serialize, Component)]
+#[component(example = json!({"name": "foo", "description": null, "query": {"spatialBounds": {"upperLeftCoordinate": {"x": -10.0, "y": 80.0}, "lowerRightCoordinate": {"x": 50.0, "y": 20.0}}, "timeInterval": {"start": 1388534400000i64, "end": 1388534401000i64}, "spatialResolution": {"x": 0.1, "y": 0.1}}}))]
+pub struct RasterDatasetFromWorkflow {
     name: String,
     description: Option<String>,
     query: RasterQueryRectangle,
+    #[component(default = default_as_cog)]
     #[serde(default = "default_as_cog")]
     as_cog: bool,
 }
@@ -318,8 +336,8 @@ const fn default_as_cog() -> bool {
 }
 
 /// response of the dataset from workflow handler
-#[derive(Clone, Debug, Deserialize, Serialize)]
-struct RasterDatasetFromWorkflowResult {
+#[derive(Clone, Debug, Deserialize, Serialize, Component)]
+pub struct RasterDatasetFromWorkflowResult {
     dataset: DatasetId,
     upload: UploadId,
 }
@@ -368,6 +386,22 @@ struct RasterDatasetFromWorkflowResult {
 ///   }
 /// }
 /// ```
+#[utoipa::path(
+    post,
+    path = "/datasetFromWorkflow/{id}",
+    request_body = RasterDatasetFromWorkflow,
+    responses(
+        (status = 200, description = "Id of created dataset and upload", body = RasterDatasetFromWorkflowResult,
+            example = json!({"upload": "3086f494-d5a4-4b51-a14b-3b29f8bf7bb0", "dataset": {"type": "internal", "datasetId": "94230f0b-4e8a-4cba-9adc-3ace837fe5d4"}})
+        )
+    ),
+    params(
+        ("id", description = "Workflow id")
+    ),
+    security(
+        ("session_token" = [])
+    )
+)]
 async fn dataset_from_workflow_handler<C: Context>(
     workflow_id: web::Path<WorkflowId>,
     session: C::Session,

@@ -4,6 +4,7 @@ use std::collections::hash_map::Keys;
 use std::collections::HashMap;
 use std::convert::{TryFrom, TryInto};
 use std::ops::RangeBounds;
+use utoipa::Component;
 
 use serde::{Deserialize, Serialize};
 
@@ -19,7 +20,9 @@ use crate::primitives::{
 use crate::util::Result;
 
 /// An enum that contains all possible vector data types
-#[derive(Debug, Ord, PartialOrd, Eq, PartialEq, Hash, Deserialize, Serialize, Copy, Clone)]
+#[derive(
+    Debug, Ord, PartialOrd, Eq, PartialEq, Hash, Deserialize, Serialize, Copy, Clone, Component,
+)]
 pub enum VectorDataType {
     Data,
     MultiPoint,

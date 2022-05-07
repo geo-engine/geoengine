@@ -1,5 +1,4 @@
 use serde::{Deserialize, Serialize};
-use utoipa::openapi::Component;
 use uuid::Uuid;
 
 use geoengine_datatypes::identifier;
@@ -25,8 +24,9 @@ pub struct Workflow {
 }
 
 impl utoipa::Component for Workflow {
-    fn component() -> Component {
-        utoipa::openapi::Ref::from_component_name("TypedOperator").into()
+    fn component() -> utoipa::openapi::Component {
+        use utoipa::openapi::*;
+        Ref::from_component_name("TypedOperator").into()
     }
 }
 

@@ -230,6 +230,16 @@ pub enum SpatialReferenceOption {
     Unreferenced,
 }
 
+impl utoipa::Component for SpatialReferenceOption {
+    fn component() -> utoipa::openapi::Component {
+        use utoipa::openapi::*;
+        PropertyBuilder::new()
+            .component_type(ComponentType::String)
+            .example(Some(serde_json::json!("EPSG:4326")))
+            .into()
+    }
+}
+
 impl SpatialReferenceOption {
     pub fn is_spatial_ref(self) -> bool {
         match self {

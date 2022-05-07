@@ -50,6 +50,30 @@ pub struct RasterResultDescriptor {
     pub no_data_value: Option<f64>,
 }
 
+impl utoipa::Component for RasterResultDescriptor {
+    fn component() -> utoipa::openapi::Component {
+        use utoipa::openapi::*;
+        ObjectBuilder::new()
+            .property("dataType", Ref::from_component_name("RasterDataType"))
+            .required("dataType")
+            .property(
+                "spatialReference",
+                Ref::from_component_name("SpatialReferenceOption"),
+            )
+            .required("spatialReference")
+            .property("measurement", Ref::from_component_name("Measurement"))
+            .required("measurement")
+            .property(
+                "noDataValue",
+                PropertyBuilder::new()
+                    .component_type(ComponentType::Number)
+                    .format(Some(ComponentFormat::Float)),
+            )
+            .description(Some("A `ResultDescriptor` for raster queries"))
+            .into()
+    }
+}
+
 impl ResultDescriptor for RasterResultDescriptor {
     type DataType = RasterDataType;
 
@@ -97,6 +121,24 @@ pub struct VectorResultDescriptor {
     pub data_type: VectorDataType,
     pub spatial_reference: SpatialReferenceOption,
     pub columns: HashMap<String, FeatureDataType>,
+}
+
+impl utoipa::Component for VectorResultDescriptor {
+    fn component() -> utoipa::openapi::Component {
+        use utoipa::openapi::*;
+        ObjectBuilder::new()
+            .property("dataType", Ref::from_component_name("VectorDataType"))
+            .required("dataType")
+            .property(
+                "spatialReference",
+                Ref::from_component_name("SpatialReferenceOption"),
+            )
+            .required("spatialReference")
+            .property("columns", ObjectBuilder::new())
+            .required("columns")
+            .description(Some("A `ResultDescriptor` for vector queries"))
+            .into()
+    }
 }
 
 impl VectorResultDescriptor {
@@ -155,6 +197,20 @@ pub struct PlotResultDescriptor {
     pub spatial_reference: SpatialReferenceOption,
 }
 
+impl utoipa::Component for PlotResultDescriptor {
+    fn component() -> utoipa::openapi::Component {
+        use utoipa::openapi::*;
+        ObjectBuilder::new()
+            .property(
+                "spatialReference",
+                Ref::from_component_name("SpatialReferenceOption"),
+            )
+            .required("spatialReference")
+            .description(Some("A `ResultDescriptor` for plot queries"))
+            .into()
+    }
+}
+
 impl ResultDescriptor for PlotResultDescriptor {
     type DataType = (); // TODO: maybe distinguish between image, interactive plot, etc.
 
@@ -178,6 +234,8 @@ impl ResultDescriptor for PlotResultDescriptor {
         *self
     }
 }
+
+// TODO: set discriminator once utoipa supports it
 #[derive(Debug, Serialize, Deserialize, Clone, PartialEq, Component)]
 #[serde(rename_all = "camelCase", tag = "type")]
 pub enum TypedResultDescriptor {

@@ -17,6 +17,20 @@ pub enum DatasetId {
     External(ExternalDatasetId),
 }
 
+impl utoipa::Component for DatasetId {
+    // TODO: rewrite using OfOneBuilder once discriminator can be set
+    fn component() -> utoipa::openapi::Component {
+        use utoipa::openapi::*;
+        ObjectBuilder::new()
+            .property("type", Property::new(ComponentType::String))
+            .required("type")
+            .property("datasetId", Property::new(ComponentType::String))
+            .required("datasetId")
+            .property("providerId", Property::new(ComponentType::String))
+            .into()
+    }
+}
+
 #[derive(Debug, Clone, Hash, Eq, PartialEq, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ExternalDatasetId {

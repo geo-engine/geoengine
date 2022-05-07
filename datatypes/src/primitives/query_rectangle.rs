@@ -38,3 +38,26 @@ impl From<QueryRectangle<BoundingBox2D>> for QueryRectangle<SpatialPartition2D> 
         }
     }
 }
+
+impl utoipa::Component for QueryRectangle<SpatialPartition2D> {
+    fn component() -> utoipa::openapi::Component {
+        use utoipa::openapi::*;
+        ObjectBuilder::new()
+            .property(
+                "spatialBounds",
+                Ref::from_component_name("SpatialPartition2D"),
+            )
+            .required("spatialBounds")
+            .property("timeInterval", Ref::from_component_name("TimeInterval"))
+            .required("timeInterval")
+            .property(
+                "spatialResolution",
+                Ref::from_component_name("SpatialResolution"),
+            )
+            .required("spatialResolution")
+            .description(Some(
+                "A spatio-temporal rectangle with a specified resolution",
+            ))
+            .into()
+    }
+}

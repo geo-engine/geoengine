@@ -16,6 +16,7 @@ use geoengine_operators::mock::MockDatasetDataSourceLoadingInfo;
 use geoengine_operators::source::{GdalLoadingInfo, OgrSourceDataset};
 use serde::{Deserialize, Serialize};
 use snafu::ensure;
+use utoipa::Component;
 
 #[derive(Debug, Serialize, Deserialize, Clone, PartialEq)]
 #[serde(rename_all = "camelCase")]
@@ -132,13 +133,13 @@ pub trait ExternalDatasetProvider: Send
     fn as_any(&self) -> &dyn std::any::Any;
 }
 
-#[derive(Debug, Serialize, Deserialize, PartialEq, Eq, Hash)]
+#[derive(Debug, Serialize, Deserialize, PartialEq, Eq, Hash, Component)]
 pub struct ProvenanceOutput {
     pub dataset: DatasetId,
     pub provenance: Option<Provenance>,
 }
 
-#[derive(Debug, Serialize, Deserialize, Clone, PartialEq, Eq, Hash)]
+#[derive(Debug, Serialize, Deserialize, Clone, PartialEq, Eq, Hash, Component)]
 pub struct Provenance {
     pub citation: String,
     pub license: String,

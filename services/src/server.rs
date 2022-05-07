@@ -5,9 +5,7 @@ use crate::handlers::ErrorResponse;
 use crate::util::config;
 use crate::util::config::get_config_element;
 
-use crate::util::IdResponse;
-use crate::workflows::workflow::Workflow;
-use crate::workflows::workflow::WorkflowId;
+use crate::apidoc::ApiDoc;
 use actix_files::Files;
 use actix_http::body::{BoxBody, EitherBody, MessageBody};
 use actix_http::uri::PathAndQuery;
@@ -15,8 +13,6 @@ use actix_http::HttpMessage;
 use actix_web::dev::{ServiceRequest, ServiceResponse};
 use actix_web::error::{InternalError, JsonPayloadError, QueryPayloadError};
 use actix_web::{http, middleware, web, App, HttpResponse, HttpServer};
-use geoengine_operators::engine::TypedOperator;
-use geoengine_operators::engine::TypedResultDescriptor;
 use log::{debug, info};
 use std::net::SocketAddr;
 use std::num::NonZeroUsize;
@@ -24,43 +20,8 @@ use std::path::PathBuf;
 use tracing::Span;
 use tracing_actix_web::{RequestId, RootSpanBuilder, TracingLogger};
 use url::Url;
-use utoipa::openapi::security::{HttpAuthScheme, HttpBuilder, SecurityScheme};
-use utoipa::{Modify, OpenApi};
+use utoipa::OpenApi;
 use utoipa_swagger_ui::SwaggerUi;
-
-#[derive(OpenApi)]
-#[openapi(
-    handlers(
-        handlers::workflows::register_workflow_handler,
-        handlers::workflows::load_workflow_handler,
-        handlers::workflows::get_workflow_metadata_handler,
-    ),
-    components(
-        Workflow,
-        IdResponse<WorkflowId>,
-        TypedOperator,
-        TypedResultDescriptor
-    ),
-    modifiers(&SecurityAddon)
-)]
-struct ApiDoc;
-
-struct SecurityAddon;
-
-impl Modify for SecurityAddon {
-    fn modify(&self, openapi: &mut utoipa::openapi::OpenApi) {
-        let components = openapi.components.as_mut().unwrap();
-        components.add_security_scheme(
-            "session_token",
-            SecurityScheme::Http(
-                HttpBuilder::new()
-                    .scheme(HttpAuthScheme::Bearer)
-                    .bearer_format("UUID")
-                    .build(),
-            ),
-        );
-    }
-}
 
 /// Starts the webserver for the Geo Engine API.
 ///
@@ -318,6 +279,31 @@ pub(crate) fn configure_extractors(cfg: &mut web::ServiceConfig) {
     }));
 }
 
+#[derive(serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct VersionInfo {
+    build_date: Option<String>,
+    commit_hash: Option<String>,
+}
+
+impl utoipa::Component for VersionInfo {
+    fn component() -> utoipa::openapi::Component {
+        use utoipa::openapi::*;
+        ObjectBuilder::new()
+            .property(
+                "buildDate",
+                PropertyBuilder::new()
+                    .component_type(ComponentType::String)
+                    .format(Some(ComponentFormat::Date)),
+            )
+            .property("commitHash", Property::new(ComponentType::String))
+            .example(Some(serde_json::json!({
+                "buildDate": "2021-05-17", "commitHash": "16cd0881a79b6f03bb5f1f6ef2b2711e570b9865"
+            })))
+            .into()
+    }
+}
+
 /// Shows information about the server software version.
 ///
 /// # Example
@@ -332,17 +318,20 @@ pub(crate) fn configure_extractors(cfg: &mut web::ServiceConfig) {
 ///   "commitHash": "16cd0881a79b6f03bb5f1f6ef2b2711e570b9865"
 /// }
 /// ```
+#[utoipa::path(
+    get,
+    path = "/version",
+    responses(
+        (status = 200, description = "Server software information", body = VersionInfo,
+            example = json!({"buildDate": "2021-05-17", "commitHash": "16cd0881a79b6f03bb5f1f6ef2b2711e570b9865"}))
+    )
+)]
 #[allow(clippy::unused_async)] // the function signature of request handlers requires it
 pub(crate) async fn show_version_handler() -> impl actix_web::Responder {
-    #[derive(serde::Serialize)]
-    #[serde(rename_all = "camelCase")]
-    struct VersionInfo<'a> {
-        build_date: Option<&'a str>,
-        commit_hash: Option<&'a str>,
-    }
-    web::Json(&VersionInfo {
-        build_date: option_env!("VERGEN_BUILD_DATE"),
-        commit_hash: option_env!("VERGEN_GIT_SHA"),
+    use std::string::ToString;
+    web::Json(VersionInfo {
+        build_date: option_env!("VERGEN_BUILD_DATE").map(ToString::to_string),
+        commit_hash: option_env!("VERGEN_GIT_SHA").map(ToString::to_string),
     })
 }
 

@@ -37,6 +37,13 @@ macro_rules! identifier {
             }
         }
 
+        impl utoipa::Component for $id_name {
+            fn component() -> utoipa::openapi::Component {
+                use utoipa::openapi::*;
+                Property::new(ComponentType::String).into()
+            }
+        }
+
         #[cfg(feature = "postgres")]
         impl<'a> postgres_types::FromSql<'a> for $id_name {
             fn from_sql(

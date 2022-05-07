@@ -38,6 +38,27 @@ pub struct SpatialPartition2D {
     lower_right_coordinate: Coordinate2D,
 }
 
+impl utoipa::Component for SpatialPartition2D {
+    fn component() -> utoipa::openapi::Component {
+        use utoipa::openapi::*;
+        ObjectBuilder::new().
+            property(
+                "upperLeftCoordinate",
+                Ref::from_component_name("Coordinate2D")
+            )
+            .required("upperLeftCoordinate")
+            .property(
+                "lowerRightCoordinate",
+                Ref::from_component_name("Coordinate2D")
+            )
+            .required("lowerRightCoordinate")
+            .description(Some(
+                "A partition of space that include the upper left but excludes the lower right coordinate"
+            ))
+            .into()
+    }
+}
+
 impl SpatialPartition2D {
     pub fn new(
         upper_left_coordinate: Coordinate2D,
