@@ -4,7 +4,7 @@ use std::fmt;
 use std::str::FromStr;
 use utoipa::Component;
 
-#[derive(Clone, Debug, PartialEq, Eq, Deserialize, Serialize, Component)]
+#[derive(Clone, Debug, PartialEq, Eq, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase", tag = "type")]
 pub enum Measurement {
     Unitless,
