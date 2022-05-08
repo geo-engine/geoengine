@@ -74,8 +74,8 @@ typetag = "0.1"
 url = { version = "2.2", features = ["serde"] }
 uuid = { version = "0.8", features = ["serde", "v4", "v5"] }
 zip = "0.6"
-utoipa = { version = "0.1.1", features = ["actix_extras"] }
-utoipa-swagger-ui = { version = "0.2.0", features = ["actix-web"] }
+utoipa = { version = "0.2.0", features = ["actix_extras"] }
+utoipa-swagger-ui = { version = "0.3.0", features = ["actix-web"] }
 
 [dev-dependencies]
 httptest = "0.15.2"

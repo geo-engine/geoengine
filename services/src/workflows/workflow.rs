@@ -1,5 +1,4 @@
 use serde::{Deserialize, Serialize};
-use utoipa::openapi::Component;
 use uuid::Uuid;
 
 use geoengine_datatypes::identifier;
