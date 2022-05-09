@@ -2,7 +2,6 @@ use serde::{Deserialize, Serialize};
 use std::collections::{BTreeMap, HashMap};
 use std::fmt;
 use std::str::FromStr;
-use utoipa::Component;
 
 #[derive(Clone, Debug, PartialEq, Eq, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase", tag = "type")]
@@ -10,6 +9,39 @@ pub enum Measurement {
     Unitless,
     Continuous(ContinuousMeasurement),
     Classification(ClassificationMeasurement),
+}
+
+impl utoipa::Component for Measurement {
+    // TODO: set discriminator once utoipa supports it
+    fn component() -> utoipa::openapi::Component {
+        use utoipa::openapi::*;
+        OneOfBuilder::new()
+            .item(
+                // Unitless
+                ObjectBuilder::new()
+                    .property("type", Property::new(ComponentType::String))
+                    .required("type"),
+            )
+            .item(
+                // Continuous
+                ObjectBuilder::new()
+                    .property("type", Property::new(ComponentType::String))
+                    .required("type")
+                    .property("measurement", Property::new(ComponentType::String))
+                    .required("measurement")
+                    .property("unit", Property::new(ComponentType::String)),
+            )
+            .item(
+                // Classification
+                ObjectBuilder::new()
+                    .property("type", Property::new(ComponentType::String))
+                    .required("type")
+                    .property("measurement", Property::new(ComponentType::String))
+                    .required("measurement")
+                    .property("classes", Property::new(ComponentType::Object)),
+            )
+            .into()
+    }
 }
 
 impl Measurement {
@@ -25,13 +57,13 @@ impl Measurement {
     }
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, Deserialize, Serialize, Component)]
+#[derive(Clone, Debug, PartialEq, Eq, Deserialize, Serialize)]
 pub struct ContinuousMeasurement {
     pub measurement: String,
     pub unit: Option<String>,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, Deserialize, Serialize, Component)]
+#[derive(Clone, Debug, PartialEq, Eq, Deserialize, Serialize)]
 #[serde(
     try_from = "SerializableClassificationMeasurement",
     into = "SerializableClassificationMeasurement"

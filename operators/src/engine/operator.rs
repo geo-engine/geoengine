@@ -202,6 +202,7 @@ impl utoipa::Component for TypedOperator {
             .example(Some(serde_json::json!({
                 "type": "Vector", "operator": {"type": "MockPointSource", "params": {"points": [{"x": 0.0, "y": 0.1}, {"x": 1.0, "y": 1.1}]}}
             })))
+            .description(Some("An enum to differentiate between `Operator` variants"))
             .into()
     }
 }

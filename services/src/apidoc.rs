@@ -8,8 +8,8 @@ use crate::workflows::workflow::{Workflow, WorkflowId};
 use geoengine_datatypes::collections::VectorDataType;
 use geoengine_datatypes::dataset::DatasetId;
 use geoengine_datatypes::primitives::{
-    Coordinate2D, RasterQueryRectangle, SpatialPartition2D, SpatialResolution, TimeInstance,
-    TimeInterval,
+    Coordinate2D, Measurement, RasterQueryRectangle, SpatialPartition2D, SpatialResolution,
+    TimeInstance, TimeInterval,
 };
 use geoengine_datatypes::raster::RasterDataType;
 use geoengine_datatypes::spatial_reference::SpatialReferenceOption;
@@ -43,6 +43,7 @@ use utoipa::{Modify, OpenApi};
         SpatialPartition2D,
         SpatialResolution,
         SpatialReferenceOption,
+        Measurement,
 
         PlotResultDescriptor,
         RasterResultDescriptor,
