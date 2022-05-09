@@ -257,21 +257,25 @@ async fn get_workflow_metadata_handler<C: Context>(
 /// Response:
 /// ```text
 /// [{
-///   "id": {
+///   "dataset": {
 ///     "type": "internal",
 ///     "datasetId": "846a823a-6859-4b94-ab0a-c1de80f593d8"
 ///   },
-///   "citation": "Author, Dataset Tile",
-///   "license": "Some license",
-///   "uri": "http://example.org/"
+///   "provenance": {
+///     "citation": "Author, Dataset Tile",
+///     "license": "Some license",
+///     "uri": "http://example.org/"
+///   }
 /// }, {
-///   "id": {
+///   "dataset": {
 ///     "type": "internal",
 ///     "datasetId": "453cd398-f271-437b-9c3d-7f42213ea30a"
 ///   },
-///   "citation": "Another Author, Another Dataset Tile",
-///   "license": "Some other license",
-///   "uri": "http://example.org/"
+///   "provenance": {
+///     "citation": "Another Author, Another Dataset Tile",
+///     "license": "Some other license",
+///     "uri": "http://example.org/"
+///   }
 /// }]
 /// ```
 #[utoipa::path(
@@ -279,7 +283,7 @@ async fn get_workflow_metadata_handler<C: Context>(
     path = "/workflow/{id}/provenance",
     responses(
         (status = 200, description = "Provenance of used datasets", body = [ProvenanceOutput],
-            example = json!([{"id": {"type": "internal", "datasetId": "846a823a-6859-4b94-ab0a-c1de80f593d8"}, "citation": "Author, Dataset Tile", "license": "Some license", "uri": "http://example.org/"}, {"id": {"type": "internal", "datasetId": "453cd398-f271-437b-9c3d-7f42213ea30a"}, "citation": "Another Author, Another Dataset Tile", "license": "Some other license", "uri": "http://example.org/"}])
+            example = json!([{"dataset": {"type": "internal", "datasetId": "846a823a-6859-4b94-ab0a-c1de80f593d8"}, "provenance": {"citation": "Author, Dataset Tile", "license": "Some license", "uri": "http://example.org/"}}, {"dataset": {"type": "internal", "datasetId": "453cd398-f271-437b-9c3d-7f42213ea30a"}, "provenance": {"citation": "Another Author, Another Dataset Tile", "license": "Some other license", "uri": "http://example.org/"}}])
         )
     ),
     params(
