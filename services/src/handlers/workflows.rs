@@ -197,6 +197,7 @@ async fn load_workflow_handler<C: Context>(
 /// Response:
 /// ```text
 /// {
+///   "type": "vector",
 ///   "dataType": "MultiPoint",
 ///   "spatialReference": "EPSG:4326",
 ///   "columns": {}

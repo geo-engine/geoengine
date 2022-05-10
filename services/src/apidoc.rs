@@ -13,10 +13,7 @@ use geoengine_datatypes::primitives::{
 };
 use geoengine_datatypes::raster::RasterDataType;
 use geoengine_datatypes::spatial_reference::SpatialReferenceOption;
-use geoengine_operators::engine::{
-    PlotResultDescriptor, RasterResultDescriptor, TypedOperator, TypedResultDescriptor,
-    VectorResultDescriptor,
-};
+use geoengine_operators::engine::{TypedOperator, TypedResultDescriptor};
 use utoipa::openapi::security::{HttpAuthScheme, HttpBuilder, SecurityScheme};
 use utoipa::{Modify, OpenApi};
 
@@ -44,10 +41,6 @@ use utoipa::{Modify, OpenApi};
         SpatialResolution,
         SpatialReferenceOption,
         Measurement,
-
-        PlotResultDescriptor,
-        RasterResultDescriptor,
-        VectorResultDescriptor,
 
         ProvenanceOutput,
         Provenance,

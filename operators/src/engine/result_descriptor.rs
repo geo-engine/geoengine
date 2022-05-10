@@ -5,7 +5,6 @@ use geoengine_datatypes::{
 };
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
-use utoipa::Component;
 
 /// A descriptor that contains information about the query result, for instance, the data type
 /// and spatial reference.
@@ -48,30 +47,6 @@ pub struct RasterResultDescriptor {
     pub spatial_reference: SpatialReferenceOption,
     pub measurement: Measurement,
     pub no_data_value: Option<f64>,
-}
-
-impl utoipa::Component for RasterResultDescriptor {
-    fn component() -> utoipa::openapi::Component {
-        use utoipa::openapi::*;
-        ObjectBuilder::new()
-            .property("dataType", Ref::from_component_name("RasterDataType"))
-            .required("dataType")
-            .property(
-                "spatialReference",
-                Ref::from_component_name("SpatialReferenceOption"),
-            )
-            .required("spatialReference")
-            .property("measurement", Ref::from_component_name("Measurement"))
-            .required("measurement")
-            .property(
-                "noDataValue",
-                PropertyBuilder::new()
-                    .component_type(ComponentType::Number)
-                    .format(Some(ComponentFormat::Float)),
-            )
-            .description(Some("A `ResultDescriptor` for raster queries"))
-            .into()
-    }
 }
 
 impl ResultDescriptor for RasterResultDescriptor {
@@ -121,24 +96,6 @@ pub struct VectorResultDescriptor {
     pub data_type: VectorDataType,
     pub spatial_reference: SpatialReferenceOption,
     pub columns: HashMap<String, FeatureDataType>,
-}
-
-impl utoipa::Component for VectorResultDescriptor {
-    fn component() -> utoipa::openapi::Component {
-        use utoipa::openapi::*;
-        ObjectBuilder::new()
-            .property("dataType", Ref::from_component_name("VectorDataType"))
-            .required("dataType")
-            .property(
-                "spatialReference",
-                Ref::from_component_name("SpatialReferenceOption"),
-            )
-            .required("spatialReference")
-            .property("columns", ObjectBuilder::new())
-            .required("columns")
-            .description(Some("A `ResultDescriptor` for vector queries"))
-            .into()
-    }
 }
 
 impl VectorResultDescriptor {
@@ -197,20 +154,6 @@ pub struct PlotResultDescriptor {
     pub spatial_reference: SpatialReferenceOption,
 }
 
-impl utoipa::Component for PlotResultDescriptor {
-    fn component() -> utoipa::openapi::Component {
-        use utoipa::openapi::*;
-        ObjectBuilder::new()
-            .property(
-                "spatialReference",
-                Ref::from_component_name("SpatialReferenceOption"),
-            )
-            .required("spatialReference")
-            .description(Some("A `ResultDescriptor` for plot queries"))
-            .into()
-    }
-}
-
 impl ResultDescriptor for PlotResultDescriptor {
     type DataType = (); // TODO: maybe distinguish between image, interactive plot, etc.
 
@@ -235,13 +178,71 @@ impl ResultDescriptor for PlotResultDescriptor {
     }
 }
 
-// TODO: set discriminator once utoipa supports it
-#[derive(Debug, Serialize, Deserialize, Clone, PartialEq, Component)]
+#[derive(Debug, Serialize, Deserialize, Clone, PartialEq)]
 #[serde(rename_all = "camelCase", tag = "type")]
 pub enum TypedResultDescriptor {
     Plot(PlotResultDescriptor),
     Raster(RasterResultDescriptor),
     Vector(VectorResultDescriptor),
+}
+
+impl utoipa::Component for TypedResultDescriptor {
+    // TODO: set discriminator once utoipa supports it
+    fn component() -> utoipa::openapi::Component {
+        use utoipa::openapi::*;
+        OneOfBuilder::new()
+            .item(
+                // plot
+                ObjectBuilder::new()
+                    .property("type", Property::new(ComponentType::String))
+                    .required("type")
+                    .property(
+                        "spatialReference",
+                        Ref::from_component_name("SpatialReferenceOption"),
+                    )
+                    .required("spatialReference")
+                    .description(Some("A `ResultDescriptor` for plot queries")),
+            )
+            .item(
+                // raster
+                ObjectBuilder::new()
+                    .property("type", Property::new(ComponentType::String))
+                    .required("type")
+                    .property("dataType", Ref::from_component_name("RasterDataType"))
+                    .required("dataType")
+                    .property(
+                        "spatialReference",
+                        Ref::from_component_name("SpatialReferenceOption"),
+                    )
+                    .required("spatialReference")
+                    .property("measurement", Ref::from_component_name("Measurement"))
+                    .required("measurement")
+                    .property(
+                        "noDataValue",
+                        PropertyBuilder::new()
+                            .component_type(ComponentType::Number)
+                            .format(Some(ComponentFormat::Float)),
+                    )
+                    .description(Some("A `ResultDescriptor` for raster queries")),
+            )
+            .item(
+                // vector
+                ObjectBuilder::new()
+                    .property("type", Property::new(ComponentType::String))
+                    .required("type")
+                    .property("dataType", Ref::from_component_name("VectorDataType"))
+                    .required("dataType")
+                    .property(
+                        "spatialReference",
+                        Ref::from_component_name("SpatialReferenceOption"),
+                    )
+                    .required("spatialReference")
+                    .property("columns", ObjectBuilder::new())
+                    .required("columns")
+                    .description(Some("A `ResultDescriptor` for vector queries")),
+            )
+            .into()
+    }
 }
 
 impl From<PlotResultDescriptor> for TypedResultDescriptor {

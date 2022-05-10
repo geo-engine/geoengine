@@ -191,11 +191,11 @@ impl utoipa::Component for TypedOperator {
                     .required("type")
                     .property(
                         "params",
-                        Object::new()
+                        Property::new(ComponentType::Object)
                     )
                     .property(
                         "sources",
-                        Object::new()
+                        Property::new(ComponentType::Object)
                     )
             )
             .required("operator")
