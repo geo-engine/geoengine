@@ -9,9 +9,9 @@ use std::fmt;
 use std::fmt::{Display, Formatter};
 
 /// This scruct stores metadata about a raster tile.
-/// The metadata is stored in a HashMap except for the `scale`, `offset` and `band_name` properties.
+/// The metadata is stored in a `HashMap` except for the `scale`, `offset` and `band_name` properties.
 /// The `scale` and `offset` properties used to indicate the values the data is scaled with.
-/// Scale and unscale are used in the way 'gdal_transle' does. See https://gdal.org/programs/gdal_translate.html for more information.
+/// Scale and unscale are used in the way `gdal_translate` does. See <https://gdal.org/programs/gdal_translate.html> for more information.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Default)]
 pub struct RasterProperties {
     pub scale: Option<f64>,
