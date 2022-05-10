@@ -740,7 +740,7 @@ mod tests {
         ];
         let time_placeholders = hashmap! {
             "%TIME%".to_string() => GdalSourceTimePlaceholder {
-                format: "%f".to_string(),
+                format: DateTimeParseFormat::custom("%f".to_string()),
                 reference: TimeReference::Start,
             },
         };
@@ -859,7 +859,7 @@ mod tests {
         ];
         let time_placeholders = hashmap! {
             "%TIME%".to_string() => GdalSourceTimePlaceholder {
-                format: "%f".to_string(),
+                format: DateTimeParseFormat::custom("%f".to_string()),
                 reference: TimeReference::Start,
             },
         };
@@ -969,7 +969,7 @@ mod tests {
         let time_steps = vec![];
         let time_placeholders = hashmap! {
             "%TIME%".to_string() => GdalSourceTimePlaceholder {
-                format: "%f".to_string(),
+                format: DateTimeParseFormat::custom("%f".to_string()),
                 reference: TimeReference::Start,
             },
         };

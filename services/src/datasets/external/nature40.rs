@@ -14,12 +14,13 @@ use crate::{
     util::user_input::Validated,
 };
 use async_trait::async_trait;
-use chrono::NaiveDateTime;
 use futures::future::join_all;
 use gdal::DatasetOptions;
 use gdal::Metadata;
 use geoengine_datatypes::dataset::{DatasetId, DatasetProviderId, ExternalDatasetId};
-use geoengine_datatypes::primitives::{RasterQueryRectangle, VectorQueryRectangle};
+use geoengine_datatypes::primitives::{
+    DateTimeParseFormat, RasterQueryRectangle, VectorQueryRectangle,
+};
 use geoengine_operators::engine::TypedResultDescriptor;
 use geoengine_operators::source::{
     GdalMetaDataStatic, GdalMetadataFixedTimes, GdalSourceTimePlaceholder, TimeReference,
@@ -40,7 +41,7 @@ use serde::{Deserialize, Serialize};
 use snafu::ResultExt;
 
 use geoengine_datatypes::hashmap;
-use geoengine_datatypes::primitives::{TimeInstance, TimeInterval};
+use geoengine_datatypes::primitives::{DateTime, TimeInstance, TimeInterval};
 use url::Url;
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -343,6 +344,7 @@ impl Nature40DataProvider {
 impl MetaDataProvider<GdalLoadingInfo, RasterResultDescriptor, RasterQueryRectangle>
     for Nature40DataProvider
 {
+    #[allow(clippy::too_many_lines)]
     async fn meta_data(
         &self,
         dataset: &DatasetId,
@@ -411,14 +413,19 @@ impl MetaDataProvider<GdalLoadingInfo, RasterResultDescriptor, RasterQueryRectan
                 )?,
             }))
         } else {
+            let format = DateTimeParseFormat::custom("%Y-%m-%dT%H:%M".to_string());
+
             let time_steps = time_positions
                 .iter()
                 .map(|time_position| {
-                    NaiveDateTime::parse_from_str(time_position, "%Y-%m-%dT%H:%M")
-                        .map_err(|e| geoengine_operators::error::Error::TimeParse { source: e })
+                    DateTime::parse_from_str(time_position, &format).map_err(|e| {
+                        geoengine_operators::error::Error::TimeParse {
+                            source: Box::new(e),
+                        }
+                    })
                 })
                 .map(
-                    |date_time: Result<NaiveDateTime, geoengine_operators::error::Error>| {
+                    |date_time: Result<DateTime, geoengine_operators::error::Error>| {
                         let time_instance = TimeInstance::from(date_time?);
                         Ok(time_instance)
                     },
@@ -451,7 +458,7 @@ impl MetaDataProvider<GdalLoadingInfo, RasterResultDescriptor, RasterQueryRectan
                 raster_descriptor_from_dataset(&dataset, band_index as isize, None)?,
                 hashmap! {
                     "%TIME%".to_string() => GdalSourceTimePlaceholder {
-                        format: "%Y-%m-%dT%H:%M".to_string(),
+                        format,
                         reference: TimeReference::Start,
                     },
                 },
@@ -1233,6 +1240,8 @@ mod tests {
             }
         );
 
+        let format = DateTimeParseFormat::custom("%Y-%m-%dT%H:%M".to_string());
+
         let loading_info = meta
             .loading_info(QueryRectangle {
                 spatial_bounds: SpatialPartition2D::new_unchecked(
@@ -1241,12 +1250,10 @@ mod tests {
                 ),
                 time_interval: TimeInterval::new_unchecked(
                     TimeInstance::from(
-                        NaiveDateTime::parse_from_str("2020-09-01T00:00", "%Y-%m-%dT%H:%M")
-                            .unwrap(),
+                        DateTime::parse_from_str("2020-09-01T00:00", &format).unwrap(),
                     ),
                     TimeInstance::from(
-                        NaiveDateTime::parse_from_str("2020-09-10T00:00", "%Y-%m-%dT%H:%M")
-                            .unwrap(),
+                        DateTime::parse_from_str("2020-09-10T00:00", &format).unwrap(),
                     ),
                 ),
 
@@ -1266,12 +1273,10 @@ mod tests {
                 GdalLoadingInfoTemporalSlice {
                     time: TimeInterval::new_unchecked(
                         TimeInstance::from(
-                            NaiveDateTime::parse_from_str("2020-09-01T00:00", "%Y-%m-%dT%H:%M")
-                                .unwrap(),
+                            DateTime::parse_from_str("2020-09-01T00:00", &format).unwrap(),
                         ),
                         TimeInstance::from(
-                            NaiveDateTime::parse_from_str("2020-09-02T00:00", "%Y-%m-%dT%H:%M")
-                                .unwrap(),
+                            DateTime::parse_from_str("2020-09-02T00:00", &format).unwrap(),
                         ),
                     ),
 
@@ -1286,11 +1291,11 @@ mod tests {
                 GdalLoadingInfoTemporalSlice {
                     time: TimeInterval::new_unchecked(
                         TimeInstance::from(
-                            NaiveDateTime::parse_from_str("2020-09-02T00:00", "%Y-%m-%dT%H:%M")
+                            DateTime::parse_from_str("2020-09-02T00:00", &format)
                                 .unwrap(),
                         ),
                         TimeInstance::from(
-                            NaiveDateTime::parse_from_str("2020-09-02T00:00", "%Y-%m-%dT%H:%M")
+                            DateTime::parse_from_str("2020-09-02T00:00", &format)
                                 .unwrap(),
                         ),
                     ),
@@ -1320,12 +1325,10 @@ mod tests {
                 GdalLoadingInfoTemporalSlice {
                     time: TimeInterval::new_unchecked(
                         TimeInstance::from(
-                            NaiveDateTime::parse_from_str("2020-09-02T00:00", "%Y-%m-%dT%H:%M")
-                                .unwrap(),
+                            DateTime::parse_from_str("2020-09-02T00:00", &format).unwrap(),
                         ),
                         TimeInstance::from(
-                            NaiveDateTime::parse_from_str("2020-09-10T00:00", "%Y-%m-%dT%H:%M")
-                                .unwrap(),
+                            DateTime::parse_from_str("2020-09-10T00:00", &format).unwrap(),
                         ),
                     ),
 

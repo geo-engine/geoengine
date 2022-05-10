@@ -365,7 +365,7 @@ impl Sub<TimeStep> for TimeInstance {
     type Output = Result<TimeInstance>;
 
     fn sub(self, rhs: TimeStep) -> Self::Output {
-        let date_time = self.as_naive_date_time().ok_or(NoDateTimeValid {
+        let date_time = self.as_date_time().ok_or(Error::NoDateTimeValid {
             time_instance: self,
         })?;
 
@@ -376,26 +376,43 @@ impl Sub<TimeStep> for TimeInstance {
             TimeGranularity::Hours => date_time - Duration::hours(i64::from(rhs.step)),
             TimeGranularity::Days => date_time - Duration::days(i64::from(rhs.step)),
             TimeGranularity::Months => {
-                let (month, year) = match rhs.step.cmp(&date_time.month()) {
+                let (month, year) = match rhs.step.cmp(&u32::from(date_time.month())) {
                     Ordering::Greater => (
-                        date_time.month() - (rhs.step % 12),
+                        date_time.month() - (rhs.step % 12) as u8,
                         date_time.year() - (rhs.step / 12) as i32,
                     ),
-                    Ordering::Less => (date_time.month() - rhs.step, date_time.year()),
-                    Ordering::Equal => (date_time.month() + 12 - rhs.step, date_time.year() - 1),
+                    Ordering::Less => (date_time.month() - rhs.step as u8, date_time.year()),
+                    Ordering::Equal => (
+                        date_time.month() + 12 - rhs.step as u8,
+                        date_time.year() - 1,
+                    ),
                 };
                 let day = date_time.day();
-                NaiveDate::from_ymd_opt(year, month, day)
-                    .context(error::DateTimeOutOfBounds { year, month, day })?
-                    .and_time(date_time.time())
+                DateTime::new_utc_checked_with_millis(
+                    year,
+                    month as u8,
+                    day,
+                    date_time.hour(),
+                    date_time.minute(),
+                    date_time.second(),
+                    date_time.millisecond(),
+                )
+                .context(error::DateTimeOutOfBounds { year, month, day })?
             }
             TimeGranularity::Years => {
                 let year = date_time.year() - rhs.step as i32;
                 let month = date_time.month();
                 let day = date_time.day();
-                NaiveDate::from_ymd_opt(year, month, day)
-                    .context(error::DateTimeOutOfBounds { year, month, day })?
-                    .and_time(date_time.time())
+                DateTime::new_utc_checked_with_millis(
+                    year,
+                    month,
+                    day,
+                    date_time.hour(),
+                    date_time.minute(),
+                    date_time.second(),
+                    date_time.millisecond(),
+                )
+                .context(error::DateTimeOutOfBounds { year, month, day })?
             }
         };
 
@@ -568,11 +585,10 @@ mod tests {
     }
 
     fn test_sub(granularity: TimeGranularity, t_step: u32, t_1: &str, t_expect: &str) {
-        let t_1 =
-            TimeInstance::from(NaiveDateTime::parse_from_str(t_1, "%Y-%m-%dT%H:%M:%S%.f").unwrap());
-        let t_expect = TimeInstance::from(
-            NaiveDateTime::parse_from_str(t_expect, "%Y-%m-%dT%H:%M:%S%.f").unwrap(),
-        );
+        let format = DateTimeParseFormat::custom("%Y-%m-%dT%H:%M:%S%.3f".to_string());
+
+        let t_1 = TimeInstance::from(DateTime::parse_from_str(t_1, &format).unwrap());
+        let t_expect = TimeInstance::from(DateTime::parse_from_str(t_expect, &format).unwrap());
 
         let time_step = TimeStep {
             granularity,
