@@ -1,6 +1,7 @@
 mod circle_merging_quadtree;
 mod column_range_filter;
 mod expression;
+mod interpolation;
 mod map_query;
 mod meteosat;
 mod point_in_polygon;
