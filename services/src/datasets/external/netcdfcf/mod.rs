@@ -1170,8 +1170,10 @@ mod tests {
             overviews: test_data!("netcdf4d/overviews").to_path_buf(),
         };
 
-        let expected_files: Vec<PathBuf> = vec!["dataset_sm.nc".into(), "dataset_m.nc".into()];
+        let expected_files: Vec<PathBuf> = vec!["dataset_m.nc".into(), "dataset_sm.nc".into()];
+        let mut files = provider.list_files().unwrap();
+        files.sort();
 
-        assert_eq!(provider.list_files().unwrap(), expected_files);
+        assert_eq!(files, expected_files);
     }
 }
