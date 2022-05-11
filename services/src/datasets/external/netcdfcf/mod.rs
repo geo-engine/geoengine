@@ -760,6 +760,7 @@ mod tests {
         primitives::{SpatialPartition2D, SpatialResolution, TimeInterval},
         spatial_reference::SpatialReferenceAuthority,
         test_data,
+        util::gdal::hide_gdal_errors,
     };
     use geoengine_operators::source::{
         FileNotFoundHandling, GdalDatasetGeoTransform, GdalDatasetParameters,
@@ -1175,5 +1176,188 @@ mod tests {
         files.sort();
 
         assert_eq!(files, expected_files);
+    }
+
+    #[tokio::test]
+    async fn test_loading_info_from_index() {
+        hide_gdal_errors();
+
+        let overview_folder = tempfile::tempdir().unwrap();
+
+        let provider = NetCdfCfDataProvider {
+            path: test_data!("netcdf4d/").to_path_buf(),
+            overviews: overview_folder.path().to_path_buf(),
+        };
+
+        provider
+            .create_overviews(Path::new("dataset_sm.nc"))
+            .unwrap();
+
+        let metadata = provider
+            .meta_data(&DatasetId::External(ExternalDatasetId {
+                provider_id: NETCDF_CF_PROVIDER_ID,
+                dataset_id: serde_json::json!({
+                    "fileName": "dataset_sm.nc",
+                    "groupNames": ["scenario_5", "metric_2"],
+                    "entity": 1
+                })
+                .to_string(),
+            }))
+            .await
+            .unwrap();
+
+        assert_eq!(
+            metadata.result_descriptor().await.unwrap(),
+            RasterResultDescriptor {
+                data_type: RasterDataType::I16,
+                spatial_reference: SpatialReference::new(SpatialReferenceAuthority::Epsg, 3035)
+                    .into(),
+                measurement: Measurement::Unitless,
+                no_data_value: Some(-9999.),
+            }
+        );
+
+        let loading_info = metadata
+            .loading_info(RasterQueryRectangle {
+                spatial_bounds: SpatialPartition2D::new(
+                    (43.945_312_5, 0.791_015_625_25).into(),
+                    (44.033_203_125, 0.703_125_25).into(),
+                )
+                .unwrap(),
+                time_interval: TimeInstance::from(DateTime::new_utc(2001, 4, 1, 0, 0, 0)).into(),
+                spatial_resolution: SpatialResolution::new_unchecked(
+                    0.000_343_322_7, // 256 pixel
+                    0.000_343_322_7, // 256 pixel
+                ),
+            })
+            .await
+            .unwrap();
+
+        let mut loading_info_parts = Vec::<GdalLoadingInfoTemporalSlice>::new();
+        for part in loading_info.info {
+            loading_info_parts.push(part.unwrap());
+        }
+
+        assert_eq!(loading_info_parts.len(), 1);
+
+        let file_path = overview_folder
+            .path()
+            .join("dataset_sm.nc/scenario_5/metric_2/ebv_cube.tiff");
+
+        assert_eq!(
+            loading_info_parts[0],
+            GdalLoadingInfoTemporalSlice {
+                time: TimeInterval::new_unchecked(946_684_800_000, 1_262_304_000_000),
+                params: Some(GdalDatasetParameters {
+                    file_path,
+                    rasterband_channel: 4,
+                    geo_transform: GdalDatasetGeoTransform {
+                        origin_coordinate: (3_580_000.0, 2_370_000.0).into(),
+                        x_pixel_size: 1000.0,
+                        y_pixel_size: -1000.0,
+                    },
+                    width: 10,
+                    height: 10,
+                    file_not_found_handling: FileNotFoundHandling::Error,
+                    no_data_value: Some(-9999.),
+                    properties_mapping: None,
+                    gdal_open_options: None,
+                    gdal_config_options: None
+                })
+            }
+        );
+    }
+
+    #[tokio::test]
+    async fn test_listing_from_netcdf_sm_from_index() {
+        hide_gdal_errors();
+
+        let overview_folder = tempfile::tempdir().unwrap();
+
+        let provider = NetCdfCfDataProvider {
+            path: test_data!("netcdf4d/").to_path_buf(),
+            overviews: overview_folder.path().to_path_buf(),
+        };
+
+        provider
+            .create_overviews(Path::new("dataset_sm.nc"))
+            .unwrap();
+
+        let provider_id =
+            DatasetProviderId::from_str("bf6bb6ea-5d5d-467d-bad1-267bf3a54470").unwrap();
+
+        let listing = NetCdfCfDataProvider::listing_from_netcdf(
+            provider_id,
+            test_data!("netcdf4d"),
+            Some(overview_folder.path()),
+            Path::new("dataset_sm.nc"),
+        )
+        .unwrap();
+
+        assert_eq!(listing.len(), 20);
+
+        let result_descriptor: TypedResultDescriptor = RasterResultDescriptor {
+            data_type: RasterDataType::I16,
+            spatial_reference: SpatialReference::new(SpatialReferenceAuthority::Epsg, 3035).into(),
+            measurement: Measurement::Unitless,
+            no_data_value: None,
+        }
+        .into();
+
+        let symbology = Some(Symbology::Raster(RasterSymbology {
+            opacity: 1.0,
+            colorizer: Colorizer::LinearGradient {
+                breakpoints: vec![
+                    (0.0.try_into().unwrap(), RgbaColor::new(68, 1, 84, 255)).into(),
+                    (50.0.try_into().unwrap(), RgbaColor::new(33, 145, 140, 255)).into(),
+                    (100.0.try_into().unwrap(), RgbaColor::new(253, 231, 37, 255)).into(),
+                ],
+                no_data_color: RgbaColor::new(0, 0, 0, 0),
+                default_color: RgbaColor::new(0, 0, 0, 0),
+            },
+        }));
+
+        assert_eq!(
+            listing[0],
+            DatasetListing {
+                id: DatasetId::External(ExternalDatasetId {
+                    provider_id,
+                    dataset_id: serde_json::json!({
+                        "fileName": "dataset_sm.nc",
+                        "groupNames": ["scenario_1", "metric_1"],
+                        "entity": 0
+                    })
+                    .to_string(),
+                }),
+                name:
+                    "Test dataset metric and scenario: Sustainability > Random metric 1 > entity01"
+                        .into(),
+                description: "Fake description of test dataset with metric and scenario.".into(),
+                tags: vec![],
+                source_operator: "GdalSource".into(),
+                result_descriptor: result_descriptor.clone(),
+                symbology: symbology.clone(),
+            }
+        );
+        assert_eq!(
+            listing[19],
+            DatasetListing {
+                id: DatasetId::External(ExternalDatasetId {
+                    provider_id,
+                    dataset_id: serde_json::json!({
+                        "fileName": "dataset_sm.nc",
+                        "groupNames": ["scenario_5", "metric_2"],
+                        "entity": 1
+                    })
+                    .to_string(),
+                }),
+                name: "Test dataset metric and scenario: Fossil-fueled Development > Random metric 2 > entity02".into(),
+                description: "Fake description of test dataset with metric and scenario.".into(),
+                tags: vec![],
+                source_operator: "GdalSource".into(),
+                result_descriptor,
+                symbology,
+            }
+        );
     }
 }
