@@ -5,6 +5,7 @@
 use crate::datasets::external::netcdfcf::{NetCdfOverview, NETCDF_CF_PROVIDER_ID};
 use crate::datasets::listing::ExternalDatasetProvider;
 use crate::datasets::storage::DatasetProviderDb;
+use crate::error::BoxedResultExt;
 use crate::error::{ErrorSource, Result};
 use crate::{contexts::Context, datasets::external::netcdfcf::NetCdfCfDataProvider};
 use actix_web::{
@@ -113,6 +114,8 @@ pub enum EbvError {
     NoNetCdfCfProviderForId { id: DatasetProviderId },
     #[snafu(display("NetCdfCf provider with id {id} cannot list files"))]
     CdfCfProviderCannotListFiles { id: DatasetProviderId },
+    #[snafu(display("Internal server error"))]
+    Internal { source: Box<dyn ErrorSource> },
 }
 
 #[derive(Debug, Serialize)]
@@ -313,11 +316,15 @@ async fn netcdfcf_provider_path<C: Context>(
     .await
 }
 
-async fn with_netcdfcf_provider<C: Context, T>(
+async fn with_netcdfcf_provider<C: Context, T, F>(
     ctx: &C,
     session: &C::Session,
-    f: impl FnOnce(&NetCdfCfDataProvider) -> Result<T, EbvError>,
-) -> Result<T, EbvError> {
+    f: F,
+) -> Result<T, EbvError>
+where
+    T: Send + 'static,
+    F: FnOnce(&NetCdfCfDataProvider) -> Result<T, EbvError> + Send + 'static,
+{
     let provider: Box<dyn ExternalDatasetProvider> = ctx
         .dataset_db_ref()
         .dataset_provider(session, NETCDF_CF_PROVIDER_ID)
@@ -326,33 +333,34 @@ async fn with_netcdfcf_provider<C: Context, T>(
             id: NETCDF_CF_PROVIDER_ID,
         })?;
 
-    if let Some(concrete_provider) = provider.as_any().downcast_ref::<NetCdfCfDataProvider>() {
-        f(concrete_provider)
-    } else {
-        Err(EbvError::NoNetCdfCfProviderForId {
-            id: NETCDF_CF_PROVIDER_ID,
-        })
-    }
+    crate::util::spawn_blocking(move || {
+        if let Some(concrete_provider) = provider.as_any().downcast_ref::<NetCdfCfDataProvider>() {
+            f(concrete_provider)
+        } else {
+            Err(EbvError::NoNetCdfCfProviderForId {
+                id: NETCDF_CF_PROVIDER_ID,
+            })
+        }
+    })
+    .await
+    .boxed_context(error::Internal)?
 }
 
 #[derive(Debug, Serialize)]
 struct NetCdfCfOverviewResponse {
     success: Vec<PathBuf>,
     error: Vec<PathBuf>,
-    // skip: Vec<PathBuf>,
 }
 
+// TODO: add token auth
 async fn create_overviews<C: Context>(
     _base_url: web::Data<BaseUrl>,
     session: C::Session,
     ctx: web::Data<C>,
 ) -> Result<impl Responder> {
-    let response = with_netcdfcf_provider(ctx.as_ref(), &session, |provider| {
+    let response = with_netcdfcf_provider(ctx.as_ref(), &session, move |provider| {
         let mut success = vec![];
         let mut error = vec![];
-        // let mut skip = vec![];
-
-        // TODO: spawn task
 
         for file in provider
             .list_files()
@@ -369,11 +377,7 @@ async fn create_overviews<C: Context>(
             }
         }
 
-        Ok(NetCdfCfOverviewResponse {
-            success,
-            error,
-            // skip,
-        })
+        Result::<_, EbvError>::Ok(NetCdfCfOverviewResponse { success, error })
     })
     .await?;
 
