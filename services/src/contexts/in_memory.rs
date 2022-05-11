@@ -60,14 +60,20 @@ impl InMemoryContext {
         exe_ctx_tiling_spec: TilingSpecification,
         query_ctx_chunk_size: ChunkByteSize,
     ) -> Self {
-        let mut dataset_db = HashMapDatasetDb::default();
-        add_datasets_from_directory(&mut dataset_db, dataset_defs_path).await;
-        add_providers_from_directory(&mut dataset_db, provider_defs_path).await;
-
         let mut workflow_registry = HashMapRegistry::default();
         let mut layer_db = HashMapLayerDb::default();
         add_layers_from_directory(&mut layer_db, &mut workflow_registry, layer_defs_path).await;
         add_layer_collections_from_directory(&mut layer_db, layer_collection_defs_path).await;
+
+        let mut dataset_db = HashMapDatasetDb::default();
+        add_datasets_from_directory(
+            &mut dataset_db,
+            &mut layer_db,
+            &mut workflow_registry,
+            dataset_defs_path,
+        )
+        .await;
+        add_providers_from_directory(&mut dataset_db, provider_defs_path).await;
 
         Self {
             project_db: Default::default(),
