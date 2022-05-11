@@ -1,7 +1,7 @@
 use crate::error;
 use crate::raster::{
-    ChangeGridBounds, GeoTransformAccess, GridBlit, GridIdx2D, GridSize, MaterializedRasterTile2D,
-    Pixel, RasterTile2D,
+    ChangeGridBounds, GeoTransformAccess, GridBlit, GridIdx2D, MaterializedRasterTile2D, Pixel,
+    RasterTile2D,
 };
 use crate::util::Result;
 use snafu::ensure;
