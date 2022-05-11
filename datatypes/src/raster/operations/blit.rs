@@ -4,6 +4,7 @@ use crate::raster::{
     RasterTile2D,
 };
 use crate::util::Result;
+
 use snafu::ensure;
 
 pub trait Blit<R> {
@@ -31,8 +32,8 @@ impl<T: Pixel> Blit<RasterTile2D<T>> for MaterializedRasterTile2D<T> {
 
         let offset = from_geo_transform.origin_coordinate - into_geo_transform.origin_coordinate;
 
-        let offset_x_pixels = (offset.x / into_geo_transform.x_pixel_size()).floor() as isize;
-        let offset_y_pixels = (offset.y / into_geo_transform.y_pixel_size()).floor() as isize;
+        let offset_x_pixels = (offset.x / into_geo_transform.x_pixel_size()).round() as isize;
+        let offset_y_pixels = (offset.y / into_geo_transform.y_pixel_size()).round() as isize;
 
         /*
         ensure!(
@@ -48,7 +49,6 @@ impl<T: Pixel> Blit<RasterTile2D<T>> for MaterializedRasterTile2D<T> {
 
         let tile_offset_pixels = source.tile_information().global_upper_left_pixel_idx()
             - self.tile_information().global_upper_left_pixel_idx();
-
         let global_offset_pixels = origin_offset_pixels + tile_offset_pixels;
 
         let shifted_source = source.grid_array.shift_by_offset(global_offset_pixels);
