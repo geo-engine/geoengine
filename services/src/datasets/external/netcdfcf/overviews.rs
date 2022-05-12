@@ -310,7 +310,6 @@ fn generate_loading_info(
 ) -> Result<GdalMetadataNetCdfCf> {
     const SAMPLE_BAND: usize = 1;
 
-    // TODO: get measurement from NetCdf
     let result_descriptor = raster_descriptor_from_dataset(dataset, 1, None)
         .boxed_context(error::CannotGenerateLoadingInfo)?;
 

@@ -345,8 +345,9 @@ impl NetCdfCfDataProvider {
         Ok(listings)
     }
 
-    async fn meta_data(
-        &self,
+    fn meta_data(
+        path: &Path,
+        overviews: &Path,
         dataset: &DatasetId,
     ) -> Result<Box<dyn MetaData<GdalLoadingInfo, RasterResultDescriptor, RasterQueryRectangle>>>
     {
@@ -360,28 +361,26 @@ impl NetCdfCfDataProvider {
         let dataset_id: NetCdfCf4DDatasetId =
             serde_json::from_str(&dataset.dataset_id).context(error::CannotParseDatasetId)?;
 
-        let path = self.path.join(&dataset_id.file_name);
+        // try to load from overviews
+        if let Some(loading_info) = Self::meta_data_from_overviews(overviews, &dataset_id) {
+            return Ok(Box::new(loading_info));
+        }
+
+        let dataset_id: NetCdfCf4DDatasetId =
+            serde_json::from_str(&dataset.dataset_id).context(error::CannotParseDatasetId)?;
+
+        let path = path.join(&dataset_id.file_name);
 
         // check that file does not "escape" the provider path
-        if let Err(source) = path.strip_prefix(self.path.as_path()) {
+        if let Err(source) = path.strip_prefix(&path) {
             return Err(NetCdfCf4DProviderError::DatasetIsNotInProviderPath { source });
         }
 
-        // TODO: read all params from overviews if possible
         let group_path = dataset_id.group_names.join("/");
-        let overview_file = self
-            .overviews
-            .join(&dataset_id.file_name)
-            .join(&group_path)
-            .join("ebv_cube.tiff");
-        let gdal_path = if overview_file.exists() {
-            overview_file.to_string_lossy().to_string()
-        } else {
-            format!(
-                "NETCDF:{path}:/{group_path}/ebv_cube",
-                path = path.to_string_lossy()
-            )
-        };
+        let gdal_path = format!(
+            "NETCDF:{path}:/{group_path}/ebv_cube",
+            path = path.to_string_lossy()
+        );
 
         let dataset = gdal_open_dataset_ex(
             &path,
@@ -465,6 +464,31 @@ impl NetCdfCfDataProvider {
             step,
             band_offset: dataset_id.entity as usize * dimensions.time,
         }))
+    }
+
+    fn meta_data_from_overviews(
+        overview_path: &Path,
+        dataset_id: &NetCdfCf4DDatasetId,
+    ) -> Option<GdalMetadataNetCdfCf> {
+        let loading_info_path = overview_path
+            .join(&dataset_id.file_name)
+            .join(&dataset_id.group_names.join("/"))
+            .join("ebv_cube.json");
+
+        let loading_info_file = std::fs::File::open(&loading_info_path).ok()?;
+        let mut loading_info: GdalMetadataNetCdfCf =
+            serde_json::from_reader(BufReader::new(loading_info_file)).ok()?;
+
+        // it is 1 + … because we have one step when start == end
+        let time_steps_per_entity = 1 + loading_info
+            .step
+            .num_steps_in_interval(TimeInterval::new(loading_info.start, loading_info.end).ok()?)
+            .ok()?;
+
+        // change start band wrt. entity
+        loading_info.band_offset = dataset_id.entity * time_steps_per_entity as usize;
+
+        Some(loading_info)
     }
 
     pub fn list_files(&self) -> Result<Vec<PathBuf>> {
@@ -708,12 +732,17 @@ impl MetaDataProvider<GdalLoadingInfo, RasterResultDescriptor, RasterQueryRectan
         Box<dyn MetaData<GdalLoadingInfo, RasterResultDescriptor, RasterQueryRectangle>>,
         geoengine_operators::error::Error,
     > {
-        // TODO spawn blocking
-        self.meta_data(dataset).await.map_err(|error| {
-            geoengine_operators::error::Error::LoadingInfo {
-                source: Box::new(error),
-            }
+        let dataset = dataset.clone();
+        let path = self.path.clone();
+        let overviews = self.overviews.clone();
+        crate::util::spawn_blocking(move || {
+            Self::meta_data(&path, &overviews, &dataset).map_err(|error| {
+                geoengine_operators::error::Error::LoadingInfo {
+                    source: Box::new(error),
+                }
+            })
         })
+        .await?
     }
 }
 
