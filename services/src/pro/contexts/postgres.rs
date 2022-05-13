@@ -229,8 +229,8 @@ where
                         );
                         
                         CREATE TYPE "TimeGranularity" AS ENUM (
-                            'millis', 'seconds', 'minutes', 'hours',
-                            'days',  'months', 'years'
+                            'Millis', 'Seconds', 'Minutes', 'Hours',
+                            'Days',  'Months', 'Years'
                         );
                         
                         CREATE TYPE "TimeStep" AS (
