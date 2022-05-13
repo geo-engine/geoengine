@@ -8,7 +8,7 @@ use rand::prelude::*;
 use core::pin::Pin;
 use std::time::{Instant};
 use pyo3::{Python, GILGuard, types::{PyModule, PyUnicode}};
-use ndarray::{ArrayBase, OwnedRepr, Dim};
+use ndarray::{ArrayBase, Array2, OwnedRepr, Dim};
 use std::marker::PhantomData;
 use numpy::PyArray;
 use crate::engine::{RasterQueryProcessor, QueryContext};
@@ -18,18 +18,18 @@ use crate::error::Error;
 
 
 ///Python session, which keeps a GIL guard. Creates an intiated training session.
-pub struct PythonTrainingSession<T> {
+pub struct PythonTrainingSession<T: Send + Sync> {
     gil_guard: GILGuard,
     phantom_data: PhantomData<T>,
 }
 ///Initialized session can be used to perform all training related tasks. Can load any python file as module. File MUST have methods for intializing model(initUnet), loading model(load), training(train), prediction(pred) and saving(save).
-pub struct InitializedPythonTrainingSession<'a, T> {
+pub struct InitializedPythonTrainingSession<'a, T: Send + Sync> {
     py: Python<'a>,
     py_mod: Option<&'a PyModule>,
     phantom_data: PhantomData<T>,
 }
 
-impl<'a, T> PythonTrainingSession<T> where T: numpy::Element {
+impl<'a, T> PythonTrainingSession<T> where T: numpy::Element + Send + Sync{
     pub fn new() -> Self {
         pyo3::prepare_freethreaded_python();
         PythonTrainingSession {
@@ -51,7 +51,7 @@ impl<'a, T> PythonTrainingSession<T> where T: numpy::Element {
 
 }
 
-impl<'a, T> InitializedPythonTrainingSession<'a, T> where T: numpy::Element {
+impl<'a, T> InitializedPythonTrainingSession<'a, T> where T: numpy::Element + Send + Sync{
 
     pub fn load_module(&mut self, module_name: &'static str) -> () {
         self.py_mod = Some(PyModule::from_code(self.py, module_name,"filename.py", "modulename").unwrap());
@@ -103,33 +103,28 @@ impl<'a, T> InitializedPythonTrainingSession<'a, T> where T: numpy::Element {
 }
 
 ///Can be used to query batches for training
-pub struct TrainingDataGenerator<T, C: QueryContext> {
-    processors: Vec<Box<dyn RasterQueryProcessor<RasterType=T>>>,
-    ground_truth: Box<dyn RasterQueryProcessor<RasterType=u8>>,
+pub struct TrainingDataGenerator<'a, T, C: 'a + QueryContext> {
+    processors: Vec<Box<dyn RasterQueryProcessor<RasterType=T> + 'a>>,
+    ground_truth: Box<dyn RasterQueryProcessor<RasterType=u8> + 'a>,
     query_ctx: C,
-    shuffle: bool,
     queries: Vec<QueryRectangle<SpatialPartition2D>>,
-    current_query_stream: Option<Pin<Box<dyn Stream<Item = Option<(Vec<Vec<T,>,>, Vec<u8,>)>>,>>>,
+    current_query_stream: Option<Pin<Box<dyn Stream<Item = Option<(Vec<Vec<T,>,>, Vec<u8,>)>> + 'a>>>,
     batch_size: usize,
-    tile_size: [usize;2],
-    no_data_value: u8,
-    default_value: T,
     rng: ThreadRng,
 }
 
-impl<T: Pixel, C: QueryContext> TrainingDataGenerator<T, C> {
-    pub fn new(processors: Vec<Box<dyn RasterQueryProcessor<RasterType=T>>>,
-               ground_truth: Box<dyn RasterQueryProcessor<RasterType=u8>>, 
+impl<'a, T: 'a + Pixel, C: 'a + QueryContext> TrainingDataGenerator<'a, T, C> {
+    pub fn new(processors: Vec<Box<dyn RasterQueryProcessor<RasterType=T> + 'a>>,
+               ground_truth: Box<dyn RasterQueryProcessor<RasterType=u8> + 'a>, 
                query_rect: QueryRectangle<SpatialPartition2D>,
                query_ctx: C,
                shuffle: bool,
                time_step: TimeStep,
                batch_size: usize,
-               batches_per_query: usize,
-               tile_size: [usize;2],
-               no_data_value: u8,
-               default_value: T,) -> Self {
+               batches_per_query: usize) -> Self {
+
                    let mut step: usize = 0;
+
                    match time_step.granularity {
                        TimeGranularity::Millis => {
                            step = 1 * time_step.step as usize * batch_size * batches_per_query;
@@ -164,52 +159,32 @@ impl<T: Pixel, C: QueryContext> TrainingDataGenerator<T, C> {
                        processors: processors,
                        ground_truth: ground_truth,
                        query_ctx: query_ctx,
-                       shuffle: shuffle,
                        queries: queries,
                        current_query_stream: None,
                        batch_size: batch_size,
-                       tile_size: tile_size,
-                       no_data_value: no_data_value,
-                       default_value: default_value,
                        rng: rand::thread_rng(),
                    }
 
                }
 
-    pub async fn next_batch(&'static mut self) -> Option<((Vec<Vec<Vec<T>>>, Vec<Vec<u8>>))> {
-        let mut batch_processors: Vec<Vec<Vec<T>>> = Vec::new();
-        let mut batch_truth: Vec<Vec<u8>> = Vec::new();
-        //Nothing has been queried yet
-        if self.current_query_stream.is_none() {
-            let random_index = get_random_index(&self.queries, &mut self.rng);
-            let the_chosen_one = self.queries.remove(random_index);
-            self.current_query_stream = Some(perform_query_on_training_data(&self.processors, &self.ground_truth, the_chosen_one, &self.query_ctx).await.unwrap());
+    pub fn boxed(self) -> Box<Self>
+    where
+        Self: Sized + 'a,
+        {
+            Box::new(self)
         }
 
-        if self.current_query_stream.is_some() {
+    
+
+    // pub async fn stream(&'a mut self, query_rect: QueryRectangle<SpatialPartition2D>) -> Result<Pin<Box<dyn Stream<Item = Option<(Vec<Vec<T>>, Vec<u8>)>> + 'a>>, Error> {
+        
+    //     return perform_query_on_training_data(&mut self.processors, &mut self.ground_truth, query_rect, &self.query_ctx).await;
+    //     // return Box::pin(futures::stream::unfold((), |_| async {
             
-            while let Some(Some((proc, truth))) = self.current_query_stream.as_mut().unwrap().next().await {
-                batch_processors.push(proc);
-                batch_truth.push(truth);
-
-                if batch_processors.len() == self.batch_size {
-                    assert!(batch_truth.len() == self.batch_size);
-                    return Some((batch_processors, batch_truth));
-                }
-            }
-            //Batch is not full yet
-            if !self.queries.is_empty() {
-                let random_index = get_random_index(&self.queries, &mut self.rng);
-                let the_chosen_one = self.queries.remove(random_index);
-                self.current_query_stream = Some(perform_query_on_training_data(&self.processors, &self.ground_truth, the_chosen_one, &self.query_ctx).await.unwrap());
-            } else {
-                //Batch could not be filled
-                return None;
-            }
-        }
-
-        None
-    }
+            
+    //     // }));
+    // }
+    
 }
 #[derive(PartialEq, Clone)]
 pub enum RasterResult<T>{
@@ -220,7 +195,7 @@ pub enum RasterResult<T>{
 }
 
 /// Splits time intervals into smaller intervalls of length step. Step has to be in milliseconds and >= 1000!
-fn split_time_intervals(query_rect: QueryRectangle<SpatialPartition2D>, step: i64 ) -> Result<Vec<QueryRectangle<SpatialPartition2D>>, Error> {
+pub fn split_time_intervals(query_rect: QueryRectangle<SpatialPartition2D>, step: i64 ) -> Result<Vec<QueryRectangle<SpatialPartition2D>>, Error> {
 
     assert!(step >= 1000);
 
@@ -266,12 +241,13 @@ fn get_random_index<T>(queries: &Vec<T>, rng: &mut ThreadRng) -> usize {
     }
 }
 
-//Queries everything that is available and returns it in a stream
-async fn perform_query_on_training_data<'a, T>(processors: &'a Vec<Box<dyn                           RasterQueryProcessor<RasterType=T>>>,
-ground_truth: &'a Box<dyn RasterQueryProcessor<RasterType = u8>>, query_rect: QueryRectangle<SpatialPartition2D>, query_ctx: &'a dyn QueryContext) -> Result<Pin<Box<dyn Stream<Item = Option<(Vec<Vec<T>>, Vec<u8>)>> + 'a>>, Error>
+///Queries everything that is available, unapacks it and returns it in a stream
+pub async fn perform_query_on_training_data<'a, T: Send + Sync>(processors: &'a mut Vec<Box<dyn        RasterQueryProcessor<RasterType=T>>>,
+ground_truth: &'a mut Box<dyn RasterQueryProcessor<RasterType = u8>>, query_rect:  QueryRectangle<SpatialPartition2D>, query_ctx: &'a dyn QueryContext) -> Result<Pin<Box<dyn Stream<Item = Option<(Vec<Vec<T>>, Vec<u8>)>> + 'a + Send>>, Error>
 //For reasons beyond my understanding this is needed...
 //TODO There might be a better way to solve this.
-where dyn crate::engine::query_processor::RasterQueryProcessor<RasterType = T>: crate::engine::query_processor::RasterQueryProcessor, T: Clone + Sized {
+where dyn crate::engine::query_processor::RasterQueryProcessor<RasterType = T>: crate::engine::query_processor::RasterQueryProcessor, T: Clone + Sized + Send {
+
         
     let mut bffr: Vec<Pin<Box<dyn Stream<Item = Result<BaseTile<GridOrEmpty<GridShape<[usize; 2]>, T>>, Error>> + Send, >>> = Vec::new();   
 
@@ -293,8 +269,8 @@ where dyn crate::engine::query_processor::RasterQueryProcessor<RasterType = T>: 
     
     Ok(Box::pin(output))
 }
-
-fn extract_data<T>(input: (Vec<Result<BaseTile<GridOrEmpty<GridShape<[usize; 2]>, T>>, Error>>, Result<BaseTile<GridOrEmpty<GridShape<[usize; 2]>, u8>>, Error>), nop: usize) -> Option<(Vec<Vec<T>>, Vec<u8>)> where T: Clone{
+///Unpacks data
+pub fn extract_data<T>(input: (Vec<Result<BaseTile<GridOrEmpty<GridShape<[usize; 2]>, T>>, Error>>, Result<BaseTile<GridOrEmpty<GridShape<[usize; 2]>, u8>>, Error>), nop: usize) -> Option<(Vec<Vec<T>>, Vec<u8>)> where T: Clone{
     
     let mut buffer_proc: Vec<RasterResult<T>> = Vec::with_capacity(nop);
     let truth_int: RasterResult<u8>;
@@ -363,7 +339,38 @@ fn extract_data<T>(input: (Vec<Result<BaseTile<GridOrEmpty<GridShape<[usize; 2]>
     }
 }
 
+///Builds exactly one batch for processors and ground truth by removing batch_size many elements from both buffers. If more elements are in the buffers they will remain there and build arrays has to be called again, to build another batch.
+pub fn build_arrays<T>(processors_buffer:  &mut Vec<Vec<Vec<T>>>, ground_truth_buffer: &mut Vec<Vec<u8>>, batch_size: usize, tile_size: [usize;2], nop: usize, no_data_value: u8, default_value: T) -> (ArrayBase<OwnedRepr<T>, Dim<[usize; 4]>>, ArrayBase<OwnedRepr<u8>, Dim<[usize; 4]>>) 
+where T: Clone + Copy{
 
+    let mut arr_proc_final = ndarray::Array::from_elem((batch_size, tile_size[0], tile_size[1], nop), default_value);
+    let mut arr_truth_final = ndarray::Array::from_elem((batch_size, tile_size[0], tile_size[1],1), no_data_value);
+    assert!(processors_buffer.len() >= batch_size);
+    assert!(ground_truth_buffer.len() >= batch_size);
+    for j in 0..batch_size {
+        let mut proc = processors_buffer.remove(0);
+        //println!("{:?}", proc);
+                        
+        let truth = ground_truth_buffer.remove(0);
+        //println!("{:?}", truth);
+                        
+        let mut arr_proc = ndarray::Array::from_elem((tile_size[0], tile_size[1], nop), default_value);
+        for i in 0 .. proc.len() {
+            let arr_x: ndarray::Array<T, _> = 
+            Array2::from_shape_vec((tile_size[0], tile_size[1]), proc.remove(0))
+            .unwrap(); 
+            arr_proc.slice_mut(ndarray::s![..,..,i]).assign(&arr_x);
+                            
+            //slice = arr_x.view_mut();
+        }
+        arr_proc_final.slice_mut(ndarray::s![j,..,..,..]).assign(&arr_proc);
+    
+        let arr_t = Array2::from_shape_vec((tile_size[0], tile_size[1]), truth).unwrap();
+        arr_truth_final.slice_mut(ndarray::s![j,..,..,0]).assign(&arr_t);
+    }
+
+    return (arr_proc_final, arr_truth_final)
+}
 
 #[pin_project(project = ZipProjection)]
 pub struct GeoZip<St>

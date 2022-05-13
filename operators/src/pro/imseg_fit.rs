@@ -5,17 +5,17 @@ use ndarray::{Array2, ArrayBase, Dim, OwnedRepr};
 use rand::prelude::*;
 use crate::util::Result;
 use core::pin::Pin;
-use geoengine_datatypes::{primitives::QueryRectangle, raster::{BaseTile,GridShape}};
+use geoengine_datatypes::{primitives::{QueryRectangle, TimeStep, TimeGranularity}, raster::{BaseTile,GridShape}};
 use crate::error::Error;
-use crate::pro::datatypes::{RasterResult, GeoZip, PythonTrainingSession};
+use crate::pro::datatypes::{RasterResult, GeoZip, PythonTrainingSession, TrainingDataGenerator,perform_query_on_training_data, build_arrays};
 use futures::stream::{Zip, Map};
 ///Performs the training. 
 #[allow(clippy::too_many_arguments)]
 pub async fn imseg_fit<T, C: QueryContext>(
     //The input channels, which have to be of the same datatype
-    processors: Vec<Box<dyn RasterQueryProcessor<RasterType=T>>>,
+    mut processors: Vec<Box<dyn RasterQueryProcessor<RasterType=T>>>,
     //The ground truth whcih is of type u8
-    processor_truth: Box<dyn RasterQueryProcessor<RasterType = u8>>,
+    mut processor_truth: Box<dyn RasterQueryProcessor<RasterType = u8>>,
     query_rect: QueryRectangle<SpatialPartition2D>,
     query_ctx: C,
     batch_size: usize,
@@ -32,15 +32,12 @@ where
 
     let mut rng = rand::thread_rng();
 
-    //Load a Training Session with datatype T
     let mut pts: PythonTrainingSession<T> = PythonTrainingSession::new();
     
-    //Initiate the Session
     let mut init_pts = pts.init();
-    //Load the right module to be used by the session
     init_pts.load_module(include_str!("tf_v2.py"));
     
-    //Create a model
+
     init_pts.initiate_model("test_model_1", 5, batch_size as u8);
     //since every 15 minutes an image is available...
     let step: i64 = (batch_size as i64 * 900_000) * batches_per_query as i64;
@@ -56,49 +53,62 @@ where
     let mut final_buff_truth: Vec<Vec<u8>> = Vec::new();
 
     while !queries.is_empty() {
-
         let queries_left = queries.len();
         println!("queries left: {:?}", queries_left);
         
-        rand_index = get_random_index(&queries, &mut rng);
+        if queries_left > 1 {
+            rand_index = rng.gen_range(0..queries_left-1);
+        } else {
+            rand_index = 0;
+        }         
 
         let the_chosen_one = queries.remove(rand_index);
 
         println!("{:?}", the_chosen_one.time_interval.start().as_naive_date_time().unwrap());
 
-        let mut query_stream = perform_query_on_training_data(&processors,&processor_truth, the_chosen_one, &query_ctx).await.unwrap();
+        let mut data_stream = perform_query_on_training_data(&mut processors, &mut processor_truth, the_chosen_one, &query_ctx).await.unwrap();
 
-        while let Some(Some((processor, ground_truth))) = query_stream.next().await {
-            final_buff_proc.push(processor);
-            final_buff_truth.push(ground_truth);
+        while let Some(data) = data_stream.next().await {
+            if let Some((mut proc, mut truth)) = data {
+                final_buff_proc.push(proc);
+                final_buff_truth.push(truth);
 
-            if final_buff_proc.len() >= batch_size {
-                let (arr_proc_final, arr_truth_final) = build_arrays(&mut final_buff_proc, &mut final_buff_truth, batch_size, tile_size, nop, no_data_value, default_value);
+                if final_buff_proc.len() >= batch_size {
+                    assert!(final_buff_truth.len() == final_buff_proc.len());
 
-                init_pts.training_step(arr_proc_final, arr_truth_final);
+                    let (arr_proc, arr_truth) = build_arrays(
+                        &mut final_buff_proc,
+                        &mut final_buff_truth,
+                        batch_size,
+                        tile_size,
+                        nop,
+                        no_data_value,
+                        default_value
+                    );
+
+                    init_pts.training_step(arr_proc, arr_truth);
+                }
             }
-
-            
-        }
-
-        // final_buff_proc.append(&mut inter_buff_proc);
-        // final_buff_truth.append(&mut inter_buff_truth);
-
-                
-        while final_buff_proc.len() >= batch_size {
-
-            let (arr_proc_final, arr_truth_final) = build_arrays(&mut final_buff_proc, &mut final_buff_truth, batch_size, tile_size, nop, no_data_value, default_value);
-
-            init_pts.training_step(arr_proc_final, arr_truth_final);
-        }
-                //buffer_proc.drain(..);
+        }      
     }
-            
-                
-                
-       
+    //Just in case, should be unreachable
+    while final_buff_proc.len() >= batch_size {
+        println!("Leftovers!");
         
+        assert!(final_buff_truth.len() == final_buff_proc.len());
 
+        let (arr_proc, arr_truth) = build_arrays(
+            &mut final_buff_proc,
+            &mut final_buff_truth,
+            batch_size,
+            tile_size,
+            nop,
+            no_data_value,
+            default_value
+        );
+
+        init_pts.training_step(arr_proc, arr_truth);
+    }
 
     init_pts.save("test_model_1");
     Ok(())
@@ -151,33 +161,33 @@ fn get_random_index<T>(queries: &Vec<T>, rng: &mut ThreadRng) -> usize {
     }
 }
 
-//Queries everything that is available and returns it in a stream
-async fn perform_query_on_training_data<'a, T>(processors: &'a Vec<Box<dyn                           RasterQueryProcessor<RasterType=T>>>,
-ground_truth: &'a Box<dyn RasterQueryProcessor<RasterType = u8>>, query_rect: QueryRectangle<SpatialPartition2D>, query_ctx: &'a dyn QueryContext) -> Result<Pin<Box<dyn Stream<Item = Option<(Vec<Vec<T>>, Vec<u8>)>> + 'a>>>
-//For reasons beyond my understanding this is needed...
-//TODO There might be a better way to solve this.
-where dyn crate::engine::query_processor::RasterQueryProcessor<RasterType = T>: crate::engine::query_processor::RasterQueryProcessor, T: Clone + Sized {
+// //Queries everything that is available and returns it in a stream
+// async fn perform_query_on_training_data<'a, T>(processors: &'a Vec<Box<dyn                           RasterQueryProcessor<RasterType=T>>>,
+// ground_truth: &'a Box<dyn RasterQueryProcessor<RasterType = u8>>, query_rect: QueryRectangle<SpatialPartition2D>, query_ctx: &'a dyn QueryContext) -> Result<Pin<Box<dyn Stream<Item = Option<(Vec<Vec<T>>, Vec<u8>)>> + 'a>>>
+// //For reasons beyond my understanding this is needed...
+// //TODO There might be a better way to solve this.
+// where dyn crate::engine::query_processor::RasterQueryProcessor<RasterType = T>: crate::engine::query_processor::RasterQueryProcessor, T: Clone + Sized {
         
-    let mut bffr: Vec<Pin<Box<dyn Stream<Item = Result<BaseTile<GridOrEmpty<GridShape<[usize; 2]>, T>>, Error>> + Send, >>> = Vec::new();   
+//     let mut bffr: Vec<Pin<Box<dyn Stream<Item = Result<BaseTile<GridOrEmpty<GridShape<[usize; 2]>, T>>, Error>> + Send, >>> = Vec::new();   
 
-    let nop = processors.len();
+//     let nop = processors.len();
     
 
-    for element in processors.iter() {
-        bffr.push(element.raster_query(query_rect, query_ctx).await?);
-    }
+//     for element in processors.iter() {
+//         bffr.push(element.raster_query(query_rect, query_ctx).await?);
+//     }
 
 
-    let mut truth_stream = ground_truth.raster_query(query_rect, query_ctx).await?;
+//     let mut truth_stream = ground_truth.raster_query(query_rect, query_ctx).await?;
 
-    let mut zip = GeoZip::new(bffr);
+//     let mut zip = GeoZip::new(bffr);
     
-    let zipped = zip.zip(truth_stream);        
+//     let zipped = zip.zip(truth_stream);        
     
-    let output = zipped.map(|data| extract_data(data, 11));
+//     let output = zipped.map(|data| extract_data(data, 11));
     
-    Ok(Box::pin(output))
-}
+//     Ok(Box::pin(output))
+// }
 
 fn extract_data<T>(input: (Vec<Result<BaseTile<GridOrEmpty<GridShape<[usize; 2]>, T>>, Error>>, Result<BaseTile<GridOrEmpty<GridShape<[usize; 2]>, u8>>, Error>), nop: usize) -> Option<(Vec<Vec<T>>, Vec<u8>)> where T: Clone{
     
@@ -250,37 +260,7 @@ fn extract_data<T>(input: (Vec<Result<BaseTile<GridOrEmpty<GridShape<[usize; 2]>
 }
 
 
-fn build_arrays<T>(processors_buffer:  &mut Vec<Vec<Vec<T>>>, ground_truth_buffer: &mut Vec<Vec<u8>>, batch_size: usize, tile_size: [usize;2], nop: usize, no_data_value: u8, default_value: T) -> (ArrayBase<OwnedRepr<T>, Dim<[usize; 4]>>, ArrayBase<OwnedRepr<u8>, Dim<[usize; 4]>>) 
-where T: Clone + Copy{
 
-    let mut arr_proc_final = ndarray::Array::from_elem((batch_size, tile_size[0], tile_size[1], nop), default_value);
-    let mut arr_truth_final = ndarray::Array::from_elem((batch_size, tile_size[0], tile_size[1],1), no_data_value);
-    assert!(processors_buffer.len() >= batch_size);
-    assert!(ground_truth_buffer.len() >= batch_size);
-    for j in 0..batch_size {
-        let mut proc = processors_buffer.remove(0);
-        //println!("{:?}", proc);
-                        
-        let truth = ground_truth_buffer.remove(0);
-        //println!("{:?}", truth);
-                        
-        let mut arr_proc = ndarray::Array::from_elem((tile_size[0], tile_size[1], nop), default_value);
-        for i in 0 .. proc.len() {
-            let arr_x: ndarray::Array<T, _> = 
-            Array2::from_shape_vec((tile_size[0], tile_size[1]), proc.remove(0))
-            .unwrap(); 
-            arr_proc.slice_mut(ndarray::s![..,..,i]).assign(&arr_x);
-                            
-            //slice = arr_x.view_mut();
-        }
-        arr_proc_final.slice_mut(ndarray::s![j,..,..,..]).assign(&arr_proc);
-    
-        let arr_t = Array2::from_shape_vec((tile_size[0], tile_size[1]), truth).unwrap();
-        arr_truth_final.slice_mut(ndarray::s![j,..,..,0]).assign(&arr_t);
-    }
-
-    return (arr_proc_final, arr_truth_final)
-}
 #[cfg(test)]
 mod tests {
     use geoengine_datatypes::{dataset::{DatasetId, InternalDatasetId}, hashmap, primitives::{Coordinate2D, TimeInterval, SpatialResolution, Measurement, TimeGranularity, TimeInstance, TimeStep}, raster::{RasterDataType}, raster::{TilingSpecification}, spatial_reference::{SpatialReference, SpatialReferenceAuthority, SpatialReferenceOption}};
