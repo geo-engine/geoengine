@@ -288,6 +288,11 @@ pub enum Error {
     MockRasterSource {
         source: crate::mock::MockRasterSourceError,
     },
+
+    #[snafu(context(false))]
+    TimeShift {
+        source: crate::processing::TimeShiftError,
+    },
 }
 
 impl From<crate::adapters::SparseTilesFillAdapterError> for Error {
