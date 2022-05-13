@@ -47,7 +47,7 @@
     },
     "start": "2014-01-01T00:00:00.000Z",
     "step": {
-      "granularity": "Months",
+      "granularity": "months",
       "step": 1
     }
   }
