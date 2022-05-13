@@ -33,6 +33,8 @@ use std::pin::Pin;
 
 pub trait FoldTileAccu {
     type RasterType: Pixel;
+    // TODO: make async to allow for work being done when consuming the accu
+    // TODO: return Result to allow error propagation
     fn into_tile(self) -> RasterTile2D<Self::RasterType>;
     fn thread_pool(&self) -> &Arc<ThreadPool>;
 }
