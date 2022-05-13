@@ -254,17 +254,17 @@ impl<T: Pixel, I: InterpolationAlgorithm<T>> InterpolationAccu<T, I> {
     }
 }
 
+#[async_trait]
 impl<T: Pixel, I: InterpolationAlgorithm<T>> FoldTileAccu for InterpolationAccu<T, I> {
     type RasterType = T;
 
-    fn into_tile(self) -> RasterTile2D<Self::RasterType> {
+    async fn into_tile(self) -> Result<RasterTile2D<Self::RasterType>> {
         // now that we collected all the input tile pixels we perform the actual interpolation
-        // TODO: this should be done in a separate thread, but requires this method to be async
         let mut output_tile = self.output_tile.into_materialized_tile();
 
-        I::interpolate(&self.input_tile, &mut output_tile, &self.pool).unwrap(); // TODO: propagate error
+        I::interpolate(&self.input_tile, &mut output_tile, &self.pool).await?;
 
-        output_tile.into()
+        Ok(output_tile.into())
     }
 
     fn thread_pool(&self) -> &Arc<ThreadPool> {
@@ -381,12 +381,13 @@ where
     ))
 }
 
+#[async_trait]
 pub trait InterpolationAlgorithm<P: Pixel>: Send + Sync + Clone + 'static {
     /// interpolate the given input tile into the output tile
     /// the output must be fully contained in the input tile and have an additional row and column in order
     /// to have all the required neighbor pixels.
     /// Also the output must have a finer resolution than the input
-    fn interpolate(
+    async fn interpolate(
         input: &RasterTile2D<P>,
         output: &mut MaterializedRasterTile2D<P>,
         pool: &ThreadPool,
@@ -396,16 +397,17 @@ pub trait InterpolationAlgorithm<P: Pixel>: Send + Sync + Clone + 'static {
 #[derive(Clone, Debug)]
 pub struct NearestNeighbor {}
 
+#[async_trait]
 impl<P> InterpolationAlgorithm<P> for NearestNeighbor
 where
     P: Pixel,
 {
-    fn interpolate(
+    async fn interpolate(
         input: &RasterTile2D<P>,
         output: &mut MaterializedRasterTile2D<P>,
         _pool: &ThreadPool,
     ) -> Result<()> {
-        // TODO: parallelize
+        // TODO: use the pool and parallelize
 
         let info_in = input.tile_information();
         let in_upper_left = info_in.spatial_partition().upper_left();
@@ -460,8 +462,8 @@ mod tests {
         util::create_rayon_thread_pool,
     };
 
-    #[test]
-    fn nearest_neightbor() {
+    #[tokio::test]
+    async fn nearest_neightbor() {
         let input = RasterTile2D::new_with_tile_info(
             Default::default(),
             TileInformation {
@@ -487,7 +489,9 @@ mod tests {
 
         let pool = create_rayon_thread_pool(0);
 
-        NearestNeighbor::interpolate(&input, &mut output, &pool).unwrap();
+        NearestNeighbor::interpolate(&input, &mut output, &pool)
+            .await
+            .unwrap();
 
         assert_eq!(
             output.grid_array.data,

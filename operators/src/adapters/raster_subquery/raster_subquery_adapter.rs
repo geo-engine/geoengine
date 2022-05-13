@@ -31,11 +31,12 @@ use std::task::Poll;
 
 use std::pin::Pin;
 
+use async_trait::async_trait;
+
+#[async_trait]
 pub trait FoldTileAccu {
     type RasterType: Pixel;
-    // TODO: make async to allow for work being done when consuming the accu
-    // TODO: return Result to allow error propagation
-    fn into_tile(self) -> RasterTile2D<Self::RasterType>;
+    async fn into_tile(self) -> Result<RasterTile2D<Self::RasterType>>;
     fn thread_pool(&self) -> &Arc<ThreadPool>;
 }
 
@@ -48,19 +49,22 @@ pub type RasterFold<'a, T, FoldFuture, FoldMethod, FoldTileAccu> =
 
 type QueryAccuFuture<'a, T, A> = BoxFuture<'a, Result<(BoxStream<'a, Result<RasterTile2D<T>>>, A)>>;
 
+type IntoTileFuture<'a, T> = BoxFuture<'a, Result<RasterTile2D<T>>>;
+
 /// This adapter allows to generate a tile stream using sub-querys.
 /// This is done using a `TileSubQuery`.
 /// The sub-query is resolved for each produced tile.
 
 #[pin_project(project=StateInnerProjection)]
 #[derive(Debug, Clone)]
-enum StateInner<A, B, C> {
+enum StateInner<A, B, C, D> {
     CreateNextQuery,
     RunningQuery {
         #[pin]
         query_with_accu: A,
     },
     RunningFold(#[pin] B),
+    RunningIntoTile(#[pin] D),
     ReturnResult(Option<C>),
     Ended,
 }
@@ -70,6 +74,7 @@ type StateInnerType<'a, P, FoldFuture, FoldMethod, TileAccu> = StateInner<
     QueryAccuFuture<'a, P, TileAccu>,
     RasterFold<'a, P, FoldFuture, FoldMethod, TileAccu>,
     RasterTile2D<P>,
+    IntoTileFuture<'a, P>,
 >;
 
 /// This adapter allows to generate a tile stream using sub-querys.
@@ -317,6 +322,28 @@ where
             match rf_res {
                 Ok(tile_accu) => {
                     let tile = tile_accu.into_tile();
+                    this.state.set(StateInner::RunningIntoTile(tile));
+                }
+                Err(e) => {
+                    this.state.set(StateInner::Ended);
+                    return Poll::Ready(Some(Err(e)));
+                }
+            }
+        }
+
+        // We are waiting for/expecting the result of `into_tile` method.
+        // This block uses the same check and project pattern as above.
+        if matches!(*this.state, StateInner::RunningIntoTile(_)) {
+            let rf_res = if let StateInnerProjection::RunningIntoTile(fold) =
+                this.state.as_mut().project()
+            {
+                ready!(fold.poll(cx))
+            } else {
+                unreachable!()
+            };
+
+            match rf_res {
+                Ok(tile) => {
                     this.state.set(StateInner::ReturnResult(Some(tile)));
                 }
                 Err(e) => {
@@ -454,11 +481,12 @@ impl<T> RasterTileAccu2D<T> {
     }
 }
 
+#[async_trait]
 impl<T: Pixel> FoldTileAccu for RasterTileAccu2D<T> {
     type RasterType = T;
 
-    fn into_tile(self) -> RasterTile2D<Self::RasterType> {
-        self.tile
+    async fn into_tile(self) -> Result<RasterTile2D<Self::RasterType>> {
+        Ok(self.tile)
     }
 
     fn thread_pool(&self) -> &Arc<ThreadPool> {

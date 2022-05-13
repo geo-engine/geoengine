@@ -1,5 +1,6 @@
 use std::sync::Arc;
 
+use async_trait::async_trait;
 use futures::{future::BoxFuture, Future, FutureExt, TryFuture, TryFutureExt};
 use geoengine_datatypes::{
     primitives::{
@@ -308,11 +309,12 @@ pub struct TemporalRasterAggregationTileAccu<T> {
     pool: Arc<ThreadPool>,
 }
 
+#[async_trait]
 impl<T: Pixel> FoldTileAccu for TemporalRasterAggregationTileAccu<T> {
     type RasterType = T;
 
-    fn into_tile(self) -> RasterTile2D<Self::RasterType> {
-        self.accu_tile
+    async fn into_tile(self) -> Result<RasterTile2D<Self::RasterType>> {
+        Ok(self.accu_tile)
     }
 
     fn thread_pool(&self) -> &Arc<ThreadPool> {
