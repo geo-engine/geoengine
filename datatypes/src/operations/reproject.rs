@@ -229,6 +229,12 @@ where
         let proj_outline_coordinates = projector.project_coordinates(&outline_coordinates)?;
 
         let bbox = MultiPoint::new_unchecked(proj_outline_coordinates).spatial_bounds();
+
+        ensure!(
+            bbox.size_x() > 0. && bbox.size_y() > 0.,
+            error::OutputBboxEmpty { bbox }
+        );
+
         A::from_min_max(bbox.lower_left(), bbox.upper_right())
     }
 }
