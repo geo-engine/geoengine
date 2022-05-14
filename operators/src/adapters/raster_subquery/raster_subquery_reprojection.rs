@@ -88,12 +88,17 @@ where
             .and_then(|vo| vo.intersection(&query_rect.spatial_partition()));
         if let Some(bounds) = valid_spatial_bounds {
             let proj = CoordinateProjector::from_known_srs(self.out_srs, self.in_srs)?;
-            let projected_bounds = bounds.reproject(&proj)?;
-            Ok(Some(RasterQueryRectangle {
-                spatial_bounds: projected_bounds,
-                time_interval: TimeInterval::new_instant(start_time)?,
-                spatial_resolution: self.in_spatial_res,
-            }))
+            let projected_bounds = bounds.reproject(&proj);
+
+            match projected_bounds {
+                Ok(pb) => Ok(Some(RasterQueryRectangle {
+                    spatial_bounds: pb,
+                    time_interval: TimeInterval::new_instant(start_time)?,
+                    spatial_resolution: self.in_spatial_res,
+                })),
+                Err(geoengine_datatypes::error::Error::OutputBboxEmpty { bbox: _ }) => Ok(None), // in some strange cases the reprojection can return an empty bbox. YWe ignore it since it contains no pixels.
+                Err(e) => Err(e.into()),
+            }
         } else {
             // output query rectangle is not valid in source projection => produce empty tile
             Ok(None)
@@ -190,17 +195,28 @@ fn projected_coordinate_grid_parallel(
             .try_for_each(|(chunk_idx, opt_coord_slice)| {
                 let chunk_start_y = chunk_idx * par_chunk_split;
                 let chunk_len = opt_coord_slice.len();
+                let chunk_end_y = chunk_start_y + (chunk_len / axis_size_x) - 1;
                 let out_coords = (0..chunk_len)
                     .map(|lin_idx| {
                         let x_idx = lin_idx % axis_size_x;
                         let y_idx = lin_idx / axis_size_x + chunk_start_y;
                         let grid_idx = GridIdx2D::from([y_idx as isize, x_idx as isize]);
-                        tile_geo_transform.grid_idx_to_upper_left_coordinate_2d(grid_idx)
+                        tile_geo_transform.grid_idx_to_pixel_upper_left_coordinate_2d(grid_idx)
                     })
                     .collect::<Vec<Coordinate2D>>();
 
-                let chunk_bounds =
-                    SpatialPartition2D::new_unchecked(out_coords[0], out_coords[chunk_len - 1]);
+                // the output bounds start at the top left corner of the chunk.
+                let ul_grid_idx = GridIdx2D::from([chunk_start_y as isize, 0_isize]);
+                let ul_coord =
+                    tile_geo_transform.grid_idx_to_pixel_upper_left_coordinate_2d(ul_grid_idx);
+
+                // the output bounds must cover the whole chunk pixels.
+                let lr_grid_idx =
+                    GridIdx2D::from([chunk_end_y as isize, (axis_size_x - 1) as isize]);
+                let lr_coord =
+                    tile_geo_transform.grid_idx_to_pixel_upper_left_coordinate_2d(lr_grid_idx + 1);
+
+                let chunk_bounds = SpatialPartition2D::new_unchecked(ul_coord, lr_coord);
 
                 let proj = CoordinateProjector::from_known_srs(out_srs, in_srs)?;
 
