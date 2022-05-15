@@ -25,6 +25,7 @@ pub mod contexts;
 pub mod datasets;
 pub mod error;
 pub mod handlers;
+pub mod layers;
 pub mod ogc;
 pub mod projects;
 pub mod server;

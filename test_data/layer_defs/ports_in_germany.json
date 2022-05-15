@@ -1,0 +1,36 @@
+{
+  "id": "b75db46e-2b9a-4a86-b33f-bc06a73cd711",
+  "name": "Ports in Germany",
+  "description": "Natural Earth Ports point filtered with Germany polygon",
+  "workflow": {
+    "type": "Vector",
+    "operator": {
+      "type": "PointInPolygonFilter",
+      "params": {},
+      "sources": {
+        "points": {
+          "type": "OgrSource",
+          "params": {
+            "dataset": {
+              "type": "internal",
+              "datasetId": "a9623a5b-b6c5-404b-bc5a-313ff72e4e75"
+            },
+            "attributeProjection": null,
+            "attributeFilters": null
+          }
+        },
+        "polygons": {
+          "type": "OgrSource",
+          "params": {
+            "dataset": {
+              "type": "internal",
+              "datasetId": "b6191257-6d61-4c6b-90a4-ebfb1b23899d"
+            },
+            "attributeProjection": null,
+            "attributeFilters": null
+          }
+        }
+      }
+    }
+  }
+}

@@ -14,6 +14,7 @@ pub mod datasets;
 pub mod ebv;
 #[cfg(feature = "nfdi")]
 pub mod gfbio;
+pub mod layers;
 pub mod plots;
 pub mod projects;
 pub mod session;
