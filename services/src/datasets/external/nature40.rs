@@ -41,7 +41,7 @@ use serde::{Deserialize, Serialize};
 use snafu::ResultExt;
 
 use geoengine_datatypes::hashmap;
-use geoengine_datatypes::primitives::{DateTime, TimeInstance, TimeInterval};
+use geoengine_datatypes::primitives::{DateTime, TimeInterval};
 use url::Url;
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -417,26 +417,10 @@ impl MetaDataProvider<GdalLoadingInfo, RasterResultDescriptor, RasterQueryRectan
 
             let time_steps = time_positions
                 .iter()
-                .map(|time_position| {
-                    DateTime::parse_from_str(time_position, &format).map_err(|e| {
-                        geoengine_operators::error::Error::TimeParse {
-                            source: Box::new(e),
-                        }
-                    })
+                .flat_map(|time_position| {
+                    DateTime::parse_from_str(time_position, &format).map(TimeInterval::new_instant)
                 })
-                .map(
-                    |date_time: Result<DateTime, geoengine_operators::error::Error>| {
-                        let time_instance = TimeInstance::from(date_time?);
-                        Ok(time_instance)
-                    },
-                )
-                .map(
-                    |time_instance: Result<TimeInstance, geoengine_operators::error::Error>| {
-                        let time_step = TimeInterval::new_instant(time_instance?)?;
-                        Ok(time_step)
-                    },
-                )
-                .filter_map(|t: Result<TimeInterval, geoengine_operators::error::Error>| t.ok())
+                .filter_map(Result::ok)
                 .collect::<Vec<_>>();
 
             let db_url =
@@ -510,7 +494,8 @@ mod tests {
 
     use geoengine_datatypes::{
         primitives::{
-            Measurement, QueryRectangle, SpatialPartition2D, SpatialResolution, TimeInterval,
+            Measurement, QueryRectangle, SpatialPartition2D, SpatialResolution, TimeInstance,
+            TimeInterval,
         },
         raster::RasterDataType,
         spatial_reference::{SpatialReference, SpatialReferenceAuthority},
