@@ -20,10 +20,12 @@ use geoengine_datatypes::primitives::{
     SpatialPartitioned, SpatialResolution, TimeInstance, TimeInterval,
 };
 use geoengine_datatypes::raster::{
-    Blit, EmptyGrid, GeoTransform, Grid2D, GridIndexAccess, GridIndexAccessMut, GridOrEmpty,
-    GridSize, MaterializedRasterTile2D, Pixel, RasterTile2D, TileInformation, TilingSpecification,
+    Blit, EmptyGrid, GeoTransform, Grid2D, GridIndexAccess, GridOrEmpty, GridSize,
+    MaterializedRasterTile2D, Pixel, RasterTile2D, TileInformation, TilingSpecification,
 };
 use num_traits::AsPrimitive;
+use rayon::iter::{IndexedParallelIterator, ParallelIterator};
+use rayon::slice::ParallelSliceMut;
 use rayon::ThreadPool;
 use serde::{Deserialize, Serialize};
 
@@ -268,7 +270,10 @@ impl<T: Pixel, I: InterpolationAlgorithm<T>> FoldTileAccu for InterpolationAccu<
         // now that we collected all the input tile pixels we perform the actual interpolation
         let mut output_tile = self.output_tile.into_materialized_tile();
 
-        I::interpolate(&self.input_tile, &mut output_tile, &self.pool).await?;
+        let output_tile = crate::util::spawn_blocking_with_thread_pool(self.pool, move || {
+            I::interpolate(&self.input_tile, &mut output_tile).map(|_| output_tile)
+        })
+        .await??;
 
         Ok(output_tile.into())
     }
@@ -393,11 +398,8 @@ pub trait InterpolationAlgorithm<P: Pixel>: Send + Sync + Clone + 'static {
     /// the output must be fully contained in the input tile and have an additional row and column in order
     /// to have all the required neighbor pixels.
     /// Also the output must have a finer resolution than the input
-    async fn interpolate(
-        input: &RasterTile2D<P>,
-        output: &mut MaterializedRasterTile2D<P>,
-        pool: &ThreadPool,
-    ) -> Result<()>;
+    fn interpolate(input: &RasterTile2D<P>, output: &mut MaterializedRasterTile2D<P>)
+        -> Result<()>;
 }
 
 #[derive(Clone, Debug)]
@@ -408,13 +410,10 @@ impl<P> InterpolationAlgorithm<P> for NearestNeighbor
 where
     P: Pixel,
 {
-    async fn interpolate(
+    fn interpolate(
         input: &RasterTile2D<P>,
         output: &mut MaterializedRasterTile2D<P>,
-        _pool: &ThreadPool,
     ) -> Result<()> {
-        // TODO: use the pool and parallelize
-
         let info_in = input.tile_information();
         let in_upper_left = info_in.spatial_partition().upper_left();
         let in_x_size = info_in.global_geo_transform.x_pixel_size();
@@ -425,20 +424,35 @@ where
         let out_x_size = info_out.global_geo_transform.x_pixel_size();
         let out_y_size = info_out.global_geo_transform.y_pixel_size();
 
-        for y in 0..output.grid_array.axis_size_y() {
-            let out_y_coord = out_upper_left.y + y as f64 * out_y_size;
-            let nearest_in_y_idx = ((out_y_coord - in_upper_left.y) / in_y_size).round() as isize;
+        let parallelism = rayon::current_num_threads();
+        let rows_per_task =
+            num::integer::div_ceil(output.grid_array.shape.axis_size_y(), parallelism);
 
-            for x in 0..output.grid_array.axis_size_x() {
-                let out_x_coord = out_upper_left.x + x as f64 * out_x_size;
-                let nearest_in_x_idx =
-                    ((out_x_coord - in_upper_left.x) / in_x_size).round() as isize;
+        let chunk_size = output.grid_array.shape.axis_size_x() * rows_per_task;
 
-                let value = input.get_at_grid_index([nearest_in_y_idx, nearest_in_x_idx])?;
+        output
+            .grid_array
+            .data
+            .par_chunks_mut(chunk_size)
+            .enumerate()
+            .for_each(|(y_f, row_slice)| {
+                let y = y_f * rows_per_task;
 
-                output.set_at_grid_index([y as isize, x as isize], value)?;
-            }
-        }
+                let out_y_coord = out_upper_left.y + y as f64 * out_y_size;
+                let nearest_in_y_idx =
+                    ((out_y_coord - in_upper_left.y) / in_y_size).round() as isize;
+
+                row_slice.iter_mut().enumerate().for_each(|(x, pixel)| {
+                    let out_x_coord = out_upper_left.x + x as f64 * out_x_size;
+                    let nearest_in_x_idx =
+                        ((out_x_coord - in_upper_left.x) / in_x_size).round() as isize;
+
+                    let value =
+                        input.get_at_grid_index_unchecked([nearest_in_y_idx, nearest_in_x_idx]);
+
+                    *pixel = value;
+                });
+            });
 
         Ok(())
     }
@@ -482,13 +496,10 @@ impl<P> InterpolationAlgorithm<P> for Bilinear
 where
     P: Pixel,
 {
-    async fn interpolate(
+    fn interpolate(
         input: &RasterTile2D<P>,
         output: &mut MaterializedRasterTile2D<P>,
-        _pool: &ThreadPool,
     ) -> Result<()> {
-        // TODO: use the pool and parallelize
-
         let info_in = input.tile_information();
         let in_upper_left = info_in.spatial_partition().upper_left();
         let in_x_size = info_in.global_geo_transform.x_pixel_size();
@@ -499,32 +510,53 @@ where
         let out_x_size = info_out.global_geo_transform.x_pixel_size();
         let out_y_size = info_out.global_geo_transform.y_pixel_size();
 
-        for y in 0..output.grid_array.axis_size_y() {
-            let out_y = out_upper_left.y + y as f64 * out_y_size;
-            let in_y_idx = ((out_y - in_upper_left.y) / in_y_size).floor() as isize;
+        let parallelism = rayon::current_num_threads();
+        let rows_per_task =
+            num::integer::div_ceil(output.grid_array.shape.axis_size_y(), parallelism);
 
-            let a_y = in_upper_left.y + in_y_size * in_y_idx as f64;
-            let b_y = a_y + in_y_size;
+        let chunk_size = output.grid_array.shape.axis_size_x() * rows_per_task;
 
-            for x in 0..output.grid_array.axis_size_x() {
-                let out_x = out_upper_left.x + x as f64 * out_x_size;
-                let in_x_idx = ((out_x - in_upper_left.x) / in_x_size).floor() as isize;
+        output
+            .grid_array
+            .data
+            .par_chunks_mut(chunk_size)
+            .enumerate()
+            .for_each(|(y_f, row_slice)| {
+                let y = y_f * rows_per_task;
 
-                let a_x = in_upper_left.x + in_x_size * in_x_idx as f64;
-                let c_x = a_x + in_x_size;
+                let out_y = out_upper_left.y + y as f64 * out_y_size;
+                let in_y_idx = ((out_y - in_upper_left.y) / in_y_size).floor() as isize;
 
-                let a_v: f64 = input.get_at_grid_index([in_y_idx, in_x_idx])?.as_();
-                let b_v: f64 = input.get_at_grid_index([in_y_idx + 1, in_x_idx])?.as_();
-                let c_v: f64 = input.get_at_grid_index([in_y_idx, in_x_idx + 1])?.as_();
-                let d_v: f64 = input.get_at_grid_index([in_y_idx + 1, in_x_idx + 1])?.as_();
+                let a_y = in_upper_left.y + in_y_size * in_y_idx as f64;
+                let b_y = a_y + in_y_size;
 
-                let value = Self::bilinear_interpolation(
-                    out_x, out_y, a_x, a_y, a_v, b_y, b_v, c_x, c_v, d_v,
-                );
+                row_slice.iter_mut().enumerate().for_each(|(x, pixel)| {
+                    let out_x = out_upper_left.x + x as f64 * out_x_size;
+                    let in_x_idx = ((out_x - in_upper_left.x) / in_x_size).floor() as isize;
 
-                output.set_at_grid_index([y as isize, x as isize], P::from_(value))?;
-            }
-        }
+                    let a_x = in_upper_left.x + in_x_size * in_x_idx as f64;
+                    let c_x = a_x + in_x_size;
+
+                    let a_v: f64 = input
+                        .get_at_grid_index_unchecked([in_y_idx, in_x_idx])
+                        .as_();
+                    let b_v: f64 = input
+                        .get_at_grid_index_unchecked([in_y_idx + 1, in_x_idx])
+                        .as_();
+                    let c_v: f64 = input
+                        .get_at_grid_index_unchecked([in_y_idx, in_x_idx + 1])
+                        .as_();
+                    let d_v: f64 = input
+                        .get_at_grid_index_unchecked([in_y_idx + 1, in_x_idx + 1])
+                        .as_();
+
+                    let value = Self::bilinear_interpolation(
+                        out_x, out_y, a_x, a_y, a_v, b_y, b_v, c_x, c_v, d_v,
+                    );
+
+                    *pixel = P::from_(value);
+                });
+            });
 
         Ok(())
     }
@@ -578,8 +610,7 @@ mod tests {
 
         let pool = create_rayon_thread_pool(0);
 
-        NearestNeighbor::interpolate(&input, &mut output, &pool)
-            .await
+        pool.install(|| NearestNeighbor::interpolate(&input, &mut output))
             .unwrap();
 
         assert_eq!(
@@ -638,8 +669,7 @@ mod tests {
 
         let pool = create_rayon_thread_pool(0);
 
-        Bilinear::interpolate(&input, &mut output, &pool)
-            .await
+        pool.install(|| Bilinear::interpolate(&input, &mut output))
             .unwrap();
 
         assert_eq!(
