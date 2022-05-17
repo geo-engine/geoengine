@@ -435,23 +435,28 @@ where
             .data
             .par_chunks_mut(chunk_size)
             .enumerate()
-            .for_each(|(y_f, row_slice)| {
-                let y = y_f * rows_per_task;
+            .for_each(|(y_f, rows_slice)| {
+                let y_start = y_f * rows_per_task;
+                let y_end = y_start + rows_slice.len() / output.grid_array.shape.axis_size_x();
 
-                let out_y_coord = out_upper_left.y + y as f64 * out_y_size;
-                let nearest_in_y_idx =
-                    ((out_y_coord - in_upper_left.y) / in_y_size).round() as isize;
+                (y_start..y_end)
+                    .zip(rows_slice.chunks_mut(output.grid_array.shape.axis_size_x()))
+                    .for_each(|(y, row)| {
+                        let out_y_coord = out_upper_left.y + y as f64 * out_y_size;
+                        let nearest_in_y_idx =
+                            ((out_y_coord - in_upper_left.y) / in_y_size).round() as isize;
 
-                row_slice.iter_mut().enumerate().for_each(|(x, pixel)| {
-                    let out_x_coord = out_upper_left.x + x as f64 * out_x_size;
-                    let nearest_in_x_idx =
-                        ((out_x_coord - in_upper_left.x) / in_x_size).round() as isize;
+                        row.iter_mut().enumerate().for_each(|(x, pixel)| {
+                            let out_x_coord = out_upper_left.x + x as f64 * out_x_size;
+                            let nearest_in_x_idx =
+                                ((out_x_coord - in_upper_left.x) / in_x_size).round() as isize;
 
-                    let value =
-                        input.get_at_grid_index_unchecked([nearest_in_y_idx, nearest_in_x_idx]);
+                            let value = input
+                                .get_at_grid_index_unchecked([nearest_in_y_idx, nearest_in_x_idx]);
 
-                    *pixel = value;
-                });
+                            *pixel = value;
+                        });
+                    });
             });
 
         Ok(())
@@ -521,41 +526,46 @@ where
             .data
             .par_chunks_mut(chunk_size)
             .enumerate()
-            .for_each(|(y_f, row_slice)| {
-                let y = y_f * rows_per_task;
+            .for_each(|(y_f, rows_slice)| {
+                let y_start = y_f * rows_per_task;
+                let y_end = y_start + rows_slice.len() / output.grid_array.shape.axis_size_x();
 
-                let out_y = out_upper_left.y + y as f64 * out_y_size;
-                let in_y_idx = ((out_y - in_upper_left.y) / in_y_size).floor() as isize;
+                (y_start..y_end)
+                    .zip(rows_slice.chunks_mut(output.grid_array.shape.axis_size_x()))
+                    .for_each(|(y, row)| {
+                        let out_y = out_upper_left.y + y as f64 * out_y_size;
+                        let in_y_idx = ((out_y - in_upper_left.y) / in_y_size).floor() as isize;
 
-                let a_y = in_upper_left.y + in_y_size * in_y_idx as f64;
-                let b_y = a_y + in_y_size;
+                        let a_y = in_upper_left.y + in_y_size * in_y_idx as f64;
+                        let b_y = a_y + in_y_size;
 
-                row_slice.iter_mut().enumerate().for_each(|(x, pixel)| {
-                    let out_x = out_upper_left.x + x as f64 * out_x_size;
-                    let in_x_idx = ((out_x - in_upper_left.x) / in_x_size).floor() as isize;
+                        row.iter_mut().enumerate().for_each(|(x, pixel)| {
+                            let out_x = out_upper_left.x + x as f64 * out_x_size;
+                            let in_x_idx = ((out_x - in_upper_left.x) / in_x_size).floor() as isize;
 
-                    let a_x = in_upper_left.x + in_x_size * in_x_idx as f64;
-                    let c_x = a_x + in_x_size;
+                            let a_x = in_upper_left.x + in_x_size * in_x_idx as f64;
+                            let c_x = a_x + in_x_size;
 
-                    let a_v: f64 = input
-                        .get_at_grid_index_unchecked([in_y_idx, in_x_idx])
-                        .as_();
-                    let b_v: f64 = input
-                        .get_at_grid_index_unchecked([in_y_idx + 1, in_x_idx])
-                        .as_();
-                    let c_v: f64 = input
-                        .get_at_grid_index_unchecked([in_y_idx, in_x_idx + 1])
-                        .as_();
-                    let d_v: f64 = input
-                        .get_at_grid_index_unchecked([in_y_idx + 1, in_x_idx + 1])
-                        .as_();
+                            let a_v: f64 = input
+                                .get_at_grid_index_unchecked([in_y_idx, in_x_idx])
+                                .as_();
+                            let b_v: f64 = input
+                                .get_at_grid_index_unchecked([in_y_idx + 1, in_x_idx])
+                                .as_();
+                            let c_v: f64 = input
+                                .get_at_grid_index_unchecked([in_y_idx, in_x_idx + 1])
+                                .as_();
+                            let d_v: f64 = input
+                                .get_at_grid_index_unchecked([in_y_idx + 1, in_x_idx + 1])
+                                .as_();
 
-                    let value = Self::bilinear_interpolation(
-                        out_x, out_y, a_x, a_y, a_v, b_y, b_v, c_x, c_v, d_v,
-                    );
+                            let value = Self::bilinear_interpolation(
+                                out_x, out_y, a_x, a_y, a_v, b_y, b_v, c_x, c_v, d_v,
+                            );
 
-                    *pixel = P::from_(value);
-                });
+                            *pixel = P::from_(value);
+                        });
+                    });
             });
 
         Ok(())
