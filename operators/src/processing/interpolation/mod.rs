@@ -469,13 +469,11 @@ pub struct Bilinear {}
 impl Bilinear {
     #[inline]
     #[allow(clippy::too_many_arguments)]
-    /// Interpolate values using the points coordinates and values
-    /// ```
-    /// a______c
+    /// Interpolate values using the points coordinates (`a_x`, `a_y`) and values (`a_v`)
+    /// a------c
     ///  |     |
     ///  |     |
-    /// b______d
-    /// ```
+    /// b------d
     pub fn bilinear_interpolation(
         x: f64,
         y: f64,
