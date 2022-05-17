@@ -96,7 +96,9 @@ where
                     time_interval: TimeInterval::new_instant(start_time)?,
                     spatial_resolution: self.in_spatial_res,
                 })),
-                Err(geoengine_datatypes::error::Error::OutputBboxEmpty { bbox: _ }) => Ok(None), // in some strange cases the reprojection can return an empty bbox. YWe ignore it since it contains no pixels.
+                // In some strange cases the reprojection can return an empty box.
+                // We ignore it since it contains no pixels.
+                Err(geoengine_datatypes::error::Error::OutputBboxEmpty { bbox: _ }) => Ok(None),
                 Err(e) => Err(e.into()),
             }
         } else {
