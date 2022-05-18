@@ -512,7 +512,6 @@ impl NetCdfCfDataProvider {
                 continue;
             }
 
-            // let mut path = path.to_owned();
             match path.strip_prefix(&self.path) {
                 Ok(path) => files.push(path.to_owned()),
                 Err(_) => {
