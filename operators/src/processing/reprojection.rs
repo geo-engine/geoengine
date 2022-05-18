@@ -903,9 +903,14 @@ mod tests {
             .collect::<Vec<RasterTile2D<u8>>>()
             .await;
 
+        // Write the tiles to a file
+        // let mut buffer = File::create("MOD13A2_M_NDVI_2014-04-01_tile-20.rst")?;
+        // buffer.write(res[8].clone().into_materialized_tile().grid_array.data.as_slice())?;
+
         // This check is against a tile produced by the operator itself. It was visually validated. TODO: rebuild when open issues are solved.
         // A perfect validation would be against a GDAL output generated like this:
         // gdalwarp -t_srs EPSG:3857 -tr 11111.11111111 11111.11111111 -r near -te 0.0 5011111.111111112 5000000.0 10011111.111111112 -te_srs EPSG:3857 -of GTiff ./MOD13A2_M_NDVI_2014-04-01.TIFF ./MOD13A2_M_NDVI_2014-04-01_tile-20.rst
+
         assert_eq!(
             include_bytes!(
                 "../../../test_data/raster/modis_ndvi/projected_3857/MOD13A2_M_NDVI_2014-04-01_tile-20.rst"

@@ -1015,11 +1015,15 @@ mod tests {
         };
 
         assert_eq!(
-            origin_split_tileing_strategy.upper_left_pixel_idx(partition),
+            origin_split_tileing_strategy
+                .geo_transform
+                .upper_left_pixel_idx(&partition),
             [0, 0].into()
         );
         assert_eq!(
-            origin_split_tileing_strategy.lower_right_pixel_idx(partition),
+            origin_split_tileing_strategy
+                .geo_transform
+                .lower_right_pixel_idx(&partition),
             [1800 - 1, 3600 - 1].into()
         );
 
@@ -1049,11 +1053,15 @@ mod tests {
         };
 
         assert_eq!(
-            origin_split_tileing_strategy.upper_left_pixel_idx(partition),
+            origin_split_tileing_strategy
+                .geo_transform
+                .upper_left_pixel_idx(&partition),
             [-900, -1800].into()
         );
         assert_eq!(
-            origin_split_tileing_strategy.lower_right_pixel_idx(partition),
+            origin_split_tileing_strategy
+                .geo_transform
+                .lower_right_pixel_idx(&partition),
             [1800 / 2 - 1, 3600 / 2 - 1].into()
         );
 
