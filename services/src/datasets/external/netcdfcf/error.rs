@@ -1,3 +1,5 @@
+use std::path::PathBuf;
+
 use gdal::errors::GdalError;
 use geoengine_datatypes::dataset::DatasetProviderId;
 use snafu::Snafu;
@@ -147,8 +149,9 @@ pub enum NetCdfCf4DProviderError {
     CannotWriteMetadataFile {
         source: Box<dyn ErrorSource>,
     },
-    CannotReadMetadataFileDir {},
-    CannotReadInputFileDir,
+    CannotReadInputFileDir {
+        path: PathBuf,
+    },
     CannotOpenNetCdfDataset {
         source: Box<dyn ErrorSource>,
     },

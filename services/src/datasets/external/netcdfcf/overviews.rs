@@ -248,7 +248,9 @@ fn index_subdataset(conversion: &ConversionMetadata, time_coverage: &TimeCoverag
         conversion
             .dataset_out
             .parent()
-            .context(error::CannotReadInputFileDir)?,
+            .context(error::CannotReadInputFileDir {
+                path: conversion.dataset_out.clone(),
+            })?,
     )
     .boxed_context(error::CannotCreateOverviews)?;
 
