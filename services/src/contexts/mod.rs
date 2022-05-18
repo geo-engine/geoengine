@@ -24,7 +24,7 @@ use geoengine_operators::source::{GdalLoadingInfo, OgrSourceDataset};
 
 use crate::datasets::listing::SessionMetaDataProvider;
 pub use in_memory::InMemoryContext;
-pub use session::{MockableSession, Session, SessionId, SimpleSession};
+pub use session::{AdminSession, MockableSession, Session, SessionId, SimpleSession};
 pub use simple_context::SimpleContext;
 
 pub type Db<T> = Arc<RwLock<T>>;
@@ -33,7 +33,7 @@ pub type Db<T> = Arc<RwLock<T>>;
 /// about the user to pass to the services handlers.
 #[async_trait]
 pub trait Context: 'static + Send + Sync + Clone {
-    type Session: MockableSession + Clone; // TODO: change to `[Session]` when workarounds are gone
+    type Session: MockableSession + Clone + From<AdminSession>; // TODO: change to `[Session]` when workarounds are gone
     type ProjectDB: ProjectDb<Self::Session>;
     type WorkflowRegistry: WorkflowRegistry;
     type DatasetDB: DatasetDb<Self::Session>;

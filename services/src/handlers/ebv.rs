@@ -2,6 +2,7 @@
 //!
 //! Connects to <https://portal.geobon.org/api/v1/>.
 
+use crate::contexts::AdminSession;
 use crate::datasets::external::netcdfcf::{NetCdfOverview, NETCDF_CF_PROVIDER_ID};
 use crate::datasets::listing::ExternalDatasetProvider;
 use crate::datasets::storage::DatasetProviderDb;
@@ -14,7 +15,7 @@ use actix_web::{
 };
 use geoengine_datatypes::dataset::DatasetProviderId;
 use log::{debug, warn};
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use snafu::{ResultExt, Snafu};
 use std::path::PathBuf;
 use url::Url;
@@ -352,13 +353,12 @@ struct NetCdfCfOverviewResponse {
     error: Vec<PathBuf>,
 }
 
-// TODO: add token auth
+/// Create overviews for a all `NetCDF` files of the provider
 async fn create_overviews<C: Context>(
-    _base_url: web::Data<BaseUrl>,
-    session: C::Session,
+    session: AdminSession,
     ctx: web::Data<C>,
 ) -> Result<impl Responder> {
-    let response = with_netcdfcf_provider(ctx.as_ref(), &session, move |provider| {
+    let response = with_netcdfcf_provider(ctx.as_ref(), &session.into(), move |provider| {
         let mut success = vec![];
         let mut error = vec![];
 
