@@ -480,36 +480,6 @@ impl<'g> MdArray<'g> {
         })
     }
 
-    // pub fn dimension_names(&self) -> Result<Vec<String>, GdalError> {
-    //     let mut number_of_dimensions = 0;
-    //     let mut dimension_names = Vec::new();
-
-    //     unsafe {
-    //         let c_dimensions = GDALMDArrayGetDimensions(
-    //             self.c_mdarray,
-    //             std::ptr::addr_of_mut!(number_of_dimensions),
-    //         );
-
-    //         let dimensions = std::slice::from_raw_parts_mut(c_dimensions, number_of_dimensions);
-
-    //         for dimension in dimensions {
-    //             let c_name = GDALDimensionGetName(*dimension);
-
-    //             if c_name.is_null() {
-    //                 return Err(MdGroup::_last_null_pointer_err("GDALDimensionGetName"));
-    //             }
-
-    //             let name = MdGroup::_string(c_name);
-
-    //             dimension_names.push(name);
-    //         }
-
-    //         GDALReleaseDimensions(c_dimensions, number_of_dimensions);
-    //     }
-
-    //     Ok(dimension_names)
-    // }
-
     /// Don't put a NULL-byte in the name!!!
     pub fn attribute_as_string(&self, name: &str) -> Result<String, GdalError> {
         let name = CString::new(name).expect("no null-byte in name");
