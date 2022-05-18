@@ -43,7 +43,8 @@ where
             web::resource("/dataset/{id}/subdatasets")
                 .route(web::get().to(get_ebv_subdatasets::<C>)),
         )
-        .service(web::resource("/create_overviews").route(web::post().to(create_overviews::<C>)));
+        .service(web::resource("/create_overviews").route(web::post().to(create_overviews::<C>)))
+        .service(web::resource("/create_overview").route(web::post().to(create_overview::<C>)));
     })
 }
 
@@ -378,6 +379,39 @@ async fn create_overviews<C: Context>(
         }
 
         Result::<_, EbvError>::Ok(NetCdfCfOverviewResponse { success, error })
+    })
+    .await?;
+
+    Ok(web::Json(response))
+}
+
+#[derive(Debug, Deserialize)]
+struct CreateOverviewParams {
+    file: PathBuf,
+}
+
+/// Create overviews for a single `NetCDF` file
+async fn create_overview<C: Context>(
+    session: AdminSession,
+    ctx: web::Data<C>,
+    params: web::Json<CreateOverviewParams>,
+) -> Result<impl Responder> {
+    let file = params.into_inner().file;
+
+    let response = with_netcdfcf_provider(ctx.as_ref(), &session.into(), move |provider| {
+        Ok(match provider.create_overviews(&file) {
+            Ok(()) => NetCdfCfOverviewResponse {
+                success: vec![file],
+                error: vec![],
+            },
+            Err(e) => {
+                warn!("Failed to create overviews for {}: {e}", file.display());
+                NetCdfCfOverviewResponse {
+                    success: vec![],
+                    error: vec![file],
+                }
+            }
+        })
     })
     .await?;
 
