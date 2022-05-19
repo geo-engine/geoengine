@@ -1016,7 +1016,7 @@ where
                     let fixed_nulls = if column.null_count() > 0 {
                         array.data_ref().null_bitmap()
                     } else {
-                        &None //StringBuilder assigns some null_bitmap even if there are no nulls
+                        None // StringBuilder assigns some null_bitmap even if there are no nulls
                     };
                     TextDataRef::new(array.value_data(), array.value_offsets(), fixed_nulls).into()
                 }

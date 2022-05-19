@@ -107,7 +107,7 @@ pub struct MultiPointCoveredPixels {
     collection: FeatureCollection<MultiPoint>,
 }
 
-impl<'a> CoveredPixels<MultiPoint> for MultiPointCoveredPixels {
+impl CoveredPixels<MultiPoint> for MultiPointCoveredPixels {
     fn initialize(collection: FeatureCollection<MultiPoint>) -> Self {
         Self { collection }
     }
