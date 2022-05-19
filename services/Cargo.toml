@@ -66,13 +66,13 @@ strum = { version = "0.24", features = ["derive"] }
 time = "0.3"
 tokio = { version = "1.15", features = ["macros", "fs", "signal", "sync", "rt-multi-thread"] }
 tokio-util = { version = "0.7", features = ["codec"] }
-tonic = { version = "0.6", features = ["tls", "tls-roots"] }
+tonic = { version = "0.6", features = ["tls", "tls-roots"] } # must be compatible with `scienceobjectsdb_rust_api`
 tracing = "0.1"
 tracing-actix-web = "0.5"
 tracing-subscriber = { version = "0.3", features = ["local-time", "ansi"] }
 typetag = "0.1"
 url = { version = "2.2", features = ["serde"] }
-uuid = { version = "0.8", features = ["serde", "v4", "v5"] }
+uuid = { version = "0.8", features = ["serde", "v4", "v5"] } # must be compatible with `bb8-postgres`
 zip = "0.6"
 
 [dev-dependencies]

@@ -55,7 +55,7 @@ where
 }
 
 #[async_trait]
-impl<'a, TO, Tuple> QueryProcessor for ExpressionQueryProcessor<TO, Tuple>
+impl<TO, Tuple> QueryProcessor for ExpressionQueryProcessor<TO, Tuple>
 where
     TO: Pixel,
     Tuple: ExpressionTupleProcessor<TO>,

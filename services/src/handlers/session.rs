@@ -227,7 +227,7 @@ mod tests {
         check_allowed_http_methods(anonymous_test_helper, &[Method::POST]).await;
     }
 
-    #[tokio::test]
+    #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
     async fn it_disables_anonymous_access() {
         config::set_config(
             "session.fixed_session_token",

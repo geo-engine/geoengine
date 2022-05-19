@@ -1,6 +1,10 @@
 use crate::datasets::add_from_directory::add_providers_from_directory;
 use crate::error::{self, Result};
+use crate::layers::add_from_directory::{
+    add_layer_collections_from_directory, add_layers_from_directory,
+};
 use crate::pro::datasets::{add_datasets_from_directory, PostgresDatasetDb, Role};
+use crate::pro::layers::postgres_layer_db::PostgresLayerDb;
 use crate::pro::projects::ProjectPermission;
 use crate::pro::users::{UserDb, UserId, UserSession};
 use crate::pro::workflows::postgres_workflow_registry::PostgresWorkflowRegistry;
@@ -43,6 +47,7 @@ where
     project_db: Arc<PostgresProjectDb<Tls>>,
     workflow_registry: Arc<PostgresWorkflowRegistry<Tls>>,
     dataset_db: Arc<PostgresDatasetDb<Tls>>,
+    layer_db: Arc<PostgresLayerDb<Tls>>,
     thread_pool: Arc<ThreadPool>,
     exe_ctx_tiling_spec: TilingSpecification,
     query_ctx_chunk_size: ChunkByteSize,
@@ -72,6 +77,7 @@ where
             project_db: Arc::new(PostgresProjectDb::new(pool.clone())),
             workflow_registry: Arc::new(PostgresWorkflowRegistry::new(pool.clone())),
             dataset_db: Arc::new(PostgresDatasetDb::new(pool.clone())),
+            layer_db: Arc::new(PostgresLayerDb::new(pool.clone())),
             thread_pool: create_rayon_thread_pool(0),
             exe_ctx_tiling_spec,
             query_ctx_chunk_size,
@@ -79,11 +85,14 @@ where
     }
 
     // TODO: check if the datasets exist already and don't output warnings when skipping them
+    #[allow(clippy::too_many_arguments)]
     pub async fn new_with_data(
         config: Config,
         tls: Tls,
         dataset_defs_path: PathBuf,
         provider_defs_path: PathBuf,
+        layer_defs_path: PathBuf,
+        layer_collection_defs_path: PathBuf,
         exe_ctx_tiling_spec: TilingSpecification,
         query_ctx_chunk_size: ChunkByteSize,
     ) -> Result<Self> {
@@ -93,16 +102,29 @@ where
 
         Self::update_schema(pool.get().await?).await?;
 
+        let mut workflow_db = PostgresWorkflowRegistry::new(pool.clone());
+        let mut layer_db = PostgresLayerDb::new(pool.clone());
+
+        add_layers_from_directory(&mut layer_db, &mut workflow_db, layer_defs_path).await;
+        add_layer_collections_from_directory(&mut layer_db, layer_collection_defs_path).await;
+
         let mut dataset_db = PostgresDatasetDb::new(pool.clone());
-        add_datasets_from_directory(&mut dataset_db, dataset_defs_path).await;
+        add_datasets_from_directory(
+            &mut dataset_db,
+            &mut layer_db,
+            &mut workflow_db,
+            dataset_defs_path,
+        )
+        .await;
         add_providers_from_directory(&mut dataset_db, provider_defs_path.clone()).await;
         add_providers_from_directory(&mut dataset_db, provider_defs_path.join("pro")).await;
 
         Ok(Self {
             user_db: Arc::new(PostgresUserDb::new(pool.clone())),
             project_db: Arc::new(PostgresProjectDb::new(pool.clone())),
-            workflow_registry: Arc::new(PostgresWorkflowRegistry::new(pool.clone())),
+            workflow_registry: Arc::new(workflow_db),
             dataset_db: Arc::new(dataset_db),
+            layer_db: Arc::new(layer_db),
             thread_pool: create_rayon_thread_pool(0),
             exe_ctx_tiling_spec,
             query_ctx_chunk_size,
@@ -367,6 +389,33 @@ where
                             FROM 
                                 user_roles r JOIN dataset_permissions p ON (r.role_id = p.role_id);
 
+
+                        CREATE TABLE layer_collections (
+                            id UUID PRIMARY KEY,
+                            name text NOT NULL,
+                            description text NOT NULL
+                        );
+
+                        CREATE TABLE layers (
+                            id UUID PRIMARY KEY,
+                            name text NOT NULL,
+                            description text NOT NULL,
+                            workflow UUID REFERENCES workflows NOT NULL,
+                            symbology json 
+                        );
+
+                        CREATE TABLE collection_layers (
+                            collection UUID REFERENCES layer_collections(id) ON DELETE CASCADE NOT NULL,
+                            layer UUID REFERENCES layers(id) ON DELETE CASCADE NOT NULL,
+                            PRIMARY KEY (collection, layer)
+                        );
+
+                        CREATE TABLE collection_children (
+                            parent UUID REFERENCES layer_collections(id) ON DELETE CASCADE NOT NULL,
+                            child UUID REFERENCES layer_collections(id) ON DELETE CASCADE NOT NULL,
+                            PRIMARY KEY (parent, child)
+                        );
+
                         -- TODO: uploads, providers permissions
 
                         -- TODO: relationship between uploads and datasets?                        
@@ -449,6 +498,7 @@ where
     type ProjectDB = PostgresProjectDb<Tls>;
     type WorkflowRegistry = PostgresWorkflowRegistry<Tls>;
     type DatasetDB = PostgresDatasetDb<Tls>;
+    type LayerDB = PostgresLayerDb<Tls>;
     type QueryContext = QueryContextImpl;
     type ExecutionContext = ExecutionContextImpl<UserSession, PostgresDatasetDb<Tls>>;
 
@@ -471,6 +521,13 @@ where
     }
     fn dataset_db_ref(&self) -> &Self::DatasetDB {
         &self.dataset_db
+    }
+
+    fn layer_db(&self) -> Arc<Self::LayerDB> {
+        self.layer_db.clone()
+    }
+    fn layer_db_ref(&self) -> &Self::LayerDB {
+        &self.layer_db
     }
 
     fn query_context(&self) -> Result<Self::QueryContext> {
@@ -516,6 +573,11 @@ mod tests {
     };
     use crate::datasets::upload::{FileId, UploadId};
     use crate::datasets::upload::{FileUpload, Upload, UploadDb};
+    use crate::layers::layer::{
+        AddLayer, AddLayerCollection, CollectionItem, LayerCollectionListOptions,
+        LayerCollectionListing, LayerListing,
+    };
+    use crate::layers::storage::LayerDb;
     use crate::pro::datasets::{DatasetPermission, Permission, UpdateDatasetPermissions};
     use crate::pro::projects::{LoadVersion, ProProjectDb, UserProjectPermission};
     use crate::pro::users::{UserCredentials, UserDb, UserRegistration};
@@ -1665,6 +1727,162 @@ mod tests {
                 .get_upload(&session2, upload_id)
                 .await
                 .is_err());
+        })
+        .await;
+    }
+
+    #[allow(clippy::too_many_lines)]
+    #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
+    async fn it_collects_layers() {
+        with_temp_context(|ctx, _| async move {
+            let layer_db = ctx.layer_db_ref();
+            let workflow_db = ctx.workflow_registry_ref();
+
+            let workflow = workflow_db
+                .register(Workflow {
+                    operator: TypedOperator::Vector(
+                        MockPointSource {
+                            params: MockPointSourceParams {
+                                points: vec![Coordinate2D::new(1., 2.); 3],
+                            },
+                        }
+                        .boxed(),
+                    ),
+                })
+                .await
+                .unwrap();
+
+            let layer1 = layer_db
+                .add_layer(
+                    AddLayer {
+                        name: "Layer1".to_string(),
+                        description: "Layer 1".to_string(),
+                        symbology: None,
+                        workflow,
+                    }
+                    .validated()
+                    .unwrap(),
+                )
+                .await
+                .unwrap();
+
+            assert_eq!(
+                layer_db.get_layer(layer1).await.unwrap(),
+                crate::layers::layer::Layer {
+                    id: layer1,
+                    name: "Layer1".to_string(),
+                    description: "Layer 1".to_string(),
+                    symbology: None,
+                    workflow
+                }
+            );
+
+            let layer2 = layer_db
+                .add_layer(
+                    AddLayer {
+                        name: "Layer2".to_string(),
+                        description: "Layer 2".to_string(),
+                        symbology: None,
+                        workflow,
+                    }
+                    .validated()
+                    .unwrap(),
+                )
+                .await
+                .unwrap();
+
+            let collection1 = layer_db
+                .add_collection(
+                    AddLayerCollection {
+                        name: "Collection1".to_string(),
+                        description: "Collection 1".to_string(),
+                    }
+                    .validated()
+                    .unwrap(),
+                )
+                .await
+                .unwrap();
+
+            let collection2 = layer_db
+                .add_collection(
+                    AddLayerCollection {
+                        name: "Collection2".to_string(),
+                        description: "Collection 2".to_string(),
+                    }
+                    .validated()
+                    .unwrap(),
+                )
+                .await
+                .unwrap();
+
+            layer_db
+                .add_layer_to_collection(layer1, collection1)
+                .await
+                .unwrap();
+
+            layer_db
+                .add_collection_to_parent(collection2, collection1)
+                .await
+                .unwrap();
+
+            let root_list = layer_db
+                .get_root_collection_items(
+                    LayerCollectionListOptions {
+                        offset: 0,
+                        limit: 20,
+                    }
+                    .validated()
+                    .unwrap(),
+                )
+                .await
+                .unwrap();
+
+            assert_eq!(
+                root_list,
+                vec![
+                    CollectionItem::Collection(LayerCollectionListing {
+                        id: collection1,
+                        name: "Collection1".to_string(),
+                        description: "Collection 1".to_string(),
+                    }),
+                    CollectionItem::Layer(LayerListing {
+                        id: layer2,
+                        name: "Layer2".to_string(),
+                        description: "Layer 2".to_string(),
+                        workflow
+                    })
+                ]
+            );
+
+            let collection1_list = layer_db
+                .get_collection_items(
+                    collection1,
+                    LayerCollectionListOptions {
+                        offset: 0,
+                        limit: 20,
+                    }
+                    .validated()
+                    .unwrap(),
+                )
+                .await
+                .unwrap();
+
+            assert_eq!(
+                collection1_list,
+                vec![
+                    CollectionItem::Collection(LayerCollectionListing {
+                        id: collection2,
+                        name: "Collection2".to_string(),
+                        description: "Collection 2".to_string(),
+                    }),
+                    CollectionItem::Layer(LayerListing {
+                        id: layer1,
+                        name: "Layer1".to_string(),
+                        description: "Layer 1".to_string(),
+                        workflow
+                    })
+                ]
+            );
         })
         .await;
     }

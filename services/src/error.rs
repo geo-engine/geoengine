@@ -330,6 +330,11 @@ pub enum Error {
     },
 
     BaseUrlMustEndWithSlash,
+
+    #[snafu(context(false))]
+    LayerDb {
+        source: crate::layers::storage::LayerDbError,
+    },
 }
 
 impl actix_web::error::ResponseError for Error {
