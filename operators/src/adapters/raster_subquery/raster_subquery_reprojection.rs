@@ -337,8 +337,8 @@ where
                                 *pixel = lookup_value;
                             }
                         }
-                    })
-            })
+                    });
+            });
     });
 
     Ok(TileWithProjectionCoordinates {
