@@ -103,8 +103,7 @@ where
 }
 
 #[async_trait]
-impl<'a, Q, PIn: Pixel, POut: Pixel> QueryProcessor
-    for RasterTypeConversionQueryProcessor<Q, PIn, POut>
+impl<Q, PIn: Pixel, POut: Pixel> QueryProcessor for RasterTypeConversionQueryProcessor<Q, PIn, POut>
 where
     PIn: AsPrimitive<POut>,
     POut: DefaultNoDataValue,
