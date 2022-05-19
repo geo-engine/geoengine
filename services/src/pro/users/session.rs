@@ -1,4 +1,4 @@
-use crate::contexts::{Context, MockableSession, Session, SessionId};
+use crate::contexts::{AdminSession, Context, MockableSession, Session, SessionId};
 use crate::error;
 use crate::handlers::get_token;
 use crate::pro::contexts::{PostgresContext, ProInMemoryContext};
@@ -119,5 +119,14 @@ impl FromRequest for UserSession {
             .expect("ProInMemoryContext will be registered because Postgres was not activated");
         let mem_ctx = mem_ctx.get_ref().clone();
         async move { mem_ctx.session_by_id(token).await.map_err(Into::into) }.boxed_local()
+    }
+}
+
+impl From<AdminSession> for UserSession {
+    fn from(admin_session: AdminSession) -> Self {
+        let mut system_session = Self::system_session();
+        system_session.id = admin_session.id();
+
+        system_session
     }
 }

@@ -120,9 +120,45 @@ pub fn raster_descriptor_from_dataset(
     Ok(RasterResultDescriptor {
         data_type,
         spatial_reference: spatial_ref.into(),
-        measurement: Measurement::Unitless,
+        measurement: measurement_from_rasterband(dataset, band)?,
         no_data_value: rasterband.no_data_value(),
     })
+}
+
+// TODO: use https://github.com/georust/gdal/pull/271 when merged and released
+fn measurement_from_rasterband(dataset: &Dataset, band: isize) -> Result<Measurement> {
+    unsafe fn _string(raw_ptr: *const std::os::raw::c_char) -> String {
+        let c_str = std::ffi::CStr::from_ptr(raw_ptr);
+        c_str.to_string_lossy().into_owned()
+    }
+
+    unsafe fn _last_null_pointer_err(method_name: &'static str) -> gdal::errors::GdalError {
+        let last_err_msg = _string(gdal_sys::CPLGetLastErrorMsg());
+        gdal_sys::CPLErrorReset();
+        gdal::errors::GdalError::NullPointer {
+            method_name,
+            msg: last_err_msg,
+        }
+    }
+
+    let unit: String = unsafe {
+        // taken from `pub fn rasterband(&self, band_index: isize) -> Result<RasterBand>`
+        let c_band = gdal_sys::GDALGetRasterBand(dataset.c_dataset(), band as std::os::raw::c_int);
+        if c_band.is_null() {
+            return Err(_last_null_pointer_err("GDALGetRasterBand"))?;
+        }
+
+        let str_ptr = gdal_sys::GDALGetRasterUnitType(c_band);
+        Result::<String>::Ok(_string(str_ptr))
+    }?;
+
+    if unit.trim().is_empty() || unit == "no unit" {
+        return Ok(Measurement::Unitless);
+    }
+
+    // TODO: how to check if the measurement is contiuous vs. classification?
+
+    Ok(Measurement::continuous(String::new(), Some(unit)))
 }
 
 /// Create `GdalDatasetParameters` from the infos in the given `dataset` and its `band`.
