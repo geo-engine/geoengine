@@ -171,7 +171,7 @@ impl<T: Pixel> OperatorDatasets for MockRasterSource<T> {
 ///
 /// TODO: implementation is done with `paste!`, but we can use `core::concat_idents` once its stable
 ///
-/// ```no_run
+/// ```compile_fail
 /// #[typetag::serde]
 /// #[async_trait]
 /// impl<T: Pixel> RasterOperator for MockRasterSource<T> {
