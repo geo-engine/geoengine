@@ -154,7 +154,7 @@ impl FromRequest for AdminSession {
 
             if request_token != admin_session.id() {
                 return Err(Error::Authorization {
-                    source: Box::new(Error::InvalidSession),
+                    source: Box::new(Error::InvalidAdminToken),
                 });
             }
 

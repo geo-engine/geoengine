@@ -77,6 +77,8 @@ pub enum Error {
     LogoutFailed,
     #[snafu(display("The session id is invalid."))]
     InvalidSession,
+    #[snafu(display("Invalid admin token"))]
+    InvalidAdminToken,
     #[snafu(display("Header with authorization token not provided."))]
     MissingAuthorizationHeader,
     #[snafu(display("Authentication scheme must be Bearer."))]
