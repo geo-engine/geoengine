@@ -38,6 +38,12 @@ struct ConversionMetadata {
     pub dataset_out: PathBuf,
 }
 
+#[derive(Debug, Clone, Copy)]
+pub enum OverviewGeneration {
+    Created,
+    Skipped,
+}
+
 impl NetCdfGroup {
     fn flatten(&self) -> Vec<Vec<String>> {
         let mut out_paths = Vec::new();
@@ -131,7 +137,7 @@ pub fn create_overviews(
     provider_path: &Path,
     dataset_path: &Path,
     overview_path: &Path,
-) -> Result<()> {
+) -> Result<OverviewGeneration> {
     let file_path = provider_path.join(dataset_path);
     let out_folder_path = overview_path.join(dataset_path);
 
@@ -159,15 +165,23 @@ pub fn create_overviews(
 
     let group_tree = root_group.group_tree()?;
 
-    store_metadata(provider_path, dataset_path, &out_folder_path)?;
+    match store_metadata(provider_path, dataset_path, &out_folder_path) {
+        Ok(OverviewGeneration::Created) => (),
+        Ok(OverviewGeneration::Skipped) => return Ok(OverviewGeneration::Skipped),
+        Err(e) => return Err(e),
+    };
 
     let time_coverage = time_coverage(&root_group)?;
 
     for conversion in group_tree.conversion_metadata(&file_path, &out_folder_path) {
-        index_subdataset(&conversion, &time_coverage)?;
+        match index_subdataset(&conversion, &time_coverage) {
+            Ok(OverviewGeneration::Created) => (),
+            Ok(OverviewGeneration::Skipped) => return Ok(OverviewGeneration::Skipped),
+            Err(e) => return Err(e),
+        }
     }
 
-    Ok(())
+    Ok(OverviewGeneration::Created)
 }
 
 fn time_coverage(root_group: &MdGroup) -> Result<TimeCoverage> {
@@ -192,12 +206,16 @@ struct TimeCoverage {
     step: TimeStep,
 }
 
-fn store_metadata(provider_path: &Path, dataset_path: &Path, out_folder_path: &Path) -> Result<()> {
+fn store_metadata(
+    provider_path: &Path,
+    dataset_path: &Path,
+    out_folder_path: &Path,
+) -> Result<OverviewGeneration> {
     let out_file_path = out_folder_path.join(METADATA_FILE_NAME);
 
     if out_file_path.exists() {
         debug!("Skipping metadata generation: {}", dataset_path.display());
-        return Ok(());
+        return Ok(OverviewGeneration::Skipped);
     }
 
     debug!("Creating metadata: {}", dataset_path.display());
@@ -218,17 +236,20 @@ fn store_metadata(provider_path: &Path, dataset_path: &Path, out_folder_path: &P
         )
         .boxed_context(error::CannotWriteMetadataFile)?;
 
-    Ok(())
+    Ok(OverviewGeneration::Created)
 }
 
-fn index_subdataset(conversion: &ConversionMetadata, time_coverage: &TimeCoverage) -> Result<()> {
+fn index_subdataset(
+    conversion: &ConversionMetadata,
+    time_coverage: &TimeCoverage,
+) -> Result<OverviewGeneration> {
     const COG_BLOCK_SIZE: &str = "512";
     const COMPRESSION_FORMAT: &str = "LZW";
     const COMPRESSION_LEVEL: &str = "9";
 
     if conversion.dataset_out.exists() {
         debug!("Skipping conversion: {}", conversion.dataset_out.display());
-        return Ok(());
+        return Ok(OverviewGeneration::Skipped);
     }
 
     debug!("Indexing conversion: {}", conversion.dataset_out.display());
@@ -302,7 +323,7 @@ fn index_subdataset(conversion: &ConversionMetadata, time_coverage: &TimeCoverag
         )
         .boxed_context(error::CannotWriteMetadataFile)?;
 
-    Ok(())
+    Ok(OverviewGeneration::Created)
 }
 
 fn generate_loading_info(

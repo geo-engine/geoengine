@@ -3,7 +3,9 @@
 //! Connects to <https://portal.geobon.org/api/v1/>.
 
 use crate::contexts::AdminSession;
-use crate::datasets::external::netcdfcf::{NetCdfOverview, NETCDF_CF_PROVIDER_ID};
+use crate::datasets::external::netcdfcf::{
+    NetCdfOverview, OverviewGeneration, NETCDF_CF_PROVIDER_ID,
+};
 use crate::datasets::listing::ExternalDatasetProvider;
 use crate::datasets::storage::DatasetProviderDb;
 use crate::error::BoxedResultExt;
@@ -351,6 +353,7 @@ where
 #[derive(Debug, Serialize)]
 struct NetCdfCfOverviewResponse {
     success: Vec<PathBuf>,
+    skip: Vec<PathBuf>,
     error: Vec<PathBuf>,
 }
 
@@ -361,6 +364,7 @@ async fn create_overviews<C: Context>(
 ) -> Result<impl Responder> {
     let response = with_netcdfcf_provider(ctx.as_ref(), &session.into(), move |provider| {
         let mut success = vec![];
+        let mut skip = vec![];
         let mut error = vec![];
 
         for file in provider
@@ -370,7 +374,8 @@ async fn create_overviews<C: Context>(
             })?
         {
             match provider.create_overviews(&file) {
-                Ok(()) => success.push(file),
+                Ok(OverviewGeneration::Created) => success.push(file),
+                Ok(OverviewGeneration::Skipped) => skip.push(file),
                 Err(e) => {
                     warn!("Failed to create overviews for {}: {e}", file.display());
                     error.push(file);
@@ -378,7 +383,11 @@ async fn create_overviews<C: Context>(
             }
         }
 
-        Result::<_, EbvError>::Ok(NetCdfCfOverviewResponse { success, error })
+        Result::<_, EbvError>::Ok(NetCdfCfOverviewResponse {
+            success,
+            skip,
+            error,
+        })
     })
     .await?;
 
@@ -400,14 +409,21 @@ async fn create_overview<C: Context>(
 
     let response = with_netcdfcf_provider(ctx.as_ref(), &session.into(), move |provider| {
         Ok(match provider.create_overviews(&file) {
-            Ok(()) => NetCdfCfOverviewResponse {
+            Ok(OverviewGeneration::Created) => NetCdfCfOverviewResponse {
                 success: vec![file],
+                skip: vec![],
+                error: vec![],
+            },
+            Ok(OverviewGeneration::Skipped) => NetCdfCfOverviewResponse {
+                success: vec![],
+                skip: vec![file],
                 error: vec![],
             },
             Err(e) => {
                 warn!("Failed to create overviews for {}: {e}", file.display());
                 NetCdfCfOverviewResponse {
                     success: vec![],
+                    skip: vec![],
                     error: vec![file],
                 }
             }

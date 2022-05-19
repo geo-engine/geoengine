@@ -36,6 +36,7 @@ use walkdir::{DirEntry, WalkDir};
 
 pub use self::error::NetCdfCf4DProviderError;
 use self::gdalmd::MdGroup;
+pub use self::overviews::OverviewGeneration;
 use self::overviews::{create_overviews, METADATA_FILE_NAME};
 
 mod error;
@@ -531,7 +532,7 @@ impl NetCdfCfDataProvider {
         Ok(files)
     }
 
-    pub fn create_overviews(&self, dataset_path: &Path) -> Result<()> {
+    pub fn create_overviews(&self, dataset_path: &Path) -> Result<OverviewGeneration> {
         create_overviews(&self.path, dataset_path, &self.overviews)
     }
 }
