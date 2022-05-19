@@ -1498,7 +1498,7 @@ mod tests {
                     },
                     "duration": {
                         "type": "value",
-                        "granularity": "Seconds",
+                        "granularity": "seconds",
                         "step": 42
                     }
                 },
@@ -1545,7 +1545,7 @@ mod tests {
                     },
                     "duration": {
                         "type": "value",
-                        "granularity": "Seconds",
+                        "granularity": "seconds",
                         "step": 42
                     }
                 },

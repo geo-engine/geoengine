@@ -632,7 +632,7 @@ mod tests {
                         "end": 1_893_456_000_000_i64
                     },
                     "timeStep": {
-                        "granularity": "Years",
+                        "granularity": "years",
                         "step": 10
                     },
                     "colorizer": {

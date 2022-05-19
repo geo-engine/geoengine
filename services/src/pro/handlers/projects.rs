@@ -87,7 +87,7 @@ where
 ///     }
 ///   },
 ///   "timeStep": {
-///     "granularity": "Months",
+///     "granularity": "months",
 ///     "step": 1
 ///   }
 /// }

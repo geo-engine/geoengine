@@ -7,10 +7,13 @@ use crate::engine::{
 use crate::util::Result;
 use async_trait::async_trait;
 use futures::stream::{self, BoxStream, StreamExt};
-use geoengine_datatypes::collections::{FeatureCollection, FeatureCollectionInfos};
+use geoengine_datatypes::collections::{
+    FeatureCollection, FeatureCollectionInfos, FeatureCollectionModifications,
+};
 use geoengine_datatypes::dataset::DatasetId;
 use geoengine_datatypes::primitives::{
-    Geometry, MultiLineString, MultiPoint, MultiPolygon, NoGeometry, VectorQueryRectangle,
+    Geometry, MultiLineString, MultiPoint, MultiPolygon, NoGeometry, TimeInterval,
+    VectorQueryRectangle,
 };
 use geoengine_datatypes::spatial_reference::{SpatialReference, SpatialReferenceOption};
 use geoengine_datatypes::util::arrow::ArrowTyped;
@@ -32,14 +35,38 @@ where
 
     async fn vector_query<'a>(
         &'a self,
-        _query: VectorQueryRectangle,
+        query: VectorQueryRectangle,
         _ctx: &'a dyn QueryContext,
     ) -> Result<BoxStream<'a, Result<Self::VectorType>>> {
         // TODO: chunk it up
         // let chunk_size = ctx.chunk_byte_size / std::mem::size_of::<Coordinate2D>();
 
-        Ok(stream::iter(self.collections.iter().map(|c| Ok(c.clone()))).boxed())
+        // TODO: filter spatially
+
+        let stream = stream::iter(
+            self.collections
+                .iter()
+                .map(move |c| filter_time_intervals(c, query.time_interval)),
+        );
+
+        Ok(stream.boxed())
     }
+}
+
+fn filter_time_intervals<G>(
+    feature_collection: &FeatureCollection<G>,
+    time_interval: TimeInterval,
+) -> Result<FeatureCollection<G>>
+where
+    G: Geometry + ArrowTyped,
+{
+    let mask: Vec<bool> = feature_collection
+        .time_intervals()
+        .iter()
+        .map(|ti| ti.intersects(&time_interval))
+        .collect();
+
+    feature_collection.filter(mask).map_err(Into::into)
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
