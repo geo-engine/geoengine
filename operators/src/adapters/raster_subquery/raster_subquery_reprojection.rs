@@ -306,35 +306,39 @@ where
     } = accu;
 
     let mut materialized_accu_tile = accu_tile.into_materialized_tile(); //in a fold chain the real materialization should only happen once. All other calls will be simple conversions.
+    let axis_size_x = materialized_accu_tile.grid_array.shape.axis_size_x();
+    let axis_size_y = materialized_accu_tile.grid_array.shape.axis_size_y();
 
     pool.install(|| {
         let parallelism = pool.current_num_threads();
-        let par_chunk_split = num::integer::div_ceil(
-            materialized_accu_tile.grid_array.shape.axis_size_y(),
-            parallelism,
-        )
-        .max(min_rows_in_par_chunk); // don't go below MIN_ROWS_IN_PAR_CHUNK lines per chunk.
-        let par_chunk_size =
-            materialized_accu_tile.grid_array.shape.axis_size_x() * par_chunk_split;
+        let par_chunk_split =
+            num::integer::div_ceil(axis_size_y, parallelism).max(min_rows_in_par_chunk); // don't go below MIN_ROWS_IN_PAR_CHUNK lines per chunk.
+        let par_chunk_size = axis_size_x * par_chunk_split;
 
         materialized_accu_tile
             .grid_array
             .data
             .par_chunks_mut(par_chunk_size)
             .enumerate()
-            .for_each(|(y_f, row_slice)| {
-                let y = y_f * par_chunk_split;
-                row_slice.iter_mut().enumerate().for_each(|(x, pixel)| {
-                    let lookup_coord = coords
-                        .get_at_grid_index_unchecked(GridIdx2D::from([y as isize, x as isize]));
-                    if let Some(coord) = lookup_coord {
-                        if tile.spatial_partition().contains_coordinate(&coord) {
-                            let lookup_value = tile.pixel_value_at_coord_unchecked(coord);
-                            *pixel = lookup_value;
+            .for_each(|(chunk_idx, chunk_slice)| {
+                let chunk_start_y = chunk_idx * par_chunk_split;
+                chunk_slice
+                    .iter_mut()
+                    .enumerate()
+                    .for_each(|(lin_idx, pixel)| {
+                        let x_idx = lin_idx % axis_size_x;
+                        let y_idx = lin_idx / axis_size_x + chunk_start_y;
+                        let grid_idx = GridIdx2D::from([y_idx as isize, x_idx as isize]);
+
+                        let lookup_coord = coords.get_at_grid_index_unchecked(grid_idx);
+                        if let Some(coord) = lookup_coord {
+                            if tile.spatial_partition().contains_coordinate(&coord) {
+                                let lookup_value = tile.pixel_value_at_coord_unchecked(coord);
+                                *pixel = lookup_value;
+                            }
                         }
-                    }
-                });
-            });
+                    })
+            })
     });
 
     Ok(TileWithProjectionCoordinates {
