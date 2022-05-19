@@ -475,7 +475,14 @@ impl NetCdfCfDataProvider {
             .join(&dataset_id.group_names.join("/"))
             .join("ebv_cube.json");
 
-        let loading_info_file = std::fs::File::open(&loading_info_path).ok()?;
+        let loading_info_file = match std::fs::File::open(&loading_info_path) {
+            Ok(file) => file,
+            Err(_) => {
+                debug!("No overview for {dataset_id:?}");
+                return None;
+            }
+        };
+
         let mut loading_info: GdalMetadataNetCdfCf =
             serde_json::from_reader(BufReader::new(loading_info_file)).ok()?;
 
