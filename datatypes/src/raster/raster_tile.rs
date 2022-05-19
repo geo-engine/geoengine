@@ -72,7 +72,7 @@ where
 
         let tile_upper_left_coord = self
             .global_geo_transform
-            .grid_idx_to_upper_left_coordinate_2d(global_upper_left_idx);
+            .grid_idx_to_pixel_upper_left_coordinate_2d(global_upper_left_idx);
 
         GeoTransform::new(
             tile_upper_left_coord,

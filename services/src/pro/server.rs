@@ -43,6 +43,7 @@ where
             .wrap(middleware::NormalizePath::trim())
             .configure(configure_extractors)
             .configure(handlers::datasets::init_dataset_routes::<C>)
+            .configure(handlers::layers::init_layer_routes::<C>)
             .configure(handlers::plots::init_plot_routes::<C>)
             .configure(pro::handlers::projects::init_project_routes::<C>)
             .configure(pro::handlers::users::init_user_routes::<C>)
@@ -142,6 +143,8 @@ pub async fn start_pro_server(static_files_dir: Option<PathBuf>) -> Result<()> {
             let ctx = ProInMemoryContext::new_with_data(
                 data_path_config.dataset_defs_path,
                 data_path_config.provider_defs_path,
+                data_path_config.layer_defs_path,
+                data_path_config.layer_collection_defs_path,
                 tiling_spec,
                 chunk_byte_size,
             )
@@ -175,6 +178,8 @@ pub async fn start_pro_server(static_files_dir: Option<PathBuf>) -> Result<()> {
                     NoTls,
                     data_path_config.dataset_defs_path,
                     data_path_config.provider_defs_path,
+                    data_path_config.layer_defs_path,
+                    data_path_config.layer_collection_defs_path,
                     tiling_spec,
                     chunk_byte_size,
                 )

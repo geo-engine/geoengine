@@ -392,7 +392,7 @@ mod tests {
     use std::path::PathBuf;
 
     #[allow(clippy::too_many_lines)]
-    #[tokio::test]
+    #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
     async fn it_works() -> Result<()> {
         let mut test_data = TestDataUploads::default(); // remember created folder and remove them on drop
 

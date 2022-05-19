@@ -3,6 +3,7 @@
 pub mod contexts;
 pub mod datasets;
 pub mod handlers;
+pub mod layers;
 pub mod projects;
 pub mod server;
 pub mod users;

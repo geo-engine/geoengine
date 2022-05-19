@@ -220,7 +220,7 @@ where
 #[derive(Clone, Debug, PartialEq)]
 pub struct FloatDataRef<'f> {
     buffer: &'f [f64],
-    valid_bitmap: &'f Option<arrow::bitmap::Bitmap>,
+    valid_bitmap: Option<&'f arrow::bitmap::Bitmap>,
 }
 
 impl<'f> DataRef<'f, f64> for FloatDataRef<'f> {
@@ -378,7 +378,7 @@ impl<'f> From<FloatDataRef<'f>> for FeatureDataRef<'f> {
 }
 
 impl<'f> FloatDataRef<'f> {
-    pub fn new(buffer: &'f [f64], null_bitmap: &'f Option<arrow::bitmap::Bitmap>) -> Self {
+    pub fn new(buffer: &'f [f64], null_bitmap: Option<&'f arrow::bitmap::Bitmap>) -> Self {
         Self {
             buffer,
             valid_bitmap: null_bitmap,
@@ -389,11 +389,11 @@ impl<'f> FloatDataRef<'f> {
 #[derive(Clone, Debug, PartialEq)]
 pub struct IntDataRef<'f> {
     buffer: &'f [i64],
-    valid_bitmap: &'f Option<arrow::bitmap::Bitmap>,
+    valid_bitmap: Option<&'f arrow::bitmap::Bitmap>,
 }
 
 impl<'f> IntDataRef<'f> {
-    pub fn new(buffer: &'f [i64], null_bitmap: &'f Option<arrow::bitmap::Bitmap>) -> Self {
+    pub fn new(buffer: &'f [i64], null_bitmap: Option<&'f arrow::bitmap::Bitmap>) -> Self {
         Self {
             buffer,
             valid_bitmap: null_bitmap,
@@ -461,7 +461,7 @@ impl<'f> From<IntDataRef<'f>> for FeatureDataRef<'f> {
     }
 }
 
-fn null_bitmap_to_bools(null_bitmap: &Option<Bitmap>, len: usize) -> Vec<bool> {
+fn null_bitmap_to_bools(null_bitmap: Option<&Bitmap>, len: usize) -> Vec<bool> {
     if let Some(nulls) = null_bitmap {
         (0..len).map(|i| !nulls.is_set(i)).collect()
     } else {
@@ -472,11 +472,11 @@ fn null_bitmap_to_bools(null_bitmap: &Option<Bitmap>, len: usize) -> Vec<bool> {
 #[derive(Clone, Debug, PartialEq)]
 pub struct BoolDataRef<'f> {
     buffer: Vec<bool>,
-    valid_bitmap: &'f Option<arrow::bitmap::Bitmap>,
+    valid_bitmap: Option<&'f arrow::bitmap::Bitmap>,
 }
 
 impl<'f> BoolDataRef<'f> {
-    pub fn new(buffer: Vec<bool>, null_bitmap: &'f Option<arrow::bitmap::Bitmap>) -> Self {
+    pub fn new(buffer: Vec<bool>, null_bitmap: Option<&'f arrow::bitmap::Bitmap>) -> Self {
         Self {
             buffer,
             valid_bitmap: null_bitmap,
@@ -577,11 +577,11 @@ impl<'f> Iterator for BoolDataRefFloatOptionIter<'f> {
 #[derive(Clone, Debug, PartialEq)]
 pub struct DateTimeDataRef<'f> {
     buffer: &'f [TimeInstance],
-    valid_bitmap: &'f Option<arrow::bitmap::Bitmap>,
+    valid_bitmap: Option<&'f arrow::bitmap::Bitmap>,
 }
 
 impl<'f> DateTimeDataRef<'f> {
-    pub fn new(buffer: &'f [TimeInstance], null_bitmap: &'f Option<arrow::bitmap::Bitmap>) -> Self {
+    pub fn new(buffer: &'f [TimeInstance], null_bitmap: Option<&'f arrow::bitmap::Bitmap>) -> Self {
         Self {
             buffer,
             valid_bitmap: null_bitmap,
@@ -682,7 +682,7 @@ impl<'f> Iterator for DateTimeDataRefFloatOptionIter<'f> {
 #[derive(Clone, Debug, PartialEq)]
 pub struct CategoryDataRef<'f> {
     buffer: &'f [u8],
-    valid_bitmap: &'f Option<arrow::bitmap::Bitmap>,
+    valid_bitmap: Option<&'f arrow::bitmap::Bitmap>,
 }
 
 impl<'f> DataRef<'f, u8> for CategoryDataRef<'f> {
@@ -746,7 +746,7 @@ impl<'f> From<CategoryDataRef<'f>> for FeatureDataRef<'f> {
 }
 
 impl<'f> CategoryDataRef<'f> {
-    pub fn new(buffer: &'f [u8], null_bitmap: &'f Option<arrow::bitmap::Bitmap>) -> Self {
+    pub fn new(buffer: &'f [u8], null_bitmap: Option<&'f arrow::bitmap::Bitmap>) -> Self {
         Self {
             buffer,
             valid_bitmap: null_bitmap,
@@ -792,7 +792,7 @@ unsafe fn byte_ptr_to_str<'d>(bytes: *const u8, length: usize) -> &'d str {
 pub struct TextDataRef<'f> {
     data_buffer: arrow::buffer::Buffer,
     offsets: &'f [i32],
-    valid_bitmap: &'f Option<arrow::bitmap::Bitmap>,
+    valid_bitmap: Option<&'f arrow::bitmap::Bitmap>,
 }
 
 impl<'f> AsRef<[u8]> for TextDataRef<'f> {
@@ -963,7 +963,7 @@ impl<'r> TextDataRef<'r> {
     pub fn new(
         data_buffer: arrow::buffer::Buffer,
         offsets: &'r [i32],
-        valid_bitmap: &'r Option<arrow::bitmap::Bitmap>,
+        valid_bitmap: Option<&'r arrow::bitmap::Bitmap>,
     ) -> Self {
         Self {
             data_buffer,
