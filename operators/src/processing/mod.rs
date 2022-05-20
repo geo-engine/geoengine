@@ -12,6 +12,7 @@ mod time_projection;
 mod vector_join;
 
 pub use expression::{Expression, ExpressionError, ExpressionParams, ExpressionSources};
+pub use interpolation::{Interpolation, InterpolationError, InterpolationParams};
 pub use point_in_polygon::{
     PointInPolygonFilter, PointInPolygonFilterParams, PointInPolygonFilterSource,
     PointInPolygonTester,

@@ -9,7 +9,6 @@ use crate::engine::{
     RasterOperator, RasterQueryProcessor, RasterResultDescriptor, SingleRasterSource,
     TypedRasterQueryProcessor,
 };
-use crate::error;
 use crate::util::Result;
 use async_trait::async_trait;
 use futures::future::BoxFuture;
@@ -28,6 +27,7 @@ use rayon::iter::{IndexedParallelIterator, ParallelIterator};
 use rayon::slice::ParallelSliceMut;
 use rayon::ThreadPool;
 use serde::{Deserialize, Serialize};
+use snafu::{ensure, Snafu};
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 #[serde(rename_all = "camelCase")]
@@ -41,6 +41,20 @@ pub struct InterpolationParams {
 pub enum InterpolationMethod {
     NearestNeighbor,
     BiLinear,
+}
+
+#[derive(Debug, Snafu)]
+#[snafu(visibility(pub(crate)), context(suffix(false)), module(error))]
+pub enum InterpolationError {
+    #[snafu(display(
+        "The query resolution ({:?}) must be smaller than the input resolution ({:?})",
+        query_resolution,
+        input_resolution
+    ))]
+    QueryResolutionMustBeSmallerThanInputResolution {
+        query_resolution: SpatialResolution,
+        input_resolution: SpatialResolution,
+    },
 }
 
 pub type Interpolation = Operator<InterpolationParams, SingleRasterSource>;
@@ -153,7 +167,14 @@ where
         query: RasterQueryRectangle,
         ctx: &'a dyn QueryContext,
     ) -> Result<BoxStream<'a, Result<Self::Output>>> {
-        // TODO: check input resolution < output resolution
+        ensure!(
+            query.spatial_resolution.x < self.params.input_resolution.x
+                && query.spatial_resolution.y < self.params.input_resolution.y,
+            error::QueryResolutionMustBeSmallerThanInputResolution {
+                query_resolution: query.spatial_resolution,
+                input_resolution: self.params.input_resolution,
+            }
+        );
 
         let sub_query = InterpolationSubQuery::<_, P, I> {
             input_resolution: self.params.input_resolution,
@@ -170,7 +191,7 @@ where
             ctx,
             sub_query,
         )
-        .filter_and_fill(self.no_data_value)) // TODO: check if this is needed
+        .filter_and_fill(self.no_data_value))
     }
 }
 
@@ -187,7 +208,7 @@ impl<'a, T, FoldM, FoldF, I> SubQueryTileAggregator<'a, T> for InterpolationSubQ
 where
     T: Pixel,
     FoldM: Send + Sync + 'a + Clone + Fn(InterpolationAccu<T, I>, RasterTile2D<T>) -> FoldF,
-    FoldF: Send + TryFuture<Ok = InterpolationAccu<T, I>, Error = error::Error>,
+    FoldF: Send + TryFuture<Ok = InterpolationAccu<T, I>, Error = crate::error::Error>,
     I: InterpolationAlgorithm<T>,
 {
     type FoldFuture = FoldF;
@@ -302,8 +323,6 @@ pub fn create_accu<T: Pixel, I: InterpolationAlgorithm<T>>(
             query_rect.spatial_resolution.x,
             -query_rect.spatial_resolution.y,
         );
-
-        // TODO: enlarge query_rect to be sure to have all the neighbor pixels for the edges
 
         let origin_coordinate = tiling
             .tile_information_iterator(query_rect.spatial_bounds)

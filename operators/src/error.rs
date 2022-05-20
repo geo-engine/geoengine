@@ -288,6 +288,10 @@ pub enum Error {
     MockRasterSource {
         source: crate::mock::MockRasterSourceError,
     },
+    #[snafu(context(false))]
+    InterpolationOperator {
+        source: crate::processing::InterpolationError,
+    },
 }
 
 impl From<crate::adapters::SparseTilesFillAdapterError> for Error {
