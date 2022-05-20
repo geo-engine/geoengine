@@ -65,8 +65,7 @@ impl TimeInterval {
     where
         A: TryInto<TimeInstance>,
         B: TryInto<TimeInstance>,
-        error::Error: From<A::Error>,
-        error::Error: From<B::Error>,
+        error::Error: From<A::Error> + From<B::Error>,
     {
         let start_instant = start.try_into()?;
         let end_instant = end.try_into()?;

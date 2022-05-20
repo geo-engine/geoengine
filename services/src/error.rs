@@ -6,7 +6,7 @@ use geoengine_datatypes::{
     dataset::{DatasetId, DatasetProviderId},
     spatial_reference::SpatialReferenceOption,
 };
-use snafu::{prelude::*, AsErrorSource};
+use snafu::{prelude::*, AsErrorSource, ErrorCompat, IntoError};
 use strum::IntoStaticStr;
 use tonic::Status;
 
@@ -77,6 +77,8 @@ pub enum Error {
     LogoutFailed,
     #[snafu(display("The session id is invalid."))]
     InvalidSession,
+    #[snafu(display("Invalid admin token"))]
+    InvalidAdminToken,
     #[snafu(display("Header with authorization token not provided."))]
     MissingAuthorizationHeader,
     #[snafu(display("Authentication scheme must be Bearer."))]
@@ -330,6 +332,11 @@ pub enum Error {
     },
 
     BaseUrlMustEndWithSlash,
+
+    #[snafu(context(false))]
+    LayerDb {
+        source: crate::layers::storage::LayerDbError,
+    },
 }
 
 impl actix_web::error::ResponseError for Error {
@@ -464,3 +471,24 @@ pub trait ErrorSource: std::error::Error + Send + Sync + 'static + AsErrorSource
 impl ErrorSource for dyn std::error::Error + Send + Sync + 'static {}
 
 impl<T> ErrorSource for T where T: std::error::Error + Send + Sync + 'static {}
+
+pub trait BoxedResultExt<T, E>: Sized {
+    fn boxed_context<C, E2>(self, context: C) -> Result<T, E2>
+    where
+        C: IntoError<E2, Source = Box<dyn ErrorSource>>,
+        E2: std::error::Error + ErrorCompat;
+}
+
+impl<T, E> BoxedResultExt<T, E> for Result<T, E>
+where
+    E: ErrorSource,
+{
+    fn boxed_context<C, E2>(self, context: C) -> Result<T, E2>
+    where
+        C: IntoError<E2, Source = Box<dyn ErrorSource>>,
+        E2: std::error::Error + ErrorCompat,
+    {
+        self.map_err(|e| Box::new(e) as Box<dyn ErrorSource>)
+            .context(context)
+    }
+}

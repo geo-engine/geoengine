@@ -24,6 +24,13 @@ Content-Type: application/json
 
 ###
 
+GET http://localhost:3030/ebv/dataset/10/subdatasets
+Authorization: Bearer cc708c33-1571-4cf4-b892-9d7afe93ffde
+Accept: application/json
+
+
+###
+
 GET http://localhost:3030/session
 Authorization: Bearer c04e0cd9-e7a9-476c-b201-521db83da0ce
 Content-Type: application/json
@@ -212,3 +219,24 @@ POST http://localhost:3000/task/new/init
 ###
 
 POST http://localhost:3000/task/new/upload/530a6809-34c0-457f-8cb9-52c7b89f1ad6
+
+###
+
+###
+
+POST http://localhost:3030/ebv/create_overviews
+Authorization: Bearer 8aca8875-425a-4ef1-8ee6-cdfc62dd7525
+Accept: application/json
+
+###
+
+POST http://localhost:3030/ebv/create_overview
+Authorization: Bearer 8aca8875-425a-4ef1-8ee6-cdfc62dd7525
+Content-Type: application/json
+Accept: application/json
+
+{
+  "file": "dataset_sm.nc"
+}
+
+###

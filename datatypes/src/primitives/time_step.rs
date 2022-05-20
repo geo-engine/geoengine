@@ -1,3 +1,4 @@
+use std::ops::Sub;
 use std::{cmp::max, convert::TryInto, ops::Add};
 
 use serde::{Deserialize, Serialize};
@@ -15,6 +16,7 @@ use super::{DateTime, Duration, TimeInterval};
 /// A time granularity.
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[cfg_attr(feature = "postgres", derive(ToSql, FromSql))]
+#[serde(rename_all = "camelCase")]
 pub enum TimeGranularity {
     Millis,
     Seconds,
@@ -360,6 +362,82 @@ impl Add<TimeStep> for TimeInstance {
     }
 }
 
+impl Sub<TimeStep> for TimeInstance {
+    type Output = Result<TimeInstance>;
+
+    fn sub(self, rhs: TimeStep) -> Self::Output {
+        let date_time = self.as_date_time().ok_or(Error::NoDateTimeValid {
+            time_instance: self,
+        })?;
+
+        let res_date_time = match rhs.granularity {
+            TimeGranularity::Millis => date_time - Duration::milliseconds(i64::from(rhs.step)),
+            TimeGranularity::Seconds => date_time - Duration::seconds(i64::from(rhs.step)),
+            TimeGranularity::Minutes => date_time - Duration::minutes(i64::from(rhs.step)),
+            TimeGranularity::Hours => date_time - Duration::hours(i64::from(rhs.step)),
+            TimeGranularity::Days => date_time - Duration::days(i64::from(rhs.step)),
+            TimeGranularity::Months => {
+                let months = i64::from(date_time.month0()) - i64::from(rhs.step);
+
+                let (year, month) = if months < 0 {
+                    let month = (months % 12 + 12) as u32;
+                    let years_from_months = 1 + (months.abs() / 12) as i32;
+                    let year = date_time.year() - years_from_months;
+
+                    (year, month as u8 + 1)
+                } else {
+                    (date_time.year(), months as u8 + 1)
+                };
+
+                let day = date_time.day();
+                DateTime::new_utc_checked_with_millis(
+                    year,
+                    month,
+                    day,
+                    date_time.hour(),
+                    date_time.minute(),
+                    date_time.second(),
+                    date_time.millisecond(),
+                )
+                .context(error::DateTimeOutOfBounds { year, month, day })?
+            }
+            TimeGranularity::Years => {
+                let year = date_time.year() - rhs.step as i32;
+                let month = date_time.month();
+                let day = date_time.day();
+                DateTime::new_utc_checked_with_millis(
+                    year,
+                    month,
+                    day,
+                    date_time.hour(),
+                    date_time.minute(),
+                    date_time.second(),
+                    date_time.millisecond(),
+                )
+                .context(error::DateTimeOutOfBounds { year, month, day })?
+            }
+        };
+
+        Ok(TimeInstance::from(res_date_time))
+    }
+}
+
+impl Add<TimeStep> for TimeInterval {
+    type Output = Result<TimeInterval>;
+
+    fn add(self, step: TimeStep) -> Self::Output {
+        Self::new((self.start() + step)?, (self.end() + step)?)
+    }
+}
+
+impl Sub<TimeStep> for TimeInterval {
+    type Output = Result<TimeInterval>;
+
+    fn sub(self, step: TimeStep) -> Self::Output {
+        Self::new((self.start() - step)?, (self.end() - step)?)
+    }
+}
+
 /// An `Iterator` to iterate over time in steps
 #[derive(Debug, Clone)]
 pub struct TimeStepIter {
@@ -522,6 +600,28 @@ mod tests {
         };
 
         assert_eq!((t_1 + time_step).unwrap(), t_expect);
+    }
+
+    fn test_sub(granularity: TimeGranularity, t_step: u32, t_1: &str, t_expect: &str) {
+        let format = DateTimeParseFormat::custom("%Y-%m-%dT%H:%M:%S%.3f".to_string());
+
+        let t_1 = TimeInstance::from(DateTime::parse_from_str(t_1, &format).unwrap());
+        let t_expect = TimeInstance::from(DateTime::parse_from_str(t_expect, &format).unwrap());
+
+        let time_step = TimeStep {
+            granularity,
+            step: t_step,
+        };
+
+        let t_result = (t_1 - time_step).unwrap();
+
+        assert_eq!(
+            t_result,
+            t_expect,
+            "left: {} right: {}",
+            t_1.as_rfc3339(),
+            t_result.as_rfc3339()
+        );
     }
 
     #[test]
@@ -731,6 +831,167 @@ mod tests {
             1000,
             "2000-01-01T00:00:00.0",
             "2000-01-01T00:00:01.0",
+        );
+    }
+
+    #[test]
+    fn test_sub_year() {
+        test_sub(
+            TimeGranularity::Years,
+            0,
+            "2000-01-01T00:00:00.000",
+            "2000-01-01T00:00:00.000",
+        );
+
+        test_sub(
+            TimeGranularity::Years,
+            1,
+            "2000-01-01T00:00:00.000",
+            "1999-01-01T00:00:00.000",
+        );
+    }
+
+    #[test]
+    fn test_sub_month() {
+        test_sub(
+            TimeGranularity::Months,
+            0,
+            "2000-01-01T00:00:00.000",
+            "2000-01-01T00:00:00.000",
+        );
+
+        test_sub(
+            TimeGranularity::Months,
+            1,
+            "2000-01-01T00:00:00.000",
+            "1999-12-01T00:00:00.000",
+        );
+
+        test_sub(
+            TimeGranularity::Months,
+            1,
+            "2000-02-01T00:00:00.000",
+            "2000-01-01T00:00:00.000",
+        );
+    }
+
+    #[test]
+    fn test_sub_day() {
+        test_sub(
+            TimeGranularity::Days,
+            0,
+            "2000-01-01T00:00:00.000",
+            "2000-01-01T00:00:00.000",
+        );
+
+        test_sub(
+            TimeGranularity::Days,
+            1,
+            "2000-01-01T00:00:00.000",
+            "1999-12-31T00:00:00.000",
+        );
+
+        test_sub(
+            TimeGranularity::Days,
+            1,
+            "2000-01-02T00:00:00.000",
+            "2000-01-01T00:00:00.000",
+        );
+    }
+
+    #[test]
+    fn test_sub_hour() {
+        test_sub(
+            TimeGranularity::Hours,
+            0,
+            "2000-01-01T00:00:00.000",
+            "2000-01-01T00:00:00.000",
+        );
+
+        test_sub(
+            TimeGranularity::Hours,
+            1,
+            "2000-01-01T00:00:00.000",
+            "1999-12-31T23:00:00.000",
+        );
+
+        test_sub(
+            TimeGranularity::Hours,
+            1,
+            "2000-01-01T01:00:00.000",
+            "2000-01-01T00:00:00.000",
+        );
+    }
+
+    #[test]
+    fn test_sub_minute() {
+        test_sub(
+            TimeGranularity::Minutes,
+            0,
+            "2000-01-01T00:00:00.000",
+            "2000-01-01T00:00:00.000",
+        );
+
+        test_sub(
+            TimeGranularity::Minutes,
+            1,
+            "2000-01-01T00:01:00.000",
+            "2000-01-01T00:00:00.000",
+        );
+
+        test_sub(
+            TimeGranularity::Minutes,
+            1,
+            "2000-01-01T00:00:00.000",
+            "1999-12-31T23:59:00.000",
+        );
+    }
+
+    #[test]
+    fn test_sub_second() {
+        test_sub(
+            TimeGranularity::Seconds,
+            0,
+            "2000-01-01T00:00:00.000",
+            "2000-01-01T00:00:00.000",
+        );
+
+        test_sub(
+            TimeGranularity::Seconds,
+            1,
+            "2000-01-01T00:00:00.000",
+            "1999-12-31T23:59:59.000",
+        );
+
+        test_sub(
+            TimeGranularity::Seconds,
+            1,
+            "2000-01-01T00:00:01.000",
+            "2000-01-01T00:00:00.000",
+        );
+    }
+
+    #[test]
+    fn test_sub_millisecond() {
+        test_sub(
+            TimeGranularity::Millis,
+            0,
+            "2000-01-01T00:00:00.000",
+            "2000-01-01T00:00:00.000",
+        );
+
+        test_sub(
+            TimeGranularity::Millis,
+            1,
+            "2000-01-01T00:00:00.001",
+            "2000-01-01T00:00:00.000",
+        );
+
+        test_sub(
+            TimeGranularity::Millis,
+            1,
+            "2000-01-01T00:00:00.000",
+            "1999-12-31T23:59:59.999",
         );
     }
 

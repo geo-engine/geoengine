@@ -253,7 +253,7 @@ fn process_tile(
                         } else {
                             let grid_idx = [y as isize, x as isize].into();
                             let geos_coord =
-                                tile_geo_transform.grid_idx_to_center_coordinate_2d(grid_idx);
+                                tile_geo_transform.grid_idx_to_pixel_center_coordinate_2d(grid_idx);
 
                             let (lat, lon) = channel.view_angle_lat_lon(geos_coord, 0.0);
                             let (_, zenith) = sunpos.solar_azimuth_zenith(lat, lon);

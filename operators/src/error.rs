@@ -292,6 +292,10 @@ pub enum Error {
     InterpolationOperator {
         source: crate::processing::InterpolationError,
     },
+    #[snafu(context(false))]
+    TimeShift {
+        source: crate::processing::TimeShiftError,
+    },
 }
 
 impl From<crate::adapters::SparseTilesFillAdapterError> for Error {

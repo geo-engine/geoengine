@@ -1,0 +1,7 @@
+{
+  "id": "272bf675-2e27-4412-824c-287c1e6841ac",
+  "name": "A test collection",
+  "description": "Some layers for testing and an empty subcollection",
+  "collections": ["a29f77cc-51ce-466b-86ef-d0ab2170bc0a"],
+  "layers": ["b75db46e-2b9a-4a86-b33f-bc06a73cd711"]
+}

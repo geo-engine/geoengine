@@ -1,9 +1,10 @@
 use crate::error;
-use crate::primitives::{AxisAlignedRectangle, SpatialPartitioned};
 use crate::raster::{
-    ChangeGridBounds, GeoTransformAccess, GridBlit, MaterializedRasterTile2D, Pixel, RasterTile2D,
+    ChangeGridBounds, GeoTransformAccess, GridBlit, GridIdx2D, MaterializedRasterTile2D, Pixel,
+    RasterTile2D,
 };
 use crate::util::Result;
+
 use snafu::ensure;
 
 pub trait Blit<R> {
@@ -18,6 +19,9 @@ impl<T: Pixel> Blit<RasterTile2D<T>> for MaterializedRasterTile2D<T> {
         // TODO: allow approximately equal pixel sizes?
         // TODO: ensure pixels are aligned
 
+        let into_geo_transform = self.geo_transform();
+        let from_geo_transform = source.geo_transform();
+
         ensure!(
             (self.geo_transform().x_pixel_size() == source.geo_transform().x_pixel_size())
                 && (self.geo_transform().y_pixel_size() == source.geo_transform().y_pixel_size()),
@@ -26,21 +30,31 @@ impl<T: Pixel> Blit<RasterTile2D<T>> for MaterializedRasterTile2D<T> {
             }
         );
 
+        let offset = from_geo_transform.origin_coordinate - into_geo_transform.origin_coordinate;
+
+        let offset_x_pixels = (offset.x / into_geo_transform.x_pixel_size()).round() as isize;
+        let offset_y_pixels = (offset.y / into_geo_transform.y_pixel_size()).round() as isize;
+
+        /*
         ensure!(
-            self.spatial_partition()
-                .intersects(&source.spatial_partition()),
+            offset_x_pixels.abs() <= self.grid_array.axis_size_x() as isize
+                && offset_y_pixels.abs() <= self.grid_array.axis_size_y() as isize,
             error::Blit {
                 details: "No overlapping region",
             }
         );
+        */
 
-        let offset = self
-            .tile_geo_transform()
-            .coordinate_to_grid_idx_2d(source.spatial_partition().upper_left());
+        let origin_offset_pixels = GridIdx2D::new([offset_y_pixels, offset_x_pixels]);
 
-        let shifted_source = source.grid_array.shift_by_offset(offset);
+        let tile_offset_pixels = source.tile_information().global_upper_left_pixel_idx()
+            - self.tile_information().global_upper_left_pixel_idx();
+        let global_offset_pixels = origin_offset_pixels + tile_offset_pixels;
+
+        let shifted_source = source.grid_array.shift_by_offset(global_offset_pixels);
 
         self.grid_array.grid_blit_from(shifted_source);
+
         Ok(())
     }
 }

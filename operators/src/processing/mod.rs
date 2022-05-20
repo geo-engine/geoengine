@@ -9,6 +9,7 @@ mod raster_vector_join;
 mod reprojection;
 mod temporal_raster_aggregation;
 mod time_projection;
+mod time_shift;
 mod vector_join;
 
 pub use expression::{Expression, ExpressionError, ExpressionParams, ExpressionSources};
@@ -19,3 +20,4 @@ pub use point_in_polygon::{
 };
 pub use reprojection::{Reprojection, ReprojectionParams};
 pub use time_projection::{TimeProjection, TimeProjectionError, TimeProjectionParams};
+pub use time_shift::{TimeShift, TimeShiftError, TimeShiftParams};

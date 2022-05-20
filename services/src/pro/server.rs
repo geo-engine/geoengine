@@ -43,6 +43,7 @@ where
             .wrap(middleware::NormalizePath::trim())
             .configure(configure_extractors)
             .configure(handlers::datasets::init_dataset_routes::<C>)
+            .configure(handlers::layers::init_layer_routes::<C>)
             .configure(handlers::plots::init_plot_routes::<C>)
             .configure(pro::handlers::projects::init_project_routes::<C>)
             .configure(pro::handlers::users::init_user_routes::<C>)
@@ -52,14 +53,23 @@ where
             .configure(handlers::wfs::init_wfs_routes::<C>)
             .configure(handlers::wms::init_wms_routes::<C>)
             .configure(handlers::workflows::init_workflow_routes::<C>);
+
         #[cfg(feature = "odm")]
         {
             app = app.configure(pro::handlers::drone_mapping::init_drone_mapping_routes::<C>);
         }
+
+        #[cfg(feature = "ebv")]
+        {
+            app = app
+                .service(web::scope("/ebv").configure(handlers::ebv::init_ebv_routes::<C>(None)));
+        }
+
         #[cfg(feature = "nfdi")]
         {
             app = app.configure(handlers::gfbio::init_gfbio_routes::<C>);
         }
+
         if version_api {
             app = app.route(
                 "/version",
@@ -133,6 +143,8 @@ pub async fn start_pro_server(static_files_dir: Option<PathBuf>) -> Result<()> {
             let ctx = ProInMemoryContext::new_with_data(
                 data_path_config.dataset_defs_path,
                 data_path_config.provider_defs_path,
+                data_path_config.layer_defs_path,
+                data_path_config.layer_collection_defs_path,
                 tiling_spec,
                 chunk_byte_size,
             )
@@ -166,6 +178,8 @@ pub async fn start_pro_server(static_files_dir: Option<PathBuf>) -> Result<()> {
                     NoTls,
                     data_path_config.dataset_defs_path,
                     data_path_config.provider_defs_path,
+                    data_path_config.layer_defs_path,
+                    data_path_config.layer_collection_defs_path,
                     tiling_spec,
                     chunk_byte_size,
                 )
