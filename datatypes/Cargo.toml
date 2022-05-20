@@ -15,12 +15,14 @@ pro = ["postgres"]
 
 [dependencies]
 arrow = { version = "14.0", features = ["simd"] }
+async-trait = "0.1"
 chrono = "0.4"
 float-cmp = "0.9"
 gdal = "0.12"
 geo = "0.20"
 geojson = "0.22"
 image = "0.24"
+num = "0.4"
 num-traits = "0.2"
 ordered-float = { version= "3.0", features = ["serde"] }
 paste = "1.0"
