@@ -1,9 +1,3 @@
-use std::collections::VecDeque;
-use std::ffi::{c_void, CStr, CString};
-use std::os::raw::c_char;
-use std::path::{Path, PathBuf};
-use std::str::FromStr;
-
 use crate::datasets::listing::DatasetListOptions;
 use crate::datasets::listing::{ExternalDatasetProvider, ProvenanceOutput};
 use crate::projects::{RasterSymbology, Symbology};
@@ -12,18 +6,7 @@ use crate::{
     util::user_input::Validated,
 };
 use async_trait::async_trait;
-use gdal::cpl::CslStringList;
-use gdal::errors::GdalError;
-use gdal::{Dataset, DatasetOptions, GdalOpenFlags};
-use gdal_sys::{
-    CPLErr, CSLDestroy, GDALAttributeReadAsString, GDALAttributeRelease, GDALDataType,
-    GDALDatasetGetRootGroup, GDALDimensionGetSize, GDALExtendedDataTypeGetNumericDataType,
-    GDALExtendedDataTypeRelease, GDALGroupGetAttribute, GDALGroupGetGroupNames, GDALGroupHS,
-    GDALGroupOpenGroup, GDALGroupOpenMDArray, GDALGroupRelease, GDALMDArrayGetAttribute,
-    GDALMDArrayGetDataType, GDALMDArrayGetDimensions, GDALMDArrayGetNoDataValueAsDouble,
-    GDALMDArrayGetSpatialRef, GDALMDArrayGetUnit, GDALMDArrayH, GDALMDArrayRelease,
-    GDALReleaseDimensions, OSRDestroySpatialReference, VSIFree,
-};
+use gdal::{DatasetOptions, GdalOpenFlags};
 use geoengine_datatypes::dataset::{DatasetId, DatasetProviderId, ExternalDatasetId};
 use geoengine_datatypes::operations::image::{Colorizer, RgbaColor};
 use geoengine_datatypes::primitives::{
@@ -31,7 +14,7 @@ use geoengine_datatypes::primitives::{
     TimeInstance, TimeInterval, TimeStep, VectorQueryRectangle,
 };
 use geoengine_datatypes::raster::{GdalGeoTransform, RasterDataType};
-use geoengine_datatypes::spatial_reference::{SpatialReference, SpatialReferenceOption};
+use geoengine_datatypes::spatial_reference::SpatialReference;
 use geoengine_operators::engine::TypedResultDescriptor;
 use geoengine_operators::source::{
     FileNotFoundHandling, GdalDatasetGeoTransform, GdalDatasetParameters, GdalMetadataNetCdfCf,
@@ -45,10 +28,20 @@ use geoengine_operators::{
 use log::debug;
 use serde::{Deserialize, Serialize};
 use snafu::{OptionExt, ResultExt};
+use std::collections::VecDeque;
+use std::io::BufReader;
+use std::path::{Path, PathBuf};
+use std::str::FromStr;
+use walkdir::{DirEntry, WalkDir};
 
 pub use self::error::NetCdfCf4DProviderError;
+use self::gdalmd::MdGroup;
+pub use self::overviews::OverviewGeneration;
+use self::overviews::{create_overviews, METADATA_FILE_NAME};
 
 mod error;
+pub mod gdalmd;
+mod overviews;
 
 type Result<T, E = NetCdfCf4DProviderError> = std::result::Result<T, E>;
 
@@ -60,13 +53,23 @@ pub const NETCDF_CF_PROVIDER_ID: DatasetProviderId =
 pub struct NetCdfCfDataProviderDefinition {
     pub name: String,
     pub path: PathBuf,
+    pub overviews: PathBuf,
+}
+
+#[derive(Debug)]
+pub struct NetCdfCfDataProvider {
+    pub path: PathBuf,
+    pub overviews: PathBuf,
 }
 
 #[typetag::serde]
 #[async_trait]
 impl ExternalDatasetProviderDefinition for NetCdfCfDataProviderDefinition {
     async fn initialize(self: Box<Self>) -> crate::error::Result<Box<dyn ExternalDatasetProvider>> {
-        Ok(Box::new(NetCdfCfDataProvider { path: self.path }))
+        Ok(Box::new(NetCdfCfDataProvider {
+            path: self.path,
+            overviews: self.overviews,
+        }))
     }
 
     fn type_name(&self) -> String {
@@ -82,443 +85,9 @@ impl ExternalDatasetProviderDefinition for NetCdfCfDataProviderDefinition {
     }
 }
 
-#[derive(Debug)]
-pub struct NetCdfCfDataProvider {
-    pub path: PathBuf,
-}
-
-/// TODO: This should be part of the GDAL crate
-#[derive(Debug)]
-struct MdGroup<'d> {
-    c_group: *mut GDALGroupHS,
-    _dataset: &'d Dataset,
-    name: String,
-}
-
-impl Drop for MdGroup<'_> {
-    fn drop(&mut self) {
-        unsafe {
-            GDALGroupRelease(self.c_group);
-        }
-    }
-}
-
-/// TODO: This should be part of the GDAL crate
-#[derive(Debug)]
-struct MdArray<'g> {
-    c_mdarray: GDALMDArrayH,
-    _group: &'g MdGroup<'g>,
-}
-
-impl Drop for MdArray<'_> {
-    fn drop(&mut self) {
-        unsafe {
-            GDALMDArrayRelease(self.c_mdarray);
-        }
-    }
-}
-
-/// Always check new implementations with `RUSTFLAGS="-Z sanitizer=leak"`
-impl<'d> MdGroup<'d> {
-    unsafe fn _string(raw_ptr: *const c_char) -> String {
-        let c_str = CStr::from_ptr(raw_ptr);
-        c_str.to_string_lossy().into_owned()
-    }
-
-    unsafe fn _string_array(raw_ptr: *mut *mut c_char) -> Vec<String> {
-        let mut ret_val: Vec<String> = vec![];
-        let mut i = 0;
-        loop {
-            let ptr = raw_ptr.add(i);
-            if ptr.is_null() {
-                break;
-            }
-            let next = ptr.read();
-            if next.is_null() {
-                break;
-            }
-            let value = Self::_string(next);
-            i += 1;
-            ret_val.push(value);
-        }
-        ret_val
-    }
-
-    unsafe fn _last_null_pointer_err(method_name: &'static str) -> GdalError {
-        let last_err_msg = Self::_string(gdal_sys::CPLGetLastErrorMsg());
-        gdal_sys::CPLErrorReset();
-        GdalError::NullPointer {
-            method_name,
-            msg: last_err_msg,
-        }
-    }
-
-    unsafe fn _last_cpl_err(cpl_err_class: CPLErr::Type) -> GdalError {
-        let last_err_no = gdal_sys::CPLGetLastErrorNo();
-        let last_err_msg = Self::_string(gdal_sys::CPLGetLastErrorMsg());
-        gdal_sys::CPLErrorReset();
-        GdalError::CplError {
-            class: cpl_err_class,
-            number: last_err_no,
-            msg: last_err_msg,
-        }
-    }
-
-    fn from_dataset(dataset: &'d Dataset) -> Result<Self> {
-        let c_group = unsafe {
-            let c_group = GDALDatasetGetRootGroup(dataset.c_dataset());
-
-            if c_group.is_null() {
-                return Err(NetCdfCf4DProviderError::GdalMd {
-                    source: Self::_last_null_pointer_err("GDALGetRasterBand"),
-                });
-            }
-
-            c_group
-        };
-
-        Ok(Self {
-            c_group,
-            _dataset: dataset,
-            name: "".to_owned(),
-        })
-    }
-
-    /// Don't put a NULL-byte in the name!!!
-    fn attribute_as_string(&self, name: &str) -> Result<String, GdalError> {
-        let name = CString::new(name).expect("no null-byte in name");
-
-        let value = unsafe {
-            let c_attribute = GDALGroupGetAttribute(self.c_group, name.as_ptr());
-
-            if c_attribute.is_null() {
-                return Err(Self::_last_null_pointer_err("GDALGroupGetAttribute"));
-            }
-
-            let value = Self::_string(GDALAttributeReadAsString(c_attribute));
-
-            GDALAttributeRelease(c_attribute);
-
-            value
-        };
-
-        Ok(value)
-    }
-
-    /// Don't put a NULL-byte in the name!!!
-    fn dimension_as_string_array(&self, name: &str) -> Result<Vec<String>, GdalError> {
-        let name = CString::new(name).expect("no null-byte in name");
-        let options = CslStringList::new();
-
-        let value = unsafe {
-            let c_mdarray = GDALGroupOpenMDArray(self.c_group, name.as_ptr(), options.as_ptr());
-
-            if c_mdarray.is_null() {
-                return Err(Self::_last_null_pointer_err("GDALGroupOpenMDArray"));
-            }
-
-            let mut dim_count = 0;
-
-            let c_dimensions =
-                GDALMDArrayGetDimensions(c_mdarray, std::ptr::addr_of_mut!(dim_count));
-            let dimensions = std::slice::from_raw_parts_mut(c_dimensions, dim_count);
-
-            let mut count = Vec::<usize>::with_capacity(dim_count);
-            for dim in dimensions {
-                let dim_size = GDALDimensionGetSize(*dim);
-                count.push(dim_size as usize);
-            }
-
-            if count.len() != 1 {
-                return Err(GdalError::BadArgument(format!(
-                    "Dimension must be 1D, but is {}D",
-                    count.len()
-                )));
-            }
-
-            let mut string_pointers: Vec<*const c_char> = vec![std::ptr::null(); count[0] as usize];
-            let array_start_index: Vec<u64> = vec![0; dim_count];
-
-            let array_step: *const i64 = std::ptr::null(); // default value
-            let buffer_stride: *const i64 = std::ptr::null(); // default value
-            let data_type = GDALMDArrayGetDataType(c_mdarray);
-            let p_dst_buffer_alloc_start: *mut c_void = std::ptr::null_mut();
-            let n_dst_buffer_alloc_size = 0;
-
-            let rv = gdal_sys::GDALMDArrayRead(
-                c_mdarray,
-                array_start_index.as_ptr(),
-                count.as_ptr(),
-                array_step,
-                buffer_stride,
-                data_type,
-                string_pointers.as_mut_ptr().cast::<std::ffi::c_void>(),
-                p_dst_buffer_alloc_start,
-                n_dst_buffer_alloc_size,
-            );
-
-            if rv == 0 {
-                return Err(GdalError::BadArgument("GDALMDArrayRead failed".to_string()));
-            }
-
-            let strings = string_pointers
-                .into_iter()
-                .map(|string_ptr| {
-                    let string = Self::_string(string_ptr);
-
-                    VSIFree(string_ptr as *mut c_void);
-
-                    string
-                })
-                .collect();
-
-            GDALExtendedDataTypeRelease(data_type);
-
-            GDALMDArrayRelease(c_mdarray);
-
-            GDALReleaseDimensions(c_dimensions, dim_count);
-
-            strings
-        };
-
-        Ok(value)
-    }
-
-    fn group_names(&self) -> Vec<String> {
-        let options = CslStringList::new();
-
-        unsafe {
-            let c_group_names = GDALGroupGetGroupNames(self.c_group, options.as_ptr());
-
-            let strings = Self::_string_array(c_group_names);
-
-            CSLDestroy(c_group_names);
-
-            strings
-        }
-    }
-
-    fn open_group(&self, name: &str) -> Result<Self> {
-        let c_name = CString::new(name).expect("no null-byte in name");
-        let options = CslStringList::new();
-
-        let c_group = unsafe {
-            let c_group = GDALGroupOpenGroup(self.c_group, c_name.as_ptr(), options.as_ptr());
-
-            if c_group.is_null() {
-                return Err(NetCdfCf4DProviderError::GdalMd {
-                    source: Self::_last_null_pointer_err("GDALGroupOpenGroup"),
-                });
-            }
-
-            c_group
-        };
-
-        #[allow(clippy::used_underscore_binding)]
-        Ok(Self {
-            c_group,
-            _dataset: self._dataset,
-            name: name.to_string(),
-        })
-    }
-
-    fn datatype_of_numeric_array(&self, name: &str) -> Result<RasterDataType> {
-        let name = CString::new(name).expect("no null-byte in name");
-
-        let gdal_data_type = unsafe {
-            let options = CslStringList::new();
-            let c_mdarray = GDALGroupOpenMDArray(self.c_group, name.as_ptr(), options.as_ptr());
-
-            if c_mdarray.is_null() {
-                return Err(NetCdfCf4DProviderError::GdalMd {
-                    source: Self::_last_null_pointer_err("GDALGroupOpenMDArray"),
-                });
-            }
-
-            let c_data_type = GDALMDArrayGetDataType(c_mdarray);
-
-            let data_type = GDALExtendedDataTypeGetNumericDataType(c_data_type);
-
-            GDALMDArrayRelease(c_mdarray);
-
-            GDALExtendedDataTypeRelease(c_data_type);
-
-            data_type
-        };
-
-        Ok(match gdal_data_type {
-            GDALDataType::GDT_Byte => RasterDataType::U8,
-            GDALDataType::GDT_UInt16 => RasterDataType::U16,
-            GDALDataType::GDT_Int16 => RasterDataType::I16,
-            GDALDataType::GDT_UInt32 => RasterDataType::U32,
-            GDALDataType::GDT_Int32 => RasterDataType::I32,
-            GDALDataType::GDT_Float32 => RasterDataType::F32,
-            GDALDataType::GDT_Float64 => RasterDataType::F64,
-            _ => {
-                return Err(NetCdfCf4DProviderError::UnknownGdalDatatype {
-                    type_number: gdal_data_type,
-                })
-            }
-        })
-    }
-
-    fn open_array(&self, name: &str) -> Result<MdArray> {
-        let name = CString::new(name).expect("no null-byte in name");
-        let options = CslStringList::new();
-
-        Ok(unsafe {
-            let c_mdarray = GDALGroupOpenMDArray(self.c_group, name.as_ptr(), options.as_ptr());
-
-            if c_mdarray.is_null() {
-                return Err(NetCdfCf4DProviderError::GdalMd {
-                    source: Self::_last_null_pointer_err("GDALGroupOpenMDArray"),
-                });
-            }
-
-            MdArray {
-                c_mdarray,
-                _group: self,
-            }
-        })
-    }
-}
-/// Always check new implementations with `RUSTFLAGS="-Z sanitizer=leak"`
-impl<'g> MdArray<'g> {
-    fn spatial_reference(&self) -> Result<SpatialReferenceOption> {
-        let gdal_spatial_ref = unsafe {
-            let c_gdal_spatial_ref = GDALMDArrayGetSpatialRef(self.c_mdarray);
-
-            let gdal_spatial_ref = gdal::spatial_ref::SpatialRef::from_c_obj(c_gdal_spatial_ref);
-
-            OSRDestroySpatialReference(c_gdal_spatial_ref);
-
-            gdal_spatial_ref
-        }
-        .context(error::GdalMd)?;
-
-        SpatialReference::try_from(gdal_spatial_ref)
-            .map(Into::into)
-            .context(error::CannotParseCrs)
-    }
-
-    fn data_type(&self) -> Result<RasterDataType> {
-        let gdal_data_type = unsafe {
-            let c_data_type = GDALMDArrayGetDataType(self.c_mdarray);
-
-            let data_type = GDALExtendedDataTypeGetNumericDataType(c_data_type);
-
-            GDALExtendedDataTypeRelease(c_data_type);
-
-            data_type
-        };
-
-        Ok(match gdal_data_type {
-            GDALDataType::GDT_Byte => RasterDataType::U8,
-            GDALDataType::GDT_UInt16 => RasterDataType::U16,
-            GDALDataType::GDT_Int16 => RasterDataType::I16,
-            GDALDataType::GDT_UInt32 => RasterDataType::U32,
-            GDALDataType::GDT_Int32 => RasterDataType::I32,
-            GDALDataType::GDT_Float32 => RasterDataType::F32,
-            GDALDataType::GDT_Float64 => RasterDataType::F64,
-            _ => {
-                return Err(NetCdfCf4DProviderError::UnknownGdalDatatype {
-                    type_number: gdal_data_type,
-                })
-            }
-        })
-    }
-
-    fn no_data_value(&self) -> Option<f64> {
-        let mut has_nodata = 0;
-
-        let no_data_value = unsafe {
-            GDALMDArrayGetNoDataValueAsDouble(self.c_mdarray, std::ptr::addr_of_mut!(has_nodata))
-        };
-
-        if has_nodata == 0 {
-            None
-        } else {
-            Some(no_data_value)
-        }
-    }
-
-    fn dimensions(&self) -> Result<DimensionSizes> {
-        let mut number_of_dimensions = 0;
-
-        Ok(unsafe {
-            let c_dimensions = GDALMDArrayGetDimensions(
-                self.c_mdarray,
-                std::ptr::addr_of_mut!(number_of_dimensions),
-            );
-
-            if number_of_dimensions != 4 {
-                return Err(NetCdfCf4DProviderError::MustBe4DDataset {
-                    number_of_dimensions,
-                });
-            }
-
-            let dimensions = std::slice::from_raw_parts_mut(c_dimensions, number_of_dimensions);
-
-            let sizes = DimensionSizes {
-                _entity: GDALDimensionGetSize(dimensions[0]) as usize,
-                time: GDALDimensionGetSize(dimensions[1]) as usize,
-                lat: GDALDimensionGetSize(dimensions[2]) as usize,
-                lon: GDALDimensionGetSize(dimensions[3]) as usize,
-            };
-
-            GDALReleaseDimensions(c_dimensions, number_of_dimensions);
-
-            sizes
-        })
-    }
-
-    /// Don't put a NULL-byte in the name!!!
-    fn attribute_as_string(&self, name: &str) -> Result<String, GdalError> {
-        let name = CString::new(name).expect("no null-byte in name");
-
-        let value = unsafe {
-            let c_attribute = GDALMDArrayGetAttribute(self.c_mdarray, name.as_ptr());
-
-            if c_attribute.is_null() {
-                return Err(MdGroup::_last_null_pointer_err("GDALGroupGetAttribute"));
-            }
-
-            let value = MdGroup::_string(GDALAttributeReadAsString(c_attribute));
-
-            GDALAttributeRelease(c_attribute);
-
-            value
-        };
-
-        Ok(value)
-    }
-
-    fn unit(&self) -> Result<String, GdalError> {
-        let value = unsafe {
-            let c_attribute = GDALMDArrayGetUnit(self.c_mdarray);
-
-            if c_attribute.is_null() {
-                return Err(MdGroup::_last_null_pointer_err("GDALMDArrayGetUnit"));
-            }
-
-            MdGroup::_string(c_attribute)
-        };
-
-        Ok(value)
-    }
-}
-
-#[derive(Debug, Clone, Copy)]
-struct DimensionSizes {
-    pub _entity: usize,
-    pub time: usize,
-    pub lat: usize,
-    pub lon: usize,
-}
-
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(rename_all = "camelCase")]
-pub(crate) struct NetCdfOverview {
+pub struct NetCdfOverview {
     pub file_name: String,
     pub title: String,
     pub summary: String,
@@ -530,9 +99,9 @@ pub(crate) struct NetCdfOverview {
     pub colorizer: Colorizer,
 }
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(rename_all = "camelCase")]
-pub(crate) struct NetCdfGroup {
+pub struct NetCdfGroup {
     pub name: String,
     pub title: String,
     pub description: String,
@@ -543,9 +112,9 @@ pub(crate) struct NetCdfGroup {
     pub groups: Vec<NetCdfGroup>,
 }
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(rename_all = "camelCase")]
-pub(crate) struct NetCdfEntity {
+pub struct NetCdfEntity {
     pub id: usize,
     pub name: String,
 }
@@ -604,10 +173,27 @@ pub(crate) struct NetCdfCf4DDatasetId {
 }
 
 impl NetCdfCfDataProvider {
-    pub(crate) fn build_netcdf_tree(
+    fn netcdf_tree_from_overviews(
+        overview_path: &Path,
+        dataset_path: &Path,
+    ) -> Option<NetCdfOverview> {
+        let tree_file_path = overview_path.join(dataset_path).join(METADATA_FILE_NAME);
+        let file = std::fs::File::open(&tree_file_path).ok()?;
+        let buf_reader = BufReader::new(file);
+        serde_json::from_reader::<_, NetCdfOverview>(buf_reader).ok()
+    }
+
+    pub fn build_netcdf_tree(
         provider_path: &Path,
+        overview_path: Option<&Path>,
         dataset_path: &Path,
     ) -> Result<NetCdfOverview> {
+        if let Some(netcdf_tree) = overview_path.and_then(|overview_path| {
+            NetCdfCfDataProvider::netcdf_tree_from_overviews(overview_path, dataset_path)
+        }) {
+            return Ok(netcdf_tree);
+        }
+
         let path = provider_path.join(dataset_path);
 
         let ds = gdal_open_dataset_ex(
@@ -689,9 +275,10 @@ impl NetCdfCfDataProvider {
     pub(crate) fn listing_from_netcdf(
         id: DatasetProviderId,
         provider_path: &Path,
+        overview_path: Option<&Path>,
         dataset_path: &Path,
     ) -> Result<Vec<DatasetListing>> {
-        let tree = Self::build_netcdf_tree(provider_path, dataset_path)?;
+        let tree = Self::build_netcdf_tree(provider_path, overview_path, dataset_path)?;
 
         let mut paths: VecDeque<Vec<&NetCdfGroup>> = tree.groups.iter().map(|s| vec![s]).collect();
 
@@ -759,8 +346,9 @@ impl NetCdfCfDataProvider {
         Ok(listings)
     }
 
-    async fn meta_data(
-        &self,
+    fn meta_data(
+        path: &Path,
+        overviews: &Path,
         dataset: &DatasetId,
     ) -> Result<Box<dyn MetaData<GdalLoadingInfo, RasterResultDescriptor, RasterQueryRectangle>>>
     {
@@ -774,17 +362,25 @@ impl NetCdfCfDataProvider {
         let dataset_id: NetCdfCf4DDatasetId =
             serde_json::from_str(&dataset.dataset_id).context(error::CannotParseDatasetId)?;
 
-        let path = self.path.join(dataset_id.file_name);
+        // try to load from overviews
+        if let Some(loading_info) = Self::meta_data_from_overviews(overviews, &dataset_id) {
+            return Ok(Box::new(loading_info));
+        }
+
+        let dataset_id: NetCdfCf4DDatasetId =
+            serde_json::from_str(&dataset.dataset_id).context(error::CannotParseDatasetId)?;
+
+        let path = path.join(&dataset_id.file_name);
 
         // check that file does not "escape" the provider path
-        if let Err(source) = path.strip_prefix(self.path.as_path()) {
+        if let Err(source) = path.strip_prefix(&path) {
             return Err(NetCdfCf4DProviderError::DatasetIsNotInProviderPath { source });
         }
 
+        let group_path = dataset_id.group_names.join("/");
         let gdal_path = format!(
-            "NETCDF:{path}:/{group}/ebv_cube",
-            path = path.to_string_lossy(),
-            group = dataset_id.group_names.join("/")
+            "NETCDF:{path}:/{group_path}/ebv_cube",
+            path = path.to_string_lossy()
         );
 
         let dataset = gdal_open_dataset_ex(
@@ -869,6 +465,75 @@ impl NetCdfCfDataProvider {
             step,
             band_offset: dataset_id.entity as usize * dimensions.time,
         }))
+    }
+
+    fn meta_data_from_overviews(
+        overview_path: &Path,
+        dataset_id: &NetCdfCf4DDatasetId,
+    ) -> Option<GdalMetadataNetCdfCf> {
+        let loading_info_path = overview_path
+            .join(&dataset_id.file_name)
+            .join(&dataset_id.group_names.join("/"))
+            .join("ebv_cube.json");
+
+        let loading_info_file = match std::fs::File::open(&loading_info_path) {
+            Ok(file) => file,
+            Err(_) => {
+                debug!("No overview for {dataset_id:?}");
+                return None;
+            }
+        };
+
+        let mut loading_info: GdalMetadataNetCdfCf =
+            serde_json::from_reader(BufReader::new(loading_info_file)).ok()?;
+
+        // it is 1 + … because we have one step when start == end
+        let time_steps_per_entity = 1 + loading_info
+            .step
+            .num_steps_in_interval(TimeInterval::new(loading_info.start, loading_info.end).ok()?)
+            .ok()?;
+
+        // change start band wrt. entity
+        loading_info.band_offset = dataset_id.entity * time_steps_per_entity as usize;
+
+        Some(loading_info)
+    }
+
+    pub fn list_files(&self) -> Result<Vec<PathBuf>> {
+        let is_overview_dir = |e: &DirEntry| -> bool { e.path() == self.overviews };
+
+        let mut files = vec![];
+
+        for entry in WalkDir::new(&self.path)
+            .into_iter()
+            .filter_entry(|e| !is_overview_dir(e))
+        {
+            let entry = entry.map_err(|e| NetCdfCf4DProviderError::InvalidDirectory {
+                source: Box::new(e),
+            })?;
+            let path = entry.path();
+
+            if !path.is_file() {
+                continue;
+            }
+            if path.extension().map_or(true, |extension| extension != "nc") {
+                continue;
+            }
+
+            match path.strip_prefix(&self.path) {
+                Ok(path) => files.push(path.to_owned()),
+                Err(_) => {
+                    // we can safely ignore it since it must be a file in the provider path
+                    continue;
+                }
+            };
+        }
+
+        Ok(files)
+    }
+
+    pub fn create_overviews(&self, dataset_path: &Path) -> Result<OverviewGeneration> {
+        create_overviews(&self.path, dataset_path, &self.overviews)
     }
 }
 
@@ -1016,6 +681,7 @@ impl ExternalDatasetProvider for NetCdfCfDataProvider {
             }
 
             let provider_path = self.path.clone();
+            let overviews_path = self.overviews.clone();
             let relative_path = if let Ok(p) = entry.path().strip_prefix(&provider_path) {
                 p.to_path_buf()
             } else {
@@ -1024,7 +690,12 @@ impl ExternalDatasetProvider for NetCdfCfDataProvider {
             };
 
             let listing = tokio::task::spawn_blocking(move || {
-                Self::listing_from_netcdf(NETCDF_CF_PROVIDER_ID, &provider_path, &relative_path)
+                Self::listing_from_netcdf(
+                    NETCDF_CF_PROVIDER_ID,
+                    &provider_path,
+                    Some(&overviews_path),
+                    &relative_path,
+                )
             })
             .await?;
 
@@ -1068,12 +739,17 @@ impl MetaDataProvider<GdalLoadingInfo, RasterResultDescriptor, RasterQueryRectan
         Box<dyn MetaData<GdalLoadingInfo, RasterResultDescriptor, RasterQueryRectangle>>,
         geoengine_operators::error::Error,
     > {
-        // TODO spawn blocking
-        self.meta_data(dataset).await.map_err(|error| {
-            geoengine_operators::error::Error::LoadingInfo {
-                source: Box::new(error),
-            }
+        let dataset = dataset.clone();
+        let path = self.path.clone();
+        let overviews = self.overviews.clone();
+        crate::util::spawn_blocking(move || {
+            Self::meta_data(&path, &overviews, &dataset).map_err(|error| {
+                geoengine_operators::error::Error::LoadingInfo {
+                    source: Box::new(error),
+                }
+            })
         })
+        .await?
     }
 }
 
@@ -1120,6 +796,7 @@ mod tests {
         primitives::{SpatialPartition2D, SpatialResolution, TimeInterval},
         spatial_reference::SpatialReferenceAuthority,
         test_data,
+        util::gdal::hide_gdal_errors,
     };
     use geoengine_operators::source::{
         FileNotFoundHandling, GdalDatasetGeoTransform, GdalDatasetParameters,
@@ -1203,6 +880,7 @@ mod tests {
         let listing = NetCdfCfDataProvider::listing_from_netcdf(
             provider_id,
             test_data!("netcdf4d"),
+            None,
             Path::new("dataset_m.nc"),
         )
         .unwrap();
@@ -1363,6 +1041,7 @@ mod tests {
         let listing = NetCdfCfDataProvider::listing_from_netcdf(
             provider_id,
             test_data!("netcdf4d"),
+            None,
             Path::new("dataset_sm.nc"),
         )
         .unwrap();
@@ -1438,6 +1117,7 @@ mod tests {
     async fn test_metadata_from_netcdf_sm() {
         let provider = NetCdfCfDataProvider {
             path: test_data!("netcdf4d/").to_path_buf(),
+            overviews: test_data!("netcdf4d/overviews").to_path_buf(),
         };
 
         let metadata = provider
@@ -1516,6 +1196,203 @@ mod tests {
                     gdal_open_options: None,
                     gdal_config_options: None
                 })
+            }
+        );
+    }
+
+    #[test]
+    fn list_files() {
+        let provider = NetCdfCfDataProvider {
+            path: test_data!("netcdf4d/").to_path_buf(),
+            overviews: test_data!("netcdf4d/overviews").to_path_buf(),
+        };
+
+        let expected_files: Vec<PathBuf> = vec!["dataset_m.nc".into(), "dataset_sm.nc".into()];
+        let mut files = provider.list_files().unwrap();
+        files.sort();
+
+        assert_eq!(files, expected_files);
+    }
+
+    #[tokio::test]
+    async fn test_loading_info_from_index() {
+        hide_gdal_errors();
+
+        let overview_folder = tempfile::tempdir().unwrap();
+
+        let provider = NetCdfCfDataProvider {
+            path: test_data!("netcdf4d/").to_path_buf(),
+            overviews: overview_folder.path().to_path_buf(),
+        };
+
+        provider
+            .create_overviews(Path::new("dataset_sm.nc"))
+            .unwrap();
+
+        let metadata = provider
+            .meta_data(&DatasetId::External(ExternalDatasetId {
+                provider_id: NETCDF_CF_PROVIDER_ID,
+                dataset_id: serde_json::json!({
+                    "fileName": "dataset_sm.nc",
+                    "groupNames": ["scenario_5", "metric_2"],
+                    "entity": 1
+                })
+                .to_string(),
+            }))
+            .await
+            .unwrap();
+
+        assert_eq!(
+            metadata.result_descriptor().await.unwrap(),
+            RasterResultDescriptor {
+                data_type: RasterDataType::I16,
+                spatial_reference: SpatialReference::new(SpatialReferenceAuthority::Epsg, 3035)
+                    .into(),
+                measurement: Measurement::Unitless,
+                no_data_value: Some(-9999.),
+            }
+        );
+
+        let loading_info = metadata
+            .loading_info(RasterQueryRectangle {
+                spatial_bounds: SpatialPartition2D::new(
+                    (43.945_312_5, 0.791_015_625_25).into(),
+                    (44.033_203_125, 0.703_125_25).into(),
+                )
+                .unwrap(),
+                time_interval: TimeInstance::from(DateTime::new_utc(2001, 4, 1, 0, 0, 0)).into(),
+                spatial_resolution: SpatialResolution::new_unchecked(
+                    0.000_343_322_7, // 256 pixel
+                    0.000_343_322_7, // 256 pixel
+                ),
+            })
+            .await
+            .unwrap();
+
+        let mut loading_info_parts = Vec::<GdalLoadingInfoTemporalSlice>::new();
+        for part in loading_info.info {
+            loading_info_parts.push(part.unwrap());
+        }
+
+        assert_eq!(loading_info_parts.len(), 1);
+
+        let file_path = overview_folder
+            .path()
+            .join("dataset_sm.nc/scenario_5/metric_2/ebv_cube.tiff");
+
+        assert_eq!(
+            loading_info_parts[0],
+            GdalLoadingInfoTemporalSlice {
+                time: TimeInterval::new_unchecked(946_684_800_000, 1_262_304_000_000),
+                params: Some(GdalDatasetParameters {
+                    file_path,
+                    rasterband_channel: 4,
+                    geo_transform: GdalDatasetGeoTransform {
+                        origin_coordinate: (3_580_000.0, 2_370_000.0).into(),
+                        x_pixel_size: 1000.0,
+                        y_pixel_size: -1000.0,
+                    },
+                    width: 10,
+                    height: 10,
+                    file_not_found_handling: FileNotFoundHandling::Error,
+                    no_data_value: Some(-9999.),
+                    properties_mapping: None,
+                    gdal_open_options: None,
+                    gdal_config_options: None
+                })
+            }
+        );
+    }
+
+    #[tokio::test]
+    async fn test_listing_from_netcdf_sm_from_index() {
+        hide_gdal_errors();
+
+        let overview_folder = tempfile::tempdir().unwrap();
+
+        let provider = NetCdfCfDataProvider {
+            path: test_data!("netcdf4d/").to_path_buf(),
+            overviews: overview_folder.path().to_path_buf(),
+        };
+
+        provider
+            .create_overviews(Path::new("dataset_sm.nc"))
+            .unwrap();
+
+        let provider_id =
+            DatasetProviderId::from_str("bf6bb6ea-5d5d-467d-bad1-267bf3a54470").unwrap();
+
+        let listing = NetCdfCfDataProvider::listing_from_netcdf(
+            provider_id,
+            test_data!("netcdf4d"),
+            Some(overview_folder.path()),
+            Path::new("dataset_sm.nc"),
+        )
+        .unwrap();
+
+        assert_eq!(listing.len(), 20);
+
+        let result_descriptor: TypedResultDescriptor = RasterResultDescriptor {
+            data_type: RasterDataType::I16,
+            spatial_reference: SpatialReference::new(SpatialReferenceAuthority::Epsg, 3035).into(),
+            measurement: Measurement::Unitless,
+            no_data_value: None,
+        }
+        .into();
+
+        let symbology = Some(Symbology::Raster(RasterSymbology {
+            opacity: 1.0,
+            colorizer: Colorizer::LinearGradient {
+                breakpoints: vec![
+                    (0.0.try_into().unwrap(), RgbaColor::new(68, 1, 84, 255)).into(),
+                    (50.0.try_into().unwrap(), RgbaColor::new(33, 145, 140, 255)).into(),
+                    (100.0.try_into().unwrap(), RgbaColor::new(253, 231, 37, 255)).into(),
+                ],
+                no_data_color: RgbaColor::new(0, 0, 0, 0),
+                default_color: RgbaColor::new(0, 0, 0, 0),
+            },
+        }));
+
+        assert_eq!(
+            listing[0],
+            DatasetListing {
+                id: DatasetId::External(ExternalDatasetId {
+                    provider_id,
+                    dataset_id: serde_json::json!({
+                        "fileName": "dataset_sm.nc",
+                        "groupNames": ["scenario_1", "metric_1"],
+                        "entity": 0
+                    })
+                    .to_string(),
+                }),
+                name:
+                    "Test dataset metric and scenario: Sustainability > Random metric 1 > entity01"
+                        .into(),
+                description: "Fake description of test dataset with metric and scenario.".into(),
+                tags: vec![],
+                source_operator: "GdalSource".into(),
+                result_descriptor: result_descriptor.clone(),
+                symbology: symbology.clone(),
+            }
+        );
+        assert_eq!(
+            listing[19],
+            DatasetListing {
+                id: DatasetId::External(ExternalDatasetId {
+                    provider_id,
+                    dataset_id: serde_json::json!({
+                        "fileName": "dataset_sm.nc",
+                        "groupNames": ["scenario_5", "metric_2"],
+                        "entity": 1
+                    })
+                    .to_string(),
+                }),
+                name: "Test dataset metric and scenario: Fossil-fueled Development > Random metric 2 > entity02".into(),
+                description: "Fake description of test dataset with metric and scenario.".into(),
+                tags: vec![],
+                source_operator: "GdalSource".into(),
+                result_descriptor,
+                symbology,
             }
         );
     }

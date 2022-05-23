@@ -44,7 +44,7 @@ where
 ///   },
 ///   "timeStep": {
 ///     "step": 1,
-///     "granularity": "Months"
+///     "granularity": "months"
 ///   }
 /// }
 /// ```
@@ -134,7 +134,7 @@ pub(crate) async fn list_projects_handler<C: Context>(
 ///     }
 ///   },
 ///   "timeStep": {
-///     "granularity": "Months",
+///     "granularity": "months",
 ///     "step": 1
 ///   }
 /// }

@@ -1,3 +1,5 @@
+use std::path::PathBuf;
+
 use gdal::errors::GdalError;
 use geoengine_datatypes::dataset::DatasetProviderId;
 use snafu::Snafu;
@@ -134,5 +136,29 @@ pub enum NetCdfCf4DProviderError {
     },
     CannotRetrieveUnit {
         source: GdalError,
+    },
+    CannotReadDimensions {
+        source: GdalError,
+    },
+    InvalidDirectory {
+        source: Box<dyn ErrorSource>,
+    },
+    CannotCreateOverviews {
+        source: Box<dyn ErrorSource>,
+    },
+    CannotWriteMetadataFile {
+        source: Box<dyn ErrorSource>,
+    },
+    CannotReadInputFileDir {
+        path: PathBuf,
+    },
+    CannotOpenNetCdfDataset {
+        source: Box<dyn ErrorSource>,
+    },
+    CannotOpenNetCdfSubdataset {
+        source: Box<dyn ErrorSource>,
+    },
+    CannotGenerateLoadingInfo {
+        source: Box<dyn ErrorSource>,
     },
 }
