@@ -1207,6 +1207,4 @@ mod tests {
             .unwrap()
         );
     }
-
-    // TODO: test for vector shifts, test for reversing the elements
 }
