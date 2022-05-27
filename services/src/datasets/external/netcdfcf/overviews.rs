@@ -1,10 +1,10 @@
 use super::{error, parse_time_coverage, NetCdfCf4DProviderError};
 use crate::{
     datasets::external::netcdfcf::{gdalmd::MdGroup, NetCdfCfDataProvider},
-    error::BoxedResultExt,
     util::config::get_config_element,
 };
 use gdal::{raster::RasterCreationOption, Dataset, DatasetOptions, GdalOpenFlags};
+use geoengine_datatypes::error::BoxedResultExt;
 use geoengine_datatypes::primitives::{TimeInstance, TimeStep};
 use geoengine_operators::{
     source::GdalMetadataNetCdfCf,

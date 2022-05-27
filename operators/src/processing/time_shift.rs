@@ -8,7 +8,11 @@ use crate::util::input::RasterOrVectorOperator;
 use crate::util::Result;
 use async_trait::async_trait;
 use futures::stream::BoxStream;
-use geoengine_datatypes::collections::FeatureCollection;
+use futures::StreamExt;
+use geoengine_datatypes::collections::{
+    FeatureCollection, FeatureCollectionInfos, FeatureCollectionModifications,
+};
+use geoengine_datatypes::error::{BoxedResultExt, ErrorSource};
 use geoengine_datatypes::primitives::{Geometry, RasterQueryRectangle, TimeInterval};
 use geoengine_datatypes::primitives::{TimeStep, VectorQueryRectangle};
 use geoengine_datatypes::raster::{Pixel, RasterTile2D};
@@ -43,6 +47,8 @@ pub enum RelativeShiftDirection {
 pub enum TimeShiftError {
     #[snafu(display("Output type must match the type of the source"))]
     UnmatchedOutput,
+    #[snafu(display("Modifying the timestamps of the feature collection failed"))]
+    FeatureCollectionTimeModifcation { source: Box<dyn ErrorSource> },
 }
 
 #[typetag::serde]
@@ -251,7 +257,36 @@ where
             time_interval,
             spatial_resolution: query.spatial_resolution,
         };
-        self.processor.vector_query(query, ctx).await
+        let stream = self.processor.vector_query(query, ctx).await?;
+
+        let stream = stream.map(|collection| {
+            let collection = collection?;
+
+            let time_intervals = collection
+                .time_intervals()
+                .iter()
+                .map(|time| {
+                    let start = match self.direction {
+                        RelativeShiftDirection::Forward => time.start() - self.step,
+                        RelativeShiftDirection::Backward => time.start() + self.step,
+                    }?;
+                    let end = match self.direction {
+                        RelativeShiftDirection::Forward => time.end() - self.step,
+                        RelativeShiftDirection::Backward => time.end() + self.step,
+                    }?;
+                    TimeInterval::new(start, end)
+                        .boxed_context(error::FeatureCollectionTimeModifcation)
+                        .map_err(Into::into)
+                })
+                .collect::<Result<Vec<TimeInterval>>>()?;
+
+            collection
+                .replace_time(&time_intervals)
+                .boxed_context(error::FeatureCollectionTimeModifcation)
+                .map_err(Into::into)
+        });
+
+        Ok(stream.boxed())
     }
 }
 
@@ -268,12 +303,39 @@ where
         query: VectorQueryRectangle,
         ctx: &'a dyn QueryContext,
     ) -> Result<BoxStream<'a, Result<Self::VectorType>>> {
+        let time_start_difference = query.time_interval.start() - self.time_interval.start();
+        let time_end_difference = query.time_interval.end() - self.time_interval.end();
+
         let query = VectorQueryRectangle {
             spatial_bounds: query.spatial_bounds,
             time_interval: self.time_interval,
             spatial_resolution: query.spatial_resolution,
         };
-        self.processor.vector_query(query, ctx).await
+        let stream = self.processor.vector_query(query, ctx).await?;
+
+        let stream = stream.map(move |collection| {
+            let collection = collection?;
+
+            let time_intervals = collection
+                .time_intervals()
+                .iter()
+                .map(|time| {
+                    TimeInterval::new(
+                        time.start() + time_start_difference.num_milliseconds(),
+                        time.end() + time_end_difference.num_milliseconds(),
+                    )
+                    .boxed_context(error::FeatureCollectionTimeModifcation)
+                    .map_err(Into::into)
+                })
+                .collect::<Result<Vec<TimeInterval>>>()?;
+
+            collection
+                .replace_time(&time_intervals)
+                .boxed_context(error::FeatureCollectionTimeModifcation)
+                .map_err(Into::into)
+        });
+
+        Ok(stream.boxed())
     }
 }
 
@@ -299,7 +361,21 @@ where
             time_interval,
             spatial_resolution: query.spatial_resolution,
         };
-        self.processor.raster_query(query, ctx).await
+        let stream = self.processor.raster_query(query, ctx).await?;
+
+        let stream = stream.map(|raster| {
+            // reverse time shift for results
+            let mut raster = raster?;
+
+            raster.time = match self.direction {
+                RelativeShiftDirection::Forward => raster.time - self.step,
+                RelativeShiftDirection::Backward => raster.time + self.step,
+            }?;
+
+            Ok(raster)
+        });
+
+        Ok(Box::pin(stream))
     }
 }
 
@@ -316,12 +392,30 @@ where
         query: RasterQueryRectangle,
         ctx: &'a dyn QueryContext,
     ) -> Result<BoxStream<'a, Result<RasterTile2D<Self::RasterType>>>> {
+        let time_start_difference = query.time_interval.start() - self.time_interval.start();
+        let time_end_difference = query.time_interval.end() - self.time_interval.end();
+
         let query = RasterQueryRectangle {
             spatial_bounds: query.spatial_bounds,
             time_interval: self.time_interval,
             spatial_resolution: query.spatial_resolution,
         };
-        self.processor.raster_query(query, ctx).await
+
+        let stream = self.processor.raster_query(query, ctx).await?;
+
+        let stream = stream.map(move |raster| {
+            // reverse time shift for results
+            let mut raster = raster?;
+
+            raster.time = TimeInterval::new(
+                raster.time.start() + time_start_difference.num_milliseconds(),
+                raster.time.end() + time_end_difference.num_milliseconds(),
+            )?;
+
+            Ok(raster)
+        });
+
+        Ok(Box::pin(stream))
     }
 }
 
@@ -332,7 +426,9 @@ mod tests {
     use crate::{
         engine::{MockExecutionContext, MockQueryContext},
         mock::{MockFeatureCollectionSource, MockRasterSource, MockRasterSourceParams},
+        processing::{Expression, ExpressionParams, ExpressionSources},
         source::{GdalSource, GdalSourceParameters},
+        util::gdal::add_ndvi_dataset,
     };
     use futures::StreamExt;
     use geoengine_datatypes::{
@@ -533,7 +629,7 @@ mod tests {
             MultiPoint::many(vec![(0., 0.)]).unwrap(),
             vec![TimeInterval::new(
                 DateTime::new_utc(2009, 1, 1, 0, 0, 0),
-                DateTime::new_utc_with_millis(2010, 12, 31, 23, 59, 59, 999),
+                DateTime::new_utc_with_millis(2013, 8, 1, 23, 59, 59, 999),
             )
             .unwrap()],
             Default::default(),
@@ -622,13 +718,13 @@ mod tests {
             MultiPoint::many(vec![(0., 0.), (1., 1.)]).unwrap(),
             vec![
                 TimeInterval::new(
-                    DateTime::new_utc(2009, 1, 1, 0, 0, 0),
-                    DateTime::new_utc_with_millis(2010, 12, 31, 23, 59, 59, 999),
+                    DateTime::new_utc(2010, 1, 1, 0, 0, 0),
+                    DateTime::new_utc_with_millis(2011, 12, 31, 23, 59, 59, 999),
                 )
                 .unwrap(),
                 TimeInterval::new(
-                    DateTime::new_utc(2009, 6, 3, 0, 0, 0),
-                    DateTime::new_utc(2010, 7, 14, 0, 0, 0),
+                    DateTime::new_utc(2010, 6, 3, 0, 0, 0),
+                    DateTime::new_utc(2011, 7, 14, 0, 0, 0),
                 )
                 .unwrap(),
             ],
@@ -787,15 +883,15 @@ mod tests {
         assert_eq!(
             result[0].time,
             TimeInterval::new_unchecked(
+                DateTime::new_utc(2010, 1, 1, 0, 0, 0),
                 DateTime::new_utc(2011, 1, 1, 0, 0, 0),
-                DateTime::new_utc(2012, 1, 1, 0, 0, 0),
             ),
         );
         assert_eq!(
             result[1].time,
             TimeInterval::new_unchecked(
+                DateTime::new_utc(2010, 1, 1, 0, 0, 0),
                 DateTime::new_utc(2011, 1, 1, 0, 0, 0),
-                DateTime::new_utc(2012, 1, 1, 0, 0, 0),
             ),
         );
     }
@@ -949,16 +1045,165 @@ mod tests {
         assert_eq!(
             result[0].time,
             TimeInterval::new_unchecked(
+                DateTime::new_utc(2010, 1, 1, 0, 0, 0),
                 DateTime::new_utc(2011, 1, 1, 0, 0, 0),
-                DateTime::new_utc(2012, 1, 1, 0, 0, 0),
             ),
         );
         assert_eq!(
             result[1].time,
             TimeInterval::new_unchecked(
+                DateTime::new_utc(2010, 1, 1, 0, 0, 0),
                 DateTime::new_utc(2011, 1, 1, 0, 0, 0),
-                DateTime::new_utc(2012, 1, 1, 0, 0, 0),
             ),
         );
     }
+
+    #[tokio::test]
+    async fn test_expression_on_shifted_raster() {
+        let mut execution_context = MockExecutionContext::test_default();
+
+        let ndvi_source = GdalSource {
+            params: GdalSourceParameters {
+                dataset: add_ndvi_dataset(&mut execution_context),
+            },
+        }
+        .boxed();
+
+        let shifted_ndvi_source = RasterOperator::boxed(TimeShift {
+            params: TimeShiftParams::Relative {
+                step: TimeStep {
+                    granularity: TimeGranularity::Months,
+                    step: 1,
+                },
+                direction: RelativeShiftDirection::Backward,
+            },
+            sources: SingleRasterOrVectorSource {
+                source: RasterOrVectorOperator::Raster(ndvi_source.clone()),
+            },
+        });
+
+        let expression = Expression {
+            params: ExpressionParams {
+                expression: "A - B".to_string(),
+                output_type: RasterDataType::F64,
+                output_no_data_value: -9999.,
+                output_measurement: None,
+                map_no_data: false,
+            },
+            sources: ExpressionSources::new_a_b(ndvi_source, shifted_ndvi_source),
+        }
+        .boxed();
+
+        let query_processor = expression
+            .initialize(&execution_context)
+            .await
+            .unwrap()
+            .query_processor()
+            .unwrap()
+            .get_f64()
+            .unwrap();
+
+        let query_context = MockQueryContext::test_default();
+
+        let mut stream = query_processor
+            .raster_query(
+                RasterQueryRectangle {
+                    spatial_bounds: SpatialPartition2D::new_unchecked(
+                        (-180., 90.).into(),
+                        (180., -90.).into(),
+                    ),
+                    time_interval: TimeInterval::new_instant(DateTime::new_utc(
+                        2014, 3, 1, 0, 0, 0,
+                    ))
+                    .unwrap(),
+                    spatial_resolution: SpatialResolution::one(),
+                },
+                &query_context,
+            )
+            .await
+            .unwrap();
+
+        let mut result = Vec::new();
+        while let Some(tile) = stream.next().await {
+            result.push(tile.unwrap());
+        }
+
+        assert_eq!(result.len(), 4);
+        assert_eq!(
+            result[0].time,
+            TimeInterval::new(
+                DateTime::new_utc(2014, 3, 1, 0, 0, 0),
+                DateTime::new_utc(2014, 4, 1, 0, 0, 0)
+            )
+            .unwrap()
+        );
+    }
+
+    #[tokio::test]
+    async fn test_expression_on_absolute_shifted_raster() {
+        let mut execution_context = MockExecutionContext::test_default();
+
+        let ndvi_source = GdalSource {
+            params: GdalSourceParameters {
+                dataset: add_ndvi_dataset(&mut execution_context),
+            },
+        }
+        .boxed();
+
+        let shifted_ndvi_source = RasterOperator::boxed(TimeShift {
+            params: TimeShiftParams::Absolute {
+                time_interval: TimeInterval::new_instant(DateTime::new_utc(2014, 5, 1, 0, 0, 0))
+                    .unwrap(),
+            },
+            sources: SingleRasterOrVectorSource {
+                source: RasterOrVectorOperator::Raster(ndvi_source),
+            },
+        });
+
+        let query_processor = shifted_ndvi_source
+            .initialize(&execution_context)
+            .await
+            .unwrap()
+            .query_processor()
+            .unwrap()
+            .get_u8()
+            .unwrap();
+
+        let query_context = MockQueryContext::test_default();
+
+        let mut stream = query_processor
+            .raster_query(
+                RasterQueryRectangle {
+                    spatial_bounds: SpatialPartition2D::new_unchecked(
+                        (-180., 90.).into(),
+                        (180., -90.).into(),
+                    ),
+                    time_interval: TimeInterval::new_instant(DateTime::new_utc(
+                        2014, 3, 1, 0, 0, 0,
+                    ))
+                    .unwrap(),
+                    spatial_resolution: SpatialResolution::one(),
+                },
+                &query_context,
+            )
+            .await
+            .unwrap();
+
+        let mut result = Vec::new();
+        while let Some(tile) = stream.next().await {
+            result.push(tile.unwrap());
+        }
+
+        assert_eq!(result.len(), 4);
+        assert_eq!(
+            result[0].time,
+            TimeInterval::new(
+                DateTime::new_utc(2014, 3, 1, 0, 0, 0),
+                DateTime::new_utc(2014, 4, 1, 0, 0, 0)
+            )
+            .unwrap()
+        );
+    }
+
+    // TODO: test for vector shifts, test for reversing the elements
 }

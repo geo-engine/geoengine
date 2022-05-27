@@ -4,7 +4,7 @@ use gdal::errors::GdalError;
 use geoengine_datatypes::dataset::DatasetProviderId;
 use snafu::Snafu;
 
-use crate::error::ErrorSource;
+use geoengine_datatypes::error::ErrorSource;
 
 #[derive(Debug, Snafu)]
 #[snafu(visibility(pub(crate)))]
