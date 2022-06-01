@@ -65,13 +65,14 @@ impl InitializedRasterOperator for InitializedRasterTypeConversionOperator {
         let source = self.source.query_processor()?;
         let out_data_type = self.result_descriptor.data_type;
 
-        let res_op = call_on_generic_raster_processor!(source, source_proc => {
-            call_generic_raster_processor!(out_data_type,
-                RasterTypeConversionQueryProcessor::create_boxed(source_proc)
-            )
-        });
+        unimplemented!();
+        //let res_op = call_on_generic_raster_processor!(source, source_proc => {
+        //    call_generic_raster_processor!(out_data_type,
+        //        RasterTypeConversionQueryProcessor::create_boxed(source_proc)
+        //    )
+        //});
 
-        Ok(res_op)
+        // Ok(res_op)
     }
 }
 
