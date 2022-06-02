@@ -60,7 +60,7 @@ pub enum TimeShiftError {
     #[snafu(display("Output type must match the type of the source"))]
     UnmatchedOutput,
     #[snafu(display("Modifying the timestamps of the feature collection failed"))]
-    FeatureCollectionTimeModifcation { source: Box<dyn ErrorSource> },
+    FeatureCollectionTimeModification { source: Box<dyn ErrorSource> },
 }
 
 #[typetag::serde]
@@ -293,14 +293,14 @@ where
                         RelativeShiftDirection::Backward => time.end() + self.step,
                     }?;
                     TimeInterval::new(start, end)
-                        .boxed_context(error::FeatureCollectionTimeModifcation)
+                        .boxed_context(error::FeatureCollectionTimeModification)
                         .map_err(Into::into)
                 })
                 .collect::<Result<Vec<TimeInterval>>>()?;
 
             collection
                 .replace_time(&time_intervals)
-                .boxed_context(error::FeatureCollectionTimeModifcation)
+                .boxed_context(error::FeatureCollectionTimeModification)
                 .map_err(Into::into)
         });
 
@@ -342,14 +342,14 @@ where
                         time.start() + time_start_difference.num_milliseconds(),
                         time.end() + time_end_difference.num_milliseconds(),
                     )
-                    .boxed_context(error::FeatureCollectionTimeModifcation)
+                    .boxed_context(error::FeatureCollectionTimeModification)
                     .map_err(Into::into)
                 })
                 .collect::<Result<Vec<TimeInterval>>>()?;
 
             collection
                 .replace_time(&time_intervals)
-                .boxed_context(error::FeatureCollectionTimeModifcation)
+                .boxed_context(error::FeatureCollectionTimeModification)
                 .map_err(Into::into)
         });
 
