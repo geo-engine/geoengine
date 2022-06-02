@@ -14,7 +14,7 @@ use geoengine_datatypes::collections::{
 };
 use geoengine_datatypes::error::{BoxedResultExt, ErrorSource};
 use geoengine_datatypes::primitives::{
-    Geometry, RasterQueryRectangle, TimeGranularity, TimeInterval,
+    Duration, Geometry, RasterQueryRectangle, TimeGranularity, TimeInterval,
 };
 use geoengine_datatypes::primitives::{TimeStep, VectorQueryRectangle};
 use geoengine_datatypes::raster::{Pixel, RasterTile2D};
@@ -37,20 +37,89 @@ pub enum TimeShiftParams {
     Absolute { time_interval: TimeInterval },
 }
 
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Copy)]
-#[serde(rename_all = "camelCase")]
-pub enum RelativeShiftDirection {
-    Forward,
-    Backward,
+pub trait TimeShiftOperation: Send + Sync + Copy {
+    type State: Send + Sync + Copy;
+
+    fn shift(&self, time_interval: TimeInterval) -> Result<(TimeInterval, Self::State)>;
+
+    fn reverse_shift(
+        &self,
+        time_interval: TimeInterval,
+        state: Self::State,
+    ) -> Result<TimeInterval>;
 }
 
-impl RelativeShiftDirection {
-    pub fn from_step(step: i32) -> Self {
-        if step.is_negative() {
-            RelativeShiftDirection::Backward
-        } else {
-            RelativeShiftDirection::Forward
-        }
+#[derive(Debug, Clone, Copy)]
+pub struct RelativeForwardShift {
+    step: TimeStep,
+}
+
+impl TimeShiftOperation for RelativeForwardShift {
+    type State = ();
+
+    fn shift(&self, time_interval: TimeInterval) -> Result<(TimeInterval, Self::State)> {
+        let time_interval = time_interval + self.step;
+        Ok((time_interval?, ()))
+    }
+
+    fn reverse_shift(
+        &self,
+        time_interval: TimeInterval,
+        _state: Self::State,
+    ) -> Result<TimeInterval> {
+        Ok((time_interval - self.step)?)
+    }
+}
+
+#[derive(Debug, Clone, Copy)]
+pub struct RelativeBackwardShift {
+    step: TimeStep,
+}
+
+impl TimeShiftOperation for RelativeBackwardShift {
+    type State = ();
+
+    fn shift(&self, time_interval: TimeInterval) -> Result<(TimeInterval, Self::State)> {
+        let time_interval = time_interval - self.step;
+        Ok((time_interval?, ()))
+    }
+
+    fn reverse_shift(
+        &self,
+        time_interval: TimeInterval,
+        _state: Self::State,
+    ) -> Result<TimeInterval> {
+        Ok((time_interval + self.step)?)
+    }
+}
+
+#[derive(Debug, Clone, Copy)]
+pub struct AbsoluteShift {
+    time_interval: TimeInterval,
+}
+
+impl TimeShiftOperation for AbsoluteShift {
+    type State = (Duration, Duration);
+
+    fn shift(&self, time_interval: TimeInterval) -> Result<(TimeInterval, Self::State)> {
+        let time_start_difference = time_interval.start() - self.time_interval.start();
+        let time_end_difference = time_interval.end() - self.time_interval.end();
+
+        Ok((
+            self.time_interval,
+            (time_start_difference, time_end_difference),
+        ))
+    }
+
+    fn reverse_shift(
+        &self,
+        time_interval: TimeInterval,
+        (time_start_difference, time_end_difference): Self::State,
+    ) -> Result<TimeInterval> {
+        Ok(TimeInterval::new(
+            time_interval.start() + time_start_difference.num_milliseconds(),
+            time_interval.end() + time_end_difference.num_milliseconds(),
+        )?)
     }
 }
 
@@ -74,20 +143,33 @@ impl VectorOperator for TimeShift {
             (
                 RasterOrVectorOperator::Vector(source),
                 TimeShiftParams::Relative { granularity, value },
-            ) => Ok(Box::new(InitializedRelativeVectorTimeShift {
+            ) if value.is_positive() => Ok(Box::new(InitializedVectorTimeShift {
                 source: source.initialize(context).await?,
-                step: TimeStep {
-                    granularity,
-                    step: value.unsigned_abs(),
+                shift: RelativeForwardShift {
+                    step: TimeStep {
+                        granularity,
+                        step: value.unsigned_abs(),
+                    },
                 },
-                direction: RelativeShiftDirection::from_step(value),
+            })),
+            (
+                RasterOrVectorOperator::Vector(source),
+                TimeShiftParams::Relative { granularity, value },
+            ) => Ok(Box::new(InitializedVectorTimeShift {
+                source: source.initialize(context).await?,
+                shift: RelativeBackwardShift {
+                    step: TimeStep {
+                        granularity,
+                        step: value.unsigned_abs(),
+                    },
+                },
             })),
             (
                 RasterOrVectorOperator::Vector(source),
                 TimeShiftParams::Absolute { time_interval },
-            ) => Ok(Box::new(InitializedAbsoluteVectorTimeShift {
+            ) => Ok(Box::new(InitializedVectorTimeShift {
                 source: source.initialize(context).await?,
-                time_interval,
+                shift: AbsoluteShift { time_interval },
             })),
             (RasterOrVectorOperator::Raster(_), _) => Err(TimeShiftError::UnmatchedOutput.into()),
         }
@@ -105,49 +187,52 @@ impl RasterOperator for TimeShift {
             (
                 RasterOrVectorOperator::Raster(source),
                 TimeShiftParams::Relative { granularity, value },
-            ) => Ok(Box::new(InitializedRelativeRasterTimeShift {
+            ) if value.is_positive() => Ok(Box::new(InitializedRasterTimeShift {
                 source: source.initialize(context).await?,
-                step: TimeStep {
-                    granularity,
-                    step: value.unsigned_abs(),
+                shift: RelativeForwardShift {
+                    step: TimeStep {
+                        granularity,
+                        step: value.unsigned_abs(),
+                    },
                 },
-                direction: RelativeShiftDirection::from_step(value),
+            })),
+            (
+                RasterOrVectorOperator::Raster(source),
+                TimeShiftParams::Relative { granularity, value },
+            ) => Ok(Box::new(InitializedRasterTimeShift {
+                source: source.initialize(context).await?,
+                shift: RelativeBackwardShift {
+                    step: TimeStep {
+                        granularity,
+                        step: value.unsigned_abs(),
+                    },
+                },
             })),
             (
                 RasterOrVectorOperator::Raster(source),
                 TimeShiftParams::Absolute { time_interval },
-            ) => Ok(Box::new(InitializedAbsoluteRasterTimeShift {
+            ) => Ok(Box::new(InitializedRasterTimeShift {
                 source: source.initialize(context).await?,
-                time_interval,
+                shift: AbsoluteShift { time_interval },
             })),
             (RasterOrVectorOperator::Vector(_), _) => Err(TimeShiftError::UnmatchedOutput.into()),
         }
     }
 }
 
-pub struct InitializedRelativeVectorTimeShift {
+pub struct InitializedVectorTimeShift<Shift: TimeShiftOperation> {
     source: Box<dyn InitializedVectorOperator>,
-    step: TimeStep,
-    direction: RelativeShiftDirection,
+    shift: Shift,
 }
 
-pub struct InitializedAbsoluteVectorTimeShift {
-    source: Box<dyn InitializedVectorOperator>,
-    time_interval: TimeInterval,
-}
-
-pub struct InitializedRelativeRasterTimeShift {
+pub struct InitializedRasterTimeShift<Shift: TimeShiftOperation> {
     source: Box<dyn InitializedRasterOperator>,
-    step: TimeStep,
-    direction: RelativeShiftDirection,
+    shift: Shift,
 }
 
-pub struct InitializedAbsoluteRasterTimeShift {
-    source: Box<dyn InitializedRasterOperator>,
-    time_interval: TimeInterval,
-}
-
-impl InitializedVectorOperator for InitializedRelativeVectorTimeShift {
+impl<Shift: TimeShiftOperation + 'static> InitializedVectorOperator
+    for InitializedVectorTimeShift<Shift>
+{
     fn result_descriptor(&self) -> &VectorResultDescriptor {
         self.source.result_descriptor()
     }
@@ -156,33 +241,17 @@ impl InitializedVectorOperator for InitializedRelativeVectorTimeShift {
         let source_processor = self.source.query_processor()?;
 
         Ok(
-            call_on_generic_vector_processor!(source_processor, processor => VectorRelativeTimeShiftProcessor {
+            call_on_generic_vector_processor!(source_processor, processor => VectorTimeShiftProcessor {
                 processor,
-                step: self.step,
-                direction: self.direction,
+                shift: self.shift,
             }.boxed().into()),
         )
     }
 }
 
-impl InitializedVectorOperator for InitializedAbsoluteVectorTimeShift {
-    fn result_descriptor(&self) -> &VectorResultDescriptor {
-        self.source.result_descriptor()
-    }
-
-    fn query_processor(&self) -> Result<TypedVectorQueryProcessor> {
-        let source_processor = self.source.query_processor()?;
-
-        Ok(
-            call_on_generic_vector_processor!(source_processor, processor => VectorAbsoluteTimeShiftProcessor {
-                processor,
-                time_interval: self.time_interval,
-            }.boxed().into()),
-        )
-    }
-}
-
-impl InitializedRasterOperator for InitializedRelativeRasterTimeShift {
+impl<Shift: TimeShiftOperation + 'static> InitializedRasterOperator
+    for InitializedRasterTimeShift<Shift>
+{
     fn result_descriptor(&self) -> &RasterResultDescriptor {
         self.source.result_descriptor()
     }
@@ -191,73 +260,37 @@ impl InitializedRasterOperator for InitializedRelativeRasterTimeShift {
         let source_processor = self.source.query_processor()?;
 
         Ok(
-            call_on_generic_raster_processor!(source_processor, processor => RasterRelativeTimeShiftProcessor {
+            call_on_generic_raster_processor!(source_processor, processor => RasterTimeShiftProcessor {
                 processor,
-                step: self.step,
-                direction: self.direction,
+                shift: self.shift,
             }.boxed().into()),
         )
     }
 }
 
-impl InitializedRasterOperator for InitializedAbsoluteRasterTimeShift {
-    fn result_descriptor(&self) -> &RasterResultDescriptor {
-        self.source.result_descriptor()
-    }
-
-    fn query_processor(&self) -> Result<TypedRasterQueryProcessor> {
-        let source_processor = self.source.query_processor()?;
-
-        Ok(
-            call_on_generic_raster_processor!(source_processor, processor => RasterAbsoluteTimeShiftProcessor {
-                processor,
-                time_interval: self.time_interval,
-            }.boxed().into()),
-        )
-    }
-}
-
-pub struct RasterRelativeTimeShiftProcessor<Q, P>
+pub struct RasterTimeShiftProcessor<Q, P, Shift: TimeShiftOperation>
 where
     Q: RasterQueryProcessor<RasterType = P>,
 {
     processor: Q,
-    step: TimeStep,
-    direction: RelativeShiftDirection,
+    shift: Shift,
 }
 
-pub struct RasterAbsoluteTimeShiftProcessor<Q, P>
-where
-    Q: RasterQueryProcessor<RasterType = P>,
-{
-    processor: Q,
-    time_interval: TimeInterval,
-}
-
-pub struct VectorRelativeTimeShiftProcessor<Q, G>
+pub struct VectorTimeShiftProcessor<Q, G, Shift: TimeShiftOperation>
 where
     G: Geometry,
     Q: VectorQueryProcessor<VectorType = FeatureCollection<G>>,
 {
     processor: Q,
-    step: TimeStep,
-    direction: RelativeShiftDirection,
-}
-
-pub struct VectorAbsoluteTimeShiftProcessor<Q, G>
-where
-    G: Geometry,
-    Q: VectorQueryProcessor<VectorType = FeatureCollection<G>>,
-{
-    processor: Q,
-    time_interval: TimeInterval,
+    shift: Shift,
 }
 
 #[async_trait]
-impl<Q, G> VectorQueryProcessor for VectorRelativeTimeShiftProcessor<Q, G>
+impl<Q, G, Shift> VectorQueryProcessor for VectorTimeShiftProcessor<Q, G, Shift>
 where
     G: Geometry + ArrowTyped + 'static,
     Q: VectorQueryProcessor<VectorType = FeatureCollection<G>>,
+    Shift: TimeShiftOperation,
 {
     type VectorType = FeatureCollection<G>;
 
@@ -266,67 +299,11 @@ where
         query: VectorQueryRectangle,
         ctx: &'a dyn QueryContext,
     ) -> Result<BoxStream<'a, Result<Self::VectorType>>> {
-        let time_interval = match self.direction {
-            RelativeShiftDirection::Forward => query.time_interval + self.step,
-            RelativeShiftDirection::Backward => query.time_interval - self.step,
-        }?;
+        let (time_interval, state) = self.shift.shift(query.time_interval)?;
+
         let query = VectorQueryRectangle {
             spatial_bounds: query.spatial_bounds,
             time_interval,
-            spatial_resolution: query.spatial_resolution,
-        };
-        let stream = self.processor.vector_query(query, ctx).await?;
-
-        let stream = stream.map(|collection| {
-            let collection = collection?;
-
-            let time_intervals = collection
-                .time_intervals()
-                .iter()
-                .map(|time| {
-                    let start = match self.direction {
-                        RelativeShiftDirection::Forward => time.start() - self.step,
-                        RelativeShiftDirection::Backward => time.start() + self.step,
-                    }?;
-                    let end = match self.direction {
-                        RelativeShiftDirection::Forward => time.end() - self.step,
-                        RelativeShiftDirection::Backward => time.end() + self.step,
-                    }?;
-                    TimeInterval::new(start, end)
-                        .boxed_context(error::FeatureCollectionTimeModification)
-                        .map_err(Into::into)
-                })
-                .collect::<Result<Vec<TimeInterval>>>()?;
-
-            collection
-                .replace_time(&time_intervals)
-                .boxed_context(error::FeatureCollectionTimeModification)
-                .map_err(Into::into)
-        });
-
-        Ok(stream.boxed())
-    }
-}
-
-#[async_trait]
-impl<Q, G> VectorQueryProcessor for VectorAbsoluteTimeShiftProcessor<Q, G>
-where
-    G: Geometry + ArrowTyped + 'static,
-    Q: VectorQueryProcessor<VectorType = FeatureCollection<G>>,
-{
-    type VectorType = FeatureCollection<G>;
-
-    async fn vector_query<'a>(
-        &'a self,
-        query: VectorQueryRectangle,
-        ctx: &'a dyn QueryContext,
-    ) -> Result<BoxStream<'a, Result<Self::VectorType>>> {
-        let time_start_difference = query.time_interval.start() - self.time_interval.start();
-        let time_end_difference = query.time_interval.end() - self.time_interval.end();
-
-        let query = VectorQueryRectangle {
-            spatial_bounds: query.spatial_bounds,
-            time_interval: self.time_interval,
             spatial_resolution: query.spatial_resolution,
         };
         let stream = self.processor.vector_query(query, ctx).await?;
@@ -337,14 +314,7 @@ where
             let time_intervals = collection
                 .time_intervals()
                 .iter()
-                .map(|time| {
-                    TimeInterval::new(
-                        time.start() + time_start_difference.num_milliseconds(),
-                        time.end() + time_end_difference.num_milliseconds(),
-                    )
-                    .boxed_context(error::FeatureCollectionTimeModification)
-                    .map_err(Into::into)
-                })
+                .map(move |time| self.shift.reverse_shift(*time, state))
                 .collect::<Result<Vec<TimeInterval>>>()?;
 
             collection
@@ -358,10 +328,11 @@ where
 }
 
 #[async_trait]
-impl<Q, P> RasterQueryProcessor for RasterRelativeTimeShiftProcessor<Q, P>
+impl<Q, P, Shift> RasterQueryProcessor for RasterTimeShiftProcessor<Q, P, Shift>
 where
     Q: RasterQueryProcessor<RasterType = P>,
     P: Pixel,
+    Shift: TimeShiftOperation,
 {
     type RasterType = P;
 
@@ -370,10 +341,7 @@ where
         query: RasterQueryRectangle,
         ctx: &'a dyn QueryContext,
     ) -> Result<BoxStream<'a, Result<RasterTile2D<Self::RasterType>>>> {
-        let time_interval = match self.direction {
-            RelativeShiftDirection::Forward => query.time_interval + self.step,
-            RelativeShiftDirection::Backward => query.time_interval - self.step,
-        }?;
+        let (time_interval, state) = self.shift.shift(query.time_interval)?;
         let query = RasterQueryRectangle {
             spatial_bounds: query.spatial_bounds,
             time_interval,
@@ -381,54 +349,11 @@ where
         };
         let stream = self.processor.raster_query(query, ctx).await?;
 
-        let stream = stream.map(|raster| {
-            // reverse time shift for results
-            let mut raster = raster?;
-
-            raster.time = match self.direction {
-                RelativeShiftDirection::Forward => raster.time - self.step,
-                RelativeShiftDirection::Backward => raster.time + self.step,
-            }?;
-
-            Ok(raster)
-        });
-
-        Ok(Box::pin(stream))
-    }
-}
-
-#[async_trait]
-impl<Q, P> RasterQueryProcessor for RasterAbsoluteTimeShiftProcessor<Q, P>
-where
-    Q: RasterQueryProcessor<RasterType = P>,
-    P: Pixel,
-{
-    type RasterType = P;
-
-    async fn raster_query<'a>(
-        &'a self,
-        query: RasterQueryRectangle,
-        ctx: &'a dyn QueryContext,
-    ) -> Result<BoxStream<'a, Result<RasterTile2D<Self::RasterType>>>> {
-        let time_start_difference = query.time_interval.start() - self.time_interval.start();
-        let time_end_difference = query.time_interval.end() - self.time_interval.end();
-
-        let query = RasterQueryRectangle {
-            spatial_bounds: query.spatial_bounds,
-            time_interval: self.time_interval,
-            spatial_resolution: query.spatial_resolution,
-        };
-
-        let stream = self.processor.raster_query(query, ctx).await?;
-
         let stream = stream.map(move |raster| {
             // reverse time shift for results
             let mut raster = raster?;
 
-            raster.time = TimeInterval::new(
-                raster.time.start() + time_start_difference.num_milliseconds(),
-                raster.time.end() + time_end_difference.num_milliseconds(),
-            )?;
+            raster.time = self.shift.reverse_shift(raster.time, state)?;
 
             Ok(raster)
         });
@@ -541,7 +466,7 @@ mod tests {
                 "params": {
                     "type": "relative",
                     "granularity": "years",
-                    "step": 1
+                    "value": 1
                 },
                 "sources": {
                     "source": {
