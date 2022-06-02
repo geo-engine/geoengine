@@ -24,7 +24,7 @@ pub type RasterTypeConversionOperator = Operator<RasterTypeConversionParams, Sin
 
 pub struct InitializedRasterTypeConversionOperator {
     result_descriptor: RasterResultDescriptor,
-    _source: Box<dyn InitializedRasterOperator>,
+    source: Box<dyn InitializedRasterOperator>,
 }
 
 #[typetag::serde]
@@ -49,7 +49,7 @@ impl RasterOperator for RasterTypeConversionOperator {
 
         let initialized_operator = InitializedRasterTypeConversionOperator {
             result_descriptor: out_desc,
-            _source: input,
+            source: input,
         };
 
         Ok(initialized_operator.boxed())
@@ -62,17 +62,16 @@ impl InitializedRasterOperator for InitializedRasterTypeConversionOperator {
     }
 
     fn query_processor(&self) -> Result<TypedRasterQueryProcessor> {
-        unimplemented!();
-        //let source = self.source.query_processor()?;
-        //let out_data_type = self.result_descriptor.data_type;
-        
-        //let res_op = call_on_generic_raster_processor!(source, source_proc => {
-        //    call_generic_raster_processor!(out_data_type,
-        //        RasterTypeConversionQueryProcessor::create_boxed(source_proc)
-        //    )
-        //});
+        let source = self.source.query_processor()?;
+        let out_data_type = self.result_descriptor.data_type;
 
-        // Ok(res_op)
+        let res_op = call_on_generic_raster_processor!(source, source_proc => {
+            call_generic_raster_processor!(out_data_type,
+                RasterTypeConversionQueryProcessor::create_boxed(source_proc)
+            )
+        });
+
+        Ok(res_op)
     }
 }
 
@@ -130,7 +129,6 @@ where
     }
 }
 
-/*
 #[cfg(test)]
 mod tests {
     use geoengine_datatypes::{
@@ -236,4 +234,3 @@ mod tests {
         }
     }
 }
-*/
