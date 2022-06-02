@@ -31,7 +31,7 @@ pub enum TimeShiftParams {
     /// Shift the query rectangle relative with a time step
     Relative {
         granularity: TimeGranularity,
-        step: i32,
+        value: i32,
     },
     /// Set the time interval to a fixed value
     Absolute { time_interval: TimeInterval },
@@ -73,14 +73,14 @@ impl VectorOperator for TimeShift {
         match (self.sources.source, self.params) {
             (
                 RasterOrVectorOperator::Vector(source),
-                TimeShiftParams::Relative { granularity, step },
+                TimeShiftParams::Relative { granularity, value },
             ) => Ok(Box::new(InitializedRelativeVectorTimeShift {
                 source: source.initialize(context).await?,
                 step: TimeStep {
                     granularity,
-                    step: step.unsigned_abs(),
+                    step: value.unsigned_abs(),
                 },
-                direction: RelativeShiftDirection::from_step(step),
+                direction: RelativeShiftDirection::from_step(value),
             })),
             (
                 RasterOrVectorOperator::Vector(source),
@@ -104,14 +104,14 @@ impl RasterOperator for TimeShift {
         match (self.sources.source, self.params) {
             (
                 RasterOrVectorOperator::Raster(source),
-                TimeShiftParams::Relative { granularity, step },
+                TimeShiftParams::Relative { granularity, value },
             ) => Ok(Box::new(InitializedRelativeRasterTimeShift {
                 source: source.initialize(context).await?,
                 step: TimeStep {
                     granularity,
-                    step: step.unsigned_abs(),
+                    step: value.unsigned_abs(),
                 },
-                direction: RelativeShiftDirection::from_step(step),
+                direction: RelativeShiftDirection::from_step(value),
             })),
             (
                 RasterOrVectorOperator::Raster(source),
@@ -529,7 +529,7 @@ mod tests {
             },
             params: TimeShiftParams::Relative {
                 granularity: TimeGranularity::Years,
-                step: 1,
+                value: 1,
             },
         };
 
@@ -687,7 +687,7 @@ mod tests {
             },
             params: TimeShiftParams::Relative {
                 granularity: TimeGranularity::Years,
-                step: -1,
+                value: -1,
             },
         };
 
@@ -1004,7 +1004,7 @@ mod tests {
             },
             params: TimeShiftParams::Relative {
                 granularity: TimeGranularity::Years,
-                step: 1,
+                value: 1,
             },
         };
 
@@ -1078,7 +1078,7 @@ mod tests {
         let shifted_ndvi_source = RasterOperator::boxed(TimeShift {
             params: TimeShiftParams::Relative {
                 granularity: TimeGranularity::Months,
-                step: -1,
+                value: -1,
             },
             sources: SingleRasterOrVectorSource {
                 source: RasterOrVectorOperator::Raster(ndvi_source.clone()),
