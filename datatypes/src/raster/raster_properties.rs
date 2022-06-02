@@ -8,6 +8,10 @@ use std::convert::TryFrom;
 use std::fmt;
 use std::fmt::{Display, Formatter};
 
+/// This scruct stores metadata about a raster tile.
+/// The metadata is stored in a `HashMap` except for the `scale`, `offset` and `band_name` properties.
+/// The `scale` and `offset` properties used to indicate the values the data is scaled with.
+/// Scale and unscale are used in the way `gdal_translate` does. See <https://gdal.org/programs/gdal_translate.html> for more information.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Default)]
 pub struct RasterProperties {
     pub scale: Option<f64>,
@@ -21,10 +25,51 @@ impl RasterProperties {
         self.properties_map.keys().map(|m| m.domain.as_ref())
     }
 
+    pub fn set_scale(&mut self, scale: f64) {
+        self.scale = Some(scale);
+    }
+
+    pub fn set_offset(&mut self, offset: f64) {
+        self.offset = Some(offset);
+    }
+
+    pub fn set_band_name(&mut self, band_name: String) {
+        self.band_name = Some(band_name);
+    }
+
+    pub fn insert_property(
+        &mut self,
+        key: RasterPropertiesKey,
+        value: RasterPropertiesEntry,
+    ) -> Option<RasterPropertiesEntry> {
+        self.properties_map.insert(key, value)
+    }
+
+    pub fn get_property(&self, key: &RasterPropertiesKey) -> Option<&RasterPropertiesEntry> {
+        self.properties_map.get(key)
+    }
+
     pub fn number_property<T: Copy + FromPrimitive>(&self, key: &RasterPropertiesKey) -> Result<T> {
+        if key.domain.is_none() && key.key == "scale" {
+            return self
+                .scale
+                .and_then(|s| T::from_f64(s))
+                .ok_or(Error::MissingRasterProperty {
+                    property: key.to_string(),
+                });
+        }
+
+        if key.domain.is_none() && key.key == "offset" {
+            return self
+                .offset
+                .and_then(|s| T::from_f64(s))
+                .ok_or(Error::MissingRasterProperty {
+                    property: key.to_string(),
+                });
+        }
+
         let val = f64::try_from(
-            self.properties_map
-                .get(key)
+            self.get_property(key)
                 .ok_or(Error::MissingRasterProperty {
                     property: key.to_string(),
                 })?
@@ -34,9 +79,14 @@ impl RasterProperties {
     }
 
     pub fn string_property(&self, key: &RasterPropertiesKey) -> Result<String> {
+        if key.domain.is_none() && key.key == "band_name" {
+            return self.band_name.clone().ok_or(Error::MissingRasterProperty {
+                property: key.to_string(),
+            });
+        }
+
         let s = self
-            .properties_map
-            .get(key)
+            .get_property(key)
             .ok_or(Error::MissingRasterProperty {
                 property: key.to_string(),
             })?
