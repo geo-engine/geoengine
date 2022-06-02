@@ -43,6 +43,7 @@ pub trait Pixel:
     + RgbaTransmutable
     + TypedRasterConversion<GridShape2D>
     + TypedRasterConversion<GridShape3D>
+    + DefaultNoDataValue
 {
 }
 
