@@ -332,6 +332,7 @@ pub struct TemporalRasterAggregationSubQuery<F, T: Pixel> {
     pub no_data_value: Option<T>,
     pub initial_value: T,
     pub step: TimeStep,
+    pub step_reference: TimeInstance,
 }
 
 impl<'a, T, FoldM, FoldF> SubQueryTileAggregator<'a, T>
@@ -374,10 +375,11 @@ where
         query_rect: RasterQueryRectangle,
         start_time: TimeInstance,
     ) -> Result<Option<RasterQueryRectangle>> {
+        let snapped_start = self.step.snap_relative(self.step_reference, start_time)?;
         Ok(Some(QueryRectangle {
             spatial_bounds: tile_info.spatial_partition(),
             spatial_resolution: query_rect.spatial_resolution,
-            time_interval: TimeInterval::new(start_time, (start_time + self.step)?)?,
+            time_interval: TimeInterval::new(snapped_start, (snapped_start + self.step)?)?,
         }))
     }
 
@@ -418,6 +420,7 @@ pub struct TemporalRasterAggregationSubQueryNoDataOnly<F, T: Pixel> {
     pub no_data_value: T,
     pub initial_value: T,
     pub step: TimeStep,
+    pub step_reference: TimeInstance,
 }
 
 impl<'a, T, FoldM, FoldF> SubQueryTileAggregator<'a, T>
@@ -452,10 +455,11 @@ where
         query_rect: RasterQueryRectangle,
         start_time: TimeInstance,
     ) -> Result<Option<RasterQueryRectangle>> {
+        let snapped_start = self.step.snap_relative(self.step_reference, start_time)?;
         Ok(Some(QueryRectangle {
             spatial_bounds: tile_info.spatial_partition(),
             spatial_resolution: query_rect.spatial_resolution,
-            time_interval: TimeInterval::new(start_time, (start_time + self.step)?)?,
+            time_interval: TimeInterval::new(snapped_start, (snapped_start + self.step)?)?,
         }))
     }
 
