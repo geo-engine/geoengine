@@ -290,7 +290,7 @@ impl<Q, G, Shift> VectorQueryProcessor for VectorTimeShiftProcessor<Q, G, Shift>
 where
     G: Geometry + ArrowTyped + 'static,
     Q: VectorQueryProcessor<VectorType = FeatureCollection<G>>,
-    Shift: TimeShiftOperation,
+    Shift: TimeShiftOperation + 'static,
 {
     type VectorType = FeatureCollection<G>;
 
@@ -308,19 +308,23 @@ where
         };
         let stream = self.processor.vector_query(query, ctx).await?;
 
-        let stream = stream.map(move |collection| {
+        let stream = stream.then(move |collection| async move {
             let collection = collection?;
+            let shift = self.shift;
 
-            let time_intervals = collection
-                .time_intervals()
-                .iter()
-                .map(move |time| self.shift.reverse_shift(*time, state))
-                .collect::<Result<Vec<TimeInterval>>>()?;
+            crate::util::spawn_blocking(move || {
+                let time_intervals = collection
+                    .time_intervals()
+                    .iter()
+                    .map(move |time| shift.reverse_shift(*time, state))
+                    .collect::<Result<Vec<TimeInterval>>>()?;
 
-            collection
-                .replace_time(&time_intervals)
-                .boxed_context(error::FeatureCollectionTimeModification)
-                .map_err(Into::into)
+                collection
+                    .replace_time(&time_intervals)
+                    .boxed_context(error::FeatureCollectionTimeModification)
+                    .map_err(Into::into)
+            })
+            .await?
         });
 
         Ok(stream.boxed())
