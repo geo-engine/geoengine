@@ -1,5 +1,6 @@
 pub use self::data_type::{
-    DynamicRasterDataType, FromPrimitive, Pixel, RasterDataType, StaticRasterDataType, TypedValue,
+    DefaultNoDataValue, DynamicRasterDataType, FromPrimitive, Pixel, RasterDataType,
+    StaticRasterDataType, TypedValue,
 };
 pub use self::empty_grid::{EmptyGrid, EmptyGrid1D, EmptyGrid2D, EmptyGrid3D};
 pub use self::geo_transform::{GdalGeoTransform, GeoTransform};
