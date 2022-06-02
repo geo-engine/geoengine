@@ -48,10 +48,6 @@ jobs:
           export C_INCLUDE_PATH=/usr/include/gdal:$C_INCLUDE_PATH
           export CPLUS_INCLUDE_PATH=/usr/include/gdal:$CPLUS_INCLUDE_PATH
           sudo ldconfig
-      - name: Setup building
-        run: |
-          export CC="clang-10"
-          export CXX="clang++-10"
       - name: Check with Rustfmt
         uses: actions-rs/cargo@v1
         with:
@@ -102,10 +98,6 @@ jobs:
           export C_INCLUDE_PATH=/usr/include/gdal:$C_INCLUDE_PATH
           export CPLUS_INCLUDE_PATH=/usr/include/gdal:$CPLUS_INCLUDE_PATH
           sudo ldconfig
-      - name: Setup building
-        run: |
-          export CC="clang-10"
-          export CXX="clang++-10"
       - name: Generate code coverage
         run: |
           cargo install cargo-tarpaulin
