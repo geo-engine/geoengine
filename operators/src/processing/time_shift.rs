@@ -14,7 +14,7 @@ use geoengine_datatypes::collections::{
 };
 use geoengine_datatypes::error::{BoxedResultExt, ErrorSource};
 use geoengine_datatypes::primitives::{
-    Duration, Geometry, RasterQueryRectangle, TimeGranularity, TimeInterval,
+    Duration, Geometry, RasterQueryRectangle, TimeGranularity, TimeInstance, TimeInterval,
 };
 use geoengine_datatypes::primitives::{TimeStep, VectorQueryRectangle};
 use geoengine_datatypes::raster::{Pixel, RasterTile2D};
@@ -40,13 +40,16 @@ pub enum TimeShiftParams {
 pub trait TimeShiftOperation: Send + Sync + Copy {
     type State: Send + Sync + Copy;
 
-    fn shift(&self, time_interval: TimeInterval) -> Result<(TimeInterval, Self::State)>;
+    fn shift(
+        &self,
+        time_interval: TimeInterval,
+    ) -> Result<(TimeInterval, Self::State), TimeShiftError>;
 
     fn reverse_shift(
         &self,
         time_interval: TimeInterval,
         state: Self::State,
-    ) -> Result<TimeInterval>;
+    ) -> Result<TimeInterval, TimeShiftError>;
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -57,17 +60,22 @@ pub struct RelativeForwardShift {
 impl TimeShiftOperation for RelativeForwardShift {
     type State = ();
 
-    fn shift(&self, time_interval: TimeInterval) -> Result<(TimeInterval, Self::State)> {
+    fn shift(
+        &self,
+        time_interval: TimeInterval,
+    ) -> Result<(TimeInterval, Self::State), TimeShiftError> {
         let time_interval = time_interval + self.step;
-        Ok((time_interval?, ()))
+        let time_interval = time_interval.boxed_context(error::TimeOverflow)?;
+        Ok((time_interval, ()))
     }
 
     fn reverse_shift(
         &self,
         time_interval: TimeInterval,
         _state: Self::State,
-    ) -> Result<TimeInterval> {
-        Ok((time_interval - self.step)?)
+    ) -> Result<TimeInterval, TimeShiftError> {
+        let reversed_time_interval = time_interval - self.step;
+        reversed_time_interval.boxed_context(error::TimeOverflow)
     }
 }
 
@@ -79,17 +87,22 @@ pub struct RelativeBackwardShift {
 impl TimeShiftOperation for RelativeBackwardShift {
     type State = ();
 
-    fn shift(&self, time_interval: TimeInterval) -> Result<(TimeInterval, Self::State)> {
+    fn shift(
+        &self,
+        time_interval: TimeInterval,
+    ) -> Result<(TimeInterval, Self::State), TimeShiftError> {
         let time_interval = time_interval - self.step;
-        Ok((time_interval?, ()))
+        let time_interval = time_interval.boxed_context(error::TimeOverflow)?;
+        Ok((time_interval, ()))
     }
 
     fn reverse_shift(
         &self,
         time_interval: TimeInterval,
         _state: Self::State,
-    ) -> Result<TimeInterval> {
-        Ok((time_interval + self.step)?)
+    ) -> Result<TimeInterval, TimeShiftError> {
+        let reversed_time_interval = time_interval + self.step;
+        reversed_time_interval.boxed_context(error::TimeOverflow)
     }
 }
 
@@ -101,7 +114,10 @@ pub struct AbsoluteShift {
 impl TimeShiftOperation for AbsoluteShift {
     type State = (Duration, Duration);
 
-    fn shift(&self, time_interval: TimeInterval) -> Result<(TimeInterval, Self::State)> {
+    fn shift(
+        &self,
+        time_interval: TimeInterval,
+    ) -> Result<(TimeInterval, Self::State), TimeShiftError> {
         let time_start_difference = time_interval.start() - self.time_interval.start();
         let time_end_difference = time_interval.end() - self.time_interval.end();
 
@@ -115,11 +131,10 @@ impl TimeShiftOperation for AbsoluteShift {
         &self,
         time_interval: TimeInterval,
         (time_start_difference, time_end_difference): Self::State,
-    ) -> Result<TimeInterval> {
-        Ok(TimeInterval::new(
-            time_interval.start() + time_start_difference.num_milliseconds(),
-            time_interval.end() + time_end_difference.num_milliseconds(),
-        )?)
+    ) -> Result<TimeInterval, TimeShiftError> {
+        let t1 = time_interval.start() + time_start_difference.num_milliseconds();
+        let t2 = time_interval.end() + time_end_difference.num_milliseconds();
+        TimeInterval::new(t1, t2).boxed_context(error::FaultyTimeInterval { t1, t2 })
     }
 }
 
@@ -128,6 +143,14 @@ impl TimeShiftOperation for AbsoluteShift {
 pub enum TimeShiftError {
     #[snafu(display("Output type must match the type of the source"))]
     UnmatchedOutput,
+    #[snafu(display("Shifting the time led to an overflowing time interval"))]
+    TimeOverflow { source: Box<dyn ErrorSource> },
+    #[snafu(display("Shifting the time to a faulty time interval: {t1} / {t2}"))]
+    FaultyTimeInterval {
+        source: Box<dyn ErrorSource>,
+        t1: TimeInstance,
+        t2: TimeInstance,
+    },
     #[snafu(display("Modifying the timestamps of the feature collection failed"))]
     FeatureCollectionTimeModification { source: Box<dyn ErrorSource> },
 }
@@ -317,7 +340,7 @@ where
                     .time_intervals()
                     .iter()
                     .map(move |time| shift.reverse_shift(*time, state))
-                    .collect::<Result<Vec<TimeInterval>>>()?;
+                    .collect::<Result<Vec<TimeInterval>, TimeShiftError>>()?;
 
                 collection
                     .replace_time(&time_intervals)
