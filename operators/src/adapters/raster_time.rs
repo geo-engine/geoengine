@@ -93,10 +93,15 @@ where
         mut tile_b: RasterTile2D<T2>,
     ) -> (RasterTile2D<T1>, RasterTile2D<T2>) {
         // TODO: scale data if measurement unit requires it?
-        let time = tile_a
-            .time
-            .intersect(&tile_b.time)
-            .expect("intervals must overlap");
+        let time = tile_a.time.intersect(&tile_b.time).unwrap_or_else(|| {
+            panic!(
+                "intervals must overlap: ({}/{}) <-> ({}/{})\nThis is a bug and most likely means an operator or adapter has a faulty implementation.",
+                tile_a.time.start().as_rfc3339(),
+                tile_a.time.end().as_rfc3339(),
+                tile_b.time.start().as_rfc3339(),
+                tile_b.time.end().as_rfc3339()
+            )
+        });
         tile_a.time = time;
         tile_b.time = time;
         (tile_a, tile_b)

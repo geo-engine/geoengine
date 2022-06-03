@@ -6,7 +6,7 @@ use geoengine_datatypes::{
     dataset::{DatasetId, DatasetProviderId},
     spatial_reference::SpatialReferenceOption,
 };
-use snafu::{prelude::*, AsErrorSource, ErrorCompat, IntoError};
+use snafu::prelude::*;
 use strum::IntoStaticStr;
 use tonic::Status;
 
@@ -463,32 +463,5 @@ impl From<tonic::transport::Error> for Error {
 impl From<tokio::task::JoinError> for Error {
     fn from(source: tokio::task::JoinError) -> Self {
         Error::TokioJoin { source }
-    }
-}
-
-pub trait ErrorSource: std::error::Error + Send + Sync + 'static + AsErrorSource {}
-
-impl ErrorSource for dyn std::error::Error + Send + Sync + 'static {}
-
-impl<T> ErrorSource for T where T: std::error::Error + Send + Sync + 'static {}
-
-pub trait BoxedResultExt<T, E>: Sized {
-    fn boxed_context<C, E2>(self, context: C) -> Result<T, E2>
-    where
-        C: IntoError<E2, Source = Box<dyn ErrorSource>>,
-        E2: std::error::Error + ErrorCompat;
-}
-
-impl<T, E> BoxedResultExt<T, E> for Result<T, E>
-where
-    E: ErrorSource,
-{
-    fn boxed_context<C, E2>(self, context: C) -> Result<T, E2>
-    where
-        C: IntoError<E2, Source = Box<dyn ErrorSource>>,
-        E2: std::error::Error + ErrorCompat,
-    {
-        self.map_err(|e| Box::new(e) as Box<dyn ErrorSource>)
-            .context(context)
     }
 }

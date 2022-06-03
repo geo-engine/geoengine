@@ -8,14 +8,14 @@ use crate::datasets::external::netcdfcf::{
 };
 use crate::datasets::listing::ExternalDatasetProvider;
 use crate::datasets::storage::DatasetProviderDb;
-use crate::error::BoxedResultExt;
-use crate::error::{ErrorSource, Result};
+use crate::error::Result;
 use crate::{contexts::Context, datasets::external::netcdfcf::NetCdfCfDataProvider};
 use actix_web::{
     web::{self, ServiceConfig},
     FromRequest, Responder,
 };
 use geoengine_datatypes::dataset::DatasetProviderId;
+use geoengine_datatypes::error::{BoxedResultExt, ErrorSource};
 use log::{debug, warn};
 use serde::{Deserialize, Serialize};
 use snafu::{ResultExt, Snafu};

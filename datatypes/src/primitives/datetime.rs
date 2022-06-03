@@ -578,6 +578,7 @@ mod sql {
     }
 }
 
+#[derive(Debug, Clone, Copy)]
 pub struct Duration {
     milliseconds: i64,
 }
@@ -609,27 +610,27 @@ impl Duration {
         Self { milliseconds }
     }
 
-    pub const fn num_milliseconds(&self) -> i64 {
+    pub const fn num_milliseconds(self) -> i64 {
         self.milliseconds
     }
 
-    pub const fn num_seconds(&self) -> i64 {
+    pub const fn num_seconds(self) -> i64 {
         self.milliseconds / Self::SECOND.milliseconds
     }
 
-    pub const fn num_minutes(&self) -> i64 {
+    pub const fn num_minutes(self) -> i64 {
         self.milliseconds / Self::MINUTE.milliseconds
     }
 
-    pub const fn num_hours(&self) -> i64 {
+    pub const fn num_hours(self) -> i64 {
         self.milliseconds / Self::HOUR.milliseconds
     }
 
-    pub const fn num_days(&self) -> i64 {
+    pub const fn num_days(self) -> i64 {
         self.milliseconds / Self::DAY.milliseconds
     }
 
-    pub const fn is_zero(&self) -> bool {
+    pub const fn is_zero(self) -> bool {
         self.milliseconds == 0
     }
 }
