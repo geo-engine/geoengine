@@ -9,7 +9,7 @@ use crate::util::Result;
 
 use super::{
     grid_traits::{ChangeGridBounds, GridShapeAccess},
-    BoundedGrid, GridBoundingBox, GridBounds, GridContains, GridIdx, GridIdx2D, GridIndexAccess,
+    GridBoundingBox, GridBounds, GridContains, GridIdx, GridIdx2D, GridIndexAccess,
     GridIndexAccessMut, GridSize, GridSpaceToLinearSpace, NoDataValue,
 };
 
@@ -88,14 +88,17 @@ impl GridSpaceToLinearSpace for GridShape1D {
     }
 
     fn linear_space_index_unchecked<I: Into<GridIdx<Self::IndexArray>>>(&self, index: I) -> usize {
-        let GridIdx([x]) = index.into();
+        let real_idx = index.into();
+        debug_assert!(self.contains(&real_idx));
+
+        let GridIdx([x]) = real_idx;
         x as usize
     }
 
     fn linear_space_index<I: Into<GridIdx<Self::IndexArray>>>(&self, index: I) -> Result<usize> {
         let real_index = index.into();
         ensure!(
-            self.bounding_box().contains(&real_index),
+            self.contains(&real_index),
             error::GridIndexOutOfBounds {
                 index: Vec::from(real_index.0),
                 min_index: Vec::from(self.min_index().0),
@@ -147,7 +150,9 @@ impl GridSpaceToLinearSpace for GridShape2D {
     }
 
     fn linear_space_index_unchecked<I: Into<GridIdx<Self::IndexArray>>>(&self, index: I) -> usize {
-        let GridIdx([y, x]) = index.into();
+        let real_idx = index.into();
+        debug_assert!(self.contains(&real_idx));
+        let GridIdx([y, x]) = real_idx;
         let [stride_y, stride_x] = self.strides();
         y as usize * stride_y + x as usize * stride_x
     }
@@ -155,7 +160,7 @@ impl GridSpaceToLinearSpace for GridShape2D {
     fn linear_space_index<I: Into<GridIdx<Self::IndexArray>>>(&self, index: I) -> Result<usize> {
         let real_index = index.into();
         ensure!(
-            self.bounding_box().contains(&real_index),
+            self.contains(&real_index),
             error::GridIndexOutOfBounds {
                 index: Vec::from(real_index.0),
                 min_index: Vec::from(self.min_index().0),
@@ -214,7 +219,10 @@ impl GridSpaceToLinearSpace for GridShape3D {
     }
 
     fn linear_space_index_unchecked<I: Into<GridIdx<Self::IndexArray>>>(&self, index: I) -> usize {
-        let GridIdx([z, y, x]) = index.into();
+        let real_idx = index.into();
+        debug_assert!(self.contains(&real_idx));
+        let GridIdx([z, y, x]) = real_idx;
+
         let [stride_z, stride_y, stride_x] = self.strides();
         z as usize * stride_z + y as usize * stride_y + x as usize * stride_x
     }
@@ -222,7 +230,7 @@ impl GridSpaceToLinearSpace for GridShape3D {
     fn linear_space_index<I: Into<GridIdx<Self::IndexArray>>>(&self, index: I) -> Result<usize> {
         let real_index = index.into();
         ensure!(
-            self.bounding_box().contains(&real_index),
+            self.contains(&real_index),
             error::GridIndexOutOfBounds {
                 index: Vec::from(real_index.0),
                 min_index: Vec::from(self.min_index().0),
