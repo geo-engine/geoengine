@@ -275,7 +275,6 @@ where
     )
 }
 
-#[allow(dead_code)]
 #[allow(clippy::type_complexity)]
 #[allow(clippy::needless_pass_by_value)]
 pub fn fold_by_coordinate_lookup_impl<T>(
@@ -322,21 +321,22 @@ where
             .enumerate()
             .for_each(|(chunk_idx, chunk_slice)| {
                 let chunk_start_y = chunk_idx * par_chunk_split;
-                chunk_slice
-                    .iter_mut()
-                    .enumerate()
-                    .for_each(|(lin_idx, pixel)| {
-                        let x_idx = lin_idx % axis_size_x;
-                        let y_idx = lin_idx / axis_size_x + chunk_start_y;
-                        let grid_idx = GridIdx2D::from([y_idx as isize, x_idx as isize]);
+                let chunk_end_y = chunk_start_y + chunk_slice.len() / axis_size_x;
 
-                        let lookup_coord = coords.get_at_grid_index_unchecked(grid_idx);
-                        if let Some(coord) = lookup_coord {
-                            if tile.spatial_partition().contains_coordinate(&coord) {
-                                let lookup_value = tile.pixel_value_at_coord_unchecked(coord);
-                                *pixel = lookup_value;
+                (chunk_start_y..chunk_end_y)
+                    .zip(chunk_slice.chunks_mut(axis_size_x))
+                    .for_each(|(y_idx, row)| {
+                        row.iter_mut().enumerate().for_each(|(x_idx, pixel)| {
+                            let grid_idx = GridIdx2D::from([y_idx as isize, x_idx as isize]);
+
+                            let lookup_coord = coords.get_at_grid_index_unchecked(grid_idx);
+                            if let Some(coord) = lookup_coord {
+                                if tile.spatial_partition().contains_coordinate(&coord) {
+                                    let lookup_value = tile.pixel_value_at_coord_unchecked(coord);
+                                    *pixel = lookup_value;
+                                }
                             }
-                        }
+                        });
                     });
             });
     });
