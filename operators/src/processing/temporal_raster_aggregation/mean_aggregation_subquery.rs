@@ -1,5 +1,6 @@
 use std::sync::Arc;
 
+use async_trait::async_trait;
 use futures::{future::BoxFuture, Future, FutureExt, TryFuture, TryFutureExt};
 use geoengine_datatypes::{
     primitives::{RasterQueryRectangle, SpatialPartitioned, TimeInstance, TimeInterval, TimeStep},
@@ -125,13 +126,14 @@ impl<T> TemporalMeanTileAccu<T> {
     }
 }
 
+#[async_trait]
 impl<T> FoldTileAccu for TemporalMeanTileAccu<T>
 where
     T: Pixel,
 {
     type RasterType = T;
 
-    fn into_tile(self) -> RasterTile2D<Self::RasterType> {
+    async fn into_tile(self) -> Result<RasterTile2D<Self::RasterType>> {
         let TemporalMeanTileAccu {
             time,
             tile_position,
@@ -147,12 +149,12 @@ where
         let value_grid = match value_grid {
             GridOrEmpty::Grid(g) => g,
             GridOrEmpty::Empty(_) => {
-                return RasterTile2D::new(
+                return Ok(RasterTile2D::new(
                     time,
                     tile_position,
                     global_geo_transform,
                     EmptyGrid2D::new(value_grid.grid_shape(), out_no_data_value).into(),
-                )
+                ))
             }
         };
 
@@ -175,7 +177,12 @@ where
             no_data_value: Some(out_no_data_value),
         };
 
-        RasterTile2D::new(time, tile_position, global_geo_transform, res_grid.into())
+        Ok(RasterTile2D::new(
+            time,
+            tile_position,
+            global_geo_transform,
+            res_grid.into(),
+        ))
     }
 
     fn thread_pool(&self) -> &Arc<ThreadPool> {
