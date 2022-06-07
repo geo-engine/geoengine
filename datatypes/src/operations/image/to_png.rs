@@ -1,7 +1,7 @@
 use std::io::Cursor;
 
 use crate::raster::{
-    Grid2D, GridIndexAccess, GridOrEmpty2D, NoDataValue, Pixel, RasterTile2D, TypedRasterTile2D,
+    Grid2D, GridIndexAccess, GridOrEmpty2D, Pixel, RasterTile2D, TypedRasterTile2D,
 };
 use crate::util::Result;
 use crate::{error, raster::EmptyGrid2D};
@@ -38,14 +38,9 @@ where
         let [.., raster_y_size, raster_x_size] = self.shape.shape_array;
         let scale_x = (raster_x_size as f64) / f64::from(width);
         let scale_y = (raster_y_size as f64) / f64::from(height);
-
-        let image_buffer = if self.no_data_value().is_some() {
-            let no_data_fn = move |p: P| self.is_no_data(p);
-            create_rgba_image(self, width, height, colorizer, scale_x, scale_y, no_data_fn)
-        } else {
-            let no_data_fn = move |_| false;
-            create_rgba_image(self, width, height, colorizer, scale_x, scale_y, no_data_fn)
-        };
+        
+        let no_data_fn = move |_| false;
+        let image_buffer = create_rgba_image(self, width, height, colorizer, scale_x, scale_y, no_data_fn);    
 
         image_buffer_to_png_bytes(image_buffer)
     }
@@ -158,7 +153,7 @@ mod tests {
 
     #[test]
     fn linear_gradient() {
-        let mut raster = Grid2D::new([2, 2].into(), vec![0; 4], None).unwrap();
+        let mut raster = Grid2D::new([2, 2].into(), vec![0; 4]).unwrap();
 
         raster.set_at_grid_index([0, 0], 255).unwrap();
         raster.set_at_grid_index([1, 0], 100).unwrap();
@@ -187,7 +182,7 @@ mod tests {
 
     #[test]
     fn logarithmic_gradient() {
-        let mut raster = Grid2D::new([2, 2].into(), vec![1; 4], None).unwrap();
+        let mut raster = Grid2D::new([2, 2].into(), vec![1; 4]).unwrap();
 
         raster.set_at_grid_index([0, 0], 10).unwrap();
         raster.set_at_grid_index([1, 0], 5).unwrap();
@@ -216,7 +211,7 @@ mod tests {
 
     #[test]
     fn palette() {
-        let mut raster = Grid2D::new([2, 2].into(), vec![0; 4], None).unwrap();
+        let mut raster = Grid2D::new([2, 2].into(), vec![0; 4]).unwrap();
 
         raster.set_at_grid_index([0, 0], 2).unwrap();
         raster.set_at_grid_index([1, 0], 1).unwrap();
@@ -247,7 +242,7 @@ mod tests {
 
     #[test]
     fn rgba() {
-        let mut raster = Grid2D::new([2, 2].into(), vec![0x0000_00FF_u32; 4], None).unwrap();
+        let mut raster = Grid2D::new([2, 2].into(), vec![0x0000_00FF_u32; 4]).unwrap();
 
         raster.set_at_grid_index([0, 0], 0xFF00_00FF_u32).unwrap();
         raster.set_at_grid_index([1, 0], 0x00FF_00FF_u32).unwrap();
@@ -266,7 +261,7 @@ mod tests {
 
     #[test]
     fn no_data() {
-        let raster = Grid2D::new([2, 2].into(), vec![0, 100, 200, 255], Some(0)).unwrap();
+        let raster = Grid2D::new([2, 2].into(), vec![0, 100, 200, 255]).unwrap();
 
         let colorizer = Colorizer::linear_gradient(
             vec![
@@ -292,7 +287,7 @@ mod tests {
 
     #[test]
     fn no_data_tile() {
-        let raster = EmptyGrid2D::new([2, 2].into(), 0);
+        let raster = EmptyGrid2D::<u8>::new([2, 2].into());
 
         let colorizer = Colorizer::linear_gradient(
             vec![
