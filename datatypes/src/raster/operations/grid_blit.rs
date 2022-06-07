@@ -99,11 +99,11 @@ where
     D1: GridSize<ShapeArray = A>
         + GridBounds<IndexArray = I>
         + GridSpaceToLinearSpace<IndexArray = I>
-        + Clone,
+        + Clone + PartialEq,
     D2: GridSize<ShapeArray = A>
         + GridBounds<IndexArray = I>
         + GridSpaceToLinearSpace<IndexArray = I>
-        + Clone,
+        + Clone + PartialEq,
     I: Clone + AsRef<[isize]> + Into<GridIdx<I>>,
     T: Pixel + Sized,
     Self: GridBlit<Grid<D1, T>, T> + GridBlit<EmptyGrid<D1, T>, T>,
@@ -196,11 +196,11 @@ mod tests {
         let dim = [4, 4];
         let data = vec![0; 16];
 
-        let mut r1 = Grid2D::new(dim.into(), data, None).unwrap();
+        let mut r1 = Grid2D::new(dim.into(), data).unwrap();
 
         let data = vec![7; 16];
 
-        let r2 = Grid2D::new(dim.into(), data, None).unwrap();
+        let r2 = Grid2D::new(dim.into(), data).unwrap();
 
         r1.grid_blit_from(r2);
 
@@ -211,13 +211,13 @@ mod tests {
     fn grid_blit_from_2d_2_2() {
         let data = vec![0; 16];
 
-        let mut r1 = Grid2D::new([4, 4].into(), data, None).unwrap();
+        let mut r1 = Grid2D::new([4, 4].into(), data).unwrap();
 
         let data = vec![0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15];
 
         let shifted_idx = GridIdx([2, 2]);
         let shifted_dim = GridBoundingBox::new(shifted_idx, shifted_idx + [3, 3]).unwrap();
-        let r2 = Grid::new(shifted_dim, data, None).unwrap();
+        let r2 = Grid::new(shifted_dim, data).unwrap();
 
         r1.grid_blit_from(r2);
 
@@ -231,13 +231,13 @@ mod tests {
     fn grid_blit_from_2d_n2_n2() {
         let data = vec![0; 16];
 
-        let mut r1 = Grid2D::new([4, 4].into(), data, None).unwrap();
+        let mut r1 = Grid2D::new([4, 4].into(), data).unwrap();
 
         let data = vec![0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15];
 
         let shifted_idx = GridIdx([-2, -2]);
         let shifted_dim = GridBoundingBox::new(shifted_idx, shifted_idx + [3, 3]).unwrap();
-        let r2 = Grid::new(shifted_dim, data, None).unwrap();
+        let r2 = Grid::new(shifted_dim, data).unwrap();
 
         r1.grid_blit_from(r2);
 
@@ -252,9 +252,9 @@ mod tests {
         let dim = [4, 4];
         let data = vec![0; 16];
 
-        let mut r1 = Grid2D::new(dim.into(), data, None).unwrap();
+        let mut r1 = Grid2D::new(dim.into(), data).unwrap();
 
-        let r2 = EmptyGrid2D::new(dim.into(), 7);
+        let r2 = EmptyGrid2D::new(dim.into());
 
         r1.grid_blit_from(r2);
 
@@ -266,11 +266,11 @@ mod tests {
         let dim = [4, 4, 4];
         let data = vec![0; 64];
 
-        let mut r1 = Grid3D::new(dim.into(), data, None).unwrap();
+        let mut r1 = Grid3D::new(dim.into(), data).unwrap();
 
         let data = vec![7; 64];
 
-        let r2 = Grid3D::new(dim.into(), data, None).unwrap();
+        let r2 = Grid3D::new(dim.into(), data).unwrap();
 
         r1.grid_blit_from(r2);
 
@@ -281,13 +281,13 @@ mod tests {
     fn grid_blit_from_3d_2_2() {
         let data = vec![0; 64];
 
-        let mut r1 = Grid3D::new([4, 4, 4].into(), data, None).unwrap();
+        let mut r1 = Grid3D::new([4, 4, 4].into(), data).unwrap();
 
         let data: Vec<i32> = (0..64).collect();
 
         let shifted_idx = GridIdx([2, 2, 2]);
         let shifted_dim = GridBoundingBox::new(shifted_idx, shifted_idx + [3, 3, 3]).unwrap();
-        let r2 = Grid::new(shifted_dim, data, None).unwrap();
+        let r2 = Grid::new(shifted_dim, data).unwrap();
 
         r1.grid_blit_from(r2);
 
@@ -305,13 +305,13 @@ mod tests {
     fn grid_blit_from_3d_n2_n2() {
         let data = vec![0; 64];
 
-        let mut r1 = Grid3D::new([4, 4, 4].into(), data, None).unwrap();
+        let mut r1 = Grid3D::new([4, 4, 4].into(), data).unwrap();
 
         let data: Vec<i32> = (0..64).collect();
 
         let shifted_idx = GridIdx([-2, -2, -2]);
         let shifted_dim = GridBoundingBox::new(shifted_idx, shifted_idx + [3, 3, 3]).unwrap();
-        let r2 = Grid::new(shifted_dim, data, None).unwrap();
+        let r2 = Grid::new(shifted_dim, data).unwrap();
 
         r1.grid_blit_from(r2);
 
@@ -330,9 +330,9 @@ mod tests {
         let dim = [4, 4, 4];
         let data = vec![0; 64];
 
-        let mut r1 = Grid3D::new(dim.into(), data, None).unwrap();
+        let mut r1 = Grid3D::new(dim.into(), data).unwrap();
 
-        let r2 = EmptyGrid3D::new(dim.into(), 7);
+        let r2 = EmptyGrid3D::new(dim.into());
 
         r1.grid_blit_from(r2);
 

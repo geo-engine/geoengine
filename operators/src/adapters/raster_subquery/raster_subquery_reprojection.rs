@@ -122,7 +122,7 @@ fn build_accu<T: Pixel>(
     in_srs: SpatialReference,
 ) -> impl Future<Output = Result<TileWithProjectionCoordinates<T>>> {
     crate::util::spawn_blocking(move || {
-        let output_raster = EmptyGrid::new(tile_info.tile_size_in_pixels, no_data_and_fill_value);
+        let output_raster = EmptyGrid::new(tile_info.tile_size_in_pixels);
 
         let pool = pool.clone();
 
@@ -131,7 +131,7 @@ fn build_accu<T: Pixel>(
             projected_coordinate_grid_parallel(&pool, tile_info, out_srs, in_srs, &valid_out_area)?
         } else {
             debug!("reproject tile outside valid bounds"); // TODO: error?
-            Grid2D::new_filled(tile_info.tile_size_in_pixels, None, None)
+            Grid2D::new_filled(tile_info.tile_size_in_pixels, None)
         };
 
         Ok(TileWithProjectionCoordinates {
@@ -172,7 +172,7 @@ fn projected_coordinate_grid_parallel(
         );
 
         let mut coord_grid: Grid2D<Option<Coordinate2D>> =
-            Grid2D::new_filled(tile_info.tile_size_in_pixels, None, None);
+            Grid2D::new_filled(tile_info.tile_size_in_pixels, None);
 
         let tile_geo_transform = tile_info.tile_geo_transform();
 
@@ -397,7 +397,7 @@ mod tests {
                 time: TimeInterval::new_unchecked(0, 5),
                 tile_position: [-1, 0].into(),
                 global_geo_transform: TestDefault::test_default(),
-                grid_array: Grid::new([2, 2].into(), vec![1, 2, 3, 4], no_data_value)
+                grid_array: Grid::new([2, 2].into(), vec![1, 2, 3, 4])
                     .unwrap()
                     .into(),
                 properties: Default::default(),
@@ -406,7 +406,7 @@ mod tests {
                 time: TimeInterval::new_unchecked(0, 5),
                 tile_position: [-1, 1].into(),
                 global_geo_transform: TestDefault::test_default(),
-                grid_array: Grid::new([2, 2].into(), vec![7, 8, 9, 10], no_data_value)
+                grid_array: Grid::new([2, 2].into(), vec![7, 8, 9, 10])
                     .unwrap()
                     .into(),
                 properties: Default::default(),
@@ -415,7 +415,7 @@ mod tests {
                 time: TimeInterval::new_unchecked(5, 10),
                 tile_position: [-1, 0].into(),
                 global_geo_transform: TestDefault::test_default(),
-                grid_array: Grid::new([2, 2].into(), vec![13, 14, 15, 16], no_data_value)
+                grid_array: Grid::new([2, 2].into(), vec![13, 14, 15, 16])
                     .unwrap()
                     .into(),
                 properties: Default::default(),
@@ -424,7 +424,7 @@ mod tests {
                 time: TimeInterval::new_unchecked(5, 10),
                 tile_position: [-1, 1].into(),
                 global_geo_transform: TestDefault::test_default(),
-                grid_array: Grid::new([2, 2].into(), vec![19, 20, 21, 22], no_data_value)
+                grid_array: Grid::new([2, 2].into(), vec![19, 20, 21, 22])
                     .unwrap()
                     .into(),
                 properties: Default::default(),

@@ -271,7 +271,6 @@ where
 pub struct Grid<D, T> {
     pub shape: D,
     pub data: Vec<T>,
-    pub no_data_value: Option<T>,
 }
 
 pub type Grid1D<T> = Grid<GridShape1D, T>;
@@ -289,7 +288,7 @@ where
     ///
     /// This constructor fails if the data container's capacity is different from the grid's dimension number
     ///
-    pub fn new(shape: D, data: Vec<T>, no_data_value: Option<T>) -> Result<Self> {
+    pub fn new(shape: D, data: Vec<T>) -> Result<Self> {
         ensure!(
             shape.number_of_elements() == data.len(),
             error::DimensionCapacityDoesNotMatchDataCapacity {
@@ -298,16 +297,12 @@ where
             }
         );
 
-        Ok(Self {
-            shape,
-            data,
-            no_data_value,
-        })
+        Ok(Self { shape, data })
     }
 
-    pub fn new_filled(shape: D, fill_value: T, no_data_value: Option<T>) -> Self {
+    pub fn new_filled(shape: D, fill_value: T) -> Self {
         let data = vec![fill_value; shape.number_of_elements()];
-        Self::new(shape, data, no_data_value).expect("sizes must match")
+        Self::new(shape, data).expect("sizes must match")
     }
 
     pub fn inner_ref(&self) -> &Vec<T> {
@@ -413,17 +408,6 @@ where
     }
 }
 
-impl<D, T> NoDataValue for Grid<D, T>
-where
-    T: PartialEq + Copy,
-{
-    type NoDataType = T;
-
-    fn no_data_value(&self) -> Option<Self::NoDataType> {
-        self.no_data_value
-    }
-}
-
 impl<D, T, I> ChangeGridBounds<I> for Grid<D, T>
 where
     I: AsRef<[isize]> + Clone,
@@ -437,13 +421,12 @@ where
     fn shift_by_offset(self, offset: GridIdx<I>) -> Self::Output {
         Grid {
             shape: self.shift_bounding_box(offset),
-            no_data_value: self.no_data_value,
             data: self.data,
         }
     }
 
     fn set_grid_bounds(self, bounds: GridBoundingBox<I>) -> Result<Self::Output> {
-        Grid::new(bounds, self.data, self.no_data_value)
+        Grid::new(bounds, self.data)
     }
 }
 
@@ -459,7 +442,7 @@ mod tests {
     fn simple_raster_2d() {
         let dim = [3, 2];
         let data = vec![1, 2, 3, 4, 5, 6];
-        Grid2D::new(dim.into(), data, None).unwrap();
+        Grid2D::new(dim.into(), data).unwrap();
     }
 
     #[test]
@@ -467,7 +450,7 @@ mod tests {
         let index = [1, 1];
         let dim = [3, 2].into();
         let data = vec![1, 2, 3, 4, 5, 6];
-        let raster2d = Grid2D::new(dim, data, None).unwrap();
+        let raster2d = Grid2D::new(dim, data).unwrap();
         assert_eq!(raster2d.get_at_grid_index(index).unwrap(), 4);
     }
 
@@ -476,7 +459,7 @@ mod tests {
         let index = [1, 1];
         let dim = [3, 2].into();
         let data = vec![1, 2, 3, 4, 5, 6];
-        let raster2d = Grid2D::new(dim, data, None).unwrap();
+        let raster2d = Grid2D::new(dim, data).unwrap();
         let value = raster2d.get_at_grid_index(index).unwrap();
         assert_eq!(value, 4);
     }
@@ -486,7 +469,7 @@ mod tests {
         let index = [1, 1];
         let dim = [3, 2].into();
         let data = vec![1, 2, 3, 4, 5, 6];
-        let mut raster2d = Grid2D::new(dim, data, None).unwrap();
+        let mut raster2d = Grid2D::new(dim, data).unwrap();
 
         raster2d.set_at_grid_index(index, 9).unwrap();
         let value = raster2d.get_at_grid_index(index).unwrap();
@@ -498,7 +481,7 @@ mod tests {
     fn simple_raster_3d() {
         let dim = [3, 2, 1];
         let data = vec![1, 2, 3, 4, 5, 6];
-        Grid3D::new(dim.into(), data, None).unwrap();
+        Grid3D::new(dim.into(), data).unwrap();
     }
 
     #[test]
@@ -506,7 +489,7 @@ mod tests {
         let index = [1, 1, 0];
         let dim = [3, 2, 1].into();
         let data = vec![1, 2, 3, 4, 5, 6];
-        let raster3d = Grid3D::new(dim, data, None).unwrap();
+        let raster3d = Grid3D::new(dim, data).unwrap();
         assert_eq!(raster3d.get_at_grid_index(index).unwrap(), 4);
     }
 
@@ -515,7 +498,7 @@ mod tests {
         let index = [1, 1, 0];
         let dim = [3, 2, 1].into();
         let data = vec![1, 2, 3, 4, 5, 6];
-        let raster3d = Grid3D::new(dim, data, None).unwrap();
+        let raster3d = Grid3D::new(dim, data).unwrap();
         let value = raster3d.get_at_grid_index(index).unwrap();
         assert_eq!(value, 4);
     }
@@ -525,7 +508,7 @@ mod tests {
         let index = [1, 1, 0];
         let dim = [3, 2, 1].into();
         let data = vec![1, 2, 3, 4, 5, 6];
-        let mut raster3d = Grid3D::new(dim, data, None).unwrap();
+        let mut raster3d = Grid3D::new(dim, data).unwrap();
 
         raster3d.set_at_grid_index(index, 9).unwrap();
         let value = raster3d.get_at_grid_index(index).unwrap();
@@ -537,7 +520,7 @@ mod tests {
     fn grid_bounds_2d() {
         let dim = [3, 2].into();
         let data = vec![1, 2, 3, 4, 5, 6];
-        let raster2d = Grid2D::new(dim, data, None).unwrap();
+        let raster2d = Grid2D::new(dim, data).unwrap();
 
         assert_eq!(raster2d.min_index(), GridIdx([0, 0]));
         assert_eq!(raster2d.max_index(), GridIdx([2, 1]));

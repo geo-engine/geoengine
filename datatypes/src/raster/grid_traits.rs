@@ -140,6 +140,31 @@ pub trait GridIndexAccess<T, I> {
     fn get_at_grid_index_unchecked(&self, grid_index: I) -> T;
 }
 
+pub trait MaskedGridIndexAccessMut<T, I> {
+    /// Sets a masked value at a grid index. None represents a missing value / no-data.
+    ///
+    /// # Errors
+    ///
+    /// The method fails if the grid index is out of bounds.
+    ///
+    fn set_masked_at_grid_index(&mut self, grid_index: I, value: Option<T>) -> Result<()>;
+
+    /// Sets the value at a grid index
+    fn set_masked_at_grid_index_unchecked(&mut self, grid_index: I, value: Option<T>);
+}
+
+/// Read elements stored in a Grid
+pub trait MaskedGridIndexAccess<T, I> {
+    /// Gets a reference to the value at a grid index. None represents a missing value / no-data.
+    ///
+    /// The method fails if the grid index is out of bounds.
+    ///
+    fn get_masked_at_grid_index(&self, grid_index: I) -> Result<Option<T>>;
+
+    /// Gets a reference to the value at a grid index
+    fn get_masked_at_grid_index_unchecked(&self, grid_index: I) -> Option<T>;
+}
+
 /// The shape of an array
 pub trait GridShapeAccess {
     type ShapeArray: AsRef<[usize]> + Into<GridShape<Self::ShapeArray>>;

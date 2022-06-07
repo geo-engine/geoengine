@@ -49,6 +49,7 @@ mod grid_traits;
 mod grid_typed;
 mod macros_raster;
 mod macros_raster_tile;
+mod masked_grid;
 mod operations;
 mod raster_properties;
 mod raster_tile;

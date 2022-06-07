@@ -3,8 +3,9 @@ use std::ops::Add;
 use super::{
     empty_grid::EmptyGrid,
     grid_traits::{ChangeGridBounds, GridShapeAccess},
+    masked_grid::MaskedGrid,
     Grid, GridBoundingBox, GridBounds, GridIdx, GridIndexAccess, GridShape, GridShape1D,
-    GridShape2D, GridShape3D, GridSize, GridSpaceToLinearSpace, NoDataValue,
+    GridShape2D, GridShape3D, GridSize, GridSpaceToLinearSpace,
 };
 
 use crate::util::Result;
@@ -20,12 +21,13 @@ pub type GridOrEmpty3D<T> = GridOrEmpty<GridShape3D, T>;
 pub enum GridOrEmpty<D, T> {
     Grid(Grid<D, T>),
     Empty(EmptyGrid<D, T>),
+    // MaskedGrid(MaskedGrid<D,T>),
 }
 
 impl<D, T> GridOrEmpty<D, T>
 where
-    D: GridSize,
-    T: Clone,
+    D: GridSize + PartialEq + Clone,
+    T: Clone + Default,
 {
     pub fn is_empty(&self) -> bool {
         matches!(self, GridOrEmpty::Empty(_))
@@ -48,12 +50,26 @@ where
             GridOrEmpty::Empty(n) => n.into(),
         }
     }
+
+    pub fn into_materialized_masked_grid(self) -> MaskedGrid<D, T> {
+        match self {
+            GridOrEmpty::Grid(g) => MaskedGrid::from(g),
+            GridOrEmpty::Empty(e) => MaskedGrid::from(e),
+        }
+    }
+
+    pub fn matching_empty_grid(&self) -> EmptyGrid<D, T> {
+        match self {
+            GridOrEmpty::Grid(g) => EmptyGrid::new(g.shape.clone()),
+            GridOrEmpty::Empty(n) => EmptyGrid::new(n.shape.clone()),
+        }
+    }
 }
 
 impl<D, T> GridSize for GridOrEmpty<D, T>
 where
-    D: GridSize + GridSpaceToLinearSpace,
-    T: Clone,
+    D: GridSize + GridSpaceToLinearSpace + PartialEq + Clone,
+    T: Clone + Default,
 {
     type ShapeArray = D::ShapeArray;
 
@@ -147,20 +163,6 @@ where
     }
 }
 
-impl<D, T> NoDataValue for GridOrEmpty<D, T>
-where
-    T: PartialEq + Copy,
-{
-    type NoDataType = T;
-
-    fn no_data_value(&self) -> Option<Self::NoDataType> {
-        match self {
-            GridOrEmpty::Grid(g) => g.no_data_value(),
-            GridOrEmpty::Empty(n) => n.no_data_value(),
-        }
-    }
-}
-
 impl<D, T, I> ChangeGridBounds<I> for GridOrEmpty<D, T>
 where
     I: AsRef<[isize]> + Clone,
@@ -195,7 +197,7 @@ mod tests {
     #[test]
     fn grid_bounds_2d_empty_grid() {
         let dim: GridShape2D = [3, 2].into();
-        let raster2d: GridOrEmpty2D<_> = EmptyGrid::new(dim, 3).into();
+        let raster2d: GridOrEmpty2D<u8> = EmptyGrid::new(dim).into(); // FIXME: find out why type is needed
 
         assert_eq!(raster2d.min_index(), GridIdx([0, 0]));
         assert_eq!(raster2d.max_index(), GridIdx([2, 1]));
@@ -208,7 +210,7 @@ mod tests {
     fn grid_bounds_2d_grid() {
         let dim: GridShape2D = [3, 2].into();
         let data = [1, 2, 3, 4, 5, 6].into();
-        let raster2d: GridOrEmpty2D<_> = Grid2D::new(dim, data, Some(3)).unwrap().into();
+        let raster2d: GridOrEmpty2D<_> = Grid2D::new(dim, data).unwrap().into();
 
         assert_eq!(raster2d.min_index(), GridIdx([0, 0]));
         assert_eq!(raster2d.max_index(), GridIdx([2, 1]));
