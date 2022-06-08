@@ -242,7 +242,7 @@ macro_rules! call_generic_raster_tile_2d_ext {
 mod tests {
     use crate::{
         primitives::TimeInterval,
-        raster::{GeoTransform, Grid2D, GridIndexAccess, Pixel, RasterTile2D, TypedRasterTile2D},
+        raster::{GeoTransform, Grid2D, MaskedGridIndexAccess, Pixel, RasterTile2D, TypedRasterTile2D},
         util::test::TestDefault,
     };
     use crate::{raster::RasterDataType, util::test::catch_unwind_silent};
@@ -271,7 +271,7 @@ mod tests {
     #[test]
     fn call_generic_raster2d() {
         fn first_pixel<T: Pixel>(raster: &RasterTile2D<T>) -> i64 {
-            raster.get_at_grid_index([0, 0]).unwrap().as_()
+            raster.get_masked_at_grid_index([0, 0]).unwrap().unwrap().as_()
         }
 
         let r = Grid2D::new([3, 2].into(), vec![1, 2, 3, 4, 5, 6]).unwrap();
@@ -326,8 +326,8 @@ mod tests {
     #[test]
     fn call_bi_generic_raster_tile_2d() {
         fn first_pixel_add<T: Pixel, U: Pixel>(a: &RasterTile2D<T>, b: &RasterTile2D<U>) -> i64 {
-            let pixel_a: i64 = a.get_at_grid_index([0, 0]).unwrap().as_();
-            let pixel_b: i64 = b.get_at_grid_index([0, 0]).unwrap().as_();
+            let pixel_a: i64 = a.get_masked_at_grid_index([0, 0]).unwrap().unwrap().as_();
+            let pixel_b: i64 = b.get_masked_at_grid_index([0, 0]).unwrap().unwrap().as_();
             pixel_a + pixel_b
         }
 
@@ -359,8 +359,8 @@ mod tests {
     #[test]
     fn call_bi_generic_raster_tile_2d_same() {
         fn first_pixel_add<T: Pixel>(a: &RasterTile2D<T>, b: &RasterTile2D<T>) -> i64 {
-            let pixel_a = a.get_at_grid_index([0, 0]).unwrap();
-            let pixel_b = b.get_at_grid_index([0, 0]).unwrap();
+            let pixel_a = a.get_masked_at_grid_index([0, 0]).unwrap().unwrap();
+            let pixel_b = b.get_masked_at_grid_index([0, 0]).unwrap().unwrap();
             (pixel_a + pixel_b).as_()
         }
 
@@ -408,8 +408,8 @@ mod tests {
             a: &RasterTile2D<T>,
             b: &RasterTile2D<U>,
         ) -> i64 {
-            let pixel_a: T = a.get_at_grid_index([0, 0]).unwrap();
-            let pixel_b: T = b.get_at_grid_index([0, 0]).unwrap().into();
+            let pixel_a: T = a.get_masked_at_grid_index([0, 0]).unwrap().unwrap();
+            let pixel_b: T = b.get_masked_at_grid_index([0, 0]).unwrap().unwrap().into();
             (pixel_a + pixel_b).as_()
         }
 

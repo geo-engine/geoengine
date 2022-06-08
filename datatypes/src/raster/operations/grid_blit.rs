@@ -1,15 +1,15 @@
 use crate::raster::{
     empty_grid::EmptyGrid, BoundedGrid, Grid, Grid1D, Grid2D, Grid3D, GridBoundingBox, GridBounds,
-    GridIdx, GridIndexAccess, GridIndexAccessMut, GridIntersection, GridOrEmpty, GridSize,
-    GridSpaceToLinearSpace, Pixel,
+    GridIdx,  GridIndexAccessMut, GridIntersection, GridOrEmpty, GridSize,
+    GridSpaceToLinearSpace, masked_grid::{ MaskedGrid},
 };
 
 pub trait GridBlit<O, T>
 where
-    O: GridSize + BoundedGrid + GridIndexAccess<T, O::IndexArray>,
-    T: Pixel,
+    O: GridSize + BoundedGrid,
+    T: Copy + Sized,
 {
-    fn grid_blit_from(&mut self, other: O);
+    fn grid_blit_from(&mut self, other: &O);
 }
 
 impl<D, T> GridBlit<Grid<D, T>, T> for Grid1D<T>
@@ -17,9 +17,9 @@ where
     D: GridSize<ShapeArray = [usize; 1]>
         + GridBounds<IndexArray = [isize; 1]>
         + GridSpaceToLinearSpace<IndexArray = [isize; 1]>,
-    T: Pixel + Sized,
+        T: Copy + Sized,
 {
-    fn grid_blit_from(&mut self, other: Grid<D, T>) {
+    fn grid_blit_from(&mut self, other: &Grid<D, T>) {
         let other_offset_dim = other.bounding_box();
         let offset_dim = self.bounding_box();
         let intersection: Option<GridBoundingBox<[isize; 1]>> =
@@ -42,9 +42,9 @@ where
     D: GridSize<ShapeArray = [usize; 2]>
         + GridBounds<IndexArray = [isize; 2]>
         + GridSpaceToLinearSpace<IndexArray = [isize; 2]>,
-    T: Pixel + Sized,
+        T: Copy + Sized,
 {
-    fn grid_blit_from(&mut self, other: Grid<D, T>) {
+    fn grid_blit_from(&mut self, other: &Grid<D, T>) {
         let other_offset_dim = other.bounding_box();
         let offset_dim = self.bounding_box();
         let intersection: Option<GridBoundingBox<[isize; 2]>> =
@@ -66,64 +66,14 @@ where
     }
 }
 
-impl<D, T> GridBlit<EmptyGrid<D, T>, T> for Grid2D<T>
-where
-    D: GridSize<ShapeArray = [usize; 2]>
-        + GridBounds<IndexArray = [isize; 2]>
-        + GridSpaceToLinearSpace<IndexArray = [isize; 2]>,
-    T: Pixel + Sized,
-{
-    fn grid_blit_from(&mut self, other: EmptyGrid<D, T>) {
-        let other_offset_dim = other.bounding_box();
-        let offset_dim = self.bounding_box();
-        let intersection: Option<GridBoundingBox<[isize; 2]>> =
-            offset_dim.intersection(&other_offset_dim);
-        if let Some(intersection_offset_dim) = intersection {
-            let GridIdx([overlap_y_start, overlap_x_start]) = intersection_offset_dim.min_index();
-            let [overlap_y_size, overlap_x_size] = intersection_offset_dim.axis_size();
-
-            for y in overlap_y_start..overlap_y_start + overlap_y_size as isize {
-                for x in overlap_x_start..overlap_x_start + overlap_x_size as isize {
-                    self.set_at_grid_index_unchecked(
-                        [y, x],
-                        other.get_at_grid_index_unchecked([y, x]),
-                    );
-                }
-            }
-        }
-    }
-}
-
-impl<D1, D2, T, A, I> GridBlit<GridOrEmpty<D1, T>, T> for Grid<D2, T>
-where
-    D1: GridSize<ShapeArray = A>
-        + GridBounds<IndexArray = I>
-        + GridSpaceToLinearSpace<IndexArray = I>
-        + Clone + PartialEq,
-    D2: GridSize<ShapeArray = A>
-        + GridBounds<IndexArray = I>
-        + GridSpaceToLinearSpace<IndexArray = I>
-        + Clone + PartialEq,
-    I: Clone + AsRef<[isize]> + Into<GridIdx<I>>,
-    T: Pixel + Sized,
-    Self: GridBlit<Grid<D1, T>, T> + GridBlit<EmptyGrid<D1, T>, T>,
-{
-    fn grid_blit_from(&mut self, other: GridOrEmpty<D1, T>) {
-        match other {
-            GridOrEmpty::Grid(g) => self.grid_blit_from(g),
-            GridOrEmpty::Empty(n) => self.grid_blit_from(n),
-        }
-    }
-}
-
 impl<D, T> GridBlit<Grid<D, T>, T> for Grid3D<T>
 where
     D: GridSize<ShapeArray = [usize; 3]>
         + GridBounds<IndexArray = [isize; 3]>
         + GridSpaceToLinearSpace<IndexArray = [isize; 3]>,
-    T: Pixel + Sized,
+        T: Copy + Sized,
 {
-    fn grid_blit_from(&mut self, other: Grid<D, T>) {
+    fn grid_blit_from(&mut self, other: &Grid<D, T>) {
         let other_offset_dim = other.bounding_box();
         let offset_dim = self.bounding_box();
         let intersection: Option<GridBoundingBox<[isize; 3]>> =
@@ -152,14 +102,122 @@ where
     }
 }
 
-impl<D, T> GridBlit<EmptyGrid<D, T>, T> for Grid3D<T>
+impl<D1, D2, T, A, I> GridBlit<MaskedGrid<D1, T>, T> for MaskedGrid<D2,T>
+where
+D1: GridSize<ShapeArray = A>
++ GridBounds<IndexArray = I>
++ GridSpaceToLinearSpace<IndexArray = I>
++ Clone + PartialEq,
+D2: GridSize<ShapeArray = A>
++ GridBounds<IndexArray = I>
++ GridSpaceToLinearSpace<IndexArray = I>
++ Clone + PartialEq + PartialEq,
+        T: Copy + Sized + Default,
+Grid<D2,T>: GridBlit<Grid<D1,T>, T>,
+Grid<D2,bool>: GridBlit<Grid<D1,bool>, bool>
+{
+    fn grid_blit_from(&mut self, other: &MaskedGrid<D1, T>) {
+
+        // easy part: blit the data
+        self.data.grid_blit_from(other.as_ref());
+
+        if !self.validity_mask_is_materialized() && !other.validity_mask_is_materialized() {
+            return;
+        }
+        
+        self.materialize_validity_mask();
+        
+        if let Some(other_mask) = other.mask_ref() {
+            self.mask_mut().expect("Mask createion before failed.").grid_blit_from(other_mask);
+        } else {
+            let temp_mask = Grid::new_filled(other.shape().clone(), true);            
+            self.mask_mut().expect("Mask createion before failed.").grid_blit_from(&temp_mask);
+        };
+    }
+}
+
+impl<D1, D2, T, A, I> GridBlit<EmptyGrid<D1, T>, T> for MaskedGrid<D2,T>
+where
+D1: GridSize<ShapeArray = A>
++ GridBounds<IndexArray = I>
++ GridSpaceToLinearSpace<IndexArray = I>
++ Clone + PartialEq,
+D2: GridSize<ShapeArray = A>
++ GridBounds<IndexArray = I>
++ GridSpaceToLinearSpace<IndexArray = I>
++ Clone + PartialEq + PartialEq,
+        T: Copy + Sized + Default,
+Grid<D2,bool>: GridBlit<EmptyGrid<D1,T>, T>
+{
+    fn grid_blit_from(&mut self, other: &EmptyGrid<D1, T>) {
+
+        self.materialize_validity_mask();
+
+        self.mask_mut().expect("Mask createion before failed.").grid_blit_from(other);    
+
+    }
+}
+
+
+
+impl<D, T> GridBlit<EmptyGrid<D, T>, T> for Grid2D<bool>
+where
+    D: GridSize<ShapeArray = [usize; 2]>
+        + GridBounds<IndexArray = [isize; 2]>
+        + GridSpaceToLinearSpace<IndexArray = [isize; 2]>,
+        T: Copy + Sized,
+{
+    fn grid_blit_from(&mut self, other: &EmptyGrid<D, T>) {
+        let other_offset_dim = other.bounding_box();
+        let offset_dim = self.bounding_box();
+        let intersection: Option<GridBoundingBox<[isize; 2]>> =
+            offset_dim.intersection(&other_offset_dim);
+        if let Some(intersection_offset_dim) = intersection {
+            let GridIdx([overlap_y_start, overlap_x_start]) = intersection_offset_dim.min_index();
+            let [overlap_y_size, overlap_x_size] = intersection_offset_dim.axis_size();
+
+            for y in overlap_y_start..overlap_y_start + overlap_y_size as isize {
+                for x in overlap_x_start..overlap_x_start + overlap_x_size as isize {
+                    self.set_at_grid_index_unchecked(
+                        [y, x],
+                        false,
+                    );
+                }
+            }
+        }
+    }
+}
+
+impl<D1, D2, T, A, I> GridBlit<GridOrEmpty<D1, T>, T> for MaskedGrid<D2, T>
+where
+    D1: GridSize<ShapeArray = A>
+        + GridBounds<IndexArray = I>
+        + GridSpaceToLinearSpace<IndexArray = I>
+        + Clone + PartialEq,
+    D2: GridSize<ShapeArray = A>
+        + GridBounds<IndexArray = I>
+        + GridSpaceToLinearSpace<IndexArray = I>
+        + Clone + PartialEq,
+    I: Clone + AsRef<[isize]> + Into<GridIdx<I>>,
+    T: Copy + Sized + Default,
+    Self: GridBlit<MaskedGrid<D1, T>, T> + GridBlit<EmptyGrid<D1, T>, T>,
+{
+    fn grid_blit_from(&mut self, other: &GridOrEmpty<D1, T>) {
+        match other {
+            GridOrEmpty::Grid(g) => self.grid_blit_from(g),
+            GridOrEmpty::Empty(n) => self.grid_blit_from(n),
+        }
+    }
+}
+
+impl<D, T> GridBlit<EmptyGrid<D, T>, T> for Grid3D<bool>
 where
     D: GridSize<ShapeArray = [usize; 3]>
         + GridBounds<IndexArray = [isize; 3]>
         + GridSpaceToLinearSpace<IndexArray = [isize; 3]>,
-    T: Pixel + Sized,
+    T: Copy + Sized,
 {
-    fn grid_blit_from(&mut self, other: EmptyGrid<D, T>) {
+    fn grid_blit_from(&mut self, other: &EmptyGrid<D, T>) {
         let other_offset_dim = other.bounding_box();
         let offset_dim = self.bounding_box();
         let intersection: Option<GridBoundingBox<[isize; 3]>> =
@@ -176,7 +234,7 @@ where
                     for x in overlap_x_start..overlap_x_start + overlap_x_size as isize {
                         self.set_at_grid_index_unchecked(
                             [z, y, x],
-                            other.get_at_grid_index_unchecked([z, y, x]),
+                            false,
                         );
                     }
                 }
@@ -185,10 +243,12 @@ where
     }
 }
 
+
+
 #[cfg(test)]
 mod tests {
     use crate::raster::{
-        EmptyGrid2D, EmptyGrid3D, Grid, Grid2D, Grid3D, GridBlit, GridBoundingBox, GridIdx,
+        EmptyGrid2D, EmptyGrid3D, Grid, Grid2D, Grid3D, GridBlit, GridBoundingBox, GridIdx, masked_grid::{MaskedGrid2D, MaskedGrid3D},
     };
 
     #[test]
@@ -202,7 +262,7 @@ mod tests {
 
         let r2 = Grid2D::new(dim.into(), data).unwrap();
 
-        r1.grid_blit_from(r2);
+        r1.grid_blit_from(&r2);
 
         assert_eq!(r1.data, vec![7; 16]);
     }
@@ -219,7 +279,7 @@ mod tests {
         let shifted_dim = GridBoundingBox::new(shifted_idx, shifted_idx + [3, 3]).unwrap();
         let r2 = Grid::new(shifted_dim, data).unwrap();
 
-        r1.grid_blit_from(r2);
+        r1.grid_blit_from(&r2);
 
         assert_eq!(
             r1.data,
@@ -239,7 +299,7 @@ mod tests {
         let shifted_dim = GridBoundingBox::new(shifted_idx, shifted_idx + [3, 3]).unwrap();
         let r2 = Grid::new(shifted_dim, data).unwrap();
 
-        r1.grid_blit_from(r2);
+        r1.grid_blit_from(&r2);
 
         assert_eq!(
             r1.data,
@@ -252,13 +312,13 @@ mod tests {
         let dim = [4, 4];
         let data = vec![0; 16];
 
-        let mut r1 = Grid2D::new(dim.into(), data).unwrap();
+        let mut r1 = MaskedGrid2D::new_with_data(Grid2D::new(dim.into(), data).unwrap());
 
         let r2 = EmptyGrid2D::new(dim.into());
 
-        r1.grid_blit_from(r2);
+        r1.grid_blit_from(&r2);
 
-        assert_eq!(r1.data, vec![7; 16]);
+        assert_eq!(r1.data.data, vec![7; 16]);
     }
 
     #[test]
@@ -272,7 +332,7 @@ mod tests {
 
         let r2 = Grid3D::new(dim.into(), data).unwrap();
 
-        r1.grid_blit_from(r2);
+        r1.grid_blit_from(&r2);
 
         assert_eq!(r1.data, vec![7; 64]);
     }
@@ -289,7 +349,7 @@ mod tests {
         let shifted_dim = GridBoundingBox::new(shifted_idx, shifted_idx + [3, 3, 3]).unwrap();
         let r2 = Grid::new(shifted_dim, data).unwrap();
 
-        r1.grid_blit_from(r2);
+        r1.grid_blit_from(&r2);
 
         assert_eq!(
             r1.data,
@@ -313,7 +373,7 @@ mod tests {
         let shifted_dim = GridBoundingBox::new(shifted_idx, shifted_idx + [3, 3, 3]).unwrap();
         let r2 = Grid::new(shifted_dim, data).unwrap();
 
-        r1.grid_blit_from(r2);
+        r1.grid_blit_from(&r2);
 
         assert_eq!(
             r1.data,
@@ -330,12 +390,12 @@ mod tests {
         let dim = [4, 4, 4];
         let data = vec![0; 64];
 
-        let mut r1 = Grid3D::new(dim.into(), data).unwrap();
+        let mut r1 = MaskedGrid3D::from(Grid3D::new(dim.into(), data).unwrap());
 
         let r2 = EmptyGrid3D::new(dim.into());
 
-        r1.grid_blit_from(r2);
+        r1.grid_blit_from(&r2);
 
-        assert_eq!(r1.data, vec![7; 64]);
+        assert_eq!(r1.data.data, vec![7; 64]);
     }
 }

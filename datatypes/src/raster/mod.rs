@@ -14,7 +14,7 @@ pub use self::grid_index::{GridIdx, GridIdx1D, GridIdx2D, GridIdx3D};
 pub use self::grid_or_empty::{GridOrEmpty, GridOrEmpty1D, GridOrEmpty2D, GridOrEmpty3D};
 pub use self::grid_traits::{
     BoundedGrid, GridBounds, GridContains, GridIndexAccess, GridIndexAccessMut, GridIntersection,
-    GridSize, GridSpaceToLinearSpace, GridStep,
+    GridSize, GridSpaceToLinearSpace, GridStep, MaskedGridIndexAccess, MaskedGridIndexAccessMut
 };
 pub use self::grid_typed::{TypedGrid, TypedGrid2D, TypedGrid3D};
 pub use self::operations::{
@@ -37,6 +37,7 @@ use crate::util::Result;
 pub use raster_properties::{
     RasterProperties, RasterPropertiesEntry, RasterPropertiesEntryType, RasterPropertiesKey,
 };
+pub use masked_grid::{ MaskedGrid, MaskedGrid1D, MaskedGrid2D, MaskedGrid3D};
 
 mod data_type;
 mod empty_grid;
@@ -78,7 +79,7 @@ pub trait CoordinatePixelAccess<P>
 where
     P: Pixel,
 {
-    fn pixel_value_at_coord(&self, coordinate: Coordinate2D) -> Result<P>;
+    fn pixel_value_at_coord(&self, coordinate: Coordinate2D) -> Result<Option<P>>;
 
-    fn pixel_value_at_coord_unchecked(&self, coordinate: Coordinate2D) -> P;
+    fn pixel_value_at_coord_unchecked(&self, coordinate: Coordinate2D) -> Option<P>;
 }

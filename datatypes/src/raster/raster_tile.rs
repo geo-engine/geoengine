@@ -1,4 +1,5 @@
-use super::RasterProperties;
+use super::{RasterProperties, MaskedGridIndexAccess, MaskedGridIndexAccessMut};
+use super::masked_grid::MaskedGrid;
 use super::{
     grid_or_empty::GridOrEmpty, GeoTransform, GeoTransformAccess, Grid, GridBounds, GridIdx2D,
     GridIndexAccess, GridIndexAccessMut, GridShape, GridShape2D, GridShape3D, GridShapeAccess,
@@ -20,7 +21,7 @@ pub type RasterTile2D<T> = RasterTile<GridShape2D, T>;
 pub type RasterTile3D<T> = RasterTile<GridShape3D, T>;
 
 /// A `MaterializedRasterTile` is a `BaseTile` of raster data where the data is represented by `Grid`. It implements mutable access to pixels.
-pub type MaterializedRasterTile<D, T> = BaseTile<Grid<D, T>>;
+pub type MaterializedRasterTile<D, T> = BaseTile<MaskedGrid<D, T>>;
 /// A `MaterializedRasterTile2D` is a 2-dimensional `BaseTile` of raster data where the data is represented by `Grid`. It implements mutable access to pixels.
 pub type MaterializedRasterTile2D<T> = MaterializedRasterTile<GridShape2D, T>;
 /// A `MaterializedRasterTile3D` is a 3-dimensional `BaseTile` of raster data where the data is represented by `Grid`. It implements mutable access to pixels.
@@ -194,7 +195,7 @@ where
             time,
             tile_position: [0, 0].into(),
             global_geo_transform,
-            grid_array: GridOrEmpty::Grid(data),
+            grid_array: GridOrEmpty::from(data),
             properties: RasterProperties::default(),
         }
     }
@@ -255,32 +256,32 @@ where
     }
 }
 
-impl<T, G, I> GridIndexAccess<T, I> for BaseTile<G>
+impl<T, G, I> MaskedGridIndexAccess<T, I> for BaseTile<G>
 where
-    G: GridIndexAccess<T, I>,
+    G: MaskedGridIndexAccess<T, I>,
     T: Pixel,
 {
-    fn get_at_grid_index(&self, grid_index: I) -> Result<T> {
-        self.grid_array.get_at_grid_index(grid_index)
+    fn get_masked_at_grid_index(&self, grid_index: I) -> Result<Option<T>> {
+        self.grid_array.get_masked_at_grid_index(grid_index)
     }
 
-    fn get_at_grid_index_unchecked(&self, grid_index: I) -> T {
-        self.grid_array.get_at_grid_index_unchecked(grid_index)
+    fn get_masked_at_grid_index_unchecked(&self, grid_index: I) -> Option<T> {
+        self.grid_array.get_masked_at_grid_index_unchecked(grid_index)
     }
 }
 
-impl<T, G, I> GridIndexAccessMut<T, I> for BaseTile<G>
+impl<T, G, I> MaskedGridIndexAccessMut<T, I> for BaseTile<G>
 where
-    G: GridIndexAccessMut<T, I>,
+    G: MaskedGridIndexAccessMut<T, I>,
     T: Pixel,
 {
-    fn set_at_grid_index(&mut self, grid_index: I, value: T) -> Result<()> {
-        self.grid_array.set_at_grid_index(grid_index, value)
+    fn set_masked_at_grid_index(&mut self, grid_index: I, value: Option<T>) -> Result<()> {
+        self.grid_array.set_masked_at_grid_index(grid_index, value)
     }
 
-    fn set_at_grid_index_unchecked(&mut self, grid_index: I, value: T) {
+    fn set_masked_at_grid_index_unchecked(&mut self, grid_index: I, value: Option<T>) {
         self.grid_array
-            .set_at_grid_index_unchecked(grid_index, value);
+            .set_masked_at_grid_index_unchecked(grid_index, value);
     }
 }
 
@@ -288,35 +289,24 @@ impl<G, P> CoordinatePixelAccess<P> for BaseTile<G>
 where
     G: GridSize + Clone,
     P: Pixel,
-    Self: GridIndexAccess<P, GridIdx2D>,
+    Self: MaskedGridIndexAccess<P, GridIdx2D>,
 {
-    fn pixel_value_at_coord(&self, coordinate: Coordinate2D) -> Result<P> {
+    fn pixel_value_at_coord(&self, coordinate: Coordinate2D) -> Result<Option<P>> {
         // TODO: benchmark the impact of creating the `GeoTransform`s
 
         let grid_index = self
             .tile_geo_transform()
             .coordinate_to_grid_idx_2d(coordinate);
 
-        self.get_at_grid_index(grid_index)
+        self.get_masked_at_grid_index(grid_index)
     }
 
-    fn pixel_value_at_coord_unchecked(&self, coordinate: Coordinate2D) -> P {
+    fn pixel_value_at_coord_unchecked(&self, coordinate: Coordinate2D) -> Option<P> {
         let grid_index = self
             .tile_geo_transform()
             .coordinate_to_grid_idx_2d(coordinate);
 
-        self.get_at_grid_index_unchecked(grid_index)
-    }
-}
-
-impl<G> NoDataValue for BaseTile<G>
-where
-    G: NoDataValue,
-{
-    type NoDataType = G::NoDataType;
-
-    fn no_data_value(&self) -> Option<Self::NoDataType> {
-        self.grid_array.no_data_value()
+        self.get_masked_at_grid_index_unchecked(grid_index)
     }
 }
 
@@ -373,7 +363,7 @@ mod tests {
             let value_a = raster_tile.pixel_value_at_coord(coordinate);
 
             let value_b = raster_tile
-                .get_at_grid_index(tile_geo_transform.coordinate_to_grid_idx_2d(coordinate));
+                .get_masked_at_grid_index(tile_geo_transform.coordinate_to_grid_idx_2d(coordinate));
 
             match (value_a, value_b) {
                 (Ok(a), Ok(b)) => assert_eq!(a, b),
@@ -399,11 +389,11 @@ mod tests {
 
         assert_eq!(
             raster_tile.pixel_value_at_coord_unchecked((0.0, 0.0).into()),
-            1
+            Some(1)
         );
         assert_eq!(
             raster_tile.pixel_value_at_coord_unchecked((1.0, 0.0).into()),
-            2
+            Some(2)
         );
 
         let raster_tile = RasterTile2D::new_with_tile_info(
@@ -424,11 +414,11 @@ mod tests {
 
         assert_eq!(
             raster_tile.pixel_value_at_coord_unchecked((2.0, -3.0).into()),
-            1
+            Some(1)
         );
         assert_eq!(
             raster_tile.pixel_value_at_coord_unchecked((3.0, -3.0).into()),
-            2
+            Some(2)
         );
     }
 

@@ -1,4 +1,4 @@
-use crate::raster::{EmptyGrid, Grid, GridOrEmpty, NoDataValue};
+use crate::raster::{EmptyGrid, Grid, GridOrEmpty, NoDataValue, MaskedGrid, GridSize};
 use std::panic;
 
 pub trait TestDefault {
@@ -17,19 +17,28 @@ pub fn catch_unwind_silent<F: FnOnce() -> R + panic::UnwindSafe, R>(
     result
 }
 
-pub fn eq_with_no_data<D, T>(g1: &GridOrEmpty<D, T>, g2: &GridOrEmpty<D, T>) -> bool
-where
-    D: PartialEq,
-    T: PartialEq + Copy,
+pub fn grid_or_empty_grid_eq<D, T>(g1: &GridOrEmpty<D, T>, g2: &GridOrEmpty<D, T>) -> bool
+where   D: PartialEq + GridSize + Clone,
+T: PartialEq + Copy,
 {
     match (g1, g2) {
-        (GridOrEmpty::Grid(g1), GridOrEmpty::Grid(g2)) => grid_eq_with_no_data(g1, g2),
-        (GridOrEmpty::Empty(g1), GridOrEmpty::Empty(g2)) => empty_grid_eq_with_no_data(g1, g2),
+        (GridOrEmpty::Grid(g1), GridOrEmpty::Grid(g2)) => masked_grid_eq(g1, g2),
+        (GridOrEmpty::Empty(g1), GridOrEmpty::Empty(g2)) => empty_grid_eq(g1, g2),
         _ => false,
     }
 }
 
-pub fn grid_eq_with_no_data<D, T>(g1: &Grid<D, T>, g2: &Grid<D, T>) -> bool
+pub fn masked_grid_eq<D,T>(g1: &MaskedGrid<D,T>, g2: &MaskedGrid<D,T>) -> bool  where   D: PartialEq + GridSize + Clone,
+T: PartialEq + Copy,{
+    grid_eq(g1.as_ref(), g2.as_ref()) && match (g1.mask_ref(), g2.mask_ref()) {
+        (None, None) => true,
+        (None, Some(_)) => false,
+        (Some(_), None) => false,
+        (Some(m1), Some(m2)) => grid_eq(m1, m2),
+    }
+}
+
+pub fn grid_eq<D, T>(g1: &Grid<D, T>, g2: &Grid<D, T>) -> bool
 where
     D: PartialEq,
     T: PartialEq + Copy,
@@ -46,7 +55,7 @@ where
     true
 }
 
-pub fn empty_grid_eq_with_no_data<D, T>(g1: &EmptyGrid<D, T>, g2: &EmptyGrid<D, T>) -> bool
+pub fn empty_grid_eq<D, T>(g1: &EmptyGrid<D, T>, g2: &EmptyGrid<D, T>) -> bool
 where
     D: PartialEq,
     T: PartialEq + Copy,
@@ -72,7 +81,6 @@ pub fn save_test_bytes(bytes: &[u8], filename: &str) {
 #[cfg(test)]
 mod tests {
     use crate::raster::{EmptyGrid, Grid2D, GridShape2D};
-    use crate::util::test::{empty_grid_eq_with_no_data, grid_eq_with_no_data};
 
     /*
     #[test]

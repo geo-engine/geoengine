@@ -322,7 +322,7 @@ mod tests {
         )
         .await;
 
-        assert!(geoengine_datatypes::util::test::eq_with_no_data(
+        assert!(geoengine_datatypes::util::test::grid_or_empty_grid_eq(
             &result.as_ref().unwrap().grid_array,
             &Grid2D::new(
                 [3, 2].into(),
@@ -361,7 +361,7 @@ mod tests {
         )
         .await;
 
-        assert!(geoengine_datatypes::util::test::eq_with_no_data(
+        assert!(geoengine_datatypes::util::test::grid_or_empty_grid_eq(
             &result.as_ref().unwrap().grid_array,
             &EmptyGrid2D::new([3, 2].into(), no_data_value_option.unwrap(),).into()
         ));

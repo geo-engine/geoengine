@@ -413,7 +413,7 @@ mod tests {
         let result = process_mock(ReflectanceParams::default(), Some(1), Some(1), true, None).await;
 
         assert!(result.is_ok());
-        assert!(geoengine_datatypes::util::test::eq_with_no_data(
+        assert!(geoengine_datatypes::util::test::grid_or_empty_grid_eq(
             &result.as_ref().unwrap().grid_array,
             &EmptyGrid2D::new([3, 2].into(), OUT_NO_DATA_VALUE,).into()
         ));
@@ -425,7 +425,7 @@ mod tests {
             process_mock(ReflectanceParams::default(), Some(1), Some(1), false, None).await;
 
         assert!(result.is_ok());
-        assert!(geoengine_datatypes::util::test::eq_with_no_data(
+        assert!(geoengine_datatypes::util::test::grid_or_empty_grid_eq(
             &result.as_ref().unwrap().grid_array,
             &Grid2D::new(
                 [3, 2].into(),
@@ -453,7 +453,7 @@ mod tests {
         let result = process_mock(params, Some(1), Some(1), false, None).await;
 
         assert!(result.is_ok());
-        assert!(geoengine_datatypes::util::test::eq_with_no_data(
+        assert!(geoengine_datatypes::util::test::grid_or_empty_grid_eq(
             &result.as_ref().unwrap().grid_array,
             &Grid2D::new(
                 [3, 2].into(),
@@ -481,7 +481,7 @@ mod tests {
         let result = process_mock(params, Some(1), Some(1), false, None).await;
 
         assert!(result.is_ok());
-        assert!(geoengine_datatypes::util::test::eq_with_no_data(
+        assert!(geoengine_datatypes::util::test::grid_or_empty_grid_eq(
             &result.as_ref().unwrap().grid_array,
             &Grid2D::new(
                 [3, 2].into(),
@@ -509,7 +509,7 @@ mod tests {
         let result = process_mock(params, Some(1), Some(1), false, None).await;
 
         assert!(result.is_ok());
-        assert!(geoengine_datatypes::util::test::eq_with_no_data(
+        assert!(geoengine_datatypes::util::test::grid_or_empty_grid_eq(
             &result.as_ref().unwrap().grid_array,
             &Grid2D::new(
                 [3, 2].into(),

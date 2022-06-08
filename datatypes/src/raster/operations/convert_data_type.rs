@@ -1,4 +1,4 @@
-use crate::raster::{BaseTile, EmptyGrid, Grid, GridOrEmpty, GridSize};
+use crate::raster::{BaseTile, EmptyGrid, Grid, GridOrEmpty, GridSize, masked_grid::MaskedGrid};
 use num_traits::AsPrimitive;
 use rayon::iter::{IndexedParallelIterator, IntoParallelIterator, ParallelIterator};
 
@@ -59,6 +59,13 @@ where
     }
 }
 
+impl <In, Out, G> ConvertDataType<MaskedGrid<G,Out>> for MaskedGrid<G, In> where Grid<G, In>: ConvertDataType<Grid<G, Out>> {
+    fn convert_data_type(self) -> MaskedGrid<G,Out> {
+        let MaskedGrid { data, validity_mask } = self;
+        MaskedGrid {data: data.convert_data_type(), validity_mask}
+    }
+}
+
 pub trait ConvertDataTypeParallel<Output> {
     fn convert_data_type_parallel(self) -> Output;
 }
@@ -113,6 +120,13 @@ where
     }
 }
 
+impl <In, Out, G> ConvertDataTypeParallel<MaskedGrid<G,Out>> for MaskedGrid<G, In> where Grid<G, In>: ConvertDataTypeParallel<Grid<G, Out>> {
+    fn convert_data_type_parallel(self) -> MaskedGrid<G,Out> {
+        let MaskedGrid { data, validity_mask } = self;
+        MaskedGrid {data: data.convert_data_type_parallel(), validity_mask}
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use crate::{
@@ -152,7 +166,7 @@ mod tests {
         let g_u8: GridOrEmpty2D<u8> = Grid2D::new_filled([32, 32].into(), 8).into();
         let g_f64: GridOrEmpty2D<f32> = g_u8.convert_data_type();
         if let GridOrEmpty2D::Grid(g) = g_f64 {
-            assert!(g.data.into_iter().all(|f| f == 8.));
+            assert!(g.data.data.into_iter().all(|f| f == 8.));
         } else {
             panic!("Expected GridOrEmpty2D::Grid");
         }
@@ -176,7 +190,7 @@ mod tests {
         let g_u8: GridOrEmpty2D<u8> = Grid2D::new_filled([32, 32].into(), 8).into();
         let g_f64: GridOrEmpty2D<f32> = g_u8.convert_data_type_parallel();
         if let GridOrEmpty2D::Grid(g) = g_f64 {
-            assert!(g.data.into_iter().all(|f| f == 8.));
+            assert!(g.data.data.into_iter().all(|f| f == 8.));
         } else {
             panic!("Expected GridOrEmpty2D::Grid");
         }
@@ -214,7 +228,7 @@ mod tests {
         );
 
         if let GridOrEmpty2D::Grid(g) = tile_f64.grid_array {
-            assert!(g.data.into_iter().all(|f| f == 8.));
+            assert!(g.data.data.into_iter().all(|f| f == 8.));
         } else {
             panic!("Expected GridOrEmpty2D::Grid");
         }
@@ -240,7 +254,7 @@ mod tests {
         );
 
         if let GridOrEmpty2D::Grid(g) = tile_f64.grid_array {
-            assert!(g.data.into_iter().all(|f| f == 8.));
+            assert!(g.data.data.into_iter().all(|f| f == 8.));
         } else {
             panic!("Expected GridOrEmpty2D::Grid");
         }

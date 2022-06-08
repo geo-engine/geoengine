@@ -1,8 +1,8 @@
 use std::{marker::PhantomData, ops::Add};
 
 use super::{
-    grid_traits::{ChangeGridBounds, GridShapeAccess},
-    Grid, GridBoundingBox, GridBounds, GridIdx, GridIndexAccess, GridShape, GridShape1D,
+    grid_traits::{ChangeGridBounds, GridShapeAccess, MaskedGridIndexAccess},
+    Grid, GridBoundingBox, GridBounds, GridIdx, GridShape, GridShape1D,
     GridShape2D, GridShape3D, GridSize, GridSpaceToLinearSpace,
 };
 use crate::{
@@ -64,14 +64,14 @@ where
     }
 }
 
-impl<T, D, I, A> GridIndexAccess<T, I> for EmptyGrid<D, T>
+impl<T, D, I, A> MaskedGridIndexAccess<T, I> for EmptyGrid<D, T>
 where
     D: GridSize + GridSpaceToLinearSpace<IndexArray = A> + GridBounds<IndexArray = A>,
     I: Into<GridIdx<A>>,
     A: AsRef<[isize]> + Into<GridIdx<A>> + Clone,
     T: Copy,
 {
-    fn get_at_grid_index(&self, grid_index: I) -> Result<T> {
+    fn get_masked_at_grid_index(&self, grid_index: I) -> Result<Option<T>> {
         let index = grid_index.into();
         ensure!(
             self.shape.contains(&index),
@@ -81,12 +81,13 @@ where
                 max_index: self.shape.max_index().as_slice()
             }
         );
-        Ok(self.get_at_grid_index_unchecked(index))
+        Ok(None)
     }
 
-    fn get_at_grid_index_unchecked(&self, _grid_index: I) -> T {
-        unimplemented!();
+    fn get_masked_at_grid_index_unchecked(&self, _grid_index: I) -> Option<T> {
+        None
     }
+
 }
 
 impl<T, D> GridBounds for EmptyGrid<D, T>
@@ -117,16 +118,6 @@ where
     }
 }
 
-impl<D, T> From<EmptyGrid<D, T>> for Grid<D, T>
-where
-    T: Clone,
-    D: GridSize,
-{
-    fn from(no_grid_array: EmptyGrid<D, T>) -> Self {
-        unimplemented!()
-    }
-}
-
 impl<D, T, I> ChangeGridBounds<I> for EmptyGrid<D, T>
 where
     I: AsRef<[isize]> + Clone,
@@ -153,25 +144,19 @@ mod tests {
 
     use super::*;
 
-    /*
+    
     #[test]
     fn new() {
-        let n = EmptyGrid2D::new([2, 2].into(), 42);
-        let expected = EmptyGrid {
-            shape: GridShape2D::from([2, 2]),
-            no_data_value: 42,
-        };
-
-        assert_eq!(n.no_data_value, 42);
+        let n: EmptyGrid2D<u8> = EmptyGrid2D::new([2, 2].into());
+        let expected = EmptyGrid {shape: GridShape2D::from([2, 2]), _phantom_data: PhantomData};
         assert_eq!(n, expected);
     }
 
     #[test]
     #[allow(clippy::float_cmp)]
     fn convert_dtype() {
-        let n = EmptyGrid2D::new([2, 2].into(), 42);
+        let n: EmptyGrid2D<u8> = EmptyGrid2D::new([2, 2].into());
         let n_converted = n.convert_dtype::<f64>();
-        assert_eq!(n_converted.no_data_value, 42.);
     }
 
     #[test]
@@ -183,35 +168,35 @@ mod tests {
 
     #[test]
     fn axis_size() {
-        let n = EmptyGrid2D::new([2, 2].into(), 42);
+        let n: EmptyGrid2D<u8> = EmptyGrid2D::new([2, 2].into());
         assert_eq!(n.axis_size(), [2, 2]);
     }
 
     #[test]
     fn number_of_elements() {
-        let n = EmptyGrid2D::new([2, 2].into(), 42);
+        let n: EmptyGrid2D<u8> = EmptyGrid2D::new([2, 2].into());
         assert_eq!(n.number_of_elements(), 4);
     }
 
     #[test]
     fn get_at_grid_index_unchecked() {
-        let n = EmptyGrid2D::new([2, 2].into(), 42);
-        assert_eq!(n.get_at_grid_index_unchecked([0, 0]), 42);
-        assert_eq!(n.get_at_grid_index_unchecked([100, 100]), 42);
+        let n: EmptyGrid2D<u8> = EmptyGrid2D::new([2, 2].into());
+        assert_eq!(n.get_masked_at_grid_index_unchecked([0, 0]), None);
+        assert_eq!(n.get_masked_at_grid_index_unchecked([100, 100]), None);
     }
 
     #[test]
     fn get_at_grid_index() {
-        let n = EmptyGrid2D::new([2, 2].into(), 42);
-        let result = n.get_at_grid_index([0, 0]).unwrap();
-        assert_eq!(result, 42);
-        assert!(n.get_at_grid_index([100, 100]).is_err());
+        let n: EmptyGrid2D<u8> = EmptyGrid2D::new([2, 2].into());
+        let result = n.get_masked_at_grid_index([0, 0]).unwrap();
+        assert_eq!(result, None);
+        assert!(n.get_masked_at_grid_index([100, 100]).is_err());
     }
 
     #[test]
     fn grid_bounds_2d() {
         let dim: GridShape2D = [3, 2].into();
-        let raster2d = EmptyGrid::new(dim, 3);
+        let raster2d: EmptyGrid2D<u8> = EmptyGrid::new(dim);
 
         assert_eq!(raster2d.min_index(), GridIdx([0, 0]));
         assert_eq!(raster2d.max_index(), GridIdx([2, 1]));
@@ -219,5 +204,5 @@ mod tests {
         let exp_bbox = GridBoundingBox2D::new([0, 0], [2, 1]).unwrap();
         assert_eq!(raster2d.bounding_box(), exp_bbox);
     }
-    */
+    
 }

@@ -2,7 +2,7 @@ use std::ops::Add;
 
 use super::{
     empty_grid::EmptyGrid,
-    grid_traits::{ChangeGridBounds, GridShapeAccess},
+    grid_traits::{ChangeGridBounds, GridShapeAccess, MaskedGridIndexAccess},
     masked_grid::MaskedGrid,
     Grid, GridBoundingBox, GridBounds, GridIdx, GridIndexAccess, GridShape, GridShape1D,
     GridShape2D, GridShape3D, GridSize, GridSpaceToLinearSpace,
@@ -19,7 +19,7 @@ pub type GridOrEmpty3D<T> = GridOrEmpty<GridShape3D, T>;
 #[serde(rename_all = "camelCase")]
 #[serde(tag = "type")]
 pub enum GridOrEmpty<D, T> {
-    Grid(Grid<D, T>),
+    Grid(MaskedGrid<D, T>),
     Empty(EmptyGrid<D, T>),
     // MaskedGrid(MaskedGrid<D,T>),
 }
@@ -39,15 +39,15 @@ where
 
     pub fn shape_ref(&self) -> &D {
         match self {
-            GridOrEmpty::Grid(g) => &g.shape,
+            GridOrEmpty::Grid(g) => &g.shape(),
             GridOrEmpty::Empty(n) => &n.shape,
         }
     }
 
-    pub fn into_materialized_grid(self) -> Grid<D, T> {
+    pub fn into_materialized_grid(self) -> MaskedGrid<D, T> {
         match self {
-            GridOrEmpty::Grid(g) => g,
-            GridOrEmpty::Empty(n) => n.into(),
+            GridOrEmpty::Grid(g) => MaskedGrid::from(g),
+            GridOrEmpty::Empty(n) => MaskedGrid::from(n),
         }
     }
 
@@ -60,7 +60,7 @@ where
 
     pub fn matching_empty_grid(&self) -> EmptyGrid<D, T> {
         match self {
-            GridOrEmpty::Grid(g) => EmptyGrid::new(g.shape.clone()),
+            GridOrEmpty::Grid(g) => EmptyGrid::new(g.shape().clone()),
             GridOrEmpty::Empty(n) => EmptyGrid::new(n.shape.clone()),
         }
     }
@@ -84,24 +84,24 @@ where
     }
 }
 
-impl<T, D, I, A> GridIndexAccess<T, I> for GridOrEmpty<D, T>
+impl<T, D, I, A> MaskedGridIndexAccess<T, I> for GridOrEmpty<D, T>
 where
     D: GridSize + GridSpaceToLinearSpace<IndexArray = A> + GridBounds<IndexArray = A>,
-    I: Into<GridIdx<A>>,
+    I: Into<GridIdx<A>> + Clone,
     A: AsRef<[isize]> + Into<GridIdx<A>> + Clone,
     T: Copy,
 {
-    fn get_at_grid_index(&self, grid_index: I) -> Result<T> {
+    fn get_masked_at_grid_index(&self, grid_index: I) -> Result<Option<T>> {
         match self {
-            GridOrEmpty::Grid(g) => g.get_at_grid_index(grid_index),
-            GridOrEmpty::Empty(n) => n.get_at_grid_index(grid_index),
+            GridOrEmpty::Grid(g) => g.get_masked_at_grid_index(grid_index),
+            GridOrEmpty::Empty(n) => n.get_masked_at_grid_index(grid_index),
         }
     }
 
-    fn get_at_grid_index_unchecked(&self, grid_index: I) -> T {
+    fn get_masked_at_grid_index_unchecked(&self, grid_index: I) -> Option<T> {
         match self {
-            GridOrEmpty::Grid(g) => g.get_at_grid_index_unchecked(grid_index),
-            GridOrEmpty::Empty(n) => n.get_at_grid_index_unchecked(grid_index),
+            GridOrEmpty::Grid(g) => g.get_masked_at_grid_index_unchecked(grid_index),
+            GridOrEmpty::Empty(n) => n.get_masked_at_grid_index_unchecked(grid_index),
         }
     }
 }
@@ -154,12 +154,22 @@ where
     }
 }
 
-impl<D, T> From<Grid<D, T>> for GridOrEmpty<D, T>
+impl<D, T> From<MaskedGrid<D, T>> for GridOrEmpty<D, T>
 where
     T: Clone,
 {
-    fn from(grid: Grid<D, T>) -> Self {
+    fn from(grid: MaskedGrid<D, T>) -> Self {
         GridOrEmpty::Grid(grid)
+    }
+}
+
+impl<D, T> From<Grid<D, T>> for GridOrEmpty<D, T>
+where
+    T: Clone,
+    D: GridSize + std::cmp::PartialEq + Clone
+{
+    fn from(grid: Grid<D, T>) -> Self {
+        Self::from(MaskedGrid::from(grid))
     }
 }
 
