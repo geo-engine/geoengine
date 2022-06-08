@@ -14,7 +14,7 @@ pub use self::grid_index::{GridIdx, GridIdx1D, GridIdx2D, GridIdx3D};
 pub use self::grid_or_empty::{GridOrEmpty, GridOrEmpty1D, GridOrEmpty2D, GridOrEmpty3D};
 pub use self::grid_traits::{
     BoundedGrid, GridBounds, GridContains, GridIndexAccess, GridIndexAccessMut, GridIntersection,
-    GridSize, GridSpaceToLinearSpace, GridStep, MaskedGridIndexAccess, MaskedGridIndexAccessMut
+    GridSize, GridSpaceToLinearSpace, GridStep, MaskedGridIndexAccess, MaskedGridIndexAccessMut,
 };
 pub use self::grid_typed::{TypedGrid, TypedGrid2D, TypedGrid3D};
 pub use self::operations::{
@@ -34,10 +34,10 @@ pub use self::{
 use super::primitives::{SpatialBounded, TemporalBounded};
 use crate::primitives::Coordinate2D;
 use crate::util::Result;
+pub use masked_grid::{MaskedGrid, MaskedGrid1D, MaskedGrid2D, MaskedGrid3D};
 pub use raster_properties::{
     RasterProperties, RasterPropertiesEntry, RasterPropertiesEntryType, RasterPropertiesKey,
 };
-pub use masked_grid::{ MaskedGrid, MaskedGrid1D, MaskedGrid2D, MaskedGrid3D};
 
 mod data_type;
 mod empty_grid;

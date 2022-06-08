@@ -10,7 +10,7 @@ use crate::util::Result;
 use super::{
     grid_traits::{ChangeGridBounds, GridShapeAccess},
     BoundedGrid, GridBoundingBox, GridBounds, GridContains, GridIdx, GridIdx2D, GridIndexAccess,
-    GridIndexAccessMut, GridSize, GridSpaceToLinearSpace, NoDataValue,
+    GridIndexAccessMut, GridSize, GridSpaceToLinearSpace,
 };
 
 /// An `GridShape` describes the shape of an n-dimensional array by storing the size of each axis.

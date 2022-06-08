@@ -1,4 +1,4 @@
-use crate::raster::{EmptyGrid, Grid, GridOrEmpty, NoDataValue, MaskedGrid, GridSize};
+use crate::raster::{EmptyGrid, Grid, GridOrEmpty, GridSize, MaskedGrid};
 use std::panic;
 
 pub trait TestDefault {
@@ -18,8 +18,9 @@ pub fn catch_unwind_silent<F: FnOnce() -> R + panic::UnwindSafe, R>(
 }
 
 pub fn grid_or_empty_grid_eq<D, T>(g1: &GridOrEmpty<D, T>, g2: &GridOrEmpty<D, T>) -> bool
-where   D: PartialEq + GridSize + Clone,
-T: PartialEq + Copy,
+where
+    D: PartialEq + GridSize + Clone,
+    T: PartialEq + Copy,
 {
     match (g1, g2) {
         (GridOrEmpty::Grid(g1), GridOrEmpty::Grid(g2)) => masked_grid_eq(g1, g2),
@@ -28,14 +29,18 @@ T: PartialEq + Copy,
     }
 }
 
-pub fn masked_grid_eq<D,T>(g1: &MaskedGrid<D,T>, g2: &MaskedGrid<D,T>) -> bool  where   D: PartialEq + GridSize + Clone,
-T: PartialEq + Copy,{
-    grid_eq(g1.as_ref(), g2.as_ref()) && match (g1.mask_ref(), g2.mask_ref()) {
-        (None, None) => true,
-        (None, Some(_)) => false,
-        (Some(_), None) => false,
-        (Some(m1), Some(m2)) => grid_eq(m1, m2),
-    }
+pub fn masked_grid_eq<D, T>(g1: &MaskedGrid<D, T>, g2: &MaskedGrid<D, T>) -> bool
+where
+    D: PartialEq + GridSize + Clone,
+    T: PartialEq + Copy,
+{
+    grid_eq(g1.as_ref(), g2.as_ref())
+        && match (g1.mask_ref(), g2.mask_ref()) {
+            (None, None) => true,
+            (None, Some(_)) => false,
+            (Some(_), None) => false,
+            (Some(m1), Some(m2)) => grid_eq(m1, m2),
+        }
 }
 
 pub fn grid_eq<D, T>(g1: &Grid<D, T>, g2: &Grid<D, T>) -> bool
@@ -80,7 +85,6 @@ pub fn save_test_bytes(bytes: &[u8], filename: &str) {
 
 #[cfg(test)]
 mod tests {
-    use crate::raster::{EmptyGrid, Grid2D, GridShape2D};
 
     /*
     #[test]

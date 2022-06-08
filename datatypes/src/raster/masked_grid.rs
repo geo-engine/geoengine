@@ -1,10 +1,8 @@
 use std::ops::Add;
 
-use num_traits::Zero;
 use serde::{Deserialize, Serialize};
-use snafu::ensure;
 
-use crate::{error, util::Result};
+use crate::util::Result;
 
 use super::{
     grid_traits::{MaskedGridIndexAccess, MaskedGridIndexAccessMut},
@@ -44,7 +42,10 @@ where
         //            }
         //        );
 
-        Ok(Self { data, validity_mask })
+        Ok(Self {
+            data,
+            validity_mask,
+        })
     }
 
     pub fn materialize_validity_mask(&mut self) {
@@ -53,8 +54,7 @@ where
         }
     }
 
-
-    pub fn replace_mask(self, validity_mask: Option<Grid<D,bool>>) -> Result<Self> {
+    pub fn replace_mask(self, validity_mask: Option<Grid<D, bool>>) -> Result<Self> {
         Self::new(self.data, validity_mask)
     }
 
@@ -69,7 +69,10 @@ where
     }
 
     pub fn new_with_data(data: Grid<D, T>) -> Self {
-        Self { data, validity_mask: None }
+        Self {
+            data,
+            validity_mask: None,
+        }
     }
 
     pub fn new_filled(shape: D, fill_value: T) -> Self {
@@ -90,7 +93,6 @@ where
     pub fn mask_mut(&mut self) -> Option<&mut Grid<D, bool>> {
         self.validity_mask.as_mut()
     }
-
 }
 
 impl<D, T> From<Grid<D, T>> for MaskedGrid<D, T>
@@ -150,16 +152,15 @@ impl<D, T, I> MaskedGridIndexAccess<T, I> for MaskedGrid<D, T>
 where
     Grid<D, T>: GridIndexAccess<T, I>,
     Grid<D, bool>: GridIndexAccess<bool, I>,
-    I: Clone
+    I: Clone,
 {
     fn get_masked_at_grid_index(&self, grid_index: I) -> Result<Option<T>> {
         if let Some(materialize_validity_mask) = &self.validity_mask {
             if !materialize_validity_mask.get_at_grid_index(grid_index.clone())? {
-                return Ok(None)
+                return Ok(None);
             }
-        }        
+        }
         self.data.get_at_grid_index(grid_index).map(Option::Some)
-            
     }
 
     fn get_masked_at_grid_index_unchecked(&self, grid_index: I) -> Option<T> {
@@ -176,17 +177,17 @@ impl<D, T, I> MaskedGridIndexAccessMut<T, I> for MaskedGrid<D, T>
 where
     Grid<D, T>: GridIndexAccessMut<T, I>,
     Grid<D, bool>: GridIndexAccessMut<bool, I>,
-    D: PartialEq + GridSize + Clone, T: Clone,
-    I: Clone
+    D: PartialEq + GridSize + Clone,
+    T: Clone,
+    I: Clone,
 {
     fn set_masked_at_grid_index(&mut self, grid_index: I, value: Option<T>) -> Result<()> {
         if value.is_none() {
             self.materialize_validity_mask();
         }
-        
+
         if let Some(materialize_validity_mask) = &mut self.validity_mask {
             materialize_validity_mask.set_at_grid_index(grid_index.clone(), value.is_some())?;
-            
         }
 
         if let Some(v) = value {
@@ -196,14 +197,14 @@ where
     }
 
     fn set_masked_at_grid_index_unchecked(&mut self, grid_index: I, value: Option<T>) {
-
-        if value.is_none() { // TODO: is this a check?
+        if value.is_none() {
+            // TODO: is this a check?
             self.materialize_validity_mask();
         }
-        
+
         if let Some(materialize_validity_mask) = &mut self.validity_mask {
-            materialize_validity_mask.set_at_grid_index_unchecked(grid_index.clone(), value.is_some());
-            
+            materialize_validity_mask
+                .set_at_grid_index_unchecked(grid_index.clone(), value.is_some());
         }
 
         if let Some(v) = value {
@@ -216,7 +217,9 @@ impl<D, T, I> GridIndexAccessMut<T, I> for MaskedGrid<D, T>
 where
     Grid<D, T>: GridIndexAccessMut<T, I>,
     Grid<D, bool>: GridIndexAccessMut<bool, I>,
-    D: PartialEq + GridSize + Clone, T: Clone, I: Clone
+    D: PartialEq + GridSize + Clone,
+    T: Clone,
+    I: Clone,
 {
     fn set_at_grid_index(&mut self, grid_index: I, value: T) -> Result<()> {
         self.set_masked_at_grid_index(grid_index, Some(value))
@@ -263,7 +266,7 @@ where
 {
     type Output = MaskedGrid<GridBoundingBox<I>, T>;
 
-    fn shift_by_offset(self, offset: GridIdx<I>) -> Self::Output {        
+    fn shift_by_offset(self, offset: GridIdx<I>) -> Self::Output {
         MaskedGrid {
             data: self.data.shift_by_offset(offset.clone()),
             validity_mask: self.validity_mask.map(|m| m.shift_by_offset(offset)),
@@ -271,10 +274,12 @@ where
     }
 
     fn set_grid_bounds(self, bounds: GridBoundingBox<I>) -> Result<Self::Output> {
-
         Ok(MaskedGrid {
             data: self.data.set_grid_bounds(bounds.clone())?,
-            validity_mask: self.validity_mask.map(|m| m.set_grid_bounds(bounds).expect("worked on the same grid before")),
+            validity_mask: self.validity_mask.map(|m| {
+                m.set_grid_bounds(bounds)
+                    .expect("worked on the same grid before")
+            }),
         })
     }
 }

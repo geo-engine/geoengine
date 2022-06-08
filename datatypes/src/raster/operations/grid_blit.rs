@@ -1,7 +1,7 @@
 use crate::raster::{
-    empty_grid::EmptyGrid, BoundedGrid, Grid, Grid1D, Grid2D, Grid3D, GridBoundingBox, GridBounds,
-    GridIdx,  GridIndexAccessMut, GridIntersection, GridOrEmpty, GridSize,
-    GridSpaceToLinearSpace, masked_grid::{ MaskedGrid},
+    empty_grid::EmptyGrid, masked_grid::MaskedGrid, BoundedGrid, Grid, Grid1D, Grid2D, Grid3D,
+    GridBoundingBox, GridBounds, GridIdx, GridIndexAccessMut, GridIntersection, GridOrEmpty,
+    GridSize, GridSpaceToLinearSpace,
 };
 
 pub trait GridBlit<O, T>
@@ -17,7 +17,7 @@ where
     D: GridSize<ShapeArray = [usize; 1]>
         + GridBounds<IndexArray = [isize; 1]>
         + GridSpaceToLinearSpace<IndexArray = [isize; 1]>,
-        T: Copy + Sized,
+    T: Copy + Sized,
 {
     fn grid_blit_from(&mut self, other: &Grid<D, T>) {
         let other_offset_dim = other.bounding_box();
@@ -42,7 +42,7 @@ where
     D: GridSize<ShapeArray = [usize; 2]>
         + GridBounds<IndexArray = [isize; 2]>
         + GridSpaceToLinearSpace<IndexArray = [isize; 2]>,
-        T: Copy + Sized,
+    T: Copy + Sized,
 {
     fn grid_blit_from(&mut self, other: &Grid<D, T>) {
         let other_offset_dim = other.bounding_box();
@@ -71,7 +71,7 @@ where
     D: GridSize<ShapeArray = [usize; 3]>
         + GridBounds<IndexArray = [isize; 3]>
         + GridSpaceToLinearSpace<IndexArray = [isize; 3]>,
-        T: Copy + Sized,
+    T: Copy + Sized,
 {
     fn grid_blit_from(&mut self, other: &Grid<D, T>) {
         let other_offset_dim = other.bounding_box();
@@ -102,70 +102,77 @@ where
     }
 }
 
-impl<D1, D2, T, A, I> GridBlit<MaskedGrid<D1, T>, T> for MaskedGrid<D2,T>
+impl<D1, D2, T, A, I> GridBlit<MaskedGrid<D1, T>, T> for MaskedGrid<D2, T>
 where
-D1: GridSize<ShapeArray = A>
-+ GridBounds<IndexArray = I>
-+ GridSpaceToLinearSpace<IndexArray = I>
-+ Clone + PartialEq,
-D2: GridSize<ShapeArray = A>
-+ GridBounds<IndexArray = I>
-+ GridSpaceToLinearSpace<IndexArray = I>
-+ Clone + PartialEq + PartialEq,
-        T: Copy + Sized + Default,
-Grid<D2,T>: GridBlit<Grid<D1,T>, T>,
-Grid<D2,bool>: GridBlit<Grid<D1,bool>, bool>
+    D1: GridSize<ShapeArray = A>
+        + GridBounds<IndexArray = I>
+        + GridSpaceToLinearSpace<IndexArray = I>
+        + Clone
+        + PartialEq,
+    D2: GridSize<ShapeArray = A>
+        + GridBounds<IndexArray = I>
+        + GridSpaceToLinearSpace<IndexArray = I>
+        + Clone
+        + PartialEq
+        + PartialEq,
+    T: Copy + Sized + Default,
+    Grid<D2, T>: GridBlit<Grid<D1, T>, T>,
+    Grid<D2, bool>: GridBlit<Grid<D1, bool>, bool>,
 {
     fn grid_blit_from(&mut self, other: &MaskedGrid<D1, T>) {
-
         // easy part: blit the data
         self.data.grid_blit_from(other.as_ref());
 
         if !self.validity_mask_is_materialized() && !other.validity_mask_is_materialized() {
             return;
         }
-        
+
         self.materialize_validity_mask();
-        
+
         if let Some(other_mask) = other.mask_ref() {
-            self.mask_mut().expect("Mask createion before failed.").grid_blit_from(other_mask);
+            self.mask_mut()
+                .expect("Mask createion before failed.")
+                .grid_blit_from(other_mask);
         } else {
-            let temp_mask = Grid::new_filled(other.shape().clone(), true);            
-            self.mask_mut().expect("Mask createion before failed.").grid_blit_from(&temp_mask);
+            let temp_mask = Grid::new_filled(other.shape().clone(), true);
+            self.mask_mut()
+                .expect("Mask createion before failed.")
+                .grid_blit_from(&temp_mask);
         };
     }
 }
 
-impl<D1, D2, T, A, I> GridBlit<EmptyGrid<D1, T>, T> for MaskedGrid<D2,T>
+impl<D1, D2, T, A, I> GridBlit<EmptyGrid<D1, T>, T> for MaskedGrid<D2, T>
 where
-D1: GridSize<ShapeArray = A>
-+ GridBounds<IndexArray = I>
-+ GridSpaceToLinearSpace<IndexArray = I>
-+ Clone + PartialEq,
-D2: GridSize<ShapeArray = A>
-+ GridBounds<IndexArray = I>
-+ GridSpaceToLinearSpace<IndexArray = I>
-+ Clone + PartialEq + PartialEq,
-        T: Copy + Sized + Default,
-Grid<D2,bool>: GridBlit<EmptyGrid<D1,T>, T>
+    D1: GridSize<ShapeArray = A>
+        + GridBounds<IndexArray = I>
+        + GridSpaceToLinearSpace<IndexArray = I>
+        + Clone
+        + PartialEq,
+    D2: GridSize<ShapeArray = A>
+        + GridBounds<IndexArray = I>
+        + GridSpaceToLinearSpace<IndexArray = I>
+        + Clone
+        + PartialEq
+        + PartialEq,
+    T: Copy + Sized + Default,
+    Grid<D2, bool>: GridBlit<EmptyGrid<D1, T>, T>,
 {
     fn grid_blit_from(&mut self, other: &EmptyGrid<D1, T>) {
-
         self.materialize_validity_mask();
 
-        self.mask_mut().expect("Mask createion before failed.").grid_blit_from(other);    
-
+        self.mask_mut()
+            .expect("Mask createion before failed.")
+            .grid_blit_from(other);
     }
 }
-
-
 
 impl<D, T> GridBlit<EmptyGrid<D, T>, T> for Grid2D<bool>
 where
     D: GridSize<ShapeArray = [usize; 2]>
         + GridBounds<IndexArray = [isize; 2]>
         + GridSpaceToLinearSpace<IndexArray = [isize; 2]>,
-        T: Copy + Sized,
+    T: Copy + Sized,
 {
     fn grid_blit_from(&mut self, other: &EmptyGrid<D, T>) {
         let other_offset_dim = other.bounding_box();
@@ -178,10 +185,7 @@ where
 
             for y in overlap_y_start..overlap_y_start + overlap_y_size as isize {
                 for x in overlap_x_start..overlap_x_start + overlap_x_size as isize {
-                    self.set_at_grid_index_unchecked(
-                        [y, x],
-                        false,
-                    );
+                    self.set_at_grid_index_unchecked([y, x], false);
                 }
             }
         }
@@ -193,11 +197,13 @@ where
     D1: GridSize<ShapeArray = A>
         + GridBounds<IndexArray = I>
         + GridSpaceToLinearSpace<IndexArray = I>
-        + Clone + PartialEq,
+        + Clone
+        + PartialEq,
     D2: GridSize<ShapeArray = A>
         + GridBounds<IndexArray = I>
         + GridSpaceToLinearSpace<IndexArray = I>
-        + Clone + PartialEq,
+        + Clone
+        + PartialEq,
     I: Clone + AsRef<[isize]> + Into<GridIdx<I>>,
     T: Copy + Sized + Default,
     Self: GridBlit<MaskedGrid<D1, T>, T> + GridBlit<EmptyGrid<D1, T>, T>,
@@ -232,10 +238,7 @@ where
             for z in overlap_z_start..overlap_z_start + overlap_z_size as isize {
                 for y in overlap_y_start..overlap_y_start + overlap_y_size as isize {
                     for x in overlap_x_start..overlap_x_start + overlap_x_size as isize {
-                        self.set_at_grid_index_unchecked(
-                            [z, y, x],
-                            false,
-                        );
+                        self.set_at_grid_index_unchecked([z, y, x], false);
                     }
                 }
             }
@@ -243,12 +246,11 @@ where
     }
 }
 
-
-
 #[cfg(test)]
 mod tests {
     use crate::raster::{
-        EmptyGrid2D, EmptyGrid3D, Grid, Grid2D, Grid3D, GridBlit, GridBoundingBox, GridIdx, masked_grid::{MaskedGrid2D, MaskedGrid3D},
+        masked_grid::{MaskedGrid2D, MaskedGrid3D},
+        EmptyGrid2D, EmptyGrid3D, Grid, Grid2D, Grid3D, GridBlit, GridBoundingBox, GridIdx,
     };
 
     #[test]

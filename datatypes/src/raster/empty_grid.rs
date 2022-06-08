@@ -2,8 +2,8 @@ use std::{marker::PhantomData, ops::Add};
 
 use super::{
     grid_traits::{ChangeGridBounds, GridShapeAccess, MaskedGridIndexAccess},
-    Grid, GridBoundingBox, GridBounds, GridIdx, GridShape, GridShape1D,
-    GridShape2D, GridShape3D, GridSize, GridSpaceToLinearSpace,
+    GridBoundingBox, GridBounds, GridIdx, GridShape, GridShape1D, GridShape2D, GridShape3D,
+    GridSize, GridSpaceToLinearSpace,
 };
 use crate::{
     error::{self},
@@ -87,7 +87,6 @@ where
     fn get_masked_at_grid_index_unchecked(&self, _grid_index: I) -> Option<T> {
         None
     }
-
 }
 
 impl<T, D> GridBounds for EmptyGrid<D, T>
@@ -144,11 +143,13 @@ mod tests {
 
     use super::*;
 
-    
     #[test]
     fn new() {
         let n: EmptyGrid2D<u8> = EmptyGrid2D::new([2, 2].into());
-        let expected = EmptyGrid {shape: GridShape2D::from([2, 2]), _phantom_data: PhantomData};
+        let expected = EmptyGrid {
+            shape: GridShape2D::from([2, 2]),
+            _phantom_data: PhantomData,
+        };
         assert_eq!(n, expected);
     }
 
@@ -156,7 +157,7 @@ mod tests {
     #[allow(clippy::float_cmp)]
     fn convert_dtype() {
         let n: EmptyGrid2D<u8> = EmptyGrid2D::new([2, 2].into());
-        let n_converted = n.convert_dtype::<f64>();
+        let _n_converted = n.convert_dtype::<f64>();
     }
 
     #[test]
@@ -204,5 +205,4 @@ mod tests {
         let exp_bbox = GridBoundingBox2D::new([0, 0], [2, 1]).unwrap();
         assert_eq!(raster2d.bounding_box(), exp_bbox);
     }
-    
 }

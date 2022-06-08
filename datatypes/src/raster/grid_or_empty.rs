@@ -4,8 +4,8 @@ use super::{
     empty_grid::EmptyGrid,
     grid_traits::{ChangeGridBounds, GridShapeAccess, MaskedGridIndexAccess},
     masked_grid::MaskedGrid,
-    Grid, GridBoundingBox, GridBounds, GridIdx, GridIndexAccess, GridShape, GridShape1D,
-    GridShape2D, GridShape3D, GridSize, GridSpaceToLinearSpace,
+    Grid, GridBoundingBox, GridBounds, GridIdx, GridShape, GridShape1D, GridShape2D, GridShape3D,
+    GridSize, GridSpaceToLinearSpace,
 };
 
 use crate::util::Result;
@@ -166,7 +166,7 @@ where
 impl<D, T> From<Grid<D, T>> for GridOrEmpty<D, T>
 where
     T: Clone,
-    D: GridSize + std::cmp::PartialEq + Clone
+    D: GridSize + std::cmp::PartialEq + Clone,
 {
     fn from(grid: Grid<D, T>) -> Self {
         Self::from(MaskedGrid::from(grid))

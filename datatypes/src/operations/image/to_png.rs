@@ -1,7 +1,8 @@
 use std::io::Cursor;
 
 use crate::raster::{
-    Grid2D, GridIndexAccess, GridOrEmpty2D, Pixel, RasterTile2D, TypedRasterTile2D, MaskedGrid2D, MaskedGridIndexAccess,
+    Grid2D, GridIndexAccess, GridOrEmpty2D, MaskedGrid2D, MaskedGridIndexAccess, Pixel,
+    RasterTile2D, TypedRasterTile2D,
 };
 use crate::util::Result;
 use crate::{error, raster::EmptyGrid2D};
@@ -38,13 +39,13 @@ where
         let [.., raster_y_size, raster_x_size] = self.shape.shape_array;
         let scale_x = (raster_x_size as f64) / f64::from(width);
         let scale_y = (raster_y_size as f64) / f64::from(height);
-        
-        let image_buffer = create_rgba_image_from_grid(self, width, height, colorizer, scale_x, scale_y);    
+
+        let image_buffer =
+            create_rgba_image_from_grid(self, width, height, colorizer, scale_x, scale_y);
 
         image_buffer_to_png_bytes(image_buffer)
     }
 }
-
 
 impl<P> ToPng for MaskedGrid2D<P>
 where
@@ -56,8 +57,9 @@ where
         let [.., raster_y_size, raster_x_size] = self.shape().shape_array;
         let scale_x = (raster_x_size as f64) / f64::from(width);
         let scale_y = (raster_y_size as f64) / f64::from(height);
-        
-        let image_buffer = create_rgba_image_from_masked_grid(self, width, height, colorizer, scale_x, scale_y);    
+
+        let image_buffer =
+            create_rgba_image_from_masked_grid(self, width, height, colorizer, scale_x, scale_y);
 
         image_buffer_to_png_bytes(image_buffer)
     }
@@ -123,7 +125,9 @@ fn create_rgba_image_from_masked_grid<P: Pixel + RgbaTransmutable>(
 
     RgbaImage::from_fn(width, height, |x, y| {
         let (grid_pixel_x, grid_pixel_y) = image_pixel_to_raster_pixel(x, y, scale_x, scale_y);
-        if let Ok(Some(pixel_value)) = raster_grid.get_masked_at_grid_index([grid_pixel_y, grid_pixel_x]) {
+        if let Ok(Some(pixel_value)) =
+            raster_grid.get_masked_at_grid_index([grid_pixel_y, grid_pixel_x])
+        {
             color_mapper.call(pixel_value)
         } else {
             colorizer.no_data_color()

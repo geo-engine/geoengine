@@ -1,10 +1,10 @@
-use super::{RasterProperties, MaskedGridIndexAccess, MaskedGridIndexAccessMut};
 use super::masked_grid::MaskedGrid;
 use super::{
     grid_or_empty::GridOrEmpty, GeoTransform, GeoTransformAccess, Grid, GridBounds, GridIdx2D,
-    GridIndexAccess, GridIndexAccessMut, GridShape, GridShape2D, GridShape3D, GridShapeAccess,
-    GridSize, NoDataValue, Raster, TileInformation,
+    GridIndexAccess, GridShape, GridShape2D, GridShape3D, GridShapeAccess, GridSize, NoDataValue,
+    Raster, TileInformation,
 };
+use super::{MaskedGridIndexAccess, MaskedGridIndexAccessMut, RasterProperties};
 use crate::primitives::{
     Coordinate2D, SpatialBounded, SpatialPartition2D, SpatialPartitioned, TemporalBounded,
     TimeInterval,
@@ -266,7 +266,8 @@ where
     }
 
     fn get_masked_at_grid_index_unchecked(&self, grid_index: I) -> Option<T> {
-        self.grid_array.get_masked_at_grid_index_unchecked(grid_index)
+        self.grid_array
+            .get_masked_at_grid_index_unchecked(grid_index)
     }
 }
 

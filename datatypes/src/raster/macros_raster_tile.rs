@@ -242,7 +242,9 @@ macro_rules! call_generic_raster_tile_2d_ext {
 mod tests {
     use crate::{
         primitives::TimeInterval,
-        raster::{GeoTransform, Grid2D, MaskedGridIndexAccess, Pixel, RasterTile2D, TypedRasterTile2D},
+        raster::{
+            GeoTransform, Grid2D, MaskedGridIndexAccess, Pixel, RasterTile2D, TypedRasterTile2D,
+        },
         util::test::TestDefault,
     };
     use crate::{raster::RasterDataType, util::test::catch_unwind_silent};
@@ -271,7 +273,11 @@ mod tests {
     #[test]
     fn call_generic_raster2d() {
         fn first_pixel<T: Pixel>(raster: &RasterTile2D<T>) -> i64 {
-            raster.get_masked_at_grid_index([0, 0]).unwrap().unwrap().as_()
+            raster
+                .get_masked_at_grid_index([0, 0])
+                .unwrap()
+                .unwrap()
+                .as_()
         }
 
         let r = Grid2D::new([3, 2].into(), vec![1, 2, 3, 4, 5, 6]).unwrap();

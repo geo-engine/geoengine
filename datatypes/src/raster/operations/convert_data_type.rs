@@ -1,4 +1,4 @@
-use crate::raster::{BaseTile, EmptyGrid, Grid, GridOrEmpty, GridSize, masked_grid::MaskedGrid};
+use crate::raster::{masked_grid::MaskedGrid, BaseTile, EmptyGrid, Grid, GridOrEmpty, GridSize};
 use num_traits::AsPrimitive;
 use rayon::iter::{IndexedParallelIterator, IntoParallelIterator, ParallelIterator};
 
@@ -59,10 +59,19 @@ where
     }
 }
 
-impl <In, Out, G> ConvertDataType<MaskedGrid<G,Out>> for MaskedGrid<G, In> where Grid<G, In>: ConvertDataType<Grid<G, Out>> {
-    fn convert_data_type(self) -> MaskedGrid<G,Out> {
-        let MaskedGrid { data, validity_mask } = self;
-        MaskedGrid {data: data.convert_data_type(), validity_mask}
+impl<In, Out, G> ConvertDataType<MaskedGrid<G, Out>> for MaskedGrid<G, In>
+where
+    Grid<G, In>: ConvertDataType<Grid<G, Out>>,
+{
+    fn convert_data_type(self) -> MaskedGrid<G, Out> {
+        let MaskedGrid {
+            data,
+            validity_mask,
+        } = self;
+        MaskedGrid {
+            data: data.convert_data_type(),
+            validity_mask,
+        }
     }
 }
 
@@ -120,10 +129,19 @@ where
     }
 }
 
-impl <In, Out, G> ConvertDataTypeParallel<MaskedGrid<G,Out>> for MaskedGrid<G, In> where Grid<G, In>: ConvertDataTypeParallel<Grid<G, Out>> {
-    fn convert_data_type_parallel(self) -> MaskedGrid<G,Out> {
-        let MaskedGrid { data, validity_mask } = self;
-        MaskedGrid {data: data.convert_data_type_parallel(), validity_mask}
+impl<In, Out, G> ConvertDataTypeParallel<MaskedGrid<G, Out>> for MaskedGrid<G, In>
+where
+    Grid<G, In>: ConvertDataTypeParallel<Grid<G, Out>>,
+{
+    fn convert_data_type_parallel(self) -> MaskedGrid<G, Out> {
+        let MaskedGrid {
+            data,
+            validity_mask,
+        } = self;
+        MaskedGrid {
+            data: data.convert_data_type_parallel(),
+            validity_mask,
+        }
     }
 }
 
