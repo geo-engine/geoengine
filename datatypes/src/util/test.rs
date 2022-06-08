@@ -85,350 +85,160 @@ pub fn save_test_bytes(bytes: &[u8], filename: &str) {
 
 #[cfg(test)]
 mod tests {
+    use crate::{
+        raster::{EmptyGrid, Grid2D, GridShape2D, MaskedGrid2D, EmptyGrid2D},
+        util::test::{empty_grid_eq, grid_eq, masked_grid_eq},
+    };
 
-    /*
     #[test]
-    fn test_empty_grid_eq_with_no_data_integral_ok() {
+    fn test_empty_grid_eq_ok() {
         let d1: GridShape2D = [3, 2].into();
         let d2: GridShape2D = [3, 2].into();
 
-        let ndv1 = 42;
-        let ndv2 = 42;
+        let r1: EmptyGrid2D<u8> = EmptyGrid::new(d1);
+        let r2: EmptyGrid2D<u8> = EmptyGrid::new(d2);
 
-        let r1 = EmptyGrid::new(d1, ndv1);
-        let r2 = EmptyGrid::new(d2, ndv2);
-
-        assert!(empty_grid_eq_with_no_data(&r1, &r2));
+        assert!(empty_grid_eq(&r1, &r2));
     }
 
     #[test]
-    fn test_empty_grid_eq_with_no_data_integral_fail_dim() {
+    fn test_empty_grid_eq_integral_fail_dim() {
         let d1: GridShape2D = [3, 2].into();
         let d2: GridShape2D = [3, 1].into();
 
-        let ndv1 = 42;
-        let ndv2 = 42;
+        let r1: EmptyGrid2D<u8> = EmptyGrid::new(d1);
+        let r2: EmptyGrid2D<u8> = EmptyGrid::new(d2);
 
-        let r1 = EmptyGrid::new(d1, ndv1);
-        let r2 = EmptyGrid::new(d2, ndv2);
-
-        assert!(!empty_grid_eq_with_no_data(&r1, &r2));
+        assert!(!empty_grid_eq(&r1, &r2));
     }
 
     #[test]
-    fn test_empty_grid_eq_with_no_data_integral_fail_ndv() {
-        let d1: GridShape2D = [3, 2].into();
-        let d2: GridShape2D = [3, 2].into();
-
-        let ndv1 = 42;
-        let ndv2 = 0;
-
-        let r1 = EmptyGrid::new(d1, ndv1);
-        let r2 = EmptyGrid::new(d2, ndv2);
-
-        assert!(!empty_grid_eq_with_no_data(&r1, &r2));
-    }
-
-    #[test]
-    fn test_empty_grid_eq_with_no_data_float_no_nan_ok() {
-        let d1: GridShape2D = [3, 2].into();
-        let d2: GridShape2D = [3, 2].into();
-
-        let ndv1 = 42;
-        let ndv2 = 42;
-
-        let r1 = EmptyGrid::new(d1, ndv1);
-        let r2 = EmptyGrid::new(d2, ndv2);
-
-        assert!(empty_grid_eq_with_no_data(&r1, &r2));
-    }
-
-    #[test]
-    fn test_empty_grid_eq_with_no_data_float_no_nan_fail_dim() {
-        let d1: GridShape2D = [3, 2].into();
-        let d2: GridShape2D = [3, 1].into();
-
-        let ndv1 = 42_f32;
-        let ndv2 = 42_f32;
-
-        let r1 = EmptyGrid::new(d1, ndv1);
-        let r2 = EmptyGrid::new(d2, ndv2);
-
-        assert!(!empty_grid_eq_with_no_data(&r1, &r2));
-    }
-
-    #[test]
-    fn test_empty_grid_eq_with_no_data_float_no_nan_fail_ndv() {
-        let d1: GridShape2D = [3, 2].into();
-        let d2: GridShape2D = [3, 2].into();
-
-        let ndv1 = 42_f32;
-        let ndv2 = 0_f32;
-
-        let r1 = EmptyGrid::new(d1, ndv1);
-        let r2 = EmptyGrid::new(d2, ndv2);
-
-        assert!(!empty_grid_eq_with_no_data(&r1, &r2));
-    }
-
-    #[test]
-    fn test_empty_grid_eq_with_no_data_float_nan_ok() {
-        let d1: GridShape2D = [3, 2].into();
-        let d2: GridShape2D = [3, 2].into();
-
-        let ndv1 = f32::NAN;
-        let ndv2 = f32::NAN;
-
-        let r1 = EmptyGrid::new(d1, ndv1);
-        let r2 = EmptyGrid::new(d2, ndv2);
-
-        assert!(empty_grid_eq_with_no_data(&r1, &r2));
-    }
-
-    #[test]
-    fn test_empty_grid_eq_with_no_data_float_nan_fail_dim() {
-        let d1: GridShape2D = [3, 2].into();
-        let d2: GridShape2D = [3, 1].into();
-
-        let ndv1 = f32::NAN;
-        let ndv2 = f32::NAN;
-
-        let r1 = EmptyGrid::new(d1, ndv1);
-        let r2 = EmptyGrid::new(d2, ndv2);
-
-        assert!(!empty_grid_eq_with_no_data(&r1, &r2));
-    }
-
-    #[test]
-    fn test_empty_grid_eq_with_no_data_float_nan_fail_ndv_1() {
-        let d1: GridShape2D = [3, 2].into();
-        let d2: GridShape2D = [3, 2].into();
-
-        let ndv1 = f32::NAN;
-        let ndv2 = 0_f32;
-
-        let r1 = EmptyGrid::new(d1, ndv1);
-        let r2 = EmptyGrid::new(d2, ndv2);
-
-        assert!(!empty_grid_eq_with_no_data(&r1, &r2));
-    }
-
-    #[test]
-    fn test_empty_grid_eq_with_no_data_float_nan_fail_ndv_2() {
-        let d1: GridShape2D = [3, 2].into();
-        let d2: GridShape2D = [3, 2].into();
-
-        let ndv1 = 42_f32;
-        let ndv2 = f32::NAN;
-
-        let r1 = EmptyGrid::new(d1, ndv1);
-        let r2 = EmptyGrid::new(d2, ndv2);
-
-        assert!(!empty_grid_eq_with_no_data(&r1, &r2));
-    }
-
-    #[test]
-    fn test_grid_eq_with_no_data_integral_ok() {
+    fn test_grid_eq_integral_ok() {
         let d1: GridShape2D = [2, 2].into();
         let d2: GridShape2D = [2, 2].into();
 
-        let ndv1 = 42;
-        let ndv2 = 42;
+        let r1 = Grid2D::new(d1, vec![1, 2, 3, 42]).unwrap();
+        let r2 = Grid2D::new(d2, vec![1, 2, 3, 42]).unwrap();
 
-        let r1 = Grid2D::new(d1, vec![1, 2, 3, 42], Some(ndv1)).unwrap();
-        let r2 = Grid2D::new(d2, vec![1, 2, 3, 42], Some(ndv2)).unwrap();
-
-        assert!(grid_eq_with_no_data(&r1, &r2));
+        assert!(grid_eq(&r1, &r2));
     }
 
     #[test]
-    fn test_grid_eq_with_no_data_integral_fail_dim() {
+    fn test_grid_eq_with_integral_fail_dim() {
+        let d1: GridShape2D = [4, 1].into();
+        let d2: GridShape2D = [2, 2].into();
+        let r1 = Grid2D::new(d1, vec![1, 2, 3, 42]).unwrap();
+        let r2 = Grid2D::new(d2, vec![1, 2, 3, 42]).unwrap();
+
+        assert!(!grid_eq(&r1, &r2));
+    }
+
+    #[test]
+    fn test_grid_eq_integral_fail_data() {
+        let d1: GridShape2D = [2, 2].into();
+        let d2: GridShape2D = [2, 2].into();
+
+        let r1 = Grid2D::new(d1, vec![2, 2, 3, 42]).unwrap();
+        let r2 = Grid2D::new(d2, vec![1, 2, 3, 42]).unwrap();
+
+        assert!(!grid_eq(&r1, &r2));
+    }
+
+    #[test]
+    fn test_grid_eq_float_some_ok() {
+        let d1: GridShape2D = [2, 2].into();
+        let d2: GridShape2D = [2, 2].into();
+
+        let r1 = Grid2D::new(d1, vec![1_f32, 2_f32, 3_f32, 42_f32]).unwrap();
+        let r2 = Grid2D::new(d2, vec![1_f32, 2_f32, 3_f32, 42_f32]).unwrap();
+
+        assert!(grid_eq(&r1, &r2));
+    }
+
+    #[test]
+    fn test_masked_grid_eq_no_mask_ok() {
+        let d1: GridShape2D = [2, 2].into();
+        let d2: GridShape2D = [2, 2].into();
+
+        let r1 = MaskedGrid2D::new(Grid2D::new(d1, vec![1, 2, 3, 42]).unwrap(), None).unwrap();
+        let r2 = MaskedGrid2D::new(Grid2D::new(d2, vec![1, 2, 3, 42]).unwrap(), None).unwrap();
+
+        assert!(masked_grid_eq(&r1, &r2));
+    }
+
+    #[test]
+    fn test_masked_grid_eq_mask_ok() {
+        let d1: GridShape2D = [2, 2].into();
+        let d2: GridShape2D = [2, 2].into();
+
+        let m1 = Grid2D::new(d1, vec![true, true, true, false]).unwrap();
+        let m2 = Grid2D::new(d2, vec![true, true, true, false]).unwrap();
+
+        let r1 = MaskedGrid2D::new(Grid2D::new(d1, vec![1, 2, 3, 42]).unwrap(), Some(m1)).unwrap();
+        let r2 = MaskedGrid2D::new(Grid2D::new(d2, vec![1, 2, 3, 42]).unwrap(), Some(m2)).unwrap();
+
+        assert!(masked_grid_eq(&r1, &r2));
+    }
+
+    #[test]
+    fn test_masked_grid_eq_no_mask_fail_data() {
+        let d1: GridShape2D = [2, 2].into();
+        let d2: GridShape2D = [2, 2].into();
+
+        let r1 = MaskedGrid2D::new(Grid2D::new(d1, vec![1, 2, 3, 42]).unwrap(), None).unwrap();
+        let r2 = MaskedGrid2D::new(Grid2D::new(d2, vec![42, 3, 2, 1]).unwrap(), None).unwrap();
+
+        assert!(!masked_grid_eq(&r1, &r2));
+    }
+
+    #[test]
+    fn test_masked_grid_eq_no_mask_fail_dim() {
         let d1: GridShape2D = [4, 1].into();
         let d2: GridShape2D = [2, 2].into();
 
-        let ndv1 = 42;
-        let ndv2 = 42;
+        let r1 = MaskedGrid2D::new(Grid2D::new(d1, vec![1, 2, 3, 42]).unwrap(), None).unwrap();
+        let r2 = MaskedGrid2D::new(Grid2D::new(d2, vec![1, 2, 3, 42]).unwrap(), None).unwrap();
 
-        let r1 = Grid2D::new(d1, vec![1, 2, 3, 42], Some(ndv1)).unwrap();
-        let r2 = Grid2D::new(d2, vec![1, 2, 3, 42], Some(ndv2)).unwrap();
-
-        assert!(!grid_eq_with_no_data(&r1, &r2));
+        assert!(!masked_grid_eq(&r1, &r2));
     }
 
     #[test]
-    fn test_grid_eq_with_no_data_integral_fail_ndv() {
+    fn test_masked_grid_eq_mask_fail_some_none() {
         let d1: GridShape2D = [2, 2].into();
         let d2: GridShape2D = [2, 2].into();
 
-        let ndv1 = 42;
-        let ndv2 = 1;
+        let m1 = Grid2D::new(d1, vec![true, true, true, false]).unwrap();
 
-        let r1 = Grid2D::new(d1, vec![1, 2, 3, 42], Some(ndv1)).unwrap();
-        let r2 = Grid2D::new(d2, vec![1, 2, 3, 42], Some(ndv2)).unwrap();
+        let r1 = MaskedGrid2D::new(Grid2D::new(d1, vec![1, 2, 3, 42]).unwrap(), Some(m1)).unwrap();
+        let r2 = MaskedGrid2D::new(Grid2D::new(d2, vec![1, 2, 3, 42]).unwrap(), None).unwrap();
 
-        assert!(!grid_eq_with_no_data(&r1, &r2));
+        assert!(!masked_grid_eq(&r1, &r2));
     }
 
     #[test]
-    fn test_grid_eq_with_no_data_integral_fail_data() {
+    fn test_masked_grid_eq_mask_fail_none_some() {
         let d1: GridShape2D = [2, 2].into();
         let d2: GridShape2D = [2, 2].into();
 
-        let ndv1 = 42;
-        let ndv2 = 42;
+        let m2 = Grid2D::new(d1, vec![true, true, true, false]).unwrap();
 
-        let r1 = Grid2D::new(d1, vec![2, 2, 3, 42], Some(ndv1)).unwrap();
-        let r2 = Grid2D::new(d2, vec![1, 2, 3, 42], Some(ndv2)).unwrap();
+        let r1 = MaskedGrid2D::new(Grid2D::new(d1, vec![1, 2, 3, 42]).unwrap(), None).unwrap();
+        let r2 = MaskedGrid2D::new(Grid2D::new(d2, vec![1, 2, 3, 42]).unwrap(), Some(m2)).unwrap();
 
-        assert!(!grid_eq_with_no_data(&r1, &r2));
+        assert!(!masked_grid_eq(&r1, &r2));
     }
 
     #[test]
-    fn test_grid_eq_with_no_data_integral_fail_data_ndv() {
+    fn test_masked_grid_eq_fail_mask() {
         let d1: GridShape2D = [2, 2].into();
         let d2: GridShape2D = [2, 2].into();
 
-        let ndv1 = 42;
-        let ndv2 = 42;
+        let m1 = Grid2D::new(d1, vec![true, true, true, true]).unwrap();
+        let m2 = Grid2D::new(d2, vec![true, true, true, false]).unwrap();
 
-        let r1 = Grid2D::new(d1, vec![42, 2, 3, 42], Some(ndv1)).unwrap();
-        let r2 = Grid2D::new(d2, vec![1, 2, 3, 42], Some(ndv2)).unwrap();
+        let r1 = MaskedGrid2D::new(Grid2D::new(d1, vec![1, 2, 3, 42]).unwrap(), Some(m1)).unwrap();
+        let r2 = MaskedGrid2D::new(Grid2D::new(d2, vec![1, 2, 3, 42]).unwrap(), Some(m2)).unwrap();
 
-        assert!(!grid_eq_with_no_data(&r1, &r2));
+        assert!(!masked_grid_eq(&r1, &r2));
     }
-
-    #[test]
-    fn test_grid_eq_with_no_data_float_none_ok() {
-        let d1: GridShape2D = [2, 2].into();
-        let d2: GridShape2D = [2, 2].into();
-
-        let r1 = Grid2D::new(d1, vec![1_f32, 2_f32, 3_f32, 42_f32], None).unwrap();
-        let r2 = Grid2D::new(d2, vec![1_f32, 2_f32, 3_f32, 42_f32], None).unwrap();
-
-        assert!(grid_eq_with_no_data(&r1, &r2));
-    }
-
-    #[test]
-    fn test_grid_eq_with_no_data_float_some_ok() {
-        let d1: GridShape2D = [2, 2].into();
-        let d2: GridShape2D = [2, 2].into();
-
-        let ndv1 = 42_f32;
-        let ndv2 = 42_f32;
-
-        let r1 = Grid2D::new(d1, vec![1_f32, 2_f32, 3_f32, 42_f32], Some(ndv1)).unwrap();
-        let r2 = Grid2D::new(d2, vec![1_f32, 2_f32, 3_f32, 42_f32], Some(ndv2)).unwrap();
-
-        assert!(grid_eq_with_no_data(&r1, &r2));
-    }
-
-    #[test]
-    fn test_grid_eq_with_no_data_float_nan_ok() {
-        let d1: GridShape2D = [2, 2].into();
-        let d2: GridShape2D = [2, 2].into();
-
-        let ndv1 = f32::NAN;
-        let ndv2 = f32::NAN;
-
-        let r1 = Grid2D::new(d1, vec![1_f32, 2_f32, 3_f32, ndv1], Some(ndv1)).unwrap();
-        let r2 = Grid2D::new(d2, vec![1_f32, 2_f32, 3_f32, ndv1], Some(ndv2)).unwrap();
-
-        assert!(grid_eq_with_no_data(&r1, &r2));
-    }
-
-    #[test]
-    fn test_grid_eq_with_no_data_float_fail_dim() {
-        let d1: GridShape2D = [4, 1].into();
-        let d2: GridShape2D = [2, 2].into();
-
-        let r1 = Grid2D::new(d1, vec![1_f32, 2_f32, 3_f32, 42_f32], None).unwrap();
-        let r2 = Grid2D::new(d2, vec![1_f32, 2_f32, 3_f32, 42_f32], None).unwrap();
-
-        assert!(!grid_eq_with_no_data(&r1, &r2));
-    }
-
-    #[test]
-    fn test_grid_eq_with_no_data_float_fail_ndv() {
-        let d1: GridShape2D = [2, 2].into();
-        let d2: GridShape2D = [2, 2].into();
-
-        let ndv1 = 42_f32;
-        let ndv2 = 1_f32;
-
-        let r1 = Grid2D::new(d1, vec![1_f32, 2_f32, 3_f32, 42_f32], Some(ndv1)).unwrap();
-        let r2 = Grid2D::new(d2, vec![1_f32, 2_f32, 3_f32, 42_f32], Some(ndv2)).unwrap();
-
-        assert!(!grid_eq_with_no_data(&r1, &r2));
-    }
-
-    #[test]
-    fn test_grid_eq_with_no_data_float_fail_ndv_nan1() {
-        let d1: GridShape2D = [2, 2].into();
-        let d2: GridShape2D = [2, 2].into();
-
-        let ndv1 = f32::NAN;
-        let ndv2 = 42_f32;
-
-        let r1 = Grid2D::new(d1, vec![1_f32, 2_f32, 3_f32, 42_f32], Some(ndv1)).unwrap();
-        let r2 = Grid2D::new(d2, vec![1_f32, 2_f32, 3_f32, 42_f32], Some(ndv2)).unwrap();
-
-        assert!(!grid_eq_with_no_data(&r1, &r2));
-    }
-
-    #[test]
-    fn test_grid_eq_with_no_data_float_fail_ndv_nan2() {
-        let d1: GridShape2D = [2, 2].into();
-        let d2: GridShape2D = [2, 2].into();
-
-        let ndv1 = 42_f32;
-        let ndv2 = f32::NAN;
-
-        let r1 = Grid2D::new(d1, vec![1_f32, 2_f32, 3_f32, 42_f32], Some(ndv1)).unwrap();
-        let r2 = Grid2D::new(d2, vec![1_f32, 2_f32, 3_f32, 42_f32], Some(ndv2)).unwrap();
-
-        assert!(!grid_eq_with_no_data(&r1, &r2));
-    }
-
-    #[test]
-    fn test_grid_eq_with_no_data_float_fail_data() {
-        let d1: GridShape2D = [2, 2].into();
-        let d2: GridShape2D = [2, 2].into();
-
-        let ndv1 = 42_f32;
-        let ndv2 = 42_f32;
-
-        let r1 = Grid2D::new(d1, vec![2_f32, 2_f32, 3_f32, 42_f32], Some(ndv1)).unwrap();
-        let r2 = Grid2D::new(d2, vec![1_f32, 2_f32, 3_f32, 42_f32], Some(ndv2)).unwrap();
-
-        assert!(!grid_eq_with_no_data(&r1, &r2));
-    }
-
-    #[test]
-    fn test_grid_eq_with_no_data_float_fail_data_nan1() {
-        let d1: GridShape2D = [2, 2].into();
-        let d2: GridShape2D = [2, 2].into();
-
-        let ndv1 = f32::NAN;
-        let ndv2 = f32::NAN;
-
-        let r1 = Grid2D::new(d1, vec![2_f32, 2_f32, 3_f32, 42_f32], Some(ndv1)).unwrap();
-        let r2 = Grid2D::new(d2, vec![1_f32, 2_f32, 3_f32, f32::NAN], Some(ndv2)).unwrap();
-
-        assert!(!grid_eq_with_no_data(&r1, &r2));
-    }
-
-    #[test]
-    fn test_grid_eq_with_no_data_float_fail_data_nan2() {
-        let d1: GridShape2D = [2, 2].into();
-        let d2: GridShape2D = [2, 2].into();
-
-        let ndv1 = f32::NAN;
-        let ndv2 = f32::NAN;
-
-        let r1 = Grid2D::new(d1, vec![2_f32, 2_f32, 3_f32, f32::NAN], Some(ndv1)).unwrap();
-        let r2 = Grid2D::new(d2, vec![1_f32, 2_f32, 3_f32, 42_f32], Some(ndv2)).unwrap();
-
-        assert!(!grid_eq_with_no_data(&r1, &r2));
-    }
-    */
 }
