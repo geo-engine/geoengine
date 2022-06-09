@@ -9,7 +9,7 @@ use crate::util::Result;
 
 use super::{
     grid_traits::{ChangeGridBounds, GridShapeAccess},
-    BoundedGrid, GridBoundingBox, GridBounds, GridContains, GridIdx, GridIdx2D, GridIndexAccess,
+    GridBoundingBox, GridBounds, GridContains, GridIdx, GridIdx2D, GridIndexAccess,
     GridIndexAccessMut, GridSize, GridSpaceToLinearSpace, NoDataValue,
 };
 
@@ -88,14 +88,17 @@ impl GridSpaceToLinearSpace for GridShape1D {
     }
 
     fn linear_space_index_unchecked<I: Into<GridIdx<Self::IndexArray>>>(&self, index: I) -> usize {
-        let GridIdx([x]) = index.into();
+        let real_idx = index.into();
+        debug_assert!(self.contains(&real_idx));
+
+        let GridIdx([x]) = real_idx;
         x as usize
     }
 
     fn linear_space_index<I: Into<GridIdx<Self::IndexArray>>>(&self, index: I) -> Result<usize> {
         let real_index = index.into();
         ensure!(
-            self.bounding_box().contains(&real_index),
+            self.contains(&real_index),
             error::GridIndexOutOfBounds {
                 index: Vec::from(real_index.0),
                 min_index: Vec::from(self.min_index().0),
@@ -107,7 +110,9 @@ impl GridSpaceToLinearSpace for GridShape1D {
     }
 
     fn grid_idx_unchecked(&self, linear_idx: usize) -> GridIdx<[isize; 1]> {
-        GridIdx([(linear_idx) as isize])
+        let grid_idx = GridIdx([(linear_idx) as isize]);
+        debug_assert!(self.contains(&grid_idx));
+        grid_idx
     }
 }
 
@@ -147,7 +152,9 @@ impl GridSpaceToLinearSpace for GridShape2D {
     }
 
     fn linear_space_index_unchecked<I: Into<GridIdx<Self::IndexArray>>>(&self, index: I) -> usize {
-        let GridIdx([y, x]) = index.into();
+        let real_idx = index.into();
+        debug_assert!(self.contains(&real_idx));
+        let GridIdx([y, x]) = real_idx;
         let [stride_y, stride_x] = self.strides();
         y as usize * stride_y + x as usize * stride_x
     }
@@ -155,7 +162,7 @@ impl GridSpaceToLinearSpace for GridShape2D {
     fn linear_space_index<I: Into<GridIdx<Self::IndexArray>>>(&self, index: I) -> Result<usize> {
         let real_index = index.into();
         ensure!(
-            self.bounding_box().contains(&real_index),
+            self.contains(&real_index),
             error::GridIndexOutOfBounds {
                 index: Vec::from(real_index.0),
                 min_index: Vec::from(self.min_index().0),
@@ -167,10 +174,12 @@ impl GridSpaceToLinearSpace for GridShape2D {
 
     fn grid_idx_unchecked(&self, linear_idx: usize) -> GridIdx<[isize; 2]> {
         let [stride_y, _stride_x] = self.strides();
-        GridIdx([
+        let grid_idx = GridIdx([
             (linear_idx / stride_y) as isize,
             (linear_idx % stride_y) as isize,
-        ])
+        ]);
+        debug_assert!(self.contains(&grid_idx));
+        grid_idx
     }
 }
 
@@ -214,7 +223,10 @@ impl GridSpaceToLinearSpace for GridShape3D {
     }
 
     fn linear_space_index_unchecked<I: Into<GridIdx<Self::IndexArray>>>(&self, index: I) -> usize {
-        let GridIdx([z, y, x]) = index.into();
+        let real_idx = index.into();
+        debug_assert!(self.contains(&real_idx));
+        let GridIdx([z, y, x]) = real_idx;
+
         let [stride_z, stride_y, stride_x] = self.strides();
         z as usize * stride_z + y as usize * stride_y + x as usize * stride_x
     }
@@ -222,7 +234,7 @@ impl GridSpaceToLinearSpace for GridShape3D {
     fn linear_space_index<I: Into<GridIdx<Self::IndexArray>>>(&self, index: I) -> Result<usize> {
         let real_index = index.into();
         ensure!(
-            self.bounding_box().contains(&real_index),
+            self.contains(&real_index),
             error::GridIndexOutOfBounds {
                 index: Vec::from(real_index.0),
                 min_index: Vec::from(self.min_index().0),
@@ -234,11 +246,13 @@ impl GridSpaceToLinearSpace for GridShape3D {
 
     fn grid_idx_unchecked(&self, linear_idx: usize) -> GridIdx<[isize; 3]> {
         let [stride_z, stride_y, _stride_x] = self.strides();
-        GridIdx([
+        let grid_idx = GridIdx([
             (linear_idx / stride_z) as isize,
             ((linear_idx % stride_z) / stride_y) as isize,
             (linear_idx % stride_y) as isize,
-        ])
+        ]);
+        debug_assert!(self.contains(&grid_idx));
+        grid_idx
     }
 }
 
@@ -450,7 +464,9 @@ where
 #[cfg(test)]
 mod tests {
     use crate::raster::{
-        BoundedGrid, GridBoundingBox2D, GridBounds, GridIdx, GridShape, GridSpaceToLinearSpace,
+        BoundedGrid, GridBoundingBox1D, GridBoundingBox2D, GridBoundingBox3D, GridBounds,
+        GridContains, GridIdx, GridIdx1D, GridIdx2D, GridIdx3D, GridShape, GridShape1D,
+        GridShape2D, GridShape3D, GridSpaceToLinearSpace,
     };
 
     use super::{Grid2D, Grid3D, GridIndexAccess, GridIndexAccessMut};
@@ -545,8 +561,101 @@ mod tests {
         let exp_bbox = GridBoundingBox2D::new([0, 0], [2, 1]).unwrap();
         assert_eq!(raster2d.bounding_box(), exp_bbox);
     }
+
+    #[test]
+    fn grid_shape_1d() {
+        let grid_shp: GridShape1D = [3].into();
+
+        assert_eq!(grid_shp.min_index(), GridIdx([0]));
+        assert_eq!(grid_shp.max_index(), GridIdx([2]));
+
+        assert!(grid_shp.contains(&GridIdx1D::from([0])));
+        assert!(grid_shp.contains(&GridIdx1D::from([2])));
+        assert!(!grid_shp.contains(&GridIdx1D::from([3])));
+
+        let exp_bbox = GridBoundingBox1D::new([0], [2]).unwrap();
+        assert_eq!(grid_shp.bounding_box(), exp_bbox);
+    }
+
+    #[test]
+    fn grid_shape_2d() {
+        let grid_shp: GridShape2D = [3, 2].into();
+
+        assert_eq!(grid_shp.min_index(), GridIdx([0, 0]));
+        assert_eq!(grid_shp.max_index(), GridIdx([2, 1]));
+
+        assert!(grid_shp.contains(&GridIdx2D::from([0, 0])));
+        assert!(grid_shp.contains(&GridIdx2D::from([2, 1])));
+        assert!(!grid_shp.contains(&GridIdx2D::from([3, 0])));
+        assert!(!grid_shp.contains(&GridIdx2D::from([2, 2])));
+
+        let exp_bbox = GridBoundingBox2D::new([0, 0], [2, 1]).unwrap();
+        assert_eq!(grid_shp.bounding_box(), exp_bbox);
+    }
+
+    #[test]
+    fn grid_shape_3d() {
+        let grid_shp: GridShape3D = [3, 2, 2].into();
+
+        assert_eq!(grid_shp.min_index(), GridIdx([0, 0, 0]));
+        assert_eq!(grid_shp.max_index(), GridIdx([2, 1, 1]));
+
+        assert!(grid_shp.contains(&GridIdx3D::from([0, 0, 0])));
+        assert!(grid_shp.contains(&GridIdx3D::from([2, 1, 1])));
+        assert!(!grid_shp.contains(&GridIdx3D::from([3, 0, 0])));
+        assert!(!grid_shp.contains(&GridIdx3D::from([2, 1, 2])));
+        assert!(!grid_shp.contains(&GridIdx3D::from([2, 2, 1])));
+
+        let exp_bbox = GridBoundingBox3D::new([0, 0, 0], [2, 1, 1]).unwrap();
+        assert_eq!(grid_shp.bounding_box(), exp_bbox);
+    }
+
     #[test]
     fn grid_shape_1d_linear_space_and_back() {
+        let a = GridShape::new([42]);
+
+        let l = a.linear_space_index([1]).unwrap();
+        assert_eq!(l, 1);
+        assert_eq!(a.grid_idx(l).unwrap(), [1].into());
+
+        let l = a.linear_space_index([42]);
+        assert!(l.is_err());
+    }
+
+    #[test]
+    fn grid_shape_2d_linear_space_and_back() {
+        let a = GridShape::new([42, 42]);
+        let l = a.linear_space_index([1, 1]).unwrap();
+        assert_eq!(l, 43);
+        assert_eq!(a.grid_idx(l).unwrap(), [1, 1].into());
+
+        let l = a.linear_space_index([42, 0]);
+        assert!(l.is_err());
+
+        let l = a.linear_space_index([0, 42]);
+        assert!(l.is_err());
+    }
+
+    #[test]
+    #[allow(clippy::identity_op)]
+    fn grid_shape_3d_linear_space_and_back() {
+        let a = GridShape::new([42, 42, 42]);
+        let l = a.linear_space_index([1, 1, 1]).unwrap();
+        assert_eq!(l, 1 * 42 * 42 + 1 * 42 + 1);
+        assert_eq!(a.grid_idx(l).unwrap(), [1, 1, 1].into());
+
+        let l = a.linear_space_index([42, 0, 0]);
+        assert!(l.is_err());
+
+        let l = a.linear_space_index([0, 42, 0]);
+        assert!(l.is_err());
+
+        let l = a.linear_space_index([0, 0, 42]);
+        assert!(l.is_err());
+    }
+
+    #[test]
+    fn grid_shape_1d_linear_space_unchecked_and_back() {
         let a = GridShape::new([42]);
         let l = a.linear_space_index_unchecked([1]);
         assert_eq!(l, 1);
@@ -554,7 +663,7 @@ mod tests {
     }
 
     #[test]
-    fn grid_shape_2d_linear_space_and_back() {
+    fn grid_shape_2d_linear_space_unchecked_and_back() {
         let a = GridShape::new([42, 42]);
         let l = a.linear_space_index_unchecked([1, 1]);
         assert_eq!(l, 43);
@@ -563,7 +672,7 @@ mod tests {
 
     #[test]
     #[allow(clippy::identity_op)]
-    fn grid_shape_3d_linear_space_and_back() {
+    fn grid_shape_3d_linear_space_unchecked_and_back() {
         let a = GridShape::new([42, 42, 42]);
         let l = a.linear_space_index_unchecked([1, 1, 1]);
         assert_eq!(l, 1 * 42 * 42 + 1 * 42 + 1);
