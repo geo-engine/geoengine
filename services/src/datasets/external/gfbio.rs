@@ -212,6 +212,8 @@ impl ExternalDatasetProvider for GfbioDataProvider {
                         .filter(|(_, name)| name.starts_with("/DataSets/DataSet/Units/Unit/"))
                         .map(|(_, name)| (name.clone(), FeatureDataType::Text))
                         .collect(),
+                    time: None,
+                    bbox: None,
                 }),
                 symbology: None,
             })
@@ -342,6 +344,8 @@ impl MetaDataProvider<OgrSourceDataset, VectorResultDescriptor, VectorQueryRecta
                     .filter(|(_, name)| name.starts_with("/DataSets/DataSet/Units/Unit"))
                     .map(|(_, name)| (name.clone(), FeatureDataType::Text))
                     .collect(),
+                time: None,
+                bbox: None,
             },
             phantom: PhantomData::default(),
         }))
@@ -533,6 +537,8 @@ mod tests {
                         .iter()
                         .cloned()
                         .collect(),
+                        time: None,
+                        bbox: None,
                 }),
                 symbology: None,
             }]
@@ -600,7 +606,9 @@ mod tests {
                     ]
                     .iter()
                     .cloned()
-                    .collect()
+                    .collect(),
+                    time: None,
+                    bbox: None,
             };
 
             let result_descriptor = meta.result_descriptor().await.map_err(|e| e.to_string())?;

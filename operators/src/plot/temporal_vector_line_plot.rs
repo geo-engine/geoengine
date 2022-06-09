@@ -85,9 +85,13 @@ impl PlotOperator for FeatureAttributeValuesOverTime {
             error::InvalidFeatureDataType,
         );
 
+        let in_desc = source.result_descriptor();
+
         Ok(InitializedFeatureAttributeValuesOverTime {
             result_descriptor: PlotResultDescriptor {
-                spatial_reference: source.result_descriptor().spatial_reference,
+                spatial_reference: in_desc.spatial_reference,
+                time: in_desc.time,
+                bbox: in_desc.bbox,
             },
             vector_source: source,
             state: self.params,

@@ -419,6 +419,8 @@ mod tests {
                     spatial_reference: SpatialReference::epsg_4326().into(),
                     measurement: Measurement::Unitless,
                     no_data_value: Some(-9999.0),
+                    time: None,
+                    bbox: None,
                 },
                 params: GdalDatasetParameters {
                     file_path: Path::new("foo/bar.tif").into(),

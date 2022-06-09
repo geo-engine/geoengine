@@ -166,34 +166,70 @@ impl VectorOperator for TimeShift {
             (
                 RasterOrVectorOperator::Vector(source),
                 TimeShiftParams::Relative { granularity, value },
-            ) if value.is_positive() => Ok(Box::new(InitializedVectorTimeShift {
-                source: source.initialize(context).await?,
-                shift: RelativeForwardShift {
+            ) if value.is_positive() => {
+                let source = source.initialize(context).await?;
+
+                let shift = RelativeForwardShift {
                     step: TimeStep {
                         granularity,
                         step: value.unsigned_abs(),
                     },
-                },
-            })),
+                };
+
+                let mut result_descriptor = source.result_descriptor().clone();
+                if let Some(time) = result_descriptor.time {
+                    result_descriptor.time = shift.shift(time).map(|r| r.0).ok();
+                }
+
+                Ok(Box::new(InitializedVectorTimeShift {
+                    source,
+                    result_descriptor,
+                    shift,
+                }))
+            }
             (
                 RasterOrVectorOperator::Vector(source),
                 TimeShiftParams::Relative { granularity, value },
-            ) => Ok(Box::new(InitializedVectorTimeShift {
-                source: source.initialize(context).await?,
-                shift: RelativeBackwardShift {
+            ) => {
+                let source = source.initialize(context).await?;
+
+                let shift = RelativeBackwardShift {
                     step: TimeStep {
                         granularity,
                         step: value.unsigned_abs(),
                     },
-                },
-            })),
+                };
+
+                let mut result_descriptor = source.result_descriptor().clone();
+                if let Some(time) = result_descriptor.time {
+                    result_descriptor.time = shift.shift(time).map(|r| r.0).ok();
+                }
+
+                Ok(Box::new(InitializedVectorTimeShift {
+                    source,
+                    result_descriptor,
+                    shift,
+                }))
+            }
             (
                 RasterOrVectorOperator::Vector(source),
                 TimeShiftParams::Absolute { time_interval },
-            ) => Ok(Box::new(InitializedVectorTimeShift {
-                source: source.initialize(context).await?,
-                shift: AbsoluteShift { time_interval },
-            })),
+            ) => {
+                let source = source.initialize(context).await?;
+
+                let shift = AbsoluteShift { time_interval };
+
+                let mut result_descriptor = source.result_descriptor().clone();
+                if let Some(time) = result_descriptor.time {
+                    result_descriptor.time = shift.shift(time).map(|r| r.0).ok();
+                }
+
+                Ok(Box::new(InitializedVectorTimeShift {
+                    source,
+                    result_descriptor,
+                    shift,
+                }))
+            }
             (RasterOrVectorOperator::Raster(_), _) => Err(TimeShiftError::UnmatchedOutput.into()),
         }
     }
@@ -210,34 +246,70 @@ impl RasterOperator for TimeShift {
             (
                 RasterOrVectorOperator::Raster(source),
                 TimeShiftParams::Relative { granularity, value },
-            ) if value.is_positive() => Ok(Box::new(InitializedRasterTimeShift {
-                source: source.initialize(context).await?,
-                shift: RelativeForwardShift {
+            ) if value.is_positive() => {
+                let source = source.initialize(context).await?;
+
+                let shift = RelativeForwardShift {
                     step: TimeStep {
                         granularity,
                         step: value.unsigned_abs(),
                     },
-                },
-            })),
+                };
+
+                let mut result_descriptor = source.result_descriptor().clone();
+                if let Some(time) = result_descriptor.time {
+                    result_descriptor.time = shift.shift(time).map(|r| r.0).ok();
+                }
+
+                Ok(Box::new(InitializedRasterTimeShift {
+                    source,
+                    result_descriptor,
+                    shift,
+                }))
+            }
             (
                 RasterOrVectorOperator::Raster(source),
                 TimeShiftParams::Relative { granularity, value },
-            ) => Ok(Box::new(InitializedRasterTimeShift {
-                source: source.initialize(context).await?,
-                shift: RelativeBackwardShift {
+            ) => {
+                let source = source.initialize(context).await?;
+
+                let shift = RelativeBackwardShift {
                     step: TimeStep {
                         granularity,
                         step: value.unsigned_abs(),
                     },
-                },
-            })),
+                };
+
+                let mut result_descriptor = source.result_descriptor().clone();
+                if let Some(time) = result_descriptor.time {
+                    result_descriptor.time = shift.shift(time).map(|r| r.0).ok();
+                }
+
+                Ok(Box::new(InitializedRasterTimeShift {
+                    source,
+                    result_descriptor,
+                    shift,
+                }))
+            }
             (
                 RasterOrVectorOperator::Raster(source),
                 TimeShiftParams::Absolute { time_interval },
-            ) => Ok(Box::new(InitializedRasterTimeShift {
-                source: source.initialize(context).await?,
-                shift: AbsoluteShift { time_interval },
-            })),
+            ) => {
+                let source = source.initialize(context).await?;
+
+                let shift = AbsoluteShift { time_interval };
+
+                let mut result_descriptor = source.result_descriptor().clone();
+                if let Some(time) = result_descriptor.time {
+                    result_descriptor.time = shift.shift(time).map(|r| r.0).ok();
+                }
+
+                Ok(Box::new(InitializedRasterTimeShift {
+                    source,
+                    result_descriptor,
+                    shift,
+                }))
+            }
             (RasterOrVectorOperator::Vector(_), _) => Err(TimeShiftError::UnmatchedOutput.into()),
         }
     }
@@ -245,11 +317,13 @@ impl RasterOperator for TimeShift {
 
 pub struct InitializedVectorTimeShift<Shift: TimeShiftOperation> {
     source: Box<dyn InitializedVectorOperator>,
+    result_descriptor: VectorResultDescriptor,
     shift: Shift,
 }
 
 pub struct InitializedRasterTimeShift<Shift: TimeShiftOperation> {
     source: Box<dyn InitializedRasterOperator>,
+    result_descriptor: RasterResultDescriptor,
     shift: Shift,
 }
 
@@ -257,7 +331,7 @@ impl<Shift: TimeShiftOperation + 'static> InitializedVectorOperator
     for InitializedVectorTimeShift<Shift>
 {
     fn result_descriptor(&self) -> &VectorResultDescriptor {
-        self.source.result_descriptor()
+        &self.result_descriptor
     }
 
     fn query_processor(&self) -> Result<TypedVectorQueryProcessor> {
@@ -276,7 +350,7 @@ impl<Shift: TimeShiftOperation + 'static> InitializedRasterOperator
     for InitializedRasterTimeShift<Shift>
 {
     fn result_descriptor(&self) -> &RasterResultDescriptor {
-        self.source.result_descriptor()
+        &self.result_descriptor
     }
 
     fn query_processor(&self) -> Result<TypedRasterQueryProcessor> {
@@ -784,6 +858,8 @@ mod tests {
                     spatial_reference: SpatialReference::epsg_4326().into(),
                     measurement: Measurement::Unitless,
                     no_data_value: Some(no_data_value.as_()),
+                    time: None,
+                    bbox: None,
                 },
             },
         }
@@ -945,6 +1021,8 @@ mod tests {
                     spatial_reference: SpatialReference::epsg_4326().into(),
                     measurement: Measurement::Unitless,
                     no_data_value: Some(no_data_value.as_()),
+                    time: None,
+                    bbox: None,
                 },
             },
         }

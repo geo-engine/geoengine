@@ -10,7 +10,8 @@ use futures::stream::BoxStream;
 use futures::StreamExt;
 use geoengine_datatypes::plots::{AreaLineChart, Plot, PlotData};
 use geoengine_datatypes::primitives::{
-    Measurement, TimeInstance, TimeInterval, VectorQueryRectangle,
+    AxisAlignedRectangle, BoundingBox2D, Measurement, TimeInstance, TimeInterval,
+    VectorQueryRectangle,
 };
 use geoengine_datatypes::raster::{Pixel, RasterTile2D};
 use serde::{Deserialize, Serialize};
@@ -55,9 +56,16 @@ impl PlotOperator for MeanRasterPixelValuesOverTime {
         context: &dyn ExecutionContext,
     ) -> Result<Box<dyn InitializedPlotOperator>> {
         let raster = self.sources.raster.initialize(context).await?;
+
+        let in_desc = raster.result_descriptor();
+
         let initialized_operator = InitializedMeanRasterPixelValuesOverTime {
             result_descriptor: PlotResultDescriptor {
-                spatial_reference: raster.result_descriptor().spatial_reference,
+                spatial_reference: in_desc.spatial_reference,
+                time: in_desc.time,
+                bbox: in_desc
+                    .bbox
+                    .and_then(|p| BoundingBox2D::new(p.lower_left(), p.upper_right()).ok()),
             },
             raster,
             state: self.params,
@@ -412,6 +420,8 @@ mod tests {
                     spatial_reference: SpatialReference::epsg_4326().into(),
                     measurement: Measurement::Unitless,
                     no_data_value: no_data_value.map(AsPrimitive::as_),
+                    time: None,
+                    bbox: None,
                 },
             },
         }

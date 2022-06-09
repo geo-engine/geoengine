@@ -62,6 +62,8 @@ pub fn create_ndvi_meta_data() -> GdalMetaDataRegular {
             spatial_reference: SpatialReference::epsg_4326().into(),
             measurement: Measurement::Unitless,
             no_data_value,
+            time: None,
+            bbox: None,
         },
     }
 }
@@ -122,6 +124,8 @@ pub fn raster_descriptor_from_dataset(
         spatial_reference: spatial_ref.into(),
         measurement: measurement_from_rasterband(dataset, band)?,
         no_data_value: rasterband.no_data_value(),
+        time: None,
+        bbox: None,
     })
 }
 

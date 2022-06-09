@@ -72,8 +72,21 @@ impl VectorOperator for TimeProjection {
             // use UTC 0 as default
             .unwrap_or_else(|| TimeInstance::from_millis_unchecked(0));
 
+        let mut result_descriptor = source.result_descriptor().clone();
+        if let Some(time) = result_descriptor.time {
+            let start = self
+                .params
+                .step
+                .snap_relative(step_reference, time.start())?;
+            let end =
+                (self.params.step.snap_relative(step_reference, time.end())? + self.params.step)?;
+
+            result_descriptor.time = Some(TimeInterval::new(start, end)?);
+        }
+
         let initialized_operator = InitializedVectorTimeProjection {
             source,
+            result_descriptor,
             step: self.params.step,
             step_reference,
         };
@@ -84,13 +97,14 @@ impl VectorOperator for TimeProjection {
 
 pub struct InitializedVectorTimeProjection {
     source: Box<dyn InitializedVectorOperator>,
+    result_descriptor: VectorResultDescriptor,
     step: TimeStep,
     step_reference: TimeInstance,
 }
 
 impl InitializedVectorOperator for InitializedVectorTimeProjection {
     fn result_descriptor(&self) -> &VectorResultDescriptor {
-        self.source.result_descriptor()
+        &self.result_descriptor
     }
 
     fn query_processor(&self) -> Result<TypedVectorQueryProcessor> {

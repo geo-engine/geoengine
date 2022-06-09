@@ -68,6 +68,8 @@ impl PangeaMetaData {
             spatial_reference: SpatialReference::epsg_4326().into(),
             data_type: feature_type,
             columns: column_map,
+            time: None,
+            bbox: None,
         }
     }
 

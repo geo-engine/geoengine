@@ -87,8 +87,13 @@ impl VectorOperator for PointInPolygonFilter {
             }
         );
 
+        let in_desc = points.result_descriptor().clone();
+
+        let mut out_desc = in_desc;
+        out_desc.bbox = polygons.result_descriptor().bbox;
+
         let initialized_operator = InitializedPointInPolygonFilter {
-            result_descriptor: points.result_descriptor().clone(),
+            result_descriptor: out_desc,
             points,
             polygons,
         };

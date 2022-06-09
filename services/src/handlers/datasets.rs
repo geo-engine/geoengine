@@ -438,6 +438,8 @@ fn auto_detect_meta_data_definition(main_file_path: &Path) -> Result<MetaDataDef
                 .into_iter()
                 .filter_map(|(k, v)| v.try_into().map(|v| (k, v)).ok()) // ignore all columns here that don't have a corresponding type in our collections
                 .collect(),
+            time: None,
+            bbox: None,
         },
         phantom: Default::default(),
     }))
@@ -754,6 +756,8 @@ mod tests {
             data_type: VectorDataType::MultiPoint,
             spatial_reference: SpatialReferenceOption::Unreferenced,
             columns: Default::default(),
+            time: None,
+            bbox: None,
         };
 
         let id = DatasetId::Internal {
@@ -859,7 +863,9 @@ mod tests {
                     "type": "vector",
                     "dataType": "MultiPoint",
                     "spatialReference": "",
-                    "columns": {}
+                    "columns": {},
+                    "time": null,
+                    "bbox": null
                 },
                 "symbology": {
                     "type": "point",
@@ -896,7 +902,9 @@ mod tests {
                     "type": "vector",
                     "dataType": "MultiPoint",
                     "spatialReference": "",
-                    "columns": {}
+                    "columns": {},
+                    "time": null,
+                    "bbox": null
                 },
                 "symbology": null
             }])
@@ -1136,6 +1144,8 @@ mod tests {
                     .iter()
                     .cloned()
                     .collect(),
+                    time: None,
+                    bbox: None,
                 },
                 phantom: Default::default(),
             })
@@ -1195,6 +1205,8 @@ mod tests {
                     .iter()
                     .cloned()
                     .collect(),
+                    time: None,
+                    bbox: None,
                 },
                 phantom: Default::default()
             })
@@ -1254,6 +1266,8 @@ mod tests {
                     .iter()
                     .cloned()
                     .collect(),
+                    time: None,
+                    bbox: None,
                 },
                 phantom: Default::default(),
             })
@@ -1313,6 +1327,8 @@ mod tests {
                     .iter()
                     .cloned()
                     .collect(),
+                    time: None,
+                    bbox: None,
                 },
                 phantom: Default::default(),
             })
@@ -1366,6 +1382,8 @@ mod tests {
                     .iter()
                     .cloned()
                     .collect(),
+                    time: None,
+                    bbox: None,
                 },
                 phantom: Default::default()
             })
@@ -1424,6 +1442,8 @@ mod tests {
                     .iter()
                     .cloned()
                     .collect(),
+                    time: None,
+                    bbox: None,
                 },
                 phantom: Default::default()
             })
@@ -1440,6 +1460,8 @@ mod tests {
             data_type: VectorDataType::Data,
             spatial_reference: SpatialReferenceOption::Unreferenced,
             columns: Default::default(),
+            time: None,
+            bbox: None,
         };
 
         let ds = AddDataset {
@@ -1501,7 +1523,9 @@ mod tests {
                     "type": "vector",
                     "dataType": "Data",
                     "spatialReference": "",
-                    "columns": {}
+                    "columns": {},
+                    "time": null,
+                    "bbox": null
                 },
                 "sourceOperator": "OgrSource",
                 "symbology": null,

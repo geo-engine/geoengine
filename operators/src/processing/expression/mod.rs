@@ -8,7 +8,11 @@ use crate::{
     util::{input::float_with_nan, Result},
 };
 use async_trait::async_trait;
-use geoengine_datatypes::{dataset::DatasetId, primitives::Measurement, raster::RasterDataType};
+use geoengine_datatypes::{
+    dataset::DatasetId,
+    primitives::{partitions_extent, time_interval_extent, Measurement},
+    raster::RasterDataType,
+};
 use num_traits::AsPrimitive;
 use serde::{Deserialize, Serialize};
 use snafu::{ensure, OptionExt};
@@ -243,10 +247,12 @@ impl RasterOperator for Expression {
 
         let spatial_reference = sources.a.result_descriptor().spatial_reference;
 
-        for other_spatial_reference in sources
+        let in_descriptors = sources
             .iter()
-            .skip(1)
-            .map(|source| source.result_descriptor().spatial_reference)
+            .map(InitializedRasterOperator::result_descriptor)
+            .collect::<Vec<_>>();
+
+        for other_spatial_reference in in_descriptors.iter().skip(1).map(|rd| rd.spatial_reference)
         {
             ensure!(
                 spatial_reference == other_spatial_reference,
@@ -257,6 +263,9 @@ impl RasterOperator for Expression {
             );
         }
 
+        let time = time_interval_extent(in_descriptors.iter().map(|d| d.time));
+        let bbox = partitions_extent(in_descriptors.iter().map(|d| d.bbox));
+
         let result_descriptor = RasterResultDescriptor {
             data_type: self.params.output_type,
             spatial_reference,
@@ -266,6 +275,8 @@ impl RasterOperator for Expression {
                 .as_ref()
                 .map_or(Measurement::Unitless, Measurement::clone),
             no_data_value: Some(self.params.output_no_data_value), // TODO: is it possible to have none?
+            time,
+            bbox,
         };
 
         let initialized_operator = InitializedExpression {
@@ -1144,6 +1155,8 @@ mod tests {
                     spatial_reference: SpatialReference::epsg_4326().into(),
                     measurement: Measurement::Unitless,
                     no_data_value: no_data_value.map(f64::from),
+                    time: None,
+                    bbox: None,
                 },
             },
         }

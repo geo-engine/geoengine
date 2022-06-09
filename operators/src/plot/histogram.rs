@@ -18,7 +18,8 @@ use futures::stream::BoxStream;
 use futures::{StreamExt, TryFutureExt};
 use geoengine_datatypes::plots::{Plot, PlotData};
 use geoengine_datatypes::primitives::{
-    DataRef, FeatureDataRef, FeatureDataType, Geometry, Measurement, VectorQueryRectangle,
+    AxisAlignedRectangle, BoundingBox2D, DataRef, FeatureDataRef, FeatureDataType, Geometry,
+    Measurement, VectorQueryRectangle,
 };
 use geoengine_datatypes::raster::{Pixel, RasterTile2D};
 use geoengine_datatypes::{
@@ -81,9 +82,15 @@ impl PlotOperator for Histogram {
                 );
 
                 let initialized = raster_source.initialize(context).await?;
+
+                let in_desc = initialized.result_descriptor();
                 InitializedHistogram::new(
                     PlotResultDescriptor {
-                        spatial_reference: initialized.result_descriptor().spatial_reference,
+                        spatial_reference: in_desc.spatial_reference,
+                        time: in_desc.time,
+                        bbox: in_desc
+                            .bbox
+                            .and_then(|p| BoundingBox2D::new(p.lower_left(), p.upper_right()).ok()),
                     },
                     self.params,
                     initialized,
@@ -124,9 +131,13 @@ impl PlotOperator for Histogram {
                     }
                 }
 
+                let in_desc = vector_source.result_descriptor();
+
                 InitializedHistogram::new(
                     PlotResultDescriptor {
-                        spatial_reference: vector_source.result_descriptor().spatial_reference,
+                        spatial_reference: in_desc.spatial_reference,
+                        time: in_desc.time,
+                        bbox: in_desc.bbox,
                     },
                     self.params,
                     vector_source,
@@ -736,6 +747,8 @@ mod tests {
                     spatial_reference: SpatialReference::epsg_4326().into(),
                     measurement: Measurement::Unitless,
                     no_data_value: no_data_value.map(AsPrimitive::as_),
+                    time: None,
+                    bbox: None,
                 },
             },
         }
@@ -1047,6 +1060,8 @@ mod tests {
                     .iter()
                     .cloned()
                     .collect(),
+                    time: None,
+                    bbox: None,
                 },
                 phantom: Default::default(),
             }),
@@ -1096,6 +1111,8 @@ mod tests {
                         spatial_reference: SpatialReference::epsg_4326().into(),
                         measurement: Measurement::Unitless,
                         no_data_value: no_data_value.map(AsPrimitive::as_),
+                        time: None,
+                        bbox: None,
                     },
                 },
             }
@@ -1285,6 +1302,8 @@ mod tests {
                         spatial_reference: SpatialReference::epsg_4326().into(),
                         measurement: Measurement::Unitless,
                         no_data_value: no_data_value.map(AsPrimitive::as_),
+                        time: None,
+                        bbox: None,
                     },
                 },
             }

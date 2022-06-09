@@ -1605,6 +1605,8 @@ mod tests {
                 data_type: VectorDataType::MultiPoint,
                 spatial_reference: SpatialReferenceOption::Unreferenced,
                 columns: Default::default(),
+                time: None,
+                bbox: None,
             },
             phantom: Default::default(),
         };
@@ -1654,6 +1656,8 @@ mod tests {
                 data_type: VectorDataType::MultiPoint,
                 spatial_reference: SpatialReferenceOption::Unreferenced,
                 columns: Default::default(),
+                time: None,
+                bbox: None,
             },
             phantom: Default::default(),
         };
@@ -1696,6 +1700,8 @@ mod tests {
                 data_type: VectorDataType::MultiPoint,
                 spatial_reference: SpatialReferenceOption::Unreferenced,
                 columns: Default::default(),
+                time: None,
+                bbox: None,
             },
             phantom: Default::default(),
         };
@@ -1743,6 +1749,8 @@ mod tests {
                 data_type: VectorDataType::MultiPoint,
                 spatial_reference: SpatialReferenceOption::Unreferenced,
                 columns: Default::default(),
+                time: None,
+                bbox: None,
             },
             phantom: Default::default(),
         };
@@ -1804,6 +1812,8 @@ mod tests {
                     data_type: VectorDataType::MultiPoint,
                     spatial_reference: SpatialReference::epsg_4326().into(),
                     columns: Default::default(),
+                    time: None,
+                    bbox: None,
                 },
                 phantom: Default::default(),
             }),
@@ -1900,6 +1910,8 @@ mod tests {
                     data_type: VectorDataType::MultiPoint,
                     spatial_reference: SpatialReference::epsg_4326().into(),
                     columns: Default::default(),
+                    time: None,
+                    bbox: None,
                 },
                 phantom: Default::default(),
             }),
@@ -1999,6 +2011,8 @@ mod tests {
                     data_type: VectorDataType::MultiPoint,
                     spatial_reference: SpatialReference::epsg_4326().into(),
                     columns: Default::default(),
+                    time: None,
+                    bbox: None,
                 },
                 phantom: Default::default(),
             }),
@@ -2119,6 +2133,8 @@ mod tests {
                     .iter()
                     .cloned()
                     .collect(),
+                    time: None,
+                    bbox: None,
                 },
                 phantom: Default::default(),
             }),
@@ -2290,6 +2306,8 @@ mod tests {
                     data_type: VectorDataType::MultiPoint,
                     spatial_reference: SpatialReference::epsg_4326().into(),
                     columns: Default::default(),
+                    time: None,
+                    bbox: None,
                 },
                 phantom: Default::default(),
             }),
@@ -3475,6 +3493,8 @@ mod tests {
                 .iter()
                 .cloned()
                 .collect(),
+                time: None,
+                bbox: None,
             },
             phantom: Default::default(),
         };
@@ -3572,6 +3592,8 @@ mod tests {
                 .iter()
                 .cloned()
                 .collect(),
+                time: None,
+                bbox: None,
             },
             phantom: Default::default(),
         };
@@ -3653,6 +3675,8 @@ mod tests {
                     data_type: VectorDataType::MultiPoint,
                     spatial_reference: SpatialReference::epsg_4326().into(),
                     columns: Default::default(),
+                    time: None,
+                    bbox: None,
                 },
                 phantom: Default::default(),
             }),
@@ -3901,6 +3925,8 @@ mod tests {
                     data_type: VectorDataType::MultiPoint,
                     spatial_reference: SpatialReference::epsg_4326().into(),
                     columns: Default::default(),
+                    time: None,
+                    bbox: None,
                 },
                 phantom: Default::default(),
             }),
@@ -3988,6 +4014,8 @@ mod tests {
                     data_type: VectorDataType::MultiPolygon,
                     spatial_reference: SpatialReference::epsg_4326().into(),
                     columns: Default::default(),
+                    time: None,
+                    bbox: None,
                 },
                 phantom: Default::default(),
             }),
@@ -4092,6 +4120,8 @@ mod tests {
                     .iter()
                     .cloned()
                     .collect(),
+                    time: None,
+                    bbox: None,
                 },
                 phantom: Default::default(),
             }),
@@ -4209,6 +4239,8 @@ mod tests {
                         .iter()
                         .cloned()
                         .collect(),
+                    time: None,
+                    bbox: None,
                 },
                 phantom: Default::default(),
             }),
@@ -4324,6 +4356,8 @@ mod tests {
                         .iter()
                         .cloned()
                         .collect(),
+                    time: None,
+                    bbox: None,
                 },
                 phantom: Default::default(),
             }),
@@ -4439,6 +4473,8 @@ mod tests {
                         .iter()
                         .cloned()
                         .collect(),
+                    time: None,
+                    bbox: None,
                 },
                 phantom: Default::default(),
             }),
@@ -4549,6 +4585,8 @@ mod tests {
                         .iter()
                         .cloned()
                         .collect(),
+                    time: None,
+                    bbox: None,
                 },
                 phantom: Default::default(),
             }),
@@ -4667,6 +4705,8 @@ mod tests {
                     .iter()
                     .cloned()
                     .collect(),
+                    time: None,
+                    bbox: None,
                 },
                 phantom: Default::default(),
             }),
@@ -4776,6 +4816,8 @@ mod tests {
                         .iter()
                         .cloned()
                         .collect(),
+                    time: None,
+                    bbox: None,
                 },
                 phantom: Default::default(),
             }),
@@ -4888,6 +4930,8 @@ mod tests {
                 .iter()
                 .cloned()
                 .collect(),
+                time: None,
+                bbox: None,
             },
             phantom: Default::default(),
         };
@@ -4983,6 +5027,8 @@ mod tests {
                 .iter()
                 .cloned()
                 .collect(),
+                time: None,
+                bbox: None,
             },
             phantom: Default::default(),
         };
@@ -5078,6 +5124,8 @@ mod tests {
                 .iter()
                 .cloned()
                 .collect(),
+                time: None,
+                bbox: None,
             },
             phantom: Default::default(),
         };
@@ -5171,6 +5219,8 @@ mod tests {
                 .iter()
                 .cloned()
                 .collect(),
+                time: None,
+                bbox: None,
             },
             phantom: Default::default(),
         };
@@ -5268,6 +5318,8 @@ mod tests {
                 .iter()
                 .cloned()
                 .collect(),
+                time: None,
+                bbox: None,
             },
             phantom: Default::default(),
         };
@@ -5361,6 +5413,8 @@ mod tests {
                 .iter()
                 .cloned()
                 .collect(),
+                time: None,
+                bbox: None,
             },
             phantom: Default::default(),
         };
@@ -5466,6 +5520,8 @@ mod tests {
                 .iter()
                 .cloned()
                 .collect(),
+                time: None,
+                bbox: None,
             },
             phantom: Default::default(),
         };
@@ -5568,6 +5624,8 @@ mod tests {
                 .iter()
                 .cloned()
                 .collect(),
+                time: None,
+                bbox: None,
             },
             phantom: Default::default(),
         };
@@ -5660,6 +5718,8 @@ mod tests {
                 .iter()
                 .cloned()
                 .collect(),
+                time: None,
+                bbox: None,
             },
             phantom: Default::default(),
         };
@@ -5735,6 +5795,8 @@ mod tests {
                 .iter()
                 .cloned()
                 .collect(),
+                time: None,
+                bbox: None,
             },
             phantom: Default::default(),
         };
@@ -5813,6 +5875,8 @@ mod tests {
                 .iter()
                 .cloned()
                 .collect(),
+                time: None,
+                bbox: None,
             },
             phantom: Default::default(),
         };
@@ -5888,6 +5952,8 @@ mod tests {
                 .iter()
                 .cloned()
                 .collect(),
+                time: None,
+                bbox: None,
             },
             phantom: Default::default(),
         };

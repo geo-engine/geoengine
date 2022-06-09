@@ -37,6 +37,8 @@ impl MetaData<MockDatasetDataSourceLoadingInfo, VectorResultDescriptor, VectorQu
             data_type: VectorDataType::MultiPoint,
             spatial_reference: SpatialReferenceOption::Unreferenced,
             columns: Default::default(),
+            time: None,
+            bbox: None,
         })
     }
 

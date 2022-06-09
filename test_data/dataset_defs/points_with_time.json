@@ -34,7 +34,15 @@
     "resultDescriptor": {
       "dataType": "MultiPoint",
       "spatialReference": "EPSG:4326",
-      "columns": {}
+      "columns": {},
+      "time": {
+        "start": "2014-04-01T00:00:00.000Z",
+        "end": "2014-07-01T00:00:00.000Z"
+      },
+      "bbox": {
+        "lowerLeftCoordinate": [3.9662060000000001, 45.9030360000000002],
+        "upperRightCoordinate": [19.171284, 51.8473430000000022]
+      }
     }
   }
 }
