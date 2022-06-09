@@ -70,7 +70,7 @@ impl VectorOperator for TimeProjection {
             .params
             .step_reference
             // use UTC 0 as default
-            .unwrap_or_else(|| TimeInstance::from_millis_unchecked(0));
+            .unwrap_or(TimeInstance::EPOCH_START);
 
         let initialized_operator = InitializedVectorTimeProjection {
             source,

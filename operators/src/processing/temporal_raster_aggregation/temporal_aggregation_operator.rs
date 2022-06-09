@@ -80,7 +80,7 @@ impl RasterOperator for TemporalRasterAggregation {
             window_reference: self
                 .params
                 .window_reference
-                .unwrap_or_else(|| TimeInstance::from_millis_unchecked(0)),
+                .unwrap_or(TimeInstance::EPOCH_START),
             result_descriptor: source.result_descriptor().clone(),
             source,
             tiling_specification: context.tiling_specification(),
@@ -1523,7 +1523,7 @@ mod tests {
                     granularity: geoengine_datatypes::primitives::TimeGranularity::Millis,
                     step: 30,
                 },
-                window_reference: Some(TimeInstance::from_millis_unchecked(0)),
+                window_reference: Some(TimeInstance::EPOCH_START),
             },
             sources: SingleRasterSource { raster: mrs },
         }
