@@ -240,7 +240,6 @@ impl<T: Pixel> InitializedRasterOperator for InitializedMockRasterSource<T> {
     fn query_processor(&self) -> Result<TypedRasterQueryProcessor> {
         fn converted<From, To>(
             raster_tiles: &[RasterTile2D<From>],
-            no_data_value: Option<f64>,
             tiling_specification: TilingSpecification,
         ) -> Box<dyn RasterQueryProcessor<RasterType = To>>
         where
@@ -254,7 +253,6 @@ impl<T: Pixel> InitializedRasterOperator for InitializedMockRasterSource<T> {
                 .collect();
             MockRasterSourceProcessor::new_unchecked(
                 data,
-                no_data_value.map(|v| To::from_(v)),
                 tiling_specification,
             )
             .boxed()
@@ -276,7 +274,6 @@ impl<T: Pixel> InitializedRasterOperator for InitializedMockRasterSource<T> {
             self.result_descriptor().data_type,
             converted(
                 &self.data,
-                self.result_descriptor.no_data_value,
                 self.tiling_specification
             )
         ))
@@ -292,7 +289,7 @@ mod tests {
     use super::*;
     use crate::engine::MockExecutionContext;
     use geoengine_datatypes::primitives::Measurement;
-    use geoengine_datatypes::raster::RasterDataType;
+    use geoengine_datatypes::raster::{RasterDataType, MaskedGrid};
     use geoengine_datatypes::util::test::TestDefault;
     use geoengine_datatypes::{
         primitives::TimeInterval,
@@ -302,8 +299,8 @@ mod tests {
 
     #[tokio::test]
     async fn serde() {
-        let no_data_value = None;
-        let raster = Grid2D::new([3, 2].into(), vec![1_u8, 2, 3, 4, 5, 6], no_data_value).unwrap();
+        
+        let raster = MaskedGrid::from(Grid2D::new([3, 2].into(), vec![1_u8, 2, 3, 4, 5, 6]).unwrap());
 
         let raster_tile = RasterTile2D::new_with_tile_info(
             TimeInterval::default(),
@@ -322,7 +319,6 @@ mod tests {
                     data_type: RasterDataType::U8,
                     spatial_reference: SpatialReference::epsg_4326().into(),
                     measurement: Measurement::Unitless,
-                    no_data_value: no_data_value.map(AsPrimitive::as_),
                 },
             },
         }
@@ -367,8 +363,7 @@ mod tests {
                     "spatialReference": "EPSG:4326",
                     "measurement": {
                         "type": "unitless"
-                    },
-                    "noDataValue": null
+                    }
                 }
             }
         })
