@@ -73,16 +73,7 @@ impl VectorOperator for TimeProjection {
             .unwrap_or_else(|| TimeInstance::from_millis_unchecked(0));
 
         let mut result_descriptor = source.result_descriptor().clone();
-        if let Some(time) = result_descriptor.time {
-            let start = self
-                .params
-                .step
-                .snap_relative(step_reference, time.start())?;
-            let end =
-                (self.params.step.snap_relative(step_reference, time.end())? + self.params.step)?;
-
-            result_descriptor.time = Some(TimeInterval::new(start, end)?);
-        }
+        rewrite_result_descriptor(&mut result_descriptor, self.params.step, step_reference)?;
 
         let initialized_operator = InitializedVectorTimeProjection {
             source,
@@ -93,6 +84,20 @@ impl VectorOperator for TimeProjection {
 
         Ok(initialized_operator.boxed())
     }
+}
+
+fn rewrite_result_descriptor(
+    result_descriptor: &mut VectorResultDescriptor,
+    step: TimeStep,
+    step_reference: TimeInstance,
+) -> Result<()> {
+    if let Some(time) = result_descriptor.time {
+        let start = step.snap_relative(step_reference, time.start())?;
+        let end = (step.snap_relative(step_reference, time.end())? + step)?;
+
+        result_descriptor.time = Some(TimeInterval::new(start, end)?);
+    }
+    Ok(())
 }
 
 pub struct InitializedVectorTimeProjection {
@@ -250,10 +255,11 @@ mod tests {
         mock::MockFeatureCollectionSource,
     };
     use geoengine_datatypes::{
-        collections::MultiPointCollection,
+        collections::{MultiPointCollection, VectorDataType},
         primitives::{
             BoundingBox2D, DateTime, MultiPoint, SpatialResolution, TimeGranularity, TimeInterval,
         },
+        spatial_reference::SpatialReference,
         util::test::TestDefault,
     };
 
@@ -581,5 +587,37 @@ mod tests {
         .unwrap();
 
         assert_eq!(result[0], expected);
+    }
+
+    #[test]
+    fn it_rewrites_result_descriptor() {
+        let mut result_descriptor = VectorResultDescriptor {
+            data_type: VectorDataType::MultiPoint,
+            spatial_reference: SpatialReference::epsg_4326().into(),
+            columns: Default::default(),
+            time: Some(TimeInterval::new_unchecked(30_000, 90_000)),
+            bbox: None,
+        };
+
+        rewrite_result_descriptor(
+            &mut result_descriptor,
+            TimeStep {
+                granularity: TimeGranularity::Minutes,
+                step: 1,
+            },
+            TimeInstance::from_millis_unchecked(0),
+        )
+        .unwrap();
+
+        assert_eq!(
+            result_descriptor,
+            VectorResultDescriptor {
+                data_type: VectorDataType::MultiPoint,
+                spatial_reference: SpatialReference::epsg_4326().into(),
+                columns: Default::default(),
+                time: Some(TimeInterval::new_unchecked(0, 120_000)),
+                bbox: None,
+            }
+        );
     }
 }
