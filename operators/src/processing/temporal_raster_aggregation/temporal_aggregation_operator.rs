@@ -11,7 +11,7 @@ use crate::{
     util::Result,
 };
 use async_trait::async_trait;
-use geoengine_datatypes::primitives::{RasterQueryRectangle, SpatialPartition2D};
+use geoengine_datatypes::primitives::{RasterQueryRectangle, SpatialPartition2D, TimeInstance};
 use geoengine_datatypes::raster::{Pixel, RasterTile2D};
 use geoengine_datatypes::{primitives::TimeStep, raster::TilingSpecification};
 use log::debug;
@@ -34,7 +34,9 @@ use super::min_max_first_last_subquery::{
 pub struct TemporalRasterAggregationParameters {
     aggregation: Aggregation,
     window: TimeStep,
-    // TODO: allow specifying window start instead of using query.start?
+    /// Define an anchor point for `window`
+    /// If `None`, the anchor point is `1970-01-01T00:00:00Z` by default
+    window_reference: Option<TimeInstance>,
 }
 
 #[derive(Debug, Clone, Copy, Deserialize, Serialize)]
@@ -75,6 +77,10 @@ impl RasterOperator for TemporalRasterAggregation {
         let initialized_operator = InitializedTemporalRasterAggregation {
             aggregation_type: self.params.aggregation,
             window: self.params.window,
+            window_reference: self
+                .params
+                .window_reference
+                .unwrap_or(TimeInstance::EPOCH_START),
             result_descriptor: source.result_descriptor().clone(),
             source,
             tiling_specification: context.tiling_specification(),
@@ -87,6 +93,7 @@ impl RasterOperator for TemporalRasterAggregation {
 pub struct InitializedTemporalRasterAggregation {
     aggregation_type: Aggregation,
     window: TimeStep,
+    window_reference: TimeInstance,
     source: Box<dyn InitializedRasterOperator>,
     result_descriptor: RasterResultDescriptor,
     tiling_specification: TilingSpecification,
@@ -105,6 +112,7 @@ impl InitializedRasterOperator for InitializedTemporalRasterAggregation {
            TemporalRasterAggregationProcessor::new(
                 self.aggregation_type,
                 self.window,
+                self.window_reference,
                 p,
                 self.tiling_specification,
                 self.source.result_descriptor().no_data_value
@@ -123,6 +131,7 @@ where
 {
     aggregation_type: Aggregation,
     window: TimeStep,
+    window_reference: TimeInstance,
     source: Q,
     tiling_specification: TilingSpecification,
     no_data_value: Option<P>,
@@ -136,6 +145,7 @@ where
     fn new(
         aggregation_type: Aggregation,
         window: TimeStep,
+        window_reference: TimeInstance,
         source: Q,
         tiling_specification: TilingSpecification,
         no_data_value: Option<f64>,
@@ -143,6 +153,7 @@ where
         Self {
             aggregation_type,
             window,
+            window_reference,
             source,
             tiling_specification,
             no_data_value: no_data_value.map(P::from_),
@@ -159,6 +170,7 @@ where
             no_data_value: self.no_data_value,
             initial_value,
             step: self.window,
+            step_reference: self.window_reference,
         }
     }
 
@@ -174,6 +186,7 @@ where
                     no_data_value,
                     initial_value: no_data_value,
                     step: self.window,
+                    step_reference: self.window_reference,
                 },
             )
     }
@@ -190,6 +203,7 @@ where
                     no_data_value,
                     initial_value: no_data_value,
                     step: self.window,
+                    step_reference: self.window_reference,
                 },
             )
     }
@@ -205,6 +219,7 @@ where
                 fold_fn,
                 no_data_value,
                 step: self.window,
+                step_reference: self.window_reference,
                 ignore_no_data,
             })
     }
@@ -373,6 +388,7 @@ mod tests {
                     granularity: geoengine_datatypes::primitives::TimeGranularity::Millis,
                     step: 20,
                 },
+                window_reference: None,
             },
             sources: SingleRasterSource { raster: mrs },
         }
@@ -497,6 +513,7 @@ mod tests {
                     granularity: geoengine_datatypes::primitives::TimeGranularity::Millis,
                     step: 20,
                 },
+                window_reference: None,
             },
             sources: SingleRasterSource { raster: mrs },
         }
@@ -626,6 +643,7 @@ mod tests {
                     granularity: geoengine_datatypes::primitives::TimeGranularity::Millis,
                     step: 20,
                 },
+                window_reference: None,
             },
             sources: SingleRasterSource { raster: mrs },
         }
@@ -760,6 +778,7 @@ mod tests {
                     granularity: geoengine_datatypes::primitives::TimeGranularity::Millis,
                     step: 20,
                 },
+                window_reference: None,
             },
             sources: SingleRasterSource { raster: mrs },
         }
@@ -892,6 +911,7 @@ mod tests {
                     granularity: geoengine_datatypes::primitives::TimeGranularity::Millis,
                     step: 20,
                 },
+                window_reference: None,
             },
             sources: SingleRasterSource { raster: mrs },
         }
@@ -968,6 +988,7 @@ mod tests {
                     granularity: geoengine_datatypes::primitives::TimeGranularity::Millis,
                     step: 30,
                 },
+                window_reference: None,
             },
             sources: SingleRasterSource { raster: mrs },
         }
@@ -1061,6 +1082,7 @@ mod tests {
                     granularity: geoengine_datatypes::primitives::TimeGranularity::Millis,
                     step: 30,
                 },
+                window_reference: None,
             },
             sources: SingleRasterSource { raster: mrs },
         }
@@ -1154,6 +1176,7 @@ mod tests {
                     granularity: geoengine_datatypes::primitives::TimeGranularity::Millis,
                     step: 30,
                 },
+                window_reference: None,
             },
             sources: SingleRasterSource { raster: mrs },
         }
@@ -1246,6 +1269,7 @@ mod tests {
                     granularity: geoengine_datatypes::primitives::TimeGranularity::Millis,
                     step: 30,
                 },
+                window_reference: None,
             },
             sources: SingleRasterSource { raster: mrs },
         }
@@ -1337,6 +1361,7 @@ mod tests {
                     granularity: geoengine_datatypes::primitives::TimeGranularity::Millis,
                     step: 30,
                 },
+                window_reference: None,
             },
             sources: SingleRasterSource { raster: mrs },
         }
@@ -1428,6 +1453,7 @@ mod tests {
                     granularity: geoengine_datatypes::primitives::TimeGranularity::Millis,
                     step: 30,
                 },
+                window_reference: None,
             },
             sources: SingleRasterSource { raster: mrs },
         }
@@ -1489,6 +1515,97 @@ mod tests {
                 GridOrEmpty::Grid(
                     Grid2D::new([3, 2].into(), vec![1, 2, 3, 42, 5, 6], no_data_value).unwrap()
                 )
+            )
+        );
+    }
+
+    #[tokio::test]
+    async fn test_query_not_aligned_with_window_reference() {
+        let (no_data_value, raster_tiles) = make_raster();
+
+        let mrs = MockRasterSource {
+            params: MockRasterSourceParams {
+                data: raster_tiles,
+                result_descriptor: RasterResultDescriptor {
+                    data_type: RasterDataType::U8,
+                    spatial_reference: SpatialReference::epsg_4326().into(),
+                    measurement: Measurement::Unitless,
+                    no_data_value: no_data_value.map(AsPrimitive::as_),
+                },
+            },
+        }
+        .boxed();
+
+        let agg = TemporalRasterAggregation {
+            params: TemporalRasterAggregationParameters {
+                aggregation: Aggregation::Last {
+                    ignore_no_data: false,
+                },
+                window: TimeStep {
+                    granularity: geoengine_datatypes::primitives::TimeGranularity::Millis,
+                    step: 30,
+                },
+                window_reference: Some(TimeInstance::EPOCH_START),
+            },
+            sources: SingleRasterSource { raster: mrs },
+        }
+        .boxed();
+
+        let exe_ctx = MockExecutionContext::new_with_tiling_spec(TilingSpecification::new(
+            (0., 0.).into(),
+            [3, 2].into(),
+        ));
+        let query_rect = RasterQueryRectangle {
+            spatial_bounds: SpatialPartition2D::new_unchecked((0., 3.).into(), (4., 0.).into()),
+            time_interval: TimeInterval::new_unchecked(5, 5),
+            spatial_resolution: SpatialResolution::one(),
+        };
+        let query_ctx = MockQueryContext::test_default();
+
+        let qp = agg
+            .initialize(&exe_ctx)
+            .await
+            .unwrap()
+            .query_processor()
+            .unwrap()
+            .get_u8()
+            .unwrap();
+
+        let result = qp
+            .query(query_rect, &query_ctx)
+            .await
+            .unwrap()
+            .collect::<Vec<_>>()
+            .await;
+
+        assert_eq!(result.len(), 2);
+        assert_eq!(
+            result[0].as_ref().unwrap(),
+            &RasterTile2D::new_with_tile_info(
+                TimeInterval::new_unchecked(0, 30),
+                TileInformation {
+                    global_tile_position: [-1, 0].into(),
+                    tile_size_in_pixels: [3, 2].into(),
+                    global_geo_transform: TestDefault::test_default(),
+                },
+                GridOrEmpty::Grid(
+                    Grid2D::new([3, 2].into(), vec![1, 2, 3, 4, 5, 6], no_data_value).unwrap()
+                ),
+            )
+        );
+
+        assert_eq!(
+            result[1].as_ref().unwrap(),
+            &RasterTile2D::new_with_tile_info(
+                TimeInterval::new_unchecked(0, 30),
+                TileInformation {
+                    global_tile_position: [-1, 1].into(),
+                    tile_size_in_pixels: [3, 2].into(),
+                    global_geo_transform: TestDefault::test_default(),
+                },
+                GridOrEmpty::Grid(
+                    Grid2D::new([3, 2].into(), vec![7, 8, 9, 10, 11, 12], no_data_value).unwrap()
+                ),
             )
         );
     }
