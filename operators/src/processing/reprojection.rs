@@ -16,7 +16,7 @@ use futures::StreamExt;
 use geoengine_datatypes::{
     operations::reproject::{
         reproject_query, suggest_pixel_size_from_diag_cross_projected, CoordinateProjection,
-        CoordinateProjector, Reproject,
+        CoordinateProjector, Reproject, ReprojectClipped,
     },
     primitives::AxisAlignedRectangle,
     primitives::{BoundingBox2D, RasterQueryRectangle, SpatialPartition2D, VectorQueryRectangle},
@@ -87,7 +87,7 @@ impl VectorOperator for Reprojection {
                 self.params.target_spatial_reference,
             )?;
 
-            Some(bbox.reproject(&projector)?)
+            Some(bbox.reproject_clipped(&projector)?)
         } else {
             None
         };
@@ -241,7 +241,7 @@ impl RasterOperator for Reprojection {
                 self.params.target_spatial_reference,
             )?;
 
-            Some(bbox.reproject(&projector)?)
+            Some(bbox.reproject_clipped(&projector)?)
         } else {
             None
         };
