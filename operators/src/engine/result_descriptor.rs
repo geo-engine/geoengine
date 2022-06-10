@@ -39,6 +39,12 @@ pub trait ResultDescriptor: Clone + Serialize {
     fn map_spatial_reference<F>(&self, f: F) -> Self
     where
         F: Fn(&SpatialReferenceOption) -> SpatialReferenceOption;
+
+    /// Map one descriptor to another one by modifying only the time
+    #[must_use]
+    fn map_time<F>(&self, f: F) -> Self
+    where
+        F: Fn(&Option<TimeInterval>) -> Option<TimeInterval>;
 }
 
 /// A `ResultDescriptor` for raster queries
@@ -81,6 +87,17 @@ impl ResultDescriptor for RasterResultDescriptor {
     {
         Self {
             spatial_reference: f(&self.spatial_reference),
+            measurement: self.measurement.clone(),
+            ..*self
+        }
+    }
+
+    fn map_time<F>(&self, f: F) -> Self
+    where
+        F: Fn(&Option<TimeInterval>) -> Option<TimeInterval>,
+    {
+        Self {
+            time: f(&self.time),
             measurement: self.measurement.clone(),
             ..*self
         }
@@ -154,6 +171,17 @@ impl ResultDescriptor for VectorResultDescriptor {
             ..*self
         }
     }
+
+    fn map_time<F>(&self, f: F) -> Self
+    where
+        F: Fn(&Option<TimeInterval>) -> Option<TimeInterval>,
+    {
+        Self {
+            time: f(&self.time),
+            columns: self.columns.clone(),
+            ..*self
+        }
+    }
 }
 
 /// A `ResultDescriptor` for plot queries
@@ -186,6 +214,16 @@ impl ResultDescriptor for PlotResultDescriptor {
         F: Fn(&SpatialReferenceOption) -> SpatialReferenceOption,
     {
         *self
+    }
+
+    fn map_time<F>(&self, f: F) -> Self
+    where
+        F: Fn(&Option<TimeInterval>) -> Option<TimeInterval>,
+    {
+        Self {
+            time: f(&self.time),
+            ..*self
+        }
     }
 }
 #[derive(Debug, Serialize, Deserialize, Clone, PartialEq)]

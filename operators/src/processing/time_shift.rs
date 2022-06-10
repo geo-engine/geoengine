@@ -1,8 +1,8 @@
 use crate::engine::{
     ExecutionContext, InitializedRasterOperator, InitializedVectorOperator, Operator, QueryContext,
-    RasterOperator, RasterQueryProcessor, RasterResultDescriptor, SingleRasterOrVectorSource,
-    TypedRasterQueryProcessor, TypedVectorQueryProcessor, VectorOperator, VectorQueryProcessor,
-    VectorResultDescriptor,
+    RasterOperator, RasterQueryProcessor, RasterResultDescriptor, ResultDescriptor,
+    SingleRasterOrVectorSource, TypedRasterQueryProcessor, TypedVectorQueryProcessor,
+    VectorOperator, VectorQueryProcessor, VectorResultDescriptor,
 };
 use crate::util::input::RasterOrVectorOperator;
 use crate::util::Result;
@@ -176,10 +176,7 @@ impl VectorOperator for TimeShift {
                     },
                 };
 
-                let mut result_descriptor = source.result_descriptor().clone();
-                if let Some(time) = result_descriptor.time {
-                    result_descriptor.time = shift.shift(time).map(|r| r.0).ok();
-                }
+                let result_descriptor = shift_result_descriptor(source.result_descriptor(), shift);
 
                 Ok(Box::new(InitializedVectorTimeShift {
                     source,
@@ -200,10 +197,7 @@ impl VectorOperator for TimeShift {
                     },
                 };
 
-                let mut result_descriptor = source.result_descriptor().clone();
-                if let Some(time) = result_descriptor.time {
-                    result_descriptor.time = shift.shift(time).map(|r| r.0).ok();
-                }
+                let result_descriptor = shift_result_descriptor(source.result_descriptor(), shift);
 
                 Ok(Box::new(InitializedVectorTimeShift {
                     source,
@@ -219,10 +213,7 @@ impl VectorOperator for TimeShift {
 
                 let shift = AbsoluteShift { time_interval };
 
-                let mut result_descriptor = source.result_descriptor().clone();
-                if let Some(time) = result_descriptor.time {
-                    result_descriptor.time = shift.shift(time).map(|r| r.0).ok();
-                }
+                let result_descriptor = shift_result_descriptor(source.result_descriptor(), shift);
 
                 Ok(Box::new(InitializedVectorTimeShift {
                     source,
@@ -256,10 +247,7 @@ impl RasterOperator for TimeShift {
                     },
                 };
 
-                let mut result_descriptor = source.result_descriptor().clone();
-                if let Some(time) = result_descriptor.time {
-                    result_descriptor.time = shift.shift(time).map(|r| r.0).ok();
-                }
+                let result_descriptor = shift_result_descriptor(source.result_descriptor(), shift);
 
                 Ok(Box::new(InitializedRasterTimeShift {
                     source,
@@ -280,10 +268,7 @@ impl RasterOperator for TimeShift {
                     },
                 };
 
-                let mut result_descriptor = source.result_descriptor().clone();
-                if let Some(time) = result_descriptor.time {
-                    result_descriptor.time = shift.shift(time).map(|r| r.0).ok();
-                }
+                let result_descriptor = shift_result_descriptor(source.result_descriptor(), shift);
 
                 Ok(Box::new(InitializedRasterTimeShift {
                     source,
@@ -299,10 +284,7 @@ impl RasterOperator for TimeShift {
 
                 let shift = AbsoluteShift { time_interval };
 
-                let mut result_descriptor = source.result_descriptor().clone();
-                if let Some(time) = result_descriptor.time {
-                    result_descriptor.time = shift.shift(time).map(|r| r.0).ok();
-                }
+                let result_descriptor = shift_result_descriptor(source.result_descriptor(), shift);
 
                 Ok(Box::new(InitializedRasterTimeShift {
                     source,
@@ -313,6 +295,19 @@ impl RasterOperator for TimeShift {
             (RasterOrVectorOperator::Vector(_), _) => Err(TimeShiftError::UnmatchedOutput.into()),
         }
     }
+}
+
+fn shift_result_descriptor<R: ResultDescriptor, S: TimeShiftOperation>(
+    result_descriptor: &R,
+    shift: S,
+) -> R {
+    result_descriptor.map_time(|time| {
+        if let Some(time) = time {
+            shift.shift(*time).map(|r| r.0).ok()
+        } else {
+            None
+        }
+    })
 }
 
 pub struct InitializedVectorTimeShift<Shift: TimeShiftOperation> {
