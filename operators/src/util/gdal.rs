@@ -1,13 +1,17 @@
 use std::{
     convert::TryInto,
     path::{Path, PathBuf},
+    str::FromStr,
 };
 
 use gdal::{raster::GDALDataType, Dataset, DatasetOptions};
 use geoengine_datatypes::{
     dataset::{DatasetId, InternalDatasetId},
     hashmap,
-    primitives::{DateTimeParseFormat, Measurement, TimeGranularity, TimeInstance, TimeStep},
+    primitives::{
+        DateTimeParseFormat, Measurement, SpatialPartition2D, TimeGranularity, TimeInstance,
+        TimeInterval, TimeStep,
+    },
     raster::RasterDataType,
     spatial_reference::SpatialReference,
     util::Identifier,
@@ -62,8 +66,14 @@ pub fn create_ndvi_meta_data() -> GdalMetaDataRegular {
             spatial_reference: SpatialReference::epsg_4326().into(),
             measurement: Measurement::Unitless,
             no_data_value,
-            time: None,
-            bbox: None,
+            time: Some(TimeInterval::new_unchecked(
+                TimeInstance::from_str("2014-01-01T00:00:00.000Z").unwrap(),
+                TimeInstance::from_str("2014-07-01T00:00:00.000Z").unwrap(),
+            )),
+            bbox: Some(SpatialPartition2D::new_unchecked(
+                (-180., 90.).into(),
+                (180., -90.).into(),
+            )),
         },
     }
 }
