@@ -312,8 +312,8 @@ async fn dataset_definition_from_geotiff(
                     spatial_reference: spatial_reference.into(),
                     measurement: Measurement::Unitless,
                     no_data_value: None, // TODO
-                    time: None,
-                    bbox: None,
+                    time: None,          // TODO: determine time
+                    bbox: None,          // TODO: determine bbox
                 },
             }),
         })

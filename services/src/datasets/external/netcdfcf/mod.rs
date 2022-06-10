@@ -334,9 +334,8 @@ impl NetCdfCfDataProvider {
                         spatial_reference: tree.spatial_reference.into(),
                         measurement: derive_measurement(tail.unit.clone()),
                         no_data_value: None, // we don't want to open the dataset at this point. We should get rid of the result descriptor in the listing in general
-
-                        time: None,
-                        bbox: None,
+                        time: None,          // TODO: determine time
+                        bbox: None,          // TODO: determine bbox
                     }),
                     symbology: Some(Symbology::Raster(RasterSymbology {
                         opacity: 1.0,

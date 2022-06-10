@@ -212,8 +212,8 @@ impl ExternalDatasetProvider for GfbioDataProvider {
                         .filter(|(_, name)| name.starts_with("/DataSets/DataSet/Units/Unit/"))
                         .map(|(_, name)| (name.clone(), FeatureDataType::Text))
                         .collect(),
-                    time: None,
-                    bbox: None,
+                    time: None, // TODO: determine time
+                    bbox: None, // TODO: determine bbox
                 }),
                 symbology: None,
             })
