@@ -131,18 +131,9 @@ impl PlotOperator for Histogram {
                     }
                 }
 
-                let in_desc = vector_source.result_descriptor();
+                let in_desc = vector_source.result_descriptor().clone();
 
-                InitializedHistogram::new(
-                    PlotResultDescriptor {
-                        spatial_reference: in_desc.spatial_reference,
-                        time: in_desc.time,
-                        bbox: in_desc.bbox,
-                    },
-                    self.params,
-                    vector_source,
-                )
-                .boxed()
+                InitializedHistogram::new(in_desc.into(), self.params, vector_source).boxed()
             }
         })
     }

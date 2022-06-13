@@ -1,5 +1,6 @@
 use geoengine_datatypes::primitives::{
-    BoundingBox2D, FeatureDataType, Measurement, SpatialPartition2D, TimeInterval,
+    AxisAlignedRectangle, BoundingBox2D, FeatureDataType, Measurement, SpatialPartition2D,
+    TimeInterval,
 };
 use geoengine_datatypes::raster::FromPrimitive;
 use geoengine_datatypes::{
@@ -226,6 +227,29 @@ impl ResultDescriptor for PlotResultDescriptor {
         }
     }
 }
+
+impl From<VectorResultDescriptor> for PlotResultDescriptor {
+    fn from(descriptor: VectorResultDescriptor) -> Self {
+        Self {
+            spatial_reference: descriptor.spatial_reference,
+            time: descriptor.time,
+            bbox: descriptor.bbox,
+        }
+    }
+}
+
+impl From<RasterResultDescriptor> for PlotResultDescriptor {
+    fn from(descriptor: RasterResultDescriptor) -> Self {
+        Self {
+            spatial_reference: descriptor.spatial_reference,
+            time: descriptor.time,
+            bbox: descriptor
+                .bbox
+                .and_then(|p| BoundingBox2D::new(p.lower_left(), p.upper_right()).ok()),
+        }
+    }
+}
+
 #[derive(Debug, Serialize, Deserialize, Clone, PartialEq)]
 #[serde(rename_all = "camelCase", tag = "type")]
 pub enum TypedResultDescriptor {
