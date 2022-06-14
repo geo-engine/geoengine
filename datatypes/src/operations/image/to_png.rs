@@ -298,7 +298,7 @@ mod tests {
 
     #[test]
     fn no_data() {
-        let raster = Grid2D::new([2, 2].into(), vec![0, 100, 200, 255]).unwrap();
+        let raster = MaskedGrid2D::new(Grid2D::new([2, 2].into(), vec![0, 100, 200, 255]).unwrap(), Grid2D::new([2,2].into(), vec![false, true, true, true]).unwrap()).unwrap();
 
         let colorizer = Colorizer::linear_gradient(
             vec![
@@ -314,7 +314,7 @@ mod tests {
 
         let image_bytes = raster.to_png(100, 100, &colorizer).unwrap();
 
-        // crate::util::test::save_test_bytes(&image_bytes, "no_data.png");
+        // crate::util::test::save_test_bytes(&image_bytes, "no_data_2.png");
 
         assert_eq!(
             include_bytes!("../../../../test_data/colorizer/no_data.png") as &[u8],

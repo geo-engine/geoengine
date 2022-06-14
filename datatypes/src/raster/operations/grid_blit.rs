@@ -411,6 +411,7 @@ mod tests {
 
         r1.grid_blit_from(&r2);
 
-        assert_eq!(r1.data.data, vec![7; 64]);
+        assert_eq!(r1.data.data, vec![0; 64]);
+        assert_eq!(r1.validity_mask.data, vec![false; 64]);
     }
 }

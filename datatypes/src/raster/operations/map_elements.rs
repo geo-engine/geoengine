@@ -356,7 +356,7 @@ mod tests {
         let r1 = Grid2D::new(dim.into(), data).unwrap();
         let scaled_r1 = r1.map_elements(|p| p * 2 + 1);
 
-        let expected = [2, 5, 7, 9];
+        let expected = [3, 5, 7, 9];
         assert_eq!(scaled_r1.data, expected);
     }
 
@@ -368,7 +368,7 @@ mod tests {
         let r1 = GridOrEmpty::Grid(MaskedGrid::from(Grid2D::new(dim.into(), data).unwrap()));
         let scaled_r1 = r1.map_elements(|p| p * 2 + 1);
 
-        let expected = [2, 5, 7, 9];
+        let expected = [3, 5, 7, 9];
 
         match scaled_r1 {
             GridOrEmpty::Grid(g) => {
@@ -402,9 +402,11 @@ mod tests {
         let scaled_r1 = t1.map_or_mask_elements(|p| if p == 7 { Some(p * 2 + 1) } else { None });
         let mat_scaled_r1 = scaled_r1.into_materialized_tile();
 
-        let expected = [15, 15, 17, 17];
+        let expected = [15, 15, 0, 0];
+        let expected_mask = [true, true, false, false];
 
         assert_eq!(mat_scaled_r1.grid_array.data.data, expected);
+        assert_eq!(mat_scaled_r1.grid_array.validity_mask.data, expected_mask);
     }
 
     #[test]
