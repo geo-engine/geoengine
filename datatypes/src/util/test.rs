@@ -34,13 +34,8 @@ where
     D: PartialEq + GridSize + Clone,
     T: PartialEq + Copy,
 {
-    grid_eq(g1.as_ref(), g2.as_ref())
-        && match (g1.mask_ref(), g2.mask_ref()) {
-            (None, None) => true,
-            (None, Some(_)) => false,
-            (Some(_), None) => false,
-            (Some(m1), Some(m2)) => grid_eq(m1, m2),
-        }
+    grid_eq(g1.as_ref(), g2.as_ref()) && grid_eq(g1.mask_ref(), g2.mask_ref())
+        
 }
 
 pub fn grid_eq<D, T>(g1: &Grid<D, T>, g2: &Grid<D, T>) -> bool
@@ -160,8 +155,8 @@ mod tests {
         let d1: GridShape2D = [2, 2].into();
         let d2: GridShape2D = [2, 2].into();
 
-        let r1 = MaskedGrid2D::new(Grid2D::new(d1, vec![1, 2, 3, 42]).unwrap(), None).unwrap();
-        let r2 = MaskedGrid2D::new(Grid2D::new(d2, vec![1, 2, 3, 42]).unwrap(), None).unwrap();
+        let r1 = MaskedGrid2D::new_with_data(Grid2D::new(d1, vec![1, 2, 3, 42]).unwrap());
+        let r2 = MaskedGrid2D::new_with_data(Grid2D::new(d2, vec![1, 2, 3, 42]).unwrap());
 
         assert!(masked_grid_eq(&r1, &r2));
     }
@@ -174,8 +169,8 @@ mod tests {
         let m1 = Grid2D::new(d1, vec![true, true, true, false]).unwrap();
         let m2 = Grid2D::new(d2, vec![true, true, true, false]).unwrap();
 
-        let r1 = MaskedGrid2D::new(Grid2D::new(d1, vec![1, 2, 3, 42]).unwrap(), Some(m1)).unwrap();
-        let r2 = MaskedGrid2D::new(Grid2D::new(d2, vec![1, 2, 3, 42]).unwrap(), Some(m2)).unwrap();
+        let r1 = MaskedGrid2D::new(Grid2D::new(d1, vec![1, 2, 3, 42]).unwrap(), m1).unwrap();
+        let r2 = MaskedGrid2D::new(Grid2D::new(d2, vec![1, 2, 3, 42]).unwrap(), m2).unwrap();
 
         assert!(masked_grid_eq(&r1, &r2));
     }
@@ -185,8 +180,8 @@ mod tests {
         let d1: GridShape2D = [2, 2].into();
         let d2: GridShape2D = [2, 2].into();
 
-        let r1 = MaskedGrid2D::new(Grid2D::new(d1, vec![1, 2, 3, 42]).unwrap(), None).unwrap();
-        let r2 = MaskedGrid2D::new(Grid2D::new(d2, vec![42, 3, 2, 1]).unwrap(), None).unwrap();
+        let r1 = MaskedGrid2D::new_with_data(Grid2D::new(d1, vec![1, 2, 3, 42]).unwrap());
+        let r2 = MaskedGrid2D::new_with_data(Grid2D::new(d2, vec![42, 3, 2, 1]).unwrap());
 
         assert!(!masked_grid_eq(&r1, &r2));
     }
@@ -196,8 +191,8 @@ mod tests {
         let d1: GridShape2D = [4, 1].into();
         let d2: GridShape2D = [2, 2].into();
 
-        let r1 = MaskedGrid2D::new(Grid2D::new(d1, vec![1, 2, 3, 42]).unwrap(), None).unwrap();
-        let r2 = MaskedGrid2D::new(Grid2D::new(d2, vec![1, 2, 3, 42]).unwrap(), None).unwrap();
+        let r1 = MaskedGrid2D::new_with_data(Grid2D::new(d1, vec![1, 2, 3, 42]).unwrap());
+        let r2 = MaskedGrid2D::new_with_data(Grid2D::new(d2, vec![1, 2, 3, 42]).unwrap());
 
         assert!(!masked_grid_eq(&r1, &r2));
     }
@@ -209,8 +204,8 @@ mod tests {
 
         let m1 = Grid2D::new(d1, vec![true, true, true, false]).unwrap();
 
-        let r1 = MaskedGrid2D::new(Grid2D::new(d1, vec![1, 2, 3, 42]).unwrap(), Some(m1)).unwrap();
-        let r2 = MaskedGrid2D::new(Grid2D::new(d2, vec![1, 2, 3, 42]).unwrap(), None).unwrap();
+        let r1 = MaskedGrid2D::new(Grid2D::new(d1, vec![1, 2, 3, 42]).unwrap(), m1).unwrap();
+        let r2 = MaskedGrid2D::new_with_data(Grid2D::new(d2, vec![1, 2, 3, 42]).unwrap());
 
         assert!(!masked_grid_eq(&r1, &r2));
     }
@@ -222,8 +217,8 @@ mod tests {
 
         let m2 = Grid2D::new(d1, vec![true, true, true, false]).unwrap();
 
-        let r1 = MaskedGrid2D::new(Grid2D::new(d1, vec![1, 2, 3, 42]).unwrap(), None).unwrap();
-        let r2 = MaskedGrid2D::new(Grid2D::new(d2, vec![1, 2, 3, 42]).unwrap(), Some(m2)).unwrap();
+        let r1 = MaskedGrid2D::new_with_data(Grid2D::new(d1, vec![1, 2, 3, 42]).unwrap());
+        let r2 = MaskedGrid2D::new(Grid2D::new(d2, vec![1, 2, 3, 42]).unwrap(), m2).unwrap();
 
         assert!(!masked_grid_eq(&r1, &r2));
     }
@@ -236,8 +231,8 @@ mod tests {
         let m1 = Grid2D::new(d1, vec![true, true, true, true]).unwrap();
         let m2 = Grid2D::new(d2, vec![true, true, true, false]).unwrap();
 
-        let r1 = MaskedGrid2D::new(Grid2D::new(d1, vec![1, 2, 3, 42]).unwrap(), Some(m1)).unwrap();
-        let r2 = MaskedGrid2D::new(Grid2D::new(d2, vec![1, 2, 3, 42]).unwrap(), Some(m2)).unwrap();
+        let r1 = MaskedGrid2D::new(Grid2D::new(d1, vec![1, 2, 3, 42]).unwrap(), m1).unwrap();
+        let r2 = MaskedGrid2D::new(Grid2D::new(d2, vec![1, 2, 3, 42]).unwrap(), m2).unwrap();
 
         assert!(!masked_grid_eq(&r1, &r2));
     }

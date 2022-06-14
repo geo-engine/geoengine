@@ -15,7 +15,7 @@ use super::{
 #[serde(rename_all = "camelCase")]
 pub struct MaskedGrid<D, T> {
     pub data: Grid<D, T>,
-    pub validity_mask: Option<Grid<D, bool>>, // TODO: switch to bitmask or something like that
+    pub validity_mask: Grid<D, bool>, // TODO: switch to bitmask or something like that
 }
 
 pub type MaskedGrid1D<T> = MaskedGrid<GridShape1D, T>;
@@ -33,7 +33,7 @@ where
     ///
     /// This constructor fails if the data container's capacity is different from the grid's dimension number
     ///
-    pub fn new(data: Grid<D, T>, validity_mask: Option<Grid<D, bool>>) -> Result<Self> {
+    pub fn new(data: Grid<D, T>, validity_mask: Grid<D, bool>) -> Result<Self> {
         //        ensure!(
         //            data.shape == mask.shape,
         //            error::DimensionCapacityDoesNotMatchDataCapacity {
@@ -48,30 +48,16 @@ where
         })
     }
 
-    pub fn materialize_validity_mask(&mut self) {
-        if self.validity_mask.is_none() {
-            self.validity_mask = Some(Grid::new_filled(self.data.shape.clone(), true));
-        }
-    }
-
-    pub fn replace_mask(self, validity_mask: Option<Grid<D, bool>>) -> Result<Self> {
+    pub fn replace_mask(self, validity_mask: Grid<D, bool>) -> Result<Self> {
         Self::new(self.data, validity_mask)
     }
 
-    #[inline]
-    pub fn remove_validity_mask(&mut self) {
-        self.validity_mask = None;
-    }
-
-    #[inline]
-    pub fn validity_mask_is_materialized(&self) -> bool {
-        self.validity_mask.is_some()
-    }
-
     pub fn new_with_data(data: Grid<D, T>) -> Self {
+        let validity_mask = Grid::new_filled(data.shape.clone(), true);
+
         Self {
             data,
-            validity_mask: None,
+            validity_mask
         }
     }
 
@@ -85,13 +71,13 @@ where
     }
 
     #[inline]
-    pub fn mask_ref(&self) -> Option<&Grid<D, bool>> {
-        self.validity_mask.as_ref()
+    pub fn mask_ref(&self) -> &Grid<D, bool> {
+        &self.validity_mask
     }
 
     #[inline]
-    pub fn mask_mut(&mut self) -> Option<&mut Grid<D, bool>> {
-        self.validity_mask.as_mut()
+    pub fn mask_mut(&mut self) -> &mut Grid<D, bool> {
+        &mut self.validity_mask
     }
 }
 
@@ -111,9 +97,7 @@ where
     T: Clone + Default,
 {
     fn from(data: EmptyGrid<D, T>) -> Self {
-        let mask = Grid::new_filled(data.shape.clone(), false);
-        let data = Grid::new_filled(data.shape, T::default());
-        Self::new(data, Some(mask)).expect("Createion for shape failed")
+        Self::new_filled(data.shape, T::default())
     }
 }
 
@@ -155,20 +139,20 @@ where
     I: Clone,
 {
     fn get_masked_at_grid_index(&self, grid_index: I) -> Result<Option<T>> {
-        if let Some(materialize_validity_mask) = &self.validity_mask {
-            if !materialize_validity_mask.get_at_grid_index(grid_index.clone())? {
-                return Ok(None);
-            }
+       
+        if !self.validity_mask.get_at_grid_index(grid_index.clone())? {
+            return Ok(None);
         }
+       
         self.data.get_at_grid_index(grid_index).map(Option::Some)
     }
 
     fn get_masked_at_grid_index_unchecked(&self, grid_index: I) -> Option<T> {
-        if let Some(materialize_validity_mask) = &self.validity_mask {
-            if !materialize_validity_mask.get_at_grid_index_unchecked(grid_index.clone()) {
+       
+            if !self.validity_mask.get_at_grid_index_unchecked(grid_index.clone()) {
                 return None;
             }
-        }
+        
         Some(self.data.get_at_grid_index_unchecked(grid_index))
     }
 }
@@ -182,13 +166,8 @@ where
     I: Clone,
 {
     fn set_masked_at_grid_index(&mut self, grid_index: I, value: Option<T>) -> Result<()> {
-        if value.is_none() {
-            self.materialize_validity_mask();
-        }
 
-        if let Some(materialize_validity_mask) = &mut self.validity_mask {
-            materialize_validity_mask.set_at_grid_index(grid_index.clone(), value.is_some())?;
-        }
+        &mut self.validity_mask.set_at_grid_index(grid_index.clone(), value.is_some())?;        
 
         if let Some(v) = value {
             self.data.set_at_grid_index(grid_index, v)?;
@@ -197,15 +176,9 @@ where
     }
 
     fn set_masked_at_grid_index_unchecked(&mut self, grid_index: I, value: Option<T>) {
-        if value.is_none() {
-            // TODO: is this a check?
-            self.materialize_validity_mask();
-        }
-
-        if let Some(materialize_validity_mask) = &mut self.validity_mask {
-            materialize_validity_mask
-                .set_at_grid_index_unchecked(grid_index.clone(), value.is_some());
-        }
+        
+        self.validity_mask.set_at_grid_index_unchecked(grid_index.clone(), value.is_some());
+        
 
         if let Some(v) = value {
             self.data.set_at_grid_index_unchecked(grid_index, v);
@@ -269,17 +242,14 @@ where
     fn shift_by_offset(self, offset: GridIdx<I>) -> Self::Output {
         MaskedGrid {
             data: self.data.shift_by_offset(offset.clone()),
-            validity_mask: self.validity_mask.map(|m| m.shift_by_offset(offset)),
+            validity_mask: self.validity_mask.shift_by_offset(offset),
         }
     }
 
     fn set_grid_bounds(self, bounds: GridBoundingBox<I>) -> Result<Self::Output> {
         Ok(MaskedGrid {
             data: self.data.set_grid_bounds(bounds.clone())?,
-            validity_mask: self.validity_mask.map(|m| {
-                m.set_grid_bounds(bounds)
-                    .expect("worked on the same grid before")
-            }),
+            validity_mask: self.validity_mask.set_grid_bounds(bounds)?                    
         })
     }
 }

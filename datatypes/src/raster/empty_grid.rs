@@ -40,8 +40,8 @@ where
     /// Converts the data type of the raster by converting it pixel-wise
     pub fn convert_dtype<To>(self) -> EmptyGrid<D, To>
     where
-        T: AsPrimitive<To> + Copy + 'static,
-        To: Copy + 'static,
+        T: 'static,
+        To: 'static,
     {
         EmptyGrid::new(self.shape)
     }

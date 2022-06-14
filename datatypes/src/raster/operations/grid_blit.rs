@@ -122,23 +122,7 @@ where
     fn grid_blit_from(&mut self, other: &MaskedGrid<D1, T>) {
         // easy part: blit the data
         self.data.grid_blit_from(other.as_ref());
-
-        if !self.validity_mask_is_materialized() && !other.validity_mask_is_materialized() {
-            return;
-        }
-
-        self.materialize_validity_mask();
-
-        if let Some(other_mask) = other.mask_ref() {
-            self.mask_mut()
-                .expect("Mask createion before failed.")
-                .grid_blit_from(other_mask);
-        } else {
-            let temp_mask = Grid::new_filled(other.shape().clone(), true);
-            self.mask_mut()
-                .expect("Mask createion before failed.")
-                .grid_blit_from(&temp_mask);
-        };
+        self.validity_mask.grid_blit_from(other.mask_ref())        
     }
 }
 
@@ -157,13 +141,10 @@ where
         + PartialEq,
     T: Copy + Sized + Default,
     Grid<D2, bool>: GridBlit<EmptyGrid<D1, T>, T>,
+    Grid<D2, bool>: GridBlit<Grid<D1, bool>, bool>,
 {
     fn grid_blit_from(&mut self, other: &EmptyGrid<D1, T>) {
-        self.materialize_validity_mask();
-
-        self.mask_mut()
-            .expect("Mask createion before failed.")
-            .grid_blit_from(other);
+        self.mask_mut().grid_blit_from(other)
     }
 }
 
