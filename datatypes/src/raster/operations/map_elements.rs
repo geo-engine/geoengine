@@ -296,7 +296,7 @@ where
                 }
             }).collect();
 
-        MaskedGrid::new(Grid::new(shape, new_data).expect("Grid creation failed before"), Grid::new(shape, new_mask).expect("Grid creation failed before")).expect("Grid creation failed before")
+        MaskedGrid::new(Grid::new(shape, new_data).expect("Grid creation failed before"), Grid::new(shape.clone(), new_mask).expect("Grid creation failed before")).expect("Grid creation failed before")
     }
 }
 
