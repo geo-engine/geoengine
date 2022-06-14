@@ -363,7 +363,7 @@ mod tests {
     #[test]
     fn map_grid_or_empty() {
         let dim = [2, 2];
-        let data = vec![7, 7, 8, 255];
+        let data = vec![1, 2, 3, 4];
 
         let r1 = GridOrEmpty::Grid(MaskedGrid::from(Grid2D::new(dim.into(), data).unwrap()));
         let scaled_r1 = r1.map_elements(|p| p * 2 + 1);
@@ -393,7 +393,7 @@ mod tests {
     #[test]
     fn map_raster_tile() {
         let dim = [2, 2];
-        let data = vec![7, 7, 8, 255];
+        let data = vec![7, 7, 8, 8];
         let geo = GeoTransform::test_default();
 
         let r1 = GridOrEmpty::Grid(MaskedGrid::from(Grid2D::new(dim.into(), data).unwrap()));
@@ -402,7 +402,7 @@ mod tests {
         let scaled_r1 = t1.map_or_mask_elements(|p| if p == 7 { Some(p * 2 + 1) } else { None });
         let mat_scaled_r1 = scaled_r1.into_materialized_tile();
 
-        let expected = [15, 15, 255, 255];
+        let expected = [15, 15, 17, 17];
 
         assert_eq!(mat_scaled_r1.grid_array.data.data, expected);
     }
@@ -410,24 +410,24 @@ mod tests {
     #[test]
     fn map_grid_parallel() {
         let dim = [2, 2];
-        let data = vec![7, 7, 8, 255];
+        let data = vec![7, 7, 8, 8];
 
         let r1 = Grid2D::new(dim.into(), data).unwrap();
         let scaled_r1 = r1.map_elements_parallel(|p| p * 2 + 1);
 
-        let expected = [15, 15, 255, 255];
+        let expected = [15, 15, 17, 17];
         assert_eq!(scaled_r1.data, expected);
     }
 
     #[test]
     fn map_grid_or_empty_parallel() {
         let dim = [2, 2];
-        let data = vec![7, 7, 8, 255];
+        let data = vec![7, 7, 8, 8];
 
         let r1 = GridOrEmpty::Grid(MaskedGrid::from(Grid2D::new(dim.into(), data).unwrap()));
         let scaled_r1 = r1.map_elements_parallel(|p| p * 2 + 1);
 
-        let expected = [15, 15, 255, 255];
+        let expected = [15, 15, 17, 17];
 
         match scaled_r1 {
             GridOrEmpty::Grid(g) => {
@@ -452,7 +452,7 @@ mod tests {
     #[test]
     fn map_raster_tile_parallel() {
         let dim = [2, 2];
-        let data = vec![7, 7, 8, 255];
+        let data = vec![7, 7, 8, 8];
         let geo = GeoTransform::test_default();
 
         let r1 = GridOrEmpty::Grid(MaskedGrid::from(Grid2D::new(dim.into(), data).unwrap()));
@@ -461,7 +461,7 @@ mod tests {
         let scaled_r1 = t1.map_elements_parallel(|p| p * 2 + 1);
         let mat_scaled_r1 = scaled_r1.into_materialized_tile();
 
-        let expected = [15, 15, 255, 255];
+        let expected = [15, 15, 17, 17];
 
         assert_eq!(mat_scaled_r1.grid_array.data.data, expected);
     }

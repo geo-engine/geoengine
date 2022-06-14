@@ -148,6 +148,30 @@ where
     }
 }
 
+impl<D1, D2, T, A, I> GridBlit<Grid<D1, T>, T> for MaskedGrid<D2, T>
+where
+    D1: GridSize<ShapeArray = A>
+        + GridBounds<IndexArray = I>
+        + GridSpaceToLinearSpace<IndexArray = I>
+        + Clone
+        + PartialEq,
+    D2: GridSize<ShapeArray = A>
+        + GridBounds<IndexArray = I>
+        + GridSpaceToLinearSpace<IndexArray = I>
+        + Clone
+        + PartialEq
+        + PartialEq,
+    T: Copy + Sized + Default,
+    Grid<D2, T>: GridBlit<Grid<D1, T>, T>,
+    Grid<D2, bool>: GridBlit<Grid<D1, bool>, bool>,
+{
+    fn grid_blit_from(&mut self, other: &Grid<D1, T>) {
+        let temp_mask = Grid::new_filled(other.shape.clone(), true);
+        self.mask_mut().grid_blit_from(&temp_mask);
+        self.as_mut().grid_blit_from(other);
+    }
+}
+
 impl<D, T> GridBlit<EmptyGrid<D, T>, T> for Grid2D<bool>
 where
     D: GridSize<ShapeArray = [usize; 2]>
@@ -293,7 +317,7 @@ mod tests {
     #[test]
     fn grid_blit_from_2d_no_data() {
         let dim = [4, 4];
-        let data = vec![0; 16];
+        let data = vec![7; 16];
 
         let mut r1 = MaskedGrid2D::new_with_data(Grid2D::new(dim.into(), data).unwrap());
 
@@ -302,6 +326,7 @@ mod tests {
         r1.grid_blit_from(&r2);
 
         assert_eq!(r1.data.data, vec![7; 16]);
+        assert_eq!(r1.validity_mask.data, vec![false; 16]);
     }
 
     #[test]
@@ -309,7 +334,7 @@ mod tests {
         let dim = [4, 4, 4];
         let data = vec![0; 64];
 
-        let mut r1 = Grid3D::new(dim.into(), data).unwrap();
+        let mut r1 = MaskedGrid3D::new_with_data(Grid3D::new(dim.into(), data).unwrap());
 
         let data = vec![7; 64];
 
@@ -317,14 +342,16 @@ mod tests {
 
         r1.grid_blit_from(&r2);
 
-        assert_eq!(r1.data, vec![7; 64]);
+        assert_eq!(r1.data.data, vec![7; 64]);
+        assert_eq!(r1.validity_mask.data, vec![true; 64]);
+
     }
 
     #[test]
     fn grid_blit_from_3d_2_2() {
         let data = vec![0; 64];
 
-        let mut r1 = Grid3D::new([4, 4, 4].into(), data).unwrap();
+        let mut r1 =  MaskedGrid3D::new_with_data(Grid3D::new([4, 4, 4].into(), data).unwrap());
 
         let data: Vec<i32> = (0..64).collect();
 
@@ -335,12 +362,17 @@ mod tests {
         r1.grid_blit_from(&r2);
 
         assert_eq!(
-            r1.data,
+            r1.data.data,
             vec![
                 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
                 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 4, 5, 0, 0, 0, 0, 0, 0, 0, 0,
                 0, 0, 16, 17, 0, 0, 20, 21
             ]
+        );
+
+        assert_eq!(
+            r1.validity_mask.data,
+            vec![true; 64]
         );
     }
 
