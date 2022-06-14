@@ -1,7 +1,5 @@
-use crate::raster::{
-    Grid, GridOrEmpty, GridSize, RasterTile2D, MaskedGrid
-};
-use rayon::iter::{IndexedParallelIterator, ParallelIterator, IntoParallelIterator};
+use crate::raster::{Grid, GridOrEmpty, GridSize, MaskedGrid, RasterTile2D};
+use rayon::iter::{IndexedParallelIterator, IntoParallelIterator, ParallelIterator};
 
 pub trait MapElements<In, Out, F: Fn(In) -> Out> {
     type Output;
@@ -26,84 +24,81 @@ pub trait MapElementsOrMaskParallel<In, Out, F: Fn(In) -> Option<Out>> {
 impl<In, Out, F, G> MapElements<In, Out, F> for Grid<G, In>
 where
     In: 'static,
-    Out: 'static ,
+    Out: 'static,
     G: GridSize + Clone,
     F: Fn(In) -> Out,
 {
     type Output = Grid<G, Out>;
     fn map_elements(self, map_fn: F) -> Self::Output {
         let shape = self.shape;
-        let data = self
-            .data
-            .into_iter()
-            .map(map_fn)
-            .collect();
+        let data = self.data.into_iter().map(map_fn).collect();
 
-        Grid {
-            shape,
-            data,
-        }
+        Grid { shape, data }
     }
 }
 
-impl <In, Out, F, G> MapElements<In, Out, F> for MaskedGrid<G, In> where In: 'static + Clone,
-Out: 'static + Clone,
-G: GridSize + Clone + PartialEq,
-F: Fn(In) -> Out,
-Grid<G,In>: MapElements<In, Out, F, Output = Grid<G, Out>>,
+impl<In, Out, F, G> MapElements<In, Out, F> for MaskedGrid<G, In>
+where
+    In: 'static + Clone,
+    Out: 'static + Clone,
+    G: GridSize + Clone + PartialEq,
+    F: Fn(In) -> Out,
+    Grid<G, In>: MapElements<In, Out, F, Output = Grid<G, Out>>,
 {
     type Output = MaskedGrid<G, Out>;
 
     fn map_elements(self, map_fn: F) -> Self::Output {
-        MaskedGrid::new(
-        self.data.map_elements(map_fn),
-        self.validity_mask
-        ).expect("Creation faild for prev valid dimensions")
+        MaskedGrid::new(self.data.map_elements(map_fn), self.validity_mask)
+            .expect("Creation faild for prev valid dimensions")
     }
 }
 
-impl <In, Out, F, G> MapElementsOrMask<In, Out, F> for MaskedGrid<G, In> where In: 'static + Clone,
-Out: 'static + Clone + Default,
-G: GridSize + Clone + PartialEq,
-F: Fn(In) -> Option<Out>,
+impl<In, Out, F, G> MapElementsOrMask<In, Out, F> for MaskedGrid<G, In>
+where
+    In: 'static + Clone,
+    Out: 'static + Clone + Default,
+    G: GridSize + Clone + PartialEq,
+    F: Fn(In) -> Option<Out>,
 {
     type Output = MaskedGrid<G, Out>;
 
     fn map_or_mask_elements(mut self, map_fn: F) -> Self::Output {
-        
         let MaskedGrid {
             data,
-            mut validity_mask // TODO: discuss if it is better to clone or mutate...
+            mut validity_mask, // TODO: discuss if it is better to clone or mutate...
         } = self;
 
         let mut new_data = Grid::new_filled(data.shape.clone(), Out::default());
 
         let mut no_data_count = 0;
-        new_data.data.iter_mut().zip(validity_mask.data.iter_mut()).zip(data.data.into_iter()).for_each(|((o, m), i)| {
-            if !*m {
-                no_data_count += 1;
-                return;
-            }
-            
-            if let Some(new_out_value) = map_fn(i) {
-                *o = new_out_value;
-            } else {
-                *m = false;
-                no_data_count += 1;
-            }
-        });
+        new_data
+            .data
+            .iter_mut()
+            .zip(validity_mask.data.iter_mut())
+            .zip(data.data.into_iter())
+            .for_each(|((o, m), i)| {
+                if !*m {
+                    no_data_count += 1;
+                    return;
+                }
+
+                if let Some(new_out_value) = map_fn(i) {
+                    *o = new_out_value;
+                } else {
+                    *m = false;
+                    no_data_count += 1;
+                }
+            });
         dbg!(no_data_count);
 
-        MaskedGrid::new(new_data, validity_mask).expect("Creation of grid with dimension failed before")
-        
+        MaskedGrid::new(new_data, validity_mask)
+            .expect("Creation of grid with dimension failed before")
     }
 }
 
-
-
 impl<In, Out, F, G> MapElements<In, Out, F> for GridOrEmpty<G, In>
 where
-    In: 'static  + Copy,
+    In: 'static + Copy,
     Out: 'static + Copy,
     G: GridSize + Clone + PartialEq,
     F: Fn(In) -> Out,
@@ -113,17 +108,14 @@ where
     fn map_elements(self, map_fn: F) -> Self::Output {
         match self {
             GridOrEmpty::Grid(grid) => GridOrEmpty::Grid(grid.map_elements(map_fn)),
-            GridOrEmpty::Empty(empty) => {
-                GridOrEmpty::Empty(empty.convert_dtype())
-            }
+            GridOrEmpty::Empty(empty) => GridOrEmpty::Empty(empty.convert_dtype()),
         }
     }
 }
 
-
 impl<In, Out, F, G> MapElementsOrMask<In, Out, F> for GridOrEmpty<G, In>
 where
-    In: 'static  + Copy,
+    In: 'static + Copy,
     Out: 'static + Copy + Default,
     G: GridSize + Clone + PartialEq,
     F: Fn(In) -> Option<Out>,
@@ -133,9 +125,7 @@ where
     fn map_or_mask_elements(self, map_fn: F) -> Self::Output {
         match self {
             GridOrEmpty::Grid(grid) => GridOrEmpty::Grid(grid.map_or_mask_elements(map_fn)),
-            GridOrEmpty::Empty(empty) => {
-                GridOrEmpty::Empty(empty.convert_dtype())
-            }
+            GridOrEmpty::Empty(empty) => GridOrEmpty::Empty(empty.convert_dtype()),
         }
     }
 }
@@ -178,7 +168,6 @@ where
     }
 }
 
-
 impl<In, Out, F, G> MapElementsParallel<In, Out, F> for Grid<G, In>
 where
     In: 'static + Copy + PartialEq + Send + Sync,
@@ -195,10 +184,7 @@ where
             .with_min_len(self.shape.axis_size_x())
             .map(map_fn)
             .collect();
-        Grid {
-            shape,
-            data,
-        }
+        Grid { shape, data }
     }
 }
 
@@ -211,8 +197,10 @@ where
 {
     type Output = MaskedGrid<G, Out>;
     fn map_elements_parallel(self, map_fn: F) -> Self::Output {
-
-        let MaskedGrid { data, validity_mask } = self;        
+        let MaskedGrid {
+            data,
+            validity_mask,
+        } = self;
         let new_data = data.map_elements_parallel(map_fn);
         MaskedGrid::new(new_data, validity_mask).expect("Grid creation failed before")
     }
@@ -229,12 +217,8 @@ where
 
     fn map_elements_parallel(self, map_fn: F) -> Self::Output {
         match self {
-            GridOrEmpty::Grid(grid) => {
-                GridOrEmpty::Grid(grid.map_elements_parallel(map_fn))
-            }
-            GridOrEmpty::Empty(empty) => {
-                GridOrEmpty::Empty(empty.convert_dtype())
-            }
+            GridOrEmpty::Grid(grid) => GridOrEmpty::Grid(grid.map_elements_parallel(map_fn)),
+            GridOrEmpty::Empty(empty) => GridOrEmpty::Empty(empty.convert_dtype()),
         }
     }
 }
@@ -281,22 +265,37 @@ where
 {
     type Output = MaskedGrid<G, Out>;
     fn map_or_mask_elements_parallel(self, map_fn: F) -> Self::Output {
-
-        let MaskedGrid{data, validity_mask} = self;
+        let MaskedGrid {
+            data,
+            validity_mask,
+        } = self;
 
         let shape = data.shape.clone();
 
-            let (new_data, new_mask): (Vec<Out>, Vec<bool>) = data.data
+        let (new_data, new_mask): (Vec<Out>, Vec<bool>) = data
+            .data
             .into_par_iter()
-            .with_min_len(data.shape.axis_size_x()).zip(validity_mask.data.into_par_iter().with_min_len(validity_mask.shape.axis_size_x())).map(|(i, m)| {
+            .with_min_len(data.shape.axis_size_x())
+            .zip(
+                validity_mask
+                    .data
+                    .into_par_iter()
+                    .with_min_len(validity_mask.shape.axis_size_x()),
+            )
+            .map(|(i, m)| {
                 if let Some(o) = map_fn(i) {
                     (o, m)
                 } else {
                     (Out::default(), false)
                 }
-            }).collect();
+            })
+            .collect();
 
-        MaskedGrid::new(Grid::new(shape, new_data).expect("Grid creation failed before"), Grid::new(shape.clone(), new_mask).expect("Grid creation failed before")).expect("Grid creation failed before")
+        MaskedGrid::new(
+            Grid::new(shape.clone(), new_data).expect("Grid creation failed before"),
+            Grid::new(shape, new_mask).expect("Grid creation failed before"),
+        )
+        .expect("Grid creation failed before")
     }
 }
 
@@ -314,9 +313,7 @@ where
             GridOrEmpty::Grid(grid) => {
                 GridOrEmpty::Grid(grid.map_or_mask_elements_parallel(map_fn))
             }
-            GridOrEmpty::Empty(empty) => {
-                GridOrEmpty::Empty(empty.convert_dtype())
-            }
+            GridOrEmpty::Empty(empty) => GridOrEmpty::Empty(empty.convert_dtype()),
         }
     }
 }
@@ -341,7 +338,6 @@ where
     }
 }
 
-
 #[cfg(test)]
 mod tests {
     use crate::{
@@ -358,9 +354,7 @@ mod tests {
         let data = vec![1, 2, 3, 4];
 
         let r1 = Grid2D::new(dim.into(), data).unwrap();
-        let scaled_r1 = r1.map_elements(
-            |p| p * 2 + 1
-        );
+        let scaled_r1 = r1.map_elements(|p| p * 2 + 1);
 
         let expected = [2, 5, 7, 9];
         assert_eq!(scaled_r1.data, expected);
@@ -373,9 +367,7 @@ mod tests {
         let no_data = 255;
 
         let r1 = GridOrEmpty::Grid(MaskedGrid::from(Grid2D::new(dim.into(), data).unwrap()));
-        let scaled_r1 = r1.map_elements(
-            |p| p * 2 + 1
-        );
+        let scaled_r1 = r1.map_elements(|p| p * 2 + 1);
 
         let expected = [2, 5, 7, 9];
 
@@ -386,7 +378,7 @@ mod tests {
             GridOrEmpty::Empty(_) => panic!("Expected grid"),
         }
 
-        let r2 = GridOrEmpty::Empty::<_,u8>(EmptyGrid2D::new(dim.into()));
+        let r2 = GridOrEmpty::Empty::<_, u8>(EmptyGrid2D::new(dim.into()));
         let scaled_r2 = r2.map_elements(|p| Some(p - 10));
 
         match scaled_r2 {
@@ -409,15 +401,7 @@ mod tests {
         let r1 = GridOrEmpty::Grid(MaskedGrid::from(Grid2D::new(dim.into(), data).unwrap()));
         let t1 = RasterTile2D::new(TimeInterval::default(), [0, 0].into(), geo, r1);
 
-        let scaled_r1 = t1.map_or_mask_elements(
-            |p| {
-                if p == 7 {
-                    Some(p * 2 + 1)
-                } else {
-                    None
-                }
-            }
-        );
+        let scaled_r1 = t1.map_or_mask_elements(|p| if p == 7 { Some(p * 2 + 1) } else { None });
         let mat_scaled_r1 = scaled_r1.into_materialized_tile();
 
         let expected = [15, 15, 255, 255];
@@ -432,9 +416,7 @@ mod tests {
         let no_data = 255;
 
         let r1 = Grid2D::new(dim.into(), data).unwrap();
-        let scaled_r1 = r1.map_elements_parallel(
-            |p| p * 2 + 1
-        );
+        let scaled_r1 = r1.map_elements_parallel(|p| p * 2 + 1);
 
         let expected = [15, 15, 255, 255];
         assert_eq!(scaled_r1.data, expected);
@@ -447,9 +429,7 @@ mod tests {
         let no_data = 255;
 
         let r1 = GridOrEmpty::Grid(MaskedGrid::from(Grid2D::new(dim.into(), data).unwrap()));
-        let scaled_r1 = r1.map_elements_parallel(
-            |p|p * 2 + 1                
-        );
+        let scaled_r1 = r1.map_elements_parallel(|p| p * 2 + 1);
 
         let expected = [15, 15, 255, 255];
 
@@ -460,7 +440,7 @@ mod tests {
             GridOrEmpty::Empty(_) => panic!("Expected grid"),
         }
 
-        let r2 = GridOrEmpty::Empty::<_,u8>(EmptyGrid2D::new(dim.into()));
+        let r2 = GridOrEmpty::Empty::<_, u8>(EmptyGrid2D::new(dim.into()));
         let scaled_r2 = r2.map_elements_parallel(|p| Some(p - 10));
 
         match scaled_r2 {
@@ -483,10 +463,7 @@ mod tests {
         let r1 = GridOrEmpty::Grid(MaskedGrid::from(Grid2D::new(dim.into(), data).unwrap()));
         let t1 = RasterTile2D::new(TimeInterval::default(), [0, 0].into(), geo, r1);
 
-        let scaled_r1 = t1.map_elements_parallel(
-            |p| p * 2 + 1           
-            
-        );
+        let scaled_r1 = t1.map_elements_parallel(|p| p * 2 + 1);
         let mat_scaled_r1 = scaled_r1.into_materialized_tile();
 
         let expected = [15, 15, 255, 255];

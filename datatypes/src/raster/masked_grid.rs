@@ -57,7 +57,7 @@ where
 
         Self {
             data,
-            validity_mask
+            validity_mask,
         }
     }
 
@@ -139,20 +139,21 @@ where
     I: Clone,
 {
     fn get_masked_at_grid_index(&self, grid_index: I) -> Result<Option<T>> {
-       
         if !self.validity_mask.get_at_grid_index(grid_index.clone())? {
             return Ok(None);
         }
-       
+
         self.data.get_at_grid_index(grid_index).map(Option::Some)
     }
 
     fn get_masked_at_grid_index_unchecked(&self, grid_index: I) -> Option<T> {
-       
-            if !self.validity_mask.get_at_grid_index_unchecked(grid_index.clone()) {
-                return None;
-            }
-        
+        if !self
+            .validity_mask
+            .get_at_grid_index_unchecked(grid_index.clone())
+        {
+            return None;
+        }
+
         Some(self.data.get_at_grid_index_unchecked(grid_index))
     }
 }
@@ -166,8 +167,9 @@ where
     I: Clone,
 {
     fn set_masked_at_grid_index(&mut self, grid_index: I, value: Option<T>) -> Result<()> {
-
-        &mut self.validity_mask.set_at_grid_index(grid_index.clone(), value.is_some())?;        
+        &mut self
+            .validity_mask
+            .set_at_grid_index(grid_index.clone(), value.is_some())?;
 
         if let Some(v) = value {
             self.data.set_at_grid_index(grid_index, v)?;
@@ -176,9 +178,8 @@ where
     }
 
     fn set_masked_at_grid_index_unchecked(&mut self, grid_index: I, value: Option<T>) {
-        
-        self.validity_mask.set_at_grid_index_unchecked(grid_index.clone(), value.is_some());
-        
+        self.validity_mask
+            .set_at_grid_index_unchecked(grid_index.clone(), value.is_some());
 
         if let Some(v) = value {
             self.data.set_at_grid_index_unchecked(grid_index, v);
@@ -249,7 +250,7 @@ where
     fn set_grid_bounds(self, bounds: GridBoundingBox<I>) -> Result<Self::Output> {
         Ok(MaskedGrid {
             data: self.data.set_grid_bounds(bounds.clone())?,
-            validity_mask: self.validity_mask.set_grid_bounds(bounds)?                    
+            validity_mask: self.validity_mask.set_grid_bounds(bounds)?,
         })
     }
 }

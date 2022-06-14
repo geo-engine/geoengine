@@ -35,10 +35,12 @@ use super::primitives::{SpatialBounded, TemporalBounded};
 use crate::primitives::Coordinate2D;
 use crate::util::Result;
 pub use masked_grid::{MaskedGrid, MaskedGrid1D, MaskedGrid2D, MaskedGrid3D};
+pub use operations::map_elements::{
+    MapElements, MapElementsOrMask, MapElementsOrMaskParallel, MapElementsParallel,
+};
 pub use raster_properties::{
     RasterProperties, RasterPropertiesEntry, RasterPropertiesEntryType, RasterPropertiesKey,
 };
-pub use operations::map_elements::{MapElements, MapElementsOrMask, MapElementsParallel, MapElementsOrMaskParallel};
 
 mod data_type;
 mod empty_grid;

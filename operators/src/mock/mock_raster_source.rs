@@ -251,11 +251,7 @@ impl<T: Pixel> InitializedRasterOperator for InitializedMockRasterSource<T> {
                 .cloned()
                 .map(RasterTile2D::convert_data_type)
                 .collect();
-            MockRasterSourceProcessor::new_unchecked(
-                data,
-                tiling_specification,
-            )
-            .boxed()
+            MockRasterSourceProcessor::new_unchecked(data, tiling_specification).boxed()
         }
 
         if let Some(tile_shape) =
@@ -272,10 +268,7 @@ impl<T: Pixel> InitializedRasterOperator for InitializedMockRasterSource<T> {
 
         Ok(call_generic_raster_processor!(
             self.result_descriptor().data_type,
-            converted(
-                &self.data,
-                self.tiling_specification
-            )
+            converted(&self.data, self.tiling_specification)
         ))
     }
 
@@ -289,7 +282,7 @@ mod tests {
     use super::*;
     use crate::engine::MockExecutionContext;
     use geoengine_datatypes::primitives::Measurement;
-    use geoengine_datatypes::raster::{RasterDataType, MaskedGrid};
+    use geoengine_datatypes::raster::{MaskedGrid, RasterDataType};
     use geoengine_datatypes::util::test::TestDefault;
     use geoengine_datatypes::{
         primitives::TimeInterval,
@@ -299,8 +292,8 @@ mod tests {
 
     #[tokio::test]
     async fn serde() {
-        
-        let raster = MaskedGrid::from(Grid2D::new([3, 2].into(), vec![1_u8, 2, 3, 4, 5, 6]).unwrap());
+        let raster =
+            MaskedGrid::from(Grid2D::new([3, 2].into(), vec![1_u8, 2, 3, 4, 5, 6]).unwrap());
 
         let raster_tile = RasterTile2D::new_with_tile_info(
             TimeInterval::default(),

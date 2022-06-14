@@ -81,9 +81,7 @@ impl ResultDescriptor for RasterResultDescriptor {
     }
 }
 
-impl RasterResultDescriptor {
-
-}
+impl RasterResultDescriptor {}
 
 /// A `ResultDescriptor` for vector queries
 #[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize)]

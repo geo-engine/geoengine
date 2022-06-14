@@ -35,7 +35,6 @@ where
     T: PartialEq + Copy,
 {
     grid_eq(g1.as_ref(), g2.as_ref()) && grid_eq(g1.mask_ref(), g2.mask_ref())
-        
 }
 
 pub fn grid_eq<D, T>(g1: &Grid<D, T>, g2: &Grid<D, T>) -> bool
@@ -81,7 +80,7 @@ pub fn save_test_bytes(bytes: &[u8], filename: &str) {
 #[cfg(test)]
 mod tests {
     use crate::{
-        raster::{EmptyGrid, Grid2D, GridShape2D, MaskedGrid2D, EmptyGrid2D},
+        raster::{EmptyGrid, EmptyGrid2D, Grid2D, GridShape2D, MaskedGrid2D},
         util::test::{empty_grid_eq, grid_eq, masked_grid_eq},
     };
 
