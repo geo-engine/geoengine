@@ -10,7 +10,7 @@ use crate::{
     raster::GridContains,
     util::Result,
 };
-use num_traits::AsPrimitive;
+
 use serde::{Deserialize, Serialize};
 use snafu::ensure;
 

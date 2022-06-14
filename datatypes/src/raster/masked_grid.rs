@@ -167,8 +167,7 @@ where
     I: Clone,
 {
     fn set_masked_at_grid_index(&mut self, grid_index: I, value: Option<T>) -> Result<()> {
-        &mut self
-            .validity_mask
+        self.mask_mut()
             .set_at_grid_index(grid_index.clone(), value.is_some())?;
 
         if let Some(v) = value {

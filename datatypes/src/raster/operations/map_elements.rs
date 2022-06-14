@@ -62,7 +62,7 @@ where
 {
     type Output = MaskedGrid<G, Out>;
 
-    fn map_or_mask_elements(mut self, map_fn: F) -> Self::Output {
+    fn map_or_mask_elements(self, map_fn: F) -> Self::Output {
         let MaskedGrid {
             data,
             mut validity_mask, // TODO: discuss if it is better to clone or mutate...
@@ -364,7 +364,6 @@ mod tests {
     fn map_grid_or_empty() {
         let dim = [2, 2];
         let data = vec![7, 7, 8, 255];
-        let no_data = 255;
 
         let r1 = GridOrEmpty::Grid(MaskedGrid::from(Grid2D::new(dim.into(), data).unwrap()));
         let scaled_r1 = r1.map_elements(|p| p * 2 + 1);
@@ -395,7 +394,6 @@ mod tests {
     fn map_raster_tile() {
         let dim = [2, 2];
         let data = vec![7, 7, 8, 255];
-        let no_data = 255;
         let geo = GeoTransform::test_default();
 
         let r1 = GridOrEmpty::Grid(MaskedGrid::from(Grid2D::new(dim.into(), data).unwrap()));
@@ -413,7 +411,6 @@ mod tests {
     fn map_grid_parallel() {
         let dim = [2, 2];
         let data = vec![7, 7, 8, 255];
-        let no_data = 255;
 
         let r1 = Grid2D::new(dim.into(), data).unwrap();
         let scaled_r1 = r1.map_elements_parallel(|p| p * 2 + 1);
@@ -426,7 +423,6 @@ mod tests {
     fn map_grid_or_empty_parallel() {
         let dim = [2, 2];
         let data = vec![7, 7, 8, 255];
-        let no_data = 255;
 
         let r1 = GridOrEmpty::Grid(MaskedGrid::from(Grid2D::new(dim.into(), data).unwrap()));
         let scaled_r1 = r1.map_elements_parallel(|p| p * 2 + 1);
@@ -457,7 +453,6 @@ mod tests {
     fn map_raster_tile_parallel() {
         let dim = [2, 2];
         let data = vec![7, 7, 8, 255];
-        let no_data = 255;
         let geo = GeoTransform::test_default();
 
         let r1 = GridOrEmpty::Grid(MaskedGrid::from(Grid2D::new(dim.into(), data).unwrap()));
