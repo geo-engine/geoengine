@@ -4,7 +4,9 @@ use super::layer::{
     AddLayer, AddLayerCollection, CollectionItem, Layer, LayerCollectionId,
     LayerCollectionListOptions, LayerCollectionListing, LayerId, LayerListing,
 };
+use super::listing::LayerCollectionProvider;
 use crate::error::Result;
+use crate::workflows::workflow::Workflow;
 use crate::{contexts::Db, util::user_input::Validated};
 use async_trait::async_trait;
 use geoengine_datatypes::util::Identifier;
@@ -19,7 +21,7 @@ pub enum LayerDbError {
 }
 
 #[async_trait]
-pub trait LayerDb: Send + Sync {
+pub trait LayerDb: LayerCollectionProvider + Send + Sync {
     async fn add_layer(&self, layer: Validated<AddLayer>) -> Result<LayerId>;
     async fn add_layer_with_id(&self, id: LayerId, layer: Validated<AddLayer>) -> Result<()>;
 
@@ -47,18 +49,6 @@ pub trait LayerDb: Send + Sync {
         collection: LayerCollectionId,
         parent: LayerCollectionId,
     ) -> Result<()>;
-
-    async fn get_collection_items(
-        &self,
-        collection: LayerCollectionId,
-        options: Validated<LayerCollectionListOptions>,
-    ) -> Result<Vec<CollectionItem>>;
-
-    // all collection items without a parent
-    async fn get_root_collection_items(
-        &self,
-        options: Validated<LayerCollectionListOptions>,
-    ) -> Result<Vec<CollectionItem>>;
 }
 
 #[derive(Default, Debug)]
@@ -107,7 +97,7 @@ impl LayerDb for HashMapLayerDb {
             id,
             name: layer.name.clone(),
             description: layer.description.clone(),
-            workflow: layer.workflow,
+            workflow: layer.workflow.clone(),
             symbology: layer.symbology.clone(),
         })
     }
@@ -169,8 +159,11 @@ impl LayerDb for HashMapLayerDb {
 
         Ok(())
     }
+}
 
-    async fn get_collection_items(
+#[async_trait]
+impl LayerCollectionProvider for HashMapLayerDb {
+    async fn collection_items(
         &self,
         collection: LayerCollectionId,
         options: Validated<LayerCollectionListOptions>,
@@ -215,7 +208,6 @@ impl LayerDb for HashMapLayerDb {
                     id: *l,
                     name: layer.name.clone(),
                     description: layer.description.clone(),
-                    workflow: layer.workflow,
                 })
             });
 
@@ -226,7 +218,7 @@ impl LayerDb for HashMapLayerDb {
             .collect())
     }
 
-    async fn get_root_collection_items(
+    async fn root_collection_items(
         &self,
         options: Validated<LayerCollectionListOptions>,
     ) -> Result<Vec<CollectionItem>> {
@@ -263,7 +255,6 @@ impl LayerDb for HashMapLayerDb {
                 id: *id,
                 name: l.name.clone(),
                 description: l.description.clone(),
-                workflow: l.workflow,
             }))
         });
 
@@ -273,10 +264,27 @@ impl LayerDb for HashMapLayerDb {
             .take(options.limit as usize)
             .collect())
     }
+
+    async fn workflow(&self, layer: LayerId) -> Result<Workflow> {
+        let backend = self.backend.read().await;
+
+        let layer = backend
+            .layers
+            .get(&layer)
+            .ok_or(LayerDbError::NoLayerForGivenId { id: layer })?;
+
+        Ok(layer.workflow.clone())
+    }
 }
 
 #[cfg(test)]
 mod tests {
+    use geoengine_datatypes::primitives::Coordinate2D;
+    use geoengine_operators::{
+        engine::{TypedOperator, VectorOperator},
+        mock::{MockPointSource, MockPointSourceParams},
+    };
+
     use crate::{util::user_input::UserInput, workflows::workflow::WorkflowId};
 
     use super::*;
@@ -285,12 +293,21 @@ mod tests {
     async fn it_stores_layers() -> Result<()> {
         let db = HashMapLayerDb::default();
 
-        let workflow_id = WorkflowId::new();
+        let _workflow_id = WorkflowId::new();
 
         let layer = AddLayer {
             name: "layer".to_string(),
             description: "description".to_string(),
-            workflow: workflow_id,
+            workflow: Workflow {
+                operator: TypedOperator::Vector(
+                    MockPointSource {
+                        params: MockPointSourceParams {
+                            points: vec![Coordinate2D::new(1., 2.); 3],
+                        },
+                    }
+                    .boxed(),
+                ),
+            },
             symbology: None,
         }
         .validated()?;
@@ -317,7 +334,7 @@ mod tests {
         db.add_collection_to_parent(empty_c_id, top_c_id).await?;
 
         let items = db
-            .get_collection_items(
+            .collection_items(
                 top_c_id,
                 LayerCollectionListOptions {
                     offset: 0,
@@ -339,7 +356,6 @@ mod tests {
                     id: l_id,
                     name: "layer".to_string(),
                     description: "description".to_string(),
-                    workflow: workflow_id
                 })
             ]
         );

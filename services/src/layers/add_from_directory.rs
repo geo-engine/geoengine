@@ -7,30 +7,20 @@ use std::{
 };
 
 use crate::error::Result;
-use crate::{
-    layers::layer::{
-        AddLayer, AddLayerCollection, LayerCollectionDefinition, LayerCollectionId, LayerDefinition,
-    },
-    workflows::registry::WorkflowRegistry,
+use crate::layers::layer::{
+    AddLayer, AddLayerCollection, LayerCollectionDefinition, LayerCollectionId, LayerDefinition,
 };
 use crate::{layers::storage::LayerDb, util::user_input::UserInput};
 
 use log::{info, warn};
 
-pub async fn add_layers_from_directory<L: LayerDb, W: WorkflowRegistry>(
-    layer_db: &mut L,
-    workflow_db: &mut W,
-    file_path: PathBuf,
-) {
-    async fn add_layer_from_dir_entry<L: LayerDb, W: WorkflowRegistry>(
+pub async fn add_layers_from_directory<L: LayerDb>(layer_db: &mut L, file_path: PathBuf) {
+    async fn add_layer_from_dir_entry<L: LayerDb>(
         layer_db: &mut L,
-        workflow_db: &mut W,
         entry: &DirEntry,
     ) -> Result<()> {
         let def: LayerDefinition =
             serde_json::from_reader(BufReader::new(File::open(entry.path())?))?;
-
-        let workflow_id = workflow_db.register(def.workflow).await?;
 
         layer_db
             .add_layer_with_id(
@@ -38,7 +28,7 @@ pub async fn add_layers_from_directory<L: LayerDb, W: WorkflowRegistry>(
                 AddLayer {
                     name: def.name,
                     description: def.description,
-                    workflow: workflow_id,
+                    workflow: def.workflow,
                     symbology: def.symbology,
                 }
                 .validated()?,
@@ -58,7 +48,7 @@ pub async fn add_layers_from_directory<L: LayerDb, W: WorkflowRegistry>(
     for entry in dir {
         match entry {
             Ok(entry) if entry.path().extension() == Some(OsStr::new("json")) => {
-                match add_layer_from_dir_entry(layer_db, workflow_db, &entry).await {
+                match add_layer_from_dir_entry(layer_db, &entry).await {
                     Ok(_) => info!("Added layer from directory entry: {:?}", entry),
                     Err(e) => warn!(
                         "Skipped adding layer from directory entry: {:?} error: {}",

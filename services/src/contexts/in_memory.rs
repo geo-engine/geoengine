@@ -60,24 +60,17 @@ impl InMemoryContext {
         exe_ctx_tiling_spec: TilingSpecification,
         query_ctx_chunk_size: ChunkByteSize,
     ) -> Self {
-        let mut workflow_registry = HashMapRegistry::default();
         let mut layer_db = HashMapLayerDb::default();
-        add_layers_from_directory(&mut layer_db, &mut workflow_registry, layer_defs_path).await;
+        add_layers_from_directory(&mut layer_db, layer_defs_path).await;
         add_layer_collections_from_directory(&mut layer_db, layer_collection_defs_path).await;
 
         let mut dataset_db = HashMapDatasetDb::default();
-        add_datasets_from_directory(
-            &mut dataset_db,
-            &mut layer_db,
-            &mut workflow_registry,
-            dataset_defs_path,
-        )
-        .await;
+        add_datasets_from_directory(&mut dataset_db, &mut layer_db, dataset_defs_path).await;
         add_providers_from_directory(&mut dataset_db, provider_defs_path).await;
 
         Self {
             project_db: Default::default(),
-            workflow_registry: Arc::new(workflow_registry),
+            workflow_registry: Default::default(),
             layer_db: Arc::new(layer_db),
             session: Default::default(),
             thread_pool: create_rayon_thread_pool(0),

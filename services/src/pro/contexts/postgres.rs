@@ -102,20 +102,14 @@ where
 
         Self::update_schema(pool.get().await?).await?;
 
-        let mut workflow_db = PostgresWorkflowRegistry::new(pool.clone());
+        let workflow_db = PostgresWorkflowRegistry::new(pool.clone());
         let mut layer_db = PostgresLayerDb::new(pool.clone());
 
-        add_layers_from_directory(&mut layer_db, &mut workflow_db, layer_defs_path).await;
+        add_layers_from_directory(&mut layer_db, layer_defs_path).await;
         add_layer_collections_from_directory(&mut layer_db, layer_collection_defs_path).await;
 
         let mut dataset_db = PostgresDatasetDb::new(pool.clone());
-        add_datasets_from_directory(
-            &mut dataset_db,
-            &mut layer_db,
-            &mut workflow_db,
-            dataset_defs_path,
-        )
-        .await;
+        add_datasets_from_directory(&mut dataset_db, &mut layer_db, dataset_defs_path).await;
         add_providers_from_directory(&mut dataset_db, provider_defs_path.clone()).await;
         add_providers_from_directory(&mut dataset_db, provider_defs_path.join("pro")).await;
 
@@ -400,7 +394,7 @@ where
                             id UUID PRIMARY KEY,
                             name text NOT NULL,
                             description text NOT NULL,
-                            workflow UUID REFERENCES workflows NOT NULL,
+                            workflow json NOT NULL,
                             symbology json 
                         );
 
@@ -577,6 +571,7 @@ mod tests {
         AddLayer, AddLayerCollection, CollectionItem, LayerCollectionListOptions,
         LayerCollectionListing, LayerListing,
     };
+    use crate::layers::listing::LayerCollectionProvider;
     use crate::layers::storage::LayerDb;
     use crate::pro::datasets::{DatasetPermission, Permission, UpdateDatasetPermissions};
     use crate::pro::projects::{LoadVersion, ProProjectDb, UserProjectPermission};
@@ -1736,21 +1731,17 @@ mod tests {
     async fn it_collects_layers() {
         with_temp_context(|ctx, _| async move {
             let layer_db = ctx.layer_db_ref();
-            let workflow_db = ctx.workflow_registry_ref();
 
-            let workflow = workflow_db
-                .register(Workflow {
-                    operator: TypedOperator::Vector(
-                        MockPointSource {
-                            params: MockPointSourceParams {
-                                points: vec![Coordinate2D::new(1., 2.); 3],
-                            },
-                        }
-                        .boxed(),
-                    ),
-                })
-                .await
-                .unwrap();
+            let workflow = Workflow {
+                operator: TypedOperator::Vector(
+                    MockPointSource {
+                        params: MockPointSourceParams {
+                            points: vec![Coordinate2D::new(1., 2.); 3],
+                        },
+                    }
+                    .boxed(),
+                ),
+            };
 
             let layer1 = layer_db
                 .add_layer(
@@ -1758,7 +1749,7 @@ mod tests {
                         name: "Layer1".to_string(),
                         description: "Layer 1".to_string(),
                         symbology: None,
-                        workflow,
+                        workflow: workflow.clone(),
                     }
                     .validated()
                     .unwrap(),
@@ -1773,7 +1764,7 @@ mod tests {
                     name: "Layer1".to_string(),
                     description: "Layer 1".to_string(),
                     symbology: None,
-                    workflow
+                    workflow: workflow.clone()
                 }
             );
 
@@ -1783,7 +1774,7 @@ mod tests {
                         name: "Layer2".to_string(),
                         description: "Layer 2".to_string(),
                         symbology: None,
-                        workflow,
+                        workflow: workflow.clone(),
                     }
                     .validated()
                     .unwrap(),
@@ -1826,7 +1817,7 @@ mod tests {
                 .unwrap();
 
             let root_list = layer_db
-                .get_root_collection_items(
+                .root_collection_items(
                     LayerCollectionListOptions {
                         offset: 0,
                         limit: 20,
@@ -1849,13 +1840,12 @@ mod tests {
                         id: layer2,
                         name: "Layer2".to_string(),
                         description: "Layer 2".to_string(),
-                        workflow
                     })
                 ]
             );
 
             let collection1_list = layer_db
-                .get_collection_items(
+                .collection_items(
                     collection1,
                     LayerCollectionListOptions {
                         offset: 0,
@@ -1879,7 +1869,6 @@ mod tests {
                         id: layer1,
                         name: "Layer1".to_string(),
                         description: "Layer 1".to_string(),
-                        workflow
                     })
                 ]
             );

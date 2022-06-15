@@ -9,7 +9,6 @@ use crate::datasets::storage::MetaDataDefinition;
 use crate::layers::layer::{AddLayer, AddLayerCollection, LayerCollectionId};
 use crate::layers::storage::LayerDb;
 use crate::util::user_input::UserInput;
-use crate::workflows::registry::WorkflowRegistry;
 use crate::workflows::workflow::Workflow;
 use crate::{contexts::MockableSession, datasets::storage::DatasetDb};
 use crate::{datasets::storage::ExternalDatasetProviderDefinition, error::Result};
@@ -41,11 +40,10 @@ pub async fn add_dataset_layer_collection<L: LayerDb>(layer_db: &mut L) -> Resul
     Ok(())
 }
 
-pub async fn add_dataset_as_layer<L: LayerDb, W: WorkflowRegistry>(
+pub async fn add_dataset_as_layer<L: LayerDb>(
     def: DatasetDefinition,
     dataset: DatasetId,
     layer_db: &mut L,
-    workflow_db: &mut W,
 ) -> Result<()> {
     let workflow = match def.meta_data {
         MetaDataDefinition::MockMetaData(_) => Workflow {
@@ -81,8 +79,6 @@ pub async fn add_dataset_as_layer<L: LayerDb, W: WorkflowRegistry>(
         },
     };
 
-    let workflow = workflow_db.register(workflow).await?;
-
     let layer = AddLayer {
         name: def.properties.name,
         description: def.properties.description,
@@ -99,26 +95,18 @@ pub async fn add_dataset_as_layer<L: LayerDb, W: WorkflowRegistry>(
     Ok(())
 }
 
-pub async fn add_datasets_from_directory<
-    S: MockableSession,
-    D: DatasetDb<S>,
-    L: LayerDb,
-    W: WorkflowRegistry,
->(
+pub async fn add_datasets_from_directory<S: MockableSession, D: DatasetDb<S>, L: LayerDb>(
     dataset_db: &mut D,
     layer_db: &mut L,
-    workflow_db: &mut W,
     file_path: PathBuf,
 ) {
     async fn add_dataset_definition_from_dir_entry<
         S: MockableSession,
         D: DatasetDb<S>,
         L: LayerDb,
-        W: WorkflowRegistry,
     >(
         db: &mut D,
         layer_db: &mut L,
-        workflow_db: &mut W,
         entry: &DirEntry,
     ) -> Result<()> {
         let def: DatasetDefinition =
@@ -132,7 +120,7 @@ pub async fn add_datasets_from_directory<
             )
             .await?; // TODO: add as system user
 
-        add_dataset_as_layer(def, id, layer_db, workflow_db).await?;
+        add_dataset_as_layer(def, id, layer_db).await?;
 
         Ok(())
     }
@@ -152,8 +140,7 @@ pub async fn add_datasets_from_directory<
         match entry {
             Ok(entry) if entry.path().extension() == Some(OsStr::new("json")) => {
                 if let Err(e) =
-                    add_dataset_definition_from_dir_entry(dataset_db, layer_db, workflow_db, &entry)
-                        .await
+                    add_dataset_definition_from_dir_entry(dataset_db, layer_db, &entry).await
                 {
                     warn!(
                         "Skipped adding dataset from directory entry: {:?} error: {}",

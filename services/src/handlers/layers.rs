@@ -2,6 +2,7 @@ use actix_web::{web, FromRequest, Responder};
 
 use crate::error::Result;
 use crate::layers::layer::{LayerCollectionId, LayerId};
+use crate::layers::listing::LayerCollectionProvider;
 use crate::layers::storage::LayerDb;
 use crate::util::user_input::UserInput;
 use crate::{contexts::Context, layers::layer::LayerCollectionListOptions};
@@ -22,7 +23,7 @@ async fn list_root_collections_handler<C: Context>(
 ) -> Result<impl Responder> {
     let db = ctx.layer_db_ref();
     let collection = db
-        .get_root_collection_items(options.into_inner().validated()?)
+        .root_collection_items(options.into_inner().validated()?)
         .await?;
 
     Ok(web::Json(collection))
@@ -35,7 +36,7 @@ async fn list_collection_handler<C: Context>(
 ) -> Result<impl Responder> {
     let collection = ctx
         .layer_db_ref()
-        .get_collection_items(id.into_inner(), options.into_inner().validated()?)
+        .collection_items(id.into_inner(), options.into_inner().validated()?)
         .await?;
 
     Ok(web::Json(collection))

@@ -8,7 +8,6 @@ use crate::{
     datasets::add_from_directory::{add_dataset_as_layer, add_dataset_layer_collection},
     error::Result,
     layers::storage::LayerDb,
-    workflows::registry::WorkflowRegistry,
 };
 use crate::{
     datasets::storage::DatasetDb,
@@ -25,21 +24,17 @@ use super::storage::UpdateDatasetPermissions;
 pub async fn add_datasets_from_directory<
     D: DatasetDb<UserSession> + UpdateDatasetPermissions,
     L: LayerDb,
-    W: WorkflowRegistry,
 >(
     dataset_db: &mut D,
     layer_db: &mut L,
-    workflow_db: &mut W,
     file_path: PathBuf,
 ) {
     async fn add_dataset_definition_from_dir_entry<
         D: DatasetDb<UserSession> + UpdateDatasetPermissions,
         L: LayerDb,
-        W: WorkflowRegistry,
     >(
         dataset_db: &mut D,
         layer_db: &mut L,
-        workflow_db: &mut W,
         entry: &DirEntry,
         system_session: &UserSession,
     ) -> Result<()> {
@@ -76,7 +71,7 @@ pub async fn add_datasets_from_directory<
             )
             .await?;
 
-        add_dataset_as_layer(def, dataset_id, layer_db, workflow_db).await?;
+        add_dataset_as_layer(def, dataset_id, layer_db).await?;
 
         Ok(())
     }
@@ -96,14 +91,9 @@ pub async fn add_datasets_from_directory<
 
     for entry in dir {
         if let Ok(entry) = entry {
-            if let Err(e) = add_dataset_definition_from_dir_entry(
-                dataset_db,
-                layer_db,
-                workflow_db,
-                &entry,
-                &system_session,
-            )
-            .await
+            if let Err(e) =
+                add_dataset_definition_from_dir_entry(dataset_db, layer_db, &entry, &system_session)
+                    .await
             {
                 warn!(
                     "Skipped adding dataset from directory entry: {:?} error: {}",

@@ -1,3 +1,4 @@
+use async_trait::async_trait;
 use bb8_postgres::{
     bb8::Pool,
     tokio_postgres::{
@@ -16,10 +17,11 @@ use crate::{
             AddLayer, AddLayerCollection, CollectionItem, Layer, LayerCollectionId,
             LayerCollectionListOptions, LayerCollectionListing, LayerId, LayerListing,
         },
+        listing::LayerCollectionProvider,
         storage::{LayerDb, LayerDbError},
     },
     util::user_input::Validated,
-    workflows::workflow::WorkflowId,
+    workflows::workflow::Workflow,
 };
 
 pub struct PostgresLayerDb<Tls>
@@ -29,7 +31,7 @@ where
     <Tls as MakeTlsConnect<Socket>>::TlsConnect: Send,
     <<Tls as MakeTlsConnect<Socket>>::TlsConnect as TlsConnect<Socket>>::Future: Send,
 {
-    conn_pool: Pool<PostgresConnectionManager<Tls>>,
+    pub(crate) conn_pool: Pool<PostgresConnectionManager<Tls>>,
 }
 
 impl<Tls> PostgresLayerDb<Tls>
@@ -44,7 +46,7 @@ where
     }
 }
 
-#[async_trait::async_trait]
+#[async_trait]
 impl<Tls> LayerDb for PostgresLayerDb<Tls>
 where
     Tls: MakeTlsConnect<Socket> + Clone + Send + Sync + 'static,
@@ -74,7 +76,7 @@ where
                 &id,
                 &layer.name,
                 &layer.description,
-                &layer.workflow,
+                &serde_json::to_value(&layer.workflow).context(error::SerdeJson)?,
                 &symbology,
             ],
         )
@@ -103,7 +105,7 @@ where
                 &id,
                 &layer.name,
                 &layer.description,
-                &layer.workflow,
+                &serde_json::to_value(&layer.workflow).context(error::SerdeJson)?,
                 &symbology,
             ],
         )
@@ -137,7 +139,7 @@ where
             id,
             name: row.get(0),
             description: row.get(1),
-            workflow: row.get(2),
+            workflow: serde_json::from_value(row.get(2)).context(error::SerdeJson)?,
             symbology: serde_json::from_value(row.get(3)).context(error::SerdeJson)?,
         })
     }
@@ -228,8 +230,17 @@ where
 
         Ok(())
     }
+}
 
-    async fn get_collection_items(
+#[async_trait]
+impl<Tls> LayerCollectionProvider for PostgresLayerDb<Tls>
+where
+    Tls: MakeTlsConnect<Socket> + Clone + Send + Sync + 'static,
+    <Tls as MakeTlsConnect<Socket>>::Stream: Send + Sync,
+    <Tls as MakeTlsConnect<Socket>>::TlsConnect: Send,
+    <<Tls as MakeTlsConnect<Socket>>::TlsConnect as TlsConnect<Socket>>::Future: Send,
+{
+    async fn collection_items(
         &self,
         collection: LayerCollectionId,
         options: Validated<LayerCollectionListOptions>,
@@ -241,28 +252,28 @@ where
         let stmt = conn
             .prepare(
                 "
-            SELECT id, name, description, workflow
-            FROM (
-                SELECT 
-                    id, 
-                    name, 
-                    description, 
-                    CAST(NULL as UUID) as workflow
-                FROM layer_collections c JOIN collection_children cc ON (c.id = cc.child)
-                WHERE cc.parent = $1
-            ) u UNION (
-                SELECT 
-                    id, 
-                    name, 
-                    description, 
-                    workflow
-                FROM layers l JOIN collection_layers cl ON (l.id = cl.layer)
-                WHERE cl.collection = $1
-            )
-            ORDER BY workflow DESC, name ASC
-            LIMIT $2 
-            OFFSET $3;            
-            ",
+        SELECT id, name, description, is_layer
+        FROM (
+            SELECT 
+                id, 
+                name, 
+                description, 
+                FALSE AS is_layer
+            FROM layer_collections c JOIN collection_children cc ON (c.id = cc.child)
+            WHERE cc.parent = $1
+        ) u UNION (
+            SELECT 
+                id, 
+                name, 
+                description, 
+                TRUE As is_layer
+            FROM layers l JOIN collection_layers cl ON (l.id = cl.layer)
+            WHERE cl.collection = $1
+        )
+        ORDER BY is_layer ASC, name ASC
+        LIMIT $2 
+        OFFSET $3;            
+        ",
             )
             .await?;
 
@@ -280,26 +291,26 @@ where
         Ok(rows
             .into_iter()
             .map(|row| {
-                let workflow = row.get::<usize, Option<WorkflowId>>(3);
+                let is_layer: bool = row.get(3);
 
-                match workflow {
-                    Some(workflow) => CollectionItem::Layer(LayerListing {
+                if is_layer {
+                    CollectionItem::Layer(LayerListing {
                         id: row.get(0),
                         name: row.get(1),
                         description: row.get(2),
-                        workflow,
-                    }),
-                    None => CollectionItem::Collection(LayerCollectionListing {
+                    })
+                } else {
+                    CollectionItem::Collection(LayerCollectionListing {
                         id: row.get(0),
                         name: row.get(1),
                         description: row.get(2),
-                    }),
+                    })
                 }
             })
             .collect())
     }
 
-    async fn get_root_collection_items(
+    async fn root_collection_items(
         &self,
         options: Validated<LayerCollectionListOptions>,
     ) -> Result<Vec<CollectionItem>> {
@@ -310,28 +321,28 @@ where
         let stmt = conn
             .prepare(
                 "
-            SELECT id, name, description, workflow
-            FROM (
-                SELECT 
-                    id, 
-                    name, 
-                    description, 
-                    CAST(NULL as UUID) as workflow
-                FROM layer_collections c LEFT JOIN collection_children cc ON (c.id = cc.child)
-                WHERE cc.parent IS NULL
-            ) a UNION (
-                SELECT 
-                    id, 
-                    name, 
-                    description, 
-                    workflow
-                FROM layers l LEFT JOIN collection_layers cl ON (l.id = cl.layer)
-                WHERE cl.collection IS NULL
-            )
-            ORDER BY workflow DESC, name ASC
-            LIMIT $1 
-            OFFSET $2;            
-            ",
+        SELECT id, name, description, is_layer
+        FROM (
+            SELECT 
+                id, 
+                name, 
+                description, 
+                FALSE AS is_layer
+            FROM layer_collections c LEFT JOIN collection_children cc ON (c.id = cc.child)
+            WHERE cc.parent IS NULL
+        ) a UNION (
+            SELECT 
+                id, 
+                name, 
+                description, 
+                TRUE AS is_layer
+            FROM layers l LEFT JOIN collection_layers cl ON (l.id = cl.layer)
+            WHERE cl.collection IS NULL
+        )
+        ORDER BY is_layer ASC, name ASC
+        LIMIT $1 
+        OFFSET $2;            
+        ",
             )
             .await?;
 
@@ -345,22 +356,43 @@ where
         Ok(rows
             .into_iter()
             .map(|row| {
-                let workflow = row.get::<usize, Option<WorkflowId>>(3);
+                let is_layer: bool = row.get(3);
 
-                match workflow {
-                    Some(workflow) => CollectionItem::Layer(LayerListing {
+                if is_layer {
+                    CollectionItem::Layer(LayerListing {
                         id: row.get(0),
                         name: row.get(1),
                         description: row.get(2),
-                        workflow,
-                    }),
-                    None => CollectionItem::Collection(LayerCollectionListing {
+                    })
+                } else {
+                    CollectionItem::Collection(LayerCollectionListing {
                         id: row.get(0),
                         name: row.get(1),
                         description: row.get(2),
-                    }),
+                    })
                 }
             })
             .collect())
+    }
+
+    async fn workflow(&self, layer: LayerId) -> Result<Workflow> {
+        let conn = self.conn_pool.get().await?;
+
+        let stmt = conn
+            .prepare(
+                "
+            SELECT 
+                workflow,     
+            FROM layers l
+            WHERE l.id = $1;",
+            )
+            .await?;
+
+        let row = conn
+            .query_one(&stmt, &[&layer])
+            .await
+            .map_err(|_error| LayerDbError::NoLayerForGivenId { id: layer })?;
+
+        Ok(serde_json::from_value(row.get(0)).context(error::SerdeJson)?)
     }
 }

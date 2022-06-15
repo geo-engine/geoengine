@@ -3,10 +3,7 @@ use serde::{Deserialize, Serialize};
 use geoengine_datatypes::identifier;
 
 use crate::{
-    error::Result,
-    projects::Symbology,
-    util::user_input::UserInput,
-    workflows::workflow::{Workflow, WorkflowId},
+    error::Result, projects::Symbology, util::user_input::UserInput, workflows::workflow::Workflow,
 };
 
 identifier!(LayerId);
@@ -17,7 +14,7 @@ pub struct Layer {
     pub id: LayerId,
     pub name: String,
     pub description: String,
-    pub workflow: WorkflowId,
+    pub workflow: Workflow,
     pub symbology: Option<Symbology>,
 }
 
@@ -26,14 +23,13 @@ pub struct LayerListing {
     pub id: LayerId,
     pub name: String,
     pub description: String,
-    pub workflow: WorkflowId,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct AddLayer {
     pub name: String,
     pub description: String,
-    pub workflow: WorkflowId,
+    pub workflow: Workflow,
     pub symbology: Option<Symbology>,
 }
 
