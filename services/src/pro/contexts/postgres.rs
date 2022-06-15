@@ -9,6 +9,7 @@ use crate::pro::projects::ProjectPermission;
 use crate::pro::users::{UserDb, UserId, UserSession};
 use crate::pro::workflows::postgres_workflow_registry::PostgresWorkflowRegistry;
 use crate::projects::ProjectId;
+use crate::tasks::{InMemoryTaskDb, InMemoryTaskDbContext};
 use crate::{contexts::Context, pro::users::PostgresUserDb};
 use crate::{
     contexts::{ExecutionContextImpl, QueryContextImpl},
@@ -499,6 +500,8 @@ where
     type WorkflowRegistry = PostgresWorkflowRegistry<Tls>;
     type DatasetDB = PostgresDatasetDb<Tls>;
     type LayerDB = PostgresLayerDb<Tls>;
+    type TaskContext = InMemoryTaskDbContext; // TODO: PostgresContext
+    type TaskDb = InMemoryTaskDb; // TODO: PostgresContext
     type QueryContext = QueryContextImpl;
     type ExecutionContext = ExecutionContextImpl<UserSession, PostgresDatasetDb<Tls>>;
 
@@ -528,6 +531,13 @@ where
     }
     fn layer_db_ref(&self) -> &Self::LayerDB {
         &self.layer_db
+    }
+
+    fn tasks(&self) -> Arc<Self::TaskDb> {
+        todo!()
+    }
+    fn tasks_ref(&self) -> &Self::TaskDb {
+        todo!()
     }
 
     fn query_context(&self) -> Result<Self::QueryContext> {

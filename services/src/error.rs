@@ -337,6 +337,11 @@ pub enum Error {
     LayerDb {
         source: crate::layers::storage::LayerDbError,
     },
+
+    #[snafu(context(false))]
+    TaskError {
+        source: crate::tasks::TaskError,
+    },
 }
 
 impl actix_web::error::ResponseError for Error {

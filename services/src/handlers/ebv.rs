@@ -2,6 +2,7 @@
 //!
 //! Connects to <https://portal.geobon.org/api/v1/>.
 
+use super::tasks::TaskResponse;
 use crate::contexts::AdminSession;
 use crate::datasets::external::netcdfcf::{
     NetCdfOverview, OverviewGeneration, NETCDF_CF_PROVIDER_ID,
@@ -9,6 +10,7 @@ use crate::datasets::external::netcdfcf::{
 use crate::datasets::listing::ExternalDatasetProvider;
 use crate::datasets::storage::DatasetProviderDb;
 use crate::error::Result;
+use crate::tasks::{Task, TaskContext, TaskDb, TaskStatusInfo};
 use crate::{contexts::Context, datasets::external::netcdfcf::NetCdfCfDataProvider};
 use actix_web::{
     web::{self, ServiceConfig},
@@ -20,6 +22,7 @@ use log::{debug, warn};
 use serde::{Deserialize, Serialize};
 use snafu::{ResultExt, Snafu};
 use std::path::PathBuf;
+use std::sync::Arc;
 use url::Url;
 
 /// Initialize ebv routes
@@ -350,7 +353,7 @@ where
     .boxed_context(error::Internal)?
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 struct NetCdfCfOverviewResponse {
     success: Vec<PathBuf>,
     skip: Vec<PathBuf>,
@@ -362,36 +365,82 @@ async fn create_overviews<C: Context>(
     session: AdminSession,
     ctx: web::Data<C>,
 ) -> Result<impl Responder> {
-    let response = with_netcdfcf_provider(ctx.as_ref(), &session.into(), move |provider| {
-        let mut success = vec![];
-        let mut skip = vec![];
-        let mut error = vec![];
+    let ctx = ctx.into_inner();
 
-        for file in provider
-            .list_files()
-            .map_err(|_| EbvError::CdfCfProviderCannotListFiles {
-                id: NETCDF_CF_PROVIDER_ID,
-            })?
-        {
-            match provider.create_overviews(&file) {
-                Ok(OverviewGeneration::Created) => success.push(file),
-                Ok(OverviewGeneration::Skipped) => skip.push(file),
-                Err(e) => {
-                    warn!("Failed to create overviews for {}: {e}", file.display());
-                    error.push(file);
+    let task: Box<dyn Task<C::TaskContext>> = EvbMultiOverviewTask::<C> {
+        session,
+        ctx: ctx.clone(),
+    }
+    .boxed();
+
+    let task_id = ctx.tasks_ref().register(task).await?;
+
+    Ok(web::Json(TaskResponse::new(task_id)))
+}
+
+struct EvbMultiOverviewTask<C: Context> {
+    session: AdminSession,
+    ctx: Arc<C>,
+}
+
+impl<C: Context> EvbMultiOverviewTask<C> {
+    fn update_pct(task_ctx: Arc<C::TaskContext>, pct: u8, status: NetCdfCfOverviewResponse) {
+        crate::util::spawn(async move {
+            task_ctx.set_completion(pct, status.boxed()).await;
+        });
+    }
+}
+
+#[async_trait::async_trait]
+impl<C: Context> Task<C::TaskContext> for EvbMultiOverviewTask<C> {
+    async fn run(
+        self: Box<Self>,
+        task_ctx: C::TaskContext,
+    ) -> Result<Box<dyn crate::tasks::TaskStatusInfo>, Box<dyn ErrorSource>> {
+        let task_ctx = Arc::new(task_ctx);
+
+        let response =
+            with_netcdfcf_provider(self.ctx.as_ref(), &self.session.into(), move |provider| {
+                let mut status = NetCdfCfOverviewResponse {
+                    success: vec![],
+                    skip: vec![],
+                    error: vec![],
+                };
+
+                let files =
+                    provider
+                        .list_files()
+                        .map_err(|_| EbvError::CdfCfProviderCannotListFiles {
+                            id: NETCDF_CF_PROVIDER_ID,
+                        })?;
+
+                let num_files = files.len();
+
+                for (i, file) in files.into_iter().enumerate() {
+                    // TODO: provide some more detailed pct status
+
+                    match provider.create_overviews(&file) {
+                        Ok(OverviewGeneration::Created) => status.success.push(file),
+                        Ok(OverviewGeneration::Skipped) => status.skip.push(file),
+                        Err(e) => {
+                            warn!("Failed to create overviews for {}: {e}", file.display());
+                            status.error.push(file);
+                        }
+                    }
+
+                    Self::update_pct(
+                        task_ctx.clone(),
+                        ((i + 1) / num_files) as u8,
+                        status.clone(),
+                    );
                 }
-            }
-        }
 
-        Result::<_, EbvError>::Ok(NetCdfCfOverviewResponse {
-            success,
-            skip,
-            error,
-        })
-    })
-    .await?;
+                Result::<_, EbvError>::Ok(status.boxed())
+            })
+            .await;
 
-    Ok(web::Json(response))
+        response.map_err(ErrorSource::boxed)
+    }
 }
 
 #[derive(Debug, Deserialize)]
@@ -405,34 +454,68 @@ async fn create_overview<C: Context>(
     ctx: web::Data<C>,
     params: web::Json<CreateOverviewParams>,
 ) -> Result<impl Responder> {
-    let file = params.into_inner().file;
+    let ctx = ctx.into_inner();
 
-    let response = with_netcdfcf_provider(ctx.as_ref(), &session.into(), move |provider| {
-        Ok(match provider.create_overviews(&file) {
-            Ok(OverviewGeneration::Created) => NetCdfCfOverviewResponse {
-                success: vec![file],
-                skip: vec![],
-                error: vec![],
-            },
-            Ok(OverviewGeneration::Skipped) => NetCdfCfOverviewResponse {
-                success: vec![],
-                skip: vec![file],
-                error: vec![],
-            },
-            Err(e) => {
-                warn!("Failed to create overviews for {}: {e}", file.display());
-                NetCdfCfOverviewResponse {
-                    success: vec![],
-                    skip: vec![],
-                    error: vec![file],
-                }
-            }
-        })
-    })
-    .await?;
+    let task: Box<dyn Task<C::TaskContext>> = EvbOverviewTask::<C> {
+        session,
+        ctx: ctx.clone(),
+        params: params.into_inner(),
+    }
+    .boxed();
 
-    Ok(web::Json(response))
+    let task_id = ctx.tasks_ref().register(task).await?;
+
+    Ok(web::Json(TaskResponse::new(task_id)))
 }
+
+struct EvbOverviewTask<C: Context> {
+    session: AdminSession,
+    ctx: Arc<C>,
+    params: CreateOverviewParams,
+}
+
+#[async_trait::async_trait]
+impl<C: Context> Task<C::TaskContext> for EvbOverviewTask<C> {
+    async fn run(
+        self: Box<Self>,
+        _ctx: C::TaskContext,
+    ) -> Result<Box<dyn crate::tasks::TaskStatusInfo>, Box<dyn ErrorSource>> {
+        let file = self.params.file;
+
+        let response =
+            with_netcdfcf_provider(self.ctx.as_ref(), &self.session.into(), move |provider| {
+                // TODO: provide some detailed pct status
+
+                Ok(match provider.create_overviews(&file) {
+                    Ok(OverviewGeneration::Created) => NetCdfCfOverviewResponse {
+                        success: vec![file],
+                        skip: vec![],
+                        error: vec![],
+                    },
+                    Ok(OverviewGeneration::Skipped) => NetCdfCfOverviewResponse {
+                        success: vec![],
+                        skip: vec![file],
+                        error: vec![],
+                    },
+                    Err(e) => {
+                        warn!("Failed to create overviews for {}: {e}", file.display());
+                        NetCdfCfOverviewResponse {
+                            success: vec![],
+                            skip: vec![],
+                            error: vec![file],
+                        }
+                    }
+                })
+            })
+            .await;
+
+        response
+            .map(TaskStatusInfo::boxed)
+            .map_err(ErrorSource::boxed)
+    }
+}
+
+impl TaskStatusInfo for NetCdfCfOverviewResponse {}
 
 #[cfg(test)]
 mod tests {
