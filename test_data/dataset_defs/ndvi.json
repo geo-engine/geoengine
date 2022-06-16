@@ -286,7 +286,8 @@
       "dataType": "U8",
       "spatialReference": "EPSG:4326",
       "measurement": {
-        "type": "unitless"
+        "type": "continuous",
+        "measurement": "vegetation"
       },
       "noDataValue": 0.0
     },
