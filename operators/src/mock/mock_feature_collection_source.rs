@@ -1,3 +1,5 @@
+use std::collections::HashMap;
+
 use crate::engine::QueryContext;
 use crate::engine::{
     ExecutionContext, InitializedVectorOperator, OperatorDatasets, ResultDescriptor,
@@ -12,7 +14,7 @@ use geoengine_datatypes::collections::{
 };
 use geoengine_datatypes::dataset::DatasetId;
 use geoengine_datatypes::primitives::{
-    Geometry, MultiLineString, MultiPoint, MultiPolygon, NoGeometry, TimeInterval,
+    Geometry, Measurement, MultiLineString, MultiPoint, MultiPolygon, NoGeometry, TimeInterval,
     VectorQueryRectangle,
 };
 use geoengine_datatypes::spatial_reference::{SpatialReference, SpatialReferenceOption};
@@ -77,6 +79,7 @@ where
 {
     pub collections: Vec<FeatureCollection<G>>,
     pub spatial_reference: SpatialReferenceOption,
+    measurements: HashMap<String, Measurement>,
 }
 
 pub type MockFeatureCollectionSource<G> = SourceOperator<MockFeatureCollectionSourceParams<G>>;
@@ -97,12 +100,7 @@ where
     }
 
     pub fn multiple(collections: Vec<FeatureCollection<G>>) -> Self {
-        Self {
-            params: MockFeatureCollectionSourceParams {
-                collections,
-                spatial_reference: SpatialReference::epsg_4326().into(),
-            },
-        }
+        Self::with_collections_and_sref(collections, SpatialReference::epsg_4326())
     }
 
     pub fn with_collections_and_sref(
@@ -111,8 +109,25 @@ where
     ) -> Self {
         Self {
             params: MockFeatureCollectionSourceParams {
-                collections,
                 spatial_reference: spatial_reference.into(),
+                measurements: collections[0]
+                    .column_names()
+                    .map(|name| (name.clone(), Measurement::default()))
+                    .collect(),
+                collections,
+            },
+        }
+    }
+
+    pub fn with_collections_and_measurements(
+        collections: Vec<FeatureCollection<G>>,
+        measurements: HashMap<String, Measurement>,
+    ) -> Self {
+        Self {
+            params: MockFeatureCollectionSourceParams {
+                collections,
+                spatial_reference: SpatialReference::epsg_4326().into(),
+                measurements,
             },
         }
     }
@@ -153,11 +168,12 @@ macro_rules! impl_mock_feature_collection_source {
                     .column_types()
                     .into_iter()
                     .map(|(name, data_type)| {
+                        let measurement = self.params.measurements.get(&name).cloned().into();
                         (
                             name,
                             crate::engine::VectorColumnInfo {
                                 data_type,
-                                measurement: geoengine_datatypes::primitives::Measurement::Unitless,
+                                measurement,
                             },
                         )
                     })

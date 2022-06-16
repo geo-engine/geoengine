@@ -197,7 +197,12 @@ impl InitializedPlotOperator for InitializedHistogram<Box<dyn InitializedVectorO
         let processor = HistogramVectorQueryProcessor {
             input: self.source.query_processor()?,
             column_name: self.column_name.clone().unwrap_or_default(),
-            measurement: Measurement::Unitless, // TODO: incorporate measurement once it is there
+            measurement: self
+                .source
+                .result_descriptor()
+                .column_measurement(self.column_name.as_deref().unwrap_or_default())
+                .cloned()
+                .into(),
             metadata: self.metadata,
             interactive: self.interactive,
         };
@@ -1229,13 +1234,19 @@ mod tests {
 
     #[tokio::test]
     async fn feature_collection_with_one_feature() {
-        let vector_source = MockFeatureCollectionSource::single(
-            DataCollection::from_slices(
+        let vector_source = MockFeatureCollectionSource::with_collections_and_measurements(
+            vec![DataCollection::from_slices(
                 &[] as &[NoGeometry],
                 &[TimeInterval::default()],
                 &[("foo", FeatureData::Float(vec![5.0]))],
             )
-            .unwrap(),
+            .unwrap()],
+            [(
+                "foo".to_string(),
+                Measurement::continuous("bar".to_string(), None),
+            )]
+            .into_iter()
+            .collect(),
         )
         .boxed();
 
@@ -1276,12 +1287,17 @@ mod tests {
 
         assert_eq!(
             result,
-            geoengine_datatypes::plots::Histogram::builder(1, 5., 5., Measurement::Unitless)
-                .counts(vec![1])
-                .build()
-                .unwrap()
-                .to_vega_embeddable(false)
-                .unwrap()
+            geoengine_datatypes::plots::Histogram::builder(
+                1,
+                5.,
+                5.,
+                Measurement::continuous("bar".to_string(), None)
+            )
+            .counts(vec![1])
+            .build()
+            .unwrap()
+            .to_vega_embeddable(false)
+            .unwrap()
         );
     }
 
