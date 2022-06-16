@@ -110,10 +110,15 @@ where
         Self {
             params: MockFeatureCollectionSourceParams {
                 spatial_reference: spatial_reference.into(),
-                measurements: collections[0]
-                    .column_names()
-                    .map(|name| (name.clone(), Measurement::default()))
-                    .collect(),
+                measurements: collections
+                    .first()
+                    .map(|collection| {
+                        collection
+                            .column_names()
+                            .map(|name| (name.clone(), Measurement::default()))
+                            .collect()
+                    })
+                    .unwrap_or_default(),
                 collections,
             },
         }
