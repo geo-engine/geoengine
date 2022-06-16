@@ -315,7 +315,12 @@ mod tests {
                         },
                     }],
                     "spatialReference": "EPSG:4326",
-                }
+                    "measurements": {
+                        "foobar": {
+                            "type": "unitless",
+                        }
+                    },
+                },
             })
             .to_string()
         );
