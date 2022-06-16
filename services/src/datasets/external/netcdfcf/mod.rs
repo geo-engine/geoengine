@@ -112,7 +112,7 @@ pub struct NetCdfGroup {
     pub groups: Vec<NetCdfGroup>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
 pub struct NetCdfEntity {
     pub id: usize,

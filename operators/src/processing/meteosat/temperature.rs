@@ -37,7 +37,7 @@ const OUT_NO_DATA_VALUE: PixelOut = PixelOut::NAN;
 
 /// Parameters for the `Temperature` operator.
 /// * `force_satellite` forces the use of the satellite with the given name.
-#[derive(Debug, Serialize, Deserialize, PartialEq, Clone, Default)]
+#[derive(Debug, Serialize, Deserialize, PartialEq, Eq, Clone, Default)]
 #[serde(rename_all = "camelCase")]
 pub struct TemperatureParams {
     force_satellite: Option<u8>,

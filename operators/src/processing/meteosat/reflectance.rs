@@ -39,7 +39,7 @@ const OUT_NO_DATA_VALUE: PixelOut = PixelOut::NAN;
 /// * `solar_correction` switch to enable solar correction.
 /// * `force_hrv` switch to force the use of the hrv channel.
 /// * `force_satellite` forces the use of the satellite with the given name.
-#[derive(Debug, Serialize, Deserialize, PartialEq, Clone, Default, Copy)]
+#[derive(Debug, Serialize, Deserialize, PartialEq, Eq, Clone, Default, Copy)]
 #[serde(rename_all = "camelCase")]
 pub struct ReflectanceParams {
     pub solar_correction: bool,

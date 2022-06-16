@@ -29,7 +29,7 @@ const MAX_NUMBER_OF_RASTER_INPUTS: usize = 8;
 pub type BoxPlot = Operator<BoxPlotParams, MultipleRasterOrSingleVectorSource>;
 
 /// The parameter spec for `BoxPlot`
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct BoxPlotParams {
     /// Name of the (numeric) attributes to compute the box plots on.

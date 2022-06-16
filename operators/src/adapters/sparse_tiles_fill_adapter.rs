@@ -42,7 +42,7 @@ pub enum SparseTilesFillAdapterError {
     },
 }
 
-#[derive(Debug, PartialEq, Clone, Copy)]
+#[derive(Debug, PartialEq, Eq, Clone, Copy)]
 enum State {
     Initial,
     PollingForNextTile,

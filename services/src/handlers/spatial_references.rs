@@ -34,7 +34,7 @@ pub struct SpatialReferenceSpecification {
     pub axis_order: Option<AxisOrder>,
 }
 
-#[derive(Deserialize, Serialize, Debug, Clone, PartialEq)]
+#[derive(Deserialize, Serialize, Debug, Clone, PartialEq, Eq)]
 pub struct ProjJson {
     name: String,
     coordinate_system: ProjJsonCoordinateSystem,
@@ -66,12 +66,12 @@ impl ProjJson {
     }
 }
 
-#[derive(Deserialize, Serialize, Debug, Clone, PartialEq)]
+#[derive(Deserialize, Serialize, Debug, Clone, PartialEq, Eq)]
 pub struct ProjJsonCoordinateSystem {
     axis: Option<Vec<ProjJsonAxis>>,
 }
 
-#[derive(Deserialize, Serialize, Debug, Clone, PartialEq)]
+#[derive(Deserialize, Serialize, Debug, Clone, PartialEq, Eq)]
 pub struct ProjJsonAxis {
     name: String,
     abbreviation: String,
@@ -79,14 +79,14 @@ pub struct ProjJsonAxis {
     unit: String,
 }
 
-#[derive(Deserialize, Serialize, Debug, Clone, PartialEq)]
+#[derive(Deserialize, Serialize, Debug, Clone, PartialEq, Eq)]
 #[serde(rename_all = "lowercase")]
 pub enum ProjJsonAxisDirection {
     East,
     North,
 }
 
-#[derive(Debug, Deserialize, Serialize, Clone, PartialEq)]
+#[derive(Debug, Deserialize, Serialize, Clone, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
 pub enum AxisOrder {
     NorthEast,

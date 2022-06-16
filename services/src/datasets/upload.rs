@@ -24,7 +24,7 @@ impl UploadRootPath for UploadId {
     }
 }
 
-#[derive(Debug, Serialize, Deserialize, Clone, PartialEq)]
+#[derive(Debug, Serialize, Deserialize, Clone, PartialEq, Eq)]
 pub struct Upload {
     pub id: UploadId,
     pub files: Vec<FileUpload>,
@@ -39,7 +39,7 @@ impl Upload {
     }
 }
 
-#[derive(Debug, Serialize, Deserialize, Clone, PartialEq)]
+#[derive(Debug, Serialize, Deserialize, Clone, PartialEq, Eq)]
 pub struct FileUpload {
     pub id: FileId,
     pub name: String,

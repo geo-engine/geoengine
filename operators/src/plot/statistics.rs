@@ -27,7 +27,7 @@ pub const STATISTICS_OPERATOR_NAME: &str = "Statistics";
 pub type Statistics = Operator<StatisticsParams, MultipleRasterSources>;
 
 /// The parameter spec for `Statistics`
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct StatisticsParams {}
 

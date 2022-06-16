@@ -328,7 +328,7 @@ impl RawFeatureCollectionBuilder {
             .add_buffer(values_buffer);
 
         let data = if let Some(nulls) = nulls_buffer {
-            builder.null_bit_buffer(nulls).build()
+            builder.null_bit_buffer(Some(nulls)).build()
         } else {
             builder.build()
         }?;

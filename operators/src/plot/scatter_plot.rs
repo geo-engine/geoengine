@@ -33,7 +33,7 @@ const COLLECTOR_TO_HISTOGRAM_THRESHOLD: usize = BATCH_SIZE * 10;
 pub type ScatterPlot = Operator<ScatterPlotParams, SingleVectorSource>;
 
 /// The parameter spec for `ScatterPlot`
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ScatterPlotParams {
     /// Name of the (numeric) attribute for the x-axis.

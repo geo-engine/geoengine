@@ -37,7 +37,7 @@ pub type FeatureAttributeValuesOverTime =
     Operator<FeatureAttributeValuesOverTimeParams, SingleVectorSource>;
 
 /// The parameter spec for `FeatureAttributeValuesOverTime`
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct FeatureAttributeValuesOverTimeParams {
     pub id_column: String,

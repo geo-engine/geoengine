@@ -23,7 +23,7 @@ pub type MeanRasterPixelValuesOverTime =
     Operator<MeanRasterPixelValuesOverTimeParams, SingleRasterSource>;
 
 /// The parameter spec for `MeanRasterPixelValuesOverTime`
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct MeanRasterPixelValuesOverTimeParams {
     /// Where should the x-axis (time) tick be positioned?
@@ -39,7 +39,7 @@ const fn default_true() -> bool {
     true
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub enum MeanRasterPixelValuesOverTimePosition {
     Start,

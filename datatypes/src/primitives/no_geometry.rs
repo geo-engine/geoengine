@@ -14,7 +14,7 @@ use crate::util::arrow::ArrowTyped;
 
 /// A zero-sized placeholder struct for situations where a geometry is necessary.
 /// Currently, this is only required for `FeatureCollection` implementations.
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct NoGeometry;
 
 impl Geometry for NoGeometry {

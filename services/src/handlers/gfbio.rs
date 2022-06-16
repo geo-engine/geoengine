@@ -369,20 +369,20 @@ struct BasketEntryInternal {
     visualizable: bool,
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Eq)]
 enum TypedBasketEntry {
     Pangaea(PangaeaEntry),
     Abcd(AbcdEntry),
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Eq)]
 struct PangaeaEntry {
     title: String,
     doi: String,
     visualizable: bool,
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Eq)]
 struct AbcdEntry {
     title: String,
     id: String,

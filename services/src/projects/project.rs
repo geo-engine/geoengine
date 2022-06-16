@@ -353,7 +353,7 @@ impl Default for LayerVisibility {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Plot {
     pub workflow: WorkflowId,
     pub name: String,
@@ -499,7 +499,7 @@ impl UserInput for ProjectListOptions {
 
 identifier!(ProjectVersionId);
 
-#[derive(Debug, PartialEq, Serialize, Deserialize, Clone, Copy)]
+#[derive(Debug, PartialEq, Eq, Serialize, Deserialize, Clone, Copy)]
 pub struct ProjectVersion {
     pub id: ProjectVersionId,
     pub changed: DateTime,

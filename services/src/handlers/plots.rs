@@ -201,7 +201,7 @@ async fn get_plot_handler<C: Context>(
     Ok(web::Json(output))
 }
 
-#[derive(Debug, Clone, PartialEq, Serialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "camelCase")]
 struct WrappedPlotOutput {
     output_format: PlotOutputFormat,

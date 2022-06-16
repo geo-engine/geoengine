@@ -14,7 +14,7 @@ pub enum AttributeAggregate {
     Null, // Representing a missing aggregate
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub enum AttributeAggregateType {
     MeanNumber,
@@ -32,7 +32,7 @@ pub struct MeanAggregator {
     n: usize,
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct StringSampler {
     pub strings: Vec<String>,
 }
