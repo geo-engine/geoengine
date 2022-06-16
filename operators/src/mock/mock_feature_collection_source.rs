@@ -149,10 +149,24 @@ macro_rules! impl_mock_feature_collection_source {
                 self: Box<Self>,
                 _context: &dyn ExecutionContext,
             ) -> Result<Box<dyn InitializedVectorOperator>> {
+                let columns = self.params.collections[0]
+                    .column_types()
+                    .into_iter()
+                    .map(|(name, data_type)| {
+                        (
+                            name,
+                            crate::engine::VectorColumnInfo {
+                                data_type,
+                                measurement: geoengine_datatypes::primitives::Measurement::Unitless,
+                            },
+                        )
+                    })
+                    .collect();
+
                 let result_descriptor = VectorResultDescriptor {
                     data_type: <$geometry>::DATA_TYPE,
                     spatial_reference: self.params.spatial_reference,
-                    columns: self.params.collections[0].column_types(),
+                    columns,
                 };
 
                 Ok(InitializedMockFeatureCollectionSource {

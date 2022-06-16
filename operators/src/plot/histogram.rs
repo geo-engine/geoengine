@@ -102,7 +102,10 @@ impl PlotOperator for Histogram {
 
                 let vector_source = vector_source.initialize(context).await?;
 
-                match vector_source.result_descriptor().columns.get(column_name) {
+                match vector_source
+                    .result_descriptor()
+                    .column_data_type(column_name)
+                {
                     None => {
                         return Err(Error::ColumnDoesNotExist {
                             column: column_name.to_string(),
@@ -590,7 +593,8 @@ mod tests {
 
     use crate::engine::{
         ChunkByteSize, MockExecutionContext, MockQueryContext, RasterOperator,
-        RasterResultDescriptor, StaticMetaData, VectorOperator, VectorResultDescriptor,
+        RasterResultDescriptor, StaticMetaData, VectorColumnInfo, VectorOperator,
+        VectorResultDescriptor,
     };
     use crate::mock::{MockFeatureCollectionSource, MockRasterSource, MockRasterSourceParams};
     use crate::source::{
@@ -979,6 +983,7 @@ mod tests {
     }
 
     #[tokio::test]
+    #[allow(clippy::too_many_lines)]
     async fn text_attribute() {
         let dataset_id = InternalDatasetId::new();
 
@@ -1038,11 +1043,41 @@ mod tests {
                     data_type: VectorDataType::MultiPoint,
                     spatial_reference: SpatialReference::epsg_4326().into(),
                     columns: [
-                        ("natlscale".to_string(), FeatureDataType::Float),
-                        ("scalerank".to_string(), FeatureDataType::Int),
-                        ("featurecla".to_string(), FeatureDataType::Text),
-                        ("name".to_string(), FeatureDataType::Text),
-                        ("website".to_string(), FeatureDataType::Text),
+                        (
+                            "natlscale".to_string(),
+                            VectorColumnInfo {
+                                data_type: FeatureDataType::Float,
+                                measurement: Measurement::Unitless,
+                            },
+                        ),
+                        (
+                            "scalerank".to_string(),
+                            VectorColumnInfo {
+                                data_type: FeatureDataType::Int,
+                                measurement: Measurement::Unitless,
+                            },
+                        ),
+                        (
+                            "featurecla".to_string(),
+                            VectorColumnInfo {
+                                data_type: FeatureDataType::Text,
+                                measurement: Measurement::Unitless,
+                            },
+                        ),
+                        (
+                            "name".to_string(),
+                            VectorColumnInfo {
+                                data_type: FeatureDataType::Text,
+                                measurement: Measurement::Unitless,
+                            },
+                        ),
+                        (
+                            "website".to_string(),
+                            VectorColumnInfo {
+                                data_type: FeatureDataType::Text,
+                                measurement: Measurement::Unitless,
+                            },
+                        ),
                     ]
                     .iter()
                     .cloned()

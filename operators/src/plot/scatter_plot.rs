@@ -51,7 +51,7 @@ impl PlotOperator for ScatterPlot {
     ) -> Result<Box<dyn InitializedPlotOperator>> {
         let source = self.sources.vector.initialize(context).await?;
         for cn in [&self.params.column_x, &self.params.column_y] {
-            match source.result_descriptor().columns.get(cn.as_str()) {
+            match source.result_descriptor().column_data_type(cn.as_str()) {
                 Some(column) if !column.is_numeric() => {
                     return Err(Error::InvalidOperatorSpec {
                         reason: format!("Column '{}' is not numeric.", cn),

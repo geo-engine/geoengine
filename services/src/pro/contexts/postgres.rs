@@ -597,7 +597,7 @@ mod tests {
         DatasetId, DatasetProviderId, ExternalDatasetId, InternalDatasetId,
     };
     use geoengine_datatypes::primitives::{
-        BoundingBox2D, Coordinate2D, FeatureDataType, SpatialResolution, TimeInterval,
+        BoundingBox2D, Coordinate2D, FeatureDataType, Measurement, SpatialResolution, TimeInterval,
         VectorQueryRectangle,
     };
     use geoengine_datatypes::spatial_reference::{SpatialReference, SpatialReferenceOption};
@@ -605,7 +605,7 @@ mod tests {
     use geoengine_datatypes::util::Identifier;
     use geoengine_operators::engine::{
         MetaData, MultipleRasterSources, PlotOperator, StaticMetaData, TypedOperator,
-        TypedResultDescriptor, VectorOperator, VectorResultDescriptor,
+        TypedResultDescriptor, VectorColumnInfo, VectorOperator, VectorResultDescriptor,
     };
     use geoengine_operators::mock::{MockPointSource, MockPointSourceParams};
     use geoengine_operators::plot::{Statistics, StatisticsParams};
@@ -1068,9 +1068,15 @@ mod tests {
                 result_descriptor: VectorResultDescriptor {
                     data_type: VectorDataType::MultiPoint,
                     spatial_reference: SpatialReference::epsg_4326().into(),
-                    columns: [("foo".to_owned(), FeatureDataType::Float)]
-                        .into_iter()
-                        .collect(),
+                    columns: [(
+                        "foo".to_owned(),
+                        VectorColumnInfo {
+                            data_type: FeatureDataType::Float,
+                            measurement: Measurement::Unitless,
+                        },
+                    )]
+                    .into_iter()
+                    .collect(),
                 },
                 phantom: Default::default(),
             });
@@ -1129,9 +1135,15 @@ mod tests {
                     result_descriptor: TypedResultDescriptor::Vector(VectorResultDescriptor {
                         data_type: VectorDataType::MultiPoint,
                         spatial_reference: SpatialReference::epsg_4326().into(),
-                        columns: [("foo".to_owned(), FeatureDataType::Float)]
-                            .into_iter()
-                            .collect(),
+                        columns: [(
+                            "foo".to_owned(),
+                            VectorColumnInfo {
+                                data_type: FeatureDataType::Float,
+                                measurement: Measurement::Unitless
+                            }
+                        )]
+                        .into_iter()
+                        .collect(),
                     }),
                 },
             );
@@ -1246,9 +1258,15 @@ mod tests {
                 result_descriptor: VectorResultDescriptor {
                     data_type: VectorDataType::MultiPoint,
                     spatial_reference: SpatialReference::epsg_4326().into(),
-                    columns: [("foo".to_owned(), FeatureDataType::Float)]
-                        .into_iter()
-                        .collect(),
+                    columns: [(
+                        "foo".to_owned(),
+                        VectorColumnInfo {
+                            data_type: FeatureDataType::Float,
+                            measurement: Measurement::Unitless,
+                        },
+                    )]
+                    .into_iter()
+                    .collect(),
                 },
                 phantom: Default::default(),
             });
