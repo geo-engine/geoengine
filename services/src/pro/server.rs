@@ -49,6 +49,7 @@ where
             .configure(pro::handlers::users::init_user_routes::<C>)
             .configure(handlers::spatial_references::init_spatial_reference_routes::<C>)
             .configure(handlers::upload::init_upload_routes::<C>)
+            // TODO: add task handler
             .configure(handlers::wcs::init_wcs_routes::<C>)
             .configure(handlers::wfs::init_wfs_routes::<C>)
             .configure(handlers::wms::init_wms_routes::<C>)

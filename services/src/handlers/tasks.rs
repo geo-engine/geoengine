@@ -1,5 +1,5 @@
 use crate::error::Result;
-use crate::tasks::TaskDb;
+use crate::tasks::{TaskDb, TaskListOptions};
 use crate::{contexts::Context, tasks::TaskId};
 use actix_web::{web, FromRequest, Responder};
 use serde::{Deserialize, Serialize};
@@ -110,45 +110,30 @@ async fn status_handler<C: Context>(
 /// # Example
 ///
 /// ```text
-/// GET /tasks/status/420b06de-0a7e-45cb-9c1c-ea901b46ab69
+/// GET /tasks/list?offset=0&limit=10&filter=completed
 /// Authorization: Bearer 4f0d02f9-68e8-46fb-9362-80f862b7db54
 /// ```
 ///
-/// Response 1:
+/// Response:
 ///
 /// ```json
-/// {
-///     "status": "running",
-///     "pct_complete": 0,
-///     "info": (),
-/// }
-///
-/// Response 2:
-///
-/// ```json
-/// {
-///     "status": "completed",
-///     "info": {
-///        "code": 42,
+/// [
+///     {
+///         "task_id": "420b06de-0a7e-45cb-9c1c-ea901b46ab69",
+///         "status": "completed",
+///         "info": "completed",
 ///     }
-/// }
-///
-/// Response 3:
-///
-/// ```json
-/// {
-///     "status": "failed",
-///     "error": "something went wrong",
-/// }
+/// ]
 /// ```
+///
 async fn list_handler<C: Context>(
     _session: C::Session, // TODO: incorporate
     ctx: web::Data<C>,
-    task_id: web::Path<TaskId>,
+    task_list_options: web::Query<TaskListOptions>,
 ) -> Result<impl Responder> {
-    let task_id = task_id.into_inner();
+    let task_list_options = task_list_options.into_inner();
 
-    let task = ctx.tasks_ref().status(task_id).await?;
+    let task = ctx.tasks_ref().list(task_list_options).await?;
 
     Ok(web::Json(task))
 }
@@ -185,55 +170,54 @@ mod tests {
 
         let task_id = ctx.tasks_ref().register(NopTask {}.boxed()).await.unwrap();
 
+        // 1. initially, we should get a running status
+
         let req = actix_web::test::TestRequest::get()
             .uri(&format!("/tasks/{task_id}/status"))
             .append_header((header::CONTENT_LENGTH, 0))
             .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())));
 
-        // initially, we should get a running status
-        {
-            let res = send_test_request(req, ctx.clone()).await;
+        let res = send_test_request(req, ctx.clone()).await;
 
-            assert_eq!(res.status(), 200);
+        assert_eq!(res.status(), 200);
 
-            let status: serde_json::Value = actix_web::test::read_body_json(res).await;
-            assert_eq!(
-                status,
-                serde_json::json!({
-                    "status": "running",
-                    "pct_complete": 0,
-                    "info": (),
-                })
-            );
-        }
+        let status: serde_json::Value = actix_web::test::read_body_json(res).await;
+        assert_eq!(
+            status,
+            serde_json::json!({
+                "status": "running",
+                "pct_complete": 0,
+                "info": (),
+            })
+        );
 
-        // then, it should complete
-        let status = crate::util::retry::retry(3, 100, 2., move || {
-            let req = actix_web::test::TestRequest::get()
-                .uri(&format!("/tasks/{task_id}/status"))
-                .append_header((header::CONTENT_LENGTH, 0))
-                .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())));
+        // 2. wait for task to finish
 
-            let ctx_clone = ctx.clone();
-
+        let task_db = ctx.tasks();
+        crate::util::retry::retry(3, 100, 2., move || {
+            let task_db = task_db.clone();
             async move {
-                let res = send_test_request(req, ctx_clone).await;
-
-                assert_eq!(res.status(), 200);
-
-                let status: serde_json::Value = actix_web::test::read_body_json(res).await;
-
-                if let Some(status_str) = status.get("status") {
-                    if status_str == "completed" {
-                        return Ok(status.clone());
-                    }
-                }
-
-                Err("not completed yet")
+                let option = (!task_db.status(task_id).await.unwrap().is_running()).then(|| ());
+                option.ok_or(())
             }
         })
         .await
         .unwrap();
+
+        // 3. finally, it should complete
+
+        let req = actix_web::test::TestRequest::get()
+            .uri(&format!("/tasks/{task_id}/status"))
+            .append_header((header::CONTENT_LENGTH, 0))
+            .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())));
+
+        let ctx_clone = ctx.clone();
+
+        let res = send_test_request(req, ctx_clone).await;
+
+        assert_eq!(res.status(), 200);
+
+        let status: serde_json::Value = actix_web::test::read_body_json(res).await;
 
         assert_eq!(
             status,
@@ -241,6 +225,47 @@ mod tests {
                 "status": "completed",
                 "info": "completed",
             })
+        );
+    }
+
+    #[tokio::test]
+    async fn test_get_list() {
+        let ctx = InMemoryContext::test_default();
+        let session_id = ctx.default_session_ref().await.id();
+
+        let task_id = ctx.tasks_ref().register(NopTask {}.boxed()).await.unwrap();
+
+        // wait for task to finish
+        let task_db = ctx.tasks();
+        crate::util::retry::retry(3, 100, 2., move || {
+            let task_db = task_db.clone();
+            async move {
+                let option = (!task_db.status(task_id).await.unwrap().is_running()).then(|| ());
+                option.ok_or(())
+            }
+        })
+        .await
+        .unwrap();
+
+        let req = actix_web::test::TestRequest::get()
+            .uri("/tasks/list")
+            .append_header((header::CONTENT_LENGTH, 0))
+            .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())));
+
+        let res = send_test_request(req, ctx.clone()).await;
+
+        assert_eq!(res.status(), 200);
+
+        let status: serde_json::Value = actix_web::test::read_body_json(res).await;
+        assert_eq!(
+            status,
+            serde_json::json!([
+                {
+                    "task_id": task_id,
+                    "status": "completed",
+                    "info": "completed",
+                }
+            ])
         );
     }
 }

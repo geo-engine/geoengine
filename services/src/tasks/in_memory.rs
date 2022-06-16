@@ -1,12 +1,16 @@
 use super::{
-    RunningTaskStatusInfo, Task, TaskContext, TaskDb, TaskError, TaskFilter, TaskId, TaskStatus,
-    TaskStatusInfo,
+    RunningTaskStatusInfo, Task, TaskContext, TaskDb, TaskError, TaskFilter, TaskId,
+    TaskListOptions, TaskStatus, TaskStatusInfo, TaskStatusWithId,
 };
 use crate::{contexts::Db, error::Result};
-use geoengine_datatypes::{error::ErrorSource, util::Identifier};
-use std::{collections::HashMap, sync::Arc};
+use futures::StreamExt;
+use geoengine_datatypes::util::Identifier;
+use std::{
+    collections::{HashMap, VecDeque},
+    sync::Arc,
+};
 use tokio::{
-    sync::{RwLockReadGuard, RwLockWriteGuard},
+    sync::{RwLock, RwLockWriteGuard},
     task::JoinHandle,
 };
 
@@ -14,43 +18,34 @@ use tokio::{
 #[derive(Default, Clone)]
 pub struct InMemoryTaskDb {
     handles: Db<HashMap<TaskId, JoinHandle<()>>>,
-    running: Db<TaskStatusMap>,
-    completed: Db<TaskResultMap>,
+    tasks_by_id: Db<HashMap<TaskId, Db<TaskStatus>>>,
+    task_list: Db<VecDeque<TaskUptableStatusWithTaskId>>,
 }
-
-type TaskStatusMap = HashMap<TaskId, Arc<RunningTaskStatusInfo>>;
-type TaskResultMap =
-    HashMap<TaskId, Result<Arc<Box<dyn TaskStatusInfo>>, Arc<Box<dyn ErrorSource>>>>;
 
 impl InMemoryTaskDb {
     async fn write_lock_all(&self) -> WriteLockAll {
-        let (handles, running, completed) = tokio::join!(
+        let (handles, tasks_by_id, task_list) = tokio::join!(
             self.handles.write(),
-            self.running.write(),
-            self.completed.write()
+            self.tasks_by_id.write(),
+            self.task_list.write()
         );
         WriteLockAll {
             handles,
-            running,
-            completed,
+            tasks_by_id,
+            task_list,
         }
     }
+}
 
-    async fn read_lock_status(&self) -> ReadLockStatus {
-        let (running, completed) = tokio::join!(self.running.read(), self.completed.read());
-        ReadLockStatus { running, completed }
-    }
+struct TaskUptableStatusWithTaskId {
+    pub task_id: TaskId,
+    pub status: Db<TaskStatus>,
 }
 
 struct WriteLockAll<'a> {
     pub handles: RwLockWriteGuard<'a, HashMap<TaskId, JoinHandle<()>>>,
-    pub running: RwLockWriteGuard<'a, TaskStatusMap>,
-    pub completed: RwLockWriteGuard<'a, TaskResultMap>,
-}
-
-struct ReadLockStatus<'a> {
-    pub running: RwLockReadGuard<'a, TaskStatusMap>,
-    pub completed: RwLockReadGuard<'a, TaskResultMap>,
+    pub tasks_by_id: RwLockWriteGuard<'a, HashMap<TaskId, Db<TaskStatus>>>,
+    pub task_list: RwLockWriteGuard<'a, VecDeque<TaskUptableStatusWithTaskId>>,
 }
 
 #[async_trait::async_trait]
@@ -61,119 +56,95 @@ impl TaskDb<InMemoryTaskDbContext> for InMemoryTaskDb {
     ) -> Result<TaskId, TaskError> {
         let task_id = TaskId::new();
 
-        let task_ctx = InMemoryTaskDbContext {
-            task_id,
-            running: self.running.clone(),
-        };
-
         // we can clone here, since all interior stuff is wrapped into `Arc`s
         let task_db = self.clone();
 
         // get lock before starting the task to prevent a race condition of initial status setting
         let mut lock = self.write_lock_all().await;
 
+        let status = Arc::new(RwLock::new(TaskStatus::Running(
+            RunningTaskStatusInfo::new(0, ().boxed()),
+        )));
+
+        let task_ctx = InMemoryTaskDbContext {
+            status: status.clone(),
+        };
+
         let handle = crate::util::spawn(async move {
-            let result = task.run(task_ctx).await;
+            let result = task.run(task_ctx.clone()).await;
 
-            let mut lock = task_db.write_lock_all().await;
+            let (mut handles_lock, mut task_status_lock) =
+                tokio::join!(task_db.handles.write(), task_ctx.status.write());
 
-            lock.handles.remove(&task_id);
-            lock.running.remove(&task_id);
+            handles_lock.remove(&task_id);
 
-            lock.completed
-                .insert(task_id, result.map(Arc::new).map_err(Arc::new));
+            *task_status_lock = match result {
+                Ok(status) => TaskStatus::completed(Arc::new(status)),
+                Err(err) => TaskStatus::failed(Arc::new(err)),
+            };
         });
 
         lock.handles.insert(task_id, handle);
-        lock.running
-            .insert(task_id, RunningTaskStatusInfo::new(0, ().boxed()));
+        lock.tasks_by_id.insert(task_id, status.clone());
+        lock.task_list
+            .push_front(TaskUptableStatusWithTaskId { task_id, status });
 
         Ok(task_id)
     }
 
     async fn status(&self, task_id: TaskId) -> Result<TaskStatus, TaskError> {
-        // we can lock the two maps after each other, because we lock all simultaneously during writing
-
-        if let Some(task_status) = self.running.read().await.get(&task_id) {
-            return Ok(TaskStatus::Running(task_status.clone()));
-        }
-
-        if let Some(task_result) = self.completed.read().await.get(&task_id) {
-            match task_result {
-                Ok(task_status) => Ok(TaskStatus::completed(task_status.clone())),
-                Err(task_status) => Ok(TaskStatus::failed(task_status.clone())),
-            }
+        if let Some(task_result) = self.tasks_by_id.read().await.get(&task_id) {
+            Ok(task_result.read().await.clone())
         } else {
             Err(TaskError::TaskNotFound { task_id })
         }
     }
 
-    async fn list(&self, filter: Option<TaskFilter>) -> Result<Vec<TaskStatus>, TaskError> {
-        // TODO: order by timestamp of creation
+    async fn list(&self, options: TaskListOptions) -> Result<Vec<TaskStatusWithId>, TaskError> {
+        let lock = self.task_list.read().await;
 
-        match filter {
-            None => {
-                let lock = self.read_lock_status().await;
+        let iter = lock.range(options.offset as usize..);
+        let stream = futures::stream::iter(iter);
 
-                let running = lock
-                    .running
-                    .values()
-                    .map(|running| TaskStatus::Running(running.clone()));
+        let result = stream
+            .filter_map(|task_status_with_id| async {
+                let task_status = task_status_with_id.status.read().await;
 
-                let completed = lock.completed.values().map(|completed| match completed {
-                    Ok(task_status) => TaskStatus::completed(task_status.clone()),
-                    Err(task_status) => TaskStatus::failed(task_status.clone()),
-                });
+                match (options.filter, &*task_status) {
+                    (None, _)
+                    | (Some(TaskFilter::Running), &TaskStatus::Running(_))
+                    | (Some(TaskFilter::Completed), &TaskStatus::Completed { info: _ })
+                    | (Some(TaskFilter::Failed), &TaskStatus::Failed { error: _ }) => {
+                        Some(TaskStatusWithId {
+                            task_id: task_status_with_id.task_id,
+                            status: task_status.clone(),
+                        })
+                    }
+                    _ => None,
+                }
+            })
+            .take(options.limit as usize)
+            .collect()
+            .await;
 
-                Ok(running.chain(completed).collect())
-            }
-            Some(TaskFilter::Running) => {
-                let lock = self.running.read().await;
-
-                let running = lock
-                    .values()
-                    .map(|running| TaskStatus::Running(running.clone()));
-
-                Ok(running.collect())
-            }
-            Some(TaskFilter::Completed) => {
-                let lock = self.completed.read().await;
-
-                let completed = lock.values().filter_map(|status| match status {
-                    Ok(task_status) => Some(TaskStatus::completed(task_status.clone())),
-                    Err(_) => None,
-                });
-
-                Ok(completed.collect())
-            }
-            Some(TaskFilter::Failed) => {
-                let lock = self.completed.read().await;
-
-                let failed = lock.values().filter_map(|status| match status {
-                    Ok(_) => None,
-                    Err(task_status) => Some(TaskStatus::failed(task_status.clone())),
-                });
-
-                Ok(failed.collect())
-            }
-        }
+        Ok(result)
     }
 }
 
+#[derive(Clone)]
 pub struct InMemoryTaskDbContext {
-    task_id: TaskId,
-    running: Db<TaskStatusMap>,
+    status: Db<TaskStatus>,
 }
 
 #[async_trait::async_trait]
 impl TaskContext for InMemoryTaskDbContext {
     async fn set_completion(&self, pct_complete: u8, status: Box<dyn TaskStatusInfo>) {
-        let mut running = self.running.write().await;
+        let mut task_status = self.status.write().await;
 
-        if let Some(task_status) = running.get_mut(&self.task_id) {
-            *task_status = RunningTaskStatusInfo::new(pct_complete, status);
+        if task_status.is_running() {
+            *task_status = TaskStatus::Running(RunningTaskStatusInfo::new(pct_complete, status));
         } else {
-            // this case should not happen, so we ignore it
+            // already completed, so we ignore the status update
         }
     }
 }

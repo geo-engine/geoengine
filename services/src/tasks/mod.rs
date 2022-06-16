@@ -15,8 +15,7 @@ pub trait TaskDb<C: TaskContext>: Send + Sync {
 
     async fn status(&self, task_id: TaskId) -> Result<TaskStatus, TaskError>;
 
-    /// TODO: pagination
-    async fn list(&self, filter: Option<TaskFilter>) -> Result<Vec<TaskStatus>, TaskError>;
+    async fn list(&self, options: TaskListOptions) -> Result<Vec<TaskStatusWithId>, TaskError>;
 }
 
 identifier!(TaskId);
@@ -60,6 +59,13 @@ pub enum TaskStatus {
     },
 }
 
+#[derive(Debug, Clone, Serialize)]
+pub struct TaskStatusWithId {
+    pub task_id: TaskId,
+    #[serde(flatten)]
+    pub status: TaskStatus,
+}
+
 impl TaskStatus {
     pub fn completed(info: Arc<Box<dyn TaskStatusInfo>>) -> Self {
         TaskStatus::Completed { info }
@@ -67,6 +73,10 @@ impl TaskStatus {
 
     pub fn failed(error: Arc<Box<dyn ErrorSource>>) -> Self {
         TaskStatus::Failed { error }
+    }
+
+    pub fn is_running(&self) -> bool {
+        matches!(self, TaskStatus::Running(_))
     }
 }
 
@@ -112,8 +122,14 @@ impl TaskStatusInfo for String {}
 pub struct TaskListOptions {
     #[serde(default)]
     pub filter: Option<TaskFilter>,
+    #[serde(default)]
     pub offset: u32,
+    #[serde(default = "task_list_limit_default")]
     pub limit: u32,
+}
+
+fn task_list_limit_default() -> u32 {
+    20
 }
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize)]
