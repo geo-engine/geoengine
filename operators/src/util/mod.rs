@@ -33,7 +33,7 @@ where
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum DuplicateOrEmpty {
     Ok,
     Duplicate(String),

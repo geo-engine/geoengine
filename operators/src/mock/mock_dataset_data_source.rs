@@ -37,6 +37,8 @@ impl MetaData<MockDatasetDataSourceLoadingInfo, VectorResultDescriptor, VectorQu
             data_type: VectorDataType::MultiPoint,
             spatial_reference: SpatialReferenceOption::Unreferenced,
             columns: Default::default(),
+            time: None,
+            bbox: None,
         })
     }
 
@@ -102,7 +104,7 @@ impl VectorQueryProcessor for MockDatasetDataSourceProcessor {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct MockDatasetDataSourceParams {
     pub dataset: DatasetId,
 }

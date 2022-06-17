@@ -559,6 +559,8 @@ mod tests {
                     spatial_reference: SpatialReference::epsg_4326().into(),
                     measurement: Measurement::Unitless,
                     no_data_value: no_data_value.map(f64::from),
+                    time: None,
+                    bbox: None,
                 },
             },
         }

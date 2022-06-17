@@ -68,6 +68,8 @@ impl VectorOperator for MockPointSource {
                 data_type: VectorDataType::MultiPoint,
                 spatial_reference: SpatialReference::epsg_4326().into(),
                 columns: Default::default(),
+                time: None,
+                bbox: None,
             },
             points: self.params.points,
         }

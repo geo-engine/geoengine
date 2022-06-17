@@ -29,14 +29,14 @@ pub trait Plot {
     // fn to_png(&self, width_px: u16, height_px: u16) -> Vec<u8>;
 }
 
-#[derive(Debug, Clone, Deserialize, PartialEq, Serialize)]
+#[derive(Debug, Clone, Deserialize, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct PlotData {
     pub vega_string: String,
     pub metadata: PlotMetaData,
 }
 
-#[derive(Debug, Clone, Deserialize, PartialEq, Serialize)]
+#[derive(Debug, Clone, Deserialize, PartialEq, Eq, Serialize)]
 #[serde(untagged)]
 pub enum PlotMetaData {
     None,
@@ -46,7 +46,7 @@ pub enum PlotMetaData {
     },
 }
 
-#[derive(Debug, Clone, Deserialize, PartialEq, Serialize)]
+#[derive(Debug, Clone, Deserialize, PartialEq, Eq, Serialize)]
 pub enum PlotOutputFormat {
     JsonPlain,
     JsonVega,

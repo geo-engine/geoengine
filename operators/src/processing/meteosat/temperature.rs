@@ -37,7 +37,7 @@ const OUT_NO_DATA_VALUE: PixelOut = PixelOut::NAN;
 
 /// Parameters for the `Temperature` operator.
 /// * `force_satellite` forces the use of the satellite with the given name.
-#[derive(Debug, Serialize, Deserialize, PartialEq, Clone, Default)]
+#[derive(Debug, Serialize, Deserialize, PartialEq, Eq, Clone, Default)]
 #[serde(rename_all = "camelCase")]
 pub struct TemperatureParams {
     force_satellite: Option<u8>,
@@ -104,6 +104,8 @@ impl RasterOperator for Temperature {
                 unit: Some("k".into()),
             }),
             no_data_value: Some(f64::from(OUT_NO_DATA_VALUE)),
+            time: in_desc.time,
+            bbox: in_desc.bbox,
         };
 
         let initialized_operator = InitializedTemperature {

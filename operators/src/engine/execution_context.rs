@@ -192,6 +192,8 @@ mod tests {
                 data_type: VectorDataType::Data,
                 spatial_reference: SpatialReferenceOption::Unreferenced,
                 columns: Default::default(),
+                time: None,
+                bbox: None,
             },
             phantom: Default::default(),
         };
@@ -211,6 +213,8 @@ mod tests {
                 data_type: VectorDataType::Data,
                 spatial_reference: SpatialReferenceOption::Unreferenced,
                 columns: Default::default(),
+                time: None,
+                bbox: None,
             }
         );
     }

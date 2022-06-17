@@ -37,7 +37,7 @@ pub type FeatureAttributeValuesOverTime =
     Operator<FeatureAttributeValuesOverTimeParams, SingleVectorSource>;
 
 /// The parameter spec for `FeatureAttributeValuesOverTime`
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct FeatureAttributeValuesOverTimeParams {
     pub id_column: String,
@@ -85,10 +85,10 @@ impl PlotOperator for FeatureAttributeValuesOverTime {
             error::InvalidFeatureDataType,
         );
 
+        let in_desc = source.result_descriptor().clone();
+
         Ok(InitializedFeatureAttributeValuesOverTime {
-            result_descriptor: PlotResultDescriptor {
-                spatial_reference: source.result_descriptor().spatial_reference,
-            },
+            result_descriptor: in_desc.into(),
             vector_source: source,
             state: self.params,
         }
