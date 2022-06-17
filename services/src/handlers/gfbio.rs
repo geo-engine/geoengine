@@ -321,6 +321,7 @@ struct BasketEntry {
     status: BasketEntryStatus,
 }
 
+#[allow(clippy::large_enum_variant)]
 #[derive(Serialize, Debug)]
 #[serde(tag = "status", rename_all = "camelCase")]
 enum BasketEntryStatus {
@@ -369,20 +370,20 @@ struct BasketEntryInternal {
     visualizable: bool,
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Eq)]
 enum TypedBasketEntry {
     Pangaea(PangaeaEntry),
     Abcd(AbcdEntry),
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Eq)]
 struct PangaeaEntry {
     title: String,
     doi: String,
     visualizable: bool,
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Eq)]
 struct AbcdEntry {
     title: String,
     id: String,
@@ -492,6 +493,8 @@ mod tests {
                         SpatialReference::epsg_4326(),
                     ),
                     columns: Default::default(),
+                    time: None,
+                    bbox: None,
                 }),
                 attribute_filters: None,
             }),
@@ -506,7 +509,9 @@ mod tests {
                 "type": "vector",
                 "dataType": "MultiPoint",
                 "spatialReference": "EPSG:4326",
-                "columns": {}
+                "columns": {},
+                "time": null,
+                "bbox": null
             }
         });
 
@@ -531,6 +536,8 @@ mod tests {
                         SpatialReference::epsg_4326(),
                     ),
                     columns: Default::default(),
+                    time: None,
+                    bbox: None,
                 }),
                 attribute_filters: Some(vec![AttributeFilter {
                     attribute: "a".to_string(),
@@ -549,7 +556,9 @@ mod tests {
                 "type": "vector",
                 "dataType": "MultiPoint",
                 "spatialReference": "EPSG:4326",
-                "columns": {}
+                "columns": {},
+                "time": null,
+                "bbox": null,
             },
             "attributeFilters": [
                 {

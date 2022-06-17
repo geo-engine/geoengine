@@ -1071,6 +1071,8 @@ mod tests {
                     columns: [("foo".to_owned(), FeatureDataType::Float)]
                         .into_iter()
                         .collect(),
+                    time: None,
+                    bbox: None,
                 },
                 phantom: Default::default(),
             });
@@ -1132,6 +1134,8 @@ mod tests {
                         columns: [("foo".to_owned(), FeatureDataType::Float)]
                             .into_iter()
                             .collect(),
+                        time: None,
+                        bbox: None,
                     }),
                 },
             );
@@ -1249,6 +1253,8 @@ mod tests {
                     columns: [("foo".to_owned(), FeatureDataType::Float)]
                         .into_iter()
                         .collect(),
+                    time: None,
+                    bbox: None,
                 },
                 phantom: Default::default(),
             });
@@ -1330,6 +1336,8 @@ mod tests {
                 data_type: VectorDataType::Data,
                 spatial_reference: SpatialReferenceOption::Unreferenced,
                 columns: Default::default(),
+                time: None,
+                bbox: None,
             };
 
             let ds = AddDataset {
@@ -1418,6 +1426,8 @@ mod tests {
                 data_type: VectorDataType::Data,
                 spatial_reference: SpatialReferenceOption::Unreferenced,
                 columns: Default::default(),
+                time: None,
+                bbox: None,
             };
 
             let ds = AddDataset {
@@ -1482,6 +1492,8 @@ mod tests {
                 data_type: VectorDataType::Data,
                 spatial_reference: SpatialReferenceOption::Unreferenced,
                 columns: Default::default(),
+                time: None,
+                bbox: None,
             };
 
             let ds = AddDataset {
@@ -1552,6 +1564,8 @@ mod tests {
                 data_type: VectorDataType::Data,
                 spatial_reference: SpatialReferenceOption::Unreferenced,
                 columns: Default::default(),
+                time: None,
+                bbox: None,
             };
 
             let ds = AddDataset {
@@ -1622,6 +1636,8 @@ mod tests {
                 data_type: VectorDataType::Data,
                 spatial_reference: SpatialReferenceOption::Unreferenced,
                 columns: Default::default(),
+                time: None,
+                bbox: None,
             };
 
             let ds = AddDataset {

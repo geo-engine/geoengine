@@ -312,6 +312,8 @@ mod tests {
                     data_type: RasterDataType::U8,
                     spatial_reference: SpatialReference::epsg_4326().into(),
                     measurement: Measurement::Unitless,
+                    time: None,
+                    bbox: None,
                 },
             },
         }
@@ -356,7 +358,9 @@ mod tests {
                     "spatialReference": "EPSG:4326",
                     "measurement": {
                         "type": "unitless"
-                    }
+                    },
+                    "time": null,
+                    "bbox": null
                 }
             }
         })

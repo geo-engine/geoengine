@@ -12,7 +12,7 @@ use crate::{
 identifier!(LayerId);
 identifier!(LayerCollectionId);
 
-#[derive(Debug, Serialize, Deserialize, Clone, PartialEq)]
+#[derive(Debug, Serialize, Deserialize, Clone, PartialEq, Eq)]
 pub struct Layer {
     pub id: LayerId,
     pub name: String,
@@ -21,7 +21,7 @@ pub struct Layer {
     pub symbology: Option<Symbology>,
 }
 
-#[derive(Debug, Serialize, Deserialize, Clone, PartialEq)]
+#[derive(Debug, Serialize, Deserialize, Clone, PartialEq, Eq)]
 pub struct LayerListing {
     pub id: LayerId,
     pub name: String,
@@ -61,14 +61,14 @@ pub struct LayerCollection {
     items: Vec<CollectionItem>,
 }
 
-#[derive(Debug, Serialize, Deserialize, Clone, PartialEq)]
+#[derive(Debug, Serialize, Deserialize, Clone, PartialEq, Eq)]
 pub struct LayerCollectionListing {
     pub id: LayerCollectionId,
     pub name: String,
     pub description: String,
 }
 
-#[derive(Debug, Serialize, Deserialize, Clone, PartialEq)]
+#[derive(Debug, Serialize, Deserialize, Clone, PartialEq, Eq)]
 #[serde(tag = "type", rename_all = "camelCase")]
 pub enum CollectionItem {
     Collection(LayerCollectionListing),

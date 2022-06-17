@@ -421,6 +421,8 @@ mod tests {
                 spatial_reference: SpatialReference::epsg_4326().into(),
                 measurement: Measurement::Unitless,
                 no_data_value,
+                time: None,
+                bbox: None,
             },
             params: GdalDatasetParameters {
                 file_path: "/foo/bar_%TIME%.tiff".into(),
@@ -453,7 +455,9 @@ mod tests {
                 data_type: RasterDataType::U8,
                 spatial_reference: SpatialReference::epsg_4326().into(),
                 measurement: Measurement::Unitless,
-                no_data_value: Some(0.)
+                no_data_value: Some(0.),
+                time: None,
+                bbox: None,
             }
         );
 
@@ -497,6 +501,8 @@ mod tests {
                 spatial_reference: SpatialReference::epsg_4326().into(),
                 measurement: Measurement::Unitless,
                 no_data_value,
+                time: None,
+                bbox: None,
             },
             params: vec![
                 GdalLoadingInfoTemporalSlice {
@@ -553,7 +559,9 @@ mod tests {
                 data_type: RasterDataType::U8,
                 spatial_reference: SpatialReference::epsg_4326().into(),
                 measurement: Measurement::Unitless,
-                no_data_value: Some(0.)
+                no_data_value: Some(0.),
+                time: None,
+                bbox: None,
             }
         );
 
@@ -598,6 +606,8 @@ mod tests {
                 spatial_reference: SpatialReference::epsg_4326().into(),
                 measurement: Measurement::Unitless,
                 no_data_value: None,
+                time: None,
+                bbox: None,
             },
             params: GdalDatasetParameters {
                 file_path: "path/to/ds".into(),
@@ -660,6 +670,8 @@ mod tests {
                 spatial_reference: SpatialReference::epsg_4326().into(),
                 measurement: Measurement::Unitless,
                 no_data_value: None,
+                time: None,
+                bbox: None,
             },
             params: GdalDatasetParameters {
                 file_path: "path/to/ds".into(),
@@ -722,6 +734,8 @@ mod tests {
                 spatial_reference: SpatialReference::epsg_4326().into(),
                 measurement: Measurement::Unitless,
                 no_data_value: None,
+                time: None,
+                bbox: None,
             },
             params: GdalDatasetParameters {
                 file_path: "path/to/ds".into(),

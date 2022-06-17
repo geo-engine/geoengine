@@ -1,5 +1,6 @@
 use std::sync::Arc;
 
+use async_trait::async_trait;
 use futures::{future::BoxFuture, Future, FutureExt, TryFuture, TryFutureExt};
 use geoengine_datatypes::{
     primitives::{
@@ -308,11 +309,12 @@ pub struct TemporalRasterAggregationTileAccu<T> {
     pool: Arc<ThreadPool>,
 }
 
+#[async_trait]
 impl<T: Pixel> FoldTileAccu for TemporalRasterAggregationTileAccu<T> {
     type RasterType = T;
 
-    fn into_tile(self) -> RasterTile2D<Self::RasterType> {
-        self.accu_tile
+    async fn into_tile(self) -> Result<RasterTile2D<Self::RasterType>> {
+        Ok(self.accu_tile)
     }
 
     fn thread_pool(&self) -> &Arc<ThreadPool> {
@@ -332,6 +334,7 @@ pub struct TemporalRasterAggregationSubQuery<F, T: Pixel> {
     pub no_data_value: Option<T>,
     pub initial_value: T,
     pub step: TimeStep,
+    pub step_reference: TimeInstance,
 }
 
 impl<'a, T, FoldM, FoldF> SubQueryTileAggregator<'a, T>
@@ -374,10 +377,11 @@ where
         query_rect: RasterQueryRectangle,
         start_time: TimeInstance,
     ) -> Result<Option<RasterQueryRectangle>> {
+        let snapped_start = self.step.snap_relative(self.step_reference, start_time)?;
         Ok(Some(QueryRectangle {
             spatial_bounds: tile_info.spatial_partition(),
             spatial_resolution: query_rect.spatial_resolution,
-            time_interval: TimeInterval::new(start_time, (start_time + self.step)?)?,
+            time_interval: TimeInterval::new(snapped_start, (snapped_start + self.step)?)?,
         }))
     }
 
@@ -418,6 +422,7 @@ pub struct TemporalRasterAggregationSubQueryNoDataOnly<F, T: Pixel> {
     pub no_data_value: T,
     pub initial_value: T,
     pub step: TimeStep,
+    pub step_reference: TimeInstance,
 }
 
 impl<'a, T, FoldM, FoldF> SubQueryTileAggregator<'a, T>
@@ -452,10 +457,11 @@ where
         query_rect: RasterQueryRectangle,
         start_time: TimeInstance,
     ) -> Result<Option<RasterQueryRectangle>> {
+        let snapped_start = self.step.snap_relative(self.step_reference, start_time)?;
         Ok(Some(QueryRectangle {
             spatial_bounds: tile_info.spatial_partition(),
             spatial_resolution: query_rect.spatial_resolution,
-            time_interval: TimeInterval::new(start_time, (start_time + self.step)?)?,
+            time_interval: TimeInterval::new(snapped_start, (snapped_start + self.step)?)?,
         }))
     }
 

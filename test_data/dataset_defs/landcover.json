@@ -69,7 +69,15 @@
           "16": "Barren or Sparsely Vegetated"
         }
       },
-      "noDataValue": 255.0
+      "noDataValue": 255.0,
+      "time": {
+        "start": "-262144-01-01T00:00:00+00:00",
+        "end": "+262143-12-31T23:59:59.999+00:00"
+      },
+      "bbox": {
+        "upperLeftCoordinate": [-180.0, 90.0],
+        "lowerRightCoordinate": [180.0, -90.0]
+      }
     },
     "params": {
       "filePath": "test_data/raster/landcover/landcover.tif",

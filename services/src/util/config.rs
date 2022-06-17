@@ -25,7 +25,6 @@ lazy_static! {
         #[cfg(not(test))]
         let files = ["Settings-default.toml", "Settings.toml"];
 
-        #[allow(clippy::filter_map)]
         let files: Vec<File<_, _>> = files
             .iter()
             .map(|f| dir.join(f))

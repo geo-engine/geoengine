@@ -19,7 +19,8 @@ pub use self::grid_traits::{
 pub use self::grid_typed::{TypedGrid, TypedGrid2D, TypedGrid3D};
 pub use self::operations::{
     blit::Blit, convert_data_type::ConvertDataType, convert_data_type::ConvertDataTypeParallel,
-    grid_blit::GridBlit,
+    grid_blit::GridBlit, interpolation::Bilinear, interpolation::InterpolationAlgorithm,
+    interpolation::NearestNeighbor,
 };
 pub use self::raster_tile::{
     BaseTile, MaterializedRasterTile, MaterializedRasterTile2D, MaterializedRasterTile3D,

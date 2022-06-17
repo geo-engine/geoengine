@@ -496,6 +496,27 @@ impl ArrowTyped for TimeInterval {
     }
 }
 
+/// Compute the extent of all input time intervals. If one time interval is None, the output will also be None
+pub fn time_interval_extent<I: Iterator<Item = Option<TimeInterval>>>(
+    mut times: I,
+) -> Option<TimeInterval> {
+    let mut extent = if let Some(Some(first)) = times.next() {
+        first
+    } else {
+        return None;
+    };
+
+    for time in times {
+        if let Some(time) = time {
+            extent = extent.extend(&time);
+        } else {
+            return None;
+        }
+    }
+
+    Some(extent)
+}
+
 #[cfg(test)]
 mod tests {
     use crate::primitives::DateTime;
@@ -677,5 +698,28 @@ mod tests {
 
         assert!(a.is_instant());
         assert!(!b.is_instant());
+    }
+
+    #[test]
+    fn extent() {
+        assert_eq!(time_interval_extent([None].into_iter()), None);
+        assert_eq!(
+            time_interval_extent(
+                [
+                    Some(TimeInterval::new(1, 2).unwrap()),
+                    Some(TimeInterval::new(5, 6).unwrap())
+                ]
+                .into_iter()
+            ),
+            Some(TimeInterval::new_unchecked(1, 6))
+        );
+        assert_eq!(
+            time_interval_extent([Some(TimeInterval::new(1, 2).unwrap()), None].into_iter()),
+            None
+        );
+        assert_eq!(
+            time_interval_extent([None, Some(TimeInterval::new(5, 6).unwrap())].into_iter()),
+            None
+        );
     }
 }

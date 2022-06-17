@@ -153,6 +153,8 @@ macro_rules! impl_mock_feature_collection_source {
                     data_type: <$geometry>::DATA_TYPE,
                     spatial_reference: self.params.spatial_reference,
                     columns: self.params.collections[0].column_types(),
+                    time: None,
+                    bbox: None,
                 };
 
                 Ok(InitializedMockFeatureCollectionSource {

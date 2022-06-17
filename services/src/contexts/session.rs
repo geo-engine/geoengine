@@ -96,7 +96,7 @@ impl FromRequest for SimpleSession {
 }
 
 /// Session for sys admin duties
-#[derive(Clone, Debug, Deserialize, Serialize, PartialEq)]
+#[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq)]
 pub struct AdminSession {
     id: SessionId,
 }

@@ -24,18 +24,18 @@ pub enum WfsRequest {
     DescribeStoredQueries(DescribeStoredQueries),
 }
 
-#[derive(PartialEq, Debug, Deserialize, Serialize)]
+#[derive(PartialEq, Eq, Debug, Deserialize, Serialize)]
 pub struct GetCapabilities {
     pub version: Option<String>,
 }
 
-#[derive(PartialEq, Debug, Deserialize, Serialize)]
+#[derive(PartialEq, Eq, Debug, Deserialize, Serialize)]
 pub struct TypeNames {
     pub namespace: Option<String>,
     pub feature_type: String,
 }
 
-#[derive(PartialEq, Debug, Deserialize, Serialize)]
+#[derive(PartialEq, Eq, Debug, Deserialize, Serialize)]
 pub struct DescribeFeatureType {
     pub version: String,
     #[serde(deserialize_with = "parse_type_names")]
@@ -72,42 +72,42 @@ pub struct GetFeature {
     pub query_resolution: Option<SpatialResolution>,
 }
 
-#[derive(PartialEq, Debug, Deserialize, Serialize)]
+#[derive(PartialEq, Eq, Debug, Deserialize, Serialize)]
 pub struct LockFeature {
     // TODO
 }
 
-#[derive(PartialEq, Debug, Deserialize, Serialize)]
+#[derive(PartialEq, Eq, Debug, Deserialize, Serialize)]
 pub struct Transaction {
     // TODO
 }
 
-#[derive(PartialEq, Debug, Deserialize, Serialize)]
+#[derive(PartialEq, Eq, Debug, Deserialize, Serialize)]
 pub struct GetPropertyValue {
     // TODO
 }
 
-#[derive(PartialEq, Debug, Deserialize, Serialize)]
+#[derive(PartialEq, Eq, Debug, Deserialize, Serialize)]
 pub struct GetFeatureWithLock {
     // TODO
 }
 
-#[derive(PartialEq, Debug, Deserialize, Serialize)]
+#[derive(PartialEq, Eq, Debug, Deserialize, Serialize)]
 pub struct CreateStoredQuery {
     // TODO
 }
 
-#[derive(PartialEq, Debug, Deserialize, Serialize)]
+#[derive(PartialEq, Eq, Debug, Deserialize, Serialize)]
 pub struct DropStoredQuery {
     // TODO
 }
 
-#[derive(PartialEq, Debug, Deserialize, Serialize)]
+#[derive(PartialEq, Eq, Debug, Deserialize, Serialize)]
 pub struct ListStoredQueries {
     // TODO
 }
 
-#[derive(PartialEq, Debug, Deserialize, Serialize)]
+#[derive(PartialEq, Eq, Debug, Deserialize, Serialize)]
 pub struct DescribeStoredQueries {
     // TODO
 }

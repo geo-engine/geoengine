@@ -1,6 +1,7 @@
 mod circle_merging_quadtree;
 mod column_range_filter;
 mod expression;
+mod interpolation;
 mod map_query;
 mod meteosat;
 mod point_in_polygon;
@@ -12,6 +13,7 @@ mod time_shift;
 mod vector_join;
 
 pub use expression::{Expression, ExpressionError, ExpressionParams, ExpressionSources};
+pub use interpolation::{Interpolation, InterpolationError, InterpolationParams};
 pub use point_in_polygon::{
     PointInPolygonFilter, PointInPolygonFilterParams, PointInPolygonFilterSource,
     PointInPolygonTester,

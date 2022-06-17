@@ -288,7 +288,10 @@ pub enum Error {
     MockRasterSource {
         source: crate::mock::MockRasterSourceError,
     },
-
+    #[snafu(context(false))]
+    InterpolationOperator {
+        source: crate::processing::InterpolationError,
+    },
     #[snafu(context(false))]
     TimeShift {
         source: crate::processing::TimeShiftError,

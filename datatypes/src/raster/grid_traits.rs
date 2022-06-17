@@ -67,18 +67,14 @@ where
     A: AsRef<[isize]>,
 {
     fn contains(&self, rhs: &GridIdx<A>) -> bool {
-        for ((&min_idx, &max_idx), &idx) in self
-            .min_index()
+        debug_assert!(self.min_index().as_slice().len() == rhs.as_slice().len()); // this must never fail since the array type A has a fixed size. However, one might implement that for a Vec so better check it here.
+
+        self.min_index()
             .as_slice()
             .iter()
             .zip(self.max_index().as_slice())
             .zip(rhs.as_slice())
-        {
-            if !crate::util::ranges::value_in_range_inclusive(idx, min_idx, max_idx) {
-                return false;
-            }
-        }
-        true
+            .all(|((&min_idx, &max_idx), idx)| (min_idx..=max_idx).contains(idx))
     }
 }
 

@@ -1,4 +1,8 @@
-use geoengine_datatypes::primitives::{FeatureDataType, Measurement};
+use geoengine_datatypes::primitives::{
+    AxisAlignedRectangle, BoundingBox2D, FeatureDataType, Measurement, SpatialPartition2D,
+    TimeInterval,
+};
+use geoengine_datatypes::raster::FromPrimitive;
 use geoengine_datatypes::{
     collections::VectorDataType, raster::RasterDataType, spatial_reference::SpatialReferenceOption,
 };
@@ -36,6 +40,12 @@ pub trait ResultDescriptor: Clone + Serialize {
     fn map_spatial_reference<F>(&self, f: F) -> Self
     where
         F: Fn(&SpatialReferenceOption) -> SpatialReferenceOption;
+
+    /// Map one descriptor to another one by modifying only the time
+    #[must_use]
+    fn map_time<F>(&self, f: F) -> Self
+    where
+        F: Fn(&Option<TimeInterval>) -> Option<TimeInterval>;
 }
 
 /// A `ResultDescriptor` for raster queries
@@ -45,6 +55,8 @@ pub struct RasterResultDescriptor {
     pub data_type: RasterDataType,
     pub spatial_reference: SpatialReferenceOption,
     pub measurement: Measurement,
+    pub time: Option<TimeInterval>,
+    pub bbox: Option<SpatialPartition2D>,
 }
 
 impl ResultDescriptor for RasterResultDescriptor {
@@ -79,17 +91,30 @@ impl ResultDescriptor for RasterResultDescriptor {
             ..*self
         }
     }
+
+    fn map_time<F>(&self, f: F) -> Self
+    where
+        F: Fn(&Option<TimeInterval>) -> Option<TimeInterval>,
+    {
+        Self {
+            time: f(&self.time),
+            measurement: self.measurement.clone(),
+            ..*self
+        }
+    }
 }
 
 impl RasterResultDescriptor {}
 
 /// A `ResultDescriptor` for vector queries
-#[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct VectorResultDescriptor {
     pub data_type: VectorDataType,
     pub spatial_reference: SpatialReferenceOption,
     pub columns: HashMap<String, FeatureDataType>,
+    pub time: Option<TimeInterval>,
+    pub bbox: Option<BoundingBox2D>,
 }
 
 impl VectorResultDescriptor {
@@ -103,6 +128,7 @@ impl VectorResultDescriptor {
             data_type: self.data_type,
             spatial_reference: self.spatial_reference,
             columns: f(&self.columns),
+            ..*self
         }
     }
 }
@@ -126,6 +152,7 @@ impl ResultDescriptor for VectorResultDescriptor {
             data_type: f(&self.data_type),
             spatial_reference: self.spatial_reference,
             columns: self.columns.clone(),
+            ..*self
         }
     }
 
@@ -137,15 +164,29 @@ impl ResultDescriptor for VectorResultDescriptor {
             data_type: self.data_type,
             spatial_reference: f(&self.spatial_reference),
             columns: self.columns.clone(),
+            ..*self
+        }
+    }
+
+    fn map_time<F>(&self, f: F) -> Self
+    where
+        F: Fn(&Option<TimeInterval>) -> Option<TimeInterval>,
+    {
+        Self {
+            time: f(&self.time),
+            columns: self.columns.clone(),
+            ..*self
         }
     }
 }
 
 /// A `ResultDescriptor` for plot queries
-#[derive(Debug, Copy, Clone, Ord, PartialOrd, Eq, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Copy, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct PlotResultDescriptor {
     pub spatial_reference: SpatialReferenceOption,
+    pub time: Option<TimeInterval>,
+    pub bbox: Option<BoundingBox2D>,
 }
 
 impl ResultDescriptor for PlotResultDescriptor {
@@ -170,7 +211,45 @@ impl ResultDescriptor for PlotResultDescriptor {
     {
         *self
     }
+
+    fn map_time<F>(&self, f: F) -> Self
+    where
+        F: Fn(&Option<TimeInterval>) -> Option<TimeInterval>,
+    {
+        Self {
+            time: f(&self.time),
+            ..*self
+        }
+    }
 }
+
+// implementing `From` is possible here because we don't need any additional information, while we would need
+// a measurement and a no data value to convert it into a `RasterResultDescriptor`
+impl From<VectorResultDescriptor> for PlotResultDescriptor {
+    fn from(descriptor: VectorResultDescriptor) -> Self {
+        Self {
+            spatial_reference: descriptor.spatial_reference,
+            time: descriptor.time,
+            bbox: descriptor.bbox,
+        }
+    }
+}
+
+// implementing `From` is possible here because we don't need any additional information, while we would need
+// to know the `columns` to convert it into a `VectorResultDescriptor`
+impl From<RasterResultDescriptor> for PlotResultDescriptor {
+    fn from(descriptor: RasterResultDescriptor) -> Self {
+        Self {
+            spatial_reference: descriptor.spatial_reference,
+            time: descriptor.time,
+            // converting `SpatialPartition2D` to `BoundingBox2D` is ok here, because is makes the covered area only larger
+            bbox: descriptor
+                .bbox
+                .and_then(|p| BoundingBox2D::new(p.lower_left(), p.upper_right()).ok()),
+        }
+    }
+}
+
 #[derive(Debug, Serialize, Deserialize, Clone, PartialEq)]
 #[serde(rename_all = "camelCase", tag = "type")]
 pub enum TypedResultDescriptor {
@@ -208,6 +287,8 @@ mod tests {
             data_type: VectorDataType::Data,
             spatial_reference: SpatialReferenceOption::Unreferenced,
             columns: Default::default(),
+            time: None,
+            bbox: None,
         };
 
         let columns = {
@@ -227,6 +308,8 @@ mod tests {
                 data_type: VectorDataType::MultiPoint,
                 spatial_reference: SpatialReference::epsg_4326().into(),
                 columns,
+                time: None,
+                bbox: None,
             }
         );
     }
