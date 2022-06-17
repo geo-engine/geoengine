@@ -228,6 +228,8 @@ impl ResultDescriptor for PlotResultDescriptor {
     }
 }
 
+// implementing `From` is possible here because we don't need any additional information, while we would need
+// a measurement and a no data value to convert it into a `RasterResultDescriptor`
 impl From<VectorResultDescriptor> for PlotResultDescriptor {
     fn from(descriptor: VectorResultDescriptor) -> Self {
         Self {
@@ -238,11 +240,14 @@ impl From<VectorResultDescriptor> for PlotResultDescriptor {
     }
 }
 
+// implementing `From` is possible here because we don't need any additional information, while we would need
+// to know the `columns` to convert it into a `VectorResultDescriptor`
 impl From<RasterResultDescriptor> for PlotResultDescriptor {
     fn from(descriptor: RasterResultDescriptor) -> Self {
         Self {
             spatial_reference: descriptor.spatial_reference,
             time: descriptor.time,
+            // converting `SpatialPartition2D` to `BoundingBox2D` is ok here, because is makes the covered area only larger
             bbox: descriptor
                 .bbox
                 .and_then(|p| BoundingBox2D::new(p.lower_left(), p.upper_right()).ok()),

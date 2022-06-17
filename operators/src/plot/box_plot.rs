@@ -103,6 +103,7 @@ impl PlotOperator for BoxPlot {
                     PlotResultDescriptor {
                         spatial_reference: in_descriptors[0].spatial_reference,
                         time,
+                        // converting `SpatialPartition2D` to `BoundingBox2D` is ok here, because is makes the covered area only larger
                         bbox: bbox
                             .and_then(|p| BoundingBox2D::new(p.lower_left(), p.upper_right()).ok()),
                     },

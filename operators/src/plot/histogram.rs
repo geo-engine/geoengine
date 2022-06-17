@@ -88,6 +88,7 @@ impl PlotOperator for Histogram {
                     PlotResultDescriptor {
                         spatial_reference: in_desc.spatial_reference,
                         time: in_desc.time,
+                        // converting `SpatialPartition2D` to `BoundingBox2D` is ok here, because is makes the covered area only larger
                         bbox: in_desc
                             .bbox
                             .and_then(|p| BoundingBox2D::new(p.lower_left(), p.upper_right()).ok()),
