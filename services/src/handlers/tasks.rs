@@ -1,5 +1,5 @@
 use crate::error::Result;
-use crate::tasks::{TaskDb, TaskListOptions};
+use crate::tasks::{TaskListOptions, TaskManager};
 use crate::{contexts::Context, tasks::TaskId};
 use actix_web::{web, FromRequest, Responder};
 use serde::{Deserialize, Serialize};

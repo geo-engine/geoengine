@@ -10,7 +10,7 @@ use crate::datasets::external::netcdfcf::{
 use crate::datasets::listing::ExternalDatasetProvider;
 use crate::datasets::storage::DatasetProviderDb;
 use crate::error::Result;
-use crate::tasks::{Task, TaskContext, TaskDb, TaskStatusInfo};
+use crate::tasks::{Task, TaskContext, TaskManager, TaskStatusInfo};
 use crate::{contexts::Context, datasets::external::netcdfcf::NetCdfCfDataProvider};
 use actix_web::{
     web::{self, ServiceConfig},

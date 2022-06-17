@@ -1,6 +1,6 @@
 use super::{
-    RunningTaskStatusInfo, Task, TaskContext, TaskDb, TaskError, TaskFilter, TaskId,
-    TaskListOptions, TaskStatus, TaskStatusInfo, TaskStatusWithId,
+    RunningTaskStatusInfo, Task, TaskContext, TaskError, TaskFilter, TaskId, TaskListOptions,
+    TaskManager, TaskStatus, TaskStatusInfo, TaskStatusWithId,
 };
 use crate::{contexts::Db, error::Result};
 use futures::StreamExt;
@@ -49,7 +49,7 @@ struct WriteLockAll<'a> {
 }
 
 #[async_trait::async_trait]
-impl TaskDb<InMemoryTaskDbContext> for InMemoryTaskDb {
+impl TaskManager<InMemoryTaskDbContext> for InMemoryTaskDb {
     async fn register(
         &self,
         task: Box<dyn Task<InMemoryTaskDbContext>>,

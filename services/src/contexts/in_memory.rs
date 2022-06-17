@@ -117,7 +117,7 @@ impl Context for InMemoryContext {
     type DatasetDB = HashMapDatasetDb;
     type LayerDB = HashMapLayerDb;
     type TaskContext = InMemoryTaskDbContext;
-    type TaskDb = InMemoryTaskDb;
+    type TaskManager = InMemoryTaskDb;
     type QueryContext = QueryContextImpl;
     type ExecutionContext = ExecutionContextImpl<SimpleSession, HashMapDatasetDb>;
 
@@ -149,10 +149,10 @@ impl Context for InMemoryContext {
         &self.layer_db
     }
 
-    fn tasks(&self) -> Arc<Self::TaskDb> {
+    fn tasks(&self) -> Arc<Self::TaskManager> {
         self.task_db.clone()
     }
-    fn tasks_ref(&self) -> &Self::TaskDb {
+    fn tasks_ref(&self) -> &Self::TaskManager {
         &self.task_db
     }
 

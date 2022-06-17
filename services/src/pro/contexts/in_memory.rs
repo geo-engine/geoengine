@@ -130,7 +130,7 @@ impl Context for ProInMemoryContext {
     type QueryContext = QueryContextImpl;
     type ExecutionContext = ExecutionContextImpl<UserSession, ProHashMapDatasetDb>;
     type TaskContext = InMemoryTaskDbContext;
-    type TaskDb = InMemoryTaskDb;
+    type TaskManager = InMemoryTaskDb;
 
     fn project_db(&self) -> Arc<Self::ProjectDB> {
         self.project_db.clone()
@@ -160,10 +160,10 @@ impl Context for ProInMemoryContext {
         &self.layer_db
     }
 
-    fn tasks(&self) -> Arc<Self::TaskDb> {
+    fn tasks(&self) -> Arc<Self::TaskManager> {
         self.task_db.clone()
     }
-    fn tasks_ref(&self) -> &Self::TaskDb {
+    fn tasks_ref(&self) -> &Self::TaskManager {
         &self.task_db
     }
 

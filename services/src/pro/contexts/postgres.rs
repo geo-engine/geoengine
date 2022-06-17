@@ -501,7 +501,7 @@ where
     type DatasetDB = PostgresDatasetDb<Tls>;
     type LayerDB = PostgresLayerDb<Tls>;
     type TaskContext = InMemoryTaskDbContext; // TODO: PostgresContext
-    type TaskDb = InMemoryTaskDb; // TODO: PostgresContext
+    type TaskManager = InMemoryTaskDb; // TODO: PostgresContext
     type QueryContext = QueryContextImpl;
     type ExecutionContext = ExecutionContextImpl<UserSession, PostgresDatasetDb<Tls>>;
 
@@ -533,10 +533,10 @@ where
         &self.layer_db
     }
 
-    fn tasks(&self) -> Arc<Self::TaskDb> {
+    fn tasks(&self) -> Arc<Self::TaskManager> {
         todo!()
     }
-    fn tasks_ref(&self) -> &Self::TaskDb {
+    fn tasks_ref(&self) -> &Self::TaskManager {
         todo!()
     }
 
