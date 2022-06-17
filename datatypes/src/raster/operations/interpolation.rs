@@ -166,7 +166,9 @@ mod tests {
     use rayon::ThreadPoolBuilder;
 
     use super::*;
-    use crate::raster::{GeoTransform, Grid2D, GridOrEmpty, RasterTile2D, TileInformation, MaskedGrid};
+    use crate::raster::{
+        GeoTransform, Grid2D, GridOrEmpty, MaskedGrid, RasterTile2D, TileInformation,
+    };
 
     #[test]
     fn nearest_neightbor() {
