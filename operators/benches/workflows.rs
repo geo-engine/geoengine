@@ -307,6 +307,8 @@ fn bench_mock_source_operator(bench_collector: &mut BenchmarkCollector) {
                     spatial_reference: SpatialReference::epsg_4326().into(),
                     measurement: Measurement::Unitless,
                     no_data_value: no_data_value.map(|v| v as f64),
+                    time: None,
+                    bbox: None,
                 },
             },
         }
@@ -375,6 +377,8 @@ fn bench_mock_source_operator_with_expression(bench_collector: &mut BenchmarkCol
                     spatial_reference: SpatialReference::epsg_4326().into(),
                     measurement: Measurement::Unitless,
                     no_data_value: no_data_value.map(|v| v as f64),
+                    time: None,
+                    bbox: None,
                 },
             },
         };
@@ -456,6 +460,8 @@ fn bench_mock_source_operator_with_identity_reprojection(bench_collector: &mut B
                     spatial_reference: SpatialReference::epsg_4326().into(),
                     measurement: Measurement::Unitless,
                     no_data_value: no_data_value.map(|v| v as f64),
+                    time: None,
+                    bbox: None,
                 },
             },
         };
@@ -529,6 +535,8 @@ fn bench_mock_source_operator_with_4326_to_3857_reprojection(
                     spatial_reference: SpatialReference::epsg_4326().into(),
                     measurement: Measurement::Unitless,
                     no_data_value: no_data_value.map(|v| v as f64),
+                    time: None,
+                    bbox: None,
                 },
             },
         };

@@ -85,10 +85,10 @@ impl PlotOperator for FeatureAttributeValuesOverTime {
             error::InvalidFeatureDataType,
         );
 
+        let in_desc = source.result_descriptor().clone();
+
         Ok(InitializedFeatureAttributeValuesOverTime {
-            result_descriptor: PlotResultDescriptor {
-                spatial_reference: source.result_descriptor().spatial_reference,
-            },
+            result_descriptor: in_desc.into(),
             vector_source: source,
             state: self.params,
         }

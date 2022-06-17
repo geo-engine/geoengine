@@ -55,10 +55,11 @@ impl PlotOperator for MeanRasterPixelValuesOverTime {
         context: &dyn ExecutionContext,
     ) -> Result<Box<dyn InitializedPlotOperator>> {
         let raster = self.sources.raster.initialize(context).await?;
+
+        let in_desc = raster.result_descriptor().clone();
+
         let initialized_operator = InitializedMeanRasterPixelValuesOverTime {
-            result_descriptor: PlotResultDescriptor {
-                spatial_reference: raster.result_descriptor().spatial_reference,
-            },
+            result_descriptor: in_desc.into(),
             raster,
             state: self.params,
         };
@@ -412,6 +413,8 @@ mod tests {
                     spatial_reference: SpatialReference::epsg_4326().into(),
                     measurement: Measurement::Unitless,
                     no_data_value: no_data_value.map(AsPrimitive::as_),
+                    time: None,
+                    bbox: None,
                 },
             },
         }

@@ -161,6 +161,8 @@ impl VectorOperator for CsvSource {
                 data_type: VectorDataType::MultiPoint, // TODO: get as user input
                 spatial_reference: SpatialReference::epsg_4326().into(), // TODO: get as user input
                 columns: Default::default(), // TODO: get when source allows loading other columns
+                time: None,
+                bbox: None,
             },
             state: self.params,
         };

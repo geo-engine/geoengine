@@ -67,14 +67,10 @@ impl PlotOperator for ScatterPlot {
                 }
             }
         }
-        Ok(InitializedScatterPlot::new(
-            PlotResultDescriptor {
-                spatial_reference: source.result_descriptor().spatial_reference,
-            },
-            self.params,
-            source,
-        )
-        .boxed())
+
+        let in_desc = source.result_descriptor().clone();
+
+        Ok(InitializedScatterPlot::new(in_desc.into(), self.params, source).boxed())
     }
 }
 
