@@ -19,7 +19,7 @@ use tokio::{
 pub struct InMemoryTaskDb {
     handles: Db<HashMap<TaskId, JoinHandle<()>>>,
     tasks_by_id: Db<HashMap<TaskId, Db<TaskStatus>>>,
-    task_list: Db<VecDeque<TaskUptableStatusWithTaskId>>,
+    task_list: Db<VecDeque<TaskUpdateStatusWithTaskId>>,
 }
 
 impl InMemoryTaskDb {
@@ -37,7 +37,7 @@ impl InMemoryTaskDb {
     }
 }
 
-struct TaskUptableStatusWithTaskId {
+struct TaskUpdateStatusWithTaskId {
     pub task_id: TaskId,
     pub status: Db<TaskStatus>,
 }
@@ -45,7 +45,7 @@ struct TaskUptableStatusWithTaskId {
 struct WriteLockAll<'a> {
     pub handles: RwLockWriteGuard<'a, HashMap<TaskId, JoinHandle<()>>>,
     pub tasks_by_id: RwLockWriteGuard<'a, HashMap<TaskId, Db<TaskStatus>>>,
-    pub task_list: RwLockWriteGuard<'a, VecDeque<TaskUptableStatusWithTaskId>>,
+    pub task_list: RwLockWriteGuard<'a, VecDeque<TaskUpdateStatusWithTaskId>>,
 }
 
 #[async_trait::async_trait]
@@ -87,7 +87,7 @@ impl TaskManager<InMemoryTaskDbContext> for InMemoryTaskDb {
         lock.handles.insert(task_id, handle);
         lock.tasks_by_id.insert(task_id, status.clone());
         lock.task_list
-            .push_front(TaskUptableStatusWithTaskId { task_id, status });
+            .push_front(TaskUpdateStatusWithTaskId { task_id, status });
 
         Ok(task_id)
     }
