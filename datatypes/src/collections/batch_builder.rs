@@ -327,11 +327,7 @@ impl RawFeatureCollectionBuilder {
             .len(self.num_features)
             .add_buffer(values_buffer);
 
-        let data = if let Some(nulls) = nulls_buffer {
-            builder.null_bit_buffer(Some(nulls)).build()
-        } else {
-            builder.build()
-        }?;
+        let data = builder.null_bit_buffer(nulls_buffer).build()?;
 
         let array = Arc::new(PrimitiveArray::<T>::from(data)) as ArrayRef;
 
