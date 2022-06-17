@@ -87,10 +87,10 @@ impl VectorOperator for PointInPolygonFilter {
             }
         );
 
-        let in_desc = points.result_descriptor().clone();
-
-        let mut out_desc = in_desc;
-        out_desc.bbox = polygons.result_descriptor().bbox;
+        // We use the result descriptor of the points because in the worst case no feature will be excluded.
+        // We cannot use the polygon bbox because a `MultiPoint` could have one point within a polygon (and
+        // thus be included in the result) and one point outside of the bbox of the polygons.
+        let out_desc = points.result_descriptor().clone();
 
         let initialized_operator = InitializedPointInPolygonFilter {
             result_descriptor: out_desc,
