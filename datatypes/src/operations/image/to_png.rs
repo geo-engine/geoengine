@@ -298,7 +298,11 @@ mod tests {
 
     #[test]
     fn no_data() {
-        let raster = MaskedGrid2D::new(Grid2D::new([2, 2].into(), vec![0, 100, 200, 255]).unwrap(), Grid2D::new([2,2].into(), vec![false, true, true, true]).unwrap()).unwrap();
+        let raster = MaskedGrid2D::new(
+            Grid2D::new([2, 2].into(), vec![0, 100, 200, 255]).unwrap(),
+            Grid2D::new([2, 2].into(), vec![false, true, true, true]).unwrap(),
+        )
+        .unwrap();
 
         let colorizer = Colorizer::linear_gradient(
             vec![

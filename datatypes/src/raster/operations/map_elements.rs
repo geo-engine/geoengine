@@ -1,5 +1,11 @@
-use crate::raster::{Grid, GridOrEmpty, GridSize, MaskedGrid, RasterTile2D};
-use rayon::iter::{IndexedParallelIterator, IntoParallelIterator, ParallelIterator};
+use crate::raster::{
+    BoundedGrid, Grid, GridBounds, GridIdx, GridIdx2D, GridOrEmpty, GridSize,
+    GridSpaceToLinearSpace, MaskedGrid, MaskedGrid2D, RasterTile2D,
+};
+use rayon::{
+    iter::{IndexedParallelIterator, IntoParallelIterator, ParallelIterator},
+    slice::{ParallelSlice, ParallelSliceMut},
+};
 
 pub trait MapElements<In, Out, F: Fn(In) -> Out> {
     type Output;
@@ -19,6 +25,16 @@ pub trait MapElementsOrMask<In, Out, F: Fn(In) -> Option<Out>> {
 pub trait MapElementsOrMaskParallel<In, Out, F: Fn(In) -> Option<Out>> {
     type Output;
     fn map_or_mask_elements_parallel(self, map_fn: F) -> Self::Output;
+}
+
+pub trait MapIndexedElements<In, Out, GIdx, F: Fn(GIdx, Option<In>) -> Option<Out>> {
+    type Output;
+    fn map_index_elements(self, map_fn: F) -> Self::Output;
+}
+
+pub trait MapIndexedElementsParallel<In, Out, GIdx, F: Fn(GIdx, Option<In>) -> Option<Out>> {
+    type Output;
+    fn map_index_elements_parallel(self, map_fn: F) -> Self::Output;
 }
 
 impl<In, Out, F, G> MapElements<In, Out, F> for Grid<G, In>
@@ -335,6 +351,111 @@ where
             global_geo_transform: self.global_geo_transform,
             properties: self.properties,
         }
+    }
+}
+
+impl<In, Out, F> MapIndexedElements<In, Out, GridIdx2D, F> for MaskedGrid2D<In>
+where
+    F: Fn(GridIdx2D, Option<In>) -> Option<Out>,
+    In: Clone,
+    Out: Default + Clone,
+{
+    type Output = MaskedGrid2D<Out>;
+
+    fn map_index_elements(self, map_fn: F) -> Self::Output {
+        let MaskedGrid {
+            data,
+            mut validity_mask,
+        } = self;
+        debug_assert!(data.data.len() == validity_mask.data.len());
+        debug_assert!(data.shape == validity_mask.shape);
+
+        let out_data: Vec<Out> = data
+            .data
+            .into_iter()
+            .zip(validity_mask.data.iter_mut())
+            .enumerate()
+            .map(|(lin_idx, (i, &mut m))| {
+                let grid_idx = data.shape.grid_idx_unchecked(lin_idx);
+
+                let in_masked_value = if m { Some(i) } else { None };
+
+                let out_value_option = map_fn(grid_idx, in_masked_value);
+
+                m = out_value_option.is_some();
+
+                out_value_option.unwrap_or_default()
+            })
+            .collect();
+
+        MaskedGrid::new(
+            Grid::new(data.shape, out_data).expect("Grid createion failed before"),
+            validity_mask,
+        )
+        .expect("Grid createion failed before")
+    }
+}
+
+impl<In, Out, F> MapIndexedElementsParallel<In, Out, GridIdx2D, F> for MaskedGrid2D<In>
+where
+    F: Fn(GridIdx2D, Option<In>) -> Option<Out> + Send + Sync,
+    In: Copy + Clone + Sync,
+    Out: Default + Clone + Send,
+{
+    type Output = MaskedGrid2D<Out>;
+
+    fn map_index_elements_parallel(self, map_fn: F) -> Self::Output {
+        let MaskedGrid {
+            data,
+            mut validity_mask,
+        } = self;
+        debug_assert!(data.data.len() == validity_mask.data.len());
+        debug_assert!(data.shape == validity_mask.shape);
+
+        let x_axis_size = data.shape.axis_size_x();
+        let y_axis_size = data.shape.axis_size_y();
+
+        let mut out_data = vec![Out::default(); data.data.len()];
+
+        let parallelism = rayon::current_num_threads();
+        let rows_per_task = num::integer::div_ceil(y_axis_size, parallelism);
+
+        let chunk_size = x_axis_size * rows_per_task;
+
+        out_data
+            .par_chunks_mut(chunk_size)
+            .zip(validity_mask.data.par_chunks_mut(chunk_size))
+            .zip(data.data.par_chunks(chunk_size))
+            .enumerate()
+            .for_each(|(y_f, ((out_rows_slice, mask_row_slice), in_raw_slice))| {
+                let chunk_lin_start = y_f * chunk_size;
+
+                out_rows_slice
+                    .iter_mut()
+                    .zip(mask_row_slice.iter_mut())
+                    .zip(in_raw_slice)
+                    .enumerate()
+                    .for_each(|(elem_x_idx, ((out, mask), i))| {
+                        let lin_idx = chunk_lin_start + elem_x_idx;
+                        let grid_idx = data.shape.grid_idx_unchecked(lin_idx);
+
+                        let in_masked_value = if *mask { Some(*i) } else { None };
+
+                        let out_value_option = map_fn(grid_idx, in_masked_value);
+
+                        *mask = out_value_option.is_some();
+
+                        if let Some(out_value) = out_value_option {
+                            *out = out_value;
+                        }
+                    });
+            });
+
+        MaskedGrid::new(
+            Grid::new(data.shape, out_data).expect("Grid createion failed before"),
+            validity_mask,
+        )
+        .expect("Grid createion failed before")
     }
 }
 

@@ -344,14 +344,13 @@ mod tests {
 
         assert_eq!(r1.data.data, vec![7; 64]);
         assert_eq!(r1.validity_mask.data, vec![true; 64]);
-
     }
 
     #[test]
     fn grid_blit_from_3d_2_2() {
         let data = vec![0; 64];
 
-        let mut r1 =  MaskedGrid3D::new_with_data(Grid3D::new([4, 4, 4].into(), data).unwrap());
+        let mut r1 = MaskedGrid3D::new_with_data(Grid3D::new([4, 4, 4].into(), data).unwrap());
 
         let data: Vec<i32> = (0..64).collect();
 
@@ -370,10 +369,7 @@ mod tests {
             ]
         );
 
-        assert_eq!(
-            r1.validity_mask.data,
-            vec![true; 64]
-        );
+        assert_eq!(r1.validity_mask.data, vec![true; 64]);
     }
 
     #[test]
