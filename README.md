@@ -5,6 +5,10 @@
 
 This workspace contains the Geo Engine crates.
 
+## Documentation
+
+- [Geo Engine Docs](https://docs.geoengine.io/)
+
 ## Development
 
 - While Geo Engine should build on Linux and Windows environments, we currently only support Ubuntu Linux 20.04 LTS.
