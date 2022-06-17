@@ -1,8 +1,8 @@
 use crate::engine::{
     ExecutionContext, InitializedRasterOperator, InitializedVectorOperator, Operator, QueryContext,
-    RasterOperator, RasterQueryProcessor, RasterResultDescriptor, SingleRasterOrVectorSource,
-    TypedRasterQueryProcessor, TypedVectorQueryProcessor, VectorOperator, VectorQueryProcessor,
-    VectorResultDescriptor,
+    RasterOperator, RasterQueryProcessor, RasterResultDescriptor, ResultDescriptor,
+    SingleRasterOrVectorSource, TypedRasterQueryProcessor, TypedVectorQueryProcessor,
+    VectorOperator, VectorQueryProcessor, VectorResultDescriptor,
 };
 use crate::util::input::RasterOrVectorOperator;
 use crate::util::Result;
@@ -25,7 +25,7 @@ use snafu::Snafu;
 /// Project the query rectangle to a new time interval.
 pub type TimeShift = Operator<TimeShiftParams, SingleRasterOrVectorSource>;
 
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "camelCase")]
 pub enum TimeShiftParams {
     /// Shift the query rectangle relative with a time step
@@ -166,34 +166,61 @@ impl VectorOperator for TimeShift {
             (
                 RasterOrVectorOperator::Vector(source),
                 TimeShiftParams::Relative { granularity, value },
-            ) if value.is_positive() => Ok(Box::new(InitializedVectorTimeShift {
-                source: source.initialize(context).await?,
-                shift: RelativeForwardShift {
+            ) if value.is_positive() => {
+                let source = source.initialize(context).await?;
+
+                let shift = RelativeForwardShift {
                     step: TimeStep {
                         granularity,
                         step: value.unsigned_abs(),
                     },
-                },
-            })),
+                };
+
+                let result_descriptor = shift_result_descriptor(source.result_descriptor(), shift);
+
+                Ok(Box::new(InitializedVectorTimeShift {
+                    source,
+                    result_descriptor,
+                    shift,
+                }))
+            }
             (
                 RasterOrVectorOperator::Vector(source),
                 TimeShiftParams::Relative { granularity, value },
-            ) => Ok(Box::new(InitializedVectorTimeShift {
-                source: source.initialize(context).await?,
-                shift: RelativeBackwardShift {
+            ) => {
+                let source = source.initialize(context).await?;
+
+                let shift = RelativeBackwardShift {
                     step: TimeStep {
                         granularity,
                         step: value.unsigned_abs(),
                     },
-                },
-            })),
+                };
+
+                let result_descriptor = shift_result_descriptor(source.result_descriptor(), shift);
+
+                Ok(Box::new(InitializedVectorTimeShift {
+                    source,
+                    result_descriptor,
+                    shift,
+                }))
+            }
             (
                 RasterOrVectorOperator::Vector(source),
                 TimeShiftParams::Absolute { time_interval },
-            ) => Ok(Box::new(InitializedVectorTimeShift {
-                source: source.initialize(context).await?,
-                shift: AbsoluteShift { time_interval },
-            })),
+            ) => {
+                let source = source.initialize(context).await?;
+
+                let shift = AbsoluteShift { time_interval };
+
+                let result_descriptor = shift_result_descriptor(source.result_descriptor(), shift);
+
+                Ok(Box::new(InitializedVectorTimeShift {
+                    source,
+                    result_descriptor,
+                    shift,
+                }))
+            }
             (RasterOrVectorOperator::Raster(_), _) => Err(TimeShiftError::UnmatchedOutput.into()),
         }
     }
@@ -210,46 +237,88 @@ impl RasterOperator for TimeShift {
             (
                 RasterOrVectorOperator::Raster(source),
                 TimeShiftParams::Relative { granularity, value },
-            ) if value.is_positive() => Ok(Box::new(InitializedRasterTimeShift {
-                source: source.initialize(context).await?,
-                shift: RelativeForwardShift {
+            ) if value.is_positive() => {
+                let source = source.initialize(context).await?;
+
+                let shift = RelativeForwardShift {
                     step: TimeStep {
                         granularity,
                         step: value.unsigned_abs(),
                     },
-                },
-            })),
+                };
+
+                let result_descriptor = shift_result_descriptor(source.result_descriptor(), shift);
+
+                Ok(Box::new(InitializedRasterTimeShift {
+                    source,
+                    result_descriptor,
+                    shift,
+                }))
+            }
             (
                 RasterOrVectorOperator::Raster(source),
                 TimeShiftParams::Relative { granularity, value },
-            ) => Ok(Box::new(InitializedRasterTimeShift {
-                source: source.initialize(context).await?,
-                shift: RelativeBackwardShift {
+            ) => {
+                let source = source.initialize(context).await?;
+
+                let shift = RelativeBackwardShift {
                     step: TimeStep {
                         granularity,
                         step: value.unsigned_abs(),
                     },
-                },
-            })),
+                };
+
+                let result_descriptor = shift_result_descriptor(source.result_descriptor(), shift);
+
+                Ok(Box::new(InitializedRasterTimeShift {
+                    source,
+                    result_descriptor,
+                    shift,
+                }))
+            }
             (
                 RasterOrVectorOperator::Raster(source),
                 TimeShiftParams::Absolute { time_interval },
-            ) => Ok(Box::new(InitializedRasterTimeShift {
-                source: source.initialize(context).await?,
-                shift: AbsoluteShift { time_interval },
-            })),
+            ) => {
+                let source = source.initialize(context).await?;
+
+                let shift = AbsoluteShift { time_interval };
+
+                let result_descriptor = shift_result_descriptor(source.result_descriptor(), shift);
+
+                Ok(Box::new(InitializedRasterTimeShift {
+                    source,
+                    result_descriptor,
+                    shift,
+                }))
+            }
             (RasterOrVectorOperator::Vector(_), _) => Err(TimeShiftError::UnmatchedOutput.into()),
         }
     }
 }
 
+fn shift_result_descriptor<R: ResultDescriptor, S: TimeShiftOperation>(
+    result_descriptor: &R,
+    shift: S,
+) -> R {
+    result_descriptor.map_time(|time| {
+        if let Some(time) = time {
+            shift.shift(*time).map(|r| r.0).ok()
+        } else {
+            None
+        }
+    })
+}
+
 pub struct InitializedVectorTimeShift<Shift: TimeShiftOperation> {
     source: Box<dyn InitializedVectorOperator>,
+    result_descriptor: VectorResultDescriptor,
     shift: Shift,
 }
 
 pub struct InitializedRasterTimeShift<Shift: TimeShiftOperation> {
     source: Box<dyn InitializedRasterOperator>,
+    result_descriptor: RasterResultDescriptor,
     shift: Shift,
 }
 
@@ -257,7 +326,7 @@ impl<Shift: TimeShiftOperation + 'static> InitializedVectorOperator
     for InitializedVectorTimeShift<Shift>
 {
     fn result_descriptor(&self) -> &VectorResultDescriptor {
-        self.source.result_descriptor()
+        &self.result_descriptor
     }
 
     fn query_processor(&self) -> Result<TypedVectorQueryProcessor> {
@@ -276,7 +345,7 @@ impl<Shift: TimeShiftOperation + 'static> InitializedRasterOperator
     for InitializedRasterTimeShift<Shift>
 {
     fn result_descriptor(&self) -> &RasterResultDescriptor {
-        self.source.result_descriptor()
+        &self.result_descriptor
     }
 
     fn query_processor(&self) -> Result<TypedRasterQueryProcessor> {
@@ -784,6 +853,8 @@ mod tests {
                     spatial_reference: SpatialReference::epsg_4326().into(),
                     measurement: Measurement::Unitless,
                     no_data_value: Some(no_data_value.as_()),
+                    time: None,
+                    bbox: None,
                 },
             },
         }
@@ -945,6 +1016,8 @@ mod tests {
                     spatial_reference: SpatialReference::epsg_4326().into(),
                     measurement: Measurement::Unitless,
                     no_data_value: Some(no_data_value.as_()),
+                    time: None,
+                    bbox: None,
                 },
             },
         }

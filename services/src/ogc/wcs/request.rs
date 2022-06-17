@@ -22,14 +22,14 @@ pub enum WcsRequest {
 }
 
 // sample: SERVICE=WCS&request=GetCapabilities&VERSION=1.0.0
-#[derive(PartialEq, Debug, Deserialize, Serialize)]
+#[derive(PartialEq, Eq, Debug, Deserialize, Serialize)]
 pub struct GetCapabilities {
     #[serde(alias = "VERSION")]
     pub version: Option<String>,
 }
 
 // sample: SERVICE=WCS&request=DescribeCoverage&VERSION=1.1.1&IDENTIFIERS=nurc:Arc_Sample
-#[derive(PartialEq, Debug, Deserialize, Serialize)]
+#[derive(PartialEq, Eq, Debug, Deserialize, Serialize)]
 pub struct DescribeCoverage {
     #[serde(alias = "VERSION")]
     pub version: String,
@@ -138,7 +138,7 @@ impl GridOrigin {
     }
 }
 
-#[derive(PartialEq, Debug, Deserialize, Serialize)]
+#[derive(PartialEq, Eq, Debug, Deserialize, Serialize)]
 pub enum GetCoverageFormat {
     #[serde(rename = "image/tiff")]
     ImageTiff,

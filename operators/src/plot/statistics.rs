@@ -10,7 +10,10 @@ use async_trait::async_trait;
 use futures::future::join_all;
 use futures::stream::select_all;
 use futures::{FutureExt, StreamExt, TryFutureExt, TryStreamExt};
-use geoengine_datatypes::primitives::VectorQueryRectangle;
+use geoengine_datatypes::primitives::{
+    partitions_extent, time_interval_extent, AxisAlignedRectangle, BoundingBox2D,
+    VectorQueryRectangle,
+};
 use geoengine_datatypes::raster::ConvertDataTypeParallel;
 use geoengine_datatypes::raster::{Grid2D, GridOrEmpty, GridSize, NoDataValue};
 use geoengine_datatypes::spatial_reference::SpatialReferenceOption;
@@ -27,7 +30,7 @@ pub const STATISTICS_OPERATOR_NAME: &str = "Statistics";
 pub type Statistics = Operator<StatisticsParams, MultipleRasterSources>;
 
 /// The parameter spec for `Statistics`
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct StatisticsParams {}
 
@@ -47,15 +50,21 @@ impl PlotOperator for Statistics {
         .await;
         let rasters = rasters.into_iter().collect::<Result<Vec<_>>>()?;
 
+        let in_descriptors = rasters
+            .iter()
+            .map(InitializedRasterOperator::result_descriptor)
+            .collect::<Vec<_>>();
+
         if rasters.len() > 1 {
-            let srs = rasters[0].result_descriptor().spatial_reference;
+            let srs = in_descriptors[0].spatial_reference;
             ensure!(
-                rasters
-                    .iter()
-                    .all(|op| op.result_descriptor().spatial_reference == srs),
+                in_descriptors.iter().all(|d| d.spatial_reference == srs),
                 error::AllSourcesMustHaveSameSpatialReference
             );
         }
+
+        let time = time_interval_extent(in_descriptors.iter().map(|d| d.time));
+        let bbox = partitions_extent(in_descriptors.iter().map(|d| d.bbox));
 
         let initialized_operator = InitializedStatistics {
             result_descriptor: PlotResultDescriptor {
@@ -63,6 +72,8 @@ impl PlotOperator for Statistics {
                     || SpatialReferenceOption::Unreferenced,
                     |r| r.result_descriptor().spatial_reference,
                 ),
+                time,
+                bbox: bbox.and_then(|p| BoundingBox2D::new(p.lower_left(), p.upper_right()).ok()),
             },
             rasters,
         };
@@ -261,6 +272,8 @@ mod tests {
                     spatial_reference: SpatialReference::epsg_4326().into(),
                     measurement: Measurement::Unitless,
                     no_data_value: no_data_value.map(AsPrimitive::as_),
+                    time: None,
+                    bbox: None,
                 },
             },
         }

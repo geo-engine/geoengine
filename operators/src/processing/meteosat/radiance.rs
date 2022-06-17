@@ -105,6 +105,8 @@ impl RasterOperator for Radiance {
                 unit: Some("W·m^(-2)·sr^(-1)·cm^(-1)".into()),
             }),
             no_data_value: Some(f64::from(OUT_NO_DATA_VALUE)),
+            time: in_desc.time,
+            bbox: in_desc.bbox,
         };
 
         let initialized_operator = InitializedRadiance {

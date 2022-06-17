@@ -94,14 +94,14 @@ impl OperatorDatasets for GdalSourceParameters {
 type GdalMetaData =
     Box<dyn MetaData<GdalLoadingInfo, RasterResultDescriptor, RasterQueryRectangle>>;
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
 pub struct GdalSourceTimePlaceholder {
     pub format: DateTimeParseFormat,
     pub reference: TimeReference,
 }
 
-#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq)]
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
 pub enum TimeReference {
     Start,
@@ -244,7 +244,7 @@ impl GridShapeAccess for GdalDatasetParameters {
 }
 
 /// How to handle file not found errors
-#[derive(Serialize, Deserialize, Debug, Clone, Copy, PartialEq)]
+#[derive(Serialize, Deserialize, Debug, Clone, Copy, PartialEq, Eq)]
 pub enum FileNotFoundHandling {
     NoData, // output tiles filled with nodata
     Error,  // return error tile
@@ -326,7 +326,7 @@ impl GdalRasterLoader {
         tile_time: TimeInterval,
         no_data_value: Option<T>,
     ) -> Result<RasterTile2D<T>> {
-        let result_tile = match dataset_params {
+        match dataset_params {
             Some(ds)
                 if tile_information
                     .spatial_partition()
@@ -356,8 +356,7 @@ impl GdalRasterLoader {
                     no_data_value,
                 ))
             }
-        };
-        result_tile
+        }
     }
 
     ///
@@ -819,7 +818,7 @@ fn create_no_data_tile<T: Pixel>(
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct GdalMetadataMapping {
     pub source_key: RasterPropertiesKey,
     pub target_key: RasterPropertiesKey,

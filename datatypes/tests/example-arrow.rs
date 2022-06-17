@@ -447,37 +447,38 @@ fn multipoints() {
     use arrow::datatypes::ToByteSlice;
 
     let array = {
-        let data = ArrayData::builder(DataType::List(Box::new(Field::new(
-            "",
-            DataType::FixedSizeList(Box::new(Field::new("", DataType::Float64, false)), 2),
-            false,
-        ))))
-        .len(2) // number of multipoints
-        .add_buffer(Buffer::from(&[0_i32, 2, 5].to_byte_slice()))
-        .add_child_data(
-            ArrayData::builder(DataType::FixedSizeList(
-                Box::new(Field::new("", DataType::Float64, false)),
-                2,
-            ))
-            .len(5) // number of coordinates
+        let data =
+            ArrayData::builder(DataType::List(Box::new(Field::new(
+                "",
+                DataType::FixedSizeList(Box::new(Field::new("", DataType::Float64, false)), 2),
+                false,
+            ))))
+            .len(2) // number of multipoints
+            .add_buffer(Buffer::from(&[0_i32, 2, 5].to_byte_slice()))
             .add_child_data(
-                ArrayData::builder(DataType::Float64)
-                    .len(10) // number of floats
-                    .add_buffer(Buffer::from(
-                        &[
-                            1_f64, 2., 11., 12., 21., 22., 31., 32., 41., 42., 51., 52., 61., 62.,
-                            71., 72., 81., 82., 91., 92.,
-                        ]
-                        .to_byte_slice(),
-                    ))
-                    .build()
-                    .unwrap(),
+                ArrayData::builder(DataType::FixedSizeList(
+                    Box::new(Field::new("", DataType::Float64, false)),
+                    2,
+                ))
+                .len(5) // number of coordinates
+                .add_child_data(
+                    ArrayData::builder(DataType::Float64)
+                        .len(10) // number of floats
+                        .add_buffer(Buffer::from(
+                            &[
+                                1_f64, 2., 11., 12., 21., 22., 31., 32., 41., 42., 51., 52., 61.,
+                                62., 71., 72., 81., 82., 91., 92.,
+                            ]
+                            .to_byte_slice(),
+                        ))
+                        .build()
+                        .unwrap(),
+                )
+                .build()
+                .unwrap(),
             )
             .build()
-            .unwrap(),
-        )
-        .build()
-        .unwrap();
+            .unwrap();
 
         ListArray::from(data)
     };

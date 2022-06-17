@@ -220,6 +220,8 @@ impl ExternalDatasetProvider for GfbioDataProvider {
                             )
                         })
                         .collect(),
+                    time: None, // TODO: determine time
+                    bbox: None, // TODO: determine bbox
                 }),
                 symbology: None,
             })
@@ -358,6 +360,8 @@ impl MetaDataProvider<OgrSourceDataset, VectorResultDescriptor, VectorQueryRecta
                         )
                     })
                     .collect(),
+                time: None,
+                bbox: None,
             },
             phantom: PhantomData::default(),
         }))
@@ -554,6 +558,8 @@ mod tests {
                         .iter()
                         .cloned()
                         .collect(),
+                        time: None,
+                        bbox: None,
                 }),
                 symbology: None,
             }]
@@ -626,7 +632,9 @@ mod tests {
                     ]
                     .iter()
                     .cloned()
-                    .collect()
+                    .collect(),
+                    time: None,
+                    bbox: None,
             };
 
             let result_descriptor = meta.result_descriptor().await.map_err(|e| e.to_string())?;

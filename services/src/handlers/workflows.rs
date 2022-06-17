@@ -711,7 +711,9 @@ mod tests {
                             "type": "unitless"
                         }
                     }
-                }
+                },
+                "time": null,
+                "bbox": null
             })
         );
     }
@@ -734,6 +736,8 @@ mod tests {
                             unit: None,
                         }),
                         no_data_value: None,
+                        time: None,
+                        bbox: None,
                     },
                 },
             }
@@ -767,7 +771,9 @@ mod tests {
                     "measurement": "radiation",
                     "unit": null
                 },
-                "noDataValue": null
+                "noDataValue": null,
+                "time": null,
+                "bbox": null
             })
         );
     }
@@ -852,7 +858,9 @@ mod tests {
             serde_json::from_str::<serde_json::Value>(&res_body).unwrap(),
             serde_json::json!({
                 "type": "plot",
-                "spatialReference": ""
+                "spatialReference": "",
+                "time": null,
+                "bbox": null
             })
         );
     }

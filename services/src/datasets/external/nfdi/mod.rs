@@ -244,6 +244,8 @@ impl NFDIDataProvider {
             data_type: info.vector_type,
             spatial_reference: crs,
             columns,
+            time: None,
+            bbox: None,
         }
     }
 
@@ -260,6 +262,8 @@ impl NFDIDataProvider {
                 .as_ref()
                 .map_or(Measurement::Unitless, Clone::clone),
             no_data_value: info.no_data_value,
+            time: None,
+            bbox: None,
         }
     }
 

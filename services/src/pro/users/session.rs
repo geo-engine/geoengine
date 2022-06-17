@@ -15,7 +15,7 @@ use futures_util::FutureExt;
 use geoengine_datatypes::primitives::DateTime;
 use serde::{Deserialize, Serialize};
 
-#[derive(Debug, PartialEq, Serialize, Deserialize, Clone)]
+#[derive(Debug, PartialEq, Eq, Serialize, Deserialize, Clone)]
 #[serde(rename_all = "camelCase")]
 pub struct UserInfo {
     pub id: UserId,

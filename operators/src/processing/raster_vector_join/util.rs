@@ -15,7 +15,7 @@ use crate::processing::point_in_polygon::PointInPolygonTesterWithCollection;
 ///
 /// Both, `feature_index_start` and `feature_index_end` are inclusive.
 ///
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct FeatureTimeSpan {
     pub feature_index_start: usize,
     pub feature_index_end: usize,

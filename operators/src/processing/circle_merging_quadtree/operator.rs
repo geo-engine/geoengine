@@ -157,11 +157,15 @@ impl VectorOperator for VisualPointClustering {
             error::DuplicateOutputColumns
         );
 
+        let in_desc = vector_source.result_descriptor();
+
         Ok(InitializedVisualPointClustering {
             result_descriptor: VectorResultDescriptor {
                 data_type: VectorDataType::MultiPoint,
-                spatial_reference: vector_source.result_descriptor().spatial_reference,
+                spatial_reference: in_desc.spatial_reference,
                 columns: new_columns,
+                time: in_desc.time,
+                bbox: in_desc.bbox,
             },
             vector_source,
             radius_model,

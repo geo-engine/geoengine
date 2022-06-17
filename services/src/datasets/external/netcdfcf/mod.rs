@@ -112,7 +112,7 @@ pub struct NetCdfGroup {
     pub groups: Vec<NetCdfGroup>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
 pub struct NetCdfEntity {
     pub id: usize,
@@ -334,6 +334,8 @@ impl NetCdfCfDataProvider {
                         spatial_reference: tree.spatial_reference.into(),
                         measurement: derive_measurement(tail.unit.clone()),
                         no_data_value: None, // we don't want to open the dataset at this point. We should get rid of the result descriptor in the listing in general
+                        time: None,          // TODO: determine time
+                        bbox: None,          // TODO: determine bbox
                     }),
                     symbology: Some(Symbology::Raster(RasterSymbology {
                         opacity: 1.0,
@@ -442,6 +444,9 @@ impl NetCdfCfDataProvider {
             spatial_reference: data_array.spatial_reference()?,
             measurement: derive_measurement(data_array.unit().context(error::CannotRetrieveUnit)?),
             no_data_value: data_array.no_data_value(),
+
+            time: None,
+            bbox: None,
         };
 
         let params = GdalDatasetParameters {
@@ -892,6 +897,9 @@ mod tests {
             spatial_reference: SpatialReference::new(SpatialReferenceAuthority::Epsg, 4326).into(),
             measurement: Measurement::Unitless,
             no_data_value: None,
+
+            time: None,
+            bbox: None,
         }
         .into();
 
@@ -1053,6 +1061,8 @@ mod tests {
             spatial_reference: SpatialReference::new(SpatialReferenceAuthority::Epsg, 3035).into(),
             measurement: Measurement::Unitless,
             no_data_value: None,
+            time: None,
+            bbox: None,
         }
         .into();
 
@@ -1141,6 +1151,8 @@ mod tests {
                     .into(),
                 measurement: Measurement::Unitless,
                 no_data_value: Some(-9999.),
+                time: None,
+                bbox: None,
             }
         );
 
@@ -1250,6 +1262,8 @@ mod tests {
                     .into(),
                 measurement: Measurement::Unitless,
                 no_data_value: Some(-9999.),
+                time: None,
+                bbox: None,
             }
         );
 
@@ -1337,6 +1351,8 @@ mod tests {
             spatial_reference: SpatialReference::new(SpatialReferenceAuthority::Epsg, 3035).into(),
             measurement: Measurement::Unitless,
             no_data_value: None,
+            time: None,
+            bbox: None,
         }
         .into();
 
