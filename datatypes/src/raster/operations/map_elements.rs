@@ -1,6 +1,6 @@
 use crate::raster::{
-    BoundedGrid, Grid, GridBounds, GridIdx, GridIdx2D, GridOrEmpty, GridSize,
-    GridSpaceToLinearSpace, MaskedGrid, MaskedGrid2D, RasterTile2D,
+    Grid, GridIdx2D, GridOrEmpty, GridSize, GridSpaceToLinearSpace, MaskedGrid, MaskedGrid2D,
+    RasterTile2D,
 };
 use rayon::{
     iter::{IndexedParallelIterator, IntoParallelIterator, ParallelIterator},
@@ -375,14 +375,14 @@ where
             .into_iter()
             .zip(validity_mask.data.iter_mut())
             .enumerate()
-            .map(|(lin_idx, (i, &mut m))| {
+            .map(|(lin_idx, (i, m))| {
                 let grid_idx = data.shape.grid_idx_unchecked(lin_idx);
 
-                let in_masked_value = if m { Some(i) } else { None };
+                let in_masked_value = if *m { Some(i) } else { None };
 
                 let out_value_option = map_fn(grid_idx, in_masked_value);
 
-                m = out_value_option.is_some();
+                *m = out_value_option.is_some();
 
                 out_value_option.unwrap_or_default()
             })
