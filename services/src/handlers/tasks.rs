@@ -1,5 +1,6 @@
 use crate::error::Result;
 use crate::tasks::{TaskListOptions, TaskManager};
+use crate::util::user_input::UserInput;
 use crate::{contexts::Context, tasks::TaskId};
 use actix_web::{web, FromRequest, Responder};
 use serde::{Deserialize, Serialize};
@@ -131,7 +132,7 @@ async fn list_handler<C: Context>(
     ctx: web::Data<C>,
     task_list_options: web::Query<TaskListOptions>,
 ) -> Result<impl Responder> {
-    let task_list_options = task_list_options.into_inner();
+    let task_list_options = task_list_options.into_inner().validated()?;
 
     let task = ctx.tasks_ref().list(task_list_options).await?;
 

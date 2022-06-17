@@ -1,7 +1,10 @@
 mod error;
 mod in_memory;
 
-use crate::error::Result;
+use crate::{
+    error::Result,
+    util::user_input::{UserInput, Validated},
+};
 pub use error::TaskError;
 use geoengine_datatypes::{error::ErrorSource, identifier};
 pub use in_memory::{InMemoryTaskDb, InMemoryTaskDbContext};
@@ -15,7 +18,10 @@ pub trait TaskManager<C: TaskContext>: Send + Sync {
 
     async fn status(&self, task_id: TaskId) -> Result<TaskStatus, TaskError>;
 
-    async fn list(&self, options: TaskListOptions) -> Result<Vec<TaskStatusWithId>, TaskError>;
+    async fn list(
+        &self,
+        options: Validated<TaskListOptions>,
+    ) -> Result<Vec<TaskStatusWithId>, TaskError>;
 }
 
 identifier!(TaskId);
@@ -126,6 +132,12 @@ pub struct TaskListOptions {
     pub offset: u32,
     #[serde(default = "task_list_limit_default")]
     pub limit: u32,
+}
+
+impl UserInput for TaskListOptions {
+    fn validate(&self) -> Result<()> {
+        Ok(())
+    }
 }
 
 fn task_list_limit_default() -> u32 {

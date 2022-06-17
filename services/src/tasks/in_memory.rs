@@ -2,7 +2,7 @@ use super::{
     RunningTaskStatusInfo, Task, TaskContext, TaskError, TaskFilter, TaskId, TaskListOptions,
     TaskManager, TaskStatus, TaskStatusInfo, TaskStatusWithId,
 };
-use crate::{contexts::Db, error::Result};
+use crate::{contexts::Db, error::Result, util::user_input::Validated};
 use futures::StreamExt;
 use geoengine_datatypes::util::Identifier;
 use std::{
@@ -100,7 +100,10 @@ impl TaskManager<InMemoryTaskDbContext> for InMemoryTaskDb {
         }
     }
 
-    async fn list(&self, options: TaskListOptions) -> Result<Vec<TaskStatusWithId>, TaskError> {
+    async fn list(
+        &self,
+        options: Validated<TaskListOptions>,
+    ) -> Result<Vec<TaskStatusWithId>, TaskError> {
         let lock = self.task_list.read().await;
 
         let iter = lock.range(options.offset as usize..);
