@@ -168,7 +168,7 @@ mod tests {
         let ctx = InMemoryContext::test_default();
         let session_id = ctx.default_session_ref().await.id();
 
-        let task_id = ctx.tasks_ref().register(NopTask {}.boxed()).await.unwrap();
+        let task_id = ctx.tasks_ref().schedule(NopTask {}.boxed()).await.unwrap();
 
         // 1. initially, we should get a running status
 
@@ -233,7 +233,7 @@ mod tests {
         let ctx = InMemoryContext::test_default();
         let session_id = ctx.default_session_ref().await.id();
 
-        let task_id = ctx.tasks_ref().register(NopTask {}.boxed()).await.unwrap();
+        let task_id = ctx.tasks_ref().schedule(NopTask {}.boxed()).await.unwrap();
 
         // wait for task to finish
         let task_db = ctx.tasks();

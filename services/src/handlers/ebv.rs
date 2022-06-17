@@ -373,7 +373,7 @@ async fn create_overviews<C: Context>(
     }
     .boxed();
 
-    let task_id = ctx.tasks_ref().register(task).await?;
+    let task_id = ctx.tasks_ref().schedule(task).await?;
 
     Ok(web::Json(TaskResponse::new(task_id)))
 }
@@ -463,7 +463,7 @@ async fn create_overview<C: Context>(
     }
     .boxed();
 
-    let task_id = ctx.tasks_ref().register(task).await?;
+    let task_id = ctx.tasks_ref().schedule(task).await?;
 
     Ok(web::Json(TaskResponse::new(task_id)))
 }

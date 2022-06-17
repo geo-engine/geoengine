@@ -8,10 +8,10 @@ pub use in_memory::{InMemoryTaskDb, InMemoryTaskDbContext};
 use serde::{Deserialize, Serialize, Serializer};
 use std::{fmt, sync::Arc};
 
-/// A database that allows registering and retrieving tasks.
+/// A database that allows scheduling and retrieving tasks.
 #[async_trait::async_trait]
 pub trait TaskManager<C: TaskContext>: Send + Sync {
-    async fn register(&self, task: Box<dyn Task<C>>) -> Result<TaskId, TaskError>;
+    async fn schedule(&self, task: Box<dyn Task<C>>) -> Result<TaskId, TaskError>;
 
     async fn status(&self, task_id: TaskId) -> Result<TaskStatus, TaskError>;
 

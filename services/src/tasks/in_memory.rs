@@ -50,7 +50,7 @@ struct WriteLockAll<'a> {
 
 #[async_trait::async_trait]
 impl TaskManager<InMemoryTaskDbContext> for InMemoryTaskDb {
-    async fn register(
+    async fn schedule(
         &self,
         task: Box<dyn Task<InMemoryTaskDbContext>>,
     ) -> Result<TaskId, TaskError> {
