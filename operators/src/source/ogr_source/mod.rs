@@ -124,7 +124,7 @@ impl OgrSourceDataset {
 ///  - `start_field` and `end_field`: the name of the field that contains time information
 ///  - `start_format` and `start_format`: a mapping of a field type to a time value (cf. `OgrSourceDatasetTimeType`)
 ///  - `duration`: the duration of the time validity for all features in the file
-#[derive(Clone, Debug, PartialEq, Deserialize, Serialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase", tag = "type")]
 pub enum OgrSourceDatasetTimeType {
     None,
@@ -163,7 +163,7 @@ impl Default for OgrSourceDatasetTimeType {
 ///   - "custom": define a custom format in the attribute `custom_format`
 ///   - "seconds": time column is numeric and contains seconds as UNIX timestamp
 ///   - "auto": time is parsed by OGR
-#[derive(Clone, Debug, PartialEq, Deserialize, Serialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Deserialize, Serialize)]
 #[serde(tag = "format")]
 #[serde(rename_all = "camelCase")]
 pub enum OgrSourceTimeFormat {
@@ -197,7 +197,7 @@ impl OgrSourceTimeFormat {
     }
 }
 
-#[derive(Clone, Debug, PartialEq, Deserialize, Serialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub enum UnixTimeStampType {
     EpochSeconds,
@@ -220,7 +220,7 @@ impl Default for OgrSourceTimeFormat {
 ///  - bool: an array of column names containing boolean values
 ///  - datetime: an array of column names containing timestamps or date strings
 ///  - rename: a. optional map of column names from data source to the name in the resulting collection
-#[derive(Clone, Debug, PartialEq, Deserialize, Serialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct OgrSourceColumnSpec {
     pub format_specifics: Option<FormatSpecifics>,
@@ -259,7 +259,7 @@ impl OgrSourceColumnSpec {
 }
 
 /// This enum provides all format specific options
-#[derive(Clone, Debug, PartialEq, Deserialize, Serialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub enum FormatSpecifics {
     Csv { header: CsvHeader },
@@ -268,7 +268,7 @@ pub enum FormatSpecifics {
 /// For CSV files this tells gdal whether or not the file
 /// contains a header line.
 /// The value `Auto` enables gdal's auto detection.
-#[derive(Clone, Debug, PartialEq, Deserialize, Serialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Deserialize, Serialize)]
 #[serde(rename_all = "lowercase")]
 pub enum CsvHeader {
     Yes,
@@ -292,7 +292,7 @@ impl CsvHeader {
 /// Specify the type of error handling
 ///  - "ignore": invalid column values are kept as null, missing/invalid geom features are skipped
 ///  - "abort": invalid column values and missing/invalid geoms result in abort
-#[derive(Copy, Clone, Debug, PartialEq, Deserialize, Serialize)]
+#[derive(Copy, Clone, Debug, PartialEq, Eq, Deserialize, Serialize)]
 #[serde(rename_all = "lowercase")]
 pub enum OgrSourceErrorSpec {
     Ignore,
@@ -309,7 +309,7 @@ impl OgrSourceErrorSpec {
     }
 }
 
-#[derive(Copy, Clone, Debug, PartialEq, Deserialize, Serialize)]
+#[derive(Copy, Clone, Debug, PartialEq, Eq, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase", tag = "type")]
 pub enum OgrSourceDurationSpec {
     Infinite,

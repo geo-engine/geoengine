@@ -32,7 +32,7 @@ pub type RasterVectorJoin = Operator<RasterVectorJoinParams, SingleVectorMultipl
 const MAX_NUMBER_OF_RASTER_INPUTS: usize = 8;
 
 /// The parameter spec for `RasterVectorJoin`
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct RasterVectorJoinParams {
     /// Each name reflects the output column of the join result.
@@ -49,7 +49,7 @@ pub struct RasterVectorJoinParams {
 /// How to aggregate the values for the geometries inside a feature e.g.
 /// the mean of all the raster values corresponding to the individual
 /// points inside a `MultiPoint` feature.
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Copy)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Copy)]
 #[serde(rename_all = "camelCase")]
 pub enum FeatureAggregationMethod {
     First,
@@ -60,7 +60,7 @@ pub enum FeatureAggregationMethod {
 /// If there are multiple rasters valid during the validity of a feature
 /// the featuer is either split into multiple (None-aggregation) or the
 /// values are aggreagated
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Copy)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Copy)]
 #[serde(rename_all = "camelCase")]
 pub enum TemporalAggregationMethod {
     None,

@@ -102,7 +102,7 @@ impl VectorQueryProcessor for MockDatasetDataSourceProcessor {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct MockDatasetDataSourceParams {
     pub dataset: DatasetId,
 }

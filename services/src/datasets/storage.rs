@@ -67,7 +67,7 @@ impl UserInput for AddDataset {
     }
 }
 
-#[derive(Debug, Serialize, Deserialize, Clone, PartialEq)]
+#[derive(Debug, Serialize, Deserialize, Clone, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
 pub struct DatasetProviderListing {
     pub id: DatasetProviderId,

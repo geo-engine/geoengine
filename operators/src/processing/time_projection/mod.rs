@@ -27,7 +27,7 @@ use snafu::{ensure, ResultExt, Snafu};
 ///
 pub type TimeProjection = Operator<TimeProjectionParams, SingleVectorSource>;
 
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct TimeProjectionParams {
     /// Specify the time step granularity and size
     step: TimeStep,

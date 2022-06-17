@@ -105,7 +105,7 @@ mod tests {
 
         impl Display for Test {
             fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-                f.write_str(&self.base_url.to_string())
+                f.write_str(self.base_url.as_ref())
             }
         }
 
