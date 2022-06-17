@@ -17,44 +17,15 @@ where
     );
 }
 
-/// Create a task somewhere and respond with a task id and a url to query the task status.
+/// Create a task somewhere and respond with a task id to query the task status.
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct TaskResponse {
     pub task_id: TaskId,
-    pub url: String,
 }
 
 impl TaskResponse {
     pub fn new(task_id: TaskId) -> Self {
-        let web_config = crate::util::config::get_config_element::<crate::util::config::Web>();
-        let url = web_config.and_then(|web| {
-            let external_address = if let Some(external_address) = web.external_address {
-                external_address
-            } else {
-                return Ok(None);
-            };
-
-            external_address
-                .join(&format!("tasks/status/{task_id}"))
-                .map(|url| Some(url.to_string()))
-                .map_err(Into::into)
-        });
-
-        let url = match url {
-            Ok(Some(external_address)) => external_address,
-            Ok(None) => {
-                log::warn!("Missing external address in config");
-
-                String::new()
-            }
-            Err(e) => {
-                log::warn!("Could not retrieve external address: {e}");
-
-                String::new()
-            }
-        };
-
-        Self { task_id, url }
+        Self { task_id }
     }
 }
 
