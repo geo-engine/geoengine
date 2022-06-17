@@ -204,7 +204,7 @@ mod tests {
                         "params": {
                             "collections": [],
                             "spatialReference": "EPSG:4326",
-                            "measurements": {},
+                            "measurements": null,
                         }
                     }
                 },

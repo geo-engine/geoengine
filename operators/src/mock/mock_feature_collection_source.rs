@@ -79,7 +79,7 @@ where
 {
     pub collections: Vec<FeatureCollection<G>>,
     pub spatial_reference: SpatialReferenceOption,
-    measurements: HashMap<String, Measurement>,
+    measurements: Option<HashMap<String, Measurement>>,
 }
 
 pub type MockFeatureCollectionSource<G> = SourceOperator<MockFeatureCollectionSourceParams<G>>;
@@ -110,15 +110,7 @@ where
         Self {
             params: MockFeatureCollectionSourceParams {
                 spatial_reference: spatial_reference.into(),
-                measurements: collections
-                    .first()
-                    .map(|collection| {
-                        collection
-                            .column_names()
-                            .map(|name| (name.clone(), Measurement::default()))
-                            .collect()
-                    })
-                    .unwrap_or_default(),
+                measurements: None,
                 collections,
             },
         }
@@ -132,7 +124,7 @@ where
             params: MockFeatureCollectionSourceParams {
                 collections,
                 spatial_reference: SpatialReference::epsg_4326().into(),
-                measurements,
+                measurements: Some(measurements),
             },
         }
     }
@@ -173,7 +165,12 @@ macro_rules! impl_mock_feature_collection_source {
                     .column_types()
                     .into_iter()
                     .map(|(name, data_type)| {
-                        let measurement = self.params.measurements.get(&name).cloned().into();
+                        let measurement = self
+                            .params
+                            .measurements
+                            .as_ref()
+                            .and_then(|m| m.get(&name).cloned())
+                            .into();
                         (
                             name,
                             crate::engine::VectorColumnInfo {
@@ -320,11 +317,7 @@ mod tests {
                         },
                     }],
                     "spatialReference": "EPSG:4326",
-                    "measurements": {
-                        "foobar": {
-                            "type": "unitless",
-                        }
-                    },
+                    "measurements": null,
                 },
             })
             .to_string()
