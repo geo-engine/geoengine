@@ -205,6 +205,16 @@ impl ConfigElement for DatasetService {
 }
 
 #[derive(Debug, Deserialize)]
+pub struct TaskManager {
+    pub list_limit: u32,
+    pub list_default_limit: u32,
+}
+
+impl ConfigElement for TaskManager {
+    const KEY: &'static str = "task_manager";
+}
+
+#[derive(Debug, Deserialize)]
 pub struct Upload {
     pub path: PathBuf,
 }

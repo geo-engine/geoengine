@@ -3,12 +3,16 @@ mod in_memory;
 
 use crate::{
     error::Result,
-    util::user_input::{UserInput, Validated},
+    util::{
+        config::get_config_element,
+        user_input::{UserInput, Validated},
+    },
 };
 pub use error::TaskError;
 use geoengine_datatypes::{error::ErrorSource, identifier};
 pub use in_memory::{InMemoryTaskDb, InMemoryTaskDbContext};
 use serde::{Deserialize, Serialize, Serializer};
+use snafu::ensure;
 use std::{fmt, sync::Arc};
 
 /// A database that allows scheduling and retrieving tasks.
@@ -136,12 +140,22 @@ pub struct TaskListOptions {
 
 impl UserInput for TaskListOptions {
     fn validate(&self) -> Result<()> {
+        let limit = get_config_element::<crate::util::config::TaskManager>()?.list_limit;
+        ensure!(
+            self.limit <= limit,
+            crate::error::InvalidListLimit {
+                limit: limit as usize
+            }
+        );
+
         Ok(())
     }
 }
 
 fn task_list_limit_default() -> u32 {
-    20
+    get_config_element::<crate::util::config::TaskManager>()
+        .map(|config| config.list_default_limit)
+        .unwrap_or(1)
 }
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize)]
