@@ -165,11 +165,12 @@ mod tests {
 
         // 2. wait for task to finish
 
-        let task_db = ctx.tasks();
+        let task_manager = ctx.tasks();
         crate::util::retry::retry(3, 100, 2., move || {
-            let task_db = task_db.clone();
+            let task_manager = task_manager.clone();
             async move {
-                let option = (!task_db.status(task_id).await.unwrap().is_running()).then(|| ());
+                let option =
+                    (!task_manager.status(task_id).await.unwrap().is_running()).then(|| ());
                 option.ok_or(())
             }
         })
@@ -208,11 +209,12 @@ mod tests {
         let task_id = ctx.tasks_ref().schedule(NopTask {}.boxed()).await.unwrap();
 
         // wait for task to finish
-        let task_db = ctx.tasks();
+        let task_manager = ctx.tasks();
         crate::util::retry::retry(3, 100, 2., move || {
-            let task_db = task_db.clone();
+            let task_manager = task_manager.clone();
             async move {
-                let option = (!task_db.status(task_id).await.unwrap().is_running()).then(|| ());
+                let option =
+                    (!task_manager.status(task_id).await.unwrap().is_running()).then(|| ());
                 option.ok_or(())
             }
         })

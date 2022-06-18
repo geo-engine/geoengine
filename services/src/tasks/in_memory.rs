@@ -14,15 +14,15 @@ use tokio::{
     task::JoinHandle,
 };
 
-/// An in-memory implementation of the `TaskDb` trait.
+/// An in-memory implementation of the [`TaskManager`] trait.
 #[derive(Default, Clone)]
-pub struct InMemoryTaskDb {
+pub struct SimpleTaskManager {
     handles: Db<HashMap<TaskId, JoinHandle<()>>>,
     tasks_by_id: Db<HashMap<TaskId, Db<TaskStatus>>>,
     task_list: Db<VecDeque<TaskUpdateStatusWithTaskId>>,
 }
 
-impl InMemoryTaskDb {
+impl SimpleTaskManager {
     async fn write_lock_all(&self) -> WriteLockAll {
         let (handles, tasks_by_id, task_list) = tokio::join!(
             self.handles.write(),
@@ -49,15 +49,15 @@ struct WriteLockAll<'a> {
 }
 
 #[async_trait::async_trait]
-impl TaskManager<InMemoryTaskDbContext> for InMemoryTaskDb {
+impl TaskManager<SimpleTaskManagerContext> for SimpleTaskManager {
     async fn schedule(
         &self,
-        task: Box<dyn Task<InMemoryTaskDbContext>>,
+        task: Box<dyn Task<SimpleTaskManagerContext>>,
     ) -> Result<TaskId, TaskError> {
         let task_id = TaskId::new();
 
         // we can clone here, since all interior stuff is wrapped into `Arc`s
-        let task_db = self.clone();
+        let task_manager = self.clone();
 
         // get lock before starting the task to prevent a race condition of initial status setting
         let mut lock = self.write_lock_all().await;
@@ -66,7 +66,7 @@ impl TaskManager<InMemoryTaskDbContext> for InMemoryTaskDb {
             RunningTaskStatusInfo::new(0, ().boxed()),
         )));
 
-        let task_ctx = InMemoryTaskDbContext {
+        let task_ctx = SimpleTaskManagerContext {
             status: status.clone(),
         };
 
@@ -74,7 +74,7 @@ impl TaskManager<InMemoryTaskDbContext> for InMemoryTaskDb {
             let result = task.run(task_ctx.clone()).await;
 
             let (mut handles_lock, mut task_status_lock) =
-                tokio::join!(task_db.handles.write(), task_ctx.status.write());
+                tokio::join!(task_manager.handles.write(), task_ctx.status.write());
 
             handles_lock.remove(&task_id);
 
@@ -135,12 +135,12 @@ impl TaskManager<InMemoryTaskDbContext> for InMemoryTaskDb {
 }
 
 #[derive(Clone)]
-pub struct InMemoryTaskDbContext {
+pub struct SimpleTaskManagerContext {
     status: Db<TaskStatus>,
 }
 
 #[async_trait::async_trait]
-impl TaskContext for InMemoryTaskDbContext {
+impl TaskContext for SimpleTaskManagerContext {
     async fn set_completion(&self, pct_complete: u8, status: Box<dyn TaskStatusInfo>) {
         let mut task_status = self.status.write().await;
 

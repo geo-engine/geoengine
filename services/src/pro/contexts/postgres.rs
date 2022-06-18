@@ -9,7 +9,7 @@ use crate::pro::projects::ProjectPermission;
 use crate::pro::users::{UserDb, UserId, UserSession};
 use crate::pro::workflows::postgres_workflow_registry::PostgresWorkflowRegistry;
 use crate::projects::ProjectId;
-use crate::tasks::{InMemoryTaskDb, InMemoryTaskDbContext};
+use crate::tasks::{SimpleTaskManager, SimpleTaskManagerContext};
 use crate::{contexts::Context, pro::users::PostgresUserDb};
 use crate::{
     contexts::{ExecutionContextImpl, QueryContextImpl},
@@ -52,6 +52,7 @@ where
     thread_pool: Arc<ThreadPool>,
     exe_ctx_tiling_spec: TilingSpecification,
     query_ctx_chunk_size: ChunkByteSize,
+    task_manager: Arc<SimpleTaskManager>,
 }
 
 impl<Tls> PostgresContext<Tls>
@@ -79,6 +80,7 @@ where
             workflow_registry: Arc::new(PostgresWorkflowRegistry::new(pool.clone())),
             dataset_db: Arc::new(PostgresDatasetDb::new(pool.clone())),
             layer_db: Arc::new(PostgresLayerDb::new(pool.clone())),
+            task_manager: Arc::new(SimpleTaskManager::default()),
             thread_pool: create_rayon_thread_pool(0),
             exe_ctx_tiling_spec,
             query_ctx_chunk_size,
@@ -126,6 +128,7 @@ where
             workflow_registry: Arc::new(workflow_db),
             dataset_db: Arc::new(dataset_db),
             layer_db: Arc::new(layer_db),
+            task_manager: Arc::new(SimpleTaskManager::default()),
             thread_pool: create_rayon_thread_pool(0),
             exe_ctx_tiling_spec,
             query_ctx_chunk_size,
@@ -500,8 +503,8 @@ where
     type WorkflowRegistry = PostgresWorkflowRegistry<Tls>;
     type DatasetDB = PostgresDatasetDb<Tls>;
     type LayerDB = PostgresLayerDb<Tls>;
-    type TaskContext = InMemoryTaskDbContext; // TODO: PostgresContext
-    type TaskManager = InMemoryTaskDb; // TODO: PostgresContext
+    type TaskContext = SimpleTaskManagerContext;
+    type TaskManager = SimpleTaskManager; // this does not persist across restarts
     type QueryContext = QueryContextImpl;
     type ExecutionContext = ExecutionContextImpl<UserSession, PostgresDatasetDb<Tls>>;
 
@@ -534,10 +537,10 @@ where
     }
 
     fn tasks(&self) -> Arc<Self::TaskManager> {
-        todo!()
+        self.task_manager.clone()
     }
     fn tasks_ref(&self) -> &Self::TaskManager {
-        todo!()
+        &self.task_manager
     }
 
     fn query_context(&self) -> Result<Self::QueryContext> {

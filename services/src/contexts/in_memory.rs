@@ -10,7 +10,7 @@ use crate::layers::add_from_directory::{
     add_layer_collections_from_directory, add_layers_from_directory,
 };
 use crate::layers::storage::HashMapLayerDb;
-use crate::tasks::{InMemoryTaskDb, InMemoryTaskDbContext};
+use crate::tasks::{SimpleTaskManager, SimpleTaskManagerContext};
 use crate::{
     datasets::add_from_directory::{add_datasets_from_directory, add_providers_from_directory},
     error::Result,
@@ -31,7 +31,7 @@ pub struct InMemoryContext {
     workflow_registry: Arc<HashMapRegistry>,
     dataset_db: Arc<HashMapDatasetDb>,
     layer_db: Arc<HashMapLayerDb>,
-    task_db: Arc<InMemoryTaskDb>,
+    task_manager: Arc<SimpleTaskManager>,
     session: Db<SimpleSession>,
     thread_pool: Arc<ThreadPool>,
     exe_ctx_tiling_spec: TilingSpecification,
@@ -45,7 +45,7 @@ impl TestDefault for InMemoryContext {
             workflow_registry: Default::default(),
             dataset_db: Default::default(),
             layer_db: Default::default(),
-            task_db: Default::default(),
+            task_manager: Default::default(),
             session: Default::default(),
             thread_pool: create_rayon_thread_pool(0),
             exe_ctx_tiling_spec: TestDefault::test_default(),
@@ -82,7 +82,7 @@ impl InMemoryContext {
             project_db: Default::default(),
             workflow_registry: Arc::new(workflow_registry),
             layer_db: Arc::new(layer_db),
-            task_db: Default::default(),
+            task_manager: Default::default(),
             session: Default::default(),
             thread_pool: create_rayon_thread_pool(0),
             exe_ctx_tiling_spec,
@@ -100,7 +100,7 @@ impl InMemoryContext {
             workflow_registry: Default::default(),
             dataset_db: Default::default(),
             layer_db: Default::default(),
-            task_db: Default::default(),
+            task_manager: Default::default(),
             session: Default::default(),
             thread_pool: create_rayon_thread_pool(0),
             exe_ctx_tiling_spec,
@@ -116,8 +116,8 @@ impl Context for InMemoryContext {
     type WorkflowRegistry = HashMapRegistry;
     type DatasetDB = HashMapDatasetDb;
     type LayerDB = HashMapLayerDb;
-    type TaskContext = InMemoryTaskDbContext;
-    type TaskManager = InMemoryTaskDb;
+    type TaskContext = SimpleTaskManagerContext;
+    type TaskManager = SimpleTaskManager;
     type QueryContext = QueryContextImpl;
     type ExecutionContext = ExecutionContextImpl<SimpleSession, HashMapDatasetDb>;
 
@@ -150,10 +150,10 @@ impl Context for InMemoryContext {
     }
 
     fn tasks(&self) -> Arc<Self::TaskManager> {
-        self.task_db.clone()
+        self.task_manager.clone()
     }
     fn tasks_ref(&self) -> &Self::TaskManager {
-        &self.task_db
+        &self.task_manager
     }
 
     fn query_context(&self) -> Result<Self::QueryContext> {

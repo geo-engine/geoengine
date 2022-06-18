@@ -10,7 +10,7 @@ use crate::{
 };
 pub use error::TaskError;
 use geoengine_datatypes::{error::ErrorSource, identifier};
-pub use in_memory::{InMemoryTaskDb, InMemoryTaskDbContext};
+pub use in_memory::{SimpleTaskManager, SimpleTaskManagerContext};
 use serde::{Deserialize, Serialize, Serializer};
 use snafu::ensure;
 use std::{fmt, sync::Arc};
@@ -43,7 +43,7 @@ pub trait Task<C: TaskContext>: Send + Sync {
     }
 }
 
-/// A way to supply status updates from a `Task` to a `TaskDb`.
+/// A way to supply status updates from a [`Task`] to a [`TaskManager`].
 #[async_trait::async_trait]
 pub trait TaskContext: Send + Sync {
     /// Set the completion percentage (%) of the task.
