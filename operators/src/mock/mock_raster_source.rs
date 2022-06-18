@@ -38,7 +38,6 @@ where
     T: Pixel,
 {
     pub data: Vec<RasterTile2D<T>>,
-    pub no_data_value: Option<T>,
     pub tiling_specification: TilingSpecification,
 }
 
@@ -48,19 +47,16 @@ where
 {
     fn new_unchecked(
         data: Vec<RasterTile2D<T>>,
-        no_data_value: Option<T>,
         tiling_specification: TilingSpecification,
     ) -> Self {
         Self {
             data,
-            no_data_value,
             tiling_specification,
         }
     }
 
     fn _new(
         data: Vec<RasterTile2D<T>>,
-        no_data_value: Option<T>,
         tiling_specification: TilingSpecification,
     ) -> Result<Self, MockRasterSourceError> {
         if let Some(tile_shape) =
@@ -76,7 +72,6 @@ where
 
         Ok(Self {
             data,
-            no_data_value,
             tiling_specification,
         })
     }
@@ -144,7 +139,6 @@ where
             tiling_strategy.tile_grid_box(query.spatial_partition()),
             tiling_strategy.geo_transform,
             tiling_strategy.tile_size_in_pixels,
-            self.no_data_value.unwrap_or_else(T::zero),
         )
         .boxed())
     }

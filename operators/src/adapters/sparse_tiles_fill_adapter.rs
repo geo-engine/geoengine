@@ -172,7 +172,6 @@ where
         tile_grid_bounds: GridBoundingBox2D,
         global_geo_transform: GeoTransform,
         tile_shape: GridShape2D,
-        no_data_value: T,
     ) -> Self {
         SparseTilesFillAdapter {
             stream,
@@ -182,7 +181,7 @@ where
                 global_geo_transform,
                 grid_bounds: tile_grid_bounds,
                 next_tile: None,
-                no_data_grid: EmptyGrid2D::new(tile_shape, no_data_value),
+                no_data_grid: EmptyGrid2D::new(tile_shape),
                 state: State::Initial,
             },
         }
@@ -192,7 +191,6 @@ where
         stream: S,
         query_rect_to_answer: RasterQueryRectangle,
         tiling_spec: TilingSpecification,
-        no_data_value: T,
     ) -> Self {
         debug_assert!(query_rect_to_answer.spatial_resolution.y > 0.);
 
@@ -207,7 +205,6 @@ where
             grid_bounds,
             tiling_strat.geo_transform,
             tiling_spec.tile_size_in_pixels,
-            no_data_value,
         )
     }
 
@@ -487,18 +484,14 @@ mod tests {
                 time: TimeInterval::new_unchecked(0, 5),
                 tile_position: [-1, 0].into(),
                 global_geo_transform: TestDefault::test_default(),
-                grid_array: Grid::new([2, 2].into(), vec![1, 2, 3, 4], no_data_value)
-                    .unwrap()
-                    .into(),
+                grid_array: Grid::new([2, 2].into(), vec![1, 2, 3, 4]).unwrap().into(),
                 properties: Default::default(),
             },
             RasterTile2D {
                 time: TimeInterval::new_unchecked(0, 5),
                 tile_position: [-1, 1].into(),
                 global_geo_transform: TestDefault::test_default(),
-                grid_array: Grid::new([2, 2].into(), vec![7, 8, 9, 10], no_data_value)
-                    .unwrap()
-                    .into(),
+                grid_array: Grid::new([2, 2].into(), vec![7, 8, 9, 10]).unwrap().into(),
                 properties: Default::default(),
             },
             // GAP
@@ -508,7 +501,7 @@ mod tests {
                 time: TimeInterval::new_unchecked(5, 10),
                 tile_position: [-1, 1].into(),
                 global_geo_transform: TestDefault::test_default(),
-                grid_array: Grid::new([2, 2].into(), vec![13, 14, 15, 16], no_data_value)
+                grid_array: Grid::new([2, 2].into(), vec![13, 14, 15, 16])
                     .unwrap()
                     .into(),
                 properties: Default::default(),
@@ -517,7 +510,7 @@ mod tests {
                 time: TimeInterval::new_unchecked(5, 10),
                 tile_position: [0, 0].into(),
                 global_geo_transform: TestDefault::test_default(),
-                grid_array: Grid::new([2, 2].into(), vec![19, 20, 21, 22], no_data_value)
+                grid_array: Grid::new([2, 2].into(), vec![19, 20, 21, 22])
                     .unwrap()
                     .into(),
                 properties: Default::default(),
@@ -538,7 +531,6 @@ mod tests {
             grid_bounding_box,
             global_geo_transform,
             tile_shape,
-            no_data_value,
         );
 
         let tiles: Vec<Result<RasterTile2D<i32>>> = adapter.collect().await;
@@ -579,14 +571,12 @@ mod tests {
         let grid_bounding_box = GridBoundingBox2D::new([-1, 0], [0, 1]).unwrap();
         let global_geo_transform = GeoTransform::test_default();
         let tile_shape = [2, 2].into();
-        let no_data_value = 0;
 
         let adapter = SparseTilesFillAdapter::new(
             in_stream,
             grid_bounding_box,
             global_geo_transform,
             tile_shape,
-            no_data_value,
         );
 
         let tiles: Vec<Result<RasterTile2D<i32>>> = adapter.collect().await;
@@ -611,7 +601,6 @@ mod tests {
 
     #[tokio::test]
     async fn test_gaps_at_begin() {
-        let no_data_value = Some(0);
         let data = vec![
             // GAP
             // GAP
@@ -619,18 +608,14 @@ mod tests {
                 time: TimeInterval::new_unchecked(0, 5),
                 tile_position: [0, 0].into(),
                 global_geo_transform: TestDefault::test_default(),
-                grid_array: Grid::new([2, 2].into(), vec![1, 2, 3, 4], no_data_value)
-                    .unwrap()
-                    .into(),
+                grid_array: Grid::new([2, 2].into(), vec![1, 2, 3, 4]).unwrap().into(),
                 properties: Default::default(),
             },
             RasterTile2D {
                 time: TimeInterval::new_unchecked(0, 5),
                 tile_position: [0, 1].into(),
                 global_geo_transform: TestDefault::test_default(),
-                grid_array: Grid::new([2, 2].into(), vec![7, 8, 9, 10], no_data_value)
-                    .unwrap()
-                    .into(),
+                grid_array: Grid::new([2, 2].into(), vec![7, 8, 9, 10]).unwrap().into(),
                 properties: Default::default(),
             },
             // GAP
@@ -639,7 +624,7 @@ mod tests {
                 time: TimeInterval::new_unchecked(5, 10),
                 tile_position: [0, 0].into(),
                 global_geo_transform: TestDefault::test_default(),
-                grid_array: Grid::new([2, 2].into(), vec![13, 14, 15, 16], no_data_value)
+                grid_array: Grid::new([2, 2].into(), vec![13, 14, 15, 16])
                     .unwrap()
                     .into(),
                 properties: Default::default(),
@@ -648,7 +633,7 @@ mod tests {
                 time: TimeInterval::new_unchecked(5, 10),
                 tile_position: [0, 1].into(),
                 global_geo_transform: TestDefault::test_default(),
-                grid_array: Grid::new([2, 2].into(), vec![19, 20, 21, 22], no_data_value)
+                grid_array: Grid::new([2, 2].into(), vec![19, 20, 21, 22])
                     .unwrap()
                     .into(),
                 properties: Default::default(),
@@ -668,7 +653,6 @@ mod tests {
             grid_bounding_box,
             global_geo_transform,
             tile_shape,
-            no_data_value,
         );
 
         let tiles: Vec<Result<RasterTile2D<i32>>> = adapter.collect().await;
@@ -697,24 +681,19 @@ mod tests {
 
     #[tokio::test]
     async fn test_gaps_at_end() {
-        let no_data_value = Some(0);
         let data = vec![
             RasterTile2D {
                 time: TimeInterval::new_unchecked(0, 5),
                 tile_position: [-1, 0].into(),
                 global_geo_transform: TestDefault::test_default(),
-                grid_array: Grid::new([2, 2].into(), vec![1, 2, 3, 4], no_data_value)
-                    .unwrap()
-                    .into(),
+                grid_array: Grid::new([2, 2].into(), vec![1, 2, 3, 4]).unwrap().into(),
                 properties: Default::default(),
             },
             RasterTile2D {
                 time: TimeInterval::new_unchecked(0, 5),
                 tile_position: [-1, 1].into(),
                 global_geo_transform: TestDefault::test_default(),
-                grid_array: Grid::new([2, 2].into(), vec![7, 8, 9, 10], no_data_value)
-                    .unwrap()
-                    .into(),
+                grid_array: Grid::new([2, 2].into(), vec![7, 8, 9, 10]).unwrap().into(),
                 properties: Default::default(),
             },
             // GAP
@@ -723,7 +702,7 @@ mod tests {
                 time: TimeInterval::new_unchecked(5, 10),
                 tile_position: [-1, 0].into(),
                 global_geo_transform: TestDefault::test_default(),
-                grid_array: Grid::new([2, 2].into(), vec![13, 14, 15, 16], no_data_value)
+                grid_array: Grid::new([2, 2].into(), vec![13, 14, 15, 16])
                     .unwrap()
                     .into(),
                 properties: Default::default(),
@@ -732,7 +711,7 @@ mod tests {
                 time: TimeInterval::new_unchecked(5, 10),
                 tile_position: [-1, 1].into(),
                 global_geo_transform: TestDefault::test_default(),
-                grid_array: Grid::new([2, 2].into(), vec![19, 20, 21, 22], no_data_value)
+                grid_array: Grid::new([2, 2].into(), vec![19, 20, 21, 22])
                     .unwrap()
                     .into(),
                 properties: Default::default(),
@@ -754,7 +733,6 @@ mod tests {
             grid_bounding_box,
             global_geo_transform,
             tile_shape,
-            no_data_value,
         );
 
         let tiles: Vec<Result<RasterTile2D<i32>>> = adapter.collect().await;
@@ -789,16 +767,14 @@ mod tests {
                 time: TimeInterval::new_unchecked(0, 5),
                 tile_position: [0, 0].into(),
                 global_geo_transform: TestDefault::test_default(),
-                grid_array: Grid::new([2, 2].into(), vec![1, 2, 3, 4], no_data_value)
-                    .unwrap()
-                    .into(),
+                grid_array: Grid::new([2, 2].into(), vec![1, 2, 3, 4]).unwrap().into(),
                 properties: Default::default(),
             },
             RasterTile2D {
                 time: TimeInterval::new_unchecked(5, 10),
                 tile_position: [0, 0].into(),
                 global_geo_transform: TestDefault::test_default(),
-                grid_array: Grid::new([2, 2].into(), vec![13, 14, 15, 16], no_data_value)
+                grid_array: Grid::new([2, 2].into(), vec![13, 14, 15, 16])
                     .unwrap()
                     .into(),
                 properties: Default::default(),
@@ -811,14 +787,12 @@ mod tests {
         let grid_bounding_box = GridBoundingBox2D::new([0, 0], [0, 0]).unwrap();
         let global_geo_transform = GeoTransform::test_default();
         let tile_shape = [2, 2].into();
-        let no_data_value = 0;
 
         let adapter = SparseTilesFillAdapter::new(
             in_stream,
             grid_bounding_box,
             global_geo_transform,
             tile_shape,
-            no_data_value,
         );
 
         let tiles: Vec<Result<RasterTile2D<i32>>> = adapter.collect().await;
@@ -842,49 +816,40 @@ mod tests {
     #[allow(clippy::too_many_lines)]
     #[tokio::test]
     async fn test_no_gaps() {
-        let no_data_value = Some(0);
         let data = vec![
             RasterTile2D {
                 time: TimeInterval::new_unchecked(0, 5),
                 tile_position: [-1, 0].into(),
                 global_geo_transform: TestDefault::test_default(),
-                grid_array: Grid::new([2, 2].into(), vec![1, 2, 3, 4], no_data_value)
-                    .unwrap()
-                    .into(),
+                grid_array: Grid::new([2, 2].into(), vec![1, 2, 3, 4]).unwrap().into(),
                 properties: Default::default(),
             },
             RasterTile2D {
                 time: TimeInterval::new_unchecked(0, 5),
                 tile_position: [-1, 1].into(),
                 global_geo_transform: TestDefault::test_default(),
-                grid_array: Grid::new([2, 2].into(), vec![7, 8, 9, 10], no_data_value)
-                    .unwrap()
-                    .into(),
+                grid_array: Grid::new([2, 2].into(), vec![7, 8, 9, 10]).unwrap().into(),
                 properties: Default::default(),
             },
             RasterTile2D {
                 time: TimeInterval::new_unchecked(0, 5),
                 tile_position: [0, 0].into(),
                 global_geo_transform: TestDefault::test_default(),
-                grid_array: Grid::new([2, 2].into(), vec![1, 2, 3, 4], no_data_value)
-                    .unwrap()
-                    .into(),
+                grid_array: Grid::new([2, 2].into(), vec![1, 2, 3, 4]).unwrap().into(),
                 properties: Default::default(),
             },
             RasterTile2D {
                 time: TimeInterval::new_unchecked(0, 5),
                 tile_position: [0, 1].into(),
                 global_geo_transform: TestDefault::test_default(),
-                grid_array: Grid::new([2, 2].into(), vec![7, 8, 9, 10], no_data_value)
-                    .unwrap()
-                    .into(),
+                grid_array: Grid::new([2, 2].into(), vec![7, 8, 9, 10]).unwrap().into(),
                 properties: Default::default(),
             },
             RasterTile2D {
                 time: TimeInterval::new_unchecked(5, 10),
                 tile_position: [-1, 0].into(),
                 global_geo_transform: TestDefault::test_default(),
-                grid_array: Grid::new([2, 2].into(), vec![13, 14, 15, 16], no_data_value)
+                grid_array: Grid::new([2, 2].into(), vec![13, 14, 15, 16])
                     .unwrap()
                     .into(),
                 properties: Default::default(),
@@ -893,7 +858,7 @@ mod tests {
                 time: TimeInterval::new_unchecked(5, 10),
                 tile_position: [-1, 1].into(),
                 global_geo_transform: TestDefault::test_default(),
-                grid_array: Grid::new([2, 2].into(), vec![19, 20, 21, 22], no_data_value)
+                grid_array: Grid::new([2, 2].into(), vec![19, 20, 21, 22])
                     .unwrap()
                     .into(),
                 properties: Default::default(),
@@ -902,7 +867,7 @@ mod tests {
                 time: TimeInterval::new_unchecked(5, 10),
                 tile_position: [0, 0].into(),
                 global_geo_transform: TestDefault::test_default(),
-                grid_array: Grid::new([2, 2].into(), vec![13, 14, 15, 16], no_data_value)
+                grid_array: Grid::new([2, 2].into(), vec![13, 14, 15, 16])
                     .unwrap()
                     .into(),
                 properties: Default::default(),
@@ -911,7 +876,7 @@ mod tests {
                 time: TimeInterval::new_unchecked(5, 10),
                 tile_position: [0, 1].into(),
                 global_geo_transform: TestDefault::test_default(),
-                grid_array: Grid::new([2, 2].into(), vec![19, 20, 21, 22], no_data_value)
+                grid_array: Grid::new([2, 2].into(), vec![19, 20, 21, 22])
                     .unwrap()
                     .into(),
                 properties: Default::default(),
@@ -924,14 +889,12 @@ mod tests {
         let grid_bounding_box = GridBoundingBox2D::new([-1, 0], [0, 1]).unwrap();
         let global_geo_transform = GeoTransform::test_default();
         let tile_shape = [2, 2].into();
-        let no_data_value = 0;
 
         let adapter = SparseTilesFillAdapter::new(
             in_stream,
             grid_bounding_box,
             global_geo_transform,
             tile_shape,
-            no_data_value,
         );
 
         let tiles: Vec<Result<RasterTile2D<i32>>> = adapter.collect().await;
@@ -960,15 +923,12 @@ mod tests {
 
     #[tokio::test]
     async fn test_min_max_time() {
-        let no_data_value = Some(0);
         let data = vec![
             RasterTile2D {
                 time: TimeInterval::default(),
                 tile_position: [-1, 0].into(),
                 global_geo_transform: TestDefault::test_default(),
-                grid_array: Grid::new([2, 2].into(), vec![1, 2, 3, 4], no_data_value)
-                    .unwrap()
-                    .into(),
+                grid_array: Grid::new([2, 2].into(), vec![1, 2, 3, 4]).unwrap().into(),
                 properties: Default::default(),
             },
             // GAP
@@ -977,9 +937,7 @@ mod tests {
                 time: TimeInterval::default(),
                 tile_position: [0, 1].into(),
                 global_geo_transform: TestDefault::test_default(),
-                grid_array: Grid::new([2, 2].into(), vec![7, 8, 9, 10], no_data_value)
-                    .unwrap()
-                    .into(),
+                grid_array: Grid::new([2, 2].into(), vec![7, 8, 9, 10]).unwrap().into(),
                 properties: Default::default(),
             },
         ];
@@ -990,14 +948,12 @@ mod tests {
         let grid_bounding_box = GridBoundingBox2D::new([-1, 0], [0, 1]).unwrap();
         let global_geo_transform = GeoTransform::test_default();
         let tile_shape = [2, 2].into();
-        let no_data_value = 0;
 
         let adapter = SparseTilesFillAdapter::new(
             in_stream,
             grid_bounding_box,
             global_geo_transform,
             tile_shape,
-            no_data_value,
         );
 
         let tiles: Vec<Result<RasterTile2D<i32>>> = adapter.collect().await;
@@ -1027,9 +983,7 @@ mod tests {
                 time: TimeInterval::new_unchecked(0, 5),
                 tile_position: [-1, 0].into(),
                 global_geo_transform: TestDefault::test_default(),
-                grid_array: Grid::new([2, 2].into(), vec![1, 2, 3, 4], Some(0))
-                    .unwrap()
-                    .into(),
+                grid_array: Grid::new([2, 2].into(), vec![1, 2, 3, 4]).unwrap().into(),
                 properties: Default::default(),
             }),
             Err(crate::error::Error::NoSpatialBoundsAvailable),
@@ -1048,7 +1002,6 @@ mod tests {
             grid_bounding_box,
             global_geo_transform,
             tile_shape,
-            no_data_value,
         );
 
         let tiles: Vec<Result<RasterTile2D<i32>>> = adapter.collect().await;
@@ -1061,49 +1014,40 @@ mod tests {
     #[allow(clippy::too_many_lines)]
     #[tokio::test]
     async fn test_timeinterval_gap() {
-        let no_data_value = Some(0);
         let data = vec![
             RasterTile2D {
                 time: TimeInterval::new_unchecked(0, 5),
                 tile_position: [-1, 0].into(),
                 global_geo_transform: TestDefault::test_default(),
-                grid_array: Grid::new([2, 2].into(), vec![1, 2, 3, 4], no_data_value)
-                    .unwrap()
-                    .into(),
+                grid_array: Grid::new([2, 2].into(), vec![1, 2, 3, 4]).unwrap().into(),
                 properties: Default::default(),
             },
             RasterTile2D {
                 time: TimeInterval::new_unchecked(0, 5),
                 tile_position: [-1, 1].into(),
                 global_geo_transform: TestDefault::test_default(),
-                grid_array: Grid::new([2, 2].into(), vec![7, 8, 9, 10], no_data_value)
-                    .unwrap()
-                    .into(),
+                grid_array: Grid::new([2, 2].into(), vec![7, 8, 9, 10]).unwrap().into(),
                 properties: Default::default(),
             },
             RasterTile2D {
                 time: TimeInterval::new_unchecked(0, 5),
                 tile_position: [0, 0].into(),
                 global_geo_transform: TestDefault::test_default(),
-                grid_array: Grid::new([2, 2].into(), vec![1, 2, 3, 4], no_data_value)
-                    .unwrap()
-                    .into(),
+                grid_array: Grid::new([2, 2].into(), vec![1, 2, 3, 4]).unwrap().into(),
                 properties: Default::default(),
             },
             RasterTile2D {
                 time: TimeInterval::new_unchecked(0, 5),
                 tile_position: [0, 1].into(),
                 global_geo_transform: TestDefault::test_default(),
-                grid_array: Grid::new([2, 2].into(), vec![7, 8, 9, 10], no_data_value)
-                    .unwrap()
-                    .into(),
+                grid_array: Grid::new([2, 2].into(), vec![7, 8, 9, 10]).unwrap().into(),
                 properties: Default::default(),
             },
             RasterTile2D {
                 time: TimeInterval::new_unchecked(10, 15),
                 tile_position: [-1, 0].into(),
                 global_geo_transform: TestDefault::test_default(),
-                grid_array: Grid::new([2, 2].into(), vec![13, 14, 15, 16], no_data_value)
+                grid_array: Grid::new([2, 2].into(), vec![13, 14, 15, 16])
                     .unwrap()
                     .into(),
                 properties: Default::default(),
@@ -1112,7 +1056,7 @@ mod tests {
                 time: TimeInterval::new_unchecked(10, 15),
                 tile_position: [-1, 1].into(),
                 global_geo_transform: TestDefault::test_default(),
-                grid_array: Grid::new([2, 2].into(), vec![19, 20, 21, 22], no_data_value)
+                grid_array: Grid::new([2, 2].into(), vec![19, 20, 21, 22])
                     .unwrap()
                     .into(),
                 properties: Default::default(),
@@ -1121,7 +1065,7 @@ mod tests {
                 time: TimeInterval::new_unchecked(10, 15),
                 tile_position: [0, 0].into(),
                 global_geo_transform: TestDefault::test_default(),
-                grid_array: Grid::new([2, 2].into(), vec![13, 14, 15, 16], no_data_value)
+                grid_array: Grid::new([2, 2].into(), vec![13, 14, 15, 16])
                     .unwrap()
                     .into(),
                 properties: Default::default(),
@@ -1130,7 +1074,7 @@ mod tests {
                 time: TimeInterval::new_unchecked(10, 15),
                 tile_position: [0, 1].into(),
                 global_geo_transform: TestDefault::test_default(),
-                grid_array: Grid::new([2, 2].into(), vec![19, 20, 21, 22], no_data_value)
+                grid_array: Grid::new([2, 2].into(), vec![19, 20, 21, 22])
                     .unwrap()
                     .into(),
                 properties: Default::default(),
@@ -1143,14 +1087,12 @@ mod tests {
         let grid_bounding_box = GridBoundingBox2D::new([-1, 0], [0, 1]).unwrap();
         let global_geo_transform = GeoTransform::test_default();
         let tile_shape = [2, 2].into();
-        let no_data_value = 0;
 
         let adapter = SparseTilesFillAdapter::new(
             in_stream,
             grid_bounding_box,
             global_geo_transform,
             tile_shape,
-            no_data_value,
         );
 
         let tiles: Vec<Result<RasterTile2D<i32>>> = adapter.collect().await;
@@ -1184,22 +1126,19 @@ mod tests {
     #[allow(clippy::too_many_lines)]
     #[tokio::test]
     async fn test_timeinterval_gap_and_end_start_gap() {
-        let no_data_value = Some(0);
         let data = vec![
             RasterTile2D {
                 time: TimeInterval::new_unchecked(0, 5),
                 tile_position: [-1, 1].into(),
                 global_geo_transform: TestDefault::test_default(),
-                grid_array: Grid::new([2, 2].into(), vec![7, 8, 9, 10], no_data_value)
-                    .unwrap()
-                    .into(),
+                grid_array: Grid::new([2, 2].into(), vec![7, 8, 9, 10]).unwrap().into(),
                 properties: Default::default(),
             },
             RasterTile2D {
                 time: TimeInterval::new_unchecked(10, 15),
                 tile_position: [0, 0].into(),
                 global_geo_transform: TestDefault::test_default(),
-                grid_array: Grid::new([2, 2].into(), vec![13, 14, 15, 16], no_data_value)
+                grid_array: Grid::new([2, 2].into(), vec![13, 14, 15, 16])
                     .unwrap()
                     .into(),
                 properties: Default::default(),
@@ -1212,14 +1151,12 @@ mod tests {
         let grid_bounding_box = GridBoundingBox2D::new([-1, 0], [0, 1]).unwrap();
         let global_geo_transform = GeoTransform::test_default();
         let tile_shape = [2, 2].into();
-        let no_data_value = 0;
 
         let adapter = SparseTilesFillAdapter::new(
             in_stream,
             grid_bounding_box,
             global_geo_transform,
             tile_shape,
-            no_data_value,
         );
 
         let tiles: Vec<Result<RasterTile2D<i32>>> = adapter.collect().await;

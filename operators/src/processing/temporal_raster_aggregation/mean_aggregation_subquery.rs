@@ -77,10 +77,10 @@ impl<T> TemporalMeanTileAccu<T> {
                 let mut accu_grid = self.value_grid.clone().into_materialized_grid();
 
                 for ((acc_value, acc_count), new_value) in accu_grid
-                    .data
+                    .inner_grid
                     .iter_mut()
                     .zip(self.count_grid.data.iter_mut())
-                    .zip(in_tile_grid.data.iter())
+                    .zip(in_tile_grid.inner_grid.iter())
                 {
                     if in_tile_grid.is_no_data(*new_value) {
                         *acc_count = 0;
@@ -96,10 +96,10 @@ impl<T> TemporalMeanTileAccu<T> {
 
             GridOrEmpty::Grid(accu_grid) => {
                 for ((acc_value, acc_count), new_value) in accu_grid
-                    .data
+                    .inner_grid
                     .iter_mut()
                     .zip(self.count_grid.data.iter_mut())
-                    .zip(in_tile_grid.data.iter())
+                    .zip(in_tile_grid.inner_grid.iter())
                 {
                     if in_tile_grid.is_no_data(*new_value) {
                         // The input pixel value is nodata
@@ -153,13 +153,13 @@ where
                     time,
                     tile_position,
                     global_geo_transform,
-                    EmptyGrid2D::new(value_grid.grid_shape(), out_no_data_value).into(),
+                    EmptyGrid2D::new(value_grid.grid_shape()).into(),
                 ))
             }
         };
 
         let res: Vec<T> = value_grid
-            .data
+            .inner_grid
             .into_iter()
             .zip(count_grid.data.into_iter())
             .map(|(v, c)| {
@@ -174,7 +174,6 @@ where
         let res_grid = Grid2D {
             shape: value_grid.shape,
             data: res,
-            no_data_value: Some(out_no_data_value),
         };
 
         Ok(RasterTile2D::new(
@@ -259,8 +258,8 @@ fn build_accu<T: Pixel>(
         time: query_rect.time_interval,
         tile_position: tile_info.global_tile_position,
         global_geo_transform: tile_info.global_geo_transform,
-        value_grid: EmptyGrid2D::new(tile_info.tile_size_in_pixels, 0.).into(),
-        count_grid: Grid2D::new_filled(tile_info.tile_size_in_pixels, 0, None),
+        value_grid: EmptyGrid2D::new(tile_info.tile_size_in_pixels).into(),
+        count_grid: Grid2D::new_filled(tile_info.tile_size_in_pixels, 0),
         ignore_no_data,
         out_no_data_value: no_data_value,
         initial_state: true,

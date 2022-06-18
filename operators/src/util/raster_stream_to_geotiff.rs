@@ -231,7 +231,6 @@ impl<P: Pixel + GdalType> GdalDatasetWriter<P> {
                 self.gdal_tiff_metadata
                     .no_data_value
                     .map_or_else(P::zero, P::from_),
-                self.gdal_tiff_metadata.no_data_value.map(P::from_),
             );
 
             let offset = tile
@@ -256,7 +255,7 @@ impl<P: Pixel + GdalType> GdalDatasetWriter<P> {
         let shape = grid_array.axis_size();
         let window_size = (shape[1], shape[0]);
 
-        let buffer = Buffer::new(window_size, grid_array.data);
+        let buffer = Buffer::new(window_size, grid_array.inner_grid);
 
         self.dataset
             .rasterband(self.rasterband_index)?
@@ -438,6 +437,8 @@ fn geotiff_to_cog(
 
 #[cfg(test)]
 mod tests {
+    use std::marker::PhantomData;
+
     use geoengine_datatypes::{
         primitives::{Coordinate2D, SpatialPartition2D, SpatialResolution, TimeInterval},
         raster::TilingSpecification,
@@ -460,11 +461,8 @@ mod tests {
 
         let gdal_source = GdalSourceProcessor::<u8> {
             tiling_specification,
-            no_data_value: metadata
-                .params
-                .no_data_value
-                .map(num_traits::AsPrimitive::as_),
             meta_data: Box::new(metadata),
+            _phandom_data: PhantomData,
         };
 
         let query_bbox = SpatialPartition2D::new((-10., 80.).into(), (50., 20.).into()).unwrap();
@@ -512,11 +510,8 @@ mod tests {
 
         let gdal_source = GdalSourceProcessor::<u8> {
             tiling_specification,
-            no_data_value: metadata
-                .params
-                .no_data_value
-                .map(num_traits::AsPrimitive::as_),
             meta_data: Box::new(metadata),
+            _phandom_data: PhantomData,
         };
 
         let query_bbox = SpatialPartition2D::new((-10., 80.).into(), (50., 20.).into()).unwrap();
@@ -564,11 +559,8 @@ mod tests {
 
         let gdal_source = GdalSourceProcessor::<u8> {
             tiling_specification,
-            no_data_value: metadata
-                .params
-                .no_data_value
-                .map(num_traits::AsPrimitive::as_),
             meta_data: Box::new(metadata),
+            _phandom_data: PhantomData,
         };
 
         let query_bbox = SpatialPartition2D::new((-10., 80.).into(), (50., 20.).into()).unwrap();
@@ -619,11 +611,8 @@ mod tests {
 
         let gdal_source = GdalSourceProcessor::<u8> {
             tiling_specification,
-            no_data_value: metadata
-                .params
-                .no_data_value
-                .map(num_traits::AsPrimitive::as_),
             meta_data: Box::new(metadata),
+            _phandom_data: PhantomData,
         };
 
         let query_bbox = SpatialPartition2D::new((-10., 80.).into(), (50., 20.).into()).unwrap();
@@ -674,11 +663,8 @@ mod tests {
 
         let gdal_source = GdalSourceProcessor::<u8> {
             tiling_specification,
-            no_data_value: metadata
-                .params
-                .no_data_value
-                .map(num_traits::AsPrimitive::as_),
             meta_data: Box::new(metadata),
+            _phandom_data: PhantomData,
         };
 
         let query_bbox = SpatialPartition2D::new((-10., 80.).into(), (50., 20.).into()).unwrap();
@@ -721,11 +707,8 @@ mod tests {
 
         let gdal_source = GdalSourceProcessor::<u8> {
             tiling_specification,
-            no_data_value: metadata
-                .params
-                .no_data_value
-                .map(num_traits::AsPrimitive::as_),
             meta_data: Box::new(metadata),
+            _phandom_data: PhantomData,
         };
 
         let query_bbox =

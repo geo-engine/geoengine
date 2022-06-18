@@ -148,7 +148,7 @@ impl<P: Pixel> MeanRasterPixelValuesOverTimeQueryProcessor<P> {
             let time = Self::time_interval_projection(tile.time, position);
 
             let mean = means.entry(time).or_default();
-            mean.add(&tile.grid_array.data, tile.grid_array.no_data_value);
+            mean.add(&tile.grid_array.inner_grid, tile.grid_array.no_data_value);
         }
 
         Ok(means)
@@ -399,9 +399,7 @@ mod tests {
                     global_tile_position: [0, 0].into(),
                     tile_size_in_pixels: [3, 2].into(),
                 },
-                Grid2D::new([3, 2].into(), values, no_data_value)
-                    .unwrap()
-                    .into(),
+                Grid2D::new([3, 2].into(), values).unwrap().into(),
             ));
         }
 
@@ -412,7 +410,6 @@ mod tests {
                     data_type: RasterDataType::U8,
                     spatial_reference: SpatialReference::epsg_4326().into(),
                     measurement: Measurement::Unitless,
-                    no_data_value: no_data_value.map(AsPrimitive::as_),
                     time: None,
                     bbox: None,
                 },

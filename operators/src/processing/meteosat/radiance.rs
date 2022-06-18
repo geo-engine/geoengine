@@ -14,11 +14,8 @@ use geoengine_datatypes::primitives::{
     SpatialPartition2D,
 };
 use geoengine_datatypes::raster::{
-    EmptyGrid, Grid2D, GridShapeAccess, GridSize, NoDataValue, Pixel, RasterDataType,
-    RasterPropertiesKey, RasterTile2D,
+    MapMaskedElementsParallel, Pixel, RasterDataType, RasterPropertiesKey, RasterTile2D,
 };
-use rayon::iter::ParallelIterator;
-use rayon::slice::ParallelSlice;
 use rayon::ThreadPool;
 use serde::{Deserialize, Serialize};
 
@@ -28,8 +25,6 @@ use crate::error::Error;
 use crate::processing::meteosat::{new_offset_key, new_slope_key};
 use RasterDataType::F32 as RasterOut;
 use TypedRasterQueryProcessor::F32 as QueryProcessorOut;
-
-const OUT_NO_DATA_VALUE: PixelOut = PixelOut::NAN;
 
 #[derive(Debug, Serialize, Deserialize, Clone, Copy)]
 #[serde(rename_all = "camelCase")]
@@ -104,7 +99,6 @@ impl RasterOperator for Radiance {
                 measurement: "radiance".into(),
                 unit: Some("W·m^(-2)·sr^(-1)·cm^(-1)".into()),
             }),
-            no_data_value: Some(f64::from(OUT_NO_DATA_VALUE)),
             time: in_desc.time,
             bbox: in_desc.bbox,
         };
@@ -188,61 +182,18 @@ where
         tile: RasterTile2D<P>,
         pool: Arc<ThreadPool>,
     ) -> Result<RasterTile2D<PixelOut>> {
-        if tile.is_empty() {
-            return Ok(RasterTile2D::new_with_properties(
-                tile.time,
-                tile.tile_position,
-                tile.global_geo_transform,
-                EmptyGrid::new(tile.grid_array.grid_shape(), OUT_NO_DATA_VALUE).into(),
-                tile.properties,
-            ));
-        }
-
         let offset = tile.properties.number_property::<f32>(&self.offset_key)?;
         let slope = tile.properties.number_property::<f32>(&self.slope_key)?;
-        let mat_tile = tile.into_materialized_tile(); // NOTE: the tile is already materialized.
 
-        let rad_grid = crate::util::spawn_blocking(move || {
-            process_tile(&mat_tile.grid_array, offset, slope, &pool)
-        })
-        .await?;
+        let map_fn = |raw_value_option: Option<P>| {
+            raw_value_option.map(|raw_value| offset + raw_value.as_() * slope)
+        };
 
-        Ok(RasterTile2D::new_with_properties(
-            mat_tile.time,
-            mat_tile.tile_position,
-            mat_tile.global_geo_transform,
-            rad_grid.into(),
-            mat_tile.properties,
-        ))
+        let result_tile =
+            crate::util::spawn_blocking(move || tile.map_or_mask_elements_parallel(map_fn)).await?;
+
+        Ok(result_tile)
     }
-}
-
-fn process_tile<P: Pixel>(
-    grid: &Grid2D<P>,
-    offset: f32,
-    slope: f32,
-    pool: &ThreadPool,
-) -> Grid2D<PixelOut> {
-    pool.install(|| {
-        let rad_array = grid
-            .data
-            .par_chunks(grid.axis_size_x())
-            .map(|row| {
-                row.iter().map(|p| {
-                    if grid.is_no_data(*p) {
-                        OUT_NO_DATA_VALUE
-                    } else {
-                        let val: PixelOut = (p).as_();
-                        offset + val * slope
-                    }
-                })
-            })
-            .flatten_iter()
-            .collect::<Vec<PixelOut>>();
-
-        Grid2D::new(grid.grid_shape(), rad_array, Some(OUT_NO_DATA_VALUE))
-            .expect("raster creation must succeed")
-    })
 }
 
 #[async_trait]
@@ -299,7 +250,6 @@ mod tests {
 
     #[tokio::test]
     async fn test_ok() {
-        let no_data_value_option = Some(super::OUT_NO_DATA_VALUE);
         let tile_size_in_pixels = [3, 2].into();
         let tiling_specification = TilingSpecification {
             origin_coordinate: [0.0, 0.0].into(),
@@ -329,7 +279,6 @@ mod tests {
             &Grid2D::new(
                 [3, 2].into(),
                 vec![13.0, 15.0, 17.0, 19.0, 21.0, no_data_value_option.unwrap()],
-                no_data_value_option,
             )
             .unwrap()
             .into()
@@ -338,7 +287,6 @@ mod tests {
 
     #[tokio::test]
     async fn test_empty_raster() {
-        let no_data_value_option = Some(super::OUT_NO_DATA_VALUE);
         let tile_size_in_pixels = [3, 2].into();
         let tiling_specification = TilingSpecification {
             origin_coordinate: [0.0, 0.0].into(),
@@ -365,7 +313,7 @@ mod tests {
 
         assert!(geoengine_datatypes::util::test::grid_or_empty_grid_eq(
             &result.as_ref().unwrap().grid_array,
-            &EmptyGrid2D::new([3, 2].into(), no_data_value_option.unwrap(),).into()
+            &EmptyGrid2D::new([3, 2].into()).into()
         ));
     }
 

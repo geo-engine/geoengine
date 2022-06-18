@@ -86,7 +86,7 @@ mod tests {
         t1.blit(t2).unwrap();
 
         assert_eq!(
-            t1.grid_array.data.data,
+            t1.grid_array.inner_grid.data,
             vec![0, 0, 8, 9, 0, 0, 12, 13, 0, 0, 0, 0, 0, 0, 0, 0]
         );
     }
@@ -111,7 +111,7 @@ mod tests {
         t1.blit(t2).unwrap();
 
         assert_eq!(
-            t1.grid_array.data.data,
+            t1.grid_array.inner_grid.data,
             vec![10, 11, 0, 0, 14, 15, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
         );
     }
@@ -136,7 +136,7 @@ mod tests {
         t1.blit(t2).unwrap();
 
         assert_eq!(
-            t1.grid_array.data.data,
+            t1.grid_array.inner_grid.data,
             vec![0, 0, 0, 0, 0, 0, 0, 0, 2, 3, 0, 0, 6, 7, 0, 0]
         );
     }

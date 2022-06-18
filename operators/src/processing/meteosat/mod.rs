@@ -151,13 +151,9 @@ mod test_util {
         custom_data: Option<Vec<P>>,
         measurement: Option<Measurement>,
     ) -> MockRasterSource<P> {
-        let no_data_value = Some(P::zero());
-
         let raster = match custom_data {
-            Some(v) if v.is_empty() => {
-                GridOrEmpty::Empty(EmptyGrid2D::new([3, 2].into(), no_data_value.unwrap()))
-            }
-            Some(v) => GridOrEmpty::Grid(Grid2D::new([3, 2].into(), v, no_data_value).unwrap()),
+            Some(v) if v.is_empty() => GridOrEmpty::Empty(EmptyGrid2D::new([3, 2].into())),
+            Some(v) => GridOrEmpty::Grid(Grid2D::new([3, 2].into(), v).unwrap()),
             None => GridOrEmpty::Grid(
                 Grid2D::<P>::new(
                     [3, 2].into(),
@@ -167,9 +163,7 @@ mod test_util {
                         P::from_(3),
                         P::from_(4),
                         P::from_(5),
-                        no_data_value.unwrap(),
                     ],
-                    no_data_value,
                 )
                 .unwrap(),
             ),
@@ -198,7 +192,6 @@ mod test_util {
                             unit: None,
                         })
                     }),
-                    no_data_value: no_data_value.map(AsPrimitive::as_),
                     time: None,
                     bbox: None,
                 },
@@ -265,7 +258,6 @@ mod test_util {
                     measurement: "raw".to_string(),
                     unit: None,
                 }),
-                no_data_value,
                 time: None,
                 bbox: None,
             },

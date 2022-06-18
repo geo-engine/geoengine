@@ -64,6 +64,14 @@ where
             GridOrEmpty::Empty(n) => EmptyGrid::new(n.shape.clone()),
         }
     }
+
+    pub fn materialize(&mut self) {
+        if self.is_empty() {
+            let grid = self.clone().into_materialized_grid();
+            *self = GridOrEmpty::Grid(grid);
+        }
+    }
+
 }
 
 impl<D, T> GridSize for GridOrEmpty<D, T>

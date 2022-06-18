@@ -250,7 +250,6 @@ impl RasterOperator for Reprojection {
             spatial_reference: self.params.target_spatial_reference.into(),
             data_type: in_desc.data_type,
             measurement: in_desc.measurement.clone(),
-            no_data_value: Some(out_no_data_value),
             time: in_desc.time,
             bbox,
         };
@@ -819,7 +818,6 @@ mod tests {
                     data_type: RasterDataType::U8,
                     spatial_reference: SpatialReference::epsg_4326().into(),
                     measurement: Measurement::Unitless,
-                    no_data_value: no_data_value.map(AsPrimitive::as_),
                     time: None,
                     bbox: None,
                 },
@@ -946,7 +944,7 @@ mod tests {
             include_bytes!(
                 "../../../test_data/raster/modis_ndvi/projected_3857/MOD13A2_M_NDVI_2014-04-01_tile-20.rst"
             ) as &[u8],
-            res[8].clone().into_materialized_tile().grid_array.data.as_slice()
+            res[8].clone().into_materialized_tile().grid_array.inner_grid.as_slice()
         );
 
         Ok(())
@@ -1021,7 +1019,6 @@ mod tests {
                 spatial_reference: SpatialReference::new(SpatialReferenceAuthority::Epsg, 3857)
                     .into(),
                 measurement: Measurement::Unitless,
-                no_data_value: Some(0.),
                 time: None,
                 bbox: None,
             },
@@ -1152,7 +1149,6 @@ mod tests {
                 spatial_reference: SpatialReference::new(SpatialReferenceAuthority::Epsg, 32636)
                     .into(),
                 measurement: Measurement::Unitless,
-                no_data_value: Some(0.),
                 time: None,
                 bbox: None,
             },

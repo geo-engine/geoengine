@@ -65,11 +65,11 @@ where
 {
     fn convert_data_type(self) -> MaskedGrid<G, Out> {
         let MaskedGrid {
-            data,
+            inner_grid: data,
             validity_mask,
         } = self;
         MaskedGrid {
-            data: data.convert_data_type(),
+            inner_grid: data.convert_data_type(),
             validity_mask,
         }
     }
@@ -135,11 +135,11 @@ where
 {
     fn convert_data_type_parallel(self) -> MaskedGrid<G, Out> {
         let MaskedGrid {
-            data,
+            inner_grid: data,
             validity_mask,
         } = self;
         MaskedGrid {
-            data: data.convert_data_type_parallel(),
+            inner_grid: data.convert_data_type_parallel(),
             validity_mask,
         }
     }
@@ -184,7 +184,7 @@ mod tests {
         let g_u8: GridOrEmpty2D<u8> = Grid2D::new_filled([32, 32].into(), 8).into();
         let g_f64: GridOrEmpty2D<f32> = g_u8.convert_data_type();
         if let GridOrEmpty2D::Grid(g) = g_f64 {
-            assert!(g.data.data.into_iter().all(|f| f == 8.));
+            assert!(g.inner_grid.data.into_iter().all(|f| f == 8.));
         } else {
             panic!("Expected GridOrEmpty2D::Grid");
         }
@@ -208,7 +208,7 @@ mod tests {
         let g_u8: GridOrEmpty2D<u8> = Grid2D::new_filled([32, 32].into(), 8).into();
         let g_f64: GridOrEmpty2D<f32> = g_u8.convert_data_type_parallel();
         if let GridOrEmpty2D::Grid(g) = g_f64 {
-            assert!(g.data.data.into_iter().all(|f| f == 8.));
+            assert!(g.inner_grid.data.into_iter().all(|f| f == 8.));
         } else {
             panic!("Expected GridOrEmpty2D::Grid");
         }
@@ -246,7 +246,7 @@ mod tests {
         );
 
         if let GridOrEmpty2D::Grid(g) = tile_f64.grid_array {
-            assert!(g.data.data.into_iter().all(|f| f == 8.));
+            assert!(g.inner_grid.data.into_iter().all(|f| f == 8.));
         } else {
             panic!("Expected GridOrEmpty2D::Grid");
         }
@@ -272,7 +272,7 @@ mod tests {
         );
 
         if let GridOrEmpty2D::Grid(g) = tile_f64.grid_array {
-            assert!(g.data.data.into_iter().all(|f| f == 8.));
+            assert!(g.inner_grid.data.into_iter().all(|f| f == 8.));
         } else {
             panic!("Expected GridOrEmpty2D::Grid");
         }

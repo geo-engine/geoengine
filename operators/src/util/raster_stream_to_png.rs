@@ -2,7 +2,7 @@ use futures::StreamExt;
 use geoengine_datatypes::{
     operations::image::{Colorizer, RgbaColor, ToPng},
     primitives::{AxisAlignedRectangle, RasterQueryRectangle, TimeInterval},
-    raster::{Blit, EmptyGrid2D, GeoTransform, Grid2D, Pixel, RasterTile2D},
+    raster::{Blit, EmptyGrid2D, GeoTransform, GridOrEmpty, Pixel, RasterTile2D},
 };
 use num_traits::AsPrimitive;
 use std::convert::TryInto;
@@ -39,19 +39,10 @@ where
         -y_query_resolution, // TODO: negative, s.t. geo transform fits...
     );
 
-    let output_grid = if let Some(no_data) = no_data_value {
-        EmptyGrid2D::new(dim.into(), no_data).into()
-    } else {
-        Grid2D::new_filled(
-            dim.into(),
-            no_data_value.unwrap_or_else(T::zero),
-            no_data_value,
-        )
-    };
     let output_tile = Ok(RasterTile2D::new_without_offset(
         time.unwrap_or_default(),
         query_geo_transform,
-        output_grid,
+        GridOrEmpty::from(EmptyGrid2D::new(dim.into())),
     ));
 
     let output_tile = tile_stream
@@ -100,6 +91,8 @@ pub fn default_colorizer_gradient<T: Pixel>() -> Result<Colorizer> {
 
 #[cfg(test)]
 mod tests {
+    use std::marker::PhantomData;
+
     use geoengine_datatypes::{
         primitives::{Coordinate2D, SpatialPartition2D, SpatialResolution},
         raster::TilingSpecification,
@@ -121,7 +114,7 @@ mod tests {
         let gdal_source = GdalSourceProcessor::<u8> {
             tiling_specification,
             meta_data: Box::new(create_ndvi_meta_data()),
-            no_data_value: Some(0),
+            _phandom_data: PhantomData,
         };
 
         let query_partition =

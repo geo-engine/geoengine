@@ -121,7 +121,7 @@ where
 {
     fn grid_blit_from(&mut self, other: &MaskedGrid<D1, T>) {
         // easy part: blit the data
-        self.data.grid_blit_from(other.as_ref());
+        self.inner_grid.grid_blit_from(other.as_ref());
         self.validity_mask.grid_blit_from(other.mask_ref())
     }
 }
@@ -217,6 +217,34 @@ where
         match other {
             GridOrEmpty::Grid(g) => self.grid_blit_from(g),
             GridOrEmpty::Empty(n) => self.grid_blit_from(n),
+        }
+    }
+}
+
+impl<D1, D2, T, A, I> GridBlit<GridOrEmpty<D1, T>, T> for GridOrEmpty<D2, T>
+where
+    D1: GridSize<ShapeArray = A>
+        + GridBounds<IndexArray = I>
+        + GridSpaceToLinearSpace<IndexArray = I>
+        + Clone
+        + PartialEq,
+    D2: GridSize<ShapeArray = A>
+        + GridBounds<IndexArray = I>
+        + GridSpaceToLinearSpace<IndexArray = I>
+        + Clone
+        + PartialEq,
+    I: Clone + AsRef<[isize]> + Into<GridIdx<I>>,
+    T: Copy + Sized + Default,
+    MaskedGrid<D2,T>: GridBlit<MaskedGrid<D1, T>, T> + GridBlit<EmptyGrid<D1, T>, T>,
+{
+    fn grid_blit_from(&mut self, other: &GridOrEmpty<D1, T>) {
+        if self.is_empty() && other.is_empty() {
+            return;
+        }
+        self.materialize();
+        match self {
+            GridOrEmpty::Grid(g) => g.grid_blit_from(other),
+            GridOrEmpty::Empty(_) => unreachable!(),
         }
     }
 }
@@ -325,7 +353,7 @@ mod tests {
 
         r1.grid_blit_from(&r2);
 
-        assert_eq!(r1.data.data, vec![7; 16]);
+        assert_eq!(r1.inner_grid.data, vec![7; 16]);
         assert_eq!(r1.validity_mask.data, vec![false; 16]);
     }
 
@@ -342,7 +370,7 @@ mod tests {
 
         r1.grid_blit_from(&r2);
 
-        assert_eq!(r1.data.data, vec![7; 64]);
+        assert_eq!(r1.inner_grid.data, vec![7; 64]);
         assert_eq!(r1.validity_mask.data, vec![true; 64]);
     }
 
@@ -361,7 +389,7 @@ mod tests {
         r1.grid_blit_from(&r2);
 
         assert_eq!(
-            r1.data.data,
+            r1.inner_grid.data,
             vec![
                 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
                 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 4, 5, 0, 0, 0, 0, 0, 0, 0, 0,
@@ -407,7 +435,7 @@ mod tests {
 
         r1.grid_blit_from(&r2);
 
-        assert_eq!(r1.data.data, vec![0; 64]);
+        assert_eq!(r1.inner_grid.data, vec![0; 64]);
         assert_eq!(r1.validity_mask.data, vec![false; 64]);
     }
 }

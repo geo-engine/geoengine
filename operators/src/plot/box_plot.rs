@@ -38,10 +38,9 @@ pub struct BoxPlotParams {
     /// Name of the (numeric) attributes to compute the box plots on.
     #[serde(default)]
     pub column_names: Vec<String>,
-
-    /// For rasters, we have the option to include no-data values
-    #[serde(default)]
-    pub include_no_data: bool,
+    // For rasters, we have the option to include no-data values
+    // #[serde(default)]
+    // pub include_no_data: bool,
 }
 
 #[typetag::serde]
@@ -108,7 +107,6 @@ impl PlotOperator for BoxPlot {
                             .and_then(|p| BoundingBox2D::new(p.lower_left(), p.upper_right()).ok()),
                     },
                     output_names,
-                    self.params.include_no_data,
                     initialized,
                 )
                 .boxed())
@@ -149,7 +147,6 @@ impl PlotOperator for BoxPlot {
                         bbox: in_desc.bbox,
                     },
                     self.params.column_names.clone(),
-                    self.params.include_no_data,
                     source,
                 )
                 .boxed())
@@ -162,21 +159,15 @@ impl PlotOperator for BoxPlot {
 pub struct InitializedBoxPlot<Op> {
     result_descriptor: PlotResultDescriptor,
     names: Vec<String>,
-    include_no_data: bool,
+
     source: Op,
 }
 
 impl<Op> InitializedBoxPlot<Op> {
-    pub fn new(
-        result_descriptor: PlotResultDescriptor,
-        names: Vec<String>,
-        include_no_data: bool,
-        source: Op,
-    ) -> Self {
+    pub fn new(result_descriptor: PlotResultDescriptor, names: Vec<String>, source: Op) -> Self {
         Self {
             result_descriptor,
             names,
-            include_no_data,
             source,
         }
     }
@@ -211,7 +202,6 @@ impl InitializedPlotOperator for InitializedBoxPlot<Vec<Box<dyn InitializedRaste
         let processor = BoxPlotRasterQueryProcessor {
             input,
             names: self.names.clone(),
-            include_no_data: self.include_no_data,
         };
         Ok(TypedPlotQueryProcessor::JsonVega(processor.boxed()))
     }
@@ -272,13 +262,11 @@ impl PlotQueryProcessor for BoxPlotVectorQueryProcessor {
 pub struct BoxPlotRasterQueryProcessor {
     input: Vec<TypedRasterQueryProcessor>,
     names: Vec<String>,
-    include_no_data: bool,
 }
 
 impl BoxPlotRasterQueryProcessor {
     async fn process_raster(
         name: String,
-        include_no_data: bool,
         input: &TypedRasterQueryProcessor,
         query: PlotQueryRectangle,
         ctx: &dyn QueryContext,
@@ -293,18 +281,10 @@ impl BoxPlotRasterQueryProcessor {
                 let tile = tile?;
 
                 match tile.grid_array {
-                    GridOrEmpty::Empty(grid) if include_no_data => {
-                        let v:f64 = grid.no_data_value().expect("Empty grids always have a no-data value").as_();
-                        let iter = std::iter::repeat(v).take(grid.number_of_elements());
-                        accum.update(iter)?;
-                    },
                     // Ignore empty grids if no_data should not be included
                     GridOrEmpty::Empty(_) => {},
-                    GridOrEmpty::Grid(grid) if include_no_data => {
-                        accum.update(grid.data.iter().map(|x| (*x).as_()))?;
-                    },
                     GridOrEmpty::Grid(grid) => {
-                        accum.update(grid.data.iter().filter(|&x| !grid.is_no_data(*x)).map(|x| (*x).as_()))?;
+                        accum.update(grid.masked_copy_element_iterator().filter_map(|pixel_option| pixel_option.map(|p| { let v: f64 = p.as_(); v})))?; // TODO: if empty pixels shuld be included we need to add an enmpty pixel count in the accu
                     }
                 }
             }
@@ -330,9 +310,7 @@ impl PlotQueryProcessor for BoxPlotRasterQueryProcessor {
             .input
             .iter()
             .zip(self.names.iter())
-            .map(|(proc, name)| {
-                Self::process_raster(name.clone(), self.include_no_data, proc, query, ctx)
-            })
+            .map(|(proc, name)| Self::process_raster(name.clone(), proc, query, ctx))
             .collect();
 
         let results = futures::future::join_all(results)
@@ -495,7 +473,6 @@ mod tests {
         let histogram = BoxPlot {
             params: BoxPlotParams {
                 column_names: vec!["foobar".to_string()],
-                include_no_data: true,
             },
             sources: MockFeatureCollectionSource::<MultiPoint>::multiple(vec![])
                 .boxed()
@@ -506,7 +483,6 @@ mod tests {
             "type": "BoxPlot",
             "params": {
                 "columnNames": ["foobar"],
-                "includeNoData": true,
             },
             "sources": {
                 "source": {
@@ -530,7 +506,6 @@ mod tests {
         let histogram = BoxPlot {
             params: BoxPlotParams {
                 column_names: vec![],
-                include_no_data: false,
             },
             sources: MockFeatureCollectionSource::<MultiPoint>::multiple(vec![])
                 .boxed()
@@ -585,7 +560,6 @@ mod tests {
         let box_plot = BoxPlot {
             params: BoxPlotParams {
                 column_names: vec!["foo".to_string(), "bar".to_string()],
-                include_no_data: false,
             },
             sources: vector_source.into(),
         };
@@ -652,7 +626,6 @@ mod tests {
         let box_plot = BoxPlot {
             params: BoxPlotParams {
                 column_names: vec!["foo".to_string()],
-                include_no_data: false,
             },
             sources: vector_source.into(),
         };
@@ -705,7 +678,6 @@ mod tests {
         let box_plot = BoxPlot {
             params: BoxPlotParams {
                 column_names: vec!["foo".to_string()],
-                include_no_data: false,
             },
             sources: vector_source.into(),
         };
@@ -732,7 +704,6 @@ mod tests {
         let box_plot = BoxPlot {
             params: BoxPlotParams {
                 column_names: vec![],
-                include_no_data: false,
             },
             sources: vector_source.into(),
         };
@@ -758,7 +729,6 @@ mod tests {
         let box_plot = BoxPlot {
             params: BoxPlotParams {
                 column_names: vec!["foo".to_string()],
-                include_no_data: false,
             },
             sources: vector_source.into(),
         };
@@ -810,7 +780,6 @@ mod tests {
         let box_plot = BoxPlot {
             params: BoxPlotParams {
                 column_names: vec!["foo".to_string()],
-                include_no_data: false,
             },
             sources: vector_source.into(),
         };
@@ -864,7 +833,6 @@ mod tests {
         let box_plot = BoxPlot {
             params: BoxPlotParams {
                 column_names: vec!["foo".to_string()],
-                include_no_data: false,
             },
             sources: vector_source.into(),
         };
@@ -922,7 +890,6 @@ mod tests {
         let box_plot = BoxPlot {
             params: BoxPlotParams {
                 column_names: vec![],
-                include_no_data: false,
             },
             sources: MockRasterSource {
                 params: MockRasterSourceParams {
@@ -933,7 +900,7 @@ mod tests {
                             global_tile_position: [0, 0].into(),
                             tile_size_in_pixels,
                         },
-                        Grid2D::new(tile_size_in_pixels, vec![0, 0, 0, 0, 0, 0], no_data_value)
+                        Grid2D::new(tile_size_in_pixels, vec![0, 0, 0, 0, 0, 0])
                             .unwrap()
                             .into(),
                     )],
@@ -941,7 +908,6 @@ mod tests {
                         data_type: RasterDataType::U8,
                         spatial_reference: SpatialReference::epsg_4326().into(),
                         measurement: Measurement::Unitless,
-                        no_data_value: no_data_value.map(AsPrimitive::as_),
                         time: None,
                         bbox: None,
                     },
@@ -992,7 +958,6 @@ mod tests {
         let box_plot = BoxPlot {
             params: BoxPlotParams {
                 column_names: vec![],
-                include_no_data: true,
             },
             sources: MockRasterSource {
                 params: MockRasterSourceParams {
@@ -1003,7 +968,7 @@ mod tests {
                             global_tile_position: [0, 0].into(),
                             tile_size_in_pixels,
                         },
-                        Grid2D::new(tile_size_in_pixels, vec![0, 0, 0, 0, 0, 0], no_data_value)
+                        Grid2D::new(tile_size_in_pixels, vec![0, 0, 0, 0, 0, 0])
                             .unwrap()
                             .into(),
                     )],
@@ -1011,7 +976,6 @@ mod tests {
                         data_type: RasterDataType::U8,
                         spatial_reference: SpatialReference::epsg_4326().into(),
                         measurement: Measurement::Unitless,
-                        no_data_value: no_data_value.map(AsPrimitive::as_),
                         time: None,
                         bbox: None,
                     },
@@ -1064,7 +1028,6 @@ mod tests {
         let box_plot = BoxPlot {
             params: BoxPlotParams {
                 column_names: vec![],
-                include_no_data: false,
             },
             sources: MockRasterSource {
                 params: MockRasterSourceParams {
@@ -1075,13 +1038,12 @@ mod tests {
                             global_tile_position: [0, 0].into(),
                             tile_size_in_pixels,
                         },
-                        EmptyGrid2D::new(tile_size_in_pixels, no_data_value.unwrap()).into(),
+                        EmptyGrid2D::<u8>::new(tile_size_in_pixels).into(),
                     )],
                     result_descriptor: RasterResultDescriptor {
                         data_type: RasterDataType::U8,
                         spatial_reference: SpatialReference::epsg_4326().into(),
                         measurement: Measurement::Unitless,
-                        no_data_value: no_data_value.map(AsPrimitive::as_),
                         time: None,
                         bbox: None,
                     },
@@ -1132,7 +1094,6 @@ mod tests {
         let box_plot = BoxPlot {
             params: BoxPlotParams {
                 column_names: vec![],
-                include_no_data: true,
             },
             sources: MockRasterSource {
                 params: MockRasterSourceParams {
@@ -1143,13 +1104,12 @@ mod tests {
                             global_tile_position: [0, 0].into(),
                             tile_size_in_pixels,
                         },
-                        EmptyGrid2D::new(tile_size_in_pixels, no_data_value.unwrap()).into(),
+                        EmptyGrid2D::<u8>::new(tile_size_in_pixels).into(),
                     )],
                     result_descriptor: RasterResultDescriptor {
                         data_type: RasterDataType::U8,
                         spatial_reference: SpatialReference::epsg_4326().into(),
                         measurement: Measurement::Unitless,
-                        no_data_value: no_data_value.map(AsPrimitive::as_),
                         time: None,
                         bbox: None,
                     },
@@ -1199,12 +1159,9 @@ mod tests {
             tile_size_in_pixels,
         };
         let execution_context = MockExecutionContext::new_with_tiling_spec(tiling_specification);
-
-        let no_data_value = None;
         let histogram = BoxPlot {
             params: BoxPlotParams {
                 column_names: vec![],
-                include_no_data: false,
             },
             sources: MockRasterSource {
                 params: MockRasterSourceParams {
@@ -1215,15 +1172,12 @@ mod tests {
                             global_tile_position: [0, 0].into(),
                             tile_size_in_pixels,
                         },
-                        Grid2D::new(tile_size_in_pixels, vec![4; 6], no_data_value)
-                            .unwrap()
-                            .into(),
+                        Grid2D::new(tile_size_in_pixels, vec![4; 6]).unwrap().into(),
                     )],
                     result_descriptor: RasterResultDescriptor {
                         data_type: RasterDataType::U8,
                         spatial_reference: SpatialReference::epsg_4326().into(),
                         measurement: Measurement::Unitless,
-                        no_data_value: no_data_value.map(AsPrimitive::as_),
                         time: None,
                         bbox: None,
                     },
@@ -1280,7 +1234,6 @@ mod tests {
         let histogram = BoxPlot {
             params: BoxPlotParams {
                 column_names: vec![],
-                include_no_data: false,
             },
             sources: MockRasterSource {
                 params: MockRasterSourceParams {
@@ -1291,19 +1244,14 @@ mod tests {
                             global_tile_position: [0, 0].into(),
                             tile_size_in_pixels,
                         },
-                        Grid2D::new(
-                            tile_size_in_pixels,
-                            vec![1, 2, 0, 4, 0, 6, 7, 0],
-                            no_data_value,
-                        )
-                        .unwrap()
-                        .into(),
+                        Grid2D::new(tile_size_in_pixels, vec![1, 2, 0, 4, 0, 6, 7, 0])
+                            .unwrap()
+                            .into(),
                     )],
                     result_descriptor: RasterResultDescriptor {
                         data_type: RasterDataType::U8,
                         spatial_reference: SpatialReference::epsg_4326().into(),
                         measurement: Measurement::Unitless,
-                        no_data_value: no_data_value.map(AsPrimitive::as_),
                         time: None,
                         bbox: None,
                     },
@@ -1359,7 +1307,6 @@ mod tests {
         let histogram = BoxPlot {
             params: BoxPlotParams {
                 column_names: vec![],
-                include_no_data: true,
             },
             sources: MockRasterSource {
                 params: MockRasterSourceParams {
@@ -1370,19 +1317,14 @@ mod tests {
                             global_tile_position: [0, 0].into(),
                             tile_size_in_pixels,
                         },
-                        Grid2D::new(
-                            tile_size_in_pixels,
-                            vec![1, 2, 0, 4, 0, 6, 7, 0],
-                            no_data_value,
-                        )
-                        .unwrap()
-                        .into(),
+                        Grid2D::new(tile_size_in_pixels, vec![1, 2, 0, 4, 0, 6, 7, 0])
+                            .unwrap()
+                            .into(),
                     )],
                     result_descriptor: RasterResultDescriptor {
                         data_type: RasterDataType::U8,
                         spatial_reference: SpatialReference::epsg_4326().into(),
                         measurement: Measurement::Unitless,
-                        no_data_value: no_data_value.map(AsPrimitive::as_),
                         time: None,
                         bbox: None,
                     },
@@ -1444,19 +1386,14 @@ mod tests {
                         global_tile_position: [0, 0].into(),
                         tile_size_in_pixels,
                     },
-                    Grid2D::new(
-                        tile_size_in_pixels,
-                        vec![1, 2, 0, 4, 0, 6, 7, 0],
-                        no_data_value,
-                    )
-                    .unwrap()
-                    .into(),
+                    Grid2D::new(tile_size_in_pixels, vec![1, 2, 0, 4, 0, 6, 7, 0])
+                        .unwrap()
+                        .into(),
                 )],
                 result_descriptor: RasterResultDescriptor {
                     data_type: RasterDataType::U8,
                     spatial_reference: SpatialReference::epsg_4326().into(),
                     measurement: Measurement::Unitless,
-                    no_data_value: no_data_value.map(AsPrimitive::as_),
                     time: None,
                     bbox: None,
                 },
@@ -1466,7 +1403,6 @@ mod tests {
         let histogram = BoxPlot {
             params: BoxPlotParams {
                 column_names: vec![],
-                include_no_data: false,
             },
             sources: vec![
                 src.clone().boxed(),

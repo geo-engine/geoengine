@@ -5,7 +5,7 @@ use crate::raster::{
 use crate::util::Result;
 use async_trait::async_trait;
 
-use super::map_elements::MapIndexedElementsParallel;
+use super::map_indexed_elements::MapIndexedElementsParallel;
 
 #[async_trait]
 pub trait InterpolationAlgorithm<P: Pixel>: Send + Sync + Clone + 'static {
@@ -203,7 +203,7 @@ mod tests {
             .unwrap();
 
         assert_eq!(
-            output.grid_array.data.data,
+            output.grid_array.inner_grid.data,
             vec![1, 2, 2, 3, 4, 5, 5, 6, 4, 5, 5, 6, 7, 8, 8, 9]
         );
     }
@@ -259,7 +259,7 @@ mod tests {
             .unwrap();
 
         assert_eq!(
-            output.grid_array.data.data,
+            output.grid_array.inner_grid.data,
             vec![1.0, 1.5, 2.0, 2.5, 2.5, 3.0, 3.5, 4.0, 4.0, 4.5, 5.0, 5.5, 5.5, 6.0, 6.5, 7.0]
         );
     }

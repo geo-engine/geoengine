@@ -488,7 +488,7 @@ mod tests {
         for (i, tile) in result.into_iter().enumerate() {
             let tile = tile.into_materialized_tile();
             assert_eq!(tile.time, times[i]);
-            assert_eq!(tile.grid_array.data, data[i]);
+            assert_eq!(tile.grid_array.inner_grid, data[i]);
         }
 
         Ok(())
@@ -558,7 +558,6 @@ mod tests {
                     data_type: RasterDataType::I8,
                     spatial_reference: SpatialReference::epsg_4326().into(),
                     measurement: Measurement::Unitless,
-                    no_data_value: no_data_value.map(f64::from),
                     time: None,
                     bbox: None,
                 },

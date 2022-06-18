@@ -178,13 +178,8 @@ where
             }
         });
 
-        let s_filled = SparseTilesFillAdapter::new(
-            s,
-            grid_bounds,
-            global_geo_transform,
-            tile_shape,
-            no_data_value,
-        );
+        let s_filled =
+            SparseTilesFillAdapter::new(s, grid_bounds, global_geo_transform, tile_shape);
         s_filled.boxed()
     }
 
@@ -553,8 +548,7 @@ pub fn identity_accu<T: Pixel>(
     pool: Arc<ThreadPool>,
 ) -> impl Future<Output = Result<RasterTileAccu2D<T>>> {
     crate::util::spawn_blocking(move || {
-        let output_raster =
-            EmptyGrid2D::new(tile_info.tile_size_in_pixels, T::from_(no_data_value)).into();
+        let output_raster = EmptyGrid2D::new(tile_info.tile_size_in_pixels).into();
         let output_tile =
             RasterTile2D::new_with_tile_info(query_rect.time_interval, tile_info, output_raster);
         RasterTileAccu2D::new(output_tile, pool)
@@ -636,25 +630,21 @@ mod tests {
                 time: TimeInterval::new_unchecked(0, 5),
                 tile_position: [-1, 0].into(),
                 global_geo_transform: TestDefault::test_default(),
-                grid_array: Grid::new([2, 2].into(), vec![1, 2, 3, 4], no_data_value)
-                    .unwrap()
-                    .into(),
+                grid_array: Grid::new([2, 2].into(), vec![1, 2, 3, 4]).unwrap().into(),
                 properties: Default::default(),
             },
             RasterTile2D {
                 time: TimeInterval::new_unchecked(0, 5),
                 tile_position: [-1, 1].into(),
                 global_geo_transform: TestDefault::test_default(),
-                grid_array: Grid::new([2, 2].into(), vec![7, 8, 9, 10], no_data_value)
-                    .unwrap()
-                    .into(),
+                grid_array: Grid::new([2, 2].into(), vec![7, 8, 9, 10]).unwrap().into(),
                 properties: Default::default(),
             },
             RasterTile2D {
                 time: TimeInterval::new_unchecked(5, 10),
                 tile_position: [-1, 0].into(),
                 global_geo_transform: TestDefault::test_default(),
-                grid_array: Grid::new([2, 2].into(), vec![13, 14, 15, 16], no_data_value)
+                grid_array: Grid::new([2, 2].into(), vec![13, 14, 15, 16])
                     .unwrap()
                     .into(),
                 properties: Default::default(),
@@ -663,7 +653,7 @@ mod tests {
                 time: TimeInterval::new_unchecked(5, 10),
                 tile_position: [-1, 1].into(),
                 global_geo_transform: TestDefault::test_default(),
-                grid_array: Grid::new([2, 2].into(), vec![19, 20, 21, 22], no_data_value)
+                grid_array: Grid::new([2, 2].into(), vec![19, 20, 21, 22])
                     .unwrap()
                     .into(),
                 properties: Default::default(),
@@ -677,7 +667,6 @@ mod tests {
                     data_type: RasterDataType::U8,
                     spatial_reference: SpatialReference::epsg_4326().into(),
                     measurement: Measurement::Unitless,
-                    no_data_value: no_data_value.map(AsPrimitive::as_),
                     time: None,
                     bbox: None,
                 },

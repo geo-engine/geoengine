@@ -18,11 +18,11 @@ use crate::{
 
 pub trait AccFunction {
     /// produce new accumulator value from current state and new value
-    fn acc<T: Pixel>(no_data: Option<T>, acc: T, value: T) -> T;
+    fn acc<T: Pixel>(acc: T, value: T) -> T;
 }
 pub trait NoDataIgnoringAccFunction {
     /// produce new accumulator value from current state and new value, ignoring no data values
-    fn acc_ignore_no_data<T: Pixel>(no_data: Option<T>, acc: T, value: T) -> T;
+    fn acc_ignore_no_data<T: Pixel>(acc: T, value: T) -> T;
 }
 
 pub struct MinAccFunction {}
@@ -141,7 +141,7 @@ where
     } else {
         match (accu_tile.grid_array, tile.grid_array) {
             (GridOrEmpty::Grid(mut a), GridOrEmpty::Grid(g)) => {
-                a.data = a
+                a.inner_grid = a
                     .inner_ref()
                     .iter()
                     .zip(g.inner_ref())
@@ -177,11 +177,11 @@ where
 
     let grid = match (accu_tile.grid_array, tile.grid_array) {
         (GridOrEmpty::Grid(mut a), GridOrEmpty::Grid(g)) => {
-            a.data = a
+            a.inner_grid = a
                 .inner_ref()
                 .iter()
                 .zip(g.inner_ref())
-                .map(|(x, y)| C::acc_ignore_no_data(a.no_data_value, *x, *y))
+                .map(|(x, y)| C::acc_ignore_no_data(*x, *y))
                 .collect();
             GridOrEmpty::Grid(a)
         }
@@ -331,7 +331,6 @@ impl<T: Pixel> FoldTileAccuMut for TemporalRasterAggregationTileAccu<T> {
 #[derive(Debug, Clone)]
 pub struct TemporalRasterAggregationSubQuery<F, T: Pixel> {
     pub fold_fn: F,
-    pub no_data_value: Option<T>,
     pub initial_value: T,
     pub step: TimeStep,
     pub step_reference: TimeInstance,
@@ -361,14 +360,7 @@ where
         query_rect: RasterQueryRectangle,
         pool: &Arc<ThreadPool>,
     ) -> Self::TileAccuFuture {
-        build_temporal_accu(
-            query_rect,
-            tile_info,
-            pool.clone(),
-            self.no_data_value,
-            self.initial_value,
-        )
-        .boxed()
+        build_temporal_accu(query_rect, tile_info, pool.clone(), self.initial_value).boxed()
     }
 
     fn tile_query_rectangle(
@@ -394,24 +386,16 @@ fn build_temporal_accu<T: Pixel>(
     query_rect: RasterQueryRectangle,
     tile_info: TileInformation,
     pool: Arc<ThreadPool>,
-    no_data_value: Option<T>,
     initial_value: T,
 ) -> impl Future<Output = Result<TemporalRasterAggregationTileAccu<T>>> {
-    crate::util::spawn_blocking(move || {
-        let output_raster = if let Some(no_data_value) = no_data_value {
-            EmptyGrid2D::new(tile_info.tile_size_in_pixels, no_data_value).into()
-        } else {
-            Grid2D::new_filled(tile_info.tile_size_in_pixels, initial_value, no_data_value).into()
-        };
-        TemporalRasterAggregationTileAccu {
-            accu_tile: RasterTile2D::new_with_tile_info(
-                query_rect.time_interval,
-                tile_info,
-                output_raster,
-            ),
-            initial_state: true,
-            pool,
-        }
+    crate::util::spawn_blocking(move || TemporalRasterAggregationTileAccu {
+        accu_tile: RasterTile2D::new_with_tile_info(
+            query_rect.time_interval,
+            tile_info,
+            EmptyGrid2D::new(tile_info.tile_size_in_pixels).into(),
+        ),
+        initial_state: true,
+        pool,
     })
     .map_err(From::from)
 }

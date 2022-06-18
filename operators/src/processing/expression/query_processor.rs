@@ -91,8 +91,7 @@ where
                 )
                 .await??;
 
-                let out =
-                    Grid2D::<TO>::new(output_grid_shape, data, Some(self.no_data_value))?.into();
+                let out = Grid2D::<TO>::new(output_grid_shape, data)?.into();
 
                 Ok(RasterTile2D::new(
                     out_time,
@@ -188,7 +187,7 @@ where
 
         let data = tile
             .grid_array
-            .data
+            .inner_grid
             .par_iter()
             .with_min_len(tile.grid_array.grid_shape().axis_size_x())
             .map(|a| {
@@ -269,7 +268,7 @@ where
         let tile_0 = rasters.0.into_materialized_tile();
         let tile_1 = rasters.1.into_materialized_tile();
 
-        let data = (&tile_0.grid_array.data, &tile_1.grid_array.data)
+        let data = (&tile_0.grid_array.inner_grid, &tile_1.grid_array.inner_grid)
             .into_par_iter()
             .with_min_len(tile_0.grid_array.grid_shape().axis_size_x())
             .map(|(a, b)| {

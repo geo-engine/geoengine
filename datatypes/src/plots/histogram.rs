@@ -208,16 +208,15 @@ impl Histogram {
     }
 
     /// Add raster data to the histogram
-    pub fn add_raster_data<P: Pixel>(&mut self, data: &[P], no_data_value: Option<P>) {
-        if let Some(no_data_value) = no_data_value {
-            for &value in data {
-                self.handle_data_item(value.as_(), value == no_data_value);
+    pub fn add_raster_data<P: Pixel, I: Iterator<Item=Option<P>>>(&mut self, data: I) {
+        data.for_each(|pixel_option| {
+            if let Some(p) = pixel_option {
+                self.handle_data_item(p.as_(), false);
+
+            } else {
+                self.handle_data_item(0., true); // TODO: remove not needed zero
             }
-        } else {
-            for &value in data {
-                self.handle_data_item(value.as_(), false);
-            }
-        }
+        });
     }
 
     pub fn add_nodata_batch(&mut self, nodata_count: u64) {

@@ -481,7 +481,6 @@ mod tests {
         spatial_reference::SpatialReference,
         util::test::TestDefault,
     };
-    use num_traits::AsPrimitive;
 
     #[test]
     fn test_ser_de_absolute() {
@@ -768,8 +767,7 @@ mod tests {
     #[tokio::test]
     #[allow(clippy::too_many_lines)]
     async fn test_absolute_raster_shift() {
-        let no_data_value: u8 = 0;
-        let empty_grid = GridOrEmpty::Empty(EmptyGrid2D::new([3, 2].into(), no_data_value));
+        let empty_grid = GridOrEmpty::Empty(EmptyGrid2D::<u8>::new([3, 2].into()));
         let raster_tiles = vec![
             RasterTile2D::new_with_tile_info(
                 TimeInterval::new_unchecked(
@@ -852,7 +850,6 @@ mod tests {
                     data_type: RasterDataType::U8,
                     spatial_reference: SpatialReference::epsg_4326().into(),
                     measurement: Measurement::Unitless,
-                    no_data_value: Some(no_data_value.as_()),
                     time: None,
                     bbox: None,
                 },
@@ -931,8 +928,7 @@ mod tests {
     #[tokio::test]
     #[allow(clippy::too_many_lines)]
     async fn test_relative_raster_shift() {
-        let no_data_value: u8 = 0;
-        let empty_grid = GridOrEmpty::Empty(EmptyGrid2D::new([3, 2].into(), no_data_value));
+        let empty_grid = GridOrEmpty::Empty(EmptyGrid2D::<u8>::new([3, 2].into()));
         let raster_tiles = vec![
             RasterTile2D::new_with_tile_info(
                 TimeInterval::new_unchecked(
@@ -1015,7 +1011,6 @@ mod tests {
                     data_type: RasterDataType::U8,
                     spatial_reference: SpatialReference::epsg_4326().into(),
                     measurement: Measurement::Unitless,
-                    no_data_value: Some(no_data_value.as_()),
                     time: None,
                     bbox: None,
                 },

@@ -22,9 +22,9 @@ use geoengine_datatypes::primitives::{
     Coordinate2D, DateTimeParseFormat, RasterQueryRectangle, SpatialPartition2D, SpatialPartitioned,
 };
 use geoengine_datatypes::raster::{
-    EmptyGrid, GeoTransform, Grid2D, GridShape2D, GridShapeAccess, Pixel, RasterDataType,
-    RasterProperties, RasterPropertiesEntry, RasterPropertiesEntryType, RasterPropertiesKey,
-    RasterTile2D, TilingStrategy,
+    EmptyGrid, GeoTransform, GridShape2D, GridShapeAccess, MaskedGrid, MaskedGrid2D, Pixel,
+    RasterDataType, RasterProperties, RasterPropertiesEntry, RasterPropertiesEntryType,
+    RasterPropertiesKey, RasterTile2D, TilingStrategy,
 };
 use geoengine_datatypes::util::test::TestDefault;
 use geoengine_datatypes::{dataset::DatasetId, raster::TileInformation};
@@ -32,7 +32,7 @@ use geoengine_datatypes::{
     primitives::TimeInterval,
     raster::{
         Grid, GridBlit, GridBoundingBox2D, GridBounds, GridIdx, GridSize, GridSpaceToLinearSpace,
-        TilingSpecification,
+        MapMaskedElements, TilingSpecification,
     },
 };
 use log::{debug, info};
@@ -40,6 +40,7 @@ use serde::{Deserialize, Serialize};
 use snafu::{ensure, ResultExt};
 use std::collections::HashMap;
 use std::convert::{TryFrom, TryInto};
+use std::marker::PhantomData;
 use std::path::PathBuf;
 use std::time::Instant;
 
@@ -299,7 +300,7 @@ where
 {
     pub tiling_specification: TilingSpecification,
     pub meta_data: GdalMetaData,
-    pub no_data_value: Option<T>,
+    _phandom_data: PhantomData<T>,
 }
 
 struct GdalRasterLoader {}
@@ -324,7 +325,6 @@ impl GdalRasterLoader {
         dataset_params: Option<GdalDatasetParameters>,
         tile_information: TileInformation,
         tile_time: TimeInterval,
-        no_data_value: Option<T>,
     ) -> Result<RasterTile2D<T>> {
         match dataset_params {
             Some(ds)
@@ -338,11 +338,7 @@ impl GdalRasterLoader {
             Some(_) => {
                 debug!("Skipping tile not in query rect {:?}", &tile_information);
 
-                Ok(create_no_data_tile(
-                    tile_information,
-                    tile_time,
-                    no_data_value,
-                ))
+                Ok(create_no_data_tile(tile_information, tile_time))
             }
             _ => {
                 debug!(
@@ -350,11 +346,7 @@ impl GdalRasterLoader {
                     &tile_information
                 );
 
-                Ok(create_no_data_tile(
-                    tile_information,
-                    tile_time,
-                    no_data_value,
-                ))
+                Ok(create_no_data_tile(tile_information, tile_time))
             }
         }
     }
@@ -397,19 +389,14 @@ impl GdalRasterLoader {
                 ..DatasetOptions::default()
             },
         );
-        let no_data_value = dataset_params.no_data_value.map(T::from_);
-
-        debug!("no_data_value is {:?} ", &no_data_value,);
 
         if dataset_result.is_err() {
             // TODO: check if Gdal error is actually file not found
 
             let err_result = match dataset_params.file_not_found_handling {
-                FileNotFoundHandling::NoData => Ok(create_no_data_tile(
-                    tile_information,
-                    tile_time,
-                    no_data_value,
-                )),
+                FileNotFoundHandling::NoData => {
+                    Ok(create_no_data_tile(tile_information, tile_time))
+                }
                 FileNotFoundHandling::Error => Err(crate::error::Error::CouldNotOpenGdalDataset {
                     file_path: dataset_params.file_path.to_string_lossy().to_string(),
                 }),
@@ -431,7 +418,7 @@ impl GdalRasterLoader {
             tile_information,
             tile_time,
         )?
-        .unwrap_or_else(|| create_no_data_tile(tile_information, tile_time, no_data_value));
+        .unwrap_or_else(|| create_no_data_tile(tile_information, tile_time));
 
         let elapsed = start.elapsed();
         debug!("data loaded -> returning data grid, took {:?}", elapsed);
@@ -445,18 +432,10 @@ impl GdalRasterLoader {
     fn temporal_slice_tile_future_stream<T: Pixel + GdalType>(
         query: RasterQueryRectangle,
         info: GdalLoadingInfoTemporalSlice,
-        no_data_value: Option<T>,
         tiling_strategy: TilingStrategy,
     ) -> impl Stream<Item = impl Future<Output = Result<RasterTile2D<T>>>> {
         stream::iter(tiling_strategy.tile_information_iterator(query.spatial_bounds)).map(
-            move |tile| {
-                GdalRasterLoader::load_tile_async(
-                    info.params.clone(),
-                    tile,
-                    info.time,
-                    no_data_value,
-                )
-            },
+            move |tile| GdalRasterLoader::load_tile_async(info.params.clone(), tile, info.time),
         )
     }
 
@@ -466,18 +445,12 @@ impl GdalRasterLoader {
     >(
         loading_info_stream: S,
         query: RasterQueryRectangle,
-        no_data_value: Option<T>,
         tiling_strategy: TilingStrategy,
     ) -> impl Stream<Item = Result<RasterTile2D<T>>> {
         loading_info_stream
             .map_ok(move |info| {
-                GdalRasterLoader::temporal_slice_tile_future_stream(
-                    query,
-                    info,
-                    no_data_value,
-                    tiling_strategy,
-                )
-                .map(Result::Ok)
+                GdalRasterLoader::temporal_slice_tile_future_stream(query, info, tiling_strategy)
+                    .map(Result::Ok)
             })
             .try_flatten()
             .try_buffered(16) // TODO: make this configurable
@@ -532,12 +505,8 @@ where
         // TODO: what to do if loading info is empty?
         let source_stream = stream::iter(meta_data.info);
 
-        let source_stream = GdalRasterLoader::loading_info_to_tile_stream(
-            source_stream,
-            query,
-            self.no_data_value,
-            tiling_strategy,
-        );
+        let source_stream =
+            GdalRasterLoader::loading_info_to_tile_stream(source_stream, query, tiling_strategy);
 
         // use SparseTilesFillAdapter to fill all the gaps
         let filled_stream = SparseTilesFillAdapter::new(
@@ -545,7 +514,6 @@ where
             tiling_strategy.tile_grid_box(query.spatial_partition()),
             tiling_strategy.geo_transform,
             tiling_strategy.tile_size_in_pixels,
-            self.no_data_value.unwrap_or_else(P::zero),
         );
 
         Ok(filled_stream.boxed())
@@ -591,7 +559,7 @@ impl InitializedRasterOperator for InitializedGdalSourceOperator {
                 GdalSourceProcessor {
                     tiling_specification: self.tiling_specification,
                     meta_data: self.meta_data.clone(),
-                    no_data_value: self.result_descriptor.no_data_value_as_(),
+                    _phandom_data: PhantomData,
                 }
                 .boxed(),
             ),
@@ -599,7 +567,7 @@ impl InitializedRasterOperator for InitializedGdalSourceOperator {
                 GdalSourceProcessor {
                     tiling_specification: self.tiling_specification,
                     meta_data: self.meta_data.clone(),
-                    no_data_value: self.result_descriptor.no_data_value_as_(),
+                    _phandom_data: PhantomData,
                 }
                 .boxed(),
             ),
@@ -607,7 +575,7 @@ impl InitializedRasterOperator for InitializedGdalSourceOperator {
                 GdalSourceProcessor {
                     tiling_specification: self.tiling_specification,
                     meta_data: self.meta_data.clone(),
-                    no_data_value: self.result_descriptor.no_data_value_as_(),
+                    _phandom_data: PhantomData,
                 }
                 .boxed(),
             ),
@@ -617,7 +585,7 @@ impl InitializedRasterOperator for InitializedGdalSourceOperator {
                 GdalSourceProcessor {
                     tiling_specification: self.tiling_specification,
                     meta_data: self.meta_data.clone(),
-                    no_data_value: self.result_descriptor.no_data_value_as_(),
+                    _phandom_data: PhantomData,
                 }
                 .boxed(),
             ),
@@ -625,7 +593,7 @@ impl InitializedRasterOperator for InitializedGdalSourceOperator {
                 GdalSourceProcessor {
                     tiling_specification: self.tiling_specification,
                     meta_data: self.meta_data.clone(),
-                    no_data_value: self.result_descriptor.no_data_value_as_(),
+                    _phandom_data: PhantomData,
                 }
                 .boxed(),
             ),
@@ -634,7 +602,7 @@ impl InitializedRasterOperator for InitializedGdalSourceOperator {
                 GdalSourceProcessor {
                     tiling_specification: self.tiling_specification,
                     meta_data: self.meta_data.clone(),
-                    no_data_value: self.result_descriptor.no_data_value_as_(),
+                    _phandom_data: PhantomData,
                 }
                 .boxed(),
             ),
@@ -642,7 +610,7 @@ impl InitializedRasterOperator for InitializedGdalSourceOperator {
                 GdalSourceProcessor {
                     tiling_specification: self.tiling_specification,
                     meta_data: self.meta_data.clone(),
-                    no_data_value: self.result_descriptor.no_data_value_as_(),
+                    _phandom_data: PhantomData,
                 }
                 .boxed(),
             ),
@@ -660,9 +628,10 @@ fn read_grid_from_raster<
     dataset_grid_box: &GridBoundingBox2D,
     tile_grid: D,
     no_data_value: Option<T>,
-) -> Result<Grid<D, T>>
+) -> Result<MaskedGrid<D, T>>
 where
-    T: Pixel + GdalType,
+    T: Pixel + GdalType + Default,
+    D: PartialEq + Clone,
 {
     let GridIdx([dataset_ul_y, dataset_ul_x]) = dataset_grid_box.min_index();
     let [dataset_y_size, dataset_x_size] = dataset_grid_box.axis_size();
@@ -673,7 +642,24 @@ where
         (tile_x_size, tile_y_size),       // requested raster size
         None,                             // sampling mode
     )?;
-    Grid::new(tile_grid, buffer.data, no_data_value).map_err(Into::into)
+    let data = Grid::new(tile_grid, buffer.data)?;
+
+    let masked_grid = MaskedGrid::from(data).map_or_mask_elements(|e| {
+        // TODO: test if parallel map is better.
+        let e = e.unwrap();
+
+        if e != e {
+            return None;
+        };
+        if let Some(no_data) = no_data_value {
+            if no_data == e {
+                return None;
+            }
+        };
+        Some(e)
+    });
+
+    Ok(masked_grid)
 }
 
 /// This method reads the data for a single grid with a specified size from the GDAL dataset.
@@ -685,9 +671,9 @@ fn read_partial_grid_from_raster<T>(
     tile_grid_bounds: GridBoundingBox2D,
     tile_grid: GridShape2D,
     no_data_value: Option<T>,
-) -> Result<Grid2D<T>>
+) -> Result<MaskedGrid2D<T>>
 where
-    T: Pixel + GdalType,
+    T: Pixel + GdalType + Default,
 {
     let dataset_raster = read_grid_from_raster(
         rasterband,
@@ -696,12 +682,8 @@ where
         no_data_value,
     )?;
 
-    let mut tile_raster = Grid2D::new_filled(
-        tile_grid,
-        no_data_value.unwrap_or_else(T::zero),
-        no_data_value,
-    );
-    tile_raster.grid_blit_from(dataset_raster);
+    let mut tile_raster = MaskedGrid::from(EmptyGrid::new(tile_grid));
+    tile_raster.grid_blit_from(&dataset_raster);
     Ok(tile_raster)
 }
 
@@ -714,11 +696,10 @@ fn read_grid_and_handle_edges<T>(
     rasterband: &GdalRasterBand,
     dataset_bounds: SpatialPartition2D,
     dataset_geo_transform: GeoTransform,
-
     no_data_value: Option<T>,
-) -> Result<Option<Grid2D<T>>>
+) -> Result<Option<MaskedGrid2D<T>>>
 where
-    T: Pixel + GdalType,
+    T: Pixel + GdalType + Default,
 {
     let output_bounds = tile_info.spatial_partition();
     let dataset_intersects_tile = dataset_bounds.intersection(&output_bounds);
@@ -774,7 +755,12 @@ fn read_raster_tile_with_properties<T: Pixel + gdal::raster::GdalType>(
         properties_from_band(&mut properties, &rasterband);
     }
 
-    let no_data_value = dataset_params.no_data_value.map(T::from_);
+    let no_data_value = dataset_params
+        .no_data_value
+        .or_else(|| rasterband.no_data_value())
+        .map(T::from_); // TODO: replace with gdal mask band access
+    debug!("no_data_value is {:?} ", &no_data_value,);
+
     let dataset_geo_transform = dataset_params.geo_transform.try_into()?;
     let dataset_bounds = dataset_params.spatial_partition();
 
@@ -799,23 +785,13 @@ fn read_raster_tile_with_properties<T: Pixel + gdal::raster::GdalType>(
 fn create_no_data_tile<T: Pixel>(
     tile_info: TileInformation,
     tile_time: TimeInterval,
-    no_data_value: Option<T>,
 ) -> RasterTile2D<T> {
-    if let Some(no_data) = no_data_value {
-        RasterTile2D::new_with_tile_info_and_properties(
-            tile_time,
-            tile_info,
-            EmptyGrid::new(tile_info.tile_size_in_pixels, no_data).into(),
-            RasterProperties::default(),
-        )
-    } else {
-        RasterTile2D::new_with_tile_info_and_properties(
-            tile_time,
-            tile_info,
-            Grid2D::new_filled(tile_info.tile_size_in_pixels, T::zero(), None).into(),
-            RasterProperties::default(),
-        )
-    }
+    RasterTile2D::new_with_tile_info_and_properties(
+        tile_time,
+        tile_info,
+        EmptyGrid::new(tile_info.tile_size_in_pixels).into(),
+        RasterProperties::default(),
+    )
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -1194,7 +1170,6 @@ mod tests {
             params.file_not_found_handling,
             replaced.file_not_found_handling
         );
-        assert_eq!(params.no_data_value, replaced.no_data_value);
     }
 
     #[test]
@@ -1215,9 +1190,9 @@ mod tests {
 
         let grid = grid.into_materialized_grid();
 
-        assert_eq!(grid.data.len(), 64);
+        assert_eq!(grid.inner_grid.data.len(), 64);
         assert_eq!(
-            grid.data,
+            grid.inner_grid.data,
             &[
                 255, 255, 255, 255, 255, 255, 255, 255, 255, 75, 37, 255, 44, 34, 39, 32, 255, 86,
                 255, 255, 255, 30, 96, 255, 255, 255, 255, 255, 90, 255, 255, 255, 255, 255, 202,
@@ -1225,7 +1200,9 @@ mod tests {
                 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255
             ]
         );
-        assert_eq!(grid.no_data_value, Some(0));
+
+        assert_eq!(grid.validity_mask.data.len(), 64);
+        assert_eq!(grid.validity_mask.data, &[false; 64]);
 
         assert!(properties.scale.is_none());
         assert!(properties.offset.is_none());
@@ -1267,9 +1244,9 @@ mod tests {
 
         let x = grid.into_materialized_grid();
 
-        assert_eq!(x.data.len(), 64);
+        assert_eq!(x.inner_grid.data.len(), 64);
         assert_eq!(
-            x.data,
+            x.inner_grid.data,
             &[
                 0, 0, 0, 0, 0, 0, 0, 0, 0, 255, 255, 255, 255, 255, 255, 255, 0, 255, 75, 37, 255,
                 44, 34, 39, 0, 255, 86, 255, 255, 255, 30, 96, 0, 255, 255, 255, 255, 90, 255, 255,
@@ -1302,8 +1279,8 @@ mod tests {
 
         let x = grid.into_materialized_grid();
 
-        assert_eq!(x.data.len(), 64);
-        assert_eq!(x.data, &[1; 64]);
+        assert_eq!(x.inner_grid.data.len(), 64);
+        assert_eq!(x.inner_grid.data, &[1; 64]);
     }
 
     #[tokio::test]
@@ -1437,16 +1414,14 @@ mod tests {
         let time_interval = TimeInterval::new_unchecked(1_388_534_400_000, 1_391_212_800_000); // 2014-01-01 - 2014-01-15
         let params = None;
 
-        let tile =
-            GdalRasterLoader::load_tile_async::<f64>(params, tile_info, time_interval, Some(1.))
-                .await;
+        let tile = GdalRasterLoader::load_tile_async::<f64>(params, tile_info, time_interval).await;
 
         assert!(tile.is_ok());
 
         let expected = RasterTile2D::<f64>::new_with_tile_info(
             time_interval,
             tile_info,
-            EmptyGrid2D::new(output_shape, 1.).into(),
+            EmptyGrid2D::new(output_shape).into(),
         );
 
         assert_eq!(tile.unwrap(), expected);

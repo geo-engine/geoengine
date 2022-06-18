@@ -14,7 +14,7 @@ use super::{
 #[derive(Debug, Eq, PartialEq, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct MaskedGrid<D, T> {
-    pub data: Grid<D, T>,
+    pub inner_grid: Grid<D, T>,
     pub validity_mask: Grid<D, bool>, // TODO: switch to bitmask or something like that
 }
 
@@ -43,20 +43,20 @@ where
         //        );
 
         Ok(Self {
-            data,
+            inner_grid: data,
             validity_mask,
         })
     }
 
     pub fn replace_mask(self, validity_mask: Grid<D, bool>) -> Result<Self> {
-        Self::new(self.data, validity_mask)
+        Self::new(self.inner_grid, validity_mask)
     }
 
     pub fn new_with_data(data: Grid<D, T>) -> Self {
         let validity_mask = Grid::new_filled(data.shape.clone(), true);
 
         Self {
-            data,
+            inner_grid: data,
             validity_mask,
         }
     }
@@ -67,7 +67,7 @@ where
     }
 
     pub fn shape(&self) -> &D {
-        &self.data.shape
+        &self.inner_grid.shape
     }
 
     #[inline]
@@ -79,6 +79,15 @@ where
     pub fn mask_mut(&mut self) -> &mut Grid<D, bool> {
         &mut self.validity_mask
     }
+
+    pub fn masked_element_iterator(&self) -> impl Iterator<Item=Option<&T>> {
+        self.inner_grid.data.iter().zip(self.validity_mask.data.iter()).map(|(v, m)| if *m { Some(v)} else {None} )
+    }
+
+    pub fn masked_copy_element_iterator(&self) -> impl Iterator<Item=Option<T>> + '_ where T: Copy {
+        self.masked_element_iterator().map(|pixel_option| pixel_option.map(|p| *p))
+    }
+
 }
 
 impl<D, T> From<Grid<D, T>> for MaskedGrid<D, T>
@@ -104,14 +113,14 @@ where
 impl<D, T> AsRef<Grid<D, T>> for MaskedGrid<D, T> {
     #[inline]
     fn as_ref(&self) -> &Grid<D, T> {
-        &self.data
+        &self.inner_grid
     }
 }
 
 impl<D, T> AsMut<Grid<D, T>> for MaskedGrid<D, T> {
     #[inline]
     fn as_mut(&mut self) -> &mut Grid<D, T> {
-        &mut self.data
+        &mut self.inner_grid
     }
 }
 
@@ -124,11 +133,11 @@ where
     const NDIM: usize = D::NDIM;
 
     fn axis_size(&self) -> Self::ShapeArray {
-        self.data.axis_size()
+        self.inner_grid.axis_size()
     }
 
     fn number_of_elements(&self) -> usize {
-        self.data.number_of_elements()
+        self.inner_grid.number_of_elements()
     }
 }
 
@@ -143,7 +152,7 @@ where
             return Ok(None);
         }
 
-        self.data.get_at_grid_index(grid_index).map(Option::Some)
+        self.inner_grid.get_at_grid_index(grid_index).map(Option::Some)
     }
 
     fn get_masked_at_grid_index_unchecked(&self, grid_index: I) -> Option<T> {
@@ -154,7 +163,7 @@ where
             return None;
         }
 
-        Some(self.data.get_at_grid_index_unchecked(grid_index))
+        Some(self.inner_grid.get_at_grid_index_unchecked(grid_index))
     }
 }
 
@@ -171,7 +180,7 @@ where
             .set_at_grid_index(grid_index.clone(), value.is_some())?;
 
         if let Some(v) = value {
-            self.data.set_at_grid_index(grid_index, v)?;
+            self.inner_grid.set_at_grid_index(grid_index, v)?;
         }
         Ok(())
     }
@@ -181,7 +190,7 @@ where
             .set_at_grid_index_unchecked(grid_index.clone(), value.is_some());
 
         if let Some(v) = value {
-            self.data.set_at_grid_index_unchecked(grid_index, v);
+            self.inner_grid.set_at_grid_index_unchecked(grid_index, v);
         }
     }
 }
@@ -209,10 +218,10 @@ where
 {
     type IndexArray = D::IndexArray;
     fn min_index(&self) -> GridIdx<<Self as GridBounds>::IndexArray> {
-        self.data.min_index()
+        self.inner_grid.min_index()
     }
     fn max_index(&self) -> GridIdx<<Self as GridBounds>::IndexArray> {
-        self.data.max_index()
+        self.inner_grid.max_index()
     }
 }
 
@@ -225,7 +234,7 @@ where
     type ShapeArray = D::ShapeArray;
 
     fn grid_shape_array(&self) -> Self::ShapeArray {
-        self.data.grid_shape_array()
+        self.inner_grid.grid_shape_array()
     }
 }
 
@@ -241,14 +250,14 @@ where
 
     fn shift_by_offset(self, offset: GridIdx<I>) -> Self::Output {
         MaskedGrid {
-            data: self.data.shift_by_offset(offset.clone()),
+            inner_grid: self.inner_grid.shift_by_offset(offset.clone()),
             validity_mask: self.validity_mask.shift_by_offset(offset),
         }
     }
 
     fn set_grid_bounds(self, bounds: GridBoundingBox<I>) -> Result<Self::Output> {
         Ok(MaskedGrid {
-            data: self.data.set_grid_bounds(bounds.clone())?,
+            inner_grid: self.inner_grid.set_grid_bounds(bounds.clone())?,
             validity_mask: self.validity_mask.set_grid_bounds(bounds)?,
         })
     }

@@ -317,7 +317,7 @@ where
 
         materialized_accu_tile
             .grid_array
-            .data
+            .inner_grid
             .par_chunks_mut(par_chunk_size)
             .enumerate()
             .for_each(|(chunk_idx, chunk_slice)| {
@@ -440,7 +440,6 @@ mod tests {
                     data_type: RasterDataType::U8,
                     spatial_reference: SpatialReference::epsg_4326().into(),
                     measurement: Measurement::Unitless,
-                    no_data_value: no_data_value.map(AsPrimitive::as_),
                     time: None,
                     bbox: None,
                 },
