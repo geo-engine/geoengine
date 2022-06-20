@@ -80,9 +80,11 @@ pub fn save_test_bytes(bytes: &[u8], filename: &str) {
 #[cfg(test)]
 mod tests {
     use crate::{
-        raster::{EmptyGrid, EmptyGrid2D, Grid2D, GridShape2D, MaskedGrid2D},
+        raster::{EmptyGrid, EmptyGrid2D, Grid2D, GridOrEmpty, GridShape2D, MaskedGrid2D},
         util::test::{empty_grid_eq, grid_eq, masked_grid_eq},
     };
+
+    use super::grid_or_empty_grid_eq;
 
     #[test]
     fn test_empty_grid_eq_ok() {
@@ -234,5 +236,50 @@ mod tests {
         let r2 = MaskedGrid2D::new(Grid2D::new(d2, vec![1, 2, 3, 42]).unwrap(), m2).unwrap();
 
         assert!(!masked_grid_eq(&r1, &r2));
+    }
+
+    #[test]
+    fn test_grid_or_empty_grid_eq_empty() {
+        let d1: GridShape2D = [2, 2].into();
+        let d2: GridShape2D = [2, 2].into();
+
+        let e1 = EmptyGrid2D::<u8>::new(d1);
+        let e2 = EmptyGrid2D::<u8>::new(d2);
+
+        let goe1 = GridOrEmpty::from(e1);
+        let goe2 = GridOrEmpty::from(e2);
+
+        assert!(grid_or_empty_grid_eq(&goe1, &goe2))
+    }
+
+    #[test]
+    fn test_grid_or_empty_grid_eq_grid_empty() {
+        let d1: GridShape2D = [2, 2].into();
+        let d2: GridShape2D = [2, 2].into();
+
+        let e1 = MaskedGrid2D::from(EmptyGrid2D::<u8>::new(d1));
+        let e2 = MaskedGrid2D::from(EmptyGrid2D::<u8>::new(d2));
+
+        let goe1 = GridOrEmpty::from(e1);
+        let goe2 = GridOrEmpty::from(e2);
+
+        assert!(grid_or_empty_grid_eq(&goe1, &goe2))
+    }
+
+    #[test]
+    fn test_grid_or_empty_grid_eq_grid_values() {
+        let d1: GridShape2D = [2, 2].into();
+        let d2: GridShape2D = [2, 2].into();
+
+        let m1 = Grid2D::new(d1, vec![true, true, true, false]).unwrap();
+        let m2 = Grid2D::new(d2, vec![true, true, true, false]).unwrap();
+
+        let r1 = MaskedGrid2D::new(Grid2D::new(d1, vec![1, 2, 3, 42]).unwrap(), m1).unwrap();
+        let r2 = MaskedGrid2D::new(Grid2D::new(d2, vec![1, 2, 3, 42]).unwrap(), m2).unwrap();
+
+        let goe1 = GridOrEmpty::from(r1);
+        let goe2 = GridOrEmpty::from(r2);
+
+        assert!(grid_or_empty_grid_eq(&goe1, &goe2))
     }
 }

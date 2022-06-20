@@ -180,7 +180,7 @@ where
     async fn process_tile_async(
         &self,
         tile: RasterTile2D<P>,
-        _pool: Arc<ThreadPool>,
+        pool: Arc<ThreadPool>,
     ) -> Result<RasterTile2D<PixelOut>> {
         let offset = tile.properties.number_property::<f32>(&self.offset_key)?;
         let slope = tile.properties.number_property::<f32>(&self.slope_key)?;
@@ -192,8 +192,10 @@ where
             })
         };
 
-        let result_tile =
-            crate::util::spawn_blocking(move || tile.map_or_mask_elements_parallel(map_fn)).await?;
+        let result_tile = crate::util::spawn_blocking_with_thread_pool(pool, move || {
+            tile.map_or_mask_elements_parallel(map_fn)
+        })
+        .await?;
 
         Ok(result_tile)
     }
@@ -227,7 +229,7 @@ mod tests {
     use geoengine_datatypes::primitives::{
         ClassificationMeasurement, ContinuousMeasurement, Measurement,
     };
-    use geoengine_datatypes::raster::{EmptyGrid2D, Grid2D, TilingSpecification};
+    use geoengine_datatypes::raster::{EmptyGrid2D, Grid2D, MaskedGrid2D, TilingSpecification};
     use std::collections::HashMap;
 
     // #[tokio::test]
@@ -279,9 +281,12 @@ mod tests {
 
         assert!(geoengine_datatypes::util::test::grid_or_empty_grid_eq(
             &result.as_ref().unwrap().grid_array,
-            &Grid2D::new([3, 2].into(), vec![13.0, 15.0, 17.0, 19.0, 21.0, 0.],)
-                .unwrap()
-                .into()
+            &MaskedGrid2D::new(
+                Grid2D::new([3, 2].into(), vec![13.0, 15.0, 17.0, 19.0, 21.0, 0.],).unwrap(),
+                Grid2D::new([3, 2].into(), vec![true, true, true, true, true, false]).unwrap()
+            )
+            .unwrap()
+            .into()
         ));
 
         // TODO: add assert to check mask
@@ -300,7 +305,11 @@ mod tests {
         let result = test_util::process(
             || {
                 let props = test_util::create_properties(None, None, Some(11.0), Some(2.0));
-                let src = test_util::create_mock_source::<u8>(props, Some(vec![]), None);
+                let src = test_util::create_mock_source::<u8>(
+                    props,
+                    Some(EmptyGrid2D::new([3, 2].into()).into()),
+                    None,
+                );
                 RasterOperator::boxed(Radiance {
                     sources: SingleRasterSource {
                         raster: src.boxed(),

@@ -215,7 +215,7 @@ where
         let offset = tile.properties.number_property::<f64>(&self.offset_key)?;
         let slope = tile.properties.number_property::<f64>(&self.slope_key)?;
 
-        let temp_tile = crate::util::spawn_blocking(move || {
+        let temp_tile = crate::util::spawn_blocking_with_thread_pool(pool.clone(), move || {
             let lut = create_lookup_table(channel, offset, slope, &pool);
 
             let map_fn = move |pixel_option: Option<P>| {
@@ -304,7 +304,11 @@ mod tests {
         let res = test_util::process(
             || {
                 let props = test_util::create_properties(Some(4), Some(1), Some(0.0), Some(1.0));
-                let src = test_util::create_mock_source::<u8>(props, Some(vec![]), None);
+                let src = test_util::create_mock_source::<u8>(
+                    props,
+                    Some(EmptyGrid2D::new([3, 2].into()).into()),
+                    None,
+                );
 
                 RasterOperator::boxed(Temperature {
                     params: TemperatureParams::default(),
@@ -409,7 +413,11 @@ mod tests {
                 let props = test_util::create_properties(Some(4), Some(1), Some(0.0), Some(1.0));
                 let src = test_util::create_mock_source::<u16>(
                     props,
-                    Some(vec![1, 2, 3, 4, 1024, 0]),
+                    Some(
+                        Grid2D::new([3, 2].into(), vec![1, 2, 3, 4, 1024, 0])
+                            .unwrap()
+                            .into(),
+                    ),
                     None,
                 );
 

@@ -640,7 +640,7 @@ mod tests {
                     tile_size_in_pixels: [3, 2].into(),
                     global_geo_transform: TestDefault::test_default(),
                 },
-                GridOrEmpty::from(Grid2D::new([3, 2].into(), vec![0, 11, 10, 9, 8, 7],).unwrap()),
+                GridOrEmpty::from(Grid2D::new([3, 2].into(), vec![12, 11, 10, 9, 8, 7],).unwrap()),
             )
         );
 
@@ -967,7 +967,14 @@ mod tests {
                     tile_size_in_pixels: [3, 2].into(),
                     global_geo_transform: TestDefault::test_default(),
                 },
-                GridOrEmpty::from(Grid2D::new([3, 2].into(), vec![1, 2, 3, 42, 5, 6]).unwrap()),
+                GridOrEmpty::from(
+                    MaskedGrid2D::new(
+                        Grid2D::new([3, 2].into(), vec![1, 2, 3, 42, 5, 6]).unwrap(),
+                        Grid2D::new([3, 2].into(), vec![true, true, true, false, true, true])
+                            .unwrap()
+                    )
+                    .unwrap()
+                ),
             )
         );
     }
@@ -1056,7 +1063,14 @@ mod tests {
                     tile_size_in_pixels: [3, 2].into(),
                     global_geo_transform: TestDefault::test_default(),
                 },
-                GridOrEmpty::from(Grid2D::new([3, 2].into(), vec![1, 2, 3, 42, 5, 6]).unwrap()),
+                GridOrEmpty::from(
+                    MaskedGrid2D::new(
+                        Grid2D::new([3, 2].into(), vec![1, 2, 3, 42, 5, 6]).unwrap(),
+                        Grid2D::new([3, 2].into(), vec![true, true, true, false, true, true])
+                            .unwrap()
+                    )
+                    .unwrap()
+                ),
             )
         );
     }
@@ -1132,9 +1146,14 @@ mod tests {
                     tile_size_in_pixels: [3, 2].into(),
                     global_geo_transform: TestDefault::test_default(),
                 },
-                GridOrEmpty::from(
-                    Grid2D::new([3, 2].into(), vec![13, 42, 15, 16, 17, 18]).unwrap()
-                )
+                GridOrEmpty::from(GridOrEmpty::from(
+                    MaskedGrid2D::new(
+                        Grid2D::new([3, 2].into(), vec![13, 42, 15, 16, 17, 18]).unwrap(),
+                        Grid2D::new([3, 2].into(), vec![true, false, true, true, true, true])
+                            .unwrap()
+                    )
+                    .unwrap()
+                ),)
             )
         );
 
@@ -1236,7 +1255,14 @@ mod tests {
                     tile_size_in_pixels: [3, 2].into(),
                     global_geo_transform: TestDefault::test_default(),
                 },
-                GridOrEmpty::from(Grid2D::new([3, 2].into(), vec![1, 2, 3, 42, 5, 6]).unwrap())
+                GridOrEmpty::from(
+                    MaskedGrid2D::new(
+                        Grid2D::new([3, 2].into(), vec![1, 2, 3, 42, 5, 6]).unwrap(),
+                        Grid2D::new([3, 2].into(), vec![true, true, true, false, true, true])
+                            .unwrap()
+                    )
+                    .unwrap()
+                ),
             )
         );
     }
@@ -1325,7 +1351,14 @@ mod tests {
                     tile_size_in_pixels: [3, 2].into(),
                     global_geo_transform: TestDefault::test_default(),
                 },
-                GridOrEmpty::from(Grid2D::new([3, 2].into(), vec![1, 2, 3, 42, 5, 6]).unwrap())
+                GridOrEmpty::from(
+                    MaskedGrid2D::new(
+                        Grid2D::new([3, 2].into(), vec![1, 2, 3, 0, 5, 6]).unwrap(),
+                        Grid2D::new([3, 2].into(), vec![true, true, true, false, true, true])
+                            .unwrap()
+                    )
+                    .unwrap()
+                ),
             )
         );
     }
@@ -1414,7 +1447,14 @@ mod tests {
                     tile_size_in_pixels: [3, 2].into(),
                     global_geo_transform: TestDefault::test_default(),
                 },
-                GridOrEmpty::from(Grid2D::new([3, 2].into(), vec![1, 2, 3, 42, 5, 6]).unwrap())
+                GridOrEmpty::from(
+                    MaskedGrid2D::new(
+                        Grid2D::new([3, 2].into(), vec![1, 2, 3, 0, 5, 6]).unwrap(),
+                        Grid2D::new([3, 2].into(), vec![true, true, true, false, true, true])
+                            .unwrap()
+                    )
+                    .unwrap()
+                ),
             )
         );
     }

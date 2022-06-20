@@ -47,7 +47,7 @@ mod test_util {
         TimeStep,
     };
     use geoengine_datatypes::raster::{
-        EmptyGrid2D, Grid2D, GridOrEmpty, MaskedGrid2D, Pixel, RasterDataType, RasterProperties,
+        Grid2D, GridOrEmpty, GridOrEmpty2D, MaskedGrid2D, Pixel, RasterDataType, RasterProperties,
         RasterPropertiesEntry, RasterPropertiesEntryType, RasterTile2D, TileInformation,
     };
     use geoengine_datatypes::spatial_reference::{SpatialReference, SpatialReferenceAuthority};
@@ -148,27 +148,29 @@ mod test_util {
 
     pub(crate) fn create_mock_source<P: Pixel>(
         props: RasterProperties,
-        custom_data: Option<Vec<P>>,
+        custom_data: Option<GridOrEmpty2D<P>>,
         measurement: Option<Measurement>,
     ) -> MockRasterSource<P> {
         let raster = match custom_data {
-            Some(v) if v.is_empty() => GridOrEmpty::Empty(EmptyGrid2D::new([3, 2].into())),
-            Some(v) => {
-                GridOrEmpty::Grid(MaskedGrid2D::from(Grid2D::new([3, 2].into(), v).unwrap()))
-            }
-            None => GridOrEmpty::Grid(MaskedGrid2D::from(
-                Grid2D::<P>::new(
-                    [3, 2].into(),
-                    vec![
-                        P::from_(1),
-                        P::from_(2),
-                        P::from_(3),
-                        P::from_(4),
-                        P::from_(5),
-                    ],
+            Some(g) => g,
+            None => GridOrEmpty::Grid(
+                MaskedGrid2D::new(
+                    Grid2D::<P>::new(
+                        [3, 2].into(),
+                        vec![
+                            P::from_(1),
+                            P::from_(2),
+                            P::from_(3),
+                            P::from_(4),
+                            P::from_(5),
+                            P::from_(0),
+                        ],
+                    )
+                    .unwrap(),
+                    Grid2D::new([3, 2].into(), vec![true, true, true, true, true, false]).unwrap(),
                 )
                 .unwrap(),
-            )),
+            ),
         };
 
         let raster_tile = RasterTile2D::new_with_tile_info_and_properties(

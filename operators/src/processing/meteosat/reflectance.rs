@@ -188,7 +188,7 @@ where
     async fn process_tile_async(
         &self,
         tile: RasterTile2D<PixelOut>,
-        _pool: Arc<ThreadPool>,
+        pool: Arc<ThreadPool>,
     ) -> Result<RasterTile2D<PixelOut>> {
         let satellite = self.satellite(&tile)?;
         let channel = self.channel(&tile, satellite)?;
@@ -224,8 +224,10 @@ where
             })
         };
 
-        let refl_tile =
-            crate::util::spawn_blocking(move || tile.map_index_elements_parallel(map_fn)).await?;
+        let refl_tile = crate::util::spawn_blocking_with_thread_pool(pool, move || {
+            tile.map_index_elements_parallel(map_fn)
+        })
+        .await?;
 
         Ok(refl_tile)
     }
@@ -266,7 +268,9 @@ mod tests {
     use geoengine_datatypes::primitives::{
         ClassificationMeasurement, ContinuousMeasurement, Measurement,
     };
-    use geoengine_datatypes::raster::{EmptyGrid2D, Grid2D, RasterTile2D, TilingSpecification};
+    use geoengine_datatypes::raster::{
+        EmptyGrid2D, Grid2D, GridOrEmpty, RasterTile2D, TilingSpecification,
+    };
     use std::collections::HashMap;
 
     async fn process_mock(
@@ -287,7 +291,11 @@ mod tests {
         test_util::process(
             || {
                 let props = test_util::create_properties(channel, satellite, None, None);
-                let cc = if empty { Some(Vec::new()) } else { None };
+                let cc = if empty {
+                    Some(EmptyGrid2D::new([3, 2].into()).into())
+                } else {
+                    None
+                };
 
                 let m = measurement.or_else(|| {
                     Some(Measurement::Continuous(ContinuousMeasurement {
@@ -346,7 +354,7 @@ mod tests {
         assert!(result.is_ok());
         assert!(geoengine_datatypes::util::test::grid_or_empty_grid_eq(
             &result.as_ref().unwrap().grid_array,
-            &EmptyGrid2D::new([3, 2].into()).into()
+            &GridOrEmpty::from(EmptyGrid2D::new([3, 2].into()))
         ));
     }
 

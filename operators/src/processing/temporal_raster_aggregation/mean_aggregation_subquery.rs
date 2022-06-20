@@ -107,9 +107,9 @@ impl<T> TemporalMeanTileAccu<T> {
                         (Some(v), None) if self.ignore_no_data => Some(v),
                         (Some(_), None) => None,
                         (Some((acc_value, acc_count)), Some(new_value)) => {
-                            let delta = new_value - acc_value;
-                            let new_acc_value = acc_value + delta / (acc_count as f64);
                             let new_acc_count = acc_count + 1;
+                            let delta = new_value - acc_value;
+                            let new_acc_value = acc_value + delta / (new_acc_count as f64);
                             Some((new_acc_value, new_acc_count))
                         }
                     }

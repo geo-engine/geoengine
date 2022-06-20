@@ -459,25 +459,45 @@ mod tests {
             vec![1, 2, 5, 6],
             vec![2, 3, 6, 7],
             vec![3, 4, 7, 8],
-            vec![4, 42, 8, 42],
-            vec![5, 6, 42, 42],
-            vec![6, 7, 42, 42],
-            vec![7, 8, 42, 42],
-            vec![8, 42, 42, 42],
+            vec![4, 0, 8, 0],
+            vec![5, 6, 0, 0],
+            vec![6, 7, 0, 0],
+            vec![7, 8, 0, 0],
+            vec![8, 0, 0, 0],
             vec![8, 7, 4, 3],
             vec![7, 6, 3, 2],
             vec![6, 5, 2, 1],
-            vec![5, 42, 1, 42],
-            vec![4, 3, 42, 42],
-            vec![3, 2, 42, 42],
-            vec![2, 1, 42, 42],
-            vec![1, 42, 42, 42],
+            vec![5, 0, 1, 0],
+            vec![4, 3, 0, 0],
+            vec![3, 2, 0, 0],
+            vec![2, 1, 0, 0],
+            vec![1, 0, 0, 0],
+        ];
+
+        let valid = vec![
+            vec![true; 4],
+            vec![true; 4],
+            vec![true; 4],
+            vec![true, false, true, false],
+            vec![true, true, false, false],
+            vec![true, true, false, false],
+            vec![true, true, false, false],
+            vec![true, false, false, false],
+            vec![true; 4],
+            vec![true; 4],
+            vec![true; 4],
+            vec![true, false, true, false],
+            vec![true, true, false, false],
+            vec![true, true, false, false],
+            vec![true, true, false, false],
+            vec![true, false, false, false],
         ];
 
         for (i, tile) in result.into_iter().enumerate() {
             let tile = tile.into_materialized_tile();
             assert_eq!(tile.time, times[i]);
             assert_eq!(tile.grid_array.inner_grid.data, data[i]);
+            assert_eq!(tile.grid_array.validity_mask.data, valid[i]);
         }
 
         Ok(())
