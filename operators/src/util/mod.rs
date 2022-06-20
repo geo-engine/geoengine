@@ -1,4 +1,5 @@
 mod async_util;
+pub mod futures_join;
 pub mod gdal;
 pub mod input;
 pub mod math;
