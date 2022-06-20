@@ -235,7 +235,7 @@ where
         + PartialEq,
     I: Clone + AsRef<[isize]> + Into<GridIdx<I>>,
     T: Copy + Sized + Default,
-    MaskedGrid<D2,T>: GridBlit<MaskedGrid<D1, T>, T> + GridBlit<EmptyGrid<D1, T>, T>,
+    MaskedGrid<D2, T>: GridBlit<MaskedGrid<D1, T>, T> + GridBlit<EmptyGrid<D1, T>, T>,
 {
     fn grid_blit_from(&mut self, other: &GridOrEmpty<D1, T>) {
         if self.is_empty() && other.is_empty() {

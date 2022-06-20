@@ -1,7 +1,12 @@
-use rayon::{slice::{ParallelSliceMut, ParallelSlice}, iter::{IndexedParallelIterator, ParallelIterator}};
+use rayon::{
+    iter::{IndexedParallelIterator, ParallelIterator},
+    slice::{ParallelSlice, ParallelSliceMut},
+};
 
-use crate::raster::{GridIdx2D, GridOrEmpty2D, MaskedGrid2D, MaskedGrid, Grid, GridSize, GridOrEmpty, GridSpaceToLinearSpace, RasterTile2D};
-
+use crate::raster::{
+    Grid, GridIdx2D, GridOrEmpty, GridOrEmpty2D, GridSize, GridSpaceToLinearSpace, MaskedGrid,
+    MaskedGrid2D, RasterTile2D,
+};
 
 pub trait MapIndexedElements<In, Out, GIdx, F: Fn(GIdx, Option<In>) -> Option<Out>> {
     type Output;
@@ -86,8 +91,8 @@ where
             tile_position: self.tile_position,
             global_geo_transform: self.global_geo_transform,
             properties: self.properties,
-        }    
-    }   
+        }
+    }
 }
 
 impl<In, Out, F> MapIndexedElementsParallel<In, Out, GridIdx2D, F> for MaskedGrid2D<In>
@@ -156,7 +161,7 @@ where
 impl<In, Out, F> MapIndexedElementsParallel<In, Out, GridIdx2D, F> for GridOrEmpty2D<In>
 where
     F: Fn(GridIdx2D, Option<In>) -> Option<Out> + Send + Sync,
-    In: Copy + Clone + Sync + 'static,
+    In: Default + Copy + Clone + Sync + 'static,
     Out: Default + Clone + Send + 'static,
 {
     type Output = GridOrEmpty2D<Out>;
@@ -164,7 +169,11 @@ where
     fn map_index_elements_parallel(self, map_fn: F) -> Self::Output {
         match self {
             GridOrEmpty::Grid(g) => g.map_index_elements_parallel(map_fn).into(),
-            GridOrEmpty::Empty(e) => e.convert_dtype().into(),
+            GridOrEmpty::Empty(e) => {
+                MaskedGrid::from(e)
+                    .map_index_elements_parallel(map_fn)
+                    .into() // TODO: this need some more thoughts. Currently it will materialize all empty grids. Propably check if any mask is true after ?
+            }
         }
     }
 }
@@ -172,7 +181,7 @@ where
 impl<In, Out, F> MapIndexedElementsParallel<In, Out, GridIdx2D, F> for RasterTile2D<In>
 where
     F: Fn(GridIdx2D, Option<In>) -> Option<Out> + Send + Sync,
-    In: Copy + Clone + Sync + 'static,
+    In: Default + Copy + Clone + Sync + 'static,
     Out: Default + Clone + Send + 'static,
 {
     type Output = RasterTile2D<Out>;
@@ -184,6 +193,6 @@ where
             tile_position: self.tile_position,
             global_geo_transform: self.global_geo_transform,
             properties: self.properties,
-        }    
-    }   
+        }
+    }
 }

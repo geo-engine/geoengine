@@ -290,6 +290,8 @@ where
 
     accu.tile_mut().time = t_union;
 
+    dbg!(tile.grid_array.is_empty(), accu.accu_tile.is_empty());
+
     if tile.grid_array.is_empty() {
         return Ok(accu);
     }
@@ -300,17 +302,20 @@ where
         pool,
     } = accu;
 
-    let tile_bounding_box = tile.spatial_partition();
+    let new_accu = pool.install(|| {
+        let tile_bounding_box = tile.spatial_partition();
 
-    let map_fn = |grid_idx, _accu_value| {
-        let lookup_coord = coords.get_at_grid_index_unchecked(grid_idx);
-        let lookup_value = lookup_coord
-            .filter(|coord| tile_bounding_box.contains_coordinate(&coord))
-            .and_then(|coord| tile.pixel_value_at_coord_unchecked(coord));
-        lookup_value
-    };
+        let map_fn = |grid_idx, accu_value: Option<T>| {
+            let lookup_coord = coords.get_at_grid_index_unchecked(grid_idx);
+            dbg!(grid_idx, accu_value, lookup_coord);
+            let lookup_value = lookup_coord
+                .filter(|coord| tile_bounding_box.contains_coordinate(&coord))
+                .and_then(|coord| tile.pixel_value_at_coord_unchecked(coord));
+            lookup_value.or(accu_value)
+        };
 
-    let new_accu = accu_tile.map_index_elements_parallel(map_fn);
+        accu_tile.map_index_elements_parallel(map_fn)
+    });
 
     Ok(TileWithProjectionCoordinates {
         accu_tile: new_accu,

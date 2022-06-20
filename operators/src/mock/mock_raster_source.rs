@@ -334,11 +334,18 @@ mod tests {
                     },
                     "gridArray": {
                         "type": "grid",
-                        "shape": {
-                            "shapeArray": [3, 2]
+                        "innerGrid" : {
+                            "shape": {
+                                "shapeArray": [3, 2]
+                            },
+                            "data": [1, 2, 3, 4, 5, 6],
                         },
-                        "data": [1, 2, 3, 4, 5, 6],
-                        "noDataValue": null
+                        "validityMask": {
+                            "shape": {
+                                "shapeArray": [3, 2]
+                            },
+                            "data": [true, true, true, true, true, true],
+                        }
                     },
                     "properties":{
                         "scale":null,

@@ -596,7 +596,7 @@ mod tests {
         BoundingBox2D, DateTime, FeatureData, NoGeometry, SpatialResolution, TimeInterval,
     };
     use geoengine_datatypes::raster::{
-        Grid2D, RasterDataType, RasterTile2D, TileInformation, TilingSpecification,
+        Grid2D, RasterDataType, RasterTile2D, TileInformation, TilingSpecification, EmptyGrid2D,
     };
     use geoengine_datatypes::spatial_reference::SpatialReference;
     use geoengine_datatypes::util::test::TestDefault;
@@ -1080,9 +1080,7 @@ mod tests {
                             global_tile_position: [0, 0].into(),
                             tile_size_in_pixels,
                         },
-                        Grid2D::new(tile_size_in_pixels, vec![0, 0, 0, 0, 0, 0])
-                            .unwrap()
-                            .into(),
+                        EmptyGrid2D::<u8>::new(tile_size_in_pixels).into(),
                     )],
                     result_descriptor: RasterResultDescriptor {
                         data_type: RasterDataType::U8,

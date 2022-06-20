@@ -235,7 +235,6 @@ mod tests {
     use serde_json::json;
 
     fn example_raster_source() -> Box<dyn RasterOperator> {
-
         MockRasterSource {
             params: MockRasterSourceParams {
                 data: vec![RasterTile2D::new_with_tile_info(

@@ -190,7 +190,10 @@ where
         time: TimeInterval,
         global_geo_transform: GeoTransform,
         data: G,
-    ) -> Self where G: Into<GridOrEmpty<D,T>>{
+    ) -> Self
+    where
+        G: Into<GridOrEmpty<D, T>>,
+    {
         Self {
             time,
             tile_position: [0, 0].into(),

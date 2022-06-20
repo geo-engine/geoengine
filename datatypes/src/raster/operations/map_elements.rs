@@ -1,9 +1,5 @@
-use crate::raster::{
-    Grid, GridOrEmpty, GridSize, MaskedGrid, RasterTile2D,
-};
-use rayon::{
-    iter::{IndexedParallelIterator, IntoParallelIterator, ParallelIterator},
-};
+use crate::raster::{Grid, GridOrEmpty, GridSize, MaskedGrid, RasterTile2D};
+use rayon::iter::{IndexedParallelIterator, IntoParallelIterator, ParallelIterator};
 
 pub trait MapElements<In, Out, F: Fn(In) -> Out> {
     type Output;
@@ -14,7 +10,6 @@ pub trait MapElementsParallel<In, Out, F: Fn(In) -> Out> {
     type Output;
     fn map_elements_parallel(self, map_fn: F) -> Self::Output;
 }
-
 
 impl<In, Out, F, G> MapElements<In, Out, F> for Grid<G, In>
 where
@@ -48,7 +43,6 @@ where
     }
 }
 
-
 impl<In, Out, F, G> MapElements<In, Out, F> for GridOrEmpty<G, In>
 where
     In: 'static + Copy,
@@ -65,7 +59,6 @@ where
         }
     }
 }
-
 
 impl<In, Out, F> MapElements<In, Out, F> for RasterTile2D<In>
 where
@@ -85,7 +78,6 @@ where
         }
     }
 }
-
 
 impl<In, Out, F, G> MapElementsParallel<In, Out, F> for Grid<G, In>
 where
@@ -213,7 +205,6 @@ mod tests {
             }
         }
     }
-
 
     #[test]
     fn map_grid_parallel() {

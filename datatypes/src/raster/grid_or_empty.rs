@@ -71,7 +71,6 @@ where
             *self = GridOrEmpty::Grid(grid);
         }
     }
-
 }
 
 impl<D, T> GridSize for GridOrEmpty<D, T>

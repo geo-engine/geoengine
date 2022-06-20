@@ -1,7 +1,6 @@
-use rayon::iter::{IntoParallelIterator, IndexedParallelIterator, ParallelIterator};
+use rayon::iter::{IndexedParallelIterator, IntoParallelIterator, ParallelIterator};
 
-use crate::raster::{MaskedGrid, GridSize, Grid, GridOrEmpty, RasterTile2D};
-
+use crate::raster::{Grid, GridOrEmpty, GridSize, MaskedGrid, RasterTile2D};
 
 pub trait MapMaskedElements<In, Out, F: Fn(Option<In>) -> Option<Out>> {
     type Output;
@@ -12,7 +11,6 @@ pub trait MapMaskedElementsParallel<In, Out, F: Fn(Option<In>) -> Option<Out>> {
     type Output;
     fn map_or_mask_elements_parallel(self, map_fn: F) -> Self::Output;
 }
-
 
 impl<In, Out, F, G> MapMaskedElements<In, Out, F> for MaskedGrid<G, In>
 where
@@ -51,7 +49,7 @@ where
 
                 if let Some(out_value) = new_out_value {
                     *o = out_value;
-                } else {                    
+                } else {
                     out_no_data_count += 1;
                 }
             });
@@ -61,7 +59,6 @@ where
             .expect("Creation of grid with dimension failed before")
     }
 }
-
 
 impl<In, Out, F, G> MapMaskedElements<In, Out, F> for GridOrEmpty<G, In>
 where
@@ -79,7 +76,6 @@ where
         }
     }
 }
-
 
 impl<In, Out, F> MapMaskedElements<In, Out, F> for RasterTile2D<In>
 where
@@ -99,7 +95,6 @@ where
         }
     }
 }
-
 
 impl<In, Out, F, G> MapMaskedElementsParallel<In, Out, F> for Grid<G, In>
 where
@@ -141,11 +136,7 @@ where
                     .with_min_len(validity_mask.shape.axis_size_x()),
             )
             .map(|(i, m)| {
-                let in_value = if m {
-                    Some(i)
-                } else {
-                    None
-                };
+                let in_value = if m { Some(i) } else { None };
 
                 if let Some(o) = map_fn(in_value) {
                     (o, m)
@@ -204,7 +195,11 @@ where
 
 #[cfg(test)]
 mod tests {
-    use crate::{raster::{GeoTransform, Grid2D}, primitives::TimeInterval, util::test::TestDefault};
+    use crate::{
+        primitives::TimeInterval,
+        raster::{GeoTransform, Grid2D},
+        util::test::TestDefault,
+    };
 
     use super::*;
 
@@ -217,7 +212,17 @@ mod tests {
         let r1 = GridOrEmpty::Grid(MaskedGrid::from(Grid2D::new(dim.into(), data).unwrap()));
         let t1 = RasterTile2D::new(TimeInterval::default(), [0, 0].into(), geo, r1);
 
-        let scaled_r1 = t1.map_or_mask_elements(|p| p.map(|p| if p == 7 { p * 2 + 1 } else {0} ));
+        let scaled_r1 = t1.map_or_mask_elements(|p| {
+            if let Some(p) = p {
+                if p == 7 {
+                    Some(p * 2 + 1)
+                } else {
+                    None
+                }
+            } else {
+                None
+            }
+        });
         let mat_scaled_r1 = scaled_r1.into_materialized_tile();
 
         let expected = [15, 15, 0, 0];

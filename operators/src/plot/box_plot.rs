@@ -454,7 +454,7 @@ mod tests {
         TimeInterval,
     };
     use geoengine_datatypes::raster::{
-        EmptyGrid2D, Grid2D, RasterDataType, RasterTile2D, TileInformation, TilingSpecification,
+        EmptyGrid2D, Grid2D, RasterDataType, RasterTile2D, TileInformation, TilingSpecification, MaskedGrid2D,
     };
     use geoengine_datatypes::spatial_reference::SpatialReference;
     use geoengine_datatypes::util::test::TestDefault;
@@ -899,9 +899,7 @@ mod tests {
                             global_tile_position: [0, 0].into(),
                             tile_size_in_pixels,
                         },
-                        Grid2D::new(tile_size_in_pixels, vec![0, 0, 0, 0, 0, 0])
-                            .unwrap()
-                            .into(),
+                        EmptyGrid2D::<u8>::new(tile_size_in_pixels).into(),
                     )],
                     result_descriptor: RasterResultDescriptor {
                         data_type: RasterDataType::U8,
@@ -1081,73 +1079,6 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn empty_tile_raster_include_no_data() {
-        let tile_size_in_pixels = [3, 2].into();
-        let tiling_specification = TilingSpecification {
-            origin_coordinate: [0.0, 0.0].into(),
-            tile_size_in_pixels,
-        };
-        let box_plot = BoxPlot {
-            params: BoxPlotParams {
-                column_names: vec![],
-            },
-            sources: MockRasterSource {
-                params: MockRasterSourceParams {
-                    data: vec![RasterTile2D::new_with_tile_info(
-                        TimeInterval::default(),
-                        TileInformation {
-                            global_geo_transform: TestDefault::test_default(),
-                            global_tile_position: [0, 0].into(),
-                            tile_size_in_pixels,
-                        },
-                        EmptyGrid2D::<u8>::new(tile_size_in_pixels).into(),
-                    )],
-                    result_descriptor: RasterResultDescriptor {
-                        data_type: RasterDataType::U8,
-                        spatial_reference: SpatialReference::epsg_4326().into(),
-                        measurement: Measurement::Unitless,
-                        time: None,
-                        bbox: None,
-                    },
-                },
-            }
-            .boxed()
-            .into(),
-        };
-
-        let execution_context = MockExecutionContext::new_with_tiling_spec(tiling_specification);
-
-        let query_processor = box_plot
-            .boxed()
-            .initialize(&execution_context)
-            .await
-            .unwrap()
-            .query_processor()
-            .unwrap()
-            .json_vega()
-            .unwrap();
-
-        let result = query_processor
-            .plot_query(
-                VectorQueryRectangle {
-                    spatial_bounds: BoundingBox2D::new((0., -3.).into(), (2., 0.).into()).unwrap(),
-                    time_interval: TimeInterval::default(),
-                    spatial_resolution: SpatialResolution::one(),
-                },
-                &MockQueryContext::new(ChunkByteSize::MIN),
-            )
-            .await
-            .unwrap();
-
-        let mut expected = geoengine_datatypes::plots::BoxPlot::new();
-        expected.add_attribute(
-            BoxPlotAttribute::new("Raster-1".to_owned(), 0.0, 0.0, 0.0, 0.0, 0.0, true).unwrap(),
-        );
-
-        assert_eq!(expected.to_vega_embeddable(false).unwrap(), result);
-    }
-
-    #[tokio::test]
     async fn single_value_raster_stream() {
         let tile_size_in_pixels = [3, 2].into();
         let tiling_specification = TilingSpecification {
@@ -1239,9 +1170,11 @@ mod tests {
                             global_tile_position: [0, 0].into(),
                             tile_size_in_pixels,
                         },
-                        Grid2D::new(tile_size_in_pixels, vec![1, 2, 0, 4, 0, 6, 7, 0])
-                            .unwrap()
-                            .into(),
+                        MaskedGrid2D::new(
+                            Grid2D::new(tile_size_in_pixels, vec![1, 2, 0, 4, 0, 6, 7, 0])
+                            .unwrap(),
+                            Grid2D::new(tile_size_in_pixels, vec![true, true, false, true, false, true, true, false])
+                            .unwrap()).unwrap().into(),
                     )],
                     result_descriptor: RasterResultDescriptor {
                         data_type: RasterDataType::U8,
@@ -1379,9 +1312,11 @@ mod tests {
                         global_tile_position: [0, 0].into(),
                         tile_size_in_pixels,
                     },
-                    Grid2D::new(tile_size_in_pixels, vec![1, 2, 0, 4, 0, 6, 7, 0])
-                        .unwrap()
-                        .into(),
+                    MaskedGrid2D::new(
+                        Grid2D::new(tile_size_in_pixels, vec![1, 2, 0, 4, 0, 6, 7, 0])
+                        .unwrap(),
+                        Grid2D::new(tile_size_in_pixels, vec![true, true, false, true, false, true, true, false])
+                        .unwrap()).unwrap().into()
                 )],
                 result_descriptor: RasterResultDescriptor {
                     data_type: RasterDataType::U8,

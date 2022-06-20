@@ -36,11 +36,9 @@ use super::primitives::{SpatialBounded, TemporalBounded};
 use crate::primitives::Coordinate2D;
 use crate::util::Result;
 pub use masked_grid::{MaskedGrid, MaskedGrid1D, MaskedGrid2D, MaskedGrid3D};
-pub use operations::map_elements::{
-    MapElements, MapElementsParallel,
-};
-pub use operations::map_masked_elements::{MapMaskedElements, MapMaskedElementsParallel,};
+pub use operations::map_elements::{MapElements, MapElementsParallel};
 pub use operations::map_indexed_elements::{MapIndexedElements, MapIndexedElementsParallel};
+pub use operations::map_masked_elements::{MapMaskedElements, MapMaskedElementsParallel};
 pub use raster_properties::{
     RasterProperties, RasterPropertiesEntry, RasterPropertiesEntryType, RasterPropertiesKey,
 };

@@ -333,8 +333,8 @@ impl NetCdfCfDataProvider {
                         data_type,
                         spatial_reference: tree.spatial_reference.into(),
                         measurement: derive_measurement(tail.unit.clone()),
-                        time: None,          // TODO: determine time
-                        bbox: None,          // TODO: determine bbox
+                        time: None, // TODO: determine time
+                        bbox: None, // TODO: determine bbox
                     }),
                     symbology: Some(Symbology::Raster(RasterSymbology {
                         opacity: 1.0,

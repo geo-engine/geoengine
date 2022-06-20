@@ -1202,7 +1202,7 @@ mod tests {
         );
 
         assert_eq!(grid.validity_mask.data.len(), 64);
-        assert_eq!(grid.validity_mask.data, &[false; 64]);
+        assert_eq!(grid.validity_mask.data, &[true; 64]);
 
         assert!(properties.scale.is_none());
         assert!(properties.offset.is_none());

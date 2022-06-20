@@ -80,14 +80,21 @@ where
         &mut self.validity_mask
     }
 
-    pub fn masked_element_iterator(&self) -> impl Iterator<Item=Option<&T>> {
-        self.inner_grid.data.iter().zip(self.validity_mask.data.iter()).map(|(v, m)| if *m { Some(v)} else {None} )
+    pub fn masked_element_iterator(&self) -> impl Iterator<Item = Option<&T>> {
+        self.inner_grid
+            .data
+            .iter()
+            .zip(self.validity_mask.data.iter())
+            .map(|(v, m)| if *m { Some(v) } else { None })
     }
 
-    pub fn masked_copy_element_iterator(&self) -> impl Iterator<Item=Option<T>> + '_ where T: Copy {
-        self.masked_element_iterator().map(|pixel_option| pixel_option.map(|p| *p))
+    pub fn masked_copy_element_iterator(&self) -> impl Iterator<Item = Option<T>> + '_
+    where
+        T: Copy,
+    {
+        self.masked_element_iterator()
+            .map(|pixel_option| pixel_option.map(|p| *p))
     }
-
 }
 
 impl<D, T> From<Grid<D, T>> for MaskedGrid<D, T>
@@ -152,7 +159,9 @@ where
             return Ok(None);
         }
 
-        self.inner_grid.get_at_grid_index(grid_index).map(Option::Some)
+        self.inner_grid
+            .get_at_grid_index(grid_index)
+            .map(Option::Some)
     }
 
     fn get_masked_at_grid_index_unchecked(&self, grid_index: I) -> Option<T> {
