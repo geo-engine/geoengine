@@ -6,12 +6,14 @@ use std::{
 };
 
 use crate::datasets::storage::MetaDataDefinition;
-use crate::layers::layer::{AddLayer, AddLayerCollection, LayerCollectionId};
-use crate::layers::storage::LayerDb;
+use crate::error::Result;
+use crate::layers::external::ExternalLayerProviderDefinition;
+use crate::layers::layer::{AddLayer, AddLayerCollection};
+use crate::layers::listing::LayerCollectionId;
+use crate::layers::storage::{LayerDb, LayerProviderDb};
 use crate::util::user_input::UserInput;
 use crate::workflows::workflow::Workflow;
 use crate::{contexts::MockableSession, datasets::storage::DatasetDb};
-use crate::{datasets::storage::ExternalDatasetProviderDefinition, error::Result};
 
 use super::storage::DatasetDefinition;
 
@@ -23,8 +25,7 @@ use geoengine_operators::source::{
 };
 use log::warn;
 
-const DATASET_LAYER_COLLECTION_ID: LayerCollectionId =
-    LayerCollectionId::from_u128(0xa762_fc70_a23f_4957_bdb5_a12f_7405_9058);
+const DATASET_LAYER_COLLECTION_ID: &str = "82825554-6b41-41e8-91c7-e562162c2a08";
 
 pub async fn add_dataset_layer_collection<L: LayerDb>(layer_db: &mut L) -> Result<()> {
     let collection = AddLayerCollection {
@@ -34,7 +35,10 @@ pub async fn add_dataset_layer_collection<L: LayerDb>(layer_db: &mut L) -> Resul
     .validated()?;
 
     layer_db
-        .add_collection_with_id(DATASET_LAYER_COLLECTION_ID, collection)
+        .add_collection_with_id(
+            &LayerCollectionId(DATASET_LAYER_COLLECTION_ID.to_string()),
+            collection,
+        )
         .await?;
 
     Ok(())
@@ -89,7 +93,10 @@ pub async fn add_dataset_as_layer<L: LayerDb>(
 
     let layer = layer_db.add_layer(layer).await?;
     layer_db
-        .add_layer_to_collection(layer, DATASET_LAYER_COLLECTION_ID)
+        .add_layer_to_collection(
+            &layer,
+            &LayerCollectionId(DATASET_LAYER_COLLECTION_ID.to_string()),
+        )
         .await?;
 
     Ok(())
@@ -156,18 +163,15 @@ pub async fn add_datasets_from_directory<S: MockableSession, D: DatasetDb<S>, L:
     }
 }
 
-pub async fn add_providers_from_directory<D: DatasetDb<S>, S: MockableSession>(
-    db: &mut D,
-    file_path: PathBuf,
-) {
-    async fn add_provider_definition_from_dir_entry<D: DatasetDb<S>, S: MockableSession>(
+pub async fn add_providers_from_directory<D: LayerProviderDb>(db: &mut D, file_path: PathBuf) {
+    async fn add_provider_definition_from_dir_entry<D: LayerProviderDb>(
         db: &mut D,
         entry: &DirEntry,
     ) -> Result<()> {
-        let def: Box<dyn ExternalDatasetProviderDefinition> =
+        let def: Box<dyn ExternalLayerProviderDefinition> =
             serde_json::from_reader(BufReader::new(File::open(entry.path())?))?;
 
-        db.add_dataset_provider(&S::mock(), def).await?; // TODO: add as system user
+        db.add_layer_provider(def).await?; // TODO: add as system user
         Ok(())
     }
 

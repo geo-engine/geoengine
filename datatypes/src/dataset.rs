@@ -1,9 +1,9 @@
 use crate::identifier;
 use serde::{Deserialize, Serialize};
 
-identifier!(DatasetProviderId);
+identifier!(LayerProviderId);
 
-identifier!(InternalDatasetId);
+identifier!(InternalDatasetId); // TODO: rename to DatasetId as there are no external datasets anymore
 
 identifier!(StagingDatasetId);
 
@@ -20,7 +20,7 @@ pub enum DatasetId {
 #[derive(Debug, Clone, Hash, Eq, PartialEq, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ExternalDatasetId {
-    pub provider_id: DatasetProviderId,
+    pub provider_id: LayerProviderId,
     pub dataset_id: String,
 }
 

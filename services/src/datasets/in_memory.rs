@@ -1,20 +1,13 @@
 use crate::contexts::{Db, SimpleSession};
-use crate::datasets::listing::{
-    DatasetListOptions, DatasetListing, DatasetProvider, ExternalDatasetProvider, OrderBy,
-};
-use crate::datasets::storage::{
-    AddDataset, Dataset, DatasetDb, DatasetProviderDb, DatasetProviderListOptions,
-    DatasetProviderListing, DatasetStore, DatasetStorer,
-};
+use crate::datasets::listing::{DatasetListOptions, DatasetListing, DatasetProvider, OrderBy};
+use crate::datasets::storage::{AddDataset, Dataset, DatasetDb, DatasetStore, DatasetStorer};
 use crate::error;
 use crate::error::Result;
 use crate::util::user_input::Validated;
 use async_trait::async_trait;
+use geoengine_datatypes::dataset::{DatasetId, InternalDatasetId};
 use geoengine_datatypes::primitives::{RasterQueryRectangle, VectorQueryRectangle};
-use geoengine_datatypes::{
-    dataset::{DatasetId, DatasetProviderId, InternalDatasetId},
-    util::Identifier,
-};
+use geoengine_datatypes::util::Identifier;
 use geoengine_operators::engine::{
     MetaData, RasterResultDescriptor, StaticMetaData, TypedResultDescriptor, VectorResultDescriptor,
 };
@@ -27,7 +20,7 @@ use std::collections::HashMap;
 use super::listing::ProvenanceOutput;
 use super::{
     listing::SessionMetaDataProvider,
-    storage::{ExternalDatasetProviderDefinition, MetaDataDefinition},
+    storage::MetaDataDefinition,
     upload::{Upload, UploadDb, UploadId},
 };
 
@@ -51,7 +44,6 @@ struct HashMapDatasetDbBackend {
         Box<dyn MetaData<GdalLoadingInfo, RasterResultDescriptor, RasterQueryRectangle>>,
     >,
     uploads: HashMap<UploadId, Upload>,
-    external_providers: HashMap<DatasetProviderId, Box<dyn ExternalDatasetProviderDefinition>>,
 }
 
 #[derive(Default)]
@@ -60,59 +52,6 @@ pub struct HashMapDatasetDb {
 }
 
 impl DatasetDb<SimpleSession> for HashMapDatasetDb {}
-
-#[async_trait]
-impl DatasetProviderDb<SimpleSession> for HashMapDatasetDb {
-    async fn add_dataset_provider(
-        &self,
-        _session: &SimpleSession,
-        provider: Box<dyn ExternalDatasetProviderDefinition>,
-    ) -> Result<DatasetProviderId> {
-        let id = provider.id();
-        self.backend
-            .write()
-            .await
-            .external_providers
-            .insert(id, provider);
-        Ok(id)
-    }
-
-    async fn list_dataset_providers(
-        &self,
-        _session: &SimpleSession,
-        _options: Validated<DatasetProviderListOptions>,
-    ) -> Result<Vec<DatasetProviderListing>> {
-        // TODO: use options
-        Ok(self
-            .backend
-            .read()
-            .await
-            .external_providers
-            .iter()
-            .map(|(id, d)| DatasetProviderListing {
-                id: *id,
-                type_name: d.type_name(),
-                name: d.name(),
-            })
-            .collect())
-    }
-
-    async fn dataset_provider(
-        &self,
-        _session: &SimpleSession,
-        provider: DatasetProviderId,
-    ) -> Result<Box<dyn ExternalDatasetProvider>> {
-        self.backend
-            .read()
-            .await
-            .external_providers
-            .get(&provider)
-            .cloned()
-            .ok_or(error::Error::UnknownProviderId)?
-            .initialize()
-            .await
-    }
-}
 
 #[async_trait]
 pub trait HashMapStorable: Send + Sync {
@@ -323,10 +262,7 @@ impl DatasetProvider<SimpleSession> for HashMapDatasetDb {
                 })
                 .ok_or(error::Error::UnknownDatasetId),
             DatasetId::External(id) => {
-                self.dataset_provider(session, id.provider_id)
-                    .await?
-                    .provenance(dataset)
-                    .await
+                todo!() // TODO: throw error
             }
         }
     }

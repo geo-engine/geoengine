@@ -9,7 +9,7 @@ use crate::error::Error;
 use crate::layers::add_from_directory::{
     add_layer_collections_from_directory, add_layers_from_directory,
 };
-use crate::layers::storage::HashMapLayerDb;
+use crate::layers::storage::{HashMapLayerDb, HashMapLayerProviderDb};
 use crate::{
     datasets::add_from_directory::{add_datasets_from_directory, add_providers_from_directory},
     error::Result,
@@ -30,6 +30,7 @@ pub struct InMemoryContext {
     workflow_registry: Arc<HashMapRegistry>,
     dataset_db: Arc<HashMapDatasetDb>,
     layer_db: Arc<HashMapLayerDb>,
+    layer_provider_db: Arc<HashMapLayerProviderDb>,
     session: Db<SimpleSession>,
     thread_pool: Arc<ThreadPool>,
     exe_ctx_tiling_spec: TilingSpecification,
@@ -43,6 +44,7 @@ impl TestDefault for InMemoryContext {
             workflow_registry: Default::default(),
             dataset_db: Default::default(),
             layer_db: Default::default(),
+            layer_provider_db: Default::default(),
             session: Default::default(),
             thread_pool: create_rayon_thread_pool(0),
             exe_ctx_tiling_spec: TestDefault::test_default(),
@@ -66,12 +68,15 @@ impl InMemoryContext {
 
         let mut dataset_db = HashMapDatasetDb::default();
         add_datasets_from_directory(&mut dataset_db, &mut layer_db, dataset_defs_path).await;
-        add_providers_from_directory(&mut dataset_db, provider_defs_path).await;
+
+        // TODO: load providers from directory
+        // add_providers_from_directory(&mut dataset_db, provider_defs_path).await;
 
         Self {
             project_db: Default::default(),
             workflow_registry: Default::default(),
             layer_db: Arc::new(layer_db),
+            layer_provider_db: Arc::new(HashMapLayerProviderDb::default()),
             session: Default::default(),
             thread_pool: create_rayon_thread_pool(0),
             exe_ctx_tiling_spec,
@@ -89,6 +94,7 @@ impl InMemoryContext {
             workflow_registry: Default::default(),
             dataset_db: Default::default(),
             layer_db: Default::default(),
+            layer_provider_db: Default::default(),
             session: Default::default(),
             thread_pool: create_rayon_thread_pool(0),
             exe_ctx_tiling_spec,
@@ -104,8 +110,10 @@ impl Context for InMemoryContext {
     type WorkflowRegistry = HashMapRegistry;
     type DatasetDB = HashMapDatasetDb;
     type LayerDB = HashMapLayerDb;
+    type LayerProviderDB = HashMapLayerProviderDb;
     type QueryContext = QueryContextImpl;
-    type ExecutionContext = ExecutionContextImpl<SimpleSession, HashMapDatasetDb>;
+    type ExecutionContext =
+        ExecutionContextImpl<SimpleSession, HashMapDatasetDb, HashMapLayerProviderDb>;
 
     fn project_db(&self) -> Arc<Self::ProjectDB> {
         self.project_db.clone()
@@ -135,6 +143,13 @@ impl Context for InMemoryContext {
         &self.layer_db
     }
 
+    fn layer_provider_db(&self) -> Arc<Self::LayerProviderDB> {
+        self.layer_provider_db.clone()
+    }
+    fn layer_provider_db_ref(&self) -> &Self::LayerProviderDB {
+        &self.layer_provider_db
+    }
+
     fn query_context(&self) -> Result<Self::QueryContext> {
         Ok(QueryContextImpl {
             chunk_byte_size: self.query_ctx_chunk_size,
@@ -143,14 +158,17 @@ impl Context for InMemoryContext {
     }
 
     fn execution_context(&self, session: SimpleSession) -> Result<Self::ExecutionContext> {
-        Ok(
-            ExecutionContextImpl::<SimpleSession, HashMapDatasetDb>::new(
-                self.dataset_db.clone(),
-                self.thread_pool.clone(),
-                session,
-                self.exe_ctx_tiling_spec,
-            ),
-        )
+        Ok(ExecutionContextImpl::<
+            SimpleSession,
+            HashMapDatasetDb,
+            HashMapLayerProviderDb,
+        >::new(
+            self.dataset_db.clone(),
+            self.layer_provider_db.clone(),
+            self.thread_pool.clone(),
+            session,
+            self.exe_ctx_tiling_spec,
+        ))
     }
 
     async fn session_by_id(&self, session_id: SessionId) -> Result<Self::Session> {

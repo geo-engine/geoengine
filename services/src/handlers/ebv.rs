@@ -6,9 +6,8 @@ use crate::contexts::AdminSession;
 use crate::datasets::external::netcdfcf::{
     NetCdfOverview, OverviewGeneration, NETCDF_CF_PROVIDER_ID,
 };
-use crate::datasets::listing::ExternalDatasetProvider;
-use crate::datasets::storage::DatasetProviderDb;
 use crate::error::Result;
+use crate::layers::external::ExternalLayerProvider;
 use crate::{contexts::Context, datasets::external::netcdfcf::NetCdfCfDataProvider};
 use actix_web::{
     web::{self, ServiceConfig},
@@ -329,7 +328,7 @@ where
     T: Send + 'static,
     F: FnOnce(&NetCdfCfDataProvider) -> Result<T, EbvError> + Send + 'static,
 {
-    let provider: Box<dyn ExternalDatasetProvider> = ctx
+    let provider: Box<dyn ExternalLayerProvider> = ctx
         .dataset_db_ref()
         .dataset_provider(session, NETCDF_CF_PROVIDER_ID)
         .await

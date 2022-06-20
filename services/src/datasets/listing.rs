@@ -109,29 +109,6 @@ pub trait DatasetProvider<S: Session>:
     async fn provenance(&self, session: &S, dataset: &DatasetId) -> Result<ProvenanceOutput>;
 }
 
-/// A provider of datasets that are not hosted by Geo Engine itself but some external party
-// TODO: Authorization: the provider needs to accept credentials for the external data source.
-//       The credentials should be generic s.t. they are independent of the Session type and
-//       extensible to new provider types. E.g. a key-value map of strings where the provider
-//       checks that the necessary information is present and how they are incorporated in
-//       the requests.
-#[async_trait]
-pub trait ExternalDatasetProvider: Send
-    + Sync
-    + std::fmt::Debug
-    + MetaDataProvider<MockDatasetDataSourceLoadingInfo, VectorResultDescriptor, VectorQueryRectangle>
-    + MetaDataProvider<OgrSourceDataset, VectorResultDescriptor, VectorQueryRectangle>
-    + MetaDataProvider<GdalLoadingInfo, RasterResultDescriptor, RasterQueryRectangle>
-{
-    // TODO: authorization, filter, paging
-    async fn list(&self, options: Validated<DatasetListOptions>) -> Result<Vec<DatasetListing>>;
-
-    async fn provenance(&self, dataset: &DatasetId) -> Result<ProvenanceOutput>;
-
-    /// Propagates `Any`-casting to the underlying provider
-    fn as_any(&self) -> &dyn std::any::Any;
-}
-
 #[derive(Debug, Serialize, Deserialize, PartialEq, Eq, Hash)]
 pub struct ProvenanceOutput {
     pub dataset: DatasetId,

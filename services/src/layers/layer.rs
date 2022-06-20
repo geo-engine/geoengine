@@ -1,16 +1,28 @@
 use serde::{Deserialize, Serialize};
 
-use geoengine_datatypes::identifier;
+use geoengine_datatypes::{dataset::LayerProviderId, identifier};
 
 use crate::{
     error::Result, projects::Symbology, util::user_input::UserInput, workflows::workflow::Workflow,
 };
 
-identifier!(LayerId);
-identifier!(LayerCollectionId);
+use super::listing::{LayerCollectionId, LayerId};
+
+#[derive(Serialize, Deserialize, Clone)]
+struct ProviderLayerId {
+    provider: LayerProviderId,
+    id: LayerId,
+}
+
+#[derive(Serialize, Deserialize, Clone)]
+struct ProviderLayerCollectionId {
+    provider: LayerProviderId,
+    id: LayerCollectionId,
+}
 
 #[derive(Debug, Serialize, Deserialize, Clone, PartialEq)]
 pub struct Layer {
+    // TODO: add provider, also need a separate struct for import and API output
     pub id: LayerId,
     pub name: String,
     pub description: String,
@@ -20,7 +32,8 @@ pub struct Layer {
 
 #[derive(Debug, Serialize, Deserialize, Clone, PartialEq)]
 pub struct LayerListing {
-    pub id: LayerId,
+    pub provider: LayerProviderId,
+    pub layer: LayerId,
     pub name: String,
     pub description: String,
 }

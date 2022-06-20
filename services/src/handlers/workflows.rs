@@ -1,6 +1,6 @@
 use std::collections::HashSet;
 
-use crate::datasets::listing::DatasetProvider;
+use crate::datasets::listing::{DatasetProvider, ProvenanceOutput};
 use crate::datasets::storage::{AddDataset, DatasetDefinition, DatasetStore, MetaDataDefinition};
 use crate::datasets::upload::{UploadId, UploadRootPath};
 use crate::error;
@@ -228,10 +228,11 @@ async fn get_workflow_provenance_handler<C: Context>(
     let datasets = workflow.operator.datasets();
 
     let db = ctx.dataset_db_ref();
+    let providers = ctx.layer_provider_db_ref();
 
     let provenance: Vec<_> = datasets
         .iter()
-        .map(|id| db.provenance(&session, id))
+        .map(|id| resolve_provenance::<C>(&session, &db, &providers, &id))
         .collect();
     let provenance: Result<Vec<_>> = join_all(provenance).await.into_iter().collect();
 
@@ -240,6 +241,13 @@ async fn get_workflow_provenance_handler<C: Context>(
     let provenance: Vec<_> = provenance.into_iter().collect();
 
     Ok(web::Json(provenance))
+}
+
+async fn resolve_provenance<C: Context>(session: &C::Session, datasets: &C::DatasetDB, providers: &C::LayerProviderDB, id: &DatasetId) -> Result<ProvenanceOutput> {
+    match id {
+        DatasetId::Internal { dataset_id } => datasets.provenance(session, id).await,
+        DatasetId::External(_) => todo!(),
+    }
 }
 
 /// parameter for the dataset from workflow handler (body)

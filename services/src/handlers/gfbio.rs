@@ -17,7 +17,6 @@ use std::collections::HashMap;
 
 use crate::datasets::external::gfbio::{GfbioDataProvider, GFBIO_PROVIDER_ID};
 use crate::datasets::external::pangaea::PANGAEA_PROVIDER_ID;
-use crate::datasets::storage::DatasetProviderDb;
 use geoengine_datatypes::identifier;
 use geoengine_operators::util::input::StringOrNumberRange;
 

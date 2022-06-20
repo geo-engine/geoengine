@@ -6,10 +6,10 @@ use std::{
     path::PathBuf,
 };
 
-use crate::error::Result;
 use crate::layers::layer::{
-    AddLayer, AddLayerCollection, LayerCollectionDefinition, LayerCollectionId, LayerDefinition,
+    AddLayer, AddLayerCollection, LayerCollectionDefinition, LayerDefinition,
 };
+use crate::{error::Result, layers::listing::LayerCollectionId};
 use crate::{layers::storage::LayerDb, util::user_input::UserInput};
 
 use log::{info, warn};
@@ -24,7 +24,7 @@ pub async fn add_layers_from_directory<L: LayerDb>(layer_db: &mut L, file_path: 
 
         layer_db
             .add_layer_with_id(
-                def.id,
+                &def.id,
                 AddLayer {
                     name: def.name,
                     description: def.description,
@@ -81,10 +81,10 @@ pub async fn add_layer_collections_from_directory<L: LayerDb>(db: &mut L, file_p
         }
         .validated()?;
 
-        db.add_collection_with_id(def.id, collection).await?;
+        db.add_collection_with_id(&def.id, collection).await?;
 
         for layer in &def.layers {
-            db.add_layer_to_collection(*layer, def.id).await?;
+            db.add_layer_to_collection(layer, &def.id).await?;
         }
 
         Ok(())
@@ -140,7 +140,7 @@ pub async fn add_layer_collections_from_directory<L: LayerDb>(db: &mut L, file_p
 
     for (parent, children) in collection_children {
         for child in children {
-            let op = db.add_collection_to_parent(child, parent).await;
+            let op = db.add_collection_to_parent(&child, &parent).await;
 
             if let Err(e) = op {
                 warn!("Skipped adding child collection to db: {}", e);

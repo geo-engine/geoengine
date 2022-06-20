@@ -1,15 +1,20 @@
-use crate::datasets::listing::{ExternalDatasetProvider, ProvenanceOutput};
+use std::collections::HashMap;
+
+use crate::datasets::listing::ProvenanceOutput;
+use crate::layers::external::{ExternalLayerProvider, ExternalLayerProviderDefinition};
+use crate::layers::layer::{CollectionItem, Layer, LayerCollectionListOptions, LayerListing};
+use crate::layers::listing::{LayerCollectionId, LayerCollectionProvider, LayerId};
 use crate::{datasets::listing::DatasetListOptions, error::Result};
 use crate::{
     datasets::{
         listing::DatasetListing,
-        storage::{DatasetDefinition, ExternalDatasetProviderDefinition, MetaDataDefinition},
+        storage::{DatasetDefinition, MetaDataDefinition},
     },
     error,
     util::user_input::Validated,
 };
 use async_trait::async_trait;
-use geoengine_datatypes::dataset::{DatasetId, DatasetProviderId};
+use geoengine_datatypes::dataset::{DatasetId, LayerProviderId};
 use geoengine_datatypes::primitives::{RasterQueryRectangle, VectorQueryRectangle};
 use geoengine_operators::{
     engine::{MetaData, MetaDataProvider, RasterResultDescriptor, VectorResultDescriptor},
@@ -19,16 +24,17 @@ use geoengine_operators::{
 use serde::{Deserialize, Serialize};
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
-pub struct MockExternalDataProviderDefinition {
-    pub id: DatasetProviderId,
+pub struct MockExternalLayerProviderDefinition {
+    pub id: LayerProviderId,
     pub datasets: Vec<DatasetDefinition>,
 }
 
 #[typetag::serde]
 #[async_trait]
-impl ExternalDatasetProviderDefinition for MockExternalDataProviderDefinition {
-    async fn initialize(self: Box<Self>) -> crate::error::Result<Box<dyn ExternalDatasetProvider>> {
+impl ExternalLayerProviderDefinition for MockExternalLayerProviderDefinition {
+    async fn initialize(self: Box<Self>) -> crate::error::Result<Box<dyn ExternalLayerProvider>> {
         Ok(Box::new(MockExternalDataProvider {
+            id: self.id,
             datasets: self.datasets,
         }))
     }
@@ -41,44 +47,28 @@ impl ExternalDatasetProviderDefinition for MockExternalDataProviderDefinition {
         "MockName".to_owned()
     }
 
-    fn id(&self) -> DatasetProviderId {
+    fn id(&self) -> LayerProviderId {
         self.id
     }
 }
 
 #[derive(Debug)]
 pub struct MockExternalDataProvider {
+    id: LayerProviderId,
     datasets: Vec<DatasetDefinition>,
 }
 
-#[async_trait]
-impl ExternalDatasetProvider for MockExternalDataProvider {
-    async fn list(&self, _options: Validated<DatasetListOptions>) -> Result<Vec<DatasetListing>> {
-        // TODO: user right management
-        // TODO: options
-        let mut listing = vec![];
-        for dataset in &self.datasets {
-            listing.push(Ok(DatasetListing {
-                id: dataset
-                    .properties
-                    .id
-                    .clone()
-                    .ok_or(error::Error::MissingDatasetId)?,
-                name: dataset.properties.name.clone(),
-                description: dataset.properties.description.clone(),
-                tags: vec![],
-                source_operator: dataset.properties.source_operator.clone(),
-                result_descriptor: dataset.meta_data.result_descriptor().await?,
-                symbology: dataset.properties.symbology.clone(),
-            }));
-        }
-
-        Ok(listing
-            .into_iter()
-            .filter_map(|d: Result<DatasetListing>| if let Ok(d) = d { Some(d) } else { None })
-            .collect())
+// this provider uses dataset and layer ids interchangably
+// TODO: remove this when external dataset ids are reworked
+fn layer_id_from_dataset_id(id: &DatasetId) -> LayerId {
+    match id {
+        DatasetId::Internal { dataset_id } => LayerId(dataset_id.to_string()),
+        DatasetId::External(s) => LayerId(s.dataset_id.clone()),
     }
+}
 
+#[async_trait]
+impl ExternalLayerProvider for MockExternalDataProvider {
     async fn provenance(&self, dataset: &DatasetId) -> Result<ProvenanceOutput> {
         Ok(ProvenanceOutput {
             dataset: dataset.clone(),
@@ -88,6 +78,63 @@ impl ExternalDatasetProvider for MockExternalDataProvider {
 
     fn as_any(&self) -> &dyn std::any::Any {
         self
+    }
+}
+
+#[async_trait]
+impl LayerCollectionProvider for MockExternalDataProvider {
+    async fn collection_items(
+        &self,
+        _collection: &LayerCollectionId,
+        _options: Validated<LayerCollectionListOptions>,
+    ) -> Result<Vec<CollectionItem>> {
+        Ok(vec![]) // TODO: throw error instead?
+    }
+
+    async fn root_collection_items(
+        &self,
+        _options: Validated<LayerCollectionListOptions>,
+    ) -> Result<Vec<CollectionItem>> {
+        let mut listing = vec![];
+        for dataset in &self.datasets {
+            listing.push(Ok(CollectionItem::Layer(LayerListing {
+                provider: self.id,
+                layer: dataset
+                    .properties
+                    .id
+                    .as_ref()
+                    .ok_or(error::Error::MissingDatasetId)
+                    .map(layer_id_from_dataset_id)?,
+                name: dataset.properties.name.clone(),
+                description: dataset.properties.description.clone(),
+            })));
+        }
+
+        Ok(listing
+            .into_iter()
+            .filter_map(|d: Result<_>| if let Ok(d) = d { Some(d) } else { None })
+            .collect())
+    }
+
+    async fn get_layer(&self, id: &LayerId) -> Result<Layer> {
+        self.datasets
+            .iter()
+            .find(|d| {
+                d.properties
+                    .id
+                    .as_ref()
+                    .map(layer_id_from_dataset_id)
+                    .as_ref()
+                    == Some(id)
+            })
+            .ok_or(error::Error::UnknownDatasetId)
+            .map(|d| Layer {
+                id: id.clone(),
+                name: d.properties.name.clone(),
+                description: d.properties.description.clone(),
+                workflow: todo!(),
+                symbology: d.properties.symbology.clone(),
+            })
     }
 }
 

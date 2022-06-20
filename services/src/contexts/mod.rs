@@ -1,5 +1,5 @@
 use crate::error::Result;
-use crate::layers::storage::LayerDb;
+use crate::layers::storage::{LayerDb, LayerProviderDb};
 use crate::{projects::ProjectDb, workflows::registry::WorkflowRegistry};
 use async_trait::async_trait;
 use geoengine_datatypes::primitives::{RasterQueryRectangle, VectorQueryRectangle};
@@ -39,6 +39,7 @@ pub trait Context: 'static + Send + Sync + Clone {
     type WorkflowRegistry: WorkflowRegistry;
     type DatasetDB: DatasetDb<Self::Session>;
     type LayerDB: LayerDb;
+    type LayerProviderDB: LayerProviderDb;
     type QueryContext: QueryContext;
     type ExecutionContext: ExecutionContext;
 
@@ -53,6 +54,9 @@ pub trait Context: 'static + Send + Sync + Clone {
 
     fn layer_db(&self) -> Arc<Self::LayerDB>;
     fn layer_db_ref(&self) -> &Self::LayerDB;
+
+    fn layer_provider_db(&self) -> Arc<Self::LayerProviderDB>;
+    fn layer_provider_db_ref(&self) -> &Self::LayerProviderDB;
 
     fn query_context(&self) -> Result<Self::QueryContext>;
 
@@ -85,30 +89,35 @@ impl QueryContext for QueryContextImpl {
     }
 }
 
-pub struct ExecutionContextImpl<S, D>
+pub struct ExecutionContextImpl<S, D, L>
 where
     D: DatasetDb<S>,
+    L: LayerProviderDb,
     S: Session,
 {
     dataset_db: Arc<D>,
+    layer_provider_db: Arc<L>,
     thread_pool: Arc<ThreadPool>,
     session: S,
     tiling_specification: TilingSpecification,
 }
 
-impl<S, D> ExecutionContextImpl<S, D>
+impl<S, D, L> ExecutionContextImpl<S, D, L>
 where
     D: DatasetDb<S>,
+    L: LayerProviderDb,
     S: Session,
 {
     pub fn new(
         dataset_db: Arc<D>,
+        layer_provider_db: Arc<L>,
         thread_pool: Arc<ThreadPool>,
         session: S,
         tiling_specification: TilingSpecification,
     ) -> Self {
         Self {
             dataset_db,
+            layer_provider_db,
             thread_pool,
             session,
             tiling_specification,
@@ -116,7 +125,7 @@ where
     }
 }
 
-impl<S, D> ExecutionContext for ExecutionContextImpl<S, D>
+impl<S, D, L> ExecutionContext for ExecutionContextImpl<S, D, L>
 where
     D: DatasetDb<S>
         + SessionMetaDataProvider<
@@ -126,6 +135,7 @@ where
             VectorQueryRectangle,
         > + SessionMetaDataProvider<S, OgrSourceDataset, VectorResultDescriptor, VectorQueryRectangle>
         + SessionMetaDataProvider<S, GdalLoadingInfo, RasterResultDescriptor, RasterQueryRectangle>,
+    L: LayerProviderDb,
     S: Session,
 {
     fn thread_pool(&self) -> &Arc<ThreadPool> {
@@ -139,9 +149,9 @@ where
 
 // TODO: use macro(?) for delegating meta_data function to DatasetDB to avoid redundant code
 #[async_trait]
-impl<S, D>
+impl<S, D, L>
     MetaDataProvider<MockDatasetDataSourceLoadingInfo, VectorResultDescriptor, VectorQueryRectangle>
-    for ExecutionContextImpl<S, D>
+    for ExecutionContextImpl<S, D, L>
 where
     D: DatasetDb<S>
         + SessionMetaDataProvider<
@@ -150,6 +160,7 @@ where
             VectorResultDescriptor,
             VectorQueryRectangle,
         >,
+    L: LayerProviderDb,
     S: Session,
 {
     async fn meta_data(
@@ -174,8 +185,8 @@ where
                     source: Box::new(e),
                 }),
             DatasetId::External(external) => {
-                self.dataset_db
-                    .dataset_provider(&self.session, external.provider_id)
+                self.layer_provider_db
+                    .layer_provider(external.provider_id)
                     .await
                     .map_err(|e| geoengine_operators::error::Error::DatasetMetaData {
                         source: Box::new(e),
@@ -189,11 +200,12 @@ where
 
 // TODO: use macro(?) for delegating meta_data function to DatasetDB to avoid redundant code
 #[async_trait]
-impl<S, D> MetaDataProvider<OgrSourceDataset, VectorResultDescriptor, VectorQueryRectangle>
-    for ExecutionContextImpl<S, D>
+impl<S, D, L> MetaDataProvider<OgrSourceDataset, VectorResultDescriptor, VectorQueryRectangle>
+    for ExecutionContextImpl<S, D, L>
 where
     D: DatasetDb<S>
         + SessionMetaDataProvider<S, OgrSourceDataset, VectorResultDescriptor, VectorQueryRectangle>,
+    L: LayerProviderDb,
     S: Session,
 {
     async fn meta_data(
@@ -212,8 +224,8 @@ where
                     source: Box::new(e),
                 }),
             DatasetId::External(external) => {
-                self.dataset_db
-                    .dataset_provider(&self.session, external.provider_id)
+                self.layer_provider_db
+                    .layer_provider(external.provider_id)
                     .await
                     .map_err(|e| geoengine_operators::error::Error::DatasetMetaData {
                         source: Box::new(e),
@@ -227,11 +239,12 @@ where
 
 // TODO: use macro(?) for delegating meta_data function to DatasetDB to avoid redundant code
 #[async_trait]
-impl<S, D> MetaDataProvider<GdalLoadingInfo, RasterResultDescriptor, RasterQueryRectangle>
-    for ExecutionContextImpl<S, D>
+impl<S, D, L> MetaDataProvider<GdalLoadingInfo, RasterResultDescriptor, RasterQueryRectangle>
+    for ExecutionContextImpl<S, D, L>
 where
     D: DatasetDb<S>
         + SessionMetaDataProvider<S, GdalLoadingInfo, RasterResultDescriptor, RasterQueryRectangle>,
+    L: LayerProviderDb,
     S: Session,
 {
     async fn meta_data(
@@ -250,8 +263,8 @@ where
                     source: Box::new(e),
                 }),
             DatasetId::External(external) => {
-                self.dataset_db
-                    .dataset_provider(&self.session, external.provider_id)
+                self.layer_provider_db
+                    .layer_provider(external.provider_id)
                     .await
                     .map_err(|e| geoengine_operators::error::Error::DatasetMetaData {
                         source: Box::new(e),

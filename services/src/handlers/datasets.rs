@@ -4,10 +4,11 @@ use std::{
     path::Path,
 };
 
-use crate::datasets::listing::DatasetProvider;
-use crate::datasets::storage::{AddDataset, DatasetStore, MetaDataSuggestion, SuggestMetaData};
-use crate::datasets::storage::{DatasetProviderDb, DatasetProviderListOptions};
 use crate::datasets::upload::UploadRootPath;
+use crate::datasets::{
+    listing::DatasetProvider,
+    storage::{AddDataset, DatasetStore, MetaDataSuggestion, SuggestMetaData},
+};
 use crate::datasets::{
     storage::{CreateDataset, MetaDataDefinition},
     upload::Upload,
@@ -25,7 +26,7 @@ use gdal::{vector::Layer, Dataset};
 use gdal::{vector::OGRFieldType, DatasetOptions};
 use geoengine_datatypes::{
     collections::VectorDataType,
-    dataset::{DatasetProviderId, InternalDatasetId},
+    dataset::InternalDatasetId,
     primitives::{FeatureDataType, VectorQueryRectangle},
     spatial_reference::{SpatialReference, SpatialReferenceOption},
 };
@@ -55,41 +56,42 @@ where
                 web::resource("/suggest").route(web::get().to(suggest_meta_data_handler::<C>)),
             ),
     )
-    .service(web::resource("/providers").route(web::get().to(list_providers_handler::<C>)))
+    // .service(web::resource("/providers").route(web::get().to(list_providers_handler::<C>)))
     .service(web::resource("/datasets").route(web::get().to(list_datasets_handler::<C>)))
-    .service(
-        web::resource("/datasets/external/{provider}")
-            .route(web::get().to(list_external_datasets_handler::<C>)),
-    );
+    // .service(
+    //     web::resource("/datasets/external/{provider}")
+    //         .route(web::get().to(list_external_datasets_handler::<C>)),
+    // )
+    ;
 }
 
-async fn list_providers_handler<C: Context>(
-    session: C::Session,
-    ctx: web::Data<C>,
-    options: web::Query<DatasetProviderListOptions>,
-) -> Result<impl Responder> {
-    let list = ctx
-        .dataset_db_ref()
-        .list_dataset_providers(&session, options.into_inner().validated()?)
-        .await?;
-    Ok(web::Json(list))
-}
+// async fn list_providers_handler<C: Context>(
+//     session: C::Session,
+//     ctx: web::Data<C>,
+//     options: web::Query<DatasetProviderListOptions>,
+// ) -> Result<impl Responder> {
+//     let list = ctx
+//         .dataset_db_ref()
+//         .list_dataset_providers(&session, options.into_inner().validated()?)
+//         .await?;
+//     Ok(web::Json(list))
+// }
 
-async fn list_external_datasets_handler<C: Context>(
-    provider: web::Path<DatasetProviderId>,
-    session: C::Session,
-    ctx: web::Data<C>,
-    options: web::Query<DatasetListOptions>,
-) -> Result<impl Responder> {
-    let options = options.into_inner().validated()?;
-    let list = ctx
-        .dataset_db_ref()
-        .dataset_provider(&session, provider.into_inner())
-        .await?
-        .list(options) // TODO: authorization
-        .await?;
-    Ok(web::Json(list))
-}
+// async fn list_external_datasets_handler<C: Context>(
+//     provider: web::Path<DatasetProviderId>,
+//     session: C::Session,
+//     ctx: web::Data<C>,
+//     options: web::Query<DatasetListOptions>,
+// ) -> Result<impl Responder> {
+//     let options = options.into_inner().validated()?;
+//     let list = ctx
+//         .dataset_db_ref()
+//         .dataset_provider(&session, provider.into_inner())
+//         .await?
+//         .list(options) // TODO: authorization
+//         .await?;
+//     Ok(web::Json(list))
+// }
 
 /// Lists available [Datasets](crate::datasets::listing::DatasetListing).
 ///

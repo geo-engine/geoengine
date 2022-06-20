@@ -3,14 +3,12 @@ use std::marker::PhantomData;
 
 use crate::datasets::listing::{Provenance, ProvenanceOutput};
 use crate::error::Error;
+use crate::layers::external::{ExternalLayerProvider, ExternalLayerProviderDefinition};
+use crate::layers::layer::{CollectionItem, Layer, LayerCollectionListOptions, LayerListing};
+use crate::layers::listing::{LayerCollectionId, LayerCollectionProvider, LayerId};
+use crate::layers::storage::LayerProviderId;
 use crate::{datasets::listing::DatasetListOptions, error::Result};
-use crate::{
-    datasets::{
-        listing::{DatasetListing, ExternalDatasetProvider},
-        storage::ExternalDatasetProviderDefinition,
-    },
-    util::user_input::Validated,
-};
+use crate::{datasets::listing::DatasetListing, util::user_input::Validated};
 use async_trait::async_trait;
 use bb8_postgres::bb8::{Pool, PooledConnection};
 use bb8_postgres::tokio_postgres::{Config, NoTls};
@@ -32,8 +30,8 @@ use geoengine_operators::{
 };
 use serde::{Deserialize, Serialize};
 
-pub const GFBIO_PROVIDER_ID: DatasetProviderId =
-    DatasetProviderId::from_u128(0x907f_9f5b_0304_4a0e_a5ef_28de_62d1_c0f9);
+pub const GFBIO_PROVIDER_ID: LayerProviderId =
+    LayerProviderId::from_u128(0x907f_9f5b_0304_4a0e_a5ef_28de_62d1_c0f9);
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 struct DatabaseConnectionConfig {
@@ -73,8 +71,8 @@ pub struct GfbioDataProviderDefinition {
 
 #[typetag::serde]
 #[async_trait]
-impl ExternalDatasetProviderDefinition for GfbioDataProviderDefinition {
-    async fn initialize(self: Box<Self>) -> Result<Box<dyn ExternalDatasetProvider>> {
+impl ExternalLayerProviderDefinition for GfbioDataProviderDefinition {
+    async fn initialize(self: Box<Self>) -> Result<Box<dyn ExternalLayerProvider>> {
         Ok(Box::new(GfbioDataProvider::new(self.db_config).await?))
     }
 
@@ -169,15 +167,26 @@ impl GfbioDataProvider {
 }
 
 #[async_trait]
-impl ExternalDatasetProvider for GfbioDataProvider {
-    async fn list(&self, _options: Validated<DatasetListOptions>) -> Result<Vec<DatasetListing>> {
+impl LayerCollectionProvider for GfbioDataProvider {
+    async fn collection_items(
+        &self,
+        collection: LayerCollectionId,
+        options: Validated<LayerCollectionListOptions>,
+    ) -> Result<Vec<CollectionItem>> {
+        todo!()
+    }
+
+    async fn root_collection_items(
+        &self,
+        options: Validated<LayerCollectionListOptions>,
+    ) -> Result<Vec<CollectionItem>> {
         let conn = self.pool.get().await?;
 
         let stmt = conn
             .prepare(&format!(
                 r#"
-            SELECT surrogate_key, "{title}", "{details}"
-            FROM {schema}.abcd_datasets;"#,
+                SELECT surrogate_key, "{title}", "{details}"
+                FROM {schema}.abcd_datasets;"#,
                 title = self
                     .column_name_to_hash
                     .get("/DataSets/DataSet/Metadata/Description/Representation/Title")
@@ -194,32 +203,31 @@ impl ExternalDatasetProvider for GfbioDataProvider {
 
         let listings: Vec<_> = rows
             .into_iter()
-            .map(|row| DatasetListing {
-                id: DatasetId::External(ExternalDatasetId {
-                    provider_id: GFBIO_PROVIDER_ID,
-                    dataset_id: row.get::<usize, i32>(0).to_string(),
-                }),
-                name: row.get(1),
-                description: row.try_get(2).unwrap_or_else(|_| "".to_owned()),
-                tags: vec![],
-                source_operator: "OgrSource".to_owned(),
-                result_descriptor: TypedResultDescriptor::Vector(VectorResultDescriptor {
-                    data_type: VectorDataType::MultiPoint,
-                    spatial_reference: SpatialReference::epsg_4326().into(),
-                    columns: self
-                        .column_hash_to_name
-                        .iter()
-                        .filter(|(_, name)| name.starts_with("/DataSets/DataSet/Units/Unit/"))
-                        .map(|(_, name)| (name.clone(), FeatureDataType::Text))
-                        .collect(),
-                }),
-                symbology: None,
+            .map(|row| {
+                CollectionItem::Layer(LayerListing {
+                    provider: GFBIO_PROVIDER_ID,
+                    layer: row.get::<usize, i32>(0).to_string(),
+                    name: row.get(1),
+                    description: row.try_get(2).unwrap_or_else(|_| "".to_owned()),
+                })
             })
             .collect();
 
         Ok(listings)
     }
 
+    async fn get_layer(&self, id: LayerId) -> Result<Layer> {
+        Ok(Layer {
+            id,
+            name: todo!(),
+            description: todo!(),
+            workflow: todo!(),
+            symbology: todo!(),
+        })
+}
+
+#[async_trait]
+impl ExternalLayerProvider for GfbioDataProvider {
     async fn provenance(&self, dataset: &DatasetId) -> Result<ProvenanceOutput> {
         let surrogate_key: i32 = dataset
             .external()
