@@ -454,7 +454,8 @@ mod tests {
         TimeInterval,
     };
     use geoengine_datatypes::raster::{
-        EmptyGrid2D, Grid2D, RasterDataType, RasterTile2D, TileInformation, TilingSpecification, MaskedGrid2D,
+        EmptyGrid2D, Grid2D, MaskedGrid2D, RasterDataType, RasterTile2D, TileInformation,
+        TilingSpecification,
     };
     use geoengine_datatypes::spatial_reference::SpatialReference;
     use geoengine_datatypes::util::test::TestDefault;
@@ -1171,10 +1172,15 @@ mod tests {
                             tile_size_in_pixels,
                         },
                         MaskedGrid2D::new(
-                            Grid2D::new(tile_size_in_pixels, vec![1, 2, 0, 4, 0, 6, 7, 0])
+                            Grid2D::new(tile_size_in_pixels, vec![1, 2, 0, 4, 0, 6, 7, 0]).unwrap(),
+                            Grid2D::new(
+                                tile_size_in_pixels,
+                                vec![true, true, false, true, false, true, true, false],
+                            )
                             .unwrap(),
-                            Grid2D::new(tile_size_in_pixels, vec![true, true, false, true, false, true, true, false])
-                            .unwrap()).unwrap().into(),
+                        )
+                        .unwrap()
+                        .into(),
                     )],
                     result_descriptor: RasterResultDescriptor {
                         data_type: RasterDataType::U8,
@@ -1313,10 +1319,15 @@ mod tests {
                         tile_size_in_pixels,
                     },
                     MaskedGrid2D::new(
-                        Grid2D::new(tile_size_in_pixels, vec![1, 2, 0, 4, 0, 6, 7, 0])
+                        Grid2D::new(tile_size_in_pixels, vec![1, 2, 0, 4, 0, 6, 7, 0]).unwrap(),
+                        Grid2D::new(
+                            tile_size_in_pixels,
+                            vec![true, true, false, true, false, true, true, false],
+                        )
                         .unwrap(),
-                        Grid2D::new(tile_size_in_pixels, vec![true, true, false, true, false, true, true, false])
-                        .unwrap()).unwrap().into()
+                    )
+                    .unwrap()
+                    .into(),
                 )],
                 result_descriptor: RasterResultDescriptor {
                     data_type: RasterDataType::U8,

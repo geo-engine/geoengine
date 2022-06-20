@@ -596,7 +596,7 @@ mod tests {
         BoundingBox2D, DateTime, FeatureData, NoGeometry, SpatialResolution, TimeInterval,
     };
     use geoengine_datatypes::raster::{
-        Grid2D, RasterDataType, RasterTile2D, TileInformation, TilingSpecification, EmptyGrid2D,
+        EmptyGrid2D, Grid2D, RasterDataType, RasterTile2D, TileInformation, TilingSpecification,
     };
     use geoengine_datatypes::spatial_reference::SpatialReference;
     use geoengine_datatypes::util::test::TestDefault;
