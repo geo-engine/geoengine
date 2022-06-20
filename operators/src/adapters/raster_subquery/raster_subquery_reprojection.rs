@@ -37,7 +37,7 @@ pub struct TileReprojectionSubQuery<T, F> {
     pub in_spatial_res: SpatialResolution,
     pub valid_bounds_in: Option<SpatialPartition2D>,
     pub valid_bounds_out: Option<SpatialPartition2D>,
-    _phantom_data: PhantomData<T>,
+    pub _phantom_data: PhantomData<T>,
 }
 
 impl<'a, T, FoldM, FoldF> SubQueryTileAggregator<'a, T> for TileReprojectionSubQuery<T, FoldM>

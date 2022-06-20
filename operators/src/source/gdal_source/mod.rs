@@ -300,7 +300,7 @@ where
 {
     pub tiling_specification: TilingSpecification,
     pub meta_data: GdalMetaData,
-    _phandom_data: PhantomData<T>,
+    pub _phandom_data: PhantomData<T>,
 }
 
 struct GdalRasterLoader {}

@@ -6,7 +6,7 @@ use geoengine_datatypes::{
     primitives::{RasterQueryRectangle, SpatialPartition2D, TimeInterval},
     raster::{
         ConvertDataType, GeoTransform, Grid2D, GridIdx2D, GridShape2D, GridShapeAccess, GridSize,
-        NoDataValue, Pixel, RasterTile2D,
+        MaskedGrid, Pixel, RasterTile2D,
     },
 };
 use libloading::Symbol;
@@ -85,13 +85,16 @@ where
                 let program = self.program.clone();
                 let map_no_data = self.map_no_data;
 
-                let data = crate::util::spawn_blocking_with_thread_pool(
+                let (data, validity_mask) = crate::util::spawn_blocking_with_thread_pool(
                     ctx.thread_pool().clone(),
                     move || Tuple::compute_expression(rasters, &program, map_no_data, out_no_data),
                 )
                 .await??;
 
-                let out = Grid2D::<TO>::new(output_grid_shape, data)?.into();
+                let out_grid = Grid2D::<TO>::new(output_grid_shape, data)?;
+                let out_validity_mask = Grid2D::<bool>::new(output_grid_shape, validity_mask)?;
+
+                let out = MaskedGrid::new(out_grid, out_validity_mask)?.into();
 
                 Ok(RasterTile2D::new(
                     out_time,
@@ -126,7 +129,7 @@ trait ExpressionTupleProcessor<TO: Pixel>: Send + Sync {
         program: &LinkedExpression,
         map_no_data: bool,
         out_no_data: TO,
-    ) -> Result<Vec<TO>>;
+    ) -> Result<(Vec<TO>, Vec<bool>)>;
 }
 
 #[async_trait]
@@ -176,7 +179,7 @@ where
         program: &LinkedExpression,
         map_no_data: bool,
         out_no_data: TO,
-    ) -> Result<Vec<TO>> {
+    ) -> Result<(Vec<TO>, Vec<bool>)> {
         let expression = unsafe {
             // we have to "trust" that the function has the signature we expect
             program.function_3::<f64, bool, f64>()?
@@ -184,25 +187,30 @@ where
 
         // cannot be empty at this point
         let tile = raster.into_materialized_tile();
+        let x_axis_size = tile.grid_array.inner_grid.grid_shape().axis_size_x();
 
-        let data = tile
-            .grid_array
-            .inner_grid
+        let res = (
+            tile.grid_array.inner_grid.data,
+            tile.grid_array.validity_mask.data,
+        )
             .par_iter()
-            .with_min_len(tile.grid_array.grid_shape().axis_size_x())
-            .map(|a| {
-                let is_no_data = tile.is_no_data(*a);
-
-                if !map_no_data && is_no_data {
-                    return out_no_data;
+            .with_min_len(x_axis_size)
+            .map(|(a, &is_a_valid)| {
+                if !map_no_data && !is_a_valid {
+                    return (out_no_data, false);
                 }
 
-                let result = expression(a.as_(), is_no_data, out_no_data.as_());
-                TO::from_(result)
-            })
-            .collect();
+                let result = expression(a.as_(), !is_a_valid, out_no_data.as_());
 
-        Result::<Vec<TO>>::Ok(data)
+                let result_t = TO::from_(result);
+
+                let out_is_no_data = result != result || result_t == out_no_data;
+
+                (result_t, !out_is_no_data)
+            })
+            .collect::<(Vec<TO>, Vec<bool>)>();
+
+        Result::Ok(res)
     }
 }
 
@@ -258,7 +266,7 @@ where
         program: &LinkedExpression,
         map_no_data: bool,
         out_no_data: TO,
-    ) -> Result<Vec<TO>> {
+    ) -> Result<(Vec<TO>, Vec<bool>)> {
         let expression = unsafe {
             // we have to "trust" that the function has the signature we expect
             program.function_5::<f64, bool, f64, bool, f64>()?
@@ -268,15 +276,20 @@ where
         let tile_0 = rasters.0.into_materialized_tile();
         let tile_1 = rasters.1.into_materialized_tile();
 
-        let data = (&tile_0.grid_array.inner_grid, &tile_1.grid_array.inner_grid)
+        let res = (
+            &tile_0.grid_array.inner_grid.data,
+            &tile_0.grid_array.validity_mask.data,
+            &tile_1.grid_array.inner_grid.data,
+            &tile_1.grid_array.validity_mask.data,
+        )
             .into_par_iter()
             .with_min_len(tile_0.grid_array.grid_shape().axis_size_x())
-            .map(|(a, b)| {
-                let is_a_no_data = tile_0.is_no_data(*a);
-                let is_b_no_data = tile_1.is_no_data(*b);
+            .map(|(a, &is_a_valid, b, &is_b_valid)| {
+                let is_a_no_data = !is_a_valid;
+                let is_b_no_data = !is_b_valid;
 
                 if !map_no_data && (is_a_no_data || is_b_no_data) {
-                    return out_no_data;
+                    return (out_no_data, false);
                 }
 
                 let result = expression(
@@ -286,11 +299,15 @@ where
                     is_b_no_data,
                     out_no_data.as_(),
                 );
-                TO::from_(result)
-            })
-            .collect();
+                let result_t = TO::from_(result);
 
-        Result::<Vec<TO>>::Ok(data)
+                let out_is_no_data = result != result || result_t == out_no_data;
+
+                (result_t, !out_is_no_data)
+            })
+            .collect::<(Vec<TO>, Vec<bool>)>();
+
+        Result::Ok(res)
     }
 }
 
@@ -333,6 +350,8 @@ macro_rules! impl_expression_tuple_processor {
                 |
                 $( [< pixel_ $x >] ),*
                 |
+                $( [< pixel_is_valid $x >] ),*
+                |
                 $( [< is_nodata_ $x >] ),*
                 |
                 [< Function $i >]
@@ -341,7 +360,7 @@ macro_rules! impl_expression_tuple_processor {
     };
 
     // We have `0, 1, 2, …` and `T0, T1, T2, …`
-    (@inner $( $I:tt ),+ | $( $T:tt ),+ | $( $TILE:tt ),+ | $( $PIXEL:tt ),+ | $( $IS_NODATA:tt ),+ | $FN_T:ty ) => {
+    (@inner $( $I:tt ),+ | $( $T:tt ),+ | $( $TILE:tt ),+ | $( $PIXEL:tt ),+ | $( $PIXEL_IS_VALID:tt ),+ | $( $IS_NODATA:tt ),+ | $FN_T:ty ) => {
         #[async_trait]
         impl<TO, $($T),*> ExpressionTupleProcessor<TO>
             for (
@@ -400,7 +419,7 @@ macro_rules! impl_expression_tuple_processor {
                 program: &LinkedExpression,
                 map_no_data: bool,
                 out_no_data: TO,
-            ) -> Result<Vec<TO>> {
+            ) -> Result<(Vec<TO>, Vec<bool>)> {
                 let expression: Symbol<$FN_T> = unsafe {
                     // we have to "trust" that the function has the signature we expect
                     program.function_nary()?
@@ -415,18 +434,19 @@ macro_rules! impl_expression_tuple_processor {
 
                 let data = (
                     $(
-                        & $TILE.grid_array.data
+                        & $TILE.grid_array.inner_grid.data,
+                        & $TILE.grid_array.validity_mask.data
                     ),*
                 )
                     .into_par_iter()
                     .with_min_len(min_batch_size)
-                    .map(|( $($PIXEL),* )| {
+                    .map(|( $($PIXEL, $PIXEL_IS_VALID),* )| {
                         $(
-                            let $IS_NODATA = $TILE.is_no_data(* $PIXEL);
+                            let $IS_NODATA = !$PIXEL_IS_VALID;
                         )*
 
                         if !map_no_data && ( $($IS_NODATA)||* ) {
-                            return out_no_data;
+                            return (out_no_data, false);
                         }
 
                         let result = expression(
@@ -436,11 +456,16 @@ macro_rules! impl_expression_tuple_processor {
                             )*
                             out_no_data.as_(),
                         );
-                        TO::from_(result)
+
+                        let result_t = TO::from_(result);
+
+                        let out_is_no_data = result != result || result_t == out_no_data;
+
+                        (result_t, !out_is_no_data)
                     })
                     .collect();
 
-                Result::<Vec<TO>>::Ok(data)
+                Result::Ok(data)
             }
         }
     };
@@ -455,5 +480,5 @@ impl_expression_tuple_processor!(3 => 0, 1, 2);
 impl_expression_tuple_processor!(4 => 0, 1, 2, 3);
 impl_expression_tuple_processor!(5 => 0, 1, 2, 3, 4);
 impl_expression_tuple_processor!(6 => 0, 1, 2, 3, 4, 5);
-impl_expression_tuple_processor!(7 => 0, 1, 2, 3, 4, 5, 6);
-impl_expression_tuple_processor!(8 => 0, 1, 2, 3, 4, 5, 6, 7);
+//impl_expression_tuple_processor!(7 => 0, 1, 2, 3, 4, 5, 6);
+//impl_expression_tuple_processor!(8 => 0, 1, 2, 3, 4, 5, 6, 7);

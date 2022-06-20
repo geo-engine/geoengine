@@ -274,7 +274,6 @@ impl RasterOperator for Expression {
                 .output_measurement
                 .as_ref()
                 .map_or(Measurement::Unitless, Measurement::clone),
-            no_data_value: Some(self.params.output_no_data_value), // TODO: is it possible to have none?
             time,
             bbox,
         };
@@ -284,6 +283,7 @@ impl RasterOperator for Expression {
             sources,
             expression,
             map_no_data: self.params.map_no_data,
+            output_no_data_value: self.params.output_no_data_value,
         };
 
         Ok(initialized_operator.boxed())
@@ -295,6 +295,7 @@ pub struct InitializedExpression {
     sources: ExpressionInitializedSources,
     expression: ExpressionAst,
     map_no_data: bool,
+    output_no_data_value: f64,
 }
 
 pub struct ExpressionInitializedSources {
@@ -330,10 +331,7 @@ impl InitializedRasterOperator for InitializedExpression {
     fn query_processor(&self) -> Result<TypedRasterQueryProcessor> {
         let output_type = self.result_descriptor().data_type;
         // TODO: allow processing expression without NO DATA
-        let output_no_data_value = self
-            .result_descriptor()
-            .no_data_value
-            .context(error::MissingOutputNoDataValue)?;
+        let output_no_data_value = self.output_no_data_value;
 
         let expression = LinkedExpression::new(&self.expression)?;
 
@@ -476,6 +474,8 @@ impl InitializedRasterOperator for InitializedExpression {
                     .boxed()
                 )
             }
+            // TODO: the zip method in the processor allows only a limited number of arrays. Use idx iterator and get_at_ instead?
+            /*
             7 => {
                 let [a, b, c, d, e, f, g] =
                     <[_; 7]>::try_from(query_processors).expect("len previously checked");
@@ -522,7 +522,7 @@ impl InitializedRasterOperator for InitializedExpression {
                     )
                     .boxed()
                 )
-            }
+            }*/
             _ => return Err(crate::error::Error::InvalidNumberOfExpressionInputs),
         })
     }
@@ -541,7 +541,10 @@ mod tests {
     use geoengine_datatypes::primitives::{
         Measurement, RasterQueryRectangle, SpatialPartition2D, SpatialResolution, TimeInterval,
     };
-    use geoengine_datatypes::raster::{Grid2D, RasterTile2D, TileInformation, TilingSpecification};
+    use geoengine_datatypes::raster::{
+        Grid2D, GridOrEmpty, MapMaskedElements, MaskedGrid2D, RasterTile2D, TileInformation,
+        TilingSpecification,
+    };
     use geoengine_datatypes::spatial_reference::SpatialReference;
     use geoengine_datatypes::util::test::TestDefault;
 
@@ -675,13 +678,9 @@ mod tests {
 
         assert_eq!(
             result[0].as_ref().unwrap().grid_array,
-            Grid2D::new(
-                [3, 2].into(),
-                vec![2, 4, 3, 8, 10, 12],
-                no_data_value_option,
-            )
-            .unwrap()
-            .into()
+            Grid2D::new([3, 2].into(), vec![2, 4, 3, 8, 10, 12],)
+                .unwrap()
+                .into()
         );
     }
 
@@ -747,13 +746,9 @@ mod tests {
 
         assert_eq!(
             result[0].as_ref().unwrap().grid_array,
-            Grid2D::new(
-                [3, 2].into(),
-                vec![2, 4, 6, 8, 10, 12],
-                no_data_value_option,
-            )
-            .unwrap()
-            .into()
+            Grid2D::new([3, 2].into(), vec![2, 4, 6, 8, 10, 12],)
+                .unwrap()
+                .into()
         );
     }
 
@@ -820,13 +815,9 @@ mod tests {
 
         assert_eq!(
             result[0].as_ref().unwrap().grid_array,
-            Grid2D::new(
-                [3, 2].into(),
-                vec![2, 4, 6, 8, 10, 12],
-                no_data_value_option,
-            )
-            .unwrap()
-            .into()
+            Grid2D::new([3, 2].into(), vec![2, 4, 6, 8, 10, 12],)
+                .unwrap()
+                .into()
         );
     }
 
@@ -900,7 +891,7 @@ mod tests {
 
         assert_eq!(
             result[0].as_ref().unwrap().grid_array,
-            Grid2D::new([3, 2].into(), vec![1, 2, 6, 4, 5, 42], no_data_value_option,)
+            Grid2D::new([3, 2].into(), vec![1, 2, 6, 4, 5, 42],)
                 .unwrap()
                 .into()
         );
@@ -971,13 +962,9 @@ mod tests {
 
         assert_eq!(
             result[0].as_ref().unwrap().grid_array,
-            Grid2D::new(
-                [3, 2].into(),
-                vec![3, 6, 3, 12, 15, 18],
-                no_data_value_option,
-            )
-            .unwrap()
-            .into()
+            Grid2D::new([3, 2].into(), vec![3, 6, 3, 12, 15, 18],)
+                .unwrap()
+                .into()
         );
     }
 
@@ -1051,13 +1038,9 @@ mod tests {
 
         assert_eq!(
             result[0].as_ref().unwrap().grid_array,
-            Grid2D::new(
-                [3, 2].into(),
-                vec![8, 16, 24, 32, 40, 48],
-                no_data_value_option,
-            )
-            .unwrap()
-            .into()
+            Grid2D::new([3, 2].into(), vec![8, 16, 24, 32, 40, 48],)
+                .unwrap()
+                .into()
         );
     }
 
@@ -1124,18 +1107,32 @@ mod tests {
 
         assert_eq!(
             result[0].as_ref().unwrap().grid_array,
-            Grid2D::new(
-                [3, 2].into(),
-                vec![3, 6, 9, 10, 10, 10],
-                no_data_value_option,
-            )
-            .unwrap()
-            .into()
+            Grid2D::new([3, 2].into(), vec![3, 6, 9, 10, 10, 10],)
+                .unwrap()
+                .into()
         );
     }
 
     fn make_raster(no_data_value: Option<i8>) -> Box<dyn RasterOperator> {
-        let raster = Grid2D::new([3, 2].into(), vec![1, 2, 3, 4, 5, 6], no_data_value).unwrap();
+        let raster = Grid2D::<i8>::new([3, 2].into(), vec![1, 2, 3, 4, 5, 6]).unwrap();
+
+        let real_raster = if let Some(no_data_value) = no_data_value {
+            MaskedGrid2D::from(raster)
+                .map_or_mask_elements(|e| {
+                    if let Some(v) = e {
+                        if v == no_data_value {
+                            None
+                        } else {
+                            Some(v)
+                        }
+                    } else {
+                        None
+                    }
+                })
+                .into()
+        } else {
+            GridOrEmpty::from(raster)
+        };
 
         let raster_tile = RasterTile2D::new_with_tile_info(
             TimeInterval::default(),
@@ -1144,7 +1141,7 @@ mod tests {
                 tile_size_in_pixels: [3, 2].into(),
                 global_geo_transform: TestDefault::test_default(),
             },
-            raster.into(),
+            real_raster,
         );
 
         MockRasterSource {
@@ -1154,7 +1151,6 @@ mod tests {
                     data_type: RasterDataType::I8,
                     spatial_reference: SpatialReference::epsg_4326().into(),
                     measurement: Measurement::Unitless,
-                    no_data_value: no_data_value.map(f64::from),
                     time: None,
                     bbox: None,
                 },

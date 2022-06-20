@@ -73,10 +73,10 @@ impl<T> TemporalMeanTileAccu<T> {
 
             GridOrEmpty::Empty(_) => {
                 // this could stay empty?
-                let mut accu_grid = self.value_grid.clone().into_materialized_grid();
+                let accu_grid = self.value_grid.clone().into_materialized_grid();
 
                 let map_fn = |grid_index, _acc_values_option| {
-                    let new_value_option = in_tile
+                    let new_value_option = in_tile_grid
                         .get_masked_at_grid_index(grid_index)
                         .expect("Grid Index was invalid before.");
                     if let Some(new_value) = new_value_option {
@@ -90,11 +90,11 @@ impl<T> TemporalMeanTileAccu<T> {
                 self.value_grid = accu_grid.map_index_elements(map_fn).into(); // TODO: could also do this parallel
             }
 
-            GridOrEmpty::Grid(accu_grid) => {
-                let mut accu_grid = self.value_grid.clone().into_materialized_grid();
+            GridOrEmpty::Grid(_) => {
+                let accu_grid = self.value_grid.clone().into_materialized_grid(); // TODO do not clone!
 
                 let map_fn = |grid_index, acc_values_option| {
-                    let new_value_option = in_tile
+                    let new_value_option = in_tile_grid
                         .get_masked_at_grid_index(grid_index)
                         .expect("Grid Index was invalid before.")
                         .map(|v| v.as_());
@@ -105,7 +105,7 @@ impl<T> TemporalMeanTileAccu<T> {
                         }
                         (None, Some(_)) => None,
                         (Some(v), None) if self.ignore_no_data => Some(v),
-                        (Some(v), None) => None,
+                        (Some(_), None) => None,
                         (Some((acc_value, acc_count)), Some(new_value)) => {
                             let delta = new_value - acc_value;
                             let new_acc_value = acc_value + delta / (acc_count as f64);
@@ -188,7 +188,7 @@ pub struct TemporalRasterMeanAggregationSubQuery<F, T: Pixel> {
     pub ignore_no_data: bool,
     pub step: TimeStep,
     pub step_reference: TimeInstance,
-    _phantom_pixel_type: PhantomData<T>,
+    pub _phantom_pixel_type: PhantomData<T>,
 }
 
 impl<'a, T, FoldM, FoldF> SubQueryTileAggregator<'a, T>

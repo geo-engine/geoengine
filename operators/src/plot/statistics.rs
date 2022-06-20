@@ -217,7 +217,6 @@ mod tests {
         Grid2D, RasterDataType, RasterTile2D, TileInformation, TilingSpecification,
     };
     use geoengine_datatypes::spatial_reference::SpatialReference;
-    use num_traits::AsPrimitive;
 
     #[test]
     fn serialization() {

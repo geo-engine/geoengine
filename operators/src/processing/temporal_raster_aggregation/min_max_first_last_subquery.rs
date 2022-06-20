@@ -115,15 +115,15 @@ where
         tile.grid_array
     } else {
         match (accu_tile.grid_array, tile.grid_array) {
-            (GridOrEmpty::Grid(mut a), GridOrEmpty::Grid(g)) => {
+            (GridOrEmpty::Grid(a), GridOrEmpty::Grid(g)) => {
                 let map_fn = |grid_index, acc_value| {
-                    let tile_value = tile
+                    let tile_value = g
                         .get_masked_at_grid_index(grid_index)
                         .expect("grid index was wrong before");
                     C::acc(acc_value, tile_value)
                 };
 
-                GridOrEmpty::from(accu_tile.grid_array.map_index_elements(map_fn))
+                GridOrEmpty::from(a.map_index_elements(map_fn))
                 // TODO: could also use parallel map_index_elements_parallel
             }
             (GridOrEmpty::Empty(e), _) | (_, GridOrEmpty::Empty(e)) => GridOrEmpty::Empty(e),
@@ -153,15 +153,15 @@ where
     } = acc;
 
     let grid = match (accu_tile.grid_array, tile.grid_array) {
-        (GridOrEmpty::Grid(mut a), GridOrEmpty::Grid(g)) => {
+        (GridOrEmpty::Grid(a), GridOrEmpty::Grid(g)) => {
             let map_fn = |grid_index, acc_value| {
-                let tile_value = tile
+                let tile_value = g
                     .get_masked_at_grid_index(grid_index)
                     .expect("grid index was wrong before");
                 C::acc_ignore_no_data(acc_value, tile_value)
             };
 
-            GridOrEmpty::from(accu_tile.grid_array.map_index_elements(map_fn)) // TODO: could also use parallel map_index_elements_parallel
+            GridOrEmpty::from(a.map_index_elements(map_fn)) // TODO: could also use parallel map_index_elements_parallel
         }
         // TODO: need to increase temporal validity?
         (GridOrEmpty::Grid(a), GridOrEmpty::Empty(_)) => GridOrEmpty::Grid(a),
@@ -311,7 +311,7 @@ pub struct TemporalRasterAggregationSubQuery<F, T: Pixel> {
     pub fold_fn: F,
     pub step: TimeStep,
     pub step_reference: TimeInstance,
-    _phantom_pixel_type: PhantomData<T>,
+    pub _phantom_pixel_type: PhantomData<T>,
 }
 
 impl<'a, T, FoldM, FoldF> SubQueryTileAggregator<'a, T>
@@ -382,7 +382,7 @@ pub struct TemporalRasterAggregationSubQueryNoDataOnly<F, T: Pixel> {
     pub fold_fn: F,
     pub step: TimeStep,
     pub step_reference: TimeInstance,
-    _phantom_pixel_type: PhantomData<T>,
+    pub _phantom_pixel_type: PhantomData<T>,
 }
 
 impl<'a, T, FoldM, FoldF> SubQueryTileAggregator<'a, T>
