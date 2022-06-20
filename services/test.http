@@ -240,3 +240,8 @@ Accept: application/json
 }
 
 ###
+
+GET http://localhost:3030/tasks/e2df22e4-83a8-4d90-8eec-08b83cb60a74/status
+Authorization: Bearer 9f33d4be-c68e-4385-93f5-176ae59a579d
+
+###

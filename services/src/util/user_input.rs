@@ -5,6 +5,7 @@ use actix_web::{FromRequest, HttpRequest};
 use futures::future::{err, ok, Ready};
 use log::debug;
 use serde::de;
+use std::ops::Deref;
 
 pub trait UserInput: Clone {
     /// Validates user input and returns itself
@@ -32,6 +33,14 @@ pub trait UserInput: Clone {
 #[derive(Debug, Clone)]
 pub struct Validated<T: UserInput + Clone> {
     pub user_input: T,
+}
+
+impl<T: UserInput + Clone> Deref for Validated<T> {
+    type Target = T;
+
+    fn deref(&self) -> &T {
+        &self.user_input
+    }
 }
 
 pub struct QueryEx<T>(pub T);

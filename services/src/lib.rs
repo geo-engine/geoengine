@@ -33,6 +33,7 @@ pub mod server;
 pub mod stac;
 #[macro_use]
 pub mod util;
+pub mod tasks;
 pub mod workflows;
 
 /// Compiles Geo Engine Pro
