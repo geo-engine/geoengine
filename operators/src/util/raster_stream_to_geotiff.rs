@@ -10,7 +10,8 @@ use geoengine_datatypes::primitives::{
     AxisAlignedRectangle, RasterQueryRectangle, SpatialPartition2D, SpatialPartitioned,
 };
 use geoengine_datatypes::raster::{
-    ChangeGridBounds, GeoTransform, Grid2D, GridBlit, GridIdx, GridSize, Pixel, RasterTile2D,
+    ChangeGridBounds, EmptyGrid2D, GeoTransform, GridBlit, GridIdx, GridSize, MaskedGrid2D, Pixel,
+    RasterTile2D,
 };
 use geoengine_datatypes::spatial_reference::SpatialReference;
 use log::debug;
@@ -223,15 +224,10 @@ impl<P: Pixel + GdalType> GdalDatasetWriter<P> {
                 .intersection(&tile_bounds)
                 .expect("tile must intersect with query");
 
-            let mut output_grid = Grid2D::new_filled(
-                intersection.grid_shape(
-                    self.output_geo_transform.origin_coordinate,
-                    self.output_geo_transform.spatial_resolution(),
-                ),
-                self.gdal_tiff_metadata
-                    .no_data_value
-                    .map_or_else(P::zero, P::from_),
-            );
+            let mut output_grid = MaskedGrid2D::from(EmptyGrid2D::new(intersection.grid_shape(
+                self.output_geo_transform.origin_coordinate,
+                self.output_geo_transform.spatial_resolution(),
+            )));
 
             let offset = tile
                 .tile_geo_transform()
@@ -239,7 +235,7 @@ impl<P: Pixel + GdalType> GdalDatasetWriter<P> {
 
             let shifted_source = tile.grid_array.shift_by_offset(GridIdx([-1, -1]) * offset);
 
-            output_grid.grid_blit_from(shifted_source);
+            output_grid.grid_blit_from(&shifted_source);
 
             (intersection.upper_left(), output_grid)
         };
@@ -255,7 +251,7 @@ impl<P: Pixel + GdalType> GdalDatasetWriter<P> {
         let shape = grid_array.axis_size();
         let window_size = (shape[1], shape[0]);
 
-        let buffer = Buffer::new(window_size, grid_array.inner_grid);
+        let buffer = Buffer::new(window_size, grid_array.inner_grid.data); // TODO: also write mask!
 
         self.dataset
             .rasterband(self.rasterband_index)?

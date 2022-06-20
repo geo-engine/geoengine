@@ -185,8 +185,11 @@ where
         let offset = tile.properties.number_property::<f32>(&self.offset_key)?;
         let slope = tile.properties.number_property::<f32>(&self.slope_key)?;
 
-        let map_fn = |raw_value_option: Option<P>| {
-            raw_value_option.map(|raw_value| offset + raw_value.as_() * slope)
+        let map_fn = move |raw_value_option: Option<P>| {
+            raw_value_option.map(|raw_value| {
+                let raw_f32: f32 = raw_value.as_();
+                offset + raw_f32 * slope
+            })
         };
 
         let result_tile =
@@ -276,13 +279,12 @@ mod tests {
 
         assert!(geoengine_datatypes::util::test::grid_or_empty_grid_eq(
             &result.as_ref().unwrap().grid_array,
-            &Grid2D::new(
-                [3, 2].into(),
-                vec![13.0, 15.0, 17.0, 19.0, 21.0, no_data_value_option.unwrap()],
-            )
-            .unwrap()
-            .into()
+            &Grid2D::new([3, 2].into(), vec![13.0, 15.0, 17.0, 19.0, 21.0, 0.],)
+                .unwrap()
+                .into()
         ));
+
+        // TODO: add assert to check mask
     }
 
     #[tokio::test]

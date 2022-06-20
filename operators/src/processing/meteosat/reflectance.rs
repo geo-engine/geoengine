@@ -8,8 +8,6 @@ use crate::engine::{
 use crate::util::Result;
 use async_trait::async_trait;
 use num_traits::AsPrimitive;
-use rayon::iter::{IndexedParallelIterator, ParallelIterator};
-use rayon::slice::ParallelSlice;
 use rayon::ThreadPool;
 use TypedRasterQueryProcessor::F32 as QueryProcessorOut;
 
@@ -21,8 +19,7 @@ use geoengine_datatypes::primitives::{
     SpatialPartition2D,
 };
 use geoengine_datatypes::raster::{
-    EmptyGrid, Grid2D, GridIdx2D, GridShapeAccess, GridSize, MaterializedRasterTile2D, NoDataValue,
-    RasterDataType, RasterPropertiesKey, RasterTile, RasterTile2D,
+    GridIdx2D, MapIndexedElementsParallel, RasterDataType, RasterPropertiesKey, RasterTile2D,
 };
 use serde::{Deserialize, Serialize};
 
@@ -210,7 +207,7 @@ where
         let esd = calculate_esd(&timestamp);
         let tile_geo_transform = tile.tile_geo_transform();
 
-        let map_fn = |grid_idx: GridIdx2D, pixel_option: Option<PixelOut>| {
+        let map_fn = move |grid_idx: GridIdx2D, pixel_option: Option<PixelOut>| {
             pixel_option.map(|p| {
                 if let Some(sun_pos) = sun_pos_option {
                     let geos_coord =
@@ -263,9 +260,7 @@ where
 #[cfg(test)]
 mod tests {
     use crate::engine::{MockExecutionContext, RasterOperator, SingleRasterSource};
-    use crate::processing::meteosat::reflectance::{
-        Reflectance, ReflectanceParams, OUT_NO_DATA_VALUE,
-    };
+    use crate::processing::meteosat::reflectance::{Reflectance, ReflectanceParams};
     use crate::processing::meteosat::test_util;
     use crate::util::Result;
     use geoengine_datatypes::primitives::{
@@ -362,7 +357,7 @@ mod tests {
 
         assert!(result.is_ok());
         assert!(geoengine_datatypes::util::test::grid_or_empty_grid_eq(
-            &result.as_ref().unwrap().grid_array.,
+            &result.as_ref().unwrap().grid_array,
             &Grid2D::new(
                 [3, 2].into(),
                 vec![

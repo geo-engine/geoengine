@@ -311,7 +311,6 @@ mod tests {
         primitives::{Measurement, SpatialResolution},
         raster::TilingSpecification,
     };
-    use num_traits::AsPrimitive;
 
     #[tokio::test]
     #[allow(clippy::too_many_lines)]
@@ -758,14 +757,14 @@ mod tests {
                         time: TimeInterval::new_unchecked(4, 10),
                         tile_position: [-1, 0].into(),
                         global_geo_transform: TestDefault::test_default(),
-                        grid_array: EmptyGrid::new([3, 2].into()).unwrap().into(),
+                        grid_array: EmptyGrid::new([3, 2].into()).into(),
                         properties: RasterProperties::default(),
                     },
                     RasterTile2D {
                         time: TimeInterval::new_unchecked(4, 10),
                         tile_position: [-1, 1].into(),
                         global_geo_transform: TestDefault::test_default(),
-                        grid_array: EmptyGrid::new([3, 2].into()).unwrap().into(),
+                        grid_array: EmptyGrid::new([3, 2].into()).into(),
                         properties: RasterProperties::default(),
                     },
                 ],
@@ -864,14 +863,14 @@ mod tests {
                         time: TimeInterval::new_unchecked(10, 20),
                         tile_position: [-1, 0].into(),
                         global_geo_transform: TestDefault::test_default(),
-                        grid_array: EmptyGrid::new([3, 2].into()).unwrap().into(),
+                        grid_array: EmptyGrid::new([3, 2].into()).into(),
                         properties: RasterProperties::default(),
                     },
                     RasterTile2D {
                         time: TimeInterval::new_unchecked(10, 20),
                         tile_position: [-1, 1].into(),
                         global_geo_transform: TestDefault::test_default(),
-                        grid_array: EmptyGrid::new([3, 2].into()).unwrap().into(),
+                        grid_array: EmptyGrid::new([3, 2].into()).into(),
                         properties: RasterProperties::default(),
                     },
                 ],
@@ -911,14 +910,14 @@ mod tests {
                         time: TimeInterval::new_unchecked(9, 20),
                         tile_position: [-1, 0].into(),
                         global_geo_transform: TestDefault::test_default(),
-                        grid_array: EmptyGrid::new([3, 2].into()).unwrap().into(),
+                        grid_array: EmptyGrid::new([3, 2].into()).into(),
                         properties: RasterProperties::default(),
                     },
                     RasterTile2D {
                         time: TimeInterval::new_unchecked(9, 20),
                         tile_position: [-1, 1].into(),
                         global_geo_transform: TestDefault::test_default(),
-                        grid_array: EmptyGrid::new([3, 2].into()).unwrap().into(),
+                        grid_array: EmptyGrid::new([3, 2].into()).into(),
                         properties: RasterProperties::default(),
                     },
                 ],

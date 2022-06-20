@@ -1,3 +1,4 @@
+use std::marker::PhantomData;
 use std::sync::Arc;
 
 use crate::error;
@@ -9,7 +10,7 @@ use geoengine_datatypes::operations::reproject::Reproject;
 use geoengine_datatypes::primitives::{
     RasterQueryRectangle, SpatialPartition2D, SpatialPartitioned,
 };
-use geoengine_datatypes::raster::{Grid2D, GridIndexAccess, GridSize};
+use geoengine_datatypes::raster::{Grid2D, GridIndexAccess, GridSize, MapIndexedElementsParallel};
 use geoengine_datatypes::{
     operations::reproject::{CoordinateProjection, CoordinateProjector},
     primitives::{SpatialResolution, TimeInterval},
@@ -32,11 +33,11 @@ use super::{FoldTileAccu, FoldTileAccuMut, SubQueryTileAggregator};
 pub struct TileReprojectionSubQuery<T, F> {
     pub in_srs: SpatialReference,
     pub out_srs: SpatialReference,
-    pub no_data_and_fill_value: T,
     pub fold_fn: F,
     pub in_spatial_res: SpatialResolution,
     pub valid_bounds_in: Option<SpatialPartition2D>,
     pub valid_bounds_out: Option<SpatialPartition2D>,
+    _phantom_data: PhantomData<T>,
 }
 
 impl<'a, T, FoldM, FoldF> SubQueryTileAggregator<'a, T> for TileReprojectionSubQuery<T, FoldM>
@@ -68,7 +69,6 @@ where
             query_rect,
             pool.clone(),
             tile_info,
-            self.no_data_and_fill_value,
             self.valid_bounds_out,
             self.out_srs,
             self.in_srs,
@@ -117,7 +117,6 @@ fn build_accu<T: Pixel>(
     query_rect: RasterQueryRectangle,
     pool: Arc<ThreadPool>,
     tile_info: TileInformation,
-    no_data_and_fill_value: T,
     valid_bounds_out: Option<SpatialPartition2D>,
     out_srs: SpatialReference,
     in_srs: SpatialReference,
@@ -150,6 +149,7 @@ fn build_accu<T: Pixel>(
 }
 
 fn projected_coordinate_grid_parallel(
+    // TODO: use a map/create_* _parallel method from Grid / Tile
     pool: &ThreadPool,
     tile_info: TileInformation,
     out_srs: SpatialReference,
@@ -285,11 +285,6 @@ pub fn fold_by_coordinate_lookup_impl<T>(
 where
     T: Pixel,
 {
-    const MIN_ELEMENTS_IN_PAR_CHUNK: usize = 32 * 512; // this must never be smaller than 1
-    let min_rows_in_par_chunk =
-        num::integer::div_ceil(MIN_ELEMENTS_IN_PAR_CHUNK, tile.grid_array.axis_size_x()).max(1);
-
-    // println!("fold_by_coordinate_lookup_impl {:?}", &tile.tile_position);
     let mut accu = accu;
     let t_union = accu.accu_tile.time.union(&tile.time)?;
 
@@ -305,45 +300,20 @@ where
         pool,
     } = accu;
 
-    let mut materialized_accu_tile = accu_tile.into_materialized_tile(); //in a fold chain the real materialization should only happen once. All other calls will be simple conversions.
-    let axis_size_x = materialized_accu_tile.grid_array.shape.axis_size_x();
-    let axis_size_y = materialized_accu_tile.grid_array.shape.axis_size_y();
+    let tile_bounding_box = tile.spatial_partition();
 
-    pool.install(|| {
-        let parallelism = pool.current_num_threads();
-        let par_chunk_split =
-            num::integer::div_ceil(axis_size_y, parallelism).max(min_rows_in_par_chunk); // don't go below MIN_ROWS_IN_PAR_CHUNK lines per chunk.
-        let par_chunk_size = axis_size_x * par_chunk_split;
+    let map_fn = |grid_idx, accu_value| {
+        let lookup_coord = coords.get_at_grid_index_unchecked(grid_idx);
+        let lookup_value = lookup_coord
+            .filter(|coord| tile_bounding_box.contains_coordinate(&coord))
+            .and_then(|coord| tile.pixel_value_at_coord_unchecked(coord));
+        lookup_value
+    };
 
-        materialized_accu_tile
-            .grid_array
-            .inner_grid
-            .par_chunks_mut(par_chunk_size)
-            .enumerate()
-            .for_each(|(chunk_idx, chunk_slice)| {
-                let chunk_start_y = chunk_idx * par_chunk_split;
-                let chunk_end_y = chunk_start_y + chunk_slice.len() / axis_size_x;
-
-                (chunk_start_y..chunk_end_y)
-                    .zip(chunk_slice.chunks_mut(axis_size_x))
-                    .for_each(|(y_idx, row)| {
-                        row.iter_mut().enumerate().for_each(|(x_idx, pixel)| {
-                            let grid_idx = GridIdx2D::from([y_idx as isize, x_idx as isize]);
-
-                            let lookup_coord = coords.get_at_grid_index_unchecked(grid_idx);
-                            if let Some(coord) = lookup_coord {
-                                if tile.spatial_partition().contains_coordinate(&coord) {
-                                    let lookup_value = tile.pixel_value_at_coord_unchecked(coord);
-                                    *pixel = lookup_value;
-                                }
-                            }
-                        });
-                    });
-            });
-    });
+    let new_accu = accu_tile.map_index_elements_parallel(map_fn);
 
     Ok(TileWithProjectionCoordinates {
-        accu_tile: materialized_accu_tile.into(),
+        accu_tile: new_accu,
         coords,
         pool,
     })
@@ -383,7 +353,6 @@ mod tests {
         raster::{Grid, GridShape, RasterDataType},
         util::test::TestDefault,
     };
-    use num_traits::AsPrimitive;
 
     use crate::{
         adapters::RasterSubQueryAdapter,
@@ -465,11 +434,6 @@ mod tests {
 
         let raster_res_desc: &RasterResultDescriptor = op.result_descriptor();
 
-        let no_data_v = raster_res_desc
-            .no_data_value
-            .map(AsPrimitive::as_)
-            .expect("must be 0 since we specified it above");
-
         let qp = op.query_processor().unwrap().get_u8().unwrap();
 
         let valid_bounds = projection.area_of_use_projected().unwrap();
@@ -477,11 +441,11 @@ mod tests {
         let state_gen = TileReprojectionSubQuery {
             in_srs: projection,
             out_srs: projection,
-            no_data_and_fill_value: no_data_v,
             fold_fn: fold_by_coordinate_lookup_future,
             in_spatial_res: query_rect.spatial_resolution,
             valid_bounds_in: Some(valid_bounds),
             valid_bounds_out: Some(valid_bounds),
+            _phantom_data: PhantomData,
         };
         let a = RasterSubQueryAdapter::new(&qp, query_rect, tiling_strat, &query_ctx, state_gen);
         let res = a

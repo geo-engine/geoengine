@@ -15,7 +15,7 @@ use geoengine_datatypes::primitives::{
     VectorQueryRectangle,
 };
 use geoengine_datatypes::raster::ConvertDataTypeParallel;
-use geoengine_datatypes::raster::{Grid2D, GridOrEmpty, GridSize, NoDataValue};
+use geoengine_datatypes::raster::{GridOrEmpty, GridSize};
 use geoengine_datatypes::spatial_reference::SpatialReferenceOption;
 use serde::{Deserialize, Serialize};
 use snafu::ensure;
@@ -145,7 +145,7 @@ impl PlotQueryProcessor for StatisticsQueryProcessor {
                     let mut number_statistics = number_statistics?;
                     let (i, raster_tile) = enumerated_raster_tile?;
                     match raster_tile.grid_array {
-                        GridOrEmpty::Grid(g) => process_raster(&mut number_statistics[i], &g),
+                        GridOrEmpty::Grid(g) => process_raster(&mut number_statistics[i], g.masked_copy_element_iterator()),
                         GridOrEmpty::Empty(n) => number_statistics[i].add_no_data_batch(n.number_of_elements())
                     }
 
@@ -161,20 +161,15 @@ impl PlotQueryProcessor for StatisticsQueryProcessor {
 }
 
 #[allow(clippy::float_cmp)] // allow since NO DATA is a specific value
-fn process_raster(number_statistics: &mut NumberStatistics, tile_grid: &Grid2D<f64>) {
-    let no_data_value = tile_grid.no_data_value();
-
-    if let Some(no_data_value) = no_data_value {
-        for &value in &tile_grid.data {
-            if value == no_data_value {
-                number_statistics.add_no_data();
-            } else {
-                number_statistics.add(value);
-            }
-        }
-    } else {
-        for &value in &tile_grid.data {
+fn process_raster<I>(number_statistics: &mut NumberStatistics, data: I)
+where
+    I: Iterator<Item = Option<f64>>,
+{
+    for value_option in data {
+        if let Some(value) = value_option {
             number_statistics.add(value);
+        } else {
+            number_statistics.add_no_data();
         }
     }
 }
@@ -247,7 +242,6 @@ mod tests {
 
     #[tokio::test]
     async fn single_raster() {
-        let no_data_value = Some(15);
         let tile_size_in_pixels = [3, 2].into();
         let tiling_specification = TilingSpecification {
             origin_coordinate: [0.0, 0.0].into(),
@@ -263,7 +257,7 @@ mod tests {
                         global_tile_position: [0, 0].into(),
                         tile_size_in_pixels,
                     },
-                    Grid2D::new([3, 2].into(), vec![1, 2, 3, 4, 5, 6], no_data_value)
+                    Grid2D::new([3, 2].into(), vec![1, 2, 3, 4, 5, 6])
                         .unwrap()
                         .into(),
                 )],
@@ -271,7 +265,6 @@ mod tests {
                     data_type: RasterDataType::U8,
                     spatial_reference: SpatialReference::epsg_4326().into(),
                     measurement: Measurement::Unitless,
-                    no_data_value: no_data_value.map(AsPrimitive::as_),
                     time: None,
                     bbox: None,
                 },

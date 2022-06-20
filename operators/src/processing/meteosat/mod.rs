@@ -47,7 +47,7 @@ mod test_util {
         TimeStep,
     };
     use geoengine_datatypes::raster::{
-        EmptyGrid2D, Grid2D, GridOrEmpty, Pixel, RasterDataType, RasterProperties,
+        EmptyGrid2D, Grid2D, GridOrEmpty, MaskedGrid2D, Pixel, RasterDataType, RasterProperties,
         RasterPropertiesEntry, RasterPropertiesEntryType, RasterTile2D, TileInformation,
     };
     use geoengine_datatypes::spatial_reference::{SpatialReference, SpatialReferenceAuthority};
@@ -153,8 +153,10 @@ mod test_util {
     ) -> MockRasterSource<P> {
         let raster = match custom_data {
             Some(v) if v.is_empty() => GridOrEmpty::Empty(EmptyGrid2D::new([3, 2].into())),
-            Some(v) => GridOrEmpty::Grid(Grid2D::new([3, 2].into(), v).unwrap()),
-            None => GridOrEmpty::Grid(
+            Some(v) => {
+                GridOrEmpty::Grid(MaskedGrid2D::from(Grid2D::new([3, 2].into(), v).unwrap()))
+            }
+            None => GridOrEmpty::Grid(MaskedGrid2D::from(
                 Grid2D::<P>::new(
                     [3, 2].into(),
                     vec![
@@ -166,7 +168,7 @@ mod test_util {
                     ],
                 )
                 .unwrap(),
-            ),
+            )),
         };
 
         let raster_tile = RasterTile2D::new_with_tile_info_and_properties(

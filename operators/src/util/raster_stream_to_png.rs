@@ -2,7 +2,7 @@ use futures::StreamExt;
 use geoengine_datatypes::{
     operations::image::{Colorizer, RgbaColor, ToPng},
     primitives::{AxisAlignedRectangle, RasterQueryRectangle, TimeInterval},
-    raster::{Blit, EmptyGrid2D, GeoTransform, GridOrEmpty, Pixel, RasterTile2D},
+    raster::{Blit, EmptyGrid2D, GeoTransform, MaskedGrid2D, Pixel, RasterTile2D},
 };
 use num_traits::AsPrimitive;
 use std::convert::TryInto;
@@ -42,7 +42,7 @@ where
     let output_tile = Ok(RasterTile2D::new_without_offset(
         time.unwrap_or_default(),
         query_geo_transform,
-        GridOrEmpty::from(EmptyGrid2D::new(dim.into())),
+        MaskedGrid2D::from(EmptyGrid2D::new(dim.into())),
     ));
 
     let output_tile = tile_stream

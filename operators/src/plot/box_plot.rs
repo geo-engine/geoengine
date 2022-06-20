@@ -9,7 +9,7 @@ use serde::{Deserialize, Serialize};
 
 use geoengine_datatypes::collections::FeatureCollectionInfos;
 use geoengine_datatypes::plots::{BoxPlotAttribute, Plot, PlotData};
-use geoengine_datatypes::raster::{GridOrEmpty, GridSize, NoDataValue};
+use geoengine_datatypes::raster::GridOrEmpty;
 
 use crate::engine::{
     ExecutionContext, InitializedPlotOperator, InitializedRasterOperator,

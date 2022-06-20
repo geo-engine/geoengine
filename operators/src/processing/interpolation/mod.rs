@@ -19,10 +19,10 @@ use geoengine_datatypes::primitives::{
     SpatialPartitioned, SpatialResolution, TimeInstance, TimeInterval,
 };
 use geoengine_datatypes::raster::{
-    Bilinear, Blit, EmptyGrid, GeoTransform, Grid2D, GridOrEmpty, GridSize, InterpolationAlgorithm,
-    NearestNeighbor, Pixel, RasterTile2D, TileInformation, TilingSpecification,
+    Bilinear, Blit, EmptyGrid, EmptyGrid2D, GeoTransform, GridOrEmpty, GridSize,
+    InterpolationAlgorithm, NearestNeighbor, Pixel, RasterTile2D, TileInformation,
+    TilingSpecification,
 };
-use num_traits::AsPrimitive;
 use rayon::ThreadPool;
 use serde::{Deserialize, Serialize};
 use snafu::{ensure, Snafu};
@@ -94,14 +94,12 @@ impl InitializedRasterOperator for InitializedInterpolation {
                         p,
                         self.params.clone(),
                         self.tiling_specification,
-                        self.result_descriptor.no_data_value.unwrap().as_(),
                     ).boxed()
                     .into(),
                 InterpolationMethod::BiLinear =>InterploationProcessor::<_,_, Bilinear>::new(
                         p,
                         self.params.clone(),
                         self.tiling_specification,
-                        self.result_descriptor.no_data_value.unwrap().as_(),
                     ).boxed()
                     .into(),
             }
@@ -124,8 +122,8 @@ where
     source: Q,
     params: InterpolationParams,
     tiling_specification: TilingSpecification,
-    no_data_value: P,
     interpolation: PhantomData<I>,
+    _phantom_data: PhantomData<P>,
 }
 
 impl<Q, P, I> InterploationProcessor<Q, P, I>
@@ -138,14 +136,13 @@ where
         source: Q,
         params: InterpolationParams,
         tiling_specification: TilingSpecification,
-        no_data_value: P,
     ) -> Self {
         Self {
             source,
             params,
             tiling_specification,
-            no_data_value,
             interpolation: PhantomData,
+            _phantom_data: PhantomData,
         }
     }
 }
@@ -177,9 +174,9 @@ where
         let sub_query = InterpolationSubQuery::<_, P, I> {
             input_resolution: self.params.input_resolution,
             fold_fn: fold_future,
-            no_data_value: self.no_data_value,
             tiling_specification: self.tiling_specification,
-            phantom: Default::default(),
+            phantom: PhantomData,
+            _phantom_pixel_type: PhantomData,
         };
 
         Ok(RasterSubQueryAdapter::<'a, P, _, _>::new(
@@ -189,7 +186,7 @@ where
             ctx,
             sub_query,
         )
-        .filter_and_fill(self.no_data_value))
+        .filter_and_fill())
     }
 }
 
@@ -197,9 +194,9 @@ where
 pub struct InterpolationSubQuery<F, T, I> {
     input_resolution: SpatialResolution,
     fold_fn: F,
-    no_data_value: T,
     tiling_specification: TilingSpecification,
     phantom: PhantomData<I>,
+    _phantom_pixel_type: PhantomData<T>,
 }
 
 impl<'a, T, FoldM, FoldF, I> SubQueryTileAggregator<'a, T> for InterpolationSubQuery<FoldM, T, I>
@@ -225,7 +222,6 @@ where
         create_accu(
             tile_info,
             query_rect,
-            self.no_data_value,
             pool.clone(),
             self.tiling_specification,
         )
@@ -311,7 +307,6 @@ impl<T: Pixel, I: InterpolationAlgorithm<T>> FoldTileAccuMut for InterpolationAc
 pub fn create_accu<T: Pixel, I: InterpolationAlgorithm<T>>(
     tile_info: TileInformation,
     query_rect: RasterQueryRectangle,
-    no_data_value: T,
     pool: Arc<ThreadPool>,
     tiling_specification: TilingSpecification,
 ) -> impl Future<Output = Result<InterpolationAccu<T, I>>> {
@@ -343,27 +338,19 @@ pub fn create_accu<T: Pixel, I: InterpolationAlgorithm<T>>(
         ];
 
         // create a non-aligned (w.r.t. the tiling specification) grid by setting the origin to the top-left of the tile and the tile-index to [0, 0]
-        let grid = Grid2D::new(
-            shape.into(),
-            vec![no_data_value; shape[0] * shape[1]],
-            Some(no_data_value),
-        )
-        .expect("grid creation must not fail");
+        let grid = EmptyGrid2D::new(shape.into());
 
         let input_tile = RasterTile2D::new(
             query_rect.time_interval,
             [0, 0].into(),
             geo_transform,
-            GridOrEmpty::Grid(grid),
+            GridOrEmpty::from(grid),
         );
 
         let output_tile = RasterTile2D::new_with_tile_info(
             query_rect.time_interval,
             tile_info,
-            GridOrEmpty::Empty(EmptyGrid::new(
-                tiling_specification.tile_size_in_pixels,
-                no_data_value,
-            )),
+            GridOrEmpty::Empty(EmptyGrid::new(tiling_specification.tile_size_in_pixels)),
         );
 
         InterpolationAccu::new(input_tile, output_tile, pool)
@@ -397,6 +384,8 @@ where
 {
     // get the time now because it is not known when the accu was created
     accu.output_tile.time = tile.time;
+
+    // TODO: add a skip if both tiles are empty?
 
     // copy all input tiles into the accu to have all data for interpolation
     let mut accu_input_tile = accu.input_tile.into_materialized_tile();
@@ -488,7 +477,7 @@ mod tests {
         for (i, tile) in result.into_iter().enumerate() {
             let tile = tile.into_materialized_tile();
             assert_eq!(tile.time, times[i]);
-            assert_eq!(tile.grid_array.inner_grid, data[i]);
+            assert_eq!(tile.grid_array.inner_grid.data, data[i]);
         }
 
         Ok(())
@@ -512,9 +501,7 @@ mod tests {
                     tile_size_in_pixels: [2, 2].into(),
                     global_geo_transform: TestDefault::test_default(),
                 },
-                GridOrEmpty::Grid(
-                    Grid2D::new([2, 2].into(), vec![1, 2, 5, 6], no_data_value).unwrap(),
-                ),
+                GridOrEmpty::from(Grid2D::new([2, 2].into(), vec![1, 2, 5, 6]).unwrap()),
             ),
             RasterTile2D::new_with_tile_info(
                 TimeInterval::new_unchecked(0, 10),
@@ -523,9 +510,7 @@ mod tests {
                     tile_size_in_pixels: [2, 2].into(),
                     global_geo_transform: TestDefault::test_default(),
                 },
-                GridOrEmpty::Grid(
-                    Grid2D::new([2, 2].into(), vec![3, 4, 7, 8], no_data_value).unwrap(),
-                ),
+                GridOrEmpty::from(Grid2D::new([2, 2].into(), vec![3, 4, 7, 8]).unwrap()),
             ),
             RasterTile2D::new_with_tile_info(
                 TimeInterval::new_unchecked(10, 20),
@@ -534,9 +519,7 @@ mod tests {
                     tile_size_in_pixels: [2, 2].into(),
                     global_geo_transform: TestDefault::test_default(),
                 },
-                GridOrEmpty::Grid(
-                    Grid2D::new([2, 2].into(), vec![8, 7, 4, 3], no_data_value).unwrap(),
-                ),
+                GridOrEmpty::from(Grid2D::new([2, 2].into(), vec![8, 7, 4, 3]).unwrap()),
             ),
             RasterTile2D::new_with_tile_info(
                 TimeInterval::new_unchecked(10, 20),
@@ -545,9 +528,7 @@ mod tests {
                     tile_size_in_pixels: [2, 2].into(),
                     global_geo_transform: TestDefault::test_default(),
                 },
-                GridOrEmpty::Grid(
-                    Grid2D::new([2, 2].into(), vec![6, 5, 2, 1], no_data_value).unwrap(),
-                ),
+                GridOrEmpty::from(Grid2D::new([2, 2].into(), vec![6, 5, 2, 1]).unwrap()),
             ),
         ];
 

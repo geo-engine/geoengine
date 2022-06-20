@@ -1,3 +1,5 @@
+use std::marker::PhantomData;
+
 use super::map_query::MapQueryProcessor;
 use crate::{
     adapters::{fold_by_coordinate_lookup_future, RasterSubQueryAdapter, TileReprojectionSubQuery},
@@ -23,7 +25,6 @@ use geoengine_datatypes::{
     raster::{Pixel, RasterTile2D, TilingSpecification},
     spatial_reference::SpatialReference,
 };
-use num_traits::AsPrimitive;
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Serialize, Deserialize, Clone, Copy)]
@@ -43,7 +44,6 @@ pub struct RasterReprojectionState {
     source_srs: SpatialReference,
     target_srs: SpatialReference,
     tiling_spec: TilingSpecification,
-    out_no_data_value: f64,
 }
 
 pub type Reprojection = Operator<ReprojectionParams, SingleRasterOrVectorSource>;
@@ -232,7 +232,6 @@ impl RasterOperator for Reprojection {
         let raster_operator = raster_operator.initialize(context).await?;
 
         let in_desc: &RasterResultDescriptor = raster_operator.result_descriptor();
-        let out_no_data_value = in_desc.no_data_value.unwrap_or(0.); // TODO: add option to force a no_data_value
 
         let bbox = if let Some(bbox) = in_desc.bbox {
             let in_srs: Option<SpatialReference> = in_desc.spatial_reference.into();
@@ -258,7 +257,6 @@ impl RasterOperator for Reprojection {
             source_srs: Option::from(in_desc.spatial_reference).unwrap(),
             target_srs: self.params.target_spatial_reference,
             tiling_spec: context.tiling_specification(),
-            out_no_data_value,
         };
 
         let initialized_operator = InitializedRasterReprojection {
@@ -291,7 +289,6 @@ impl InitializedRasterOperator for InitializedRasterReprojection {
                     s.source_srs,
                     s.target_srs,
                     s.tiling_spec,
-                    s.out_no_data_value.as_(),
                 )))
             }
             geoengine_datatypes::raster::RasterDataType::U16 => {
@@ -301,7 +298,6 @@ impl InitializedRasterOperator for InitializedRasterReprojection {
                     s.source_srs,
                     s.target_srs,
                     s.tiling_spec,
-                    s.out_no_data_value.as_(),
                 )))
             }
 
@@ -312,7 +308,6 @@ impl InitializedRasterOperator for InitializedRasterReprojection {
                     s.source_srs,
                     s.target_srs,
                     s.tiling_spec,
-                    s.out_no_data_value.as_(),
                 )))
             }
             geoengine_datatypes::raster::RasterDataType::U64 => {
@@ -322,7 +317,6 @@ impl InitializedRasterOperator for InitializedRasterReprojection {
                     s.source_srs,
                     s.target_srs,
                     s.tiling_spec,
-                    s.out_no_data_value.as_(),
                 )))
             }
             geoengine_datatypes::raster::RasterDataType::I8 => {
@@ -332,7 +326,6 @@ impl InitializedRasterOperator for InitializedRasterReprojection {
                     s.source_srs,
                     s.target_srs,
                     s.tiling_spec,
-                    s.out_no_data_value.as_(),
                 )))
             }
             geoengine_datatypes::raster::RasterDataType::I16 => {
@@ -342,7 +335,6 @@ impl InitializedRasterOperator for InitializedRasterReprojection {
                     s.source_srs,
                     s.target_srs,
                     s.tiling_spec,
-                    s.out_no_data_value.as_(),
                 )))
             }
             geoengine_datatypes::raster::RasterDataType::I32 => {
@@ -352,7 +344,6 @@ impl InitializedRasterOperator for InitializedRasterReprojection {
                     s.source_srs,
                     s.target_srs,
                     s.tiling_spec,
-                    s.out_no_data_value.as_(),
                 )))
             }
             geoengine_datatypes::raster::RasterDataType::I64 => {
@@ -362,7 +353,6 @@ impl InitializedRasterOperator for InitializedRasterReprojection {
                     s.source_srs,
                     s.target_srs,
                     s.tiling_spec,
-                    s.out_no_data_value.as_(),
                 )))
             }
             geoengine_datatypes::raster::RasterDataType::F32 => {
@@ -372,7 +362,6 @@ impl InitializedRasterOperator for InitializedRasterReprojection {
                     s.source_srs,
                     s.target_srs,
                     s.tiling_spec,
-                    s.out_no_data_value.as_(),
                 )))
             }
             geoengine_datatypes::raster::RasterDataType::F64 => {
@@ -382,7 +371,6 @@ impl InitializedRasterOperator for InitializedRasterReprojection {
                     s.source_srs,
                     s.target_srs,
                     s.tiling_spec,
-                    s.out_no_data_value.as_(),
                 )))
             }
         })
@@ -397,7 +385,7 @@ where
     from: SpatialReference,
     to: SpatialReference,
     tiling_spec: TilingSpecification,
-    no_data_and_fill_value: P,
+    _phantom_data: PhantomData<P>,
 }
 
 impl<Q, P> RasterReprojectionProcessor<Q, P>
@@ -410,14 +398,13 @@ where
         from: SpatialReference,
         to: SpatialReference,
         tiling_spec: TilingSpecification,
-        no_data_and_fill_value: P,
     ) -> Self {
         Self {
             source,
             from,
             to,
             tiling_spec,
-            no_data_and_fill_value,
+            _phantom_data: PhantomData,
         }
     }
 
@@ -479,11 +466,11 @@ where
         let sub_query_spec = TileReprojectionSubQuery {
             in_srs: self.from,
             out_srs: self.to,
-            no_data_and_fill_value: self.no_data_and_fill_value,
             fold_fn: fold_by_coordinate_lookup_future,
             in_spatial_res,
             valid_bounds_in,
             valid_bounds_out,
+            _phantom_data: PhantomData,
         };
 
         // return the adapter which will reproject the tiles and uses the fill adapter to inject missing tiles
@@ -494,7 +481,7 @@ where
             ctx,
             sub_query_spec,
         )
-        .filter_and_fill(self.no_data_and_fill_value))
+        .filter_and_fill())
     }
 }
 
@@ -770,32 +757,26 @@ mod tests {
             4326,
         );
 
-        let no_data_value = Some(0);
-
         let data = vec![
             RasterTile2D {
                 time: TimeInterval::new_unchecked(0, 5),
                 tile_position: [-1, 0].into(),
                 global_geo_transform: TestDefault::test_default(),
-                grid_array: Grid::new([2, 2].into(), vec![1, 2, 3, 4], no_data_value)
-                    .unwrap()
-                    .into(),
+                grid_array: Grid::new([2, 2].into(), vec![1, 2, 3, 4]).unwrap().into(),
                 properties: Default::default(),
             },
             RasterTile2D {
                 time: TimeInterval::new_unchecked(0, 5),
                 tile_position: [-1, 1].into(),
                 global_geo_transform: TestDefault::test_default(),
-                grid_array: Grid::new([2, 2].into(), vec![7, 8, 9, 10], no_data_value)
-                    .unwrap()
-                    .into(),
+                grid_array: Grid::new([2, 2].into(), vec![7, 8, 9, 10]).unwrap().into(),
                 properties: Default::default(),
             },
             RasterTile2D {
                 time: TimeInterval::new_unchecked(5, 10),
                 tile_position: [-1, 0].into(),
                 global_geo_transform: TestDefault::test_default(),
-                grid_array: Grid::new([2, 2].into(), vec![13, 14, 15, 16], no_data_value)
+                grid_array: Grid::new([2, 2].into(), vec![13, 14, 15, 16])
                     .unwrap()
                     .into(),
                 properties: Default::default(),
@@ -804,7 +785,7 @@ mod tests {
                 time: TimeInterval::new_unchecked(5, 10),
                 tile_position: [-1, 1].into(),
                 global_geo_transform: TestDefault::test_default(),
-                grid_array: Grid::new([2, 2].into(), vec![19, 20, 21, 22], no_data_value)
+                grid_array: Grid::new([2, 2].into(), vec![19, 20, 21, 22])
                     .unwrap()
                     .into(),
                 properties: Default::default(),
@@ -944,7 +925,7 @@ mod tests {
             include_bytes!(
                 "../../../test_data/raster/modis_ndvi/projected_3857/MOD13A2_M_NDVI_2014-04-01_tile-20.rst"
             ) as &[u8],
-            res[8].clone().into_materialized_tile().grid_array.inner_grid.as_slice()
+            res[8].clone().into_materialized_tile().grid_array.inner_grid.data.as_slice()
         );
 
         Ok(())

@@ -139,16 +139,14 @@ impl<P: Pixel> MeanRasterPixelValuesOverTimeQueryProcessor<P> {
         while let Some(tile) = tile_stream.next().await {
             let tile = tile?;
 
-            if tile.grid_array.is_empty() {
-                continue;
+            match tile.grid_array {
+                geoengine_datatypes::raster::GridOrEmpty::Grid(g) => {
+                    let time = Self::time_interval_projection(tile.time, position);
+                    let mean = means.entry(time).or_default();
+                    mean.add(g.masked_copy_element_iterator());
+                }
+                geoengine_datatypes::raster::GridOrEmpty::Empty(_) => (),
             }
-
-            let tile = tile.into_materialized_tile(); // this should be free since we checked for empty tiles
-
-            let time = Self::time_interval_projection(tile.time, position);
-
-            let mean = means.entry(time).or_default();
-            mean.add(&tile.grid_array.inner_grid, tile.grid_array.no_data_value);
         }
 
         Ok(means)
@@ -198,29 +196,11 @@ impl Default for MeanCalculator {
 
 impl MeanCalculator {
     #[inline]
-    fn add<P: Pixel>(&mut self, values: &[P], no_data: Option<P>) {
-        if let Some(no_data) = no_data {
-            self.add_with_no_data(values, no_data);
-        } else {
-            self.add_without_no_data(values);
-        }
-    }
-
-    #[inline]
-    fn add_without_no_data<P: Pixel>(&mut self, values: &[P]) {
-        for &value in values {
-            self.add_single_value(value);
-        }
-    }
-
-    #[inline]
-    fn add_with_no_data<P: Pixel>(&mut self, values: &[P], no_data: P) {
-        for &value in values {
-            if value == no_data {
-                continue;
+    fn add<P: Pixel, I: Iterator<Item = Option<P>>>(&mut self, values: I) {
+        for value_option in values {
+            if let Some(value) = value_option {
+                self.add_single_value(value);
             }
-
-            self.add_single_value(value);
         }
     }
 
@@ -272,7 +252,6 @@ mod tests {
         raster::{Grid2D, RasterDataType, TileInformation},
         util::test::TestDefault,
     };
-    use num_traits::AsPrimitive;
     use serde_json::json;
 
     #[test]
@@ -387,8 +366,6 @@ mod tests {
     ) -> Box<dyn RasterOperator> {
         assert_eq!(time_intervals.len(), values_vec.len());
         assert!(values_vec.iter().all(|v| v.len() == 6));
-
-        let no_data_value = None;
 
         let mut tiles = Vec::with_capacity(time_intervals.len());
         for (time_interval, values) in time_intervals.into_iter().zip(values_vec) {

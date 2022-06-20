@@ -1,6 +1,6 @@
 use super::masked_grid::MaskedGrid;
 use super::{
-    grid_or_empty::GridOrEmpty, GeoTransform, GeoTransformAccess, Grid, GridBounds, GridIdx2D,
+    grid_or_empty::GridOrEmpty, GeoTransform, GeoTransformAccess, GridBounds, GridIdx2D,
     GridIndexAccess, GridShape, GridShape2D, GridShape3D, GridShapeAccess, GridSize, NoDataValue,
     Raster, TileInformation,
 };
@@ -186,16 +186,16 @@ where
     }
 
     /// create a new `RasterTile`
-    pub fn new_without_offset(
+    pub fn new_without_offset<G>(
         time: TimeInterval,
         global_geo_transform: GeoTransform,
-        data: Grid<D, T>,
-    ) -> Self {
+        data: G,
+    ) -> Self where G: Into<GridOrEmpty<D,T>>{
         Self {
             time,
             tile_position: [0, 0].into(),
             global_geo_transform,
-            grid_array: GridOrEmpty::from(data),
+            grid_array: data.into(),
             properties: RasterProperties::default(),
         }
     }

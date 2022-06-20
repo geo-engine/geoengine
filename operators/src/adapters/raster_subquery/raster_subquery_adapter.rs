@@ -18,10 +18,7 @@ use geoengine_datatypes::{
     primitives::TimeInstance,
     raster::{Blit, Pixel, RasterTile2D, TileInformation},
 };
-use geoengine_datatypes::{
-    primitives::TimeInterval,
-    raster::{NoDataValue, TilingSpecification},
-};
+use geoengine_datatypes::{primitives::TimeInterval, raster::TilingSpecification};
 
 use pin_project::pin_project;
 use rayon::ThreadPool;
@@ -159,10 +156,7 @@ where
     }
 
     /// Wrap the `RasterSubQueryAdapter` with a filter and a `SparseTilesFillAdapter` to produce a `Stream` compatible with `RasterQueryProcessor`.
-    pub fn filter_and_fill(
-        self,
-        no_data_value: PixelType,
-    ) -> BoxStream<'a, Result<RasterTile2D<PixelType>>>
+    pub fn filter_and_fill(self) -> BoxStream<'a, Result<RasterTile2D<PixelType>>>
     where
         Self: Stream<Item = Result<Option<RasterTile2D<PixelType>>>> + 'a,
     {
@@ -569,25 +563,15 @@ where
 
     accu_tile.time = t_union;
 
-    if tile.grid_array.is_empty() && accu_tile.no_data_value() == tile.no_data_value() {
+    if tile.grid_array.is_empty() && accu_tile.grid_array.is_empty() {
+        // only skip if both tiles are empty. There might be valid data in one otherwise.
         return Ok(RasterTileAccu2D::new(accu_tile, pool));
     }
 
-    let mut materialized_accu_tile = accu_tile.into_materialized_tile();
+    let mut materialized_tile = accu_tile.into_materialized_tile();
+    materialized_tile.blit(tile)?;
 
-    let blit_tile = match materialized_accu_tile.blit(tile) {
-        Ok(_) => materialized_accu_tile.into(),
-        Err(_error) => {
-            // Ignore lookup errors
-            //dbg!(
-            //    "Skipping non-overlapping area tiles in blit method. This schould not happen but the MockSource produces all tiles!!!",
-            //    error
-            //);
-            materialized_accu_tile.into()
-        }
-    };
-
-    Ok(RasterTileAccu2D::new(blit_tile, pool))
+    Ok(RasterTileAccu2D::new(materialized_tile.into(), pool))
 }
 
 #[allow(dead_code)]
@@ -620,7 +604,6 @@ mod tests {
     use crate::engine::{RasterOperator, RasterResultDescriptor};
     use crate::mock::{MockRasterSource, MockRasterSourceParams};
     use futures::StreamExt;
-    use num_traits::AsPrimitive;
 
     #[tokio::test]
     async fn identity() {
