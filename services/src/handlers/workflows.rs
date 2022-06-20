@@ -340,7 +340,6 @@ async fn dataset_from_workflow_handler<C: Context>(
 
     let query_rect = info.query;
     let query_ctx = ctx.query_context()?;
-    let no_data_value = result_descriptor.no_data_value;
     let request_spatial_ref = Option::<SpatialReference>::from(result_descriptor.spatial_reference)
         .ok_or(error::Error::MissingSpatialReference)?;
     let tile_limit = None; // TODO: set a reasonable limit or make configurable?
@@ -352,7 +351,7 @@ async fn dataset_from_workflow_handler<C: Context>(
             query_rect,
             query_ctx,
             GdalGeoTiffDatasetMetadata {
-                no_data_value,
+                no_data_value: Default::default(), // TODO: decide how to handle the no data here
                 spatial_reference: request_spatial_ref,
             },
             GdalGeoTiffOptions {
@@ -413,7 +412,7 @@ async fn create_dataset<C: Context>(
                 height: (info.query.spatial_bounds.size_y() / info.query.spatial_resolution.y)
                     .ceil() as usize,
                 file_not_found_handling: FileNotFoundHandling::Error,
-                no_data_value: result_descriptor.no_data_value,
+                no_data_value: None, // TODO: how to handle this here?
                 properties_mapping: None, // TODO: add properties
                 gdal_open_options: None,
                 gdal_config_options: None,
@@ -725,7 +724,6 @@ mod tests {
                             measurement: "radiation".to_string(),
                             unit: None,
                         }),
-                        no_data_value: None,
                         time: None,
                         bbox: None,
                     },
@@ -761,7 +759,6 @@ mod tests {
                     "measurement": "radiation",
                     "unit": null
                 },
-                "noDataValue": null,
                 "time": null,
                 "bbox": null
             })

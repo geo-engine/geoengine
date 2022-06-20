@@ -333,7 +333,6 @@ impl NetCdfCfDataProvider {
                         data_type,
                         spatial_reference: tree.spatial_reference.into(),
                         measurement: derive_measurement(tail.unit.clone()),
-                        no_data_value: None, // we don't want to open the dataset at this point. We should get rid of the result descriptor in the listing in general
                         time: None,          // TODO: determine time
                         bbox: None,          // TODO: determine bbox
                     }),
@@ -443,7 +442,6 @@ impl NetCdfCfDataProvider {
             data_type: data_array.data_type()?,
             spatial_reference: data_array.spatial_reference()?,
             measurement: derive_measurement(data_array.unit().context(error::CannotRetrieveUnit)?),
-            no_data_value: data_array.no_data_value(),
 
             time: None,
             bbox: None,
@@ -454,7 +452,7 @@ impl NetCdfCfDataProvider {
             rasterband_channel: 0, // we calculate offsets in our source
             geo_transform,
             file_not_found_handling: FileNotFoundHandling::Error,
-            no_data_value: result_descriptor.no_data_value,
+            no_data_value: None, // gdal source will try to get the correct one
             properties_mapping: None,
             width: dimensions.lon,
             height: dimensions.lat,
@@ -896,8 +894,6 @@ mod tests {
             data_type: RasterDataType::I16,
             spatial_reference: SpatialReference::new(SpatialReferenceAuthority::Epsg, 4326).into(),
             measurement: Measurement::Unitless,
-            no_data_value: None,
-
             time: None,
             bbox: None,
         }
@@ -1060,7 +1056,6 @@ mod tests {
             data_type: RasterDataType::I16,
             spatial_reference: SpatialReference::new(SpatialReferenceAuthority::Epsg, 3035).into(),
             measurement: Measurement::Unitless,
-            no_data_value: None,
             time: None,
             bbox: None,
         }
@@ -1150,7 +1145,6 @@ mod tests {
                 spatial_reference: SpatialReference::new(SpatialReferenceAuthority::Epsg, 3035)
                     .into(),
                 measurement: Measurement::Unitless,
-                no_data_value: Some(-9999.),
                 time: None,
                 bbox: None,
             }
@@ -1261,7 +1255,6 @@ mod tests {
                 spatial_reference: SpatialReference::new(SpatialReferenceAuthority::Epsg, 3035)
                     .into(),
                 measurement: Measurement::Unitless,
-                no_data_value: Some(-9999.),
                 time: None,
                 bbox: None,
             }
@@ -1350,7 +1343,6 @@ mod tests {
             data_type: RasterDataType::I16,
             spatial_reference: SpatialReference::new(SpatialReferenceAuthority::Epsg, 3035).into(),
             measurement: Measurement::Unitless,
-            no_data_value: None,
             time: None,
             bbox: None,
         }

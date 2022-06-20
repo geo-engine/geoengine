@@ -325,8 +325,6 @@ async fn get_coverage<C: Context>(
             .context(error::Operator)?
     };
 
-    let no_data_value: Option<f64> = initialized.result_descriptor().no_data_value;
-
     let processor = initialized.query_processor().context(error::Operator)?;
 
     let spatial_resolution: SpatialResolution =
@@ -354,7 +352,7 @@ async fn get_coverage<C: Context>(
             query_rect,
             query_ctx,
             GdalGeoTiffDatasetMetadata {
-                no_data_value,
+                no_data_value: Default::default(),
                 spatial_reference: request_spatial_ref,
             },
             GdalGeoTiffOptions {
