@@ -180,7 +180,7 @@ where
     async fn process_tile_async(
         &self,
         tile: RasterTile2D<P>,
-        pool: Arc<ThreadPool>,
+        _pool: Arc<ThreadPool>,
     ) -> Result<RasterTile2D<PixelOut>> {
         let offset = tile.properties.number_property::<f32>(&self.offset_key)?;
         let slope = tile.properties.number_property::<f32>(&self.slope_key)?;

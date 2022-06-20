@@ -23,6 +23,7 @@ use geoengine_datatypes::{primitives::TimeInterval, raster::TilingSpecification}
 use pin_project::pin_project;
 use rayon::ThreadPool;
 
+use std::marker::PhantomData;
 use std::sync::Arc;
 use std::task::Poll;
 
@@ -492,7 +493,7 @@ impl<T: Pixel> FoldTileAccuMut for RasterTileAccu2D<T> {
 #[derive(Debug, Clone)]
 pub struct TileSubQueryIdentity<F, T> {
     fold_fn: F,
-    no_data_value: T,
+    _phantom_pixel_type: PhantomData<T>,
 }
 
 impl<'a, T, FoldM, FoldF> SubQueryTileAggregator<'a, T> for TileSubQueryIdentity<FoldM, T>
@@ -514,7 +515,7 @@ where
         query_rect: RasterQueryRectangle,
         pool: &Arc<ThreadPool>,
     ) -> Self::TileAccuFuture {
-        identity_accu(tile_info, query_rect, self.no_data_value, pool.clone()).boxed()
+        identity_accu(tile_info, query_rect, pool.clone()).boxed()
     }
 
     fn tile_query_rectangle(
@@ -538,7 +539,6 @@ where
 pub fn identity_accu<T: Pixel>(
     tile_info: TileInformation,
     query_rect: RasterQueryRectangle,
-    no_data_value: T,
     pool: Arc<ThreadPool>,
 ) -> impl Future<Output = Result<RasterTileAccu2D<T>>> {
     crate::util::spawn_blocking(move || {
@@ -607,7 +607,6 @@ mod tests {
 
     #[tokio::test]
     async fn identity() {
-        let no_data_value = Some(0);
         let data: Vec<RasterTile2D<u8>> = vec![
             RasterTile2D {
                 time: TimeInterval::new_unchecked(0, 5),
@@ -682,7 +681,7 @@ mod tests {
             &query_ctx,
             TileSubQueryIdentity {
                 fold_fn: fold_by_blit_future,
-                no_data_value: 0,
+                _phantom_pixel_type: PhantomData,
             },
         );
         let res = a

@@ -158,11 +158,7 @@ where
         }
     }
 
-    fn create_subquery<F>(
-        &self,
-        fold_fn: F,
-        initial_value: P,
-    ) -> TemporalRasterAggregationSubQuery<F, P> {
+    fn create_subquery<F>(&self, fold_fn: F) -> TemporalRasterAggregationSubQuery<F, P> {
         TemporalRasterAggregationSubQuery {
             fold_fn,
             step: self.window,
@@ -229,31 +225,25 @@ where
             Aggregation::Min {
                 ignore_no_data: true,
             } => Ok(self
-                .create_subquery(
-                    no_data_ignoring_fold_future::<P, MinIgnoreNoDataAccFunction>,
-                    P::max_value(),
-                )
+                .create_subquery(no_data_ignoring_fold_future::<P, MinIgnoreNoDataAccFunction>)
                 .into_raster_subquery_adapter(&self.source, query, ctx, self.tiling_specification)
                 .expect("no tiles must be skipped in Aggregation::Min")),
             Aggregation::Min {
                 ignore_no_data: false,
             } => Ok(self
-                .create_subquery(fold_future::<P, MinAccFunction>, P::max_value())
+                .create_subquery(fold_future::<P, MinAccFunction>)
                 .into_raster_subquery_adapter(&self.source, query, ctx, self.tiling_specification)
                 .expect("no tiles must be skipped in Aggregation::Min")),
             Aggregation::Max {
                 ignore_no_data: true,
             } => Ok(self
-                .create_subquery(
-                    no_data_ignoring_fold_future::<P, MaxIgnoreNoDataAccFunction>,
-                    P::min_value(),
-                )
+                .create_subquery(no_data_ignoring_fold_future::<P, MaxIgnoreNoDataAccFunction>)
                 .into_raster_subquery_adapter(&self.source, query, ctx, self.tiling_specification)
                 .expect("no tiles must be skipped in Aggregation::Max")),
             Aggregation::Max {
                 ignore_no_data: false,
             } => Ok(self
-                .create_subquery(fold_future::<P, MaxAccFunction>, P::min_value())
+                .create_subquery(fold_future::<P, MaxAccFunction>)
                 .into_raster_subquery_adapter(&self.source, query, ctx, self.tiling_specification)
                 .expect("no tiles must be skipped in Aggregation::Max")),
 
@@ -581,7 +571,7 @@ mod tests {
     #[tokio::test]
     #[allow(clippy::too_many_lines)]
     async fn test_max_with_no_data() {
-        let mut raster_tiles = make_raster(); // TODO: switch to make_raster_with_no_data?
+        let raster_tiles = make_raster(); // TODO: switch to make_raster_with_no_data?
 
         let mrs = MockRasterSource {
             params: MockRasterSourceParams {
@@ -697,7 +687,7 @@ mod tests {
     #[tokio::test]
     #[allow(clippy::too_many_lines)]
     async fn test_max_with_no_data_but_ignoring_it() {
-        let mut raster_tiles = make_raster(); // TODO: switch to make_raster_with_no_data?
+        let raster_tiles = make_raster(); // TODO: switch to make_raster_with_no_data?
 
         let mrs = MockRasterSource {
             params: MockRasterSourceParams {
@@ -813,8 +803,6 @@ mod tests {
     #[tokio::test]
     #[allow(clippy::too_many_lines)]
     async fn test_only_no_data() {
-        let no_data_value: Option<u8> = Some(42);
-
         let mrs = MockRasterSource {
             params: MockRasterSourceParams {
                 data: vec![RasterTile2D::new_with_tile_info(

@@ -81,7 +81,7 @@ pub struct LastValidAccFunction {}
 impl NoDataIgnoringAccFunction for LastValidAccFunction {
     fn acc_ignore_no_data<T: Pixel>(acc: Option<T>, value: Option<T>) -> Option<T> {
         match (acc, value) {
-            (Some(a), Some(v)) => Some(v),
+            (Some(_a), Some(v)) => Some(v),
             (Some(a), None) => Some(a),
             (None, Some(v)) => Some(v),
             _ => None,
@@ -93,7 +93,7 @@ pub struct FirstValidAccFunction {}
 impl NoDataIgnoringAccFunction for FirstValidAccFunction {
     fn acc_ignore_no_data<T: Pixel>(acc: Option<T>, value: Option<T>) -> Option<T> {
         match (acc, value) {
-            (Some(a), Some(v)) => Some(a),
+            (Some(a), Some(_v)) => Some(a),
             (Some(a), None) => Some(a),
             (None, Some(v)) => Some(v),
             _ => None,

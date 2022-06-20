@@ -1,6 +1,6 @@
 #![feature(bench_black_box)]
-use std::hint::black_box;
 use std::time::Instant;
+use std::{hint::black_box, marker::PhantomData};
 
 use futures::StreamExt;
 use geoengine_datatypes::{
@@ -24,16 +24,14 @@ fn setup_gdal_source(
     GdalSourceProcessor::<u8> {
         tiling_specification,
         meta_data: Box::new(meta_data),
-        no_data_value: Some(0),
+        _phandom_data: PhantomData,
     }
 }
 
 fn setup_mock_source(tiling_spec: TilingSpecification) -> MockRasterSourceProcessor<u8> {
-    let no_data_value = Some(0);
     let grid: GridOrEmpty2D<u8> = Grid2D::new(
         tiling_spec.tile_size_in_pixels,
         vec![42; tiling_spec.tile_size_in_pixels.number_of_elements()],
-        no_data_value,
     )
     .unwrap()
     .into();
@@ -53,7 +51,6 @@ fn setup_mock_source(tiling_spec: TilingSpecification) -> MockRasterSourceProces
             RasterTile2D::new(time, [1, 0].into(), geo_transform, grid.clone()),
             RasterTile2D::new(time, [1, 1].into(), geo_transform, grid),
         ],
-        no_data_value,
         tiling_specification: tiling_spec,
     }
 }

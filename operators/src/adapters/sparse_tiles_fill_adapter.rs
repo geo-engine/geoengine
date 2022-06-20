@@ -478,7 +478,6 @@ mod tests {
 
     #[tokio::test]
     async fn test_gap_overlaps_time_step() {
-        let no_data_value = Some(0);
         let data = vec![
             RasterTile2D {
                 time: TimeInterval::new_unchecked(0, 5),
@@ -524,7 +523,6 @@ mod tests {
         let grid_bounding_box = GridBoundingBox2D::new([-1, 0], [0, 1]).unwrap();
         let global_geo_transform = GeoTransform::test_default();
         let tile_shape = [2, 2].into();
-        let no_data_value = 0;
 
         let adapter = SparseTilesFillAdapter::new(
             in_stream,
@@ -646,7 +644,6 @@ mod tests {
         let grid_bounding_box = GridBoundingBox2D::new([-1, 0], [0, 1]).unwrap();
         let global_geo_transform = GeoTransform::test_default();
         let tile_shape = [2, 2].into();
-        let no_data_value = 0;
 
         let adapter = SparseTilesFillAdapter::new(
             in_stream,
@@ -726,7 +723,6 @@ mod tests {
         let grid_bounding_box = GridBoundingBox2D::new([-1, 0], [0, 1]).unwrap();
         let global_geo_transform = GeoTransform::test_default();
         let tile_shape = [2, 2].into();
-        let no_data_value = 0;
 
         let adapter = SparseTilesFillAdapter::new(
             in_stream,
@@ -761,7 +757,6 @@ mod tests {
 
     #[tokio::test]
     async fn test_one_cell_grid() {
-        let no_data_value = Some(0);
         let data = vec![
             RasterTile2D {
                 time: TimeInterval::new_unchecked(0, 5),
@@ -995,7 +990,6 @@ mod tests {
         let grid_bounding_box = GridBoundingBox2D::new([-1, 0], [0, 1]).unwrap();
         let global_geo_transform = GeoTransform::test_default();
         let tile_shape = [2, 2].into();
-        let no_data_value = 0;
 
         let adapter = SparseTilesFillAdapter::new(
             in_stream,

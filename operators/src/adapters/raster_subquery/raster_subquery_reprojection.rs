@@ -302,7 +302,7 @@ where
 
     let tile_bounding_box = tile.spatial_partition();
 
-    let map_fn = |grid_idx, accu_value| {
+    let map_fn = |grid_idx, _accu_value| {
         let lookup_coord = coords.get_at_grid_index_unchecked(grid_idx);
         let lookup_value = lookup_coord
             .filter(|coord| tile_bounding_box.contains_coordinate(&coord))
@@ -365,7 +365,6 @@ mod tests {
     #[tokio::test]
     async fn identity_projection() {
         let projection = SpatialReference::epsg_4326();
-        let no_data_value = Some(0);
 
         let data = vec![
             RasterTile2D {
@@ -431,8 +430,6 @@ mod tests {
         let tiling_strat = exe_ctx.tiling_specification;
 
         let op = mrs1.initialize(&exe_ctx).await.unwrap();
-
-        let raster_res_desc: &RasterResultDescriptor = op.result_descriptor();
 
         let qp = op.query_processor().unwrap().get_u8().unwrap();
 

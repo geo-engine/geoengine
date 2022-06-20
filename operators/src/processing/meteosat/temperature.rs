@@ -30,8 +30,6 @@ use crate::processing::meteosat::{
 };
 use RasterDataType::F32 as RasterOut;
 
-const OUT_NO_DATA_VALUE: PixelOut = PixelOut::NAN;
-
 /// Parameters for the `Temperature` operator.
 /// * `force_satellite` forces the use of the satellite with the given name.
 #[derive(Debug, Serialize, Deserialize, PartialEq, Eq, Clone, Default)]

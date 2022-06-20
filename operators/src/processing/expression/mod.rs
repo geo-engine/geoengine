@@ -15,7 +15,7 @@ use geoengine_datatypes::{
 };
 use num_traits::AsPrimitive;
 use serde::{Deserialize, Serialize};
-use snafu::{ensure, OptionExt};
+use snafu::ensure;
 
 pub use self::error::ExpressionError;
 
@@ -619,7 +619,6 @@ mod tests {
     #[tokio::test]
     async fn basic_unary() {
         let no_data_value = 3;
-        let no_data_value_option = Some(no_data_value);
         let tile_size_in_pixels = [3, 2].into();
         let tiling_specification = TilingSpecification {
             origin_coordinate: [0.0, 0.0].into(),
@@ -687,7 +686,6 @@ mod tests {
     #[tokio::test]
     async fn unary_map_no_data() {
         let no_data_value = 3;
-        let no_data_value_option = Some(no_data_value);
         let tile_size_in_pixels = [3, 2].into();
         let tiling_specification = TilingSpecification {
             origin_coordinate: [0.0, 0.0].into(),
@@ -755,7 +753,6 @@ mod tests {
     #[tokio::test]
     async fn basic_binary() {
         let no_data_value = 42;
-        let no_data_value_option = Some(no_data_value);
         let tile_size_in_pixels = [3, 2].into();
         let tiling_specification = TilingSpecification {
             origin_coordinate: [0.0, 0.0].into(),
@@ -823,8 +820,6 @@ mod tests {
 
     #[tokio::test]
     async fn basic_coalesce() {
-        let no_data_value = 42;
-        let no_data_value_option = Some(no_data_value);
         let tile_size_in_pixels = [3, 2].into();
         let tiling_specification = TilingSpecification {
             origin_coordinate: [0.0, 0.0].into(),
@@ -847,7 +842,7 @@ mod tests {
                 }"
                 .to_string(),
                 output_type: RasterDataType::I8,
-                output_no_data_value: no_data_value.as_(), //  cast no_data_valuee to f64
+                output_no_data_value: 0., //  cast no_data_valuee to f64
                 output_measurement: Some(Measurement::Unitless),
                 map_no_data: true,
             },
@@ -1046,9 +1041,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_functions() {
-        let no_data_value = 42;
-        let no_data_value_option = Some(no_data_value);
-
+        let no_data_value = 0;
         let tile_size_in_pixels = [3, 2].into();
         let tiling_specification = TilingSpecification {
             origin_coordinate: [0.0, 0.0].into(),

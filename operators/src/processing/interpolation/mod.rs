@@ -492,7 +492,6 @@ mod tests {
         // [10, 20)
         // || 8 | 7 || 6 | 5 ||
         // || 4 | 3 || 2 | 1 ||
-        let no_data_value = Some(42);
         let raster_tiles = vec![
             RasterTile2D::new_with_tile_info(
                 TimeInterval::new_unchecked(0, 10),

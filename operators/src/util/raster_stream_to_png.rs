@@ -19,7 +19,6 @@ pub async fn raster_stream_to_png_bytes<T, C: QueryContext>(
     height: u32,
     time: Option<TimeInterval>,
     colorizer: Option<Colorizer>,
-    no_data_value: Option<T>,
 ) -> Result<Vec<u8>>
 where
     T: Pixel,
@@ -133,7 +132,6 @@ mod tests {
             600,
             None,
             None,
-            Some(0),
         )
         .await
         .unwrap();

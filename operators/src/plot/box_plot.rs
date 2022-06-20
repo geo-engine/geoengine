@@ -881,7 +881,6 @@ mod tests {
 
     #[tokio::test]
     async fn no_data_raster_exclude_no_data() {
-        let no_data_value = Some(0);
         let tile_size_in_pixels = [3, 2].into();
         let tiling_specification = TilingSpecification {
             origin_coordinate: [0.0, 0.0].into(),
@@ -954,7 +953,6 @@ mod tests {
             origin_coordinate: [0.0, 0.0].into(),
             tile_size_in_pixels,
         };
-        let no_data_value = Some(0);
         let box_plot = BoxPlot {
             params: BoxPlotParams {
                 column_names: vec![],
@@ -1024,7 +1022,6 @@ mod tests {
             origin_coordinate: [0.0, 0.0].into(),
             tile_size_in_pixels,
         };
-        let no_data_value = Some(0_u8);
         let box_plot = BoxPlot {
             params: BoxPlotParams {
                 column_names: vec![],
@@ -1090,7 +1087,6 @@ mod tests {
             origin_coordinate: [0.0, 0.0].into(),
             tile_size_in_pixels,
         };
-        let no_data_value = Some(0_u8);
         let box_plot = BoxPlot {
             params: BoxPlotParams {
                 column_names: vec![],
@@ -1230,7 +1226,6 @@ mod tests {
         };
         let execution_context = MockExecutionContext::new_with_tiling_spec(tiling_specification);
 
-        let no_data_value = Some(0);
         let histogram = BoxPlot {
             params: BoxPlotParams {
                 column_names: vec![],
@@ -1303,7 +1298,6 @@ mod tests {
         };
         let execution_context = MockExecutionContext::new_with_tiling_spec(tiling_specification);
 
-        let no_data_value = Some(0);
         let histogram = BoxPlot {
             params: BoxPlotParams {
                 column_names: vec![],
@@ -1375,7 +1369,6 @@ mod tests {
             tile_size_in_pixels,
         };
         let execution_context = MockExecutionContext::new_with_tiling_spec(tiling_specification);
-        let no_data_value = Some(0);
 
         let src = MockRasterSource {
             params: MockRasterSourceParams {

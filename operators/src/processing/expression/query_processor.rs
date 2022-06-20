@@ -315,8 +315,8 @@ type Function3 = fn(f64, bool, f64, bool, f64, bool, f64) -> f64;
 type Function4 = fn(f64, bool, f64, bool, f64, bool, f64, bool, f64) -> f64;
 type Function5 = fn(f64, bool, f64, bool, f64, bool, f64, bool, f64, bool, f64) -> f64;
 type Function6 = fn(f64, bool, f64, bool, f64, bool, f64, bool, f64, bool, f64, bool, f64) -> f64;
-type Function7 =
-    fn(f64, bool, f64, bool, f64, bool, f64, bool, f64, bool, f64, bool, f64, bool, f64) -> f64;
+// type Function7 = fn(f64, bool, f64, bool, f64, bool, f64, bool, f64, bool, f64, bool, f64, bool, f64) -> f64;
+/*
 type Function8 = fn(
     f64,
     bool,
@@ -336,6 +336,7 @@ type Function8 = fn(
     bool,
     f64,
 ) -> f64;
+*/
 
 macro_rules! impl_expression_tuple_processor {
     ( $i:tt => $( $x:tt ),+ ) => {

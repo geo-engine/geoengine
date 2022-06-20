@@ -188,7 +188,7 @@ where
     async fn process_tile_async(
         &self,
         tile: RasterTile2D<PixelOut>,
-        pool: Arc<ThreadPool>,
+        _pool: Arc<ThreadPool>,
     ) -> Result<RasterTile2D<PixelOut>> {
         let satellite = self.satellite(&tile)?;
         let channel = self.channel(&tile, satellite)?;
