@@ -108,7 +108,7 @@ impl VectorOperator for VectorJoin {
             for (right_column_name, right_column_type) in &right.result_descriptor().columns {
                 columns.insert(
                     column_translation_table[right_column_name].clone(),
-                    *right_column_type,
+                    right_column_type.clone(),
                 );
             }
             columns

@@ -13,7 +13,7 @@ use geoengine_datatypes::primitives::{
 use geoengine_datatypes::spatial_reference::SpatialReferenceOption;
 use geoengine_operators::engine::{
     MetaData, MetaDataProvider, RasterResultDescriptor, ResultDescriptor, TypedResultDescriptor,
-    VectorResultDescriptor,
+    VectorResultDescriptor, VectorColumnInfo,
 };
 use geoengine_operators::mock::MockDatasetDataSourceLoadingInfo;
 use geoengine_operators::source::{
@@ -229,8 +229,16 @@ impl NFDIDataProvider {
         let columns = info
             .attributes
             .iter()
-            .map(|a| (a.name.clone(), a.r#type))
-            .collect::<HashMap<String, FeatureDataType>>();
+            .map(|a| {
+                (
+                    a.name.clone(),
+                    VectorColumnInfo {
+                        data_type: a.r#type,
+                        measurement: Measurement::Unitless, // TODO: get measurement
+                    },
+                )
+            })
+            .collect::<HashMap<String, VectorColumnInfo>>();
 
         VectorResultDescriptor {
             data_type: info.vector_type,
@@ -301,7 +309,7 @@ impl NFDIDataProvider {
         let mut bool = vec![];
         let mut datetime = vec![];
 
-        for (k, v) in &rd.columns {
+        for (k, v) in rd.columns.iter().map(|(name, info)| (name, info.data_type)) {
             match v {
                 FeatureDataType::Category | FeatureDataType::Int => int.push(k.to_string()),
                 FeatureDataType::Float => float.push(k.to_string()),

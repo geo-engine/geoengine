@@ -26,11 +26,11 @@ use gdal::{vector::OGRFieldType, DatasetOptions};
 use geoengine_datatypes::{
     collections::VectorDataType,
     dataset::{DatasetProviderId, InternalDatasetId},
-    primitives::{FeatureDataType, VectorQueryRectangle},
+    primitives::{FeatureDataType, Measurement, VectorQueryRectangle},
     spatial_reference::{SpatialReference, SpatialReferenceOption},
 };
 use geoengine_operators::{
-    engine::{StaticMetaData, VectorResultDescriptor},
+    engine::{StaticMetaData, VectorColumnInfo, VectorResultDescriptor},
     source::{
         OgrSourceColumnSpec, OgrSourceDataset, OgrSourceDatasetTimeType, OgrSourceDurationSpec,
         OgrSourceTimeFormat,
@@ -436,7 +436,19 @@ fn auto_detect_meta_data_definition(main_file_path: &Path) -> Result<MetaDataDef
             spatial_reference: geometry.spatial_reference,
             columns: columns_map
                 .into_iter()
-                .filter_map(|(k, v)| v.try_into().map(|v| (k, v)).ok()) // ignore all columns here that don't have a corresponding type in our collections
+                .filter_map(|(k, v)| {
+                    v.try_into()
+                        .map(|v| {
+                            (
+                                k,
+                                VectorColumnInfo {
+                                    data_type: v,
+                                    measurement: Measurement::Unitless,
+                                },
+                            )
+                        })
+                        .ok()
+                }) // ignore all columns here that don't have a corresponding type in our collections
                 .collect(),
             time: None,
             bbox: None,
@@ -983,11 +995,36 @@ mod tests {
                         "dataType": "MultiPoint",
                         "spatialReference": "EPSG:4326",
                         "columns": {
-                            "website": "text",
-                            "name": "text",
-                            "natlscale": "float",
-                            "scalerank": "int",
-                            "featurecla": "text"
+                            "website": {
+                                "dataType": "text",
+                                "measurement": {
+                                    "type": "unitless"
+                                }
+                            },
+                            "name": {
+                                "dataType": "text",
+                                "measurement": {
+                                    "type": "unitless"
+                                }
+                            },
+                            "natlscale": {
+                                "dataType": "float",
+                                "measurement": {
+                                    "type": "unitless"
+                                }
+                            },
+                            "scalerank": {
+                                "dataType": "int",
+                                "measurement": {
+                                    "type": "unitless"
+                                }
+                            },
+                            "featurecla": {
+                                "dataType": "text",
+                                "measurement": {
+                                    "type": "unitless"
+                                }
+                            }
                         }
                     }
                 }
@@ -1135,11 +1172,41 @@ mod tests {
                     data_type: VectorDataType::MultiPoint,
                     spatial_reference: SpatialReference::epsg_4326().into(),
                     columns: [
-                        ("name".to_string(), FeatureDataType::Text),
-                        ("scalerank".to_string(), FeatureDataType::Int),
-                        ("website".to_string(), FeatureDataType::Text),
-                        ("natlscale".to_string(), FeatureDataType::Float),
-                        ("featurecla".to_string(), FeatureDataType::Text),
+                        (
+                            "name".to_string(),
+                            VectorColumnInfo {
+                                data_type: FeatureDataType::Text,
+                                measurement: Measurement::Unitless
+                            }
+                        ),
+                        (
+                            "scalerank".to_string(),
+                            VectorColumnInfo {
+                                data_type: FeatureDataType::Int,
+                                measurement: Measurement::Unitless
+                            }
+                        ),
+                        (
+                            "website".to_string(),
+                            VectorColumnInfo {
+                                data_type: FeatureDataType::Text,
+                                measurement: Measurement::Unitless
+                            }
+                        ),
+                        (
+                            "natlscale".to_string(),
+                            VectorColumnInfo {
+                                data_type: FeatureDataType::Float,
+                                measurement: Measurement::Unitless
+                            }
+                        ),
+                        (
+                            "featurecla".to_string(),
+                            VectorColumnInfo {
+                                data_type: FeatureDataType::Text,
+                                measurement: Measurement::Unitless
+                            }
+                        ),
                     ]
                     .iter()
                     .cloned()
@@ -1199,8 +1266,20 @@ mod tests {
                     data_type: VectorDataType::MultiPoint,
                     spatial_reference: SpatialReference::epsg_4326().into(),
                     columns: [
-                        ("time_start".to_owned(), FeatureDataType::DateTime),
-                        ("time_end".to_owned(), FeatureDataType::DateTime)
+                        (
+                            "time_start".to_owned(),
+                            VectorColumnInfo {
+                                data_type: FeatureDataType::DateTime,
+                                measurement: Measurement::Unitless
+                            }
+                        ),
+                        (
+                            "time_end".to_owned(),
+                            VectorColumnInfo {
+                                data_type: FeatureDataType::DateTime,
+                                measurement: Measurement::Unitless
+                            }
+                        )
                     ]
                     .iter()
                     .cloned()
@@ -1260,8 +1339,20 @@ mod tests {
                     data_type: VectorDataType::MultiPoint,
                     spatial_reference: SpatialReference::epsg_4326().into(),
                     columns: [
-                        ("time_start".to_owned(), FeatureDataType::DateTime),
-                        ("time_end".to_owned(), FeatureDataType::DateTime)
+                        (
+                            "time_start".to_owned(),
+                            VectorColumnInfo {
+                                data_type: FeatureDataType::DateTime,
+                                measurement: Measurement::Unitless
+                            }
+                        ),
+                        (
+                            "time_end".to_owned(),
+                            VectorColumnInfo {
+                                data_type: FeatureDataType::DateTime,
+                                measurement: Measurement::Unitless
+                            }
+                        )
                     ]
                     .iter()
                     .cloned()
@@ -1321,8 +1412,20 @@ mod tests {
                     data_type: VectorDataType::MultiPoint,
                     spatial_reference: SpatialReference::epsg_4326().into(),
                     columns: [
-                        ("time_end".to_owned(), FeatureDataType::DateTime),
-                        ("time_start".to_owned(), FeatureDataType::DateTime)
+                        (
+                            "time_end".to_owned(),
+                            VectorColumnInfo {
+                                data_type: FeatureDataType::DateTime,
+                                measurement: Measurement::Unitless
+                            }
+                        ),
+                        (
+                            "time_start".to_owned(),
+                            VectorColumnInfo {
+                                data_type: FeatureDataType::DateTime,
+                                measurement: Measurement::Unitless
+                            }
+                        )
                     ]
                     .iter()
                     .cloned()
@@ -1376,8 +1479,20 @@ mod tests {
                     data_type: VectorDataType::MultiPoint,
                     spatial_reference: SpatialReference::epsg_4326().into(),
                     columns: [
-                        ("time_start".to_owned(), FeatureDataType::DateTime),
-                        ("duration".to_owned(), FeatureDataType::Int)
+                        (
+                            "time_start".to_owned(),
+                            VectorColumnInfo {
+                                data_type: FeatureDataType::DateTime,
+                                measurement: Measurement::Unitless
+                            }
+                        ),
+                        (
+                            "duration".to_owned(),
+                            VectorColumnInfo {
+                                data_type: FeatureDataType::Int,
+                                measurement: Measurement::Unitless
+                            }
+                        )
                     ]
                     .iter()
                     .cloned()
@@ -1435,9 +1550,27 @@ mod tests {
                     data_type: VectorDataType::MultiPoint,
                     spatial_reference: SpatialReferenceOption::Unreferenced,
                     columns: [
-                        ("Latitude".to_string(), FeatureDataType::Text),
-                        ("Longitude".to_string(), FeatureDataType::Text),
-                        ("Name".to_string(), FeatureDataType::Text)
+                        (
+                            "Latitude".to_string(),
+                            VectorColumnInfo {
+                                data_type: FeatureDataType::Text,
+                                measurement: Measurement::Unitless
+                            }
+                        ),
+                        (
+                            "Longitude".to_string(),
+                            VectorColumnInfo {
+                                data_type: FeatureDataType::Text,
+                                measurement: Measurement::Unitless
+                            }
+                        ),
+                        (
+                            "Name".to_string(),
+                            VectorColumnInfo {
+                                data_type: FeatureDataType::Text,
+                                measurement: Measurement::Unitless
+                            }
+                        )
                     ]
                     .iter()
                     .cloned()

@@ -24,6 +24,12 @@ impl Measurement {
     }
 }
 
+impl Default for Measurement {
+    fn default() -> Self {
+        Self::Unitless
+    }
+}
+
 #[derive(Clone, Debug, PartialEq, Eq, Deserialize, Serialize)]
 pub struct ContinuousMeasurement {
     pub measurement: String,
@@ -74,6 +80,12 @@ impl TryFrom<SerializableClassificationMeasurement> for ClassificationMeasuremen
             measurement: measurement.measurement,
             classes,
         })
+    }
+}
+
+impl From<Option<Measurement>> for Measurement {
+    fn from(measurement: Option<Measurement>) -> Self {
+        measurement.unwrap_or(Measurement::Unitless)
     }
 }
 

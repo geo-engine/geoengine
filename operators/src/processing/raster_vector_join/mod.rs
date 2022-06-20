@@ -5,7 +5,7 @@ mod util;
 
 use crate::engine::{
     ExecutionContext, InitializedRasterOperator, InitializedVectorOperator, Operator,
-    SingleVectorMultipleRasterSources, TypedVectorQueryProcessor, VectorOperator,
+    SingleVectorMultipleRasterSources, TypedVectorQueryProcessor, VectorColumnInfo, VectorOperator,
     VectorQueryProcessor, VectorResultDescriptor,
 };
 use crate::error::{self, Error};
@@ -151,7 +151,13 @@ impl VectorOperator for RasterVectorJoin {
                     }
                     TemporalAggregationMethod::Mean => FeatureDataType::Float,
                 };
-                columns.insert(new_column_name.clone(), feature_data_type);
+                columns.insert(
+                    new_column_name.clone(),
+                    VectorColumnInfo {
+                        data_type: feature_data_type,
+                        measurement: raster_sources[i].result_descriptor().measurement.clone(),
+                    },
+                );
             }
             columns
         });
@@ -304,7 +310,8 @@ mod tests {
                     "type": "MockFeatureCollectionSourceMultiPoint",
                     "params": {
                         "collections": [],
-                        "spatialReference": "EPSG:4326"
+                        "spatialReference": "EPSG:4326",
+                        "measurements": {},
                     }
                 },
                 "rasters": [],
