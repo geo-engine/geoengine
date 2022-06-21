@@ -28,22 +28,24 @@ impl Plot for BarChart {
         let mut values = Vec::with_capacity(self.bars.len());
         for (tick_label, bar_height) in &self.bars {
             values.push(serde_json::json!({
-                "label": tick_label,
+                self.x_label.clone(): tick_label,
                 self.y_label.clone(): bar_height,
             }));
         }
 
         let vega_spec = serde_json::json!({
             "$schema": "https://vega.github.io/schema/vega-lite/v5.json",
+            "width": "container",
             "data": {
                 "values": values,
             },
             "mark": "bar",
             "encoding": {
                 "x": {
-                    "field": "label",
+                    "field": self.x_label,
+                    "type": "nominal",
                     "axis": {
-                        "title": self.x_label,
+                        "labelAngle": -45,
                     },
                 },
                 "y": {
@@ -83,18 +85,19 @@ mod tests {
             PlotData {
                 vega_string: serde_json::json!({
                   "$schema": "https://vega.github.io/schema/vega-lite/v5.json",
+                  "width": "container",
                   "data": {
                     "values": [
                       {
-                        "label": "bar",
+                        "foobar": "bar",
                         "Frequency": 3
                       },
                       {
-                        "label": "baz",
+                        "foobar": "baz",
                         "Frequency": 10
                       },
                       {
-                        "label": "foo",
+                        "foobar": "foo",
                         "Frequency": 1
                       }
                     ]
@@ -102,10 +105,11 @@ mod tests {
                   "mark": "bar",
                   "encoding": {
                     "x": {
-                      "field": "label",
+                      "field": "foobar",
+                      "type": "nominal",
                       "axis": {
-                        "title": "Frequency"
-                      }
+                          "labelAngle": -45,
+                      },
                     },
                     "y": {
                       "field": "Frequency",
