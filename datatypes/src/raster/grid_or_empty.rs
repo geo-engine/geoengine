@@ -39,21 +39,21 @@ where
 
     pub fn shape_ref(&self) -> &D {
         match self {
-            GridOrEmpty::Grid(g) => &g.shape(),
+            GridOrEmpty::Grid(g) => g.shape(),
             GridOrEmpty::Empty(n) => &n.shape,
         }
     }
 
     pub fn into_materialized_grid(self) -> MaskedGrid<D, T> {
         match self {
-            GridOrEmpty::Grid(g) => MaskedGrid::from(g),
+            GridOrEmpty::Grid(g) => g,
             GridOrEmpty::Empty(n) => MaskedGrid::from(n),
         }
     }
 
     pub fn into_materialized_masked_grid(self) -> MaskedGrid<D, T> {
         match self {
-            GridOrEmpty::Grid(g) => MaskedGrid::from(g),
+            GridOrEmpty::Grid(g) => g,
             GridOrEmpty::Empty(e) => MaskedGrid::from(e),
         }
     }

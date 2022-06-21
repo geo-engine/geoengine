@@ -109,16 +109,16 @@ where
         let out_x_size = info_out.global_geo_transform.x_pixel_size();
         let out_y_size = info_out.global_geo_transform.y_pixel_size();
 
-        let map_fn = |gidx: GridIdx2D, _current_pixel_value: Option<P>| {
-            let GridIdx([y, x]) = gidx;
+        let map_fn = |g_idx: GridIdx2D, _current_pixel_value: Option<P>| {
+            let GridIdx([y_idx, x_idx]) = g_idx;
 
-            let out_y = out_upper_left.y + y as f64 * out_y_size;
+            let out_y = out_upper_left.y + y_idx as f64 * out_y_size;
             let in_y_idx = ((out_y - in_upper_left.y) / in_y_size).floor() as isize;
 
             let a_y = in_upper_left.y + in_y_size * in_y_idx as f64;
             let b_y = a_y + in_y_size;
 
-            let out_x = out_upper_left.x + x as f64 * out_x_size;
+            let out_x = out_upper_left.x + x_idx as f64 * out_x_size;
             let in_x_idx = ((out_x - in_upper_left.x) / in_x_size).floor() as isize;
 
             let a_x = in_upper_left.x + in_x_size * in_x_idx as f64;

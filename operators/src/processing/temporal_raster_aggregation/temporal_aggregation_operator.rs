@@ -170,39 +170,39 @@ where
     fn create_subquery_first<F>(
         &self,
         fold_fn: F,
-    ) -> Result<TemporalRasterAggregationSubQueryNoDataOnly<F, P>> {
-        Ok(TemporalRasterAggregationSubQueryNoDataOnly {
+    ) -> TemporalRasterAggregationSubQueryNoDataOnly<F, P> {
+        TemporalRasterAggregationSubQueryNoDataOnly {
             fold_fn,
             step: self.window,
             step_reference: self.window_reference,
             _phantom_pixel_type: PhantomData,
-        })
+        }
     }
 
     fn create_subquery_last<F>(
         &self,
         fold_fn: F,
-    ) -> Result<TemporalRasterAggregationSubQueryNoDataOnly<F, P>> {
-        Ok(TemporalRasterAggregationSubQueryNoDataOnly {
+    ) -> TemporalRasterAggregationSubQueryNoDataOnly<F, P> {
+        TemporalRasterAggregationSubQueryNoDataOnly {
             fold_fn,
             step: self.window,
             step_reference: self.window_reference,
             _phantom_pixel_type: PhantomData,
-        })
+        }
     }
 
     fn create_subquery_mean<F>(
         &self,
         fold_fn: F,
         ignore_no_data: bool,
-    ) -> Result<TemporalRasterMeanAggregationSubQuery<F, P>> {
-        Ok(TemporalRasterMeanAggregationSubQuery {
+    ) -> TemporalRasterMeanAggregationSubQuery<F, P> {
+        TemporalRasterMeanAggregationSubQuery {
             fold_fn,
             step: self.window,
             step_reference: self.window_reference,
             ignore_no_data,
             _phantom_pixel_type: PhantomData,
-        })
+        }
     }
 }
 
@@ -249,69 +249,34 @@ where
 
             Aggregation::First {
                 ignore_no_data: true,
-            } => self
+            } => Ok(self
                 .create_subquery_first(no_data_ignoring_fold_future::<P, FirstValidAccFunction>)
-                .map(|o| {
-                    o.into_raster_subquery_adapter(
-                        &self.source,
-                        query,
-                        ctx,
-                        self.tiling_specification,
-                    )
-                    .expect("no tiles must be skipped in Aggregation::First")
-                }),
+                .into_raster_subquery_adapter(&self.source, query, ctx, self.tiling_specification)
+                .expect("no tiles must be skipped in Aggregation::First")),
             Aggregation::First {
                 ignore_no_data: false,
-            } => self
+            } => Ok(self
                 .create_subquery_first(first_tile_fold_future::<P>)
-                .map(|o| {
-                    o.into_raster_subquery_adapter(
-                        &self.source,
-                        query,
-                        ctx,
-                        self.tiling_specification,
-                    )
-                    .expect("no tiles must be skipped in Aggregation::First")
-                }),
+                .into_raster_subquery_adapter(&self.source, query, ctx, self.tiling_specification)
+                .expect("no tiles must be skipped in Aggregation::First")),
             Aggregation::Last {
                 ignore_no_data: true,
-            } => self
+            } => Ok(self
                 .create_subquery_last(no_data_ignoring_fold_future::<P, LastValidAccFunction>)
-                .map(|o| {
-                    o.into_raster_subquery_adapter(
-                        &self.source,
-                        query,
-                        ctx,
-                        self.tiling_specification,
-                    )
-                    .expect("no tiles must be skipped in Aggregation::Last")
-                }),
+                .into_raster_subquery_adapter(&self.source, query, ctx, self.tiling_specification)
+                .expect("no tiles must be skipped in Aggregation::Last")),
 
             Aggregation::Last {
                 ignore_no_data: false,
-            } => self
+            } => Ok(self
                 .create_subquery_last(last_tile_fold_future::<P>)
-                .map(|o| {
-                    o.into_raster_subquery_adapter(
-                        &self.source,
-                        query,
-                        ctx,
-                        self.tiling_specification,
-                    )
-                    .expect("no tiles must be skipped in Aggregation::Last")
-                }),
+                .into_raster_subquery_adapter(&self.source, query, ctx, self.tiling_specification)
+                .expect("no tiles must be skipped in Aggregation::Last")),
 
-            Aggregation::Mean { ignore_no_data } => self
+            Aggregation::Mean { ignore_no_data } => Ok(self
                 .create_subquery_mean(mean_tile_fold_future::<P>, ignore_no_data)
-                .map(|o| {
-                    o.into_raster_subquery_adapter(
-                        &self.source,
-                        query,
-                        ctx,
-                        self.tiling_specification,
-                    )
-                    .expect("no tiles must be skipped in Aggregation::Mean")
-                }),
+                .into_raster_subquery_adapter(&self.source, query, ctx, self.tiling_specification)
+                .expect("no tiles must be skipped in Aggregation::Mean")),
         }
     }
 }

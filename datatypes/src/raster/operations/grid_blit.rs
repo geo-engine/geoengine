@@ -122,7 +122,7 @@ where
     fn grid_blit_from(&mut self, other: &MaskedGrid<D1, T>) {
         // easy part: blit the data
         self.inner_grid.grid_blit_from(other.as_ref());
-        self.validity_mask.grid_blit_from(other.mask_ref())
+        self.validity_mask.grid_blit_from(other.mask_ref());
     }
 }
 
@@ -144,7 +144,7 @@ where
     Grid<D2, bool>: GridBlit<Grid<D1, bool>, bool>,
 {
     fn grid_blit_from(&mut self, other: &EmptyGrid<D1, T>) {
-        self.mask_mut().grid_blit_from(other)
+        self.mask_mut().grid_blit_from(other);
     }
 }
 

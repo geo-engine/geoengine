@@ -97,21 +97,19 @@ impl<T> TemporalMeanTileAccu<T> {
                     let new_value_option = in_tile_grid
                         .get_masked_at_grid_index(grid_index)
                         .expect("Grid Index was invalid before.")
-                        .map(|v| v.as_());
+                        .map(num_traits::AsPrimitive::as_);
                     match (acc_values_option, new_value_option) {
-                        (None, None) => None,
                         (None, Some(v)) if self.ignore_no_data || self.initial_state => {
                             Some((v, 1))
                         }
-                        (None, Some(_)) => None,
                         (Some(v), None) if self.ignore_no_data => Some(v),
-                        (Some(_), None) => None,
                         (Some((acc_value, acc_count)), Some(new_value)) => {
                             let new_acc_count = acc_count + 1;
                             let delta = new_value - acc_value;
                             let new_acc_value = acc_value + delta / (new_acc_count as f64);
                             Some((new_acc_value, new_acc_count))
                         }
+                        (None, Some(_) | None) | (Some(_), None) => None,
                     }
                 };
 

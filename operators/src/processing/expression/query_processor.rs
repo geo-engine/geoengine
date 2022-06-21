@@ -174,6 +174,8 @@ where
     }
 
     #[inline]
+    #[allow(clippy::eq_op)]
+    #[allow(clippy::float_cmp)]
     fn compute_expression(
         raster: Self::Tuple,
         program: &LinkedExpression,
@@ -262,6 +264,8 @@ where
     }
 
     #[inline]
+    #[allow(clippy::eq_op)]
+    #[allow(clippy::float_cmp)]
     fn compute_expression(
         rasters: Self::Tuple,
         program: &LinkedExpression,
@@ -417,6 +421,8 @@ macro_rules! impl_expression_tuple_processor {
                 )
             }
 
+            #[allow(clippy::eq_op)]
+            #[allow(clippy::float_cmp)]
             fn compute_expression(
                 rasters: Self::Tuple,
                 program: &LinkedExpression,

@@ -1,8 +1,9 @@
 use std::ops::Add;
 
 use serde::{Deserialize, Serialize};
+use snafu::ensure;
 
-use crate::util::Result;
+use crate::{error, util::Result};
 
 use super::{
     grid_traits::{MaskedGridIndexAccess, MaskedGridIndexAccessMut},
@@ -34,13 +35,13 @@ where
     /// This constructor fails if the data container's capacity is different from the grid's dimension number
     ///
     pub fn new(data: Grid<D, T>, validity_mask: Grid<D, bool>) -> Result<Self> {
-        //        ensure!(
-        //            data.shape == mask.shape,
-        //            error::DimensionCapacityDoesNotMatchDataCapacity {
-        //                dimension_cap: shape.number_of_elements(),
-        //                data_cap: data.len()
-        //            }
-        //        );
+        ensure!(
+            data.shape == validity_mask.shape,
+            error::DimensionCapacityDoesNotMatchDataCapacity {
+                dimension_cap: data.shape.number_of_elements(),
+                data_cap: validity_mask.shape.number_of_elements()
+            }
+        );
 
         Ok(Self {
             inner_grid: data,
@@ -93,7 +94,7 @@ where
         T: Copy,
     {
         self.masked_element_iterator()
-            .map(|pixel_option| pixel_option.map(|p| *p))
+            .map(std::option::Option::<&T>::copied)
     }
 }
 
@@ -217,7 +218,7 @@ where
     }
 
     fn set_at_grid_index_unchecked(&mut self, grid_index: I, value: T) {
-        self.set_masked_at_grid_index_unchecked(grid_index, Some(value))
+        self.set_masked_at_grid_index_unchecked(grid_index, Some(value));
     }
 }
 

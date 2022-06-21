@@ -620,6 +620,8 @@ impl InitializedRasterOperator for InitializedGdalSourceOperator {
 
 /// This method reads the data for a single grid with a specified size from the GDAL dataset.
 /// It fails if the tile is not within the dataset.
+#[allow(clippy::eq_op)]
+#[allow(clippy::float_cmp)]
 fn read_grid_from_raster<
     T,
     D: GridSize<ShapeArray = [usize; 2]> + GridSpaceToLinearSpace<IndexArray = [isize; 2]>,

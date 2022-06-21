@@ -18,7 +18,7 @@ use snafu::ensure;
 #[serde(rename_all = "camelCase")]
 pub struct EmptyGrid<D, T> {
     pub shape: D,
-    pub _phantom_data: PhantomData<T>,
+    pub phantom_data: PhantomData<T>,
 }
 
 pub type EmptyGrid1D<T> = EmptyGrid<GridShape1D, T>;
@@ -33,7 +33,7 @@ where
     pub fn new(shape: D) -> Self {
         Self {
             shape,
-            _phantom_data: PhantomData,
+            phantom_data: PhantomData,
         }
     }
 
@@ -148,7 +148,7 @@ mod tests {
         let n: EmptyGrid2D<u8> = EmptyGrid2D::new([2, 2].into());
         let expected = EmptyGrid {
             shape: GridShape2D::from([2, 2]),
-            _phantom_data: PhantomData,
+            phantom_data: PhantomData,
         };
         assert_eq!(n, expected);
     }

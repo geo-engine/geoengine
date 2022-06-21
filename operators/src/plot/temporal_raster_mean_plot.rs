@@ -197,11 +197,9 @@ impl Default for MeanCalculator {
 impl MeanCalculator {
     #[inline]
     fn add<P: Pixel, I: Iterator<Item = Option<P>>>(&mut self, values: I) {
-        for value_option in values {
-            if let Some(value) = value_option {
-                self.add_single_value(value);
-            }
-        }
+        values.flatten().for_each(|value| {
+            self.add_single_value(value);
+        });
     }
 
     #[inline]
