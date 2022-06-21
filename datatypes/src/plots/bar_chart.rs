@@ -43,7 +43,7 @@ impl Plot for BarChart {
                 "x": {
                     "field": "label",
                     "axis": {
-                        "title": self.y_label,
+                        "title": self.x_label,
                     },
                 },
                 "y": {
