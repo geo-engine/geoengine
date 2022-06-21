@@ -651,7 +651,7 @@ where
         let e = e.unwrap();
 
         if let Some(no_data) = no_data_value {
-            if no_data == e || (no_data_value != no_data_value && e != e) {
+            if no_data == e || (no_data != no_data && e != e) {
                 return None;
             };
         };
