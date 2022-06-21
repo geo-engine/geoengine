@@ -204,7 +204,8 @@ where
 
                 let result_t = TO::from_(result);
 
-                let out_is_no_data = result != result || result_t == out_no_data;
+                let out_is_no_data =
+                    result_t == out_no_data || (out_no_data != out_no_data && result != result);
 
                 (result_t, !out_is_no_data)
             })
@@ -301,7 +302,8 @@ where
                 );
                 let result_t = TO::from_(result);
 
-                let out_is_no_data = result != result || result_t == out_no_data;
+                let out_is_no_data =
+                    result_t == out_no_data || (out_no_data != out_no_data && result != result);
 
                 (result_t, !out_is_no_data)
             })
@@ -460,7 +462,7 @@ macro_rules! impl_expression_tuple_processor {
 
                         let result_t = TO::from_(result);
 
-                        let out_is_no_data = result != result || result_t == out_no_data;
+                        let out_is_no_data = result_t == out_no_data || (out_no_data != out_no_data && result != result);
 
                         (result_t, !out_is_no_data)
                     })

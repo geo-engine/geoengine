@@ -452,7 +452,7 @@ impl NetCdfCfDataProvider {
             rasterband_channel: 0, // we calculate offsets in our source
             geo_transform,
             file_not_found_handling: FileNotFoundHandling::Error,
-            no_data_value: None, // gdal source will try to get the correct one
+            no_data_value: data_array.no_data_value(), // we could also leave this empty. The gdal source will try to get the correct one.
             properties_mapping: None,
             width: dimensions.lon,
             height: dimensions.lat,

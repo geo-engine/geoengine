@@ -53,7 +53,7 @@ where
                     out_no_data_count += 1;
                 }
             });
-        dbg!(in_no_data_count, out_no_data_count);
+        // dbg!(in_no_data_count, out_no_data_count);
 
         MaskedGrid::new(new_data, validity_mask)
             .expect("Creation of grid with dimension failed before")

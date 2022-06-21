@@ -10,8 +10,8 @@ use geoengine_datatypes::primitives::{
     AxisAlignedRectangle, RasterQueryRectangle, SpatialPartition2D, SpatialPartitioned,
 };
 use geoengine_datatypes::raster::{
-    ChangeGridBounds, EmptyGrid2D, GeoTransform, GridBlit, GridIdx, GridSize, MaskedGrid2D, Pixel,
-    RasterTile2D, MapMaskedElements,
+    ChangeGridBounds, EmptyGrid2D, GeoTransform, GridBlit, GridIdx, GridSize, MapMaskedElements,
+    MaskedGrid2D, Pixel, RasterTile2D,
 };
 use geoengine_datatypes::spatial_reference::SpatialReference;
 use log::debug;
@@ -207,16 +207,16 @@ impl<P: Pixel + GdalType> GdalDatasetWriter<P> {
     }
 
     fn write_tile(&self, tile: RasterTile2D<P>) -> Result<()> {
-
         // FIXME: transform masks to no-data values if the gdal_tiff_metadata no-data value is set. This might need to move somewhere else. Also: write the mask if no no-data value is set.
         let tile = if let Some(replace_no_data_value) = self.gdal_tiff_metadata.no_data_value {
             let replace_no_data_value_p: P = P::from_(replace_no_data_value);
-            let map_fn = |pixel_option| {if let Some(p) = pixel_option {
+            let map_fn = |pixel_option| {
+                if let Some(p) = pixel_option {
                     Some(p)
                 } else {
                     Some(replace_no_data_value_p)
                 }
-            }; 
+            };
             tile.map_or_mask_elements(map_fn)
         } else {
             tile

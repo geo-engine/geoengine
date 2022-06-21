@@ -420,10 +420,13 @@ mod tests {
                 let src = test_util::create_mock_source::<u16>(
                     props,
                     Some(
-                        MaskedGrid2D::new(Grid2D::new([3, 2].into(), vec![1, 2, 3, 4, 1024, 0])
-                            .unwrap(),
-                            Grid2D::new([3, 2].into(), vec![true, true, true, true, true, false]).unwrap()).
-                            unwrap().into(),
+                        MaskedGrid2D::new(
+                            Grid2D::new([3, 2].into(), vec![1, 2, 3, 4, 1024, 0]).unwrap(),
+                            Grid2D::new([3, 2].into(), vec![true, true, true, true, true, false])
+                                .unwrap(),
+                        )
+                        .unwrap()
+                        .into(),
                     ),
                     None,
                 );
@@ -454,7 +457,6 @@ mod tests {
             .unwrap()
             .into()
         ));
-
     }
 
     #[tokio::test]

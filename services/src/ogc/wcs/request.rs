@@ -77,6 +77,11 @@ pub struct GetCoverage {
     #[serde(default)]
     #[serde(deserialize_with = "from_str_option")]
     resy: Option<f64>,
+
+    // Geo Engine specific
+    #[serde(default)]
+    #[serde(deserialize_with = "from_str_option")]
+    pub nodatavalue: Option<f64>,
 }
 
 impl GetCoverage {
@@ -231,7 +236,8 @@ mod tests {
                 }),
                 time: Some(TimeInterval::new_instant(1_388_534_400_000).unwrap()),
                 resx: None,
-                resy: None
+                resy: None,
+                nodatavalue: None,
             },
             coverage
         );

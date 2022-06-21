@@ -648,13 +648,10 @@ where
         // TODO: test if parallel map is better.
         let e = e.unwrap();
 
-        if e != e {
-            return None;
-        };
         if let Some(no_data) = no_data_value {
-            if no_data == e {
+            if no_data == e || (no_data_value != no_data_value && e != e) {
                 return None;
-            }
+            };
         };
         Some(e)
     });
