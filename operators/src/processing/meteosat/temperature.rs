@@ -272,7 +272,7 @@ mod tests {
     use geoengine_datatypes::primitives::{
         ClassificationMeasurement, ContinuousMeasurement, Measurement,
     };
-    use geoengine_datatypes::raster::{EmptyGrid2D, Grid2D, TilingSpecification};
+    use geoengine_datatypes::raster::{EmptyGrid2D, Grid2D, MaskedGrid2D, TilingSpecification};
     use std::collections::HashMap;
 
     // #[tokio::test]
@@ -354,9 +354,13 @@ mod tests {
 
         assert!(geoengine_datatypes::util::test::grid_or_empty_grid_eq(
             &res.grid_array,
-            &Grid2D::new(
-                [3, 2].into(),
-                vec![300.341_43, 318.617_65, 330.365_14, 339.233_64, 346.443_94, 0.,],
+            &MaskedGrid2D::new(
+                Grid2D::new(
+                    [3, 2].into(),
+                    vec![300.341_43, 318.617_65, 330.365_14, 339.233_64, 346.443_94, 0.,],
+                )
+                .unwrap(),
+                Grid2D::new([3, 2].into(), vec![true, true, true, true, true, false,],).unwrap(),
             )
             .unwrap()
             .into()
@@ -392,19 +396,21 @@ mod tests {
 
         assert!(geoengine_datatypes::util::test::grid_or_empty_grid_eq(
             &res.grid_array,
-            &Grid2D::new(
-                [3, 2].into(),
-                vec![300.9428, 319.250_15, 331.019_04, 339.9044, 347.128_78, 0.],
+            &MaskedGrid2D::new(
+                Grid2D::new(
+                    [3, 2].into(),
+                    vec![300.9428, 319.250_15, 331.019_04, 339.9044, 347.128_78, 0.],
+                )
+                .unwrap(),
+                Grid2D::new([3, 2].into(), vec![true, true, true, true, true, false,],).unwrap(),
             )
             .unwrap()
             .into()
         ));
-
-        // TODO: add assert to check mask
     }
 
     #[tokio::test]
-    async fn test_fail_illegal_input() {
+    async fn test_ok_illegal_input_to_masked() {
         let tiling_specification = TilingSpecification::new([0.0, 0.0].into(), [3, 2].into());
         let ctx = MockExecutionContext::new_with_tiling_spec(tiling_specification);
 
@@ -414,9 +420,10 @@ mod tests {
                 let src = test_util::create_mock_source::<u16>(
                     props,
                     Some(
-                        Grid2D::new([3, 2].into(), vec![1, 2, 3, 4, 1024, 0])
-                            .unwrap()
-                            .into(),
+                        MaskedGrid2D::new(Grid2D::new([3, 2].into(), vec![1, 2, 3, 4, 1024, 0])
+                            .unwrap(),
+                            Grid2D::new([3, 2].into(), vec![true, true, true, true, true, false]).unwrap()).
+                            unwrap().into(),
                     ),
                     None,
                 );
@@ -432,8 +439,22 @@ mod tests {
             &ctx,
         )
         .await;
+        assert!(res.is_ok());
+        let res = res.unwrap();
+        assert!(geoengine_datatypes::util::test::grid_or_empty_grid_eq(
+            &res.grid_array,
+            &MaskedGrid2D::new(
+                Grid2D::new(
+                    [3, 2].into(),
+                    vec![300.341_43, 318.617_65, 330.365_14, 339.233_64, 0., 0.],
+                )
+                .unwrap(),
+                Grid2D::new([3, 2].into(), vec![true, true, true, true, false, false,],).unwrap(),
+            )
+            .unwrap()
+            .into()
+        ));
 
-        assert!(res.is_err());
     }
 
     #[tokio::test]

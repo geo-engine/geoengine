@@ -190,6 +190,10 @@ where
         tile: RasterTile2D<PixelOut>,
         pool: Arc<ThreadPool>,
     ) -> Result<RasterTile2D<PixelOut>> {
+        if tile.is_empty() {
+            return Ok(tile);
+        }
+
         let satellite = self.satellite(&tile)?;
         let channel = self.channel(&tile, satellite)?;
         let solar_correction = self.params.solar_correction;
@@ -269,7 +273,7 @@ mod tests {
         ClassificationMeasurement, ContinuousMeasurement, Measurement,
     };
     use geoengine_datatypes::raster::{
-        EmptyGrid2D, Grid2D, GridOrEmpty, RasterTile2D, TilingSpecification,
+        EmptyGrid2D, Grid2D, GridOrEmpty, MaskedGrid2D, RasterTile2D, TilingSpecification,
     };
     use std::collections::HashMap;
 
@@ -352,8 +356,9 @@ mod tests {
         let result = process_mock(ReflectanceParams::default(), Some(1), Some(1), true, None).await;
 
         assert!(result.is_ok());
+        println!("{:?}", result);
         assert!(geoengine_datatypes::util::test::grid_or_empty_grid_eq(
-            &result.as_ref().unwrap().grid_array,
+            &result.unwrap().grid_array,
             &GridOrEmpty::from(EmptyGrid2D::new([3, 2].into()))
         ));
     }
@@ -366,16 +371,20 @@ mod tests {
         assert!(result.is_ok());
         assert!(geoengine_datatypes::util::test::grid_or_empty_grid_eq(
             &result.as_ref().unwrap().grid_array,
-            &Grid2D::new(
-                [3, 2].into(),
-                vec![
-                    0.046_567_827_f32,
-                    0.093_135_655_f32,
-                    0.139_703_48_f32,
-                    0.186_271_31_f32,
-                    0.232_839_14_f32,
-                    0. // TODO: check nodata mask
-                ],
+            &MaskedGrid2D::new(
+                Grid2D::new(
+                    [3, 2].into(),
+                    vec![
+                        0.046_567_827_f32,
+                        0.093_135_655_f32,
+                        0.139_703_48_f32,
+                        0.186_271_31_f32,
+                        0.232_839_14_f32,
+                        0.
+                    ],
+                )
+                .unwrap(),
+                Grid2D::new([3, 2].into(), vec![true, true, true, true, true, false,],).unwrap(),
             )
             .unwrap()
             .into()
@@ -393,16 +402,20 @@ mod tests {
         assert!(result.is_ok());
         assert!(geoengine_datatypes::util::test::grid_or_empty_grid_eq(
             &result.as_ref().unwrap().grid_array,
-            &Grid2D::new(
-                [3, 2].into(),
-                vec![
-                    0.046_542_14_f32,
-                    0.093_084_28_f32,
-                    0.139_626_43_f32,
-                    0.186_168_57_f32,
-                    0.232_710_7_f32,
-                    0. // TODO: check nodata mask
-                ],
+            &MaskedGrid2D::new(
+                Grid2D::new(
+                    [3, 2].into(),
+                    vec![
+                        0.046_542_14_f32,
+                        0.093_084_28_f32,
+                        0.139_626_43_f32,
+                        0.186_168_57_f32,
+                        0.232_710_7_f32,
+                        0. // TODO: check nodata mask
+                    ],
+                )
+                .unwrap(),
+                Grid2D::new([3, 2].into(), vec![true, true, true, true, true, false,],).unwrap()
             )
             .unwrap()
             .into()
@@ -420,16 +433,20 @@ mod tests {
         assert!(result.is_ok());
         assert!(geoengine_datatypes::util::test::grid_or_empty_grid_eq(
             &result.as_ref().unwrap().grid_array,
-            &Grid2D::new(
-                [3, 2].into(),
-                vec![
-                    0.038_567_86_f32,
-                    0.077_135_72_f32,
-                    0.115_703_575_f32,
-                    0.154_271_44_f32,
-                    0.192_839_3_f32,
-                    0. // TODO: check nodata mask
-                ],
+            &MaskedGrid2D::new(
+                Grid2D::new(
+                    [3, 2].into(),
+                    vec![
+                        0.038_567_86_f32,
+                        0.077_135_72_f32,
+                        0.115_703_575_f32,
+                        0.154_271_44_f32,
+                        0.192_839_3_f32,
+                        0. // TODO: check nodata mask
+                    ],
+                )
+                .unwrap(),
+                Grid2D::new([3, 2].into(), vec![true, true, true, true, true, false,],).unwrap(),
             )
             .unwrap()
             .into()
@@ -447,16 +464,20 @@ mod tests {
         assert!(result.is_ok());
         assert!(geoengine_datatypes::util::test::grid_or_empty_grid_eq(
             &result.as_ref().unwrap().grid_array,
-            &Grid2D::new(
-                [3, 2].into(),
-                vec![
-                    0.268_173_43_f32,
-                    0.536_346_85_f32,
-                    0.804_520_3_f32,
-                    1.072_693_7_f32,
-                    1.340_867_2_f32,
-                    0. // TODO: check nodata mask
-                ],
+            &MaskedGrid2D::new(
+                Grid2D::new(
+                    [3, 2].into(),
+                    vec![
+                        0.268_173_43_f32,
+                        0.536_346_85_f32,
+                        0.804_520_3_f32,
+                        1.072_693_7_f32,
+                        1.340_867_2_f32,
+                        0.
+                    ],
+                )
+                .unwrap(),
+                Grid2D::new([3, 2].into(), vec![true, true, true, true, true, false],).unwrap(),
             )
             .unwrap()
             .into()
