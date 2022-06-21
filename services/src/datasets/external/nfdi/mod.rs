@@ -253,7 +253,6 @@ impl NFDIDataProvider {
                 .measurement
                 .as_ref()
                 .map_or(Measurement::Unitless, Clone::clone),
-            no_data_value: info.no_data_value,
             time: None,
             bbox: None,
         }
@@ -374,7 +373,7 @@ impl NFDIDataProvider {
     /// a concrete url on every call to `MetaData.loading_info()`.
     /// This is required, since download links from the core-storage are only valid
     /// for 15 minutes.
-    fn raster_loading_template(info: &RasterInfo, rd: &RasterResultDescriptor) -> GdalLoadingInfo {
+    fn raster_loading_template(info: &RasterInfo) -> GdalLoadingInfo {
         let part = GdalLoadingInfoTemporalSlice {
             time: info.time_interval,
             params: Some(GdalDatasetParameters {
@@ -384,7 +383,7 @@ impl NFDIDataProvider {
                 width: info.width,
                 height: info.height,
                 file_not_found_handling: FileNotFoundHandling::NoData,
-                no_data_value: rd.no_data_value,
+                no_data_value: None,
                 properties_mapping: None,
                 gdal_open_options: None,
                 gdal_config_options: None,
@@ -489,7 +488,7 @@ impl MetaDataProvider<GdalLoadingInfo, RasterResultDescriptor, RasterQueryRectan
         match &md.data_type {
             DataType::SingleRasterFile(info) => {
                 let result_descriptor = Self::create_raster_result_descriptor(md.crs.into(), info);
-                let template = Self::raster_loading_template(info, &result_descriptor);
+                let template = Self::raster_loading_template(info);
 
                 let res = NFDIMetaData {
                     object_id: object.id,
@@ -986,9 +985,7 @@ mod tests {
             super::metadata::DataType::SingleVectorFile(_) => panic!("Expected raster description"),
         };
 
-        let rd = NFDIDataProvider::create_raster_result_descriptor(md.crs.into(), &ri);
-
-        let template = NFDIDataProvider::raster_loading_template(&ri, &rd);
+        let template = NFDIDataProvider::raster_loading_template(&ri);
 
         let url = template
             .new_link("test".to_string())

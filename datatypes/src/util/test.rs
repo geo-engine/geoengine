@@ -249,7 +249,7 @@ mod tests {
         let goe1 = GridOrEmpty::from(e1);
         let goe2 = GridOrEmpty::from(e2);
 
-        assert!(grid_or_empty_grid_eq(&goe1, &goe2))
+        assert!(grid_or_empty_grid_eq(&goe1, &goe2));
     }
 
     #[test]
@@ -263,7 +263,7 @@ mod tests {
         let goe1 = GridOrEmpty::from(e1);
         let goe2 = GridOrEmpty::from(e2);
 
-        assert!(grid_or_empty_grid_eq(&goe1, &goe2))
+        assert!(grid_or_empty_grid_eq(&goe1, &goe2));
     }
 
     #[test]
@@ -280,6 +280,6 @@ mod tests {
         let goe1 = GridOrEmpty::from(r1);
         let goe2 = GridOrEmpty::from(r2);
 
-        assert!(grid_or_empty_grid_eq(&goe1, &goe2))
+        assert!(grid_or_empty_grid_eq(&goe1, &goe2));
     }
 }

@@ -1111,14 +1111,14 @@ mod tests {
                     tile_size_in_pixels: [3, 2].into(),
                     global_geo_transform: TestDefault::test_default(),
                 },
-                GridOrEmpty::from(GridOrEmpty::from(
+                GridOrEmpty::from(
                     MaskedGrid2D::new(
                         Grid2D::new([3, 2].into(), vec![13, 42, 15, 16, 17, 18]).unwrap(),
                         Grid2D::new([3, 2].into(), vec![true, false, true, true, true, true])
                             .unwrap()
                     )
                     .unwrap()
-                ),)
+                )
             )
         );
 
