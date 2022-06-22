@@ -1,6 +1,5 @@
 use async_trait::async_trait;
 use geoengine_datatypes::dataset::{DatasetId, LayerProviderId};
-use geoengine_datatypes::identifier;
 use geoengine_datatypes::primitives::{RasterQueryRectangle, VectorQueryRectangle};
 use geoengine_operators::engine::{
     MetaDataProvider, RasterResultDescriptor, VectorResultDescriptor,

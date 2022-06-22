@@ -1,6 +1,6 @@
 use serde::{Deserialize, Serialize};
 
-use geoengine_datatypes::{dataset::LayerProviderId, identifier};
+use geoengine_datatypes::dataset::LayerProviderId;
 
 use crate::{
     error::Result, projects::Symbology, util::user_input::UserInput, workflows::workflow::Workflow,
@@ -8,22 +8,22 @@ use crate::{
 
 use super::listing::{LayerCollectionId, LayerId};
 
-#[derive(Serialize, Deserialize, Clone)]
-struct ProviderLayerId {
-    provider: LayerProviderId,
-    id: LayerId,
+#[derive(Debug, Serialize, Deserialize, Clone, PartialEq)]
+pub struct ProviderLayerId {
+    pub provider: LayerProviderId,
+    pub item: LayerId,
 }
 
-#[derive(Serialize, Deserialize, Clone)]
-struct ProviderLayerCollectionId {
-    provider: LayerProviderId,
-    id: LayerCollectionId,
+#[derive(Debug, Serialize, Deserialize, Clone, PartialEq)]
+pub struct ProviderLayerCollectionId {
+    pub provider: LayerProviderId,
+    pub item: LayerCollectionId,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone, PartialEq)]
 pub struct Layer {
     // TODO: add provider, also need a separate struct for import and API output
-    pub id: LayerId,
+    pub id: ProviderLayerId,
     pub name: String,
     pub description: String,
     pub workflow: Workflow,
@@ -32,8 +32,7 @@ pub struct Layer {
 
 #[derive(Debug, Serialize, Deserialize, Clone, PartialEq)]
 pub struct LayerListing {
-    pub provider: LayerProviderId,
-    pub layer: LayerId,
+    pub id: ProviderLayerId,
     pub name: String,
     pub description: String,
 }
@@ -72,7 +71,7 @@ pub struct LayerCollection {
 
 #[derive(Debug, Serialize, Deserialize, Clone, PartialEq)]
 pub struct LayerCollectionListing {
-    pub id: LayerCollectionId,
+    pub id: ProviderLayerCollectionId,
     pub name: String,
     pub description: String,
 }

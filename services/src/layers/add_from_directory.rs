@@ -22,6 +22,7 @@ pub async fn add_layers_from_directory<L: LayerDb>(layer_db: &mut L, file_path: 
         let def: LayerDefinition =
             serde_json::from_reader(BufReader::new(File::open(entry.path())?))?;
 
+        // TODO: only add layer to root collection that are not contained in any other collection
         layer_db
             .add_layer_with_id(
                 &def.id,
@@ -32,6 +33,7 @@ pub async fn add_layers_from_directory<L: LayerDb>(layer_db: &mut L, file_path: 
                     symbology: def.symbology,
                 }
                 .validated()?,
+                &layer_db.root_collection_id().await?,
             )
             .await?;
 
@@ -81,7 +83,9 @@ pub async fn add_layer_collections_from_directory<L: LayerDb>(db: &mut L, file_p
         }
         .validated()?;
 
-        db.add_collection_with_id(&def.id, collection).await?;
+        // TODO: add only collections that aren't contained in any other collection to the root collection?
+        db.add_collection_with_id(&def.id, collection, &db.root_collection_id().await?)
+            .await?;
 
         for layer in &def.layers {
             db.add_layer_to_collection(layer, &def.id).await?;

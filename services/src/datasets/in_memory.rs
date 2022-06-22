@@ -245,7 +245,7 @@ impl DatasetProvider<SimpleSession> for HashMapDatasetDb {
 
     async fn provenance(
         &self,
-        session: &SimpleSession,
+        _session: &SimpleSession,
         dataset: &DatasetId,
     ) -> Result<ProvenanceOutput> {
         match dataset {
@@ -261,7 +261,7 @@ impl DatasetProvider<SimpleSession> for HashMapDatasetDb {
                     provenance: d.provenance.clone(),
                 })
                 .ok_or(error::Error::UnknownDatasetId),
-            DatasetId::External(id) => {
+            DatasetId::External(_id) => {
                 todo!() // TODO: throw error
             }
         }

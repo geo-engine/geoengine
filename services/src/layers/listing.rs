@@ -1,10 +1,9 @@
 use std::fmt;
 
 use async_trait::async_trait;
-use geoengine_datatypes::dataset::DatasetId;
 
+use crate::error::Result;
 use crate::util::user_input::Validated;
-use crate::{error::Result, workflows::workflow::Workflow};
 
 use super::layer::{CollectionItem, Layer, LayerCollectionListOptions};
 
@@ -29,17 +28,18 @@ impl fmt::Display for LayerCollectionId {
 }
 
 #[async_trait]
+/// Listing of layers and layer collections
 pub trait LayerCollectionProvider {
+    /// list all the items in the given `collection`
     async fn collection_items(
         &self,
         collection: &LayerCollectionId,
         options: Validated<LayerCollectionListOptions>,
     ) -> Result<Vec<CollectionItem>>;
 
-    async fn root_collection_items(
-        &self,
-        options: Validated<LayerCollectionListOptions>,
-    ) -> Result<Vec<CollectionItem>>;
+    /// get the id of the root collection
+    async fn root_collection_id(&self) -> Result<LayerCollectionId>;
 
+    /// get the full contents of the layer with the given `id`
     async fn get_layer(&self, id: &LayerId) -> Result<Layer>;
 }

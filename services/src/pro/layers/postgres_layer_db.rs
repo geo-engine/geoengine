@@ -7,7 +7,6 @@ use bb8_postgres::{
     },
     PostgresConnectionManager,
 };
-use geoengine_datatypes::util::Identifier;
 use snafu::ResultExt;
 
 use crate::{

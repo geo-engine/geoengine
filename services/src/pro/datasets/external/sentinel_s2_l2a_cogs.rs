@@ -582,7 +582,7 @@ impl MetaDataProvider<OgrSourceDataset, VectorResultDescriptor, VectorQueryRecta
 
 #[cfg(test)]
 mod tests {
-    use std::{fs::File, io::BufReader, str::FromStr};
+    use std::{fs::File, io::BufReader};
 
     use crate::test_data;
     use futures::StreamExt;

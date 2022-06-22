@@ -1,20 +1,21 @@
 use std::collections::HashMap;
+use std::sync::Arc;
 
 use super::external::{ExternalLayerProvider, ExternalLayerProviderDefinition};
 use super::layer::{
     AddLayer, AddLayerCollection, CollectionItem, Layer, LayerCollectionListOptions,
-    LayerCollectionListing, LayerListing,
+    LayerCollectionListing, LayerListing, ProviderLayerCollectionId, ProviderLayerId,
 };
 use super::listing::{LayerCollectionId, LayerCollectionProvider, LayerId};
-use crate::error::Result;
+use crate::error::{Error, Result};
 use crate::util::user_input::UserInput;
-use crate::workflows::workflow::Workflow;
 use crate::{contexts::Db, util::user_input::Validated};
 use async_trait::async_trait;
 use geoengine_datatypes::dataset::LayerProviderId;
-use geoengine_datatypes::identifier;
-use geoengine_datatypes::util::Identifier;
+use serde::{Deserialize, Serialize};
 use snafu::Snafu;
+use tokio::sync::RwLock;
+use uuid::Uuid;
 
 #[derive(Debug, Snafu)]
 #[snafu(visibility(pub(crate)))]
@@ -27,29 +28,53 @@ pub enum LayerDbError {
 pub const INTERNAL_PROVIDER_ID: LayerProviderId =
     LayerProviderId::from_u128(0xce5e_84db_cbf9_48a2_9a32_d4b7_cc56_ea74);
 
-#[async_trait]
-pub trait LayerDb: LayerCollectionProvider + Send + Sync {
-    async fn add_layer(&self, layer: Validated<AddLayer>) -> Result<LayerId>;
-    async fn add_layer_with_id(&self, id: &LayerId, layer: Validated<AddLayer>) -> Result<()>;
+pub const INTERNAL_LAYER_DB_ROOT_COLLECTION_ID: Uuid =
+    Uuid::from_u128(0x0510_2bb3_a855_4a37_8a8a_3002_6a91_fef1);
 
+#[async_trait]
+/// Storage for layers and layer collections
+pub trait LayerDb: LayerCollectionProvider + Send + Sync {
+    /// add new `layer` to the given `collection`
+    async fn add_layer(
+        &self,
+        layer: Validated<AddLayer>,
+        collection: &LayerCollectionId,
+    ) -> Result<LayerId>;
+
+    /// add new `layer` with fixed `id` to the given `collection`
+    /// TODO: remove this method and allow stable names instead
+    async fn add_layer_with_id(
+        &self,
+        id: &LayerId,
+        layer: Validated<AddLayer>,
+        collection: &LayerCollectionId,
+    ) -> Result<()>;
+
+    /// add existing `layer` to the given `collection`
     async fn add_layer_to_collection(
         &self,
         layer: &LayerId,
         collection: &LayerCollectionId,
     ) -> Result<()>;
 
+    /// add new `collection` to the given `parent`
+    // TODO: remove once stable names are available
     async fn add_collection(
         &self,
         collection: Validated<AddLayerCollection>,
+        parent: &LayerCollectionId,
     ) -> Result<LayerCollectionId>;
 
+    /// add new `collection` with fixex `id` to the given `parent`
     // TODO: remove once stable names are available
     async fn add_collection_with_id(
         &self,
         id: &LayerCollectionId,
         collection: Validated<AddLayerCollection>,
+        parent: &LayerCollectionId,
     ) -> Result<()>;
 
+    /// add existing `collection` to given `parent`
     async fn add_collection_to_parent(
         &self,
         collection: &LayerCollectionId,
@@ -59,10 +84,16 @@ pub trait LayerDb: LayerCollectionProvider + Send + Sync {
     // TODO: share/remove/update
 }
 
-pub struct LayerProviderListing {}
-
-#[derive(Debug, Clone)]
-pub struct LayerProviderListingOptions {}
+pub struct LayerProviderListing {
+    pub id: LayerProviderId,
+    pub name: String,
+    pub description: String,
+}
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct LayerProviderListingOptions {
+    pub offset: u32,
+    pub limit: u32,
+}
 
 impl UserInput for LayerProviderListingOptions {
     fn validate(&self) -> Result<()> {
@@ -94,32 +125,69 @@ pub struct HashMapLayerDbBackend {
     collections: HashMap<LayerCollectionId, AddLayerCollection>,
     collection_children: HashMap<LayerCollectionId, Vec<LayerCollectionId>>,
     collection_layers: HashMap<LayerCollectionId, Vec<LayerId>>,
-    external_providers: Db<HashMap<LayerProviderId, Box<dyn ExternalLayerProviderDefinition>>>,
 }
 
-#[derive(Default, Debug)]
+#[derive(Debug)]
 pub struct HashMapLayerDb {
     backend: Db<HashMapLayerDbBackend>,
 }
 
+impl HashMapLayerDb {
+    pub fn new() -> Self {
+        let mut backend = HashMapLayerDbBackend::default();
+
+        backend.collections.insert(
+            LayerCollectionId(INTERNAL_LAYER_DB_ROOT_COLLECTION_ID.to_string()),
+            AddLayerCollection {
+                name: "LayerDB".to_string(),
+                description: "Root collection for LayerDB".to_string(),
+            },
+        );
+
+        Self {
+            backend: Arc::new(RwLock::new(backend)),
+        }
+    }
+}
+
+impl Default for HashMapLayerDb {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 #[async_trait]
 impl LayerDb for HashMapLayerDb {
-    async fn add_layer(&self, layer: Validated<AddLayer>) -> Result<LayerId> {
+    async fn add_layer(
+        &self,
+        layer: Validated<AddLayer>,
+        collection: &LayerCollectionId,
+    ) -> Result<LayerId> {
         let id = LayerId(uuid::Uuid::new_v4().to_string());
-        self.backend
-            .write()
-            .await
-            .layers
-            .insert(id.clone(), layer.user_input);
+
+        let mut backend = self.backend.write().await;
+        backend.layers.insert(id.clone(), layer.user_input);
+        backend
+            .collection_layers
+            .entry(collection.clone())
+            .or_default()
+            .push(id.clone());
         Ok(id)
     }
 
-    async fn add_layer_with_id(&self, id: &LayerId, layer: Validated<AddLayer>) -> Result<()> {
-        self.backend
-            .write()
-            .await
-            .layers
-            .insert(id.clone(), layer.user_input);
+    async fn add_layer_with_id(
+        &self,
+        id: &LayerId,
+        layer: Validated<AddLayer>,
+        collection: &LayerCollectionId,
+    ) -> Result<()> {
+        let mut backend = self.backend.write().await;
+        backend.layers.insert(id.clone(), layer.user_input);
+        backend
+            .collection_layers
+            .entry(collection.clone())
+            .or_default()
+            .push(id.clone());
         Ok(())
     }
 
@@ -144,14 +212,19 @@ impl LayerDb for HashMapLayerDb {
     async fn add_collection(
         &self,
         collection: Validated<AddLayerCollection>,
+        parent: &LayerCollectionId,
     ) -> Result<LayerCollectionId> {
         let id = LayerCollectionId(uuid::Uuid::new_v4().to_string());
 
-        self.backend
-            .write()
-            .await
+        let mut backend = self.backend.write().await;
+        backend
             .collections
             .insert(id.clone(), collection.user_input);
+        backend
+            .collection_children
+            .entry(parent.clone())
+            .or_default()
+            .push(id.clone());
 
         Ok(id)
     }
@@ -160,12 +233,18 @@ impl LayerDb for HashMapLayerDb {
         &self,
         id: &LayerCollectionId,
         collection: Validated<AddLayerCollection>,
+        parent: &LayerCollectionId,
     ) -> Result<()> {
-        self.backend
-            .write()
-            .await
+        let mut backend = self.backend.write().await;
+        backend
             .collections
             .insert(id.clone(), collection.user_input);
+        backend
+            .collection_children
+            .entry(parent.clone())
+            .or_default()
+            .push(id.clone());
+
         Ok(())
     }
 
@@ -203,7 +282,7 @@ impl LayerCollectionProvider for HashMapLayerDb {
 
         let collections = backend
             .collection_children
-            .get(&collection)
+            .get(collection)
             .unwrap_or(&empty)
             .iter()
             .map(|c| {
@@ -212,7 +291,10 @@ impl LayerCollectionProvider for HashMapLayerDb {
                     .get(c)
                     .expect("collections reference existing collections as children");
                 CollectionItem::Collection(LayerCollectionListing {
-                    id: c.clone(),
+                    id: ProviderLayerCollectionId {
+                        provider: INTERNAL_PROVIDER_ID,
+                        item: c.clone(),
+                    },
                     name: collection.name.clone(),
                     description: collection.description.clone(),
                 })
@@ -222,7 +304,7 @@ impl LayerCollectionProvider for HashMapLayerDb {
 
         let layers = backend
             .collection_layers
-            .get(&collection)
+            .get(collection)
             .unwrap_or(&empty)
             .iter()
             .map(|l| {
@@ -232,8 +314,10 @@ impl LayerCollectionProvider for HashMapLayerDb {
                     .expect("collections reference existing layers as items");
 
                 CollectionItem::Layer(LayerListing {
-                    provider: INTERNAL_PROVIDER_ID,
-                    layer: l.clone(),
+                    id: ProviderLayerId {
+                        provider: INTERNAL_PROVIDER_ID,
+                        item: l.clone(),
+                    },
                     name: layer.name.clone(),
                     description: layer.description.clone(),
                 })
@@ -246,52 +330,10 @@ impl LayerCollectionProvider for HashMapLayerDb {
             .collect())
     }
 
-    async fn root_collection_items(
-        &self,
-        options: Validated<LayerCollectionListOptions>,
-    ) -> Result<Vec<CollectionItem>> {
-        let options = options.user_input;
-
-        let backend = self.backend.read().await;
-
-        let collections = backend.collections.iter().filter_map(|(id, c)| {
-            if backend
-                .collection_children
-                .values()
-                .any(|collections| collections.contains(id))
-            {
-                return None;
-            }
-
-            Some(CollectionItem::Collection(LayerCollectionListing {
-                id: id.clone(),
-                name: c.name.clone(),
-                description: c.description.clone(),
-            }))
-        });
-
-        let layers = backend.layers.iter().filter_map(|(id, l)| {
-            if backend
-                .collection_layers
-                .values()
-                .any(|layers| layers.contains(id))
-            {
-                return None;
-            }
-
-            Some(CollectionItem::Layer(LayerListing {
-                provider: INTERNAL_PROVIDER_ID,
-                layer: id.clone(),
-                name: l.name.clone(),
-                description: l.description.clone(),
-            }))
-        });
-
-        Ok(collections
-            .chain(layers)
-            .skip(options.offset as usize)
-            .take(options.limit as usize)
-            .collect())
+    async fn root_collection_id(&self) -> Result<LayerCollectionId> {
+        Ok(LayerCollectionId(
+            INTERNAL_LAYER_DB_ROOT_COLLECTION_ID.to_string(),
+        ))
     }
 
     async fn get_layer(&self, id: &LayerId) -> Result<Layer> {
@@ -299,28 +341,20 @@ impl LayerCollectionProvider for HashMapLayerDb {
 
         let layer = backend
             .layers
-            .get(&id)
+            .get(id)
             .ok_or(LayerDbError::NoLayerForGivenId { id: id.clone() })?;
 
         Ok(Layer {
-            id: id.clone(),
+            id: ProviderLayerId {
+                provider: INTERNAL_PROVIDER_ID,
+                item: id.clone(),
+            },
             name: layer.name.clone(),
             description: layer.description.clone(),
             workflow: layer.workflow.clone(),
             symbology: layer.symbology.clone(),
         })
     }
-
-    // async fn workflow(&self, layer: LayerId) -> Result<Workflow> {
-    //     let backend = self.backend.read().await;
-
-    //     let layer = backend
-    //         .layers
-    //         .get(&layer)
-    //         .ok_or(LayerDbError::NoLayerForGivenId { id: layer })?;
-
-    //     Ok(layer.workflow.clone())
-    // }
 }
 
 #[derive(Default)]
@@ -334,7 +368,7 @@ impl LayerProviderDb for HashMapLayerProviderDb {
         &self,
         provider: Box<dyn ExternalLayerProviderDefinition>,
     ) -> Result<LayerProviderId> {
-        let id = LayerProviderId::new();
+        let id = provider.id();
 
         self.external_providers.write().await.insert(id, provider);
 
@@ -345,11 +379,39 @@ impl LayerProviderDb for HashMapLayerProviderDb {
         &self,
         options: Validated<LayerProviderListingOptions>,
     ) -> Result<Vec<LayerProviderListing>> {
-        todo!()
+        let options = options.user_input;
+
+        let mut listing = self
+            .external_providers
+            .read()
+            .await
+            .iter()
+            .map(|(id, provider)| LayerProviderListing {
+                id: *id,
+                name: provider.name(),
+                description: provider.type_name(),
+            })
+            .collect::<Vec<_>>();
+
+        // TODO: sort option
+        listing.sort_by(|a, b| a.name.cmp(&b.name));
+
+        Ok(listing
+            .into_iter()
+            .skip(options.offset as usize)
+            .take(options.limit as usize)
+            .collect())
     }
 
     async fn layer_provider(&self, id: LayerProviderId) -> Result<Box<dyn ExternalLayerProvider>> {
-        todo!()
+        self.external_providers
+            .read()
+            .await
+            .get(&id)
+            .cloned()
+            .ok_or(Error::UnknownProviderId)?
+            .initialize()
+            .await
     }
 }
 
@@ -403,15 +465,13 @@ mod tests {
         mock::{MockPointSource, MockPointSourceParams},
     };
 
-    use crate::{util::user_input::UserInput, workflows::workflow::WorkflowId};
+    use crate::util::user_input::UserInput;
 
     use super::*;
 
     #[tokio::test]
     async fn it_stores_layers() -> Result<()> {
         let db = HashMapLayerDb::default();
-
-        let _workflow_id = WorkflowId::new();
 
         let layer = AddLayer {
             name: "layer".to_string(),
@@ -430,7 +490,9 @@ mod tests {
         }
         .validated()?;
 
-        let l_id = db.add_layer(layer).await?;
+        let root_collection = &db.root_collection_id().await?;
+
+        let l_id = db.add_layer(layer, root_collection).await?;
 
         let collection = AddLayerCollection {
             name: "top collection".to_string(),
@@ -438,7 +500,7 @@ mod tests {
         }
         .validated()?;
 
-        let top_c_id = db.add_collection(collection).await?;
+        let top_c_id = db.add_collection(collection, root_collection).await?;
         db.add_layer_to_collection(&l_id, &top_c_id).await?;
 
         let collection = AddLayerCollection {
@@ -447,9 +509,7 @@ mod tests {
         }
         .validated()?;
 
-        let empty_c_id = db.add_collection(collection).await?;
-
-        db.add_collection_to_parent(&empty_c_id, &top_c_id).await?;
+        let empty_c_id = db.add_collection(collection, &top_c_id).await?;
 
         let items = db
             .collection_items(
@@ -466,13 +526,18 @@ mod tests {
             items,
             vec![
                 CollectionItem::Collection(LayerCollectionListing {
-                    id: empty_c_id,
+                    id: ProviderLayerCollectionId {
+                        provider: INTERNAL_PROVIDER_ID,
+                        item: empty_c_id,
+                    },
                     name: "empty collection".to_string(),
                     description: "description".to_string()
                 }),
                 CollectionItem::Layer(LayerListing {
-                    provider: INTERNAL_PROVIDER_ID,
-                    layer: l_id,
+                    id: ProviderLayerId {
+                        provider: INTERNAL_PROVIDER_ID,
+                        item: l_id,
+                    },
                     name: "layer".to_string(),
                     description: "description".to_string(),
                 })

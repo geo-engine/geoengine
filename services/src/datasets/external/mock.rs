@@ -1,27 +1,30 @@
-use std::collections::HashMap;
-
 use crate::datasets::listing::ProvenanceOutput;
+use crate::error::Result;
 use crate::layers::external::{ExternalLayerProvider, ExternalLayerProviderDefinition};
-use crate::layers::layer::{CollectionItem, Layer, LayerCollectionListOptions, LayerListing};
+use crate::layers::layer::{
+    CollectionItem, Layer, LayerCollectionListOptions, LayerListing, ProviderLayerId,
+};
 use crate::layers::listing::{LayerCollectionId, LayerCollectionProvider, LayerId};
-use crate::{datasets::listing::DatasetListOptions, error::Result};
+use crate::workflows::workflow::Workflow;
 use crate::{
-    datasets::{
-        listing::DatasetListing,
-        storage::{DatasetDefinition, MetaDataDefinition},
-    },
+    datasets::storage::{DatasetDefinition, MetaDataDefinition},
     error,
     util::user_input::Validated,
 };
 use async_trait::async_trait;
 use geoengine_datatypes::dataset::{DatasetId, LayerProviderId};
 use geoengine_datatypes::primitives::{RasterQueryRectangle, VectorQueryRectangle};
+use geoengine_operators::engine::{TypedOperator, VectorOperator};
+use geoengine_operators::mock::{MockDatasetDataSource, MockDatasetDataSourceParams};
 use geoengine_operators::{
     engine::{MetaData, MetaDataProvider, RasterResultDescriptor, VectorResultDescriptor},
     mock::MockDatasetDataSourceLoadingInfo,
     source::{GdalLoadingInfo, OgrSourceDataset},
 };
 use serde::{Deserialize, Serialize};
+use uuid::Uuid;
+
+pub const ROOT_COLLECTION_ID: Uuid = Uuid::from_u128(0xd630_e723_63d4_440c_9e15_644c_400f_c7c1);
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct MockExternalLayerProviderDefinition {
@@ -88,23 +91,21 @@ impl LayerCollectionProvider for MockExternalDataProvider {
         _collection: &LayerCollectionId,
         _options: Validated<LayerCollectionListOptions>,
     ) -> Result<Vec<CollectionItem>> {
-        Ok(vec![]) // TODO: throw error instead?
-    }
+        // TODO: use collection id
+        // TODO: use options
 
-    async fn root_collection_items(
-        &self,
-        _options: Validated<LayerCollectionListOptions>,
-    ) -> Result<Vec<CollectionItem>> {
         let mut listing = vec![];
         for dataset in &self.datasets {
             listing.push(Ok(CollectionItem::Layer(LayerListing {
-                provider: self.id,
-                layer: dataset
-                    .properties
-                    .id
-                    .as_ref()
-                    .ok_or(error::Error::MissingDatasetId)
-                    .map(layer_id_from_dataset_id)?,
+                id: ProviderLayerId {
+                    provider: self.id,
+                    item: dataset
+                        .properties
+                        .id
+                        .as_ref()
+                        .ok_or(error::Error::MissingDatasetId)
+                        .map(layer_id_from_dataset_id)?,
+                },
                 name: dataset.properties.name.clone(),
                 description: dataset.properties.description.clone(),
             })));
@@ -114,6 +115,10 @@ impl LayerCollectionProvider for MockExternalDataProvider {
             .into_iter()
             .filter_map(|d: Result<_>| if let Ok(d) = d { Some(d) } else { None })
             .collect())
+    }
+
+    async fn root_collection_id(&self) -> Result<LayerCollectionId> {
+        Ok(LayerCollectionId(ROOT_COLLECTION_ID.to_string()))
     }
 
     async fn get_layer(&self, id: &LayerId) -> Result<Layer> {
@@ -128,12 +133,30 @@ impl LayerCollectionProvider for MockExternalDataProvider {
                     == Some(id)
             })
             .ok_or(error::Error::UnknownDatasetId)
-            .map(|d| Layer {
-                id: id.clone(),
-                name: d.properties.name.clone(),
-                description: d.properties.description.clone(),
-                workflow: todo!(),
-                symbology: d.properties.symbology.clone(),
+            .and_then(|d| {
+                Ok(Layer {
+                    id: ProviderLayerId {
+                        provider: self.id,
+                        item: id.clone(),
+                    },
+                    name: d.properties.name.clone(),
+                    description: d.properties.description.clone(),
+                    workflow: Workflow {
+                        operator: TypedOperator::Vector(
+                            MockDatasetDataSource {
+                                params: MockDatasetDataSourceParams {
+                                    dataset: d
+                                        .properties
+                                        .id
+                                        .clone()
+                                        .ok_or(error::Error::MissingDatasetId)?,
+                                },
+                            }
+                            .boxed(),
+                        ),
+                    },
+                    symbology: d.properties.symbology.clone(),
+                })
             })
     }
 }

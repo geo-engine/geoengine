@@ -9,7 +9,7 @@ use async_trait::async_trait;
 use geoengine_datatypes::dataset::DatasetId;
 use geoengine_datatypes::primitives::{RasterQueryRectangle, VectorQueryRectangle};
 use geoengine_operators::engine::{
-    MetaData, MetaDataProvider, RasterResultDescriptor, ResultDescriptor, TypedResultDescriptor,
+    MetaData, RasterResultDescriptor, ResultDescriptor, TypedResultDescriptor,
     VectorResultDescriptor,
 };
 use geoengine_operators::mock::MockDatasetDataSourceLoadingInfo;

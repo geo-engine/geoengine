@@ -1,9 +1,11 @@
 use actix_web::{web, FromRequest, Responder};
+use geoengine_datatypes::dataset::LayerProviderId;
 
 use crate::error::Result;
 
+use crate::layers::layer::{CollectionItem, LayerCollectionListing, ProviderLayerCollectionId};
 use crate::layers::listing::{LayerCollectionId, LayerCollectionProvider, LayerId};
-use crate::layers::storage::LayerDb;
+use crate::layers::storage::{LayerProviderDb, LayerProviderListingOptions};
 use crate::util::user_input::UserInput;
 use crate::{contexts::Context, layers::layer::LayerCollectionListOptions};
 
@@ -12,33 +14,86 @@ where
     C: Context,
     C::Session: FromRequest,
 {
-    cfg.service(web::resource("/layers").route(web::get().to(list_root_collections_handler::<C>)))
-        // TODO: add provider as param
-        .service(web::resource("/layers/{id}").route(web::get().to(list_collection_handler::<C>)))
-        // TODO: add provider as param
-        .service(web::resource("/layer/{id}").route(web::get().to(layer_handler::<C>)));
+    cfg.service(
+        web::resource("/layers/collections")
+            .route(web::get().to(list_root_collections_handler::<C>)),
+    )
+    .service(
+        web::resource("/layers/collections/{provider}/{item}")
+            .route(web::get().to(list_collection_handler::<C>)),
+    )
+    .service(web::resource("/layers/{provider}/{item}").route(web::get().to(layer_handler::<C>)));
 }
 
 async fn list_root_collections_handler<C: Context>(
     ctx: web::Data<C>,
     options: web::Query<LayerCollectionListOptions>,
 ) -> Result<impl Responder> {
-    let db = ctx.layer_db_ref();
-    let collection = db
-        .root_collection_items(options.into_inner().validated()?)
-        .await?;
+    let mut providers = vec![];
 
-    Ok(web::Json(collection))
+    // TODO: add dataset db as provider
+
+    if options.offset == 0 && options.limit > 0 {
+        providers.push(CollectionItem::Collection(LayerCollectionListing {
+            id: ProviderLayerCollectionId {
+                provider: crate::layers::storage::INTERNAL_PROVIDER_ID,
+                item: LayerCollectionId(
+                    crate::layers::storage::INTERNAL_LAYER_DB_ROOT_COLLECTION_ID.to_string(),
+                ),
+            },
+            name: "Layers".to_string(),
+            description: "All available Geo Engine layers".to_string(),
+        }));
+    }
+
+    let external = ctx.layer_provider_db_ref();
+
+    for provider_listing in external
+        .list_layer_providers(
+            LayerProviderListingOptions {
+                offset: options.offset,
+                limit: options.limit,
+            }
+            .validated()?,
+        )
+        .await?
+    {
+        // TODO: resolve providers in parallel
+        let provider = external.layer_provider(provider_listing.id).await?;
+        providers.push(CollectionItem::Collection(LayerCollectionListing {
+            id: ProviderLayerCollectionId {
+                provider: provider_listing.id,
+                item: provider.root_collection_id().await?,
+            },
+            name: provider_listing.name,
+            description: provider_listing.description,
+        }));
+    }
+
+    Ok(web::Json(providers))
 }
 
 async fn list_collection_handler<C: Context>(
     ctx: web::Data<C>,
-    id: web::Path<LayerCollectionId>,
+    path: web::Path<(LayerProviderId, LayerCollectionId)>,
     options: web::Query<LayerCollectionListOptions>,
 ) -> Result<impl Responder> {
+    let (provider, item) = path.into_inner();
+
+    if provider == crate::layers::storage::INTERNAL_PROVIDER_ID {
+        let collection = ctx
+            .layer_db_ref()
+            .collection_items(&item, options.into_inner().validated()?)
+            .await?;
+
+        return Ok(web::Json(collection));
+    }
+
     let collection = ctx
-        .layer_db_ref()
-        .collection_items(&id.into_inner(), options.into_inner().validated()?)
+        .layer_provider_db_ref()
+        .layer_provider(provider)
+        .await?
+        .collection_items(&item, options.into_inner().validated()?)
         .await?;
 
     Ok(web::Json(collection))
@@ -46,9 +101,22 @@ async fn list_collection_handler<C: Context>(
 
 async fn layer_handler<C: Context>(
     ctx: web::Data<C>,
-    id: web::Path<LayerId>,
+    path: web::Path<(LayerProviderId, LayerId)>,
 ) -> Result<impl Responder> {
-    let collection = ctx.layer_db_ref().get_layer(&id.into_inner()).await?;
+    let (provider, item) = path.into_inner();
+
+    if provider == crate::layers::storage::INTERNAL_PROVIDER_ID {
+        let collection = ctx.layer_db_ref().get_layer(&item).await?;
+
+        return Ok(web::Json(collection));
+    }
+
+    let collection = ctx
+        .layer_provider_db_ref()
+        .layer_provider(provider)
+        .await?
+        .get_layer(&item)
+        .await?;
 
     Ok(web::Json(collection))
 }

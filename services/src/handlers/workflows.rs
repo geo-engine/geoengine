@@ -232,7 +232,7 @@ async fn get_workflow_provenance_handler<C: Context>(
 
     let provenance: Vec<_> = datasets
         .iter()
-        .map(|id| resolve_provenance::<C>(&session, &db, &providers, &id))
+        .map(|id| resolve_provenance::<C>(&session, db, providers, id))
         .collect();
     let provenance: Result<Vec<_>> = join_all(provenance).await.into_iter().collect();
 
@@ -243,9 +243,9 @@ async fn get_workflow_provenance_handler<C: Context>(
     Ok(web::Json(provenance))
 }
 
-async fn resolve_provenance<C: Context>(session: &C::Session, datasets: &C::DatasetDB, providers: &C::LayerProviderDB, id: &DatasetId) -> Result<ProvenanceOutput> {
+async fn resolve_provenance<C: Context>(session: &C::Session, datasets: &C::DatasetDB, _providers: &C::LayerProviderDB, id: &DatasetId) -> Result<ProvenanceOutput> {
     match id {
-        DatasetId::Internal { dataset_id } => datasets.provenance(session, id).await,
+        DatasetId::Internal { dataset_id: _ } => datasets.provenance(session, id).await,
         DatasetId::External(_) => todo!(),
     }
 }
