@@ -9,6 +9,7 @@ use crate::pro::projects::ProjectPermission;
 use crate::pro::users::{UserDb, UserId, UserSession};
 use crate::pro::workflows::postgres_workflow_registry::PostgresWorkflowRegistry;
 use crate::projects::ProjectId;
+use crate::tasks::{SimpleTaskManager, SimpleTaskManagerContext};
 use crate::{contexts::Context, pro::users::PostgresUserDb};
 use crate::{
     contexts::{ExecutionContextImpl, QueryContextImpl},
@@ -51,6 +52,7 @@ where
     thread_pool: Arc<ThreadPool>,
     exe_ctx_tiling_spec: TilingSpecification,
     query_ctx_chunk_size: ChunkByteSize,
+    task_manager: Arc<SimpleTaskManager>,
 }
 
 impl<Tls> PostgresContext<Tls>
@@ -78,6 +80,7 @@ where
             workflow_registry: Arc::new(PostgresWorkflowRegistry::new(pool.clone())),
             dataset_db: Arc::new(PostgresDatasetDb::new(pool.clone())),
             layer_db: Arc::new(PostgresLayerDb::new(pool.clone())),
+            task_manager: Arc::new(SimpleTaskManager::default()),
             thread_pool: create_rayon_thread_pool(0),
             exe_ctx_tiling_spec,
             query_ctx_chunk_size,
@@ -125,6 +128,7 @@ where
             workflow_registry: Arc::new(workflow_db),
             dataset_db: Arc::new(dataset_db),
             layer_db: Arc::new(layer_db),
+            task_manager: Arc::new(SimpleTaskManager::default()),
             thread_pool: create_rayon_thread_pool(0),
             exe_ctx_tiling_spec,
             query_ctx_chunk_size,
@@ -499,6 +503,8 @@ where
     type WorkflowRegistry = PostgresWorkflowRegistry<Tls>;
     type DatasetDB = PostgresDatasetDb<Tls>;
     type LayerDB = PostgresLayerDb<Tls>;
+    type TaskContext = SimpleTaskManagerContext;
+    type TaskManager = SimpleTaskManager; // this does not persist across restarts
     type QueryContext = QueryContextImpl;
     type ExecutionContext = ExecutionContextImpl<UserSession, PostgresDatasetDb<Tls>>;
 
@@ -528,6 +534,13 @@ where
     }
     fn layer_db_ref(&self) -> &Self::LayerDB {
         &self.layer_db
+    }
+
+    fn tasks(&self) -> Arc<Self::TaskManager> {
+        self.task_manager.clone()
+    }
+    fn tasks_ref(&self) -> &Self::TaskManager {
+        &self.task_manager
     }
 
     fn query_context(&self) -> Result<Self::QueryContext> {
@@ -597,7 +610,7 @@ mod tests {
         DatasetId, DatasetProviderId, ExternalDatasetId, InternalDatasetId,
     };
     use geoengine_datatypes::primitives::{
-        BoundingBox2D, Coordinate2D, FeatureDataType, SpatialResolution, TimeInterval,
+        BoundingBox2D, Coordinate2D, FeatureDataType, Measurement, SpatialResolution, TimeInterval,
         VectorQueryRectangle,
     };
     use geoengine_datatypes::spatial_reference::{SpatialReference, SpatialReferenceOption};
@@ -605,7 +618,7 @@ mod tests {
     use geoengine_datatypes::util::Identifier;
     use geoengine_operators::engine::{
         MetaData, MultipleRasterSources, PlotOperator, StaticMetaData, TypedOperator,
-        TypedResultDescriptor, VectorOperator, VectorResultDescriptor,
+        TypedResultDescriptor, VectorColumnInfo, VectorOperator, VectorResultDescriptor,
     };
     use geoengine_operators::mock::{MockPointSource, MockPointSourceParams};
     use geoengine_operators::plot::{Statistics, StatisticsParams};
@@ -1068,9 +1081,15 @@ mod tests {
                 result_descriptor: VectorResultDescriptor {
                     data_type: VectorDataType::MultiPoint,
                     spatial_reference: SpatialReference::epsg_4326().into(),
-                    columns: [("foo".to_owned(), FeatureDataType::Float)]
-                        .into_iter()
-                        .collect(),
+                    columns: [(
+                        "foo".to_owned(),
+                        VectorColumnInfo {
+                            data_type: FeatureDataType::Float,
+                            measurement: Measurement::Unitless,
+                        },
+                    )]
+                    .into_iter()
+                    .collect(),
                     time: None,
                     bbox: None,
                 },
@@ -1131,9 +1150,15 @@ mod tests {
                     result_descriptor: TypedResultDescriptor::Vector(VectorResultDescriptor {
                         data_type: VectorDataType::MultiPoint,
                         spatial_reference: SpatialReference::epsg_4326().into(),
-                        columns: [("foo".to_owned(), FeatureDataType::Float)]
-                            .into_iter()
-                            .collect(),
+                        columns: [(
+                            "foo".to_owned(),
+                            VectorColumnInfo {
+                                data_type: FeatureDataType::Float,
+                                measurement: Measurement::Unitless
+                            }
+                        )]
+                        .into_iter()
+                        .collect(),
                         time: None,
                         bbox: None,
                     }),
@@ -1250,9 +1275,15 @@ mod tests {
                 result_descriptor: VectorResultDescriptor {
                     data_type: VectorDataType::MultiPoint,
                     spatial_reference: SpatialReference::epsg_4326().into(),
-                    columns: [("foo".to_owned(), FeatureDataType::Float)]
-                        .into_iter()
-                        .collect(),
+                    columns: [(
+                        "foo".to_owned(),
+                        VectorColumnInfo {
+                            data_type: FeatureDataType::Float,
+                            measurement: Measurement::Unitless,
+                        },
+                    )]
+                    .into_iter()
+                    .collect(),
                     time: None,
                     bbox: None,
                 },

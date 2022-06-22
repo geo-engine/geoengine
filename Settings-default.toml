@@ -11,6 +11,10 @@ list_limit = 20
 [dataset_service]
 list_limit = 20
 
+[task_manager]
+list_default_limit = 10
+list_limit = 20
+
 [postgres]
 host = "localhost"
 port = 5432

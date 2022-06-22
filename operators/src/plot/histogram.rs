@@ -110,7 +110,10 @@ impl PlotOperator for Histogram {
 
                 let vector_source = vector_source.initialize(context).await?;
 
-                match vector_source.result_descriptor().columns.get(column_name) {
+                match vector_source
+                    .result_descriptor()
+                    .column_data_type(column_name)
+                {
                     None => {
                         return Err(Error::ColumnDoesNotExist {
                             column: column_name.to_string(),
@@ -197,7 +200,12 @@ impl InitializedPlotOperator for InitializedHistogram<Box<dyn InitializedVectorO
         let processor = HistogramVectorQueryProcessor {
             input: self.source.query_processor()?,
             column_name: self.column_name.clone().unwrap_or_default(),
-            measurement: Measurement::Unitless, // TODO: incorporate measurement once it is there
+            measurement: self
+                .source
+                .result_descriptor()
+                .column_measurement(self.column_name.as_deref().unwrap_or_default())
+                .cloned()
+                .into(),
             metadata: self.metadata,
             interactive: self.interactive,
         };
@@ -584,7 +592,8 @@ mod tests {
 
     use crate::engine::{
         ChunkByteSize, MockExecutionContext, MockQueryContext, RasterOperator,
-        RasterResultDescriptor, StaticMetaData, VectorOperator, VectorResultDescriptor,
+        RasterResultDescriptor, StaticMetaData, VectorColumnInfo, VectorOperator,
+        VectorResultDescriptor,
     };
     use crate::mock::{MockFeatureCollectionSource, MockRasterSource, MockRasterSourceParams};
     use crate::source::{
@@ -640,7 +649,8 @@ mod tests {
                     "type": "MockFeatureCollectionSourceMultiPoint",
                     "params": {
                         "collections": [],
-                        "spatialReference": "EPSG:4326"
+                        "spatialReference": "EPSG:4326",
+                        "measurements": {},
                     }
                 }
             }
@@ -676,7 +686,8 @@ mod tests {
                     "type": "MockFeatureCollectionSourceMultiPoint",
                     "params": {
                         "collections": [],
-                        "spatialReference": "EPSG:4326"
+                        "spatialReference": "EPSG:4326",
+                        "measurements": {},
                     }
                 }
             }
@@ -972,6 +983,7 @@ mod tests {
     }
 
     #[tokio::test]
+    #[allow(clippy::too_many_lines)]
     async fn text_attribute() {
         let dataset_id = InternalDatasetId::new();
 
@@ -1031,11 +1043,41 @@ mod tests {
                     data_type: VectorDataType::MultiPoint,
                     spatial_reference: SpatialReference::epsg_4326().into(),
                     columns: [
-                        ("natlscale".to_string(), FeatureDataType::Float),
-                        ("scalerank".to_string(), FeatureDataType::Int),
-                        ("featurecla".to_string(), FeatureDataType::Text),
-                        ("name".to_string(), FeatureDataType::Text),
-                        ("website".to_string(), FeatureDataType::Text),
+                        (
+                            "natlscale".to_string(),
+                            VectorColumnInfo {
+                                data_type: FeatureDataType::Float,
+                                measurement: Measurement::Unitless,
+                            },
+                        ),
+                        (
+                            "scalerank".to_string(),
+                            VectorColumnInfo {
+                                data_type: FeatureDataType::Int,
+                                measurement: Measurement::Unitless,
+                            },
+                        ),
+                        (
+                            "featurecla".to_string(),
+                            VectorColumnInfo {
+                                data_type: FeatureDataType::Text,
+                                measurement: Measurement::Unitless,
+                            },
+                        ),
+                        (
+                            "name".to_string(),
+                            VectorColumnInfo {
+                                data_type: FeatureDataType::Text,
+                                measurement: Measurement::Unitless,
+                            },
+                        ),
+                        (
+                            "website".to_string(),
+                            VectorColumnInfo {
+                                data_type: FeatureDataType::Text,
+                                measurement: Measurement::Unitless,
+                            },
+                        ),
                     ]
                     .iter()
                     .cloned()
@@ -1186,13 +1228,19 @@ mod tests {
 
     #[tokio::test]
     async fn feature_collection_with_one_feature() {
-        let vector_source = MockFeatureCollectionSource::single(
-            DataCollection::from_slices(
+        let vector_source = MockFeatureCollectionSource::with_collections_and_measurements(
+            vec![DataCollection::from_slices(
                 &[] as &[NoGeometry],
                 &[TimeInterval::default()],
                 &[("foo", FeatureData::Float(vec![5.0]))],
             )
-            .unwrap(),
+            .unwrap()],
+            [(
+                "foo".to_string(),
+                Measurement::continuous("bar".to_string(), None),
+            )]
+            .into_iter()
+            .collect(),
         )
         .boxed();
 
@@ -1233,12 +1281,17 @@ mod tests {
 
         assert_eq!(
             result,
-            geoengine_datatypes::plots::Histogram::builder(1, 5., 5., Measurement::Unitless)
-                .counts(vec![1])
-                .build()
-                .unwrap()
-                .to_vega_embeddable(false)
-                .unwrap()
+            geoengine_datatypes::plots::Histogram::builder(
+                1,
+                5.,
+                5.,
+                Measurement::continuous("bar".to_string(), None)
+            )
+            .counts(vec![1])
+            .build()
+            .unwrap()
+            .to_vega_embeddable(false)
+            .unwrap()
         );
     }
 

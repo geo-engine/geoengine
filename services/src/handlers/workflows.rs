@@ -698,8 +698,18 @@ mod tests {
                 "dataType": "MultiPoint",
                 "spatialReference": "EPSG:4326",
                 "columns": {
-                    "bar": "int",
-                    "foo": "float"
+                    "bar": {
+                        "dataType": "int",
+                        "measurement": {
+                            "type": "unitless"
+                        }
+                    },
+                    "foo": {
+                        "dataType": "float",
+                        "measurement": {
+                            "type": "unitless"
+                        }
+                    }
                 },
                 "time": null,
                 "bbox": null

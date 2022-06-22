@@ -2,8 +2,13 @@
 
 [![CI](https://github.com/geo-engine/geoengine/actions/workflows/ci.yml/badge.svg)](https://github.com/geo-engine/geoengine/actions/workflows/ci.yml)
 [![Coverage Status](https://coveralls.io/repos/github/geo-engine/geoengine/badge.svg?branch=master)](https://coveralls.io/github/geo-engine/geoengine?branch=master)
+[![Documentation](https://img.shields.io/badge/documentation-docs.geoengine.io-blue)](https://docs.geoengine.io/)
 
 This workspace contains the Geo Engine crates.
+
+## Documentation
+
+- [Geo Engine Docs](https://docs.geoengine.io/)
 
 ## Development
 
