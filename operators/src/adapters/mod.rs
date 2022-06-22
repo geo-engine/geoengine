@@ -11,7 +11,7 @@ pub use raster_subquery::{
     fold_by_coordinate_lookup_future, FoldTileAccu, FoldTileAccuMut, RasterSubQueryAdapter,
     SubQueryTileAggregator, TileReprojectionSubQuery,
 };
-pub use raster_time::{QueryWrapper, Queryable, RasterTimeAdapter};
+pub use raster_time::{QueryWrapper, Queryable, RasterArrayTimeAdapter, RasterTimeAdapter};
 pub use sparse_tiles_fill_adapter::{SparseTilesFillAdapter, SparseTilesFillAdapterError};
 
 use self::raster_time_substream::RasterTimeMultiFold;
