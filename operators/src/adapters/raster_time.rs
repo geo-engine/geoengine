@@ -1,8 +1,7 @@
 use crate::engine::{QueryContext, RasterQueryProcessor};
-use crate::util::futures_join::ArrayJoin;
 use crate::util::stream_zip::StreamArrayZip;
 use crate::util::Result;
-use futures::future::{self, BoxFuture, Join};
+use futures::future::{self, BoxFuture, Join, JoinAll};
 use futures::stream::{BoxStream, FusedStream, Zip};
 use futures::{ready, StreamExt};
 use futures::{Future, Stream};
@@ -134,7 +133,7 @@ where
     Initial,
     AwaitingQuery {
         #[pin]
-        query_futures: ArrayJoin<F::Output, N>,
+        query_futures: JoinAll<F::Output>, // TODO: use join construct on array if available
     },
     ConsumingStream {
         #[pin]
@@ -362,18 +361,12 @@ where
         loop {
             match state.as_mut().project() {
                 ArrayStateProjection::Initial => {
-                    let array_of_futures = if let Ok(arr) = sources
+                    let array_of_futures = sources
                         .iter()
                         .map(|source| source.query(*query_rect))
-                        .collect::<Vec<_>>()
-                        .try_into()
-                    {
-                        arr
-                    } else {
-                        unreachable!("RasterArrayTimeAdapter: sources.len() != N");
-                    };
+                        .collect::<Vec<_>>();
 
-                    let query_futures = ArrayJoin::new(array_of_futures);
+                    let query_futures = futures::future::join_all(array_of_futures);
 
                     state.set(ArrayState::AwaitingQuery { query_futures });
                 }
