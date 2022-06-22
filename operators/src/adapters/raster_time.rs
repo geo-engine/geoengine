@@ -144,7 +144,7 @@ where
     Finished,
 }
 
-/// Merges two raster sources by aligning the temporal validity.
+/// Merges `N` raster sources by aligning the temporal validity.
 ///
 /// # Assumptions
 /// * Assumes that the raster tiles already align spatially.

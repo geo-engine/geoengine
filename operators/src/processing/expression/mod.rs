@@ -53,7 +53,7 @@ pub struct ExpressionParams {
 pub type Expression = Operator<ExpressionParams, ExpressionSources>;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-#[allow(clippy::unsafe_derive_deserialize)]
+#[allow(clippy::unsafe_derive_deserialize)] // TODO: remove if this warning is a glitch
 pub struct ExpressionSources {
     a: Box<dyn RasterOperator>,
     b: Option<Box<dyn RasterOperator>>,
