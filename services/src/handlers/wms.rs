@@ -445,8 +445,8 @@ mod tests {
         check_allowed_http_methods(get_capabilities_test_helper, &[Method::GET]).await;
     }
 
-    // The result should be similar to the GDAL output of this command: gdalwarp -tr 1 1 -r near -srcnodata 0 -dstnodata 0  MOD13A2_M_NDVI_2014-01-01.TIFF MOD13A2_M_NDVI_2014-01-01_360_180_near_0.TIFF 
-    /*    
+    // The result should be similar to the GDAL output of this command: gdalwarp -tr 1 1 -r near -srcnodata 0 -dstnodata 0  MOD13A2_M_NDVI_2014-01-01.TIFF MOD13A2_M_NDVI_2014-01-01_360_180_near_0.TIFF
+    /*
     #[tokio::test]
     async fn png_from_stream_non_full() {
         let ctx = InMemoryContext::test_default();
