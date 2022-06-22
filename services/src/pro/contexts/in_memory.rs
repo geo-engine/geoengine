@@ -8,6 +8,7 @@ use crate::pro::contexts::{Context, ProContext};
 use crate::pro::datasets::{add_datasets_from_directory, ProHashMapDatasetDb};
 use crate::pro::projects::ProHashMapProjectDb;
 use crate::pro::users::{HashMapUserDb, UserDb, UserSession};
+use crate::tasks::{SimpleTaskManager, SimpleTaskManagerContext};
 use crate::workflows::registry::HashMapRegistry;
 use crate::{datasets::add_from_directory::add_providers_from_directory, error::Result};
 use async_trait::async_trait;
@@ -31,6 +32,7 @@ pub struct ProInMemoryContext {
     thread_pool: Arc<ThreadPool>,
     exe_ctx_tiling_spec: TilingSpecification,
     query_ctx_chunk_size: ChunkByteSize,
+    task_manager: Arc<SimpleTaskManager>,
 }
 
 impl TestDefault for ProInMemoryContext {
@@ -44,6 +46,7 @@ impl TestDefault for ProInMemoryContext {
             thread_pool: create_rayon_thread_pool(0),
             exe_ctx_tiling_spec: TestDefault::test_default(),
             query_ctx_chunk_size: TestDefault::test_default(),
+            task_manager: Default::default(),
         }
     }
 }
@@ -80,6 +83,7 @@ impl ProInMemoryContext {
             workflow_registry: Arc::new(workflow_db),
             dataset_db: Arc::new(dataset_db),
             layer_db: Arc::new(layer_db),
+            task_manager: Default::default(),
             thread_pool: create_rayon_thread_pool(0),
             exe_ctx_tiling_spec,
             query_ctx_chunk_size,
@@ -96,6 +100,7 @@ impl ProInMemoryContext {
             workflow_registry: Default::default(),
             dataset_db: Default::default(),
             layer_db: Default::default(),
+            task_manager: Default::default(),
             thread_pool: create_rayon_thread_pool(0),
             exe_ctx_tiling_spec,
             query_ctx_chunk_size,
@@ -124,6 +129,8 @@ impl Context for ProInMemoryContext {
     type LayerDB = HashMapLayerDb;
     type QueryContext = QueryContextImpl;
     type ExecutionContext = ExecutionContextImpl<UserSession, ProHashMapDatasetDb>;
+    type TaskContext = SimpleTaskManagerContext;
+    type TaskManager = SimpleTaskManager;
 
     fn project_db(&self) -> Arc<Self::ProjectDB> {
         self.project_db.clone()
@@ -151,6 +158,13 @@ impl Context for ProInMemoryContext {
     }
     fn layer_db_ref(&self) -> &Self::LayerDB {
         &self.layer_db
+    }
+
+    fn tasks(&self) -> Arc<Self::TaskManager> {
+        self.task_manager.clone()
+    }
+    fn tasks_ref(&self) -> &Self::TaskManager {
+        &self.task_manager
     }
 
     fn query_context(&self) -> Result<Self::QueryContext> {

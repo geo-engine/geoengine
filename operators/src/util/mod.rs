@@ -17,7 +17,7 @@ use std::collections::HashSet;
 use std::ops::Deref;
 use std::sync::{Mutex, MutexGuard};
 
-pub use self::async_util::{spawn_blocking, spawn_blocking_with_thread_pool};
+pub use self::async_util::{spawn, spawn_blocking, spawn_blocking_with_thread_pool};
 pub use self::rayon::create_rayon_thread_pool;
 
 pub type Result<T, E = Error> = std::result::Result<T, E>;

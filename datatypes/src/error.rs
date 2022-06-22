@@ -11,7 +11,14 @@ use crate::{
     raster::RasterDataType,
 };
 
-pub trait ErrorSource: std::error::Error + Send + Sync + 'static + AsErrorSource {}
+pub trait ErrorSource: std::error::Error + Send + Sync + 'static + AsErrorSource {
+    fn boxed(self) -> Box<dyn ErrorSource>
+    where
+        Self: Sized + 'static,
+    {
+        Box::new(self)
+    }
+}
 
 impl ErrorSource for dyn std::error::Error + Send + Sync + 'static {}
 
