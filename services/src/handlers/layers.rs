@@ -27,13 +27,28 @@ where
 
 async fn list_root_collections_handler<C: Context>(
     ctx: web::Data<C>,
-    options: web::Query<LayerCollectionListOptions>,
+    mut options: web::Query<LayerCollectionListOptions>,
 ) -> Result<impl Responder> {
     let mut providers = vec![];
 
     // TODO: add dataset db as provider
 
     if options.offset == 0 && options.limit > 0 {
+        providers.push(CollectionItem::Collection(LayerCollectionListing {
+            id: ProviderLayerCollectionId {
+                provider: crate::datasets::storage::DATASET_DB_LAYER_PROVIDER_ID,
+                item: LayerCollectionId(
+                    crate::datasets::storage::DATASET_DB_ROOT_COLLECTION_ID.to_string(),
+                ),
+            },
+            name: "Datasets".to_string(),
+            description: "Basic Layers for all Datasets".to_string(),
+        }));
+
+        options.limit -= 1;
+    }
+
+    if options.offset <= 1 && options.limit > 1 {
         providers.push(CollectionItem::Collection(LayerCollectionListing {
             id: ProviderLayerCollectionId {
                 provider: crate::layers::storage::INTERNAL_PROVIDER_ID,
@@ -44,6 +59,8 @@ async fn list_root_collections_handler<C: Context>(
             name: "Layers".to_string(),
             description: "All available Geo Engine layers".to_string(),
         }));
+
+        options.limit -= 1;
     }
 
     let external = ctx.layer_provider_db_ref();
@@ -80,6 +97,15 @@ async fn list_collection_handler<C: Context>(
 ) -> Result<impl Responder> {
     let (provider, item) = path.into_inner();
 
+    if provider == crate::datasets::storage::DATASET_DB_LAYER_PROVIDER_ID {
+        let collection = ctx
+            .dataset_db_ref()
+            .collection_items(&item, options.into_inner().validated()?)
+            .await?;
+
+        return Ok(web::Json(collection));
+    }
+
     if provider == crate::layers::storage::INTERNAL_PROVIDER_ID {
         let collection = ctx
             .layer_db_ref()
@@ -104,6 +130,12 @@ async fn layer_handler<C: Context>(
     path: web::Path<(LayerProviderId, LayerId)>,
 ) -> Result<impl Responder> {
     let (provider, item) = path.into_inner();
+
+    if provider == crate::datasets::storage::DATASET_DB_LAYER_PROVIDER_ID {
+        let collection = ctx.dataset_db_ref().get_layer(&item).await?;
+
+        return Ok(web::Json(collection));
+    }
 
     if provider == crate::layers::storage::INTERNAL_PROVIDER_ID {
         let collection = ctx.layer_db_ref().get_layer(&item).await?;

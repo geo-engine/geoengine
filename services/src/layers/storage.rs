@@ -465,7 +465,7 @@ mod tests {
         mock::{MockPointSource, MockPointSourceParams},
     };
 
-    use crate::util::user_input::UserInput;
+    use crate::{util::user_input::UserInput, workflows::workflow::Workflow};
 
     use super::*;
 

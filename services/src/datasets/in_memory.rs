@@ -3,21 +3,31 @@ use crate::datasets::listing::{DatasetListOptions, DatasetListing, DatasetProvid
 use crate::datasets::storage::{AddDataset, Dataset, DatasetDb, DatasetStore, DatasetStorer};
 use crate::error;
 use crate::error::Result;
+use crate::layers::layer::{
+    CollectionItem, Layer, LayerCollectionListOptions, LayerListing, ProviderLayerId,
+};
+use crate::layers::listing::{LayerCollectionId, LayerCollectionProvider, LayerId};
 use crate::util::user_input::Validated;
+use crate::workflows::workflow::Workflow;
 use async_trait::async_trait;
 use geoengine_datatypes::dataset::{DatasetId, InternalDatasetId};
 use geoengine_datatypes::primitives::{RasterQueryRectangle, VectorQueryRectangle};
 use geoengine_datatypes::util::Identifier;
 use geoengine_operators::engine::{
-    MetaData, RasterResultDescriptor, StaticMetaData, TypedResultDescriptor, VectorResultDescriptor,
+    MetaData, RasterOperator, RasterResultDescriptor, StaticMetaData, TypedOperator,
+    TypedResultDescriptor, VectorOperator, VectorResultDescriptor,
 };
+use geoengine_operators::mock::{MockDatasetDataSource, MockDatasetDataSourceParams};
 use geoengine_operators::source::{
-    GdalLoadingInfo, GdalMetaDataList, GdalMetaDataRegular, GdalMetadataNetCdfCf, OgrSourceDataset,
+    GdalLoadingInfo, GdalMetaDataList, GdalMetaDataRegular, GdalMetadataNetCdfCf, GdalSource,
+    GdalSourceParameters, OgrSource, OgrSourceDataset, OgrSourceParameters,
 };
 use geoengine_operators::{mock::MockDatasetDataSourceLoadingInfo, source::GdalMetaDataStatic};
 use std::collections::HashMap;
+use std::str::FromStr;
 
 use super::listing::ProvenanceOutput;
+use super::storage::{DATASET_DB_LAYER_PROVIDER_ID, DATASET_DB_ROOT_COLLECTION_ID};
 use super::{
     listing::SessionMetaDataProvider,
     storage::MetaDataDefinition,
@@ -384,6 +394,108 @@ impl UploadDb<SimpleSession> for HashMapDatasetDb {
     async fn create_upload(&self, _session: &SimpleSession, upload: Upload) -> Result<()> {
         self.backend.write().await.uploads.insert(upload.id, upload);
         Ok(())
+    }
+}
+
+#[async_trait]
+impl LayerCollectionProvider for HashMapDatasetDb {
+    async fn collection_items(
+        &self,
+        _collection: &LayerCollectionId,
+        options: Validated<LayerCollectionListOptions>,
+    ) -> Result<Vec<CollectionItem>> {
+        // TODO: check collection id
+
+        let options = options.user_input;
+
+        let backend = self.backend.read().await;
+
+        let listing = backend
+            .datasets
+            .iter()
+            .skip(options.offset as usize)
+            .take(options.limit as usize)
+            .map(|d| {
+                CollectionItem::Layer(LayerListing {
+                    id: ProviderLayerId {
+                        provider: DATASET_DB_LAYER_PROVIDER_ID,
+                        // use the dataset id also as layer id, TODO: maybe prefix it?
+                        item: LayerId(
+                            d.id.internal()
+                                .expect("Dataset DB contains only internal datasets")
+                                .to_string(),
+                        ),
+                    },
+                    name: d.name.clone(),
+                    description: d.description.clone(),
+                })
+            })
+            .collect();
+
+        Ok(listing)
+    }
+
+    async fn root_collection_id(&self) -> Result<LayerCollectionId> {
+        Ok(LayerCollectionId(DATASET_DB_ROOT_COLLECTION_ID.to_string()))
+    }
+
+    async fn get_layer(&self, id: &LayerId) -> Result<Layer> {
+        let dataset_id = DatasetId::Internal {
+            dataset_id: InternalDatasetId::from_str(&id.0)?,
+        };
+
+        let backend = self.backend.read().await;
+
+        let dataset = backend
+            .datasets
+            .iter()
+            .find(|d| d.id == dataset_id)
+            .ok_or(error::Error::UnknownDatasetId)?;
+
+        let operator = match dataset.source_operator.as_str() {
+            "OgrSource" => TypedOperator::Vector(
+                OgrSource {
+                    params: OgrSourceParameters {
+                        dataset: dataset.id.clone(),
+                        attribute_projection: None,
+                        attribute_filters: None,
+                    },
+                }
+                .boxed(),
+            ),
+            "GdalSource" => TypedOperator::Raster(
+                GdalSource {
+                    params: GdalSourceParameters {
+                        dataset: dataset.id.clone(),
+                    },
+                }
+                .boxed(),
+            ),
+            "MockDatasetDataSource" => TypedOperator::Vector(
+                MockDatasetDataSource {
+                    params: MockDatasetDataSourceParams {
+                        dataset: dataset.id.clone(),
+                    },
+                }
+                .boxed(),
+            ),
+            s => {
+                return Err(crate::error::Error::UnknownOperator {
+                    operator: s.to_owned(),
+                })
+            }
+        };
+
+        Ok(Layer {
+            id: ProviderLayerId {
+                provider: DATASET_DB_LAYER_PROVIDER_ID,
+                item: id.clone(),
+            },
+            name: dataset.name.clone(),
+            description: dataset.description.clone(),
+            workflow: Workflow { operator },
+            symbology: dataset.symbology.clone(),
+        })
     }
 }
 

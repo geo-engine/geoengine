@@ -336,6 +336,10 @@ pub enum Error {
     LayerDb {
         source: crate::layers::storage::LayerDbError,
     },
+
+    UnknownOperator {
+        operator: String,
+    },
 }
 
 impl actix_web::error::ResponseError for Error {
