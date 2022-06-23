@@ -1,13 +1,12 @@
-use super::{error, parse_time_coverage, NetCdfCf4DProviderError};
+use super::{error, time_coverage, NetCdfCf4DProviderError, TimeCoverage};
 use crate::{
-    datasets::external::netcdfcf::{gdalmd::MdGroup, NetCdfCfDataProvider},
+    datasets::external::netcdfcf::{gdalmd::MdGroup, Metadata, NetCdfCfDataProvider},
     util::config::get_config_element,
 };
 use gdal::{raster::RasterCreationOption, Dataset, DatasetOptions, GdalOpenFlags};
-use geoengine_datatypes::error::BoxedResultExt;
-use geoengine_datatypes::primitives::{TimeInstance, TimeStep};
+use geoengine_datatypes::{error::BoxedResultExt, primitives::TimeInterval};
 use geoengine_operators::{
-    source::GdalMetadataNetCdfCf,
+    source::{GdalLoadingInfoTemporalSlice, GdalMetaDataList, GdalMetadataNetCdfCf},
     util::gdal::{
         gdal_open_dataset_ex, gdal_parameters_from_dataset, raster_descriptor_from_dataset,
     },
@@ -184,28 +183,6 @@ pub fn create_overviews(
     Ok(OverviewGeneration::Created)
 }
 
-fn time_coverage(root_group: &MdGroup) -> Result<TimeCoverage> {
-    let start = root_group
-        .attribute_as_string("time_coverage_start")
-        .context(error::MissingTimeCoverageStart)?;
-    let end = root_group
-        .attribute_as_string("time_coverage_end")
-        .context(error::MissingTimeCoverageEnd)?;
-    let step = root_group
-        .attribute_as_string("time_coverage_resolution")
-        .context(error::MissingTimeCoverageResolution)?;
-
-    let (start, end, step) = parse_time_coverage(&start, &end, &step)?;
-
-    Ok(TimeCoverage { start, end, step })
-}
-
-struct TimeCoverage {
-    start: TimeInstance,
-    end: TimeInstance,
-    step: TimeStep,
-}
-
 fn store_metadata(
     provider_path: &Path,
     dataset_path: &Path,
@@ -330,7 +307,7 @@ fn generate_loading_info(
     dataset: &Dataset,
     overview_dataset_path: &Path,
     time_coverage: &TimeCoverage,
-) -> Result<GdalMetadataNetCdfCf> {
+) -> Result<Metadata> {
     const SAMPLE_BAND: usize = 1;
 
     let result_descriptor = raster_descriptor_from_dataset(dataset, 1, None)
@@ -345,13 +322,36 @@ fn generate_loading_info(
     )
     .boxed_context(error::CannotGenerateLoadingInfo)?;
 
-    Ok(GdalMetadataNetCdfCf {
-        result_descriptor,
-        params,
-        start: time_coverage.start,
-        end: time_coverage.end,
-        step: time_coverage.step,
-        band_offset: 0, // must be changed if there are other dimensions then geo & time
+    Ok(match *time_coverage {
+        TimeCoverage::Regular { start, end, step } => {
+            Metadata::NetCDF(GdalMetadataNetCdfCf {
+                result_descriptor,
+                params,
+                start,
+                end,
+                step,
+                band_offset: 0, // must be changed if there are other dimensions then geo & time
+            })
+        }
+        TimeCoverage::List { ref time_stamps } => {
+            let mut params_list = Vec::with_capacity(time_stamps.len());
+            for (i, time_instance) in time_stamps.iter().enumerate() {
+                let mut params = params.clone();
+
+                params.rasterband_channel = i + 1;
+
+                params_list.push(GdalLoadingInfoTemporalSlice {
+                    time: TimeInterval::new_instant(*time_instance)
+                        .context(error::InvalidTimeCoverageInterval)?,
+                    params: Some(params),
+                });
+            }
+
+            Metadata::List(GdalMetaDataList {
+                result_descriptor,
+                params: params_list,
+            })
+        }
     })
 }
 
@@ -364,7 +364,7 @@ mod tests {
     };
     use geoengine_datatypes::{
         operations::image::{Colorizer, RgbaColor},
-        primitives::{DateTime, Measurement, TimeGranularity, TimeInterval},
+        primitives::{DateTime, Measurement, TimeGranularity, TimeStep},
         raster::RasterDataType,
         spatial_reference::SpatialReference,
         test_data,
@@ -400,7 +400,7 @@ mod tests {
         let loading_info = generate_loading_info(
             &dataset,
             Path::new("foo/bar.tif"),
-            &TimeCoverage {
+            &TimeCoverage::Regular {
                 start: DateTime::new_utc(2020, 1, 1, 0, 0, 0).into(),
                 end: DateTime::new_utc(2021, 1, 1, 0, 0, 0).into(),
                 step: TimeStep {
@@ -413,7 +413,7 @@ mod tests {
 
         assert_eq!(
             loading_info,
-            GdalMetadataNetCdfCf {
+            Metadata::NetCDF(GdalMetadataNetCdfCf {
                 result_descriptor: RasterResultDescriptor {
                     data_type: RasterDataType::I16,
                     spatial_reference: SpatialReference::epsg_4326().into(),
@@ -445,7 +445,7 @@ mod tests {
                     step: 1,
                 },
                 band_offset: 0,
-            }
+            })
         );
     }
 
@@ -468,7 +468,7 @@ mod tests {
                 dataset_in,
                 dataset_out: dataset_out.clone(),
             },
-            &TimeCoverage {
+            &TimeCoverage::Regular {
                 start: DateTime::new_utc(2020, 1, 1, 0, 0, 0).into(),
                 end: DateTime::new_utc(2021, 1, 1, 0, 0, 0).into(),
                 step: TimeStep {
@@ -545,14 +545,13 @@ mod tests {
                         name: "entity03".to_string(),
                     }
                 ],
-                time: TimeInterval::new(
-                    DateTime::new_utc(2000, 1, 1, 0, 0, 0),
-                    DateTime::new_utc(2003, 1, 1, 0, 0, 0)
-                )
-                .unwrap(),
-                time_step: TimeStep {
-                    granularity: TimeGranularity::Years,
-                    step: 1
+                time_coverage: TimeCoverage::Regular {
+                    start: DateTime::new_utc(2000, 1, 1, 0, 0, 0).into(),
+                    end: DateTime::new_utc(2003, 1, 1, 0, 0, 0).into(),
+                    step: TimeStep {
+                        granularity: TimeGranularity::Years,
+                        step: 1
+                    }
                 },
                 colorizer: Colorizer::LinearGradient {
                     breakpoints: vec![

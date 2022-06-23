@@ -227,6 +227,74 @@ impl<'d> MdGroup<'d> {
         Ok(value)
     }
 
+    /// Don't put a NULL-byte in the name!!!
+    pub fn dimension_as_double_array(&self, name: &str) -> Result<Vec<f64>, GdalError> {
+        let name = CString::new(name).expect("no null-byte in name");
+        let options = CslStringList::new();
+
+        let value = unsafe {
+            let c_mdarray = GDALGroupOpenMDArray(self.c_group, name.as_ptr(), options.as_ptr());
+
+            if c_mdarray.is_null() {
+                return Err(Self::_last_null_pointer_err("GDALGroupOpenMDArray"));
+            }
+
+            let mut dim_count = 0;
+
+            let c_dimensions =
+                GDALMDArrayGetDimensions(c_mdarray, std::ptr::addr_of_mut!(dim_count));
+            let dimensions = std::slice::from_raw_parts_mut(c_dimensions, dim_count);
+
+            let mut count = Vec::<usize>::with_capacity(dim_count);
+            for dim in dimensions {
+                let dim_size = GDALDimensionGetSize(*dim);
+                count.push(dim_size as usize);
+            }
+
+            if count.len() != 1 {
+                return Err(GdalError::BadArgument(format!(
+                    "Dimension must be 1D, but is {}D",
+                    count.len()
+                )));
+            }
+
+            let mut values: Vec<f64> = vec![0.; count[0] as usize];
+            let array_start_index: Vec<u64> = vec![0; dim_count];
+
+            let array_step: *const i64 = std::ptr::null(); // default value
+            let buffer_stride: *const i64 = std::ptr::null(); // default value
+            let data_type = GDALMDArrayGetDataType(c_mdarray);
+            let p_dst_buffer_alloc_start: *mut c_void = std::ptr::null_mut();
+            let n_dst_buffer_alloc_size = 0;
+
+            let rv = gdal_sys::GDALMDArrayRead(
+                c_mdarray,
+                array_start_index.as_ptr(),
+                count.as_ptr(),
+                array_step,
+                buffer_stride,
+                data_type,
+                values.as_mut_ptr().cast::<std::ffi::c_void>(),
+                p_dst_buffer_alloc_start,
+                n_dst_buffer_alloc_size,
+            );
+
+            if rv == 0 {
+                return Err(GdalError::BadArgument("GDALMDArrayRead failed".to_string()));
+            }
+
+            GDALExtendedDataTypeRelease(data_type);
+
+            GDALMDArrayRelease(c_mdarray);
+
+            GDALReleaseDimensions(c_dimensions, dim_count);
+
+            values
+        };
+
+        Ok(value)
+    }
+
     pub fn group_names(&self) -> Vec<String> {
         let options = CslStringList::new();
 
