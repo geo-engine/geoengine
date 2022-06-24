@@ -340,6 +340,10 @@ pub enum Error {
     UnknownOperator {
         operator: String,
     },
+
+    IdStringMustBeUuid {
+        found: String,
+    },
 }
 
 impl actix_web::error::ResponseError for Error {

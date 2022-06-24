@@ -1,36 +1,43 @@
-use crate::contexts::{Db, MockableSession};
+use crate::contexts::Db;
 use crate::datasets::listing::SessionMetaDataProvider;
 use crate::datasets::listing::{
-    DatasetListOptions, DatasetListing, DatasetProvider, ExternalDatasetProvider, OrderBy,
-    ProvenanceOutput,
+    DatasetListOptions, DatasetListing, DatasetProvider, OrderBy, ProvenanceOutput,
 };
 use crate::datasets::storage::{
-    AddDataset, Dataset, DatasetDb, DatasetProviderDb, DatasetProviderListOptions,
-    DatasetProviderListing, DatasetStore, DatasetStorer, ExternalDatasetProviderDefinition,
-    MetaDataDefinition,
+    AddDataset, Dataset, DatasetDb, DatasetStore, DatasetStorer, MetaDataDefinition,
+    DATASET_DB_LAYER_PROVIDER_ID, DATASET_DB_ROOT_COLLECTION_ID,
 };
 use crate::datasets::upload::{Upload, UploadDb, UploadId};
 use crate::error;
 use crate::error::Result;
+use crate::layers::layer::{
+    CollectionItem, Layer, LayerCollectionListOptions, LayerListing, ProviderLayerId,
+};
+use crate::layers::listing::{LayerCollectionId, LayerCollectionProvider, LayerId};
 use crate::pro::datasets::Permission;
 use crate::pro::users::{UserId, UserSession};
 use crate::util::user_input::Validated;
+use crate::workflows::workflow::Workflow;
 use async_trait::async_trait;
 use geoengine_datatypes::primitives::{RasterQueryRectangle, VectorQueryRectangle};
 use geoengine_datatypes::{
-    dataset::{DatasetId, DatasetProviderId, InternalDatasetId},
+    dataset::{DatasetId, InternalDatasetId},
     util::Identifier,
 };
 use geoengine_operators::engine::{
-    MetaData, RasterResultDescriptor, StaticMetaData, TypedResultDescriptor, VectorResultDescriptor,
+    MetaData, RasterOperator, RasterResultDescriptor, StaticMetaData, TypedOperator,
+    TypedResultDescriptor, VectorOperator, VectorResultDescriptor,
 };
+use geoengine_operators::mock::{MockDatasetDataSource, MockDatasetDataSourceParams};
 use geoengine_operators::source::{
-    GdalLoadingInfo, GdalMetaDataList, GdalMetaDataRegular, GdalMetadataNetCdfCf, OgrSourceDataset,
+    GdalLoadingInfo, GdalMetaDataList, GdalMetaDataRegular, GdalMetadataNetCdfCf, GdalSource,
+    GdalSourceParameters, OgrSource, OgrSourceDataset, OgrSourceParameters,
 };
 use geoengine_operators::{mock::MockDatasetDataSourceLoadingInfo, source::GdalMetaDataStatic};
 use log::{info, warn};
 use snafu::ensure;
 use std::collections::HashMap;
+use std::str::FromStr;
 
 use super::storage::UpdateDatasetPermissions;
 use super::DatasetPermission;
@@ -56,7 +63,6 @@ pub struct ProHashMapDatasetDbBackend {
         Box<dyn MetaData<GdalLoadingInfo, RasterResultDescriptor, RasterQueryRectangle>>,
     >,
     uploads: HashMap<UserId, HashMap<UploadId, Upload>>,
-    external_providers: HashMap<DatasetProviderId, Box<dyn ExternalDatasetProviderDefinition>>,
 }
 
 #[derive(Default)]
@@ -65,62 +71,6 @@ pub struct ProHashMapDatasetDb {
 }
 
 impl DatasetDb<UserSession> for ProHashMapDatasetDb {}
-
-#[async_trait]
-impl DatasetProviderDb<UserSession> for ProHashMapDatasetDb {
-    async fn add_dataset_provider(
-        &self,
-        _session: &UserSession,
-        provider: Box<dyn ExternalDatasetProviderDefinition>,
-    ) -> Result<DatasetProviderId> {
-        // TODO: authorization
-        let id = provider.id();
-        self.backend
-            .write()
-            .await
-            .external_providers
-            .insert(id, provider);
-        Ok(id)
-    }
-
-    async fn list_dataset_providers(
-        &self,
-        _session: &UserSession,
-        _options: Validated<DatasetProviderListOptions>,
-    ) -> Result<Vec<DatasetProviderListing>> {
-        // TODO: authorization
-        // TODO: use options
-        Ok(self
-            .backend
-            .read()
-            .await
-            .external_providers
-            .iter()
-            .map(|(id, d)| DatasetProviderListing {
-                id: *id,
-                type_name: d.type_name(),
-                name: d.name(),
-            })
-            .collect())
-    }
-
-    async fn dataset_provider(
-        &self,
-        _session: &UserSession,
-        provider: DatasetProviderId,
-    ) -> Result<Box<dyn ExternalDatasetProvider>> {
-        // TODO: authorization
-        self.backend
-            .read()
-            .await
-            .external_providers
-            .get(&provider)
-            .cloned()
-            .ok_or(error::Error::UnknownProviderId)?
-            .initialize()
-            .await
-    }
-}
 
 #[async_trait]
 pub trait ProHashMapStorable: Send + Sync {
@@ -394,11 +344,8 @@ impl DatasetProvider<UserSession> for ProHashMapDatasetDb {
                     })
                     .ok_or(error::Error::UnknownDatasetId)
             }
-            DatasetId::External(id) => {
-                self.dataset_provider(&UserSession::mock(), id.provider_id)
-                    .await?
-                    .provenance(dataset)
-                    .await
+            DatasetId::External(_id) => {
+                todo!() // throw error
             }
         }
     }
@@ -588,6 +535,108 @@ impl UploadDb<UserSession> for ProHashMapDatasetDb {
             .or_insert_with(HashMap::new)
             .insert(upload.id, upload);
         Ok(())
+    }
+}
+
+#[async_trait]
+impl LayerCollectionProvider for ProHashMapDatasetDb {
+    async fn collection_items(
+        &self,
+        _collection: &LayerCollectionId,
+        options: Validated<LayerCollectionListOptions>,
+    ) -> Result<Vec<CollectionItem>> {
+        // TODO: check collection id
+
+        let options = options.user_input;
+
+        let backend = self.backend.read().await;
+
+        let listing = backend
+            .datasets
+            .iter()
+            .skip(options.offset as usize)
+            .take(options.limit as usize)
+            .map(|(_id, d)| {
+                CollectionItem::Layer(LayerListing {
+                    id: ProviderLayerId {
+                        provider: DATASET_DB_LAYER_PROVIDER_ID,
+                        // use the dataset id also as layer id, TODO: maybe prefix it?
+                        item: LayerId(
+                            d.id.internal()
+                                .expect("Dataset DB contains only internal datasets")
+                                .to_string(),
+                        ),
+                    },
+                    name: d.name.clone(),
+                    description: d.description.clone(),
+                })
+            })
+            .collect();
+
+        Ok(listing)
+    }
+
+    async fn root_collection_id(&self) -> Result<LayerCollectionId> {
+        Ok(LayerCollectionId(DATASET_DB_ROOT_COLLECTION_ID.to_string()))
+    }
+
+    async fn get_layer(&self, id: &LayerId) -> Result<Layer> {
+        let dataset_id = DatasetId::Internal {
+            dataset_id: InternalDatasetId::from_str(&id.0)?,
+        };
+
+        let backend = self.backend.read().await;
+
+        let (_id, dataset) = backend
+            .datasets
+            .iter()
+            .find(|(_id, d)| d.id == dataset_id)
+            .ok_or(error::Error::UnknownDatasetId)?;
+
+        let operator = match dataset.source_operator.as_str() {
+            "OgrSource" => TypedOperator::Vector(
+                OgrSource {
+                    params: OgrSourceParameters {
+                        dataset: dataset.id.clone(),
+                        attribute_projection: None,
+                        attribute_filters: None,
+                    },
+                }
+                .boxed(),
+            ),
+            "GdalSource" => TypedOperator::Raster(
+                GdalSource {
+                    params: GdalSourceParameters {
+                        dataset: dataset.id.clone(),
+                    },
+                }
+                .boxed(),
+            ),
+            "MockDatasetDataSource" => TypedOperator::Vector(
+                MockDatasetDataSource {
+                    params: MockDatasetDataSourceParams {
+                        dataset: dataset.id.clone(),
+                    },
+                }
+                .boxed(),
+            ),
+            s => {
+                return Err(crate::error::Error::UnknownOperator {
+                    operator: s.to_owned(),
+                })
+            }
+        };
+
+        Ok(Layer {
+            id: ProviderLayerId {
+                provider: DATASET_DB_LAYER_PROVIDER_ID,
+                item: id.clone(),
+            },
+            name: dataset.name.clone(),
+            description: dataset.description.clone(),
+            workflow: Workflow { operator },
+            symbology: dataset.symbology.clone(),
+        })
     }
 }
 

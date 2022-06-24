@@ -3,10 +3,7 @@ use std::str::FromStr;
 use crate::error::Result;
 use crate::pro::users::{UserId, UserSession};
 use async_trait::async_trait;
-use geoengine_datatypes::{
-    dataset::{DatasetId, DatasetProviderId},
-    identifier,
-};
+use geoengine_datatypes::{dataset::DatasetId, identifier};
 #[cfg(feature = "postgres")]
 use postgres_types::{FromSql, ToSql};
 use serde::{Deserialize, Serialize};
@@ -51,13 +48,6 @@ pub enum Permission {
 pub struct DatasetPermission {
     pub role: RoleId,
     pub dataset: DatasetId,
-    pub permission: Permission,
-}
-
-#[derive(Debug, PartialEq, Eq, Serialize, Deserialize, Clone, Hash)]
-pub struct DatasetProviderPermission {
-    pub role: RoleId,
-    pub external_provider: DatasetProviderId,
     pub permission: Permission,
 }
 

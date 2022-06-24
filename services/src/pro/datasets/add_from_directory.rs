@@ -4,11 +4,7 @@ use std::{
     path::PathBuf,
 };
 
-use crate::{
-    datasets::add_from_directory::{add_dataset_as_layer, add_dataset_layer_collection},
-    error::Result,
-    layers::storage::LayerDb,
-};
+use crate::error::Result;
 use crate::{
     datasets::storage::DatasetDb,
     pro::datasets::{DatasetPermission, Permission, Role},
@@ -21,20 +17,14 @@ use log::warn;
 
 use super::storage::UpdateDatasetPermissions;
 
-pub async fn add_datasets_from_directory<
-    D: DatasetDb<UserSession> + UpdateDatasetPermissions,
-    L: LayerDb,
->(
+pub async fn add_datasets_from_directory<D: DatasetDb<UserSession> + UpdateDatasetPermissions>(
     dataset_db: &mut D,
-    layer_db: &mut L,
     file_path: PathBuf,
 ) {
     async fn add_dataset_definition_from_dir_entry<
         D: DatasetDb<UserSession> + UpdateDatasetPermissions,
-        L: LayerDb,
     >(
         dataset_db: &mut D,
-        layer_db: &mut L,
         entry: &DirEntry,
         system_session: &UserSession,
     ) -> Result<()> {
@@ -71,8 +61,6 @@ pub async fn add_datasets_from_directory<
             )
             .await?;
 
-        add_dataset_as_layer(def, dataset_id, layer_db).await?;
-
         Ok(())
     }
 
@@ -85,15 +73,10 @@ pub async fn add_datasets_from_directory<
     }
     let dir = dir.expect("checked");
 
-    add_dataset_layer_collection(layer_db)
-        .await
-        .expect("Adding dataset layer collection must work");
-
     for entry in dir {
         if let Ok(entry) = entry {
             if let Err(e) =
-                add_dataset_definition_from_dir_entry(dataset_db, layer_db, &entry, &system_session)
-                    .await
+                add_dataset_definition_from_dir_entry(dataset_db, &entry, &system_session).await
             {
                 warn!(
                     "Skipped adding dataset from directory entry: {:?} error: {}",

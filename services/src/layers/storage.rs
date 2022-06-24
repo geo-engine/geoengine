@@ -84,6 +84,7 @@ pub trait LayerDb: LayerCollectionProvider + Send + Sync {
     // TODO: share/remove/update
 }
 
+#[derive(Debug, Clone, PartialEq)]
 pub struct LayerProviderListing {
     pub id: LayerProviderId,
     pub name: String,
@@ -414,48 +415,6 @@ impl LayerProviderDb for HashMapLayerProviderDb {
             .await
     }
 }
-
-// #[async_trait]
-// impl LayerCollectionProvider for HashMapLayerDb {
-//     async fn collection_items(
-//         &self,
-//         collection: LayerCollectionId,
-//         options: Validated<LayerCollectionListOptions>,
-//     ) -> Result<Vec<CollectionItem>> {
-//         todo!()
-//     }
-
-//     async fn root_collection_items(
-//         &self,
-//         _options: Validated<LayerCollectionListOptions>,
-//     ) -> Result<Vec<CollectionItem>> {
-//         // TODO: use options
-
-//         // on root level return one collection of every provider
-//         let backend = self.backend.read().await;
-
-//         let result = [CollectionItem::Collection(LayerCollectionListing {
-//             id: INTERNAL_PROVIDER_ID.clone(),
-//             name: "Internal".to_string(),
-//             description: "Datasets managed by Geo Engine",
-//         })]
-//         .into_iter()
-//         .chain(backend.iter().map(|(id, provider)| {
-//             CollectionItem::Collection(LayerCollectionListing {
-//                 id: id.clone(),
-//                 name: provider.name(),
-//                 description: provider.type_name(),
-//             })
-//         }))
-//         .collect();
-
-//         Ok(result)
-//     }
-
-//     async fn get_layer(&self, id: LayerId) -> Result<Layer> {
-//         todo!()
-//     }
-// }
 
 #[cfg(test)]
 mod tests {
