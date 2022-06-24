@@ -1056,10 +1056,44 @@ mod tests {
             opacity: 1.0,
             colorizer: Colorizer::LinearGradient {
                 breakpoints: vec![
-                    (0.0.try_into().unwrap(), RgbaColor::new(0, 0, 0, 255)).into(),
                     (
-                        255.0.try_into().unwrap(),
-                        RgbaColor::new(255, 255, 255, 255),
+                        0.0.try_into().expect("not nan"),
+                        RgbaColor::new(68, 1, 84, 255),
+                    )
+                        .into(),
+                    (
+                        36.428_571_428_571_42.try_into().expect("not nan"),
+                        RgbaColor::new(70, 50, 126, 255),
+                    )
+                        .into(),
+                    (
+                        72.857_142_857_142_85.try_into().expect("not nan"),
+                        RgbaColor::new(54, 92, 141, 255),
+                    )
+                        .into(),
+                    (
+                        109.285_714_285_714_28.try_into().expect("not nan"),
+                        RgbaColor::new(39, 127, 142, 255),
+                    )
+                        .into(),
+                    (
+                        109.285_714_285_714_28.try_into().expect("not nan"),
+                        RgbaColor::new(31, 161, 135, 255),
+                    )
+                        .into(),
+                    (
+                        182.142_857_142_857_1.try_into().expect("not nan"),
+                        RgbaColor::new(74, 193, 109, 255),
+                    )
+                        .into(),
+                    (
+                        218.571_428_571_428_53.try_into().expect("not nan"),
+                        RgbaColor::new(160, 218, 57, 255),
+                    )
+                        .into(),
+                    (
+                        255.0.try_into().expect("not nan"),
+                        RgbaColor::new(253, 231, 37, 255),
                     )
                         .into(),
                 ],
