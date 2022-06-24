@@ -159,7 +159,6 @@ where
         + GridBounds<IndexArray = I>
         + GridSpaceToLinearSpace<IndexArray = I>
         + Clone
-        + PartialEq
         + PartialEq,
     T: Copy + Sized + Default,
     Grid<D2, T>: GridBlit<Grid<D1, T>, T>,
