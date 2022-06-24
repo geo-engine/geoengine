@@ -36,6 +36,9 @@ pub enum NetCdfCf4DProviderError {
     MissingEntities {
         source: GdalError,
     },
+    MissingTimeDimension {
+        source: GdalError,
+    },
     MissingGroupName,
     MissingFileName,
     NoTitleForGroup {
@@ -70,6 +73,9 @@ pub enum NetCdfCf4DProviderError {
     },
     GeneratingParametersFromDataset {
         source: geoengine_operators::error::Error,
+    },
+    InvalidTimeCoverageInstant {
+        source: geoengine_datatypes::error::Error,
     },
     InvalidTimeCoverageInterval {
         source: geoengine_datatypes::error::Error,

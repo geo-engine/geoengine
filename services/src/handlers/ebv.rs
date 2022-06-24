@@ -836,13 +836,14 @@ mod tests {
                             "name": "entity02"
                         }
                     ],
-                    "time": {
+                    "timeCoverage": {
+                        "type": "regular",
                         "start": 946_684_800_000_i64,
-                        "end": 1_893_456_000_000_i64
-                    },
-                    "timeStep": {
-                        "granularity": "years",
-                        "step": 10
+                        "end": 1_893_456_000_000_i64,
+                        "step": {
+                            "granularity": "years",
+                            "step": 10
+                        }
                     },
                     "colorizer": {
                         "type": "linearGradient",

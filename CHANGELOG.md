@@ -22,5 +22,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Operators were adapted to propagate `Measurement`s if possible.
 
 - The `Expression` operator now uses temporal alignment for 3-8 sources.
+
   - https://github.com/geo-engine/geoengine/pull/559
   - Added a `RasterArrayTimeAdapter` to temporally align an array of raster sources
+
+- EBV Provider now handles non-regular data
+
+  - https://github.com/geo-engine/geoengine/pull/564
+  - **breaking**: since metadata changed to cover two variants of time defintions, overview metadata is no longer valid
