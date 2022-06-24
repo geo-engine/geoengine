@@ -17,8 +17,8 @@ use geoengine_datatypes::raster::{GdalGeoTransform, RasterDataType};
 use geoengine_datatypes::spatial_reference::SpatialReference;
 use geoengine_operators::engine::TypedResultDescriptor;
 use geoengine_operators::source::{
-    FileNotFoundHandling, GdalDatasetGeoTransform, GdalDatasetParameters, GdalMetaDataList,
-    GdalMetadataNetCdfCf,
+    FileNotFoundHandling, GdalDatasetGeoTransform, GdalDatasetParameters,
+    GdalLoadingInfoTemporalSlice, GdalMetaDataList, GdalMetadataNetCdfCf,
 };
 use geoengine_operators::util::gdal::gdal_open_dataset_ex;
 use geoengine_operators::{
@@ -336,6 +336,7 @@ impl NetCdfCfDataProvider {
         Ok(listings)
     }
 
+    #[allow(clippy::too_many_lines)] // TODO: refactor method
     fn meta_data(
         path: &Path,
         overviews: &Path,
@@ -389,17 +390,7 @@ impl NetCdfCfDataProvider {
 
         let root_group = MdGroup::from_dataset(&dataset)?;
 
-        let start = root_group
-            .attribute_as_string("time_coverage_start")
-            .context(error::MissingTimeCoverageStart)?;
-        let end = root_group
-            .attribute_as_string("time_coverage_end")
-            .context(error::MissingTimeCoverageEnd)?;
-        let step = root_group
-            .attribute_as_string("time_coverage_resolution")
-            .context(error::MissingTimeCoverageResolution)?;
-
-        let (start, end, step) = parse_time_coverage(&start, &end, &step)?;
+        let time_coverage = time_coverage(&root_group)?;
 
         let geo_transform = {
             let crs_array = root_group.open_array("crs")?;
@@ -453,14 +444,35 @@ impl NetCdfCfDataProvider {
             gdal_config_options: None,
         };
 
-        Ok(Box::new(GdalMetadataNetCdfCf {
-            params,
-            result_descriptor,
-            start,
-            end, // TODO: Use this or time dimension size (number of steps)?
-            step,
-            band_offset: dataset_id.entity as usize * dimensions.time,
-        }))
+        Ok(match time_coverage {
+            TimeCoverage::Regular { start, end, step } => Box::new(GdalMetadataNetCdfCf {
+                params,
+                result_descriptor,
+                start,
+                end, // TODO: Use this or time dimension size (number of steps)?
+                step,
+                band_offset: dataset_id.entity as usize * dimensions.time,
+            }),
+            TimeCoverage::List { time_stamps } => {
+                let mut params_list = Vec::with_capacity(time_stamps.len());
+                for (i, time_instance) in time_stamps.iter().enumerate() {
+                    let mut params = params.clone();
+
+                    params.rasterband_channel = i + 1;
+
+                    params_list.push(GdalLoadingInfoTemporalSlice {
+                        time: TimeInterval::new_instant(*time_instance)
+                            .context(error::InvalidTimeCoverageInterval)?,
+                        params: Some(params),
+                    });
+                }
+
+                Box::new(GdalMetaDataList {
+                    result_descriptor,
+                    params: params_list,
+                })
+            }
+        })
     }
 
     fn meta_data_from_overviews(
