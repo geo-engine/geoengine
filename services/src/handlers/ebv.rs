@@ -292,6 +292,7 @@ async fn get_ebv_subdatasets<C: Context>(
                 &provider_paths.provider_path,
                 Some(&provider_paths.overview_path),
                 &dataset_path,
+                false,
             )
         })
         .await?

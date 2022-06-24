@@ -10,15 +10,15 @@ use gdal_sys::{
     GDALGroupGetDimensions, GDALGroupGetGroupNames, GDALGroupGetMDArrayNames, GDALGroupHS,
     GDALGroupOpenGroup, GDALGroupOpenMDArray, GDALGroupRelease, GDALMDArrayGetAttribute,
     GDALMDArrayGetDataType, GDALMDArrayGetDimensions, GDALMDArrayGetNoDataValueAsDouble,
-    GDALMDArrayGetSpatialRef, GDALMDArrayGetUnit, GDALMDArrayH, GDALMDArrayRelease,
-    GDALReleaseDimensions, OSRDestroySpatialReference, VSIFree,
+    GDALMDArrayGetSpatialRef, GDALMDArrayGetStatistics, GDALMDArrayGetUnit, GDALMDArrayH,
+    GDALMDArrayRelease, GDALReleaseDimensions, OSRDestroySpatialReference, VSIFree,
 };
 use geoengine_datatypes::raster::RasterDataType;
 use geoengine_datatypes::spatial_reference::{SpatialReference, SpatialReferenceOption};
 use log::debug;
 use snafu::ResultExt;
 use std::ffi::{c_void, CStr, CString};
-use std::os::raw::c_char;
+use std::os::raw::{c_char, c_int};
 
 use super::{error, NetCdfCf4DProviderError};
 
@@ -27,7 +27,7 @@ type Result<T, E = NetCdfCf4DProviderError> = std::result::Result<T, E>;
 #[derive(Debug)]
 pub struct MdGroup<'d> {
     c_group: *mut GDALGroupHS,
-    _dataset: &'d Dataset,
+    dataset: &'d Dataset,
     pub name: String,
 }
 
@@ -42,7 +42,7 @@ impl Drop for MdGroup<'_> {
 #[derive(Debug)]
 pub struct MdArray<'g> {
     c_mdarray: GDALMDArrayH,
-    _group: &'g MdGroup<'g>,
+    group: &'g MdGroup<'g>,
 }
 
 impl Drop for MdArray<'_> {
@@ -122,7 +122,7 @@ impl<'d> MdGroup<'d> {
 
         Ok(Self {
             c_group,
-            _dataset: dataset,
+            dataset,
             name: "".to_owned(),
         })
     }
@@ -357,10 +357,9 @@ impl<'d> MdGroup<'d> {
             c_group
         };
 
-        #[allow(clippy::used_underscore_binding)]
         Ok(Self {
             c_group,
-            _dataset: self._dataset,
+            dataset: self.dataset,
             name: name.to_string(),
         })
     }
@@ -420,7 +419,7 @@ impl<'d> MdGroup<'d> {
 
             MdArray {
                 c_mdarray,
-                _group: self,
+                group: self,
             }
         })
     }
@@ -581,5 +580,31 @@ impl<'g> MdArray<'g> {
         };
 
         Ok(value)
+    }
+
+    pub fn min_max(&self) -> Result<(f64, f64), GdalError> {
+        let mut min: f64 = 0.;
+        let mut max: f64 = 0.;
+
+        let result = unsafe {
+            GDALMDArrayGetStatistics(
+                self.c_mdarray,
+                self.group.dataset.c_dataset(),
+                true as c_int,
+                true as c_int,
+                &mut min,
+                &mut max,
+                std::ptr::null_mut(),
+                std::ptr::null_mut(),
+                std::ptr::null_mut(),
+                None,
+                std::ptr::null_mut(),
+            )
+        };
+
+        match result {
+            gdal_sys::CPLErr::CE_None => Ok((min, max)),
+            _ => Err(unsafe { MdGroup::_last_cpl_err(result) }),
+        }
     }
 }
