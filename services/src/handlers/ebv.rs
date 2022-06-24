@@ -712,12 +712,14 @@ mod tests {
                             "title": "Sustainability",
                             "description": "SSP1-RCP2.6",
                             "dataType": null,
+                            "dataRange": null,
                             "unit": "",
                             "groups": [{
                                     "name": "metric_1",
                                     "title": "Random metric 1",
                                     "description": "Randomly created data",
                                     "dataType": "I16",
+                                    "dataRange": null,
                                     "unit": "",
                                     "groups": []
                                 },
@@ -726,6 +728,7 @@ mod tests {
                                     "title": "Random metric 2",
                                     "description": "Randomly created data",
                                     "dataType": "I16",
+                                    "dataRange": null,
                                     "unit": "",
                                     "groups": []
                                 }
@@ -736,12 +739,14 @@ mod tests {
                             "title": "Middle of the Road ",
                             "description": "SSP2-RCP4.5",
                             "dataType": null,
+                            "dataRange": null,
                             "unit": "",
                             "groups": [{
                                     "name": "metric_1",
                                     "title": "Random metric 1",
                                     "description": "Randomly created data",
                                     "dataType": "I16",
+                                    "dataRange": null,
                                     "unit": "",
                                     "groups": []
                                 },
@@ -750,6 +755,7 @@ mod tests {
                                     "title": "Random metric 2",
                                     "description": "Randomly created data",
                                     "dataType": "I16",
+                                    "dataRange": null,
                                     "unit": "",
                                     "groups": []
                                 }
@@ -760,12 +766,14 @@ mod tests {
                             "title": "Regional Rivalry",
                             "description": "SSP3-RCP6.0",
                             "dataType": null,
+                            "dataRange": null,
                             "unit": "",
                             "groups": [{
                                     "name": "metric_1",
                                     "title": "Random metric 1",
                                     "description": "Randomly created data",
                                     "dataType": "I16",
+                                    "dataRange": null,
                                     "unit": "",
                                     "groups": []
                                 },
@@ -774,6 +782,7 @@ mod tests {
                                     "title": "Random metric 2",
                                     "description": "Randomly created data",
                                     "dataType": "I16",
+                                    "dataRange": null,
                                     "unit": "",
                                     "groups": []
                                 }
@@ -784,12 +793,14 @@ mod tests {
                             "title": "Inequality",
                             "description": "SSP4-RCP6.0",
                             "dataType": null,
+                            "dataRange": null,
                             "unit": "",
                             "groups": [{
                                     "name": "metric_1",
                                     "title": "Random metric 1",
                                     "description": "Randomly created data",
                                     "dataType": "I16",
+                                    "dataRange": null,
                                     "unit": "",
                                     "groups": []
                                 },
@@ -798,6 +809,7 @@ mod tests {
                                     "title": "Random metric 2",
                                     "description": "Randomly created data",
                                     "dataType": "I16",
+                                    "dataRange": null,
                                     "unit": "",
                                     "groups": []
                                 }
@@ -808,12 +820,14 @@ mod tests {
                             "title": "Fossil-fueled Development",
                             "description": "SSP5-RCP8.5",
                             "dataType": null,
+                            "dataRange": null,
                             "unit": "",
                             "groups": [{
                                     "name": "metric_1",
                                     "title": "Random metric 1",
                                     "description": "Randomly created data",
                                     "dataType": "I16",
+                                    "dataRange": null,
                                     "unit": "",
                                     "groups": []
                                 },
@@ -822,6 +836,7 @@ mod tests {
                                     "title": "Random metric 2",
                                     "description": "Randomly created data",
                                     "dataType": "I16",
+                                    "dataRange": null,
                                     "unit": "",
                                     "groups": []
                                 }
