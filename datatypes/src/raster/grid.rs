@@ -444,7 +444,7 @@ where
     }
 }
 
-impl<D,T> Index<usize> for Grid<D,T> {
+impl<D, T> Index<usize> for Grid<D, T> {
     type Output = T;
 
     fn index(&self, index: usize) -> &Self::Output {

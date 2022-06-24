@@ -106,7 +106,10 @@ where
         None
     }
 
-    pub fn at_linear_index_unchecked_deref(&self, lin_idx: usize) -> Option<T> where T: Copy {
+    pub fn at_linear_index_unchecked_deref(&self, lin_idx: usize) -> Option<T>
+    where
+        T: Copy,
+    {
         let mask = self.validity_mask[lin_idx];
         if mask {
             let value = self.inner_grid[lin_idx];
@@ -114,7 +117,6 @@ where
         }
         None
     }
-
 }
 
 impl<D, T> From<Grid<D, T>> for MaskedGrid<D, T>
@@ -291,4 +293,3 @@ where
         })
     }
 }
-

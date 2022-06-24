@@ -7,10 +7,7 @@ use geoengine_datatypes::{
         QueryRectangle, RasterQueryRectangle, SpatialPartitioned, TimeInstance, TimeInterval,
         TimeStep,
     },
-    raster::{
-        EmptyGrid2D, GridOrEmpty, MapIndexedElements, Pixel, RasterTile2D,
-        TileInformation,
-    },
+    raster::{EmptyGrid2D, GridOrEmpty, MapIndexedElements, Pixel, RasterTile2D, TileInformation},
 };
 use rayon::ThreadPool;
 

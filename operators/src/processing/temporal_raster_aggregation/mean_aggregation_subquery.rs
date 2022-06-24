@@ -6,8 +6,7 @@ use geoengine_datatypes::{
     primitives::{RasterQueryRectangle, SpatialPartitioned, TimeInstance, TimeInterval, TimeStep},
     raster::{
         EmptyGrid2D, GeoTransform, GridIdx2D, GridOrEmpty, GridOrEmpty2D, GridShapeAccess,
-        MapIndexedElements, MapMaskedElements, Pixel, RasterTile2D,
-        TileInformation,
+        MapIndexedElements, MapMaskedElements, Pixel, RasterTile2D, TileInformation,
     },
 };
 use num_traits::AsPrimitive;
