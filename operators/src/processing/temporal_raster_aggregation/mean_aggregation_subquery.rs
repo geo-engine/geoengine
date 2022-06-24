@@ -6,7 +6,7 @@ use geoengine_datatypes::{
     primitives::{RasterQueryRectangle, SpatialPartitioned, TimeInstance, TimeInterval, TimeStep},
     raster::{
         EmptyGrid2D, GeoTransform, GridIdx2D, GridOrEmpty, GridOrEmpty2D, GridShapeAccess,
-        MapIndexedElements, MapMaskedElements, MaskedGridIndexAccess, Pixel, RasterTile2D,
+        MapIndexedElements, MapMaskedElements, Pixel, RasterTile2D,
         TileInformation,
     },
 };
@@ -44,7 +44,6 @@ pub struct TemporalMeanTileAccu<T> {
     tile_position: GridIdx2D,
     global_geo_transform: GeoTransform,
     value_grid: GridOrEmpty2D<(f64, u64)>,
-    // count_grid: Grid2D<u64>,
     ignore_no_data: bool,
     initial_state: bool,
     pool: Arc<ThreadPool>,
@@ -57,6 +56,8 @@ impl<T> TemporalMeanTileAccu<T> {
         T: Copy + AsPrimitive<f64> + Pixel,
     {
         self.time = self.time.union(&in_tile.time)?;
+
+        debug_assert!(self.value_grid.grid_shape() == in_tile.grid_shape());
 
         let in_tile_grid = match in_tile.grid_array {
             GridOrEmpty::Grid(g) => g,
@@ -75,10 +76,8 @@ impl<T> TemporalMeanTileAccu<T> {
                 // this could stay empty?
                 let accu_grid = self.value_grid.clone().into_materialized_grid();
 
-                let map_fn = |grid_index, _acc_values_option| {
-                    let new_value_option = in_tile_grid
-                        .get_masked_at_grid_index(grid_index)
-                        .expect("Grid Index was invalid before.");
+                let map_fn = |lin_idx: usize, _acc_values_option| {
+                    let new_value_option = in_tile_grid.at_linear_index_unchecked_deref(lin_idx);
                     if let Some(new_value) = new_value_option {
                         let ivf: f64 = new_value.as_();
                         Some((ivf, 1))
@@ -93,19 +92,18 @@ impl<T> TemporalMeanTileAccu<T> {
             GridOrEmpty::Grid(_) => {
                 let accu_grid = self.value_grid.clone().into_materialized_grid(); // TODO do not clone!
 
-                let map_fn = |grid_index, acc_values_option| {
-                    let new_value_option = in_tile_grid
-                        .get_masked_at_grid_index(grid_index)
-                        .expect("Grid Index was invalid before.")
-                        .map(num_traits::AsPrimitive::as_);
+                let map_fn = |lin_idx: usize, acc_values_option: Option<(f64, u64)>| {
+                    let new_value_option = in_tile_grid.at_linear_index_unchecked_deref(lin_idx);
                     match (acc_values_option, new_value_option) {
-                        (None, Some(v)) if self.ignore_no_data || self.initial_state => {
-                            Some((v, 1))
+                        (None, Some(new_value)) if self.ignore_no_data || self.initial_state => {
+                            let ivf: f64 = new_value.as_();
+                            Some((ivf, 1))
                         }
-                        (Some(v), None) if self.ignore_no_data => Some(v),
+                        (Some(acc_value), None) if self.ignore_no_data => Some(acc_value),
                         (Some((acc_value, acc_count)), Some(new_value)) => {
+                            let ivf: f64 = new_value.as_();
                             let new_acc_count = acc_count + 1;
-                            let delta = new_value - acc_value;
+                            let delta = ivf - acc_value;
                             let new_acc_value = acc_value + delta / (new_acc_count as f64);
                             Some((new_acc_value, new_acc_count))
                         }

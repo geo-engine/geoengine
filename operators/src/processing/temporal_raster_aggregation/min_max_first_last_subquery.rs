@@ -8,7 +8,7 @@ use geoengine_datatypes::{
         TimeStep,
     },
     raster::{
-        EmptyGrid2D, GridOrEmpty, MapIndexedElements, MaskedGridIndexAccess, Pixel, RasterTile2D,
+        EmptyGrid2D, GridOrEmpty, MapIndexedElements, Pixel, RasterTile2D,
         TileInformation,
     },
 };
@@ -116,10 +116,8 @@ where
     } else {
         match (accu_tile.grid_array, tile.grid_array) {
             (GridOrEmpty::Grid(a), GridOrEmpty::Grid(g)) => {
-                let map_fn = |grid_index, acc_value| {
-                    let tile_value = g
-                        .get_masked_at_grid_index(grid_index)
-                        .expect("grid index was wrong before");
+                let map_fn = |lin_idx: usize, acc_value| {
+                    let tile_value = g.at_linear_index_unchecked_deref(lin_idx);
                     C::acc(acc_value, tile_value)
                 };
 
@@ -154,10 +152,8 @@ where
 
     let grid = match (accu_tile.grid_array, tile.grid_array) {
         (GridOrEmpty::Grid(a), GridOrEmpty::Grid(g)) => {
-            let map_fn = |grid_index, acc_value| {
-                let tile_value = g
-                    .get_masked_at_grid_index(grid_index)
-                    .expect("grid index was wrong before");
+            let map_fn = |lin_idx: usize, acc_value| {
+                let tile_value = g.at_linear_index_unchecked_deref(lin_idx);
                 C::acc_ignore_no_data(acc_value, tile_value)
             };
 

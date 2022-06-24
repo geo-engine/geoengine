@@ -303,7 +303,7 @@ where
     let new_accu = pool.install(|| {
         let tile_bounding_box = tile.spatial_partition();
 
-        let map_fn = |grid_idx, accu_value: Option<T>| {
+        let map_fn = |grid_idx: GridIdx2D, accu_value: Option<T>| {
             let lookup_coord = coords.get_at_grid_index_unchecked(grid_idx);
             let lookup_value = lookup_coord
                 .filter(|coord| tile_bounding_box.contains_coordinate(coord))

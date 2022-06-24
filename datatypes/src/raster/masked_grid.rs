@@ -96,6 +96,25 @@ where
         self.masked_element_iterator()
             .map(std::option::Option::<&T>::copied)
     }
+
+    pub fn at_linear_index_unchecked(&self, lin_idx: usize) -> Option<&T> {
+        let mask = self.validity_mask[lin_idx];
+        if mask {
+            let value = &self.inner_grid[lin_idx];
+            return Some(value);
+        }
+        None
+    }
+
+    pub fn at_linear_index_unchecked_deref(&self, lin_idx: usize) -> Option<T> where T: Copy {
+        let mask = self.validity_mask[lin_idx];
+        if mask {
+            let value = self.inner_grid[lin_idx];
+            return Some(value);
+        }
+        None
+    }
+
 }
 
 impl<D, T> From<Grid<D, T>> for MaskedGrid<D, T>
@@ -272,3 +291,4 @@ where
         })
     }
 }
+

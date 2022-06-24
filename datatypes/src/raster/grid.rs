@@ -1,4 +1,4 @@
-use std::ops::Add;
+use std::ops::{Add, Index};
 
 use num_traits::Zero;
 use serde::{Deserialize, Serialize};
@@ -441,6 +441,14 @@ where
 
     fn set_grid_bounds(self, bounds: GridBoundingBox<I>) -> Result<Self::Output> {
         Grid::new(bounds, self.data)
+    }
+}
+
+impl<D,T> Index<usize> for Grid<D,T> {
+    type Output = T;
+
+    fn index(&self, index: usize) -> &Self::Output {
+        &self.data[index]
     }
 }
 
