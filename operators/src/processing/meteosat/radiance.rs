@@ -14,7 +14,7 @@ use geoengine_datatypes::primitives::{
     SpatialPartition2D,
 };
 use geoengine_datatypes::raster::{
-    MapMaskedElementsParallel, Pixel, RasterDataType, RasterPropertiesKey, RasterTile2D,
+    MapElementsParallel, Pixel, RasterDataType, RasterPropertiesKey, RasterTile2D,
 };
 use rayon::ThreadPool;
 use serde::{Deserialize, Serialize};
@@ -193,7 +193,7 @@ where
         };
 
         let result_tile = crate::util::spawn_blocking_with_thread_pool(pool, move || {
-            tile.map_or_mask_elements_parallel(map_fn)
+            tile.map_elements_parallel(map_fn)
         })
         .await?;
 

@@ -542,7 +542,7 @@ mod tests {
         Measurement, RasterQueryRectangle, SpatialPartition2D, SpatialResolution, TimeInterval,
     };
     use geoengine_datatypes::raster::{
-        Grid2D, GridOrEmpty, MapMaskedElements, MaskedGrid2D, RasterTile2D, TileInformation,
+        Grid2D, GridOrEmpty, MapElements, MaskedGrid2D, RasterTile2D, TileInformation,
         TilingSpecification,
     };
     use geoengine_datatypes::spatial_reference::SpatialReference;
@@ -1125,7 +1125,7 @@ mod tests {
 
         let real_raster = if let Some(no_data_value) = no_data_value {
             MaskedGrid2D::from(raster)
-                .map_or_mask_elements(|e| {
+                .map_elements(|e| {
                     if let Some(v) = e {
                         if v == no_data_value {
                             None

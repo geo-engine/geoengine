@@ -10,7 +10,7 @@ use geoengine_datatypes::primitives::{
     AxisAlignedRectangle, RasterQueryRectangle, SpatialPartition2D, SpatialPartitioned,
 };
 use geoengine_datatypes::raster::{
-    ChangeGridBounds, EmptyGrid2D, GeoTransform, GridBlit, GridIdx, GridSize, MapMaskedElements,
+    ChangeGridBounds, EmptyGrid2D, GeoTransform, GridBlit, GridIdx, GridSize, MapElements,
     MaskedGrid2D, Pixel, RasterTile2D,
 };
 use geoengine_datatypes::spatial_reference::SpatialReference;
@@ -217,7 +217,7 @@ impl<P: Pixel + GdalType> GdalDatasetWriter<P> {
                     Some(replace_no_data_value_p)
                 }
             };
-            tile.map_or_mask_elements(map_fn)
+            tile.map_elements(map_fn)
         } else {
             tile
         };

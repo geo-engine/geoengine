@@ -6,7 +6,7 @@ use geoengine_datatypes::{
     primitives::{RasterQueryRectangle, SpatialPartitioned, TimeInstance, TimeInterval, TimeStep},
     raster::{
         EmptyGrid2D, GeoTransform, GridIdx2D, GridOrEmpty, GridOrEmpty2D, GridShapeAccess,
-        MapIndexedElements, MapMaskedElements, Pixel, RasterTile2D, TileInformation,
+        MapElements, MapIndexedElements, Pixel, RasterTile2D, TileInformation,
     },
 };
 use num_traits::AsPrimitive;
@@ -162,7 +162,7 @@ where
             }
         };
 
-        let res_grid = value_grid.map_or_mask_elements(map_fn);
+        let res_grid = value_grid.map_elements(map_fn);
 
         Ok(RasterTile2D::new(
             time,

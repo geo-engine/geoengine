@@ -18,7 +18,7 @@ use geoengine_datatypes::primitives::{
     SpatialPartition2D,
 };
 use geoengine_datatypes::raster::{
-    MapMaskedElementsParallel, Pixel, RasterDataType, RasterPropertiesKey, RasterTile2D,
+    MapElementsParallel, Pixel, RasterDataType, RasterPropertiesKey, RasterTile2D,
 };
 use serde::{Deserialize, Serialize};
 
@@ -225,7 +225,7 @@ where
                 })
             };
 
-            tile.map_or_mask_elements_parallel(map_fn)
+            tile.map_elements_parallel(map_fn)
         })
         .await?;
 

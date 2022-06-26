@@ -32,7 +32,7 @@ use geoengine_datatypes::{
     primitives::TimeInterval,
     raster::{
         Grid, GridBlit, GridBoundingBox2D, GridBounds, GridIdx, GridSize, GridSpaceToLinearSpace,
-        MapMaskedElements, TilingSpecification,
+        MapElements, TilingSpecification,
     },
 };
 use log::{debug, info};
@@ -646,7 +646,7 @@ where
     )?;
     let data = Grid::new(tile_grid, buffer.data)?;
 
-    let masked_grid = MaskedGrid::from(data).map_or_mask_elements(|e| {
+    let masked_grid = MaskedGrid::from(data).map_elements(|e: Option<T>| {
         // TODO: test if parallel map is better.
         let e = e.unwrap();
 
