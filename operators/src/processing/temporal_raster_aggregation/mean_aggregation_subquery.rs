@@ -6,7 +6,7 @@ use geoengine_datatypes::{
     primitives::{RasterQueryRectangle, SpatialPartitioned, TimeInstance, TimeInterval, TimeStep},
     raster::{
         EmptyGrid2D, GeoTransform, GridIdx2D, GridOrEmpty, GridOrEmpty2D, GridShapeAccess,
-        MapElements, MapIndexedElements, Pixel, RasterTile2D, TileInformation,
+        MapElements, Pixel, RasterTile2D, TileInformation, UpdateIndexedElements,
     },
 };
 use num_traits::AsPrimitive;
@@ -73,7 +73,7 @@ impl<T> TemporalMeanTileAccu<T> {
 
             GridOrEmpty::Empty(_) => {
                 // this could stay empty?
-                let accu_grid = self.value_grid.clone().into_materialized_grid();
+                let mut accu_grid = self.value_grid.clone().into_materialized_grid(); //TODO: avoid the clone!
 
                 let map_fn = |lin_idx: usize, _acc_values_option| {
                     let new_value_option = in_tile_grid.at_linear_index_unchecked_deref(lin_idx);
@@ -85,11 +85,13 @@ impl<T> TemporalMeanTileAccu<T> {
                     }
                 };
 
-                self.value_grid = accu_grid.map_index_elements(map_fn).into(); // TODO: could also do this parallel
+                accu_grid.update_indexed_elements(map_fn);
+
+                self.value_grid = accu_grid.into(); // TODO: could also do this parallel
             }
 
             GridOrEmpty::Grid(_) => {
-                let accu_grid = self.value_grid.clone().into_materialized_grid(); // TODO do not clone!
+                let mut accu_grid = self.value_grid.clone().into_materialized_grid(); // TODO: avoid the clone!
 
                 let map_fn = |lin_idx: usize, acc_values_option: Option<(f64, u64)>| {
                     let new_value_option = in_tile_grid.at_linear_index_unchecked_deref(lin_idx);
@@ -110,7 +112,9 @@ impl<T> TemporalMeanTileAccu<T> {
                     }
                 };
 
-                self.value_grid = accu_grid.map_index_elements(map_fn).into(); // TODO: could also do this parallel
+                accu_grid.update_indexed_elements(map_fn);
+
+                self.value_grid = accu_grid.into(); // TODO: could also do this parallel
             }
         }
 

@@ -75,6 +75,19 @@ where
     }
 }
 
+impl<G, A, T, F> UpdateIndexedElements<GridIdx<A>, T, F> for MaskedGrid<G, T>
+where
+    G: GridSpaceToLinearSpace<IndexArray = A> + PartialEq + Clone,
+    F: Fn(GridIdx<A>, T) -> T,
+    A: AsRef<[isize]>,
+    T: Copy,
+    Grid<G, T>: UpdateIndexedElements<GridIdx<A>, T, F>,
+{
+    fn update_indexed_elements(&mut self, map_fn: F) {
+        self.inner_grid.update_indexed_elements(map_fn)
+    }
+}
+
 impl<G, T, F> UpdateIndexedElements<usize, Option<T>, F> for MaskedGrid<G, T>
 where
     F: Fn(usize, Option<T>) -> Option<T>,
@@ -101,6 +114,17 @@ where
                     *element_value = out_value;
                 }
             });
+    }
+}
+
+impl<G, T, F> UpdateIndexedElements<usize, T, F> for MaskedGrid<G, T>
+where
+    F: Fn(usize, T) -> T,
+    T: Copy,
+    Grid<G, T>: UpdateIndexedElements<usize, T, F>,
+{
+    fn update_indexed_elements(&mut self, map_fn: F) {
+        self.inner_grid.update_indexed_elements(map_fn)
     }
 }
 

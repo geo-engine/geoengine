@@ -4,27 +4,114 @@ use rayon::{
 };
 
 use crate::raster::{
-    Grid, GridIdx2D, GridOrEmpty, GridOrEmpty2D, GridSize, GridSpaceToLinearSpace, MaskedGrid,
-    MaskedGrid2D, RasterTile2D,
+    Grid, GridIdx, GridIdx2D, GridOrEmpty, GridOrEmpty2D, GridSize, GridSpaceToLinearSpace,
+    MaskedGrid, MaskedGrid2D, RasterTile2D,
 };
 
-pub trait MapIndexedElements<In, Out, Index, F: Fn(Index, Option<In>) -> Option<Out>> {
+pub trait MapIndexedElements<In, Out, Index, F: Fn(Index, In) -> Out> {
     type Output;
     fn map_index_elements(self, map_fn: F) -> Self::Output;
 }
 
-pub trait MapIndexedElementsParallel<In, Out, Index, F: Fn(Index, Option<In>) -> Option<Out>> {
+pub trait MapIndexedElementsParallel<In, Out, Index, F: Fn(Index, In) -> Out> {
     type Output;
     fn map_index_elements_parallel(self, map_fn: F) -> Self::Output;
 }
 
-impl<In, Out, F> MapIndexedElements<In, Out, GridIdx2D, F> for MaskedGrid2D<In>
+impl<G, A, In, Out, F> MapIndexedElements<In, Out, GridIdx<A>, F> for Grid<G, In>
 where
-    F: Fn(GridIdx2D, Option<In>) -> Option<Out>,
+    G: GridSpaceToLinearSpace<IndexArray = A> + Clone,
+    A: AsRef<[isize]>,
+    F: Fn(GridIdx<A>, In) -> Out,
     In: Clone,
     Out: Default + Clone,
 {
-    type Output = MaskedGrid2D<Out>;
+    type Output = Grid<G, Out>;
+
+    fn map_index_elements(self, map_fn: F) -> Self::Output {
+        let grid_shape = self.shape.clone();
+
+        let grid_idx_map_fn = |lin_idx, old_value_option| {
+            let grid_idx = grid_shape.grid_idx_unchecked(lin_idx);
+            map_fn(grid_idx, old_value_option)
+        };
+        self.map_index_elements(grid_idx_map_fn)
+    }
+}
+
+impl<G, In, Out, F> MapIndexedElements<In, Out, usize, F> for Grid<G, In>
+where
+    G: GridSize,
+    F: Fn(usize, In) -> Out,
+    In: Clone,
+    Out: Default + Clone,
+{
+    type Output = Grid<G, Out>;
+
+    fn map_index_elements(self, map_fn: F) -> Self::Output {
+        let Grid { shape, data } = self;
+
+        let out_data: Vec<Out> = data
+            .into_iter()
+            .enumerate()
+            .map(|(lin_idx, i)| map_fn(lin_idx, i))
+            .collect();
+
+        Grid::new(shape, out_data).expect("Grid creation with shape failed before.")
+    }
+}
+
+impl<G, Index, In, Out, F> MapIndexedElements<In, Out, Index, F> for MaskedGrid<G, In>
+where
+    G: GridSize + PartialEq + Clone,
+    F: Fn(Index, In) -> Out,
+    In: Clone,
+    Out: Default + Clone,
+    Grid<G, In>: MapIndexedElements<In, Out, Index, F, Output = Grid<G, Out>>,
+{
+    type Output = MaskedGrid<G, Out>;
+
+    fn map_index_elements(self, map_fn: F) -> Self::Output {
+        let MaskedGrid {
+            inner_grid,
+            validity_mask,
+        } = self;
+        let out_grid = inner_grid.map_index_elements(map_fn);
+
+        MaskedGrid::new(out_grid, validity_mask).expect("Createion failed before.")
+    }
+}
+
+impl<G, A, In, Out, F> MapIndexedElements<Option<In>, Option<Out>, GridIdx<A>, F>
+    for MaskedGrid<G, In>
+where
+    G: GridSize + GridSpaceToLinearSpace<IndexArray = A> + Clone + PartialEq,
+    A: AsRef<[isize]>,
+    F: Fn(GridIdx<A>, Option<In>) -> Option<Out>,
+    In: Clone,
+    Out: Default + Clone,
+{
+    type Output = MaskedGrid<G, Out>;
+
+    fn map_index_elements(self, map_fn: F) -> Self::Output {
+        let grid_shape = self.shape().clone();
+
+        let grid_idx_map_fn = |lin_idx, old_value_option| {
+            let grid_idx = grid_shape.grid_idx_unchecked(lin_idx);
+            map_fn(grid_idx, old_value_option)
+        };
+        self.map_index_elements(grid_idx_map_fn)
+    }
+}
+
+impl<G, In, Out, F> MapIndexedElements<Option<In>, Option<Out>, usize, F> for MaskedGrid<G, In>
+where
+    G: GridSize + Clone + PartialEq,
+    F: Fn(usize, Option<In>) -> Option<Out>,
+    In: Clone,
+    Out: Default + Clone,
+{
+    type Output = MaskedGrid<G, Out>;
 
     fn map_index_elements(self, map_fn: F) -> Self::Output {
         let MaskedGrid {
@@ -40,11 +127,9 @@ where
             .zip(validity_mask.data.iter_mut())
             .enumerate()
             .map(|(lin_idx, (i, m))| {
-                let grid_idx = data.shape.grid_idx_unchecked(lin_idx);
-
                 let in_masked_value = if *m { Some(i) } else { None };
 
-                let out_value_option = map_fn(grid_idx, in_masked_value);
+                let out_value_option = map_fn(lin_idx, in_masked_value);
 
                 *m = out_value_option.is_some();
 
@@ -60,30 +145,35 @@ where
     }
 }
 
-impl<In, Out, Index, F> MapIndexedElements<In, Out, Index, F> for GridOrEmpty2D<In>
+impl<G, TIn, TOut, FIn, FOut, Index, F> MapIndexedElements<FIn, FOut, Index, F>
+    for GridOrEmpty<G, TIn>
 where
-    F: Fn(Index, Option<In>) -> Option<Out>,
-    In: Clone + 'static,
-    Out: Default + Clone + 'static,
-    MaskedGrid2D<In>: MapIndexedElements<In, Out, Index, F, Output = MaskedGrid2D<Out>>,
-    GridOrEmpty2D<Out>: From<MaskedGrid2D<Out>>,
+    G: GridSize,
+    F: Fn(Index, FIn) -> FOut,
+    FIn: Clone + 'static,
+    FOut: Default + Clone + 'static,
+    TOut: 'static + Clone,
+    TIn: 'static,
+    MaskedGrid<G, TIn>: MapIndexedElements<FIn, FOut, Index, F, Output = MaskedGrid<G, TOut>>,
+    GridOrEmpty<G, TOut>: From<MaskedGrid<G, TOut>>,
 {
-    type Output = GridOrEmpty2D<Out>;
+    type Output = GridOrEmpty<G, TOut>;
 
     fn map_index_elements(self, map_fn: F) -> Self::Output {
         match self {
             GridOrEmpty::Grid(g) => GridOrEmpty::from(g.map_index_elements(map_fn)),
-            GridOrEmpty::Empty(e) => e.convert_dtype::<Out>().into(),
+            GridOrEmpty::Empty(e) => e.convert_dtype::<TOut>().into(),
         }
     }
 }
 
-impl<In, Out, Index, F> MapIndexedElements<In, Out, Index, F> for RasterTile2D<In>
+impl<In, Out, Index, F> MapIndexedElements<Option<In>, Option<Out>, Index, F> for RasterTile2D<In>
 where
     F: Fn(Index, Option<In>) -> Option<Out>,
     In: Clone + 'static,
     Out: Default + Clone + 'static,
-    MaskedGrid2D<In>: MapIndexedElements<In, Out, Index, F, Output = MaskedGrid2D<Out>>,
+    MaskedGrid2D<In>:
+        MapIndexedElements<Option<In>, Option<Out>, Index, F, Output = MaskedGrid2D<Out>>,
     GridOrEmpty2D<Out>: From<MaskedGrid2D<Out>>,
 {
     type Output = RasterTile2D<Out>;
@@ -99,7 +189,8 @@ where
     }
 }
 
-impl<In, Out, F> MapIndexedElementsParallel<In, Out, GridIdx2D, F> for MaskedGrid2D<In>
+impl<In, Out, F> MapIndexedElementsParallel<Option<In>, Option<Out>, GridIdx2D, F>
+    for MaskedGrid2D<In>
 where
     F: Fn(GridIdx2D, Option<In>) -> Option<Out> + Send + Sync,
     In: Copy + Clone + Sync,
@@ -162,12 +253,14 @@ where
     }
 }
 
-impl<In, Out, Index, F> MapIndexedElementsParallel<In, Out, Index, F> for GridOrEmpty2D<In>
+impl<In, Out, Index, F> MapIndexedElementsParallel<Option<In>, Option<Out>, Index, F>
+    for GridOrEmpty2D<In>
 where
     F: Fn(Index, Option<In>) -> Option<Out> + Send + Sync,
     In: Default + Copy + Clone + Sync + 'static,
     Out: Default + Clone + Send + 'static,
-    MaskedGrid2D<In>: MapIndexedElementsParallel<In, Out, Index, F, Output = MaskedGrid2D<Out>>,
+    MaskedGrid2D<In>:
+        MapIndexedElementsParallel<Option<In>, Option<Out>, Index, F, Output = MaskedGrid2D<Out>>,
     GridOrEmpty2D<Out>: From<MaskedGrid2D<Out>>,
 {
     type Output = GridOrEmpty2D<Out>;
@@ -184,12 +277,14 @@ where
     }
 }
 
-impl<In, Out, Index, F> MapIndexedElementsParallel<In, Out, Index, F> for RasterTile2D<In>
+impl<In, Out, Index, F> MapIndexedElementsParallel<Option<In>, Option<Out>, Index, F>
+    for RasterTile2D<In>
 where
     F: Fn(Index, Option<In>) -> Option<Out> + Send + Sync,
     In: Default + Copy + Clone + Sync + 'static,
     Out: Default + Clone + Send + 'static,
-    MaskedGrid2D<In>: MapIndexedElementsParallel<In, Out, Index, F, Output = MaskedGrid2D<Out>>,
+    MaskedGrid2D<In>:
+        MapIndexedElementsParallel<Option<In>, Option<Out>, Index, F, Output = MaskedGrid2D<Out>>,
     GridOrEmpty2D<Out>: From<MaskedGrid2D<Out>>,
 {
     type Output = RasterTile2D<Out>;
@@ -206,47 +301,8 @@ where
 }
 
 // Impl for lin_idx
-impl<In, Out, F> MapIndexedElements<In, Out, usize, F> for MaskedGrid2D<In>
-where
-    F: Fn(usize, Option<In>) -> Option<Out>,
-    In: Clone,
-    Out: Default + Clone,
-{
-    type Output = MaskedGrid2D<Out>;
 
-    fn map_index_elements(self, map_fn: F) -> Self::Output {
-        let MaskedGrid {
-            inner_grid: data,
-            mut validity_mask,
-        } = self;
-        debug_assert!(data.data.len() == validity_mask.data.len());
-        debug_assert!(data.shape == validity_mask.shape);
-
-        let out_data: Vec<Out> = data
-            .data
-            .into_iter()
-            .zip(validity_mask.data.iter_mut())
-            .enumerate()
-            .map(|(lin_idx, (i, m))| {
-                let in_masked_value = if *m { Some(i) } else { None };
-
-                let out_value_option = map_fn(lin_idx, in_masked_value);
-
-                *m = out_value_option.is_some();
-
-                out_value_option.unwrap_or_default()
-            })
-            .collect();
-
-        MaskedGrid::new(
-            Grid::new(data.shape, out_data).expect("Grid createion failed before"),
-            validity_mask,
-        )
-        .expect("Grid createion failed before")
-    }
-}
-
-impl<In, Out, F> MapIndexedElementsParallel<In, Out, usize, F> for MaskedGrid2D<In>
+impl<In, Out, F> MapIndexedElementsParallel<Option<In>, Option<Out>, usize, F> for MaskedGrid2D<In>
 where
     F: Fn(usize, Option<In>) -> Option<Out> + Send + Sync,
     In: Copy + Clone + Sync,
