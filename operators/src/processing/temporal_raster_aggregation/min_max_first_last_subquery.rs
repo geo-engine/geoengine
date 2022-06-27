@@ -7,7 +7,9 @@ use geoengine_datatypes::{
         QueryRectangle, RasterQueryRectangle, SpatialPartitioned, TimeInstance, TimeInterval,
         TimeStep,
     },
-    raster::{EmptyGrid2D, GridOrEmpty, MapIndexedElements, Pixel, RasterTile2D, TileInformation},
+    raster::{
+        EmptyGrid2D, GridOrEmpty, Pixel, RasterTile2D, TileInformation, UpdateIndexedElements,
+    },
 };
 use rayon::ThreadPool;
 
@@ -108,24 +110,22 @@ where
 {
     let mut accu_tile = acc.accu_tile;
 
-    let grid = if acc.initial_state {
-        tile.grid_array
+    if acc.initial_state {
+        accu_tile.grid_array = tile.grid_array;
     } else {
-        match (accu_tile.grid_array, tile.grid_array) {
+        match (&mut accu_tile.grid_array, tile.grid_array) {
             (GridOrEmpty::Grid(a), GridOrEmpty::Grid(g)) => {
                 let map_fn = |lin_idx: usize, acc_value| {
                     let tile_value = g.at_linear_index_unchecked_deref(lin_idx);
                     C::acc(acc_value, tile_value)
                 };
 
-                GridOrEmpty::from(a.map_indexed_elements(map_fn))
-                // TODO: could also use parallel map_index_elements_parallel
+                a.update_indexed_elements(map_fn); // TODO: could also use parallel method
             }
-            (GridOrEmpty::Empty(e), _) | (_, GridOrEmpty::Empty(e)) => GridOrEmpty::Empty(e),
+            (GridOrEmpty::Empty(_), _) | (_, GridOrEmpty::Empty(_)) => {}
         }
     };
 
-    accu_tile.grid_array = grid;
     TemporalRasterAggregationTileAccu {
         accu_tile,
         initial_state: false,
@@ -148,13 +148,14 @@ where
     } = acc;
 
     let grid = match (accu_tile.grid_array, tile.grid_array) {
-        (GridOrEmpty::Grid(a), GridOrEmpty::Grid(g)) => {
+        (GridOrEmpty::Grid(mut a), GridOrEmpty::Grid(g)) => {
             let map_fn = |lin_idx: usize, acc_value| {
                 let tile_value = g.at_linear_index_unchecked_deref(lin_idx);
                 C::acc_ignore_no_data(acc_value, tile_value)
             };
 
-            GridOrEmpty::from(a.map_indexed_elements(map_fn)) // TODO: could also use parallel map_index_elements_parallel
+            a.update_indexed_elements(map_fn); // TODO: could also use parallel map_index_elements_parallel
+            GridOrEmpty::Grid(a)
         }
         // TODO: need to increase temporal validity?
         (GridOrEmpty::Grid(a), GridOrEmpty::Empty(_)) => GridOrEmpty::Grid(a),

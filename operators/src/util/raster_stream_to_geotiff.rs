@@ -473,7 +473,7 @@ mod tests {
         let gdal_source = GdalSourceProcessor::<u8> {
             tiling_specification,
             meta_data: Box::new(metadata),
-            _phandom_data: PhantomData,
+            _phantom_data: PhantomData,
         };
 
         let query_bbox = SpatialPartition2D::new((-10., 80.).into(), (50., 20.).into()).unwrap();
@@ -522,7 +522,7 @@ mod tests {
         let gdal_source = GdalSourceProcessor::<u8> {
             tiling_specification,
             meta_data: Box::new(metadata),
-            _phandom_data: PhantomData,
+            _phantom_data: PhantomData,
         };
 
         let query_bbox = SpatialPartition2D::new((-10., 80.).into(), (50., 20.).into()).unwrap();
@@ -571,7 +571,7 @@ mod tests {
         let gdal_source = GdalSourceProcessor::<u8> {
             tiling_specification,
             meta_data: Box::new(metadata),
-            _phandom_data: PhantomData,
+            _phantom_data: PhantomData,
         };
 
         let query_bbox = SpatialPartition2D::new((-10., 80.).into(), (50., 20.).into()).unwrap();
@@ -623,7 +623,7 @@ mod tests {
         let gdal_source = GdalSourceProcessor::<u8> {
             tiling_specification,
             meta_data: Box::new(metadata),
-            _phandom_data: PhantomData,
+            _phantom_data: PhantomData,
         };
 
         let query_bbox = SpatialPartition2D::new((-10., 80.).into(), (50., 20.).into()).unwrap();
@@ -675,7 +675,7 @@ mod tests {
         let gdal_source = GdalSourceProcessor::<u8> {
             tiling_specification,
             meta_data: Box::new(metadata),
-            _phandom_data: PhantomData,
+            _phantom_data: PhantomData,
         };
 
         let query_bbox = SpatialPartition2D::new((-10., 80.).into(), (50., 20.).into()).unwrap();
@@ -719,7 +719,7 @@ mod tests {
         let gdal_source = GdalSourceProcessor::<u8> {
             tiling_specification,
             meta_data: Box::new(metadata),
-            _phandom_data: PhantomData,
+            _phantom_data: PhantomData,
         };
 
         let query_bbox =

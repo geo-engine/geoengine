@@ -10,7 +10,9 @@ use geoengine_datatypes::operations::reproject::Reproject;
 use geoengine_datatypes::primitives::{
     RasterQueryRectangle, SpatialPartition2D, SpatialPartitioned,
 };
-use geoengine_datatypes::raster::{Grid2D, GridIndexAccess, GridSize, MapIndexedElementsParallel};
+use geoengine_datatypes::raster::{
+    Grid2D, GridIndexAccess, GridSize, UpdateIndexedElementsParallel,
+};
 use geoengine_datatypes::{
     operations::reproject::{CoordinateProjection, CoordinateProjector},
     primitives::{SpatialResolution, TimeInterval},
@@ -295,12 +297,12 @@ where
     }
 
     let TileWithProjectionCoordinates {
-        accu_tile,
+        mut accu_tile,
         coords,
         pool,
     } = accu;
 
-    let new_accu = pool.install(|| {
+    pool.install(|| {
         let tile_bounding_box = tile.spatial_partition();
 
         let map_fn = |grid_idx: GridIdx2D, accu_value: Option<T>| {
@@ -311,11 +313,11 @@ where
             lookup_value.or(accu_value)
         };
 
-        accu_tile.map_indexed_elements_parallel(map_fn)
+        accu_tile.update_indexed_elements_parallel(map_fn);
     });
 
     Ok(TileWithProjectionCoordinates {
-        accu_tile: new_accu,
+        accu_tile,
         coords,
         pool,
     })

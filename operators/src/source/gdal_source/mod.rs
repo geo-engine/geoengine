@@ -300,7 +300,7 @@ where
 {
     pub tiling_specification: TilingSpecification,
     pub meta_data: GdalMetaData,
-    pub _phandom_data: PhantomData<T>,
+    pub _phantom_data: PhantomData<T>,
 }
 
 struct GdalRasterLoader {}
@@ -559,7 +559,7 @@ impl InitializedRasterOperator for InitializedGdalSourceOperator {
                 GdalSourceProcessor {
                     tiling_specification: self.tiling_specification,
                     meta_data: self.meta_data.clone(),
-                    _phandom_data: PhantomData,
+                    _phantom_data: PhantomData,
                 }
                 .boxed(),
             ),
@@ -567,7 +567,7 @@ impl InitializedRasterOperator for InitializedGdalSourceOperator {
                 GdalSourceProcessor {
                     tiling_specification: self.tiling_specification,
                     meta_data: self.meta_data.clone(),
-                    _phandom_data: PhantomData,
+                    _phantom_data: PhantomData,
                 }
                 .boxed(),
             ),
@@ -575,7 +575,7 @@ impl InitializedRasterOperator for InitializedGdalSourceOperator {
                 GdalSourceProcessor {
                     tiling_specification: self.tiling_specification,
                     meta_data: self.meta_data.clone(),
-                    _phandom_data: PhantomData,
+                    _phantom_data: PhantomData,
                 }
                 .boxed(),
             ),
@@ -585,7 +585,7 @@ impl InitializedRasterOperator for InitializedGdalSourceOperator {
                 GdalSourceProcessor {
                     tiling_specification: self.tiling_specification,
                     meta_data: self.meta_data.clone(),
-                    _phandom_data: PhantomData,
+                    _phantom_data: PhantomData,
                 }
                 .boxed(),
             ),
@@ -593,7 +593,7 @@ impl InitializedRasterOperator for InitializedGdalSourceOperator {
                 GdalSourceProcessor {
                     tiling_specification: self.tiling_specification,
                     meta_data: self.meta_data.clone(),
-                    _phandom_data: PhantomData,
+                    _phantom_data: PhantomData,
                 }
                 .boxed(),
             ),
@@ -602,7 +602,7 @@ impl InitializedRasterOperator for InitializedGdalSourceOperator {
                 GdalSourceProcessor {
                     tiling_specification: self.tiling_specification,
                     meta_data: self.meta_data.clone(),
-                    _phandom_data: PhantomData,
+                    _phantom_data: PhantomData,
                 }
                 .boxed(),
             ),
@@ -610,7 +610,7 @@ impl InitializedRasterOperator for InitializedGdalSourceOperator {
                 GdalSourceProcessor {
                     tiling_specification: self.tiling_specification,
                     meta_data: self.meta_data.clone(),
-                    _phandom_data: PhantomData,
+                    _phantom_data: PhantomData,
                 }
                 .boxed(),
             ),
@@ -650,6 +650,7 @@ where
         // TODO: test if parallel map is better.
         let e = e.unwrap();
 
+        // map no_data value to None. Also check if no_data value is NAN and the raster value us also NAN.
         if let Some(no_data) = no_data_value {
             if no_data == e || (no_data != no_data && e != e) {
                 return None;

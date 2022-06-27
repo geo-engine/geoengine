@@ -1,11 +1,10 @@
 use crate::primitives::{AxisAlignedRectangle, SpatialPartitioned};
 use crate::raster::{
     GridIdx, GridIdx2D, MaskedGridIndexAccess, MaterializedRasterTile2D, Pixel, RasterTile2D,
+    UpdateIndexedElementsParallel,
 };
 use crate::util::Result;
 use async_trait::async_trait;
-
-use super::map_indexed_elements::MapIndexedElementsParallel;
 
 #[async_trait]
 pub trait InterpolationAlgorithm<P: Pixel>: Send + Sync + Clone + 'static {
@@ -48,12 +47,7 @@ where
             input.get_masked_at_grid_index_unchecked([nearest_in_y_idx, nearest_in_x_idx])
         };
 
-        let out_grid = output
-            .grid_array
-            .clone()
-            .map_indexed_elements_parallel(map_fn);
-
-        output.grid_array = out_grid; // TODO: add a trait for update elements?
+        output.grid_array.update_indexed_elements_parallel(map_fn);
 
         Ok(())
     }
@@ -151,11 +145,7 @@ where
             value.map(|v| P::from_(v))
         };
 
-        let out_grid = output
-            .grid_array
-            .clone()
-            .map_indexed_elements_parallel(map_fn);
-        output.grid_array = out_grid; // TODO: add a trait for update elements?
+        output.grid_array.update_indexed_elements_parallel(map_fn);
 
         Ok(())
     }

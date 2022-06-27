@@ -73,8 +73,6 @@ impl<T> TemporalMeanTileAccu<T> {
 
             GridOrEmpty::Empty(_) => {
                 // this could stay empty?
-                let mut accu_grid = self.value_grid.clone().into_materialized_grid(); //TODO: avoid the clone!
-
                 let map_fn = |lin_idx: usize, _acc_values_option| {
                     let new_value_option = in_tile_grid.at_linear_index_unchecked_deref(lin_idx);
                     if let Some(new_value) = new_value_option {
@@ -84,15 +82,10 @@ impl<T> TemporalMeanTileAccu<T> {
                         None
                     }
                 };
-
-                accu_grid.update_indexed_elements(map_fn);
-
-                self.value_grid = accu_grid.into(); // TODO: could also do this parallel
+                self.value_grid.update_indexed_elements(map_fn); // TODO: make this patallel?
             }
 
             GridOrEmpty::Grid(_) => {
-                let mut accu_grid = self.value_grid.clone().into_materialized_grid(); // TODO: avoid the clone!
-
                 let map_fn = |lin_idx: usize, acc_values_option: Option<(f64, u64)>| {
                     let new_value_option = in_tile_grid.at_linear_index_unchecked_deref(lin_idx);
                     match (acc_values_option, new_value_option) {
@@ -112,9 +105,7 @@ impl<T> TemporalMeanTileAccu<T> {
                     }
                 };
 
-                accu_grid.update_indexed_elements(map_fn);
-
-                self.value_grid = accu_grid.into(); // TODO: could also do this parallel
+                self.value_grid.update_indexed_elements(map_fn); // TODO: make this patallel?
             }
         }
 
