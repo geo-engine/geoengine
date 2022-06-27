@@ -39,7 +39,7 @@ where
 
     fn map_elements(self, map_fn: F) -> Self::Output {
         MaskedGrid::new(self.inner_grid.map_elements(map_fn), self.validity_mask)
-            .expect("Creation faild for prev valid dimensions")
+            .expect("Creation failed for prev valid dimensions")
     }
 }
 
