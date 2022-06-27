@@ -304,7 +304,7 @@ impl HistogramRasterQueryProcessor {
             while let Some(tile) = input.next().await {
                 match tile?.grid_array {
                     geoengine_datatypes::raster::GridOrEmpty::Grid(g) => {
-                        computed_metadata.add_raster_batch(g.masked_copy_element_iterator());
+                        computed_metadata.add_raster_batch(g.masked_element_deref_iterator());
                     }
                     geoengine_datatypes::raster::GridOrEmpty::Empty(_) => {} // TODO: find out if we really do nothing for empty tiles?
                 }
@@ -346,7 +346,7 @@ impl HistogramRasterQueryProcessor {
 
 
                 match tile?.grid_array {
-                    geoengine_datatypes::raster::GridOrEmpty::Grid(g) => histogram.add_raster_data(g.masked_copy_element_iterator()),
+                    geoengine_datatypes::raster::GridOrEmpty::Grid(g) => histogram.add_raster_data(g.masked_element_deref_iterator()),
                     geoengine_datatypes::raster::GridOrEmpty::Empty(n) => histogram.add_nodata_batch(n.number_of_elements() as u64) // TODO: why u64?
                 }
             }

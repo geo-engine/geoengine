@@ -311,7 +311,7 @@ where
             lookup_value.or(accu_value)
         };
 
-        accu_tile.map_index_elements_parallel(map_fn)
+        accu_tile.map_indexed_elements_parallel(map_fn)
     });
 
     Ok(TileWithProjectionCoordinates {

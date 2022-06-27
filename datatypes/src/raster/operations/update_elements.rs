@@ -1,16 +1,30 @@
-use crate::raster::{Grid, GridOrEmpty, GridSize, MaskedGrid, MaskedGrid2D, RasterTile2D};
+use crate::raster::{Grid, GridOrEmpty, GridOrEmpty2D, GridSize, MaskedGrid, RasterTile2D};
 use rayon::iter::{IndexedParallelIterator, IntoParallelRefMutIterator, ParallelIterator};
 
+/// This trait models mutable updates on elements using a provided update function that maps each element to a new value.
+///
+/// Most usefull implementations are on: `Grid`, `MaskedGrid`, `GridOrEmpty` and `RasterTile2D`.
+///
+/// On `Grid` elements are mapped as `|element: T| { element + 1 }` with `F: Fn(T) -> T`
+///
+/// On `MaskedGrid` elements are mapped ignoring _no data_ as `|element: T| { element + 1 }` with `F: Fn(T) -> T` or handling _no data_ as `|element: Option<T>| { element.map(|e| e+ 1) }` with `F: Fn(Option<T>) -> Option<T>`.
 pub trait UpdateElements<FT, F: Fn(FT) -> FT> {
     /// Apply the map fn to all elements and overwrite the old value with the result of the closure.
     fn update_elements(&mut self, map_fn: F);
 }
 
+/// This trait is equal to `UpdateElements` but uses a thread pool to do the operation in parallel.
+/// Most usefull implementations are on: `Grid`, `MaskedGrid`, `GridOrEmpty` and `RasterTile2D`.
+///
+/// On `Grid` elements are mapped as `|element: T| { element + 1 }` with `F: Fn(T) -> T`
+///
+/// On `MaskedGrid` elements are mapped ignoring _no data_ as `|element: T| { element + 1 }` with `F: Fn(T) -> T` or handling _no data_ as `|element: Option<T>| { element.map(|e| e+ 1) }` with `F: Fn(Option<T>) -> Option<T>`.
 pub trait UpdateElementsParallel<FT, F: Fn(FT) -> FT> {
     /// Apply the `map_fn` to all elements and overwrite the old value with the result of the closure parallel.
     fn update_elements_parallel(&mut self, map_fn: F);
 }
 
+// Implementation for Grid using usize as index: F: Fn(T) -> T.
 impl<T, F, G> UpdateElements<T, F> for Grid<G, T>
 where
     T: 'static + Copy,
@@ -22,6 +36,7 @@ where
     }
 }
 
+// Implementation for MaskedGrid to enable update of the inner data with F: Fn(T) -> T.
 impl<T, F, G> UpdateElements<T, F> for MaskedGrid<G, T>
 where
     T: 'static,
@@ -34,6 +49,7 @@ where
     }
 }
 
+// Implementation for MaskedGrid using usize as index: F: Fn(Option<T>) -> Option<T>.
 impl<T, F, G> UpdateElements<Option<T>, F> for MaskedGrid<G, T>
 where
     T: 'static + Copy,
@@ -58,12 +74,15 @@ where
     }
 }
 
-impl<T, TF, F, G> UpdateElements<TF, F> for GridOrEmpty<G, T>
+// Implementation for GridOrEmpty.
+// Works with:
+//    F: Fn(T) -> T
+impl<T, F, G> UpdateElements<T, F> for GridOrEmpty<G, T>
 where
     T: 'static + Copy,
     G: GridSize + Clone,
-    F: Fn(TF) -> TF,
-    MaskedGrid<G, T>: UpdateElements<TF, F>,
+    F: Fn(T) -> T,
+    MaskedGrid<G, T>: UpdateElements<T, F>,
 {
     fn update_elements(&mut self, map_fn: F) {
         match self {
@@ -73,17 +92,48 @@ where
     }
 }
 
+// Implementation for GridOrEmpty.
+// Works with:
+//    F: Fn(Option<T>) -> Option<T>,
+impl<T, F, G> UpdateElements<Option<T>, F> for GridOrEmpty<G, T>
+where
+    T: 'static + Copy + Default,
+    G: GridSize + Clone + PartialEq,
+    F: Fn(Option<T>) -> Option<T>,
+    MaskedGrid<G, T>: UpdateElements<Option<T>, F>,
+{
+    fn update_elements(&mut self, map_fn: F) {
+        if self.is_empty() {
+            // if None maps to a value we can be sure that the whole grid will turn to that value.
+            if let Some(fill_value) = map_fn(None as Option<T>) {
+                *self =
+                    GridOrEmpty::Grid(MaskedGrid::new_filled(self.shape_ref().clone(), fill_value));
+            }
+            return;
+        }
+
+        if let GridOrEmpty::Grid(grid) = self {
+            grid.update_elements(map_fn);
+        };
+    }
+}
+
+// Implementation for RasterTile2D.
+// Works with:
+//    F: Fn(Option<T>) -> Option<T>,
+//    F: Fn(T) -> T
 impl<T, TF, F> UpdateElements<TF, F> for RasterTile2D<T>
 where
     T: 'static + Copy,
     F: Fn(TF) -> TF,
-    MaskedGrid2D<T>: UpdateElements<TF, F>,
+    GridOrEmpty2D<T>: UpdateElements<TF, F>,
 {
     fn update_elements(&mut self, map_fn: F) {
         self.grid_array.update_elements(map_fn);
     }
 }
 
+// Implementation for Grid using usize as index: F: Fn(T) -> T.
 impl<T, F, G> UpdateElementsParallel<T, F> for Grid<G, T>
 where
     T: 'static + Send + Copy,
@@ -98,6 +148,7 @@ where
     }
 }
 
+// Implementation for MaskedGrid to enable update of the inner data with F: Fn(T) -> T.
 impl<T, F, G> UpdateElementsParallel<T, F> for MaskedGrid<G, T>
 where
     T: 'static + Send,
@@ -110,6 +161,7 @@ where
     }
 }
 
+// Implementation for MaskedGrid using usize as index: F: Fn(Option<T>) -> Option<T>.
 impl<T, F, G> UpdateElementsParallel<Option<T>, F> for MaskedGrid<G, T>
 where
     T: 'static + Send + Copy,
@@ -142,12 +194,15 @@ where
     }
 }
 
-impl<T, TF, F, G> UpdateElementsParallel<TF, F> for GridOrEmpty<G, T>
+// Implementation for GridOrEmpty.
+// Works with:
+//    F: Fn(T) -> T
+impl<T, F, G> UpdateElementsParallel<T, F> for GridOrEmpty<G, T>
 where
     T: 'static + Send + Copy,
     G: GridSize + Clone,
-    F: Fn(TF) -> TF + Send + Sync,
-    MaskedGrid<G, T>: UpdateElementsParallel<TF, F>,
+    F: Fn(T) -> T + Send + Sync,
+    MaskedGrid<G, T>: UpdateElementsParallel<T, F>,
 {
     fn update_elements_parallel(&mut self, map_fn: F) {
         match self {
@@ -157,11 +212,41 @@ where
     }
 }
 
+// Implementation for GridOrEmpty.
+// Works with:
+//    F: Fn(Option<T>) -> Option<T>,
+impl<T, F, G> UpdateElementsParallel<Option<T>, F> for GridOrEmpty<G, T>
+where
+    T: 'static + Send + Copy + Default,
+    G: GridSize + Clone + PartialEq,
+    F: Fn(Option<T>) -> Option<T> + Send + Sync,
+    MaskedGrid<G, T>: UpdateElementsParallel<Option<T>, F>,
+{
+    fn update_elements_parallel(&mut self, map_fn: F) {
+        if self.is_empty() {
+            // if None maps to a value we can be sure that the whole grid will turn to that value.
+            if let Some(fill_value) = map_fn(None as Option<T>) {
+                *self =
+                    GridOrEmpty::Grid(MaskedGrid::new_filled(self.shape_ref().clone(), fill_value));
+            }
+            return;
+        }
+
+        if let GridOrEmpty::Grid(grid) = self {
+            grid.update_elements_parallel(map_fn);
+        };
+    }
+}
+
+// Implementation for RasterTile2D.
+// Works with:
+//    F: Fn(Option<T>) -> Option<T>,
+//    F: Fn(T) -> T
 impl<T, TF, F> UpdateElementsParallel<TF, F> for RasterTile2D<T>
 where
     T: 'static + Send + Copy,
     F: Fn(TF) -> TF + Send + Sync,
-    MaskedGrid2D<T>: UpdateElementsParallel<TF, F>,
+    GridOrEmpty2D<T>: UpdateElementsParallel<TF, F>,
 {
     fn update_elements_parallel(&mut self, map_fn: F) {
         self.grid_array.update_elements_parallel(map_fn);

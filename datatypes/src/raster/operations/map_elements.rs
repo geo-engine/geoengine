@@ -1,16 +1,35 @@
-use crate::raster::{Grid, GridOrEmpty, GridSize, MaskedGrid, MaskedGrid2D, RasterTile2D};
+use crate::raster::{Grid, GridOrEmpty, GridOrEmpty2D, GridSize, MaskedGrid, RasterTile2D};
 use rayon::iter::{IndexedParallelIterator, IntoParallelIterator, ParallelIterator};
 
+/// This trait models a map operation from a `Grid` of type `In` into a `Grid` of Type `Out`. This is done using a provided function that maps each element to a new value.
+///
+/// Most usefull implementations are on: `Grid`, `MaskedGrid`, `GridOrEmpty` and `RasterTile2D`.
+///
+/// On `Grid` elements are mapped as `|element: In| { element + 1 }` with `F: Fn(In) -> Out`
+///
+/// On `MaskedGrid` elements are mapped ignoring _no data_ as `|element: In| { element + 1 }` with `F: Fn(In) -> Out` or handling _no data_ as `|element: Option<In>| { element.map(|e| e+ 1) }` with `F: Fn(Option<In>) -> Option<Out>`.
 pub trait MapElements<In, Out, F: Fn(In) -> Out> {
     type Output;
+    /// Create a new instance from the current one. The `map_fn` transforms all elements to a new value.
     fn map_elements(self, map_fn: F) -> Self::Output;
 }
 
+/// This trait is equal to `MapElements` but uses a thread pool to do the operation in parallel.
+/// This trait models a map operation from a `Grid` of type `In` into a `Grid` of Type `Out`. This is done using a provided function that maps each element to a new value.
+///
+/// Most usefull implementations are on: `Grid`, `MaskedGrid`, `GridOrEmpty` and `RasterTile2D`.
+///
+/// On `Grid` elements are mapped as `|element: In| { element + 1 }` with `F: Fn(In) -> Out`
+///
+/// On `MaskedGrid` elements are mapped ignoring _no data_ as `|element: In| { element + 1 }` with `F: Fn(In) -> Out` or handling _no data_ as `|element: Option<In>| { element.map(|e| e+ 1) }` with `F: Fn(Option<In>) -> Option<Out>`.
+
 pub trait MapElementsParallel<In, Out, F: Fn(In) -> Out> {
     type Output;
+    /// Create a new instance from the current one. The `map_fn` transforms all elements to a new value. Use a `ThreadPool` for parallel map operations.
     fn map_elements_parallel(self, map_fn: F) -> Self::Output;
 }
 
+// Implementation for Grid: F: Fn(In) -> Out.
 impl<In, Out, F, G> MapElements<In, Out, F> for Grid<G, In>
 where
     In: 'static,
@@ -27,6 +46,7 @@ where
     }
 }
 
+// Implementation for MaskedGrid to enable update of the inner data with F: Fn(T) -> T.
 impl<In, Out, F, G> MapElements<In, Out, F> for MaskedGrid<G, In>
 where
     In: 'static + Clone,
@@ -43,6 +63,7 @@ where
     }
 }
 
+// Implementation for MaskedGrid: F: Fn(Option<T>) -> Option<T>.
 impl<In, Out, F, G> MapElements<Option<In>, Option<Out>, F> for MaskedGrid<G, In>
 where
     In: 'static + Clone,
@@ -55,53 +76,44 @@ where
     fn map_elements(self, map_fn: F) -> Self::Output {
         let MaskedGrid {
             inner_grid: data,
-            mut validity_mask, // TODO: discuss if it is better to clone or mutate...
+            mut validity_mask,
         } = self;
 
         let mut new_data = Grid::new_filled(data.shape.clone(), Out::default());
 
-        let mut in_no_data_count = 0;
-        let mut out_no_data_count = 0;
         new_data
             .data
             .iter_mut()
             .zip(validity_mask.data.iter_mut())
             .zip(data.data.into_iter())
             .for_each(|((o, m), i)| {
-                let in_value = if *m {
-                    Some(i)
-                } else {
-                    in_no_data_count += 1;
-                    None
-                };
+                let in_value = if *m { Some(i) } else { None };
 
                 let new_out_value = map_fn(in_value);
                 *m = new_out_value.is_some();
 
                 if let Some(out_value) = new_out_value {
                     *o = out_value;
-                } else {
-                    out_no_data_count += 1;
                 }
             });
-        // dbg!(in_no_data_count, out_no_data_count);
 
         MaskedGrid::new(new_data, validity_mask)
             .expect("Creation of grid with dimension failed before")
     }
 }
 
-impl<FIn, FOut, TIn, TOut, F, G> MapElements<FIn, FOut, F> for GridOrEmpty<G, TIn>
+// Implementation for GridOrEmpty.
+// Works with:
+//    F: Fn(T) -> T
+impl<In, Out, F, G> MapElements<In, Out, F> for GridOrEmpty<G, In>
 where
-    FIn: 'static + Copy,
-    FOut: 'static + Copy,
-    TIn: 'static,
-    TOut: 'static,
+    In: 'static + Copy,
+    Out: 'static + Copy,
     G: GridSize + Clone + PartialEq,
-    F: Fn(FIn) -> FOut,
-    MaskedGrid<G, TIn>: MapElements<FIn, FOut, F, Output = MaskedGrid<G, TOut>>,
+    F: Fn(In) -> Out,
+    MaskedGrid<G, In>: MapElements<In, Out, F, Output = MaskedGrid<G, Out>>,
 {
-    type Output = GridOrEmpty<G, TOut>;
+    type Output = GridOrEmpty<G, Out>;
 
     fn map_elements(self, map_fn: F) -> Self::Output {
         match self {
@@ -111,6 +123,37 @@ where
     }
 }
 
+// Implementation for GridOrEmpty.
+// Works with:
+//    F: Fn(Option<T>) -> Option<T>,
+impl<In, Out, F, G> MapElements<Option<In>, Option<Out>, F> for GridOrEmpty<G, In>
+where
+    In: 'static,
+    Out: 'static + Clone,
+    G: GridSize + Clone + PartialEq,
+    F: Fn(Option<In>) -> Option<Out>,
+    MaskedGrid<G, In>: MapElements<Option<In>, Option<Out>, F, Output = MaskedGrid<G, Out>>,
+{
+    type Output = GridOrEmpty<G, Out>;
+
+    fn map_elements(self, map_fn: F) -> Self::Output {
+        match self {
+            GridOrEmpty::Grid(grid) => GridOrEmpty::Grid(grid.map_elements(map_fn)),
+            GridOrEmpty::Empty(empty) => {
+                // if None maps to a value we can be sure that the whole grid will turn to that value.
+                if let Some(fill_value) = map_fn(None as Option<In>) {
+                    return GridOrEmpty::Grid(MaskedGrid::new_filled(empty.shape, fill_value));
+                }
+                GridOrEmpty::Empty(empty.convert_dtype())
+            }
+        }
+    }
+}
+
+// Implementation for GridOrEmpty.
+// Works with:
+//    F: Fn(Option<T>) -> Option<T>,
+//    F: Fn(T) -> T
 impl<FIn, FOut, TIn, TOut, F> MapElements<FIn, FOut, F> for RasterTile2D<TIn>
 where
     FIn: 'static + Copy,
@@ -118,7 +161,7 @@ where
     TIn: 'static,
     TOut: 'static,
     F: Fn(FIn) -> FOut,
-    MaskedGrid2D<TIn>: MapElements<FIn, FOut, F, Output = MaskedGrid2D<TOut>>,
+    GridOrEmpty2D<TIn>: MapElements<FIn, FOut, F, Output = GridOrEmpty2D<TOut>>,
 {
     type Output = RasterTile2D<TOut>;
 
@@ -133,6 +176,7 @@ where
     }
 }
 
+// Implementation for Grid: F: Fn(In) -> Out.
 impl<In, Out, F, G> MapElementsParallel<In, Out, F> for Grid<G, In>
 where
     In: 'static + Copy + PartialEq + Send + Sync,
@@ -153,6 +197,7 @@ where
     }
 }
 
+// Implementation for MaskedGrid to enable update of the inner data with F: Fn(T) -> T.
 impl<In, Out, F, G> MapElementsParallel<In, Out, F> for MaskedGrid<G, In>
 where
     In: 'static + Copy + PartialEq + Send + Sync,
@@ -171,6 +216,7 @@ where
     }
 }
 
+// Implementation for MaskedGrid: F: Fn(Option<T>) -> Option<T>.
 impl<In, Out, F, G> MapElementsParallel<Option<In>, Option<Out>, F> for MaskedGrid<G, In>
 where
     In: 'static + Copy + Send + Sync,
@@ -216,15 +262,18 @@ where
     }
 }
 
-impl<FIn, FOut, TIn, TOut, F, G> MapElementsParallel<FIn, FOut, F> for GridOrEmpty<G, TIn>
+// Implementation for GridOrEmpty.
+// Works with:
+//    F: Fn(T) -> T
+impl<In, Out, F, G> MapElementsParallel<In, Out, F> for GridOrEmpty<G, In>
 where
-    TIn: 'static,
-    TOut: 'static,
+    In: 'static,
+    Out: 'static,
     G: GridSize,
-    F: Fn(FIn) -> FOut + Send + Sync,
-    MaskedGrid<G, TIn>: MapElementsParallel<FIn, FOut, F, Output = MaskedGrid<G, TOut>>,
+    F: Fn(In) -> Out + Send + Sync,
+    MaskedGrid<G, In>: MapElementsParallel<In, Out, F, Output = MaskedGrid<G, Out>>,
 {
-    type Output = GridOrEmpty<G, TOut>;
+    type Output = GridOrEmpty<G, Out>;
 
     fn map_elements_parallel(self, map_fn: F) -> Self::Output {
         match self {
@@ -234,12 +283,43 @@ where
     }
 }
 
+// Implementation for GridOrEmpty.
+// Works with:
+//    F: Fn(Option<T>) -> Option<T>,
+impl<In, Out, F, G> MapElementsParallel<Option<In>, Option<Out>, F> for GridOrEmpty<G, In>
+where
+    In: 'static,
+    Out: 'static + Clone,
+    G: GridSize + PartialEq + Clone,
+    F: Fn(Option<In>) -> Option<Out> + Send + Sync,
+    MaskedGrid<G, In>: MapElementsParallel<Option<In>, Option<Out>, F, Output = MaskedGrid<G, Out>>,
+{
+    type Output = GridOrEmpty<G, Out>;
+
+    fn map_elements_parallel(self, map_fn: F) -> Self::Output {
+        match self {
+            GridOrEmpty::Grid(grid) => GridOrEmpty::Grid(grid.map_elements_parallel(map_fn)),
+            GridOrEmpty::Empty(empty) => {
+                // if None maps to a value we can be sure that the whole grid will turn to that value.
+                if let Some(fill_value) = map_fn(None as Option<In>) {
+                    return GridOrEmpty::Grid(MaskedGrid::new_filled(empty.shape, fill_value));
+                }
+                GridOrEmpty::Empty(empty.convert_dtype())
+            }
+        }
+    }
+}
+
+// Implementation for GridOrEmpty.
+// Works with:
+//    F: Fn(Option<T>) -> Option<T>,
+//    F: Fn(T) -> T
 impl<FIn, FOut, TIn, TOut, F> MapElementsParallel<FIn, FOut, F> for RasterTile2D<TIn>
 where
     TIn: 'static,
     TOut: 'static,
     F: Fn(FIn) -> FOut + Send + Sync,
-    MaskedGrid2D<TIn>: MapElementsParallel<FIn, FOut, F, Output = MaskedGrid2D<TOut>>,
+    GridOrEmpty2D<TIn>: MapElementsParallel<FIn, FOut, F, Output = GridOrEmpty2D<TOut>>,
 {
     type Output = RasterTile2D<TOut>;
 

@@ -145,7 +145,7 @@ impl PlotQueryProcessor for StatisticsQueryProcessor {
                     let mut number_statistics = number_statistics?;
                     let (i, raster_tile) = enumerated_raster_tile?;
                     match raster_tile.grid_array {
-                        GridOrEmpty::Grid(g) => process_raster(&mut number_statistics[i], g.masked_copy_element_iterator()),
+                        GridOrEmpty::Grid(g) => process_raster(&mut number_statistics[i], g.masked_element_deref_iterator()),
                         GridOrEmpty::Empty(n) => number_statistics[i].add_no_data_batch(n.number_of_elements())
                     }
 

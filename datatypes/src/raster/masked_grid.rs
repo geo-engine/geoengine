@@ -81,7 +81,7 @@ where
         &mut self.validity_mask
     }
 
-    pub fn masked_element_iterator(&self) -> impl Iterator<Item = Option<&T>> {
+    pub fn masked_element_ref_iterator(&self) -> impl Iterator<Item = Option<&T>> {
         self.inner_grid
             .data
             .iter()
@@ -89,11 +89,11 @@ where
             .map(|(v, m)| if *m { Some(v) } else { None })
     }
 
-    pub fn masked_copy_element_iterator(&self) -> impl Iterator<Item = Option<T>> + '_
+    pub fn masked_element_deref_iterator(&self) -> impl Iterator<Item = Option<T>> + '_
     where
         T: Copy,
     {
-        self.masked_element_iterator()
+        self.masked_element_ref_iterator()
             .map(std::option::Option::<&T>::copied)
     }
 

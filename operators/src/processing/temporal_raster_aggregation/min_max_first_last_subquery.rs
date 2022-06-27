@@ -118,7 +118,7 @@ where
                     C::acc(acc_value, tile_value)
                 };
 
-                GridOrEmpty::from(a.map_index_elements(map_fn))
+                GridOrEmpty::from(a.map_indexed_elements(map_fn))
                 // TODO: could also use parallel map_index_elements_parallel
             }
             (GridOrEmpty::Empty(e), _) | (_, GridOrEmpty::Empty(e)) => GridOrEmpty::Empty(e),
@@ -154,7 +154,7 @@ where
                 C::acc_ignore_no_data(acc_value, tile_value)
             };
 
-            GridOrEmpty::from(a.map_index_elements(map_fn)) // TODO: could also use parallel map_index_elements_parallel
+            GridOrEmpty::from(a.map_indexed_elements(map_fn)) // TODO: could also use parallel map_index_elements_parallel
         }
         // TODO: need to increase temporal validity?
         (GridOrEmpty::Grid(a), GridOrEmpty::Empty(_)) => GridOrEmpty::Grid(a),

@@ -51,7 +51,7 @@ where
         let out_grid = output
             .grid_array
             .clone()
-            .map_index_elements_parallel(map_fn);
+            .map_indexed_elements_parallel(map_fn);
 
         output.grid_array = out_grid; // TODO: add a trait for update elements?
 
@@ -154,7 +154,7 @@ where
         let out_grid = output
             .grid_array
             .clone()
-            .map_index_elements_parallel(map_fn);
+            .map_indexed_elements_parallel(map_fn);
         output.grid_array = out_grid; // TODO: add a trait for update elements?
 
         Ok(())

@@ -143,7 +143,7 @@ impl<P: Pixel> MeanRasterPixelValuesOverTimeQueryProcessor<P> {
                 geoengine_datatypes::raster::GridOrEmpty::Grid(g) => {
                     let time = Self::time_interval_projection(tile.time, position);
                     let mean = means.entry(time).or_default();
-                    mean.add(g.masked_copy_element_iterator());
+                    mean.add(g.masked_element_deref_iterator());
                 }
                 geoengine_datatypes::raster::GridOrEmpty::Empty(_) => (),
             }

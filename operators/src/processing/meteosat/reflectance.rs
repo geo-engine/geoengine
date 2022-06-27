@@ -229,7 +229,7 @@ where
         };
 
         let refl_tile = crate::util::spawn_blocking_with_thread_pool(pool, move || {
-            tile.map_index_elements_parallel(map_fn)
+            tile.map_indexed_elements_parallel(map_fn)
         })
         .await?;
 
