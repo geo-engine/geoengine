@@ -54,6 +54,9 @@ pub enum NetCdfCf4DProviderError {
     CannotParseTimeCoverageDate {
         source: Box<dyn ErrorSource>,
     },
+    CannotComputeMinMax {
+        source: GdalError,
+    },
     TimeCoverageYearOverflows {
         year: i32,
     },

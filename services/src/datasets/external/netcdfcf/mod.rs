@@ -107,6 +107,7 @@ pub struct NetCdfGroup {
     pub description: String,
     // TODO: would actually be nice if it were inside dataset/entity
     pub data_type: Option<RasterDataType>,
+    pub data_range: Option<(f64, f64)>,
     // TODO: would actually be nice if it were inside dataset/entity
     pub unit: String,
     pub groups: Vec<NetCdfGroup>,
@@ -120,11 +121,11 @@ pub struct NetCdfEntity {
 }
 
 trait ToNetCdfSubgroup {
-    fn to_net_cdf_subgroup(&self) -> Result<NetCdfGroup>;
+    fn to_net_cdf_subgroup(&self, compute_stats: bool) -> Result<NetCdfGroup>;
 }
 
 impl<'a> ToNetCdfSubgroup for MdGroup<'a> {
-    fn to_net_cdf_subgroup(&self) -> Result<NetCdfGroup> {
+    fn to_net_cdf_subgroup(&self, compute_stats: bool) -> Result<NetCdfGroup> {
         let name = self.name.clone();
         let title = self
             .attribute_as_string("standard_name")
@@ -137,11 +138,19 @@ impl<'a> ToNetCdfSubgroup for MdGroup<'a> {
         if group_names.is_empty() {
             let data_type = Some(self.datatype_of_numeric_array("ebv_cube")?);
 
+            let data_range = if compute_stats {
+                let array = self.open_array("ebv_cube")?;
+                Some(array.min_max().context(error::CannotComputeMinMax)?)
+            } else {
+                None
+            };
+
             return Ok(NetCdfGroup {
                 name,
                 title,
                 description,
                 data_type,
+                data_range,
                 unit,
                 groups: Vec::new(),
             });
@@ -150,7 +159,10 @@ impl<'a> ToNetCdfSubgroup for MdGroup<'a> {
         let mut groups = Vec::with_capacity(group_names.len());
 
         for subgroup in group_names {
-            groups.push(self.open_group(&subgroup)?.to_net_cdf_subgroup()?);
+            groups.push(
+                self.open_group(&subgroup)?
+                    .to_net_cdf_subgroup(compute_stats)?,
+            );
         }
 
         Ok(NetCdfGroup {
@@ -158,6 +170,7 @@ impl<'a> ToNetCdfSubgroup for MdGroup<'a> {
             title,
             description,
             data_type: None,
+            data_range: None,
             unit,
             groups,
         })
@@ -187,6 +200,7 @@ impl NetCdfCfDataProvider {
         provider_path: &Path,
         overview_path: Option<&Path>,
         dataset_path: &Path,
+        compute_stats: bool,
     ) -> Result<NetCdfOverview> {
         if let Some(netcdf_tree) = overview_path.and_then(|overview_path| {
             NetCdfCfDataProvider::netcdf_tree_from_overviews(overview_path, dataset_path)
@@ -234,7 +248,11 @@ impl NetCdfCfDataProvider {
         let groups = root_group
             .group_names()
             .iter()
-            .map(|name| root_group.open_group(name)?.to_net_cdf_subgroup())
+            .map(|name| {
+                root_group
+                    .open_group(name)?
+                    .to_net_cdf_subgroup(compute_stats)
+            })
             .collect::<Result<Vec<_>>>()?;
 
         let time_coverage = time_coverage(&root_group)?;
@@ -265,8 +283,10 @@ impl NetCdfCfDataProvider {
         provider_path: &Path,
         overview_path: Option<&Path>,
         dataset_path: &Path,
+        compute_stats: bool,
     ) -> Result<Vec<DatasetListing>> {
-        let tree = Self::build_netcdf_tree(provider_path, overview_path, dataset_path)?;
+        let tree =
+            Self::build_netcdf_tree(provider_path, overview_path, dataset_path, compute_stats)?;
 
         let mut paths: VecDeque<Vec<&NetCdfGroup>> = tree.groups.iter().map(|s| vec![s]).collect();
 
@@ -592,13 +612,50 @@ fn load_colorizer(path: &Path) -> Result<Colorizer> {
     Ok(colorizer)
 }
 
-/// A simple colorizer between 0 and 255
-/// TODO: generate better default by using `NetCDF` metadata
+/// A simple viridis colorizer between 0 and 255
 fn fallback_colorizer() -> Result<Colorizer> {
     Colorizer::linear_gradient(
         vec![
-            (0.0.try_into().expect("not nan"), RgbaColor::black()).into(),
-            (255.0.try_into().expect("not nan"), RgbaColor::white()).into(),
+            (
+                0.0.try_into().expect("not nan"),
+                RgbaColor::new(68, 1, 84, 255),
+            )
+                .into(),
+            (
+                36.428_571_428_571_42.try_into().expect("not nan"),
+                RgbaColor::new(70, 50, 126, 255),
+            )
+                .into(),
+            (
+                72.857_142_857_142_85.try_into().expect("not nan"),
+                RgbaColor::new(54, 92, 141, 255),
+            )
+                .into(),
+            (
+                109.285_714_285_714_28.try_into().expect("not nan"),
+                RgbaColor::new(39, 127, 142, 255),
+            )
+                .into(),
+            (
+                109.285_714_285_714_28.try_into().expect("not nan"),
+                RgbaColor::new(31, 161, 135, 255),
+            )
+                .into(),
+            (
+                182.142_857_142_857_1.try_into().expect("not nan"),
+                RgbaColor::new(74, 193, 109, 255),
+            )
+                .into(),
+            (
+                218.571_428_571_428_53.try_into().expect("not nan"),
+                RgbaColor::new(160, 218, 57, 255),
+            )
+                .into(),
+            (
+                255.0.try_into().expect("not nan"),
+                RgbaColor::new(253, 231, 37, 255),
+            )
+                .into(),
         ],
         RgbaColor::transparent(),
         RgbaColor::transparent(),
@@ -790,6 +847,7 @@ impl ExternalDatasetProvider for NetCdfCfDataProvider {
                     &provider_path,
                     Some(&overviews_path),
                     &relative_path,
+                    false,
                 )
             })
             .await?;
@@ -977,6 +1035,7 @@ mod tests {
             test_data!("netcdf4d"),
             None,
             Path::new("dataset_m.nc"),
+            false,
         )
         .unwrap();
 
@@ -997,10 +1056,44 @@ mod tests {
             opacity: 1.0,
             colorizer: Colorizer::LinearGradient {
                 breakpoints: vec![
-                    (0.0.try_into().unwrap(), RgbaColor::new(0, 0, 0, 255)).into(),
                     (
-                        255.0.try_into().unwrap(),
-                        RgbaColor::new(255, 255, 255, 255),
+                        0.0.try_into().expect("not nan"),
+                        RgbaColor::new(68, 1, 84, 255),
+                    )
+                        .into(),
+                    (
+                        36.428_571_428_571_42.try_into().expect("not nan"),
+                        RgbaColor::new(70, 50, 126, 255),
+                    )
+                        .into(),
+                    (
+                        72.857_142_857_142_85.try_into().expect("not nan"),
+                        RgbaColor::new(54, 92, 141, 255),
+                    )
+                        .into(),
+                    (
+                        109.285_714_285_714_28.try_into().expect("not nan"),
+                        RgbaColor::new(39, 127, 142, 255),
+                    )
+                        .into(),
+                    (
+                        109.285_714_285_714_28.try_into().expect("not nan"),
+                        RgbaColor::new(31, 161, 135, 255),
+                    )
+                        .into(),
+                    (
+                        182.142_857_142_857_1.try_into().expect("not nan"),
+                        RgbaColor::new(74, 193, 109, 255),
+                    )
+                        .into(),
+                    (
+                        218.571_428_571_428_53.try_into().expect("not nan"),
+                        RgbaColor::new(160, 218, 57, 255),
+                    )
+                        .into(),
+                    (
+                        255.0.try_into().expect("not nan"),
+                        RgbaColor::new(253, 231, 37, 255),
                     )
                         .into(),
                 ],
@@ -1141,6 +1234,7 @@ mod tests {
             test_data!("netcdf4d"),
             None,
             Path::new("dataset_sm.nc"),
+            false,
         )
         .unwrap();
 
@@ -1431,6 +1525,7 @@ mod tests {
             test_data!("netcdf4d"),
             Some(overview_folder.path()),
             Path::new("dataset_sm.nc"),
+            false,
         )
         .unwrap();
 
