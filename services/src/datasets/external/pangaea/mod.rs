@@ -1,10 +1,10 @@
 use crate::datasets::external::pangaea::meta::PangeaMetaData;
-use crate::datasets::listing::{
-    DatasetListOptions, DatasetListing, ExternalDatasetProvider, Provenance, ProvenanceOutput,
-};
-use crate::datasets::storage::ExternalDatasetProviderDefinition;
+use crate::datasets::listing::{Provenance, ProvenanceOutput};
+use crate::layers::external::{ExternalLayerProvider, ExternalLayerProviderDefinition};
+use crate::layers::layer::{CollectionItem, Layer, LayerCollectionListOptions};
+use crate::layers::listing::{LayerCollectionId, LayerCollectionProvider, LayerId};
 use async_trait::async_trait;
-use geoengine_datatypes::dataset::{DatasetId, DatasetProviderId};
+use geoengine_datatypes::dataset::{DatasetId, LayerProviderId};
 use geoengine_datatypes::primitives::{RasterQueryRectangle, VectorQueryRectangle};
 use geoengine_operators::engine::{
     MetaData, MetaDataProvider, RasterResultDescriptor, VectorResultDescriptor,
@@ -19,8 +19,8 @@ use serde::{Deserialize, Serialize};
 
 mod meta;
 
-pub const PANGAEA_PROVIDER_ID: DatasetProviderId =
-    DatasetProviderId::from_u128(0xe3b9_3bf3_1bc1_48db_80e8_97cf_b068_5e8d);
+pub const PANGAEA_PROVIDER_ID: LayerProviderId =
+    LayerProviderId::from_u128(0xe3b9_3bf3_1bc1_48db_80e8_97cf_b068_5e8d);
 
 /// The pangaea provider allows to include datasets from
 /// <http://pangaea.de/>
@@ -33,8 +33,8 @@ pub struct PangaeaDataProviderDefinition {
 
 #[typetag::serde]
 #[async_trait]
-impl ExternalDatasetProviderDefinition for PangaeaDataProviderDefinition {
-    async fn initialize(self: Box<Self>) -> Result<Box<dyn ExternalDatasetProvider>> {
+impl ExternalLayerProviderDefinition for PangaeaDataProviderDefinition {
+    async fn initialize(self: Box<Self>) -> Result<Box<dyn ExternalLayerProvider>> {
         Ok(Box::new(PangaeaDataProvider::new(self.base_url)))
     }
 
@@ -46,7 +46,7 @@ impl ExternalDatasetProviderDefinition for PangaeaDataProviderDefinition {
         self.name.clone()
     }
 
-    fn id(&self) -> DatasetProviderId {
+    fn id(&self) -> LayerProviderId {
         PANGAEA_PROVIDER_ID
     }
 }
@@ -67,11 +67,7 @@ impl PangaeaDataProvider {
 }
 
 #[async_trait]
-impl ExternalDatasetProvider for PangaeaDataProvider {
-    async fn list(&self, _options: Validated<DatasetListOptions>) -> Result<Vec<DatasetListing>> {
-        Ok(vec![])
-    }
-
+impl ExternalLayerProvider for PangaeaDataProvider {
     async fn provenance(&self, dataset: &DatasetId) -> Result<ProvenanceOutput> {
         let doi = dataset
             .external()
@@ -112,6 +108,25 @@ impl ExternalDatasetProvider for PangaeaDataProvider {
 
     fn as_any(&self) -> &dyn std::any::Any {
         self
+    }
+}
+
+#[async_trait]
+impl LayerCollectionProvider for PangaeaDataProvider {
+    async fn collection_items(
+        &self,
+        _collection: &LayerCollectionId,
+        _options: Validated<LayerCollectionListOptions>,
+    ) -> Result<Vec<CollectionItem>> {
+        Err(Error::NotYetImplemented)
+    }
+
+    async fn root_collection_id(&self) -> Result<LayerCollectionId> {
+        Err(Error::NotYetImplemented)
+    }
+
+    async fn get_layer(&self, _id: &LayerId) -> Result<Layer> {
+        Err(Error::NotYetImplemented)
     }
 }
 
@@ -198,9 +213,8 @@ impl
 #[cfg(test)]
 mod tests {
     use crate::datasets::external::pangaea::{PangaeaDataProviderDefinition, PANGAEA_PROVIDER_ID};
-    use crate::datasets::listing::ExternalDatasetProvider;
-    use crate::datasets::storage::ExternalDatasetProviderDefinition;
     use crate::error::Error;
+    use crate::layers::external::{ExternalLayerProvider, ExternalLayerProviderDefinition};
     use futures::StreamExt;
     use geoengine_datatypes::collections::{
         DataCollection, FeatureCollectionInfos, IntoGeometryIterator, MultiPointCollection,
@@ -232,7 +246,7 @@ mod tests {
         crate::test_data!(String::from("pangaea/") + file_name).into()
     }
 
-    async fn create_provider(server: &Server) -> Result<Box<dyn ExternalDatasetProvider>, Error> {
+    async fn create_provider(server: &Server) -> Result<Box<dyn ExternalLayerProvider>, Error> {
         Box::new(PangaeaDataProviderDefinition {
             name: "Pangaea".to_string(),
             base_url: server.url_str("").strip_suffix('/').unwrap().to_owned(),

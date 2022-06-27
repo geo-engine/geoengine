@@ -1,10 +1,9 @@
 use std::path::PathBuf;
 
 use gdal::errors::GdalError;
-use geoengine_datatypes::dataset::DatasetProviderId;
 use snafu::Snafu;
 
-use geoengine_datatypes::error::ErrorSource;
+use geoengine_datatypes::{dataset::LayerProviderId, error::ErrorSource};
 
 #[derive(Debug, Snafu)]
 #[snafu(visibility(pub(crate)))]
@@ -78,7 +77,7 @@ pub enum NetCdfCf4DProviderError {
         source: geoengine_datatypes::error::Error,
     },
     InvalidExternalDatasetId {
-        provider: DatasetProviderId,
+        provider: LayerProviderId,
     },
     InvalidDatasetIdLength {
         length: usize,

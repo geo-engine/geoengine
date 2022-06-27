@@ -1,14 +1,17 @@
-use crate::datasets::listing::{
-    DatasetListOptions, DatasetListing, ExternalDatasetProvider, ProvenanceOutput,
+use crate::datasets::listing::{DatasetListing, ProvenanceOutput};
+use crate::error::{self, Error, Result};
+use crate::layers::external::{ExternalLayerProvider, ExternalLayerProviderDefinition};
+use crate::layers::layer::{
+    CollectionItem, Layer, LayerCollectionListOptions, LayerListing, ProviderLayerId,
 };
-use crate::datasets::storage::ExternalDatasetProviderDefinition;
-use crate::error::{self, Result};
+use crate::layers::listing::{LayerCollectionId, LayerCollectionProvider, LayerId};
 use crate::projects::{RasterSymbology, Symbology};
 use crate::stac::{Feature as StacFeature, FeatureCollection as StacCollection, StacAsset};
 use crate::util::retry::retry;
 use crate::util::user_input::Validated;
+use crate::workflows::workflow::Workflow;
 use async_trait::async_trait;
-use geoengine_datatypes::dataset::{DatasetId, DatasetProviderId, ExternalDatasetId};
+use geoengine_datatypes::dataset::{DatasetId, ExternalDatasetId, LayerProviderId};
 use geoengine_datatypes::operations::image::{Colorizer, RgbaColor};
 use geoengine_datatypes::operations::reproject::{
     CoordinateProjection, CoordinateProjector, ReprojectClipped,
@@ -20,12 +23,13 @@ use geoengine_datatypes::primitives::{
 use geoengine_datatypes::raster::RasterDataType;
 use geoengine_datatypes::spatial_reference::{SpatialReference, SpatialReferenceAuthority};
 use geoengine_operators::engine::{
-    MetaData, MetaDataProvider, RasterResultDescriptor, VectorResultDescriptor,
+    MetaData, MetaDataProvider, RasterOperator, RasterResultDescriptor, TypedOperator,
+    VectorResultDescriptor,
 };
 use geoengine_operators::mock::MockDatasetDataSourceLoadingInfo;
 use geoengine_operators::source::{
     GdalDatasetGeoTransform, GdalDatasetParameters, GdalLoadingInfo, GdalLoadingInfoTemporalSlice,
-    GdalLoadingInfoTemporalSliceIterator, OgrSourceDataset,
+    GdalLoadingInfoTemporalSliceIterator, GdalSource, GdalSourceParameters, OgrSourceDataset,
 };
 use log::debug;
 use reqwest::Client;
@@ -40,7 +44,7 @@ use std::path::PathBuf;
 #[serde(rename_all = "camelCase")]
 pub struct SentinelS2L2ACogsProviderDefinition {
     name: String,
-    id: DatasetProviderId,
+    id: LayerProviderId,
     api_url: String,
     bands: Vec<Band>,
     zones: Vec<Zone>,
@@ -69,10 +73,8 @@ impl Default for StacApiRetries {
 
 #[typetag::serde]
 #[async_trait]
-impl ExternalDatasetProviderDefinition for SentinelS2L2ACogsProviderDefinition {
-    async fn initialize(
-        self: Box<Self>,
-    ) -> crate::error::Result<Box<dyn crate::datasets::listing::ExternalDatasetProvider>> {
+impl ExternalLayerProviderDefinition for SentinelS2L2ACogsProviderDefinition {
+    async fn initialize(self: Box<Self>) -> crate::error::Result<Box<dyn ExternalLayerProvider>> {
         Ok(Box::new(SentinelS2L2aCogsDataProvider::new(
             self.id,
             self.api_url,
@@ -90,7 +92,7 @@ impl ExternalDatasetProviderDefinition for SentinelS2L2ACogsProviderDefinition {
         self.name.clone()
     }
 
-    fn id(&self) -> DatasetProviderId {
+    fn id(&self) -> LayerProviderId {
         self.id
     }
 }
@@ -118,6 +120,8 @@ pub struct SentinelDataset {
 
 #[derive(Debug)]
 pub struct SentinelS2L2aCogsDataProvider {
+    id: LayerProviderId,
+
     api_url: String,
 
     datasets: HashMap<DatasetId, SentinelDataset>,
@@ -127,13 +131,14 @@ pub struct SentinelS2L2aCogsDataProvider {
 
 impl SentinelS2L2aCogsDataProvider {
     pub fn new(
-        id: DatasetProviderId,
+        id: LayerProviderId,
         api_url: String,
         bands: &[Band],
         zones: &[Zone],
         stac_api_retries: StacApiRetries,
     ) -> Self {
         Self {
+            id,
             api_url,
             datasets: Self::create_datasets(&id, bands, zones),
             stac_api_retries,
@@ -141,7 +146,7 @@ impl SentinelS2L2aCogsDataProvider {
     }
 
     fn create_datasets(
-        id: &DatasetProviderId,
+        id: &LayerProviderId,
         bands: &[Band],
         zones: &[Zone],
     ) -> HashMap<DatasetId, SentinelDataset> {
@@ -203,15 +208,7 @@ impl SentinelS2L2aCogsDataProvider {
 }
 
 #[async_trait]
-impl ExternalDatasetProvider for SentinelS2L2aCogsDataProvider {
-    async fn list(&self, _options: Validated<DatasetListOptions>) -> Result<Vec<DatasetListing>> {
-        // TODO: options
-        let mut x: Vec<DatasetListing> =
-            self.datasets.values().map(|d| d.listing.clone()).collect();
-        x.sort_by_key(|e| e.name.clone());
-        Ok(x)
-    }
-
+impl ExternalLayerProvider for SentinelS2L2aCogsDataProvider {
     async fn provenance(&self, dataset: &DatasetId) -> Result<ProvenanceOutput> {
         Ok(ProvenanceOutput {
             dataset: dataset.clone(),
@@ -221,6 +218,72 @@ impl ExternalDatasetProvider for SentinelS2L2aCogsDataProvider {
 
     fn as_any(&self) -> &dyn std::any::Any {
         self
+    }
+}
+
+#[async_trait]
+impl LayerCollectionProvider for SentinelS2L2aCogsDataProvider {
+    async fn collection_items(
+        &self,
+        _collection: &LayerCollectionId,
+        _options: Validated<LayerCollectionListOptions>,
+    ) -> Result<Vec<CollectionItem>> {
+        // TODO: check collection id
+
+        // TODO: options
+        let mut x = self
+            .datasets
+            .values()
+            .map(|d| {
+                let id = d.listing.id.external().ok_or(Error::InvalidDatasetId)?;
+                Ok(CollectionItem::Layer(LayerListing {
+                    id: ProviderLayerId {
+                        provider: id.provider_id,
+                        item: LayerId(id.dataset_id),
+                    },
+                    name: d.listing.name.clone(),
+                    description: d.listing.description.clone(),
+                }))
+            })
+            .collect::<Result<Vec<CollectionItem>>>()?;
+        x.sort_by_key(|e| e.name().to_string());
+        Ok(x)
+    }
+
+    async fn root_collection_id(&self) -> Result<LayerCollectionId> {
+        Ok(LayerCollectionId("SentinelS2L2ACogs".to_owned()))
+    }
+
+    async fn get_layer(&self, id: &LayerId) -> Result<Layer> {
+        let dataset_id = DatasetId::External(ExternalDatasetId {
+            provider_id: self.id,
+            dataset_id: id.0.clone(),
+        });
+
+        let dataset = self
+            .datasets
+            .get(&dataset_id)
+            .ok_or(Error::UnknownDatasetId)?;
+
+        Ok(Layer {
+            id: ProviderLayerId {
+                provider: self.id,
+                item: id.clone(),
+            },
+            name: dataset.listing.name.clone(),
+            description: dataset.listing.description.clone(),
+            workflow: Workflow {
+                operator: TypedOperator::Raster(
+                    GdalSource {
+                        params: GdalSourceParameters {
+                            dataset: dataset_id,
+                        },
+                    }
+                    .boxed(),
+                ),
+            },
+            symbology: dataset.listing.symbology.clone(),
+        })
     }
 }
 
@@ -582,7 +645,7 @@ impl MetaDataProvider<OgrSourceDataset, VectorResultDescriptor, VectorQueryRecta
 
 #[cfg(test)]
 mod tests {
-    use std::{fs::File, io::BufReader};
+    use std::{fs::File, io::BufReader, str::FromStr};
 
     use crate::test_data;
     use futures::StreamExt;
@@ -607,7 +670,7 @@ mod tests {
     async fn loading_info() -> Result<()> {
         // TODO: mock STAC endpoint
 
-        let def: Box<dyn ExternalDatasetProviderDefinition> =
+        let def: Box<dyn ExternalLayerProviderDefinition> =
             serde_json::from_reader(BufReader::new(File::open(test_data!(
                 "provider_defs/pro/sentinel_s2_l2a_cogs.json"
             ))?))?;
@@ -618,7 +681,7 @@ mod tests {
             provider
                 .meta_data(
                     &ExternalDatasetId {
-                        provider_id: DatasetProviderId::from_str(
+                        provider_id: LayerProviderId::from_str(
                             "5779494c-f3a2-48b3-8a2d-5fbba8c5b6c5",
                         )?,
                         dataset_id: "UTM32N:B01".to_owned(),
@@ -679,7 +742,7 @@ mod tests {
 
         let mut exe = MockExecutionContext::test_default();
 
-        let def: Box<dyn ExternalDatasetProviderDefinition> =
+        let def: Box<dyn ExternalLayerProviderDefinition> =
             serde_json::from_reader(BufReader::new(File::open(test_data!(
                 "provider_defs/pro/sentinel_s2_l2a_cogs.json"
             ))?))?;
@@ -690,7 +753,7 @@ mod tests {
             provider
                 .meta_data(
                     &ExternalDatasetId {
-                        provider_id: DatasetProviderId::from_str(
+                        provider_id: LayerProviderId::from_str(
                             "5779494c-f3a2-48b3-8a2d-5fbba8c5b6c5",
                         )?,
                         dataset_id: "UTM32N:B01".to_owned(),
@@ -701,7 +764,7 @@ mod tests {
 
         exe.add_meta_data(
             ExternalDatasetId {
-                provider_id: DatasetProviderId::from_str("5779494c-f3a2-48b3-8a2d-5fbba8c5b6c5")?,
+                provider_id: LayerProviderId::from_str("5779494c-f3a2-48b3-8a2d-5fbba8c5b6c5")?,
                 dataset_id: "UTM32N:B01".to_owned(),
             }
             .into(),
@@ -711,9 +774,7 @@ mod tests {
         let op = GdalSource {
             params: GdalSourceParameters {
                 dataset: ExternalDatasetId {
-                    provider_id: DatasetProviderId::from_str(
-                        "5779494c-f3a2-48b3-8a2d-5fbba8c5b6c5",
-                    )?,
+                    provider_id: LayerProviderId::from_str("5779494c-f3a2-48b3-8a2d-5fbba8c5b6c5")?,
                     dataset_id: "UTM32N:B01".to_owned(),
                 }
                 .into(),
@@ -791,10 +852,9 @@ mod tests {
             ]),
         );
 
-        let provider_id: DatasetProviderId =
-            "5779494c-f3a2-48b3-8a2d-5fbba8c5b6c5".parse().unwrap();
+        let provider_id: LayerProviderId = "5779494c-f3a2-48b3-8a2d-5fbba8c5b6c5".parse().unwrap();
 
-        let provider_def: Box<dyn ExternalDatasetProviderDefinition> =
+        let provider_def: Box<dyn ExternalLayerProviderDefinition> =
             Box::new(SentinelS2L2ACogsProviderDefinition {
                 name: "Element 84 AWS STAC".into(),
                 id: provider_id,

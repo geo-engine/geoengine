@@ -59,16 +59,16 @@ where
             app = app.configure(pro::handlers::drone_mapping::init_drone_mapping_routes::<C>);
         }
 
-        // #[cfg(feature = "ebv")]
-        // {
-        //     app = app
-        //         .service(web::scope("/ebv").configure(handlers::ebv::init_ebv_routes::<C>(None)));
-        // }
+        #[cfg(feature = "ebv")]
+        {
+            app = app
+                .service(web::scope("/ebv").configure(handlers::ebv::init_ebv_routes::<C>(None)));
+        }
 
-        // #[cfg(feature = "nfdi")]
-        // {
-        //     app = app.configure(handlers::gfbio::init_gfbio_routes::<C>);
-        // }
+        #[cfg(feature = "nfdi")]
+        {
+            app = app.configure(handlers::gfbio::init_gfbio_routes::<C>);
+        }
 
         if version_api {
             app = app.route(

@@ -83,6 +83,15 @@ pub enum CollectionItem {
     Layer(LayerListing),
 }
 
+impl CollectionItem {
+    pub fn name(&self) -> &str {
+        match self {
+            CollectionItem::Collection(c) => &c.name,
+            CollectionItem::Layer(l) => &l.name,
+        }
+    }
+}
+
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct AddLayerCollection {
     pub name: String,

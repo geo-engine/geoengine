@@ -1,5 +1,6 @@
 use crate::contexts::Context;
 use crate::error::Result;
+use crate::layers::storage::LayerProviderDb;
 use crate::util::config::{get_config_element, GFBio};
 use actix_web::{web, FromRequest, Responder};
 use futures::stream::FuturesUnordered;
@@ -38,8 +39,8 @@ async fn get_basket_handler<C: Context>(
     // Get basket content
     let config = get_config_element::<GFBio>()?;
     let abcd_provider = ctx
-        .dataset_db_ref()
-        .dataset_provider(&session, GFBIO_PROVIDER_ID)
+        .layer_provider_db()
+        .layer_provider(GFBIO_PROVIDER_ID)
         .await
         .ok();
 
@@ -433,7 +434,7 @@ mod tests {
         BasketInternal, TypedBasketEntry,
     };
     use geoengine_datatypes::collections::VectorDataType;
-    use geoengine_datatypes::dataset::{DatasetId, DatasetProviderId, ExternalDatasetId};
+    use geoengine_datatypes::dataset::{DatasetId, ExternalDatasetId, LayerProviderId};
     use geoengine_datatypes::spatial_reference::{SpatialReference, SpatialReferenceOption};
     use geoengine_operators::engine::{TypedResultDescriptor, VectorResultDescriptor};
     use geoengine_operators::source::AttributeFilter;
@@ -476,7 +477,7 @@ mod tests {
     #[test]
     fn basket_entry_serialization_ok() {
         let id = DatasetId::External(ExternalDatasetId {
-            provider_id: DatasetProviderId(Uuid::default()),
+            provider_id: LayerProviderId(Uuid::default()),
             dataset_id: "1".to_string(),
         });
 
@@ -515,7 +516,7 @@ mod tests {
     #[test]
     fn basket_entry_serialization_ok_with_filter() {
         let id = DatasetId::External(ExternalDatasetId {
-            provider_id: DatasetProviderId(Uuid::default()),
+            provider_id: LayerProviderId(Uuid::default()),
             dataset_id: "1".to_string(),
         });
 

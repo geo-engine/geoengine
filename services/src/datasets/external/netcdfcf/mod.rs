@@ -1,13 +1,19 @@
-use crate::datasets::listing::DatasetListOptions;
-use crate::datasets::listing::{ExternalDatasetProvider, ProvenanceOutput};
+use crate::datasets::listing::ProvenanceOutput;
+use crate::error::Error;
+use crate::layers::external::ExternalLayerProvider;
+use crate::layers::external::ExternalLayerProviderDefinition;
+use crate::layers::layer::CollectionItem;
+use crate::layers::layer::Layer;
+use crate::layers::layer::LayerCollectionListOptions;
+use crate::layers::listing::LayerCollectionId;
+use crate::layers::listing::LayerCollectionProvider;
+use crate::layers::listing::LayerId;
 use crate::projects::{RasterSymbology, Symbology};
-use crate::{
-    datasets::{listing::DatasetListing, storage::ExternalDatasetProviderDefinition},
-    util::user_input::Validated,
-};
+use crate::{datasets::listing::DatasetListing, util::user_input::Validated};
 use async_trait::async_trait;
 use gdal::{DatasetOptions, GdalOpenFlags};
-use geoengine_datatypes::dataset::{DatasetId, DatasetProviderId, ExternalDatasetId};
+use geoengine_datatypes::dataset::LayerProviderId;
+use geoengine_datatypes::dataset::{DatasetId, ExternalDatasetId};
 use geoengine_datatypes::operations::image::{Colorizer, RgbaColor};
 use geoengine_datatypes::primitives::{
     DateTime, DateTimeParseFormat, Measurement, RasterQueryRectangle, TimeGranularity,
@@ -46,8 +52,8 @@ mod overviews;
 type Result<T, E = NetCdfCf4DProviderError> = std::result::Result<T, E>;
 
 /// Singleton Provider with id `1690c483-b17f-4d98-95c8-00a64849cd0b`
-pub const NETCDF_CF_PROVIDER_ID: DatasetProviderId =
-    DatasetProviderId::from_u128(0x1690_c483_b17f_4d98_95c8_00a6_4849_cd0b);
+pub const NETCDF_CF_PROVIDER_ID: LayerProviderId =
+    LayerProviderId::from_u128(0x1690_c483_b17f_4d98_95c8_00a6_4849_cd0b);
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct NetCdfCfDataProviderDefinition {
@@ -64,8 +70,8 @@ pub struct NetCdfCfDataProvider {
 
 #[typetag::serde]
 #[async_trait]
-impl ExternalDatasetProviderDefinition for NetCdfCfDataProviderDefinition {
-    async fn initialize(self: Box<Self>) -> crate::error::Result<Box<dyn ExternalDatasetProvider>> {
+impl ExternalLayerProviderDefinition for NetCdfCfDataProviderDefinition {
+    async fn initialize(self: Box<Self>) -> crate::error::Result<Box<dyn ExternalLayerProvider>> {
         Ok(Box::new(NetCdfCfDataProvider {
             path: self.path,
             overviews: self.overviews,
@@ -80,7 +86,7 @@ impl ExternalDatasetProviderDefinition for NetCdfCfDataProviderDefinition {
         self.name.clone()
     }
 
-    fn id(&self) -> DatasetProviderId {
+    fn id(&self) -> LayerProviderId {
         NETCDF_CF_PROVIDER_ID
     }
 }
@@ -272,8 +278,9 @@ impl NetCdfCfDataProvider {
         })
     }
 
+    #[allow(dead_code)]
     pub(crate) fn listing_from_netcdf(
-        id: DatasetProviderId,
+        id: LayerProviderId,
         provider_path: &Path,
         overview_path: Option<&Path>,
         dataset_path: &Path,
@@ -664,58 +671,7 @@ fn parse_time_coverage(
 }
 
 #[async_trait]
-impl ExternalDatasetProvider for NetCdfCfDataProvider {
-    async fn list(
-        &self,
-        options: Validated<DatasetListOptions>,
-    ) -> crate::error::Result<Vec<DatasetListing>> {
-        // TODO: user right management
-        // TODO: options
-
-        let mut dir = tokio::fs::read_dir(&self.path).await?;
-
-        let mut datasets = vec![];
-        while let Some(entry) = dir.next_entry().await? {
-            if !entry.path().is_file() {
-                continue;
-            }
-
-            let provider_path = self.path.clone();
-            let overviews_path = self.overviews.clone();
-            let relative_path = if let Ok(p) = entry.path().strip_prefix(&provider_path) {
-                p.to_path_buf()
-            } else {
-                // cannot actually happen since `entry` is listed from `provider_path`
-                continue;
-            };
-
-            let listing = tokio::task::spawn_blocking(move || {
-                Self::listing_from_netcdf(
-                    NETCDF_CF_PROVIDER_ID,
-                    &provider_path,
-                    Some(&overviews_path),
-                    &relative_path,
-                )
-            })
-            .await?;
-
-            match listing {
-                Ok(listing) => datasets.extend(listing),
-                Err(e) => debug!("Failed to list dataset: {}", e),
-            }
-        }
-
-        // TODO: react to filter and sort options
-        // TODO: don't compute everything and filter then
-        let datasets = datasets
-            .into_iter()
-            .skip(options.user_input.offset as usize)
-            .take(options.user_input.limit as usize)
-            .collect();
-
-        Ok(datasets)
-    }
-
+impl ExternalLayerProvider for NetCdfCfDataProvider {
     async fn provenance(&self, dataset: &DatasetId) -> crate::error::Result<ProvenanceOutput> {
         Ok(ProvenanceOutput {
             dataset: dataset.clone(),
@@ -725,6 +681,26 @@ impl ExternalDatasetProvider for NetCdfCfDataProvider {
 
     fn as_any(&self) -> &dyn std::any::Any {
         self
+    }
+}
+
+#[async_trait]
+// TODO: replace the custom dataset API with this one
+impl LayerCollectionProvider for NetCdfCfDataProvider {
+    async fn collection_items(
+        &self,
+        _collection: &LayerCollectionId,
+        _options: Validated<LayerCollectionListOptions>,
+    ) -> crate::error::Result<Vec<CollectionItem>> {
+        Err(Error::NotYetImplemented)
+    }
+
+    async fn root_collection_id(&self) -> crate::error::Result<LayerCollectionId> {
+        Err(Error::NotYetImplemented)
+    }
+
+    async fn get_layer(&self, _id: &LayerId) -> crate::error::Result<Layer> {
+        Err(Error::NotYetImplemented)
     }
 }
 
@@ -875,7 +851,7 @@ mod tests {
     #[allow(clippy::too_many_lines)]
     async fn test_listing_from_netcdf_m() {
         let provider_id =
-            DatasetProviderId::from_str("bf6bb6ea-5d5d-467d-bad1-267bf3a54470").unwrap();
+            LayerProviderId::from_str("bf6bb6ea-5d5d-467d-bad1-267bf3a54470").unwrap();
 
         let listing = NetCdfCfDataProvider::listing_from_netcdf(
             provider_id,
@@ -1036,7 +1012,7 @@ mod tests {
     #[tokio::test]
     async fn test_listing_from_netcdf_sm() {
         let provider_id =
-            DatasetProviderId::from_str("bf6bb6ea-5d5d-467d-bad1-267bf3a54470").unwrap();
+            LayerProviderId::from_str("bf6bb6ea-5d5d-467d-bad1-267bf3a54470").unwrap();
 
         let listing = NetCdfCfDataProvider::listing_from_netcdf(
             provider_id,
@@ -1320,7 +1296,7 @@ mod tests {
             .unwrap();
 
         let provider_id =
-            DatasetProviderId::from_str("bf6bb6ea-5d5d-467d-bad1-267bf3a54470").unwrap();
+            LayerProviderId::from_str("bf6bb6ea-5d5d-467d-bad1-267bf3a54470").unwrap();
 
         let listing = NetCdfCfDataProvider::listing_from_netcdf(
             provider_id,

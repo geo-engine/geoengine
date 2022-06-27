@@ -1,4 +1,7 @@
-use crate::{handlers::ErrorResponse, workflows::workflow::WorkflowId};
+use crate::{
+    datasets::external::netcdfcf::NetCdfCf4DProviderError, handlers::ErrorResponse,
+    workflows::workflow::WorkflowId,
+};
 // use crate::{datasets::external::netcdfcf::NetCdfCf4DProviderError, handlers::ErrorResponse};
 use actix_web::http::StatusCode;
 use actix_web::HttpResponse;
@@ -314,16 +317,16 @@ pub enum Error {
     },
     MissingNFDIMetaData,
 
-    // #[snafu(context(false))]
-    // NetCdfCf4DProvider {
-    //     source: NetCdfCf4DProviderError,
-    // },
+    #[snafu(context(false))]
+    NetCdfCf4DProvider {
+        source: NetCdfCf4DProviderError,
+    },
 
-    // #[cfg(feature = "ebv")]
-    // #[snafu(context(false))]
-    // EbvHandler {
-    //     source: crate::handlers::ebv::EbvError,
-    // },
+    #[cfg(feature = "ebv")]
+    #[snafu(context(false))]
+    EbvHandler {
+        source: crate::handlers::ebv::EbvError,
+    },
     #[cfg(feature = "nfdi")]
     #[snafu(display("Could not parse GFBio basket: {}", message,))]
     GFBioBasketParse {
