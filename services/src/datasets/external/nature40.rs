@@ -809,7 +809,7 @@ mod tests {
                     id: ProviderLayerId {
                         provider: LayerProviderId::from_str("2cb964d5-b9fa-4f8f-ab6f-f6c7fb47d4cd")
                             .unwrap(),
-                        item: LayerId("geonode_ortho_muf_1m:4".to_owned())
+                        item: LayerId("lidar_2018_wetness_1m:1".to_owned())
                     },
                     name: "Topografic Wetness index".to_owned(),
                     description: "Band 1: wetness".to_owned(),
