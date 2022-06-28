@@ -199,6 +199,8 @@ mod test_util {
                         })
                     }),
                     no_data_value: no_data_value.map(AsPrimitive::as_),
+                    time: None,
+                    bbox: None,
                 },
             },
         }
@@ -264,6 +266,8 @@ mod test_util {
                     unit: None,
                 }),
                 no_data_value,
+                time: None,
+                bbox: None,
             },
         };
         ctx.add_meta_data(dataset_id.clone(), Box::new(meta));

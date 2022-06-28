@@ -22,7 +22,15 @@
       "type": "vector",
       "dataType": "MultiPoint",
       "spatialReference": "EPSG:4326",
-      "columns": {}
+      "columns": {},
+      "time": {
+        "start": "-262144-01-01T00:00:00+00:00",
+        "end": "+262143-12-31T23:59:59.999+00:00"
+      },
+      "bbox": {
+        "lowerLeftCoordinate": [1.0, 2.0],
+        "upperRightCoordinate": [1.0, 2.0]
+      }
     }
   }
 }

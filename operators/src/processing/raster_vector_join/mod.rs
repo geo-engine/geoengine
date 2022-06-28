@@ -5,7 +5,7 @@ mod util;
 
 use crate::engine::{
     ExecutionContext, InitializedRasterOperator, InitializedVectorOperator, Operator,
-    SingleVectorMultipleRasterSources, TypedVectorQueryProcessor, VectorOperator,
+    SingleVectorMultipleRasterSources, TypedVectorQueryProcessor, VectorColumnInfo, VectorOperator,
     VectorQueryProcessor, VectorResultDescriptor,
 };
 use crate::error::{self, Error};
@@ -32,7 +32,7 @@ pub type RasterVectorJoin = Operator<RasterVectorJoinParams, SingleVectorMultipl
 const MAX_NUMBER_OF_RASTER_INPUTS: usize = 8;
 
 /// The parameter spec for `RasterVectorJoin`
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct RasterVectorJoinParams {
     /// Each name reflects the output column of the join result.
@@ -49,7 +49,7 @@ pub struct RasterVectorJoinParams {
 /// How to aggregate the values for the geometries inside a feature e.g.
 /// the mean of all the raster values corresponding to the individual
 /// points inside a `MultiPoint` feature.
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Copy)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Copy)]
 #[serde(rename_all = "camelCase")]
 pub enum FeatureAggregationMethod {
     First,
@@ -60,7 +60,7 @@ pub enum FeatureAggregationMethod {
 /// If there are multiple rasters valid during the validity of a feature
 /// the featuer is either split into multiple (None-aggregation) or the
 /// values are aggreagated
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Copy)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Copy)]
 #[serde(rename_all = "camelCase")]
 pub enum TemporalAggregationMethod {
     None,
@@ -151,7 +151,13 @@ impl VectorOperator for RasterVectorJoin {
                     }
                     TemporalAggregationMethod::Mean => FeatureDataType::Float,
                 };
-                columns.insert(new_column_name.clone(), feature_data_type);
+                columns.insert(
+                    new_column_name.clone(),
+                    VectorColumnInfo {
+                        data_type: feature_data_type,
+                        measurement: raster_sources[i].result_descriptor().measurement.clone(),
+                    },
+                );
             }
             columns
         });
@@ -304,7 +310,8 @@ mod tests {
                     "type": "MockFeatureCollectionSourceMultiPoint",
                     "params": {
                         "collections": [],
-                        "spatialReference": "EPSG:4326"
+                        "spatialReference": "EPSG:4326",
+                        "measurements": {},
                     }
                 },
                 "rasters": [],

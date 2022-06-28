@@ -37,11 +37,44 @@
       "dataType": "MultiPoint",
       "spatialReference": "EPSG:4326",
       "columns": {
-        "website": "text",
-        "name": "text",
-        "natlscale": "float",
-        "scalerank": "int",
-        "featurecla": "text"
+        "website": {
+          "dataType": "text",
+          "measurement": {
+            "type": "unitless"
+          }
+        },
+        "name": {
+          "dataType": "text",
+          "measurement": {
+            "type": "unitless"
+          }
+        },
+        "natlscale": {
+          "dataType": "float",
+          "measurement": {
+            "type": "unitless"
+          }
+        },
+        "scalerank": {
+          "dataType": "int",
+          "measurement": {
+            "type": "unitless"
+          }
+        },
+        "featurecla": {
+          "dataType": "text",
+          "measurement": {
+            "type": "unitless"
+          }
+        }
+      },
+      "time": {
+        "start": "-262144-01-01T00:00:00+00:00",
+        "end": "+262143-12-31T23:59:59.999+00:00"
+      },
+      "bbox": {
+        "lowerLeftCoordinate": [-171.7579504999999926, 78.2261111100000051],
+        "upperRightCoordinate": [179.309363999999988, -54.80944444]
       }
     }
   }

@@ -347,6 +347,11 @@ pub enum Error {
     IdStringMustBeUuid {
         found: String,
     },
+
+    #[snafu(context(false))]
+    TaskError {
+        source: crate::tasks::TaskError,
+    },
 }
 
 impl actix_web::error::ResponseError for Error {

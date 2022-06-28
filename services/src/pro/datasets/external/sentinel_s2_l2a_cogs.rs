@@ -174,6 +174,8 @@ impl SentinelS2L2aCogsDataProvider {
                             .into(),
                             measurement: Measurement::Unitless, // TODO: add measurement
                             no_data_value: band.no_data_value,
+                            time: None, // TODO: determine time
+                            bbox: None, // TODO: determine bbox
                         }
                         .into(),
                         symbology: Some(Symbology::Raster(RasterSymbology {
@@ -571,6 +573,8 @@ impl MetaData<GdalLoadingInfo, RasterResultDescriptor, RasterQueryRectangle>
             .into(),
             measurement: Measurement::Unitless,
             no_data_value: self.band.no_data_value,
+            time: None,
+            bbox: None,
         })
     }
 

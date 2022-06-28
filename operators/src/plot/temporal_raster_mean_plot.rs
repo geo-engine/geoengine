@@ -23,7 +23,7 @@ pub type MeanRasterPixelValuesOverTime =
     Operator<MeanRasterPixelValuesOverTimeParams, SingleRasterSource>;
 
 /// The parameter spec for `MeanRasterPixelValuesOverTime`
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct MeanRasterPixelValuesOverTimeParams {
     /// Where should the x-axis (time) tick be positioned?
@@ -39,7 +39,7 @@ const fn default_true() -> bool {
     true
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub enum MeanRasterPixelValuesOverTimePosition {
     Start,
@@ -55,10 +55,11 @@ impl PlotOperator for MeanRasterPixelValuesOverTime {
         context: &dyn ExecutionContext,
     ) -> Result<Box<dyn InitializedPlotOperator>> {
         let raster = self.sources.raster.initialize(context).await?;
+
+        let in_desc = raster.result_descriptor().clone();
+
         let initialized_operator = InitializedMeanRasterPixelValuesOverTime {
-            result_descriptor: PlotResultDescriptor {
-                spatial_reference: raster.result_descriptor().spatial_reference,
-            },
+            result_descriptor: in_desc.into(),
             raster,
             state: self.params,
         };
@@ -412,6 +413,8 @@ mod tests {
                     spatial_reference: SpatialReference::epsg_4326().into(),
                     measurement: Measurement::Unitless,
                     no_data_value: no_data_value.map(AsPrimitive::as_),
+                    time: None,
+                    bbox: None,
                 },
             },
         }

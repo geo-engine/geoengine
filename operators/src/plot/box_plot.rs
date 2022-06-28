@@ -1,6 +1,9 @@
 use async_trait::async_trait;
 use futures::StreamExt;
-use geoengine_datatypes::primitives::{PlotQueryRectangle, VectorQueryRectangle};
+use geoengine_datatypes::primitives::{
+    partitions_extent, time_interval_extent, AxisAlignedRectangle, BoundingBox2D,
+    PlotQueryRectangle, VectorQueryRectangle,
+};
 use num_traits::AsPrimitive;
 use serde::{Deserialize, Serialize};
 
@@ -11,7 +14,7 @@ use geoengine_datatypes::raster::{GridOrEmpty, GridSize, NoDataValue};
 use crate::engine::{
     ExecutionContext, InitializedPlotOperator, InitializedRasterOperator,
     InitializedVectorOperator, MultipleRasterOrSingleVectorSource, Operator, PlotOperator,
-    PlotQueryProcessor, PlotResultDescriptor, QueryContext, QueryProcessor, ResultDescriptor,
+    PlotQueryProcessor, PlotResultDescriptor, QueryContext, QueryProcessor,
     TypedPlotQueryProcessor, TypedRasterQueryProcessor, TypedVectorQueryProcessor,
 };
 use crate::error::{self, Error};
@@ -29,7 +32,7 @@ const MAX_NUMBER_OF_RASTER_INPUTS: usize = 8;
 pub type BoxPlot = Operator<BoxPlotParams, MultipleRasterOrSingleVectorSource>;
 
 /// The parameter spec for `BoxPlot`
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct BoxPlotParams {
     /// Name of the (numeric) attributes to compute the box plots on.
@@ -88,9 +91,21 @@ impl PlotOperator for BoxPlot {
                     );
                 }
 
+                let in_descriptors = initialized
+                    .iter()
+                    .map(InitializedRasterOperator::result_descriptor)
+                    .collect::<Vec<_>>();
+
+                let time = time_interval_extent(in_descriptors.iter().map(|d| d.time));
+                let bbox = partitions_extent(in_descriptors.iter().map(|d| d.bbox));
+
                 Ok(InitializedBoxPlot::new(
                     PlotResultDescriptor {
-                        spatial_reference: initialized[0].result_descriptor().spatial_reference,
+                        spatial_reference: in_descriptors[0].spatial_reference,
+                        time,
+                        // converting `SpatialPartition2D` to `BoundingBox2D` is ok here, because is makes the covered area only larger
+                        bbox: bbox
+                            .and_then(|p| BoundingBox2D::new(p.lower_left(), p.upper_right()).ok()),
                     },
                     output_names,
                     self.params.include_no_data,
@@ -108,7 +123,7 @@ impl PlotOperator for BoxPlot {
 
                 let source = vector_source.initialize(context).await?;
                 for cn in &self.params.column_names {
-                    match source.result_descriptor().columns.get(cn.as_str()) {
+                    match source.result_descriptor().column_data_type(cn.as_str()) {
                         Some(column) if !column.is_numeric() => {
                             return Err(Error::InvalidOperatorSpec {
                                 reason: format!("Column '{}' is not numeric.", cn),
@@ -124,9 +139,14 @@ impl PlotOperator for BoxPlot {
                         }
                     }
                 }
+
+                let in_desc = source.result_descriptor();
+
                 Ok(InitializedBoxPlot::new(
                     PlotResultDescriptor {
-                        spatial_reference: source.result_descriptor().spatial_reference(),
+                        spatial_reference: in_desc.spatial_reference,
+                        time: in_desc.time,
+                        bbox: in_desc.bbox,
                     },
                     self.params.column_names.clone(),
                     self.params.include_no_data,
@@ -493,7 +513,8 @@ mod tests {
                     "type": "MockFeatureCollectionSourceMultiPoint",
                     "params": {
                         "collections": [],
-                        "spatialReference": "EPSG:4326"
+                        "spatialReference": "EPSG:4326",
+                        "measurements": {},
                     }
                 }
             }
@@ -526,7 +547,8 @@ mod tests {
                     "type": "MockFeatureCollectionSourceMultiPoint",
                     "params": {
                         "collections": [],
-                        "spatialReference": "EPSG:4326"
+                        "spatialReference": "EPSG:4326",
+                        "measurements": {},
                     }
                 }
             }
@@ -922,6 +944,8 @@ mod tests {
                         spatial_reference: SpatialReference::epsg_4326().into(),
                         measurement: Measurement::Unitless,
                         no_data_value: no_data_value.map(AsPrimitive::as_),
+                        time: None,
+                        bbox: None,
                     },
                 },
             }
@@ -990,6 +1014,8 @@ mod tests {
                         spatial_reference: SpatialReference::epsg_4326().into(),
                         measurement: Measurement::Unitless,
                         no_data_value: no_data_value.map(AsPrimitive::as_),
+                        time: None,
+                        bbox: None,
                     },
                 },
             }
@@ -1058,6 +1084,8 @@ mod tests {
                         spatial_reference: SpatialReference::epsg_4326().into(),
                         measurement: Measurement::Unitless,
                         no_data_value: no_data_value.map(AsPrimitive::as_),
+                        time: None,
+                        bbox: None,
                     },
                 },
             }
@@ -1124,6 +1152,8 @@ mod tests {
                         spatial_reference: SpatialReference::epsg_4326().into(),
                         measurement: Measurement::Unitless,
                         no_data_value: no_data_value.map(AsPrimitive::as_),
+                        time: None,
+                        bbox: None,
                     },
                 },
             }
@@ -1196,6 +1226,8 @@ mod tests {
                         spatial_reference: SpatialReference::epsg_4326().into(),
                         measurement: Measurement::Unitless,
                         no_data_value: no_data_value.map(AsPrimitive::as_),
+                        time: None,
+                        bbox: None,
                     },
                 },
             }
@@ -1274,6 +1306,8 @@ mod tests {
                         spatial_reference: SpatialReference::epsg_4326().into(),
                         measurement: Measurement::Unitless,
                         no_data_value: no_data_value.map(AsPrimitive::as_),
+                        time: None,
+                        bbox: None,
                     },
                 },
             }
@@ -1351,6 +1385,8 @@ mod tests {
                         spatial_reference: SpatialReference::epsg_4326().into(),
                         measurement: Measurement::Unitless,
                         no_data_value: no_data_value.map(AsPrimitive::as_),
+                        time: None,
+                        bbox: None,
                     },
                 },
             }
@@ -1423,6 +1459,8 @@ mod tests {
                     spatial_reference: SpatialReference::epsg_4326().into(),
                     measurement: Measurement::Unitless,
                     no_data_value: no_data_value.map(AsPrimitive::as_),
+                    time: None,
+                    bbox: None,
                 },
             },
         };

@@ -7,7 +7,7 @@ use crate::{
         SingleRasterOrVectorSource, TypedRasterQueryProcessor, TypedVectorQueryProcessor,
         VectorOperator, VectorQueryProcessor, VectorResultDescriptor,
     },
-    error,
+    error::{self, Error},
     util::{input::RasterOrVectorOperator, Result},
 };
 use async_trait::async_trait;
@@ -16,7 +16,7 @@ use futures::StreamExt;
 use geoengine_datatypes::{
     operations::reproject::{
         reproject_query, suggest_pixel_size_from_diag_cross_projected, CoordinateProjection,
-        CoordinateProjector, Reproject,
+        CoordinateProjector, Reproject, ReprojectClipped,
     },
     primitives::AxisAlignedRectangle,
     primitives::{BoundingBox2D, RasterQueryRectangle, SpatialPartition2D, VectorQueryRectangle},
@@ -79,10 +79,25 @@ impl VectorOperator for Reprojection {
         let vector_operator = vector_operator.initialize(context).await?;
 
         let in_desc: &VectorResultDescriptor = vector_operator.result_descriptor();
+
+        let bbox = if let Some(bbox) = in_desc.bbox {
+            let in_srs: Option<SpatialReference> = in_desc.spatial_reference.into();
+            let projector = CoordinateProjector::from_known_srs(
+                in_srs.ok_or(Error::AllSourcesMustHaveSameSpatialReference)?,
+                self.params.target_spatial_reference,
+            )?;
+
+            Some(bbox.reproject_clipped(&projector)?)
+        } else {
+            None
+        };
+
         let out_desc = VectorResultDescriptor {
             spatial_reference: self.params.target_spatial_reference.into(),
             data_type: in_desc.data_type,
             columns: in_desc.columns.clone(),
+            time: in_desc.time,
+            bbox,
         };
 
         let state = VectorReprojectionState {
@@ -219,11 +234,25 @@ impl RasterOperator for Reprojection {
         let in_desc: &RasterResultDescriptor = raster_operator.result_descriptor();
         let out_no_data_value = in_desc.no_data_value.unwrap_or(0.); // TODO: add option to force a no_data_value
 
+        let bbox = if let Some(bbox) = in_desc.bbox {
+            let in_srs: Option<SpatialReference> = in_desc.spatial_reference.into();
+            let projector = CoordinateProjector::from_known_srs(
+                in_srs.ok_or(Error::AllSourcesMustHaveSameSpatialReference)?,
+                self.params.target_spatial_reference,
+            )?;
+
+            Some(bbox.reproject_clipped(&projector)?)
+        } else {
+            None
+        };
+
         let out_desc = RasterResultDescriptor {
             spatial_reference: self.params.target_spatial_reference.into(),
             data_type: in_desc.data_type,
             measurement: in_desc.measurement.clone(),
             no_data_value: Some(out_no_data_value),
+            time: in_desc.time,
+            bbox,
         };
 
         let state = RasterReprojectionState {
@@ -791,6 +820,8 @@ mod tests {
                     spatial_reference: SpatialReference::epsg_4326().into(),
                     measurement: Measurement::Unitless,
                     no_data_value: no_data_value.map(AsPrimitive::as_),
+                    time: None,
+                    bbox: None,
                 },
             },
         }
@@ -991,6 +1022,8 @@ mod tests {
                     .into(),
                 measurement: Measurement::Unitless,
                 no_data_value: Some(0.),
+                time: None,
+                bbox: None,
             },
         };
 
@@ -1120,6 +1153,8 @@ mod tests {
                     .into(),
                 measurement: Measurement::Unitless,
                 no_data_value: Some(0.),
+                time: None,
+                bbox: None,
             },
         };
 

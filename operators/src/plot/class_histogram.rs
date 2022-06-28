@@ -1,7 +1,6 @@
 use crate::engine::QueryProcessor;
 use crate::error;
 use crate::error::Error;
-use crate::string_token;
 use crate::util::Result;
 use crate::{
     engine::{
@@ -13,60 +12,37 @@ use crate::{
     util::input::RasterOrVectorOperator,
 };
 use async_trait::async_trait;
-use float_cmp::approx_eq;
-use futures::stream::BoxStream;
-use futures::{StreamExt, TryFutureExt};
-use geoengine_datatypes::plots::{Plot, PlotData};
+use futures::StreamExt;
+use geoengine_datatypes::collections::FeatureCollectionInfos;
+use geoengine_datatypes::plots::{BarChart, Plot, PlotData};
 use geoengine_datatypes::primitives::{
-    AxisAlignedRectangle, BoundingBox2D, DataRef, FeatureDataRef, FeatureDataType, Geometry,
-    Measurement, VectorQueryRectangle,
+    AxisAlignedRectangle, BoundingBox2D, ClassificationMeasurement, FeatureDataType, Measurement,
+    VectorQueryRectangle,
 };
-use geoengine_datatypes::raster::{Pixel, RasterTile2D};
-use geoengine_datatypes::{
-    collections::{FeatureCollection, FeatureCollectionInfos},
-    raster::GridSize,
-};
+use geoengine_datatypes::raster::NoDataValue;
 use serde::{Deserialize, Serialize};
 use snafu::{ensure, OptionExt};
-use std::convert::TryFrom;
+use std::collections::HashMap;
 
-pub const HISTOGRAM_OPERATOR_NAME: &str = "Histogram";
+pub const CLASS_HISTOGRAM_OPERATOR_NAME: &str = "ClassHistogram";
 
-/// A histogram plot about either a raster or a vector input.
+/// A class histogram plot about either a raster or a vector input.
 ///
 /// For vector inputs, it calculates the histogram on one of its attributes.
 ///
-pub type Histogram = Operator<HistogramParams, SingleRasterOrVectorSource>;
+pub type ClassHistogram = Operator<ClassHistogramParams, SingleRasterOrVectorSource>;
 
 /// The parameter spec for `Histogram`
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub struct HistogramParams {
-    /// Name of the (numeric) attribute to compute the histogram on. Ignored for operation on rasters.
+pub struct ClassHistogramParams {
+    /// Name of the (numeric) attribute to compute the histogram on. Fails if set for rasters.
     pub column_name: Option<String>,
-    /// The bounds (min/max) of the histogram.
-    pub bounds: HistogramBounds,
-    /// If the number of buckets is undefined, it is derived from the square-root choice rule.
-    pub buckets: Option<usize>,
-    /// Whether to create an interactive output (`false` by default)
-    #[serde(default)]
-    pub interactive: bool,
-}
-
-string_token!(Data, "data");
-
-/// Let the bounds either be computed or given.
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-#[serde(untagged)]
-pub enum HistogramBounds {
-    Data(Data),
-    Values { min: f64, max: f64 },
-    // TODO: use bounds in measurement if they are available
 }
 
 #[typetag::serde]
 #[async_trait]
-impl PlotOperator for Histogram {
+impl PlotOperator for ClassHistogram {
     async fn initialize(
         self: Box<Self>,
         context: &dyn ExecutionContext,
@@ -84,7 +60,17 @@ impl PlotOperator for Histogram {
                 let initialized = raster_source.initialize(context).await?;
 
                 let in_desc = initialized.result_descriptor();
-                InitializedHistogram::new(
+
+                let source_measurement = match &in_desc.measurement {
+                    Measurement::Classification(measurement) => measurement.clone(),
+                    _ => {
+                        return Err(Error::InvalidOperatorSpec {
+                            reason: "Source measurement mut be classification".to_string(),
+                        })
+                    }
+                };
+
+                InitializedClassHistogram::new(
                     PlotResultDescriptor {
                         spatial_reference: in_desc.spatial_reference,
                         time: in_desc.time,
@@ -93,7 +79,8 @@ impl PlotOperator for Histogram {
                             .bbox
                             .and_then(|p| BoundingBox2D::new(p.lower_left(), p.upper_right()).ok()),
                     },
-                    self.params,
+                    self.params.column_name,
+                    source_measurement,
                     initialized,
                 )
                 .boxed()
@@ -119,8 +106,7 @@ impl PlotOperator for Histogram {
                             column: column_name.to_string(),
                         });
                     }
-                    Some(FeatureDataType::Category | FeatureDataType::Text) => {
-                        // TODO: incorporate category data
+                    Some(FeatureDataType::Text | FeatureDataType::DateTime) => {
                         return Err(Error::InvalidOperatorSpec {
                             reason: format!("column `{}` must be numerical", column_name),
                         });
@@ -129,7 +115,7 @@ impl PlotOperator for Histogram {
                         FeatureDataType::Int
                         | FeatureDataType::Float
                         | FeatureDataType::Bool
-                        | FeatureDataType::DateTime,
+                        | FeatureDataType::Category,
                     ) => {
                         // okay
                     }
@@ -137,54 +123,56 @@ impl PlotOperator for Histogram {
 
                 let in_desc = vector_source.result_descriptor().clone();
 
-                InitializedHistogram::new(in_desc.into(), self.params, vector_source).boxed()
+                let source_measurement = match in_desc.column_measurement(column_name) {
+                    Some(Measurement::Classification(measurement)) => measurement.clone(),
+                    _ => {
+                        return Err(Error::InvalidOperatorSpec {
+                            reason: "Source measurement mut be classification".to_string(),
+                        })
+                    }
+                };
+
+                InitializedClassHistogram::new(
+                    in_desc.into(),
+                    self.params.column_name,
+                    source_measurement,
+                    vector_source,
+                )
+                .boxed()
             }
         })
     }
 }
 
 /// The initialization of `Histogram`
-pub struct InitializedHistogram<Op> {
+pub struct InitializedClassHistogram<Op> {
     result_descriptor: PlotResultDescriptor,
-    metadata: HistogramMetadataOptions,
+    source_measurement: ClassificationMeasurement,
     source: Op,
-    interactive: bool,
     column_name: Option<String>,
 }
 
-impl<Op> InitializedHistogram<Op> {
+impl<Op> InitializedClassHistogram<Op> {
     pub fn new(
         result_descriptor: PlotResultDescriptor,
-        params: HistogramParams,
+        column_name: Option<String>,
+        source_measurement: ClassificationMeasurement,
         source: Op,
     ) -> Self {
-        let (min, max) = if let HistogramBounds::Values { min, max } = params.bounds {
-            (Some(min), Some(max))
-        } else {
-            (None, None)
-        };
-
         Self {
             result_descriptor,
-            metadata: HistogramMetadataOptions {
-                number_of_buckets: params.buckets,
-                min,
-                max,
-            },
+            source_measurement,
             source,
-            interactive: params.interactive,
-            column_name: params.column_name,
+            column_name,
         }
     }
 }
 
-impl InitializedPlotOperator for InitializedHistogram<Box<dyn InitializedRasterOperator>> {
+impl InitializedPlotOperator for InitializedClassHistogram<Box<dyn InitializedRasterOperator>> {
     fn query_processor(&self) -> Result<TypedPlotQueryProcessor> {
-        let processor = HistogramRasterQueryProcessor {
+        let processor = ClassHistogramRasterQueryProcessor {
             input: self.source.query_processor()?,
-            measurement: self.source.result_descriptor().measurement.clone(),
-            metadata: self.metadata,
-            interactive: self.interactive,
+            measurement: self.source_measurement.clone(),
         };
 
         Ok(TypedPlotQueryProcessor::JsonVega(processor.boxed()))
@@ -195,19 +183,12 @@ impl InitializedPlotOperator for InitializedHistogram<Box<dyn InitializedRasterO
     }
 }
 
-impl InitializedPlotOperator for InitializedHistogram<Box<dyn InitializedVectorOperator>> {
+impl InitializedPlotOperator for InitializedClassHistogram<Box<dyn InitializedVectorOperator>> {
     fn query_processor(&self) -> Result<TypedPlotQueryProcessor> {
-        let processor = HistogramVectorQueryProcessor {
+        let processor = ClassHistogramVectorQueryProcessor {
             input: self.source.query_processor()?,
             column_name: self.column_name.clone().unwrap_or_default(),
-            measurement: self
-                .source
-                .result_descriptor()
-                .column_measurement(self.column_name.as_deref().unwrap_or_default())
-                .cloned()
-                .into(),
-            metadata: self.metadata,
-            interactive: self.interactive,
+            measurement: self.source_measurement.clone(),
         };
 
         Ok(TypedPlotQueryProcessor::JsonVega(processor.boxed()))
@@ -219,28 +200,24 @@ impl InitializedPlotOperator for InitializedHistogram<Box<dyn InitializedVectorO
 }
 
 /// A query processor that calculates the Histogram about its raster inputs.
-pub struct HistogramRasterQueryProcessor {
+pub struct ClassHistogramRasterQueryProcessor {
     input: TypedRasterQueryProcessor,
-    measurement: Measurement,
-    metadata: HistogramMetadataOptions,
-    interactive: bool,
+    measurement: ClassificationMeasurement,
 }
 
 /// A query processor that calculates the Histogram about its vector inputs.
-pub struct HistogramVectorQueryProcessor {
+pub struct ClassHistogramVectorQueryProcessor {
     input: TypedVectorQueryProcessor,
     column_name: String,
-    measurement: Measurement,
-    metadata: HistogramMetadataOptions,
-    interactive: bool,
+    measurement: ClassificationMeasurement,
 }
 
 #[async_trait]
-impl PlotQueryProcessor for HistogramRasterQueryProcessor {
+impl PlotQueryProcessor for ClassHistogramRasterQueryProcessor {
     type OutputFormat = PlotData;
 
     fn plot_type(&self) -> &'static str {
-        HISTOGRAM_OPERATOR_NAME
+        CLASS_HISTOGRAM_OPERATOR_NAME
     }
 
     async fn plot_query<'p>(
@@ -248,26 +225,16 @@ impl PlotQueryProcessor for HistogramRasterQueryProcessor {
         query: VectorQueryRectangle,
         ctx: &'p dyn QueryContext,
     ) -> Result<Self::OutputFormat> {
-        self.preprocess(query, ctx)
-            .and_then(move |mut histogram_metadata| async move {
-                histogram_metadata.sanitize();
-                if histogram_metadata.has_invalid_parameters() {
-                    // early return of empty histogram
-                    return self.empty_histogram();
-                }
-
-                self.process(histogram_metadata, query, ctx).await
-            })
-            .await
+        self.process(query, ctx).await
     }
 }
 
 #[async_trait]
-impl PlotQueryProcessor for HistogramVectorQueryProcessor {
+impl PlotQueryProcessor for ClassHistogramVectorQueryProcessor {
     type OutputFormat = PlotData;
 
     fn plot_type(&self) -> &'static str {
-        HISTOGRAM_OPERATOR_NAME
+        CLASS_HISTOGRAM_OPERATOR_NAME
     }
 
     async fn plot_query<'p>(
@@ -275,154 +242,88 @@ impl PlotQueryProcessor for HistogramVectorQueryProcessor {
         query: VectorQueryRectangle,
         ctx: &'p dyn QueryContext,
     ) -> Result<Self::OutputFormat> {
-        self.preprocess(query, ctx)
-            .and_then(move |mut histogram_metadata| async move {
-                histogram_metadata.sanitize();
-                if histogram_metadata.has_invalid_parameters() {
-                    // early return of empty histogram
-                    return self.empty_histogram();
-                }
-
-                self.process(histogram_metadata, query, ctx).await
-            })
-            .await
+        self.process(query, ctx).await
     }
 }
 
-impl HistogramRasterQueryProcessor {
-    async fn preprocess<'p>(
-        &'p self,
-        query: VectorQueryRectangle,
-        ctx: &'p dyn QueryContext,
-    ) -> Result<HistogramMetadata> {
-        async fn process_metadata<T: Pixel>(
-            mut input: BoxStream<'_, Result<RasterTile2D<T>>>,
-            metadata: HistogramMetadataOptions,
-        ) -> Result<HistogramMetadata> {
-            let mut computed_metadata = HistogramMetadataInProgress::default();
-
-            while let Some(tile) = input.next().await {
-                match tile?.grid_array {
-                    geoengine_datatypes::raster::GridOrEmpty::Grid(g) => {
-                        computed_metadata.add_raster_batch(&g.data, g.no_data_value);
-                    }
-                    geoengine_datatypes::raster::GridOrEmpty::Empty(_) => {} // TODO: find out if we really do nothing for empty tiles?
-                }
-            }
-
-            Ok(metadata.merge_with(computed_metadata.into()))
-        }
-
-        if let Ok(metadata) = HistogramMetadata::try_from(self.metadata) {
-            return Ok(metadata);
-        }
-
-        // TODO: compute only number of buckets if possible
-
-        call_on_generic_raster_processor!(&self.input, processor => {
-            process_metadata(processor.query(query.into(), ctx).await?, self.metadata).await
-        })
-    }
-
+impl ClassHistogramRasterQueryProcessor {
     async fn process<'p>(
         &'p self,
-        metadata: HistogramMetadata,
         query: VectorQueryRectangle,
         ctx: &'p dyn QueryContext,
-    ) -> Result<<HistogramRasterQueryProcessor as PlotQueryProcessor>::OutputFormat> {
-        let mut histogram = geoengine_datatypes::plots::Histogram::builder(
-            metadata.number_of_buckets,
-            metadata.min,
-            metadata.max,
-            self.measurement.clone(),
-        )
-        .build()
-        .map_err(Error::from)?;
+    ) -> Result<<ClassHistogramRasterQueryProcessor as PlotQueryProcessor>::OutputFormat> {
+        let mut class_counts: HashMap<u8, u64> = self
+            .measurement
+            .classes
+            .keys()
+            .map(|key| (*key, 0))
+            .collect();
 
         call_on_generic_raster_processor!(&self.input, processor => {
             let mut query = processor.query(query.into(), ctx).await?;
 
             while let Some(tile) = query.next().await {
-
-
                 match tile?.grid_array {
-                    geoengine_datatypes::raster::GridOrEmpty::Grid(g) => histogram.add_raster_data(&g.data, g.no_data_value),
-                    geoengine_datatypes::raster::GridOrEmpty::Empty(n) => histogram.add_nodata_batch(n.number_of_elements() as u64) // TODO: why u64?
+                    geoengine_datatypes::raster::GridOrEmpty::Grid(g) => {
+                        if g.no_data_value.is_some() {
+                            for value in &g.data {
+                                if g.is_no_data(*value) {
+                                    // ignore no data
+                                } else if let Some(count) = class_counts.get_mut(&(*value as u8)) {
+                                    *count += 1;
+                                }
+                                // else… ignore values that are not in the class list
+                            }
+                        } else {
+                            for value in g.data {
+                                if let Some(count) = class_counts.get_mut(&(value as u8)) {
+                                    *count += 1;
+                                }
+                            }
+                        }
+                    },
+                    geoengine_datatypes::raster::GridOrEmpty::Empty(_) => (), // ignore no data,
                 }
             }
         });
 
-        let chart = histogram.to_vega_embeddable(self.interactive)?;
+        // TODO: display NO-DATA count?
 
-        Ok(chart)
-    }
-
-    fn empty_histogram(
-        &self,
-    ) -> Result<<HistogramRasterQueryProcessor as PlotQueryProcessor>::OutputFormat> {
-        let histogram =
-            geoengine_datatypes::plots::Histogram::builder(1, 0., 0., self.measurement.clone())
-                .build()
-                .map_err(Error::from)?;
-
-        let chart = histogram.to_vega_embeddable(self.interactive)?;
+        let bar_chart = BarChart::new(
+            class_counts
+                .into_iter()
+                .map(|(class, count)| {
+                    (
+                        self.measurement
+                            .classes
+                            .get(&class)
+                            .cloned()
+                            .unwrap_or_default(),
+                        count,
+                    )
+                })
+                .collect(),
+            Measurement::Classification(self.measurement.clone()).to_string(),
+            "Frequency".to_string(),
+        );
+        let chart = bar_chart.to_vega_embeddable(false)?;
 
         Ok(chart)
     }
 }
 
-impl HistogramVectorQueryProcessor {
-    async fn preprocess<'p>(
-        &'p self,
-        query: VectorQueryRectangle,
-        ctx: &'p dyn QueryContext,
-    ) -> Result<HistogramMetadata> {
-        async fn process_metadata<'m, G>(
-            mut input: BoxStream<'m, Result<FeatureCollection<G>>>,
-            column_name: &'m str,
-            metadata: HistogramMetadataOptions,
-        ) -> Result<HistogramMetadata>
-        where
-            G: Geometry + 'static,
-            FeatureCollection<G>: FeatureCollectionInfos,
-        {
-            let mut computed_metadata = HistogramMetadataInProgress::default();
-
-            while let Some(collection) = input.next().await {
-                let collection = collection?;
-
-                let feature_data = collection.data(column_name).expect("check in param");
-                computed_metadata.add_vector_batch(feature_data);
-            }
-
-            Ok(metadata.merge_with(computed_metadata.into()))
-        }
-
-        if let Ok(metadata) = HistogramMetadata::try_from(self.metadata) {
-            return Ok(metadata);
-        }
-
-        // TODO: compute only number of buckets if possible
-
-        call_on_generic_vector_processor!(&self.input, processor => {
-            process_metadata(processor.query(query, ctx).await?, &self.column_name, self.metadata).await
-        })
-    }
-
+impl ClassHistogramVectorQueryProcessor {
     async fn process<'p>(
         &'p self,
-        metadata: HistogramMetadata,
         query: VectorQueryRectangle,
         ctx: &'p dyn QueryContext,
-    ) -> Result<<HistogramRasterQueryProcessor as PlotQueryProcessor>::OutputFormat> {
-        let mut histogram = geoengine_datatypes::plots::Histogram::builder(
-            metadata.number_of_buckets,
-            metadata.min,
-            metadata.max,
-            self.measurement.clone(),
-        )
-        .build()
-        .map_err(Error::from)?;
+    ) -> Result<<ClassHistogramRasterQueryProcessor as PlotQueryProcessor>::OutputFormat> {
+        let mut class_counts: HashMap<u8, u64> = self
+            .measurement
+            .classes
+            .keys()
+            .map(|key| (*key, 0))
+            .collect();
 
         call_on_generic_vector_processor!(&self.input, processor => {
             let mut query = processor.query(query, ctx).await?;
@@ -432,166 +333,42 @@ impl HistogramVectorQueryProcessor {
 
                 let feature_data = collection.data(&self.column_name).expect("checked in param");
 
-                histogram.add_feature_data(feature_data)?;
+                for v in feature_data.float_options_iter() {
+                    match v {
+                        None => (), // ignore no data
+                        Some(index) => if let Some(count) = class_counts.get_mut(&(index as u8)) {
+                            *count += 1;
+                        },
+                        // else… ignore values that are not in the class list
+                    }
+
+                }
+
             }
         });
 
-        let chart = histogram.to_vega_embeddable(self.interactive)?;
+        // TODO: display NO-DATA count?
+
+        let bar_chart = BarChart::new(
+            class_counts
+                .into_iter()
+                .map(|(class, count)| {
+                    (
+                        self.measurement
+                            .classes
+                            .get(&class)
+                            .cloned()
+                            .unwrap_or_default(),
+                        count,
+                    )
+                })
+                .collect(),
+            Measurement::Classification(self.measurement.clone()).to_string(),
+            "Frequency".to_string(),
+        );
+        let chart = bar_chart.to_vega_embeddable(false)?;
 
         Ok(chart)
-    }
-
-    fn empty_histogram(
-        &self,
-    ) -> Result<<HistogramRasterQueryProcessor as PlotQueryProcessor>::OutputFormat> {
-        let histogram =
-            geoengine_datatypes::plots::Histogram::builder(1, 0., 0., self.measurement.clone())
-                .build()
-                .map_err(Error::from)?;
-
-        let chart = histogram.to_vega_embeddable(self.interactive)?;
-
-        Ok(chart)
-    }
-}
-
-#[derive(Debug, Copy, Clone, PartialEq)]
-struct HistogramMetadata {
-    pub number_of_buckets: usize,
-    pub min: f64,
-    pub max: f64,
-}
-
-impl HistogramMetadata {
-    /// Fix invalid configurations if they are fixeable
-    fn sanitize(&mut self) {
-        // prevent the rare case that min=max and you have more than one bucket
-        if approx_eq!(f64, self.min, self.max) && self.number_of_buckets > 1 {
-            self.number_of_buckets = 1;
-        }
-    }
-
-    fn has_invalid_parameters(&self) -> bool {
-        self.number_of_buckets == 0 || self.min > self.max
-    }
-}
-
-#[derive(Debug, Copy, Clone, PartialEq)]
-struct HistogramMetadataOptions {
-    pub number_of_buckets: Option<usize>,
-    pub min: Option<f64>,
-    pub max: Option<f64>,
-}
-
-impl TryFrom<HistogramMetadataOptions> for HistogramMetadata {
-    type Error = ();
-
-    fn try_from(options: HistogramMetadataOptions) -> Result<Self, Self::Error> {
-        match (options.number_of_buckets, options.min, options.max) {
-            (Some(number_of_buckets), Some(min), Some(max)) => Ok(Self {
-                number_of_buckets,
-                min,
-                max,
-            }),
-            _ => Err(()),
-        }
-    }
-}
-
-impl HistogramMetadataOptions {
-    fn merge_with(self, metadata: HistogramMetadata) -> HistogramMetadata {
-        HistogramMetadata {
-            number_of_buckets: self.number_of_buckets.unwrap_or(metadata.number_of_buckets),
-            min: self.min.unwrap_or(metadata.min),
-            max: self.max.unwrap_or(metadata.max),
-        }
-    }
-}
-
-#[derive(Debug, Copy, Clone, PartialEq)]
-struct HistogramMetadataInProgress {
-    pub n: usize,
-    pub min: f64,
-    pub max: f64,
-}
-
-impl Default for HistogramMetadataInProgress {
-    fn default() -> Self {
-        Self {
-            n: 0,
-            min: f64::MAX,
-            max: f64::MIN,
-        }
-    }
-}
-
-impl HistogramMetadataInProgress {
-    #[inline]
-    fn add_raster_batch<T: Pixel>(&mut self, values: &[T], no_data: Option<T>) {
-        if let Some(no_data) = no_data {
-            for &v in values {
-                if v == no_data {
-                    continue;
-                }
-
-                self.n += 1;
-                self.update_minmax(v.as_());
-            }
-        } else {
-            self.n += values.len();
-            for v in values {
-                self.update_minmax(v.as_());
-            }
-        }
-    }
-
-    #[inline]
-    fn add_vector_batch(&mut self, values: FeatureDataRef) {
-        fn add_data_ref<'d, D, T>(metadata: &mut HistogramMetadataInProgress, data_ref: &'d D)
-        where
-            D: DataRef<'d, T>,
-            T: 'static,
-        {
-            for v in data_ref.float_options_iter().flatten() {
-                metadata.n += 1;
-                metadata.update_minmax(v);
-            }
-        }
-
-        match values {
-            FeatureDataRef::Int(values) => {
-                add_data_ref(self, &values);
-            }
-            FeatureDataRef::Float(values) => {
-                add_data_ref(self, &values);
-            }
-            FeatureDataRef::Bool(values) => {
-                add_data_ref(self, &values);
-            }
-            FeatureDataRef::DateTime(values) => {
-                add_data_ref(self, &values);
-            }
-            FeatureDataRef::Category(_) | FeatureDataRef::Text(_) => {
-                // do nothing since we don't support them
-                // TODO: fill with live once we support category and text types
-            }
-        }
-    }
-
-    #[inline]
-    fn update_minmax(&mut self, value: f64) {
-        self.min = f64::min(self.min, value);
-        self.max = f64::max(self.max, value);
-    }
-}
-
-impl From<HistogramMetadataInProgress> for HistogramMetadata {
-    fn from(metadata: HistogramMetadataInProgress) -> Self {
-        Self {
-            number_of_buckets: f64::sqrt(metadata.n as f64) as usize,
-            min: metadata.min,
-            max: metadata.max,
-        }
     }
 }
 
@@ -628,15 +405,9 @@ mod tests {
 
     #[test]
     fn serialization() {
-        let histogram = Histogram {
-            params: HistogramParams {
+        let histogram = ClassHistogram {
+            params: ClassHistogramParams {
                 column_name: Some("foobar".to_string()),
-                bounds: HistogramBounds::Values {
-                    min: 5.0,
-                    max: 10.0,
-                },
-                buckets: Some(15),
-                interactive: false,
             },
             sources: MockFeatureCollectionSource::<MultiPoint>::multiple(vec![])
                 .boxed()
@@ -644,15 +415,9 @@ mod tests {
         };
 
         let serialized = json!({
-            "type": "Histogram",
+            "type": "ClassHistogram",
             "params": {
                 "columnName": "foobar",
-                "bounds": {
-                    "min": 5.0,
-                    "max": 10.0,
-                },
-                "buckets": 15,
-                "interactivity": false,
             },
             "sources": {
                 "source": {
@@ -667,56 +432,16 @@ mod tests {
         })
         .to_string();
 
-        let deserialized: Histogram = serde_json::from_str(&serialized).unwrap();
-
-        assert_eq!(deserialized.params, histogram.params);
-    }
-
-    #[test]
-    fn serialization_alt() {
-        let histogram = Histogram {
-            params: HistogramParams {
-                column_name: None,
-                bounds: HistogramBounds::Data(Default::default()),
-                buckets: None,
-                interactive: false,
-            },
-            sources: MockFeatureCollectionSource::<MultiPoint>::multiple(vec![])
-                .boxed()
-                .into(),
-        };
-
-        let serialized = json!({
-            "type": "Histogram",
-            "params": {
-                "bounds": "data",
-            },
-            "sources": {
-                "source": {
-                    "type": "MockFeatureCollectionSourceMultiPoint",
-                    "params": {
-                        "collections": [],
-                        "spatialReference": "EPSG:4326",
-                        "measurements": {},
-                    }
-                }
-            }
-        })
-        .to_string();
-
-        let deserialized: Histogram = serde_json::from_str(&serialized).unwrap();
+        let deserialized: ClassHistogram = serde_json::from_str(&serialized).unwrap();
 
         assert_eq!(deserialized.params, histogram.params);
     }
 
     #[tokio::test]
     async fn column_name_for_raster_source() {
-        let histogram = Histogram {
-            params: HistogramParams {
+        let histogram = ClassHistogram {
+            params: ClassHistogramParams {
                 column_name: Some("foo".to_string()),
-                bounds: HistogramBounds::Values { min: 0.0, max: 8.0 },
-                buckets: Some(3),
-                interactive: false,
             },
             sources: mock_raster_source().into(),
         };
@@ -748,7 +473,19 @@ mod tests {
                 result_descriptor: RasterResultDescriptor {
                     data_type: RasterDataType::U8,
                     spatial_reference: SpatialReference::epsg_4326().into(),
-                    measurement: Measurement::Unitless,
+                    measurement: Measurement::classification(
+                        "test-class".to_string(),
+                        [
+                            (1, "A".to_string()),
+                            (2, "B".to_string()),
+                            (3, "C".to_string()),
+                            (4, "D".to_string()),
+                            (5, "E".to_string()),
+                            (6, "F".to_string()),
+                        ]
+                        .into_iter()
+                        .collect(),
+                    ),
                     no_data_value: no_data_value.map(AsPrimitive::as_),
                     time: None,
                     bbox: None,
@@ -767,13 +504,8 @@ mod tests {
         };
         let execution_context = MockExecutionContext::new_with_tiling_spec(tiling_specification);
 
-        let histogram = Histogram {
-            params: HistogramParams {
-                column_name: None,
-                bounds: HistogramBounds::Values { min: 0.0, max: 8.0 },
-                buckets: Some(3),
-                interactive: false,
-            },
+        let histogram = ClassHistogram {
+            params: ClassHistogramParams { column_name: None },
             sources: mock_raster_source().into(),
         };
 
@@ -801,91 +533,60 @@ mod tests {
 
         assert_eq!(
             result,
-            geoengine_datatypes::plots::Histogram::builder(3, 0., 8., Measurement::Unitless)
-                .counts(vec![2, 3, 1])
-                .build()
-                .unwrap()
-                .to_vega_embeddable(false)
-                .unwrap()
-        );
-    }
-
-    #[tokio::test]
-    async fn simple_raster_without_spec() {
-        let tile_size_in_pixels = [3, 2].into();
-        let tiling_specification = TilingSpecification {
-            origin_coordinate: [0.0, 0.0].into(),
-            tile_size_in_pixels,
-        };
-        let execution_context = MockExecutionContext::new_with_tiling_spec(tiling_specification);
-
-        let histogram = Histogram {
-            params: HistogramParams {
-                column_name: None,
-                bounds: HistogramBounds::Data(Default::default()),
-                buckets: None,
-                interactive: false,
-            },
-            sources: mock_raster_source().into(),
-        };
-
-        let query_processor = histogram
-            .boxed()
-            .initialize(&execution_context)
-            .await
-            .unwrap()
-            .query_processor()
-            .unwrap()
-            .json_vega()
-            .unwrap();
-
-        let result = query_processor
-            .plot_query(
-                VectorQueryRectangle {
-                    spatial_bounds: BoundingBox2D::new((0., -3.).into(), (2., 0.).into()).unwrap(),
-                    time_interval: TimeInterval::default(),
-                    spatial_resolution: SpatialResolution::one(),
-                },
-                &MockQueryContext::new(ChunkByteSize::MIN),
+            BarChart::new(
+                [
+                    ("A".to_string(), 1),
+                    ("B".to_string(), 1),
+                    ("C".to_string(), 1),
+                    ("D".to_string(), 1),
+                    ("E".to_string(), 1),
+                    ("F".to_string(), 1),
+                ]
+                .into_iter()
+                .collect(),
+                "test-class".to_string(),
+                "Frequency".to_string()
             )
-            .await
-            .unwrap();
-
-        assert_eq!(
-            result,
-            geoengine_datatypes::plots::Histogram::builder(2, 1., 6., Measurement::Unitless)
-                .counts(vec![3, 3])
-                .build()
-                .unwrap()
-                .to_vega_embeddable(false)
-                .unwrap()
+            .to_vega_embeddable(true)
+            .unwrap()
         );
     }
 
     #[tokio::test]
     async fn vector_data() {
-        let vector_source = MockFeatureCollectionSource::multiple(vec![
-            DataCollection::from_slices(
-                &[] as &[NoGeometry],
-                &[TimeInterval::default(); 8],
-                &[("foo", FeatureData::Int(vec![1, 1, 2, 2, 3, 3, 4, 4]))],
-            )
-            .unwrap(),
-            DataCollection::from_slices(
-                &[] as &[NoGeometry],
-                &[TimeInterval::default(); 4],
-                &[("foo", FeatureData::Int(vec![5, 6, 7, 8]))],
-            )
-            .unwrap(),
-        ])
+        let measurement = Measurement::classification(
+            "foo".to_string(),
+            [
+                (1, "A".to_string()),
+                (2, "B".to_string()),
+                (3, "C".to_string()),
+            ]
+            .into_iter()
+            .collect(),
+        );
+
+        let vector_source = MockFeatureCollectionSource::with_collections_and_measurements(
+            vec![
+                DataCollection::from_slices(
+                    &[] as &[NoGeometry],
+                    &[TimeInterval::default(); 8],
+                    &[("foo", FeatureData::Int(vec![1, 1, 2, 2, 3, 3, 1, 2]))],
+                )
+                .unwrap(),
+                DataCollection::from_slices(
+                    &[] as &[NoGeometry],
+                    &[TimeInterval::default(); 4],
+                    &[("foo", FeatureData::Int(vec![1, 1, 2, 3]))],
+                )
+                .unwrap(),
+            ],
+            [("foo".to_string(), measurement)].into_iter().collect(),
+        )
         .boxed();
 
-        let histogram = Histogram {
-            params: HistogramParams {
+        let histogram = ClassHistogram {
+            params: ClassHistogramParams {
                 column_name: Some("foo".to_string()),
-                bounds: HistogramBounds::Values { min: 0.0, max: 8.0 },
-                buckets: Some(3),
-                interactive: true,
             },
             sources: vector_source.into(),
         };
@@ -917,19 +618,37 @@ mod tests {
 
         assert_eq!(
             result,
-            geoengine_datatypes::plots::Histogram::builder(3, 0., 8., Measurement::Unitless)
-                .counts(vec![4, 5, 3])
-                .build()
-                .unwrap()
-                .to_vega_embeddable(true)
-                .unwrap()
+            BarChart::new(
+                [
+                    ("A".to_string(), 5),
+                    ("B".to_string(), 4),
+                    ("C".to_string(), 3),
+                ]
+                .into_iter()
+                .collect(),
+                "foo".to_string(),
+                "Frequency".to_string()
+            )
+            .to_vega_embeddable(true)
+            .unwrap()
         );
     }
 
     #[tokio::test]
     async fn vector_data_with_nulls() {
-        let vector_source = MockFeatureCollectionSource::single(
-            DataCollection::from_slices(
+        let measurement = Measurement::classification(
+            "foo".to_string(),
+            [
+                (1, "A".to_string()),
+                (2, "B".to_string()),
+                (4, "C".to_string()),
+            ]
+            .into_iter()
+            .collect(),
+        );
+
+        let vector_source = MockFeatureCollectionSource::with_collections_and_measurements(
+            vec![DataCollection::from_slices(
                 &[] as &[NoGeometry],
                 &[TimeInterval::default(); 6],
                 &[(
@@ -944,16 +663,14 @@ mod tests {
                     ]),
                 )],
             )
-            .unwrap(),
+            .unwrap()],
+            [("foo".to_string(), measurement)].into_iter().collect(),
         )
         .boxed();
 
-        let histogram = Histogram {
-            params: HistogramParams {
+        let histogram = ClassHistogram {
+            params: ClassHistogramParams {
                 column_name: Some("foo".to_string()),
-                bounds: HistogramBounds::Data(Default::default()),
-                buckets: None,
-                interactive: false,
             },
             sources: vector_source.into(),
         };
@@ -985,12 +702,19 @@ mod tests {
 
         assert_eq!(
             result,
-            geoengine_datatypes::plots::Histogram::builder(2, 1., 5., Measurement::Unitless)
-                .counts(vec![2, 2])
-                .build()
-                .unwrap()
-                .to_vega_embeddable(false)
-                .unwrap()
+            BarChart::new(
+                [
+                    ("A".to_string(), 1),
+                    ("B".to_string(), 1),
+                    ("C".to_string(), 1),
+                ]
+                .into_iter()
+                .collect(),
+                "foo".to_string(),
+                "Frequency".to_string()
+            )
+            .to_vega_embeddable(true)
+            .unwrap()
         );
     }
 
@@ -1003,7 +727,6 @@ mod tests {
             "type": "Histogram",
             "params": {
                 "columnName": "featurecla",
-                "bounds": "data"
             },
             "sources": {
                 "source": {
@@ -1018,7 +741,7 @@ mod tests {
                 }
             }
         });
-        let histogram: Histogram = serde_json::from_value(workflow).unwrap();
+        let histogram: ClassHistogram = serde_json::from_value(workflow).unwrap();
 
         let mut execution_context = MockExecutionContext::test_default();
         execution_context.add_meta_data::<_, _, VectorQueryRectangle>(
@@ -1119,14 +842,14 @@ mod tests {
         };
         let execution_context = MockExecutionContext::new_with_tiling_spec(tiling_specification);
 
+        let measurement = Measurement::classification(
+            "foo".to_string(),
+            [(1, "A".to_string())].into_iter().collect(),
+        );
+
         let no_data_value = Some(0);
-        let histogram = Histogram {
-            params: HistogramParams {
-                column_name: None,
-                bounds: HistogramBounds::Data(Data::default()),
-                buckets: None,
-                interactive: false,
-            },
+        let histogram = ClassHistogram {
+            params: ClassHistogramParams { column_name: None },
             sources: MockRasterSource {
                 params: MockRasterSourceParams {
                     data: vec![RasterTile2D::new_with_tile_info(
@@ -1143,7 +866,7 @@ mod tests {
                     result_descriptor: RasterResultDescriptor {
                         data_type: RasterDataType::U8,
                         spatial_reference: SpatialReference::epsg_4326().into(),
-                        measurement: Measurement::Unitless,
+                        measurement,
                         no_data_value: no_data_value.map(AsPrimitive::as_),
                         time: None,
                         bbox: None,
@@ -1178,32 +901,37 @@ mod tests {
 
         assert_eq!(
             result,
-            geoengine_datatypes::plots::Histogram::builder(1, 0., 0., Measurement::Unitless)
-                .build()
-                .unwrap()
-                .to_vega_embeddable(false)
-                .unwrap()
+            BarChart::new(
+                [("A".to_string(), 0)].into_iter().collect(),
+                "foo".to_string(),
+                "Frequency".to_string()
+            )
+            .to_vega_embeddable(true)
+            .unwrap()
         );
     }
 
     #[tokio::test]
     async fn empty_feature_collection() {
-        let vector_source = MockFeatureCollectionSource::single(
-            DataCollection::from_slices(
+        let measurement = Measurement::classification(
+            "foo".to_string(),
+            [(1, "A".to_string())].into_iter().collect(),
+        );
+
+        let vector_source = MockFeatureCollectionSource::with_collections_and_measurements(
+            vec![DataCollection::from_slices(
                 &[] as &[NoGeometry],
                 &[] as &[TimeInterval],
                 &[("foo", FeatureData::Float(vec![]))],
             )
-            .unwrap(),
+            .unwrap()],
+            [("foo".to_string(), measurement)].into_iter().collect(),
         )
         .boxed();
 
-        let histogram = Histogram {
-            params: HistogramParams {
+        let histogram = ClassHistogram {
+            params: ClassHistogramParams {
                 column_name: Some("foo".to_string()),
-                bounds: HistogramBounds::Data(Default::default()),
-                buckets: None,
-                interactive: false,
             },
             sources: vector_source.into(),
         };
@@ -1235,16 +963,23 @@ mod tests {
 
         assert_eq!(
             result,
-            geoengine_datatypes::plots::Histogram::builder(1, 0., 0., Measurement::Unitless)
-                .build()
-                .unwrap()
-                .to_vega_embeddable(false)
-                .unwrap()
+            BarChart::new(
+                [("A".to_string(), 0)].into_iter().collect(),
+                "foo".to_string(),
+                "Frequency".to_string()
+            )
+            .to_vega_embeddable(true)
+            .unwrap()
         );
     }
 
     #[tokio::test]
     async fn feature_collection_with_one_feature() {
+        let measurement = Measurement::classification(
+            "foo".to_string(),
+            [(5, "A".to_string())].into_iter().collect(),
+        );
+
         let vector_source = MockFeatureCollectionSource::with_collections_and_measurements(
             vec![DataCollection::from_slices(
                 &[] as &[NoGeometry],
@@ -1252,21 +987,13 @@ mod tests {
                 &[("foo", FeatureData::Float(vec![5.0]))],
             )
             .unwrap()],
-            [(
-                "foo".to_string(),
-                Measurement::continuous("bar".to_string(), None),
-            )]
-            .into_iter()
-            .collect(),
+            [("foo".to_string(), measurement)].into_iter().collect(),
         )
         .boxed();
 
-        let histogram = Histogram {
-            params: HistogramParams {
+        let histogram = ClassHistogram {
+            params: ClassHistogramParams {
                 column_name: Some("foo".to_string()),
-                bounds: HistogramBounds::Data(Default::default()),
-                buckets: None,
-                interactive: false,
             },
             sources: vector_source.into(),
         };
@@ -1298,16 +1025,12 @@ mod tests {
 
         assert_eq!(
             result,
-            geoengine_datatypes::plots::Histogram::builder(
-                1,
-                5.,
-                5.,
-                Measurement::continuous("bar".to_string(), None)
+            BarChart::new(
+                [("A".to_string(), 1)].into_iter().collect(),
+                "foo".to_string(),
+                "Frequency".to_string()
             )
-            .counts(vec![1])
-            .build()
-            .unwrap()
-            .to_vega_embeddable(false)
+            .to_vega_embeddable(true)
             .unwrap()
         );
     }
@@ -1321,14 +1044,14 @@ mod tests {
         };
         let execution_context = MockExecutionContext::new_with_tiling_spec(tiling_specification);
 
+        let measurement = Measurement::classification(
+            "foo".to_string(),
+            [(4, "D".to_string())].into_iter().collect(),
+        );
+
         let no_data_value = None;
-        let histogram = Histogram {
-            params: HistogramParams {
-                column_name: None,
-                bounds: HistogramBounds::Data(Data::default()),
-                buckets: None,
-                interactive: false,
-            },
+        let histogram = ClassHistogram {
+            params: ClassHistogramParams { column_name: None },
             sources: MockRasterSource {
                 params: MockRasterSourceParams {
                     data: vec![RasterTile2D::new_with_tile_info(
@@ -1345,7 +1068,7 @@ mod tests {
                     result_descriptor: RasterResultDescriptor {
                         data_type: RasterDataType::U8,
                         spatial_reference: SpatialReference::epsg_4326().into(),
-                        measurement: Measurement::Unitless,
+                        measurement,
                         no_data_value: no_data_value.map(AsPrimitive::as_),
                         time: None,
                         bbox: None,
@@ -1383,12 +1106,13 @@ mod tests {
 
         assert_eq!(
             result,
-            geoengine_datatypes::plots::Histogram::builder(1, 4., 4., Measurement::Unitless)
-                .counts(vec![6])
-                .build()
-                .unwrap()
-                .to_vega_embeddable(false)
-                .unwrap()
+            BarChart::new(
+                [("D".to_string(), 6)].into_iter().collect(),
+                "foo".to_string(),
+                "Frequency".to_string()
+            )
+            .to_vega_embeddable(true)
+            .unwrap()
         );
     }
 }

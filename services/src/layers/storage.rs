@@ -84,7 +84,7 @@ pub trait LayerDb: LayerCollectionProvider + Send + Sync {
     // TODO: share/remove/update
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct LayerProviderListing {
     pub id: LayerProviderId,
     pub name: String,

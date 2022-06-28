@@ -1,13 +1,12 @@
-use super::{error, parse_time_coverage, NetCdfCf4DProviderError};
+use super::{error, time_coverage, NetCdfCf4DProviderError, TimeCoverage};
 use crate::{
-    datasets::external::netcdfcf::{gdalmd::MdGroup, NetCdfCfDataProvider},
+    datasets::external::netcdfcf::{gdalmd::MdGroup, Metadata, NetCdfCfDataProvider},
     util::config::get_config_element,
 };
 use gdal::{raster::RasterCreationOption, Dataset, DatasetOptions, GdalOpenFlags};
-use geoengine_datatypes::error::BoxedResultExt;
-use geoengine_datatypes::primitives::{TimeInstance, TimeStep};
+use geoengine_datatypes::{error::BoxedResultExt, primitives::TimeInterval};
 use geoengine_operators::{
-    source::GdalMetadataNetCdfCf,
+    source::{GdalLoadingInfoTemporalSlice, GdalMetaDataList, GdalMetadataNetCdfCf},
     util::gdal::{
         gdal_open_dataset_ex, gdal_parameters_from_dataset, raster_descriptor_from_dataset,
     },
@@ -184,28 +183,6 @@ pub fn create_overviews(
     Ok(OverviewGeneration::Created)
 }
 
-fn time_coverage(root_group: &MdGroup) -> Result<TimeCoverage> {
-    let start = root_group
-        .attribute_as_string("time_coverage_start")
-        .context(error::MissingTimeCoverageStart)?;
-    let end = root_group
-        .attribute_as_string("time_coverage_end")
-        .context(error::MissingTimeCoverageEnd)?;
-    let step = root_group
-        .attribute_as_string("time_coverage_resolution")
-        .context(error::MissingTimeCoverageResolution)?;
-
-    let (start, end, step) = parse_time_coverage(&start, &end, &step)?;
-
-    Ok(TimeCoverage { start, end, step })
-}
-
-struct TimeCoverage {
-    start: TimeInstance,
-    end: TimeInstance,
-    step: TimeStep,
-}
-
 fn store_metadata(
     provider_path: &Path,
     dataset_path: &Path,
@@ -220,7 +197,8 @@ fn store_metadata(
 
     debug!("Creating metadata: {}", dataset_path.display());
 
-    let metadata = NetCdfCfDataProvider::build_netcdf_tree(provider_path, None, dataset_path)?;
+    let metadata =
+        NetCdfCfDataProvider::build_netcdf_tree(provider_path, None, dataset_path, true)?;
 
     fs::create_dir_all(out_folder_path).boxed_context(error::CannotCreateOverviews)?;
 
@@ -330,7 +308,7 @@ fn generate_loading_info(
     dataset: &Dataset,
     overview_dataset_path: &Path,
     time_coverage: &TimeCoverage,
-) -> Result<GdalMetadataNetCdfCf> {
+) -> Result<Metadata> {
     const SAMPLE_BAND: usize = 1;
 
     let result_descriptor = raster_descriptor_from_dataset(dataset, 1, None)
@@ -345,13 +323,36 @@ fn generate_loading_info(
     )
     .boxed_context(error::CannotGenerateLoadingInfo)?;
 
-    Ok(GdalMetadataNetCdfCf {
-        result_descriptor,
-        params,
-        start: time_coverage.start,
-        end: time_coverage.end,
-        step: time_coverage.step,
-        band_offset: 0, // must be changed if there are other dimensions then geo & time
+    Ok(match *time_coverage {
+        TimeCoverage::Regular { start, end, step } => {
+            Metadata::NetCDF(GdalMetadataNetCdfCf {
+                result_descriptor,
+                params,
+                start,
+                end,
+                step,
+                band_offset: 0, // must be changed if there are other dimensions then geo & time
+            })
+        }
+        TimeCoverage::List { ref time_stamps } => {
+            let mut params_list = Vec::with_capacity(time_stamps.len());
+            for (i, time_instance) in time_stamps.iter().enumerate() {
+                let mut params = params.clone();
+
+                params.rasterband_channel = i + 1;
+
+                params_list.push(GdalLoadingInfoTemporalSlice {
+                    time: TimeInterval::new_instant(*time_instance)
+                        .context(error::InvalidTimeCoverageInterval)?,
+                    params: Some(params),
+                });
+            }
+
+            Metadata::List(GdalMetaDataList {
+                result_descriptor,
+                params: params_list,
+            })
+        }
     })
 }
 
@@ -364,7 +365,7 @@ mod tests {
     };
     use geoengine_datatypes::{
         operations::image::{Colorizer, RgbaColor},
-        primitives::{DateTime, Measurement, TimeGranularity, TimeInterval},
+        primitives::{DateTime, Measurement, TimeGranularity, TimeStep},
         raster::RasterDataType,
         spatial_reference::SpatialReference,
         test_data,
@@ -400,7 +401,7 @@ mod tests {
         let loading_info = generate_loading_info(
             &dataset,
             Path::new("foo/bar.tif"),
-            &TimeCoverage {
+            &TimeCoverage::Regular {
                 start: DateTime::new_utc(2020, 1, 1, 0, 0, 0).into(),
                 end: DateTime::new_utc(2021, 1, 1, 0, 0, 0).into(),
                 step: TimeStep {
@@ -413,12 +414,14 @@ mod tests {
 
         assert_eq!(
             loading_info,
-            GdalMetadataNetCdfCf {
+            Metadata::NetCDF(GdalMetadataNetCdfCf {
                 result_descriptor: RasterResultDescriptor {
                     data_type: RasterDataType::I16,
                     spatial_reference: SpatialReference::epsg_4326().into(),
                     measurement: Measurement::Unitless,
                     no_data_value: Some(-9999.0),
+                    time: None,
+                    bbox: None,
                 },
                 params: GdalDatasetParameters {
                     file_path: Path::new("foo/bar.tif").into(),
@@ -443,7 +446,7 @@ mod tests {
                     step: 1,
                 },
                 band_offset: 0,
-            }
+            })
         );
     }
 
@@ -466,7 +469,7 @@ mod tests {
                 dataset_in,
                 dataset_out: dataset_out.clone(),
             },
-            &TimeCoverage {
+            &TimeCoverage::Regular {
                 start: DateTime::new_utc(2020, 1, 1, 0, 0, 0).into(),
                 end: DateTime::new_utc(2021, 1, 1, 0, 0, 0).into(),
                 step: TimeStep {
@@ -481,6 +484,7 @@ mod tests {
     }
 
     #[test]
+    #[allow(clippy::too_many_lines)]
     fn test_store_metadata() {
         hide_gdal_errors();
 
@@ -517,6 +521,7 @@ mod tests {
                         title: "Random metric 1".to_string(),
                         description: "Randomly created data".to_string(),
                         data_type: Some(RasterDataType::I16),
+                        data_range: Some((1., 97.)),
                         unit: "".to_string(),
                         groups: vec![]
                     },
@@ -525,6 +530,7 @@ mod tests {
                         title: "Random metric 2".to_string(),
                         description: "Randomly created data".to_string(),
                         data_type: Some(RasterDataType::I16),
+                        data_range: Some((1., 98.)),
                         unit: "".to_string(),
                         groups: vec![]
                     }
@@ -543,21 +549,56 @@ mod tests {
                         name: "entity03".to_string(),
                     }
                 ],
-                time: TimeInterval::new(
-                    DateTime::new_utc(2000, 1, 1, 0, 0, 0),
-                    DateTime::new_utc(2003, 1, 1, 0, 0, 0)
-                )
-                .unwrap(),
-                time_step: TimeStep {
-                    granularity: TimeGranularity::Years,
-                    step: 1
+                time_coverage: TimeCoverage::Regular {
+                    start: DateTime::new_utc(2000, 1, 1, 0, 0, 0).into(),
+                    end: DateTime::new_utc(2003, 1, 1, 0, 0, 0).into(),
+                    step: TimeStep {
+                        granularity: TimeGranularity::Years,
+                        step: 1
+                    }
                 },
                 colorizer: Colorizer::LinearGradient {
                     breakpoints: vec![
-                        (0.0, RgbaColor::new(0, 0, 0, 255)).try_into().unwrap(),
-                        (255.0, RgbaColor::new(255, 255, 255, 255))
-                            .try_into()
-                            .unwrap(),
+                        (
+                            0.0.try_into().expect("not nan"),
+                            RgbaColor::new(68, 1, 84, 255),
+                        )
+                            .into(),
+                        (
+                            36.428_571_428_571_42.try_into().expect("not nan"),
+                            RgbaColor::new(70, 50, 126, 255),
+                        )
+                            .into(),
+                        (
+                            72.857_142_857_142_85.try_into().expect("not nan"),
+                            RgbaColor::new(54, 92, 141, 255),
+                        )
+                            .into(),
+                        (
+                            109.285_714_285_714_28.try_into().expect("not nan"),
+                            RgbaColor::new(39, 127, 142, 255),
+                        )
+                            .into(),
+                        (
+                            109.285_714_285_714_28.try_into().expect("not nan"),
+                            RgbaColor::new(31, 161, 135, 255),
+                        )
+                            .into(),
+                        (
+                            182.142_857_142_857_1.try_into().expect("not nan"),
+                            RgbaColor::new(74, 193, 109, 255),
+                        )
+                            .into(),
+                        (
+                            218.571_428_571_428_53.try_into().expect("not nan"),
+                            RgbaColor::new(160, 218, 57, 255),
+                        )
+                            .into(),
+                        (
+                            255.0.try_into().expect("not nan"),
+                            RgbaColor::new(253, 231, 37, 255),
+                        )
+                            .into(),
                     ],
                     no_data_color: RgbaColor::new(0, 0, 0, 0),
                     default_color: RgbaColor::new(0, 0, 0, 0)

@@ -854,7 +854,9 @@ mod tests {
                 spatial_reference: SpatialReference::new(SpatialReferenceAuthority::Epsg, 25832)
                     .into(),
                 measurement: Measurement::Unitless,
-                no_data_value: None
+                no_data_value: None,
+                time: None,
+                bbox: None,
             }
         );
 

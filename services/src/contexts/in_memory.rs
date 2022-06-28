@@ -10,6 +10,7 @@ use crate::layers::add_from_directory::{
     add_layer_collections_from_directory, add_layers_from_directory,
 };
 use crate::layers::storage::{HashMapLayerDb, HashMapLayerProviderDb};
+use crate::tasks::{SimpleTaskManager, SimpleTaskManagerContext};
 use crate::{
     datasets::add_from_directory::{add_datasets_from_directory, add_providers_from_directory},
     error::Result,
@@ -31,6 +32,7 @@ pub struct InMemoryContext {
     dataset_db: Arc<HashMapDatasetDb>,
     layer_db: Arc<HashMapLayerDb>,
     layer_provider_db: Arc<HashMapLayerProviderDb>,
+    task_manager: Arc<SimpleTaskManager>,
     session: Db<SimpleSession>,
     thread_pool: Arc<ThreadPool>,
     exe_ctx_tiling_spec: TilingSpecification,
@@ -45,6 +47,7 @@ impl TestDefault for InMemoryContext {
             dataset_db: Default::default(),
             layer_db: Default::default(),
             layer_provider_db: Default::default(),
+            task_manager: Default::default(),
             session: Default::default(),
             thread_pool: create_rayon_thread_pool(0),
             exe_ctx_tiling_spec: TestDefault::test_default(),
@@ -77,6 +80,7 @@ impl InMemoryContext {
             workflow_registry: Default::default(),
             layer_db: Arc::new(layer_db),
             layer_provider_db: Arc::new(layer_proivder_db),
+            task_manager: Default::default(),
             session: Default::default(),
             thread_pool: create_rayon_thread_pool(0),
             exe_ctx_tiling_spec,
@@ -95,6 +99,7 @@ impl InMemoryContext {
             dataset_db: Default::default(),
             layer_db: Default::default(),
             layer_provider_db: Default::default(),
+            task_manager: Default::default(),
             session: Default::default(),
             thread_pool: create_rayon_thread_pool(0),
             exe_ctx_tiling_spec,
@@ -111,6 +116,8 @@ impl Context for InMemoryContext {
     type DatasetDB = HashMapDatasetDb;
     type LayerDB = HashMapLayerDb;
     type LayerProviderDB = HashMapLayerProviderDb;
+    type TaskContext = SimpleTaskManagerContext;
+    type TaskManager = SimpleTaskManager;
     type QueryContext = QueryContextImpl;
     type ExecutionContext =
         ExecutionContextImpl<SimpleSession, HashMapDatasetDb, HashMapLayerProviderDb>;
@@ -148,6 +155,13 @@ impl Context for InMemoryContext {
     }
     fn layer_provider_db_ref(&self) -> &Self::LayerProviderDB {
         &self.layer_provider_db
+    }
+
+    fn tasks(&self) -> Arc<Self::TaskManager> {
+        self.task_manager.clone()
+    }
+    fn tasks_ref(&self) -> &Self::TaskManager {
+        &self.task_manager
     }
 
     fn query_context(&self) -> Result<Self::QueryContext> {

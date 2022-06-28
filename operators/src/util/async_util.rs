@@ -1,3 +1,4 @@
+use futures::Future;
 use rayon::ThreadPool;
 use std::sync::Arc;
 use tokio::task::JoinHandle;
@@ -36,5 +37,23 @@ where
 
             f()
         })
+    })
+}
+
+/// A wrapper around `tokio::task::spawn` that wraps the
+/// function into the parent `Span` from `tracing`.
+#[inline]
+pub fn spawn<T>(future: T) -> JoinHandle<T::Output>
+where
+    T: Future + Send + 'static,
+    T::Output: Send + 'static,
+{
+    let current_span = tracing::Span::current();
+
+    tokio::task::spawn(async move {
+        // TODO: check if we need to move a span into here
+        let _entered_span = current_span.enter();
+
+        future.await
     })
 }

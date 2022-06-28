@@ -23,7 +23,7 @@ mod util;
 pub type VectorJoin = Operator<VectorJoinParams, VectorJoinSources>;
 
 /// A set of parameters for the `VectorJoin`
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
 pub struct VectorJoinParams {
     #[serde(flatten)]
@@ -45,7 +45,7 @@ impl OperatorDatasets for VectorJoinSources {
 }
 
 /// Define the type of join
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(tag = "type")]
 pub enum VectorJoinType {
     /// An inner equi-join between a `GeoFeatureCollection` and a `DataCollection`
@@ -108,7 +108,7 @@ impl VectorOperator for VectorJoin {
             for (right_column_name, right_column_type) in &right.result_descriptor().columns {
                 columns.insert(
                     column_translation_table[right_column_name].clone(),
-                    *right_column_type,
+                    right_column_type.clone(),
                 );
             }
             columns
@@ -129,7 +129,7 @@ impl VectorOperator for VectorJoin {
 }
 
 /// A set of parameters for the `VectorJoin`
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct InitializedVectorJoinParams {
     join_type: VectorJoinType,
     column_translation_table: HashMap<String, String>,

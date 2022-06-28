@@ -25,7 +25,6 @@ lazy_static! {
         #[cfg(not(test))]
         let files = ["Settings-default.toml", "Settings.toml"];
 
-        #[allow(clippy::filter_map)]
         let files: Vec<File<_, _>> = files
             .iter()
             .map(|f| dir.join(f))
@@ -203,6 +202,16 @@ pub struct DatasetService {
 
 impl ConfigElement for DatasetService {
     const KEY: &'static str = "dataset_service";
+}
+
+#[derive(Debug, Deserialize)]
+pub struct TaskManager {
+    pub list_limit: u32,
+    pub list_default_limit: u32,
+}
+
+impl ConfigElement for TaskManager {
+    const KEY: &'static str = "task_manager";
 }
 
 #[derive(Debug, Deserialize)]

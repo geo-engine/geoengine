@@ -3,7 +3,7 @@ use std::num::ParseFloatError;
 use super::parser::PestError;
 use snafu::Snafu;
 
-#[derive(Debug, Snafu, Clone, PartialEq)]
+#[derive(Debug, Snafu, Clone, PartialEq, Eq)]
 #[snafu(visibility(pub(crate)))]
 #[snafu(context(suffix(false)))] // disables default `Snafu` suffix
 pub enum ExpressionError {

@@ -1,9 +1,9 @@
-use crate::engine::QueryProcessor;
 use crate::engine::{
     ExecutionContext, InitializedPlotOperator, InitializedVectorOperator, Operator, PlotOperator,
     PlotQueryProcessor, PlotResultDescriptor, QueryContext, SingleVectorSource,
     TypedPlotQueryProcessor, VectorQueryProcessor,
 };
+use crate::engine::{QueryProcessor, VectorColumnInfo};
 use crate::error;
 use crate::util::Result;
 use async_trait::async_trait;
@@ -37,7 +37,7 @@ pub type FeatureAttributeValuesOverTime =
     Operator<FeatureAttributeValuesOverTimeParams, SingleVectorSource>;
 
 /// The parameter spec for `FeatureAttributeValuesOverTime`
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct FeatureAttributeValuesOverTimeParams {
     pub id_column: String,
@@ -53,7 +53,7 @@ impl PlotOperator for FeatureAttributeValuesOverTime {
     ) -> Result<Box<dyn InitializedPlotOperator>> {
         let source = self.sources.vector.initialize(context).await?;
         let result_descriptor = source.result_descriptor();
-        let columns: &HashMap<String, FeatureDataType> = &result_descriptor.columns;
+        let columns: &HashMap<String, VectorColumnInfo> = &result_descriptor.columns;
 
         ensure!(
             columns.contains_key(&self.params.id_column),
@@ -69,26 +69,32 @@ impl PlotOperator for FeatureAttributeValuesOverTime {
             }
         );
 
-        let id_type = columns.get(&self.params.id_column).expect("checked");
-        let value_type = columns.get(&self.params.value_column).expect("checked");
+        let id_type = columns
+            .get(&self.params.id_column)
+            .expect("checked")
+            .data_type;
+        let value_type = columns
+            .get(&self.params.value_column)
+            .expect("checked")
+            .data_type;
 
         // TODO: ensure column is really an id
         ensure!(
-            id_type == &FeatureDataType::Text
-                || id_type == &FeatureDataType::Int
-                || id_type == &FeatureDataType::Category,
+            id_type == FeatureDataType::Text
+                || id_type == FeatureDataType::Int
+                || id_type == FeatureDataType::Category,
             error::InvalidFeatureDataType,
         );
 
         ensure!(
-            value_type.is_numeric() || value_type == &FeatureDataType::Category,
+            value_type.is_numeric() || value_type == FeatureDataType::Category,
             error::InvalidFeatureDataType,
         );
 
+        let in_desc = source.result_descriptor().clone();
+
         Ok(InitializedFeatureAttributeValuesOverTime {
-            result_descriptor: PlotResultDescriptor {
-                spatial_reference: source.result_descriptor().spatial_reference,
-            },
+            result_descriptor: in_desc.into(),
             vector_source: source,
             state: self.params,
         }

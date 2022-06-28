@@ -7,8 +7,8 @@ use geoengine_datatypes::collections::{
     BuilderProvider, GeoFeatureCollectionRowBuilder, MultiPointCollection, VectorDataType,
 };
 use geoengine_datatypes::primitives::{
-    BoundingBox2D, Circle, FeatureDataType, FeatureDataValue, MultiPoint, MultiPointAccess,
-    VectorQueryRectangle,
+    BoundingBox2D, Circle, FeatureDataType, FeatureDataValue, Measurement, MultiPoint,
+    MultiPointAccess, VectorQueryRectangle,
 };
 use serde::{Deserialize, Serialize};
 use snafu::ensure;
@@ -16,8 +16,8 @@ use snafu::ensure;
 use crate::adapters::FeatureCollectionStreamExt;
 use crate::engine::{
     ExecutionContext, InitializedVectorOperator, Operator, QueryContext, QueryProcessor,
-    SingleVectorSource, TypedVectorQueryProcessor, VectorOperator, VectorQueryProcessor,
-    VectorResultDescriptor,
+    SingleVectorSource, TypedVectorQueryProcessor, VectorColumnInfo, VectorOperator,
+    VectorQueryProcessor, VectorResultDescriptor,
 };
 use crate::error::{self, Error};
 use crate::processing::circle_merging_quadtree::aggregates::MeanAggregator;
@@ -45,6 +45,8 @@ pub struct VisualPointClusteringParams {
 pub struct AttributeAggregateDef {
     pub column_name: String,
     pub aggregate_type: AttributeAggregateType,
+    // if measurement is unset, it will be taken from the source result descriptor
+    pub measurement: Option<Measurement>,
 }
 
 pub type VisualPointClustering = Operator<VisualPointClusteringParams, SingleVectorSource>;
@@ -53,7 +55,7 @@ pub type VisualPointClustering = Operator<VisualPointClusteringParams, SingleVec
 #[async_trait]
 impl VectorOperator for VisualPointClustering {
     async fn initialize(
-        self: Box<Self>,
+        mut self: Box<Self>,
         context: &dyn ExecutionContext,
     ) -> Result<Box<dyn InitializedVectorOperator>> {
         ensure!(
@@ -116,20 +118,34 @@ impl VectorOperator for VisualPointClustering {
         );
 
         // create schema for [`ResultDescriptor`]
-        let mut new_columns: HashMap<String, FeatureDataType> =
+        let mut new_columns: HashMap<String, VectorColumnInfo> =
             HashMap::with_capacity(self.params.column_aggregates.len());
-        for attribute_aggregate_def in self.params.column_aggregates.values() {
+        for attribute_aggregate_def in self.params.column_aggregates.values_mut() {
+            if attribute_aggregate_def.measurement.is_none() {
+                // take it from source measurement
+
+                attribute_aggregate_def.measurement = vector_source
+                    .result_descriptor()
+                    .column_measurement(&attribute_aggregate_def.column_name)
+                    .cloned();
+            }
+
+            let data_type = match attribute_aggregate_def.aggregate_type {
+                AttributeAggregateType::MeanNumber => FeatureDataType::Float,
+                AttributeAggregateType::StringSample => FeatureDataType::Text,
+                AttributeAggregateType::Null => {
+                    return Err(Error::InvalidType {
+                        expected: "not null".to_string(),
+                        found: "null".to_string(),
+                    })
+                }
+            };
+
             new_columns.insert(
                 attribute_aggregate_def.column_name.clone(),
-                match attribute_aggregate_def.aggregate_type {
-                    AttributeAggregateType::MeanNumber => FeatureDataType::Float,
-                    AttributeAggregateType::StringSample => FeatureDataType::Text,
-                    AttributeAggregateType::Null => {
-                        return Err(Error::InvalidType {
-                            expected: "not null".to_string(),
-                            found: "null".to_string(),
-                        })
-                    }
+                VectorColumnInfo {
+                    data_type,
+                    measurement: attribute_aggregate_def.measurement.clone().into(),
                 },
             );
         }
@@ -141,11 +157,15 @@ impl VectorOperator for VisualPointClustering {
             error::DuplicateOutputColumns
         );
 
+        let in_desc = vector_source.result_descriptor();
+
         Ok(InitializedVisualPointClustering {
             result_descriptor: VectorResultDescriptor {
                 data_type: VectorDataType::MultiPoint,
-                spatial_reference: vector_source.result_descriptor().spatial_reference,
+                spatial_reference: in_desc.spatial_reference,
                 columns: new_columns,
+                time: in_desc.time,
+                bbox: in_desc.bbox,
             },
             vector_source,
             radius_model,
@@ -328,7 +348,12 @@ impl QueryProcessor for VisualPointClusteringProcessor {
     ) -> Result<BoxStream<'a, Result<Self::Output>>> {
         // we aggregate all points into one collection
 
-        let column_schema = self.result_descriptor.columns.clone();
+        let column_schema = self
+            .result_descriptor
+            .columns
+            .iter()
+            .map(|(name, column_info)| (name.clone(), column_info.data_type))
+            .collect();
 
         let joint_resolution = f64::max(query.spatial_resolution.x, query.spatial_resolution.y);
         let scaled_radius_model = self.radius_model.with_scaled_radii(joint_resolution)?;
@@ -363,6 +388,7 @@ impl QueryProcessor for VisualPointClusteringProcessor {
                             AttributeAggregateDef {
                                 column_name: tgt_column,
                                 aggregate_type,
+                                measurement: _,
                             },
                         ) in &column_mapping
                         {
@@ -529,6 +555,7 @@ mod tests {
                     AttributeAggregateDef {
                         column_name: "bar".to_string(),
                         aggregate_type: AttributeAggregateType::MeanNumber,
+                        measurement: None,
                     },
                 )]
                 .iter()
@@ -611,6 +638,7 @@ mod tests {
                     AttributeAggregateDef {
                         column_name: "foo".to_string(),
                         aggregate_type: AttributeAggregateType::MeanNumber,
+                        measurement: None,
                     },
                 )]
                 .iter()
@@ -701,6 +729,7 @@ mod tests {
                     AttributeAggregateDef {
                         column_name: "text".to_string(),
                         aggregate_type: AttributeAggregateType::StringSample,
+                        measurement: None,
                     },
                 )]
                 .iter()

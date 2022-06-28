@@ -8,13 +8,13 @@ use crate::{
 
 use super::listing::{LayerCollectionId, LayerId};
 
-#[derive(Debug, Serialize, Deserialize, Clone, PartialEq)]
+#[derive(Debug, Serialize, Deserialize, Clone, PartialEq, Eq)]
 pub struct ProviderLayerId {
     pub provider: LayerProviderId,
     pub item: LayerId,
 }
 
-#[derive(Debug, Serialize, Deserialize, Clone, PartialEq)]
+#[derive(Debug, Serialize, Deserialize, Clone, PartialEq, Eq)]
 pub struct ProviderLayerCollectionId {
     pub provider: LayerProviderId,
     pub item: LayerCollectionId,
@@ -30,7 +30,7 @@ pub struct Layer {
     pub symbology: Option<Symbology>,
 }
 
-#[derive(Debug, Serialize, Deserialize, Clone, PartialEq)]
+#[derive(Debug, Serialize, Deserialize, Clone, PartialEq, Eq)]
 pub struct LayerListing {
     pub id: ProviderLayerId,
     pub name: String,
@@ -69,14 +69,14 @@ pub struct LayerCollection {
     items: Vec<CollectionItem>,
 }
 
-#[derive(Debug, Serialize, Deserialize, Clone, PartialEq)]
+#[derive(Debug, Serialize, Deserialize, Clone, PartialEq, Eq)]
 pub struct LayerCollectionListing {
     pub id: ProviderLayerCollectionId,
     pub name: String,
     pub description: String,
 }
 
-#[derive(Debug, Serialize, Deserialize, Clone, PartialEq)]
+#[derive(Debug, Serialize, Deserialize, Clone, PartialEq, Eq)]
 #[serde(tag = "type", rename_all = "camelCase")]
 pub enum CollectionItem {
     Collection(LayerCollectionListing),

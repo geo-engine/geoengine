@@ -1,5 +1,6 @@
 use crate::error::Result;
 use crate::layers::storage::{LayerDb, LayerProviderDb};
+use crate::tasks::{TaskContext, TaskManager};
 use crate::{projects::ProjectDb, workflows::registry::WorkflowRegistry};
 use async_trait::async_trait;
 use geoengine_datatypes::primitives::{RasterQueryRectangle, VectorQueryRectangle};
@@ -42,6 +43,8 @@ pub trait Context: 'static + Send + Sync + Clone {
     type LayerProviderDB: LayerProviderDb;
     type QueryContext: QueryContext;
     type ExecutionContext: ExecutionContext;
+    type TaskContext: TaskContext;
+    type TaskManager: TaskManager<Self::TaskContext>;
 
     fn project_db(&self) -> Arc<Self::ProjectDB>;
     fn project_db_ref(&self) -> &Self::ProjectDB;
@@ -57,6 +60,9 @@ pub trait Context: 'static + Send + Sync + Clone {
 
     fn layer_provider_db(&self) -> Arc<Self::LayerProviderDB>;
     fn layer_provider_db_ref(&self) -> &Self::LayerProviderDB;
+
+    fn tasks(&self) -> Arc<Self::TaskManager>;
+    fn tasks_ref(&self) -> &Self::TaskManager;
 
     fn query_context(&self) -> Result<Self::QueryContext>;
 

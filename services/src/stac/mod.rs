@@ -16,7 +16,7 @@ pub struct FeatureCollection {
     pub links: Vec<Link>,
 }
 
-#[derive(Debug, Deserialize, Clone, PartialEq)]
+#[derive(Debug, Deserialize, Clone, PartialEq, Eq)]
 pub struct Context {
     pub page: u64,
     pub limit: u64,
@@ -24,7 +24,7 @@ pub struct Context {
     pub returned: u64,
 }
 
-#[derive(Debug, Deserialize, Clone, PartialEq)]
+#[derive(Debug, Deserialize, Clone, PartialEq, Eq)]
 pub struct Link {
     pub rel: String,
     pub title: Option<String>,

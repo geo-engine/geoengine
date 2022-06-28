@@ -22,7 +22,7 @@ pub use query_processor::{
 };
 pub use result_descriptor::{
     PlotResultDescriptor, RasterResultDescriptor, ResultDescriptor, TypedResultDescriptor,
-    VectorResultDescriptor,
+    VectorColumnInfo, VectorResultDescriptor,
 };
 
 mod clonable_operator;
