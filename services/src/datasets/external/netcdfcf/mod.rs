@@ -512,6 +512,8 @@ impl NetCdfCfDataProvider {
             }
         };
 
+        debug!("Using overview for {dataset_id:?}. Overview path is {overview_path:?}.");
+
         let loading_info: Metadata =
             serde_json::from_reader(BufReader::new(loading_info_file)).ok()?;
 
