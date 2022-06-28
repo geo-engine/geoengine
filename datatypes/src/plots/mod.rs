@@ -1,4 +1,5 @@
 mod area_line_plot;
+mod bar_chart;
 mod box_plot;
 mod histogram;
 mod histogram2d;
@@ -6,6 +7,7 @@ mod multi_line_plot;
 mod scatter_plot;
 
 pub use area_line_plot::AreaLineChart;
+pub use bar_chart::BarChart;
 pub use box_plot::{BoxPlot, BoxPlotAttribute};
 pub use histogram::{Histogram, HistogramBuilder};
 pub use histogram2d::{Histogram2D, HistogramDimension};

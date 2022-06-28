@@ -10,15 +10,15 @@ use gdal_sys::{
     GDALGroupGetDimensions, GDALGroupGetGroupNames, GDALGroupGetMDArrayNames, GDALGroupHS,
     GDALGroupOpenGroup, GDALGroupOpenMDArray, GDALGroupRelease, GDALMDArrayGetAttribute,
     GDALMDArrayGetDataType, GDALMDArrayGetDimensions, GDALMDArrayGetNoDataValueAsDouble,
-    GDALMDArrayGetSpatialRef, GDALMDArrayGetUnit, GDALMDArrayH, GDALMDArrayRelease,
-    GDALReleaseDimensions, OSRDestroySpatialReference, VSIFree,
+    GDALMDArrayGetSpatialRef, GDALMDArrayGetStatistics, GDALMDArrayGetUnit, GDALMDArrayH,
+    GDALMDArrayRelease, GDALReleaseDimensions, OSRDestroySpatialReference, VSIFree,
 };
 use geoengine_datatypes::raster::RasterDataType;
 use geoengine_datatypes::spatial_reference::{SpatialReference, SpatialReferenceOption};
 use log::debug;
 use snafu::ResultExt;
 use std::ffi::{c_void, CStr, CString};
-use std::os::raw::c_char;
+use std::os::raw::{c_char, c_int};
 
 use super::{error, NetCdfCf4DProviderError};
 
@@ -27,7 +27,7 @@ type Result<T, E = NetCdfCf4DProviderError> = std::result::Result<T, E>;
 #[derive(Debug)]
 pub struct MdGroup<'d> {
     c_group: *mut GDALGroupHS,
-    _dataset: &'d Dataset,
+    dataset: &'d Dataset,
     pub name: String,
 }
 
@@ -42,7 +42,7 @@ impl Drop for MdGroup<'_> {
 #[derive(Debug)]
 pub struct MdArray<'g> {
     c_mdarray: GDALMDArrayH,
-    _group: &'g MdGroup<'g>,
+    group: &'g MdGroup<'g>,
 }
 
 impl Drop for MdArray<'_> {
@@ -122,7 +122,7 @@ impl<'d> MdGroup<'d> {
 
         Ok(Self {
             c_group,
-            _dataset: dataset,
+            dataset,
             name: "".to_owned(),
         })
     }
@@ -227,6 +227,74 @@ impl<'d> MdGroup<'d> {
         Ok(value)
     }
 
+    /// Don't put a NULL-byte in the name!!!
+    pub fn dimension_as_double_array(&self, name: &str) -> Result<Vec<f64>, GdalError> {
+        let name = CString::new(name).expect("no null-byte in name");
+        let options = CslStringList::new();
+
+        let value = unsafe {
+            let c_mdarray = GDALGroupOpenMDArray(self.c_group, name.as_ptr(), options.as_ptr());
+
+            if c_mdarray.is_null() {
+                return Err(Self::_last_null_pointer_err("GDALGroupOpenMDArray"));
+            }
+
+            let mut dim_count = 0;
+
+            let c_dimensions =
+                GDALMDArrayGetDimensions(c_mdarray, std::ptr::addr_of_mut!(dim_count));
+            let dimensions = std::slice::from_raw_parts_mut(c_dimensions, dim_count);
+
+            let mut count = Vec::<usize>::with_capacity(dim_count);
+            for dim in dimensions {
+                let dim_size = GDALDimensionGetSize(*dim);
+                count.push(dim_size as usize);
+            }
+
+            if count.len() != 1 {
+                return Err(GdalError::BadArgument(format!(
+                    "Dimension must be 1D, but is {}D",
+                    count.len()
+                )));
+            }
+
+            let mut values: Vec<f64> = vec![0.; count[0] as usize];
+            let array_start_index: Vec<u64> = vec![0; dim_count];
+
+            let array_step: *const i64 = std::ptr::null(); // default value
+            let buffer_stride: *const i64 = std::ptr::null(); // default value
+            let data_type = GDALMDArrayGetDataType(c_mdarray);
+            let p_dst_buffer_alloc_start: *mut c_void = std::ptr::null_mut();
+            let n_dst_buffer_alloc_size = 0;
+
+            let rv = gdal_sys::GDALMDArrayRead(
+                c_mdarray,
+                array_start_index.as_ptr(),
+                count.as_ptr(),
+                array_step,
+                buffer_stride,
+                data_type,
+                values.as_mut_ptr().cast::<std::ffi::c_void>(),
+                p_dst_buffer_alloc_start,
+                n_dst_buffer_alloc_size,
+            );
+
+            if rv == 0 {
+                return Err(GdalError::BadArgument("GDALMDArrayRead failed".to_string()));
+            }
+
+            GDALExtendedDataTypeRelease(data_type);
+
+            GDALMDArrayRelease(c_mdarray);
+
+            GDALReleaseDimensions(c_dimensions, dim_count);
+
+            values
+        };
+
+        Ok(value)
+    }
+
     pub fn group_names(&self) -> Vec<String> {
         let options = CslStringList::new();
 
@@ -289,10 +357,9 @@ impl<'d> MdGroup<'d> {
             c_group
         };
 
-        #[allow(clippy::used_underscore_binding)]
         Ok(Self {
             c_group,
-            _dataset: self._dataset,
+            dataset: self.dataset,
             name: name.to_string(),
         })
     }
@@ -352,7 +419,7 @@ impl<'d> MdGroup<'d> {
 
             MdArray {
                 c_mdarray,
-                _group: self,
+                group: self,
             }
         })
     }
@@ -513,5 +580,31 @@ impl<'g> MdArray<'g> {
         };
 
         Ok(value)
+    }
+
+    pub fn min_max(&self) -> Result<(f64, f64), GdalError> {
+        let mut min: f64 = 0.;
+        let mut max: f64 = 0.;
+
+        let result = unsafe {
+            GDALMDArrayGetStatistics(
+                self.c_mdarray,
+                self.group.dataset.c_dataset(),
+                true as c_int,
+                true as c_int,
+                &mut min,
+                &mut max,
+                std::ptr::null_mut(),
+                std::ptr::null_mut(),
+                std::ptr::null_mut(),
+                None,
+                std::ptr::null_mut(),
+            )
+        };
+
+        match result {
+            gdal_sys::CPLErr::CE_None => Ok((min, max)),
+            _ => Err(unsafe { MdGroup::_last_cpl_err(result) }),
+        }
     }
 }

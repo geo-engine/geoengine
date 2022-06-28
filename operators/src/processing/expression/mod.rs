@@ -8,6 +8,7 @@ use crate::{
     util::{input::float_with_nan, Result},
 };
 use async_trait::async_trait;
+use futures::try_join;
 use geoengine_datatypes::{
     dataset::DatasetId,
     primitives::{partitions_extent, time_interval_extent, Measurement},
@@ -52,6 +53,7 @@ pub struct ExpressionParams {
 pub type Expression = Operator<ExpressionParams, ExpressionSources>;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[allow(clippy::unsafe_derive_deserialize)] // TODO: remove if this warning is a glitch
 pub struct ExpressionSources {
     a: Box<dyn RasterOperator>,
     b: Option<Box<dyn RasterOperator>>,
@@ -119,6 +121,7 @@ impl ExpressionSources {
         self.iter().count()
     }
 
+    #[allow(clippy::many_single_char_names)]
     async fn initialize(
         self,
         context: &dyn ExecutionContext,
@@ -127,15 +130,26 @@ impl ExpressionSources {
             return Err(ExpressionError::SourcesMustBeConsecutive.into());
         }
 
+        let (a, b, c, d, e, f, g, h) = try_join!(
+            self.a.initialize(context),
+            Self::initialize_source(self.b, context),
+            Self::initialize_source(self.c, context),
+            Self::initialize_source(self.d, context),
+            Self::initialize_source(self.e, context),
+            Self::initialize_source(self.f, context),
+            Self::initialize_source(self.g, context),
+            Self::initialize_source(self.h, context),
+        )?;
+
         Ok(ExpressionInitializedSources {
-            a: self.a.initialize(context).await?,
-            b: Self::initialize_source(self.b, context).await?,
-            c: Self::initialize_source(self.c, context).await?,
-            d: Self::initialize_source(self.d, context).await?,
-            e: Self::initialize_source(self.e, context).await?,
-            f: Self::initialize_source(self.f, context).await?,
-            g: Self::initialize_source(self.g, context).await?,
-            h: Self::initialize_source(self.h, context).await?,
+            a,
+            b,
+            c,
+            d,
+            e,
+            f,
+            g,
+            h,
         })
     }
 
@@ -404,7 +418,7 @@ impl InitializedRasterOperator for InitializedExpression {
             3 => {
                 let [a, b, c] =
                     <[_; 3]>::try_from(query_processors).expect("len previously checked");
-                let query_processors = (a.into_f64(), b.into_f64(), c.into_f64());
+                let query_processors = [a.into_f64(), b.into_f64(), c.into_f64()];
                 call_generic_raster_processor!(
                     output_type,
                     ExpressionQueryProcessor::new(
@@ -419,7 +433,7 @@ impl InitializedRasterOperator for InitializedExpression {
             4 => {
                 let [a, b, c, d] =
                     <[_; 4]>::try_from(query_processors).expect("len previously checked");
-                let query_processors = (a.into_f64(), b.into_f64(), c.into_f64(), d.into_f64());
+                let query_processors = [a.into_f64(), b.into_f64(), c.into_f64(), d.into_f64()];
                 call_generic_raster_processor!(
                     output_type,
                     ExpressionQueryProcessor::new(
@@ -434,13 +448,13 @@ impl InitializedRasterOperator for InitializedExpression {
             5 => {
                 let [a, b, c, d, e] =
                     <[_; 5]>::try_from(query_processors).expect("len previously checked");
-                let query_processors = (
+                let query_processors = [
                     a.into_f64(),
                     b.into_f64(),
                     c.into_f64(),
                     d.into_f64(),
                     e.into_f64(),
-                );
+                ];
                 call_generic_raster_processor!(
                     output_type,
                     ExpressionQueryProcessor::new(
@@ -455,14 +469,14 @@ impl InitializedRasterOperator for InitializedExpression {
             6 => {
                 let [a, b, c, d, e, f] =
                     <[_; 6]>::try_from(query_processors).expect("len previously checked");
-                let query_processors = (
+                let query_processors = [
                     a.into_f64(),
                     b.into_f64(),
                     c.into_f64(),
                     d.into_f64(),
                     e.into_f64(),
                     f.into_f64(),
-                );
+                ];
                 call_generic_raster_processor!(
                     output_type,
                     ExpressionQueryProcessor::new(
@@ -479,7 +493,7 @@ impl InitializedRasterOperator for InitializedExpression {
             7 => {
                 let [a, b, c, d, e, f, g] =
                     <[_; 7]>::try_from(query_processors).expect("len previously checked");
-                let query_processors = (
+                let query_processors = [
                     a.into_f64(),
                     b.into_f64(),
                     c.into_f64(),
@@ -487,7 +501,7 @@ impl InitializedRasterOperator for InitializedExpression {
                     e.into_f64(),
                     f.into_f64(),
                     g.into_f64(),
-                );
+                ];
                 call_generic_raster_processor!(
                     output_type,
                     ExpressionQueryProcessor::new(
@@ -502,7 +516,7 @@ impl InitializedRasterOperator for InitializedExpression {
             8 => {
                 let [a, b, c, d, e, f, g, h] =
                     <[_; 8]>::try_from(query_processors).expect("len previously checked");
-                let query_processors = (
+                let query_processors = [
                     a.into_f64(),
                     b.into_f64(),
                     c.into_f64(),
@@ -511,7 +525,7 @@ impl InitializedRasterOperator for InitializedExpression {
                     f.into_f64(),
                     g.into_f64(),
                     h.into_f64(),
-                );
+                ];
                 call_generic_raster_processor!(
                     output_type,
                     ExpressionQueryProcessor::new(

@@ -1,7 +1,7 @@
 use std::{marker::PhantomData, sync::Arc};
 
 use async_trait::async_trait;
-use futures::{stream::BoxStream, try_join, StreamExt, TryStreamExt};
+use futures::{stream::BoxStream, StreamExt, TryStreamExt};
 use geoengine_datatypes::{
     primitives::{RasterQueryRectangle, SpatialPartition2D, TimeInterval},
     raster::{
@@ -16,9 +16,9 @@ use rayon::iter::{
 };
 
 use crate::{
-    adapters::{QueryWrapper, RasterTimeAdapter},
+    adapters::{QueryWrapper, RasterArrayTimeAdapter, RasterTimeAdapter},
     engine::{BoxRasterQueryProcessor, QueryContext, QueryProcessor},
-    util::{stream_zip::StreamTupleZip, Result},
+    util::Result,
 };
 
 use super::compiled::LinkedExpression;
@@ -349,9 +349,9 @@ macro_rules! impl_expression_tuple_processor {
         paste::paste! {
             impl_expression_tuple_processor!(
                 @inner
-                $( $x ),*
+                $i
                 |
-                $( [< T $x >] ),*
+                $( $x ),*
                 |
                 $( [< tile_ $x >] ),*
                 |
@@ -367,17 +367,14 @@ macro_rules! impl_expression_tuple_processor {
     };
 
     // We have `0, 1, 2, …` and `T0, T1, T2, …`
-    (@inner $( $I:tt ),+ | $( $T:tt ),+ | $( $TILE:tt ),+ | $( $PIXEL:tt ),+ | $( $PIXEL_IS_VALID:tt ),+ | $( $IS_NODATA:tt ),+ | $FN_T:ty ) => {
+    (@inner $N:tt | $( $I:tt ),+ | $( $TILE:tt ),+ | $( $PIXEL:tt ),+ | $( $IS_NODATA:tt ),+ | $FN_T:ty ) => {
         #[async_trait]
-        impl<TO, $($T),*> ExpressionTupleProcessor<TO>
-            for (
-                $(BoxRasterQueryProcessor<$T>),*
-            )
+        impl<TO, T1> ExpressionTupleProcessor<TO> for [BoxRasterQueryProcessor<T1>; $N]
         where
             TO: Pixel,
-            $($T : Pixel + AsPrimitive<TO>),*
+            T1 : Pixel + AsPrimitive<TO>
         {
-            type Tuple = ( $(RasterTile2D<$T>),* );
+            type Tuple = [RasterTile2D<T1>; $N];
 
             #[inline]
             async fn queries<'a>(
@@ -385,33 +382,24 @@ macro_rules! impl_expression_tuple_processor {
                 query: RasterQueryRectangle,
                 ctx: &'a dyn QueryContext,
             ) -> Result<BoxStream<'a, Result<Self::Tuple>>> {
-                // TODO: tile alignment
+                let sources = [$( QueryWrapper { p: &self[$I], ctx } ),*];
 
-                let queries = try_join!(
-                    $( self.$I.query(query, ctx) ),*
-                )?;
-
-                let stream =
-                    StreamTupleZip::new(queries).map(|rasters| Ok((
-                        $( rasters.$I? ),*
-                    )));
-
-                Ok(stream.boxed())
+                Ok(Box::pin(RasterArrayTimeAdapter::new(sources, query)))
             }
 
             #[inline]
             fn all_empty(tuple: &Self::Tuple) -> bool {
-                $( tuple.$I.grid_array.is_empty() )&&*
+                $( tuple[$I].grid_array.is_empty() )&&*
             }
 
             #[inline]
             fn empty_raster(tuple: &Self::Tuple) -> RasterTile2D<TO> {
-                tuple.0.clone().convert_data_type()
+                tuple[0].clone().convert_data_type()
             }
 
             #[inline]
             fn metadata(tuple: &Self::Tuple) -> (TimeInterval, GridIdx2D, GeoTransform, GridShape2D) {
-                let raster = &tuple.0;
+                let raster = &tuple[0];
 
                 (
                     raster.time,
@@ -434,12 +422,11 @@ macro_rules! impl_expression_tuple_processor {
                     program.function_nary()?
                 };
 
-                let min_batch_size = rasters.0.grid_array.grid_shape().axis_size_x();
+                let min_batch_size = rasters[0].grid_array.grid_shape().axis_size_x();
+
+                let [ $($TILE),* ] = rasters.map(|raster| raster.into_materialized_tile());
 
                 // TODO: allow iterating over empty rasters
-                $(
-                    let $TILE = rasters.$I.into_materialized_tile();
-                )*
 
                 let data = (
                     $(
