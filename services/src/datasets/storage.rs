@@ -25,7 +25,6 @@ use uuid::Uuid;
 
 use super::listing::Provenance;
 
-// TODO: where to put these constants?
 pub const DATASET_DB_LAYER_PROVIDER_ID: LayerProviderId =
     LayerProviderId::from_u128(0xac50_ed0d_c9a0_41f8_9ce8_35fc_9e38_299b);
 

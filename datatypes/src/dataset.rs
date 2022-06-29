@@ -9,6 +9,9 @@ identifier!(StagingDatasetId);
 
 #[derive(Debug, Clone, Hash, Eq, PartialEq, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase", tag = "type")]
+// TODO: distinguish between Datasets (stuff MANAGED by Geo Engine) and Data (stuff LOADABLE by Geo Engine)
+//       DatasetId should be used to refer to local dataset and DataId (or similar) should differentiate
+//       between local datasets and external providers
 pub enum DatasetId {
     #[serde(rename_all = "camelCase")]
     Internal {

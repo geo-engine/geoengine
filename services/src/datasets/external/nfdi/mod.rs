@@ -584,7 +584,6 @@ impl LayerCollectionProvider for NFDIDataProvider {
     async fn get_layer(&self, id: &LayerId) -> Result<Layer> {
         let mut project_stub = self.project_stub.clone();
 
-        // TODO: avoid loading ALL project datasets
         let resp = project_stub
             .get_project_datasets(GetProjectDatasetsRequest {
                 id: self.project_id.clone(),

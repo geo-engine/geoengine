@@ -22,7 +22,6 @@ pub struct ProviderLayerCollectionId {
 
 #[derive(Debug, Serialize, Deserialize, Clone, PartialEq)]
 pub struct Layer {
-    // TODO: add provider, also need a separate struct for import and API output
     pub id: ProviderLayerId,
     pub name: String,
     pub description: String,

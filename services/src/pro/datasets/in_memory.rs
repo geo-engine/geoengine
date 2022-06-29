@@ -559,7 +559,7 @@ impl LayerCollectionProvider for ProHashMapDatasetDb {
                 CollectionItem::Layer(LayerListing {
                     id: ProviderLayerId {
                         provider: DATASET_DB_LAYER_PROVIDER_ID,
-                        // use the dataset id also as layer id, TODO: maybe prefix it?
+                        // use the dataset id also as layer id
                         item: LayerId(
                             d.id.internal()
                                 .expect("Dataset DB contains only internal datasets")

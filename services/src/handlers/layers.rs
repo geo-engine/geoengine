@@ -31,8 +31,6 @@ async fn list_root_collections_handler<C: Context>(
 ) -> Result<impl Responder> {
     let mut providers = vec![];
 
-    // TODO: add dataset db as provider
-
     if options.offset == 0 && options.limit > 0 {
         providers.push(CollectionItem::Collection(LayerCollectionListing {
             id: ProviderLayerCollectionId {

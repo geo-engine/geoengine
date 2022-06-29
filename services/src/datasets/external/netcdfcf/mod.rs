@@ -844,7 +844,6 @@ impl ExternalLayerProvider for NetCdfCfDataProvider {
 }
 
 #[async_trait]
-// TODO: replace the custom dataset API with this one
 impl LayerCollectionProvider for NetCdfCfDataProvider {
     async fn collection_items(
         &self,

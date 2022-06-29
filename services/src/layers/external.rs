@@ -49,7 +49,7 @@ impl Clone for Box<dyn ExternalLayerProviderDefinition> {
     }
 }
 
-/// A provider of datasets that are not hosted by Geo Engine itself but some external party
+/// A provider of layers that are not hosted by Geo Engine itself but some external party
 // TODO: Authorization: the provider needs to accept credentials for the external data source.
 //       The credentials should be generic s.t. they are independent of the Session type and
 //       extensible to new provider types. E.g. a key-value map of strings where the provider
