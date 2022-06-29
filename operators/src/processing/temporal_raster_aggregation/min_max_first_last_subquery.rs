@@ -8,7 +8,8 @@ use geoengine_datatypes::{
         TimeStep,
     },
     raster::{
-        EmptyGrid2D, GridOrEmpty, Pixel, RasterTile2D, TileInformation, UpdateIndexedElements,
+        EmptyGrid2D, GridIndexAccess, GridOrEmpty, Pixel, RasterTile2D, TileInformation,
+        UpdateIndexedElements,
     },
 };
 use rayon::ThreadPool;
@@ -116,7 +117,7 @@ where
         match (&mut accu_tile.grid_array, tile.grid_array) {
             (GridOrEmpty::Grid(a), GridOrEmpty::Grid(g)) => {
                 let map_fn = |lin_idx: usize, acc_value| {
-                    let tile_value = g.at_linear_index_unchecked_deref(lin_idx);
+                    let tile_value = g.get_at_grid_index_unchecked(lin_idx);
                     C::acc(acc_value, tile_value)
                 };
 
@@ -150,7 +151,7 @@ where
     let grid = match (accu_tile.grid_array, tile.grid_array) {
         (GridOrEmpty::Grid(mut a), GridOrEmpty::Grid(g)) => {
             let map_fn = |lin_idx: usize, acc_value| {
-                let tile_value = g.at_linear_index_unchecked_deref(lin_idx);
+                let tile_value = g.get_at_grid_index_unchecked(lin_idx);
                 C::acc_ignore_no_data(acc_value, tile_value)
             };
 

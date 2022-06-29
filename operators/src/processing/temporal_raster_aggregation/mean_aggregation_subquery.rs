@@ -5,8 +5,8 @@ use futures::{future::BoxFuture, Future, FutureExt, TryFuture, TryFutureExt};
 use geoengine_datatypes::{
     primitives::{RasterQueryRectangle, SpatialPartitioned, TimeInstance, TimeInterval, TimeStep},
     raster::{
-        EmptyGrid2D, GeoTransform, GridIdx2D, GridOrEmpty, GridOrEmpty2D, GridShapeAccess,
-        MapElements, Pixel, RasterTile2D, TileInformation, UpdateIndexedElements,
+        EmptyGrid2D, GeoTransform, GridIdx2D, GridIndexAccess, GridOrEmpty, GridOrEmpty2D,
+        GridShapeAccess, MapElements, Pixel, RasterTile2D, TileInformation, UpdateIndexedElements,
     },
 };
 use num_traits::AsPrimitive;
@@ -74,7 +74,7 @@ impl<T> TemporalMeanTileAccu<T> {
             GridOrEmpty::Empty(_) => {
                 // this could stay empty?
                 let map_fn = |lin_idx: usize, _acc_values_option| {
-                    let new_value_option = in_tile_grid.at_linear_index_unchecked_deref(lin_idx);
+                    let new_value_option = in_tile_grid.get_at_grid_index_unchecked(lin_idx);
                     if let Some(new_value) = new_value_option {
                         let ivf: f64 = new_value.as_();
                         Some((ivf, 1))
@@ -87,7 +87,7 @@ impl<T> TemporalMeanTileAccu<T> {
 
             GridOrEmpty::Grid(_) => {
                 let map_fn = |lin_idx: usize, acc_values_option: Option<(f64, u64)>| {
-                    let new_value_option = in_tile_grid.at_linear_index_unchecked_deref(lin_idx);
+                    let new_value_option = in_tile_grid.get_at_grid_index_unchecked(lin_idx);
                     match (acc_values_option, new_value_option) {
                         (None, Some(new_value)) if self.ignore_no_data || self.initial_state => {
                             let ivf: f64 = new_value.as_();

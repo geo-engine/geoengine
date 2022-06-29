@@ -1,18 +1,11 @@
-use std::{marker::PhantomData, ops::Add};
-
 use super::{
-    grid_traits::{ChangeGridBounds, GridShapeAccess, MaskedGridIndexAccess},
+    grid_traits::{ChangeGridBounds, GridShapeAccess},
     GridBoundingBox, GridBounds, GridIdx, GridShape, GridShape1D, GridShape2D, GridShape3D,
     GridSize, GridSpaceToLinearSpace,
 };
-use crate::{
-    error::{self},
-    raster::GridContains,
-    util::Result,
-};
-
+use crate::util::Result;
 use serde::{Deserialize, Serialize};
-use snafu::ensure;
+use std::{marker::PhantomData, ops::Add};
 
 #[derive(Debug, Eq, PartialEq, Clone, Copy, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -61,31 +54,6 @@ where
 
     fn number_of_elements(&self) -> usize {
         self.shape.number_of_elements()
-    }
-}
-
-impl<T, D, I, A> MaskedGridIndexAccess<T, I> for EmptyGrid<D, T>
-where
-    D: GridSize + GridSpaceToLinearSpace<IndexArray = A> + GridBounds<IndexArray = A>,
-    I: Into<GridIdx<A>>,
-    A: AsRef<[isize]> + Into<GridIdx<A>> + Clone,
-    T: Copy,
-{
-    fn get_masked_at_grid_index(&self, grid_index: I) -> Result<Option<T>> {
-        let index = grid_index.into();
-        ensure!(
-            self.shape.contains(&index),
-            error::GridIndexOutOfBounds {
-                index: index.as_slice(),
-                min_index: self.shape.min_index().as_slice(),
-                max_index: self.shape.max_index().as_slice()
-            }
-        );
-        Ok(None)
-    }
-
-    fn get_masked_at_grid_index_unchecked(&self, _grid_index: I) -> Option<T> {
-        None
     }
 }
 
@@ -177,21 +145,6 @@ mod tests {
     fn number_of_elements() {
         let n: EmptyGrid2D<u8> = EmptyGrid2D::new([2, 2].into());
         assert_eq!(n.number_of_elements(), 4);
-    }
-
-    #[test]
-    fn get_at_grid_index_unchecked() {
-        let n: EmptyGrid2D<u8> = EmptyGrid2D::new([2, 2].into());
-        assert_eq!(n.get_masked_at_grid_index_unchecked([0, 0]), None);
-        assert_eq!(n.get_masked_at_grid_index_unchecked([100, 100]), None);
-    }
-
-    #[test]
-    fn get_at_grid_index() {
-        let n: EmptyGrid2D<u8> = EmptyGrid2D::new([2, 2].into());
-        let result = n.get_masked_at_grid_index([0, 0]).unwrap();
-        assert_eq!(result, None);
-        assert!(n.get_masked_at_grid_index([100, 100]).is_err());
     }
 
     #[test]

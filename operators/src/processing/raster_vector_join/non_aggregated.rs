@@ -7,7 +7,7 @@ use geoengine_datatypes::util::arrow::ArrowTyped;
 use std::marker::PhantomData;
 use std::sync::Arc;
 
-use geoengine_datatypes::raster::{MaskedGridIndexAccess, RasterTile2D};
+use geoengine_datatypes::raster::{GridIndexAccess, RasterTile2D};
 use geoengine_datatypes::{
     collections::FeatureCollectionModifications, primitives::TimeInterval, raster::Pixel,
 };
@@ -211,7 +211,7 @@ where
 
         for feature_index in 0..collection.len() {
             for grid_idx in covered_pixels.covered_pixels(feature_index, raster) {
-                let value = match raster.get_masked_at_grid_index(grid_idx) {
+                let value = match raster.get_at_grid_index(grid_idx) {
                     Ok(value) => value,
                     Err(_) => continue, // not found in this raster tile
                 };

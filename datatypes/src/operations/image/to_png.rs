@@ -1,8 +1,7 @@
 use std::io::Cursor;
 
 use crate::raster::{
-    Grid2D, GridIndexAccess, GridOrEmpty2D, MaskedGrid2D, MaskedGridIndexAccess, Pixel,
-    RasterTile2D, TypedRasterTile2D,
+    Grid2D, GridIndexAccess, GridOrEmpty2D, MaskedGrid2D, Pixel, RasterTile2D, TypedRasterTile2D,
 };
 use crate::util::Result;
 use crate::{error, raster::EmptyGrid2D};
@@ -125,9 +124,7 @@ fn create_rgba_image_from_masked_grid<P: Pixel + RgbaTransmutable>(
 
     RgbaImage::from_fn(width, height, |x, y| {
         let (grid_pixel_x, grid_pixel_y) = image_pixel_to_raster_pixel(x, y, scale_x, scale_y);
-        if let Ok(Some(pixel_value)) =
-            raster_grid.get_masked_at_grid_index([grid_pixel_y, grid_pixel_x])
-        {
+        if let Ok(Some(pixel_value)) = raster_grid.get_at_grid_index([grid_pixel_y, grid_pixel_x]) {
             color_mapper.call(pixel_value)
         } else {
             colorizer.no_data_color()

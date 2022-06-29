@@ -118,6 +118,12 @@ pub enum Error {
         max_index: Vec<isize>,
     },
 
+    #[snafu(display("{:?} is not a valid index in the bounds 0, {:?} ", index, max_index,))]
+    LinearIndexOutOfBounds {
+        index: usize,
+        max_index: usize,
+    },
+
     #[snafu(display("Invalid GridIndex ({:?}), reason: \"{}\".", grid_index, description))]
     InvalidGridIndex {
         grid_index: Vec<usize>,

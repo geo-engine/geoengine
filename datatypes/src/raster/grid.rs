@@ -341,6 +341,26 @@ where
     }
 }
 
+impl<T, D> GridIndexAccess<T, usize> for Grid<D, T>
+where
+    T: Copy,
+{
+    fn get_at_grid_index(&self, grid_index: usize) -> Result<T> {
+        ensure!(
+            grid_index < self.data.len(),
+            error::LinearIndexOutOfBounds {
+                index: grid_index,
+                max_index: self.data.len(),
+            }
+        );
+        Ok(self.get_at_grid_index_unchecked(grid_index))
+    }
+
+    fn get_at_grid_index_unchecked(&self, grid_index: usize) -> T {
+        self.data[grid_index]
+    }
+}
+
 impl<T, D, I, A> GridIndexAccess<T, I> for Grid<D, T>
 where
     D: GridSize + GridSpaceToLinearSpace<IndexArray = A> + GridBounds<IndexArray = A>,
@@ -364,7 +384,28 @@ where
     fn get_at_grid_index_unchecked(&self, grid_index: I) -> T {
         let index = grid_index.into();
         let lin_space_idx = self.shape.linear_space_index_unchecked(index);
-        self.data[lin_space_idx]
+        self.get_at_grid_index_unchecked(lin_space_idx)
+    }
+}
+
+impl<T, D> GridIndexAccessMut<T, usize> for Grid<D, T>
+where
+    T: Copy,
+{
+    fn set_at_grid_index(&mut self, grid_index: usize, value: T) -> Result<()> {
+        ensure!(
+            grid_index < self.data.len(),
+            error::LinearIndexOutOfBounds {
+                index: grid_index,
+                max_index: self.data.len(),
+            }
+        );
+        self.set_at_grid_index_unchecked(grid_index, value);
+        Ok(())
+    }
+
+    fn set_at_grid_index_unchecked(&mut self, grid_index: usize, value: T) {
+        self.data[grid_index] = value;
     }
 }
 

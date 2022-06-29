@@ -1,6 +1,6 @@
 use crate::primitives::{AxisAlignedRectangle, SpatialPartitioned};
 use crate::raster::{
-    GridIdx, GridIdx2D, MaskedGridIndexAccess, MaterializedRasterTile2D, Pixel, RasterTile2D,
+    GridIdx, GridIdx2D, GridIndexAccess, MaterializedRasterTile2D, Pixel, RasterTile2D,
     UpdateIndexedElementsParallel,
 };
 use crate::util::Result;
@@ -44,7 +44,7 @@ where
             let out_x_coord = out_upper_left.x + x as f64 * out_x_size;
             let nearest_in_y_idx = ((out_y_coord - in_upper_left.y) / in_y_size).round() as isize;
             let nearest_in_x_idx = ((out_x_coord - in_upper_left.x) / in_x_size).round() as isize;
-            input.get_masked_at_grid_index_unchecked([nearest_in_y_idx, nearest_in_x_idx])
+            input.get_at_grid_index_unchecked([nearest_in_y_idx, nearest_in_x_idx])
         };
 
         output.grid_array.update_indexed_elements_parallel(map_fn);
@@ -118,13 +118,13 @@ where
             let a_x = in_upper_left.x + in_x_size * in_x_idx as f64;
             let c_x = a_x + in_x_size;
 
-            let a_v = input.get_masked_at_grid_index_unchecked([in_y_idx, in_x_idx]);
+            let a_v = input.get_at_grid_index_unchecked([in_y_idx, in_x_idx]);
 
-            let b_v = input.get_masked_at_grid_index_unchecked([in_y_idx + 1, in_x_idx]);
+            let b_v = input.get_at_grid_index_unchecked([in_y_idx + 1, in_x_idx]);
 
-            let c_v = input.get_masked_at_grid_index_unchecked([in_y_idx, in_x_idx + 1]);
+            let c_v = input.get_at_grid_index_unchecked([in_y_idx, in_x_idx + 1]);
 
-            let d_v = input.get_masked_at_grid_index_unchecked([in_y_idx + 1, in_x_idx + 1]);
+            let d_v = input.get_at_grid_index_unchecked([in_y_idx + 1, in_x_idx + 1]);
 
             let value = match (a_v, b_v, c_v, d_v) {
                 (Some(a), Some(b), Some(c), Some(d)) => Some(Self::bilinear_interpolation(

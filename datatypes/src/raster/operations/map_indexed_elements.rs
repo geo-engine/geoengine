@@ -560,7 +560,13 @@ where
             GridOrEmpty::Empty(e) => {
                 // we have to map all the empty pixels. However, if the validity mask is empty we can return an empty grid.
                 let mapped = e.map_indexed_elements_parallel(map_fn);
-                if mapped.mask_ref().data.par_iter().any(|m| *m) {
+                if mapped
+                    .mask_ref()
+                    .data
+                    .par_iter()
+                    .with_min_len(mapped.shape().axis_size_x())
+                    .any(|m| *m)
+                {
                     return mapped.into();
                 }
                 EmptyGrid::new(mapped.inner_grid.shape).into()

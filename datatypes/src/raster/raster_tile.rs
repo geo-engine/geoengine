@@ -4,7 +4,7 @@ use super::{
     GridIndexAccess, GridShape, GridShape2D, GridShape3D, GridShapeAccess, GridSize, NoDataValue,
     Raster, TileInformation,
 };
-use super::{MaskedGridIndexAccess, MaskedGridIndexAccessMut, RasterProperties};
+use super::{GridIndexAccessMut, RasterProperties};
 use crate::primitives::{
     Coordinate2D, SpatialBounded, SpatialPartition2D, SpatialPartitioned, TemporalBounded,
     TimeInterval,
@@ -259,33 +259,32 @@ where
     }
 }
 
-impl<T, G, I> MaskedGridIndexAccess<T, I> for BaseTile<G>
+impl<T, G, I> GridIndexAccess<Option<T>, I> for BaseTile<G>
 where
-    G: MaskedGridIndexAccess<T, I>,
+    G: GridIndexAccess<Option<T>, I>,
     T: Pixel,
 {
-    fn get_masked_at_grid_index(&self, grid_index: I) -> Result<Option<T>> {
-        self.grid_array.get_masked_at_grid_index(grid_index)
+    fn get_at_grid_index(&self, grid_index: I) -> Result<Option<T>> {
+        self.grid_array.get_at_grid_index(grid_index)
     }
 
-    fn get_masked_at_grid_index_unchecked(&self, grid_index: I) -> Option<T> {
-        self.grid_array
-            .get_masked_at_grid_index_unchecked(grid_index)
+    fn get_at_grid_index_unchecked(&self, grid_index: I) -> Option<T> {
+        self.grid_array.get_at_grid_index_unchecked(grid_index)
     }
 }
 
-impl<T, G, I> MaskedGridIndexAccessMut<T, I> for BaseTile<G>
+impl<T, G, I> GridIndexAccessMut<Option<T>, I> for BaseTile<G>
 where
-    G: MaskedGridIndexAccessMut<T, I>,
+    G: GridIndexAccessMut<Option<T>, I>,
     T: Pixel,
 {
-    fn set_masked_at_grid_index(&mut self, grid_index: I, value: Option<T>) -> Result<()> {
-        self.grid_array.set_masked_at_grid_index(grid_index, value)
+    fn set_at_grid_index(&mut self, grid_index: I, value: Option<T>) -> Result<()> {
+        self.grid_array.set_at_grid_index(grid_index, value)
     }
 
-    fn set_masked_at_grid_index_unchecked(&mut self, grid_index: I, value: Option<T>) {
+    fn set_at_grid_index_unchecked(&mut self, grid_index: I, value: Option<T>) {
         self.grid_array
-            .set_masked_at_grid_index_unchecked(grid_index, value);
+            .set_at_grid_index_unchecked(grid_index, value);
     }
 }
 
@@ -293,7 +292,7 @@ impl<G, P> CoordinatePixelAccess<P> for BaseTile<G>
 where
     G: GridSize + Clone,
     P: Pixel,
-    Self: MaskedGridIndexAccess<P, GridIdx2D>,
+    Self: GridIndexAccess<Option<P>, GridIdx2D>,
 {
     fn pixel_value_at_coord(&self, coordinate: Coordinate2D) -> Result<Option<P>> {
         // TODO: benchmark the impact of creating the `GeoTransform`s
@@ -302,7 +301,7 @@ where
             .tile_geo_transform()
             .coordinate_to_grid_idx_2d(coordinate);
 
-        self.get_masked_at_grid_index(grid_index)
+        self.get_at_grid_index(grid_index)
     }
 
     fn pixel_value_at_coord_unchecked(&self, coordinate: Coordinate2D) -> Option<P> {
@@ -310,7 +309,7 @@ where
             .tile_geo_transform()
             .coordinate_to_grid_idx_2d(coordinate);
 
-        self.get_masked_at_grid_index_unchecked(grid_index)
+        self.get_at_grid_index_unchecked(grid_index)
     }
 }
 
@@ -367,7 +366,7 @@ mod tests {
             let value_a = raster_tile.pixel_value_at_coord(coordinate);
 
             let value_b = raster_tile
-                .get_masked_at_grid_index(tile_geo_transform.coordinate_to_grid_idx_2d(coordinate));
+                .get_at_grid_index(tile_geo_transform.coordinate_to_grid_idx_2d(coordinate));
 
             match (value_a, value_b) {
                 (Ok(a), Ok(b)) => assert_eq!(a, b),

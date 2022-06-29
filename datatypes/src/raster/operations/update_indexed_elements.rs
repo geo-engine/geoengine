@@ -358,7 +358,13 @@ where
             GridOrEmpty::Empty(e) => {
                 // we need to map all the empty pixels. If any is valid set the mapped grid as self.
                 let mapped_grid = e.clone().map_indexed_elements_parallel(map_fn);
-                if mapped_grid.mask_ref().data.par_iter().any(|m| *m) {
+                if mapped_grid
+                    .mask_ref()
+                    .data
+                    .par_iter()
+                    .with_min_len(mapped_grid.shape().axis_size_x())
+                    .any(|m| *m)
+                {
                     *self = GridOrEmpty::Grid(mapped_grid);
                 }
             }

@@ -4,7 +4,7 @@ use futures::{StreamExt, TryStreamExt};
 use geoengine_datatypes::collections::{
     FeatureCollection, FeatureCollectionInfos, FeatureCollectionModifications,
 };
-use geoengine_datatypes::raster::{MaskedGridIndexAccess, Pixel, RasterDataType};
+use geoengine_datatypes::raster::{GridIndexAccess, Pixel, RasterDataType};
 use geoengine_datatypes::util::arrow::ArrowTyped;
 
 use crate::engine::{
@@ -112,7 +112,7 @@ where
                     let mut satisfied = false;
                     for grid_idx in covered_pixels.covered_pixels(feature_index, &raster) {
                         // try to get the pixel if the coordinate is within the current tile
-                        if let Ok(pixel) = raster.get_masked_at_grid_index(grid_idx) {
+                        if let Ok(pixel) = raster.get_at_grid_index(grid_idx) {
                             // finally, attach value to feature
                             if let Some(data) = pixel {
                                 feature_aggregator.add_value(feature_index, data, 1);

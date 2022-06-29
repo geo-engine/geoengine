@@ -6,7 +6,6 @@ use snafu::ensure;
 use crate::{error, util::Result};
 
 use super::{
-    grid_traits::{MaskedGridIndexAccess, MaskedGridIndexAccessMut},
     ChangeGridBounds, EmptyGrid, Grid, GridBoundingBox, GridBounds, GridIdx, GridIndexAccess,
     GridIndexAccessMut, GridShape, GridShape1D, GridShape2D, GridShape3D, GridShapeAccess,
     GridSize, GridSpaceToLinearSpace,
@@ -96,27 +95,6 @@ where
         self.masked_element_ref_iterator()
             .map(std::option::Option::<&T>::copied)
     }
-
-    pub fn at_linear_index_unchecked(&self, lin_idx: usize) -> Option<&T> {
-        let mask = self.validity_mask[lin_idx];
-        if mask {
-            let value = &self.inner_grid[lin_idx];
-            return Some(value);
-        }
-        None
-    }
-
-    pub fn at_linear_index_unchecked_deref(&self, lin_idx: usize) -> Option<T>
-    where
-        T: Copy,
-    {
-        let mask = self.validity_mask[lin_idx];
-        if mask {
-            let value = self.inner_grid[lin_idx];
-            return Some(value);
-        }
-        None
-    }
 }
 
 impl<D, T> From<Grid<D, T>> for MaskedGrid<D, T>
@@ -170,13 +148,14 @@ where
     }
 }
 
-impl<D, T, I> MaskedGridIndexAccess<T, I> for MaskedGrid<D, T>
+impl<T, D, I> GridIndexAccess<Option<T>, I> for MaskedGrid<D, T>
 where
+    T: Copy,
     Grid<D, T>: GridIndexAccess<T, I>,
     Grid<D, bool>: GridIndexAccess<bool, I>,
     I: Clone,
 {
-    fn get_masked_at_grid_index(&self, grid_index: I) -> Result<Option<T>> {
+    fn get_at_grid_index(&self, grid_index: I) -> Result<Option<T>> {
         if !self.validity_mask.get_at_grid_index(grid_index.clone())? {
             return Ok(None);
         }
@@ -186,7 +165,7 @@ where
             .map(Option::Some)
     }
 
-    fn get_masked_at_grid_index_unchecked(&self, grid_index: I) -> Option<T> {
+    fn get_at_grid_index_unchecked(&self, grid_index: I) -> Option<T> {
         if !self
             .validity_mask
             .get_at_grid_index_unchecked(grid_index.clone())
@@ -198,7 +177,7 @@ where
     }
 }
 
-impl<D, T, I> MaskedGridIndexAccessMut<T, I> for MaskedGrid<D, T>
+impl<D, T, I> GridIndexAccessMut<Option<T>, I> for MaskedGrid<D, T>
 where
     Grid<D, T>: GridIndexAccessMut<T, I>,
     Grid<D, bool>: GridIndexAccessMut<bool, I>,
@@ -206,7 +185,7 @@ where
     T: Clone,
     I: Clone,
 {
-    fn set_masked_at_grid_index(&mut self, grid_index: I, value: Option<T>) -> Result<()> {
+    fn set_at_grid_index(&mut self, grid_index: I, value: Option<T>) -> Result<()> {
         self.mask_mut()
             .set_at_grid_index(grid_index.clone(), value.is_some())?;
 
@@ -216,7 +195,7 @@ where
         Ok(())
     }
 
-    fn set_masked_at_grid_index_unchecked(&mut self, grid_index: I, value: Option<T>) {
+    fn set_at_grid_index_unchecked(&mut self, grid_index: I, value: Option<T>) {
         self.validity_mask
             .set_at_grid_index_unchecked(grid_index.clone(), value.is_some());
 
@@ -235,11 +214,11 @@ where
     I: Clone,
 {
     fn set_at_grid_index(&mut self, grid_index: I, value: T) -> Result<()> {
-        self.set_masked_at_grid_index(grid_index, Some(value))
+        self.set_at_grid_index(grid_index, Some(value))
     }
 
     fn set_at_grid_index_unchecked(&mut self, grid_index: I, value: T) {
-        self.set_masked_at_grid_index_unchecked(grid_index, Some(value));
+        self.set_at_grid_index_unchecked(grid_index, Some(value));
     }
 }
 

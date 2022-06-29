@@ -2,10 +2,10 @@ use std::ops::Add;
 
 use super::{
     empty_grid::EmptyGrid,
-    grid_traits::{ChangeGridBounds, GridShapeAccess, MaskedGridIndexAccess},
+    grid_traits::{ChangeGridBounds, GridShapeAccess},
     masked_grid::MaskedGrid,
-    Grid, GridBoundingBox, GridBounds, GridIdx, GridShape, GridShape1D, GridShape2D, GridShape3D,
-    GridSize, GridSpaceToLinearSpace,
+    Grid, GridBoundingBox, GridBounds, GridIdx, GridIndexAccess, GridShape, GridShape1D,
+    GridShape2D, GridShape3D, GridSize, GridSpaceToLinearSpace,
 };
 
 use crate::util::Result;
@@ -91,24 +91,22 @@ where
     }
 }
 
-impl<T, D, I, A> MaskedGridIndexAccess<T, I> for GridOrEmpty<D, T>
+impl<T, D, I> GridIndexAccess<Option<T>, I> for GridOrEmpty<D, T>
 where
-    D: GridSize + GridSpaceToLinearSpace<IndexArray = A> + GridBounds<IndexArray = A>,
-    I: Into<GridIdx<A>> + Clone,
-    A: AsRef<[isize]> + Into<GridIdx<A>> + Clone,
+    MaskedGrid<D, T>: GridIndexAccess<Option<T>, I>,
     T: Copy,
 {
-    fn get_masked_at_grid_index(&self, grid_index: I) -> Result<Option<T>> {
+    fn get_at_grid_index(&self, grid_index: I) -> Result<Option<T>> {
         match self {
-            GridOrEmpty::Grid(g) => g.get_masked_at_grid_index(grid_index),
-            GridOrEmpty::Empty(n) => n.get_masked_at_grid_index(grid_index),
+            GridOrEmpty::Grid(g) => g.get_at_grid_index(grid_index),
+            GridOrEmpty::Empty(_) => Ok(None), // TODO: check if index in bounds?
         }
     }
 
-    fn get_masked_at_grid_index_unchecked(&self, grid_index: I) -> Option<T> {
+    fn get_at_grid_index_unchecked(&self, grid_index: I) -> Option<T> {
         match self {
-            GridOrEmpty::Grid(g) => g.get_masked_at_grid_index_unchecked(grid_index),
-            GridOrEmpty::Empty(n) => n.get_masked_at_grid_index_unchecked(grid_index),
+            GridOrEmpty::Grid(g) => g.get_at_grid_index_unchecked(grid_index),
+            GridOrEmpty::Empty(_) => None,
         }
     }
 }
