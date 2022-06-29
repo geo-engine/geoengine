@@ -2,8 +2,8 @@ use std::collections::HashMap;
 use std::marker::PhantomData;
 
 use crate::datasets::listing::{Provenance, ProvenanceOutput};
-use crate::error::Error;
 use crate::error::Result;
+use crate::error::{self, Error};
 use crate::layers::external::{ExternalLayerProvider, ExternalLayerProviderDefinition};
 use crate::layers::layer::{
     CollectionItem, Layer, LayerCollectionListOptions, LayerListing, ProviderLayerId,
@@ -34,6 +34,7 @@ use geoengine_operators::{
     source::{GdalLoadingInfo, OgrSourceDataset},
 };
 use serde::{Deserialize, Serialize};
+use snafu::ensure;
 
 pub const GFBIO_PROVIDER_ID: LayerProviderId =
     LayerProviderId::from_u128(0x907f_9f5b_0304_4a0e_a5ef_28de_62d1_c0f9);
@@ -175,10 +176,16 @@ impl GfbioDataProvider {
 impl LayerCollectionProvider for GfbioDataProvider {
     async fn collection_items(
         &self,
-        _collection: &LayerCollectionId,
+        collection: &LayerCollectionId,
         options: Validated<LayerCollectionListOptions>,
     ) -> Result<Vec<CollectionItem>> {
-        // TODO: check collection id
+        ensure!(
+            *collection == self.root_collection_id().await?,
+            error::UnknownLayerCollectionId {
+                id: collection.clone()
+            }
+        );
+
         let conn = self.pool.get().await?;
 
         let options = options.user_input;

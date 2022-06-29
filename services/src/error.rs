@@ -1,8 +1,5 @@
-use crate::{
-    datasets::external::netcdfcf::NetCdfCf4DProviderError, handlers::ErrorResponse,
-    workflows::workflow::WorkflowId,
-};
-// use crate::{datasets::external::netcdfcf::NetCdfCf4DProviderError, handlers::ErrorResponse};
+use crate::{datasets::external::netcdfcf::NetCdfCf4DProviderError, handlers::ErrorResponse};
+use crate::{layers::listing::LayerCollectionId, workflows::workflow::WorkflowId};
 use actix_web::http::StatusCode;
 use actix_web::HttpResponse;
 use geoengine_datatypes::{
@@ -351,6 +348,10 @@ pub enum Error {
     #[snafu(context(false))]
     TaskError {
         source: crate::tasks::TaskError,
+    },
+
+    UnknownLayerCollectionId {
+        id: LayerCollectionId,
     },
 }
 

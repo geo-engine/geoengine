@@ -40,6 +40,7 @@ use geoengine_operators::{
 };
 use log::debug;
 use serde::{Deserialize, Serialize};
+use snafu::ensure;
 use snafu::{OptionExt, ResultExt};
 use std::collections::VecDeque;
 use std::io::BufReader;
@@ -847,10 +848,15 @@ impl ExternalLayerProvider for NetCdfCfDataProvider {
 impl LayerCollectionProvider for NetCdfCfDataProvider {
     async fn collection_items(
         &self,
-        _collection: &LayerCollectionId,
+        collection: &LayerCollectionId,
         options: Validated<LayerCollectionListOptions>,
     ) -> crate::error::Result<Vec<CollectionItem>> {
-        // TODO: check collection id
+        ensure!(
+            *collection == self.root_collection_id().await?,
+            crate::error::UnknownLayerCollectionId {
+                id: collection.clone()
+            }
+        );
 
         let mut dir = tokio::fs::read_dir(&self.path).await?;
 

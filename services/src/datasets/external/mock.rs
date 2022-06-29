@@ -22,6 +22,7 @@ use geoengine_operators::{
     source::{GdalLoadingInfo, OgrSourceDataset},
 };
 use serde::{Deserialize, Serialize};
+use snafu::ensure;
 use uuid::Uuid;
 
 pub const ROOT_COLLECTION_ID: Uuid = Uuid::from_u128(0xd630_e723_63d4_440c_9e15_644c_400f_c7c1);
@@ -88,10 +89,16 @@ impl ExternalLayerProvider for MockExternalDataProvider {
 impl LayerCollectionProvider for MockExternalDataProvider {
     async fn collection_items(
         &self,
-        _collection: &LayerCollectionId,
+        collection: &LayerCollectionId,
         _options: Validated<LayerCollectionListOptions>,
     ) -> Result<Vec<CollectionItem>> {
-        // TODO: use collection id
+        ensure!(
+            *collection == self.root_collection_id().await?,
+            error::UnknownLayerCollectionId {
+                id: collection.clone()
+            }
+        );
+
         // TODO: use options
 
         let mut listing = vec![];

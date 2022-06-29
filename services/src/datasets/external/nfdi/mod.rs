@@ -3,7 +3,7 @@ use crate::datasets::listing::{
      ProvenanceOutput,
 };
 use crate::datasets::storage::{Dataset};
-use crate::error::{Error, Result};
+use crate::error::{Error, Result, self};
 use crate::layers::external::{ExternalLayerProviderDefinition, ExternalLayerProvider};
 use crate::layers::layer::{LayerCollectionListOptions, CollectionItem, Layer, LayerListing, ProviderLayerId};
 use crate::layers::listing::{LayerCollectionProvider, LayerCollectionId, LayerId};
@@ -35,6 +35,7 @@ use scienceobjectsdb_rust_api::sciobjectsdb::sciobjsdb::api::storage::services::
     GetProjectDatasetsRequest,
 };
 use serde::{Deserialize, Serialize};
+use snafu::ensure;
 use std::collections::HashMap;
 use std::fmt::Debug;
 use std::marker::PhantomData;
@@ -541,10 +542,15 @@ impl ExternalLayerProvider for NFDIDataProvider {
 impl LayerCollectionProvider for NFDIDataProvider {
     async fn collection_items(
         &self,
-        _collection: &LayerCollectionId,
+        collection: &LayerCollectionId,
         _options: Validated<LayerCollectionListOptions>,
     ) -> Result<Vec<CollectionItem>> {
-        // TODO: check collection id
+        ensure!(
+            *collection == self.root_collection_id().await?,
+            error::UnknownLayerCollectionId {
+                id: collection.clone()
+            }
+        );
 
         let mut project_stub = self.project_stub.clone();
 

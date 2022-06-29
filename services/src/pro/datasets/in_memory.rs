@@ -542,10 +542,15 @@ impl UploadDb<UserSession> for ProHashMapDatasetDb {
 impl LayerCollectionProvider for ProHashMapDatasetDb {
     async fn collection_items(
         &self,
-        _collection: &LayerCollectionId,
+        collection: &LayerCollectionId,
         options: Validated<LayerCollectionListOptions>,
     ) -> Result<Vec<CollectionItem>> {
-        // TODO: check collection id
+        ensure!(
+            *collection == self.root_collection_id().await?,
+            error::UnknownLayerCollectionId {
+                id: collection.clone()
+            }
+        );
 
         let options = options.user_input;
 

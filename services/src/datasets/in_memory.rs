@@ -23,6 +23,7 @@ use geoengine_operators::source::{
     GdalSourceParameters, OgrSource, OgrSourceDataset, OgrSourceParameters,
 };
 use geoengine_operators::{mock::MockDatasetDataSourceLoadingInfo, source::GdalMetaDataStatic};
+use snafu::ensure;
 use std::collections::HashMap;
 use std::str::FromStr;
 
@@ -401,10 +402,15 @@ impl UploadDb<SimpleSession> for HashMapDatasetDb {
 impl LayerCollectionProvider for HashMapDatasetDb {
     async fn collection_items(
         &self,
-        _collection: &LayerCollectionId,
+        collection: &LayerCollectionId,
         options: Validated<LayerCollectionListOptions>,
     ) -> Result<Vec<CollectionItem>> {
-        // TODO: check collection id
+        ensure!(
+            *collection == self.root_collection_id().await?,
+            error::UnknownLayerCollectionId {
+                id: collection.clone()
+            }
+        );
 
         let options = options.user_input;
 

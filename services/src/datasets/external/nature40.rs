@@ -37,6 +37,7 @@ use quick_xml::events::Event;
 use quick_xml::Reader;
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
+use snafu::ensure;
 use snafu::ResultExt;
 use url::Url;
 
@@ -156,10 +157,15 @@ impl ExternalLayerProvider for Nature40DataProvider {
 impl LayerCollectionProvider for Nature40DataProvider {
     async fn collection_items(
         &self,
-        _collection: &LayerCollectionId,
+        collection: &LayerCollectionId,
         _options: Validated<LayerCollectionListOptions>,
     ) -> Result<Vec<CollectionItem>> {
-        // TODO: check collection id
+        ensure!(
+            *collection == self.root_collection_id().await?,
+            error::UnknownLayerCollectionId {
+                id: collection.clone()
+            }
+        );
 
         // TODO: query the other dbs as well
         let raster_dbs = self.load_raster_dbs().await?;

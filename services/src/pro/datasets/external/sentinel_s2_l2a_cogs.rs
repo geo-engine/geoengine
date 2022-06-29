@@ -34,7 +34,7 @@ use geoengine_operators::source::{
 use log::debug;
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
-use snafu::ResultExt;
+use snafu::{ensure, ResultExt};
 use std::collections::HashMap;
 use std::convert::TryInto;
 use std::fmt::Debug;
@@ -227,10 +227,15 @@ impl ExternalLayerProvider for SentinelS2L2aCogsDataProvider {
 impl LayerCollectionProvider for SentinelS2L2aCogsDataProvider {
     async fn collection_items(
         &self,
-        _collection: &LayerCollectionId,
+        collection: &LayerCollectionId,
         _options: Validated<LayerCollectionListOptions>,
     ) -> Result<Vec<CollectionItem>> {
-        // TODO: check collection id
+        ensure!(
+            *collection == self.root_collection_id().await?,
+            error::UnknownLayerCollectionId {
+                id: collection.clone()
+            }
+        );
 
         // TODO: options
         let mut x = self
