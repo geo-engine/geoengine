@@ -323,31 +323,25 @@ impl DatasetProvider<UserSession> for ProHashMapDatasetDb {
         dataset: &DatasetId,
     ) -> Result<ProvenanceOutput> {
         let backend = self.backend.read().await;
-        match dataset {
-            DatasetId::Internal { dataset_id: _ } => {
-                ensure!(
-                    backend
-                        .dataset_permissions
-                        .iter()
-                        .any(|p| session.roles.contains(&p.role)),
-                    error::DatasetPermissionDenied {
-                        dataset: dataset.clone(),
-                    }
-                );
 
-                backend
-                    .datasets
-                    .get(dataset)
-                    .map(|d| ProvenanceOutput {
-                        dataset: d.id.clone(),
-                        provenance: d.provenance.clone(),
-                    })
-                    .ok_or(error::Error::UnknownDatasetId)
+        ensure!(
+            backend
+                .dataset_permissions
+                .iter()
+                .any(|p| session.roles.contains(&p.role)),
+            error::DatasetPermissionDenied {
+                dataset: dataset.clone(),
             }
-            DatasetId::External(_id) => {
-                todo!() // throw error
-            }
-        }
+        );
+
+        backend
+            .datasets
+            .get(dataset)
+            .map(|d| ProvenanceOutput {
+                dataset: d.id.clone(),
+                provenance: d.provenance.clone(),
+            })
+            .ok_or(error::Error::UnknownDatasetId)
     }
 }
 

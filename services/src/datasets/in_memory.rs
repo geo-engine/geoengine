@@ -259,23 +259,17 @@ impl DatasetProvider<SimpleSession> for HashMapDatasetDb {
         _session: &SimpleSession,
         dataset: &DatasetId,
     ) -> Result<ProvenanceOutput> {
-        match dataset {
-            DatasetId::Internal { dataset_id: _ } => self
-                .backend
-                .read()
-                .await
-                .datasets
-                .iter()
-                .find(|d| d.id == *dataset)
-                .map(|d| ProvenanceOutput {
-                    dataset: d.id.clone(),
-                    provenance: d.provenance.clone(),
-                })
-                .ok_or(error::Error::UnknownDatasetId),
-            DatasetId::External(_id) => {
-                todo!() // TODO: throw error
-            }
-        }
+        self.backend
+            .read()
+            .await
+            .datasets
+            .iter()
+            .find(|d| d.id == *dataset)
+            .map(|d| ProvenanceOutput {
+                dataset: d.id.clone(),
+                provenance: d.provenance.clone(),
+            })
+            .ok_or(error::Error::UnknownDatasetId)
     }
 }
 
