@@ -1,14 +1,16 @@
 use crate::datasets::listing::ProvenanceOutput;
-use crate::error::Error;
 use crate::layers::external::ExternalLayerProvider;
 use crate::layers::external::ExternalLayerProviderDefinition;
 use crate::layers::layer::CollectionItem;
 use crate::layers::layer::Layer;
 use crate::layers::layer::LayerCollectionListOptions;
+use crate::layers::layer::LayerListing;
+use crate::layers::layer::ProviderLayerId;
 use crate::layers::listing::LayerCollectionId;
 use crate::layers::listing::LayerCollectionProvider;
 use crate::layers::listing::LayerId;
 use crate::projects::{RasterSymbology, Symbology};
+use crate::workflows::workflow::Workflow;
 use crate::{datasets::listing::DatasetListing, util::user_input::Validated};
 use async_trait::async_trait;
 use gdal::{DatasetOptions, GdalOpenFlags};
@@ -21,7 +23,11 @@ use geoengine_datatypes::primitives::{
 };
 use geoengine_datatypes::raster::{GdalGeoTransform, RasterDataType};
 use geoengine_datatypes::spatial_reference::SpatialReference;
+use geoengine_operators::engine::RasterOperator;
+use geoengine_operators::engine::TypedOperator;
 use geoengine_operators::engine::TypedResultDescriptor;
+use geoengine_operators::source::GdalSource;
+use geoengine_operators::source::GdalSourceParameters;
 use geoengine_operators::source::{
     FileNotFoundHandling, GdalDatasetGeoTransform, GdalDatasetParameters,
     GdalLoadingInfoTemporalSlice, GdalMetaDataList, GdalMetadataNetCdfCf,
@@ -824,58 +830,6 @@ enum Metadata {
 
 #[async_trait]
 impl ExternalLayerProvider for NetCdfCfDataProvider {
-    // async fn list(
-    //     &self,
-    //     options: Validated<DatasetListOptions>,
-    // ) -> crate::error::Result<Vec<DatasetListing>> {
-    //     // TODO: user right management
-    //     // TODO: options
-
-    //     let mut dir = tokio::fs::read_dir(&self.path).await?;
-
-    //     let mut datasets = vec![];
-    //     while let Some(entry) = dir.next_entry().await? {
-    //         if !entry.path().is_file() {
-    //             continue;
-    //         }
-
-    //         let provider_path = self.path.clone();
-    //         let overviews_path = self.overviews.clone();
-    //         let relative_path = if let Ok(p) = entry.path().strip_prefix(&provider_path) {
-    //             p.to_path_buf()
-    //         } else {
-    //             // cannot actually happen since `entry` is listed from `provider_path`
-    //             continue;
-    //         };
-
-    //         let listing = tokio::task::spawn_blocking(move || {
-    //             Self::listing_from_netcdf(
-    //                 NETCDF_CF_PROVIDER_ID,
-    //                 &provider_path,
-    //                 Some(&overviews_path),
-    //                 &relative_path,
-    //                 false,
-    //             )
-    //         })
-    //         .await?;
-
-    //         match listing {
-    //             Ok(listing) => datasets.extend(listing),
-    //             Err(e) => debug!("Failed to list dataset: {}", e),
-    //         }
-    //     }
-
-    //     // TODO: react to filter and sort options
-    //     // TODO: don't compute everything and filter then
-    //     let datasets = datasets
-    //         .into_iter()
-    //         .skip(options.user_input.offset as usize)
-    //         .take(options.user_input.limit as usize)
-    //         .collect();
-
-    //     Ok(datasets)
-    // }
-
     async fn provenance(&self, dataset: &DatasetId) -> crate::error::Result<ProvenanceOutput> {
         Ok(ProvenanceOutput {
             dataset: dataset.clone(),
@@ -894,17 +848,100 @@ impl LayerCollectionProvider for NetCdfCfDataProvider {
     async fn collection_items(
         &self,
         _collection: &LayerCollectionId,
-        _options: Validated<LayerCollectionListOptions>,
+        options: Validated<LayerCollectionListOptions>,
     ) -> crate::error::Result<Vec<CollectionItem>> {
-        Err(Error::NotYetImplemented)
+        // TODO: check collection id
+
+        let mut dir = tokio::fs::read_dir(&self.path).await?;
+
+        let mut datasets = vec![];
+        while let Some(entry) = dir.next_entry().await? {
+            if !entry.path().is_file() {
+                continue;
+            }
+
+            let provider_path = self.path.clone();
+            let overviews_path = self.overviews.clone();
+            let relative_path = if let Ok(p) = entry.path().strip_prefix(&provider_path) {
+                p.to_path_buf()
+            } else {
+                // cannot actually happen since `entry` is listed from `provider_path`
+                continue;
+            };
+
+            let listing = tokio::task::spawn_blocking(move || {
+                Self::listing_from_netcdf(
+                    NETCDF_CF_PROVIDER_ID,
+                    &provider_path,
+                    Some(&overviews_path),
+                    &relative_path,
+                    false,
+                )
+                .map(|l| {
+                    l.into_iter()
+                        .map(|l| {
+                            CollectionItem::Layer(LayerListing {
+                                id: crate::layers::layer::ProviderLayerId {
+                                    provider: NETCDF_CF_PROVIDER_ID,
+                                    item: LayerId(
+                                        l.id.external()
+                                            .expect("listing produces only external datasets")
+                                            .dataset_id,
+                                    ),
+                                },
+                                name: l.name,
+                                description: l.description,
+                            })
+                        })
+                        .collect::<Vec<_>>()
+                })
+            })
+            .await?;
+
+            match listing {
+                Ok(listing) => datasets.extend(listing),
+                Err(e) => debug!("Failed to list dataset: {}", e),
+            }
+        }
+
+        // TODO: react to filter and sort options
+        // TODO: don't compute everything and filter then
+        let datasets = datasets
+            .into_iter()
+            .skip(options.user_input.offset as usize)
+            .take(options.user_input.limit as usize)
+            .collect();
+
+        Ok(datasets)
     }
 
     async fn root_collection_id(&self) -> crate::error::Result<LayerCollectionId> {
-        Err(Error::NotYetImplemented)
+        Ok(LayerCollectionId("root".to_string()))
     }
 
-    async fn get_layer(&self, _id: &LayerId) -> crate::error::Result<Layer> {
-        Err(Error::NotYetImplemented)
+    async fn get_layer(&self, id: &LayerId) -> crate::error::Result<Layer> {
+        Ok(Layer {
+            id: ProviderLayerId {
+                provider: NETCDF_CF_PROVIDER_ID,
+                item: id.clone(),
+            },
+            name: "".to_string(),        // TODO: get from file or overview
+            description: "".to_string(), // TODO: get from file or overview
+            workflow: Workflow {
+                operator: TypedOperator::Raster(
+                    GdalSource {
+                        params: GdalSourceParameters {
+                            dataset: DatasetId::External(ExternalDatasetId {
+                                provider_id: NETCDF_CF_PROVIDER_ID,
+                                dataset_id: id.0.clone(),
+                            }),
+                        },
+                    }
+                    .boxed(),
+                ),
+            },
+            symbology: None,
+        })
     }
 }
 
