@@ -127,6 +127,8 @@ trait ToNetCdfSubgroup {
 impl<'a> ToNetCdfSubgroup for MdGroup<'a> {
     fn to_net_cdf_subgroup(&self, compute_stats: bool) -> Result<NetCdfGroup> {
         let name = self.name.clone();
+        debug!("to_net_cdf_subgroup for {name} with stats={compute_stats}");
+
         let title = self
             .attribute_as_string("standard_name")
             .unwrap_or_default();
