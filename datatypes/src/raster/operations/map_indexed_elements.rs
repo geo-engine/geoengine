@@ -105,7 +105,7 @@ where
         } = self;
         let out_grid = inner_grid.map_indexed_elements(map_fn);
 
-        MaskedGrid::new(out_grid, validity_mask).expect("Createion failed before.")
+        MaskedGrid::new(out_grid, validity_mask).expect("creation failed before.")
     }
 }
 
@@ -144,10 +144,10 @@ where
             .collect();
 
         MaskedGrid::new(
-            Grid::new(data.shape, out_data).expect("Grid createion failed before"),
+            Grid::new(data.shape, out_data).expect("Grid creation failed before"),
             validity_mask,
         )
-        .expect("Grid createion failed before")
+        .expect("Grid creation failed before")
     }
 }
 
@@ -199,10 +199,10 @@ where
             .unzip();
 
         MaskedGrid::new(
-            Grid::new(self.shape.clone(), out_data).expect("Grid createion failed before"),
-            Grid::new(self.shape, validity_mask).expect("Grid createion failed before"),
+            Grid::new(self.shape.clone(), out_data).expect("Grid creation failed before"),
+            Grid::new(self.shape, validity_mask).expect("Grid creation failed before"),
         )
-        .expect("Grid createion failed before")
+        .expect("Grid creation failed before")
     }
 }
 
@@ -379,7 +379,7 @@ where
         } = self;
         let out_grid = inner_grid.map_indexed_elements_parallel(map_fn);
 
-        MaskedGrid::new(out_grid, validity_mask).expect("Createion failed before.")
+        MaskedGrid::new(out_grid, validity_mask).expect("creation failed before.")
     }
 }
 
@@ -428,7 +428,7 @@ where
             Grid::new(data.shape, out_data).expect("Grid creation failed before"),
             validity_mask,
         )
-        .expect("Grid createion failed before")
+        .expect("Grid creation failed before")
     }
 }
 
@@ -481,10 +481,10 @@ where
             .unzip();
 
         MaskedGrid::new(
-            Grid::new(self.shape.clone(), out_data).expect("Grid createion failed before"),
-            Grid::new(self.shape, validity_mask).expect("Grid createion failed before"),
+            Grid::new(self.shape.clone(), out_data).expect("Grid creation failed before"),
+            Grid::new(self.shape, validity_mask).expect("Grid creation failed before"),
         )
-        .expect("Grid createion failed before")
+        .expect("Grid creation failed before")
     }
 }
 
