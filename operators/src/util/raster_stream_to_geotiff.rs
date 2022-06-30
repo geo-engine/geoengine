@@ -207,7 +207,7 @@ impl<P: Pixel + GdalType> GdalDatasetWriter<P> {
     }
 
     fn write_tile(&self, tile: RasterTile2D<P>) -> Result<()> {
-        // FIXME: transform masks to no-data values if the gdal_tiff_metadata no-data value is set. This might need to move somewhere else. Also: write the mask if no no-data value is set.
+        // TODO: transform masks to no-data values if the gdal_tiff_metadata no-data value is set. This might need to move somewhere else. Also: write the mask if no no-data value is set.
         let tile = if let Some(replace_no_data_value) = self.gdal_tiff_metadata.no_data_value {
             let replace_no_data_value_p: P = P::from_(replace_no_data_value);
             let map_fn = |pixel_option| {
