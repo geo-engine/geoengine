@@ -123,7 +123,6 @@ where
     params: InterpolationParams,
     tiling_specification: TilingSpecification,
     interpolation: PhantomData<I>,
-    _phantom_data: PhantomData<P>,
 }
 
 impl<Q, P, I> InterploationProcessor<Q, P, I>
@@ -142,7 +141,6 @@ where
             params,
             tiling_specification,
             interpolation: PhantomData,
-            _phantom_data: PhantomData,
         }
     }
 }

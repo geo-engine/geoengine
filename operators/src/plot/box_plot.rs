@@ -38,7 +38,6 @@ pub struct BoxPlotParams {
     /// Name of the (numeric) attributes to compute the box plots on.
     #[serde(default)]
     pub column_names: Vec<String>,
-
 }
 
 #[typetag::serde]

@@ -488,7 +488,7 @@ impl InitializedRasterOperator for InitializedExpression {
                     .boxed()
                 )
             }
-            // TODO: the zip method in the processor allows only a limited number of arrays. Use idx iterator and get_at_ instead?
+
             7 => {
                 let [a, b, c, d, e, f, g] =
                     <[_; 7]>::try_from(query_processors).expect("len previously checked");

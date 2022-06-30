@@ -43,7 +43,7 @@ where
         }
     }
 
-    /// Transforms `self`into a `MaskedGrid` 
+    /// Transforms `self`into a `MaskedGrid`
     pub fn into_materialized_grid(self) -> MaskedGrid<D, T> {
         match self {
             GridOrEmpty::Grid(g) => g,
