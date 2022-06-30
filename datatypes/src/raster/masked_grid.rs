@@ -27,11 +27,11 @@ where
     D: GridSize + PartialEq + Clone,
     T: Clone,
 {
-    /// Creates a new `Grid`
+    /// Creates a new `MaskedGrid`
     ///
     /// # Errors
     ///
-    /// This constructor fails if the data container's capacity is different from the grid's dimension number
+    /// This constructor fails if the data container's capacity is different from the grid's dimension number or if data and validity mask have different shapes.
     ///
     pub fn new(data: Grid<D, T>, validity_mask: Grid<D, bool>) -> Result<Self> {
         ensure!(
