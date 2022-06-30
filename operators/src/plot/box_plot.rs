@@ -38,9 +38,7 @@ pub struct BoxPlotParams {
     /// Name of the (numeric) attributes to compute the box plots on.
     #[serde(default)]
     pub column_names: Vec<String>,
-    // For rasters, we have the option to include no-data values
-    // #[serde(default)]
-    // pub include_no_data: bool,
+
 }
 
 #[typetag::serde]
