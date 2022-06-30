@@ -51,7 +51,7 @@ where
         }
     }
 
-    /// Creates an ``EmptyGrid with the same shape and type.
+    /// Creates an `EmptyGrid` with the same shape and type.
     pub fn matching_empty_grid(&self) -> EmptyGrid<D, T> {
         match self {
             GridOrEmpty::Grid(g) => EmptyGrid::new(g.shape().clone()),

@@ -722,7 +722,6 @@ mod tests {
     }
 
     #[test]
-    #[allow(clippy::eq_op)]
     fn nan_equals() {
         let collection = {
             let mut builder = MultiPointCollection::builder();
@@ -753,7 +752,6 @@ mod tests {
     }
 
     #[test]
-    #[allow(clippy::eq_op)]
     fn null_equals() {
         let collection = {
             let mut builder = MultiPointCollection::builder();

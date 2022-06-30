@@ -9,6 +9,7 @@ use geoengine_datatypes::{
         GridOrEmpty2D, GridShape2D, GridShapeAccess, MapElementsParallel, Pixel, RasterTile2D,
         UpdateIndexedElementsParallel,
     },
+    util::helpers::equals_or_both_nan,
 };
 use libloading::Symbol;
 use num_traits::AsPrimitive;
@@ -167,8 +168,6 @@ where
     }
 
     #[inline]
-    #[allow(clippy::eq_op)]
-    #[allow(clippy::float_cmp)]
     fn compute_expression(
         raster: Self::Tuple,
         program: &LinkedExpression,
@@ -192,8 +191,7 @@ where
 
             let result_t = TO::from_(result);
 
-            let out_is_no_data =
-                result_t == out_no_data || (out_no_data != out_no_data && result != result);
+            let out_is_no_data = equals_or_both_nan(&result_t, &out_no_data);
 
             if out_is_no_data {
                 None
@@ -255,8 +253,6 @@ where
     }
 
     #[inline]
-    #[allow(clippy::eq_op)]
-    #[allow(clippy::float_cmp)]
     fn compute_expression(
         rasters: Self::Tuple,
         program: &LinkedExpression,
@@ -293,8 +289,7 @@ where
             );
             let result_t = TO::from_(result);
 
-            let out_is_no_data =
-                result_t == out_no_data || (out_no_data != out_no_data && result != result);
+            let out_is_no_data = equals_or_both_nan(&result_t, &out_no_data);
 
             if out_is_no_data {
                 None
@@ -399,8 +394,6 @@ macro_rules! impl_expression_tuple_processor {
                 )
             }
 
-            #[allow(clippy::eq_op)]
-            #[allow(clippy::float_cmp)]
             fn compute_expression(
                 rasters: Self::Tuple,
                 program: &LinkedExpression,
@@ -440,7 +433,7 @@ macro_rules! impl_expression_tuple_processor {
 
                     let result_t = TO::from_(result);
 
-                    let out_is_no_data = result_t == out_no_data || (out_no_data != out_no_data && result != result);
+                    let out_is_no_data =  equals_or_both_nan(&result_t, &out_no_data);
 
                 if out_is_no_data {
                     None

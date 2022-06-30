@@ -1,8 +1,8 @@
 use super::masked_grid::MaskedGrid;
 use super::{
     grid_or_empty::GridOrEmpty, GeoTransform, GeoTransformAccess, GridBounds, GridIdx2D,
-    GridIndexAccess, GridShape, GridShape2D, GridShape3D, GridShapeAccess, GridSize, NoDataValue,
-    Raster, TileInformation,
+    GridIndexAccess, GridShape, GridShape2D, GridShape3D, GridShapeAccess, GridSize, Raster,
+    TileInformation,
 };
 use super::{GridIndexAccessMut, RasterProperties};
 use crate::primitives::{
@@ -249,8 +249,7 @@ where
     D: GridSize + GridBounds + Clone,
     T: Pixel,
     G: GridIndexAccess<D::IndexArray, T>,
-    Self:
-        SpatialBounded + NoDataValue<NoDataType = T> + GridShapeAccess<ShapeArray = D::ShapeArray>,
+    Self: SpatialBounded + GridShapeAccess<ShapeArray = D::ShapeArray>,
 {
     type DataContainer = G;
 

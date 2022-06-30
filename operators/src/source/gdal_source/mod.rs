@@ -26,6 +26,7 @@ use geoengine_datatypes::raster::{
     RasterDataType, RasterProperties, RasterPropertiesEntry, RasterPropertiesEntryType,
     RasterPropertiesKey, RasterTile2D, TilingStrategy,
 };
+use geoengine_datatypes::util::helpers::equals_or_both_nan;
 use geoengine_datatypes::util::test::TestDefault;
 use geoengine_datatypes::{dataset::DatasetId, raster::TileInformation};
 use geoengine_datatypes::{
@@ -620,7 +621,6 @@ impl InitializedRasterOperator for InitializedGdalSourceOperator {
 
 /// This method reads the data for a single grid with a specified size from the GDAL dataset.
 /// It fails if the tile is not within the dataset.
-#[allow(clippy::eq_op)]
 #[allow(clippy::float_cmp)]
 fn read_grid_from_raster<
     T,
@@ -652,7 +652,7 @@ where
 
         // map no_data value to None. Also check if no_data value is NAN and the raster value us also NAN.
         if let Some(no_data) = no_data_value {
-            if no_data == e || (no_data != no_data && e != e) {
+            if equals_or_both_nan(&e, &no_data) {
                 return None;
             };
         };

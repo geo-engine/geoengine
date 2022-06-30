@@ -818,7 +818,6 @@ mod tests {
         );
     }
 
-    #[allow(clippy::eq_op)]
     #[tokio::test]
     async fn it_loads() {
         let mut server = Server::run();

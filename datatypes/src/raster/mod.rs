@@ -29,9 +29,7 @@ pub use self::raster_tile::{
 pub use self::tiling::{TileInformation, TilingSpecification, TilingStrategy};
 pub use self::typed_raster_conversion::TypedRasterConversion;
 pub use self::typed_raster_tile::{TypedRasterTile2D, TypedRasterTile3D};
-pub use self::{
-    grid_traits::ChangeGridBounds, grid_traits::GridShapeAccess, grid_traits::NoDataValue,
-};
+pub use self::{grid_traits::ChangeGridBounds, grid_traits::GridShapeAccess};
 use super::primitives::{SpatialBounded, TemporalBounded};
 use crate::primitives::Coordinate2D;
 use crate::util::Result;
@@ -66,11 +64,7 @@ mod typed_raster_conversion;
 mod typed_raster_tile;
 
 pub trait Raster<D: GridSize, T: Pixel>:
-    SpatialBounded
-    + TemporalBounded
-    + NoDataValue<NoDataType = T>
-    + GridShapeAccess<ShapeArray = D::ShapeArray>
-    + GeoTransformAccess
+    SpatialBounded + TemporalBounded + GridShapeAccess<ShapeArray = D::ShapeArray> + GeoTransformAccess
 {
     type DataContainer;
     /// returns a reference to the data container used to hold the pixels / cells of the raster
