@@ -102,20 +102,11 @@ where
     }
 }
 
-impl<D1, D2, T, A, I> GridBlit<MaskedGrid<D1, T>, T> for MaskedGrid<D2, T>
+impl<D1, D2, T, I> GridBlit<MaskedGrid<D1, T>, T> for MaskedGrid<D2, T>
 where
-    D1: GridSize<ShapeArray = A>
-        + GridBounds<IndexArray = I>
-        + GridSpaceToLinearSpace<IndexArray = I>
-        + Clone
-        + PartialEq,
-    D2: GridSize<ShapeArray = A>
-        + GridBounds<IndexArray = I>
-        + GridSpaceToLinearSpace<IndexArray = I>
-        + Clone
-        + PartialEq
-        + PartialEq,
-    T: Copy + Sized + Default,
+    D1: GridSpaceToLinearSpace<IndexArray = I> + GridBounds + PartialEq + Clone,
+    D2: GridSpaceToLinearSpace<IndexArray = I> + GridBounds,
+    T: Copy,
     Grid<D2, T>: GridBlit<Grid<D1, T>, T>,
     Grid<D2, bool>: GridBlit<Grid<D1, bool>, bool>,
 {
@@ -126,20 +117,11 @@ where
     }
 }
 
-impl<D1, D2, T, A, I> GridBlit<EmptyGrid<D1, T>, T> for MaskedGrid<D2, T>
+impl<D1, D2, T, I> GridBlit<EmptyGrid<D1, T>, T> for MaskedGrid<D2, T>
 where
-    D1: GridSize<ShapeArray = A>
-        + GridBounds<IndexArray = I>
-        + GridSpaceToLinearSpace<IndexArray = I>
-        + Clone
-        + PartialEq,
-    D2: GridSize<ShapeArray = A>
-        + GridBounds<IndexArray = I>
-        + GridSpaceToLinearSpace<IndexArray = I>
-        + Clone
-        + PartialEq
-        + PartialEq,
-    T: Copy + Sized + Default,
+    D1: GridSpaceToLinearSpace<IndexArray = I> + GridBounds,
+    D2: GridSpaceToLinearSpace<IndexArray = I> + GridBounds + PartialEq + Clone,
+    T: Copy,
     Grid<D2, bool>: GridBlit<EmptyGrid<D1, T>, T>,
     Grid<D2, bool>: GridBlit<Grid<D1, bool>, bool>,
 {
@@ -148,19 +130,11 @@ where
     }
 }
 
-impl<D1, D2, T, A, I> GridBlit<Grid<D1, T>, T> for MaskedGrid<D2, T>
+impl<D1, D2, T, I> GridBlit<Grid<D1, T>, T> for MaskedGrid<D2, T>
 where
-    D1: GridSize<ShapeArray = A>
-        + GridBounds<IndexArray = I>
-        + GridSpaceToLinearSpace<IndexArray = I>
-        + Clone
-        + PartialEq,
-    D2: GridSize<ShapeArray = A>
-        + GridBounds<IndexArray = I>
-        + GridSpaceToLinearSpace<IndexArray = I>
-        + Clone
-        + PartialEq,
-    T: Copy + Sized + Default,
+    D1: GridSpaceToLinearSpace<IndexArray = I> + GridBounds + Clone,
+    D2: GridSpaceToLinearSpace<IndexArray = I> + GridBounds + PartialEq + Clone,
+    T: Copy,
     Grid<D2, T>: GridBlit<Grid<D1, T>, T>,
     Grid<D2, bool>: GridBlit<Grid<D1, bool>, bool>,
 {
@@ -196,20 +170,12 @@ where
     }
 }
 
-impl<D1, D2, T, A, I> GridBlit<GridOrEmpty<D1, T>, T> for MaskedGrid<D2, T>
+impl<D1, D2, T, I> GridBlit<GridOrEmpty<D1, T>, T> for MaskedGrid<D2, T>
 where
-    D1: GridSize<ShapeArray = A>
-        + GridBounds<IndexArray = I>
-        + GridSpaceToLinearSpace<IndexArray = I>
-        + Clone
-        + PartialEq,
-    D2: GridSize<ShapeArray = A>
-        + GridBounds<IndexArray = I>
-        + GridSpaceToLinearSpace<IndexArray = I>
-        + Clone
-        + PartialEq,
-    I: Clone + AsRef<[isize]> + Into<GridIdx<I>>,
-    T: Copy + Sized + Default,
+    D1: GridSpaceToLinearSpace<IndexArray = I> + GridBounds<IndexArray = I> + PartialEq + Clone,
+    D2: GridSpaceToLinearSpace<IndexArray = I> + GridBounds<IndexArray = I> + PartialEq + Clone,
+    T: Copy + Default,
+    I: AsRef<[isize]> + Into<GridIdx<I>>,
     Self: GridBlit<MaskedGrid<D1, T>, T> + GridBlit<EmptyGrid<D1, T>, T>,
 {
     fn grid_blit_from(&mut self, other: &GridOrEmpty<D1, T>) {
@@ -220,20 +186,12 @@ where
     }
 }
 
-impl<D1, D2, T, A, I> GridBlit<GridOrEmpty<D1, T>, T> for GridOrEmpty<D2, T>
+impl<D1, D2, T, I> GridBlit<GridOrEmpty<D1, T>, T> for GridOrEmpty<D2, T>
 where
-    D1: GridSize<ShapeArray = A>
-        + GridBounds<IndexArray = I>
-        + GridSpaceToLinearSpace<IndexArray = I>
-        + Clone
-        + PartialEq,
-    D2: GridSize<ShapeArray = A>
-        + GridBounds<IndexArray = I>
-        + GridSpaceToLinearSpace<IndexArray = I>
-        + Clone
-        + PartialEq,
-    I: Clone + AsRef<[isize]> + Into<GridIdx<I>>,
-    T: Copy + Sized + Default,
+    D1: GridSpaceToLinearSpace<IndexArray = I> + GridBounds<IndexArray = I> + PartialEq + Clone,
+    D2: GridSpaceToLinearSpace<IndexArray = I> + GridBounds<IndexArray = I> + PartialEq + Clone,
+    T: Copy + Default,
+    I: AsRef<[isize]> + Into<GridIdx<I>>,
     MaskedGrid<D2, T>: GridBlit<MaskedGrid<D1, T>, T> + GridBlit<EmptyGrid<D1, T>, T>,
 {
     fn grid_blit_from(&mut self, other: &GridOrEmpty<D1, T>) {
