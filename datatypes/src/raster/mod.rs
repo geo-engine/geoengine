@@ -30,9 +30,6 @@ pub use self::tiling::{TileInformation, TilingSpecification, TilingStrategy};
 pub use self::typed_raster_conversion::TypedRasterConversion;
 pub use self::typed_raster_tile::{TypedRasterTile2D, TypedRasterTile3D};
 pub use self::{grid_traits::ChangeGridBounds, grid_traits::GridShapeAccess};
-use super::primitives::{SpatialBounded, TemporalBounded};
-use crate::primitives::Coordinate2D;
-use crate::util::Result;
 pub use masked_grid::{MaskedGrid, MaskedGrid1D, MaskedGrid2D, MaskedGrid3D};
 pub use operations::map_elements::{MapElements, MapElementsParallel};
 pub use operations::map_indexed_elements::{MapIndexedElements, MapIndexedElementsParallel};
@@ -43,6 +40,7 @@ pub use operations::update_indexed_elements::{
 pub use raster_properties::{
     RasterProperties, RasterPropertiesEntry, RasterPropertiesEntryType, RasterPropertiesKey,
 };
+pub use raster_traits::{CoordinatePixelAccess, GeoTransformAccess, Raster};
 
 mod data_type;
 mod empty_grid;
@@ -59,28 +57,7 @@ mod masked_grid;
 mod operations;
 mod raster_properties;
 mod raster_tile;
+mod raster_traits;
 mod tiling;
 mod typed_raster_conversion;
 mod typed_raster_tile;
-
-pub trait Raster<D: GridSize, T: Pixel>:
-    SpatialBounded + TemporalBounded + GridShapeAccess<ShapeArray = D::ShapeArray> + GeoTransformAccess
-{
-    type DataContainer;
-    /// returns a reference to the data container used to hold the pixels / cells of the raster
-    fn data_container(&self) -> &Self::DataContainer;
-}
-
-pub trait GeoTransformAccess {
-    /// returns a reference to the geo transform describing the origin of the raster and the pixel size
-    fn geo_transform(&self) -> GeoTransform;
-}
-
-pub trait CoordinatePixelAccess<P>
-where
-    P: Pixel,
-{
-    fn pixel_value_at_coord(&self, coordinate: Coordinate2D) -> Result<Option<P>>;
-
-    fn pixel_value_at_coord_unchecked(&self, coordinate: Coordinate2D) -> Option<P>;
-}

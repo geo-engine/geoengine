@@ -1,17 +1,14 @@
-use std::ops::{Add, Index};
-
-use num_traits::Zero;
-use serde::{Deserialize, Serialize};
-use snafu::ensure;
-
-use crate::error;
-use crate::util::Result;
-
 use super::{
     grid_traits::{ChangeGridBounds, GridShapeAccess},
     GridBoundingBox, GridBounds, GridContains, GridIdx, GridIdx2D, GridIndexAccess,
     GridIndexAccessMut, GridSize, GridSpaceToLinearSpace,
 };
+use crate::error;
+use crate::util::Result;
+use num_traits::Zero;
+use serde::{Deserialize, Serialize};
+use snafu::ensure;
+use std::ops::Add;
 
 /// An `GridShape` describes the shape of an n-dimensional array by storing the size of each axis.
 #[derive(PartialEq, Debug, Copy, Clone, Serialize, Deserialize)]
@@ -482,14 +479,6 @@ where
 
     fn set_grid_bounds(self, bounds: GridBoundingBox<I>) -> Result<Self::Output> {
         Grid::new(bounds, self.data)
-    }
-}
-
-impl<D, T> Index<usize> for Grid<D, T> {
-    type Output = T;
-
-    fn index(&self, index: usize) -> &Self::Output {
-        &self.data[index]
     }
 }
 
