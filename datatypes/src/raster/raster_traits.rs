@@ -1,8 +1,8 @@
+use super::{BaseTile, GeoTransform, GridIdx2D, GridIndexAccess, GridShapeAccess, GridSize, Pixel};
 use crate::{
     primitives::{Coordinate2D, SpatialBounded, TemporalBounded},
     util::Result,
 };
-use super::{BaseTile, GeoTransform, GridIdx2D, GridIndexAccess, GridShapeAccess, GridSize, Pixel};
 
 pub trait Raster<D: GridSize, T: Pixel>:
     SpatialBounded + TemporalBounded + GridShapeAccess<ShapeArray = D::ShapeArray> + GeoTransformAccess
