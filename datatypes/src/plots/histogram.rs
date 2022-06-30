@@ -213,13 +213,17 @@ impl Histogram {
             if let Some(p) = pixel_option {
                 self.handle_data_item(p.as_(), false);
             } else {
-                self.handle_data_item(0., true); // TODO: remove not needed zero
+                self.inc_nodata_count();
             }
         });
     }
 
     pub fn add_nodata_batch(&mut self, nodata_count: u64) {
         self.nodata_count += nodata_count;
+    }
+
+    pub fn inc_nodata_count(&mut self) {
+        self.nodata_count += 1;
     }
 
     fn handle_data_item(&mut self, value: f64, is_null: bool) {
