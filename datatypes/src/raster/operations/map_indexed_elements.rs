@@ -425,7 +425,7 @@ where
             });
 
         MaskedGrid::new(
-            Grid::new(data.shape, out_data).expect("Grid createion failed before"),
+            Grid::new(data.shape, out_data).expect("Grid creation failed before"),
             validity_mask,
         )
         .expect("Grid createion failed before")
