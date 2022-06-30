@@ -85,7 +85,7 @@ impl<T> TemporalMeanTileAccu<T> {
                 self.value_grid.update_indexed_elements(map_fn); // TODO: make this patallel?
             }
 
-            GridOrEmpty::Grid(_) => {
+            GridOrEmpty::Grid(g) => {
                 let map_fn = |lin_idx: usize, acc_values_option: Option<(f64, u64)>| {
                     let new_value_option = in_tile_grid.get_at_grid_index_unchecked(lin_idx);
                     match (acc_values_option, new_value_option) {
@@ -105,7 +105,7 @@ impl<T> TemporalMeanTileAccu<T> {
                     }
                 };
 
-                self.value_grid.update_indexed_elements(map_fn); // TODO: make this patallel?
+                g.update_indexed_elements(map_fn); // TODO: make this patallel?
             }
         }
 
