@@ -21,7 +21,6 @@ pub type GridOrEmpty3D<T> = GridOrEmpty<GridShape3D, T>;
 pub enum GridOrEmpty<D, T> {
     Grid(MaskedGrid<D, T>),
     Empty(EmptyGrid<D, T>),
-    // MaskedGrid(MaskedGrid<D,T>),
 }
 
 impl<D, T> GridOrEmpty<D, T>
@@ -44,6 +43,7 @@ where
         }
     }
 
+    /// Transforms `self`into a `MaskedGrid` 
     pub fn into_materialized_grid(self) -> MaskedGrid<D, T> {
         match self {
             GridOrEmpty::Grid(g) => g,
@@ -51,13 +51,7 @@ where
         }
     }
 
-    pub fn into_materialized_masked_grid(self) -> MaskedGrid<D, T> {
-        match self {
-            GridOrEmpty::Grid(g) => g,
-            GridOrEmpty::Empty(e) => MaskedGrid::from(e),
-        }
-    }
-
+    /// Creates an ``EmptyGrid with the same shape and type.
     pub fn matching_empty_grid(&self) -> EmptyGrid<D, T> {
         match self {
             GridOrEmpty::Grid(g) => EmptyGrid::new(g.shape().clone()),
