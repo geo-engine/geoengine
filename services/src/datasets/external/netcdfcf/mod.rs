@@ -455,7 +455,7 @@ impl NetCdfCfDataProvider {
 
         let params = GdalDatasetParameters {
             file_path: gdal_path.into(),
-            rasterband_channel: 0, // we calculate offsets in our source
+            rasterband_channel: 0, // we calculate offsets below
             geo_transform,
             file_not_found_handling: FileNotFoundHandling::Error,
             no_data_value: result_descriptor.no_data_value,
@@ -480,7 +480,8 @@ impl NetCdfCfDataProvider {
                 for (i, time_instance) in time_stamps.iter().enumerate() {
                     let mut params = params.clone();
 
-                    params.rasterband_channel = i + 1;
+                    params.rasterband_channel =
+                        dataset_id.entity as usize * dimensions.time + i + 1;
 
                     params_list.push(GdalLoadingInfoTemporalSlice {
                         time: TimeInterval::new_instant(*time_instance)
@@ -699,7 +700,7 @@ fn parse_date(input: &str) -> Result<DateTime> {
     })
 }
 
-fn parse_time_step(input: &str) -> Result<TimeStep> {
+fn parse_time_step(input: &str) -> Result<Option<TimeStep>> {
     let duration_str = if let Some(duration_str) = input.strip_prefix('P') {
         duration_str
     } else {
@@ -713,14 +714,14 @@ fn parse_time_step(input: &str) -> Result<TimeStep> {
         .context(error::TimeCoverageResolutionMustConsistsOnlyOfIntParts)?;
 
     if parts.iter().all(|digit| digit.is_zero()) {
-        return Err(NetCdfCf4DProviderError::TimeCoverageResolutionMustNotBeZero);
+        return Ok(None);
     }
 
     if parts.is_empty() {
         return Err(NetCdfCf4DProviderError::TimeCoverageResolutionPartsMustNotBeEmpty);
     }
 
-    Ok(match parts.as_slice() {
+    Ok(Some(match parts.as_slice() {
         [year, 0, 0, ..] => TimeStep {
             granularity: TimeGranularity::Years,
             step: *year,
@@ -735,24 +736,26 @@ fn parse_time_step(input: &str) -> Result<TimeStep> {
         },
         // TODO: fix format and parse other options
         _ => return Err(NetCdfCf4DProviderError::NotYetImplemented),
-    })
+    }))
 }
 
-fn parse_time_coverage(
-    start: &str,
-    end: &str,
-    resolution: &str,
-) -> Result<(TimeInstance, TimeInstance, TimeStep)> {
+fn parse_time_coverage(start: &str, end: &str, resolution: &str) -> Result<TimeCoverage> {
     // TODO: parse datetimes
 
     let start: TimeInstance = parse_date(start)?.into();
     let end: TimeInstance = parse_date(end)?.into();
-    let step = parse_time_step(resolution)?;
+    let step_option = parse_time_step(resolution)?;
 
-    // add one step to provide a right side boundary for the close-open interval
-    let end = (end + step).context(error::CannotDefineTimeCoverageEnd)?;
+    if let Some(step) = step_option {
+        // add one step to provide a right side boundary for the close-open interval
+        let end = (end + step).context(error::CannotDefineTimeCoverageEnd)?;
+        return Ok(TimeCoverage::Regular { start, end, step });
+    }
 
-    Ok((start, end, step))
+    // there is no step. Data must be valid for start.
+    Ok(TimeCoverage::List {
+        time_stamps: vec![start],
+    })
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -781,8 +784,12 @@ fn time_coverage(root_group: &MdGroup) -> Result<TimeCoverage> {
 
     // we can parse coverages starting with `P`,
     let time_p_res = parse_time_coverage(&start, &end, &step);
-    if let Ok((start, end, step)) = time_p_res {
-        return Ok(TimeCoverage::Regular { start, end, step });
+    if time_p_res.is_ok() {
+        debug!(
+            "Using time parsed from: start: {start}, end:{end}, step: {step} -> {:?} ",
+            time_p_res.as_ref().expect("was just checked with ok")
+        );
+        return time_p_res;
     }
 
     // something went wrong parsing a regular time as defined in the NetCDF CF standard.
@@ -971,21 +978,26 @@ mod tests {
     #[test]
     fn test_parse_time_coverage() {
         let result = parse_time_coverage("2010", "2020", "P0001-00-00").unwrap();
-        let expected = (
-            TimeInstance::from(DateTime::new_utc(2010, 1, 1, 0, 0, 0)),
-            TimeInstance::from(DateTime::new_utc(2021, 1, 1, 0, 0, 0)),
-            TimeStep {
+        let expected = TimeCoverage::Regular {
+            start: TimeInstance::from(DateTime::new_utc(2010, 1, 1, 0, 0, 0)),
+            end: TimeInstance::from(DateTime::new_utc(2021, 1, 1, 0, 0, 0)),
+            step: TimeStep {
                 granularity: TimeGranularity::Years,
                 step: 1,
             },
-        );
+        };
         assert_eq!(result, expected);
     }
 
     #[test]
     fn test_parse_zero_time_coverage() {
-        let result = parse_time_coverage("2010", "2020", "P0000-00-00");
-        assert!(result.is_err())
+        let result = parse_time_coverage("2010", "2020", "P0000-00-00").unwrap();
+        assert_eq!(
+            result,
+            TimeCoverage::List {
+                time_stamps: vec![DateTime::new_utc(2010, 1, 1, 0, 0, 0).into()]
+            }
+        );
     }
 
     #[test]
@@ -1012,31 +1024,31 @@ mod tests {
     fn test_parse_time_step() {
         assert_eq!(
             parse_time_step("P0001-00-00").unwrap(),
-            TimeStep {
+            Some(TimeStep {
                 granularity: TimeGranularity::Years,
                 step: 1,
-            }
+            })
         );
         assert_eq!(
             parse_time_step("P0005-00-00").unwrap(),
-            TimeStep {
+            Some(TimeStep {
                 granularity: TimeGranularity::Years,
                 step: 5,
-            }
+            })
         );
         assert_eq!(
             parse_time_step("P0010-00-00").unwrap(),
-            TimeStep {
+            Some(TimeStep {
                 granularity: TimeGranularity::Years,
                 step: 10,
-            }
+            })
         );
         assert_eq!(
             parse_time_step("P0000-06-00").unwrap(),
-            TimeStep {
+            Some(TimeStep {
                 granularity: TimeGranularity::Months,
                 step: 6,
-            }
+            })
         );
     }
 

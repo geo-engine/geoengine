@@ -289,7 +289,7 @@ fn index_subdataset(
         },
     ];
 
-    debug!("GDAL RAsterCreateionOptions: {:?}", &options);
+    debug!("Overview creation GDAL options: {:?}", &options);
 
     subdataset
         .create_copy(&cog_driver, &conversion.dataset_out, &options)
