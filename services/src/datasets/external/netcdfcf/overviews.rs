@@ -222,8 +222,8 @@ fn index_subdataset(
     time_coverage: &TimeCoverage,
 ) -> Result<OverviewGeneration> {
     const COG_BLOCK_SIZE: &str = "512";
-    const COMPRESSION_FORMAT: &str = "LZW";
-    const COMPRESSION_LEVEL: &str = "9";
+    const COMPRESSION_FORMAT: &str = "LZW"; // this is the GDAL default
+    const COMPRESSION_LEVEL: u8 = 6; // this is the GDAL default
 
     if conversion.dataset_out.exists() {
         debug!("Skipping conversion: {}", conversion.dataset_out.display());
@@ -253,20 +253,27 @@ fn index_subdataset(
     )
     .boxed_context(error::CannotCreateOverviews)?;
 
-    let gdal_num_threads = get_config_element::<crate::util::config::Gdal>()
-        .boxed_context(error::CannotCreateOverviews)?
-        .compression_num_threads;
-    let num_threads = gdal_num_threads.to_string();
+    let gdal_options = get_config_element::<crate::util::config::Gdal>()
+        .boxed_context(error::CannotCreateOverviews)?;
+    let num_threads = gdal_options.compression_num_threads.to_string();
+    let compression_format = gdal_options
+        .compression_algorithm
+        .as_deref()
+        .unwrap_or(COMPRESSION_FORMAT);
+    let compression_level = gdal_options
+        .compression_z_level
+        .unwrap_or(COMPRESSION_LEVEL)
+        .to_string();
 
     let cog_driver = gdal::Driver::get("COG").boxed_context(error::CannotCreateOverviews)?;
     let options = vec![
         RasterCreationOption {
             key: "COMPRESS",
-            value: COMPRESSION_FORMAT,
+            value: compression_format,
         },
         RasterCreationOption {
             key: "LEVEL",
-            value: COMPRESSION_LEVEL,
+            value: compression_level.as_ref(),
         },
         RasterCreationOption {
             key: "NUM_THREADS",
@@ -281,6 +288,8 @@ fn index_subdataset(
             value: "IF_SAFER", // TODO: test if this suffices
         },
     ];
+
+    debug!("GDAL RAsterCreateionOptions: {:?}", &options);
 
     subdataset
         .create_copy(&cog_driver, &conversion.dataset_out, &options)
