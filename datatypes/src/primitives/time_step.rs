@@ -390,13 +390,13 @@ impl Sub<TimeStep> for TimeInterval {
     }
 }
 
-impl Mul<TimeStep> for u32 {
+impl Mul<u32> for TimeStep {
     type Output = TimeStep;
 
-    fn mul(self, rhs: TimeStep) -> Self::Output {
+    fn mul(self, rhs: u32) -> Self::Output {
         TimeStep {
-            granularity: rhs.granularity,
-            step: self * rhs.step,
+            granularity: self.granularity,
+            step: self.step * rhs,
         }
     }
 }
@@ -451,7 +451,7 @@ impl TimeStepIter {
         // compute the number of steps that are still contained in the `time_interval`
         // this has to be at least 1 as the start of the interval is always contained
         let mut num_steps = time_step.num_steps_in_interval(time_interval)?.max(1);
-        if (time_interval.start() + (num_steps * time_step))? < time_interval.end() {
+        if (time_interval.start() + (time_step * num_steps))? < time_interval.end() {
             // the next step is partially contained so we need to add one more step
             num_steps += 1;
         }
@@ -482,7 +482,7 @@ impl Iterator for TimeStepIter {
             return None;
         }
 
-        let next = (self.reference_time + self.curr * self.time_step).unwrap();
+        let next = (self.reference_time + self.time_step * self.curr).unwrap();
 
         self.curr += 1;
 
