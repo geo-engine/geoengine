@@ -96,6 +96,24 @@ impl TimeStep {
         Ok(max(0, num_steps as u32))
     }
 
+    /// Resolves how many `TimeStep`-sized intervals fit into a given `TimeInterval`.
+    /// The last step is included into the result even if it does not fit completely.
+    /// Remember that `TimeInterval` is not inclusive.
+    ///
+    /// # Errors
+    /// This method uses chrono and therefore fails if a `TimeInstance` is outside chronos valid date range.
+    ///
+    pub fn num_steps_in_interval_ceil(self, time_interval: TimeInterval) -> Result<u32> {
+        // compute the number of steps that are still contained in the `time_interval`
+        // this has to be at least 1 as the start of the interval is always contained
+        let mut num_steps = self.num_steps_in_interval(time_interval)?.max(1);
+        if (time_interval.start() + (self * num_steps))? < time_interval.end() {
+            // the next step is partially contained so we need to add one more step
+            num_steps += 1;
+        }
+        Ok(num_steps)
+    }
+
     /// Snaps a `TimeInstance` relative to a given reference `TimeInstance`.
     ///
     /// # Errors
@@ -441,20 +459,15 @@ impl TimeStepIter {
 
     /// Create a new `TimeStepIter` which produces all `TimeInstance`s contained in the given `time_interval`.
     /// # Errors
-    /// This method fails if the start or end values of the interval are not valid in chrono.
+    /// This method fails if the start or end values of the interval are not valid in chrono, or if the start
+    /// value is the begin of time (`TimeInstance::MIN`).
     pub fn new_with_interval(time_interval: TimeInterval, time_step: TimeStep) -> Result<Self> {
         ensure!(
             !time_interval.start().is_min(),
             error::TimeStepIterStartMustNotBeBeginOfTime,
         );
 
-        // compute the number of steps that are still contained in the `time_interval`
-        // this has to be at least 1 as the start of the interval is always contained
-        let mut num_steps = time_step.num_steps_in_interval(time_interval)?.max(1);
-        if (time_interval.start() + (time_step * num_steps))? < time_interval.end() {
-            // the next step is partially contained so we need to add one more step
-            num_steps += 1;
-        }
+        let num_steps = time_step.num_steps_in_interval_ceil(time_interval)?;
 
         Self::new(time_interval.start(), time_step, num_steps)
     }
@@ -1507,6 +1520,49 @@ mod tests {
             step.num_steps_in_interval(TimeInterval::new_unchecked(0, 0))
                 .unwrap(),
             0
+        );
+    }
+
+    #[test]
+    fn num_steps_ceil() {
+        let step = TimeStep {
+            granularity: TimeGranularity::Millis,
+            step: 10,
+        };
+
+        assert_eq!(
+            step.num_steps_in_interval_ceil(TimeInterval::new_unchecked(0, 5))
+                .unwrap(),
+            1
+        );
+
+        assert_eq!(
+            step.num_steps_in_interval_ceil(TimeInterval::new_unchecked(0, 10))
+                .unwrap(),
+            1
+        );
+
+        assert_eq!(
+            step.num_steps_in_interval_ceil(TimeInterval::new_unchecked(0, 11))
+                .unwrap(),
+            2
+        );
+
+        assert_eq!(
+            step.num_steps_in_interval_ceil(TimeInterval::new_unchecked(0, 15))
+                .unwrap(),
+            2
+        );
+        assert_eq!(
+            step.num_steps_in_interval_ceil(TimeInterval::new_unchecked(0, 20))
+                .unwrap(),
+            2
+        );
+
+        assert_eq!(
+            step.num_steps_in_interval_ceil(TimeInterval::new_unchecked(0, 21))
+                .unwrap(),
+            3
         );
     }
 
