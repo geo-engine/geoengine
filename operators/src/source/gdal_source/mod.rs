@@ -332,7 +332,10 @@ impl GdalRasterLoader {
                     .spatial_partition()
                     .intersects(&ds.spatial_partition()) =>
             {
-                debug!("Loading tile {:?}", &tile_information);
+                debug!(
+                    "Loading tile {:?}, from {:?}, band: {}",
+                    &tile_information, ds.file_path, ds.rasterband_channel
+                );
                 Self::load_tile_data_async(ds, tile_information, tile_time).await
             }
             Some(_) => {
