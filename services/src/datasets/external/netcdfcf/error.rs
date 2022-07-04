@@ -66,6 +66,7 @@ pub enum NetCdfCf4DProviderError {
     TimeCoverageResolutionMustConsistsOnlyOfIntParts {
         source: std::num::ParseIntError,
     },
+    TimeCoverageResolutionMustNotBeZero,
     TimeCoverageResolutionPartsMustNotBeEmpty,
     TimeCoverageResolutionMustStartWithP,
     CannotDefineTimeCoverageEnd {

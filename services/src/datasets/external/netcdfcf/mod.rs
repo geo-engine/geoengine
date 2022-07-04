@@ -1,3 +1,7 @@
+pub use self::error::NetCdfCf4DProviderError;
+use self::gdalmd::MdGroup;
+pub use self::overviews::OverviewGeneration;
+use self::overviews::{create_overviews, METADATA_FILE_NAME};
 use crate::datasets::listing::DatasetListOptions;
 use crate::datasets::listing::{ExternalDatasetProvider, ProvenanceOutput};
 use crate::projects::{RasterSymbology, Symbology};
@@ -27,6 +31,7 @@ use geoengine_operators::{
     source::{GdalLoadingInfo, OgrSourceDataset},
 };
 use log::debug;
+use num_traits::Zero;
 use serde::{Deserialize, Serialize};
 use snafu::{OptionExt, ResultExt};
 use std::collections::VecDeque;
@@ -34,11 +39,6 @@ use std::io::BufReader;
 use std::path::{Path, PathBuf};
 use std::str::FromStr;
 use walkdir::{DirEntry, WalkDir};
-
-pub use self::error::NetCdfCf4DProviderError;
-use self::gdalmd::MdGroup;
-pub use self::overviews::OverviewGeneration;
-use self::overviews::{create_overviews, METADATA_FILE_NAME};
 
 mod error;
 pub mod gdalmd;
@@ -708,6 +708,10 @@ fn parse_time_step(input: &str) -> Result<TimeStep> {
         .collect::<Result<Vec<u32>, std::num::ParseIntError>>()
         .context(error::TimeCoverageResolutionMustConsistsOnlyOfIntParts)?;
 
+    if parts.iter().all(|digit| digit.is_zero()) {
+        return Err(NetCdfCf4DProviderError::TimeCoverageResolutionMustNotBeZero);
+    }
+
     if parts.is_empty() {
         return Err(NetCdfCf4DProviderError::TimeCoverageResolutionPartsMustNotBeEmpty);
     }
@@ -772,14 +776,16 @@ fn time_coverage(root_group: &MdGroup) -> Result<TimeCoverage> {
         .context(error::MissingTimeCoverageResolution)?;
 
     // we can parse coverages starting with `P`,
-    // so let's parse all other variants differently
-    if !step.starts_with('P') {
-        return time_coverage_from_dimension(root_group);
+    let time_p_res = parse_time_coverage(&start, &end, &step);
+    if let Ok((start, end, step)) = time_p_res {
+        return Ok(TimeCoverage::Regular { start, end, step });
     }
 
-    let (start, end, step) = parse_time_coverage(&start, &end, &step)?;
+    // something went wrong parsing a regular time as defined in the NetCDF CF standard.
+    debug!("Could not parse time from: start: {start}, end:{end}, step: {step}");
 
-    Ok(TimeCoverage::Regular { start, end, step })
+    // try to read time from dimension:
+    return time_coverage_from_dimension(root_group);
 }
 
 fn time_coverage_from_dimension(root_group: &MdGroup) -> Result<TimeCoverage> {
@@ -970,6 +976,12 @@ mod tests {
             },
         );
         assert_eq!(result, expected);
+    }
+
+    #[test]
+    fn test_parse_zero_time_coverage() {
+        let result = parse_time_coverage("2010", "2020", "P0000-00-00");
+        assert!(result.is_err())
     }
 
     #[test]
