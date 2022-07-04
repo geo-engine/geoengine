@@ -712,6 +712,7 @@ fn parse_time_step(input: &str) -> Result<Option<TimeStep>> {
         .collect::<Result<Vec<u32>, std::num::ParseIntError>>()
         .context(error::TimeCoverageResolutionMustConsistsOnlyOfIntParts)?;
 
+    // check if the time step string contains only zeros.
     if parts.iter().all(num_traits::Zero::is_zero) {
         return Ok(None);
     }
@@ -751,7 +752,7 @@ fn parse_time_coverage(start: &str, end: &str, resolution: &str) -> Result<TimeC
         return Ok(TimeCoverage::Regular { start, end, step });
     }
 
-    // there is no step. Data must be valid for start.
+    // there is no step. Data must be valid for start. TODO: Should this be a TimeInterval?
     Ok(TimeCoverage::List {
         time_stamps: vec![start],
     })
