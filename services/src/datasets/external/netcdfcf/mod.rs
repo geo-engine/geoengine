@@ -31,7 +31,6 @@ use geoengine_operators::{
     source::{GdalLoadingInfo, OgrSourceDataset},
 };
 use log::debug;
-use num_traits::Zero;
 use serde::{Deserialize, Serialize};
 use snafu::{OptionExt, ResultExt};
 use std::collections::VecDeque;
@@ -713,7 +712,7 @@ fn parse_time_step(input: &str) -> Result<Option<TimeStep>> {
         .collect::<Result<Vec<u32>, std::num::ParseIntError>>()
         .context(error::TimeCoverageResolutionMustConsistsOnlyOfIntParts)?;
 
-    if parts.iter().all(|digit| digit.is_zero()) {
+    if parts.iter().all(num_traits::Zero::is_zero) {
         return Ok(None);
     }
 
@@ -796,7 +795,7 @@ fn time_coverage(root_group: &MdGroup) -> Result<TimeCoverage> {
     debug!("Could not parse time from: start: {start}, end:{end}, step: {step}");
 
     // try to read time from dimension:
-    return time_coverage_from_dimension(root_group);
+    time_coverage_from_dimension(root_group)
 }
 
 fn time_coverage_from_dimension(root_group: &MdGroup) -> Result<TimeCoverage> {
