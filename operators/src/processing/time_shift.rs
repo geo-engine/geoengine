@@ -1227,4 +1227,108 @@ mod tests {
             .unwrap()
         );
     }
+
+    #[test]
+    fn shift_eternal() {
+        let eternal = TimeInterval::default();
+
+        let f_shift = RelativeForwardShift {
+            step: TimeStep {
+                granularity: TimeGranularity::Seconds,
+                step: 1,
+            },
+        };
+
+        let (shifted, state) = f_shift.shift(eternal).unwrap();
+        assert_eq!(shifted, eternal);
+        let reverse_shifted = f_shift.reverse_shift(eternal, state).unwrap();
+        assert_eq!(reverse_shifted, eternal);
+
+        let b_shift = RelativeBackwardShift {
+            step: TimeStep {
+                granularity: TimeGranularity::Seconds,
+                step: 1,
+            },
+        };
+
+        let (shifted, state) = b_shift.shift(eternal).unwrap();
+        assert_eq!(shifted, eternal);
+
+        let reverse_shifted = b_shift.reverse_shift(eternal, state).unwrap();
+        assert_eq!(reverse_shifted, eternal);
+    }
+
+    #[test]
+    fn shift_begin_of_time() {
+        let time = TimeInterval::new_unchecked(TimeInstance::MIN, TimeInstance::EPOCH_START);
+
+        let f_shift = RelativeForwardShift {
+            step: TimeStep {
+                granularity: TimeGranularity::Seconds,
+                step: 1,
+            },
+        };
+
+        let expected_shift =
+            TimeInterval::new_unchecked(TimeInstance::MIN, TimeInstance::EPOCH_START + 1_000);
+
+        let (shifted, state) = f_shift.shift(time).unwrap();
+        assert_eq!(shifted, expected_shift);
+
+        let reverse_shifted = f_shift.reverse_shift(expected_shift, state).unwrap();
+        assert_eq!(reverse_shifted, time);
+
+        let f_shift = RelativeBackwardShift {
+            step: TimeStep {
+                granularity: TimeGranularity::Seconds,
+                step: 1,
+            },
+        };
+
+        let expected_shift =
+            TimeInterval::new_unchecked(TimeInstance::MIN, TimeInstance::EPOCH_START - 1_000);
+
+        let (shifted, state) = f_shift.shift(time).unwrap();
+        assert_eq!(shifted, expected_shift);
+
+        let reverse_shifted = f_shift.reverse_shift(expected_shift, state).unwrap();
+        assert_eq!(reverse_shifted, time);
+    }
+
+    #[test]
+    fn shift_end_of_time() {
+        let time = TimeInterval::new_unchecked(TimeInstance::EPOCH_START, TimeInstance::MAX);
+
+        let f_shift = RelativeForwardShift {
+            step: TimeStep {
+                granularity: TimeGranularity::Seconds,
+                step: 1,
+            },
+        };
+
+        let expected_shift =
+            TimeInterval::new_unchecked(TimeInstance::EPOCH_START + 1_000, TimeInstance::MAX);
+
+        let (shifted, state) = f_shift.shift(time).unwrap();
+        assert_eq!(shifted, expected_shift);
+
+        let reverse_shifted = f_shift.reverse_shift(expected_shift, state).unwrap();
+        assert_eq!(reverse_shifted, time);
+
+        let f_shift = RelativeBackwardShift {
+            step: TimeStep {
+                granularity: TimeGranularity::Seconds,
+                step: 1,
+            },
+        };
+
+        let expected_shift =
+            TimeInterval::new_unchecked(TimeInstance::EPOCH_START - 1_000, TimeInstance::MAX);
+
+        let (shifted, state) = f_shift.shift(time).unwrap();
+        assert_eq!(shifted, expected_shift);
+
+        let reverse_shifted = f_shift.reverse_shift(expected_shift, state).unwrap();
+        assert_eq!(reverse_shifted, time);
+    }
 }

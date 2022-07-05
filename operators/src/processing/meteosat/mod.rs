@@ -35,6 +35,8 @@ fn new_satellite_key() -> RasterPropertiesKey {
 
 #[cfg(test)]
 mod test_util {
+    use std::str::FromStr;
+
     use futures::StreamExt;
     use geoengine_datatypes::hashmap;
     use geoengine_datatypes::util::test::TestDefault;
@@ -206,11 +208,12 @@ mod test_util {
     pub(crate) fn _create_gdal_src(ctx: &mut MockExecutionContext) -> GdalSource {
         let dataset_id: DatasetId = InternalDatasetId::new().into();
 
-        let timestamp = DateTime::new_utc(2012, 12, 12, 12, 0, 0);
-
         let no_data_value = Some(0.);
         let meta = GdalMetaDataRegular {
-            start: TimeInstance::from(timestamp),
+            data_time: TimeInterval::new_unchecked(
+                TimeInstance::from_str("2012-12-12T12:00:00.000Z").unwrap(),
+                TimeInstance::from_str("2020-12-12T12:00:00.000Z").unwrap(),
+            ),
             step: TimeStep {
                 granularity: TimeGranularity::Minutes,
                 step: 15,

@@ -286,6 +286,8 @@ pub enum Error {
     MissingRasterProperty {
         property: String,
     },
+
+    TimeStepIterStartMustNotBeBeginOfTime,
 }
 
 impl From<arrow::error::ArrowError> for Error {

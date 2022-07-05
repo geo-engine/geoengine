@@ -34,7 +34,10 @@ use crate::{
 pub fn create_ndvi_meta_data() -> GdalMetaDataRegular {
     let no_data_value = Some(0.); // TODO: is it really 0?
     GdalMetaDataRegular {
-        start: TimeInstance::from_millis(1_388_534_400_000).unwrap(),
+        data_time: TimeInterval::new_unchecked(
+            TimeInstance::from_str("2014-01-01T00:00:00.000Z").unwrap(),
+            TimeInstance::from_str("2014-07-01T00:00:00.000Z").unwrap(),
+        ),
         step: TimeStep {
             granularity: TimeGranularity::Months,
             step: 1,

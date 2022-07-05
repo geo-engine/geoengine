@@ -529,6 +529,7 @@ mod tests {
     };
     use std::collections::HashMap;
     use std::path::PathBuf;
+    use std::str::FromStr;
 
     #[tokio::test]
     async fn multi_point() -> Result<()> {
@@ -965,7 +966,10 @@ mod tests {
         let query_ctx = MockQueryContext::test_default();
 
         let m = GdalMetaDataRegular {
-            start: TimeInstance::from_millis(1_388_534_400_000).unwrap(),
+            data_time: TimeInterval::new_unchecked(
+                TimeInstance::from_str("2014-01-01T00:00:00.000Z").unwrap(),
+                TimeInstance::from_str("2014-07-01T00:00:00.000Z").unwrap(),
+            ),
             step: TimeStep {
                 granularity: TimeGranularity::Months,
                 step: 1,
