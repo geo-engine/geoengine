@@ -521,8 +521,7 @@ impl NetCdfCfDataProvider {
 
         match loading_info {
             Metadata::NetCDF(mut loading_info) => {
-                // it is 1 + … because we have one step when start == end
-                let time_steps_per_entity = 1 + loading_info
+                let time_steps_per_entity = loading_info
                     .step
                     .num_steps_in_interval(
                         TimeInterval::new(loading_info.start, loading_info.end).ok()?,

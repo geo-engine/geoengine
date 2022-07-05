@@ -1424,7 +1424,7 @@ mod tests {
 
         assert_eq!(
             tile_1.time,
-            TimeInterval::new_unchecked(1_385_856_000_000, 1_388_534_400_000)
+            TimeInterval::new_unchecked(TimeInstance::MIN, 1_388_534_400_000)
         );
 
         assert!(tile_1.is_empty());
