@@ -236,7 +236,7 @@ mod tests {
 
     #[tokio::test]
     async fn extract_raster_values_single_raster() {
-        let raster_tile = RasterTile2D::new_with_tile_info(
+        let raster_tile = RasterTile2D::<u8>::new_with_tile_info(
             TimeInterval::default(),
             TileInformation {
                 global_geo_transform: TestDefault::test_default(),
@@ -310,7 +310,7 @@ mod tests {
     #[tokio::test]
     #[allow(clippy::float_cmp)]
     async fn extract_raster_values_two_raster_timesteps() {
-        let raster_tile_a = RasterTile2D::new_with_tile_info(
+        let raster_tile_a = RasterTile2D::<u8>::new_with_tile_info(
             TimeInterval::new(0, 10).unwrap(),
             TileInformation {
                 global_geo_transform: TestDefault::test_default(),
@@ -395,7 +395,7 @@ mod tests {
     #[tokio::test]
     #[allow(clippy::float_cmp)]
     async fn extract_raster_values_two_spatial_tiles_per_time_step() {
-        let raster_tile_a_0 = RasterTile2D::new_with_tile_info(
+        let raster_tile_a_0 = RasterTile2D::<u8>::new_with_tile_info(
             TimeInterval::new(0, 10).unwrap(),
             TileInformation {
                 global_geo_transform: TestDefault::test_default(),
@@ -507,7 +507,7 @@ mod tests {
     #[allow(clippy::too_many_lines)]
     #[allow(clippy::float_cmp)]
     async fn polygons() {
-        let raster_tile_a_0 = RasterTile2D::new_with_tile_info(
+        let raster_tile_a_0 = RasterTile2D::<u8>::new_with_tile_info(
             TimeInterval::new(0, 10).unwrap(),
             TileInformation {
                 global_geo_transform: TestDefault::test_default(),
