@@ -7,7 +7,7 @@ pub use execution_context::{
 };
 pub use operator::{
     InitializedPlotOperator, InitializedRasterOperator, InitializedVectorOperator,
-    OperatorDatasets, PlotOperator, RasterOperator, TypedOperator, VectorOperator,
+    OperatorDatasets, OperatorName, PlotOperator, RasterOperator, TypedOperator, VectorOperator,
 };
 pub use operator_impl::{
     MultipleRasterOrSingleVectorSource, MultipleRasterSources, MultipleVectorSources, Operator,

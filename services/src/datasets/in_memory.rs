@@ -7,6 +7,7 @@ use crate::layers::layer::{
     CollectionItem, Layer, LayerCollectionListOptions, LayerListing, ProviderLayerId,
 };
 use crate::layers::listing::{LayerCollectionId, LayerCollectionProvider, LayerId};
+use crate::util::operators::source_operator_from_dataset;
 use crate::util::user_input::Validated;
 use crate::workflows::workflow::Workflow;
 use async_trait::async_trait;
@@ -14,13 +15,12 @@ use geoengine_datatypes::dataset::{DatasetId, InternalDatasetId};
 use geoengine_datatypes::primitives::{RasterQueryRectangle, VectorQueryRectangle};
 use geoengine_datatypes::util::Identifier;
 use geoengine_operators::engine::{
-    MetaData, RasterOperator, RasterResultDescriptor, StaticMetaData, TypedOperator,
-    TypedResultDescriptor, VectorOperator, VectorResultDescriptor,
+    MetaData, RasterResultDescriptor, StaticMetaData,
+    TypedResultDescriptor, VectorResultDescriptor,
 };
-use geoengine_operators::mock::{MockDatasetDataSource, MockDatasetDataSourceParams};
+
 use geoengine_operators::source::{
-    GdalLoadingInfo, GdalMetaDataList, GdalMetaDataRegular, GdalMetadataNetCdfCf, GdalSource,
-    GdalSourceParameters, OgrSource, OgrSourceDataset, OgrSourceParameters,
+    GdalLoadingInfo, GdalMetaDataList, GdalMetaDataRegular, GdalMetadataNetCdfCf, OgrSourceDataset,
 };
 use geoengine_operators::{mock::MockDatasetDataSourceLoadingInfo, source::GdalMetaDataStatic};
 use snafu::ensure;
@@ -452,39 +452,7 @@ impl LayerCollectionProvider for HashMapDatasetDb {
             .find(|d| d.id == dataset_id)
             .ok_or(error::Error::UnknownDatasetId)?;
 
-        let operator = match dataset.source_operator.as_str() {
-            "OgrSource" => TypedOperator::Vector(
-                OgrSource {
-                    params: OgrSourceParameters {
-                        dataset: dataset.id.clone(),
-                        attribute_projection: None,
-                        attribute_filters: None,
-                    },
-                }
-                .boxed(),
-            ),
-            "GdalSource" => TypedOperator::Raster(
-                GdalSource {
-                    params: GdalSourceParameters {
-                        dataset: dataset.id.clone(),
-                    },
-                }
-                .boxed(),
-            ),
-            "MockDatasetDataSource" => TypedOperator::Vector(
-                MockDatasetDataSource {
-                    params: MockDatasetDataSourceParams {
-                        dataset: dataset.id.clone(),
-                    },
-                }
-                .boxed(),
-            ),
-            s => {
-                return Err(crate::error::Error::UnknownOperator {
-                    operator: s.to_owned(),
-                })
-            }
-        };
+        let operator = source_operator_from_dataset(&dataset.source_operator, &dataset.id)?;
 
         Ok(Layer {
             id: ProviderLayerId {

@@ -36,7 +36,7 @@ use geoengine_datatypes::primitives::{
 };
 use geoengine_datatypes::util::arrow::ArrowTyped;
 
-use crate::engine::{OperatorDatasets, QueryProcessor};
+use crate::engine::{OperatorDatasets, OperatorName, QueryProcessor};
 use crate::error::Error;
 use crate::util::input::StringOrNumberRange;
 use crate::util::Result;
@@ -77,6 +77,10 @@ impl OperatorDatasets for OgrSourceParameters {
 }
 
 pub type OgrSource = SourceOperator<OgrSourceParameters>;
+
+impl OperatorName for OgrSource {
+    const TYPE_NAME: &'static str = "OgrSource";
+}
 
 ///  - `file_name`: path to the input file
 ///  - `layer_name`: name of the layer to load

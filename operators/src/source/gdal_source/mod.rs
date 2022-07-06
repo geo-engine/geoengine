@@ -1,5 +1,5 @@
 use crate::adapters::SparseTilesFillAdapter;
-use crate::engine::{MetaData, OperatorDatasets, QueryProcessor};
+use crate::engine::{MetaData, OperatorDatasets, OperatorName, QueryProcessor};
 use crate::util::gdal::gdal_open_dataset_ex;
 use crate::util::input::float_option_with_nan;
 use crate::{
@@ -556,6 +556,10 @@ where
 }
 
 pub type GdalSource = SourceOperator<GdalSourceParameters>;
+
+impl OperatorName for GdalSource {
+    const TYPE_NAME: &'static str = "GdalSource";
+}
 
 #[typetag::serde]
 #[async_trait]

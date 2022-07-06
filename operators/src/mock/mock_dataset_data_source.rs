@@ -1,6 +1,6 @@
 use crate::engine::{
-    ExecutionContext, InitializedVectorOperator, MetaData, OperatorDatasets, QueryContext,
-    ResultDescriptor, SourceOperator, TypedVectorQueryProcessor, VectorOperator,
+    ExecutionContext, InitializedVectorOperator, MetaData, OperatorDatasets, OperatorName,
+    QueryContext, ResultDescriptor, SourceOperator, TypedVectorQueryProcessor, VectorOperator,
     VectorQueryProcessor, VectorResultDescriptor,
 };
 use crate::util::Result;
@@ -110,6 +110,10 @@ pub struct MockDatasetDataSourceParams {
 }
 
 pub type MockDatasetDataSource = SourceOperator<MockDatasetDataSourceParams>;
+
+impl OperatorName for MockDatasetDataSource {
+    const TYPE_NAME: &'static str = "MockDatasetDataSource";
+}
 
 #[typetag::serde]
 #[async_trait]

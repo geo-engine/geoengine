@@ -21,6 +21,7 @@ use crate::layers::listing::LayerId;
 use crate::pro::datasets::storage::UpdateDatasetPermissions;
 use crate::pro::datasets::RoleId;
 use crate::projects::Symbology;
+use crate::util::operators::source_operator_from_dataset;
 use crate::util::user_input::Validated;
 use crate::workflows::workflow::Workflow;
 use crate::{
@@ -36,19 +37,19 @@ use geoengine_datatypes::dataset::{DatasetId, InternalDatasetId};
 use geoengine_datatypes::primitives::RasterQueryRectangle;
 use geoengine_datatypes::primitives::VectorQueryRectangle;
 use geoengine_datatypes::util::Identifier;
-use geoengine_operators::engine::RasterOperator;
-use geoengine_operators::engine::TypedOperator;
-use geoengine_operators::engine::VectorOperator;
+
+
+
 use geoengine_operators::engine::{
     MetaData, RasterResultDescriptor, StaticMetaData, TypedResultDescriptor, VectorResultDescriptor,
 };
-use geoengine_operators::mock::MockDatasetDataSource;
+
 use geoengine_operators::mock::MockDatasetDataSourceLoadingInfo;
-use geoengine_operators::mock::MockDatasetDataSourceParams;
-use geoengine_operators::source::GdalSource;
-use geoengine_operators::source::GdalSourceParameters;
-use geoengine_operators::source::OgrSource;
-use geoengine_operators::source::OgrSourceParameters;
+
+
+
+
+
 use geoengine_operators::source::{GdalLoadingInfo, OgrSourceDataset};
 use log::info;
 use postgres_types::{FromSql, ToSql};
@@ -778,39 +779,7 @@ where
         let source_operator: String = row.get(2);
         let symbology: Option<Symbology> = serde_json::from_value(row.get(3))?;
 
-        let operator = match source_operator.as_str() {
-            "OgrSource" => TypedOperator::Vector(
-                OgrSource {
-                    params: OgrSourceParameters {
-                        dataset: dataset_id.clone(),
-                        attribute_projection: None,
-                        attribute_filters: None,
-                    },
-                }
-                .boxed(),
-            ),
-            "GdalSource" => TypedOperator::Raster(
-                GdalSource {
-                    params: GdalSourceParameters {
-                        dataset: dataset_id.clone(),
-                    },
-                }
-                .boxed(),
-            ),
-            "MockDatasetDataSource" => TypedOperator::Vector(
-                MockDatasetDataSource {
-                    params: MockDatasetDataSourceParams {
-                        dataset: dataset_id.clone(),
-                    },
-                }
-                .boxed(),
-            ),
-            s => {
-                return Err(crate::error::Error::UnknownOperator {
-                    operator: s.to_owned(),
-                })
-            }
-        };
+        let operator = source_operator_from_dataset(&source_operator, &dataset_id)?;
 
         Ok(Layer {
             id: ProviderLayerId {

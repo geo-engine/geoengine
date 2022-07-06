@@ -273,3 +273,7 @@ impl OperatorDatasets for TypedOperator {
         }
     }
 }
+
+pub trait OperatorName {
+    const TYPE_NAME: &'static str;
+}
