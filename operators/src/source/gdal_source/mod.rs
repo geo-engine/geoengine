@@ -332,7 +332,10 @@ impl GdalRasterLoader {
                     .spatial_partition()
                     .intersects(&ds.spatial_partition()) =>
             {
-                debug!("Loading tile {:?}", &tile_information);
+                debug!(
+                    "Loading tile {:?}, from {:?}, band: {}",
+                    &tile_information, ds.file_path, ds.rasterband_channel
+                );
                 Self::load_tile_data_async(ds, tile_information, tile_time).await
             }
             Some(_) => {
@@ -1421,7 +1424,7 @@ mod tests {
 
         assert_eq!(
             tile_1.time,
-            TimeInterval::new_unchecked(1_385_856_000_000, 1_388_534_400_000)
+            TimeInterval::new_unchecked(TimeInstance::MIN, 1_388_534_400_000)
         );
 
         assert!(tile_1.is_empty());

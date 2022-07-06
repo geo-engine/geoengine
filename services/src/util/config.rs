@@ -329,6 +329,8 @@ impl ConfigElement for DataProvider {
 #[derive(Debug, Deserialize)]
 pub struct Gdal {
     pub compression_num_threads: GdalCompressionNumThreads,
+    pub compression_z_level: Option<u8>,
+    pub compression_algorithm: Option<Box<str>>,
 }
 
 impl ConfigElement for Gdal {

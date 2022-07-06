@@ -321,7 +321,10 @@
         "reference": "start"
       }
     },
-    "start": "2014-01-01T00:00:00.000Z",
+    "dataTime": {
+      "start": "2014-01-01T00:00:00.000Z",
+      "end": "2014-07-01T00:00:00.000Z"
+    },
     "step": {
       "granularity": "months",
       "step": 1

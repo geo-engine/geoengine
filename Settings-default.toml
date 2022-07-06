@@ -71,6 +71,8 @@ layer_collection_defs_path = "./test_data/layer_collection_defs"
 # TODO: find good default
 # Use 0 for `ALL_CPUS` option or a number >0 for a specific number of threads.
 compression_num_threads = 8
+compression_z_level = 6
+compression_algorithm = "LZW"
 
 [session]
 # Whether to allow requests to `/anonymous` that return a valid session.
