@@ -511,7 +511,7 @@ mod tests {
         // || 8 | 7 || 6 | 5 ||
         // || 4 | 3 || 2 | 1 ||
         let raster_tiles = vec![
-            RasterTile2D::new_with_tile_info(
+            RasterTile2D::<i8>::new_with_tile_info(
                 TimeInterval::new_unchecked(0, 10),
                 TileInformation {
                     global_tile_position: [-1, 0].into(),

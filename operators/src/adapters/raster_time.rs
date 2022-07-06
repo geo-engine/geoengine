@@ -625,7 +625,7 @@ mod tests {
         let mrs2 = MockRasterSource {
             params: MockRasterSourceParams {
                 data: vec![
-                    RasterTile2D {
+                    RasterTile2D::<u8> {
                         time: TimeInterval::new_unchecked(0, 3),
                         tile_position: [-1, 0].into(),
                         global_geo_transform: TestDefault::test_default(),
@@ -834,7 +834,7 @@ mod tests {
         let mrs2 = MockRasterSource {
             params: MockRasterSourceParams {
                 data: vec![
-                    RasterTile2D {
+                    RasterTile2D::<u8> {
                         time: TimeInterval::new_unchecked(0, 3),
                         tile_position: [-1, 0].into(),
                         global_geo_transform: TestDefault::test_default(),

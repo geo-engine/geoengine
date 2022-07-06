@@ -1,5 +1,4 @@
 use crate::adapters::SparseTilesFillAdapter;
-use crate::call_generic_raster_processor;
 use crate::engine::{
     InitializedRasterOperator, OperatorDatasets, RasterOperator, RasterQueryProcessor,
     RasterResultDescriptor, SourceOperator, TypedRasterQueryProcessor,
@@ -10,10 +9,8 @@ use futures::{stream, stream::StreamExt};
 use geoengine_datatypes::dataset::DatasetId;
 use geoengine_datatypes::primitives::{RasterQueryRectangle, SpatialPartitioned};
 use geoengine_datatypes::raster::{
-    ConvertDataType, FromPrimitive, GridShape2D, GridShapeAccess, GridSize, Pixel, RasterTile2D,
-    TilingSpecification,
+    GridShape2D, GridShapeAccess, GridSize, Pixel, RasterTile2D, TilingSpecification,
 };
-use num_traits::AsPrimitive;
 use serde::{Deserialize, Serialize};
 use snafu::Snafu;
 
@@ -202,10 +199,25 @@ macro_rules! impl_mock_raster_source {
                 self: Box<Self>,
                 context: &dyn crate::engine::ExecutionContext,
             ) -> Result<Box<dyn InitializedRasterOperator>> {
+                let data = self.params.data;
+                let tiling_specification = context.tiling_specification();
+
+                if let Some(tile_shape) =
+                    first_tile_shape_not_matching_tiling_spec(&data, tiling_specification)
+                {
+                    return Err(
+                        MockRasterSourceError::TileSizeDiffersFromTilingSpecification {
+                            tiling_specification_yx: tiling_specification.grid_shape(),
+                            tile_size_yx: tile_shape,
+                        }
+                        .into(),
+                    );
+                };
+
                 Ok(InitializedMockRasterSource {
                     result_descriptor: self.params.result_descriptor,
-                    data: self.params.data,
-                    tiling_specification: context.tiling_specification(),
+                    data,
+                    tiling_specification,
                 }
                 .boxed())
             }
@@ -230,40 +242,20 @@ pub struct InitializedMockRasterSource<T: Pixel> {
     tiling_specification: TilingSpecification,
 }
 
-impl<T: Pixel> InitializedRasterOperator for InitializedMockRasterSource<T> {
+impl<T: Pixel> InitializedRasterOperator for InitializedMockRasterSource<T>
+where
+    TypedRasterQueryProcessor: From<std::boxed::Box<dyn RasterQueryProcessor<RasterType = T>>>,
+{
     fn query_processor(&self) -> Result<TypedRasterQueryProcessor> {
-        fn converted<From, To>(
-            raster_tiles: &[RasterTile2D<From>],
-            tiling_specification: TilingSpecification,
-        ) -> Box<dyn RasterQueryProcessor<RasterType = To>>
-        where
-            From: Pixel + AsPrimitive<To>,
-            To: Pixel + FromPrimitive<From>,
-        {
-            let data: Vec<RasterTile2D<To>> = raster_tiles
-                .iter()
-                .cloned()
-                .map(RasterTile2D::convert_data_type)
-                .collect();
-            MockRasterSourceProcessor::new_unchecked(data, tiling_specification).boxed()
-        }
+        let processor = TypedRasterQueryProcessor::from(
+            MockRasterSourceProcessor::new_unchecked(
+                self.data.clone(),
+                self.tiling_specification,
+            )
+            .boxed(),
+        );
 
-        if let Some(tile_shape) =
-            first_tile_shape_not_matching_tiling_spec(&self.data, self.tiling_specification)
-        {
-            return Err(
-                MockRasterSourceError::TileSizeDiffersFromTilingSpecification {
-                    tiling_specification_yx: self.tiling_specification.grid_shape(),
-                    tile_size_yx: tile_shape,
-                }
-                .into(),
-            );
-        };
-
-        Ok(call_generic_raster_processor!(
-            self.result_descriptor().data_type,
-            converted(&self.data, self.tiling_specification)
-        ))
+        Ok(processor)
     }
 
     fn result_descriptor(&self) -> &RasterResultDescriptor {
