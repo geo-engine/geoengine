@@ -38,17 +38,11 @@ use geoengine_datatypes::primitives::RasterQueryRectangle;
 use geoengine_datatypes::primitives::VectorQueryRectangle;
 use geoengine_datatypes::util::Identifier;
 
-
-
 use geoengine_operators::engine::{
     MetaData, RasterResultDescriptor, StaticMetaData, TypedResultDescriptor, VectorResultDescriptor,
 };
 
 use geoengine_operators::mock::MockDatasetDataSourceLoadingInfo;
-
-
-
-
 
 use geoengine_operators::source::{GdalLoadingInfo, OgrSourceDataset};
 use log::info;

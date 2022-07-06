@@ -13,6 +13,9 @@ use crate::{error::Result, layers::listing::LayerCollectionId};
 use crate::{layers::storage::LayerDb, util::user_input::UserInput};
 
 use log::{info, warn};
+use uuid::Uuid;
+
+pub const UNSORTED_COLLECTION_ID: Uuid = Uuid::from_u128(0xffb2_dd9e_f5ad_427c_b7f1_c9a0_c7a0_ae3f);
 
 pub async fn add_layers_from_directory<L: LayerDb>(layer_db: &mut L, file_path: PathBuf) {
     async fn add_layer_from_dir_entry<L: LayerDb>(
@@ -22,7 +25,6 @@ pub async fn add_layers_from_directory<L: LayerDb>(layer_db: &mut L, file_path: 
         let def: LayerDefinition =
             serde_json::from_reader(BufReader::new(File::open(entry.path())?))?;
 
-        // TODO: only add layer to root collection that are not contained in any other collection
         layer_db
             .add_layer_with_id(
                 &def.id,
@@ -33,7 +35,7 @@ pub async fn add_layers_from_directory<L: LayerDb>(layer_db: &mut L, file_path: 
                     symbology: def.symbology,
                 }
                 .validated()?,
-                &layer_db.root_collection_id().await?,
+                &LayerCollectionId(UNSORTED_COLLECTION_ID.to_string()),
             )
             .await?;
 
@@ -83,9 +85,12 @@ pub async fn add_layer_collections_from_directory<L: LayerDb>(db: &mut L, file_p
         }
         .validated()?;
 
-        // TODO: add only collections that aren't contained in any other collection to the root collection?
-        db.add_collection_with_id(&def.id, collection, &db.root_collection_id().await?)
-            .await?;
+        db.add_collection_with_id(
+            &def.id,
+            collection,
+            &LayerCollectionId(UNSORTED_COLLECTION_ID.to_string()),
+        )
+        .await?;
 
         for layer in &def.layers {
             db.add_layer_to_collection(layer, &def.id).await?;
@@ -126,13 +131,36 @@ pub async fn add_layer_collections_from_directory<L: LayerDb>(db: &mut L, file_p
         }
     }
 
+    let root_id = db
+        .root_collection_id()
+        .await
+        .expect("root id must be resolved");
     let mut collection_children: HashMap<LayerCollectionId, Vec<LayerCollectionId>> =
         HashMap::new();
 
-    for def in collection_defs {
-        let collection = add_collection_to_db(db, &def).await;
+    let unsorted = AddLayerCollection {
+        name: "Unsorted".to_string(),
+        description: "Unsorted Layers".to_string(),
+    }
+    .validated()
+    .expect("unsorted collection is valid");
 
-        match collection {
+    db.add_collection_with_id(
+        &LayerCollectionId(UNSORTED_COLLECTION_ID.to_string()),
+        unsorted,
+        &root_id,
+    )
+    .await
+    .expect("unsorted collection should always be added");
+
+    for def in collection_defs {
+        let ok = if def.id == root_id {
+            Ok(())
+        } else {
+            add_collection_to_db(db, &def).await
+        };
+
+        match ok {
             Ok(_) => {
                 collection_children.insert(def.id, def.collections);
             }

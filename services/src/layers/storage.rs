@@ -1,3 +1,4 @@
+use std::cmp::Ordering;
 use std::collections::HashMap;
 use std::sync::Arc;
 
@@ -324,11 +325,20 @@ impl LayerCollectionProvider for HashMapLayerDb {
                 })
             });
 
-        Ok(collections
+        let mut listing = collections
             .chain(layers)
             .skip(options.offset as usize)
             .take(options.limit as usize)
-            .collect())
+            .collect::<Vec<_>>();
+
+        listing.sort_by(|a, b| match (a, b) {
+            (CollectionItem::Collection(a), CollectionItem::Collection(b)) => a.name.cmp(&b.name),
+            (CollectionItem::Layer(a), CollectionItem::Layer(b)) => a.name.cmp(&b.name),
+            (CollectionItem::Collection(_), CollectionItem::Layer(_)) => Ordering::Less,
+            (CollectionItem::Layer(_), CollectionItem::Collection(_)) => Ordering::Greater,
+        });
+
+        Ok(listing)
     }
 
     async fn root_collection_id(&self) -> Result<LayerCollectionId> {

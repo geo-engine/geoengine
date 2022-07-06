@@ -26,8 +26,7 @@ use geoengine_datatypes::{
     util::Identifier,
 };
 use geoengine_operators::engine::{
-    MetaData, RasterResultDescriptor, StaticMetaData,
-    TypedResultDescriptor, VectorResultDescriptor,
+    MetaData, RasterResultDescriptor, StaticMetaData, TypedResultDescriptor, VectorResultDescriptor,
 };
 
 use geoengine_operators::source::{
