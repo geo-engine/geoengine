@@ -248,11 +248,8 @@ where
 {
     fn query_processor(&self) -> Result<TypedRasterQueryProcessor> {
         let processor = TypedRasterQueryProcessor::from(
-            MockRasterSourceProcessor::new_unchecked(
-                self.data.clone(),
-                self.tiling_specification,
-            )
-            .boxed(),
+            MockRasterSourceProcessor::new_unchecked(self.data.clone(), self.tiling_specification)
+                .boxed(),
         );
 
         Ok(processor)

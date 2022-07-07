@@ -1,11 +1,14 @@
-use rayon::{iter::{
-    IndexedParallelIterator, IntoParallelIterator, IntoParallelRefIterator,
-    IntoParallelRefMutIterator, ParallelIterator,
-}, slice::{ParallelSlice, ParallelSliceMut}};
+use rayon::{
+    iter::{
+        IndexedParallelIterator, IntoParallelIterator, IntoParallelRefIterator,
+        IntoParallelRefMutIterator, ParallelIterator,
+    },
+    slice::{ParallelSlice, ParallelSliceMut},
+};
 
 use crate::raster::{
-    EmptyGrid, Grid, GridIdx, GridOrEmpty, GridOrEmpty2D, GridSize, GridSpaceToLinearSpace,
-    MaskedGrid, MaskedGrid2D, RasterTile2D, GridIdx2D, Grid2D,
+    EmptyGrid, Grid, Grid2D, GridIdx, GridIdx2D, GridOrEmpty, GridOrEmpty2D, GridSize,
+    GridSpaceToLinearSpace, MaskedGrid, MaskedGrid2D, RasterTile2D,
 };
 
 /// This trait models a map operation from a `Grid` of type `In` into a `Grid` of Type `Out`. This is done using a provided function that maps each element to a new value.
@@ -62,37 +65,38 @@ where
         let Grid { shape, data } = self;
 
         let parallelism = rayon::current_num_threads();
-        let rows_per_task =
-            num::integer::div_ceil(shape.axis_size_y(), parallelism);
+        let rows_per_task = num::integer::div_ceil(shape.axis_size_y(), parallelism);
 
         let chunk_size = shape.axis_size_x() * rows_per_task;
 
         let mut out_grid = Grid::new_filled(shape.clone(), Out::default());
 
-
-        out_grid.data
-            .par_chunks_mut(chunk_size).zip(data.par_chunks(chunk_size))
+        out_grid
+            .data
+            .par_chunks_mut(chunk_size)
+            .zip(data.par_chunks(chunk_size))
             .enumerate()
             .for_each(|(y_f, (out_rows_slice, in_row_slice))| {
                 let y_start = y_f * rows_per_task;
                 let y_end = y_start + out_rows_slice.len() / shape.axis_size_x();
 
                 (y_start..y_end)
-                    .zip(out_rows_slice.chunks_mut(shape.axis_size_x())).zip(in_row_slice.chunks(shape.axis_size_x()))
+                    .zip(out_rows_slice.chunks_mut(shape.axis_size_x()))
+                    .zip(in_row_slice.chunks(shape.axis_size_x()))
                     .for_each(|((y, out_row), in_row)| {
-
-                        out_row.iter_mut().zip(in_row.iter()).enumerate().for_each(|(x, (pixel_out, pixel_in))| {
-                            let g_idx = GridIdx([y as isize,x as isize]);
-                            let out_value = map_fn(g_idx, *pixel_in);
-                            *pixel_out = out_value
-                        });
+                        out_row.iter_mut().zip(in_row.iter()).enumerate().for_each(
+                            |(x, (pixel_out, pixel_in))| {
+                                let g_idx = GridIdx([y as isize, x as isize]);
+                                let out_value = map_fn(g_idx, *pixel_in);
+                                *pixel_out = out_value
+                            },
+                        );
                     });
             });
 
         out_grid
     }
 }
-
 
 // Implementation for Grid using usize as index: F: Fn(usize, In) -> Out.
 impl<G, In, Out, F> MapIndexedElements<In, Out, usize, F> for Grid<G, In>
@@ -380,7 +384,8 @@ where
 
     fn map_indexed_elements_parallel(self, map_fn: F) -> Self::Output {
         let Grid { shape, data } = self;
-        let num_elements_per_thread = num::integer::div_ceil(shape.number_of_elements(), rayon::current_num_threads());
+        let num_elements_per_thread =
+            num::integer::div_ceil(shape.number_of_elements(), rayon::current_num_threads());
 
         let out_data: Vec<Out> = data
             .into_par_iter()
@@ -397,7 +402,7 @@ where
 // Delegates to implementation for Grid with F: Fn(usize, In) -> Out.
 impl<G, A, In, Out, F> MapIndexedElementsParallel<In, Out, GridIdx<A>, F> for Grid<G, In>
 where
-    G: GridSpaceToLinearSpace<IndexArray = A> + Clone  + GridSize + Send + Sync,
+    G: GridSpaceToLinearSpace<IndexArray = A> + Clone + GridSize + Send + Sync,
     A: AsRef<[isize]>,
     F: Fn(GridIdx<A>, In) -> Out + Send + Sync,
     In: 'static + Sized + Send + Sync,
@@ -457,14 +462,22 @@ where
         debug_assert!(data.data.len() == validity_mask.data.len());
         debug_assert!(data.shape == validity_mask.shape);
 
-        let num_elements_per_thread = num::integer::div_ceil(data.shape.number_of_elements(), rayon::current_num_threads());
+        let num_elements_per_thread = num::integer::div_ceil(
+            data.shape.number_of_elements(),
+            rayon::current_num_threads(),
+        );
 
         let mut out_data = vec![Out::default(); data.data.len()];
 
         out_data
             .par_iter_mut()
             .with_min_len(num_elements_per_thread)
-            .zip(validity_mask.data.par_iter_mut().with_min_len(num_elements_per_thread))
+            .zip(
+                validity_mask
+                    .data
+                    .par_iter_mut()
+                    .with_min_len(num_elements_per_thread),
+            )
             .zip(data.data.par_iter().with_min_len(num_elements_per_thread))
             .enumerate()
             .for_each(|(lin_idx, ((out, mask), i))| {
@@ -523,7 +536,10 @@ where
     type Output = MaskedGrid<G, Out>;
 
     fn map_indexed_elements_parallel(self, map_fn: F) -> Self::Output {
-        let num_elements_per_thread = num::integer::div_ceil(self.shape.number_of_elements(), rayon::current_num_threads());
+        let num_elements_per_thread = num::integer::div_ceil(
+            self.shape.number_of_elements(),
+            rayon::current_num_threads(),
+        );
 
         let (out_data, validity_mask) = (0..self.shape.number_of_elements())
             .into_par_iter()
@@ -617,7 +633,10 @@ where
             GridOrEmpty::Grid(g) => g.map_indexed_elements_parallel(map_fn).into(),
             GridOrEmpty::Empty(e) => {
                 // we have to map all the empty pixels. However, if the validity mask is empty we can return an empty grid.
-                let num_elements_per_thread = num::integer::div_ceil(e.shape.number_of_elements(), rayon::current_num_threads());
+                let num_elements_per_thread = num::integer::div_ceil(
+                    e.shape.number_of_elements(),
+                    rayon::current_num_threads(),
+                );
 
                 let mapped = e.map_indexed_elements_parallel(map_fn);
                 if mapped

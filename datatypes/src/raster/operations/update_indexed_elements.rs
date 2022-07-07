@@ -212,7 +212,10 @@ where
     T: 'static + Copy + Send + Sync,
 {
     fn update_indexed_elements_parallel(&mut self, map_fn: F) {
-        let num_elements_per_thread = num::integer::div_ceil(self.shape.number_of_elements(), rayon::current_num_threads());
+        let num_elements_per_thread = num::integer::div_ceil(
+            self.shape.number_of_elements(),
+            rayon::current_num_threads(),
+        );
 
         self.data
             .par_iter_mut()
@@ -267,7 +270,10 @@ where
     T: 'static + Copy + Send + Sync,
 {
     fn update_indexed_elements_parallel(&mut self, map_fn: F) {
-        let num_elements_per_thread = num::integer::div_ceil(self.shape().number_of_elements(), rayon::current_num_threads());
+        let num_elements_per_thread = num::integer::div_ceil(
+            self.shape().number_of_elements(),
+            rayon::current_num_threads(),
+        );
 
         self.inner_grid
             .data
@@ -357,7 +363,10 @@ where
             GridOrEmpty::Grid(grid) => grid.update_indexed_elements_parallel(map_fn),
             GridOrEmpty::Empty(e) => {
                 // we need to map all the empty pixels. If any is valid set the mapped grid as self.
-                let num_elements_per_thread = num::integer::div_ceil(e.shape.number_of_elements(), rayon::current_num_threads());
+                let num_elements_per_thread = num::integer::div_ceil(
+                    e.shape.number_of_elements(),
+                    rayon::current_num_threads(),
+                );
 
                 let mapped_grid = e.clone().map_indexed_elements_parallel(map_fn);
                 if mapped_grid

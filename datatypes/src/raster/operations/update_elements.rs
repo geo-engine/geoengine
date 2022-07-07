@@ -141,8 +141,10 @@ where
     F: Fn(T) -> T + Send + Sync,
 {
     fn update_elements_parallel(&mut self, map_fn: F) {
-        
-        let num_elements_per_thread = num::integer::div_ceil(self.shape.number_of_elements(), rayon::current_num_threads());
+        let num_elements_per_thread = num::integer::div_ceil(
+            self.shape.number_of_elements(),
+            rayon::current_num_threads(),
+        );
 
         self.data
             .par_iter_mut()
@@ -172,7 +174,10 @@ where
     F: Fn(Option<T>) -> Option<T> + Send + Sync,
 {
     fn update_elements_parallel(&mut self, map_fn: F) {
-        let num_elements_per_thread = num::integer::div_ceil(self.shape().number_of_elements(), rayon::current_num_threads());
+        let num_elements_per_thread = num::integer::div_ceil(
+            self.shape().number_of_elements(),
+            rayon::current_num_threads(),
+        );
 
         self.inner_grid
             .data
