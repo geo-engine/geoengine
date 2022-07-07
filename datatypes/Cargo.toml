@@ -47,3 +47,11 @@ harness = false
 [[bench]]
 name = "grid_mapping"
 harness = false
+
+[[bench]]
+name = "grid_updates"
+harness = false
+
+[[bench]]
+name = "masked_grid_mapping"
+harness = false

@@ -7,8 +7,8 @@ use rayon::{
 };
 
 use crate::raster::{
-    EmptyGrid, Grid, Grid2D, GridIdx, GridIdx2D, GridOrEmpty, GridOrEmpty2D, GridSize,
-    GridSpaceToLinearSpace, MaskedGrid, MaskedGrid2D, RasterTile2D,
+    EmptyGrid, Grid, Grid2D, GridIdx, GridIdx2D, GridIndexAccess, GridOrEmpty, GridOrEmpty2D,
+    GridSize, GridSpaceToLinearSpace, MaskedGrid, MaskedGrid2D, RasterTile2D,
 };
 
 /// This trait models a map operation from a `Grid` of type `In` into a `Grid` of Type `Out`. This is done using a provided function that maps each element to a new value.
@@ -44,15 +44,15 @@ pub trait MapIndexedElementsParallel<In, Out, Index, F: Fn(Index, In) -> Out> {
     fn map_indexed_elements_parallel(self, map_fn: F) -> Self::Output;
 }
 
-pub trait MapIndexedElementsParallel2D<In, Out, Index, F: Fn(Index, In) -> Out> {
+pub trait MapIndexedElementsParallel2dOptimized<In, Out, Index, F: Fn(Index, In) -> Out> {
     type Output;
     /// Create a new instance from the current one. The `map_fn` transforms all elements to a new value. Use a `ThreadPool` for parallel map operations.
-    fn map_indexed_elements_parallel2d(self, map_fn: F) -> Self::Output;
+    fn map_indexed_elements_parallel_2d_optimized(self, map_fn: F) -> Self::Output;
 }
 
 // Implementation for Grid using GridIdx as index: F: Fn(GridIdx, In) -> Out.
-// Delegates to implementation for Grid with F: Fn(usize, In) -> Out.
-impl<In, Out, F> MapIndexedElementsParallel2D<In, Out, GridIdx2D, F> for Grid2D<In>
+// Optimized for 2D
+impl<In, Out, F> MapIndexedElementsParallel2dOptimized<In, Out, GridIdx2D, F> for Grid2D<In>
 where
     F: Fn(GridIdx2D, In) -> Out + Send + Sync,
     In: 'static + Sized + Send + Sync + Copy,
@@ -61,7 +61,7 @@ where
 {
     type Output = Grid2D<Out>;
 
-    fn map_indexed_elements_parallel2d(self, map_fn: F) -> Self::Output {
+    fn map_indexed_elements_parallel_2d_optimized(self, map_fn: F) -> Self::Output {
         let Grid { shape, data } = self;
 
         let parallelism = rayon::current_num_threads();
@@ -91,6 +91,76 @@ where
                                 *pixel_out = out_value
                             },
                         );
+                    });
+            });
+
+        out_grid
+    }
+}
+
+// Implementation for Grid using GridIdx as index: F: Fn(GridIdx, In) -> Out.
+// Optimized for 2D
+impl<In, Out, F> MapIndexedElementsParallel2dOptimized<Option<In>, Option<Out>, GridIdx2D, F>
+    for MaskedGrid2D<In>
+where
+    F: Fn(GridIdx2D, Option<In>) -> Option<Out> + Send + Sync,
+    In: 'static + Sized + Send + Sync + Copy,
+    Out: Default + Sized + Send + Sync + Clone,
+    Vec<In>: Sized,
+{
+    type Output = Grid2D<Out>;
+
+    fn map_indexed_elements_parallel_2d_optimized(self, map_fn: F) -> Self::Output {
+        let MaskedGrid {
+            inner_grid,
+            validity_mask,
+        } = self;
+
+        let Grid { data, shape } = inner_grid;
+        let Grid {
+            data: mut validity_data,
+            shape: _shape,
+        } = validity_mask;
+
+        let parallelism = rayon::current_num_threads();
+        let rows_per_task = num::integer::div_ceil(shape.axis_size_y(), parallelism);
+
+        let chunk_size = shape.axis_size_x() * rows_per_task;
+
+        let mut out_grid = Grid::new_filled(shape.clone(), Out::default());
+
+        out_grid
+            .data
+            .par_chunks_mut(chunk_size)
+            .zip(validity_data.par_chunks_mut(chunk_size))
+            .zip(data.par_chunks(chunk_size))
+            .enumerate()
+            .for_each(|(y_f, ((out_rows_slice, val_rows_slice), in_row_slice))| {
+                let y_start = y_f * rows_per_task;
+                let y_end = y_start + out_rows_slice.len() / shape.axis_size_x();
+
+                (y_start..y_end)
+                    .zip(out_rows_slice.chunks_mut(shape.axis_size_x()))
+                    .zip(val_rows_slice.chunks_mut(shape.axis_size_x()))
+                    .zip(in_row_slice.chunks(shape.axis_size_x()))
+                    .for_each(|(((y, out_row), val_row), in_row)| {
+                        out_row
+                            .iter_mut()
+                            .zip(val_row.iter_mut())
+                            .zip(in_row.iter())
+                            .enumerate()
+                            .for_each(|(x, ((pixel_out, pixel_val), pixel_in))| {
+                                let g_idx = GridIdx([y as isize, x as isize]);
+
+                                let in_value = if *pixel_val { Some(*pixel_in) } else { None };
+
+                                let out_value = map_fn(g_idx, in_value);
+                                *pixel_val = out_value.is_some();
+
+                                if let Some(out_pixel) = out_value {
+                                    *pixel_out = out_pixel
+                                }
+                            });
                     });
             });
 
@@ -173,6 +243,7 @@ where
     F: Fn(usize, Option<In>) -> Option<Out>,
     In: Clone,
     Out: Default + Clone,
+    Grid<G, In>: GridIndexAccess<In, usize>,
 {
     type Output = MaskedGrid<G, Out>;
 
@@ -184,13 +255,17 @@ where
         debug_assert!(data.data.len() == validity_mask.data.len());
         debug_assert!(data.shape == validity_mask.shape);
 
-        let out_data: Vec<Out> = data
+        let out_data: Vec<Out> = validity_mask
             .data
-            .into_iter()
-            .zip(validity_mask.data.iter_mut())
+            .iter_mut()
             .enumerate()
-            .map(|(lin_idx, (i, m))| {
-                let in_masked_value = if *m { Some(i) } else { None };
+            .map(|(lin_idx, m)| {
+                let in_masked_value = if *m {
+                    let i = data.get_at_grid_index_unchecked(lin_idx);
+                    Some(i)
+                } else {
+                    None
+                };
 
                 let out_value_option = map_fn(lin_idx, in_masked_value);
 
@@ -218,6 +293,7 @@ where
     F: Fn(GridIdx<A>, Option<In>) -> Option<Out>,
     In: Clone,
     Out: Default + Clone,
+    Grid<G, In>: GridIndexAccess<In, usize>,
 {
     type Output = MaskedGrid<G, Out>;
 
@@ -447,7 +523,7 @@ where
 impl<G, In, Out, F> MapIndexedElementsParallel<Option<In>, Option<Out>, usize, F>
     for MaskedGrid<G, In>
 where
-    G: GridSize + PartialEq + Clone,
+    G: GridSize + PartialEq + Clone + Send + Sync,
     F: Fn(usize, Option<In>) -> Option<Out> + Send + Sync,
     In: Copy + Clone + Sync,
     Out: Default + Clone + Send,
@@ -478,10 +554,14 @@ where
                     .par_iter_mut()
                     .with_min_len(num_elements_per_thread),
             )
-            .zip(data.data.par_iter().with_min_len(num_elements_per_thread))
             .enumerate()
-            .for_each(|(lin_idx, ((out, mask), i))| {
-                let in_masked_value = if *mask { Some(*i) } else { None };
+            .for_each(|(lin_idx, (out, mask))| {
+                let in_masked_value = if *mask {
+                    let i = data.get_at_grid_index_unchecked(lin_idx);
+                    Some(i)
+                } else {
+                    None
+                };
 
                 let out_value_option = map_fn(lin_idx, in_masked_value);
 
