@@ -212,11 +212,11 @@ where
     T: 'static + Copy + Send + Sync,
 {
     fn update_indexed_elements_parallel(&mut self, map_fn: F) {
-        let axis_size_x = self.shape.axis_size_x();
+        let num_elements_per_thread = num::integer::div_ceil(self.shape.number_of_elements(), rayon::current_num_threads());
 
         self.data
             .par_iter_mut()
-            .with_min_len(axis_size_x)
+            .with_min_len(num_elements_per_thread)
             .enumerate()
             .for_each(|(lin_idx, element_value)| {
                 let out_value = map_fn(lin_idx, *element_value);
@@ -262,22 +262,22 @@ where
 // Implementation for MaskedGrid using usize as index: F: Fn(usize, Option<T>) -> Option<T>.
 impl<G, T, F> UpdateIndexedElementsParallel<usize, Option<T>, F> for MaskedGrid<G, T>
 where
-    G: GridSize,
+    G: GridSize + PartialEq + Clone,
     F: Fn(usize, Option<T>) -> Option<T> + Sync,
     T: 'static + Copy + Send + Sync,
 {
     fn update_indexed_elements_parallel(&mut self, map_fn: F) {
-        let axis_size_x = self.inner_grid.shape.axis_size_x();
+        let num_elements_per_thread = num::integer::div_ceil(self.shape().number_of_elements(), rayon::current_num_threads());
 
         self.inner_grid
             .data
             .par_iter_mut()
-            .with_min_len(axis_size_x)
+            .with_min_len(num_elements_per_thread)
             .zip(
                 self.validity_mask
                     .data
                     .par_iter_mut()
-                    .with_min_len(axis_size_x),
+                    .with_min_len(num_elements_per_thread),
             )
             .enumerate()
             .for_each(|(lin_idx, (element_value, element_valid))| {
@@ -302,7 +302,7 @@ where
 // Delegates to implementation for MaskedGrid with F: Fn(usize, Option<T>) -> Option<T>.
 impl<G, A, T, F> UpdateIndexedElementsParallel<GridIdx<A>, Option<T>, F> for MaskedGrid<G, T>
 where
-    G: GridSpaceToLinearSpace<IndexArray = A> + Clone + Sync,
+    G: GridSpaceToLinearSpace<IndexArray = A> + Clone + Sync + PartialEq,
     F: Fn(GridIdx<A>, Option<T>) -> Option<T> + Sync,
     A: AsRef<[isize]>,
     T: 'static + Copy + Send + Sync,
@@ -357,12 +357,14 @@ where
             GridOrEmpty::Grid(grid) => grid.update_indexed_elements_parallel(map_fn),
             GridOrEmpty::Empty(e) => {
                 // we need to map all the empty pixels. If any is valid set the mapped grid as self.
+                let num_elements_per_thread = num::integer::div_ceil(e.shape.number_of_elements(), rayon::current_num_threads());
+
                 let mapped_grid = e.clone().map_indexed_elements_parallel(map_fn);
                 if mapped_grid
                     .mask_ref()
                     .data
                     .par_iter()
-                    .with_min_len(mapped_grid.shape().axis_size_x())
+                    .with_min_len(num_elements_per_thread)
                     .any(|m| *m)
                 {
                     *self = GridOrEmpty::Grid(mapped_grid);

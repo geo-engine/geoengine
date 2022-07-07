@@ -141,9 +141,12 @@ where
     F: Fn(T) -> T + Send + Sync,
 {
     fn update_elements_parallel(&mut self, map_fn: F) {
+        
+        let num_elements_per_thread = num::integer::div_ceil(self.shape.number_of_elements(), rayon::current_num_threads());
+
         self.data
             .par_iter_mut()
-            .with_min_len(self.shape.axis_size_x())
+            .with_min_len(num_elements_per_thread)
             .for_each(|t| *t = map_fn(*t));
     }
 }
@@ -165,21 +168,21 @@ where
 impl<T, F, G> UpdateElementsParallel<Option<T>, F> for MaskedGrid<G, T>
 where
     T: 'static + Send + Copy,
-    G: GridSize + Clone,
+    G: GridSize + Clone + PartialEq,
     F: Fn(Option<T>) -> Option<T> + Send + Sync,
 {
     fn update_elements_parallel(&mut self, map_fn: F) {
-        let axis_size_x = self.inner_grid.shape.axis_size_x();
+        let num_elements_per_thread = num::integer::div_ceil(self.shape().number_of_elements(), rayon::current_num_threads());
 
         self.inner_grid
             .data
             .par_iter_mut()
-            .with_min_len(axis_size_x)
+            .with_min_len(num_elements_per_thread)
             .zip(
                 self.validity_mask
                     .data
                     .par_iter_mut()
-                    .with_min_len(axis_size_x),
+                    .with_min_len(num_elements_per_thread),
             )
             .for_each(|(i, m)| {
                 let in_value = if *m { Some(*i) } else { None };

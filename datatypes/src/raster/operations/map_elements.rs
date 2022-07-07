@@ -187,10 +187,12 @@ where
     type Output = Grid<G, Out>;
     fn map_elements_parallel(self, map_fn: F) -> Self::Output {
         let shape = self.shape.clone();
+        let num_elements_per_thread = num::integer::div_ceil(self.shape.number_of_elements(), rayon::current_num_threads());
+
         let data = self
             .data
             .into_par_iter()
-            .with_min_len(self.shape.axis_size_x())
+            .with_min_len(num_elements_per_thread)
             .map(map_fn)
             .collect();
         Grid { shape, data }
@@ -232,16 +234,17 @@ where
         } = self;
 
         let shape = data.shape.clone();
+        let num_elements_per_thread = num::integer::div_ceil(shape.number_of_elements(), rayon::current_num_threads());
 
         let (new_data, new_mask): (Vec<Out>, Vec<bool>) = data
             .data
             .into_par_iter()
-            .with_min_len(data.shape.axis_size_x())
+            .with_min_len(num_elements_per_thread)
             .zip(
                 validity_mask
                     .data
                     .into_par_iter()
-                    .with_min_len(validity_mask.shape.axis_size_x()),
+                    .with_min_len(num_elements_per_thread),
             )
             .map(|(i, m)| {
                 let in_value = if m { Some(i) } else { None };
