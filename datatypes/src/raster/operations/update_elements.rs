@@ -1,6 +1,8 @@
 use crate::raster::{Grid, GridOrEmpty, GridOrEmpty2D, GridSize, MaskedGrid, RasterTile2D};
 use rayon::iter::{IndexedParallelIterator, IntoParallelRefMutIterator, ParallelIterator};
 
+const MIN_ELEMENTS_PER_THREAD: usize = 16 * 512;
+
 /// This trait models mutable updates on elements using a provided update function that maps each element to a new value.
 ///
 /// Most usefull implementations are on: `Grid`, `MaskedGrid`, `GridOrEmpty` and `RasterTile2D`.
@@ -144,7 +146,8 @@ where
         let num_elements_per_thread = num::integer::div_ceil(
             self.shape.number_of_elements(),
             rayon::current_num_threads(),
-        );
+        )
+        .min(MIN_ELEMENTS_PER_THREAD);
 
         self.data
             .par_iter_mut()
@@ -177,7 +180,8 @@ where
         let num_elements_per_thread = num::integer::div_ceil(
             self.shape().number_of_elements(),
             rayon::current_num_threads(),
-        );
+        )
+        .min(MIN_ELEMENTS_PER_THREAD);
 
         self.inner_grid
             .data

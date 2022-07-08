@@ -1,6 +1,8 @@
 use crate::raster::{Grid, GridOrEmpty, GridOrEmpty2D, GridSize, MaskedGrid, RasterTile2D};
 use rayon::iter::{IndexedParallelIterator, IntoParallelIterator, ParallelIterator};
 
+const MIN_ELEMENTS_PER_THREAD: usize = 16 * 512;
+
 /// This trait models a map operation from a `Grid` of type `In` into a `Grid` of Type `Out`. This is done using a provided function that maps each element to a new value.
 ///
 /// Most usefull implementations are on: `Grid`, `MaskedGrid`, `GridOrEmpty` and `RasterTile2D`.
@@ -190,7 +192,8 @@ where
         let num_elements_per_thread = num::integer::div_ceil(
             self.shape.number_of_elements(),
             rayon::current_num_threads(),
-        );
+        )
+        .min(MIN_ELEMENTS_PER_THREAD);
 
         let data = self
             .data
@@ -238,7 +241,8 @@ where
 
         let shape = data.shape.clone();
         let num_elements_per_thread =
-            num::integer::div_ceil(shape.number_of_elements(), rayon::current_num_threads());
+            num::integer::div_ceil(shape.number_of_elements(), rayon::current_num_threads())
+                .min(MIN_ELEMENTS_PER_THREAD);
 
         let (new_data, new_mask): (Vec<Out>, Vec<bool>) = data
             .data

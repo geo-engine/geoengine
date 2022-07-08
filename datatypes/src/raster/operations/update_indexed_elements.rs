@@ -12,6 +12,8 @@ use crate::raster::{
     RasterTile2D,
 };
 
+const MIN_ELEMENTS_PER_THREAD: usize = 16 * 512;
+
 /// This trait models mutable updates on elements using a provided update function that maps each element to a new value.
 ///
 /// The trait is implemented in a way that `Index` as well as the type `FT` that the map function uses are generic.
@@ -261,7 +263,8 @@ where
         let num_elements_per_thread = num::integer::div_ceil(
             self.shape.number_of_elements(),
             rayon::current_num_threads(),
-        );
+        )
+        .min(MIN_ELEMENTS_PER_THREAD);
 
         self.data
             .par_iter_mut()
@@ -319,7 +322,8 @@ where
         let num_elements_per_thread = num::integer::div_ceil(
             self.shape().number_of_elements(),
             rayon::current_num_threads(),
-        );
+        )
+        .min(MIN_ELEMENTS_PER_THREAD);
 
         self.inner_grid
             .data
@@ -412,7 +416,8 @@ where
                 let num_elements_per_thread = num::integer::div_ceil(
                     e.shape.number_of_elements(),
                     rayon::current_num_threads(),
-                );
+                )
+                .min(MIN_ELEMENTS_PER_THREAD);
 
                 let mapped_grid = e.clone().map_indexed_elements_parallel(map_fn);
                 if mapped_grid

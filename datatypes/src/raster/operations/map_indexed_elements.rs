@@ -11,6 +11,8 @@ use crate::raster::{
     GridSize, GridSpaceToLinearSpace, MaskedGrid, MaskedGrid2D, RasterTile2D,
 };
 
+const MIN_ELEMENTS_PER_THREAD: usize = 16 * 512;
+
 /// This trait models a map operation from a `Grid` of type `In` into a `Grid` of Type `Out`. This is done using a provided function that maps each element to a new value.
 ///
 /// The trait is implemented in a way that `Index` as well as the types `In` and `Out` used by the map function are generic.
@@ -65,7 +67,9 @@ where
         let Grid { shape, data } = self;
 
         let parallelism = rayon::current_num_threads();
-        let rows_per_task = num::integer::div_ceil(shape.axis_size_y(), parallelism);
+        let rows_per_task = num::integer::div_ceil(shape.axis_size_y(), parallelism).min(
+            num::integer::div_ceil(MIN_ELEMENTS_PER_THREAD, shape.axis_size_x()),
+        );
 
         let chunk_size = shape.axis_size_x() * rows_per_task;
 
@@ -461,7 +465,8 @@ where
     fn map_indexed_elements_parallel(self, map_fn: F) -> Self::Output {
         let Grid { shape, data } = self;
         let num_elements_per_thread =
-            num::integer::div_ceil(shape.number_of_elements(), rayon::current_num_threads());
+            num::integer::div_ceil(shape.number_of_elements(), rayon::current_num_threads())
+                .min(MIN_ELEMENTS_PER_THREAD);
 
         let out_data: Vec<Out> = data
             .into_par_iter()
@@ -541,7 +546,8 @@ where
         let num_elements_per_thread = num::integer::div_ceil(
             data.shape.number_of_elements(),
             rayon::current_num_threads(),
-        );
+        )
+        .min(MIN_ELEMENTS_PER_THREAD);
 
         let mut out_data = vec![Out::default(); data.data.len()];
 
@@ -619,7 +625,8 @@ where
         let num_elements_per_thread = num::integer::div_ceil(
             self.shape.number_of_elements(),
             rayon::current_num_threads(),
-        );
+        )
+        .min(MIN_ELEMENTS_PER_THREAD);
 
         let (out_data, validity_mask) = (0..self.shape.number_of_elements())
             .into_par_iter()
@@ -716,7 +723,8 @@ where
                 let num_elements_per_thread = num::integer::div_ceil(
                     e.shape.number_of_elements(),
                     rayon::current_num_threads(),
-                );
+                )
+                .min(MIN_ELEMENTS_PER_THREAD);
 
                 let mapped = e.map_indexed_elements_parallel(map_fn);
                 if mapped
