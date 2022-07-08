@@ -5,6 +5,7 @@ use super::{
 };
 use crate::error;
 use crate::util::Result;
+use num::Integer;
 use num_traits::Zero;
 use serde::{Deserialize, Serialize};
 use snafu::ensure;
@@ -171,10 +172,9 @@ impl GridSpaceToLinearSpace for GridShape2D {
 
     fn grid_idx_unchecked(&self, linear_idx: usize) -> GridIdx<[isize; 2]> {
         let [stride_y, _stride_x] = self.strides();
-        let grid_idx = GridIdx([
-            (linear_idx / stride_y) as isize,
-            (linear_idx % stride_y) as isize,
-        ]);
+        let (y, x) = linear_idx.div_rem(&stride_y);
+
+        let grid_idx = GridIdx([y as isize, x as isize]);
         debug_assert!(self.contains(&grid_idx));
         grid_idx
     }

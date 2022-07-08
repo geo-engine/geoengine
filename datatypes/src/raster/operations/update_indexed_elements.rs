@@ -1,6 +1,6 @@
 use rayon::{
     iter::{
-        IndexedParallelIterator, IntoParallelRefIterator, IntoParallelRefMutIterator,
+        IndexedParallelIterator, IntoParallelRefMutIterator,
         ParallelIterator,
     },
     slice::ParallelSliceMut,
@@ -415,18 +415,10 @@ where
             GridOrEmpty::Grid(grid) => grid.update_indexed_elements_parallel(map_fn),
             GridOrEmpty::Empty(e) => {
                 // we need to map all the empty pixels. If any is valid set the mapped grid as self.
-                let num_elements_per_thread = num::integer::div_ceil(
-                    e.shape.number_of_elements(),
-                    rayon::current_num_threads(),
-                )
-                .max(MIN_ELEMENTS_PER_THREAD);
-
                 let mapped_grid = e.clone().map_indexed_elements_parallel(map_fn);
                 if mapped_grid
                     .mask_ref()
-                    .data
-                    .par_iter()
-                    .with_min_len(num_elements_per_thread)
+                    .data.iter() // TODO: benchmark if a parallel iterator is faster.
                     .any(|m| *m)
                 {
                     *self = GridOrEmpty::Grid(mapped_grid);

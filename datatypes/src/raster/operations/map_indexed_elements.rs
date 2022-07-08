@@ -1,7 +1,6 @@
 use rayon::{
     iter::{
-        IndexedParallelIterator, IntoParallelIterator, IntoParallelRefIterator,
-        IntoParallelRefMutIterator, ParallelIterator,
+        IndexedParallelIterator, IntoParallelIterator, ParallelIterator,
     },
     slice::{ParallelSlice, ParallelSliceMut},
 };
@@ -540,7 +539,7 @@ where
     fn map_indexed_elements_parallel(self, map_fn: F) -> Self::Output {
         let MaskedGrid {
             inner_grid: data,
-            mut validity_mask,
+            validity_mask,
         } = self;
         debug_assert!(data.data.len() == validity_mask.data.len());
         debug_assert!(data.shape == validity_mask.shape);
@@ -551,38 +550,33 @@ where
         )
         .max(MIN_ELEMENTS_PER_THREAD);
 
-        let mut out_data = vec![Out::default(); data.data.len()];
-
-        out_data
-            .par_iter_mut()
+        let (out_data, out_validity): (Vec<Out>, Vec<bool>) = data
+            .data
+            .into_par_iter()
             .with_min_len(num_elements_per_thread)
             .zip(
                 validity_mask
                     .data
-                    .par_iter_mut()
+                    .into_par_iter()
                     .with_min_len(num_elements_per_thread),
             )
             .enumerate()
-            .for_each(|(lin_idx, (out, mask))| {
-                let in_masked_value = if *mask {
-                    let i = data.get_at_grid_index_unchecked(lin_idx);
-                    Some(i)
-                } else {
-                    None
-                };
+            .map(|(lin_idx, (in_pixel, mask))| {
+                let in_masked_value = if mask { Some(*in_pixel) } else { None };
 
                 let out_value_option = map_fn(lin_idx, in_masked_value);
 
-                *mask = out_value_option.is_some();
-
                 if let Some(out_value) = out_value_option {
-                    *out = out_value;
+                    (out_value, true)
+                } else {
+                    (Out::default(), false)
                 }
-            });
+            })
+            .collect();
 
         MaskedGrid::new(
             Grid::new(data.shape, out_data).expect("Grid creation failed before"),
-            validity_mask,
+            Grid::new(validity_mask.shape, out_validity).expect("Grid creation failed before"),
         )
         .expect("Grid creation failed before")
     }
@@ -722,18 +716,10 @@ where
             GridOrEmpty::Grid(g) => g.map_indexed_elements_parallel(map_fn).into(),
             GridOrEmpty::Empty(e) => {
                 // we have to map all the empty pixels. However, if the validity mask is empty we can return an empty grid.
-                let num_elements_per_thread = num::integer::div_ceil(
-                    e.shape.number_of_elements(),
-                    rayon::current_num_threads(),
-                )
-                .max(MIN_ELEMENTS_PER_THREAD);
-
                 let mapped = e.map_indexed_elements_parallel(map_fn);
                 if mapped
                     .mask_ref()
-                    .data
-                    .par_iter()
-                    .with_min_len(num_elements_per_thread)
+                    .data.iter() // TODO: benchmark if a parallel iterator is faster here.
                     .any(|m| *m)
                 {
                     return mapped.into();
