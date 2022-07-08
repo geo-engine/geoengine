@@ -65,7 +65,9 @@ where
         let Grid { shape, data } = self;
 
         let parallelism = rayon::current_num_threads();
-        let rows_per_task = num::integer::div_ceil(shape.axis_size_y(), parallelism);
+        let rows_per_task = num::integer::div_ceil(shape.axis_size_y(), parallelism).max(
+            num::integer::div_ceil(MIN_ELEMENTS_PER_THREAD, shape.axis_size_x()),
+        );
 
         let chunk_size = shape.axis_size_x() * rows_per_task;
 
@@ -264,7 +266,7 @@ where
             self.shape.number_of_elements(),
             rayon::current_num_threads(),
         )
-        .min(MIN_ELEMENTS_PER_THREAD);
+        .max(MIN_ELEMENTS_PER_THREAD);
 
         self.data
             .par_iter_mut()
@@ -323,7 +325,7 @@ where
             self.shape().number_of_elements(),
             rayon::current_num_threads(),
         )
-        .min(MIN_ELEMENTS_PER_THREAD);
+        .max(MIN_ELEMENTS_PER_THREAD);
 
         self.inner_grid
             .data
@@ -417,7 +419,7 @@ where
                     e.shape.number_of_elements(),
                     rayon::current_num_threads(),
                 )
-                .min(MIN_ELEMENTS_PER_THREAD);
+                .max(MIN_ELEMENTS_PER_THREAD);
 
                 let mapped_grid = e.clone().map_indexed_elements_parallel(map_fn);
                 if mapped_grid

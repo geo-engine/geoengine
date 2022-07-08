@@ -193,7 +193,7 @@ where
             self.shape.number_of_elements(),
             rayon::current_num_threads(),
         )
-        .min(MIN_ELEMENTS_PER_THREAD);
+        .max(MIN_ELEMENTS_PER_THREAD);
 
         let data = self
             .data
@@ -242,7 +242,7 @@ where
         let shape = data.shape.clone();
         let num_elements_per_thread =
             num::integer::div_ceil(shape.number_of_elements(), rayon::current_num_threads())
-                .min(MIN_ELEMENTS_PER_THREAD);
+                .max(MIN_ELEMENTS_PER_THREAD);
 
         let (new_data, new_mask): (Vec<Out>, Vec<bool>) = data
             .data

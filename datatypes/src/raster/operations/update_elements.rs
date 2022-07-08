@@ -147,7 +147,7 @@ where
             self.shape.number_of_elements(),
             rayon::current_num_threads(),
         )
-        .min(MIN_ELEMENTS_PER_THREAD);
+        .max(MIN_ELEMENTS_PER_THREAD);
 
         self.data
             .par_iter_mut()
@@ -181,7 +181,7 @@ where
             self.shape().number_of_elements(),
             rayon::current_num_threads(),
         )
-        .min(MIN_ELEMENTS_PER_THREAD);
+        .max(MIN_ELEMENTS_PER_THREAD);
 
         self.inner_grid
             .data

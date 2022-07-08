@@ -67,7 +67,7 @@ where
         let Grid { shape, data } = self;
 
         let parallelism = rayon::current_num_threads();
-        let rows_per_task = num::integer::div_ceil(shape.axis_size_y(), parallelism).min(
+        let rows_per_task = num::integer::div_ceil(shape.axis_size_y(), parallelism).max(
             num::integer::div_ceil(MIN_ELEMENTS_PER_THREAD, shape.axis_size_x()),
         );
 
@@ -127,7 +127,9 @@ where
         } = validity_mask;
 
         let parallelism = rayon::current_num_threads();
-        let rows_per_task = num::integer::div_ceil(shape.axis_size_y(), parallelism);
+        let rows_per_task = num::integer::div_ceil(shape.axis_size_y(), parallelism).max(
+            num::integer::div_ceil(MIN_ELEMENTS_PER_THREAD, shape.axis_size_x()),
+        );
 
         let chunk_size = shape.axis_size_x() * rows_per_task;
 
@@ -466,7 +468,7 @@ where
         let Grid { shape, data } = self;
         let num_elements_per_thread =
             num::integer::div_ceil(shape.number_of_elements(), rayon::current_num_threads())
-                .min(MIN_ELEMENTS_PER_THREAD);
+                .max(MIN_ELEMENTS_PER_THREAD);
 
         let out_data: Vec<Out> = data
             .into_par_iter()
@@ -547,7 +549,7 @@ where
             data.shape.number_of_elements(),
             rayon::current_num_threads(),
         )
-        .min(MIN_ELEMENTS_PER_THREAD);
+        .max(MIN_ELEMENTS_PER_THREAD);
 
         let mut out_data = vec![Out::default(); data.data.len()];
 
@@ -626,7 +628,7 @@ where
             self.shape.number_of_elements(),
             rayon::current_num_threads(),
         )
-        .min(MIN_ELEMENTS_PER_THREAD);
+        .max(MIN_ELEMENTS_PER_THREAD);
 
         let (out_data, validity_mask) = (0..self.shape.number_of_elements())
             .into_par_iter()
@@ -724,7 +726,7 @@ where
                     e.shape.number_of_elements(),
                     rayon::current_num_threads(),
                 )
-                .min(MIN_ELEMENTS_PER_THREAD);
+                .max(MIN_ELEMENTS_PER_THREAD);
 
                 let mapped = e.map_indexed_elements_parallel(map_fn);
                 if mapped
