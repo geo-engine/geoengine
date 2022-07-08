@@ -1,7 +1,5 @@
 use rayon::{
-    iter::{
-        IndexedParallelIterator, IntoParallelIterator, ParallelIterator,
-    },
+    iter::{IndexedParallelIterator, IntoParallelIterator, ParallelIterator},
     slice::{ParallelSlice, ParallelSliceMut},
 };
 
@@ -719,7 +717,8 @@ where
                 let mapped = e.map_indexed_elements_parallel(map_fn);
                 if mapped
                     .mask_ref()
-                    .data.iter() // TODO: benchmark if a parallel iterator is faster here.
+                    .data
+                    .iter() // TODO: benchmark if a parallel iterator is faster here.
                     .any(|m| *m)
                 {
                     return mapped.into();

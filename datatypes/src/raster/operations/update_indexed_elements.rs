@@ -1,8 +1,5 @@
 use rayon::{
-    iter::{
-        IndexedParallelIterator, IntoParallelRefMutIterator,
-        ParallelIterator,
-    },
+    iter::{IndexedParallelIterator, IntoParallelRefMutIterator, ParallelIterator},
     slice::ParallelSliceMut,
 };
 
@@ -418,7 +415,8 @@ where
                 let mapped_grid = e.clone().map_indexed_elements_parallel(map_fn);
                 if mapped_grid
                     .mask_ref()
-                    .data.iter() // TODO: benchmark if a parallel iterator is faster.
+                    .data
+                    .iter() // TODO: benchmark if a parallel iterator is faster.
                     .any(|m| *m)
                 {
                     *self = GridOrEmpty::Grid(mapped_grid);
