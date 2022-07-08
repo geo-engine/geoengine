@@ -79,7 +79,7 @@ where
                         row.iter_mut().enumerate().for_each(|(x, pixel)| {
                             let g_idx = GridIdx([y as isize, x as isize]);
                             let out_value = map_fn(g_idx, *pixel);
-                            *pixel = out_value
+                            *pixel = out_value;
                         });
                     });
             });

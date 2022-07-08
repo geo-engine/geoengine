@@ -15,18 +15,15 @@ fn map_indexed_elements_1d_simple(c: &mut Criterion) {
     let grid_idx_map_fn =
         |GridIdx([x]): GridIdx1D, element: Option<u32>| element.map(|e| (e * 321) % (x + 1) as u32);
 
-    let group_name = format!("MaskedGrid MapIndexedElements 1D simple");
+    let group_name = "MaskedGrid MapIndexedElements 1D simple";
 
-    let mut group = c.benchmark_group(&group_name);
+    let mut group = c.benchmark_group(group_name);
 
     group.bench_function("map_indexed_elements usize", |b| {
         b.iter(|| {
             let grid = grid.clone();
 
-            black_box({
-                let map_fn = lin_idx_map_fn;
-                let _ = grid.map_indexed_elements(map_fn);
-            })
+            black_box(grid.map_indexed_elements(lin_idx_map_fn))
         })
     });
 
@@ -34,10 +31,7 @@ fn map_indexed_elements_1d_simple(c: &mut Criterion) {
         b.iter(|| {
             let grid = grid.clone();
 
-            black_box({
-                let map_fn = grid_idx_map_fn;
-                let _ = grid.map_indexed_elements(map_fn);
-            })
+            black_box(grid.map_indexed_elements(grid_idx_map_fn))
         })
     });
     group.finish();
@@ -72,10 +66,7 @@ fn map_indexed_elements_1d(c: &mut Criterion) {
                 b.iter(|| {
                     let grid = grid.clone();
 
-                    black_box({
-                        let map_fn = lin_idx_map_fn;
-                        let _ = grid.map_indexed_elements_parallel(map_fn);
-                    })
+                    black_box(grid.map_indexed_elements_parallel(lin_idx_map_fn))
                 })
             })
         });
@@ -85,10 +76,7 @@ fn map_indexed_elements_1d(c: &mut Criterion) {
                 b.iter(|| {
                     let grid = grid.clone();
 
-                    black_box({
-                        let map_fn = grid_idx_map_fn;
-                        let _ = grid.map_indexed_elements_parallel(map_fn);
-                    })
+                    black_box(grid.map_indexed_elements_parallel(grid_idx_map_fn))
                 })
             })
         });
@@ -106,18 +94,15 @@ fn map_indexed_elements_2d_simple(c: &mut Criterion) {
         element.map(|e| (e * 321) % (y * 512 + x + 1) as u32)
     };
 
-    let group_name = format!("MaskedGrid MapIndexedElements 2D simple");
+    let group_name = "MaskedGrid MapIndexedElements 2D simple";
 
-    let mut group = c.benchmark_group(&group_name);
+    let mut group = c.benchmark_group(group_name);
 
     group.bench_function("map_indexed_elements usize", |b| {
         b.iter(|| {
             let grid = grid.clone();
 
-            black_box({
-                let map_fn = lin_idx_map_fn;
-                let _ = grid.map_indexed_elements(map_fn);
-            })
+            black_box(grid.map_indexed_elements(lin_idx_map_fn))
         })
     });
 
@@ -125,10 +110,7 @@ fn map_indexed_elements_2d_simple(c: &mut Criterion) {
         b.iter(|| {
             let grid = grid.clone();
 
-            black_box({
-                let map_fn = grid_idx_map_fn;
-                let _ = grid.map_indexed_elements(map_fn);
-            })
+            black_box(grid.map_indexed_elements(grid_idx_map_fn))
         })
     });
 
@@ -165,10 +147,7 @@ fn map_indexed_elements_2d(c: &mut Criterion) {
                 b.iter(|| {
                     let grid = grid.clone();
 
-                    black_box({
-                        let map_fn = lin_idx_map_fn;
-                        let _ = grid.map_indexed_elements_parallel(map_fn);
-                    })
+                    black_box(grid.map_indexed_elements_parallel(lin_idx_map_fn))
                 })
             })
         });
@@ -178,10 +157,7 @@ fn map_indexed_elements_2d(c: &mut Criterion) {
                 b.iter(|| {
                     let grid = grid.clone();
 
-                    black_box({
-                        let map_fn = grid_idx_map_fn;
-                        let _ = grid.map_indexed_elements_parallel(map_fn);
-                    })
+                    black_box(grid.map_indexed_elements_parallel(grid_idx_map_fn))
                 })
             })
         });
@@ -191,10 +167,7 @@ fn map_indexed_elements_2d(c: &mut Criterion) {
                 b.iter(|| {
                     let grid = grid.clone();
 
-                    black_box({
-                        let map_fn = grid_idx_map_fn;
-                        let _ = grid.map_indexed_elements_parallel_2d_optimized(map_fn);
-                    })
+                    black_box(grid.map_indexed_elements_parallel_2d_optimized(grid_idx_map_fn))
                 })
             })
         });

@@ -69,7 +69,7 @@ where
 
         let chunk_size = shape.axis_size_x() * rows_per_task;
 
-        let mut out_grid = Grid::new_filled(shape.clone(), Out::default());
+        let mut out_grid = Grid::new_filled(shape, Out::default());
 
         out_grid
             .data
@@ -88,7 +88,7 @@ where
                             |(x, (pixel_out, pixel_in))| {
                                 let g_idx = GridIdx([y as isize, x as isize]);
                                 let out_value = map_fn(g_idx, *pixel_in);
-                                *pixel_out = out_value
+                                *pixel_out = out_value;
                             },
                         );
                     });
@@ -127,7 +127,7 @@ where
 
         let chunk_size = shape.axis_size_x() * rows_per_task;
 
-        let mut out_grid = Grid::new_filled(shape.clone(), Out::default());
+        let mut out_grid = Grid::new_filled(shape, Out::default());
 
         out_grid
             .data
@@ -158,7 +158,7 @@ where
                                 *pixel_val = out_value.is_some();
 
                                 if let Some(out_pixel) = out_value {
-                                    *pixel_out = out_pixel
+                                    *pixel_out = out_pixel;
                                 }
                             });
                     });
