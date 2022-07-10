@@ -7,9 +7,9 @@ const MIN_ELEMENTS_PER_THREAD: usize = 16 * 512;
 ///
 /// Most useful implementations are on: `Grid`, `MaskedGrid`, `GridOrEmpty` and `RasterTile2D`.
 ///
-/// On `Grid` elements are mapped as `|element: In| { element + 1 }` with `F: Fn(In) -> Out`
+/// On `Grid` elements are mapped, e.g., as `|element: In| { element + 1 }` with `F: Fn(In) -> Out`
 ///
-/// On `MaskedGrid` elements are mapped ignoring _no data_ as `|element: In| { element + 1 }` with `F: Fn(In) -> Out` or handling _no data_ as `|element: Option<In>| { element.map(|e| e+ 1) }` with `F: Fn(Option<In>) -> Option<Out>`.
+/// On `MaskedGrid` you can map either only valid data (excluding no data), e.g., `|element: In| { element + 1 }` with `F: Fn(In) -> Out` or handling no data as `|element: Option<In>| { element.map(|e| e+ 1) }` with `F: Fn(Option<In>) -> Option<Out>`.
 pub trait MapElements<In, Out, F: Fn(In) -> Out> {
     type Output;
     /// Create a new instance from the current one. The `map_fn` transforms all elements to a new value.
@@ -19,11 +19,11 @@ pub trait MapElements<In, Out, F: Fn(In) -> Out> {
 /// This trait is equal to `MapElements` but uses a thread pool to do the operation in parallel.
 /// This trait models a map operation from a `Grid` of type `In` into a `Grid` of Type `Out`. This is done using a provided function that maps each element to a new value.
 ///
-/// Most usefull implementations are on: `Grid`, `MaskedGrid`, `GridOrEmpty` and `RasterTile2D`.
+/// Most useful implementations are on: `Grid`, `MaskedGrid`, `GridOrEmpty` and `RasterTile2D`.
 ///
-/// On `Grid` elements are mapped as `|element: In| { element + 1 }` with `F: Fn(In) -> Out`
+/// On `Grid` elements are mapped, e.g., as `|element: In| { element + 1 }` with `F: Fn(In) -> Out`
 ///
-/// On `MaskedGrid` elements are mapped ignoring _no data_ as `|element: In| { element + 1 }` with `F: Fn(In) -> Out` or handling _no data_ as `|element: Option<In>| { element.map(|e| e+ 1) }` with `F: Fn(Option<In>) -> Option<Out>`.
+/// On `MaskedGrid` you can map either only valid data (excluding no data), e.g., `|element: In| { element + 1 }` with `F: Fn(In) -> Out` or handling no data as `|element: Option<In>| { element.map(|e| e+ 1) }` with `F: Fn(Option<In>) -> Option<Out>`.
 
 pub trait MapElementsParallel<In, Out, F: Fn(In) -> Out> {
     type Output;
