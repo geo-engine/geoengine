@@ -11,11 +11,11 @@ const MIN_ELEMENTS_PER_THREAD: usize = 16 * 512;
 /// The trait is implemented in a way that `Index` as well as the types `In` and `Out` used by the map function are generic.
 /// The generic `Index` allows to either use enumerated elements `Index = usize` or n-dimensinal grid coordinates `Index = GridIdx`.
 ///
-/// Most usefull implementations are on: `Grid`, `MaskedGrid`, `GridOrEmpty` and `RasterTile2D`.
+/// Most useful implementations are on: `Grid`, `MaskedGrid`, `GridOrEmpty` and `RasterTile2D`.
 ///
-/// On `Grid` elements are mapped as `|element: In| { element + 1 }` with `F: Fn(In, Index) -> Out`
+/// On `Grid` elements are mapped, e.g., as `|element: In| { element + 1 }` with `F: Fn(In, Index) -> Out`
 ///
-/// On `MaskedGrid` elements are mapped ignoring _no data_ as `|element: In| { element + 1 }` with `F: Fn(In, Index) -> Out` or handling _no data_ as `|element: Option<In>| { element.map(|e| e+ 1) }` with `F: Fn(Option<In>, Index) -> Option<Out>`.
+/// On `MaskedGrid` you can map either only valid data (excluding no data), e.g., `|element: In| { element + 1 }` with `Fn(In, Index) -> Out` or handling no data as `|element: Option<In>| { element.map(|e| e + 1) }` with `F: Fn(Option<In>, Index) -> Option<Out>`.
 pub trait MapIndexedElements<In, Out, Index, F: Fn(Index, In) -> Out> {
     type Output;
     /// Create a new instance from the current one. The `map_fn` transforms all elements to a new value.
@@ -28,11 +28,11 @@ pub trait MapIndexedElements<In, Out, Index, F: Fn(Index, In) -> Out> {
 /// The trait is implemented in a way that `Index` as well as the types `In` and `Out` used by the map function are generic.
 /// The generic `Index` allows to either use enumerated elements `Index = usize` or n-dimensinal grid coordinates `Index = GridIdx`.
 ///
-/// Most usefull implementations are on: `Grid`, `MaskedGrid`, `GridOrEmpty` and `RasterTile2D`.
+/// Most useful implementations are on: `Grid`, `MaskedGrid`, `GridOrEmpty` and `RasterTile2D`.
 ///
-/// On `Grid` elements are mapped as `|element: In| { element + 1 }` with `F: Fn(In, Index) -> Out`
+/// On `Grid` elements are mapped, e.g., as `|element: In| { element + 1 }` with `F: Fn(In, Index) -> Out`
 ///
-/// On `MaskedGrid` elements are mapped ignoring _no data_ as `|element: In| { element + 1 }` with `F: Fn(In, Index) -> Out` or handling _no data_ as `|element: Option<In>| { element.map(|e| e+ 1) }` with `F: Fn(Option<In>, Index) -> Option<Out>`.
+/// On `MaskedGrid` you can map either only valid data (excluding no data), e.g., `|element: In| { element + 1 }` with `Fn(In, Index) -> Out` or handling no data as `|element: Option<In>| { element.map(|e| e + 1) }` with `F: Fn(Option<In>, Index) -> Option<Out>`.
 pub trait MapIndexedElementsParallel<In, Out, Index, F: Fn(Index, In) -> Out> {
     type Output;
     /// Create a new instance from the current one. The `map_fn` transforms all elements to a new value. Use a `ThreadPool` for parallel map operations.
