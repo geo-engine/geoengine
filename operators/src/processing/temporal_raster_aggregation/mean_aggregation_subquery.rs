@@ -82,7 +82,7 @@ impl<T> TemporalMeanTileAccu<T> {
                         None
                     }
                 };
-                self.value_grid.update_indexed_elements(map_fn); // TODO: make this patallel?
+                self.value_grid.update_indexed_elements(map_fn); // TODO: make this parallel?
             }
 
             GridOrEmpty::Grid(g) => {
@@ -105,7 +105,7 @@ impl<T> TemporalMeanTileAccu<T> {
                     }
                 };
 
-                g.update_indexed_elements(map_fn); // TODO: make this patallel?
+                g.update_indexed_elements(map_fn); // TODO: make this parallel?
             }
         }
 
