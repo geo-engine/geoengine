@@ -44,7 +44,7 @@ pub struct ExpressionParams {
     #[serde(with = "float_with_nan")]
     pub output_no_data_value: f64, // TODO: check value is valid for given output type during deserialization
     pub output_measurement: Option<Measurement>,
-    pub map_no_data: bool, // TODO: remove since that has no use anymore!
+    pub map_no_data: bool,
 }
 
 // TODO: rename to `Expression`
