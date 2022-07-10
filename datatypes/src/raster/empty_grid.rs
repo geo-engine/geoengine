@@ -121,12 +121,7 @@ mod tests {
         assert_eq!(n, expected);
     }
 
-    #[test]
-    #[allow(clippy::float_cmp)]
-    fn convert_dtype() {
-        let n: EmptyGrid2D<u8> = EmptyGrid2D::new([2, 2].into());
-        let _n_converted = n.convert_dtype::<f64>();
-    }
+
 
     #[test]
     fn ndim() {
