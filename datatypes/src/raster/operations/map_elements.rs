@@ -5,7 +5,7 @@ const MIN_ELEMENTS_PER_THREAD: usize = 16 * 512;
 
 /// This trait models a map operation from a `Grid` of type `In` into a `Grid` of Type `Out`. This is done using a provided function that maps each element to a new value.
 ///
-/// Most usefull implementations are on: `Grid`, `MaskedGrid`, `GridOrEmpty` and `RasterTile2D`.
+/// Most useful implementations are on: `Grid`, `MaskedGrid`, `GridOrEmpty` and `RasterTile2D`.
 ///
 /// On `Grid` elements are mapped as `|element: In| { element + 1 }` with `F: Fn(In) -> Out`
 ///
