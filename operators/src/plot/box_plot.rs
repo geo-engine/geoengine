@@ -281,7 +281,7 @@ impl BoxPlotRasterQueryProcessor {
                     // Ignore empty grids if no_data should not be included
                     GridOrEmpty::Empty(_) => {},
                     GridOrEmpty::Grid(grid) => {
-                        accum.update(grid.masked_element_deref_iterator().filter_map(|pixel_option| pixel_option.map(|p| { let v: f64 = p.as_(); v})))?; // TODO: if empty pixels shuld be included we need to add an enmpty pixel count in the accu
+                        accum.update(grid.masked_element_deref_iterator().filter_map(|pixel_option| pixel_option.map(|p| { let v: f64 = p.as_(); v})))?;
                     }
                 }
             }
