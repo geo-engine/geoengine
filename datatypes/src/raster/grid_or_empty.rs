@@ -66,6 +66,22 @@ where
             *self = GridOrEmpty::Grid(grid);
         }
     }
+
+    /// Returns an option of a reference to the inner grid.
+    pub fn as_masked_grid(&self) -> Option<&MaskedGrid<D, T>> {
+        match self {
+            GridOrEmpty::Grid(g) => Some(g),
+            GridOrEmpty::Empty(_) => None,
+        }
+    }
+
+    /// Returns an option of a mutable reference to the inner grid.
+    pub fn as_masked_grid_mut(&mut self) -> Option<&mut MaskedGrid<D, T>> {
+        match self {
+            GridOrEmpty::Grid(g) => Some(g),
+            GridOrEmpty::Empty(_) => None,
+        }
+    }
 }
 
 impl<D, T> GridSize for GridOrEmpty<D, T>

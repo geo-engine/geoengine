@@ -19,9 +19,8 @@ use geoengine_datatypes::primitives::{
     SpatialPartitioned, SpatialResolution, TimeInstance, TimeInterval,
 };
 use geoengine_datatypes::raster::{
-    Bilinear, Blit, EmptyGrid, EmptyGrid2D, GeoTransform, GridOrEmpty, GridSize,
-    InterpolationAlgorithm, NearestNeighbor, Pixel, RasterTile2D, TileInformation,
-    TilingSpecification,
+    Bilinear, Blit, EmptyGrid2D, GeoTransform, GridOrEmpty, GridSize, InterpolationAlgorithm,
+    NearestNeighbor, Pixel, RasterTile2D, TileInformation, TilingSpecification,
 };
 use rayon::ThreadPool;
 use serde::{Deserialize, Serialize};
@@ -254,7 +253,7 @@ where
 
 #[derive(Clone, Debug)]
 pub struct InterpolationAccu<T: Pixel, I: InterpolationAlgorithm<T>> {
-    pub output_tile: RasterTile2D<T>,
+    pub output_info: TileInformation,
     pub input_tile: RasterTile2D<T>,
     pub pool: Arc<ThreadPool>,
     phantom: PhantomData<I>,
@@ -263,12 +262,12 @@ pub struct InterpolationAccu<T: Pixel, I: InterpolationAlgorithm<T>> {
 impl<T: Pixel, I: InterpolationAlgorithm<T>> InterpolationAccu<T, I> {
     pub fn new(
         input_tile: RasterTile2D<T>,
-        output_tile: RasterTile2D<T>,
+        output_info: TileInformation,
         pool: Arc<ThreadPool>,
     ) -> Self {
         InterpolationAccu {
             input_tile,
-            output_tile,
+            output_info,
             pool,
             phantom: Default::default(),
         }
@@ -281,14 +280,13 @@ impl<T: Pixel, I: InterpolationAlgorithm<T>> FoldTileAccu for InterpolationAccu<
 
     async fn into_tile(self) -> Result<RasterTile2D<Self::RasterType>> {
         // now that we collected all the input tile pixels we perform the actual interpolation
-        let mut output_tile = self.output_tile.into_materialized_tile();
 
         let output_tile = crate::util::spawn_blocking_with_thread_pool(self.pool, move || {
-            I::interpolate(&self.input_tile, &mut output_tile).map(|_| output_tile)
+            I::interpolate(&self.input_tile, &self.output_info)
         })
         .await??;
 
-        Ok(output_tile.into())
+        Ok(output_tile)
     }
 
     fn thread_pool(&self) -> &Arc<ThreadPool> {
@@ -345,13 +343,7 @@ pub fn create_accu<T: Pixel, I: InterpolationAlgorithm<T>>(
             GridOrEmpty::from(grid),
         );
 
-        let output_tile = RasterTile2D::new_with_tile_info(
-            query_rect.time_interval,
-            tile_info,
-            GridOrEmpty::Empty(EmptyGrid::new(tiling_specification.tile_size_in_pixels)),
-        );
-
-        InterpolationAccu::new(input_tile, output_tile, pool)
+        InterpolationAccu::new(input_tile, tile_info, pool)
     })
     .map_err(From::from)
 }
@@ -381,7 +373,7 @@ where
     I: InterpolationAlgorithm<T>,
 {
     // get the time now because it is not known when the accu was created
-    accu.output_tile.time = tile.time;
+    accu.input_tile.time = tile.time;
 
     // TODO: add a skip if both tiles are empty?
 
@@ -391,7 +383,7 @@ where
 
     Ok(InterpolationAccu::new(
         accu_input_tile.into(),
-        accu.output_tile,
+        accu.output_info,
         accu.pool,
     ))
 }
