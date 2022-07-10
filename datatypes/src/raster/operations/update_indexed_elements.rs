@@ -13,9 +13,9 @@ const MIN_ELEMENTS_PER_THREAD: usize = 16 * 512;
 ///
 /// Most usefull implementations are on: `Grid`, `MaskedGrid`, `GridOrEmpty` and `RasterTile2D`.
 ///
-/// On `Grid` elements are mapped as `|element: T| { element + 1 }` with `F: Fn(T, Index) -> T`
+/// On `Grid` elements are mapped, e.g., as `|element: T| { element + 1 }` with `F: Fn(T, Index) -> T`
 ///
-/// On `MaskedGrid` elements are mapped ignoring _no data_ as `|element: T| { element + 1 }` with `F: Fn(T, Index) -> T` or handling _no data_ as `|element: Option<T>| { element.mao(|e| e+ 1) }` with `F: Fn(Option<T>, Index) -> Option<T>`.
+/// On `MaskedGrid` you can update either only valid data (excluding no data), e.g., `|element: In| { element + 1 }` with `Fn(In, Index) -> Out` or handling no data as `|element: Option<In>| { element.map(|e| e + 1) }` with `F: Fn(Option<In>, Index) -> Option<Out>`.
 pub trait UpdateIndexedElements<Index, FT, F: Fn(Index, FT) -> FT> {
     /// Apply the map fn to all elements and overwrite the old value with the result of the closure.
     /// Use `usize` for enumerated pixels or `GridIdx` for n-dimnsional element locations as `Index` type in the `map_fn`.
@@ -28,11 +28,11 @@ pub trait UpdateIndexedElements<Index, FT, F: Fn(Index, FT) -> FT> {
 /// The trait is implemented in a way that `Index` as well as the type `FT` that the map function uses are generic.
 /// The generic `Index` allows to either use enumerated elements `Index = usize` or n-dimensinal grid coordinates `Index = GridIdx`.
 ///
-/// Most usefull implementations are on: `Grid`, `MaskedGrid`, `GridOrEmpty` and `RasterTile2D`.
+/// Most useful implementations are on: `Grid`, `MaskedGrid`, `GridOrEmpty` and `RasterTile2D`.
 ///
-/// On `Grid` elements are mapped as `|element: T| { element + 1 }` with `F: Fn(T, Index) -> T`
+/// On `Grid` elements are mapped, e.g., as `|element: T| { element + 1 }` with `F: Fn(T, Index) -> T`
 ///
-/// On `MaskedGrid` elements are mapped ignoring _no data_ as `|element: T| { element + 1 }` with `F: Fn(T, Index) -> T` or handling _no data_ as `|element: Option<T>| { element.mao(|e| e+ 1) }` with `F: Fn(Option<T>, Index) -> Option<T>`.
+/// On `MaskedGrid` you can update either only valid data (excluding no data), e.g., `|element: In| { element + 1 }` with `Fn(In, Index) -> Out` or handling no data as `|element: Option<In>| { element.map(|e| e + 1) }` with `F: Fn(Option<In>, Index) -> Option<Out>`.
 pub trait UpdateIndexedElementsParallel<Index, FT, F: Fn(Index, FT) -> FT> {
     /// Apply the `map_fn` to all elements and overwrite the old value with the result of the closure parallel.
     /// Use `usize` for enumerated pixels or `GridIdx` for n-diemnsional element locations as `Index` type in the `map_fn`.
