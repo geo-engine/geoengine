@@ -3,7 +3,7 @@
 use criterion::{black_box, criterion_group, criterion_main, Criterion};
 use geoengine_datatypes::raster::{
     GridIdx, GridIdx1D, GridIdx2D, GridShape, MapIndexedElements, MapIndexedElementsParallel,
-    MapIndexedElementsParallel2dOptimized, MaskedGrid,
+    MaskedGrid,
 };
 
 fn map_indexed_elements_1d_simple(c: &mut Criterion) {
@@ -162,15 +162,6 @@ fn map_indexed_elements_2d(c: &mut Criterion) {
             })
         });
 
-        group.bench_function("map_indexed_elements_parallel GridIdx2D optimized-y", |b| {
-            pool.install(|| {
-                b.iter(|| {
-                    let grid = grid.clone();
-
-                    black_box(grid.map_indexed_elements_parallel_2d_optimized(grid_idx_map_fn))
-                })
-            })
-        });
         group.finish();
     }
 }

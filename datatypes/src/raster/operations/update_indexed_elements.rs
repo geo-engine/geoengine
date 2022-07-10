@@ -1,13 +1,8 @@
-use rayon::{
-    iter::{IndexedParallelIterator, IntoParallelRefMutIterator, ParallelIterator},
-    slice::ParallelSliceMut,
-};
-
 use crate::raster::{
-    EmptyGrid, Grid, Grid2D, GridIdx, GridIdx2D, GridOrEmpty, GridOrEmpty2D, GridSize,
-    GridSpaceToLinearSpace, MapIndexedElements, MapIndexedElementsParallel, MaskedGrid,
-    RasterTile2D,
+    EmptyGrid, Grid, GridIdx, GridOrEmpty, GridOrEmpty2D, GridSize, GridSpaceToLinearSpace,
+    MapIndexedElements, MapIndexedElementsParallel, MaskedGrid, RasterTile2D,
 };
+use rayon::iter::{IndexedParallelIterator, IntoParallelRefMutIterator, ParallelIterator};
 
 const MIN_ELEMENTS_PER_THREAD: usize = 16 * 512;
 
@@ -42,49 +37,6 @@ pub trait UpdateIndexedElementsParallel<Index, FT, F: Fn(Index, FT) -> FT> {
     /// Apply the `map_fn` to all elements and overwrite the old value with the result of the closure parallel.
     /// Use `usize` for enumerated pixels or `GridIdx` for n-diemnsional element locations as `Index` type in the `map_fn`.
     fn update_indexed_elements_parallel(&mut self, map_fn: F);
-}
-
-pub trait UpdateIndexedElementsParallel2dOptimized<Index, FT, F: Fn(Index, FT) -> FT> {
-    /// Apply the `map_fn` to all elements and overwrite the old value with the result of the closure parallel.
-    /// Use `usize` for enumerated pixels or `GridIdx` for n-diemnsional element locations as `Index` type in the `map_fn`.
-    fn update_indexed_elements_parallel_2d_optimized(&mut self, map_fn: F);
-}
-
-// Implementation for Grid using GridIdx as index: F: Fn(GridIdx, In) -> Out.
-// Optimized for 2D
-impl<T, F> UpdateIndexedElementsParallel2dOptimized<GridIdx2D, T, F> for Grid2D<T>
-where
-    F: Fn(GridIdx2D, T) -> T + Send + Sync,
-    T: 'static + Sized + Send + Sync + Copy,
-    Vec<T>: Sized,
-{
-    fn update_indexed_elements_parallel_2d_optimized(&mut self, map_fn: F) {
-        let Grid { shape, data } = self;
-
-        let parallelism = rayon::current_num_threads();
-        let rows_per_task = num::integer::div_ceil(shape.axis_size_y(), parallelism).max(
-            num::integer::div_ceil(MIN_ELEMENTS_PER_THREAD, shape.axis_size_x()),
-        );
-
-        let chunk_size = shape.axis_size_x() * rows_per_task;
-
-        data.par_chunks_mut(chunk_size)
-            .enumerate()
-            .for_each(|(y_f, rows_slice)| {
-                let y_start = y_f * rows_per_task;
-                let y_end = y_start + rows_slice.len() / shape.axis_size_x();
-
-                (y_start..y_end)
-                    .zip(rows_slice.chunks_mut(shape.axis_size_x()))
-                    .for_each(|(y, row)| {
-                        row.iter_mut().enumerate().for_each(|(x, pixel)| {
-                            let g_idx = GridIdx([y as isize, x as isize]);
-                            let out_value = map_fn(g_idx, *pixel);
-                            *pixel = out_value;
-                        });
-                    });
-            });
-    }
 }
 
 // Implementation for Grid using usize as index: F: Fn(usize, T) -> T.

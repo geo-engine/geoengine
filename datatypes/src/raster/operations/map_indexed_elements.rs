@@ -1,12 +1,8 @@
-use rayon::{
-    iter::{IndexedParallelIterator, IntoParallelIterator, ParallelIterator},
-    slice::{ParallelSlice, ParallelSliceMut},
-};
-
 use crate::raster::{
-    EmptyGrid, Grid, Grid2D, GridIdx, GridIdx2D, GridIndexAccess, GridOrEmpty, GridOrEmpty2D,
-    GridSize, GridSpaceToLinearSpace, MaskedGrid, MaskedGrid2D, RasterTile2D,
+    EmptyGrid, Grid, GridIdx, GridIndexAccess, GridOrEmpty, GridOrEmpty2D, GridSize,
+    GridSpaceToLinearSpace, MaskedGrid, MaskedGrid2D, RasterTile2D,
 };
+use rayon::iter::{IndexedParallelIterator, IntoParallelIterator, ParallelIterator};
 
 const MIN_ELEMENTS_PER_THREAD: usize = 16 * 512;
 
@@ -41,134 +37,6 @@ pub trait MapIndexedElementsParallel<In, Out, Index, F: Fn(Index, In) -> Out> {
     type Output;
     /// Create a new instance from the current one. The `map_fn` transforms all elements to a new value. Use a `ThreadPool` for parallel map operations.
     fn map_indexed_elements_parallel(self, map_fn: F) -> Self::Output;
-}
-
-pub trait MapIndexedElementsParallel2dOptimized<In, Out, Index, F: Fn(Index, In) -> Out> {
-    type Output;
-    /// Create a new instance from the current one. The `map_fn` transforms all elements to a new value. Use a `ThreadPool` for parallel map operations.
-    fn map_indexed_elements_parallel_2d_optimized(self, map_fn: F) -> Self::Output;
-}
-
-// Implementation for Grid using GridIdx as index: F: Fn(GridIdx, In) -> Out.
-// Optimized for 2D
-impl<In, Out, F> MapIndexedElementsParallel2dOptimized<In, Out, GridIdx2D, F> for Grid2D<In>
-where
-    F: Fn(GridIdx2D, In) -> Out + Send + Sync,
-    In: 'static + Sized + Send + Sync + Copy,
-    Out: Default + Sized + Send + Sync + Clone,
-    Vec<In>: Sized,
-{
-    type Output = Grid2D<Out>;
-
-    fn map_indexed_elements_parallel_2d_optimized(self, map_fn: F) -> Self::Output {
-        let Grid { shape, data } = self;
-
-        let parallelism = rayon::current_num_threads();
-        let rows_per_task = num::integer::div_ceil(shape.axis_size_y(), parallelism).max(
-            num::integer::div_ceil(MIN_ELEMENTS_PER_THREAD, shape.axis_size_x()),
-        );
-
-        let chunk_size = shape.axis_size_x() * rows_per_task;
-
-        let mut out_grid = Grid::new_filled(shape, Out::default());
-
-        out_grid
-            .data
-            .par_chunks_mut(chunk_size)
-            .zip(data.par_chunks(chunk_size))
-            .enumerate()
-            .for_each(|(y_f, (out_rows_slice, in_row_slice))| {
-                let y_start = y_f * rows_per_task;
-                let y_end = y_start + out_rows_slice.len() / shape.axis_size_x();
-
-                (y_start..y_end)
-                    .zip(out_rows_slice.chunks_mut(shape.axis_size_x()))
-                    .zip(in_row_slice.chunks(shape.axis_size_x()))
-                    .for_each(|((y, out_row), in_row)| {
-                        out_row.iter_mut().zip(in_row.iter()).enumerate().for_each(
-                            |(x, (pixel_out, pixel_in))| {
-                                let g_idx = GridIdx([y as isize, x as isize]);
-                                let out_value = map_fn(g_idx, *pixel_in);
-                                *pixel_out = out_value;
-                            },
-                        );
-                    });
-            });
-
-        out_grid
-    }
-}
-
-// Implementation for Grid using GridIdx as index: F: Fn(GridIdx, In) -> Out.
-// Optimized for 2D
-impl<In, Out, F> MapIndexedElementsParallel2dOptimized<Option<In>, Option<Out>, GridIdx2D, F>
-    for MaskedGrid2D<In>
-where
-    F: Fn(GridIdx2D, Option<In>) -> Option<Out> + Send + Sync,
-    In: 'static + Sized + Send + Sync + Copy,
-    Out: Default + Sized + Send + Sync + Clone,
-    Vec<In>: Sized,
-{
-    type Output = Grid2D<Out>;
-
-    fn map_indexed_elements_parallel_2d_optimized(self, map_fn: F) -> Self::Output {
-        let MaskedGrid {
-            inner_grid,
-            validity_mask,
-        } = self;
-
-        let Grid { data, shape } = inner_grid;
-        let Grid {
-            data: mut validity_data,
-            shape: _shape,
-        } = validity_mask;
-
-        let parallelism = rayon::current_num_threads();
-        let rows_per_task = num::integer::div_ceil(shape.axis_size_y(), parallelism).max(
-            num::integer::div_ceil(MIN_ELEMENTS_PER_THREAD, shape.axis_size_x()),
-        );
-
-        let chunk_size = shape.axis_size_x() * rows_per_task;
-
-        let mut out_grid = Grid::new_filled(shape, Out::default());
-
-        out_grid
-            .data
-            .par_chunks_mut(chunk_size)
-            .zip(validity_data.par_chunks_mut(chunk_size))
-            .zip(data.par_chunks(chunk_size))
-            .enumerate()
-            .for_each(|(y_f, ((out_rows_slice, val_rows_slice), in_row_slice))| {
-                let y_start = y_f * rows_per_task;
-                let y_end = y_start + out_rows_slice.len() / shape.axis_size_x();
-
-                (y_start..y_end)
-                    .zip(out_rows_slice.chunks_mut(shape.axis_size_x()))
-                    .zip(val_rows_slice.chunks_mut(shape.axis_size_x()))
-                    .zip(in_row_slice.chunks(shape.axis_size_x()))
-                    .for_each(|(((y, out_row), val_row), in_row)| {
-                        out_row
-                            .iter_mut()
-                            .zip(val_row.iter_mut())
-                            .zip(in_row.iter())
-                            .enumerate()
-                            .for_each(|(x, ((pixel_out, pixel_val), pixel_in))| {
-                                let g_idx = GridIdx([y as isize, x as isize]);
-
-                                let in_value = if *pixel_val { Some(*pixel_in) } else { None };
-
-                                let out_value = map_fn(g_idx, in_value);
-                                *pixel_val = out_value.is_some();
-
-                                if let Some(out_pixel) = out_value {
-                                    *pixel_out = out_pixel;
-                                }
-                            });
-                    });
-            });
-
-        out_grid
-    }
 }
 
 // Implementation for Grid using usize as index: F: Fn(usize, In) -> Out.

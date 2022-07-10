@@ -32,12 +32,10 @@ pub use self::typed_raster_tile::{TypedRasterTile2D, TypedRasterTile3D};
 pub use self::{grid_traits::ChangeGridBounds, grid_traits::GridShapeAccess};
 pub use masked_grid::{MaskedGrid, MaskedGrid1D, MaskedGrid2D, MaskedGrid3D};
 pub use operations::map_elements::{MapElements, MapElementsParallel};
-pub use operations::map_indexed_elements::{
-    MapIndexedElements, MapIndexedElementsParallel, MapIndexedElementsParallel2dOptimized,
-};
+pub use operations::map_indexed_elements::{MapIndexedElements, MapIndexedElementsParallel};
 pub use operations::update_elements::{UpdateElements, UpdateElementsParallel};
 pub use operations::update_indexed_elements::{
-    UpdateIndexedElements, UpdateIndexedElementsParallel, UpdateIndexedElementsParallel2dOptimized,
+    UpdateIndexedElements, UpdateIndexedElementsParallel,
 };
 pub use raster_properties::{
     RasterProperties, RasterPropertiesEntry, RasterPropertiesEntryType, RasterPropertiesKey,
