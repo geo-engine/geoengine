@@ -467,12 +467,13 @@ where
             num::integer::div_ceil(shape.number_of_elements(), rayon::current_num_threads())
                 .max(MIN_ELEMENTS_PER_THREAD);
 
-        let out_data: Vec<Out> = data
-            .into_par_iter()
+        let mut out_data = Vec::with_capacity(shape.number_of_elements());
+
+        data.into_par_iter()
             .with_min_len(num_elements_per_thread)
             .enumerate()
             .map(|(lin_idx, i)| map_fn(lin_idx, i))
-            .collect();
+            .collect_into_vec(out_data.as_mut());
 
         Grid::new(shape, out_data).expect("Grid creation with shape failed before.")
     }
@@ -548,8 +549,10 @@ where
         )
         .max(MIN_ELEMENTS_PER_THREAD);
 
-        let (out_data, out_validity): (Vec<Out>, Vec<bool>) = data
-            .data
+        let mut out_data = Vec::with_capacity(data.shape.number_of_elements());
+        let mut out_validity = Vec::with_capacity(data.shape.number_of_elements());
+
+        data.data
             .into_par_iter()
             .with_min_len(num_elements_per_thread)
             .zip(
@@ -570,7 +573,7 @@ where
                     (Out::default(), false)
                 }
             })
-            .collect();
+            .unzip_into_vecs(out_data.as_mut(), out_validity.as_mut());
 
         MaskedGrid::new(
             Grid::new(data.shape, out_data).expect("Grid creation failed before"),
@@ -622,7 +625,10 @@ where
         )
         .max(MIN_ELEMENTS_PER_THREAD);
 
-        let (out_data, validity_mask) = (0..self.shape.number_of_elements())
+        let mut out_data = Vec::with_capacity(self.shape.number_of_elements());
+        let mut out_validity = Vec::with_capacity(self.shape.number_of_elements());
+
+        (0..self.shape.number_of_elements())
             .into_par_iter()
             .with_min_len(num_elements_per_thread)
             .map(|lin_idx| {
@@ -633,11 +639,11 @@ where
 
                 (out_value_option.unwrap_or_default(), is_valid)
             })
-            .unzip();
+            .unzip_into_vecs(&mut out_data, &mut out_validity);
 
         MaskedGrid::new(
             Grid::new(self.shape.clone(), out_data).expect("Grid creation failed before"),
-            Grid::new(self.shape, validity_mask).expect("Grid creation failed before"),
+            Grid::new(self.shape, out_validity).expect("Grid creation failed before"),
         )
         .expect("Grid creation failed before")
     }
