@@ -121,8 +121,6 @@ mod tests {
         assert_eq!(n, expected);
     }
 
-
-
     #[test]
     fn ndim() {
         assert_eq!(EmptyGrid1D::<i32>::NDIM, 1);
