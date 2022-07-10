@@ -1191,7 +1191,7 @@ mod tests {
 
         assert!(!grid.is_empty());
 
-        let grid = grid.into_materialized_grid();
+        let grid = grid.into_materialized_masked_grid();
 
         assert_eq!(grid.inner_grid.data.len(), 64);
         assert_eq!(
@@ -1245,7 +1245,7 @@ mod tests {
 
         assert!(!grid.is_empty());
 
-        let x = grid.into_materialized_grid();
+        let x = grid.into_materialized_masked_grid();
 
         assert_eq!(x.inner_grid.data.len(), 64);
         assert_eq!(
@@ -1280,7 +1280,7 @@ mod tests {
 
         assert!(!grid.is_empty());
 
-        let x = grid.into_materialized_grid();
+        let x = grid.into_materialized_masked_grid();
 
         assert_eq!(x.inner_grid.data.len(), 64);
         assert_eq!(x.inner_grid.data, &[1; 64]);

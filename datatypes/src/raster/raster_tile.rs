@@ -210,7 +210,7 @@ where
     /// Convert the tile into a materialized tile.
     pub fn into_materialized_tile(self) -> MaterializedRasterTile<D, T> {
         MaterializedRasterTile {
-            grid_array: self.grid_array.into_materialized_grid(),
+            grid_array: self.grid_array.into_materialized_masked_grid(),
             time: self.time,
             tile_position: self.tile_position,
             global_geo_transform: self.global_geo_transform,
@@ -222,7 +222,11 @@ where
         match self.grid_array {
             GridOrEmpty::Grid(_) => {}
             GridOrEmpty::Empty(_) => {
-                self.grid_array = self.grid_array.clone().into_materialized_grid().into();
+                self.grid_array = self
+                    .grid_array
+                    .clone()
+                    .into_materialized_masked_grid()
+                    .into();
             }
         }
     }

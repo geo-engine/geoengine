@@ -44,7 +44,7 @@ where
     }
 
     /// Transforms `self`into a `MaskedGrid`
-    pub fn into_materialized_grid(self) -> MaskedGrid<D, T> {
+    pub fn into_materialized_masked_grid(self) -> MaskedGrid<D, T> {
         match self {
             GridOrEmpty::Grid(g) => g,
             GridOrEmpty::Empty(n) => MaskedGrid::from(n),
@@ -55,13 +55,14 @@ where
     pub fn matching_empty_grid(&self) -> EmptyGrid<D, T> {
         match self {
             GridOrEmpty::Grid(g) => EmptyGrid::new(g.shape().clone()),
-            GridOrEmpty::Empty(n) => EmptyGrid::new(n.shape.clone()),
+            GridOrEmpty::Empty(n) => n.clone(),
         }
     }
 
+    /// Materialize the inner grid. This is a no-op if the grid is already materialized.
     pub fn materialize(&mut self) {
         if self.is_empty() {
-            let grid = self.clone().into_materialized_grid();
+            let grid = self.clone().into_materialized_masked_grid();
             *self = GridOrEmpty::Grid(grid);
         }
     }
