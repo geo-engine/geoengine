@@ -7,7 +7,7 @@ use geoengine_datatypes::{
     raster::{
         ConvertDataType, EmptyGrid2D, GeoTransform, GridIdx2D, GridIndexAccess, GridOrEmpty,
         GridOrEmpty2D, GridShape2D, GridShapeAccess, MapElementsParallel, Pixel, RasterTile2D,
-        UpdateIndexedElementsParallel,
+        UpdateIndexedElementsParallel, FromIndexFnParallel,
     },
     util::helpers::equals_or_both_nan,
 };
@@ -264,9 +264,9 @@ where
             program.function_5::<f64, bool, f64, bool, f64>()?
         };
 
-        let mut out = GridOrEmpty::from(EmptyGrid2D::<TO>::new(rasters.0.grid_shape()));
+        
 
-        let map_fn = |lin_idx: usize, _empty: Option<TO>| {
+        let map_fn = |lin_idx: usize| {
             let t0_value = rasters.0.get_at_grid_index_unchecked(lin_idx);
             let t1_value = rasters.1.get_at_grid_index_unchecked(lin_idx);
 
@@ -298,7 +298,8 @@ where
             }
         };
 
-        out.update_indexed_elements_parallel(map_fn);
+        let grid_shape = rasters.0.grid_shape();
+        let out = GridOrEmpty::from_index_fn_parallel(&grid_shape, map_fn);
 
         Result::Ok(out)
     }

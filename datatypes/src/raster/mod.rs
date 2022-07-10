@@ -37,6 +37,7 @@ pub use operations::update_elements::{UpdateElements, UpdateElementsParallel};
 pub use operations::update_indexed_elements::{
     UpdateIndexedElements, UpdateIndexedElementsParallel,
 };
+pub use operations::from_index_fn::{FromIndexFn, FromIndexFnParallel};
 pub use raster_properties::{
     RasterProperties, RasterPropertiesEntry, RasterPropertiesEntryType, RasterPropertiesKey,
 };
