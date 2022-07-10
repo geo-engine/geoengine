@@ -5,22 +5,22 @@ const MIN_ELEMENTS_PER_THREAD: usize = 16 * 512;
 
 /// This trait models mutable updates on elements using a provided update function that maps each element to a new value.
 ///
-/// Most usefull implementations are on: `Grid`, `MaskedGrid`, `GridOrEmpty` and `RasterTile2D`.
+/// Most useful implementations are on: `Grid`, `MaskedGrid`, `GridOrEmpty` and `RasterTile2D`.
 ///
-/// On `Grid` elements are mapped as `|element: T| { element + 1 }` with `F: Fn(T) -> T`
+/// On `Grid` elements are mapped, e.g.,  as `|element: T| { element + 1 }` with `F: Fn(T) -> T`
 ///
-/// On `MaskedGrid` elements are mapped ignoring _no data_ as `|element: T| { element + 1 }` with `F: Fn(T) -> T` or handling _no data_ as `|element: Option<T>| { element.map(|e| e+ 1) }` with `F: Fn(Option<T>) -> Option<T>`.
+/// On `MaskedGrid` you can update either only valid data (excluding no data), e.g., `|element: In| { element + 1 }` with `F: Fn(In) -> Out` or handling no data as `|element: Option<In>| { element.map(|e| e+ 1) }` with `F: Fn(Option<In>) -> Option<Out>`.
 pub trait UpdateElements<FT, F: Fn(FT) -> FT> {
     /// Apply the map fn to all elements and overwrite the old value with the result of the closure.
     fn update_elements(&mut self, map_fn: F);
 }
 
 /// This trait is equal to `UpdateElements` but uses a thread pool to do the operation in parallel.
-/// Most usefull implementations are on: `Grid`, `MaskedGrid`, `GridOrEmpty` and `RasterTile2D`.
+/// Most useful implementations are on: `Grid`, `MaskedGrid`, `GridOrEmpty` and `RasterTile2D`.
 ///
-/// On `Grid` elements are mapped as `|element: T| { element + 1 }` with `F: Fn(T) -> T`
+/// On `Grid` elements are mapped, e.g.,  as `|element: T| { element + 1 }` with `F: Fn(T) -> T`
 ///
-/// On `MaskedGrid` elements are mapped ignoring _no data_ as `|element: T| { element + 1 }` with `F: Fn(T) -> T` or handling _no data_ as `|element: Option<T>| { element.map(|e| e+ 1) }` with `F: Fn(Option<T>) -> Option<T>`.
+/// On `MaskedGrid` you can update either only valid data (excluding no data), e.g., `|element: In| { element + 1 }` with `F: Fn(In) -> Out` or handling no data as `|element: Option<In>| { element.map(|e| e+ 1) }` with `F: Fn(Option<In>) -> Option<Out>`.
 pub trait UpdateElementsParallel<FT, F: Fn(FT) -> FT> {
     /// Apply the `map_fn` to all elements and overwrite the old value with the result of the closure parallel.
     fn update_elements_parallel(&mut self, map_fn: F);
