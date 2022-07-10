@@ -160,7 +160,6 @@ impl PlotQueryProcessor for StatisticsQueryProcessor {
     }
 }
 
-#[allow(clippy::float_cmp)] // allow since NO DATA is a specific value
 fn process_raster<I>(number_statistics: &mut NumberStatistics, data: I)
 where
     I: Iterator<Item = Option<f64>>,
