@@ -348,7 +348,9 @@ fn default_time_from_config() -> TimeInterval {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::contexts::{InMemoryContext, Session, SimpleContext, SimpleSession /*SimpleSession*/};
+    use crate::contexts::{
+        InMemoryContext, Session, SimpleContext, SimpleSession, /*SimpleSession*/
+    };
     use crate::handlers::ErrorResponse;
     use crate::util::tests::{
         check_allowed_http_methods, register_ndvi_workflow_helper, send_test_request,
@@ -358,18 +360,13 @@ mod tests {
     use actix_web::http::Method;
     use actix_web_httpauth::headers::authorization::Bearer;
     use geoengine_datatypes::operations::image::RgbaColor;
-    // use geoengine_datatypes::primitives::SpatialPartition2D;
     use geoengine_datatypes::raster::{GridShape2D, TilingSpecification};
     use geoengine_datatypes::util::test::TestDefault;
     use geoengine_operators::engine::{ExecutionContext, RasterQueryProcessor};
     use geoengine_operators::source::GdalSourceProcessor;
     use geoengine_operators::util::gdal::create_ndvi_meta_data;
-    // use geoengine_operators::engine::{ExecutionContext, RasterQueryProcessor};
-    // use geoengine_operators::source::GdalSourceProcessor;
-    // use geoengine_operators::util::gdal::create_ndvi_meta_data;
     use std::convert::TryInto;
     use std::marker::PhantomData;
-    // use std::marker::PhantomData;
     use xml::ParserConfig;
 
     async fn test_test_helper(method: Method, path: Option<&str>) -> ServiceResponse {
