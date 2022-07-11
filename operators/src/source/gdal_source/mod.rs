@@ -2,6 +2,7 @@ use crate::adapters::SparseTilesFillAdapter;
 use crate::engine::{MetaData, OperatorDatasets, QueryProcessor};
 use crate::util::gdal::gdal_open_dataset_ex;
 use crate::util::input::float_option_with_nan;
+use crate::util::TemporaryGdalThreadLocalConfigOptions;
 use crate::{
     engine::{
         InitializedRasterOperator, RasterOperator, RasterQueryProcessor, RasterResultDescriptor,
@@ -36,7 +37,7 @@ use geoengine_datatypes::{
         TilingSpecification,
     },
 };
-use log::{debug, info};
+use log::debug;
 use serde::{Deserialize, Serialize};
 use snafu::{ensure, ResultExt};
 use std::collections::HashMap;
@@ -177,48 +178,6 @@ impl From<gdal::GeoTransform> for GdalDatasetGeoTransform {
             origin_coordinate: (gdal_geo_transform[0], gdal_geo_transform[3]).into(),
             x_pixel_size: gdal_geo_transform[1],
             y_pixel_size: gdal_geo_transform[5],
-        }
-    }
-}
-
-/// Set thread local gdal options and revert them on drop
-struct TemporaryGdalThreadLocalConfigOptions {
-    original_configs: Vec<(String, Option<String>)>,
-}
-
-impl TemporaryGdalThreadLocalConfigOptions {
-    /// Set thread local gdal options and revert them on drop
-    fn new(configs: &[(String, String)]) -> Result<Self> {
-        let mut original_configs = vec![];
-
-        for (key, value) in configs {
-            let old = gdal::config::get_thread_local_config_option(key, "").map(|value| {
-                if value.is_empty() {
-                    None
-                } else {
-                    Some(value)
-                }
-            })?;
-
-            // TODO: check if overriding existing config (local & global) is ok for the given key
-            gdal::config::set_thread_local_config_option(key, value)?;
-            info!("set {}={}", key, value);
-
-            original_configs.push((key.clone(), old));
-        }
-
-        Ok(Self { original_configs })
-    }
-}
-
-impl Drop for TemporaryGdalThreadLocalConfigOptions {
-    fn drop(&mut self) {
-        for (key, value) in &self.original_configs {
-            if let Some(value) = value {
-                let _result = gdal::config::set_thread_local_config_option(key, value);
-            } else {
-                let _result = gdal::config::clear_thread_local_config_option(key);
-            }
         }
     }
 }
