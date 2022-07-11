@@ -31,13 +31,16 @@ pub use self::typed_raster_conversion::TypedRasterConversion;
 pub use self::typed_raster_tile::{TypedRasterTile2D, TypedRasterTile3D};
 pub use self::{grid_traits::ChangeGridBounds, grid_traits::GridShapeAccess};
 pub use masked_grid::{MaskedGrid, MaskedGrid1D, MaskedGrid2D, MaskedGrid3D};
+pub use no_data_value_grid::{
+    NoDataValueGrid, NoDataValueGrid1D, NoDataValueGrid2D, NoDataValueGrid3D,
+};
+pub use operations::from_index_fn::{FromIndexFn, FromIndexFnParallel};
 pub use operations::map_elements::{MapElements, MapElementsParallel};
 pub use operations::map_indexed_elements::{MapIndexedElements, MapIndexedElementsParallel};
 pub use operations::update_elements::{UpdateElements, UpdateElementsParallel};
 pub use operations::update_indexed_elements::{
     UpdateIndexedElements, UpdateIndexedElementsParallel,
 };
-pub use operations::from_index_fn::{FromIndexFn, FromIndexFnParallel};
 pub use raster_properties::{
     RasterProperties, RasterPropertiesEntry, RasterPropertiesEntryType, RasterPropertiesKey,
 };
@@ -55,6 +58,7 @@ mod grid_typed;
 mod macros_raster;
 mod macros_raster_tile;
 mod masked_grid;
+mod no_data_value_grid;
 mod operations;
 mod raster_properties;
 mod raster_tile;

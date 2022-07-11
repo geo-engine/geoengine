@@ -11,7 +11,7 @@ use geoengine_datatypes::primitives::{
 };
 use geoengine_datatypes::raster::{
     ChangeGridBounds, EmptyGrid2D, GeoTransform, GridBlit, GridIdx, GridSize, MapElements,
-    MaskedGrid2D, Pixel, RasterTile2D,
+    MaskedGrid2D, NoDataValueGrid, NoDataValueGrid2D, Pixel, RasterTile2D,
 };
 use geoengine_datatypes::spatial_reference::SpatialReference;
 use log::debug;
@@ -207,21 +207,6 @@ impl<P: Pixel + GdalType> GdalDatasetWriter<P> {
     }
 
     fn write_tile(&self, tile: RasterTile2D<P>) -> Result<()> {
-        // TODO: transform masks to no-data values if the gdal_tiff_metadata no-data value is set. This might need to move somewhere else. Also: write the mask if no no-data value is set.
-        let tile = if let Some(replace_no_data_value) = self.gdal_tiff_metadata.no_data_value {
-            let replace_no_data_value_p: P = P::from_(replace_no_data_value);
-            let map_fn = |pixel_option| {
-                if let Some(p) = pixel_option {
-                    Some(p)
-                } else {
-                    Some(replace_no_data_value_p)
-                }
-            };
-            tile.map_elements(map_fn)
-        } else {
-            tile
-        };
-
         let tile_info = tile.tile_information();
 
         let tile_bounds = tile_info.spatial_partition();
@@ -266,13 +251,89 @@ impl<P: Pixel + GdalType> GdalDatasetWriter<P> {
         let shape = grid_array.axis_size();
         let window_size = (shape[1], shape[0]);
 
-        let buffer = Buffer::new(window_size, grid_array.inner_grid.data); // TODO: also write mask!
+        // transform MaskedGrid into to NoDataValueGrid if the gdal_tiff_metadata no-data value is set.
+        if let Some(replace_no_data_value) = self.gdal_tiff_metadata.no_data_value {
+            let replace_no_data_value_p: P = P::from_(replace_no_data_value);
+            let no_data_value_grid =
+                NoDataValueGrid::from_masked_grid(&grid_array, replace_no_data_value_p);
+            self.write_no_data_value_grid(no_data_value_grid, window, window_size)
+        } else {
+            self.write_masked_data_grid(grid_array, window, window_size)
+        }
+    }
+
+    fn write_no_data_value_grid(
+        &self,
+        no_data_value_grid: NoDataValueGrid2D<P>,
+        window: (isize, isize),
+        window_size: (usize, usize),
+    ) -> Result<()> {
+        let buffer = Buffer::new(window_size, no_data_value_grid.inner_grid.data); // TODO: also write mask!
 
         self.dataset
             .rasterband(self.rasterband_index)?
             .write(window, window_size, &buffer)?;
+        Ok(())
+    }
+
+    fn write_masked_data_grid(
+        &self,
+        masked_grid: MaskedGrid2D<P>,
+        window: (isize, isize),
+        window_size: (usize, usize),
+    ) -> Result<()> {
+        // Write the MaskedGrid data and mask if no no-data value is set.
+        let data_buffer = Buffer::new(window_size, masked_grid.inner_grid.data);
+
+        self.dataset
+            .rasterband(self.rasterband_index)?
+            .write(window, window_size, &data_buffer)?;
+
+        // No-data masks are described by the rasterio docs as:
+        // "One is the the valid data mask from GDAL, an unsigned byte array with the same number of rows and columns as the dataset in which non-zero elements (typically 255) indicate that the corresponding data elements are valid. Other elements are invalid, or nodata elements."
+
+        let mask_grid_gdal_values =
+            masked_grid
+                .validity_mask
+                .map_elements(|is_valid| if is_valid { 255_u8 } else { 0 }); // TODO: investigate if we can transmute the vec of bool to u8.
+        let mask_buffer = Buffer::new(window_size, mask_grid_gdal_values.data);
+
+        self.create_and_open_mask_band()?
+            .write(window, window_size, &mask_buffer)?;
 
         Ok(())
+    }
+
+    fn create_and_open_mask_band(&self) -> Result<gdal::raster::RasterBand> {
+        // TODO: move most of this to the GDAL crate. Use all-valid flag to avoid writing data.
+
+        let n_flags = 0; // 2 is the flag for shared mask betweeen all bands
+        unsafe {
+            let raster_band_ptr =
+                gdal_sys::GDALGetRasterBand(self.dataset.c_dataset(), self.rasterband_index as i32);
+            let res = gdal_sys::GDALCreateMaskBand(raster_band_ptr, n_flags);
+            if res != 0 {
+                return Err(Error::Gdal {
+                    source: gdal::errors::GdalError::CplError {
+                        class: res,
+                        number: 0,
+                        msg: "Could not create MaskBand".to_string(),
+                    },
+                });
+            }
+            let mask_band_ptr = gdal_sys::GDALGetMaskBand(raster_band_ptr);
+            if mask_band_ptr.is_null() {
+                return Err(Error::Gdal {
+                    source: gdal::errors::GdalError::NullPointer {
+                        method_name: "GDALGetMaskBand",
+                        msg: "Could not open MaskBand".to_string(),
+                    },
+                });
+            }
+            let mask_band =
+                gdal::raster::RasterBand::from_c_rasterband(&self.dataset, mask_band_ptr);
+            Ok(mask_band)
+        }
     }
 
     fn finish(self) -> Result<()> {

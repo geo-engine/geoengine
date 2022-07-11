@@ -22,18 +22,18 @@ use geoengine_datatypes::primitives::{
     Coordinate2D, DateTimeParseFormat, RasterQueryRectangle, SpatialPartition2D, SpatialPartitioned,
 };
 use geoengine_datatypes::raster::{
-    EmptyGrid, GeoTransform, GridShape2D, GridShapeAccess, MaskedGrid, MaskedGrid2D, Pixel,
-    RasterDataType, RasterProperties, RasterPropertiesEntry, RasterPropertiesEntryType,
-    RasterPropertiesKey, RasterTile2D, TilingStrategy,
+    EmptyGrid, GeoTransform, GridShape2D, GridShapeAccess, MaskedGrid, MaskedGrid2D,
+    NoDataValueGrid, Pixel, RasterDataType, RasterProperties, RasterPropertiesEntry,
+    RasterPropertiesEntryType, RasterPropertiesKey, RasterTile2D, TilingStrategy,
 };
-use geoengine_datatypes::util::helpers::equals_or_both_nan;
+
 use geoengine_datatypes::util::test::TestDefault;
 use geoengine_datatypes::{dataset::DatasetId, raster::TileInformation};
 use geoengine_datatypes::{
     primitives::TimeInterval,
     raster::{
         Grid, GridBlit, GridBoundingBox2D, GridBounds, GridIdx, GridSize, GridSpaceToLinearSpace,
-        MapElements, TilingSpecification,
+        TilingSpecification,
     },
 };
 use log::{debug, info};
@@ -647,21 +647,9 @@ where
         (tile_x_size, tile_y_size),       // requested raster size
         None,                             // sampling mode
     )?;
-    let data = Grid::new(tile_grid, buffer.data)?;
-
-    let masked_grid = MaskedGrid::from(data).map_elements(|e: Option<T>| {
-        // TODO: test if parallel map is better.
-        let e = e.unwrap();
-
-        // map no_data value to None. Also check if no_data value is NAN and the raster value us also NAN.
-        if let Some(no_data) = no_data_value {
-            if equals_or_both_nan(&e, &no_data) {
-                return None;
-            };
-        };
-        Some(e)
-    });
-
+    let data_grid = Grid::new(tile_grid, buffer.data)?;
+    let no_data_value_grid = NoDataValueGrid::new(data_grid, no_data_value);
+    let masked_grid = no_data_value_grid.into();
     Ok(masked_grid)
 }
 
