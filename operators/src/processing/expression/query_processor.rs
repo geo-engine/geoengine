@@ -5,9 +5,9 @@ use futures::{stream::BoxStream, StreamExt, TryStreamExt};
 use geoengine_datatypes::{
     primitives::{RasterQueryRectangle, SpatialPartition2D, TimeInterval},
     raster::{
-        ConvertDataType, EmptyGrid2D, GeoTransform, GridIdx2D, GridIndexAccess, GridOrEmpty,
-        GridOrEmpty2D, GridShape2D, GridShapeAccess, MapElementsParallel, Pixel, RasterTile2D,
-        UpdateIndexedElementsParallel, FromIndexFnParallel,
+        ConvertDataType, EmptyGrid2D, FromIndexFnParallel, GeoTransform, GridIdx2D,
+        GridIndexAccess, GridOrEmpty, GridOrEmpty2D, GridShape2D, GridShapeAccess,
+        MapElementsParallel, Pixel, RasterTile2D, UpdateIndexedElementsParallel,
     },
     util::helpers::equals_or_both_nan,
 };
@@ -263,8 +263,6 @@ where
             // we have to "trust" that the function has the signature we expect
             program.function_5::<f64, bool, f64, bool, f64>()?
         };
-
-        
 
         let map_fn = |lin_idx: usize| {
             let t0_value = rasters.0.get_at_grid_index_unchecked(lin_idx);
