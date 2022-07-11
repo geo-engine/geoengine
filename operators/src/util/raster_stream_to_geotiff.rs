@@ -1,4 +1,4 @@
-use crate::util::Result;
+use crate::util::{Result, TemporaryGdalThreadLocalConfigOptions};
 use crate::{
     engine::{QueryContext, RasterQueryProcessor},
     error::Error,
@@ -11,7 +11,7 @@ use geoengine_datatypes::primitives::{
 };
 use geoengine_datatypes::raster::{
     ChangeGridBounds, EmptyGrid2D, GeoTransform, GridBlit, GridIdx, GridSize, MapElements,
-    MaskedGrid2D, NoDataValueGrid, NoDataValueGrid2D, Pixel, RasterTile2D,
+    MaskedGrid2D, NoDataValueGrid, Pixel, RasterTile2D,
 };
 use geoengine_datatypes::spatial_reference::SpatialReference;
 use log::debug;
@@ -72,12 +72,25 @@ where
 
     let file_path = file_path.to_owned();
 
+    let gdal_config_options = if gdal_tiff_metadata.no_data_value.is_none() {
+        // If we want to write a mask into the geotiff we need to do that internaly because of vismem.
+        Some(vec![(
+            "GDAL_TIFF_INTERNAL_MASK".to_string(),
+            "YES".to_string(),
+        )])
+    } else {
+        None
+    };
+
     let dataset_writer = crate::util::spawn_blocking(move || {
+        let gdal_config_options = gdal_config_options.as_deref();
+
         GdalDatasetWriter::new(
             &file_path,
             query_rect,
             gdal_tiff_metadata,
             gdal_tiff_options,
+            gdal_config_options,
         )
     })
     .await?;
@@ -138,6 +151,7 @@ impl<P: Pixel + GdalType> GdalDatasetWriter<P> {
         query_rect: RasterQueryRectangle,
         gdal_tiff_metadata: GdalGeoTiffDatasetMetadata,
         gdal_tiff_options: GdalGeoTiffOptions,
+        gdal_config_options: Option<&[(String, String)]>,
     ) -> Result<Self> {
         const INTERMEDIATE_FILE_SUFFIX: &str = "GEO-ENGINE-TMP";
         let intermediate_file_path = file_path.with_extension(INTERMEDIATE_FILE_SUFFIX);
@@ -166,6 +180,10 @@ impl<P: Pixel + GdalType> GdalDatasetWriter<P> {
             use_big_tiff, gdal_tiff_options.force_big_tiff
         );
 
+        // reverts the thread local configs on drop
+        let thread_local_configs =
+            gdal_config_options.map(TemporaryGdalThreadLocalConfigOptions::new);
+
         let driver = Driver::get("GTiff")?;
         let options = create_gdal_tiff_options(
             &compression_num_threads,
@@ -186,9 +204,16 @@ impl<P: Pixel + GdalType> GdalDatasetWriter<P> {
         let rasterband_index = 1;
         let mut band = dataset.rasterband(rasterband_index)?;
 
+        // Check if the gdal_tiff_metadata no-data value is set.
+        // If it is set, set the no-data value for the output geotiff.
+        // Otherwise add a mask band to the output geotiff.
         if let Some(no_data) = gdal_tiff_metadata.no_data_value {
             band.set_no_data_value(no_data)?;
+        } else {
+            Self::create_mask_band(&dataset, rasterband_index)?;
         }
+
+        drop(thread_local_configs); // ensure that we drop here
 
         Ok(Self {
             dataset,
@@ -251,23 +276,27 @@ impl<P: Pixel + GdalType> GdalDatasetWriter<P> {
         let shape = grid_array.axis_size();
         let window_size = (shape[1], shape[0]);
 
-        // transform MaskedGrid into to NoDataValueGrid if the gdal_tiff_metadata no-data value is set.
-        if let Some(replace_no_data_value) = self.gdal_tiff_metadata.no_data_value {
-            let replace_no_data_value_p: P = P::from_(replace_no_data_value);
-            let no_data_value_grid =
-                NoDataValueGrid::from_masked_grid(&grid_array, replace_no_data_value_p);
-            self.write_no_data_value_grid(no_data_value_grid, window, window_size)
+        // Check if the gdal_tiff_metadata no-data value is set.
+        // If it is set write a geotiff with no-data values.
+        // Otherwise write a geotiff with a mask band.
+        if let Some(out_no_data_value) = self.gdal_tiff_metadata.no_data_value {
+            self.write_no_data_value_grid(&grid_array, out_no_data_value, window, window_size)?;
         } else {
-            self.write_masked_data_grid(grid_array, window, window_size)
+            self.write_masked_data_grid(grid_array, window, window_size)?;
         }
+        Ok(())
     }
 
     fn write_no_data_value_grid(
         &self,
-        no_data_value_grid: NoDataValueGrid2D<P>,
+        grid_array: &MaskedGrid2D<P>,
+        no_data_value: f64,
         window: (isize, isize),
         window_size: (usize, usize),
     ) -> Result<()> {
+        let out_no_data_value_p: P = P::from_(no_data_value);
+        let no_data_value_grid = NoDataValueGrid::from_masked_grid(grid_array, out_no_data_value_p);
+
         let buffer = Buffer::new(window_size, no_data_value_grid.inner_grid.data); // TODO: also write mask!
 
         self.dataset
@@ -285,9 +314,8 @@ impl<P: Pixel + GdalType> GdalDatasetWriter<P> {
         // Write the MaskedGrid data and mask if no no-data value is set.
         let data_buffer = Buffer::new(window_size, masked_grid.inner_grid.data);
 
-        self.dataset
-            .rasterband(self.rasterband_index)?
-            .write(window, window_size, &data_buffer)?;
+        let mut raster_band = self.dataset.rasterband(self.rasterband_index)?;
+        raster_band.write(window, window_size, &data_buffer)?;
 
         // No-data masks are described by the rasterio docs as:
         // "One is the the valid data mask from GDAL, an unsigned byte array with the same number of rows and columns as the dataset in which non-zero elements (typically 255) indicate that the corresponding data elements are valid. Other elements are invalid, or nodata elements."
@@ -298,19 +326,19 @@ impl<P: Pixel + GdalType> GdalDatasetWriter<P> {
                 .map_elements(|is_valid| if is_valid { 255_u8 } else { 0 }); // TODO: investigate if we can transmute the vec of bool to u8.
         let mask_buffer = Buffer::new(window_size, mask_grid_gdal_values.data);
 
-        self.create_and_open_mask_band()?
-            .write(window, window_size, &mask_buffer)?;
+        let mut mask_band = self.open_mask_band()?;
+        mask_band.write(window, window_size, &mask_buffer)?;
 
         Ok(())
     }
 
-    fn create_and_open_mask_band(&self) -> Result<gdal::raster::RasterBand> {
-        // TODO: move most of this to the GDAL crate. Use all-valid flag to avoid writing data.
+    fn create_mask_band(dataset: &Dataset, rasterband_index: isize) -> Result<()> {
+        // TODO: move most of this to the GDAL crate. Use all-valid flag to avoid writing data?
 
-        let n_flags = 0; // 2 is the flag for shared mask betweeen all bands
+        let n_flags = 0x02; // 2 is the flag for shared mask betweeen all bands. It is the only valid flag here!
         unsafe {
             let raster_band_ptr =
-                gdal_sys::GDALGetRasterBand(self.dataset.c_dataset(), self.rasterband_index as i32);
+                gdal_sys::GDALGetRasterBand(dataset.c_dataset(), rasterband_index as i32);
             let res = gdal_sys::GDALCreateMaskBand(raster_band_ptr, n_flags);
             if res != 0 {
                 return Err(Error::Gdal {
@@ -321,6 +349,15 @@ impl<P: Pixel + GdalType> GdalDatasetWriter<P> {
                     },
                 });
             }
+            Ok(())
+        }
+    }
+
+    fn open_mask_band(&self) -> Result<gdal::raster::RasterBand> {
+        // TODO: move most of this to the GDAL crate. Use all-valid flag to avoid writing data?
+        unsafe {
+            let raster_band_ptr =
+                gdal_sys::GDALGetRasterBand(self.dataset.c_dataset(), self.rasterband_index as i32);
             let mask_band_ptr = gdal_sys::GDALGetMaskBand(raster_band_ptr);
             if mask_band_ptr.is_null() {
                 return Err(Error::Gdal {
@@ -524,7 +561,7 @@ mod tests {
     use super::*;
 
     #[tokio::test]
-    async fn geotiff_from_stream() {
+    async fn geotiff_with_no_data_from_stream() {
         let ctx = MockQueryContext::test_default();
         let tiling_specification =
             TilingSpecification::new(Coordinate2D::default(), [600, 600].into());
@@ -568,6 +605,56 @@ mod tests {
         assert_eq!(
             include_bytes!("../../../test_data/raster/geotiff_from_stream_compressed.tiff")
                 as &[u8],
+            bytes.as_slice()
+        );
+    }
+
+    #[tokio::test]
+    async fn geotiff_with_mask_from_stream() {
+        let ctx = MockQueryContext::test_default();
+        let tiling_specification =
+            TilingSpecification::new(Coordinate2D::default(), [600, 600].into());
+
+        let metadata = create_ndvi_meta_data();
+
+        let gdal_source = GdalSourceProcessor::<u8> {
+            tiling_specification,
+            meta_data: Box::new(metadata),
+            _phantom_data: PhantomData,
+        };
+
+        let query_bbox = SpatialPartition2D::new((-10., 80.).into(), (50., 20.).into()).unwrap();
+
+        let bytes = raster_stream_to_geotiff_bytes(
+            gdal_source.boxed(),
+            RasterQueryRectangle {
+                spatial_bounds: query_bbox,
+                time_interval: TimeInterval::new(1_388_534_400_000, 1_388_534_400_000 + 1000)
+                    .unwrap(),
+                spatial_resolution: SpatialResolution::new_unchecked(
+                    query_bbox.size_x() / 600.,
+                    query_bbox.size_y() / 600.,
+                ),
+            },
+            ctx,
+            GdalGeoTiffDatasetMetadata {
+                no_data_value: None,
+                spatial_reference: SpatialReference::epsg_4326(),
+            },
+            GdalGeoTiffOptions {
+                as_cog: false,
+                compression_num_threads: GdalCompressionNumThreads::NumThreads(2),
+                force_big_tiff: false,
+            },
+            None,
+        )
+        .await
+        .unwrap();
+
+        assert_eq!(
+            include_bytes!(
+                "../../../test_data/raster/geotiff_with_mask_from_stream_compressed.tiff"
+            ) as &[u8],
             bytes.as_slice()
         );
     }
