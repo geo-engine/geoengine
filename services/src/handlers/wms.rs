@@ -348,7 +348,7 @@ fn default_time_from_config() -> TimeInterval {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::contexts::{InMemoryContext, Session, SimpleContext /*SimpleSession*/};
+    use crate::contexts::{InMemoryContext, Session, SimpleContext, SimpleSession /*SimpleSession*/};
     use crate::handlers::ErrorResponse;
     use crate::util::tests::{
         check_allowed_http_methods, register_ndvi_workflow_helper, send_test_request,
@@ -361,10 +361,14 @@ mod tests {
     // use geoengine_datatypes::primitives::SpatialPartition2D;
     use geoengine_datatypes::raster::{GridShape2D, TilingSpecification};
     use geoengine_datatypes::util::test::TestDefault;
+    use geoengine_operators::engine::{ExecutionContext, RasterQueryProcessor};
+    use geoengine_operators::source::GdalSourceProcessor;
+    use geoengine_operators::util::gdal::create_ndvi_meta_data;
     // use geoengine_operators::engine::{ExecutionContext, RasterQueryProcessor};
     // use geoengine_operators::source::GdalSourceProcessor;
     // use geoengine_operators::util::gdal::create_ndvi_meta_data;
     use std::convert::TryInto;
+    use std::marker::PhantomData;
     // use std::marker::PhantomData;
     use xml::ParserConfig;
 
@@ -446,7 +450,6 @@ mod tests {
     }
 
     // The result should be similar to the GDAL output of this command: gdalwarp -tr 1 1 -r near -srcnodata 0 -dstnodata 0  MOD13A2_M_NDVI_2014-01-01.TIFF MOD13A2_M_NDVI_2014-01-01_360_180_near_0.TIFF
-    /*
     #[tokio::test]
     async fn png_from_stream_non_full() {
         let ctx = InMemoryContext::test_default();
@@ -455,7 +458,7 @@ mod tests {
         let gdal_source = GdalSourceProcessor::<u8> {
             tiling_specification: exe_ctx.tiling_specification(),
             meta_data: Box::new(create_ndvi_meta_data()),
-            _phandom_data: PhantomData,
+            _phantom_data: PhantomData,
         };
 
         let query_partition =
@@ -485,8 +488,6 @@ mod tests {
             image_bytes.as_slice()
         );
     }
-
-    */
 
     async fn get_map_test_helper(method: Method, path: Option<&str>) -> ServiceResponse {
         let exe_ctx_tiling_spec = TilingSpecification {
