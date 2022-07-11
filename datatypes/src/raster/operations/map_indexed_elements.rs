@@ -147,7 +147,8 @@ where
             .collect();
 
         MaskedGrid::new(
-            Grid::new(data.shape, out_data).expect("the shape of the grid and the data size matched before"),
+            Grid::new(data.shape, out_data)
+                .expect("the shape of the grid and the data size matched before"),
             validity_mask,
         )
         .expect("the shape of the grid and the data size matched before")
@@ -203,8 +204,10 @@ where
             .unzip();
 
         MaskedGrid::new(
-            Grid::new(self.shape.clone(), out_data).expect("the shape of the grid and the data size matched before"),
-            Grid::new(self.shape, validity_mask).expect("the shape of the grid and the data size matched before"),
+            Grid::new(self.shape.clone(), out_data)
+                .expect("the shape of the grid and the data size matched before"),
+            Grid::new(self.shape, validity_mask)
+                .expect("the shape of the grid and the data size matched before"),
         )
         .expect("the shape of the grid and the data size matched before")
     }
@@ -444,8 +447,10 @@ where
             .unzip_into_vecs(out_data.as_mut(), out_validity.as_mut());
 
         MaskedGrid::new(
-            Grid::new(data.shape, out_data).expect("the shape of the grid and the data size matched before"),
-            Grid::new(validity_mask.shape, out_validity).expect("the shape of the grid and the data size matched before"),
+            Grid::new(data.shape, out_data)
+                .expect("the shape of the grid and the data size matched before"),
+            Grid::new(validity_mask.shape, out_validity)
+                .expect("the shape of the grid and the data size matched before"),
         )
         .expect("the shape of the grid and the data size matched before")
     }
@@ -510,8 +515,10 @@ where
             .unzip_into_vecs(&mut out_data, &mut out_validity);
 
         MaskedGrid::new(
-            Grid::new(self.shape.clone(), out_data).expect("the shape of the grid and the data size matched before"),
-            Grid::new(self.shape, out_validity).expect("the shape of the grid and the data size matched before"),
+            Grid::new(self.shape.clone(), out_data)
+                .expect("the shape of the grid and the data size matched before"),
+            Grid::new(self.shape, out_validity)
+                .expect("the shape of the grid and the data size matched before"),
         )
         .expect("the shape of the grid and the data size matched before")
     }

@@ -221,7 +221,8 @@ where
             validity_mask,
         } = self;
         let new_data = data.map_elements_parallel(map_fn);
-        MaskedGrid::new(new_data, validity_mask).expect("the shape of the grid and the data size matched before")
+        MaskedGrid::new(new_data, validity_mask)
+            .expect("the shape of the grid and the data size matched before")
     }
 }
 
@@ -269,8 +270,10 @@ where
             .unzip_into_vecs(out_data.as_mut(), out_validity.as_mut());
 
         MaskedGrid::new(
-            Grid::new(shape.clone(), out_data).expect("the shape of the grid and the data size matched before"),
-            Grid::new(shape, out_validity).expect("the shape of the grid and the data size matched before"),
+            Grid::new(shape.clone(), out_data)
+                .expect("the shape of the grid and the data size matched before"),
+            Grid::new(shape, out_validity)
+                .expect("the shape of the grid and the data size matched before"),
         )
         .expect("the shape of the grid and the data size matched before")
     }
