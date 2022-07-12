@@ -49,9 +49,7 @@ where
         web::scope("/dataset")
             .service(web::resource("").route(web::post().to(create_dataset_handler::<C>)))
             .service(web::resource("/auto").route(web::post().to(auto_create_dataset_handler::<C>)))
-            .service(
-                web::resource("/internal/{dataset}").route(web::get().to(get_dataset_handler::<C>)),
-            )
+            .service(web::resource("/{dataset}").route(web::get().to(get_dataset_handler::<C>)))
             .service(
                 web::resource("/suggest").route(web::get().to(suggest_meta_data_handler::<C>)),
             ),
