@@ -2,17 +2,17 @@ use std::cmp::Ordering;
 use std::collections::HashMap;
 use std::sync::Arc;
 
-use super::external::{ExternalLayerProvider, ExternalLayerProviderDefinition};
+use super::external::{DataProvider, DataProviderDefinition};
 use super::layer::{
     AddLayer, AddLayerCollection, CollectionItem, Layer, LayerCollectionListOptions,
     LayerCollectionListing, LayerListing, ProviderLayerCollectionId, ProviderLayerId,
 };
-use super::listing::{LayerCollectionId, LayerCollectionProvider, LayerId};
+use super::listing::{LayerCollectionId, LayerCollectionProvider};
 use crate::error::{Error, Result};
 use crate::util::user_input::UserInput;
 use crate::{contexts::Db, util::user_input::Validated};
 use async_trait::async_trait;
-use geoengine_datatypes::dataset::LayerProviderId;
+use geoengine_datatypes::dataset::{DataProviderId, LayerId};
 use serde::{Deserialize, Serialize};
 use snafu::Snafu;
 use tokio::sync::RwLock;
@@ -26,8 +26,8 @@ pub enum LayerDbError {
     NoLayerForGivenId { id: LayerId },
 }
 
-pub const INTERNAL_PROVIDER_ID: LayerProviderId =
-    LayerProviderId::from_u128(0xce5e_84db_cbf9_48a2_9a32_d4b7_cc56_ea74);
+pub const INTERNAL_PROVIDER_ID: DataProviderId =
+    DataProviderId::from_u128(0xce5e_84db_cbf9_48a2_9a32_d4b7_cc56_ea74);
 
 pub const INTERNAL_LAYER_DB_ROOT_COLLECTION_ID: Uuid =
     Uuid::from_u128(0x0510_2bb3_a855_4a37_8a8a_3002_6a91_fef1);
@@ -87,7 +87,7 @@ pub trait LayerDb: LayerCollectionProvider + Send + Sync {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct LayerProviderListing {
-    pub id: LayerProviderId,
+    pub id: DataProviderId,
     pub name: String,
     pub description: String,
 }
@@ -108,15 +108,15 @@ impl UserInput for LayerProviderListingOptions {
 pub trait LayerProviderDb: Send + Sync + 'static {
     async fn add_layer_provider(
         &self,
-        provider: Box<dyn ExternalLayerProviderDefinition>,
-    ) -> Result<LayerProviderId>;
+        provider: Box<dyn DataProviderDefinition>,
+    ) -> Result<DataProviderId>;
 
     async fn list_layer_providers(
         &self,
         options: Validated<LayerProviderListingOptions>,
     ) -> Result<Vec<LayerProviderListing>>;
 
-    async fn layer_provider(&self, id: LayerProviderId) -> Result<Box<dyn ExternalLayerProvider>>;
+    async fn layer_provider(&self, id: DataProviderId) -> Result<Box<dyn DataProvider>>;
 
     // TODO: share/remove/update layer providers
 }
@@ -294,8 +294,8 @@ impl LayerCollectionProvider for HashMapLayerDb {
                     .expect("collections reference existing collections as children");
                 CollectionItem::Collection(LayerCollectionListing {
                     id: ProviderLayerCollectionId {
-                        provider: INTERNAL_PROVIDER_ID,
-                        item: c.clone(),
+                        provider_id: INTERNAL_PROVIDER_ID,
+                        collection_id: c.clone(),
                     },
                     name: collection.name.clone(),
                     description: collection.description.clone(),
@@ -317,8 +317,8 @@ impl LayerCollectionProvider for HashMapLayerDb {
 
                 CollectionItem::Layer(LayerListing {
                     id: ProviderLayerId {
-                        provider: INTERNAL_PROVIDER_ID,
-                        item: l.clone(),
+                        provider_id: INTERNAL_PROVIDER_ID,
+                        layer_id: l.clone(),
                     },
                     name: layer.name.clone(),
                     description: layer.description.clone(),
@@ -357,8 +357,8 @@ impl LayerCollectionProvider for HashMapLayerDb {
 
         Ok(Layer {
             id: ProviderLayerId {
-                provider: INTERNAL_PROVIDER_ID,
-                item: id.clone(),
+                provider_id: INTERNAL_PROVIDER_ID,
+                layer_id: id.clone(),
             },
             name: layer.name.clone(),
             description: layer.description.clone(),
@@ -370,15 +370,15 @@ impl LayerCollectionProvider for HashMapLayerDb {
 
 #[derive(Default)]
 pub struct HashMapLayerProviderDb {
-    external_providers: Db<HashMap<LayerProviderId, Box<dyn ExternalLayerProviderDefinition>>>,
+    external_providers: Db<HashMap<DataProviderId, Box<dyn DataProviderDefinition>>>,
 }
 
 #[async_trait]
 impl LayerProviderDb for HashMapLayerProviderDb {
     async fn add_layer_provider(
         &self,
-        provider: Box<dyn ExternalLayerProviderDefinition>,
-    ) -> Result<LayerProviderId> {
+        provider: Box<dyn DataProviderDefinition>,
+    ) -> Result<DataProviderId> {
         let id = provider.id();
 
         self.external_providers.write().await.insert(id, provider);
@@ -414,7 +414,7 @@ impl LayerProviderDb for HashMapLayerProviderDb {
             .collect())
     }
 
-    async fn layer_provider(&self, id: LayerProviderId) -> Result<Box<dyn ExternalLayerProvider>> {
+    async fn layer_provider(&self, id: DataProviderId) -> Result<Box<dyn DataProvider>> {
         self.external_providers
             .read()
             .await
@@ -496,16 +496,16 @@ mod tests {
             vec![
                 CollectionItem::Collection(LayerCollectionListing {
                     id: ProviderLayerCollectionId {
-                        provider: INTERNAL_PROVIDER_ID,
-                        item: empty_c_id,
+                        provider_id: INTERNAL_PROVIDER_ID,
+                        collection_id: empty_c_id,
                     },
                     name: "empty collection".to_string(),
                     description: "description".to_string()
                 }),
                 CollectionItem::Layer(LayerListing {
                     id: ProviderLayerId {
-                        provider: INTERNAL_PROVIDER_ID,
-                        item: l_id,
+                        provider_id: INTERNAL_PROVIDER_ID,
+                        layer_id: l_id,
                     },
                     name: "layer".to_string(),
                     description: "description".to_string(),

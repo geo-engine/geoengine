@@ -8,7 +8,7 @@ use crate::layers::listing::LayerCollectionProvider;
 use crate::projects::Symbology;
 use crate::util::user_input::{UserInput, Validated};
 use async_trait::async_trait;
-use geoengine_datatypes::dataset::{DatasetId, LayerProviderId};
+use geoengine_datatypes::dataset::{DataProviderId, DatasetId};
 use geoengine_datatypes::primitives::VectorQueryRectangle;
 use geoengine_operators::engine::MetaData;
 use geoengine_operators::source::{GdalMetaDataList, GdalMetadataNetCdfCf};
@@ -25,8 +25,8 @@ use uuid::Uuid;
 
 use super::listing::Provenance;
 
-pub const DATASET_DB_LAYER_PROVIDER_ID: LayerProviderId =
-    LayerProviderId::from_u128(0xac50_ed0d_c9a0_41f8_9ce8_35fc_9e38_299b);
+pub const DATASET_DB_LAYER_PROVIDER_ID: DataProviderId =
+    DataProviderId::from_u128(0xac50_ed0d_c9a0_41f8_9ce8_35fc_9e38_299b);
 
 pub const DATASET_DB_ROOT_COLLECTION_ID: Uuid =
     Uuid::from_u128(0x5460_73b6_d535_4205_b601_9967_5c9f_6dd7);
@@ -46,7 +46,7 @@ pub struct Dataset {
 impl Dataset {
     pub fn listing(&self) -> DatasetListing {
         DatasetListing {
-            id: self.id.clone(),
+            id: self.id,
             name: self.name.clone(),
             description: self.description.clone(),
             tags: vec![], // TODO

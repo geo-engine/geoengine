@@ -1,10 +1,10 @@
 use crate::datasets::listing::ProvenanceOutput;
 use crate::error::Result;
-use crate::layers::external::{ExternalLayerProvider, ExternalLayerProviderDefinition};
+use crate::layers::external::{DataProvider, DataProviderDefinition};
 use crate::layers::layer::{
     CollectionItem, Layer, LayerCollectionListOptions, LayerListing, ProviderLayerId,
 };
-use crate::layers::listing::{LayerCollectionId, LayerCollectionProvider, LayerId};
+use crate::layers::listing::{LayerCollectionId, LayerCollectionProvider};
 use crate::workflows::workflow::Workflow;
 use crate::{
     datasets::storage::{DatasetDefinition, MetaDataDefinition},
@@ -12,7 +12,7 @@ use crate::{
     util::user_input::Validated,
 };
 use async_trait::async_trait;
-use geoengine_datatypes::dataset::{DatasetId, LayerProviderId};
+use geoengine_datatypes::dataset::{DataId, DataProviderId, LayerId};
 use geoengine_datatypes::primitives::{RasterQueryRectangle, VectorQueryRectangle};
 use geoengine_operators::engine::{TypedOperator, VectorOperator};
 use geoengine_operators::mock::{MockDatasetDataSource, MockDatasetDataSourceParams};
@@ -29,14 +29,14 @@ pub const ROOT_COLLECTION_ID: Uuid = Uuid::from_u128(0xd630_e723_63d4_440c_9e15_
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct MockExternalLayerProviderDefinition {
-    pub id: LayerProviderId,
+    pub id: DataProviderId,
     pub datasets: Vec<DatasetDefinition>,
 }
 
 #[typetag::serde]
 #[async_trait]
-impl ExternalLayerProviderDefinition for MockExternalLayerProviderDefinition {
-    async fn initialize(self: Box<Self>) -> crate::error::Result<Box<dyn ExternalLayerProvider>> {
+impl DataProviderDefinition for MockExternalLayerProviderDefinition {
+    async fn initialize(self: Box<Self>) -> crate::error::Result<Box<dyn DataProvider>> {
         Ok(Box::new(MockExternalDataProvider {
             id: self.id,
             datasets: self.datasets,
@@ -51,31 +51,22 @@ impl ExternalLayerProviderDefinition for MockExternalLayerProviderDefinition {
         "MockName".to_owned()
     }
 
-    fn id(&self) -> LayerProviderId {
+    fn id(&self) -> DataProviderId {
         self.id
     }
 }
 
 #[derive(Debug)]
 pub struct MockExternalDataProvider {
-    id: LayerProviderId,
+    id: DataProviderId,
     datasets: Vec<DatasetDefinition>,
 }
 
-// this provider uses dataset and layer ids interchangably
-// TODO: remove this when external dataset ids are reworked
-fn layer_id_from_dataset_id(id: &DatasetId) -> LayerId {
-    match id {
-        DatasetId::Internal { dataset_id } => LayerId(dataset_id.to_string()),
-        DatasetId::External(s) => LayerId(s.dataset_id.clone()),
-    }
-}
-
 #[async_trait]
-impl ExternalLayerProvider for MockExternalDataProvider {
-    async fn provenance(&self, dataset: &DatasetId) -> Result<ProvenanceOutput> {
+impl DataProvider for MockExternalDataProvider {
+    async fn provenance(&self, id: &DataId) -> Result<ProvenanceOutput> {
         Ok(ProvenanceOutput {
-            dataset: dataset.clone(),
+            data: id.clone(),
             provenance: None,
         })
     }
@@ -105,13 +96,13 @@ impl LayerCollectionProvider for MockExternalDataProvider {
         for dataset in &self.datasets {
             listing.push(Ok(CollectionItem::Layer(LayerListing {
                 id: ProviderLayerId {
-                    provider: self.id,
-                    item: dataset
+                    provider_id: self.id,
+                    layer_id: dataset
                         .properties
                         .id
                         .as_ref()
                         .ok_or(error::Error::MissingDatasetId)
-                        .map(layer_id_from_dataset_id)?,
+                        .map(|id| LayerId(id.to_string()))?,
                 },
                 name: dataset.properties.name.clone(),
                 description: dataset.properties.description.clone(),
@@ -135,16 +126,16 @@ impl LayerCollectionProvider for MockExternalDataProvider {
                 d.properties
                     .id
                     .as_ref()
-                    .map(layer_id_from_dataset_id)
+                    .map(|id| LayerId(id.to_string()))
                     .as_ref()
                     == Some(id)
             })
-            .ok_or(error::Error::UnknownDatasetId)
+            .ok_or(error::Error::UnknownDataId)
             .and_then(|d| {
                 Ok(Layer {
                     id: ProviderLayerId {
-                        provider: self.id,
-                        item: id.clone(),
+                        provider_id: self.id,
+                        layer_id: id.clone(),
                     },
                     name: d.properties.name.clone(),
                     description: d.properties.description.clone(),
@@ -152,11 +143,11 @@ impl LayerCollectionProvider for MockExternalDataProvider {
                         operator: TypedOperator::Vector(
                             MockDatasetDataSource {
                                 params: MockDatasetDataSourceParams {
-                                    dataset: d
+                                    data: d
                                         .properties
                                         .id
-                                        .clone()
-                                        .ok_or(error::Error::MissingDatasetId)?,
+                                        .ok_or(error::Error::MissingDatasetId)?
+                                        .into(),
                                 },
                             }
                             .boxed(),
@@ -175,7 +166,7 @@ impl
 {
     async fn meta_data(
         &self,
-        dataset: &DatasetId,
+        id: &DataId,
     ) -> Result<
         Box<
             dyn MetaData<
@@ -186,19 +177,24 @@ impl
         >,
         geoengine_operators::error::Error,
     > {
+        let dataset = id
+            .internal()
+            .ok_or(geoengine_operators::error::Error::DatasetMetaData {
+                source: Box::new(error::Error::DataIdTypeMissMatch),
+            })?;
         let dataset_def = self
             .datasets
             .iter()
-            .find(|d| d.properties.id.as_ref() == Some(dataset))
+            .find(|d| d.properties.id.as_ref() == Some(&dataset))
             .ok_or(geoengine_operators::error::Error::DatasetMetaData {
-                source: Box::new(error::Error::UnknownDatasetId),
+                source: Box::new(error::Error::UnknownDataId),
             })?;
 
         if let MetaDataDefinition::MockMetaData(m) = &dataset_def.meta_data {
             Ok(Box::new(m.clone()))
         } else {
             Err(geoengine_operators::error::Error::DatasetMetaData {
-                source: Box::new(error::Error::DatasetIdTypeMissMatch),
+                source: Box::new(error::Error::DataIdTypeMissMatch),
             })
         }
     }
@@ -210,7 +206,7 @@ impl MetaDataProvider<OgrSourceDataset, VectorResultDescriptor, VectorQueryRecta
 {
     async fn meta_data(
         &self,
-        _dataset: &DatasetId,
+        _id: &DataId,
     ) -> Result<
         Box<dyn MetaData<OgrSourceDataset, VectorResultDescriptor, VectorQueryRectangle>>,
         geoengine_operators::error::Error,
@@ -225,7 +221,7 @@ impl MetaDataProvider<GdalLoadingInfo, RasterResultDescriptor, RasterQueryRectan
 {
     async fn meta_data(
         &self,
-        _dataset: &DatasetId,
+        _id: &DataId,
     ) -> Result<
         Box<dyn MetaData<GdalLoadingInfo, RasterResultDescriptor, RasterQueryRectangle>>,
         geoengine_operators::error::Error,

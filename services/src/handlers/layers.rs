@@ -1,10 +1,10 @@
 use actix_web::{web, FromRequest, Responder};
-use geoengine_datatypes::dataset::LayerProviderId;
+use geoengine_datatypes::dataset::{DataProviderId, LayerId};
 
 use crate::error::Result;
 
 use crate::layers::layer::{CollectionItem, LayerCollectionListing, ProviderLayerCollectionId};
-use crate::layers::listing::{LayerCollectionId, LayerCollectionProvider, LayerId};
+use crate::layers::listing::{LayerCollectionId, LayerCollectionProvider};
 use crate::layers::storage::{LayerProviderDb, LayerProviderListingOptions};
 use crate::util::user_input::UserInput;
 use crate::{contexts::Context, layers::layer::LayerCollectionListOptions};
@@ -34,8 +34,8 @@ async fn list_root_collections_handler<C: Context>(
     if options.offset == 0 && options.limit > 0 {
         providers.push(CollectionItem::Collection(LayerCollectionListing {
             id: ProviderLayerCollectionId {
-                provider: crate::datasets::storage::DATASET_DB_LAYER_PROVIDER_ID,
-                item: LayerCollectionId(
+                provider_id: crate::datasets::storage::DATASET_DB_LAYER_PROVIDER_ID,
+                collection_id: LayerCollectionId(
                     crate::datasets::storage::DATASET_DB_ROOT_COLLECTION_ID.to_string(),
                 ),
             },
@@ -49,8 +49,8 @@ async fn list_root_collections_handler<C: Context>(
     if options.offset <= 1 && options.limit > 1 {
         providers.push(CollectionItem::Collection(LayerCollectionListing {
             id: ProviderLayerCollectionId {
-                provider: crate::layers::storage::INTERNAL_PROVIDER_ID,
-                item: LayerCollectionId(
+                provider_id: crate::layers::storage::INTERNAL_PROVIDER_ID,
+                collection_id: LayerCollectionId(
                     crate::layers::storage::INTERNAL_LAYER_DB_ROOT_COLLECTION_ID.to_string(),
                 ),
             },
@@ -77,8 +77,8 @@ async fn list_root_collections_handler<C: Context>(
         let provider = external.layer_provider(provider_listing.id).await?;
         providers.push(CollectionItem::Collection(LayerCollectionListing {
             id: ProviderLayerCollectionId {
-                provider: provider_listing.id,
-                item: provider.root_collection_id().await?,
+                provider_id: provider_listing.id,
+                collection_id: provider.root_collection_id().await?,
             },
             name: provider_listing.name,
             description: provider_listing.description,
@@ -90,7 +90,7 @@ async fn list_root_collections_handler<C: Context>(
 
 async fn list_collection_handler<C: Context>(
     ctx: web::Data<C>,
-    path: web::Path<(LayerProviderId, LayerCollectionId)>,
+    path: web::Path<(DataProviderId, LayerCollectionId)>,
     options: web::Query<LayerCollectionListOptions>,
 ) -> Result<impl Responder> {
     let (provider, item) = path.into_inner();
@@ -125,7 +125,7 @@ async fn list_collection_handler<C: Context>(
 
 async fn layer_handler<C: Context>(
     ctx: web::Data<C>,
-    path: web::Path<(LayerProviderId, LayerId)>,
+    path: web::Path<(DataProviderId, LayerId)>,
 ) -> Result<impl Responder> {
     let (provider, item) = path.into_inner();
 

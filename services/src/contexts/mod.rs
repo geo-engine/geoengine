@@ -14,7 +14,7 @@ mod simple_context;
 
 use crate::datasets::storage::DatasetDb;
 
-use geoengine_datatypes::dataset::DatasetId;
+use geoengine_datatypes::dataset::DataId;
 
 use geoengine_datatypes::raster::TilingSpecification;
 use geoengine_operators::engine::{
@@ -171,7 +171,7 @@ where
 {
     async fn meta_data(
         &self,
-        dataset_id: &DatasetId,
+        data_id: &DataId,
     ) -> Result<
         Box<
             dyn MetaData<
@@ -182,22 +182,22 @@ where
         >,
         geoengine_operators::error::Error,
     > {
-        match dataset_id {
-            DatasetId::Internal { dataset_id: _ } => self
+        match data_id {
+            DataId::Internal { dataset_id: _ } => self
                 .dataset_db
-                .session_meta_data(&self.session, dataset_id)
+                .session_meta_data(&self.session, data_id)
                 .await
                 .map_err(|e| geoengine_operators::error::Error::LoadingInfo {
                     source: Box::new(e),
                 }),
-            DatasetId::External(external) => {
+            DataId::External(external) => {
                 self.layer_provider_db
                     .layer_provider(external.provider_id)
                     .await
                     .map_err(|e| geoengine_operators::error::Error::DatasetMetaData {
                         source: Box::new(e),
                     })?
-                    .meta_data(dataset_id)
+                    .meta_data(data_id)
                     .await
             }
         }
@@ -216,27 +216,27 @@ where
 {
     async fn meta_data(
         &self,
-        dataset_id: &DatasetId,
+        data_id: &DataId,
     ) -> Result<
         Box<dyn MetaData<OgrSourceDataset, VectorResultDescriptor, VectorQueryRectangle>>,
         geoengine_operators::error::Error,
     > {
-        match dataset_id {
-            DatasetId::Internal { dataset_id: _ } => self
+        match data_id {
+            DataId::Internal { dataset_id: _ } => self
                 .dataset_db
-                .session_meta_data(&self.session, dataset_id)
+                .session_meta_data(&self.session, data_id)
                 .await
                 .map_err(|e| geoengine_operators::error::Error::LoadingInfo {
                     source: Box::new(e),
                 }),
-            DatasetId::External(external) => {
+            DataId::External(external) => {
                 self.layer_provider_db
                     .layer_provider(external.provider_id)
                     .await
                     .map_err(|e| geoengine_operators::error::Error::DatasetMetaData {
                         source: Box::new(e),
                     })?
-                    .meta_data(dataset_id)
+                    .meta_data(data_id)
                     .await
             }
         }
@@ -255,27 +255,27 @@ where
 {
     async fn meta_data(
         &self,
-        dataset_id: &DatasetId,
+        data_id: &DataId,
     ) -> Result<
         Box<dyn MetaData<GdalLoadingInfo, RasterResultDescriptor, RasterQueryRectangle>>,
         geoengine_operators::error::Error,
     > {
-        match dataset_id {
-            DatasetId::Internal { dataset_id: _ } => self
+        match data_id {
+            DataId::Internal { dataset_id: _ } => self
                 .dataset_db
-                .session_meta_data(&self.session, dataset_id)
+                .session_meta_data(&self.session, data_id)
                 .await
                 .map_err(|e| geoengine_operators::error::Error::LoadingInfo {
                     source: Box::new(e),
                 }),
-            DatasetId::External(external) => {
+            DataId::External(external) => {
                 self.layer_provider_db
                     .layer_provider(external.provider_id)
                     .await
                     .map_err(|e| geoengine_operators::error::Error::DatasetMetaData {
                         source: Box::new(e),
                     })?
-                    .meta_data(dataset_id)
+                    .meta_data(data_id)
                     .await
             }
         }

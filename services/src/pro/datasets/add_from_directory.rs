@@ -44,7 +44,7 @@ pub async fn add_datasets_from_directory<D: DatasetDb<UserSession> + UpdateDatas
                 system_session,
                 DatasetPermission {
                     role: Role::user_role_id(),
-                    dataset: dataset_id.clone(),
+                    dataset: dataset_id,
                     permission: Permission::Read,
                 },
             )
@@ -55,7 +55,7 @@ pub async fn add_datasets_from_directory<D: DatasetDb<UserSession> + UpdateDatas
                 system_session,
                 DatasetPermission {
                     role: Role::anonymous_role_id(),
-                    dataset: dataset_id.clone(),
+                    dataset: dataset_id,
                     permission: Permission::Read,
                 },
             )

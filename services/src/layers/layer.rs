@@ -1,23 +1,25 @@
 use serde::{Deserialize, Serialize};
 
-use geoengine_datatypes::dataset::LayerProviderId;
+use geoengine_datatypes::dataset::{DataProviderId, LayerId};
 
 use crate::{
     error::Result, projects::Symbology, util::user_input::UserInput, workflows::workflow::Workflow,
 };
 
-use super::listing::{LayerCollectionId, LayerId};
+use super::listing::LayerCollectionId;
 
 #[derive(Debug, Serialize, Deserialize, Clone, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
 pub struct ProviderLayerId {
-    pub provider: LayerProviderId,
-    pub item: LayerId,
+    pub provider_id: DataProviderId,
+    pub layer_id: LayerId,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
 pub struct ProviderLayerCollectionId {
-    pub provider: LayerProviderId,
-    pub item: LayerCollectionId,
+    pub provider_id: DataProviderId,
+    pub collection_id: LayerCollectionId,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone, PartialEq)]

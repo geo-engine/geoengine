@@ -26,7 +26,7 @@ use gdal::{vector::Layer, Dataset};
 use gdal::{vector::OGRFieldType, DatasetOptions};
 use geoengine_datatypes::{
     collections::VectorDataType,
-    dataset::InternalDatasetId,
+    dataset::DatasetId,
     primitives::{FeatureDataType, Measurement, VectorQueryRectangle},
     spatial_reference::{SpatialReference, SpatialReferenceOption},
 };
@@ -125,13 +125,13 @@ async fn list_datasets_handler<C: Context>(
 /// }
 /// ```
 async fn get_dataset_handler<C: Context>(
-    dataset: web::Path<InternalDatasetId>,
+    dataset: web::Path<DatasetId>,
     session: C::Session,
     ctx: web::Data<C>,
 ) -> Result<impl Responder> {
     let dataset = ctx
         .dataset_db_ref()
-        .load(&session, &dataset.into_inner().into())
+        .load(&session, &dataset.into_inner())
         .await?;
     Ok(web::Json(dataset))
 }
@@ -710,7 +710,7 @@ mod tests {
     use geoengine_datatypes::collections::{
         GeometryCollection, MultiPointCollection, VectorDataType,
     };
-    use geoengine_datatypes::dataset::{DatasetId, InternalDatasetId};
+    use geoengine_datatypes::dataset::DatasetId;
     use geoengine_datatypes::primitives::{BoundingBox2D, SpatialResolution};
     use geoengine_datatypes::raster::{GridShape2D, TilingSpecification};
     use geoengine_datatypes::spatial_reference::SpatialReferenceOption;
@@ -740,10 +740,7 @@ mod tests {
             bbox: None,
         };
 
-        let id = DatasetId::Internal {
-            dataset_id: InternalDatasetId::from_str("370e99ec-9fd8-401d-828d-d67b431a8742")
-                .unwrap(),
-        };
+        let id = DatasetId::from_str("370e99ec-9fd8-401d-828d-d67b431a8742")?;
         let ds = AddDataset {
             id: Some(id),
             name: "OgrDataset".to_string(),
@@ -776,10 +773,8 @@ mod tests {
             .add_dataset(&SimpleSession::default(), ds.validated()?, Box::new(meta))
             .await?;
 
-        let id2 = DatasetId::Internal {
-            dataset_id: InternalDatasetId::from_str("370e99ec-9fd8-401d-828d-d67b431a8742")
-                .unwrap(),
-        };
+        let id2 = DatasetId::from_str("370e99ec-9fd8-401d-828d-d67b431a8742")?;
+
         let ds = AddDataset {
             id: Some(id2),
             name: "OgrDataset2".to_string(),
@@ -831,10 +826,7 @@ mod tests {
         assert_eq!(
             read_body_string(res).await,
             json!([{
-                "id": {
-                    "type": "internal",
-                    "datasetId": "370e99ec-9fd8-401d-828d-d67b431a8742"
-                },
+                "id": "370e99ec-9fd8-401d-828d-d67b431a8742",
                 "name": "OgrDataset2",
                 "description": "My Ogr dataset2",
                 "tags": [],
@@ -870,10 +862,7 @@ mod tests {
                     "text": null
                 }
             }, {
-                "id": {
-                    "type": "internal",
-                    "datasetId": "370e99ec-9fd8-401d-828d-d67b431a8742"
-                },
+                "id": "370e99ec-9fd8-401d-828d-d67b431a8742",
                 "name": "OgrDataset",
                 "description": "My Ogr dataset",
                 "tags": [],
@@ -1018,7 +1007,7 @@ mod tests {
     ) -> Result<Box<dyn InitializedVectorOperator>> {
         OgrSource {
             params: OgrSourceParameters {
-                dataset: dataset_id,
+                data: dataset_id.into(),
                 attribute_projection: None,
                 attribute_filters: None,
             },
@@ -1602,7 +1591,7 @@ mod tests {
             .await?;
 
         let req = actix_web::test::TestRequest::get()
-            .uri(&format!("/dataset/internal/{}", id.internal().unwrap()))
+            .uri(&format!("/dataset/internal/{}", id))
             .append_header((header::CONTENT_LENGTH, 0))
             .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())));
         let res = send_test_request(req, ctx).await;
@@ -1614,10 +1603,7 @@ mod tests {
         assert_eq!(
             res_body,
             json!({
-                "id": {
-                    "type": "internal",
-                    "datasetId": id.internal().unwrap()
-                },
+                "id": id,
                 "name": "OgrDataset",
                 "description": "My Ogr dataset",
                 "resultDescriptor": {

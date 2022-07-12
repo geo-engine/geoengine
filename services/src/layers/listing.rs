@@ -1,6 +1,7 @@
 use std::fmt;
 
 use async_trait::async_trait;
+use geoengine_datatypes::dataset::LayerId;
 
 use crate::error::Result;
 use crate::util::user_input::Validated;
@@ -8,15 +9,6 @@ use crate::util::user_input::Validated;
 use super::layer::{CollectionItem, Layer, LayerCollectionListOptions};
 
 use serde::{Deserialize, Serialize};
-
-#[derive(Debug, Serialize, Deserialize, Clone, PartialEq, Eq, Hash)]
-pub struct LayerId(pub String);
-
-impl fmt::Display for LayerId {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "{}", self.0)
-    }
-}
 
 #[derive(Debug, Serialize, Deserialize, Clone, PartialEq, Eq, Hash)]
 pub struct LayerCollectionId(pub String);

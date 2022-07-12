@@ -1,5 +1,5 @@
 use crate::engine::{
-    ExecutionContext, InitializedVectorOperator, MetaData, OperatorDatasets, OperatorName,
+    ExecutionContext, InitializedVectorOperator, MetaData, OperatorData, OperatorName,
     QueryContext, ResultDescriptor, SourceOperator, TypedVectorQueryProcessor, VectorOperator,
     VectorQueryProcessor, VectorResultDescriptor,
 };
@@ -9,7 +9,7 @@ use futures::stream;
 use futures::stream::BoxStream;
 use futures::StreamExt;
 use geoengine_datatypes::collections::{MultiPointCollection, VectorDataType};
-use geoengine_datatypes::dataset::DatasetId;
+use geoengine_datatypes::dataset::DataId;
 use geoengine_datatypes::primitives::{Coordinate2D, TimeInterval, VectorQueryRectangle};
 use geoengine_datatypes::spatial_reference::SpatialReferenceOption;
 use serde::{Deserialize, Serialize};
@@ -106,7 +106,7 @@ impl VectorQueryProcessor for MockDatasetDataSourceProcessor {
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct MockDatasetDataSourceParams {
-    pub dataset: DatasetId,
+    pub data: DataId,
 }
 
 pub type MockDatasetDataSource = SourceOperator<MockDatasetDataSourceParams>;
@@ -122,7 +122,7 @@ impl VectorOperator for MockDatasetDataSource {
         self: Box<Self>,
         context: &dyn ExecutionContext,
     ) -> Result<Box<dyn InitializedVectorOperator>> {
-        let loading_info = context.meta_data(&self.params.dataset).await?;
+        let loading_info = context.meta_data(&self.params.data).await?;
 
         Ok(InitializedMockDatasetDataSource {
             result_descriptor: loading_info.result_descriptor().await?,
@@ -132,9 +132,9 @@ impl VectorOperator for MockDatasetDataSource {
     }
 }
 
-impl OperatorDatasets for MockDatasetDataSource {
-    fn datasets_collect(&self, datasets: &mut Vec<DatasetId>) {
-        datasets.push(self.params.dataset.clone());
+impl OperatorData for MockDatasetDataSource {
+    fn data_ids_collect(&self, data_ids: &mut Vec<DataId>) {
+        data_ids.push(self.params.data.clone());
     }
 }
 
@@ -167,7 +167,7 @@ mod tests {
     use crate::engine::{MockExecutionContext, MockQueryContext};
     use futures::executor::block_on_stream;
     use geoengine_datatypes::collections::FeatureCollectionInfos;
-    use geoengine_datatypes::dataset::InternalDatasetId;
+    use geoengine_datatypes::dataset::{DataId, DatasetId};
     use geoengine_datatypes::primitives::{BoundingBox2D, SpatialResolution};
     use geoengine_datatypes::util::test::TestDefault;
     use geoengine_datatypes::util::Identifier;
@@ -176,9 +176,7 @@ mod tests {
     async fn test() {
         let mut execution_context = MockExecutionContext::test_default();
 
-        let id = DatasetId::Internal {
-            dataset_id: InternalDatasetId::new(),
-        };
+        let id: DataId = DatasetId::new().into();
         execution_context.add_meta_data(
             id.clone(),
             Box::new(MockDatasetDataSourceLoadingInfo {
@@ -187,7 +185,7 @@ mod tests {
         );
 
         let mps = MockDatasetDataSource {
-            params: MockDatasetDataSourceParams { dataset: id },
+            params: MockDatasetDataSourceParams { data: id },
         }
         .boxed();
         let initialized = mps.initialize(&execution_context).await.unwrap();

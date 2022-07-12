@@ -3,7 +3,7 @@ use std::path::PathBuf;
 use gdal::errors::GdalError;
 use snafu::Snafu;
 
-use geoengine_datatypes::{dataset::LayerProviderId, error::ErrorSource};
+use geoengine_datatypes::{dataset::DataProviderId, error::ErrorSource};
 
 #[derive(Debug, Snafu)]
 #[snafu(visibility(pub(crate)))]
@@ -85,10 +85,10 @@ pub enum NetCdfCf4DProviderError {
     CannotCalculateStepsInTimeCoverageInterval {
         source: geoengine_datatypes::error::Error,
     },
-    InvalidExternalDatasetId {
-        provider: LayerProviderId,
+    InvalidExternalDataId {
+        provider: DataProviderId,
     },
-    InvalidDatasetIdLength {
+    InvalidDataIdLength {
         length: usize,
     },
     InvalidDatasetIdFile {

@@ -8,7 +8,7 @@ use crate::datasets::external::netcdfcf::{
     NetCdfOverview, OverviewGeneration, NETCDF_CF_PROVIDER_ID,
 };
 use crate::error::Result;
-use crate::layers::external::ExternalLayerProvider;
+use crate::layers::external::DataProvider;
 use crate::layers::storage::LayerProviderDb;
 use crate::tasks::{Task, TaskContext, TaskManager, TaskStatusInfo};
 use crate::{contexts::Context, datasets::external::netcdfcf::NetCdfCfDataProvider};
@@ -16,7 +16,7 @@ use actix_web::{
     web::{self, ServiceConfig},
     FromRequest, Responder,
 };
-use geoengine_datatypes::dataset::LayerProviderId;
+use geoengine_datatypes::dataset::DataProviderId;
 use geoengine_datatypes::error::{BoxedResultExt, ErrorSource};
 use log::{debug, warn};
 use serde::{Deserialize, Serialize};
@@ -118,9 +118,9 @@ pub enum EbvError {
     #[snafu(display("Cannot lookup dataset with id {id}"))]
     CannotLookupDataset { id: usize },
     #[snafu(display("Cannot find NetCdfCf provider with id {id}"))]
-    NoNetCdfCfProviderForId { id: LayerProviderId },
+    NoNetCdfCfProviderForId { id: DataProviderId },
     #[snafu(display("NetCdfCf provider with id {id} cannot list files"))]
-    CdfCfProviderCannotListFiles { id: LayerProviderId },
+    CdfCfProviderCannotListFiles { id: DataProviderId },
     #[snafu(display("Internal server error"))]
     Internal { source: Box<dyn ErrorSource> },
 }
@@ -267,7 +267,7 @@ async fn get_dataset_metadata(base_url: &BaseUrl, id: usize) -> Result<EbvDatase
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 struct EbvHierarchy {
-    provider_id: LayerProviderId,
+    provider_id: DataProviderId,
     tree: NetCdfOverview,
 }
 
@@ -333,7 +333,7 @@ where
     T: Send + 'static,
     F: FnOnce(&NetCdfCfDataProvider) -> Result<T, EbvError> + Send + 'static,
 {
-    let provider: Box<dyn ExternalLayerProvider> = ctx
+    let provider: Box<dyn DataProvider> = ctx
         .layer_provider_db_ref()
         .layer_provider(NETCDF_CF_PROVIDER_ID)
         .await

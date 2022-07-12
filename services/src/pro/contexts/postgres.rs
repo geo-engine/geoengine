@@ -636,9 +636,7 @@ mod tests {
     use bb8_postgres::tokio_postgres::{self, NoTls};
     use futures::Future;
     use geoengine_datatypes::collections::VectorDataType;
-    use geoengine_datatypes::dataset::{
-        DatasetId, ExternalDatasetId, InternalDatasetId, LayerProviderId,
-    };
+    use geoengine_datatypes::dataset::{DataProviderId, DatasetId};
     use geoengine_datatypes::primitives::{
         BoundingBox2D, Coordinate2D, FeatureDataType, Measurement, SpatialResolution, TimeInterval,
         VectorQueryRectangle,
@@ -1067,10 +1065,7 @@ mod tests {
     #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
     async fn it_persists_datasets() {
         with_temp_context(|ctx, _| async move {
-            let dataset_id = DatasetId::Internal {
-                dataset_id: InternalDatasetId::from_str("2e8af98d-3b98-4e2c-a35b-e487bffad7b6")
-                    .unwrap(),
-            };
+            let dataset_id = DatasetId::from_str("2e8af98d-3b98-4e2c-a35b-e487bffad7b6").unwrap();
 
             let loading_info = OgrSourceDataset {
                 file_name: PathBuf::from("test.csv"),
@@ -1133,7 +1128,7 @@ mod tests {
             db.add_dataset(
                 &session,
                 AddDataset {
-                    id: Some(dataset_id.clone()),
+                    id: Some(dataset_id),
                     name: "Ogr Test".to_owned(),
                     description: "desc".to_owned(),
                     source_operator: "OgrSource".to_owned(),
@@ -1171,7 +1166,7 @@ mod tests {
             assert_eq!(
                 datasets[0],
                 DatasetListing {
-                    id: dataset_id.clone(),
+                    id: dataset_id,
                     name: "Ogr Test".to_owned(),
                     description: "desc".to_owned(),
                     source_operator: "OgrSource".to_owned(),
@@ -1200,7 +1195,7 @@ mod tests {
             assert_eq!(
                 provenance,
                 ProvenanceOutput {
-                    dataset: dataset_id.clone(),
+                    data: dataset_id.into(),
                     provenance: Some(Provenance {
                         citation: "citation".to_owned(),
                         license: "license".to_owned(),
@@ -1209,8 +1204,10 @@ mod tests {
                 }
             );
 
-            let meta_data: Box<dyn MetaData<OgrSourceDataset, _, _>> =
-                db.session_meta_data(&session, &dataset_id).await.unwrap();
+            let meta_data: Box<dyn MetaData<OgrSourceDataset, _, _>> = db
+                .session_meta_data(&session, &dataset_id.into())
+                .await
+                .unwrap();
 
             assert_eq!(
                 meta_data
@@ -1262,7 +1259,7 @@ mod tests {
             let db = ctx.layer_provider_db_ref();
 
             let provider_id =
-                LayerProviderId::from_str("7b20c8d7-d754-4f8f-ad44-dddd25df22d2").unwrap();
+                DataProviderId::from_str("7b20c8d7-d754-4f8f-ad44-dddd25df22d2").unwrap();
 
             let loading_info = OgrSourceDataset {
                 file_name: PathBuf::from("test.csv"),
@@ -1322,10 +1319,7 @@ mod tests {
                 id: provider_id,
                 datasets: vec![DatasetDefinition {
                     properties: AddDataset {
-                        id: Some(DatasetId::External(ExternalDatasetId {
-                            provider_id,
-                            dataset_id: "test".to_owned(),
-                        })),
+                        id: Some(DatasetId::new()),
                         name: "test".to_owned(),
                         description: "desc".to_owned(),
                         source_operator: "MockPointSource".to_owned(),
@@ -1597,7 +1591,7 @@ mod tests {
                     &session1,
                     DatasetPermission {
                         role: session2.user.id.into(),
-                        dataset: id.clone(),
+                        dataset: id,
                         permission: Permission::Read,
                     },
                 )
@@ -1669,7 +1663,7 @@ mod tests {
                     &session1,
                     DatasetPermission {
                         role: session2.user.id.into(),
-                        dataset: id.clone(),
+                        dataset: id,
                         permission: Permission::Read,
                     },
                 )
@@ -1734,13 +1728,19 @@ mod tests {
 
             let meta: Result<
                 Box<dyn MetaData<OgrSourceDataset, VectorResultDescriptor, VectorQueryRectangle>>,
-            > = ctx.dataset_db_ref().session_meta_data(&session1, &id).await;
+            > = ctx
+                .dataset_db_ref()
+                .session_meta_data(&session1, &id.into())
+                .await;
 
             assert!(meta.is_ok());
 
             let meta: Result<
                 Box<dyn MetaData<OgrSourceDataset, VectorResultDescriptor, VectorQueryRectangle>>,
-            > = ctx.dataset_db_ref().session_meta_data(&session2, &id).await;
+            > = ctx
+                .dataset_db_ref()
+                .session_meta_data(&session2, &id.into())
+                .await;
 
             assert!(meta.is_err());
 
@@ -1749,7 +1749,7 @@ mod tests {
                     &session1,
                     DatasetPermission {
                         role: session2.user.id.into(),
-                        dataset: id.clone(),
+                        dataset: id,
                         permission: Permission::Read,
                     },
                 )
@@ -1758,7 +1758,10 @@ mod tests {
 
             let meta: Result<
                 Box<dyn MetaData<OgrSourceDataset, VectorResultDescriptor, VectorQueryRectangle>>,
-            > = ctx.dataset_db_ref().session_meta_data(&session2, &id).await;
+            > = ctx
+                .dataset_db_ref()
+                .session_meta_data(&session2, &id.into())
+                .await;
 
             assert!(meta.is_ok());
         })
@@ -1840,8 +1843,8 @@ mod tests {
                 layer_db.get_layer(&layer1).await.unwrap(),
                 crate::layers::layer::Layer {
                     id: ProviderLayerId {
-                        provider: INTERNAL_PROVIDER_ID,
-                        item: layer1.clone(),
+                        provider_id: INTERNAL_PROVIDER_ID,
+                        layer_id: layer1.clone(),
                     },
                     name: "Layer1".to_string(),
                     description: "Layer 1".to_string(),
@@ -1914,16 +1917,16 @@ mod tests {
                 vec![
                     CollectionItem::Collection(LayerCollectionListing {
                         id: ProviderLayerCollectionId {
-                            provider: INTERNAL_PROVIDER_ID,
-                            item: collection1.clone(),
+                            provider_id: INTERNAL_PROVIDER_ID,
+                            collection_id: collection1.clone(),
                         },
                         name: "Collection1".to_string(),
                         description: "Collection 1".to_string(),
                     }),
                     CollectionItem::Layer(LayerListing {
                         id: ProviderLayerId {
-                            provider: INTERNAL_PROVIDER_ID,
-                            item: layer1,
+                            provider_id: INTERNAL_PROVIDER_ID,
+                            layer_id: layer1,
                         },
                         name: "Layer1".to_string(),
                         description: "Layer 1".to_string(),
@@ -1949,16 +1952,16 @@ mod tests {
                 vec![
                     CollectionItem::Collection(LayerCollectionListing {
                         id: ProviderLayerCollectionId {
-                            provider: INTERNAL_PROVIDER_ID,
-                            item: collection2,
+                            provider_id: INTERNAL_PROVIDER_ID,
+                            collection_id: collection2,
                         },
                         name: "Collection2".to_string(),
                         description: "Collection 2".to_string(),
                     }),
                     CollectionItem::Layer(LayerListing {
                         id: ProviderLayerId {
-                            provider: INTERNAL_PROVIDER_ID,
-                            item: layer2,
+                            provider_id: INTERNAL_PROVIDER_ID,
+                            layer_id: layer2,
                         },
                         name: "Layer2".to_string(),
                         description: "Layer 2".to_string(),

@@ -6,7 +6,7 @@ use std::{
 };
 
 use crate::error::Result;
-use crate::layers::external::ExternalLayerProviderDefinition;
+use crate::layers::external::DataProviderDefinition;
 use crate::layers::storage::LayerProviderDb;
 use crate::util::user_input::UserInput;
 use crate::{contexts::MockableSession, datasets::storage::DatasetDb};
@@ -67,7 +67,7 @@ pub async fn add_providers_from_directory<D: LayerProviderDb>(db: &mut D, file_p
         db: &mut D,
         entry: &DirEntry,
     ) -> Result<()> {
-        let def: Box<dyn ExternalLayerProviderDefinition> =
+        let def: Box<dyn DataProviderDefinition> =
             serde_json::from_reader(BufReader::new(File::open(entry.path())?))?;
 
         db.add_layer_provider(def).await?; // TODO: add as system user

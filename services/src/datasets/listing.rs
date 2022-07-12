@@ -6,7 +6,7 @@ use crate::projects::Symbology;
 use crate::util::config::{get_config_element, DatasetService};
 use crate::util::user_input::{UserInput, Validated};
 use async_trait::async_trait;
-use geoengine_datatypes::dataset::DatasetId;
+use geoengine_datatypes::dataset::{DataId, DatasetId};
 use geoengine_datatypes::primitives::{RasterQueryRectangle, VectorQueryRectangle};
 use geoengine_operators::engine::{
     MetaData, RasterResultDescriptor, ResultDescriptor, TypedResultDescriptor,
@@ -80,7 +80,7 @@ where
     async fn session_meta_data(
         &self,
         session: &S,
-        dataset: &DatasetId,
+        id: &DataId,
     ) -> Result<Box<dyn MetaData<L, R, Q>>>;
 }
 
@@ -111,7 +111,7 @@ pub trait DatasetProvider<S: Session>:
 
 #[derive(Debug, Serialize, Deserialize, PartialEq, Eq, Hash)]
 pub struct ProvenanceOutput {
-    pub dataset: DatasetId,
+    pub data: DataId,
     pub provenance: Option<Provenance>,
 }
 

@@ -6,6 +6,7 @@ use crate::datasets::upload::{UploadId, UploadRootPath};
 use crate::error;
 use crate::error::Result;
 use crate::handlers::Context;
+use crate::layers::storage::LayerProviderDb;
 use crate::util::config::get_config_element;
 use crate::util::user_input::UserInput;
 use crate::util::IdResponse;
@@ -13,11 +14,11 @@ use crate::workflows::registry::WorkflowRegistry;
 use crate::workflows::workflow::{Workflow, WorkflowId};
 use actix_web::{web, FromRequest, Responder};
 use futures::future::join_all;
-use geoengine_datatypes::dataset::{DatasetId, InternalDatasetId};
+use geoengine_datatypes::dataset::{DataId, DatasetId};
 use geoengine_datatypes::primitives::{AxisAlignedRectangle, RasterQueryRectangle};
 use geoengine_datatypes::spatial_reference::SpatialReference;
 use geoengine_datatypes::util::Identifier;
-use geoengine_operators::engine::{OperatorDatasets, TypedOperator, TypedResultDescriptor};
+use geoengine_operators::engine::{OperatorData, TypedOperator, TypedResultDescriptor};
 use geoengine_operators::source::{
     FileNotFoundHandling, GdalDatasetGeoTransform, GdalDatasetParameters, GdalMetaDataStatic,
 };
@@ -225,7 +226,7 @@ async fn get_workflow_provenance_handler<C: Context>(
 ) -> Result<impl Responder> {
     let workflow = ctx.workflow_registry_ref().load(&id.into_inner()).await?;
 
-    let datasets = workflow.operator.datasets();
+    let datasets = workflow.operator.data_ids();
 
     let db = ctx.dataset_db_ref();
     let providers = ctx.layer_provider_db_ref();
@@ -246,12 +247,12 @@ async fn get_workflow_provenance_handler<C: Context>(
 async fn resolve_provenance<C: Context>(
     session: &C::Session,
     datasets: &C::DatasetDB,
-    _providers: &C::LayerProviderDB,
-    id: &DatasetId,
+    providers: &C::LayerProviderDB,
+    id: &DataId,
 ) -> Result<ProvenanceOutput> {
     match id {
-        DatasetId::Internal { dataset_id: _ } => datasets.provenance(session, id).await,
-        DatasetId::External(_) => todo!(),
+        DataId::Internal { dataset_id } => datasets.provenance(session, dataset_id).await,
+        DataId::External(e) => providers.layer_provider(e.provider_id).await?.provenance(id).await,
     }
 }
 
@@ -316,7 +317,7 @@ struct RasterDatasetFromWorkflowResult {
 /// ```text
 /// {
 ///   "upload": "3086f494-d5a4-4b51-a14b-3b29f8bf7bb0",
-///   "dataset": {
+///   "data": {
 ///     "type": "internal",
 ///     "datasetId": "94230f0b-4e8a-4cba-9adc-3ace837fe5d4"
 ///   }
@@ -401,7 +402,7 @@ async fn create_dataset<C: Context>(
     ctx: &C,
     session: <C as Context>::Session,
 ) -> Result<geoengine_datatypes::dataset::DatasetId> {
-    let dataset_id = InternalDatasetId::new().into();
+    let dataset_id = DatasetId::new();
     let dataset_definition = DatasetDefinition {
         properties: AddDataset {
             id: Some(dataset_id),
@@ -890,7 +891,7 @@ mod tests {
             operator: TypedOperator::Raster(
                 GdalSource {
                     params: GdalSourceParameters {
-                        dataset: dataset.clone(),
+                        data: dataset.into(),
                     },
                 }
                 .boxed(),
@@ -915,9 +916,9 @@ mod tests {
         assert_eq!(
             serde_json::from_str::<serde_json::Value>(&res_body).unwrap(),
             serde_json::json!([{
-                "dataset": {
+                "data": {
                     "type": "internal",
-                    "datasetId": dataset.internal().unwrap().to_string()
+                    "datasetId": dataset.to_string()
                 },
                 "provenance": {
                     "citation": "Sample Citation",
@@ -950,7 +951,7 @@ mod tests {
             operator: TypedOperator::Raster(
                 GdalSource {
                     params: GdalSourceParameters {
-                        dataset: dataset.clone(),
+                        data: dataset.into(),
                     },
                 }
                 .boxed(),
@@ -1007,7 +1008,7 @@ mod tests {
         // query the newly created dataset
         let op = GdalSource {
             params: GdalSourceParameters {
-                dataset: response.dataset.clone(),
+                data: response.dataset.into(),
             },
         }
         .boxed();
@@ -1069,7 +1070,7 @@ mod tests {
               "source": {
                 "type": "GdalSource",
                 "params": {
-                  "dataset": {
+                  "data": {
                     "type": "internal",
                     "datasetId": "36574dc3-560a-4b09-9d22-d5945f2b8093"
                   }

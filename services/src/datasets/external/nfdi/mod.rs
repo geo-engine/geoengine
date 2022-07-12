@@ -2,15 +2,15 @@ use crate::datasets::external::nfdi::metadata::{DataType, GEMetadata, RasterInfo
 use crate::datasets::listing::{
      ProvenanceOutput,
 };
-use crate::datasets::storage::{Dataset};
 use crate::error::{Error, Result, self};
-use crate::layers::external::{ExternalLayerProviderDefinition, ExternalLayerProvider};
+use crate::layers::external::{DataProviderDefinition, DataProvider};
 use crate::layers::layer::{LayerCollectionListOptions, CollectionItem, Layer, LayerListing, ProviderLayerId};
-use crate::layers::listing::{LayerCollectionProvider, LayerCollectionId, LayerId};
+use crate::layers::listing::{LayerCollectionProvider, LayerCollectionId};
+use crate::util::operators::source_operator_from_dataset;
 use crate::util::user_input::Validated;
 use crate::workflows::workflow::Workflow;
 use geoengine_datatypes::collections::VectorDataType;
-use geoengine_datatypes::dataset::{DatasetId, ExternalDatasetId, LayerProviderId};
+use geoengine_datatypes::dataset::{DataId, ExternalDataId, DataProviderId, LayerId};
 use geoengine_datatypes::primitives::{
     FeatureDataType, Measurement, RasterQueryRectangle, VectorQueryRectangle,
 };
@@ -18,7 +18,7 @@ use geoengine_datatypes::spatial_reference::SpatialReferenceOption;
 use geoengine_operators::engine::{
     MetaData, MetaDataProvider, RasterResultDescriptor, ResultDescriptor, TypedResultDescriptor,
     VectorResultDescriptor, VectorOperator, TypedOperator, RasterOperator,
-    VectorColumnInfo,
+    VectorColumnInfo, OperatorName,
 };
 use geoengine_operators::mock::MockDatasetDataSourceLoadingInfo;
 use geoengine_operators::source::{
@@ -54,7 +54,7 @@ const URL_REPLACEMENT: &str = "%URL%";
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct NFDIDataProviderDefinition {
-    id: LayerProviderId,
+    id: DataProviderId,
     name: String,
     api_url: String,
     project_id: String,
@@ -63,8 +63,8 @@ pub struct NFDIDataProviderDefinition {
 
 #[typetag::serde]
 #[async_trait::async_trait]
-impl ExternalLayerProviderDefinition for NFDIDataProviderDefinition {
-    async fn initialize(self: Box<Self>) -> Result<Box<dyn ExternalLayerProvider>> {
+impl DataProviderDefinition for NFDIDataProviderDefinition {
+    async fn initialize(self: Box<Self>) -> Result<Box<dyn DataProvider>> {
         Ok(Box::new(NFDIDataProvider::new(self).await?))
     }
 
@@ -76,7 +76,7 @@ impl ExternalLayerProviderDefinition for NFDIDataProviderDefinition {
         self.name.clone()
     }
 
-    fn id(&self) -> LayerProviderId {
+    fn id(&self) -> DataProviderId {
         self.id
     }
 }
@@ -114,7 +114,7 @@ impl Interceptor for APITokenInterceptor {
 /// is cheap.
 #[derive(Debug)]
 pub struct NFDIDataProvider {
-    id: LayerProviderId,
+    id: DataProviderId,
     project_id: String,
     project_stub: ProjectServiceClient<InterceptedService<Channel, APITokenInterceptor>>,
     dataset_stub: DatasetServiceClient<InterceptedService<Channel, APITokenInterceptor>>,
@@ -149,10 +149,10 @@ impl NFDIDataProvider {
     }
 
     /// Extracts the core store id from the given dataset id
-    fn dataset_nfdi_id(id: &DatasetId) -> Result<String> {
+    fn dataset_nfdi_id(id: &DataId) -> Result<String> {
         match id {
-            DatasetId::External(id) => Ok(id.dataset_id.clone()),
-            DatasetId::Internal { .. } => Err(Error::InvalidDatasetId),
+            DataId::External(id) => Ok(id.layer_id.0.clone()),
+            DataId::Internal { .. } => Err(Error::InvalidDataId),
         }
     }
 
@@ -171,7 +171,7 @@ impl NFDIDataProvider {
     }
 
     /// Retrieves information for the datasat with the given id.
-    async fn dataset_info(&self, id: &DatasetId) -> Result<(Dataset, GEMetadata)> {
+    async fn dataset_info(&self, id: &DataId) -> Result<(Layer, GEMetadata)> {
         let id = Self::dataset_nfdi_id(id)?;
         let mut stub = self.dataset_stub.clone();
 
@@ -180,51 +180,57 @@ impl NFDIDataProvider {
             .await?
             .into_inner();
 
-        resp.dataset.ok_or(Error::InvalidDatasetId).and_then(|ds| {
+        resp.dataset.ok_or(Error::InvalidDataId).and_then(|ds| {
             // Extract and parse geoengine metadata
             let md = Self::extract_metadata(&ds)?;
-            Ok((self.map_dataset(&ds, &md), md))
+            Ok((self.map_layer(&ds, &md)?, md))
         })
     }
 
     /// Maps the `gRPC` dataset representation to geoengine's internal representation.
-    fn map_dataset(
+    fn map_layer(
         &self,
         ds: &scienceobjectsdb_rust_api::sciobjectsdb::sciobjsdb::api::storage::models::v1::Dataset,
         md: &GEMetadata,
-    ) -> Dataset {
-        let id = DatasetId::External(ExternalDatasetId {
+    ) -> Result<Layer> {
+        let id = ProviderLayerId {
             provider_id: self.id,
-            dataset_id: ds.id.clone(),
-        });
+            layer_id: LayerId(ds.id.clone()),
+        };
 
         // Create type specific infos
-        let (result_descriptor, source_operator) = match &md.data_type {
+        let (_result_descriptor, source_operator) = match &md.data_type {
             DataType::SingleVectorFile(info) => (
                 TypedResultDescriptor::Vector(Self::create_vector_result_descriptor(
                     md.crs.into(),
                     info,
                 )),
-                "OgrSource".to_string(),
+                OgrSource::TYPE_NAME,
             ),
             DataType::SingleRasterFile(info) => (
                 TypedResultDescriptor::Raster(Self::create_raster_result_descriptor(
                     md.crs.into(),
                     info,
                 )),
-                "GdalSource".to_string(),
+                GdalSource::TYPE_NAME,
             ),
         };
 
-        Dataset {
+        Ok(Layer {
             id,
             name: ds.name.clone(),
             description: ds.description.clone(),
-            source_operator,
-            result_descriptor,
+            workflow: Workflow {
+                operator: source_operator_from_dataset(
+                    source_operator,
+                    &DataId::External(ExternalDataId {
+                        provider_id: self.id,
+                        layer_id: LayerId(ds.id.clone()),
+                    }),
+                )?,
+            },
             symbology: None,
-            provenance: md.provenance.clone(),
-        }
+        })
     }
 
     /// Creates a result descriptor for vector data
@@ -275,7 +281,7 @@ impl NFDIDataProvider {
 
     /// Retrieves a file-object from the core-storage. It assumes, that the dataset consists
     /// only of a single object group with a single object (the file).
-    async fn get_single_file_object(&self, id: &DatasetId) -> Result<Object> {
+    async fn get_single_file_object(&self, id: &DataId) -> Result<Object> {
         let mut ds_stub = self.dataset_stub.clone();
 
         let group = ds_stub
@@ -420,7 +426,7 @@ impl
 {
     async fn meta_data(
         &self,
-        _dataset: &DatasetId,
+        _id: &DataId,
     ) -> geoengine_operators::util::Result<
         Box<
             dyn MetaData<
@@ -440,17 +446,17 @@ impl MetaDataProvider<OgrSourceDataset, VectorResultDescriptor, VectorQueryRecta
 {
     async fn meta_data(
         &self,
-        dataset: &DatasetId,
+        id: &DataId,
     ) -> geoengine_operators::util::Result<
         Box<dyn MetaData<OgrSourceDataset, VectorResultDescriptor, VectorQueryRectangle>>,
     > {
-        let (_, md) = self.dataset_info(dataset).await.map_err(|e| {
+        let (_, md) = self.dataset_info(id).await.map_err(|e| {
             geoengine_operators::error::Error::DatasetMetaData {
                 source: Box::new(e),
             }
         })?;
 
-        let object = self.get_single_file_object(dataset).await.map_err(|e| {
+        let object = self.get_single_file_object(id).await.map_err(|e| {
             geoengine_operators::error::Error::DatasetMetaData {
                 source: Box::new(e),
             }
@@ -484,17 +490,17 @@ impl MetaDataProvider<GdalLoadingInfo, RasterResultDescriptor, RasterQueryRectan
 {
     async fn meta_data(
         &self,
-        dataset: &DatasetId,
+        id: &DataId,
     ) -> geoengine_operators::util::Result<
         Box<dyn MetaData<GdalLoadingInfo, RasterResultDescriptor, RasterQueryRectangle>>,
     > {
-        let (_, md) = self.dataset_info(dataset).await.map_err(|e| {
+        let (_, md) = self.dataset_info(id).await.map_err(|e| {
             geoengine_operators::error::Error::DatasetMetaData {
                 source: Box::new(e),
             }
         })?;
 
-        let object = self.get_single_file_object(dataset).await.map_err(|e| {
+        let object = self.get_single_file_object(id).await.map_err(|e| {
             geoengine_operators::error::Error::DatasetMetaData {
                 source: Box::new(e),
             }
@@ -523,13 +529,13 @@ impl MetaDataProvider<GdalLoadingInfo, RasterResultDescriptor, RasterQueryRectan
 }
 
 #[async_trait::async_trait]
-impl ExternalLayerProvider for NFDIDataProvider {
-    async fn provenance(&self, dataset: &DatasetId) -> Result<ProvenanceOutput> {
-        let (ds, _) = self.dataset_info(dataset).await?;
+impl DataProvider for NFDIDataProvider {
+    async fn provenance(&self, id: &DataId) -> Result<ProvenanceOutput> {
+        let (_, metadata) = self.dataset_info(id).await?;
 
         Ok(ProvenanceOutput {
-            dataset: dataset.clone(),
-            provenance: ds.provenance,
+            data: id.clone(),
+            provenance: metadata.provenance,
         })
     }
 
@@ -567,8 +573,8 @@ impl LayerCollectionProvider for NFDIDataProvider {
             .map(|ds| {
                 CollectionItem::Layer(LayerListing {
                     id: ProviderLayerId {
-                        provider: self.id,
-                        item: LayerId(ds.id),
+                        provider_id: self.id,
+                        layer_id: LayerId(ds.id),
                     },
                     name: ds.name,
                     description: ds.description,
@@ -595,7 +601,7 @@ impl LayerCollectionProvider for NFDIDataProvider {
             .datasets
             .into_iter()
             .find(|ds| ds.id == id.0)
-            .ok_or(Error::UnknownDatasetId)?;
+            .ok_or(Error::UnknownDataId)?;
 
         let meta_data = Self::extract_metadata(&dataset)?;
 
@@ -603,9 +609,9 @@ impl LayerCollectionProvider for NFDIDataProvider {
             DataType::SingleVectorFile(_) => TypedOperator::Vector(
                 OgrSource {
                     params: OgrSourceParameters {
-                        dataset: DatasetId::External(ExternalDatasetId {
+                        data: DataId::External(ExternalDataId {
                             provider_id: self.id,
-                            dataset_id: id.0.clone(),
+                            layer_id: id.clone(),
                         }),
                         attribute_projection: None,
                         attribute_filters: None,
@@ -616,9 +622,9 @@ impl LayerCollectionProvider for NFDIDataProvider {
             DataType::SingleRasterFile(_) => TypedOperator::Raster(
                 GdalSource {
                     params: GdalSourceParameters {
-                        dataset: DatasetId::External(ExternalDatasetId {
+                        data: DataId::External(ExternalDataId {
                             provider_id: self.id,
-                            dataset_id: id.0.clone(),
+                            layer_id: id.clone(),
                         }),
                     },
                 }
@@ -628,8 +634,8 @@ impl LayerCollectionProvider for NFDIDataProvider {
 
         Ok(Layer {
             id: ProviderLayerId {
-                provider: self.id,
-                item: id.clone(),
+                provider_id: self.id,
+                layer_id: id.clone(),
             },
             name: dataset.name,
             description: dataset.description,
@@ -782,11 +788,11 @@ mod tests {
     use crate::datasets::external::nfdi::{
         ExpiringDownloadLink, NFDIDataProvider, NFDIDataProviderDefinition,
     };
-    use crate::layers::external::ExternalLayerProvider;
+    use crate::layers::external::DataProvider;
     use crate::layers::layer::LayerCollectionListOptions;
     use crate::layers::listing::LayerCollectionProvider;
     use futures::StreamExt;
-    use geoengine_datatypes::dataset::{DatasetId, ExternalDatasetId, LayerProviderId};
+    use geoengine_datatypes::dataset::{DataId, DataProviderId, ExternalDataId, LayerId};
     use httptest::responders::status_code;
     use httptest::{Expectation, Server};
     use scienceobjectsdb_rust_api::sciobjectsdb::sciobjsdb::api::storage::models::v1::{
@@ -796,7 +802,7 @@ mod tests {
         CreateDownloadLinkResponse, GetDatasetObjectGroupsResponse, GetDatasetResponse,
         GetProjectDatasetsResponse,
     };
-    use serde_json::Value;
+    use serde_json::{json, Value};
     use std::str::FromStr;
     use tokio::fs::File;
     use tokio::io::AsyncReadExt;
@@ -827,7 +833,7 @@ mod tests {
 
     async fn new_provider_with_url(url: String) -> NFDIDataProvider {
         let def = NFDIDataProviderDefinition {
-            id: LayerProviderId::from_str(PROVIDER_ID).unwrap(),
+            id: DataProviderId::from_str(PROVIDER_ID).unwrap(),
             api_token: TOKEN.to_string(),
             api_url: url,
             project_id: PROJECT_ID.to_string(),
@@ -977,12 +983,29 @@ mod tests {
         let provider = new_provider_with_url(addr).await;
 
         let md = NFDIDataProvider::extract_metadata(&ds).unwrap();
-        let ds = provider.map_dataset(&ds, &md);
+        let layer = provider.map_layer(&ds, &md).unwrap();
         assert!(matches!(
             md.data_type,
             super::metadata::DataType::SingleVectorFile(_)
         ));
-        assert_eq!("OgrSource".to_string(), ds.source_operator);
+        assert_eq!(
+            json!({
+                "type": "Vector",
+                "operator": {
+                    "type": "OgrSource",
+                    "params": {
+                        "data": {
+                            "type": "external",
+                            "providerId": "86a7f7ce-1bab-4ce9-a32b-172c0f958ee0",
+                            "layerId": "C"
+                        },
+                        "attributeProjection": null,
+                        "attributeFilters": null
+                    }
+                }
+            }),
+            serde_json::to_value(&layer.workflow.operator).unwrap()
+        );
     }
 
     #[tokio::test]
@@ -1015,9 +1038,24 @@ mod tests {
         let addr = format!("http://{}", server.address());
         let provider = new_provider_with_url(addr).await;
 
-        let ds = provider.map_dataset(&ds, &md);
+        let layer = provider.map_layer(&ds, &md).unwrap();
 
-        assert_eq!("GdalSource".to_string(), ds.source_operator);
+        assert_eq!(
+            json!({
+                "type": "Raster",
+                "operator": {
+                    "type": "GdalSource",
+                    "params": {
+                        "data": {
+                            "type": "external",
+                            "providerId": "86a7f7ce-1bab-4ce9-a32b-172c0f958ee0",
+                            "layerId": "C"
+                        }
+                    }
+                }
+            }),
+            serde_json::to_value(&layer.workflow.operator).unwrap()
+        );
     }
 
     #[tokio::test]
@@ -1184,9 +1222,9 @@ mod tests {
                 }),
         );
 
-        let id = DatasetId::External(ExternalDatasetId {
-            provider_id: LayerProviderId::from_str(PROVIDER_ID).unwrap(),
-            dataset_id: DATASET_ID.to_string(),
+        let id = DataId::External(ExternalDataId {
+            provider_id: DataProviderId::from_str(PROVIDER_ID).unwrap(),
+            layer_id: LayerId(DATASET_ID.to_string()),
         });
 
         let addr = format!("http://{}", server.address());
@@ -1268,9 +1306,9 @@ mod tests {
                 }),
         );
 
-        let id = DatasetId::External(ExternalDatasetId {
-            provider_id: LayerProviderId::from_str(PROVIDER_ID).unwrap(),
-            dataset_id: DATASET_ID.to_string(),
+        let id = DataId::External(ExternalDataId {
+            provider_id: DataProviderId::from_str(PROVIDER_ID).unwrap(),
+            layer_id: LayerId(DATASET_ID.to_string()),
         });
 
         let addr = format!("http://{}", server.address());
@@ -1383,9 +1421,9 @@ mod tests {
                 .respond_with(responder),
         );
 
-        let id = DatasetId::External(ExternalDatasetId {
-            provider_id: LayerProviderId::from_str(PROVIDER_ID).unwrap(),
-            dataset_id: DATASET_ID.to_string(),
+        let id = DataId::External(ExternalDataId {
+            provider_id: DataProviderId::from_str(PROVIDER_ID).unwrap(),
+            layer_id: LayerId(DATASET_ID.to_string()),
         });
 
         let provider = new_provider_with_url(addr).await;
@@ -1399,7 +1437,7 @@ mod tests {
 
         let src = OgrSource {
             params: OgrSourceParameters {
-                dataset: id,
+                data: id,
                 attribute_projection: None,
                 attribute_filters: None,
             },

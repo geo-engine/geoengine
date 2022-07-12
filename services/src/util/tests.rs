@@ -91,7 +91,9 @@ pub async fn register_ndvi_workflow_helper(ctx: &InMemoryContext) -> (Workflow, 
     let workflow = Workflow {
         operator: TypedOperator::Raster(
             GdalSource {
-                params: GdalSourceParameters { dataset },
+                params: GdalSourceParameters {
+                    data: dataset.into(),
+                },
             }
             .boxed(),
         ),

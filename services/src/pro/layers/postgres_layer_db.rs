@@ -9,19 +9,19 @@ use bb8_postgres::{
     },
     PostgresConnectionManager,
 };
-use geoengine_datatypes::dataset::LayerProviderId;
+use geoengine_datatypes::dataset::{DataProviderId, LayerId};
 use snafu::ResultExt;
 use uuid::Uuid;
 
 use crate::{
     error::{self, Result},
     layers::{
-        external::{ExternalLayerProvider, ExternalLayerProviderDefinition},
+        external::{DataProvider, DataProviderDefinition},
         layer::{
             AddLayer, AddLayerCollection, CollectionItem, Layer, LayerCollectionListOptions,
             LayerCollectionListing, LayerListing, ProviderLayerCollectionId, ProviderLayerId,
         },
-        listing::{LayerCollectionId, LayerCollectionProvider, LayerId},
+        listing::{LayerCollectionId, LayerCollectionProvider},
         storage::{
             LayerDb, LayerDbError, LayerProviderDb, LayerProviderListing,
             LayerProviderListingOptions, INTERNAL_LAYER_DB_ROOT_COLLECTION_ID,
@@ -401,8 +401,8 @@ where
                 if is_layer {
                     CollectionItem::Layer(LayerListing {
                         id: ProviderLayerId {
-                            provider: INTERNAL_PROVIDER_ID,
-                            item: LayerId(row.get(0)),
+                            provider_id: INTERNAL_PROVIDER_ID,
+                            layer_id: LayerId(row.get(0)),
                         },
                         name: row.get(1),
                         description: row.get(2),
@@ -410,8 +410,8 @@ where
                 } else {
                     CollectionItem::Collection(LayerCollectionListing {
                         id: ProviderLayerCollectionId {
-                            provider: INTERNAL_PROVIDER_ID,
-                            item: LayerCollectionId(row.get(0)),
+                            provider_id: INTERNAL_PROVIDER_ID,
+                            collection_id: LayerCollectionId(row.get(0)),
                         },
                         name: row.get(1),
                         description: row.get(2),
@@ -454,8 +454,8 @@ where
 
         Ok(Layer {
             id: ProviderLayerId {
-                provider: INTERNAL_PROVIDER_ID,
-                item: id.clone(),
+                provider_id: INTERNAL_PROVIDER_ID,
+                layer_id: id.clone(),
             },
             name: row.get(0),
             description: row.get(1),
@@ -497,8 +497,8 @@ where
 {
     async fn add_layer_provider(
         &self,
-        provider: Box<dyn ExternalLayerProviderDefinition>,
-    ) -> Result<LayerProviderId> {
+        provider: Box<dyn DataProviderDefinition>,
+    ) -> Result<DataProviderId> {
         // TODO: permissions
         let conn = self.conn_pool.get().await?;
 
@@ -570,7 +570,7 @@ where
             .collect())
     }
 
-    async fn layer_provider(&self, id: LayerProviderId) -> Result<Box<dyn ExternalLayerProvider>> {
+    async fn layer_provider(&self, id: DataProviderId) -> Result<Box<dyn DataProvider>> {
         // TODO: permissions
         let conn = self.conn_pool.get().await?;
 
@@ -588,8 +588,7 @@ where
 
         let row = conn.query_one(&stmt, &[&id]).await?;
 
-        let definition =
-            serde_json::from_value::<Box<dyn ExternalLayerProviderDefinition>>(row.get(0))?;
+        let definition = serde_json::from_value::<Box<dyn DataProviderDefinition>>(row.get(0))?;
 
         definition.initialize().await
     }

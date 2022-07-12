@@ -1,10 +1,10 @@
 use crate::datasets::external::pangaea::meta::PangeaMetaData;
 use crate::datasets::listing::{Provenance, ProvenanceOutput};
-use crate::layers::external::{ExternalLayerProvider, ExternalLayerProviderDefinition};
+use crate::layers::external::{DataProvider, DataProviderDefinition};
 use crate::layers::layer::{CollectionItem, Layer, LayerCollectionListOptions};
-use crate::layers::listing::{LayerCollectionId, LayerCollectionProvider, LayerId};
+use crate::layers::listing::{LayerCollectionId, LayerCollectionProvider};
 use async_trait::async_trait;
-use geoengine_datatypes::dataset::{DatasetId, LayerProviderId};
+use geoengine_datatypes::dataset::{DataId, DataProviderId, LayerId};
 use geoengine_datatypes::primitives::{RasterQueryRectangle, VectorQueryRectangle};
 use geoengine_operators::engine::{
     MetaData, MetaDataProvider, RasterResultDescriptor, VectorResultDescriptor,
@@ -19,8 +19,8 @@ use serde::{Deserialize, Serialize};
 
 mod meta;
 
-pub const PANGAEA_PROVIDER_ID: LayerProviderId =
-    LayerProviderId::from_u128(0xe3b9_3bf3_1bc1_48db_80e8_97cf_b068_5e8d);
+pub const PANGAEA_PROVIDER_ID: DataProviderId =
+    DataProviderId::from_u128(0xe3b9_3bf3_1bc1_48db_80e8_97cf_b068_5e8d);
 
 /// The pangaea provider allows to include datasets from
 /// <http://pangaea.de/>
@@ -33,8 +33,8 @@ pub struct PangaeaDataProviderDefinition {
 
 #[typetag::serde]
 #[async_trait]
-impl ExternalLayerProviderDefinition for PangaeaDataProviderDefinition {
-    async fn initialize(self: Box<Self>) -> Result<Box<dyn ExternalLayerProvider>> {
+impl DataProviderDefinition for PangaeaDataProviderDefinition {
+    async fn initialize(self: Box<Self>) -> Result<Box<dyn DataProvider>> {
         Ok(Box::new(PangaeaDataProvider::new(self.base_url)))
     }
 
@@ -46,7 +46,7 @@ impl ExternalLayerProviderDefinition for PangaeaDataProviderDefinition {
         self.name.clone()
     }
 
-    fn id(&self) -> LayerProviderId {
+    fn id(&self) -> DataProviderId {
         PANGAEA_PROVIDER_ID
     }
 }
@@ -67,15 +67,15 @@ impl PangaeaDataProvider {
 }
 
 #[async_trait]
-impl ExternalLayerProvider for PangaeaDataProvider {
-    async fn provenance(&self, dataset: &DatasetId) -> Result<ProvenanceOutput> {
-        let doi = dataset
+impl DataProvider for PangaeaDataProvider {
+    async fn provenance(&self, id: &DataId) -> Result<ProvenanceOutput> {
+        let doi = id
             .external()
-            .ok_or(Error::InvalidDatasetId)
+            .ok_or(Error::InvalidDataId)
             .map_err(|e| geoengine_operators::error::Error::LoadingInfo {
                 source: Box::new(e),
             })?
-            .dataset_id;
+            .layer_id;
 
         let pmd: PangeaMetaData = self
             .client
@@ -97,7 +97,7 @@ impl ExternalLayerProvider for PangaeaDataProvider {
             .await?;
 
         Ok(ProvenanceOutput {
-            dataset: dataset.clone(),
+            data: id.clone(),
             provenance: Some(Provenance {
                 citation: citation_text,
                 license: pmd.license.unwrap_or_else(|| "".to_string()),
@@ -136,18 +136,18 @@ impl MetaDataProvider<OgrSourceDataset, VectorResultDescriptor, VectorQueryRecta
 {
     async fn meta_data(
         &self,
-        dataset: &DatasetId,
+        id: &DataId,
     ) -> Result<
         Box<dyn MetaData<OgrSourceDataset, VectorResultDescriptor, VectorQueryRectangle>>,
         geoengine_operators::error::Error,
     > {
-        let doi = dataset
+        let doi = id
             .external()
-            .ok_or(Error::InvalidDatasetId)
+            .ok_or(Error::InvalidDataId)
             .map_err(|e| geoengine_operators::error::Error::LoadingInfo {
                 source: Box::new(e),
             })?
-            .dataset_id;
+            .layer_id;
 
         let pmd: PangeaMetaData = self
             .client
@@ -179,7 +179,7 @@ impl MetaDataProvider<GdalLoadingInfo, RasterResultDescriptor, RasterQueryRectan
 {
     async fn meta_data(
         &self,
-        _dataset: &DatasetId,
+        _id: &DataId,
     ) -> Result<
         Box<dyn MetaData<GdalLoadingInfo, RasterResultDescriptor, RasterQueryRectangle>>,
         geoengine_operators::error::Error,
@@ -195,7 +195,7 @@ impl
 {
     async fn meta_data(
         &self,
-        _dataset: &DatasetId,
+        _id: &DataId,
     ) -> Result<
         Box<
             dyn MetaData<
@@ -214,13 +214,13 @@ impl
 mod tests {
     use crate::datasets::external::pangaea::{PangaeaDataProviderDefinition, PANGAEA_PROVIDER_ID};
     use crate::error::Error;
-    use crate::layers::external::{ExternalLayerProvider, ExternalLayerProviderDefinition};
+    use crate::layers::external::{DataProvider, DataProviderDefinition};
     use futures::StreamExt;
     use geoengine_datatypes::collections::{
         DataCollection, FeatureCollectionInfos, IntoGeometryIterator, MultiPointCollection,
         MultiPolygonCollection, VectorDataType,
     };
-    use geoengine_datatypes::dataset::{DatasetId, ExternalDatasetId};
+    use geoengine_datatypes::dataset::{DataId, ExternalDataId, LayerId};
     use geoengine_datatypes::primitives::{
         BoundingBox2D, Coordinate2D, MultiPointAccess, SpatialResolution, TimeInterval,
         VectorQueryRectangle,
@@ -246,7 +246,7 @@ mod tests {
         crate::test_data!(String::from("pangaea/") + file_name).into()
     }
 
-    async fn create_provider(server: &Server) -> Result<Box<dyn ExternalLayerProvider>, Error> {
+    async fn create_provider(server: &Server) -> Result<Box<dyn DataProvider>, Error> {
         Box::new(PangaeaDataProviderDefinition {
             name: "Pangaea".to_string(),
             base_url: server.url_str("").strip_suffix('/').unwrap().to_owned(),
@@ -255,10 +255,10 @@ mod tests {
         .await
     }
 
-    fn create_id(doi: &str) -> DatasetId {
-        DatasetId::External(ExternalDatasetId {
+    fn create_id(doi: &str) -> DataId {
+        DataId::External(ExternalDataId {
             provider_id: PANGAEA_PROVIDER_ID,
-            dataset_id: doi.to_owned(),
+            layer_id: LayerId(doi.to_owned()),
         })
     }
 
@@ -434,7 +434,7 @@ mod tests {
 
         let src = OgrSource {
             params: OgrSourceParameters {
-                dataset: id,
+                data: id,
                 attribute_projection: None,
                 attribute_filters: None,
             },
@@ -490,7 +490,7 @@ mod tests {
 
         let src = OgrSource {
             params: OgrSourceParameters {
-                dataset: id,
+                data: id,
                 attribute_projection: None,
                 attribute_filters: None,
             },
@@ -558,7 +558,7 @@ mod tests {
 
         let src = OgrSource {
             params: OgrSourceParameters {
-                dataset: id,
+                data: id,
                 attribute_projection: None,
                 attribute_filters: None,
             },
@@ -622,7 +622,7 @@ mod tests {
 
         let src = OgrSource {
             params: OgrSourceParameters {
-                dataset: id,
+                data: id,
                 attribute_projection: None,
                 attribute_filters: None,
             },

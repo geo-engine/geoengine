@@ -1,9 +1,9 @@
-use geoengine_datatypes::dataset::DatasetId;
+use geoengine_datatypes::dataset::DataId;
 use serde::{Deserialize, Serialize};
 
 use crate::util::input::{MultiRasterOrVectorOperator, RasterOrVectorOperator};
 
-use super::{OperatorDatasets, RasterOperator, VectorOperator};
+use super::{OperatorData, RasterOperator, VectorOperator};
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 #[serde(rename_all = "camelCase")]
@@ -125,69 +125,69 @@ impl From<Vec<Box<dyn RasterOperator>>> for MultipleRasterOrSingleVectorSource {
     }
 }
 
-impl<Params, Sources> OperatorDatasets for Operator<Params, Sources>
+impl<Params, Sources> OperatorData for Operator<Params, Sources>
 where
-    Sources: OperatorDatasets,
+    Sources: OperatorData,
 {
-    fn datasets_collect(&self, datasets: &mut Vec<DatasetId>) {
-        self.sources.datasets_collect(datasets);
+    fn data_ids_collect(&self, data_ids: &mut Vec<DataId>) {
+        self.sources.data_ids_collect(data_ids);
     }
 }
 
-impl<Params> OperatorDatasets for SourceOperator<Params>
+impl<Params> OperatorData for SourceOperator<Params>
 where
-    Params: OperatorDatasets,
+    Params: OperatorData,
 {
-    fn datasets_collect(&self, datasets: &mut Vec<DatasetId>) {
-        self.params.datasets_collect(datasets);
+    fn data_ids_collect(&self, data_ids: &mut Vec<DataId>) {
+        self.params.data_ids_collect(data_ids);
     }
 }
 
-impl OperatorDatasets for SingleRasterOrVectorSource {
-    fn datasets_collect(&self, datasets: &mut Vec<DatasetId>) {
-        self.source.datasets_collect(datasets);
+impl OperatorData for SingleRasterOrVectorSource {
+    fn data_ids_collect(&self, data_ids: &mut Vec<DataId>) {
+        self.source.data_ids_collect(data_ids);
     }
 }
 
-impl OperatorDatasets for MultipleRasterOrSingleVectorSource {
-    fn datasets_collect(&self, datasets: &mut Vec<DatasetId>) {
-        self.source.datasets_collect(datasets);
+impl OperatorData for MultipleRasterOrSingleVectorSource {
+    fn data_ids_collect(&self, data_ids: &mut Vec<DataId>) {
+        self.source.data_ids_collect(data_ids);
     }
 }
 
-impl OperatorDatasets for SingleVectorSource {
-    fn datasets_collect(&self, datasets: &mut Vec<DatasetId>) {
-        self.vector.datasets_collect(datasets);
+impl OperatorData for SingleVectorSource {
+    fn data_ids_collect(&self, data_ids: &mut Vec<DataId>) {
+        self.vector.data_ids_collect(data_ids);
     }
 }
 
-impl OperatorDatasets for SingleRasterSource {
-    fn datasets_collect(&self, datasets: &mut Vec<DatasetId>) {
-        self.raster.datasets_collect(datasets);
+impl OperatorData for SingleRasterSource {
+    fn data_ids_collect(&self, data_ids: &mut Vec<DataId>) {
+        self.raster.data_ids_collect(data_ids);
     }
 }
 
-impl OperatorDatasets for MultipleRasterSources {
-    fn datasets_collect(&self, datasets: &mut Vec<DatasetId>) {
+impl OperatorData for MultipleRasterSources {
+    fn data_ids_collect(&self, data_ids: &mut Vec<DataId>) {
         for source in &self.rasters {
-            source.datasets_collect(datasets);
+            source.data_ids_collect(data_ids);
         }
     }
 }
 
-impl OperatorDatasets for MultipleVectorSources {
-    fn datasets_collect(&self, datasets: &mut Vec<DatasetId>) {
+impl OperatorData for MultipleVectorSources {
+    fn data_ids_collect(&self, data_ids: &mut Vec<DataId>) {
         for source in &self.vectors {
-            source.datasets_collect(datasets);
+            source.data_ids_collect(data_ids);
         }
     }
 }
 
-impl OperatorDatasets for SingleVectorMultipleRasterSources {
-    fn datasets_collect(&self, datasets: &mut Vec<DatasetId>) {
-        self.vector.datasets_collect(datasets);
+impl OperatorData for SingleVectorMultipleRasterSources {
+    fn data_ids_collect(&self, data_ids: &mut Vec<DataId>) {
+        self.vector.data_ids_collect(data_ids);
         for source in &self.rasters {
-            source.datasets_collect(datasets);
+            source.data_ids_collect(data_ids);
         }
     }
 }

@@ -17,7 +17,6 @@ use crate::layers::layer::LayerListing;
 use crate::layers::layer::ProviderLayerId;
 use crate::layers::listing::LayerCollectionId;
 use crate::layers::listing::LayerCollectionProvider;
-use crate::layers::listing::LayerId;
 use crate::pro::datasets::storage::UpdateDatasetPermissions;
 use crate::pro::datasets::RoleId;
 use crate::projects::Symbology;
@@ -33,7 +32,9 @@ use bb8_postgres::bb8::Pool;
 use bb8_postgres::tokio_postgres::tls::{MakeTlsConnect, TlsConnect};
 use bb8_postgres::tokio_postgres::Socket;
 use bb8_postgres::PostgresConnectionManager;
-use geoengine_datatypes::dataset::{DatasetId, InternalDatasetId};
+use geoengine_datatypes::dataset::DataId;
+use geoengine_datatypes::dataset::DatasetId;
+use geoengine_datatypes::dataset::LayerId;
 use geoengine_datatypes::primitives::RasterQueryRectangle;
 use geoengine_datatypes::primitives::VectorQueryRectangle;
 use geoengine_datatypes::util::Identifier;
@@ -124,9 +125,7 @@ where
             .iter()
             .map(|row| {
                 Result::<DatasetListing>::Ok(DatasetListing {
-                    id: DatasetId::Internal {
-                        dataset_id: row.get(0),
-                    },
+                    id: row.get(0),
                     name: row.get(1),
                     description: row.get(2),
                     tags: row.get::<_, Option<_>>(3).unwrap_or_default(),
@@ -140,8 +139,6 @@ where
     }
 
     async fn load(&self, session: &UserSession, dataset: &DatasetId) -> Result<Dataset> {
-        let id = dataset.internal().ok_or(Error::InvalidDatasetId)?;
-
         let conn = self.conn_pool.get().await?;
         let stmt = conn
             .prepare(
@@ -165,12 +162,10 @@ where
             .await?;
 
         // TODO: throw proper dataset does not exist/no permission error
-        let row = conn.query_one(&stmt, &[&session.user.id, &id]).await?;
+        let row = conn.query_one(&stmt, &[&session.user.id, dataset]).await?;
 
         Ok(Dataset {
-            id: DatasetId::Internal {
-                dataset_id: row.get(0),
-            },
+            id: row.get(0),
             name: row.get(1),
             description: row.get(2),
             result_descriptor: serde_json::from_value(row.get(3))?,
@@ -185,8 +180,6 @@ where
         session: &UserSession,
         dataset: &DatasetId,
     ) -> Result<ProvenanceOutput> {
-        let id = dataset.internal().ok_or(Error::InvalidDatasetId)?;
-
         let conn = self.conn_pool.get().await?;
 
         let stmt = conn
@@ -202,10 +195,10 @@ where
             )
             .await?;
 
-        let row = conn.query_one(&stmt, &[&session.user.id, &id]).await?;
+        let row = conn.query_one(&stmt, &[&session.user.id, dataset]).await?;
 
         Ok(ProvenanceOutput {
-            dataset: dataset.clone(),
+            data: (*dataset).into(),
             provenance: serde_json::from_value(row.get(0)).context(error::SerdeJson)?,
         })
     }
@@ -228,7 +221,7 @@ where
     async fn session_meta_data(
         &self,
         _session: &UserSession,
-        _dataset: &DatasetId,
+        _id: &DataId,
     ) -> Result<
         Box<
             dyn MetaData<
@@ -259,10 +252,10 @@ where
     async fn session_meta_data(
         &self,
         session: &UserSession,
-        dataset: &DatasetId,
+        id: &DataId,
     ) -> Result<Box<dyn MetaData<OgrSourceDataset, VectorResultDescriptor, VectorQueryRectangle>>>
     {
-        let id = dataset.internal().ok_or(Error::InvalidDatasetId)?;
+        let id = id.internal().ok_or(error::Error::DataIdTypeMissMatch)?;
 
         let conn = self.conn_pool.get().await?;
         let stmt = conn
@@ -307,10 +300,10 @@ where
     async fn session_meta_data(
         &self,
         session: &UserSession,
-        dataset: &DatasetId,
+        id: &DataId,
     ) -> Result<Box<dyn MetaData<GdalLoadingInfo, RasterResultDescriptor, RasterQueryRectangle>>>
     {
-        let id = dataset.internal().ok_or(Error::InvalidDatasetId)?;
+        let id = id.internal().ok_or(error::Error::DataIdTypeMissMatch)?;
 
         let conn = self.conn_pool.get().await?;
         let stmt = conn
@@ -333,7 +326,7 @@ where
         Ok(match meta_data {
             MetaDataDefinition::GdalMetaDataRegular(m) => Box::new(m),
             MetaDataDefinition::GdalStatic(m) => Box::new(m),
-            _ => return Err(Error::DatasetIdTypeMissMatch),
+            _ => return Err(Error::DataIdTypeMissMatch),
         })
     }
 }
@@ -428,10 +421,7 @@ where
         meta_data: Box<dyn PostgresStorable<Tls>>,
     ) -> Result<DatasetId> {
         let dataset = dataset.user_input;
-        let id = dataset
-            .id
-            .unwrap_or_else(|| InternalDatasetId::new().into());
-        let internal_id = id.internal().ok_or(Error::InvalidDatasetId)?;
+        let id = dataset.id.unwrap_or_else(DatasetId::new);
 
         let meta_data_json = meta_data.to_json()?;
 
@@ -459,7 +449,7 @@ where
         tx.execute(
             &stmt,
             &[
-                &internal_id,
+                &id,
                 &dataset.name,
                 &dataset.description,
                 &dataset.source_operator,
@@ -485,11 +475,7 @@ where
 
         tx.execute(
             &stmt,
-            &[
-                &RoleId::from(session.user.id),
-                &internal_id,
-                &Permission::Owner,
-            ],
+            &[&RoleId::from(session.user.id), &id, &Permission::Owner],
         )
         .await?;
 
@@ -521,11 +507,7 @@ where
             session, permission
         );
 
-        let internal_id = permission.dataset.internal().ok_or(
-            geoengine_operators::error::Error::DatasetMetaData {
-                source: Box::new(error::Error::DatasetIdTypeMissMatch),
-            },
-        )?;
+        let id = permission.dataset;
 
         let mut conn = self.conn_pool.get().await?;
 
@@ -546,11 +528,7 @@ where
         let auth = tx
             .query_one(
                 &stmt,
-                &[
-                    &RoleId::from(session.user.id),
-                    &internal_id,
-                    &Permission::Owner,
-                ],
+                &[&RoleId::from(session.user.id), &id, &Permission::Owner],
             )
             .await;
 
@@ -576,10 +554,7 @@ where
             .await?;
 
         let duplicate = tx
-            .query_one(
-                &stmt,
-                &[&permission.role, &internal_id, &permission.permission],
-            )
+            .query_one(&stmt, &[&permission.role, &id, &permission.permission])
             .await?;
 
         ensure!(
@@ -603,11 +578,8 @@ where
             )
             .await?;
 
-        tx.execute(
-            &stmt,
-            &[&permission.role, &internal_id, &permission.permission],
-        )
-        .await?;
+        tx.execute(&stmt, &[&permission.role, &id, &permission.permission])
+            .await?;
 
         tx.commit().await?;
 
@@ -719,8 +691,8 @@ where
             .map(|row| {
                 Result::<CollectionItem>::Ok(CollectionItem::Layer(LayerListing {
                     id: ProviderLayerId {
-                        provider: DATASET_DB_LAYER_PROVIDER_ID,
-                        item: LayerId(row.get(0)),
+                        provider_id: DATASET_DB_LAYER_PROVIDER_ID,
+                        layer_id: LayerId(row.get(0)),
                     },
                     name: row.get(1),
                     description: row.get(2),
@@ -735,9 +707,7 @@ where
     }
 
     async fn get_layer(&self, id: &LayerId) -> Result<Layer> {
-        let dataset_id = DatasetId::Internal {
-            dataset_id: InternalDatasetId::from_str(&id.0)?,
-        };
+        let dataset_id = DatasetId::from_str(&id.0)?;
 
         let conn = self.conn_pool.get().await?;
 
@@ -773,12 +743,12 @@ where
         let source_operator: String = row.get(2);
         let symbology: Option<Symbology> = serde_json::from_value(row.get(3))?;
 
-        let operator = source_operator_from_dataset(&source_operator, &dataset_id)?;
+        let operator = source_operator_from_dataset(&source_operator, &dataset_id.into())?;
 
         Ok(Layer {
             id: ProviderLayerId {
-                provider: DATASET_DB_LAYER_PROVIDER_ID,
-                item: id.clone(),
+                provider_id: DATASET_DB_LAYER_PROVIDER_ID,
+                layer_id: id.clone(),
             },
             name,
             description,

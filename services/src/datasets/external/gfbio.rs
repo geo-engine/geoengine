@@ -4,11 +4,11 @@ use std::marker::PhantomData;
 use crate::datasets::listing::{Provenance, ProvenanceOutput};
 use crate::error::Result;
 use crate::error::{self, Error};
-use crate::layers::external::{ExternalLayerProvider, ExternalLayerProviderDefinition};
+use crate::layers::external::{DataProvider, DataProviderDefinition};
 use crate::layers::layer::{
     CollectionItem, Layer, LayerCollectionListOptions, LayerListing, ProviderLayerId,
 };
-use crate::layers::listing::{LayerCollectionId, LayerCollectionProvider, LayerId};
+use crate::layers::listing::{LayerCollectionId, LayerCollectionProvider};
 use crate::util::user_input::Validated;
 use crate::workflows::workflow::Workflow;
 use async_trait::async_trait;
@@ -16,7 +16,7 @@ use bb8_postgres::bb8::{Pool, PooledConnection};
 use bb8_postgres::tokio_postgres::{Config, NoTls};
 use bb8_postgres::PostgresConnectionManager;
 use geoengine_datatypes::collections::VectorDataType;
-use geoengine_datatypes::dataset::{DatasetId, ExternalDatasetId, LayerProviderId};
+use geoengine_datatypes::dataset::{DataId, DataProviderId, ExternalDataId, LayerId};
 use geoengine_datatypes::primitives::{
     FeatureDataType, Measurement, RasterQueryRectangle, VectorQueryRectangle,
 };
@@ -36,8 +36,8 @@ use geoengine_operators::{
 use serde::{Deserialize, Serialize};
 use snafu::ensure;
 
-pub const GFBIO_PROVIDER_ID: LayerProviderId =
-    LayerProviderId::from_u128(0x907f_9f5b_0304_4a0e_a5ef_28de_62d1_c0f9);
+pub const GFBIO_PROVIDER_ID: DataProviderId =
+    DataProviderId::from_u128(0x907f_9f5b_0304_4a0e_a5ef_28de_62d1_c0f9);
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 struct DatabaseConnectionConfig {
@@ -77,8 +77,8 @@ pub struct GfbioDataProviderDefinition {
 
 #[typetag::serde]
 #[async_trait]
-impl ExternalLayerProviderDefinition for GfbioDataProviderDefinition {
-    async fn initialize(self: Box<Self>) -> Result<Box<dyn ExternalLayerProvider>> {
+impl DataProviderDefinition for GfbioDataProviderDefinition {
+    async fn initialize(self: Box<Self>) -> Result<Box<dyn DataProvider>> {
         Ok(Box::new(GfbioDataProvider::new(self.db_config).await?))
     }
 
@@ -90,7 +90,7 @@ impl ExternalLayerProviderDefinition for GfbioDataProviderDefinition {
         self.name.clone()
     }
 
-    fn id(&self) -> LayerProviderId {
+    fn id(&self) -> DataProviderId {
         GFBIO_PROVIDER_ID
     }
 }
@@ -222,8 +222,8 @@ impl LayerCollectionProvider for GfbioDataProvider {
             .map(|row| {
                 CollectionItem::Layer(LayerListing {
                     id: ProviderLayerId {
-                        provider: GFBIO_PROVIDER_ID,
-                        item: LayerId(row.get::<usize, i32>(0).to_string()),
+                        provider_id: GFBIO_PROVIDER_ID,
+                        layer_id: LayerId(row.get::<usize, i32>(0).to_string()),
                     },
                     name: row.get(1),
                     description: row.try_get(2).unwrap_or_else(|_| "".to_owned()),
@@ -239,7 +239,7 @@ impl LayerCollectionProvider for GfbioDataProvider {
     }
 
     async fn get_layer(&self, id: &LayerId) -> Result<Layer> {
-        let surrogate_key: i32 = id.0.parse().map_err(|_| Error::InvalidDatasetId)?;
+        let surrogate_key: i32 = id.0.parse().map_err(|_| Error::InvalidDataId)?;
 
         let conn = self.pool.get().await?;
 
@@ -265,8 +265,8 @@ impl LayerCollectionProvider for GfbioDataProvider {
 
         Ok(Layer {
             id: ProviderLayerId {
-                provider: GFBIO_PROVIDER_ID,
-                item: id.clone(),
+                provider_id: GFBIO_PROVIDER_ID,
+                layer_id: id.clone(),
             },
             name: row.get(0),
             description: row.try_get(1).unwrap_or_else(|_| "".to_owned()),
@@ -274,9 +274,9 @@ impl LayerCollectionProvider for GfbioDataProvider {
                 operator: TypedOperator::Vector(
                     OgrSource {
                         params: OgrSourceParameters {
-                            dataset: DatasetId::External(ExternalDatasetId {
+                            data: DataId::External(ExternalDataId {
                                 provider_id: GFBIO_PROVIDER_ID,
-                                dataset_id: id.0.clone(),
+                                layer_id: id.clone(),
                             }),
                             attribute_projection: None,
                             attribute_filters: None,
@@ -291,15 +291,16 @@ impl LayerCollectionProvider for GfbioDataProvider {
 }
 
 #[async_trait]
-impl ExternalLayerProvider for GfbioDataProvider {
-    async fn provenance(&self, dataset: &DatasetId) -> Result<ProvenanceOutput> {
-        let surrogate_key: i32 = dataset
+impl DataProvider for GfbioDataProvider {
+    async fn provenance(&self, id: &DataId) -> Result<ProvenanceOutput> {
+        let surrogate_key: i32 = id
             .external()
-            .ok_or(Error::InvalidDatasetId)
+            .ok_or(Error::InvalidDataId)
             .map_err(|e| geoengine_operators::error::Error::LoadingInfo {
                 source: Box::new(e),
             })?
-            .dataset_id
+            .layer_id
+            .0
             .parse()
             .map_err(|e| geoengine_operators::error::Error::LoadingInfo {
                 source: Box::new(e),
@@ -331,7 +332,7 @@ impl ExternalLayerProvider for GfbioDataProvider {
         let row = conn.query_one(&stmt, &[&surrogate_key]).await?;
 
         Ok(ProvenanceOutput {
-            dataset: dataset.clone(),
+            data: id.clone(),
             provenance: Some(Provenance {
                 citation: row.try_get(0).unwrap_or_else(|_| "".to_owned()),
                 license: row.try_get(1).unwrap_or_else(|_| "".to_owned()),
@@ -351,18 +352,19 @@ impl MetaDataProvider<OgrSourceDataset, VectorResultDescriptor, VectorQueryRecta
 {
     async fn meta_data(
         &self,
-        dataset: &DatasetId,
+        id: &DataId,
     ) -> Result<
         Box<dyn MetaData<OgrSourceDataset, VectorResultDescriptor, VectorQueryRectangle>>,
         geoengine_operators::error::Error,
     > {
-        let surrogate_key: i32 = dataset
+        let surrogate_key: i32 = id
             .external()
-            .ok_or(Error::InvalidDatasetId)
+            .ok_or(Error::InvalidDataId)
             .map_err(|e| geoengine_operators::error::Error::LoadingInfo {
                 source: Box::new(e),
             })?
-            .dataset_id
+            .layer_id
+            .0
             .parse()
             .map_err(|e| geoengine_operators::error::Error::LoadingInfo {
                 source: Box::new(e),
@@ -436,7 +438,7 @@ impl MetaDataProvider<GdalLoadingInfo, RasterResultDescriptor, RasterQueryRectan
 {
     async fn meta_data(
         &self,
-        _dataset: &DatasetId,
+        _id: &DataId,
     ) -> Result<
         Box<dyn MetaData<GdalLoadingInfo, RasterResultDescriptor, RasterQueryRectangle>>,
         geoengine_operators::error::Error,
@@ -452,7 +454,7 @@ impl
 {
     async fn meta_data(
         &self,
-        _dataset: &DatasetId,
+        _id: &DataId,
     ) -> Result<
         Box<
             dyn MetaData<
@@ -472,7 +474,7 @@ mod tests {
     use bb8_postgres::bb8::ManageConnection;
     use futures::StreamExt;
     use geoengine_datatypes::collections::MultiPointCollection;
-    use geoengine_datatypes::dataset::ExternalDatasetId;
+    use geoengine_datatypes::dataset::{ExternalDataId, LayerId};
     use geoengine_datatypes::primitives::{
         BoundingBox2D, FeatureData, MultiPoint, SpatialResolution, TimeInterval,
     };
@@ -576,8 +578,8 @@ mod tests {
             listing,
             vec![CollectionItem::Layer(LayerListing {
                 id: ProviderLayerId {
-                    provider: GFBIO_PROVIDER_ID,
-                    item: LayerId("1".to_string()),
+                    provider_id: GFBIO_PROVIDER_ID,
+                    layer_id: LayerId("1".to_string()),
                 },
                 name: "Example Title".to_string(),
                 description: "".to_string(),
@@ -611,9 +613,9 @@ mod tests {
             let meta: Box<
                 dyn MetaData<OgrSourceDataset, VectorResultDescriptor, VectorQueryRectangle>,
             > = provider
-                .meta_data(&DatasetId::External(ExternalDatasetId {
+                .meta_data(&DataId::External(ExternalDataId {
                     provider_id: GFBIO_PROVIDER_ID,
-                    dataset_id: "1".to_string(),
+                    layer_id: LayerId("1".to_string()),
                 }))
                 .await
                 .map_err(|e| e.to_string())?;
@@ -788,9 +790,9 @@ mod tests {
             let meta: Box<
                 dyn MetaData<OgrSourceDataset, VectorResultDescriptor, VectorQueryRectangle>,
             > = provider
-                .meta_data(&DatasetId::External(ExternalDatasetId {
+                .meta_data(&DataId::External(ExternalDataId {
                     provider_id: GFBIO_PROVIDER_ID,
-                    dataset_id: "1".to_string(),
+                    layer_id: LayerId("1".to_string()),
                 }))
                 .await
                 .map_err(|e| e.to_string())?;
@@ -888,9 +890,9 @@ mod tests {
             .await
             .map_err(|e| e.to_string())?;
 
-            let dataset = DatasetId::External(ExternalDatasetId {
+            let dataset = DataId::External(ExternalDataId {
                 provider_id: GFBIO_PROVIDER_ID,
-                dataset_id: "1".to_owned(),
+                layer_id: LayerId("1".to_owned()),
             });
 
             let result = provider
@@ -899,9 +901,9 @@ mod tests {
                 .map_err(|e| e.to_string())?;
 
             let expected = ProvenanceOutput {
-                dataset: DatasetId::External(ExternalDatasetId {
+                data: DataId::External(ExternalDataId {
                     provider_id: GFBIO_PROVIDER_ID,
-                    dataset_id: "1".to_owned(),
+                    layer_id: LayerId("1".to_owned()),
                 }),
                 provenance: Some(Provenance {
                     citation: "Example Description".to_owned(),
