@@ -90,9 +90,10 @@ pub async fn add_datasets_from_directory<
     }
     let dir = dir.expect("checked");
 
-    add_dataset_layer_collection(layer_db)
-        .await
-        .expect("Adding dataset layer collection must work");
+    let dataset_layer_collection = add_dataset_layer_collection(layer_db).await;
+    if let Err(e) = dataset_layer_collection {
+        warn!("Skipped adding dataset layer collection: {:?}", e);
+    }
 
     for entry in dir {
         if let Ok(entry) = entry {
