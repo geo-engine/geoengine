@@ -5,6 +5,8 @@ pub type NoDataValueGrid1D<T> = NoDataValueGrid<GridShape1D, T>;
 pub type NoDataValueGrid2D<T> = NoDataValueGrid<GridShape2D, T>;
 pub type NoDataValueGrid3D<T> = NoDataValueGrid<GridShape3D, T>;
 
+/// A `NoDataValueGrid` is an n-dmensional array.
+/// In this grid type each element/pixel can be invalid. This is the case if the element/pixel value is equal to the value storef in the `no_data_value` field.
 pub struct NoDataValueGrid<D, T> {
     pub inner_grid: Grid<D, T>,
     pub no_data_value: Option<T>, // TODO: do we need the option or is there always a no_data_value?
@@ -14,6 +16,7 @@ impl<D, T> NoDataValueGrid<D, T>
 where
     T: PartialEq,
 {
+    /// Create a new `NoDataValueGrid` from a `Grid` and a `no_data_value`.
     pub fn new(inner_grid: Grid<D, T>, no_data_value: Option<T>) -> Self {
         NoDataValueGrid {
             inner_grid,
@@ -21,10 +24,12 @@ where
         }
     }
 
+    /// Set the `no_data_value` which represents invalid elements / pixels.
     pub fn set_no_data_value(&mut self, no_data_value: Option<T>) {
         self.no_data_value = no_data_value;
     }
 
+    /// Test if the provided value is equal to the `no_data_value` of this `NoDataValueGrid`.
     pub fn is_no_data_value(&self, value: &T) -> bool {
         if let Some(no_data_value) = &self.no_data_value {
             equals_or_both_nan(value, no_data_value)
@@ -33,6 +38,7 @@ where
         }
     }
 
+    /// Create a new `NoDataValueGrid` from a `MaskedGrid` where each invalid pixel is assigned the `no_data_value`.
     pub fn from_masked_grid(masked_grid: &MaskedGrid<D, T>, no_data_value: T) -> Self
     where
         D: GridSize + Clone + PartialEq,

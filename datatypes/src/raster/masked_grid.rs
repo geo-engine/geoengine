@@ -13,6 +13,8 @@ use super::{
 
 #[derive(Debug, Eq, PartialEq, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+/// A `MaskedGrid` is an n-dmensional array.
+/// For each element/pixel a `validity_mask` stores if the pixel is valid.
 pub struct MaskedGrid<D, T> {
     pub inner_grid: Grid<D, T>,
     pub validity_mask: Grid<D, bool>, // TODO: switch to bitmask or something like that
@@ -48,10 +50,12 @@ where
         })
     }
 
+    /// Replace the current mask with a new `Grid` of `bool`.
     pub fn replace_mask(self, validity_mask: Grid<D, bool>) -> Result<Self> {
         Self::new(self.inner_grid, validity_mask)
     }
 
+    /// Create a new `MaskedGrid` where all pixels are valid.
     pub fn new_with_data(data: Grid<D, T>) -> Self {
         let validity_mask = Grid::new_filled(data.shape.clone(), true);
 
@@ -61,25 +65,30 @@ where
         }
     }
 
+    /// Create a new `MaskedGrid` where all pixels have the same value and are valid.
     pub fn new_filled(shape: D, fill_value: T) -> Self {
         let data = Grid::new_filled(shape, fill_value);
         Self::new_with_data(data)
     }
 
+    /// Get a reference to the shape of the grid.
     pub fn shape(&self) -> &D {
         &self.inner_grid.shape
     }
 
     #[inline]
+    /// Get a reference to the inner mask.
     pub fn mask_ref(&self) -> &Grid<D, bool> {
         &self.validity_mask
     }
 
     #[inline]
+    /// Get a mutable reference to the inner mask.
     pub fn mask_mut(&mut self) -> &mut Grid<D, bool> {
         &mut self.validity_mask
     }
 
+    /// Returns an `Iterator<Item=Option<&T>>`. The `Iterator` produces all elements of the `MaskedGrid` where invalid elements are `None` and valid elements are `Some(&T)`.
     pub fn masked_element_ref_iterator(&self) -> impl Iterator<Item = Option<&T>> {
         self.inner_grid
             .data
@@ -88,6 +97,7 @@ where
             .map(|(v, m)| if *m { Some(v) } else { None })
     }
 
+    /// Returns an `Iterator<Item=Option<T>>`. The `Iterator` produces and copies all elements (that are `copy`) of the `MaskedGrid` where invalid elements are `None` and valid elements are `Some(T)`.
     pub fn masked_element_deref_iterator(&self) -> impl Iterator<Item = Option<T>> + '_
     where
         T: Copy,
