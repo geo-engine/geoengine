@@ -57,7 +57,7 @@ mod loading_info;
 /// ```rust
 /// use serde_json::{Result, Value};
 /// use geoengine_operators::source::{GdalSource, GdalSourceParameters};
-/// use geoengine_datatypes::dataset::DataId;
+/// use geoengine_datatypes::dataset::{DatasetId, DataId};
 /// use geoengine_datatypes::util::Identifier;
 /// use std::str::FromStr;
 ///
