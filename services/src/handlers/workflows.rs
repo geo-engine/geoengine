@@ -252,7 +252,13 @@ async fn resolve_provenance<C: Context>(
 ) -> Result<ProvenanceOutput> {
     match id {
         DataId::Internal { dataset_id } => datasets.provenance(session, dataset_id).await,
-        DataId::External(e) => providers.layer_provider(e.provider_id).await?.provenance(id).await,
+        DataId::External(e) => {
+            providers
+                .layer_provider(e.provider_id)
+                .await?
+                .provenance(id)
+                .await
+        }
     }
 }
 
