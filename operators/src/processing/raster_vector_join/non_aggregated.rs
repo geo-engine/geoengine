@@ -322,7 +322,7 @@ mod tests {
 
         let raster_source = GdalSource {
             params: GdalSourceParameters {
-                dataset: add_ndvi_dataset(&mut execution_context),
+                data: add_ndvi_dataset(&mut execution_context),
             },
         }
         .boxed();
@@ -411,7 +411,7 @@ mod tests {
 
         let raster_source = GdalSource {
             params: GdalSourceParameters {
-                dataset: add_ndvi_dataset(&mut execution_context),
+                data: add_ndvi_dataset(&mut execution_context),
             },
         }
         .boxed();
@@ -510,7 +510,7 @@ mod tests {
 
         let raster_source = GdalSource {
             params: GdalSourceParameters {
-                dataset: add_ndvi_dataset(&mut execution_context),
+                data: add_ndvi_dataset(&mut execution_context),
             },
         }
         .boxed();
@@ -613,7 +613,7 @@ mod tests {
 
         let raster_source = GdalSource {
             params: GdalSourceParameters {
-                dataset: add_ndvi_dataset(&mut execution_context),
+                data: add_ndvi_dataset(&mut execution_context),
             },
         }
         .boxed();

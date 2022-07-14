@@ -1,5 +1,5 @@
 use crate::adapters::SparseTilesFillAdapter;
-use crate::engine::{MetaData, OperatorDatasets, QueryProcessor};
+use crate::engine::{MetaData, OperatorData, OperatorName, QueryProcessor};
 use crate::util::gdal::gdal_open_dataset_ex;
 use crate::util::input::float_option_with_nan;
 use crate::util::TemporaryGdalThreadLocalConfigOptions;
@@ -29,7 +29,7 @@ use geoengine_datatypes::raster::{
 };
 
 use geoengine_datatypes::util::test::TestDefault;
-use geoengine_datatypes::{dataset::DatasetId, raster::TileInformation};
+use geoengine_datatypes::{dataset::DataId, raster::TileInformation};
 use geoengine_datatypes::{
     primitives::TimeInterval,
     raster::{
@@ -60,7 +60,7 @@ mod loading_info;
 /// ```rust
 /// use serde_json::{Result, Value};
 /// use geoengine_operators::source::{GdalSource, GdalSourceParameters};
-/// use geoengine_datatypes::dataset::InternalDatasetId;
+/// use geoengine_datatypes::dataset::{DatasetId, DataId};
 /// use geoengine_datatypes::util::Identifier;
 /// use std::str::FromStr;
 ///
@@ -68,7 +68,7 @@ mod loading_info;
 ///     {
 ///         "type": "GdalSource",
 ///         "params": {
-///             "dataset": {
+///             "data": {
 ///                 "type": "internal",
 ///                 "datasetId": "a626c880-1c41-489b-9e19-9596d129859c"
 ///             }
@@ -79,18 +79,18 @@ mod loading_info;
 ///
 /// assert_eq!(operator, GdalSource {
 ///     params: GdalSourceParameters {
-///         dataset: InternalDatasetId::from_str("a626c880-1c41-489b-9e19-9596d129859c").unwrap().into()
+///         data: DatasetId::from_str("a626c880-1c41-489b-9e19-9596d129859c").unwrap().into()
 ///     },
 /// });
 /// ```
 #[derive(Debug, PartialEq, Eq, Clone, Serialize, Deserialize)]
 pub struct GdalSourceParameters {
-    pub dataset: DatasetId,
+    pub data: DataId,
 }
 
-impl OperatorDatasets for GdalSourceParameters {
-    fn datasets_collect(&self, datasets: &mut Vec<DatasetId>) {
-        datasets.push(self.dataset.clone());
+impl OperatorData for GdalSourceParameters {
+    fn data_ids_collect(&self, data_ids: &mut Vec<DataId>) {
+        data_ids.push(self.data.clone());
     }
 }
 
@@ -485,6 +485,10 @@ where
 
 pub type GdalSource = SourceOperator<GdalSourceParameters>;
 
+impl OperatorName for GdalSource {
+    const TYPE_NAME: &'static str = "GdalSource";
+}
+
 #[typetag::serde]
 #[async_trait]
 impl RasterOperator for GdalSource {
@@ -492,9 +496,9 @@ impl RasterOperator for GdalSource {
         self: Box<Self>,
         context: &dyn crate::engine::ExecutionContext,
     ) -> Result<Box<dyn InitializedRasterOperator>> {
-        let meta_data: GdalMetaData = context.meta_data(&self.params.dataset).await?;
+        let meta_data: GdalMetaData = context.meta_data(&self.params.data).await?;
 
-        debug!("Initializing GdalSource for {:?}.", &self.params.dataset);
+        debug!("Initializing GdalSource for {:?}.", &self.params.data);
 
         Ok(InitializedGdalSourceOperator {
             result_descriptor: meta_data.result_descriptor().await?,
@@ -832,15 +836,13 @@ mod tests {
     async fn query_gdal_source(
         exe_ctx: &mut MockExecutionContext,
         query_ctx: &MockQueryContext,
-        id: DatasetId,
+        id: DataId,
         output_shape: GridShape2D,
         output_bounds: SpatialPartition2D,
         time_interval: TimeInterval,
     ) -> Vec<Result<RasterTile2D<u8>>> {
         let op = GdalSource {
-            params: GdalSourceParameters {
-                dataset: id.clone(),
-            },
+            params: GdalSourceParameters { data: id.clone() },
         }
         .boxed();
 

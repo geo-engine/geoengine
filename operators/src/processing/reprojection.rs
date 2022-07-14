@@ -510,7 +510,7 @@ mod tests {
             GeometryCollection, MultiLineStringCollection, MultiPointCollection,
             MultiPolygonCollection,
         },
-        dataset::{DatasetId, InternalDatasetId},
+        dataset::{DataId, DatasetId},
         hashmap,
         primitives::{
             BoundingBox2D, Measurement, MultiLineString, MultiPoint, MultiPolygon, QueryRectangle,
@@ -864,9 +864,7 @@ mod tests {
         // 2014-01-01
 
         let gdal_op = GdalSource {
-            params: GdalSourceParameters {
-                dataset: id.clone(),
-            },
+            params: GdalSourceParameters { data: id.clone() },
         }
         .boxed();
 
@@ -1009,7 +1007,7 @@ mod tests {
             },
         };
 
-        let id: DatasetId = InternalDatasetId::new().into();
+        let id: DataId = DatasetId::new().into();
         exe_ctx.add_meta_data(id.clone(), Box::new(m));
 
         exe_ctx.tiling_specification = TilingSpecification::new((0.0, 0.0).into(), [60, 60].into());
@@ -1020,9 +1018,7 @@ mod tests {
         // 2014-04-01
 
         let gdal_op = GdalSource {
-            params: GdalSourceParameters {
-                dataset: id.clone(),
-            },
+            params: GdalSourceParameters { data: id.clone() },
         }
         .boxed();
 
@@ -1139,7 +1135,7 @@ mod tests {
             },
         };
 
-        let id: DatasetId = InternalDatasetId::new().into();
+        let id: DataId = DatasetId::new().into();
         exe_ctx.add_meta_data(id.clone(), Box::new(m));
 
         exe_ctx.tiling_specification =
@@ -1151,9 +1147,7 @@ mod tests {
         let time_interval = TimeInterval::new_instant(1_388_534_400_000).unwrap(); // 2014-01-01
 
         let gdal_op = GdalSource {
-            params: GdalSourceParameters {
-                dataset: id.clone(),
-            },
+            params: GdalSourceParameters { data: id.clone() },
         }
         .boxed();
 

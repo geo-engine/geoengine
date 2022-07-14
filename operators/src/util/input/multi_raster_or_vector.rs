@@ -1,5 +1,5 @@
-use crate::engine::{OperatorDatasets, RasterOperator, VectorOperator};
-use geoengine_datatypes::dataset::DatasetId;
+use crate::engine::{OperatorData, RasterOperator, VectorOperator};
+use geoengine_datatypes::dataset::DataId;
 use serde::{Deserialize, Serialize};
 
 /// It is either a set of `RasterOperator` or a single `VectorOperator`
@@ -44,15 +44,15 @@ impl From<Box<dyn VectorOperator>> for MultiRasterOrVectorOperator {
     }
 }
 
-impl OperatorDatasets for MultiRasterOrVectorOperator {
-    fn datasets_collect(&self, datasets: &mut Vec<DatasetId>) {
+impl OperatorData for MultiRasterOrVectorOperator {
+    fn data_ids_collect(&self, data_ids: &mut Vec<DataId>) {
         match self {
             Self::Raster(rs) => {
                 for r in rs {
-                    r.datasets_collect(datasets);
+                    r.data_ids_collect(data_ids);
                 }
             }
-            Self::Vector(v) => v.datasets_collect(datasets),
+            Self::Vector(v) => v.data_ids_collect(data_ids),
         }
     }
 }
@@ -60,7 +60,7 @@ impl OperatorDatasets for MultiRasterOrVectorOperator {
 #[cfg(test)]
 mod tests {
     use crate::source::{GdalSource, GdalSourceParameters};
-    use geoengine_datatypes::dataset::InternalDatasetId;
+    use geoengine_datatypes::dataset::DatasetId;
     use std::str::FromStr;
 
     use super::*;
@@ -69,7 +69,7 @@ mod tests {
     fn it_serializes() {
         let operator = MultiRasterOrVectorOperator::Raster(vec![GdalSource {
             params: GdalSourceParameters {
-                dataset: InternalDatasetId::from_str("fc734022-61e0-49da-b327-257ba9d602a7")
+                data: DatasetId::from_str("fc734022-61e0-49da-b327-257ba9d602a7")
                     .unwrap()
                     .into(),
             },
@@ -81,7 +81,7 @@ mod tests {
             serde_json::json!([{
                 "type": "GdalSource",
                 "params": {
-                    "dataset": {
+                    "data": {
                         "type": "internal",
                         "datasetId": "fc734022-61e0-49da-b327-257ba9d602a7"
                     }
@@ -95,7 +95,7 @@ mod tests {
         let workflow = serde_json::json!([{
             "type": "GdalSource",
             "params": {
-                "dataset": {
+                "data": {
                     "type": "internal",
                     "datasetId":  "fc734022-61e0-49da-b327-257ba9d602a7"
                 }
@@ -115,7 +115,7 @@ mod tests {
         let workflow = serde_json::json!({
             "type": "OgrSource",
             "params": {
-                "dataset": {
+                "data": {
                     "type": "internal",
                     "datasetId":  "fc734022-61e0-49da-b327-257ba9d602a7"
                 },

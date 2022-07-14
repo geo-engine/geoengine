@@ -1,9 +1,6 @@
 {
   "properties": {
-    "id": {
-      "type": "internal",
-      "datasetId": "9ee3619e-d0f9-4ced-9c44-3d407c3aed69"
-    },
+    "id": "9ee3619e-d0f9-4ced-9c44-3d407c3aed69",
     "name": "Land Cover",
     "description": "Land Cover derived from MODIS/Terra+Aqua Land Cover",
     "sourceOperator": "GdalSource",

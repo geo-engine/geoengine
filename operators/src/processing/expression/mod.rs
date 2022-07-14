@@ -1,7 +1,7 @@
 use self::{codegen::ExpressionAst, compiled::LinkedExpression, parser::ExpressionParser};
 use crate::{
     engine::{
-        ExecutionContext, InitializedRasterOperator, Operator, OperatorDatasets, RasterOperator,
+        ExecutionContext, InitializedRasterOperator, Operator, OperatorData, RasterOperator,
         RasterQueryProcessor, RasterResultDescriptor, TypedRasterQueryProcessor,
     },
     processing::expression::{codegen::Parameter, query_processor::ExpressionQueryProcessor},
@@ -10,7 +10,7 @@ use crate::{
 use async_trait::async_trait;
 use futures::try_join;
 use geoengine_datatypes::{
-    dataset::DatasetId,
+    dataset::DataId,
     primitives::{partitions_extent, time_interval_extent, Measurement},
     raster::RasterDataType,
 };
@@ -65,10 +65,10 @@ pub struct ExpressionSources {
     h: Option<Box<dyn RasterOperator>>,
 }
 
-impl OperatorDatasets for ExpressionSources {
-    fn datasets_collect(&self, datasets: &mut Vec<DatasetId>) {
+impl OperatorData for ExpressionSources {
+    fn data_ids_collect(&self, data_ids: &mut Vec<DataId>) {
         for source in self.iter() {
-            source.datasets_collect(datasets);
+            source.data_ids_collect(data_ids);
         }
     }
 }

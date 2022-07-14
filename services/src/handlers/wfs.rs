@@ -603,7 +603,7 @@ mod tests {
     use actix_web::http::header;
     use actix_web::{http::Method, test};
     use actix_web_httpauth::headers::authorization::Bearer;
-    use geoengine_datatypes::dataset::DatasetId;
+    use geoengine_datatypes::dataset::{DataId, DatasetId};
     use geoengine_datatypes::raster::{GridShape2D, TilingSpecification};
     use geoengine_datatypes::test_data;
     use geoengine_datatypes::util::test::TestDefault;
@@ -1064,13 +1064,16 @@ x;y
 
         let session_id = ctx.default_session_ref().await.id();
 
-        let ndvi_id =
-            add_dataset_definition_to_datasets(&ctx, test_data!("dataset_defs/ndvi.json")).await;
-        let ne_10m_ports_id = add_dataset_definition_to_datasets(
+        let ndvi_id: DataId =
+            add_dataset_definition_to_datasets(&ctx, test_data!("dataset_defs/ndvi.json"))
+                .await
+                .into();
+        let ne_10m_ports_id: DataId = add_dataset_definition_to_datasets(
             &ctx,
             test_data!("dataset_defs/points_with_time.json"),
         )
-        .await;
+        .await
+        .into();
 
         let workflow = serde_json::json!({
             "type": "Vector",
@@ -1087,14 +1090,14 @@ x;y
                     "vector": {
                         "type": "OgrSource",
                         "params": {
-                            "dataset": ne_10m_ports_id,
+                            "data": ne_10m_ports_id,
                             "attributeProjection": null
                         }
                     },
                     "rasters": [{
                         "type": "GdalSource",
                         "params": {
-                            "dataset": ndvi_id,
+                            "data": ndvi_id,
                         }
                     }],
                 }

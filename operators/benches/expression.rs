@@ -43,7 +43,7 @@ fn ndvi_source(execution_context: &mut MockExecutionContext) -> Box<dyn RasterOp
     let ndvi_id = add_ndvi_dataset(execution_context);
 
     let gdal_operator = GdalSource {
-        params: GdalSourceParameters { dataset: ndvi_id },
+        params: GdalSourceParameters { data: ndvi_id },
     };
 
     gdal_operator.boxed()

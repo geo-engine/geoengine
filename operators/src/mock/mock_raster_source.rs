@@ -1,12 +1,12 @@
 use crate::adapters::SparseTilesFillAdapter;
 use crate::engine::{
-    InitializedRasterOperator, OperatorDatasets, RasterOperator, RasterQueryProcessor,
+    InitializedRasterOperator, OperatorData, RasterOperator, RasterQueryProcessor,
     RasterResultDescriptor, SourceOperator, TypedRasterQueryProcessor,
 };
 use crate::util::Result;
 use async_trait::async_trait;
 use futures::{stream, stream::StreamExt};
-use geoengine_datatypes::dataset::DatasetId;
+use geoengine_datatypes::dataset::DataId;
 use geoengine_datatypes::primitives::{RasterQueryRectangle, SpatialPartitioned};
 use geoengine_datatypes::raster::{
     GridShape2D, GridShapeAccess, GridSize, Pixel, RasterTile2D, TilingSpecification,
@@ -150,8 +150,8 @@ pub struct MockRasterSourceParams<T: Pixel> {
 
 pub type MockRasterSource<T> = SourceOperator<MockRasterSourceParams<T>>;
 
-impl<T: Pixel> OperatorDatasets for MockRasterSource<T> {
-    fn datasets_collect(&self, _datasets: &mut Vec<DatasetId>) {}
+impl<T: Pixel> OperatorData for MockRasterSource<T> {
+    fn data_ids_collect(&self, _data_ids: &mut Vec<DataId>) {}
 }
 
 /// Implement a mock raster source with typetag for a specific generic type

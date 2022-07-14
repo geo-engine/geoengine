@@ -6,7 +6,7 @@ use std::{
 
 use gdal::{raster::GDALDataType, Dataset, DatasetOptions};
 use geoengine_datatypes::{
-    dataset::{DatasetId, InternalDatasetId},
+    dataset::{DataId, DatasetId},
     hashmap,
     primitives::{
         DateTimeParseFormat, Measurement, SpatialPartition2D, TimeGranularity, TimeInstance,
@@ -81,8 +81,8 @@ pub fn create_ndvi_meta_data() -> GdalMetaDataRegular {
 }
 
 // TODO: move test helper somewhere else?
-pub fn add_ndvi_dataset(ctx: &mut MockExecutionContext) -> DatasetId {
-    let id: DatasetId = InternalDatasetId::new().into();
+pub fn add_ndvi_dataset(ctx: &mut MockExecutionContext) -> DataId {
+    let id: DataId = DatasetId::new().into();
     ctx.add_meta_data(id.clone(), Box::new(create_ndvi_meta_data()));
     id
 }

@@ -7,6 +7,7 @@ pub use geoengine_datatypes::util::Identifier;
 pub use geoengine_operators::util::{spawn, spawn_blocking, spawn_blocking_with_thread_pool};
 
 pub mod config;
+pub mod operators;
 pub mod parsing;
 pub mod retry;
 pub mod tests;

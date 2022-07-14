@@ -472,7 +472,7 @@ mod tests {
     use futures::StreamExt;
     use geoengine_datatypes::{
         collections::MultiPointCollection,
-        dataset::InternalDatasetId,
+        dataset::DatasetId,
         primitives::{
             BoundingBox2D, DateTime, Measurement, MultiPoint, SpatialPartition2D,
             SpatialResolution, TimeGranularity,
@@ -489,7 +489,7 @@ mod tests {
                 source: RasterOrVectorOperator::Raster(
                     GdalSource {
                         params: GdalSourceParameters {
-                            dataset: InternalDatasetId::from_u128(1337).into(),
+                            data: DatasetId::from_u128(1337).into(),
                         },
                     }
                     .boxed(),
@@ -519,7 +519,7 @@ mod tests {
                     "source": {
                         "type": "GdalSource",
                         "params": {
-                            "dataset": {
+                            "data": {
                                 "type": "internal",
                                 "datasetId": "00000000-0000-0000-0000-000000000539"
                             }
@@ -541,7 +541,7 @@ mod tests {
                 source: RasterOrVectorOperator::Raster(
                     GdalSource {
                         params: GdalSourceParameters {
-                            dataset: InternalDatasetId::from_u128(1337).into(),
+                            data: DatasetId::from_u128(1337).into(),
                         },
                     }
                     .boxed(),
@@ -567,7 +567,7 @@ mod tests {
                     "source": {
                         "type": "GdalSource",
                         "params": {
-                            "dataset": {
+                            "data": {
                                 "type": "internal",
                                 "datasetId": "00000000-0000-0000-0000-000000000539"
                             }
@@ -1090,7 +1090,7 @@ mod tests {
 
         let ndvi_source = GdalSource {
             params: GdalSourceParameters {
-                dataset: add_ndvi_dataset(&mut execution_context),
+                data: add_ndvi_dataset(&mut execution_context),
             },
         }
         .boxed();
@@ -1168,7 +1168,7 @@ mod tests {
 
         let ndvi_source = GdalSource {
             params: GdalSourceParameters {
-                dataset: add_ndvi_dataset(&mut execution_context),
+                data: add_ndvi_dataset(&mut execution_context),
             },
         }
         .boxed();

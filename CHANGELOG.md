@@ -13,6 +13,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
   - https://github.com/geo-engine/geoengine/pull/561
 
+- Added a layers API that allows browsing datasets, stored layers and external data in a uniform fashion
+
+  - https://github.com/geo-engine/geoengine/pull/554
 
 - Added a `ClassHistogram` plot operator for creating histograms of categorical data
 
@@ -31,6 +34,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - https://github.com/geo-engine/geoengine/pull/561
   - `MaskedGrid` replaces `Grid` in `GridOrEmpty` / `RasterTile`
   - GeoTIFF files created by the engine contain the validity mask if not specified otherwise.
+- Refactored dataset ids and external provders
+
+  - https://github.com/geo-engine/geoengine/pull/554
+  - **breaking** the parameters of the source operators changed which makes old workflow jsons incompatible
+  - **breaking** the id of datasets changed which makes old dataset definition jsons incompatible
 
 - Added `Measurement`s to vector data workflows
 
