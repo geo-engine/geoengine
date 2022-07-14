@@ -9,7 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
-- Added traits for updating / mapping the pixels of grid types. Also added a trait for creating grid types using a function for each pixels location.
+- Added traits and methods for updating / mapping the pixels of grid types. Also added a trait for creating grid types using a function for each pixels location.
 
   - https://github.com/geo-engine/geoengine/pull/561
 
