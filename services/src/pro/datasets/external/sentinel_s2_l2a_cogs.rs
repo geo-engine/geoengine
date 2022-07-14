@@ -171,12 +171,8 @@ impl SentinelS2L2aCogsDataProvider {
                                     layer_id: layer_id.clone(),
                                 }),
                             )
-                            .into(),
-                            measurement: Measurement::Unitless, // TODO: add measurement
-                            time: None,                         // TODO: determine time
-                            bbox: None,                         // TODO: determine bbox
-                        }
-                        .into(),
+                            .expect("Gdal source is a valid operator."),
+                        },
                         symbology: Some(Symbology::Raster(RasterSymbology {
                             opacity: 1.0,
                             colorizer: Colorizer::linear_gradient(

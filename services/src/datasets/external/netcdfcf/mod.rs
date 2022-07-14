@@ -1240,7 +1240,7 @@ mod tests {
 
         assert_eq!(listing.len(), 20);
 
-        let result_descriptor: TypedResultDescriptor = RasterResultDescriptor {
+        let _result_descriptor: TypedResultDescriptor = RasterResultDescriptor {
             data_type: RasterDataType::I16,
             spatial_reference: SpatialReference::new(SpatialReferenceAuthority::Epsg, 3035).into(),
             measurement: Measurement::Unitless,
@@ -1249,7 +1249,7 @@ mod tests {
         }
         .into();
 
-        let symbology = Some(Symbology::Raster(RasterSymbology {
+        let _symbology = Some(Symbology::Raster(RasterSymbology {
             opacity: 1.0,
             colorizer: Colorizer::LinearGradient {
                 breakpoints: vec![
