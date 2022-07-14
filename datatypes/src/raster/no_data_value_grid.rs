@@ -9,7 +9,7 @@ pub type NoDataValueGrid2D<T> = NoDataValueGrid<GridShape2D, T>;
 pub type NoDataValueGrid3D<T> = NoDataValueGrid<GridShape3D, T>;
 
 /// A `NoDataValueGrid` is an n-dmensional array.
-/// In this grid type each element/pixel can be invalid. This is the case if the element/pixel value is equal to the value storef in the `no_data_value` field.
+/// In this grid type each element/pixel can be invalid. This is the case if the element/pixel value is equal to the value stored in the `no_data_value` field.
 pub struct NoDataValueGrid<D, T> {
     pub inner_grid: Grid<D, T>,
     pub no_data_value: Option<T>, // TODO: do we need the option or is there always a no_data_value?
