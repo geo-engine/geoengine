@@ -121,6 +121,7 @@ pub struct GdalDatasetParameters {
     pub width: usize,
     pub height: usize,
     pub file_not_found_handling: FileNotFoundHandling,
+    #[serde(default)]
     #[serde(with = "float_option_with_nan")]
     pub no_data_value: Option<f64>,
     pub properties_mapping: Option<Vec<GdalMetadataMapping>>,
