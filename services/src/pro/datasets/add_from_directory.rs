@@ -4,12 +4,7 @@ use std::{
     path::PathBuf,
 };
 
-use crate::{
-    datasets::add_from_directory::{add_dataset_as_layer, add_dataset_layer_collection},
-    error::Result,
-    layers::storage::LayerDb,
-    workflows::registry::WorkflowRegistry,
-};
+use crate::error::Result;
 use crate::{
     datasets::storage::DatasetDb,
     pro::datasets::{DatasetPermission, Permission, Role},
@@ -22,24 +17,14 @@ use log::warn;
 
 use super::storage::UpdateDatasetPermissions;
 
-pub async fn add_datasets_from_directory<
-    D: DatasetDb<UserSession> + UpdateDatasetPermissions,
-    L: LayerDb,
-    W: WorkflowRegistry,
->(
+pub async fn add_datasets_from_directory<D: DatasetDb<UserSession> + UpdateDatasetPermissions>(
     dataset_db: &mut D,
-    layer_db: &mut L,
-    workflow_db: &mut W,
     file_path: PathBuf,
 ) {
     async fn add_dataset_definition_from_dir_entry<
         D: DatasetDb<UserSession> + UpdateDatasetPermissions,
-        L: LayerDb,
-        W: WorkflowRegistry,
     >(
         dataset_db: &mut D,
-        layer_db: &mut L,
-        workflow_db: &mut W,
         entry: &DirEntry,
         system_session: &UserSession,
     ) -> Result<()> {
@@ -59,7 +44,7 @@ pub async fn add_datasets_from_directory<
                 system_session,
                 DatasetPermission {
                     role: Role::user_role_id(),
-                    dataset: dataset_id.clone(),
+                    dataset: dataset_id,
                     permission: Permission::Read,
                 },
             )
@@ -70,13 +55,11 @@ pub async fn add_datasets_from_directory<
                 system_session,
                 DatasetPermission {
                     role: Role::anonymous_role_id(),
-                    dataset: dataset_id.clone(),
+                    dataset: dataset_id,
                     permission: Permission::Read,
                 },
             )
             .await?;
-
-        add_dataset_as_layer(def, dataset_id, layer_db, workflow_db).await?;
 
         Ok(())
     }
@@ -90,21 +73,10 @@ pub async fn add_datasets_from_directory<
     }
     let dir = dir.expect("checked");
 
-    let dataset_layer_collection = add_dataset_layer_collection(layer_db).await;
-    if let Err(e) = dataset_layer_collection {
-        warn!("Skipped adding dataset layer collection: {:?}", e);
-    }
-
     for entry in dir {
         if let Ok(entry) = entry {
-            if let Err(e) = add_dataset_definition_from_dir_entry(
-                dataset_db,
-                layer_db,
-                workflow_db,
-                &entry,
-                &system_session,
-            )
-            .await
+            if let Err(e) =
+                add_dataset_definition_from_dir_entry(dataset_db, &entry, &system_session).await
             {
                 warn!(
                     "Skipped adding dataset from directory entry: {:?} error: {}",

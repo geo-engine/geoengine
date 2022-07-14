@@ -1,11 +1,9 @@
-use crate::workflows::workflow::WorkflowId;
 use crate::{datasets::external::netcdfcf::NetCdfCf4DProviderError, handlers::ErrorResponse};
+use crate::{layers::listing::LayerCollectionId, workflows::workflow::WorkflowId};
 use actix_web::http::StatusCode;
 use actix_web::HttpResponse;
-use geoengine_datatypes::{
-    dataset::{DatasetId, DatasetProviderId},
-    spatial_reference::SpatialReferenceOption,
-};
+use geoengine_datatypes::dataset::DatasetId;
+use geoengine_datatypes::{dataset::DataProviderId, spatial_reference::SpatialReferenceOption};
 use snafu::prelude::*;
 use strum::IntoStaticStr;
 use tonic::Status;
@@ -143,10 +141,12 @@ pub enum Error {
 
     MissingSettingsDirectory,
 
-    DatasetIdTypeMissMatch,
-    UnknownDatasetId,
+    DataIdTypeMissMatch,
+    UnknownDataId,
     UnknownProviderId,
     MissingDatasetId,
+
+    UnknownDatasetId,
 
     #[snafu(display("Permission denied for dataset with id {:?}", dataset))]
     DatasetPermissionDenied {
@@ -225,10 +225,11 @@ pub enum Error {
 
     PangaeaNoTsv,
     GfbioMissingAbcdField,
-    ExpectedExternalDatasetId,
-    InvalidExternalDatasetId {
-        provider: DatasetProviderId,
+    ExpectedExternalDataId,
+    InvalidExternalDataId {
+        provider: DataProviderId,
     },
+    InvalidDataId,
 
     #[cfg(feature = "nature40")]
     Nature40UnknownRasterDbname,
@@ -318,13 +319,11 @@ pub enum Error {
     NetCdfCf4DProvider {
         source: NetCdfCf4DProviderError,
     },
-
     #[cfg(feature = "ebv")]
     #[snafu(context(false))]
     EbvHandler {
         source: crate::handlers::ebv::EbvError,
     },
-
     #[cfg(feature = "nfdi")]
     #[snafu(display("Could not parse GFBio basket: {}", message,))]
     GFBioBasketParse {
@@ -338,9 +337,21 @@ pub enum Error {
         source: crate::layers::storage::LayerDbError,
     },
 
+    UnknownOperator {
+        operator: String,
+    },
+
+    IdStringMustBeUuid {
+        found: String,
+    },
+
     #[snafu(context(false))]
     TaskError {
         source: crate::tasks::TaskError,
+    },
+
+    UnknownLayerCollectionId {
+        id: LayerCollectionId,
     },
 }
 

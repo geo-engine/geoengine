@@ -1,9 +1,6 @@
 {
   "properties": {
-    "id": {
-      "type": "internal",
-      "datasetId": "b6191257-6d61-4c6b-90a4-ebfb1b23899d"
-    },
+    "id": "b6191257-6d61-4c6b-90a4-ebfb1b23899d",
     "name": "Germany",
     "description": "Boundaries of Germany",
     "sourceOperator": "OgrSource"

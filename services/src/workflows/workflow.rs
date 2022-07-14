@@ -23,6 +23,15 @@ pub struct Workflow {
     pub operator: TypedOperator,
 }
 
+impl PartialEq for Workflow {
+    fn eq(&self, other: &Self) -> bool {
+        match (serde_json::to_string(self), serde_json::to_string(other)) {
+            (Ok(a), Ok(b)) => a == b,
+            _ => false,
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

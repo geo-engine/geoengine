@@ -1,9 +1,6 @@
 {
   "properties": {
-    "id": {
-      "type": "internal",
-      "datasetId": "5c2e620c-0c25-49f4-a3dd-9ef518c95709"
-    },
+    "id": "5c2e620c-0c25-49f4-a3dd-9ef518c95709",
     "name": "Mock",
     "description": "A mock dataset",
     "sourceOperator": "MockDatasetDataSource"

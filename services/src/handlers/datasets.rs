@@ -4,10 +4,11 @@ use std::{
     path::Path,
 };
 
-use crate::datasets::listing::DatasetProvider;
-use crate::datasets::storage::{AddDataset, DatasetStore, MetaDataSuggestion, SuggestMetaData};
-use crate::datasets::storage::{DatasetProviderDb, DatasetProviderListOptions};
 use crate::datasets::upload::UploadRootPath;
+use crate::datasets::{
+    listing::DatasetProvider,
+    storage::{AddDataset, DatasetStore, MetaDataSuggestion, SuggestMetaData},
+};
 use crate::datasets::{
     storage::{CreateDataset, MetaDataDefinition},
     upload::Upload,
@@ -25,7 +26,7 @@ use gdal::{vector::Layer, Dataset};
 use gdal::{vector::OGRFieldType, DatasetOptions};
 use geoengine_datatypes::{
     collections::VectorDataType,
-    dataset::{DatasetProviderId, InternalDatasetId},
+    dataset::DatasetId,
     primitives::{FeatureDataType, Measurement, VectorQueryRectangle},
     spatial_reference::{SpatialReference, SpatialReferenceOption},
 };
@@ -48,47 +49,12 @@ where
         web::scope("/dataset")
             .service(web::resource("").route(web::post().to(create_dataset_handler::<C>)))
             .service(web::resource("/auto").route(web::post().to(auto_create_dataset_handler::<C>)))
-            .service(
-                web::resource("/internal/{dataset}").route(web::get().to(get_dataset_handler::<C>)),
-            )
+            .service(web::resource("/{dataset}").route(web::get().to(get_dataset_handler::<C>)))
             .service(
                 web::resource("/suggest").route(web::get().to(suggest_meta_data_handler::<C>)),
             ),
     )
-    .service(web::resource("/providers").route(web::get().to(list_providers_handler::<C>)))
-    .service(web::resource("/datasets").route(web::get().to(list_datasets_handler::<C>)))
-    .service(
-        web::resource("/datasets/external/{provider}")
-            .route(web::get().to(list_external_datasets_handler::<C>)),
-    );
-}
-
-async fn list_providers_handler<C: Context>(
-    session: C::Session,
-    ctx: web::Data<C>,
-    options: web::Query<DatasetProviderListOptions>,
-) -> Result<impl Responder> {
-    let list = ctx
-        .dataset_db_ref()
-        .list_dataset_providers(&session, options.into_inner().validated()?)
-        .await?;
-    Ok(web::Json(list))
-}
-
-async fn list_external_datasets_handler<C: Context>(
-    provider: web::Path<DatasetProviderId>,
-    session: C::Session,
-    ctx: web::Data<C>,
-    options: web::Query<DatasetListOptions>,
-) -> Result<impl Responder> {
-    let options = options.into_inner().validated()?;
-    let list = ctx
-        .dataset_db_ref()
-        .dataset_provider(&session, provider.into_inner())
-        .await?
-        .list(options) // TODO: authorization
-        .await?;
-    Ok(web::Json(list))
+    .service(web::resource("/datasets").route(web::get().to(list_datasets_handler::<C>)));
 }
 
 /// Lists available [Datasets](crate::datasets::listing::DatasetListing).
@@ -157,13 +123,13 @@ async fn list_datasets_handler<C: Context>(
 /// }
 /// ```
 async fn get_dataset_handler<C: Context>(
-    dataset: web::Path<InternalDatasetId>,
+    dataset: web::Path<DatasetId>,
     session: C::Session,
     ctx: web::Data<C>,
 ) -> Result<impl Responder> {
     let dataset = ctx
         .dataset_db_ref()
-        .load(&session, &dataset.into_inner().into())
+        .load(&session, &dataset.into_inner())
         .await?;
     Ok(web::Json(dataset))
 }
@@ -742,7 +708,7 @@ mod tests {
     use geoengine_datatypes::collections::{
         GeometryCollection, MultiPointCollection, VectorDataType,
     };
-    use geoengine_datatypes::dataset::{DatasetId, InternalDatasetId};
+    use geoengine_datatypes::dataset::DatasetId;
     use geoengine_datatypes::primitives::{BoundingBox2D, SpatialResolution};
     use geoengine_datatypes::raster::{GridShape2D, TilingSpecification};
     use geoengine_datatypes::spatial_reference::SpatialReferenceOption;
@@ -772,10 +738,7 @@ mod tests {
             bbox: None,
         };
 
-        let id = DatasetId::Internal {
-            dataset_id: InternalDatasetId::from_str("370e99ec-9fd8-401d-828d-d67b431a8742")
-                .unwrap(),
-        };
+        let id = DatasetId::from_str("370e99ec-9fd8-401d-828d-d67b431a8742")?;
         let ds = AddDataset {
             id: Some(id),
             name: "OgrDataset".to_string(),
@@ -808,10 +771,8 @@ mod tests {
             .add_dataset(&SimpleSession::default(), ds.validated()?, Box::new(meta))
             .await?;
 
-        let id2 = DatasetId::Internal {
-            dataset_id: InternalDatasetId::from_str("370e99ec-9fd8-401d-828d-d67b431a8742")
-                .unwrap(),
-        };
+        let id2 = DatasetId::from_str("370e99ec-9fd8-401d-828d-d67b431a8742")?;
+
         let ds = AddDataset {
             id: Some(id2),
             name: "OgrDataset2".to_string(),
@@ -863,10 +824,7 @@ mod tests {
         assert_eq!(
             read_body_string(res).await,
             json!([{
-                "id": {
-                    "type": "internal",
-                    "datasetId": "370e99ec-9fd8-401d-828d-d67b431a8742"
-                },
+                "id": "370e99ec-9fd8-401d-828d-d67b431a8742",
                 "name": "OgrDataset2",
                 "description": "My Ogr dataset2",
                 "tags": [],
@@ -902,10 +860,7 @@ mod tests {
                     "text": null
                 }
             }, {
-                "id": {
-                    "type": "internal",
-                    "datasetId": "370e99ec-9fd8-401d-828d-d67b431a8742"
-                },
+                "id": "370e99ec-9fd8-401d-828d-d67b431a8742",
                 "name": "OgrDataset",
                 "description": "My Ogr dataset",
                 "tags": [],
@@ -1050,7 +1005,7 @@ mod tests {
     ) -> Result<Box<dyn InitializedVectorOperator>> {
         OgrSource {
             params: OgrSourceParameters {
-                dataset: dataset_id,
+                data: dataset_id.into(),
                 attribute_projection: None,
                 attribute_filters: None,
             },
@@ -1634,7 +1589,7 @@ mod tests {
             .await?;
 
         let req = actix_web::test::TestRequest::get()
-            .uri(&format!("/dataset/internal/{}", id.internal().unwrap()))
+            .uri(&format!("/dataset/{}", id))
             .append_header((header::CONTENT_LENGTH, 0))
             .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())));
         let res = send_test_request(req, ctx).await;
@@ -1646,10 +1601,7 @@ mod tests {
         assert_eq!(
             res_body,
             json!({
-                "id": {
-                    "type": "internal",
-                    "datasetId": id.internal().unwrap()
-                },
+                "id": id,
                 "name": "OgrDataset",
                 "description": "My Ogr dataset",
                 "resultDescriptor": {

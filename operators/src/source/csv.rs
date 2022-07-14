@@ -7,7 +7,7 @@ use csv::{Position, Reader, StringRecord};
 use futures::stream::BoxStream;
 use futures::task::{Context, Poll};
 use futures::{Stream, StreamExt};
-use geoengine_datatypes::dataset::DatasetId;
+use geoengine_datatypes::dataset::DataId;
 use geoengine_datatypes::primitives::VectorQueryRectangle;
 use serde::{Deserialize, Serialize};
 use snafu::{ensure, OptionExt, ResultExt};
@@ -22,7 +22,7 @@ use geoengine_datatypes::{
 
 use crate::engine::QueryProcessor;
 use crate::engine::{
-    InitializedVectorOperator, OperatorDatasets, QueryContext, SourceOperator,
+    InitializedVectorOperator, OperatorData, QueryContext, SourceOperator,
     TypedVectorQueryProcessor, VectorOperator, VectorQueryProcessor, VectorResultDescriptor,
 };
 use crate::error;
@@ -145,8 +145,8 @@ pub struct CsvSourceStream {
 
 pub type CsvSource = SourceOperator<CsvSourceParameters>;
 
-impl OperatorDatasets for CsvSourceParameters {
-    fn datasets_collect(&self, _datasets: &mut Vec<DatasetId>) {}
+impl OperatorData for CsvSourceParameters {
+    fn data_ids_collect(&self, _data_ids: &mut Vec<DataId>) {}
 }
 
 #[typetag::serde]

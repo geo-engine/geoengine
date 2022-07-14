@@ -2,9 +2,8 @@ use std::collections::HashMap;
 
 use crate::engine::QueryContext;
 use crate::engine::{
-    ExecutionContext, InitializedVectorOperator, OperatorDatasets, ResultDescriptor,
-    SourceOperator, TypedVectorQueryProcessor, VectorOperator, VectorQueryProcessor,
-    VectorResultDescriptor,
+    ExecutionContext, InitializedVectorOperator, OperatorData, ResultDescriptor, SourceOperator,
+    TypedVectorQueryProcessor, VectorOperator, VectorQueryProcessor, VectorResultDescriptor,
 };
 use crate::util::Result;
 use async_trait::async_trait;
@@ -12,7 +11,7 @@ use futures::stream::{self, BoxStream, StreamExt};
 use geoengine_datatypes::collections::{
     FeatureCollection, FeatureCollectionInfos, FeatureCollectionModifications,
 };
-use geoengine_datatypes::dataset::DatasetId;
+use geoengine_datatypes::dataset::DataId;
 use geoengine_datatypes::primitives::{
     Geometry, Measurement, MultiLineString, MultiPoint, MultiPolygon, NoGeometry, TimeInterval,
     VectorQueryRectangle,
@@ -84,11 +83,11 @@ where
 
 pub type MockFeatureCollectionSource<G> = SourceOperator<MockFeatureCollectionSourceParams<G>>;
 
-impl<G> OperatorDatasets for MockFeatureCollectionSource<G>
+impl<G> OperatorData for MockFeatureCollectionSource<G>
 where
     G: Geometry + ArrowTyped,
 {
-    fn datasets_collect(&self, _datasets: &mut Vec<DatasetId>) {}
+    fn data_ids_collect(&self, _data_ids: &mut Vec<DataId>) {}
 }
 
 impl<G> MockFeatureCollectionSource<G>

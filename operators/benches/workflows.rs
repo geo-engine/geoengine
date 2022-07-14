@@ -3,7 +3,7 @@ use std::hint::black_box;
 use std::time::{Duration, Instant};
 
 use futures::TryStreamExt;
-use geoengine_datatypes::dataset::DatasetId;
+use geoengine_datatypes::dataset::{DataId, DatasetId};
 use geoengine_datatypes::primitives::{
     Measurement, QueryRectangle, RasterQueryRectangle, SpatialPartitioned,
 };
@@ -12,7 +12,6 @@ use geoengine_datatypes::spatial_reference::SpatialReference;
 
 use geoengine_datatypes::util::Identifier;
 use geoengine_datatypes::{
-    dataset::InternalDatasetId,
     primitives::{SpatialPartition2D, SpatialResolution, TimeInterval},
     raster::{GridSize, RasterTile2D, TilingSpecification},
 };
@@ -602,13 +601,11 @@ fn bench_gdal_source_operator_tile_size(bench_collector: &mut BenchmarkCollector
         // TilingSpecification::new((0., 0.).into(), [9000, 9000].into()),
     ];
 
-    let id: DatasetId = InternalDatasetId::new().into();
+    let id: DataId = DatasetId::new().into();
     let meta_data = create_ndvi_meta_data();
 
     let gdal_operator = GdalSource {
-        params: GdalSourceParameters {
-            dataset: id.clone(),
-        },
+        params: GdalSourceParameters { data: id.clone() },
     }
     .boxed();
 
@@ -654,13 +651,11 @@ fn bench_gdal_source_operator_with_expression_tile_size(bench_collector: &mut Be
         // TilingSpecification::new((0., 0.).into(), [9000, 9000].into()),
     ];
 
-    let id: DatasetId = InternalDatasetId::new().into();
+    let id: DataId = DatasetId::new().into();
     let meta_data = create_ndvi_meta_data();
 
     let gdal_operator = GdalSource {
-        params: GdalSourceParameters {
-            dataset: id.clone(),
-        },
+        params: GdalSourceParameters { data: id.clone() },
     };
 
     let expression_operator = Expression {
@@ -717,13 +712,11 @@ fn bench_gdal_source_operator_with_identity_reprojection(bench_collector: &mut B
         // TilingSpecification::new((0., 0.).into(), [9000, 9000].into()),
     ];
 
-    let id: DatasetId = InternalDatasetId::new().into();
+    let id: DataId = DatasetId::new().into();
     let meta_data = create_ndvi_meta_data();
 
     let gdal_operator = GdalSource {
-        params: GdalSourceParameters {
-            dataset: id.clone(),
-        },
+        params: GdalSourceParameters { data: id.clone() },
     };
 
     let projection_operator = Reprojection {
@@ -781,13 +774,11 @@ fn bench_gdal_source_operator_with_4326_to_3857_reprojection(
         // TilingSpecification::new((0., 0.).into(), [9000, 9000].into()),
     ];
 
-    let id: DatasetId = InternalDatasetId::new().into();
+    let id: DataId = DatasetId::new().into();
     let meta_data = create_ndvi_meta_data();
 
     let gdal_operator = GdalSource {
-        params: GdalSourceParameters {
-            dataset: id.clone(),
-        },
+        params: GdalSourceParameters { data: id.clone() },
     };
 
     let projection_operator = Reprojection {

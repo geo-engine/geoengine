@@ -386,7 +386,7 @@ mod tests {
         OgrSourceColumnSpec, OgrSourceDataset, OgrSourceDatasetTimeType, OgrSourceErrorSpec,
     };
     use crate::test_data;
-    use geoengine_datatypes::dataset::{DatasetId, InternalDatasetId};
+    use geoengine_datatypes::dataset::{DataId, DatasetId};
     use geoengine_datatypes::primitives::{
         BoundingBox2D, DateTime, FeatureData, NoGeometry, SpatialResolution, TimeInterval,
     };
@@ -721,7 +721,7 @@ mod tests {
     #[tokio::test]
     #[allow(clippy::too_many_lines)]
     async fn text_attribute() {
-        let dataset_id = InternalDatasetId::new();
+        let dataset_id = DatasetId::new();
 
         let workflow = serde_json::json!({
             "type": "Histogram",
@@ -732,7 +732,7 @@ mod tests {
                 "source": {
                     "type": "OgrSource",
                     "params": {
-                        "dataset": {
+                        "data": {
                             "type": "internal",
                             "datasetId": dataset_id
                         },
@@ -745,7 +745,7 @@ mod tests {
 
         let mut execution_context = MockExecutionContext::test_default();
         execution_context.add_meta_data::<_, _, VectorQueryRectangle>(
-            DatasetId::Internal { dataset_id },
+            DataId::Internal { dataset_id },
             Box::new(StaticMetaData {
                 loading_info: OgrSourceDataset {
                     file_name: test_data!("vector/data/ne_10m_ports/ne_10m_ports.shp").into(),

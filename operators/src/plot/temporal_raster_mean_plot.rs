@@ -259,7 +259,7 @@ mod tests {
         source::GdalSourceParameters,
     };
     use geoengine_datatypes::{
-        dataset::InternalDatasetId,
+        dataset::DatasetId,
         plots::{PlotData, PlotMetaData},
         primitives::DateTime,
     };
@@ -285,7 +285,7 @@ mod tests {
             sources: SingleRasterSource {
                 raster: GdalSource {
                     params: GdalSourceParameters {
-                        dataset: InternalDatasetId::new().into(),
+                        data: DatasetId::new().into(),
                     },
                 }
                 .boxed(),
@@ -302,7 +302,7 @@ mod tests {
                 "raster": {
                     "type": "GdalSource",
                     "params": {
-                        "dataset": {
+                        "data": {
                             "type": "internal",
                             "datasetId": "a626c880-1c41-489b-9e19-9596d129859c"
                         }
