@@ -71,6 +71,13 @@ where
         Self::new_with_data(data)
     }
 
+        /// Create a new `MaskedGrid` where all pixels have the same value and are valid.
+    pub fn new_empty(shape: D) -> Self where T: Default{
+        let data = Grid::new_filled(shape.clone(), T::default());
+        let validity = Grid::new_filled(shape, false);
+        Self::new(data, validity).expect("new_filled can not fail wen using a valid shape")
+    }
+
     /// Get a reference to the shape of the grid.
     pub fn shape(&self) -> &D {
         &self.inner_grid.shape
@@ -123,7 +130,7 @@ where
     T: Clone + Default,
 {
     fn from(data: EmptyGrid<D, T>) -> Self {
-        Self::new_filled(data.shape, T::default())
+        Self::new_empty(data.shape)
     }
 }
 
