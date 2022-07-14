@@ -1,4 +1,7 @@
-use super::{Grid, GridIndexAccess, GridShape1D, GridShape2D, GridShape3D, GridSize, MaskedGrid};
+use super::{
+    EmptyGrid, Grid, GridIndexAccess, GridOrEmpty, GridShape1D, GridShape2D, GridShape3D, GridSize,
+    MaskedGrid,
+};
 use crate::util::{helpers::equals_or_both_nan, Result};
 
 pub type NoDataValueGrid1D<T> = NoDataValueGrid<GridShape1D, T>;
@@ -118,5 +121,29 @@ where
             inner_grid: n.inner_grid,
             validity_mask: validity_grid,
         }
+    }
+}
+
+impl<D, T> From<NoDataValueGrid<D, T>> for GridOrEmpty<D, T>
+where
+    T: PartialEq + Clone,
+    D: Clone + GridSize + PartialEq,
+{
+    fn from(n: NoDataValueGrid<D, T>) -> Self {
+        if n.no_data_value.is_none() {
+            return MaskedGrid::from(n.inner_grid).into();
+        }
+
+        if let Some(ref no_data_value) = n.no_data_value {
+            if n.inner_grid
+                .data
+                .iter()
+                .all(|p| equals_or_both_nan(p, no_data_value))
+            {
+                return EmptyGrid::new(n.inner_grid.shape).into();
+            }
+        }
+
+        MaskedGrid::from(n).into()
     }
 }

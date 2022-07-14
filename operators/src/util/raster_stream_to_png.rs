@@ -2,7 +2,7 @@ use futures::StreamExt;
 use geoengine_datatypes::{
     operations::image::{Colorizer, RgbaColor, ToPng},
     primitives::{AxisAlignedRectangle, RasterQueryRectangle, TimeInterval},
-    raster::{Blit, EmptyGrid2D, GeoTransform, Pixel, RasterTile2D, GridOrEmpty},
+    raster::{Blit, EmptyGrid2D, GeoTransform, GridOrEmpty, Pixel, RasterTile2D},
 };
 use num_traits::AsPrimitive;
 use std::convert::TryInto;
@@ -48,12 +48,10 @@ where
         .fold(output_tile, |raster2d, tile| {
             let result: Result<RasterTile2D<T>> = match (raster2d, tile) {
                 (Ok(raster2d), Ok(tile)) if tile.is_empty() => Ok(raster2d),
-                (Ok(mut raster2d), Ok(tile)) => {
-                   match raster2d.blit(tile) {
-                        Ok(_) => Ok(raster2d),
-                        Err(error) => Err(error.into()),
-                    }
-                }
+                (Ok(mut raster2d), Ok(tile)) => match raster2d.blit(tile) {
+                    Ok(_) => Ok(raster2d),
+                    Err(error) => Err(error.into()),
+                },
                 (Err(error), _) | (_, Err(error)) => Err(error),
             };
 

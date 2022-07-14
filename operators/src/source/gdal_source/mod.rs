@@ -23,7 +23,7 @@ use geoengine_datatypes::primitives::{
     Coordinate2D, DateTimeParseFormat, RasterQueryRectangle, SpatialPartition2D, SpatialPartitioned,
 };
 use geoengine_datatypes::raster::{
-    EmptyGrid, GeoTransform, GridShape2D, GridShapeAccess, MaskedGrid, MaskedGrid2D,
+    EmptyGrid, GeoTransform, GridOrEmpty, GridOrEmpty2D, GridShape2D, GridShapeAccess,
     NoDataValueGrid, Pixel, RasterDataType, RasterProperties, RasterPropertiesEntry,
     RasterPropertiesEntryType, RasterPropertiesKey, RasterTile2D, TilingStrategy,
 };
@@ -380,8 +380,7 @@ impl GdalRasterLoader {
             dataset_params,
             tile_information,
             tile_time,
-        )?
-        .unwrap_or_else(|| create_no_data_tile(tile_information, tile_time));
+        )?;
 
         let elapsed = start.elapsed();
         debug!("data loaded -> returning data grid, took {:?}", elapsed);
@@ -592,7 +591,7 @@ fn read_grid_from_raster<
     dataset_grid_box: &GridBoundingBox2D,
     tile_grid: D,
     no_data_value: Option<T>,
-) -> Result<MaskedGrid<D, T>>
+) -> Result<GridOrEmpty<D, T>>
 where
     T: Pixel + GdalType + Default,
     D: PartialEq + Clone,
@@ -608,8 +607,8 @@ where
     )?;
     let data_grid = Grid::new(tile_grid, buffer.data)?;
     let no_data_value_grid = NoDataValueGrid::new(data_grid, no_data_value);
-    let masked_grid = no_data_value_grid.into();
-    Ok(masked_grid)
+    let grid_or_empty = GridOrEmpty::from(no_data_value_grid);
+    Ok(grid_or_empty)
 }
 
 /// This method reads the data for a single grid with a specified size from the GDAL dataset.
@@ -621,7 +620,7 @@ fn read_partial_grid_from_raster<T>(
     tile_grid_bounds: GridBoundingBox2D,
     tile_grid: GridShape2D,
     no_data_value: Option<T>,
-) -> Result<MaskedGrid2D<T>>
+) -> Result<GridOrEmpty2D<T>>
 where
     T: Pixel + GdalType + Default,
 {
@@ -632,7 +631,7 @@ where
         no_data_value,
     )?;
 
-    let mut tile_raster = MaskedGrid::from(EmptyGrid::new(tile_grid));
+    let mut tile_raster = GridOrEmpty::from(EmptyGrid::new(tile_grid));
     tile_raster.grid_blit_from(&dataset_raster);
     Ok(tile_raster)
 }
@@ -647,21 +646,21 @@ fn read_grid_and_handle_edges<T>(
     dataset_bounds: SpatialPartition2D,
     dataset_geo_transform: GeoTransform,
     no_data_value: Option<T>,
-) -> Result<Option<MaskedGrid2D<T>>>
+) -> Result<GridOrEmpty2D<T>>
 where
     T: Pixel + GdalType + Default,
 {
     let output_bounds = tile_info.spatial_partition();
     let dataset_intersects_tile = dataset_bounds.intersection(&output_bounds);
+    let output_shape = tile_info.tile_size_in_pixels();
 
     let dataset_intersection_area = match dataset_intersects_tile {
         Some(i) => i,
         None => {
-            return Ok(None);
+            return Ok(GridOrEmpty::from(EmptyGrid::new(output_shape)));
         }
     };
 
-    let output_shape = tile_info.tile_size_in_pixels();
     let output_geo_transform = tile_info.tile_geo_transform();
     let dataset_grid_bounds =
         dataset_geo_transform.spatial_to_grid_bounds(&dataset_intersection_area);
@@ -685,7 +684,7 @@ where
         )?
     };
 
-    Ok(Some(result_grid))
+    Ok(result_grid)
 }
 
 /// This method reads the data for a single tile with a specified size from the GDAL dataset and adds the requested metadata as properties to the tile.
@@ -694,7 +693,7 @@ fn read_raster_tile_with_properties<T: Pixel + gdal::raster::GdalType>(
     dataset_params: &GdalDatasetParameters,
     tile_info: TileInformation,
     tile_time: TimeInterval,
-) -> Result<Option<RasterTile2D<T>>> {
+) -> Result<RasterTile2D<T>> {
     let rasterband = dataset.rasterband(dataset_params.rasterband_channel as isize)?;
 
     let mut properties = RasterProperties::default();
@@ -722,14 +721,12 @@ fn read_raster_tile_with_properties<T: Pixel + gdal::raster::GdalType>(
         no_data_value,
     )?;
 
-    Ok(result_grid.map(|grid| {
-        RasterTile2D::new_with_tile_info_and_properties(
-            tile_time,
-            tile_info,
-            grid.into(),
-            properties,
-        )
-    }))
+    Ok(RasterTile2D::new_with_tile_info_and_properties(
+        tile_time,
+        tile_info,
+        result_grid,
+        properties,
+    ))
 }
 
 fn create_no_data_tile<T: Pixel>(
