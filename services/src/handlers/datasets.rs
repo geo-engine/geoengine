@@ -1589,7 +1589,7 @@ mod tests {
             .await?;
 
         let req = actix_web::test::TestRequest::get()
-            .uri(&format!("/dataset/internal/{}", id))
+            .uri(&format!("/dataset/{}", id))
             .append_header((header::CONTENT_LENGTH, 0))
             .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())));
         let res = send_test_request(req, ctx).await;
