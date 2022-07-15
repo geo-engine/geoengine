@@ -49,6 +49,27 @@ pub async fn add_layers_from_directory<L: LayerDb>(layer_db: &mut L, file_path: 
     }
     let dir = dir.expect("checked");
 
+    let unsorted = AddLayerCollection {
+        name: "Unsorted".to_string(),
+        description: "Unsorted Layers".to_string(),
+    }
+    .validated()
+    .expect("unsorted collection is valid");
+
+    let root_id = layer_db
+        .root_collection_id()
+        .await
+        .expect("root id must be resolved");
+
+    layer_db
+        .add_collection_with_id(
+            &LayerCollectionId(UNSORTED_COLLECTION_ID.to_string()),
+            unsorted,
+            &root_id,
+        )
+        .await
+        .expect("unsorted collection should always be added");
+
     for entry in dir {
         match entry {
             Ok(entry) if entry.path().extension() == Some(OsStr::new("json")) => {
@@ -137,21 +158,6 @@ pub async fn add_layer_collections_from_directory<L: LayerDb>(db: &mut L, file_p
         .expect("root id must be resolved");
     let mut collection_children: HashMap<LayerCollectionId, Vec<LayerCollectionId>> =
         HashMap::new();
-
-    let unsorted = AddLayerCollection {
-        name: "Unsorted".to_string(),
-        description: "Unsorted Layers".to_string(),
-    }
-    .validated()
-    .expect("unsorted collection is valid");
-
-    db.add_collection_with_id(
-        &LayerCollectionId(UNSORTED_COLLECTION_ID.to_string()),
-        unsorted,
-        &root_id,
-    )
-    .await
-    .expect("unsorted collection should always be added");
 
     for def in collection_defs {
         let ok = if def.id == root_id {
