@@ -333,47 +333,6 @@ impl<P: Pixel + GdalType> GdalDatasetWriter<P> {
         Ok(())
     }
 
-    fn create_mask_band(dataset: &Dataset, rasterband_index: isize) -> Result<()> {
-        // TODO: move most of this to the GDAL crate. Use all-valid flag to avoid writing data?
-
-        let n_flags = 0x02; // 2 is the flag for shared mask betweeen all bands. It is the only valid flag here!
-        unsafe {
-            let raster_band_ptr =
-                gdal_sys::GDALGetRasterBand(dataset.c_dataset(), rasterband_index as i32);
-            let res = gdal_sys::GDALCreateMaskBand(raster_band_ptr, n_flags);
-            if res != 0 {
-                return Err(Error::Gdal {
-                    source: gdal::errors::GdalError::CplError {
-                        class: res,
-                        number: 0,
-                        msg: "Could not create MaskBand".to_string(),
-                    },
-                });
-            }
-            Ok(())
-        }
-    }
-
-    fn open_mask_band(&self) -> Result<gdal::raster::RasterBand> {
-        // TODO: move most of this to the GDAL crate. Use all-valid flag to avoid writing data?
-        unsafe {
-            let raster_band_ptr =
-                gdal_sys::GDALGetRasterBand(self.dataset.c_dataset(), self.rasterband_index as i32);
-            let mask_band_ptr = gdal_sys::GDALGetMaskBand(raster_band_ptr);
-            if mask_band_ptr.is_null() {
-                return Err(Error::Gdal {
-                    source: gdal::errors::GdalError::NullPointer {
-                        method_name: "GDALGetMaskBand",
-                        msg: "Could not open MaskBand".to_string(),
-                    },
-                });
-            }
-            let mask_band =
-                gdal::raster::RasterBand::from_c_rasterband(&self.dataset, mask_band_ptr);
-            Ok(mask_band)
-        }
-    }
-
     fn finish(self) -> Result<()> {
         if self.gdal_tiff_options.as_cog {
             geotiff_to_cog(
