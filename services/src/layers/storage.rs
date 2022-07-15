@@ -2,6 +2,7 @@ use std::cmp::Ordering;
 use std::collections::HashMap;
 use std::sync::Arc;
 
+use super::add_from_directory::UNSORTED_COLLECTION_ID;
 use super::external::{DataProvider, DataProviderDefinition};
 use super::layer::{
     AddLayer, AddLayerCollection, CollectionItem, Layer, LayerCollectionListOptions,
@@ -144,6 +145,19 @@ impl HashMapLayerDb {
                 name: "LayerDB".to_string(),
                 description: "Root collection for LayerDB".to_string(),
             },
+        );
+
+        backend.collections.insert(
+            LayerCollectionId(UNSORTED_COLLECTION_ID.to_string()),
+            AddLayerCollection {
+                name: "Unsorted".to_string(),
+                description: "Unsorted Layers".to_string(),
+            },
+        );
+
+        backend.collection_children.insert(
+            LayerCollectionId(INTERNAL_LAYER_DB_ROOT_COLLECTION_ID.to_string()),
+            vec![LayerCollectionId(UNSORTED_COLLECTION_ID.to_string())],
         );
 
         Self {

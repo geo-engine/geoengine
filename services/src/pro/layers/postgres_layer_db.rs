@@ -181,7 +181,7 @@ where
         collection: &LayerCollectionId,
     ) -> Result<()> {
         let layer_id = Uuid::from_str(&layer.0).map_err(|_| error::Error::IdStringMustBeUuid {
-            found: collection.0.clone(),
+            found: layer.0.clone(),
         })?;
 
         let collection_id =

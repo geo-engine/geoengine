@@ -1,7 +1,7 @@
 use crate::datasets::add_from_directory::add_providers_from_directory;
 use crate::error::{self, Result};
 use crate::layers::add_from_directory::{
-    add_layer_collections_from_directory, add_layers_from_directory,
+    add_layer_collections_from_directory, add_layers_from_directory, UNSORTED_COLLECTION_ID,
 };
 use crate::layers::storage::INTERNAL_LAYER_DB_ROOT_COLLECTION_ID;
 use crate::pro::datasets::{add_datasets_from_directory, PostgresDatasetDb, Role};
@@ -403,6 +403,17 @@ where
                             'Layers',
                             'All available Geo Engine layers'
                         );
+
+                        -- insert the unsorted layer collection
+                        INSERT INTO layer_collections (
+                            id,
+                            name,
+                            description
+                        ) VALUES (
+                            '{unsorted_layer_collection_id}',
+                            'Unsorted',
+                            'Unsorted Layers'
+                        );
     
 
                         CREATE TABLE layers (
@@ -425,6 +436,10 @@ where
                             PRIMARY KEY (parent, child)
                         );
 
+                        -- add unsorted layers to root layer collection
+                        INSERT INTO collection_children (parent, child) VALUES
+                        ('{root_layer_collection_id}', '{unsorted_layer_collection_id}');
+
                         -- TODO: should name be unique (per user)?
                         CREATE TABLE layer_providers (
                             id UUID PRIMARY KEY,
@@ -442,7 +457,8 @@ where
                     system_role_id = Role::system_role_id(),
                     user_role_id = Role::user_role_id(),
                     anonymous_role_id = Role::anonymous_role_id(),
-                    root_layer_collection_id = INTERNAL_LAYER_DB_ROOT_COLLECTION_ID))
+                    root_layer_collection_id = INTERNAL_LAYER_DB_ROOT_COLLECTION_ID,
+                    unsorted_layer_collection_id = UNSORTED_COLLECTION_ID))
                     .await?;
                     debug!("Updated user database to schema version {}", version + 1);
                 }
@@ -616,7 +632,7 @@ mod tests {
         AddLayer, AddLayerCollection, CollectionItem, LayerCollectionListOptions,
         LayerCollectionListing, LayerListing, ProviderLayerCollectionId, ProviderLayerId,
     };
-    use crate::layers::listing::LayerCollectionProvider;
+    use crate::layers::listing::{LayerCollectionId, LayerCollectionProvider};
     use crate::layers::storage::{
         LayerDb, LayerProviderDb, LayerProviderListing, LayerProviderListingOptions,
         INTERNAL_PROVIDER_ID,
@@ -1922,6 +1938,14 @@ mod tests {
                         },
                         name: "Collection1".to_string(),
                         description: "Collection 1".to_string(),
+                    }),
+                    CollectionItem::Collection(LayerCollectionListing {
+                        id: ProviderLayerCollectionId {
+                            provider_id: INTERNAL_PROVIDER_ID,
+                            collection_id: LayerCollectionId(UNSORTED_COLLECTION_ID.to_string()),
+                        },
+                        name: "Unsorted".to_string(),
+                        description: "Unsorted Layers".to_string(),
                     }),
                     CollectionItem::Layer(LayerListing {
                         id: ProviderLayerId {
