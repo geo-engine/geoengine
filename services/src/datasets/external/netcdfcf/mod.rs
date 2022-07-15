@@ -1010,15 +1010,10 @@ mod tests {
         test_data,
         util::gdal::hide_gdal_errors,
     };
-    use geoengine_operators::{
-        engine::TypedResultDescriptor,
-        source::{
-            FileNotFoundHandling, GdalDatasetGeoTransform, GdalDatasetParameters,
-            GdalLoadingInfoTemporalSlice,
-        },
+    use geoengine_operators::source::{
+        FileNotFoundHandling, GdalDatasetGeoTransform, GdalDatasetParameters,
+        GdalLoadingInfoTemporalSlice,
     };
-
-    use crate::projects::{RasterSymbology, Symbology};
 
     use super::*;
 
