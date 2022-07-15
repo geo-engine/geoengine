@@ -632,7 +632,7 @@ mod tests {
         AddLayer, AddLayerCollection, CollectionItem, LayerCollectionListOptions,
         LayerCollectionListing, LayerListing, ProviderLayerCollectionId, ProviderLayerId,
     };
-    use crate::layers::listing::LayerCollectionProvider;
+    use crate::layers::listing::{LayerCollectionId, LayerCollectionProvider};
     use crate::layers::storage::{
         LayerDb, LayerProviderDb, LayerProviderListing, LayerProviderListingOptions,
         INTERNAL_PROVIDER_ID,
@@ -1938,6 +1938,14 @@ mod tests {
                         },
                         name: "Collection1".to_string(),
                         description: "Collection 1".to_string(),
+                    }),
+                    CollectionItem::Collection(LayerCollectionListing {
+                        id: ProviderLayerCollectionId {
+                            provider_id: INTERNAL_PROVIDER_ID,
+                            collection_id: LayerCollectionId(UNSORTED_COLLECTION_ID.to_string()),
+                        },
+                        name: "Unsorted".to_string(),
+                        description: "Unsorted Layers".to_string(),
                     }),
                     CollectionItem::Layer(LayerListing {
                         id: ProviderLayerId {
