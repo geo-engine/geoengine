@@ -833,7 +833,6 @@ mod tests {
         );
     }
 
-    #[allow(clippy::eq_op)]
     #[tokio::test]
     async fn it_loads() {
         let mut server = Server::run();
@@ -869,7 +868,6 @@ mod tests {
                 spatial_reference: SpatialReference::new(SpatialReferenceAuthority::Epsg, 25832)
                     .into(),
                 measurement: Measurement::Unitless,
-                no_data_value: None,
                 time: None,
                 bbox: None,
             }

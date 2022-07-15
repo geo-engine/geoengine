@@ -441,7 +441,6 @@ impl NetCdfCfDataProvider {
             data_type: data_array.data_type()?,
             spatial_reference: data_array.spatial_reference()?,
             measurement: derive_measurement(data_array.unit().context(error::CannotRetrieveUnit)?),
-            no_data_value: data_array.no_data_value(),
 
             time: None,
             bbox: None,
@@ -452,7 +451,7 @@ impl NetCdfCfDataProvider {
             rasterband_channel: 0, // we calculate offsets below
             geo_transform,
             file_not_found_handling: FileNotFoundHandling::Error,
-            no_data_value: result_descriptor.no_data_value,
+            no_data_value: data_array.no_data_value(), // we could also leave this empty. The gdal source will try to get the correct one.
             properties_mapping: None,
             width: dimensions.lon,
             height: dimensions.lat,
@@ -1011,15 +1010,10 @@ mod tests {
         test_data,
         util::gdal::hide_gdal_errors,
     };
-    use geoengine_operators::{
-        engine::TypedResultDescriptor,
-        source::{
-            FileNotFoundHandling, GdalDatasetGeoTransform, GdalDatasetParameters,
-            GdalLoadingInfoTemporalSlice,
-        },
+    use geoengine_operators::source::{
+        FileNotFoundHandling, GdalDatasetGeoTransform, GdalDatasetParameters,
+        GdalLoadingInfoTemporalSlice,
     };
-
-    use crate::projects::{RasterSymbology, Symbology};
 
     use super::*;
 
@@ -1308,7 +1302,6 @@ mod tests {
                 spatial_reference: SpatialReference::new(SpatialReferenceAuthority::Epsg, 3035)
                     .into(),
                 measurement: Measurement::Unitless,
-                no_data_value: Some(-9999.),
                 time: None,
                 bbox: None,
             }
@@ -1421,7 +1414,6 @@ mod tests {
                 spatial_reference: SpatialReference::new(SpatialReferenceAuthority::Epsg, 3035)
                     .into(),
                 measurement: Measurement::Unitless,
-                no_data_value: Some(-9999.),
                 time: None,
                 bbox: None,
             }
@@ -1505,29 +1497,6 @@ mod tests {
         .unwrap();
 
         assert_eq!(listing.len(), 20);
-
-        let _result_descriptor: TypedResultDescriptor = RasterResultDescriptor {
-            data_type: RasterDataType::I16,
-            spatial_reference: SpatialReference::new(SpatialReferenceAuthority::Epsg, 3035).into(),
-            measurement: Measurement::Unitless,
-            no_data_value: None,
-            time: None,
-            bbox: None,
-        }
-        .into();
-
-        let _symbology = Some(Symbology::Raster(RasterSymbology {
-            opacity: 1.0,
-            colorizer: Colorizer::LinearGradient {
-                breakpoints: vec![
-                    (0.0.try_into().unwrap(), RgbaColor::new(68, 1, 84, 255)).into(),
-                    (50.0.try_into().unwrap(), RgbaColor::new(33, 145, 140, 255)).into(),
-                    (100.0.try_into().unwrap(), RgbaColor::new(253, 231, 37, 255)).into(),
-                ],
-                no_data_color: RgbaColor::new(0, 0, 0, 0),
-                default_color: RgbaColor::new(0, 0, 0, 0),
-            },
-        }));
 
         assert_eq!(
             listing[0],

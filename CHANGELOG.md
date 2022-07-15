@@ -9,6 +9,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Added traits and methods for updating / mapping the pixels of grid types. Also added a trait for creating grid types using a function for each pixels location.
+
+  - https://github.com/geo-engine/geoengine/pull/561
+
 - Added a layers API that allows browsing datasets, stored layers and external data in a uniform fashion
 
   - https://github.com/geo-engine/geoengine/pull/554
@@ -25,6 +29,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- No-data pixels in a Raster are now represented by a validity mask.
+
+  - https://github.com/geo-engine/geoengine/pull/561
+  - `MaskedGrid` replaces `Grid` in `GridOrEmpty` / `RasterTile`
+  - GeoTIFF files created by the engine contain the validity mask if not specified otherwise.
 - Refactored dataset ids and external provders
 
   - https://github.com/geo-engine/geoengine/pull/554

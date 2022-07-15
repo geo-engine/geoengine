@@ -43,3 +43,15 @@ vega_lite_4 = { version = "0.6", features = ["ndarray", "show_vega"]}
 [[bench]]
 name = "multi_point_collection"
 harness = false
+
+[[bench]]
+name = "grid_mapping"
+harness = false
+
+[[bench]]
+name = "grid_updates"
+harness = false
+
+[[bench]]
+name = "masked_grid_mapping"
+harness = false

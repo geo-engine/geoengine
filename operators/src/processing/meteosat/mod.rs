@@ -49,7 +49,7 @@ mod test_util {
         TimeStep,
     };
     use geoengine_datatypes::raster::{
-        EmptyGrid2D, Grid2D, GridOrEmpty, Pixel, RasterDataType, RasterProperties,
+        Grid2D, GridOrEmpty, GridOrEmpty2D, MaskedGrid2D, Pixel, RasterDataType, RasterProperties,
         RasterPropertiesEntry, RasterPropertiesEntryType, RasterTile2D, TileInformation,
     };
     use geoengine_datatypes::spatial_reference::{SpatialReference, SpatialReferenceAuthority};
@@ -150,28 +150,26 @@ mod test_util {
 
     pub(crate) fn create_mock_source<P: Pixel>(
         props: RasterProperties,
-        custom_data: Option<Vec<P>>,
+        custom_data: Option<GridOrEmpty2D<P>>,
         measurement: Option<Measurement>,
     ) -> MockRasterSource<P> {
-        let no_data_value = Some(P::zero());
-
         let raster = match custom_data {
-            Some(v) if v.is_empty() => {
-                GridOrEmpty::Empty(EmptyGrid2D::new([3, 2].into(), no_data_value.unwrap()))
-            }
-            Some(v) => GridOrEmpty::Grid(Grid2D::new([3, 2].into(), v, no_data_value).unwrap()),
+            Some(g) => g,
             None => GridOrEmpty::Grid(
-                Grid2D::<P>::new(
-                    [3, 2].into(),
-                    vec![
-                        P::from_(1),
-                        P::from_(2),
-                        P::from_(3),
-                        P::from_(4),
-                        P::from_(5),
-                        no_data_value.unwrap(),
-                    ],
-                    no_data_value,
+                MaskedGrid2D::new(
+                    Grid2D::<P>::new(
+                        [3, 2].into(),
+                        vec![
+                            P::from_(1),
+                            P::from_(2),
+                            P::from_(3),
+                            P::from_(4),
+                            P::from_(5),
+                            P::from_(0),
+                        ],
+                    )
+                    .unwrap(),
+                    Grid2D::new([3, 2].into(), vec![true, true, true, true, true, false]).unwrap(),
                 )
                 .unwrap(),
             ),
@@ -200,7 +198,6 @@ mod test_util {
                             unit: None,
                         })
                     }),
-                    no_data_value: no_data_value.map(AsPrimitive::as_),
                     time: None,
                     bbox: None,
                 },
@@ -268,7 +265,6 @@ mod test_util {
                     measurement: "raw".to_string(),
                     unit: None,
                 }),
-                no_data_value,
                 time: None,
                 bbox: None,
             },

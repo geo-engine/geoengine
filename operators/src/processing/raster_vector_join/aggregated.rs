@@ -4,7 +4,7 @@ use futures::{StreamExt, TryStreamExt};
 use geoengine_datatypes::collections::{
     FeatureCollection, FeatureCollectionInfos, FeatureCollectionModifications,
 };
-use geoengine_datatypes::raster::{GridIndexAccess, NoDataValue, Pixel, RasterDataType};
+use geoengine_datatypes::raster::{GridIndexAccess, Pixel, RasterDataType};
 use geoengine_datatypes::util::arrow::ArrowTyped;
 
 use crate::engine::{
@@ -114,15 +114,11 @@ where
                         // try to get the pixel if the coordinate is within the current tile
                         if let Ok(pixel) = raster.get_at_grid_index(grid_idx) {
                             // finally, attach value to feature
-                            let is_no_data = raster
-                                .no_data_value()
-                                .map_or(false, |no_data| pixel == no_data);
-
-                            if is_no_data {
-                                feature_aggregator.add_null(feature_index);
+                            if let Some(data) = pixel {
+                                feature_aggregator.add_value(feature_index, data, 1);
                             } else {
                                 // TODO: weigh by area?
-                                feature_aggregator.add_value(feature_index, pixel, 1);
+                                feature_aggregator.add_null(feature_index);
                             }
 
                             if feature_aggregator.is_satisfied() {
@@ -243,7 +239,7 @@ mod tests {
                 global_tile_position: [0, 0].into(),
                 tile_size_in_pixels: [3, 2].into(),
             },
-            Grid2D::new([3, 2].into(), vec![1, 2, 3, 4, 5, 6], None)
+            Grid2D::new([3, 2].into(), vec![1, 2, 3, 4, 5, 6])
                 .unwrap()
                 .into(),
         );
@@ -255,7 +251,6 @@ mod tests {
                     data_type: RasterDataType::U8,
                     spatial_reference: SpatialReference::epsg_4326().into(),
                     measurement: Measurement::Unitless,
-                    no_data_value: None,
                     time: None,
                     bbox: None,
                 },
@@ -317,7 +312,7 @@ mod tests {
                 global_tile_position: [0, 0].into(),
                 tile_size_in_pixels: [3, 2].into(),
             },
-            Grid2D::new([3, 2].into(), vec![6, 5, 4, 3, 2, 1], None)
+            Grid2D::new([3, 2].into(), vec![6, 5, 4, 3, 2, 1])
                 .unwrap()
                 .into(),
         );
@@ -328,7 +323,7 @@ mod tests {
                 global_tile_position: [0, 0].into(),
                 tile_size_in_pixels: [3, 2].into(),
             },
-            Grid2D::new([3, 2].into(), vec![1, 2, 3, 4, 5, 6], None)
+            Grid2D::new([3, 2].into(), vec![1, 2, 3, 4, 5, 6])
                 .unwrap()
                 .into(),
         );
@@ -340,7 +335,6 @@ mod tests {
                     data_type: RasterDataType::U8,
                     spatial_reference: SpatialReference::epsg_4326().into(),
                     measurement: Measurement::Unitless,
-                    no_data_value: None,
                     time: None,
                     bbox: None,
                 },
@@ -402,7 +396,7 @@ mod tests {
                 global_tile_position: [0, 0].into(),
                 tile_size_in_pixels: [3, 2].into(),
             },
-            Grid2D::new([3, 2].into(), vec![6, 5, 4, 3, 2, 1], None)
+            Grid2D::new([3, 2].into(), vec![6, 5, 4, 3, 2, 1])
                 .unwrap()
                 .into(),
         );
@@ -413,7 +407,7 @@ mod tests {
                 global_tile_position: [0, 1].into(),
                 tile_size_in_pixels: [3, 2].into(),
             },
-            Grid2D::new([3, 2].into(), vec![60, 50, 40, 30, 20, 10], None)
+            Grid2D::new([3, 2].into(), vec![60, 50, 40, 30, 20, 10])
                 .unwrap()
                 .into(),
         );
@@ -424,7 +418,7 @@ mod tests {
                 global_tile_position: [0, 0].into(),
                 tile_size_in_pixels: [3, 2].into(),
             },
-            Grid2D::new([3, 2].into(), vec![1, 2, 3, 4, 5, 6], None)
+            Grid2D::new([3, 2].into(), vec![1, 2, 3, 4, 5, 6])
                 .unwrap()
                 .into(),
         );
@@ -435,7 +429,7 @@ mod tests {
                 global_tile_position: [0, 1].into(),
                 tile_size_in_pixels: [3, 2].into(),
             },
-            Grid2D::new([3, 2].into(), vec![10, 20, 30, 40, 50, 60], None)
+            Grid2D::new([3, 2].into(), vec![10, 20, 30, 40, 50, 60])
                 .unwrap()
                 .into(),
         );
@@ -452,7 +446,6 @@ mod tests {
                     data_type: RasterDataType::U8,
                     spatial_reference: SpatialReference::epsg_4326().into(),
                     measurement: Measurement::Unitless,
-                    no_data_value: None,
                     time: None,
                     bbox: None,
                 },
@@ -514,7 +507,7 @@ mod tests {
                 global_tile_position: [0, 0].into(),
                 tile_size_in_pixels: [3, 2].into(),
             },
-            Grid2D::new([3, 2].into(), vec![6, 5, 4, 3, 2, 1], None)
+            Grid2D::new([3, 2].into(), vec![6, 5, 4, 3, 2, 1])
                 .unwrap()
                 .into(),
         );
@@ -525,7 +518,7 @@ mod tests {
                 global_tile_position: [0, 1].into(),
                 tile_size_in_pixels: [3, 2].into(),
             },
-            Grid2D::new([3, 2].into(), vec![60, 50, 40, 30, 20, 10], None)
+            Grid2D::new([3, 2].into(), vec![60, 50, 40, 30, 20, 10])
                 .unwrap()
                 .into(),
         );
@@ -536,7 +529,7 @@ mod tests {
                 global_tile_position: [0, 0].into(),
                 tile_size_in_pixels: [3, 2].into(),
             },
-            Grid2D::new([3, 2].into(), vec![1, 2, 3, 4, 5, 6], None)
+            Grid2D::new([3, 2].into(), vec![1, 2, 3, 4, 5, 6])
                 .unwrap()
                 .into(),
         );
@@ -547,7 +540,7 @@ mod tests {
                 global_tile_position: [0, 1].into(),
                 tile_size_in_pixels: [3, 2].into(),
             },
-            Grid2D::new([3, 2].into(), vec![10, 20, 30, 40, 50, 60], None)
+            Grid2D::new([3, 2].into(), vec![10, 20, 30, 40, 50, 60])
                 .unwrap()
                 .into(),
         );
@@ -564,7 +557,6 @@ mod tests {
                     data_type: RasterDataType::U8,
                     spatial_reference: SpatialReference::epsg_4326().into(),
                     measurement: Measurement::Unitless,
-                    no_data_value: None,
                     time: None,
                     bbox: None,
                 },

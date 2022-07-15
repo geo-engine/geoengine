@@ -171,7 +171,7 @@ impl SentinelS2L2aCogsDataProvider {
                                     layer_id: layer_id.clone(),
                                 }),
                             )
-                            .expect("gdal source is a valid operator"),
+                            .expect("Gdal source is a valid operator."),
                         },
                         symbology: Some(Symbology::Raster(RasterSymbology {
                             opacity: 1.0,
@@ -563,7 +563,6 @@ impl MetaData<GdalLoadingInfo, RasterResultDescriptor, RasterQueryRectangle>
             )
             .into(),
             measurement: Measurement::Unitless,
-            no_data_value: self.band.no_data_value,
             time: None,
             bbox: None,
         })

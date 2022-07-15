@@ -1,7 +1,7 @@
 use std::io::Cursor;
 
 use crate::raster::{
-    Grid2D, GridIndexAccess, GridOrEmpty2D, NoDataValue, Pixel, RasterTile2D, TypedRasterTile2D,
+    Grid2D, GridIndexAccess, GridOrEmpty2D, MaskedGrid2D, Pixel, RasterTile2D, TypedRasterTile2D,
 };
 use crate::util::Result;
 use crate::{error, raster::EmptyGrid2D};
@@ -39,13 +39,26 @@ where
         let scale_x = (raster_x_size as f64) / f64::from(width);
         let scale_y = (raster_y_size as f64) / f64::from(height);
 
-        let image_buffer = if self.no_data_value().is_some() {
-            let no_data_fn = move |p: P| self.is_no_data(p);
-            create_rgba_image(self, width, height, colorizer, scale_x, scale_y, no_data_fn)
-        } else {
-            let no_data_fn = move |_| false;
-            create_rgba_image(self, width, height, colorizer, scale_x, scale_y, no_data_fn)
-        };
+        let image_buffer =
+            create_rgba_image_from_grid(self, width, height, colorizer, scale_x, scale_y);
+
+        image_buffer_to_png_bytes(image_buffer)
+    }
+}
+
+impl<P> ToPng for MaskedGrid2D<P>
+where
+    P: Pixel + RgbaTransmutable,
+{
+    fn to_png(&self, width: u32, height: u32, colorizer: &Colorizer) -> Result<Vec<u8>> {
+        // TODO: use PNG color palette once it is available
+
+        let [.., raster_y_size, raster_x_size] = self.shape().shape_array;
+        let scale_x = (raster_x_size as f64) / f64::from(width);
+        let scale_y = (raster_y_size as f64) / f64::from(height);
+
+        let image_buffer =
+            create_rgba_image_from_masked_grid(self, width, height, colorizer, scale_x, scale_y);
 
         image_buffer_to_png_bytes(image_buffer)
     }
@@ -78,24 +91,40 @@ where
     }
 }
 
-fn create_rgba_image<P: Pixel + RgbaTransmutable, N: Fn(P) -> bool>(
+fn create_rgba_image_from_grid<P: Pixel + RgbaTransmutable>(
     raster_grid: &Grid2D<P>,
     width: u32,
     height: u32,
     colorizer: &Colorizer,
     scale_x: f64,
     scale_y: f64,
-    is_no_data: N,
 ) -> RgbaImage {
     let color_mapper = colorizer.create_color_mapper();
 
     RgbaImage::from_fn(width, height, |x, y| {
         let (grid_pixel_x, grid_pixel_y) = image_pixel_to_raster_pixel(x, y, scale_x, scale_y);
         if let Ok(pixel_value) = raster_grid.get_at_grid_index([grid_pixel_y, grid_pixel_x]) {
-            if is_no_data(pixel_value) {
-                return colorizer.no_data_color().into();
-            }
+            color_mapper.call(pixel_value)
+        } else {
+            colorizer.no_data_color()
+        }
+        .into()
+    })
+}
 
+fn create_rgba_image_from_masked_grid<P: Pixel + RgbaTransmutable>(
+    raster_grid: &MaskedGrid2D<P>,
+    width: u32,
+    height: u32,
+    colorizer: &Colorizer,
+    scale_x: f64,
+    scale_y: f64,
+) -> RgbaImage {
+    let color_mapper = colorizer.create_color_mapper();
+
+    RgbaImage::from_fn(width, height, |x, y| {
+        let (grid_pixel_x, grid_pixel_y) = image_pixel_to_raster_pixel(x, y, scale_x, scale_y);
+        if let Ok(Some(pixel_value)) = raster_grid.get_at_grid_index([grid_pixel_y, grid_pixel_x]) {
             color_mapper.call(pixel_value)
         } else {
             colorizer.no_data_color()
@@ -158,7 +187,7 @@ mod tests {
 
     #[test]
     fn linear_gradient() {
-        let mut raster = Grid2D::new([2, 2].into(), vec![0; 4], None).unwrap();
+        let mut raster = Grid2D::new([2, 2].into(), vec![0; 4]).unwrap();
 
         raster.set_at_grid_index([0, 0], 255).unwrap();
         raster.set_at_grid_index([1, 0], 100).unwrap();
@@ -187,7 +216,7 @@ mod tests {
 
     #[test]
     fn logarithmic_gradient() {
-        let mut raster = Grid2D::new([2, 2].into(), vec![1; 4], None).unwrap();
+        let mut raster = Grid2D::new([2, 2].into(), vec![1; 4]).unwrap();
 
         raster.set_at_grid_index([0, 0], 10).unwrap();
         raster.set_at_grid_index([1, 0], 5).unwrap();
@@ -216,7 +245,7 @@ mod tests {
 
     #[test]
     fn palette() {
-        let mut raster = Grid2D::new([2, 2].into(), vec![0; 4], None).unwrap();
+        let mut raster = Grid2D::new([2, 2].into(), vec![0; 4]).unwrap();
 
         raster.set_at_grid_index([0, 0], 2).unwrap();
         raster.set_at_grid_index([1, 0], 1).unwrap();
@@ -247,7 +276,7 @@ mod tests {
 
     #[test]
     fn rgba() {
-        let mut raster = Grid2D::new([2, 2].into(), vec![0x0000_00FF_u32; 4], None).unwrap();
+        let mut raster = Grid2D::new([2, 2].into(), vec![0x0000_00FF_u32; 4]).unwrap();
 
         raster.set_at_grid_index([0, 0], 0xFF00_00FF_u32).unwrap();
         raster.set_at_grid_index([1, 0], 0x00FF_00FF_u32).unwrap();
@@ -266,7 +295,11 @@ mod tests {
 
     #[test]
     fn no_data() {
-        let raster = Grid2D::new([2, 2].into(), vec![0, 100, 200, 255], Some(0)).unwrap();
+        let raster = MaskedGrid2D::new(
+            Grid2D::new([2, 2].into(), vec![0, 100, 200, 255]).unwrap(),
+            Grid2D::new([2, 2].into(), vec![false, true, true, true]).unwrap(),
+        )
+        .unwrap();
 
         let colorizer = Colorizer::linear_gradient(
             vec![
@@ -282,7 +315,7 @@ mod tests {
 
         let image_bytes = raster.to_png(100, 100, &colorizer).unwrap();
 
-        // crate::util::test::save_test_bytes(&image_bytes, "no_data.png");
+        // crate::util::test::save_test_bytes(&image_bytes, "no_data_2.png");
 
         assert_eq!(
             include_bytes!("../../../../test_data/colorizer/no_data.png") as &[u8],
@@ -292,7 +325,7 @@ mod tests {
 
     #[test]
     fn no_data_tile() {
-        let raster = EmptyGrid2D::new([2, 2].into(), 0);
+        let raster = EmptyGrid2D::<u8>::new([2, 2].into());
 
         let colorizer = Colorizer::linear_gradient(
             vec![

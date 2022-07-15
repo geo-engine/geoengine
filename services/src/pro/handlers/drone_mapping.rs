@@ -309,9 +309,8 @@ async fn dataset_definition_from_geotiff(
                     data_type: RasterDataType::U8,
                     spatial_reference: spatial_reference.into(),
                     measurement: Measurement::Unitless,
-                    no_data_value: None, // TODO
-                    time: None,          // TODO: determine time
-                    bbox: None,          // TODO: determine bbox
+                    time: None, // TODO: determine time
+                    bbox: None, // TODO: determine bbox
                 },
             }),
         })
@@ -510,7 +509,6 @@ mod tests {
                 spatial_reference: SpatialReference::new(SpatialReferenceAuthority::Epsg, 32630)
                     .into(),
                 measurement: Measurement::Unitless,
-                no_data_value: None,
                 time: None,
                 bbox: None,
             }

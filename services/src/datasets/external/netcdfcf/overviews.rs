@@ -428,7 +428,6 @@ mod tests {
                     data_type: RasterDataType::I16,
                     spatial_reference: SpatialReference::epsg_4326().into(),
                     measurement: Measurement::Unitless,
-                    no_data_value: Some(-9999.0),
                     time: None,
                     bbox: None,
                 },

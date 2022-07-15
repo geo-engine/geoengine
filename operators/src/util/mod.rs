@@ -10,6 +10,7 @@ pub mod statistics;
 pub mod stream_zip;
 pub mod string_token;
 pub mod sunpos;
+mod temporary_gdal_thread_local_config_options;
 
 use crate::error::Error;
 use std::collections::HashSet;
@@ -18,6 +19,7 @@ use std::sync::{Mutex, MutexGuard};
 
 pub use self::async_util::{spawn, spawn_blocking, spawn_blocking_with_thread_pool};
 pub use self::rayon::create_rayon_thread_pool;
+pub(crate) use self::temporary_gdal_thread_local_config_options::TemporaryGdalThreadLocalConfigOptions;
 
 pub type Result<T, E = Error> = std::result::Result<T, E>;
 
