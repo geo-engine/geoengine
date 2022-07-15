@@ -1240,28 +1240,6 @@ mod tests {
 
         assert_eq!(listing.len(), 20);
 
-        let _result_descriptor: TypedResultDescriptor = RasterResultDescriptor {
-            data_type: RasterDataType::I16,
-            spatial_reference: SpatialReference::new(SpatialReferenceAuthority::Epsg, 3035).into(),
-            measurement: Measurement::Unitless,
-            time: None,
-            bbox: None,
-        }
-        .into();
-
-        let _symbology = Some(Symbology::Raster(RasterSymbology {
-            opacity: 1.0,
-            colorizer: Colorizer::LinearGradient {
-                breakpoints: vec![
-                    (0.0.try_into().unwrap(), RgbaColor::new(68, 1, 84, 255)).into(),
-                    (50.0.try_into().unwrap(), RgbaColor::new(33, 145, 140, 255)).into(),
-                    (100.0.try_into().unwrap(), RgbaColor::new(253, 231, 37, 255)).into(),
-                ],
-                no_data_color: RgbaColor::new(0, 0, 0, 0),
-                default_color: RgbaColor::new(0, 0, 0, 0),
-            },
-        }));
-
         assert_eq!(
             listing[0],
             LayerListing {
@@ -1524,28 +1502,6 @@ mod tests {
         .unwrap();
 
         assert_eq!(listing.len(), 20);
-
-        let _result_descriptor: TypedResultDescriptor = RasterResultDescriptor {
-            data_type: RasterDataType::I16,
-            spatial_reference: SpatialReference::new(SpatialReferenceAuthority::Epsg, 3035).into(),
-            measurement: Measurement::Unitless,
-            time: None,
-            bbox: None,
-        }
-        .into();
-
-        let _symbology = Some(Symbology::Raster(RasterSymbology {
-            opacity: 1.0,
-            colorizer: Colorizer::LinearGradient {
-                breakpoints: vec![
-                    (0.0.try_into().unwrap(), RgbaColor::new(68, 1, 84, 255)).into(),
-                    (50.0.try_into().unwrap(), RgbaColor::new(33, 145, 140, 255)).into(),
-                    (100.0.try_into().unwrap(), RgbaColor::new(253, 231, 37, 255)).into(),
-                ],
-                no_data_color: RgbaColor::new(0, 0, 0, 0),
-                default_color: RgbaColor::new(0, 0, 0, 0),
-            },
-        }));
 
         assert_eq!(
             listing[0],
