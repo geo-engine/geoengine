@@ -123,7 +123,6 @@ pub fn get_mask_flags(dataset: &Dataset, raster_band_index: i32) -> Result<GdalM
         });
     }
     let band_mask_flags = unsafe { gdal_sys::GDALGetMaskFlags(raster_band_ptr) };
-    // TODO: if 0 that should be an error...
 
     Ok(GdalMaskFlags(band_mask_flags))
 }
