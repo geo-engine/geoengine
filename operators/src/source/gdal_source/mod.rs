@@ -109,10 +109,6 @@ pub enum TimeReference {
     End,
 }
 
-const fn default_true() -> bool {
-    true
-}
-
 /// Parameters for loading data using Gdal
 #[derive(PartialEq, Serialize, Deserialize, Debug, Clone)]
 #[serde(rename_all = "camelCase")]
@@ -133,7 +129,7 @@ pub struct GdalDatasetParameters {
     // `vec!["AWS_REGION".to_owned(), "eu-central-1".to_owned()]` and unset afterwards
     // TODO: validate the config options: only allow specific keys and specific values
     pub gdal_config_options: Option<Vec<(String, String)>>,
-    #[serde(default = "default_true")]
+    #[serde(default)]
     pub allow_alphaband_as_mask: bool,
 }
 
