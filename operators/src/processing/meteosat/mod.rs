@@ -256,6 +256,7 @@ mod test_util {
                 ]),
                 gdal_open_options: None,
                 gdal_config_options: None,
+                allow_alphaband_as_mask: true,
             },
             result_descriptor: RasterResultDescriptor {
                 data_type: RasterDataType::I16,

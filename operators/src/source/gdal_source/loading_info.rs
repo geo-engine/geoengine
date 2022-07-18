@@ -320,7 +320,8 @@ impl Iterator for DynamicGdalLoadingInfoPartIterator {
                         .map(|loading_info_part_params| GdalLoadingInfoTemporalSlice {
                             time: time_interval,
                             params: Some(loading_info_part_params),
-                        });
+                        })
+                        .map_err(Into::into);
 
                     Some(loading_info_part)
                 } else {
@@ -500,6 +501,7 @@ mod tests {
                 properties_mapping: None,
                 gdal_open_options: None,
                 gdal_config_options: None,
+                allow_alphaband_as_mask: true,
             },
             time_placeholders: hashmap! {
                 "%TIME%".to_string() => GdalSourceTimePlaceholder {
@@ -780,6 +782,7 @@ mod tests {
                         properties_mapping: None,
                         gdal_open_options: None,
                         gdal_config_options: None,
+                        allow_alphaband_as_mask: true,
                     }),
                 },
                 GdalLoadingInfoTemporalSlice {
@@ -795,6 +798,7 @@ mod tests {
                         properties_mapping: None,
                         gdal_open_options: None,
                         gdal_config_options: None,
+                        allow_alphaband_as_mask: true,
                     }),
                 },
                 GdalLoadingInfoTemporalSlice {
@@ -810,6 +814,7 @@ mod tests {
                         properties_mapping: None,
                         gdal_open_options: None,
                         gdal_config_options: None,
+                        allow_alphaband_as_mask: true,
                     }),
                 },
             ],
@@ -884,6 +889,7 @@ mod tests {
                 properties_mapping: None,
                 gdal_open_options: None,
                 gdal_config_options: None,
+                allow_alphaband_as_mask: true,
             },
             start: time_start,
             end: time_end,
@@ -947,6 +953,7 @@ mod tests {
                 properties_mapping: None,
                 gdal_open_options: None,
                 gdal_config_options: None,
+                allow_alphaband_as_mask: true,
             },
             start: time_start,
             end: time_end,
@@ -1010,6 +1017,7 @@ mod tests {
                 properties_mapping: None,
                 gdal_open_options: None,
                 gdal_config_options: None,
+                allow_alphaband_as_mask: true,
             },
             start: time_start,
             end: time_end,
@@ -1097,6 +1105,7 @@ mod tests {
                 properties_mapping: None,
                 gdal_open_options: None,
                 gdal_config_options: None,
+                allow_alphaband_as_mask: true,
             },
             step: time_step,
             dataset_time_start: time_start,
@@ -1177,6 +1186,7 @@ mod tests {
                     properties_mapping: None,
                     gdal_open_options: None,
                     gdal_config_options: None,
+                    allow_alphaband_as_mask: true,
                 },
                 step: time_step,
                 dataset_time_start: TimeInstance::from(DateTime::new_utc(2010, 1, 1, 0, 0, 0)),

@@ -910,6 +910,7 @@ mod tests {
                         properties_mapping: None,
                         gdal_open_options: Some(vec!["UserPwd=geoengine:pwd".to_owned(), "HttpAuth=BASIC".to_owned()]),
                         gdal_config_options: None,
+                        allow_alphaband_as_mask: true,
                     })
                 }
             );

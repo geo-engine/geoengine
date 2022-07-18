@@ -296,6 +296,8 @@ pub enum Error {
     TimeShift {
         source: crate::processing::TimeShiftError,
     },
+
+    AlphaBandAsMaskNotAllowed,
 }
 
 impl From<crate::adapters::SparseTilesFillAdapterError> for Error {

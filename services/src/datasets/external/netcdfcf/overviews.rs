@@ -446,6 +446,7 @@ mod tests {
                     properties_mapping: None,
                     gdal_open_options: None,
                     gdal_config_options: None,
+                    allow_alphaband_as_mask: true,
                 },
                 start: DateTime::new_utc(2020, 1, 1, 0, 0, 0).into(),
                 end: DateTime::new_utc(2021, 1, 1, 0, 0, 0).into(),

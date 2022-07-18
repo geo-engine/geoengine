@@ -1,3 +1,4 @@
+use crate::util::gdal::{create_mask_band, open_mask_band};
 use crate::util::{Result, TemporaryGdalThreadLocalConfigOptions};
 use crate::{
     engine::{QueryContext, RasterQueryProcessor},
@@ -210,7 +211,7 @@ impl<P: Pixel + GdalType> GdalDatasetWriter<P> {
         if let Some(no_data) = gdal_tiff_metadata.no_data_value {
             band.set_no_data_value(no_data)?;
         } else {
-            Self::create_mask_band(&dataset, rasterband_index)?;
+            create_mask_band(&dataset, rasterband_index)?;
         }
 
         drop(thread_local_configs); // ensure that we drop here
@@ -326,51 +327,10 @@ impl<P: Pixel + GdalType> GdalDatasetWriter<P> {
                 .map_elements(|is_valid| if is_valid { 255_u8 } else { 0 }); // TODO: investigate if we can transmute the vec of bool to u8.
         let mask_buffer = Buffer::new(window_size, mask_grid_gdal_values.data);
 
-        let mut mask_band = self.open_mask_band()?;
+        let mut mask_band = open_mask_band(&self.dataset, self.rasterband_index as i32)?;
         mask_band.write(window, window_size, &mask_buffer)?;
 
         Ok(())
-    }
-
-    fn create_mask_band(dataset: &Dataset, rasterband_index: isize) -> Result<()> {
-        // TODO: move most of this to the GDAL crate. Use all-valid flag to avoid writing data?
-
-        let n_flags = 0x02; // 2 is the flag for shared mask betweeen all bands. It is the only valid flag here!
-        unsafe {
-            let raster_band_ptr =
-                gdal_sys::GDALGetRasterBand(dataset.c_dataset(), rasterband_index as i32);
-            let res = gdal_sys::GDALCreateMaskBand(raster_band_ptr, n_flags);
-            if res != 0 {
-                return Err(Error::Gdal {
-                    source: gdal::errors::GdalError::CplError {
-                        class: res,
-                        number: 0,
-                        msg: "Could not create MaskBand".to_string(),
-                    },
-                });
-            }
-            Ok(())
-        }
-    }
-
-    fn open_mask_band(&self) -> Result<gdal::raster::RasterBand> {
-        // TODO: move most of this to the GDAL crate. Use all-valid flag to avoid writing data?
-        unsafe {
-            let raster_band_ptr =
-                gdal_sys::GDALGetRasterBand(self.dataset.c_dataset(), self.rasterband_index as i32);
-            let mask_band_ptr = gdal_sys::GDALGetMaskBand(raster_band_ptr);
-            if mask_band_ptr.is_null() {
-                return Err(Error::Gdal {
-                    source: gdal::errors::GdalError::NullPointer {
-                        method_name: "GDALGetMaskBand",
-                        msg: "Could not open MaskBand".to_string(),
-                    },
-                });
-            }
-            let mask_band =
-                gdal::raster::RasterBand::from_c_rasterband(&self.dataset, mask_band_ptr);
-            Ok(mask_band)
-        }
     }
 
     fn finish(self) -> Result<()> {

@@ -436,6 +436,7 @@ async fn create_dataset<C: Context>(
                 properties_mapping: None, // TODO: add properties
                 gdal_open_options: None,
                 gdal_config_options: None,
+                allow_alphaband_as_mask: true,
             },
             result_descriptor: result_descriptor.clone(),
         }),
