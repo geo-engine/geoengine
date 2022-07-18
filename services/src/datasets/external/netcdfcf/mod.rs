@@ -457,6 +457,7 @@ impl NetCdfCfDataProvider {
             height: dimensions.lat,
             gdal_open_options: None,
             gdal_config_options: None,
+            allow_alphaband_as_mask: true,
         };
 
         Ok(match time_coverage {
@@ -1357,7 +1358,8 @@ mod tests {
                     no_data_value: Some(-9999.),
                     properties_mapping: None,
                     gdal_open_options: None,
-                    gdal_config_options: None
+                    gdal_config_options: None,
+                    allow_alphaband_as_mask: true,
                 })
             }
         );
@@ -1464,7 +1466,8 @@ mod tests {
                     no_data_value: Some(-9999.),
                     properties_mapping: None,
                     gdal_open_options: None,
-                    gdal_config_options: None
+                    gdal_config_options: None,
+                    allow_alphaband_as_mask: true,
                 })
             }
         );

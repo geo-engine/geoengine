@@ -27,7 +27,6 @@ use geoengine_datatypes::raster::{
     MaskedGrid, NoDataValueGrid, Pixel, RasterDataType, RasterProperties, RasterPropertiesEntry,
     RasterPropertiesEntryType, RasterPropertiesKey, RasterTile2D, TilingStrategy,
 };
-
 use geoengine_datatypes::util::test::TestDefault;
 use geoengine_datatypes::{dataset::DataId, raster::TileInformation};
 use geoengine_datatypes::{
@@ -36,6 +35,10 @@ use geoengine_datatypes::{
         Grid, GridBlit, GridBoundingBox2D, GridBounds, GridIdx, GridSize, GridSpaceToLinearSpace,
         TilingSpecification,
     },
+};
+pub use loading_info::{
+    GdalLoadingInfo, GdalLoadingInfoTemporalSlice, GdalLoadingInfoTemporalSliceIterator,
+    GdalMetaDataList, GdalMetaDataRegular, GdalMetaDataStatic, GdalMetadataNetCdfCf,
 };
 use log::debug;
 use num::FromPrimitive;
@@ -46,12 +49,6 @@ use std::convert::{TryFrom, TryInto};
 use std::marker::PhantomData;
 use std::path::PathBuf;
 use std::time::Instant;
-
-pub use loading_info::{
-    GdalLoadingInfo, GdalLoadingInfoTemporalSlice, GdalLoadingInfoTemporalSliceIterator,
-    GdalMetaDataList, GdalMetaDataRegular, GdalMetaDataStatic, GdalMetadataNetCdfCf,
-};
-
 mod loading_info;
 
 /// Parameters for the GDAL Source Operator
@@ -112,6 +109,10 @@ pub enum TimeReference {
     End,
 }
 
+const fn default_true() -> bool {
+    true
+}
+
 /// Parameters for loading data using Gdal
 #[derive(PartialEq, Serialize, Deserialize, Debug, Clone)]
 #[serde(rename_all = "camelCase")]
@@ -132,6 +133,8 @@ pub struct GdalDatasetParameters {
     // `vec!["AWS_REGION".to_owned(), "eu-central-1".to_owned()]` and unset afterwards
     // TODO: validate the config options: only allow specific keys and specific values
     pub gdal_config_options: Option<Vec<(String, String)>>,
+    #[serde(default = "default_true")]
+    pub allow_alphaband_as_mask: bool,
 }
 
 /// A user friendly representation of Gdal's geo transform. In contrast to [`GeoTransform`] this
@@ -635,6 +638,13 @@ where
         return Ok(grid_or_empty);
     }
 
+    if dataset_mask_flags.is_alpha() {
+        debug!("raster uses alpha band to mask pixels.");
+        if !dataset_params.allow_alphaband_as_mask {
+            return Err(Error::AlphaBandAsMaskNotAllowed);
+        }
+    }
+
     debug!("use mask based no-data handling.");
 
     let mask_band = open_mask_band(dataset, raster_band_index as i32)?;
@@ -723,6 +733,8 @@ fn read_raster_tile_with_properties<T: Pixel + gdal::raster::GdalType + FromPrim
     tile_info: TileInformation,
     tile_time: TimeInterval,
 ) -> Result<RasterTile2D<T>> {
+    // TODO: open the RasterBand here and pass it down to the read methods once access to the mask band and mask flags are merged into the gdal crate.
+
     let mut properties = RasterProperties::default();
 
     if let Some(properties_mapping) = dataset_params.properties_mapping.as_ref() {
@@ -931,6 +943,7 @@ mod tests {
                 ]),
                 gdal_open_options: None,
                 gdal_config_options: None,
+                allow_alphaband_as_mask: true,
             },
             TileInformation::with_partition_and_shape(output_bounds, output_shape),
             TimeInterval::default(),
@@ -1113,6 +1126,7 @@ mod tests {
             properties_mapping: None,
             gdal_open_options: None,
             gdal_config_options: None,
+            allow_alphaband_as_mask: true,
         };
         let replaced = params
             .replace_time_placeholders(
@@ -1455,6 +1469,7 @@ mod tests {
             ]),
             gdal_open_options: None,
             gdal_config_options: None,
+            allow_alphaband_as_mask: true,
         };
 
         let dataset_parameters_json = serde_json::to_value(&dataset_parameters).unwrap();
@@ -1500,7 +1515,8 @@ mod tests {
                     }
                 ],
                 "gdalOpenOptions": null,
-                "gdalConfigOptions": null
+                "gdalConfigOptions": null,
+                "allowAlphabandAsMask": true,
             })
         );
 
