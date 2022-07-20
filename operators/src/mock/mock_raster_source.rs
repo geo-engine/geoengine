@@ -1,12 +1,12 @@
 use crate::adapters::SparseTilesFillAdapter;
 use crate::engine::{
-    InitializedRasterOperator, OperatorDatasets, RasterOperator, RasterQueryProcessor,
+    InitializedRasterOperator, OperatorData, RasterOperator, RasterQueryProcessor,
     RasterResultDescriptor, SourceOperator, TypedRasterQueryProcessor,
 };
 use crate::util::Result;
 use async_trait::async_trait;
 use futures::{stream, stream::StreamExt};
-use geoengine_datatypes::dataset::DatasetId;
+use geoengine_datatypes::dataset::DataId;
 use geoengine_datatypes::primitives::{RasterQueryRectangle, SpatialPartitioned};
 use geoengine_datatypes::raster::{
     GridShape2D, GridShapeAccess, GridSize, Pixel, RasterTile2D, TilingSpecification,
@@ -35,7 +35,6 @@ where
     T: Pixel,
 {
     pub data: Vec<RasterTile2D<T>>,
-    pub no_data_value: Option<T>,
     pub tiling_specification: TilingSpecification,
 }
 
@@ -45,19 +44,16 @@ where
 {
     fn new_unchecked(
         data: Vec<RasterTile2D<T>>,
-        no_data_value: Option<T>,
         tiling_specification: TilingSpecification,
     ) -> Self {
         Self {
             data,
-            no_data_value,
             tiling_specification,
         }
     }
 
     fn _new(
         data: Vec<RasterTile2D<T>>,
-        no_data_value: Option<T>,
         tiling_specification: TilingSpecification,
     ) -> Result<Self, MockRasterSourceError> {
         if let Some(tile_shape) =
@@ -73,7 +69,6 @@ where
 
         Ok(Self {
             data,
-            no_data_value,
             tiling_specification,
         })
     }
@@ -141,7 +136,6 @@ where
             tiling_strategy.tile_grid_box(query.spatial_partition()),
             tiling_strategy.geo_transform,
             tiling_strategy.tile_size_in_pixels,
-            self.no_data_value.unwrap_or_else(T::zero),
         )
         .boxed())
     }
@@ -156,8 +150,8 @@ pub struct MockRasterSourceParams<T: Pixel> {
 
 pub type MockRasterSource<T> = SourceOperator<MockRasterSourceParams<T>>;
 
-impl<T: Pixel> OperatorDatasets for MockRasterSource<T> {
-    fn datasets_collect(&self, _datasets: &mut Vec<DatasetId>) {}
+impl<T: Pixel> OperatorData for MockRasterSource<T> {
+    fn data_ids_collect(&self, _data_ids: &mut Vec<DataId>) {}
 }
 
 /// Implement a mock raster source with typetag for a specific generic type
@@ -254,12 +248,8 @@ where
 {
     fn query_processor(&self) -> Result<TypedRasterQueryProcessor> {
         let processor = TypedRasterQueryProcessor::from(
-            MockRasterSourceProcessor::new_unchecked(
-                self.data.clone(),
-                self.result_descriptor.no_data_value.map(|v| T::from_(v)),
-                self.tiling_specification,
-            )
-            .boxed(),
+            MockRasterSourceProcessor::new_unchecked(self.data.clone(), self.tiling_specification)
+                .boxed(),
         );
 
         Ok(processor)
@@ -275,19 +265,18 @@ mod tests {
     use super::*;
     use crate::engine::MockExecutionContext;
     use geoengine_datatypes::primitives::Measurement;
-    use geoengine_datatypes::raster::RasterDataType;
+    use geoengine_datatypes::raster::{MaskedGrid, RasterDataType};
     use geoengine_datatypes::util::test::TestDefault;
     use geoengine_datatypes::{
         primitives::TimeInterval,
         raster::{Grid2D, TileInformation},
         spatial_reference::SpatialReference,
     };
-    use num_traits::AsPrimitive;
 
     #[tokio::test]
     async fn serde() {
-        let no_data_value = None;
-        let raster = Grid2D::new([3, 2].into(), vec![1_u8, 2, 3, 4, 5, 6], no_data_value).unwrap();
+        let raster =
+            MaskedGrid::from(Grid2D::new([3, 2].into(), vec![1_u8, 2, 3, 4, 5, 6]).unwrap());
 
         let raster_tile = RasterTile2D::new_with_tile_info(
             TimeInterval::default(),
@@ -306,7 +295,6 @@ mod tests {
                     data_type: RasterDataType::U8,
                     spatial_reference: SpatialReference::epsg_4326().into(),
                     measurement: Measurement::Unitless,
-                    no_data_value: no_data_value.map(AsPrimitive::as_),
                     time: None,
                     bbox: None,
                 },
@@ -335,11 +323,18 @@ mod tests {
                     },
                     "gridArray": {
                         "type": "grid",
-                        "shape": {
-                            "shapeArray": [3, 2]
+                        "innerGrid" : {
+                            "shape": {
+                                "shapeArray": [3, 2]
+                            },
+                            "data": [1, 2, 3, 4, 5, 6],
                         },
-                        "data": [1, 2, 3, 4, 5, 6],
-                        "noDataValue": null
+                        "validityMask": {
+                            "shape": {
+                                "shapeArray": [3, 2]
+                            },
+                            "data": [true, true, true, true, true, true],
+                        }
                     },
                     "properties":{
                         "scale":null,
@@ -354,7 +349,6 @@ mod tests {
                     "measurement": {
                         "type": "unitless"
                     },
-                    "noDataValue": null,
                     "time": null,
                     "bbox": null
                 }

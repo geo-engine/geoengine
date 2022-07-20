@@ -2,16 +2,23 @@ pub use self::error::NetCdfCf4DProviderError;
 use self::gdalmd::MdGroup;
 pub use self::overviews::OverviewGeneration;
 use self::overviews::{create_overviews, METADATA_FILE_NAME};
-use crate::datasets::listing::DatasetListOptions;
-use crate::datasets::listing::{ExternalDatasetProvider, ProvenanceOutput};
-use crate::projects::{RasterSymbology, Symbology};
-use crate::{
-    datasets::{listing::DatasetListing, storage::ExternalDatasetProviderDefinition},
-    util::user_input::Validated,
-};
+use crate::datasets::listing::ProvenanceOutput;
+use crate::layers::external::DataProvider;
+use crate::layers::external::DataProviderDefinition;
+use crate::layers::layer::CollectionItem;
+use crate::layers::layer::Layer;
+use crate::layers::layer::LayerCollectionListOptions;
+use crate::layers::layer::LayerListing;
+use crate::layers::layer::ProviderLayerId;
+use crate::layers::listing::LayerCollectionId;
+use crate::layers::listing::LayerCollectionProvider;
+use crate::util::user_input::Validated;
+use crate::workflows::workflow::Workflow;
 use async_trait::async_trait;
 use gdal::{DatasetOptions, GdalOpenFlags};
-use geoengine_datatypes::dataset::{DatasetId, DatasetProviderId, ExternalDatasetId};
+use geoengine_datatypes::dataset::DataProviderId;
+use geoengine_datatypes::dataset::LayerId;
+use geoengine_datatypes::dataset::{DataId, ExternalDataId};
 use geoengine_datatypes::operations::image::{Colorizer, RgbaColor};
 use geoengine_datatypes::primitives::{
     DateTime, DateTimeParseFormat, Measurement, RasterQueryRectangle, TimeGranularity,
@@ -19,7 +26,10 @@ use geoengine_datatypes::primitives::{
 };
 use geoengine_datatypes::raster::{GdalGeoTransform, RasterDataType};
 use geoengine_datatypes::spatial_reference::SpatialReference;
-use geoengine_operators::engine::TypedResultDescriptor;
+use geoengine_operators::engine::RasterOperator;
+use geoengine_operators::engine::TypedOperator;
+use geoengine_operators::source::GdalSource;
+use geoengine_operators::source::GdalSourceParameters;
 use geoengine_operators::source::{
     FileNotFoundHandling, GdalDatasetGeoTransform, GdalDatasetParameters,
     GdalLoadingInfoTemporalSlice, GdalMetaDataList, GdalMetadataNetCdfCf,
@@ -32,6 +42,7 @@ use geoengine_operators::{
 };
 use log::debug;
 use serde::{Deserialize, Serialize};
+use snafu::ensure;
 use snafu::{OptionExt, ResultExt};
 use std::collections::VecDeque;
 use std::io::BufReader;
@@ -46,8 +57,8 @@ mod overviews;
 type Result<T, E = NetCdfCf4DProviderError> = std::result::Result<T, E>;
 
 /// Singleton Provider with id `1690c483-b17f-4d98-95c8-00a64849cd0b`
-pub const NETCDF_CF_PROVIDER_ID: DatasetProviderId =
-    DatasetProviderId::from_u128(0x1690_c483_b17f_4d98_95c8_00a6_4849_cd0b);
+pub const NETCDF_CF_PROVIDER_ID: DataProviderId =
+    DataProviderId::from_u128(0x1690_c483_b17f_4d98_95c8_00a6_4849_cd0b);
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct NetCdfCfDataProviderDefinition {
@@ -64,8 +75,8 @@ pub struct NetCdfCfDataProvider {
 
 #[typetag::serde]
 #[async_trait]
-impl ExternalDatasetProviderDefinition for NetCdfCfDataProviderDefinition {
-    async fn initialize(self: Box<Self>) -> crate::error::Result<Box<dyn ExternalDatasetProvider>> {
+impl DataProviderDefinition for NetCdfCfDataProviderDefinition {
+    async fn initialize(self: Box<Self>) -> crate::error::Result<Box<dyn DataProvider>> {
         Ok(Box::new(NetCdfCfDataProvider {
             path: self.path,
             overviews: self.overviews,
@@ -80,7 +91,7 @@ impl ExternalDatasetProviderDefinition for NetCdfCfDataProviderDefinition {
         self.name.clone()
     }
 
-    fn id(&self) -> DatasetProviderId {
+    fn id(&self) -> DataProviderId {
         NETCDF_CF_PROVIDER_ID
     }
 }
@@ -279,13 +290,14 @@ impl NetCdfCfDataProvider {
         })
     }
 
+    #[allow(dead_code)]
     pub(crate) fn listing_from_netcdf(
-        id: DatasetProviderId,
+        id: DataProviderId,
         provider_path: &Path,
         overview_path: Option<&Path>,
         dataset_path: &Path,
         compute_stats: bool,
-    ) -> Result<Vec<DatasetListing>> {
+    ) -> Result<Vec<LayerListing>> {
         let tree =
             Self::build_netcdf_tree(provider_path, overview_path, dataset_path, compute_stats)?;
 
@@ -316,8 +328,6 @@ impl NetCdfCfDataProvider {
 
             let group_names = path.iter().map(|s| s.name.clone()).collect::<Vec<String>>();
 
-            let data_type = tail.data_type.context(error::MissingDataType)?;
-
             for entity in &tree.entities {
                 let dataset_id = NetCdfCf4DDatasetId {
                     file_name: tree.file_name.clone(),
@@ -325,31 +335,17 @@ impl NetCdfCfDataProvider {
                     entity: entity.id,
                 };
 
-                listings.push(DatasetListing {
-                    id: DatasetId::External(ExternalDatasetId {
+                listings.push(LayerListing {
+                    id: ProviderLayerId {
                         provider_id: id,
-                        dataset_id: serde_json::to_string(&dataset_id).unwrap_or_default(),
-                    }),
+                        layer_id: LayerId(serde_json::to_string(&dataset_id).unwrap_or_default()),
+                    },
                     name: format!(
                         "{title}: {group_title_path} > {entity_name}",
                         title = tree.title,
                         entity_name = entity.name
                     ),
                     description: tree.summary.clone(),
-                    tags: vec![], // TODO: where to get from file?
-                    source_operator: "GdalSource".to_owned(),
-                    result_descriptor: TypedResultDescriptor::Raster(RasterResultDescriptor {
-                        data_type,
-                        spatial_reference: tree.spatial_reference.into(),
-                        measurement: derive_measurement(tail.unit.clone()),
-                        no_data_value: None, // we don't want to open the dataset at this point. We should get rid of the result descriptor in the listing in general
-                        time: None,          // TODO: determine time
-                        bbox: None,          // TODO: determine bbox
-                    }),
-                    symbology: Some(Symbology::Raster(RasterSymbology {
-                        opacity: 1.0,
-                        colorizer: tree.colorizer.clone(),
-                    })),
                 });
             }
         }
@@ -361,18 +357,17 @@ impl NetCdfCfDataProvider {
     fn meta_data(
         path: &Path,
         overviews: &Path,
-        dataset: &DatasetId,
+        id: &DataId,
     ) -> Result<Box<dyn MetaData<GdalLoadingInfo, RasterResultDescriptor, RasterQueryRectangle>>>
     {
-        let dataset =
-            dataset
-                .external()
-                .ok_or(NetCdfCf4DProviderError::InvalidExternalDatasetId {
-                    provider: NETCDF_CF_PROVIDER_ID,
-                })?;
+        let dataset = id
+            .external()
+            .ok_or(NetCdfCf4DProviderError::InvalidExternalDataId {
+                provider: NETCDF_CF_PROVIDER_ID,
+            })?;
 
         let dataset_id: NetCdfCf4DDatasetId =
-            serde_json::from_str(&dataset.dataset_id).context(error::CannotParseDatasetId)?;
+            serde_json::from_str(&dataset.layer_id.0).context(error::CannotParseDatasetId)?;
 
         // try to load from overviews
         if let Some(loading_info) = Self::meta_data_from_overviews(overviews, &dataset_id) {
@@ -383,7 +378,7 @@ impl NetCdfCfDataProvider {
         }
 
         let dataset_id: NetCdfCf4DDatasetId =
-            serde_json::from_str(&dataset.dataset_id).context(error::CannotParseDatasetId)?;
+            serde_json::from_str(&dataset.layer_id.0).context(error::CannotParseDatasetId)?;
 
         let path = path.join(&dataset_id.file_name);
 
@@ -446,7 +441,6 @@ impl NetCdfCfDataProvider {
             data_type: data_array.data_type()?,
             spatial_reference: data_array.spatial_reference()?,
             measurement: derive_measurement(data_array.unit().context(error::CannotRetrieveUnit)?),
-            no_data_value: data_array.no_data_value(),
 
             time: None,
             bbox: None,
@@ -457,12 +451,13 @@ impl NetCdfCfDataProvider {
             rasterband_channel: 0, // we calculate offsets below
             geo_transform,
             file_not_found_handling: FileNotFoundHandling::Error,
-            no_data_value: result_descriptor.no_data_value,
+            no_data_value: data_array.no_data_value(), // we could also leave this empty. The gdal source will try to get the correct one.
             properties_mapping: None,
             width: dimensions.lon,
             height: dimensions.lat,
             gdal_open_options: None,
             gdal_config_options: None,
+            allow_alphaband_as_mask: true,
         };
 
         Ok(match time_coverage {
@@ -832,13 +827,32 @@ enum Metadata {
 }
 
 #[async_trait]
-impl ExternalDatasetProvider for NetCdfCfDataProvider {
-    async fn list(
+impl DataProvider for NetCdfCfDataProvider {
+    async fn provenance(&self, id: &DataId) -> crate::error::Result<ProvenanceOutput> {
+        Ok(ProvenanceOutput {
+            data: id.clone(),
+            provenance: None,
+        })
+    }
+
+    fn as_any(&self) -> &dyn std::any::Any {
+        self
+    }
+}
+
+#[async_trait]
+impl LayerCollectionProvider for NetCdfCfDataProvider {
+    async fn collection_items(
         &self,
-        options: Validated<DatasetListOptions>,
-    ) -> crate::error::Result<Vec<DatasetListing>> {
-        // TODO: user right management
-        // TODO: options
+        collection: &LayerCollectionId,
+        options: Validated<LayerCollectionListOptions>,
+    ) -> crate::error::Result<Vec<CollectionItem>> {
+        ensure!(
+            *collection == self.root_collection_id().await?,
+            crate::error::UnknownLayerCollectionId {
+                id: collection.clone()
+            }
+        );
 
         let mut dir = tokio::fs::read_dir(&self.path).await?;
 
@@ -865,6 +879,17 @@ impl ExternalDatasetProvider for NetCdfCfDataProvider {
                     &relative_path,
                     false,
                 )
+                .map(|l| {
+                    l.into_iter()
+                        .map(|l| {
+                            CollectionItem::Layer(LayerListing {
+                                id: l.id,
+                                name: l.name,
+                                description: l.description,
+                            })
+                        })
+                        .collect::<Vec<_>>()
+                })
             })
             .await?;
 
@@ -885,15 +910,33 @@ impl ExternalDatasetProvider for NetCdfCfDataProvider {
         Ok(datasets)
     }
 
-    async fn provenance(&self, dataset: &DatasetId) -> crate::error::Result<ProvenanceOutput> {
-        Ok(ProvenanceOutput {
-            dataset: dataset.clone(),
-            provenance: None,
-        })
+    async fn root_collection_id(&self) -> crate::error::Result<LayerCollectionId> {
+        Ok(LayerCollectionId("root".to_string()))
     }
 
-    fn as_any(&self) -> &dyn std::any::Any {
-        self
+    async fn get_layer(&self, id: &LayerId) -> crate::error::Result<Layer> {
+        Ok(Layer {
+            id: ProviderLayerId {
+                provider_id: NETCDF_CF_PROVIDER_ID,
+                layer_id: id.clone(),
+            },
+            name: "".to_string(),        // TODO: get from file or overview
+            description: "".to_string(), // TODO: get from file or overview
+            workflow: Workflow {
+                operator: TypedOperator::Raster(
+                    GdalSource {
+                        params: GdalSourceParameters {
+                            data: DataId::External(ExternalDataId {
+                                provider_id: NETCDF_CF_PROVIDER_ID,
+                                layer_id: id.clone(),
+                            }),
+                        },
+                    }
+                    .boxed(),
+                ),
+            },
+            symbology: None,
+        })
     }
 }
 
@@ -903,12 +946,12 @@ impl MetaDataProvider<GdalLoadingInfo, RasterResultDescriptor, RasterQueryRectan
 {
     async fn meta_data(
         &self,
-        dataset: &DatasetId,
+        id: &DataId,
     ) -> Result<
         Box<dyn MetaData<GdalLoadingInfo, RasterResultDescriptor, RasterQueryRectangle>>,
         geoengine_operators::error::Error,
     > {
-        let dataset = dataset.clone();
+        let dataset = id.clone();
         let path = self.path.clone();
         let overviews = self.overviews.clone();
         crate::util::spawn_blocking(move || {
@@ -929,7 +972,7 @@ impl
 {
     async fn meta_data(
         &self,
-        _dataset: &DatasetId,
+        _id: &DataId,
     ) -> Result<
         Box<
             dyn MetaData<
@@ -950,7 +993,7 @@ impl MetaDataProvider<OgrSourceDataset, VectorResultDescriptor, VectorQueryRecta
 {
     async fn meta_data(
         &self,
-        _dataset: &DatasetId,
+        _id: &DataId,
     ) -> Result<
         Box<dyn MetaData<OgrSourceDataset, VectorResultDescriptor, VectorQueryRectangle>>,
         geoengine_operators::error::Error,
@@ -962,6 +1005,7 @@ impl MetaDataProvider<OgrSourceDataset, VectorResultDescriptor, VectorQueryRecta
 #[cfg(test)]
 mod tests {
     use geoengine_datatypes::{
+        dataset::LayerId,
         primitives::{SpatialPartition2D, SpatialResolution, TimeInterval},
         spatial_reference::SpatialReferenceAuthority,
         test_data,
@@ -1054,8 +1098,7 @@ mod tests {
     #[tokio::test]
     #[allow(clippy::too_many_lines)]
     async fn test_listing_from_netcdf_m() {
-        let provider_id =
-            DatasetProviderId::from_str("bf6bb6ea-5d5d-467d-bad1-267bf3a54470").unwrap();
+        let provider_id = DataProviderId::from_str("bf6bb6ea-5d5d-467d-bad1-267bf3a54470").unwrap();
 
         let listing = NetCdfCfDataProvider::listing_from_netcdf(
             provider_id,
@@ -1068,193 +1111,119 @@ mod tests {
 
         assert_eq!(listing.len(), 6);
 
-        let result_descriptor: TypedResultDescriptor = RasterResultDescriptor {
-            data_type: RasterDataType::I16,
-            spatial_reference: SpatialReference::new(SpatialReferenceAuthority::Epsg, 4326).into(),
-            measurement: Measurement::Unitless,
-            no_data_value: None,
-
-            time: None,
-            bbox: None,
-        }
-        .into();
-
-        let symbology = Some(Symbology::Raster(RasterSymbology {
-            opacity: 1.0,
-            colorizer: Colorizer::LinearGradient {
-                breakpoints: vec![
-                    (
-                        0.0.try_into().expect("not nan"),
-                        RgbaColor::new(68, 1, 84, 255),
-                    )
-                        .into(),
-                    (
-                        36.428_571_428_571_42.try_into().expect("not nan"),
-                        RgbaColor::new(70, 50, 126, 255),
-                    )
-                        .into(),
-                    (
-                        72.857_142_857_142_85.try_into().expect("not nan"),
-                        RgbaColor::new(54, 92, 141, 255),
-                    )
-                        .into(),
-                    (
-                        109.285_714_285_714_28.try_into().expect("not nan"),
-                        RgbaColor::new(39, 127, 142, 255),
-                    )
-                        .into(),
-                    (
-                        109.285_714_285_714_28.try_into().expect("not nan"),
-                        RgbaColor::new(31, 161, 135, 255),
-                    )
-                        .into(),
-                    (
-                        182.142_857_142_857_1.try_into().expect("not nan"),
-                        RgbaColor::new(74, 193, 109, 255),
-                    )
-                        .into(),
-                    (
-                        218.571_428_571_428_53.try_into().expect("not nan"),
-                        RgbaColor::new(160, 218, 57, 255),
-                    )
-                        .into(),
-                    (
-                        255.0.try_into().expect("not nan"),
-                        RgbaColor::new(253, 231, 37, 255),
-                    )
-                        .into(),
-                ],
-                no_data_color: RgbaColor::new(0, 0, 0, 0),
-                default_color: RgbaColor::new(0, 0, 0, 0),
-            },
-        }));
-
         assert_eq!(
             listing[0],
-            DatasetListing {
-                id: DatasetId::External(ExternalDatasetId {
+            LayerListing {
+                id: ProviderLayerId {
                     provider_id,
-                    dataset_id: serde_json::json!({
-                        "fileName": "dataset_m.nc",
-                        "groupNames": ["metric_1"],
-                        "entity": 0
-                    })
-                    .to_string(),
-                }),
+                    layer_id: LayerId(
+                        serde_json::json!({
+                            "fileName": "dataset_m.nc",
+                            "groupNames": ["metric_1"],
+                            "entity": 0
+                        })
+                        .to_string()
+                    ),
+                },
                 name: "Test dataset metric: Random metric 1 > entity01".into(),
                 description: "CFake description of test dataset with metric.".into(),
-                tags: vec![],
-                source_operator: "GdalSource".into(),
-                result_descriptor: result_descriptor.clone(),
-                symbology: symbology.clone(),
             }
         );
         assert_eq!(
             listing[1],
-            DatasetListing {
-                id: DatasetId::External(ExternalDatasetId {
+            LayerListing {
+                id: ProviderLayerId {
                     provider_id,
-                    dataset_id: serde_json::json!({
-                        "fileName": "dataset_m.nc",
-                        "groupNames": ["metric_1"],
-                        "entity": 1
-                    })
-                    .to_string(),
-                }),
+                    layer_id: LayerId(
+                        serde_json::json!({
+                            "fileName": "dataset_m.nc",
+                            "groupNames": ["metric_1"],
+                            "entity": 1
+                        })
+                        .to_string()
+                    ),
+                },
                 name: "Test dataset metric: Random metric 1 > entity02".into(),
                 description: "CFake description of test dataset with metric.".into(),
-                tags: vec![],
-                source_operator: "GdalSource".into(),
-                result_descriptor: result_descriptor.clone(),
-                symbology: symbology.clone(),
             }
         );
         assert_eq!(
             listing[2],
-            DatasetListing {
-                id: DatasetId::External(ExternalDatasetId {
+            LayerListing {
+                id: ProviderLayerId {
                     provider_id,
-                    dataset_id: serde_json::json!({
-                        "fileName": "dataset_m.nc",
-                        "groupNames": ["metric_1"],
-                        "entity": 2
-                    })
-                    .to_string(),
-                }),
+                    layer_id: LayerId(
+                        serde_json::json!({
+                            "fileName": "dataset_m.nc",
+                            "groupNames": ["metric_1"],
+                            "entity": 2
+                        })
+                        .to_string()
+                    ),
+                },
                 name: "Test dataset metric: Random metric 1 > entity03".into(),
                 description: "CFake description of test dataset with metric.".into(),
-                tags: vec![],
-                source_operator: "GdalSource".into(),
-                result_descriptor: result_descriptor.clone(),
-                symbology: symbology.clone(),
             }
         );
         assert_eq!(
             listing[3],
-            DatasetListing {
-                id: DatasetId::External(ExternalDatasetId {
+            LayerListing {
+                id: ProviderLayerId {
                     provider_id,
-                    dataset_id: serde_json::json!({
-                        "fileName": "dataset_m.nc",
-                        "groupNames": ["metric_2"],
-                        "entity": 0
-                    })
-                    .to_string(),
-                }),
+                    layer_id: LayerId(
+                        serde_json::json!({
+                            "fileName": "dataset_m.nc",
+                            "groupNames": ["metric_2"],
+                            "entity": 0
+                        })
+                        .to_string()
+                    ),
+                },
                 name: "Test dataset metric: Random metric 2 > entity01".into(),
                 description: "CFake description of test dataset with metric.".into(),
-                tags: vec![],
-                source_operator: "GdalSource".into(),
-                result_descriptor: result_descriptor.clone(),
-                symbology: symbology.clone(),
             }
         );
         assert_eq!(
             listing[4],
-            DatasetListing {
-                id: DatasetId::External(ExternalDatasetId {
+            LayerListing {
+                id: ProviderLayerId {
                     provider_id,
-                    dataset_id: serde_json::json!({
-                        "fileName": "dataset_m.nc",
-                        "groupNames": ["metric_2"],
-                        "entity": 1
-                    })
-                    .to_string(),
-                }),
+                    layer_id: LayerId(
+                        serde_json::json!({
+                            "fileName": "dataset_m.nc",
+                            "groupNames": ["metric_2"],
+                            "entity": 1
+                        })
+                        .to_string()
+                    ),
+                },
                 name: "Test dataset metric: Random metric 2 > entity02".into(),
                 description: "CFake description of test dataset with metric.".into(),
-                tags: vec![],
-                source_operator: "GdalSource".into(),
-                result_descriptor: result_descriptor.clone(),
-                symbology: symbology.clone(),
             }
         );
         assert_eq!(
             listing[5],
-            DatasetListing {
-                id: DatasetId::External(ExternalDatasetId {
+            LayerListing {
+                id: ProviderLayerId {
                     provider_id,
-                    dataset_id: serde_json::json!({
-                        "fileName": "dataset_m.nc",
-                        "groupNames": ["metric_2"],
-                        "entity": 2
-                    })
-                    .to_string(),
-                }),
+                    layer_id: LayerId(
+                        serde_json::json!({
+                            "fileName": "dataset_m.nc",
+                            "groupNames": ["metric_2"],
+                            "entity": 2
+                        })
+                        .to_string()
+                    ),
+                },
                 name: "Test dataset metric: Random metric 2 > entity03".into(),
                 description: "CFake description of test dataset with metric.".into(),
-                tags: vec![],
-                source_operator: "GdalSource".into(),
-                result_descriptor,
-                symbology,
             }
         );
     }
 
     #[tokio::test]
     async fn test_listing_from_netcdf_sm() {
-        let provider_id =
-            DatasetProviderId::from_str("bf6bb6ea-5d5d-467d-bad1-267bf3a54470").unwrap();
+        let provider_id = DataProviderId::from_str("bf6bb6ea-5d5d-467d-bad1-267bf3a54470").unwrap();
 
         let listing = NetCdfCfDataProvider::listing_from_netcdf(
             provider_id,
@@ -1267,69 +1236,40 @@ mod tests {
 
         assert_eq!(listing.len(), 20);
 
-        let result_descriptor: TypedResultDescriptor = RasterResultDescriptor {
-            data_type: RasterDataType::I16,
-            spatial_reference: SpatialReference::new(SpatialReferenceAuthority::Epsg, 3035).into(),
-            measurement: Measurement::Unitless,
-            no_data_value: None,
-            time: None,
-            bbox: None,
-        }
-        .into();
-
-        let symbology = Some(Symbology::Raster(RasterSymbology {
-            opacity: 1.0,
-            colorizer: Colorizer::LinearGradient {
-                breakpoints: vec![
-                    (0.0.try_into().unwrap(), RgbaColor::new(68, 1, 84, 255)).into(),
-                    (50.0.try_into().unwrap(), RgbaColor::new(33, 145, 140, 255)).into(),
-                    (100.0.try_into().unwrap(), RgbaColor::new(253, 231, 37, 255)).into(),
-                ],
-                no_data_color: RgbaColor::new(0, 0, 0, 0),
-                default_color: RgbaColor::new(0, 0, 0, 0),
-            },
-        }));
-
         assert_eq!(
             listing[0],
-            DatasetListing {
-                id: DatasetId::External(ExternalDatasetId {
+            LayerListing {
+                id: ProviderLayerId {
                     provider_id,
-                    dataset_id: serde_json::json!({
-                        "fileName": "dataset_sm.nc",
-                        "groupNames": ["scenario_1", "metric_1"],
-                        "entity": 0
-                    })
-                    .to_string(),
-                }),
+                    layer_id: LayerId(
+                        serde_json::json!({
+                            "fileName": "dataset_sm.nc",
+                            "groupNames": ["scenario_1", "metric_1"],
+                            "entity": 0
+                        })
+                        .to_string()
+                    ),
+                },
                 name:
                     "Test dataset metric and scenario: Sustainability > Random metric 1 > entity01"
                         .into(),
                 description: "Fake description of test dataset with metric and scenario.".into(),
-                tags: vec![],
-                source_operator: "GdalSource".into(),
-                result_descriptor: result_descriptor.clone(),
-                symbology: symbology.clone(),
             }
         );
         assert_eq!(
             listing[19],
-            DatasetListing {
-                id: DatasetId::External(ExternalDatasetId {
+            LayerListing {
+                id: ProviderLayerId {
                     provider_id,
-                    dataset_id: serde_json::json!({
+                    layer_id: LayerId(serde_json::json!({
                         "fileName": "dataset_sm.nc",
                         "groupNames": ["scenario_5", "metric_2"],
                         "entity": 1
                     })
-                    .to_string(),
-                }),
+                    .to_string()),
+                },
                 name: "Test dataset metric and scenario: Fossil-fueled Development > Random metric 2 > entity02".into(),
                 description: "Fake description of test dataset with metric and scenario.".into(),
-                tags: vec![],
-                source_operator: "GdalSource".into(),
-                result_descriptor,
-                symbology,
             }
         );
     }
@@ -1342,14 +1282,16 @@ mod tests {
         };
 
         let metadata = provider
-            .meta_data(&DatasetId::External(ExternalDatasetId {
+            .meta_data(&DataId::External(ExternalDataId {
                 provider_id: NETCDF_CF_PROVIDER_ID,
-                dataset_id: serde_json::json!({
-                    "fileName": "dataset_sm.nc",
-                    "groupNames": ["scenario_5", "metric_2"],
-                    "entity": 1
-                })
-                .to_string(),
+                layer_id: LayerId(
+                    serde_json::json!({
+                        "fileName": "dataset_sm.nc",
+                        "groupNames": ["scenario_5", "metric_2"],
+                        "entity": 1
+                    })
+                    .to_string(),
+                ),
             }))
             .await
             .unwrap();
@@ -1361,7 +1303,6 @@ mod tests {
                 spatial_reference: SpatialReference::new(SpatialReferenceAuthority::Epsg, 3035)
                     .into(),
                 measurement: Measurement::Unitless,
-                no_data_value: Some(-9999.),
                 time: None,
                 bbox: None,
             }
@@ -1417,7 +1358,8 @@ mod tests {
                     no_data_value: Some(-9999.),
                     properties_mapping: None,
                     gdal_open_options: None,
-                    gdal_config_options: None
+                    gdal_config_options: None,
+                    allow_alphaband_as_mask: true,
                 })
             }
         );
@@ -1453,14 +1395,16 @@ mod tests {
             .unwrap();
 
         let metadata = provider
-            .meta_data(&DatasetId::External(ExternalDatasetId {
+            .meta_data(&DataId::External(ExternalDataId {
                 provider_id: NETCDF_CF_PROVIDER_ID,
-                dataset_id: serde_json::json!({
-                    "fileName": "dataset_sm.nc",
-                    "groupNames": ["scenario_5", "metric_2"],
-                    "entity": 1
-                })
-                .to_string(),
+                layer_id: LayerId(
+                    serde_json::json!({
+                        "fileName": "dataset_sm.nc",
+                        "groupNames": ["scenario_5", "metric_2"],
+                        "entity": 1
+                    })
+                    .to_string(),
+                ),
             }))
             .await
             .unwrap();
@@ -1472,7 +1416,6 @@ mod tests {
                 spatial_reference: SpatialReference::new(SpatialReferenceAuthority::Epsg, 3035)
                     .into(),
                 measurement: Measurement::Unitless,
-                no_data_value: Some(-9999.),
                 time: None,
                 bbox: None,
             }
@@ -1523,7 +1466,8 @@ mod tests {
                     no_data_value: Some(-9999.),
                     properties_mapping: None,
                     gdal_open_options: None,
-                    gdal_config_options: None
+                    gdal_config_options: None,
+                    allow_alphaband_as_mask: true,
                 })
             }
         );
@@ -1544,8 +1488,7 @@ mod tests {
             .create_overviews(Path::new("dataset_sm.nc"))
             .unwrap();
 
-        let provider_id =
-            DatasetProviderId::from_str("bf6bb6ea-5d5d-467d-bad1-267bf3a54470").unwrap();
+        let provider_id = DataProviderId::from_str("bf6bb6ea-5d5d-467d-bad1-267bf3a54470").unwrap();
 
         let listing = NetCdfCfDataProvider::listing_from_netcdf(
             provider_id,
@@ -1558,69 +1501,40 @@ mod tests {
 
         assert_eq!(listing.len(), 20);
 
-        let result_descriptor: TypedResultDescriptor = RasterResultDescriptor {
-            data_type: RasterDataType::I16,
-            spatial_reference: SpatialReference::new(SpatialReferenceAuthority::Epsg, 3035).into(),
-            measurement: Measurement::Unitless,
-            no_data_value: None,
-            time: None,
-            bbox: None,
-        }
-        .into();
-
-        let symbology = Some(Symbology::Raster(RasterSymbology {
-            opacity: 1.0,
-            colorizer: Colorizer::LinearGradient {
-                breakpoints: vec![
-                    (0.0.try_into().unwrap(), RgbaColor::new(68, 1, 84, 255)).into(),
-                    (50.0.try_into().unwrap(), RgbaColor::new(33, 145, 140, 255)).into(),
-                    (100.0.try_into().unwrap(), RgbaColor::new(253, 231, 37, 255)).into(),
-                ],
-                no_data_color: RgbaColor::new(0, 0, 0, 0),
-                default_color: RgbaColor::new(0, 0, 0, 0),
-            },
-        }));
-
         assert_eq!(
             listing[0],
-            DatasetListing {
-                id: DatasetId::External(ExternalDatasetId {
+            LayerListing {
+                id: ProviderLayerId {
                     provider_id,
-                    dataset_id: serde_json::json!({
-                        "fileName": "dataset_sm.nc",
-                        "groupNames": ["scenario_1", "metric_1"],
-                        "entity": 0
-                    })
-                    .to_string(),
-                }),
+                    layer_id: LayerId(
+                        serde_json::json!({
+                            "fileName": "dataset_sm.nc",
+                            "groupNames": ["scenario_1", "metric_1"],
+                            "entity": 0
+                        })
+                        .to_string()
+                    ),
+                },
                 name:
                     "Test dataset metric and scenario: Sustainability > Random metric 1 > entity01"
                         .into(),
                 description: "Fake description of test dataset with metric and scenario.".into(),
-                tags: vec![],
-                source_operator: "GdalSource".into(),
-                result_descriptor: result_descriptor.clone(),
-                symbology: symbology.clone(),
             }
         );
         assert_eq!(
             listing[19],
-            DatasetListing {
-                id: DatasetId::External(ExternalDatasetId {
+            LayerListing {
+                id: ProviderLayerId {
                     provider_id,
-                    dataset_id: serde_json::json!({
+                    layer_id: LayerId(serde_json::json!({
                         "fileName": "dataset_sm.nc",
                         "groupNames": ["scenario_5", "metric_2"],
                         "entity": 1
                     })
-                    .to_string(),
-                }),
+                    .to_string()),
+                },
                 name: "Test dataset metric and scenario: Fossil-fueled Development > Random metric 2 > entity02".into(),
                 description: "Fake description of test dataset with metric and scenario.".into(),
-                tags: vec![],
-                source_operator: "GdalSource".into(),
-                result_descriptor,
-                symbology,
             }
         );
     }

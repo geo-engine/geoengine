@@ -383,7 +383,6 @@ mod tests {
     }
 
     #[test]
-    #[allow(clippy::eq_op)]
     fn equals() {
         let mut builder = MultiLineStringCollection::builder().finish_header();
 

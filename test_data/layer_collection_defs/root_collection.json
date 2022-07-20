@@ -1,0 +1,10 @@
+{
+  "id": "05102bb3-a855-4a37-8a8a-30026a91fef1",
+  "name": "LayerDB",
+  "description": "Root collection for LayerDB",
+  "collections": [
+    "272bf675-2e27-4412-824c-287c1e6841ac",
+    "a29f77cc-51ce-466b-86ef-d0ab2170bc0a"
+  ],
+  "layers": []
+}

@@ -1,9 +1,11 @@
+use super::from_index_fn::FromIndexFnParallel;
 use crate::primitives::{AxisAlignedRectangle, SpatialPartitioned};
-use crate::raster::{GridIndexAccess, GridSize, MaterializedRasterTile2D, Pixel, RasterTile2D};
+use crate::raster::{
+    EmptyGrid, GridIdx, GridIdx2D, GridIndexAccess, GridOrEmpty, Pixel, RasterTile2D,
+    TileInformation,
+};
 use crate::util::Result;
 use async_trait::async_trait;
-use rayon::iter::{IndexedParallelIterator, ParallelIterator};
-use rayon::slice::ParallelSliceMut;
 
 #[async_trait]
 pub trait InterpolationAlgorithm<P: Pixel>: Send + Sync + Clone + 'static {
@@ -11,8 +13,10 @@ pub trait InterpolationAlgorithm<P: Pixel>: Send + Sync + Clone + 'static {
     /// the output must be fully contained in the input tile and have an additional row and column in order
     /// to have all the required neighbor pixels.
     /// Also the output must have a finer resolution than the input
-    fn interpolate(input: &RasterTile2D<P>, output: &mut MaterializedRasterTile2D<P>)
-        -> Result<()>;
+    fn interpolate(
+        input: &RasterTile2D<P>,
+        output_tile_info: &TileInformation,
+    ) -> Result<RasterTile2D<P>>;
 }
 
 #[derive(Clone, Debug)]
@@ -23,56 +27,43 @@ impl<P> InterpolationAlgorithm<P> for NearestNeighbor
 where
     P: Pixel,
 {
-    fn interpolate(
-        input: &RasterTile2D<P>,
-        output: &mut MaterializedRasterTile2D<P>,
-    ) -> Result<()> {
+    fn interpolate(input: &RasterTile2D<P>, info_out: &TileInformation) -> Result<RasterTile2D<P>> {
+        if input.is_empty() {
+            return Ok(RasterTile2D::new_with_tile_info(
+                input.time,
+                *info_out,
+                EmptyGrid::new(info_out.tile_size_in_pixels).into(),
+            ));
+        }
+
         let info_in = input.tile_information();
         let in_upper_left = info_in.spatial_partition().upper_left();
         let in_x_size = info_in.global_geo_transform.x_pixel_size();
         let in_y_size = info_in.global_geo_transform.y_pixel_size();
 
-        let info_out = output.tile_information();
         let out_upper_left = info_out.spatial_partition().upper_left();
         let out_x_size = info_out.global_geo_transform.x_pixel_size();
         let out_y_size = info_out.global_geo_transform.y_pixel_size();
 
-        let parallelism = rayon::current_num_threads();
-        let rows_per_task =
-            num::integer::div_ceil(output.grid_array.shape.axis_size_y(), parallelism);
+        let map_fn = |gidx: GridIdx2D| {
+            let GridIdx([y, x]) = gidx;
+            let out_y_coord = out_upper_left.y + y as f64 * out_y_size;
+            let out_x_coord = out_upper_left.x + x as f64 * out_x_size;
+            let nearest_in_y_idx = ((out_y_coord - in_upper_left.y) / in_y_size).round() as isize;
+            let nearest_in_x_idx = ((out_x_coord - in_upper_left.x) / in_x_size).round() as isize;
+            input.get_at_grid_index_unchecked([nearest_in_y_idx, nearest_in_x_idx])
+        };
 
-        let chunk_size = output.grid_array.shape.axis_size_x() * rows_per_task;
+        let out_data = GridOrEmpty::from_index_fn_parallel(&info_out.tile_size_in_pixels, map_fn); // TODO: this will check for empty tiles. Change to MaskedGrid::from.. to avoid this.
 
-        output
-            .grid_array
-            .data
-            .par_chunks_mut(chunk_size)
-            .enumerate()
-            .for_each(|(y_f, rows_slice)| {
-                let y_start = y_f * rows_per_task;
-                let y_end = y_start + rows_slice.len() / output.grid_array.shape.axis_size_x();
+        let out_tile = RasterTile2D::new(
+            input.time,
+            info_out.global_tile_position,
+            info_out.global_geo_transform,
+            out_data,
+        );
 
-                (y_start..y_end)
-                    .zip(rows_slice.chunks_mut(output.grid_array.shape.axis_size_x()))
-                    .for_each(|(y, row)| {
-                        let out_y_coord = out_upper_left.y + y as f64 * out_y_size;
-                        let nearest_in_y_idx =
-                            ((out_y_coord - in_upper_left.y) / in_y_size).round() as isize;
-
-                        row.iter_mut().enumerate().for_each(|(x, pixel)| {
-                            let out_x_coord = out_upper_left.x + x as f64 * out_x_size;
-                            let nearest_in_x_idx =
-                                ((out_x_coord - in_upper_left.x) / in_x_size).round() as isize;
-
-                            let value = input
-                                .get_at_grid_index_unchecked([nearest_in_y_idx, nearest_in_x_idx]);
-
-                            *pixel = value;
-                        });
-                    });
-            });
-
-        Ok(())
+        Ok(out_tile)
     }
 }
 
@@ -112,74 +103,76 @@ impl<P> InterpolationAlgorithm<P> for Bilinear
 where
     P: Pixel,
 {
-    fn interpolate(
-        input: &RasterTile2D<P>,
-        output: &mut MaterializedRasterTile2D<P>,
-    ) -> Result<()> {
+    fn interpolate(input: &RasterTile2D<P>, info_out: &TileInformation) -> Result<RasterTile2D<P>> {
+        if input.is_empty() {
+            return Ok(RasterTile2D::new_with_tile_info(
+                input.time,
+                *info_out,
+                EmptyGrid::new(info_out.tile_size_in_pixels).into(),
+            ));
+        }
+
         let info_in = input.tile_information();
         let in_upper_left = info_in.spatial_partition().upper_left();
         let in_x_size = info_in.global_geo_transform.x_pixel_size();
         let in_y_size = info_in.global_geo_transform.y_pixel_size();
 
-        let info_out = output.tile_information();
         let out_upper_left = info_out.spatial_partition().upper_left();
         let out_x_size = info_out.global_geo_transform.x_pixel_size();
         let out_y_size = info_out.global_geo_transform.y_pixel_size();
 
-        let parallelism = rayon::current_num_threads();
-        let rows_per_task =
-            num::integer::div_ceil(output.grid_array.shape.axis_size_y(), parallelism);
+        let map_fn = |g_idx: GridIdx2D| {
+            let GridIdx([y_idx, x_idx]) = g_idx;
 
-        let chunk_size = output.grid_array.shape.axis_size_x() * rows_per_task;
+            let out_y = out_upper_left.y + y_idx as f64 * out_y_size;
+            let in_y_idx = ((out_y - in_upper_left.y) / in_y_size).floor() as isize;
 
-        output
-            .grid_array
-            .data
-            .par_chunks_mut(chunk_size)
-            .enumerate()
-            .for_each(|(y_f, rows_slice)| {
-                let y_start = y_f * rows_per_task;
-                let y_end = y_start + rows_slice.len() / output.grid_array.shape.axis_size_x();
+            let a_y = in_upper_left.y + in_y_size * in_y_idx as f64;
+            let b_y = a_y + in_y_size;
 
-                (y_start..y_end)
-                    .zip(rows_slice.chunks_mut(output.grid_array.shape.axis_size_x()))
-                    .for_each(|(y, row)| {
-                        let out_y = out_upper_left.y + y as f64 * out_y_size;
-                        let in_y_idx = ((out_y - in_upper_left.y) / in_y_size).floor() as isize;
+            let out_x = out_upper_left.x + x_idx as f64 * out_x_size;
+            let in_x_idx = ((out_x - in_upper_left.x) / in_x_size).floor() as isize;
 
-                        let a_y = in_upper_left.y + in_y_size * in_y_idx as f64;
-                        let b_y = a_y + in_y_size;
+            let a_x = in_upper_left.x + in_x_size * in_x_idx as f64;
+            let c_x = a_x + in_x_size;
 
-                        row.iter_mut().enumerate().for_each(|(x, pixel)| {
-                            let out_x = out_upper_left.x + x as f64 * out_x_size;
-                            let in_x_idx = ((out_x - in_upper_left.x) / in_x_size).floor() as isize;
+            let a_v = input.get_at_grid_index_unchecked([in_y_idx, in_x_idx]);
 
-                            let a_x = in_upper_left.x + in_x_size * in_x_idx as f64;
-                            let c_x = a_x + in_x_size;
+            let b_v = input.get_at_grid_index_unchecked([in_y_idx + 1, in_x_idx]);
 
-                            let a_v: f64 = input
-                                .get_at_grid_index_unchecked([in_y_idx, in_x_idx])
-                                .as_();
-                            let b_v: f64 = input
-                                .get_at_grid_index_unchecked([in_y_idx + 1, in_x_idx])
-                                .as_();
-                            let c_v: f64 = input
-                                .get_at_grid_index_unchecked([in_y_idx, in_x_idx + 1])
-                                .as_();
-                            let d_v: f64 = input
-                                .get_at_grid_index_unchecked([in_y_idx + 1, in_x_idx + 1])
-                                .as_();
+            let c_v = input.get_at_grid_index_unchecked([in_y_idx, in_x_idx + 1]);
 
-                            let value = Self::bilinear_interpolation(
-                                out_x, out_y, a_x, a_y, a_v, b_y, b_v, c_x, c_v, d_v,
-                            );
+            let d_v = input.get_at_grid_index_unchecked([in_y_idx + 1, in_x_idx + 1]);
 
-                            *pixel = P::from_(value);
-                        });
-                    });
-            });
+            let value = match (a_v, b_v, c_v, d_v) {
+                (Some(a), Some(b), Some(c), Some(d)) => Some(Self::bilinear_interpolation(
+                    out_x,
+                    out_y,
+                    a_x,
+                    a_y,
+                    a.as_(),
+                    b_y,
+                    b.as_(),
+                    c_x,
+                    c.as_(),
+                    d.as_(),
+                )),
+                _ => None,
+            };
 
-        Ok(())
+            value.map(|v| P::from_(v))
+        };
+
+        let out_data = GridOrEmpty::from_index_fn_parallel(&info_out.tile_size_in_pixels, map_fn); // TODO: this will check for empty tiles. Change to MaskedGrid::from.. to avoid this.
+
+        let out_tile = RasterTile2D::new(
+            input.time,
+            info_out.global_tile_position,
+            info_out.global_geo_transform,
+            out_data,
+        );
+
+        Ok(out_tile)
     }
 }
 
@@ -188,7 +181,9 @@ mod tests {
     use rayon::ThreadPoolBuilder;
 
     use super::*;
-    use crate::raster::{GeoTransform, Grid2D, GridOrEmpty, RasterTile2D, TileInformation};
+    use crate::raster::{
+        GeoTransform, Grid2D, GridOrEmpty, MaskedGrid, RasterTile2D, TileInformation,
+    };
 
     #[test]
     fn nearest_neightbor() {
@@ -199,30 +194,48 @@ mod tests {
                 tile_size_in_pixels: [3, 3].into(),
                 global_geo_transform: GeoTransform::new((0.0, 2.0).into(), 1.0, -1.0),
             },
-            GridOrEmpty::Grid(
-                Grid2D::new([3, 3].into(), vec![1, 2, 3, 4, 5, 6, 7, 8, 9], Some(42)).unwrap(),
-            ),
+            GridOrEmpty::Grid(MaskedGrid::from(
+                Grid2D::new([3, 3].into(), vec![1, 2, 3, 4, 5, 6, 7, 8, 9]).unwrap(),
+            )),
         );
 
-        let mut output = RasterTile2D::new_with_tile_info(
-            Default::default(),
-            TileInformation {
-                global_tile_position: [0, 0].into(),
-                tile_size_in_pixels: [4, 4].into(),
-                global_geo_transform: GeoTransform::new((0.0, 2.0).into(), 0.5, -0.5),
-            },
-            GridOrEmpty::Grid(Grid2D::new([4, 4].into(), vec![42; 16], Some(42)).unwrap()),
-        )
-        .into_materialized_tile();
+        let output_info = TileInformation {
+            global_tile_position: [0, 0].into(),
+            tile_size_in_pixels: [4, 4].into(),
+            global_geo_transform: GeoTransform::new((0.0, 2.0).into(), 0.5, -0.5),
+        };
 
         let pool = ThreadPoolBuilder::new().num_threads(0).build().unwrap();
 
-        pool.install(|| NearestNeighbor::interpolate(&input, &mut output))
+        let output = pool
+            .install(|| NearestNeighbor::interpolate(&input, &output_info))
             .unwrap();
 
+        assert!(!output.is_empty());
+        let output_data = output.grid_array.as_masked_grid().unwrap();
+
         assert_eq!(
-            output.grid_array.data,
-            vec![1, 2, 2, 3, 4, 5, 5, 6, 4, 5, 5, 6, 7, 8, 8, 9]
+            output_data
+                .masked_element_deref_iterator()
+                .collect::<Vec<_>>(),
+            vec![
+                Some(1),
+                Some(2),
+                Some(2),
+                Some(3),
+                Some(4),
+                Some(5),
+                Some(5),
+                Some(6),
+                Some(4),
+                Some(5),
+                Some(5),
+                Some(6),
+                Some(7),
+                Some(8),
+                Some(8),
+                Some(9)
+            ]
         );
     }
 
@@ -253,35 +266,48 @@ mod tests {
                 tile_size_in_pixels: [3, 3].into(),
                 global_geo_transform: GeoTransform::new((0.0, 2.0).into(), 1.0, -1.0),
             },
-            GridOrEmpty::Grid(
-                Grid2D::new(
-                    [3, 3].into(),
-                    vec![1., 2., 3., 4., 5., 6., 7., 8., 9.],
-                    Some(42.),
-                )
-                .unwrap(),
-            ),
+            GridOrEmpty::Grid(MaskedGrid::from(
+                Grid2D::new([3, 3].into(), vec![1., 2., 3., 4., 5., 6., 7., 8., 9.]).unwrap(),
+            )),
         );
 
-        let mut output = RasterTile2D::new_with_tile_info(
-            Default::default(),
-            TileInformation {
-                global_tile_position: [0, 0].into(),
-                tile_size_in_pixels: [4, 4].into(),
-                global_geo_transform: GeoTransform::new((0.0, 2.0).into(), 0.5, -0.5),
-            },
-            GridOrEmpty::Grid(Grid2D::new([4, 4].into(), vec![42.; 16], Some(42.)).unwrap()),
-        )
-        .into_materialized_tile();
+        let output_info = TileInformation {
+            global_tile_position: [0, 0].into(),
+            tile_size_in_pixels: [4, 4].into(),
+            global_geo_transform: GeoTransform::new((0.0, 2.0).into(), 0.5, -0.5),
+        };
 
         let pool = ThreadPoolBuilder::new().num_threads(0).build().unwrap();
 
-        pool.install(|| Bilinear::interpolate(&input, &mut output))
+        let output = pool
+            .install(|| Bilinear::interpolate(&input, &output_info))
             .unwrap();
 
+        assert!(!output.is_empty());
+        let output_data = output.grid_array.as_masked_grid().unwrap();
+
         assert_eq!(
-            output.grid_array.data,
-            vec![1.0, 1.5, 2.0, 2.5, 2.5, 3.0, 3.5, 4.0, 4.0, 4.5, 5.0, 5.5, 5.5, 6.0, 6.5, 7.0]
+            output_data
+                .masked_element_deref_iterator()
+                .collect::<Vec<_>>(),
+            vec![
+                Some(1.0),
+                Some(1.5),
+                Some(2.0),
+                Some(2.5),
+                Some(2.5),
+                Some(3.0),
+                Some(3.5),
+                Some(4.0),
+                Some(4.0),
+                Some(4.5),
+                Some(5.0),
+                Some(5.5),
+                Some(5.5),
+                Some(6.0),
+                Some(6.5),
+                Some(7.0)
+            ]
         );
     }
 }

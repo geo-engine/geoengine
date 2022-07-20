@@ -636,7 +636,6 @@ fn multipoint_builder_bytes() {
 }
 
 #[test]
-#[allow(clippy::eq_op)]
 fn float_equality() {
     let mut floats = Float64Builder::new(3);
     floats.append_value(4.0).unwrap();

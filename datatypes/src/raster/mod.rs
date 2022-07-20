@@ -29,15 +29,22 @@ pub use self::raster_tile::{
 pub use self::tiling::{TileInformation, TilingSpecification, TilingStrategy};
 pub use self::typed_raster_conversion::TypedRasterConversion;
 pub use self::typed_raster_tile::{TypedRasterTile2D, TypedRasterTile3D};
-pub use self::{
-    grid_traits::ChangeGridBounds, grid_traits::GridShapeAccess, grid_traits::NoDataValue,
+pub use self::{grid_traits::ChangeGridBounds, grid_traits::GridShapeAccess};
+pub use masked_grid::{MaskedGrid, MaskedGrid1D, MaskedGrid2D, MaskedGrid3D};
+pub use no_data_value_grid::{
+    NoDataValueGrid, NoDataValueGrid1D, NoDataValueGrid2D, NoDataValueGrid3D,
 };
-use super::primitives::{SpatialBounded, TemporalBounded};
-use crate::primitives::Coordinate2D;
-use crate::util::Result;
+pub use operations::from_index_fn::{FromIndexFn, FromIndexFnParallel};
+pub use operations::map_elements::{MapElements, MapElementsParallel};
+pub use operations::map_indexed_elements::{MapIndexedElements, MapIndexedElementsParallel};
+pub use operations::update_elements::{UpdateElements, UpdateElementsParallel};
+pub use operations::update_indexed_elements::{
+    UpdateIndexedElements, UpdateIndexedElementsParallel,
+};
 pub use raster_properties::{
     RasterProperties, RasterPropertiesEntry, RasterPropertiesEntryType, RasterPropertiesKey,
 };
+pub use raster_traits::{CoordinatePixelAccess, GeoTransformAccess, Raster};
 
 mod data_type;
 mod empty_grid;
@@ -50,35 +57,12 @@ mod grid_traits;
 mod grid_typed;
 mod macros_raster;
 mod macros_raster_tile;
+mod masked_grid;
+mod no_data_value_grid;
 mod operations;
 mod raster_properties;
 mod raster_tile;
+mod raster_traits;
 mod tiling;
 mod typed_raster_conversion;
 mod typed_raster_tile;
-
-pub trait Raster<D: GridSize, T: Pixel>:
-    SpatialBounded
-    + TemporalBounded
-    + NoDataValue<NoDataType = T>
-    + GridShapeAccess<ShapeArray = D::ShapeArray>
-    + GeoTransformAccess
-{
-    type DataContainer;
-    /// returns a reference to the data container used to hold the pixels / cells of the raster
-    fn data_container(&self) -> &Self::DataContainer;
-}
-
-pub trait GeoTransformAccess {
-    /// returns a reference to the geo transform describing the origin of the raster and the pixel size
-    fn geo_transform(&self) -> GeoTransform;
-}
-
-pub trait CoordinatePixelAccess<P>
-where
-    P: Pixel,
-{
-    fn pixel_value_at_coord(&self, coordinate: Coordinate2D) -> Result<P>;
-
-    fn pixel_value_at_coord_unchecked(&self, coordinate: Coordinate2D) -> P;
-}

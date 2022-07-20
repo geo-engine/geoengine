@@ -3,7 +3,7 @@ use serde::{Deserialize, Serialize};
 use crate::error;
 use crate::util::Result;
 use async_trait::async_trait;
-use geoengine_datatypes::dataset::DatasetId;
+use geoengine_datatypes::dataset::DataId;
 
 use super::{
     query_processor::{TypedRasterQueryProcessor, TypedVectorQueryProcessor},
@@ -11,23 +11,22 @@ use super::{
     PlotResultDescriptor, RasterResultDescriptor, TypedPlotQueryProcessor, VectorResultDescriptor,
 };
 
-pub trait OperatorDatasets {
-    /// Get the dataset ids of all the datasets involoved in this operator and its sources
-    fn datasets(&self) -> Vec<DatasetId> {
+pub trait OperatorData {
+    /// Get the ids of all the data involoved in this operator and its sources
+    fn data_ids(&self) -> Vec<DataId> {
         let mut datasets = vec![];
-        self.datasets_collect(&mut datasets);
+        self.data_ids_collect(&mut datasets);
         datasets
     }
 
-    #[allow(clippy::ptr_arg)] // must allow `push` on `datasets`
-    fn datasets_collect(&self, datasets: &mut Vec<DatasetId>);
+    fn data_ids_collect(&self, data_ids: &mut Vec<DataId>);
 }
 
 /// Common methods for `RasterOperator`s
 #[typetag::serde(tag = "type")]
 #[async_trait]
 pub trait RasterOperator:
-    CloneableRasterOperator + OperatorDatasets + Send + Sync + std::fmt::Debug
+    CloneableRasterOperator + OperatorData + Send + Sync + std::fmt::Debug
 {
     async fn initialize(
         self: Box<Self>,
@@ -47,7 +46,7 @@ pub trait RasterOperator:
 #[typetag::serde(tag = "type")]
 #[async_trait]
 pub trait VectorOperator:
-    CloneableVectorOperator + OperatorDatasets + Send + Sync + std::fmt::Debug
+    CloneableVectorOperator + OperatorData + Send + Sync + std::fmt::Debug
 {
     async fn initialize(
         self: Box<Self>,
@@ -67,7 +66,7 @@ pub trait VectorOperator:
 #[typetag::serde(tag = "type")]
 #[async_trait]
 pub trait PlotOperator:
-    CloneablePlotOperator + OperatorDatasets + Send + Sync + std::fmt::Debug
+    CloneablePlotOperator + OperatorData + Send + Sync + std::fmt::Debug
 {
     async fn initialize(
         self: Box<Self>,
@@ -264,12 +263,16 @@ macro_rules! call_on_typed_operator {
     };
 }
 
-impl OperatorDatasets for TypedOperator {
-    fn datasets_collect(&self, datasets: &mut Vec<DatasetId>) {
+impl OperatorData for TypedOperator {
+    fn data_ids_collect(&self, data_ids: &mut Vec<DataId>) {
         match self {
-            TypedOperator::Vector(v) => v.datasets_collect(datasets),
-            TypedOperator::Raster(r) => r.datasets_collect(datasets),
-            TypedOperator::Plot(p) => p.datasets_collect(datasets),
+            TypedOperator::Vector(v) => v.data_ids_collect(data_ids),
+            TypedOperator::Raster(r) => r.data_ids_collect(data_ids),
+            TypedOperator::Plot(p) => p.data_ids_collect(data_ids),
         }
     }
+}
+
+pub trait OperatorName {
+    const TYPE_NAME: &'static str;
 }

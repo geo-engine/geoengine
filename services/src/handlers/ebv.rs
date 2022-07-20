@@ -7,16 +7,16 @@ use crate::contexts::AdminSession;
 use crate::datasets::external::netcdfcf::{
     NetCdfOverview, OverviewGeneration, NETCDF_CF_PROVIDER_ID,
 };
-use crate::datasets::listing::ExternalDatasetProvider;
-use crate::datasets::storage::DatasetProviderDb;
 use crate::error::Result;
+use crate::layers::external::DataProvider;
+use crate::layers::storage::LayerProviderDb;
 use crate::tasks::{Task, TaskContext, TaskManager, TaskStatusInfo};
 use crate::{contexts::Context, datasets::external::netcdfcf::NetCdfCfDataProvider};
 use actix_web::{
     web::{self, ServiceConfig},
     FromRequest, Responder,
 };
-use geoengine_datatypes::dataset::DatasetProviderId;
+use geoengine_datatypes::dataset::DataProviderId;
 use geoengine_datatypes::error::{BoxedResultExt, ErrorSource};
 use log::{debug, warn};
 use serde::{Deserialize, Serialize};
@@ -118,9 +118,9 @@ pub enum EbvError {
     #[snafu(display("Cannot lookup dataset with id {id}"))]
     CannotLookupDataset { id: usize },
     #[snafu(display("Cannot find NetCdfCf provider with id {id}"))]
-    NoNetCdfCfProviderForId { id: DatasetProviderId },
+    NoNetCdfCfProviderForId { id: DataProviderId },
     #[snafu(display("NetCdfCf provider with id {id} cannot list files"))]
-    CdfCfProviderCannotListFiles { id: DatasetProviderId },
+    CdfCfProviderCannotListFiles { id: DataProviderId },
     #[snafu(display("Internal server error"))]
     Internal { source: Box<dyn ErrorSource> },
 }
@@ -267,7 +267,7 @@ async fn get_dataset_metadata(base_url: &BaseUrl, id: usize) -> Result<EbvDatase
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 struct EbvHierarchy {
-    provider_id: DatasetProviderId,
+    provider_id: DataProviderId,
     tree: NetCdfOverview,
 }
 
@@ -326,16 +326,16 @@ async fn netcdfcf_provider_path<C: Context>(
 
 async fn with_netcdfcf_provider<C: Context, T, F>(
     ctx: &C,
-    session: &C::Session,
+    _session: &C::Session,
     f: F,
 ) -> Result<T, EbvError>
 where
     T: Send + 'static,
     F: FnOnce(&NetCdfCfDataProvider) -> Result<T, EbvError> + Send + 'static,
 {
-    let provider: Box<dyn ExternalDatasetProvider> = ctx
-        .dataset_db_ref()
-        .dataset_provider(session, NETCDF_CF_PROVIDER_ID)
+    let provider: Box<dyn DataProvider> = ctx
+        .layer_provider_db_ref()
+        .layer_provider(NETCDF_CF_PROVIDER_ID)
         .await
         .map_err(|_| EbvError::NoNetCdfCfProviderForId {
             id: NETCDF_CF_PROVIDER_ID,
@@ -567,15 +567,12 @@ mod tests {
         let ctx = InMemoryContext::test_default();
         let session_id = ctx.default_session_ref().await.id();
 
-        ctx.dataset_db_ref()
-            .add_dataset_provider(
-                &*ctx.default_session_ref().await,
-                Box::new(NetCdfCfDataProviderDefinition {
-                    name: "test".to_string(),
-                    path: test_data!("netcdf4d").to_path_buf(),
-                    overviews: test_data!("netcdf4d/overviews").to_path_buf(),
-                }),
-            )
+        ctx.layer_provider_db_ref()
+            .add_layer_provider(Box::new(NetCdfCfDataProviderDefinition {
+                name: "test".to_string(),
+                path: test_data!("netcdf4d").to_path_buf(),
+                overviews: test_data!("netcdf4d/overviews").to_path_buf(),
+            }))
             .await
             .unwrap();
 

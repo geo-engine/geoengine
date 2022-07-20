@@ -306,6 +306,7 @@ async fn get_coverage<C: Context>(
     let workflow_spatial_ref = workflow_spatial_ref.ok_or(error::Error::InvalidSpatialReference)?;
 
     let request_spatial_ref: SpatialReference = request.gridbasecrs;
+    let request_no_data_value = request.nodatavalue;
 
     // perform reprojection if necessary
     let initialized = if request_spatial_ref == workflow_spatial_ref {
@@ -324,8 +325,6 @@ async fn get_coverage<C: Context>(
             .await
             .context(error::Operator)?
     };
-
-    let no_data_value: Option<f64> = initialized.result_descriptor().no_data_value;
 
     let processor = initialized.query_processor().context(error::Operator)?;
 
@@ -354,7 +353,7 @@ async fn get_coverage<C: Context>(
             query_rect,
             query_ctx,
             GdalGeoTiffDatasetMetadata {
-                no_data_value,
+                no_data_value: request_no_data_value,
                 spatial_reference: request_spatial_ref,
             },
             GdalGeoTiffOptions {
@@ -548,8 +547,10 @@ mod tests {
         );
     }
 
+    // TODO: add get_coverage with masked band
+
     #[tokio::test]
-    async fn get_coverage() {
+    async fn get_coverage_with_nodatavalue() {
         let exe_ctx_tiling_spec = TilingSpecification {
             origin_coordinate: (0., 0.).into(),
             tile_size_in_pixels: GridShape2D::new([600, 600]),
@@ -577,6 +578,7 @@ mod tests {
             ("gridorigin", "80,-10"),
             ("gridoffsets", "0.1,0.1"),
             ("time", "2014-01-01T00:00:00.0Z"),
+            ("nodatavalue", "0.0"),
         ];
 
         let req = test::TestRequest::get()
@@ -586,6 +588,7 @@ mod tests {
                 serde_urlencoded::to_string(params).unwrap()
             ))
             .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())));
+
         let res = send_test_request(req, ctx).await;
 
         assert_eq!(res.status(), 200);

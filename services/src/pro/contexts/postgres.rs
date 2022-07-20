@@ -1,10 +1,11 @@
 use crate::datasets::add_from_directory::add_providers_from_directory;
 use crate::error::{self, Result};
 use crate::layers::add_from_directory::{
-    add_layer_collections_from_directory, add_layers_from_directory,
+    add_layer_collections_from_directory, add_layers_from_directory, UNSORTED_COLLECTION_ID,
 };
+use crate::layers::storage::INTERNAL_LAYER_DB_ROOT_COLLECTION_ID;
 use crate::pro::datasets::{add_datasets_from_directory, PostgresDatasetDb, Role};
-use crate::pro::layers::postgres_layer_db::PostgresLayerDb;
+use crate::pro::layers::postgres_layer_db::{PostgresLayerDb, PostgresLayerProviderDb};
 use crate::pro::projects::ProjectPermission;
 use crate::pro::users::{UserDb, UserId, UserSession};
 use crate::pro::workflows::postgres_workflow_registry::PostgresWorkflowRegistry;
@@ -49,6 +50,7 @@ where
     workflow_registry: Arc<PostgresWorkflowRegistry<Tls>>,
     dataset_db: Arc<PostgresDatasetDb<Tls>>,
     layer_db: Arc<PostgresLayerDb<Tls>>,
+    layer_provider_db: Arc<PostgresLayerProviderDb<Tls>>,
     thread_pool: Arc<ThreadPool>,
     exe_ctx_tiling_spec: TilingSpecification,
     query_ctx_chunk_size: ChunkByteSize,
@@ -80,6 +82,7 @@ where
             workflow_registry: Arc::new(PostgresWorkflowRegistry::new(pool.clone())),
             dataset_db: Arc::new(PostgresDatasetDb::new(pool.clone())),
             layer_db: Arc::new(PostgresLayerDb::new(pool.clone())),
+            layer_provider_db: Arc::new(PostgresLayerProviderDb::new(pool.clone())),
             task_manager: Arc::new(SimpleTaskManager::default()),
             thread_pool: create_rayon_thread_pool(0),
             exe_ctx_tiling_spec,
@@ -105,22 +108,20 @@ where
 
         Self::update_schema(pool.get().await?).await?;
 
-        let mut workflow_db = PostgresWorkflowRegistry::new(pool.clone());
+        let workflow_db = PostgresWorkflowRegistry::new(pool.clone());
         let mut layer_db = PostgresLayerDb::new(pool.clone());
 
-        add_layers_from_directory(&mut layer_db, &mut workflow_db, layer_defs_path).await;
+        add_layers_from_directory(&mut layer_db, layer_defs_path).await;
         add_layer_collections_from_directory(&mut layer_db, layer_collection_defs_path).await;
 
         let mut dataset_db = PostgresDatasetDb::new(pool.clone());
-        add_datasets_from_directory(
-            &mut dataset_db,
-            &mut layer_db,
-            &mut workflow_db,
-            dataset_defs_path,
-        )
-        .await;
-        add_providers_from_directory(&mut dataset_db, provider_defs_path.clone()).await;
-        add_providers_from_directory(&mut dataset_db, provider_defs_path.join("pro")).await;
+
+        add_datasets_from_directory(&mut dataset_db, dataset_defs_path).await;
+
+        let mut layer_provider_db = PostgresLayerProviderDb::new(pool.clone());
+
+        add_providers_from_directory(&mut layer_provider_db, provider_defs_path.clone()).await;
+        add_providers_from_directory(&mut layer_provider_db, provider_defs_path.join("pro")).await;
 
         Ok(Self {
             user_db: Arc::new(PostgresUserDb::new(pool.clone())),
@@ -128,6 +129,7 @@ where
             workflow_registry: Arc::new(workflow_db),
             dataset_db: Arc::new(dataset_db),
             layer_db: Arc::new(layer_db),
+            layer_provider_db: Arc::new(PostgresLayerProviderDb::new(pool.clone())),
             task_manager: Arc::new(SimpleTaskManager::default()),
             thread_pool: create_rayon_thread_pool(0),
             exe_ctx_tiling_spec,
@@ -347,15 +349,6 @@ where
                             provenance json
                         );
 
-                        -- TODO: should name be unique (per user)?
-                        CREATE TABLE dataset_providers (
-                            id UUID PRIMARY KEY,
-                            type_name text NOT NULL,
-                            name text NOT NULL,
-
-                            definition json NOT NULL
-                        );
-
                         -- TODO: add constraint not null
                         -- TODO: add constaint byte_size >= 0
                         CREATE TYPE "FileUpload" AS (
@@ -400,11 +393,34 @@ where
                             description text NOT NULL
                         );
 
+                        -- insert the root layer collection
+                        INSERT INTO layer_collections (
+                            id,
+                            name,
+                            description
+                        ) VALUES (
+                            '{root_layer_collection_id}',
+                            'Layers',
+                            'All available Geo Engine layers'
+                        );
+
+                        -- insert the unsorted layer collection
+                        INSERT INTO layer_collections (
+                            id,
+                            name,
+                            description
+                        ) VALUES (
+                            '{unsorted_layer_collection_id}',
+                            'Unsorted',
+                            'Unsorted Layers'
+                        );
+    
+
                         CREATE TABLE layers (
                             id UUID PRIMARY KEY,
                             name text NOT NULL,
                             description text NOT NULL,
-                            workflow UUID REFERENCES workflows NOT NULL,
+                            workflow json NOT NULL,
                             symbology json 
                         );
 
@@ -420,6 +436,19 @@ where
                             PRIMARY KEY (parent, child)
                         );
 
+                        -- add unsorted layers to root layer collection
+                        INSERT INTO collection_children (parent, child) VALUES
+                        ('{root_layer_collection_id}', '{unsorted_layer_collection_id}');
+
+                        -- TODO: should name be unique (per user)?
+                        CREATE TABLE layer_providers (
+                            id UUID PRIMARY KEY,
+                            type_name text NOT NULL,
+                            name text NOT NULL,
+
+                            definition json NOT NULL
+                        );
+
                         -- TODO: uploads, providers permissions
 
                         -- TODO: relationship between uploads and datasets?                        
@@ -427,7 +456,9 @@ where
                     ,
                     system_role_id = Role::system_role_id(),
                     user_role_id = Role::user_role_id(),
-                    anonymous_role_id = Role::anonymous_role_id()))
+                    anonymous_role_id = Role::anonymous_role_id(),
+                    root_layer_collection_id = INTERNAL_LAYER_DB_ROOT_COLLECTION_ID,
+                    unsorted_layer_collection_id = UNSORTED_COLLECTION_ID))
                     .await?;
                     debug!("Updated user database to schema version {}", version + 1);
                 }
@@ -503,10 +534,12 @@ where
     type WorkflowRegistry = PostgresWorkflowRegistry<Tls>;
     type DatasetDB = PostgresDatasetDb<Tls>;
     type LayerDB = PostgresLayerDb<Tls>;
+    type LayerProviderDB = PostgresLayerProviderDb<Tls>;
     type TaskContext = SimpleTaskManagerContext;
     type TaskManager = SimpleTaskManager; // this does not persist across restarts
     type QueryContext = QueryContextImpl;
-    type ExecutionContext = ExecutionContextImpl<UserSession, PostgresDatasetDb<Tls>>;
+    type ExecutionContext =
+        ExecutionContextImpl<UserSession, PostgresDatasetDb<Tls>, PostgresLayerProviderDb<Tls>>;
 
     fn project_db(&self) -> Arc<Self::ProjectDB> {
         self.project_db.clone()
@@ -536,6 +569,13 @@ where
         &self.layer_db
     }
 
+    fn layer_provider_db(&self) -> Arc<Self::LayerProviderDB> {
+        self.layer_provider_db.clone()
+    }
+    fn layer_provider_db_ref(&self) -> &Self::LayerProviderDB {
+        &self.layer_provider_db
+    }
+
     fn tasks(&self) -> Arc<Self::TaskManager> {
         self.task_manager.clone()
     }
@@ -552,14 +592,17 @@ where
     }
 
     fn execution_context(&self, session: UserSession) -> Result<Self::ExecutionContext> {
-        Ok(
-            ExecutionContextImpl::<UserSession, PostgresDatasetDb<Tls>>::new(
-                self.dataset_db.clone(),
-                self.thread_pool.clone(),
-                session,
-                self.exe_ctx_tiling_spec,
-            ),
-        )
+        Ok(ExecutionContextImpl::<
+            UserSession,
+            PostgresDatasetDb<Tls>,
+            PostgresLayerProviderDb<Tls>,
+        >::new(
+            self.dataset_db.clone(),
+            self.layer_provider_db.clone(),
+            self.thread_pool.clone(),
+            session,
+            self.exe_ctx_tiling_spec,
+        ))
     }
 
     async fn session_by_id(&self, session_id: crate::contexts::SessionId) -> Result<Self::Session> {
@@ -576,21 +619,24 @@ mod tests {
     use std::str::FromStr;
 
     use super::*;
-    use crate::datasets::external::mock::MockExternalDataProviderDefinition;
+    use crate::datasets::external::mock::MockExternalLayerProviderDefinition;
     use crate::datasets::listing::SessionMetaDataProvider;
     use crate::datasets::listing::{DatasetListOptions, DatasetListing, ProvenanceOutput};
     use crate::datasets::listing::{DatasetProvider, Provenance};
     use crate::datasets::storage::{
-        AddDataset, DatasetDefinition, DatasetProviderDb, DatasetProviderListOptions,
-        DatasetProviderListing, DatasetStore, MetaDataDefinition,
+        AddDataset, DatasetDefinition, DatasetStore, MetaDataDefinition,
     };
     use crate::datasets::upload::{FileId, UploadId};
     use crate::datasets::upload::{FileUpload, Upload, UploadDb};
     use crate::layers::layer::{
         AddLayer, AddLayerCollection, CollectionItem, LayerCollectionListOptions,
-        LayerCollectionListing, LayerListing,
+        LayerCollectionListing, LayerListing, ProviderLayerCollectionId, ProviderLayerId,
     };
-    use crate::layers::storage::LayerDb;
+    use crate::layers::listing::{LayerCollectionId, LayerCollectionProvider};
+    use crate::layers::storage::{
+        LayerDb, LayerProviderDb, LayerProviderListing, LayerProviderListingOptions,
+        INTERNAL_PROVIDER_ID,
+    };
     use crate::pro::datasets::{DatasetPermission, Permission, UpdateDatasetPermissions};
     use crate::pro::projects::{LoadVersion, ProProjectDb, UserProjectPermission};
     use crate::pro::users::{UserCredentials, UserDb, UserRegistration};
@@ -606,9 +652,7 @@ mod tests {
     use bb8_postgres::tokio_postgres::{self, NoTls};
     use futures::Future;
     use geoengine_datatypes::collections::VectorDataType;
-    use geoengine_datatypes::dataset::{
-        DatasetId, DatasetProviderId, ExternalDatasetId, InternalDatasetId,
-    };
+    use geoengine_datatypes::dataset::{DataProviderId, DatasetId};
     use geoengine_datatypes::primitives::{
         BoundingBox2D, Coordinate2D, FeatureDataType, Measurement, SpatialResolution, TimeInterval,
         VectorQueryRectangle,
@@ -1037,10 +1081,7 @@ mod tests {
     #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
     async fn it_persists_datasets() {
         with_temp_context(|ctx, _| async move {
-            let dataset_id = DatasetId::Internal {
-                dataset_id: InternalDatasetId::from_str("2e8af98d-3b98-4e2c-a35b-e487bffad7b6")
-                    .unwrap(),
-            };
+            let dataset_id = DatasetId::from_str("2e8af98d-3b98-4e2c-a35b-e487bffad7b6").unwrap();
 
             let loading_info = OgrSourceDataset {
                 file_name: PathBuf::from("test.csv"),
@@ -1103,7 +1144,7 @@ mod tests {
             db.add_dataset(
                 &session,
                 AddDataset {
-                    id: Some(dataset_id.clone()),
+                    id: Some(dataset_id),
                     name: "Ogr Test".to_owned(),
                     description: "desc".to_owned(),
                     source_operator: "OgrSource".to_owned(),
@@ -1141,7 +1182,7 @@ mod tests {
             assert_eq!(
                 datasets[0],
                 DatasetListing {
-                    id: dataset_id.clone(),
+                    id: dataset_id,
                     name: "Ogr Test".to_owned(),
                     description: "desc".to_owned(),
                     source_operator: "OgrSource".to_owned(),
@@ -1170,7 +1211,7 @@ mod tests {
             assert_eq!(
                 provenance,
                 ProvenanceOutput {
-                    dataset: dataset_id.clone(),
+                    data: dataset_id.into(),
                     provenance: Some(Provenance {
                         citation: "citation".to_owned(),
                         license: "license".to_owned(),
@@ -1179,8 +1220,10 @@ mod tests {
                 }
             );
 
-            let meta_data: Box<dyn MetaData<OgrSourceDataset, _, _>> =
-                db.session_meta_data(&session, &dataset_id).await.unwrap();
+            let meta_data: Box<dyn MetaData<OgrSourceDataset, _, _>> = db
+                .session_meta_data(&session, &dataset_id.into())
+                .await
+                .unwrap();
 
             assert_eq!(
                 meta_data
@@ -1227,14 +1270,12 @@ mod tests {
 
     #[allow(clippy::too_many_lines)]
     #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
-    async fn it_persists_dataset_providers() {
+    async fn it_persists_layer_providers() {
         with_temp_context(|ctx, _| async move {
-            let db = ctx.dataset_db_ref();
-
-            let session = ctx.user_db_ref().anonymous().await.unwrap();
+            let db = ctx.layer_provider_db_ref();
 
             let provider_id =
-                DatasetProviderId::from_str("7b20c8d7-d754-4f8f-ad44-dddd25df22d2").unwrap();
+                DataProviderId::from_str("7b20c8d7-d754-4f8f-ad44-dddd25df22d2").unwrap();
 
             let loading_info = OgrSourceDataset {
                 file_name: PathBuf::from("test.csv"),
@@ -1290,14 +1331,11 @@ mod tests {
                 phantom: Default::default(),
             });
 
-            let provider = MockExternalDataProviderDefinition {
+            let provider = MockExternalLayerProviderDefinition {
                 id: provider_id,
                 datasets: vec![DatasetDefinition {
                     properties: AddDataset {
-                        id: Some(DatasetId::External(ExternalDatasetId {
-                            provider_id,
-                            dataset_id: "test".to_owned(),
-                        })),
+                        id: Some(DatasetId::new()),
                         name: "test".to_owned(),
                         description: "desc".to_owned(),
                         source_operator: "MockPointSource".to_owned(),
@@ -1308,14 +1346,11 @@ mod tests {
                 }],
             };
 
-            db.add_dataset_provider(&session, Box::new(provider))
-                .await
-                .unwrap();
+            db.add_layer_provider(Box::new(provider)).await.unwrap();
 
             let providers = db
-                .list_dataset_providers(
-                    &session,
-                    DatasetProviderListOptions {
+                .list_layer_providers(
+                    LayerProviderListingOptions {
                         offset: 0,
                         limit: 10,
                     }
@@ -1329,20 +1364,19 @@ mod tests {
 
             assert_eq!(
                 providers[0],
-                DatasetProviderListing {
+                LayerProviderListing {
                     id: provider_id,
-                    type_name: "MockType".to_owned(),
                     name: "MockName".to_owned(),
+                    description: "MockType".to_owned(),
                 }
             );
 
-            let provider = db.dataset_provider(&session, provider_id).await.unwrap();
+            let provider = db.layer_provider(provider_id).await.unwrap();
 
             let datasets = provider
-                .list(
-                    DatasetListOptions {
-                        filter: None,
-                        order: crate::datasets::listing::OrderBy::NameAsc,
+                .collection_items(
+                    &provider.root_collection_id().await.unwrap(),
+                    LayerCollectionListOptions {
                         offset: 0,
                         limit: 10,
                     }
@@ -1573,7 +1607,7 @@ mod tests {
                     &session1,
                     DatasetPermission {
                         role: session2.user.id.into(),
-                        dataset: id.clone(),
+                        dataset: id,
                         permission: Permission::Read,
                     },
                 )
@@ -1645,7 +1679,7 @@ mod tests {
                     &session1,
                     DatasetPermission {
                         role: session2.user.id.into(),
-                        dataset: id.clone(),
+                        dataset: id,
                         permission: Permission::Read,
                     },
                 )
@@ -1710,13 +1744,19 @@ mod tests {
 
             let meta: Result<
                 Box<dyn MetaData<OgrSourceDataset, VectorResultDescriptor, VectorQueryRectangle>>,
-            > = ctx.dataset_db_ref().session_meta_data(&session1, &id).await;
+            > = ctx
+                .dataset_db_ref()
+                .session_meta_data(&session1, &id.into())
+                .await;
 
             assert!(meta.is_ok());
 
             let meta: Result<
                 Box<dyn MetaData<OgrSourceDataset, VectorResultDescriptor, VectorQueryRectangle>>,
-            > = ctx.dataset_db_ref().session_meta_data(&session2, &id).await;
+            > = ctx
+                .dataset_db_ref()
+                .session_meta_data(&session2, &id.into())
+                .await;
 
             assert!(meta.is_err());
 
@@ -1725,7 +1765,7 @@ mod tests {
                     &session1,
                     DatasetPermission {
                         role: session2.user.id.into(),
-                        dataset: id.clone(),
+                        dataset: id,
                         permission: Permission::Read,
                     },
                 )
@@ -1734,7 +1774,10 @@ mod tests {
 
             let meta: Result<
                 Box<dyn MetaData<OgrSourceDataset, VectorResultDescriptor, VectorQueryRectangle>>,
-            > = ctx.dataset_db_ref().session_meta_data(&session2, &id).await;
+            > = ctx
+                .dataset_db_ref()
+                .session_meta_data(&session2, &id.into())
+                .await;
 
             assert!(meta.is_ok());
         })
@@ -1783,21 +1826,19 @@ mod tests {
     async fn it_collects_layers() {
         with_temp_context(|ctx, _| async move {
             let layer_db = ctx.layer_db_ref();
-            let workflow_db = ctx.workflow_registry_ref();
 
-            let workflow = workflow_db
-                .register(Workflow {
-                    operator: TypedOperator::Vector(
-                        MockPointSource {
-                            params: MockPointSourceParams {
-                                points: vec![Coordinate2D::new(1., 2.); 3],
-                            },
-                        }
-                        .boxed(),
-                    ),
-                })
-                .await
-                .unwrap();
+            let workflow = Workflow {
+                operator: TypedOperator::Vector(
+                    MockPointSource {
+                        params: MockPointSourceParams {
+                            points: vec![Coordinate2D::new(1., 2.); 3],
+                        },
+                    }
+                    .boxed(),
+                ),
+            };
+
+            let root_collection_id = layer_db.root_collection_id().await.unwrap();
 
             let layer1 = layer_db
                 .add_layer(
@@ -1805,38 +1846,28 @@ mod tests {
                         name: "Layer1".to_string(),
                         description: "Layer 1".to_string(),
                         symbology: None,
-                        workflow,
+                        workflow: workflow.clone(),
                     }
                     .validated()
                     .unwrap(),
+                    &root_collection_id,
                 )
                 .await
                 .unwrap();
 
             assert_eq!(
-                layer_db.get_layer(layer1).await.unwrap(),
+                layer_db.get_layer(&layer1).await.unwrap(),
                 crate::layers::layer::Layer {
-                    id: layer1,
+                    id: ProviderLayerId {
+                        provider_id: INTERNAL_PROVIDER_ID,
+                        layer_id: layer1.clone(),
+                    },
                     name: "Layer1".to_string(),
                     description: "Layer 1".to_string(),
                     symbology: None,
-                    workflow
+                    workflow: workflow.clone()
                 }
             );
-
-            let layer2 = layer_db
-                .add_layer(
-                    AddLayer {
-                        name: "Layer2".to_string(),
-                        description: "Layer 2".to_string(),
-                        symbology: None,
-                        workflow,
-                    }
-                    .validated()
-                    .unwrap(),
-                )
-                .await
-                .unwrap();
 
             let collection1 = layer_db
                 .add_collection(
@@ -1846,6 +1877,22 @@ mod tests {
                     }
                     .validated()
                     .unwrap(),
+                    &root_collection_id,
+                )
+                .await
+                .unwrap();
+
+            let layer2 = layer_db
+                .add_layer(
+                    AddLayer {
+                        name: "Layer2".to_string(),
+                        description: "Layer 2".to_string(),
+                        symbology: None,
+                        workflow: workflow.clone(),
+                    }
+                    .validated()
+                    .unwrap(),
+                    &collection1,
                 )
                 .await
                 .unwrap();
@@ -1858,22 +1905,19 @@ mod tests {
                     }
                     .validated()
                     .unwrap(),
+                    &collection1,
                 )
                 .await
                 .unwrap();
 
             layer_db
-                .add_layer_to_collection(layer1, collection1)
-                .await
-                .unwrap();
-
-            layer_db
-                .add_collection_to_parent(collection2, collection1)
+                .add_collection_to_parent(&collection2, &collection1)
                 .await
                 .unwrap();
 
             let root_list = layer_db
-                .get_root_collection_items(
+                .collection_items(
+                    &root_collection_id,
                     LayerCollectionListOptions {
                         offset: 0,
                         limit: 20,
@@ -1888,22 +1932,35 @@ mod tests {
                 root_list,
                 vec![
                     CollectionItem::Collection(LayerCollectionListing {
-                        id: collection1,
+                        id: ProviderLayerCollectionId {
+                            provider_id: INTERNAL_PROVIDER_ID,
+                            collection_id: collection1.clone(),
+                        },
                         name: "Collection1".to_string(),
                         description: "Collection 1".to_string(),
                     }),
+                    CollectionItem::Collection(LayerCollectionListing {
+                        id: ProviderLayerCollectionId {
+                            provider_id: INTERNAL_PROVIDER_ID,
+                            collection_id: LayerCollectionId(UNSORTED_COLLECTION_ID.to_string()),
+                        },
+                        name: "Unsorted".to_string(),
+                        description: "Unsorted Layers".to_string(),
+                    }),
                     CollectionItem::Layer(LayerListing {
-                        id: layer2,
-                        name: "Layer2".to_string(),
-                        description: "Layer 2".to_string(),
-                        workflow
+                        id: ProviderLayerId {
+                            provider_id: INTERNAL_PROVIDER_ID,
+                            layer_id: layer1,
+                        },
+                        name: "Layer1".to_string(),
+                        description: "Layer 1".to_string(),
                     })
                 ]
             );
 
             let collection1_list = layer_db
-                .get_collection_items(
-                    collection1,
+                .collection_items(
+                    &collection1,
                     LayerCollectionListOptions {
                         offset: 0,
                         limit: 20,
@@ -1918,15 +1975,20 @@ mod tests {
                 collection1_list,
                 vec![
                     CollectionItem::Collection(LayerCollectionListing {
-                        id: collection2,
+                        id: ProviderLayerCollectionId {
+                            provider_id: INTERNAL_PROVIDER_ID,
+                            collection_id: collection2,
+                        },
                         name: "Collection2".to_string(),
                         description: "Collection 2".to_string(),
                     }),
                     CollectionItem::Layer(LayerListing {
-                        id: layer1,
-                        name: "Layer1".to_string(),
-                        description: "Layer 1".to_string(),
-                        workflow
+                        id: ProviderLayerId {
+                            provider_id: INTERNAL_PROVIDER_ID,
+                            layer_id: layer2,
+                        },
+                        name: "Layer2".to_string(),
+                        description: "Layer 2".to_string(),
                     })
                 ]
             );

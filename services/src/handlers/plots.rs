@@ -232,12 +232,9 @@ mod tests {
     use geoengine_operators::plot::{
         Histogram, HistogramBounds, HistogramParams, Statistics, StatisticsParams,
     };
-    use num_traits::AsPrimitive;
     use serde_json::json;
 
     fn example_raster_source() -> Box<dyn RasterOperator> {
-        let no_data_value = None;
-
         MockRasterSource {
             params: MockRasterSourceParams {
                 data: vec![RasterTile2D::new_with_tile_info(
@@ -247,7 +244,7 @@ mod tests {
                         global_tile_position: [0, 0].into(),
                         tile_size_in_pixels: [3, 2].into(),
                     },
-                    Grid2D::new([3, 2].into(), vec![1, 2, 3, 4, 5, 6], no_data_value)
+                    Grid2D::new([3, 2].into(), vec![1, 2, 3, 4, 5, 6])
                         .unwrap()
                         .into(),
                 )],
@@ -255,7 +252,6 @@ mod tests {
                     data_type: RasterDataType::U8,
                     spatial_reference: SpatialReference::epsg_4326().into(),
                     measurement: Measurement::Unitless,
-                    no_data_value: no_data_value.map(AsPrimitive::as_),
                     time: None,
                     bbox: None,
                 },

@@ -1,9 +1,6 @@
 {
   "properties": {
-    "id": {
-      "type": "internal",
-      "datasetId": "5c512b9c-776a-4a05-b47a-c3c8b052ecfa"
-    },
+    "id": "5c512b9c-776a-4a05-b47a-c3c8b052ecfa",
     "name": "NDVI as GdalMetaDataList",
     "description": "NDVI data from MODIS",
     "sourceOperator": "GdalSource",
@@ -288,7 +285,6 @@
       "measurement": {
         "type": "unitless"
       },
-      "noDataValue": 0.0,
       "time": {
         "start": "2014-01-01T00:00:00.000Z",
         "end": "2014-07-01T00:00:00.000Z"

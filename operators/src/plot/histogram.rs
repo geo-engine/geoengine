@@ -304,7 +304,7 @@ impl HistogramRasterQueryProcessor {
             while let Some(tile) = input.next().await {
                 match tile?.grid_array {
                     geoengine_datatypes::raster::GridOrEmpty::Grid(g) => {
-                        computed_metadata.add_raster_batch(&g.data, g.no_data_value);
+                        computed_metadata.add_raster_batch(g.masked_element_deref_iterator());
                     }
                     geoengine_datatypes::raster::GridOrEmpty::Empty(_) => {} // TODO: find out if we really do nothing for empty tiles?
                 }
@@ -346,7 +346,7 @@ impl HistogramRasterQueryProcessor {
 
 
                 match tile?.grid_array {
-                    geoengine_datatypes::raster::GridOrEmpty::Grid(g) => histogram.add_raster_data(&g.data, g.no_data_value),
+                    geoengine_datatypes::raster::GridOrEmpty::Grid(g) => histogram.add_raster_data(g.masked_element_deref_iterator()),
                     geoengine_datatypes::raster::GridOrEmpty::Empty(n) => histogram.add_nodata_batch(n.number_of_elements() as u64) // TODO: why u64?
                 }
             }
@@ -527,22 +527,13 @@ impl Default for HistogramMetadataInProgress {
 
 impl HistogramMetadataInProgress {
     #[inline]
-    fn add_raster_batch<T: Pixel>(&mut self, values: &[T], no_data: Option<T>) {
-        if let Some(no_data) = no_data {
-            for &v in values {
-                if v == no_data {
-                    continue;
-                }
-
+    fn add_raster_batch<T: Pixel, I: Iterator<Item = Option<T>>>(&mut self, values: I) {
+        values.for_each(|pixel_option| {
+            if let Some(p) = pixel_option {
                 self.n += 1;
-                self.update_minmax(v.as_());
+                self.update_minmax(p.as_());
             }
-        } else {
-            self.n += values.len();
-            for v in values {
-                self.update_minmax(v.as_());
-            }
-        }
+        });
     }
 
     #[inline]
@@ -609,12 +600,12 @@ mod tests {
         OgrSourceColumnSpec, OgrSourceDataset, OgrSourceDatasetTimeType, OgrSourceErrorSpec,
     };
     use crate::test_data;
-    use geoengine_datatypes::dataset::{DatasetId, InternalDatasetId};
+    use geoengine_datatypes::dataset::{DataId, DatasetId};
     use geoengine_datatypes::primitives::{
         BoundingBox2D, DateTime, FeatureData, NoGeometry, SpatialResolution, TimeInterval,
     };
     use geoengine_datatypes::raster::{
-        Grid2D, RasterDataType, RasterTile2D, TileInformation, TilingSpecification,
+        EmptyGrid2D, Grid2D, RasterDataType, RasterTile2D, TileInformation, TilingSpecification,
     };
     use geoengine_datatypes::spatial_reference::SpatialReference;
     use geoengine_datatypes::util::test::TestDefault;
@@ -623,7 +614,6 @@ mod tests {
         collections::{DataCollection, VectorDataType},
         primitives::MultiPoint,
     };
-    use num_traits::AsPrimitive;
     use serde_json::json;
 
     #[test]
@@ -731,7 +721,6 @@ mod tests {
     }
 
     fn mock_raster_source() -> Box<dyn RasterOperator> {
-        let no_data_value = None;
         MockRasterSource {
             params: MockRasterSourceParams {
                 data: vec![RasterTile2D::new_with_tile_info(
@@ -741,7 +730,7 @@ mod tests {
                         global_tile_position: [0, 0].into(),
                         tile_size_in_pixels: [3, 2].into(),
                     },
-                    Grid2D::new([3, 2].into(), vec![1, 2, 3, 4, 5, 6], no_data_value)
+                    Grid2D::new([3, 2].into(), vec![1, 2, 3, 4, 5, 6])
                         .unwrap()
                         .into(),
                 )],
@@ -749,7 +738,6 @@ mod tests {
                     data_type: RasterDataType::U8,
                     spatial_reference: SpatialReference::epsg_4326().into(),
                     measurement: Measurement::Unitless,
-                    no_data_value: no_data_value.map(AsPrimitive::as_),
                     time: None,
                     bbox: None,
                 },
@@ -997,7 +985,7 @@ mod tests {
     #[tokio::test]
     #[allow(clippy::too_many_lines)]
     async fn text_attribute() {
-        let dataset_id = InternalDatasetId::new();
+        let dataset_id = DatasetId::new();
 
         let workflow = serde_json::json!({
             "type": "Histogram",
@@ -1009,7 +997,7 @@ mod tests {
                 "source": {
                     "type": "OgrSource",
                     "params": {
-                        "dataset": {
+                        "data": {
                             "type": "internal",
                             "datasetId": dataset_id
                         },
@@ -1022,7 +1010,7 @@ mod tests {
 
         let mut execution_context = MockExecutionContext::test_default();
         execution_context.add_meta_data::<_, _, VectorQueryRectangle>(
-            DatasetId::Internal { dataset_id },
+            DataId::Internal { dataset_id },
             Box::new(StaticMetaData {
                 loading_info: OgrSourceDataset {
                     file_name: test_data!("vector/data/ne_10m_ports/ne_10m_ports.shp").into(),
@@ -1118,8 +1106,6 @@ mod tests {
             tile_size_in_pixels,
         };
         let execution_context = MockExecutionContext::new_with_tiling_spec(tiling_specification);
-
-        let no_data_value = Some(0);
         let histogram = Histogram {
             params: HistogramParams {
                 column_name: None,
@@ -1136,15 +1122,12 @@ mod tests {
                             global_tile_position: [0, 0].into(),
                             tile_size_in_pixels,
                         },
-                        Grid2D::new(tile_size_in_pixels, vec![0, 0, 0, 0, 0, 0], no_data_value)
-                            .unwrap()
-                            .into(),
+                        EmptyGrid2D::<u8>::new(tile_size_in_pixels).into(),
                     )],
                     result_descriptor: RasterResultDescriptor {
                         data_type: RasterDataType::U8,
                         spatial_reference: SpatialReference::epsg_4326().into(),
                         measurement: Measurement::Unitless,
-                        no_data_value: no_data_value.map(AsPrimitive::as_),
                         time: None,
                         bbox: None,
                     },
@@ -1320,8 +1303,6 @@ mod tests {
             tile_size_in_pixels,
         };
         let execution_context = MockExecutionContext::new_with_tiling_spec(tiling_specification);
-
-        let no_data_value = None;
         let histogram = Histogram {
             params: HistogramParams {
                 column_name: None,
@@ -1338,15 +1319,12 @@ mod tests {
                             global_tile_position: [0, 0].into(),
                             tile_size_in_pixels,
                         },
-                        Grid2D::new(tile_size_in_pixels, vec![4; 6], no_data_value)
-                            .unwrap()
-                            .into(),
+                        Grid2D::new(tile_size_in_pixels, vec![4; 6]).unwrap().into(),
                     )],
                     result_descriptor: RasterResultDescriptor {
                         data_type: RasterDataType::U8,
                         spatial_reference: SpatialReference::epsg_4326().into(),
                         measurement: Measurement::Unitless,
-                        no_data_value: no_data_value.map(AsPrimitive::as_),
                         time: None,
                         bbox: None,
                     },

@@ -9,6 +9,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Added traits and methods for updating / mapping the pixels of grid types. Also added a trait for creating grid types using a function for each pixels location.
+
+  - https://github.com/geo-engine/geoengine/pull/561
+
+- Added a layers API that allows browsing datasets, stored layers and external data in a uniform fashion
+
+  - https://github.com/geo-engine/geoengine/pull/554
+
 - Added a `ClassHistogram` plot operator for creating histograms of categorical data
 
   - https://github.com/geo-engine/geoengine/pull/560
@@ -21,10 +29,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+
 - Changed the temporal reference of regular raster time series from a start date to a valid time interval `dataTime`. Before and after the `dataTime`, only one loading info with nodata will be produced instead of lots of nodata-chunks with the original interval of the time series.
 
   - https://github.com/geo-engine/geoengine/pull/569
   - **breaking** The json dataset definition now has a `dataTime` field, instead of "start".
+
+- No-data pixels in a Raster are now represented by a validity mask.
+
+  - https://github.com/geo-engine/geoengine/pull/561
+  - `MaskedGrid` replaces `Grid` in `GridOrEmpty` / `RasterTile`
+  - GeoTIFF files created by the engine contain the validity mask if not specified otherwise.
+  
+- Refactored dataset ids and external provders
+
+  - https://github.com/geo-engine/geoengine/pull/554
+  - **breaking** the parameters of the source operators changed which makes old workflow jsons incompatible
+  - **breaking** the id of datasets changed which makes old dataset definition jsons incompatible
 
 - Added `Measurement`s to vector data workflows
 

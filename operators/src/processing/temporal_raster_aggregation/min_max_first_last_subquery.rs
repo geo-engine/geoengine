@@ -1,4 +1,4 @@
-use std::sync::Arc;
+use std::{marker::PhantomData, sync::Arc};
 
 use async_trait::async_trait;
 use futures::{future::BoxFuture, Future, FutureExt, TryFuture, TryFutureExt};
@@ -7,7 +7,10 @@ use geoengine_datatypes::{
         QueryRectangle, RasterQueryRectangle, SpatialPartitioned, TimeInstance, TimeInterval,
         TimeStep,
     },
-    raster::{EmptyGrid2D, Grid2D, GridOrEmpty, Pixel, RasterTile2D, TileInformation},
+    raster::{
+        EmptyGrid2D, GridIndexAccess, GridOrEmpty, Pixel, RasterTile2D, TileInformation,
+        UpdateIndexedElements,
+    },
 };
 use rayon::ThreadPool;
 
@@ -18,27 +21,20 @@ use crate::{
 
 pub trait AccFunction {
     /// produce new accumulator value from current state and new value
-    fn acc<T: Pixel>(no_data: Option<T>, acc: T, value: T) -> T;
+    fn acc<T: Pixel>(acc: Option<T>, value: Option<T>) -> Option<T>;
 }
 pub trait NoDataIgnoringAccFunction {
     /// produce new accumulator value from current state and new value, ignoring no data values
-    fn acc_ignore_no_data<T: Pixel>(no_data: Option<T>, acc: T, value: T) -> T;
+    fn acc_ignore_no_data<T: Pixel>(acc: Option<T>, value: Option<T>) -> Option<T>;
 }
 
 pub struct MinAccFunction {}
 
 impl AccFunction for MinAccFunction {
-    fn acc<T: Pixel>(no_data: Option<T>, acc: T, value: T) -> T {
-        if let Some(no_data) = no_data {
-            if acc == no_data || value == no_data {
-                return no_data;
-            }
-        }
-
-        if acc < value {
-            acc
-        } else {
-            value
+    fn acc<T: Pixel>(acc: Option<T>, value: Option<T>) -> Option<T> {
+        match (acc, value) {
+            (Some(a), Some(v)) => Some(if a < v { a } else { v }),
+            _ => None,
         }
     }
 }
@@ -46,19 +42,12 @@ impl AccFunction for MinAccFunction {
 pub struct MinIgnoreNoDataAccFunction {}
 
 impl NoDataIgnoringAccFunction for MinIgnoreNoDataAccFunction {
-    fn acc_ignore_no_data<T: Pixel>(no_data: Option<T>, acc: T, value: T) -> T {
-        if let Some(no_data) = no_data {
-            if value == no_data {
-                return acc;
-            } else if acc == no_data {
-                return value;
-            }
-        }
-
-        if acc < value {
-            acc
-        } else {
-            value
+    fn acc_ignore_no_data<T: Pixel>(acc: Option<T>, value: Option<T>) -> Option<T> {
+        match (acc, value) {
+            (Some(a), Some(v)) => Some(if a < v { a } else { v }),
+            (Some(a), None) => Some(a),
+            (None, Some(v)) => Some(v),
+            _ => None,
         }
     }
 }
@@ -66,17 +55,10 @@ impl NoDataIgnoringAccFunction for MinIgnoreNoDataAccFunction {
 pub struct MaxAccFunction {}
 
 impl AccFunction for MaxAccFunction {
-    fn acc<T: Pixel>(no_data: Option<T>, acc: T, value: T) -> T {
-        if let Some(no_data) = no_data {
-            if acc == no_data || value == no_data {
-                return no_data;
-            }
-        }
-
-        if acc > value {
-            acc
-        } else {
-            value
+    fn acc<T: Pixel>(acc: Option<T>, value: Option<T>) -> Option<T> {
+        match (acc, value) {
+            (Some(a), Some(v)) => Some(if a > v { a } else { v }),
+            _ => None,
         }
     }
 }
@@ -84,19 +66,12 @@ impl AccFunction for MaxAccFunction {
 pub struct MaxIgnoreNoDataAccFunction {}
 
 impl NoDataIgnoringAccFunction for MaxIgnoreNoDataAccFunction {
-    fn acc_ignore_no_data<T: Pixel>(no_data: Option<T>, acc: T, value: T) -> T {
-        if let Some(no_data) = no_data {
-            if value == no_data {
-                return acc;
-            } else if acc == no_data {
-                return value;
-            }
-        }
-
-        if acc > value {
-            acc
-        } else {
-            value
+    fn acc_ignore_no_data<T: Pixel>(acc: Option<T>, value: Option<T>) -> Option<T> {
+        match (acc, value) {
+            (Some(a), Some(v)) => Some(if a > v { a } else { v }),
+            (Some(a), None) => Some(a),
+            (None, Some(v)) => Some(v),
+            _ => None,
         }
     }
 }
@@ -104,25 +79,25 @@ impl NoDataIgnoringAccFunction for MaxIgnoreNoDataAccFunction {
 pub struct LastValidAccFunction {}
 
 impl NoDataIgnoringAccFunction for LastValidAccFunction {
-    fn acc_ignore_no_data<T: Pixel>(no_data: Option<T>, acc: T, value: T) -> T {
-        if let Some(no_data) = no_data {
-            if value == no_data {
-                return acc;
-            }
+    fn acc_ignore_no_data<T: Pixel>(acc: Option<T>, value: Option<T>) -> Option<T> {
+        match (acc, value) {
+            (Some(_a), Some(v)) => Some(v),
+            (Some(a), None) => Some(a),
+            (None, Some(v)) => Some(v),
+            _ => None,
         }
-        value
     }
 }
 pub struct FirstValidAccFunction {}
 
 impl NoDataIgnoringAccFunction for FirstValidAccFunction {
-    fn acc_ignore_no_data<T: Pixel>(no_data: Option<T>, acc: T, value: T) -> T {
-        if let Some(no_data) = no_data {
-            if acc == no_data {
-                return value;
-            }
+    fn acc_ignore_no_data<T: Pixel>(acc: Option<T>, value: Option<T>) -> Option<T> {
+        match (acc, value) {
+            (Some(a), Some(_v)) => Some(a),
+            (Some(a), None) => Some(a),
+            (None, Some(v)) => Some(v),
+            _ => None,
         }
-        acc
     }
 }
 
@@ -136,24 +111,22 @@ where
 {
     let mut accu_tile = acc.accu_tile;
 
-    let grid = if acc.initial_state {
-        tile.grid_array
+    if acc.initial_state {
+        accu_tile.grid_array = tile.grid_array;
     } else {
-        match (accu_tile.grid_array, tile.grid_array) {
-            (GridOrEmpty::Grid(mut a), GridOrEmpty::Grid(g)) => {
-                a.data = a
-                    .inner_ref()
-                    .iter()
-                    .zip(g.inner_ref())
-                    .map(|(x, y)| C::acc(a.no_data_value, *x, *y))
-                    .collect();
-                GridOrEmpty::Grid(a)
+        match (&mut accu_tile.grid_array, tile.grid_array) {
+            (GridOrEmpty::Grid(a), GridOrEmpty::Grid(g)) => {
+                let map_fn = |lin_idx: usize, acc_value| {
+                    let tile_value = g.get_at_grid_index_unchecked(lin_idx);
+                    C::acc(acc_value, tile_value)
+                };
+
+                a.update_indexed_elements(map_fn); // TODO: could also use parallel method
             }
-            (GridOrEmpty::Empty(e), _) | (_, GridOrEmpty::Empty(e)) => GridOrEmpty::Empty(e),
+            (GridOrEmpty::Empty(_), _) | (_, GridOrEmpty::Empty(_)) => {}
         }
     };
 
-    accu_tile.grid_array = grid;
     TemporalRasterAggregationTileAccu {
         accu_tile,
         initial_state: false,
@@ -177,12 +150,12 @@ where
 
     let grid = match (accu_tile.grid_array, tile.grid_array) {
         (GridOrEmpty::Grid(mut a), GridOrEmpty::Grid(g)) => {
-            a.data = a
-                .inner_ref()
-                .iter()
-                .zip(g.inner_ref())
-                .map(|(x, y)| C::acc_ignore_no_data(a.no_data_value, *x, *y))
-                .collect();
+            let map_fn = |lin_idx: usize, acc_value| {
+                let tile_value = g.get_at_grid_index_unchecked(lin_idx);
+                C::acc_ignore_no_data(acc_value, tile_value)
+            };
+
+            a.update_indexed_elements(map_fn); // TODO: could also use parallel map_index_elements_parallel
             GridOrEmpty::Grid(a)
         }
         // TODO: need to increase temporal validity?
@@ -331,10 +304,9 @@ impl<T: Pixel> FoldTileAccuMut for TemporalRasterAggregationTileAccu<T> {
 #[derive(Debug, Clone)]
 pub struct TemporalRasterAggregationSubQuery<F, T: Pixel> {
     pub fold_fn: F,
-    pub no_data_value: Option<T>,
-    pub initial_value: T,
     pub step: TimeStep,
     pub step_reference: TimeInstance,
+    pub _phantom_pixel_type: PhantomData<T>,
 }
 
 impl<'a, T, FoldM, FoldF> SubQueryTileAggregator<'a, T>
@@ -361,14 +333,7 @@ where
         query_rect: RasterQueryRectangle,
         pool: &Arc<ThreadPool>,
     ) -> Self::TileAccuFuture {
-        build_temporal_accu(
-            query_rect,
-            tile_info,
-            pool.clone(),
-            self.no_data_value,
-            self.initial_value,
-        )
-        .boxed()
+        build_temporal_accu(query_rect, tile_info, pool.clone()).boxed()
     }
 
     fn tile_query_rectangle(
@@ -394,24 +359,15 @@ fn build_temporal_accu<T: Pixel>(
     query_rect: RasterQueryRectangle,
     tile_info: TileInformation,
     pool: Arc<ThreadPool>,
-    no_data_value: Option<T>,
-    initial_value: T,
 ) -> impl Future<Output = Result<TemporalRasterAggregationTileAccu<T>>> {
-    crate::util::spawn_blocking(move || {
-        let output_raster = if let Some(no_data_value) = no_data_value {
-            EmptyGrid2D::new(tile_info.tile_size_in_pixels, no_data_value).into()
-        } else {
-            Grid2D::new_filled(tile_info.tile_size_in_pixels, initial_value, no_data_value).into()
-        };
-        TemporalRasterAggregationTileAccu {
-            accu_tile: RasterTile2D::new_with_tile_info(
-                query_rect.time_interval,
-                tile_info,
-                output_raster,
-            ),
-            initial_state: true,
-            pool,
-        }
+    crate::util::spawn_blocking(move || TemporalRasterAggregationTileAccu {
+        accu_tile: RasterTile2D::new_with_tile_info(
+            query_rect.time_interval,
+            tile_info,
+            EmptyGrid2D::new(tile_info.tile_size_in_pixels).into(),
+        ),
+        initial_state: true,
+        pool,
     })
     .map_err(From::from)
 }
@@ -419,10 +375,9 @@ fn build_temporal_accu<T: Pixel>(
 #[derive(Debug, Clone)]
 pub struct TemporalRasterAggregationSubQueryNoDataOnly<F, T: Pixel> {
     pub fold_fn: F,
-    pub no_data_value: T,
-    pub initial_value: T,
     pub step: TimeStep,
     pub step_reference: TimeInstance,
+    pub _phantom_pixel_type: PhantomData<T>,
 }
 
 impl<'a, T, FoldM, FoldF> SubQueryTileAggregator<'a, T>
@@ -448,7 +403,7 @@ where
         query_rect: RasterQueryRectangle,
         pool: &Arc<ThreadPool>,
     ) -> Self::TileAccuFuture {
-        build_temporal_no_data_accu(query_rect, tile_info, pool.clone(), self.no_data_value).boxed()
+        build_temporal_no_data_accu(query_rect, tile_info, pool.clone()).boxed()
     }
 
     fn tile_query_rectangle(
@@ -474,10 +429,9 @@ fn build_temporal_no_data_accu<T: Pixel>(
     query_rect: RasterQueryRectangle,
     tile_info: TileInformation,
     pool: Arc<ThreadPool>,
-    no_data_value: T,
 ) -> impl Future<Output = Result<TemporalRasterAggregationTileAccu<T>>> {
     crate::util::spawn_blocking(move || {
-        let output_raster = EmptyGrid2D::new(tile_info.tile_size_in_pixels, no_data_value).into();
+        let output_raster = EmptyGrid2D::new(tile_info.tile_size_in_pixels).into();
 
         TemporalRasterAggregationTileAccu {
             accu_tile: RasterTile2D::new_with_tile_info(

@@ -1,11 +1,12 @@
 use std::collections::HashSet;
 
-use crate::datasets::listing::DatasetProvider;
+use crate::datasets::listing::{DatasetProvider, ProvenanceOutput};
 use crate::datasets::storage::{AddDataset, DatasetDefinition, DatasetStore, MetaDataDefinition};
 use crate::datasets::upload::{UploadId, UploadRootPath};
 use crate::error;
 use crate::error::Result;
 use crate::handlers::Context;
+use crate::layers::storage::LayerProviderDb;
 use crate::util::config::get_config_element;
 use crate::util::user_input::UserInput;
 use crate::util::IdResponse;
@@ -13,11 +14,11 @@ use crate::workflows::registry::WorkflowRegistry;
 use crate::workflows::workflow::{Workflow, WorkflowId};
 use actix_web::{web, FromRequest, Responder};
 use futures::future::join_all;
-use geoengine_datatypes::dataset::{DatasetId, InternalDatasetId};
+use geoengine_datatypes::dataset::{DataId, DatasetId};
 use geoengine_datatypes::primitives::{AxisAlignedRectangle, RasterQueryRectangle};
 use geoengine_datatypes::spatial_reference::SpatialReference;
 use geoengine_datatypes::util::Identifier;
-use geoengine_operators::engine::{OperatorDatasets, TypedOperator, TypedResultDescriptor};
+use geoengine_operators::engine::{OperatorData, TypedOperator, TypedResultDescriptor};
 use geoengine_operators::source::{
     FileNotFoundHandling, GdalDatasetGeoTransform, GdalDatasetParameters, GdalMetaDataStatic,
 };
@@ -225,13 +226,14 @@ async fn get_workflow_provenance_handler<C: Context>(
 ) -> Result<impl Responder> {
     let workflow = ctx.workflow_registry_ref().load(&id.into_inner()).await?;
 
-    let datasets = workflow.operator.datasets();
+    let datasets = workflow.operator.data_ids();
 
     let db = ctx.dataset_db_ref();
+    let providers = ctx.layer_provider_db_ref();
 
     let provenance: Vec<_> = datasets
         .iter()
-        .map(|id| db.provenance(&session, id))
+        .map(|id| resolve_provenance::<C>(&session, db, providers, id))
         .collect();
     let provenance: Result<Vec<_>> = join_all(provenance).await.into_iter().collect();
 
@@ -240,6 +242,24 @@ async fn get_workflow_provenance_handler<C: Context>(
     let provenance: Vec<_> = provenance.into_iter().collect();
 
     Ok(web::Json(provenance))
+}
+
+async fn resolve_provenance<C: Context>(
+    session: &C::Session,
+    datasets: &C::DatasetDB,
+    providers: &C::LayerProviderDB,
+    id: &DataId,
+) -> Result<ProvenanceOutput> {
+    match id {
+        DataId::Internal { dataset_id } => datasets.provenance(session, dataset_id).await,
+        DataId::External(e) => {
+            providers
+                .layer_provider(e.provider_id)
+                .await?
+                .provenance(id)
+                .await
+        }
+    }
 }
 
 /// parameter for the dataset from workflow handler (body)
@@ -303,7 +323,7 @@ struct RasterDatasetFromWorkflowResult {
 /// ```text
 /// {
 ///   "upload": "3086f494-d5a4-4b51-a14b-3b29f8bf7bb0",
-///   "dataset": {
+///   "data": {
 ///     "type": "internal",
 ///     "datasetId": "94230f0b-4e8a-4cba-9adc-3ace837fe5d4"
 ///   }
@@ -340,7 +360,6 @@ async fn dataset_from_workflow_handler<C: Context>(
 
     let query_rect = info.query;
     let query_ctx = ctx.query_context()?;
-    let no_data_value = result_descriptor.no_data_value;
     let request_spatial_ref = Option::<SpatialReference>::from(result_descriptor.spatial_reference)
         .ok_or(error::Error::MissingSpatialReference)?;
     let tile_limit = None; // TODO: set a reasonable limit or make configurable?
@@ -352,7 +371,7 @@ async fn dataset_from_workflow_handler<C: Context>(
             query_rect,
             query_ctx,
             GdalGeoTiffDatasetMetadata {
-                no_data_value,
+                no_data_value: Default::default(), // TODO: decide how to handle the no data here
                 spatial_reference: request_spatial_ref,
             },
             GdalGeoTiffOptions {
@@ -388,7 +407,7 @@ async fn create_dataset<C: Context>(
     ctx: &C,
     session: <C as Context>::Session,
 ) -> Result<geoengine_datatypes::dataset::DatasetId> {
-    let dataset_id = InternalDatasetId::new().into();
+    let dataset_id = DatasetId::new();
     let dataset_definition = DatasetDefinition {
         properties: AddDataset {
             id: Some(dataset_id),
@@ -413,10 +432,11 @@ async fn create_dataset<C: Context>(
                 height: (info.query.spatial_bounds.size_y() / info.query.spatial_resolution.y)
                     .ceil() as usize,
                 file_not_found_handling: FileNotFoundHandling::Error,
-                no_data_value: result_descriptor.no_data_value,
+                no_data_value: None, // `None` will let the GdalSource detect the correct no-data value.
                 properties_mapping: None, // TODO: add properties
                 gdal_open_options: None,
                 gdal_config_options: None,
+                allow_alphaband_as_mask: true,
             },
             result_descriptor: result_descriptor.clone(),
         }),
@@ -735,7 +755,6 @@ mod tests {
                             measurement: "radiation".to_string(),
                             unit: None,
                         }),
-                        no_data_value: None,
                         time: None,
                         bbox: None,
                     },
@@ -771,7 +790,6 @@ mod tests {
                     "measurement": "radiation",
                     "unit": null
                 },
-                "noDataValue": null,
                 "time": null,
                 "bbox": null
             })
@@ -877,7 +895,7 @@ mod tests {
             operator: TypedOperator::Raster(
                 GdalSource {
                     params: GdalSourceParameters {
-                        dataset: dataset.clone(),
+                        data: dataset.into(),
                     },
                 }
                 .boxed(),
@@ -902,9 +920,9 @@ mod tests {
         assert_eq!(
             serde_json::from_str::<serde_json::Value>(&res_body).unwrap(),
             serde_json::json!([{
-                "dataset": {
+                "data": {
                     "type": "internal",
-                    "datasetId": dataset.internal().unwrap().to_string()
+                    "datasetId": dataset.to_string()
                 },
                 "provenance": {
                     "citation": "Sample Citation",
@@ -937,7 +955,7 @@ mod tests {
             operator: TypedOperator::Raster(
                 GdalSource {
                     params: GdalSourceParameters {
-                        dataset: dataset.clone(),
+                        data: dataset.into(),
                     },
                 }
                 .boxed(),
@@ -994,7 +1012,7 @@ mod tests {
         // query the newly created dataset
         let op = GdalSource {
             params: GdalSourceParameters {
-                dataset: response.dataset.clone(),
+                data: response.dataset.into(),
             },
         }
         .boxed();
@@ -1056,7 +1074,7 @@ mod tests {
               "source": {
                 "type": "GdalSource",
                 "params": {
-                  "dataset": {
+                  "data": {
                     "type": "internal",
                     "datasetId": "36574dc3-560a-4b09-9d22-d5945f2b8093"
                   }
