@@ -19,6 +19,7 @@ Content-Type: application/json
 
 ###
 
+# @name anonymousSession
 POST http://localhost:3030/anonymous
 Content-Type: application/json
 
@@ -98,10 +99,11 @@ Authorization: Bearer 6d69326e-8694-4ae5-815a-b4b1ef02a8f6
 Content-Type: application/json
 
 
-###
+### 
 
+# @name getVectorWorkflow
 POST http://localhost:3030/workflow
-Authorization: Bearer 6d69326e-8694-4ae5-815a-b4b1ef02a8f6
+Authorization: Bearer {{anonymousSession.response.body.$.id}}
 Content-Type: application/json
 
 {
@@ -126,6 +128,12 @@ Content-Type: application/json
     }
   }
 }
+
+###
+
+GET http://localhost:3030/workflow/{{getVectorWorkflow.response.body.$.id}}/all_metadata/zip
+Authorization: Bearer {{anonymousSession.response.body.$.id}}
+Content-Type: application/json
 
 ###
 

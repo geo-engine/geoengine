@@ -103,7 +103,7 @@ macro_rules! call_on_generic_raster_processor_gdal_types {
             $crate::engine::TypedRasterQueryProcessor::I32($processor_var) => Ok($function_call),
             $crate::engine::TypedRasterQueryProcessor::F32($processor_var) => Ok($function_call),
             $crate::engine::TypedRasterQueryProcessor::F64($processor_var) => Ok($function_call),
-            _ => Err(error::Error::RasterDataTypeNotSupportByGdal),
+            _ => Err($crate::error::Error::GdalRasterDataTypeNotSupported),
         }
     };
 }

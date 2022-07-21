@@ -353,6 +353,11 @@ pub enum Error {
     UnknownLayerCollectionId {
         id: LayerCollectionId,
     },
+
+    #[snafu(context(false))]
+    WorkflowApi {
+        source: crate::handlers::workflows::WorkflowApiError,
+    },
 }
 
 impl actix_web::error::ResponseError for Error {

@@ -1,9 +1,9 @@
 use std::collections::HashSet;
+use std::io::{Cursor, Write};
 
 use crate::datasets::listing::{DatasetProvider, ProvenanceOutput};
 use crate::datasets::storage::{AddDataset, DatasetDefinition, DatasetStore, MetaDataDefinition};
 use crate::datasets::upload::{UploadId, UploadRootPath};
-use crate::error;
 use crate::error::Result;
 use crate::handlers::Context;
 use crate::layers::storage::LayerProviderDb;
@@ -12,9 +12,10 @@ use crate::util::user_input::UserInput;
 use crate::util::IdResponse;
 use crate::workflows::registry::WorkflowRegistry;
 use crate::workflows::workflow::{Workflow, WorkflowId};
-use actix_web::{web, FromRequest, Responder};
+use actix_web::{web, FromRequest, Responder, HttpResponse};
 use futures::future::join_all;
 use geoengine_datatypes::dataset::{DataId, DatasetId};
+use geoengine_datatypes::error::{ErrorSource, BoxedResultExt};
 use geoengine_datatypes::primitives::{AxisAlignedRectangle, RasterQueryRectangle};
 use geoengine_datatypes::spatial_reference::SpatialReference;
 use geoengine_datatypes::util::Identifier;
@@ -27,8 +28,9 @@ use geoengine_operators::util::raster_stream_to_geotiff::{
 };
 use geoengine_operators::{call_on_generic_raster_processor_gdal_types, call_on_typed_operator};
 use serde::{Deserialize, Serialize};
-use snafu::ResultExt;
+use snafu::{ResultExt, Snafu};
 use tokio::fs;
+use zip::{write::FileOptions, ZipWriter};
 
 pub(crate) fn init_workflow_routes<C>(cfg: &mut web::ServiceConfig)
 where
@@ -38,14 +40,21 @@ where
     cfg.service(
         web::scope("/workflow")
             .service(web::resource("").route(web::post().to(register_workflow_handler::<C>)))
-            .service(web::resource("/{id}").route(web::get().to(load_workflow_handler::<C>)))
             .service(
-                web::resource("/{id}/metadata")
-                    .route(web::get().to(get_workflow_metadata_handler::<C>)),
-            )
-            .service(
-                web::resource("/{id}/provenance")
-                    .route(web::get().to(get_workflow_provenance_handler::<C>)),
+                web::scope("/{id}")
+                    .service(web::resource("").route(web::get().to(load_workflow_handler::<C>)))
+                    .service(
+                        web::resource("/metadata")
+                            .route(web::get().to(get_workflow_metadata_handler::<C>)),
+                    )
+                    .service(
+                        web::resource("/provenance")
+                            .route(web::get().to(get_workflow_provenance_handler::<C>)),
+                    )
+                    .service(
+                        web::resource("/all_metadata/zip")
+                            .route(web::get().to(get_workflow_all_metadata_zip_handler::<C>)),
+                    ),
             ),
     )
     .service(
@@ -94,17 +103,17 @@ async fn register_workflow_handler<C: Context>(
         TypedOperator::Vector(o) => {
             o.initialize(&execution_context)
                 .await
-                .context(error::Operator)?;
+                .context(crate::error::Operator)?;
         }
         TypedOperator::Raster(o) => {
             o.initialize(&execution_context)
                 .await
-                .context(error::Operator)?;
+                .context(crate::error::Operator)?;
         }
         TypedOperator::Plot(o) => {
             o.initialize(&execution_context)
                 .await
-                .context(error::Operator)?;
+                .context(crate::error::Operator)?;
         }
     }
 
@@ -175,20 +184,26 @@ async fn get_workflow_metadata_handler<C: Context>(
 
     let execution_context = ctx.execution_context(session)?;
 
+    let result_descriptor = workflow_metadata::<C>(workflow, execution_context).await?;
+
+    Ok(web::Json(result_descriptor))
+}
+
+async fn workflow_metadata<C: Context>(workflow: Workflow, execution_context: C::ExecutionContext) -> Result<TypedResultDescriptor> {
     // TODO: use cache here
     let result_descriptor: TypedResultDescriptor = call_on_typed_operator!(
         workflow.operator,
         operator => {
             let operator = operator
                 .initialize(&execution_context).await
-                .context(error::Operator)?;
+                .context(crate::error::Operator)?;
 
             #[allow(clippy::clone_on_copy)]
             operator.result_descriptor().clone().into()
         }
     );
 
-    Ok(web::Json(result_descriptor))
+    Ok(result_descriptor)
 }
 
 /// Gets the provenance of all datasets used in a workflow.
@@ -226,6 +241,12 @@ async fn get_workflow_provenance_handler<C: Context>(
 ) -> Result<impl Responder> {
     let workflow = ctx.workflow_registry_ref().load(&id.into_inner()).await?;
 
+    let provenance = workflow_provenance(&workflow, ctx.get_ref(), session).await?;
+
+    Ok(web::Json(provenance))
+}
+
+async fn workflow_provenance<C: Context>(workflow: &Workflow, ctx: &C, session: C::Session) -> Result<Vec<ProvenanceOutput>> {
     let datasets = workflow.operator.data_ids();
 
     let db = ctx.dataset_db_ref();
@@ -241,7 +262,64 @@ async fn get_workflow_provenance_handler<C: Context>(
     let provenance: HashSet<_> = provenance?.into_iter().collect();
     let provenance: Vec<_> = provenance.into_iter().collect();
 
-    Ok(web::Json(provenance))
+    Ok(provenance)
+}
+
+
+/// Gets a ZIP archive of the worklow, its provenance and the output metadata.
+///
+/// # Example
+///
+/// ```text
+/// GET /workflow/cee25e8c-18a0-5f1b-a504-0bc30de21e06/all_metadata/zip
+/// Authorization: Bearer e9da345c-b1df-464b-901c-0335a0419227
+/// ```
+/// Response:
+/// <zip archive>
+/// ```
+async fn get_workflow_all_metadata_zip_handler<C: Context>(
+    id: web::Path<WorkflowId>,
+    session: C::Session,
+    ctx: web::Data<C>,
+) -> Result<impl Responder> {
+    let id = id.into_inner();
+
+    let workflow = ctx.workflow_registry_ref().load(&id).await?;
+
+    let (metadata, provenance) = futures::try_join!(
+        workflow_metadata::<C>(workflow.clone(), ctx.execution_context(session.clone())?),
+        workflow_provenance(&workflow, ctx.get_ref(), session),
+    )?;
+
+    let output = crate::util::spawn_blocking(move || {
+        let mut output = Vec::new();
+
+        let zip_options = FileOptions::default().compression_method(zip::CompressionMethod::Deflated);
+        let mut zip_writer = ZipWriter::new(Cursor::new(&mut output));
+
+        let workflow_filename = "workflow.json";
+        zip_writer.start_file(workflow_filename, zip_options).boxed_context(error::CannotAddDataToZipFile { item: workflow_filename })?;
+        zip_writer.write_all(serde_json::to_string_pretty(&workflow)?.as_bytes()).boxed_context(error::CannotAddDataToZipFile { item: workflow_filename })?;
+
+        let metadata_filename = "metadata.json";
+        zip_writer.start_file(metadata_filename, zip_options).boxed_context(error::CannotAddDataToZipFile { item: metadata_filename })?;
+        zip_writer.write_all(serde_json::to_string_pretty(&metadata)?.as_bytes()).boxed_context(error::CannotAddDataToZipFile { item: metadata_filename })?;
+
+        let citation_filename = "citation.json";
+        zip_writer.start_file(citation_filename, zip_options).boxed_context(error::CannotAddDataToZipFile { item: citation_filename })?;
+        zip_writer.write_all(serde_json::to_string_pretty(&provenance)?.as_bytes()).boxed_context(error::CannotAddDataToZipFile { item: citation_filename })?;
+
+        zip_writer.finish().boxed_context(error::CannotFinishZipFile)?;
+        drop(zip_writer);
+
+        Result::<Vec<u8>>::Ok(output)
+    }).await??;
+
+    let response = HttpResponse::Ok().content_type("application/zip")
+        .insert_header(("content-disposition", format!("attachment; filename=\"metadata_{id}.zip\"")))
+        .body(web::Bytes::from(output));
+
+    Ok(response)
 }
 
 async fn resolve_provenance<C: Context>(
@@ -339,33 +417,33 @@ async fn dataset_from_workflow_handler<C: Context>(
 
     let workflow = ctx.workflow_registry_ref().load(&workflow_id).await?;
 
-    let operator = workflow.operator.get_raster().context(error::Operator)?;
+    let operator = workflow.operator.get_raster().context(crate::error::Operator)?;
 
     let execution_context = ctx.execution_context(session.clone())?;
     let initialized = operator
         .clone()
         .initialize(&execution_context)
         .await
-        .context(error::Operator)?;
+        .context(crate::error::Operator)?;
 
     let result_descriptor = initialized.result_descriptor();
 
-    let processor = initialized.query_processor().context(error::Operator)?;
+    let processor = initialized.query_processor().context(crate::error::Operator)?;
 
     // put the created data into a new upload
     let upload = UploadId::new();
     let upload_path = upload.root_path()?;
-    fs::create_dir_all(&upload_path).await.context(error::Io)?;
+    fs::create_dir_all(&upload_path).await.context(crate::error::Io)?;
     let file_path = upload_path.join("raster.tiff");
 
     let query_rect = info.query;
     let query_ctx = ctx.query_context()?;
     let request_spatial_ref = Option::<SpatialReference>::from(result_descriptor.spatial_reference)
-        .ok_or(error::Error::MissingSpatialReference)?;
+        .ok_or(crate::error::Error::MissingSpatialReference)?;
     let tile_limit = None; // TODO: set a reasonable limit or make configurable?
 
     // build the geotiff
-    call_on_generic_raster_processor_gdal_types!(processor, p =>  raster_stream_to_geotiff(
+    call_on_generic_raster_processor_gdal_types!(processor, p => raster_stream_to_geotiff(
             &file_path,
             p,
             query_rect,
@@ -382,7 +460,7 @@ async fn dataset_from_workflow_handler<C: Context>(
             tile_limit,
             
         ).await)?
-    .map_err(error::Error::from)?;
+    .map_err(crate::error::Error::from)?;
 
     // create the dataset
     let dataset = create_dataset(
@@ -450,6 +528,16 @@ async fn create_dataset<C: Context>(
         .add_dataset(&session, dataset_definition.properties.validated()?, meta)
         .await?;
     Ok(dataset)
+}
+
+#[derive(Debug, Snafu)]
+#[snafu(visibility(pub(crate)))]
+#[snafu(module(error), context(suffix(false)))] // disables default `Snafu` suffix
+pub enum WorkflowApiError {
+    #[snafu(display("Adding data to output ZIP file failed"))]
+    CannotAddDataToZipFile { item: &'static str, source: Box<dyn ErrorSource> },
+    #[snafu(display("Finishing to output ZIP file failed"))]
+    CannotFinishZipFile { source: Box<dyn ErrorSource> },
 }
 
 #[cfg(test)]
