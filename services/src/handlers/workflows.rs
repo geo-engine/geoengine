@@ -12,10 +12,10 @@ use crate::util::user_input::UserInput;
 use crate::util::IdResponse;
 use crate::workflows::registry::WorkflowRegistry;
 use crate::workflows::workflow::{Workflow, WorkflowId};
-use actix_web::{web, FromRequest, Responder, HttpResponse};
+use actix_web::{web, FromRequest, HttpResponse, Responder};
 use futures::future::join_all;
 use geoengine_datatypes::dataset::{DataId, DatasetId};
-use geoengine_datatypes::error::{ErrorSource, BoxedResultExt};
+use geoengine_datatypes::error::{BoxedResultExt, ErrorSource};
 use geoengine_datatypes::primitives::{AxisAlignedRectangle, RasterQueryRectangle};
 use geoengine_datatypes::spatial_reference::SpatialReference;
 use geoengine_datatypes::util::Identifier;
@@ -189,7 +189,10 @@ async fn get_workflow_metadata_handler<C: Context>(
     Ok(web::Json(result_descriptor))
 }
 
-async fn workflow_metadata<C: Context>(workflow: Workflow, execution_context: C::ExecutionContext) -> Result<TypedResultDescriptor> {
+async fn workflow_metadata<C: Context>(
+    workflow: Workflow,
+    execution_context: C::ExecutionContext,
+) -> Result<TypedResultDescriptor> {
     // TODO: use cache here
     let result_descriptor: TypedResultDescriptor = call_on_typed_operator!(
         workflow.operator,
@@ -246,7 +249,11 @@ async fn get_workflow_provenance_handler<C: Context>(
     Ok(web::Json(provenance))
 }
 
-async fn workflow_provenance<C: Context>(workflow: &Workflow, ctx: &C, session: C::Session) -> Result<Vec<ProvenanceOutput>> {
+async fn workflow_provenance<C: Context>(
+    workflow: &Workflow,
+    ctx: &C,
+    session: C::Session,
+) -> Result<Vec<ProvenanceOutput>> {
     let datasets = workflow.operator.data_ids();
 
     let db = ctx.dataset_db_ref();
@@ -264,7 +271,6 @@ async fn workflow_provenance<C: Context>(workflow: &Workflow, ctx: &C, session: 
 
     Ok(provenance)
 }
-
 
 /// Gets a ZIP archive of the worklow, its provenance and the output metadata.
 ///
@@ -294,29 +300,61 @@ async fn get_workflow_all_metadata_zip_handler<C: Context>(
     let output = crate::util::spawn_blocking(move || {
         let mut output = Vec::new();
 
-        let zip_options = FileOptions::default().compression_method(zip::CompressionMethod::Deflated);
+        let zip_options =
+            FileOptions::default().compression_method(zip::CompressionMethod::Deflated);
         let mut zip_writer = ZipWriter::new(Cursor::new(&mut output));
 
         let workflow_filename = "workflow.json";
-        zip_writer.start_file(workflow_filename, zip_options).boxed_context(error::CannotAddDataToZipFile { item: workflow_filename })?;
-        zip_writer.write_all(serde_json::to_string_pretty(&workflow)?.as_bytes()).boxed_context(error::CannotAddDataToZipFile { item: workflow_filename })?;
+        zip_writer
+            .start_file(workflow_filename, zip_options)
+            .boxed_context(error::CannotAddDataToZipFile {
+                item: workflow_filename,
+            })?;
+        zip_writer
+            .write_all(serde_json::to_string_pretty(&workflow)?.as_bytes())
+            .boxed_context(error::CannotAddDataToZipFile {
+                item: workflow_filename,
+            })?;
 
         let metadata_filename = "metadata.json";
-        zip_writer.start_file(metadata_filename, zip_options).boxed_context(error::CannotAddDataToZipFile { item: metadata_filename })?;
-        zip_writer.write_all(serde_json::to_string_pretty(&metadata)?.as_bytes()).boxed_context(error::CannotAddDataToZipFile { item: metadata_filename })?;
+        zip_writer
+            .start_file(metadata_filename, zip_options)
+            .boxed_context(error::CannotAddDataToZipFile {
+                item: metadata_filename,
+            })?;
+        zip_writer
+            .write_all(serde_json::to_string_pretty(&metadata)?.as_bytes())
+            .boxed_context(error::CannotAddDataToZipFile {
+                item: metadata_filename,
+            })?;
 
         let citation_filename = "citation.json";
-        zip_writer.start_file(citation_filename, zip_options).boxed_context(error::CannotAddDataToZipFile { item: citation_filename })?;
-        zip_writer.write_all(serde_json::to_string_pretty(&provenance)?.as_bytes()).boxed_context(error::CannotAddDataToZipFile { item: citation_filename })?;
+        zip_writer
+            .start_file(citation_filename, zip_options)
+            .boxed_context(error::CannotAddDataToZipFile {
+                item: citation_filename,
+            })?;
+        zip_writer
+            .write_all(serde_json::to_string_pretty(&provenance)?.as_bytes())
+            .boxed_context(error::CannotAddDataToZipFile {
+                item: citation_filename,
+            })?;
 
-        zip_writer.finish().boxed_context(error::CannotFinishZipFile)?;
+        zip_writer
+            .finish()
+            .boxed_context(error::CannotFinishZipFile)?;
         drop(zip_writer);
 
         Result::<Vec<u8>>::Ok(output)
-    }).await??;
+    })
+    .await??;
 
-    let response = HttpResponse::Ok().content_type("application/zip")
-        .insert_header(("content-disposition", format!("attachment; filename=\"metadata_{id}.zip\"")))
+    let response = HttpResponse::Ok()
+        .content_type("application/zip")
+        .insert_header((
+            "content-disposition",
+            format!("attachment; filename=\"metadata_{id}.zip\""),
+        ))
         .body(web::Bytes::from(output));
 
     Ok(response)
@@ -417,7 +455,10 @@ async fn dataset_from_workflow_handler<C: Context>(
 
     let workflow = ctx.workflow_registry_ref().load(&workflow_id).await?;
 
-    let operator = workflow.operator.get_raster().context(crate::error::Operator)?;
+    let operator = workflow
+        .operator
+        .get_raster()
+        .context(crate::error::Operator)?;
 
     let execution_context = ctx.execution_context(session.clone())?;
     let initialized = operator
@@ -428,12 +469,16 @@ async fn dataset_from_workflow_handler<C: Context>(
 
     let result_descriptor = initialized.result_descriptor();
 
-    let processor = initialized.query_processor().context(crate::error::Operator)?;
+    let processor = initialized
+        .query_processor()
+        .context(crate::error::Operator)?;
 
     // put the created data into a new upload
     let upload = UploadId::new();
     let upload_path = upload.root_path()?;
-    fs::create_dir_all(&upload_path).await.context(crate::error::Io)?;
+    fs::create_dir_all(&upload_path)
+        .await
+        .context(crate::error::Io)?;
     let file_path = upload_path.join("raster.tiff");
 
     let query_rect = info.query;
@@ -458,7 +503,6 @@ async fn dataset_from_workflow_handler<C: Context>(
                 force_big_tiff: false,
             },
             tile_limit,
-            
         ).await)?
     .map_err(crate::error::Error::from)?;
 
@@ -535,7 +579,10 @@ async fn create_dataset<C: Context>(
 #[snafu(module(error), context(suffix(false)))] // disables default `Snafu` suffix
 pub enum WorkflowApiError {
     #[snafu(display("Adding data to output ZIP file failed"))]
-    CannotAddDataToZipFile { item: &'static str, source: Box<dyn ErrorSource> },
+    CannotAddDataToZipFile {
+        item: &'static str,
+        source: Box<dyn ErrorSource>,
+    },
     #[snafu(display("Finishing to output ZIP file failed"))]
     CannotFinishZipFile { source: Box<dyn ErrorSource> },
 }
