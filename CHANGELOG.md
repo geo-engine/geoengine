@@ -27,6 +27,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - https://github.com/geo-engine/geoengine/pull/565
   - Metadata has new field `dataRange`, which is optional
 
+- Added download of workflow metadata (description, result descriptor, citations) as zip file
+
+  - https://github.com/geo-engine/geoengine-python/pull/65
+
 ### Changed
 
 - No-data pixels in a Raster are now represented by a validity mask.
@@ -34,6 +38,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - https://github.com/geo-engine/geoengine/pull/561
   - `MaskedGrid` replaces `Grid` in `GridOrEmpty` / `RasterTile`
   - GeoTIFF files created by the engine contain the validity mask if not specified otherwise.
+
 - Refactored dataset ids and external provders
 
   - https://github.com/geo-engine/geoengine/pull/554
