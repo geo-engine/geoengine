@@ -38,6 +38,7 @@ where
     C::Session: FromRequest,
 {
     cfg.service(
+        // TODO: rename to plural `workflows`
         web::scope("/workflow")
             .service(web::resource("").route(web::post().to(register_workflow_handler::<C>)))
             .service(
@@ -52,7 +53,7 @@ where
                             .route(web::get().to(get_workflow_provenance_handler::<C>)),
                     )
                     .service(
-                        web::resource("/all_metadata/zip")
+                        web::resource("/allMetadata/zip")
                             .route(web::get().to(get_workflow_all_metadata_zip_handler::<C>)),
                     ),
             ),
@@ -589,6 +590,7 @@ pub enum WorkflowApiError {
 
 #[cfg(test)]
 mod tests {
+
     use super::*;
     use crate::contexts::{InMemoryContext, Session, SimpleContext};
     use crate::handlers::ErrorResponse;
@@ -619,6 +621,9 @@ mod tests {
     use geoengine_operators::source::{GdalSource, GdalSourceParameters};
     use geoengine_operators::util::raster_stream_to_geotiff::raster_stream_to_geotiff_bytes;
     use serde_json::json;
+    use std::io::Read;
+    use zip::read::ZipFile;
+    use zip::ZipArchive;
 
     async fn register_test_helper(method: Method) -> ServiceResponse {
         let ctx = InMemoryContext::test_default();
@@ -1232,6 +1237,120 @@ mod tests {
         assert_eq!(
             res_body,
             json!({"error": "Operator", "message": "Operator: Invalid operator type: expected Vector found Raster"}).to_string()
+        );
+    }
+
+    #[tokio::test]
+    #[allow(clippy::too_many_lines)]
+    async fn test_download_all_metadata_zip() {
+        fn zip_file_to_json(mut zip_file: ZipFile) -> serde_json::Value {
+            let mut bytes = Vec::new();
+            zip_file.read_to_end(&mut bytes).unwrap();
+
+            serde_json::from_slice(&bytes).unwrap()
+        }
+
+        let exe_ctx_tiling_spec = TilingSpecification {
+            origin_coordinate: (0., 0.).into(),
+            tile_size_in_pixels: GridShape::new([600, 600]),
+        };
+
+        // override the pixel size since this test was designed for 600 x 600 pixel tiles
+        let ctx = InMemoryContext::new_with_context_spec(
+            exe_ctx_tiling_spec,
+            TestDefault::test_default(),
+        );
+
+        let session_id = ctx.default_session_ref().await.id();
+
+        let dataset = add_ndvi_to_datasets(&ctx).await;
+
+        let workflow = Workflow {
+            operator: TypedOperator::Raster(
+                GdalSource {
+                    params: GdalSourceParameters {
+                        data: dataset.into(),
+                    },
+                }
+                .boxed(),
+            ),
+        };
+
+        let workflow_id = ctx
+            .workflow_registry_ref()
+            .register(workflow)
+            .await
+            .unwrap();
+
+        // create dataset from workflow
+        let req = test::TestRequest::get()
+            .uri(&format!("/workflow/{workflow_id}/allMetadata/zip"))
+            .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())));
+        let res = send_test_request(req, ctx.clone()).await;
+
+        assert_eq!(res.status(), 200);
+
+        let zip_bytes = test::read_body(res).await;
+
+        let mut zip = ZipArchive::new(Cursor::new(zip_bytes)).unwrap();
+
+        assert_eq!(zip.len(), 3);
+
+        assert_eq!(
+            zip_file_to_json(zip.by_name("workflow.json").unwrap()),
+            serde_json::json!({
+                "type": "Raster",
+                "operator": {
+                    "type": "GdalSource",
+                    "params": {
+                        "data": {
+                            "type": "internal",
+                            "datasetId": dataset
+                        }
+                    }
+                }
+            })
+        );
+
+        assert_eq!(
+            zip_file_to_json(zip.by_name("metadata.json").unwrap()),
+            serde_json::json!({
+                "type": "raster",
+                "dataType": "U8",
+                "spatialReference": "EPSG:4326",
+                "measurement": {
+                    "type": "unitless"
+                },
+                "time": {
+                    "start": 1_388_534_400_000_i64,
+                    "end": 1_404_172_800_000_i64,
+                },
+                "bbox": {
+                    "upperLeftCoordinate": {
+                        "x": -180.0,
+                        "y": 90.0,
+                    },
+                    "lowerRightCoordinate": {
+                        "x": 180.0,
+                        "y": -90.0
+                    }
+                }
+            })
+        );
+
+        assert_eq!(
+            zip_file_to_json(zip.by_name("citation.json").unwrap()),
+            serde_json::json!([{
+                "data": {
+                    "type": "internal",
+                    "datasetId": dataset
+                },
+                "provenance": {
+                    "citation": "Sample Citation",
+                    "license": "Sample License",
+                    "uri": "http://example.org/"
+                }
+            }])
         );
     }
 }
