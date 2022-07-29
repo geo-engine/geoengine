@@ -169,4 +169,29 @@ pub enum NetCdfCf4DProviderError {
     CannotGenerateLoadingInfo {
         source: Box<dyn ErrorSource>,
     },
+    InvalidCollectionId {
+        id: String,
+    },
+
+    #[snafu(display("Cannot parse NetCDF file metadata: {source}"))]
+    CannotParseNetCdfFile {
+        source: Box<dyn ErrorSource>,
+    },
+    #[snafu(display("Cannot lookup dataset with id {id}"))]
+    CannotLookupDataset {
+        id: String,
+    },
+    #[snafu(display("Cannot find NetCdfCf provider with id {id}"))]
+    NoNetCdfCfProviderForId {
+        id: DataProviderId,
+    },
+    NoNetCdfCfProviderAvailable,
+    #[snafu(display("NetCdfCf provider with id {id} cannot list files"))]
+    CdfCfProviderCannotListFiles {
+        id: DataProviderId,
+    },
+    #[snafu(display("Internal server error"))]
+    Internal {
+        source: Box<dyn ErrorSource>,
+    },
 }

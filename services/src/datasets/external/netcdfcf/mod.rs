@@ -1,14 +1,19 @@
+#[cfg(feature = "ebv")]
+pub use self::ebvportal_provider::{EbvPortalDataProvider, EBV_PROVIDER_ID};
 pub use self::error::NetCdfCf4DProviderError;
 use self::gdalmd::MdGroup;
 pub use self::overviews::OverviewGeneration;
 use self::overviews::{create_overviews, METADATA_FILE_NAME};
 use crate::datasets::listing::ProvenanceOutput;
+use crate::error::Error;
 use crate::layers::external::DataProvider;
 use crate::layers::external::DataProviderDefinition;
 use crate::layers::layer::CollectionItem;
 use crate::layers::layer::Layer;
 use crate::layers::layer::LayerCollectionListOptions;
+use crate::layers::layer::LayerCollectionListing;
 use crate::layers::layer::LayerListing;
+use crate::layers::layer::ProviderLayerCollectionId;
 use crate::layers::layer::ProviderLayerId;
 use crate::layers::listing::LayerCollectionId;
 use crate::layers::listing::LayerCollectionProvider;
@@ -42,7 +47,7 @@ use geoengine_operators::{
 };
 use log::debug;
 use serde::{Deserialize, Serialize};
-use snafu::ensure;
+use serde_json::json;
 use snafu::{OptionExt, ResultExt};
 use std::collections::VecDeque;
 use std::io::BufReader;
@@ -50,7 +55,11 @@ use std::path::{Path, PathBuf};
 use std::str::FromStr;
 use walkdir::{DirEntry, WalkDir};
 
-mod error;
+#[cfg(feature = "ebv")]
+mod ebvportal_api;
+#[cfg(feature = "ebv")]
+mod ebvportal_provider;
+pub mod error;
 pub mod gdalmd;
 mod overviews;
 
@@ -580,6 +589,11 @@ impl NetCdfCfDataProvider {
     pub fn create_overviews(&self, dataset_path: &Path) -> Result<OverviewGeneration> {
         create_overviews(&self.path, dataset_path, &self.overviews)
     }
+
+    fn is_netcdf_file(&self, path: &Path) -> bool {
+        let real_path = self.path.join(path);
+        real_path.is_file() && real_path.extension() == Some("nc".as_ref())
+    }
 }
 
 fn derive_measurement(unit: String) -> Measurement {
@@ -840,6 +854,155 @@ impl DataProvider for NetCdfCfDataProvider {
     }
 }
 
+#[derive(Deserialize, Serialize, Debug, Clone)]
+enum NetCdfLayerCollectionId {
+    Path {
+        path: PathBuf,
+    },
+    Group {
+        path: PathBuf,
+        groups: Vec<String>,
+    },
+    Entity {
+        path: PathBuf,
+        groups: Vec<String>,
+        entity: usize,
+    },
+}
+
+impl TryFrom<NetCdfLayerCollectionId> for LayerCollectionId {
+    type Error = crate::error::Error;
+
+    fn try_from(id: NetCdfLayerCollectionId) -> crate::error::Result<Self> {
+        Ok(LayerCollectionId(serde_json::to_string(&id)?))
+    }
+}
+
+impl TryFrom<NetCdfLayerCollectionId> for LayerId {
+    type Error = crate::error::Error;
+
+    fn try_from(id: NetCdfLayerCollectionId) -> crate::error::Result<Self> {
+        Ok(LayerId(serde_json::to_string(&id)?))
+    }
+}
+
+async fn listing_from_dir(base: &Path, path: &Path) -> crate::error::Result<Vec<CollectionItem>> {
+    let mut dir = tokio::fs::read_dir(base.join(&path)).await?;
+
+    let mut items = vec![];
+    while let Some(entry) = dir.next_entry().await? {
+        if entry.path().is_dir() || entry.path().extension() == Some("nc".as_ref()) {
+            items.push(CollectionItem::Collection(LayerCollectionListing {
+                id: ProviderLayerCollectionId {
+                    provider_id: NETCDF_CF_PROVIDER_ID,
+                    collection_id: NetCdfLayerCollectionId::Path {
+                        path: entry
+                            .path()
+                            .strip_prefix(base)
+                            .map_err(|_| Error::InvalidLayerCollectionId)?
+                            .to_owned(),
+                    }
+                    .try_into()?,
+                },
+                name: entry.file_name().to_string_lossy().to_string(),
+                description: "".to_string(),
+            }));
+        }
+    }
+
+    Ok(items)
+}
+
+/// List all the groups in the group given by the path `groups`.
+pub fn list_groups(
+    netcdf_groups: Vec<NetCdfGroup>,
+    groups: &[String],
+) -> crate::error::Result<Vec<NetCdfGroup>> {
+    if groups.is_empty() {
+        return Ok(netcdf_groups);
+    }
+
+    let mut group_stack = groups.iter().collect::<Vec<_>>();
+    let mut group = netcdf_groups
+        .into_iter()
+        .find(|g| g.name == *group_stack.remove(0))
+        .ok_or(Error::InvalidLayerCollectionId)?;
+
+    while !group_stack.is_empty() {
+        group = group
+            .groups
+            .into_iter()
+            .find(|g| g.name == *group_stack.remove(0))
+            .ok_or(Error::InvalidLayerCollectionId)?;
+    }
+
+    Ok(group.groups)
+}
+
+async fn listing_from_netcdf_file(
+    file_path: PathBuf,
+    groups: &[String],
+    provider_path: PathBuf,
+    overview_path: PathBuf,
+    options: &LayerCollectionListOptions,
+) -> crate::error::Result<Vec<CollectionItem>> {
+    let fp = file_path.clone();
+    let tree = tokio::task::spawn_blocking(move || {
+        NetCdfCfDataProvider::build_netcdf_tree(&provider_path, Some(&overview_path), &fp, false)
+            .map_err(|_| Error::InvalidLayerCollectionId)
+    })
+    .await??;
+
+    let groups_list = list_groups(tree.groups, groups)?;
+
+    if groups_list.is_empty() {
+        tree.entities
+            .into_iter()
+            .skip(options.offset as usize)
+            .take(options.limit as usize)
+            .map(|entity| {
+                Ok(CollectionItem::Layer(LayerListing {
+                    id: ProviderLayerId {
+                        provider_id: NETCDF_CF_PROVIDER_ID,
+                        layer_id: NetCdfLayerCollectionId::Entity {
+                            path: file_path.clone(),
+                            groups: groups.to_owned(),
+                            entity: entity.id,
+                        }
+                        .try_into()?,
+                    },
+                    name: entity.name,
+                    description: "".to_string(),
+                }))
+            })
+            .collect()
+    } else {
+        let out_groups = groups.to_owned();
+
+        groups_list
+            .into_iter()
+            .skip(options.offset as usize)
+            .take(options.limit as usize)
+            .map(|group| {
+                let mut out_groups = out_groups.clone();
+                out_groups.push(group.name.clone());
+                Ok(CollectionItem::Collection(LayerCollectionListing {
+                    id: ProviderLayerCollectionId {
+                        provider_id: NETCDF_CF_PROVIDER_ID,
+                        collection_id: NetCdfLayerCollectionId::Group {
+                            path: file_path.clone(),
+                            groups: out_groups,
+                        }
+                        .try_into()?,
+                    },
+                    name: group.title.clone(),
+                    description: group.description,
+                }))
+            })
+            .collect()
+    }
+}
+
 #[async_trait]
 impl LayerCollectionProvider for NetCdfCfDataProvider {
     async fn collection_items(
@@ -847,96 +1010,108 @@ impl LayerCollectionProvider for NetCdfCfDataProvider {
         collection: &LayerCollectionId,
         options: Validated<LayerCollectionListOptions>,
     ) -> crate::error::Result<Vec<CollectionItem>> {
-        ensure!(
-            *collection == self.root_collection_id().await?,
-            crate::error::UnknownLayerCollectionId {
-                id: collection.clone()
+        let id: NetCdfLayerCollectionId = serde_json::from_str(&collection.0)?;
+
+        match id {
+            NetCdfLayerCollectionId::Path { path } if self.path.join(&path).is_dir() => {
+                listing_from_dir(&self.path, &path).await
             }
-        );
-
-        let mut dir = tokio::fs::read_dir(&self.path).await?;
-
-        let mut datasets = vec![];
-        while let Some(entry) = dir.next_entry().await? {
-            if !entry.path().is_file() {
-                continue;
-            }
-
-            let provider_path = self.path.clone();
-            let overviews_path = self.overviews.clone();
-            let relative_path = if let Ok(p) = entry.path().strip_prefix(&provider_path) {
-                p.to_path_buf()
-            } else {
-                // cannot actually happen since `entry` is listed from `provider_path`
-                continue;
-            };
-
-            let listing = tokio::task::spawn_blocking(move || {
-                Self::listing_from_netcdf(
-                    NETCDF_CF_PROVIDER_ID,
-                    &provider_path,
-                    Some(&overviews_path),
-                    &relative_path,
-                    false,
+            NetCdfLayerCollectionId::Path { path } if self.is_netcdf_file(&path) => {
+                listing_from_netcdf_file(
+                    path,
+                    &[],
+                    self.path.clone(),
+                    self.overviews.clone(),
+                    &options.user_input,
                 )
-                .map(|l| {
-                    l.into_iter()
-                        .map(|l| {
-                            CollectionItem::Layer(LayerListing {
-                                id: l.id,
-                                name: l.name,
-                                description: l.description,
-                            })
-                        })
-                        .collect::<Vec<_>>()
-                })
-            })
-            .await?;
-
-            match listing {
-                Ok(listing) => datasets.extend(listing),
-                Err(e) => debug!("Failed to list dataset: {}", e),
+                .await
             }
+            NetCdfLayerCollectionId::Group { path, groups } if self.is_netcdf_file(&path) => {
+                listing_from_netcdf_file(
+                    path,
+                    &groups,
+                    self.path.clone(),
+                    self.overviews.clone(),
+                    &options.user_input,
+                )
+                .await
+            }
+            _ => return Err(Error::InvalidLayerCollectionId),
         }
-
-        // TODO: react to filter and sort options
-        // TODO: don't compute everything and filter then
-        let datasets = datasets
-            .into_iter()
-            .skip(options.user_input.offset as usize)
-            .take(options.user_input.limit as usize)
-            .collect();
-
-        Ok(datasets)
     }
 
     async fn root_collection_id(&self) -> crate::error::Result<LayerCollectionId> {
-        Ok(LayerCollectionId("root".to_string()))
+        Ok(NetCdfLayerCollectionId::Path { path: ".".into() }.try_into()?)
     }
 
     async fn get_layer(&self, id: &LayerId) -> crate::error::Result<Layer> {
-        Ok(Layer {
-            id: ProviderLayerId {
-                provider_id: NETCDF_CF_PROVIDER_ID,
-                layer_id: id.clone(),
-            },
-            name: "".to_string(),        // TODO: get from file or overview
-            description: "".to_string(), // TODO: get from file or overview
-            workflow: Workflow {
-                operator: TypedOperator::Raster(
-                    GdalSource {
-                        params: GdalSourceParameters {
-                            data: DataId::External(ExternalDataId {
-                                provider_id: NETCDF_CF_PROVIDER_ID,
-                                layer_id: id.clone(),
-                            }),
-                        },
-                    }
-                    .boxed(),
-                ),
-            },
-            symbology: None,
-        })
+        let netcdf_id = serde_json::from_str(&id.0)?;
+
+        match netcdf_id {
+            NetCdfLayerCollectionId::Entity {
+                path,
+                groups,
+                entity,
+            } => {
+                let rp = path.clone();
+
+                let provider_path = self.path.clone();
+                let overviews_path = self.overviews.clone();
+
+                let tree = tokio::task::spawn_blocking(move || {
+                    NetCdfCfDataProvider::build_netcdf_tree(
+                        &provider_path,
+                        Some(&overviews_path),
+                        &rp,
+                        false,
+                    )
+                    .map_err(|_| Error::InvalidLayerCollectionId)
+                })
+                .await??;
+
+                let netcdf_entity = tree
+                    .entities
+                    .into_iter()
+                    .find(|e| e.id == entity)
+                    .ok_or(Error::UnknownLayerId { id: id.clone() })?;
+
+                Ok(Layer {
+                    id: ProviderLayerId {
+                        provider_id: NETCDF_CF_PROVIDER_ID,
+                        layer_id: id.clone(),
+                    },
+                    name: format!("{} > {}", tree.title, netcdf_entity.name),
+                    description: format!("{} > {}", tree.title, netcdf_entity.name),
+                    workflow: Workflow {
+                        operator: TypedOperator::Raster(
+                            GdalSource {
+                                params:
+                                    GdalSourceParameters {
+                                        data:
+                                            DataId::External(
+                                                ExternalDataId {
+                                                    provider_id: NETCDF_CF_PROVIDER_ID,
+                                                    layer_id:
+                                                        LayerId(
+                                                            json!({
+                                                                "fileName": tree.file_name,
+                                                                "groupNames": groups,
+                                                                "entity": entity
+                                                            })
+                                                            .to_string(),
+                                                        ),
+                                                },
+                                            ),
+                                    },
+                            }
+                            .boxed(),
+                        ),
+                    },
+                    symbology: None,
+                })
+            }
+            _ => return Err(Error::InvalidLayerId),
+        }
     }
 }
 
