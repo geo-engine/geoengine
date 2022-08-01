@@ -131,7 +131,7 @@ Content-Type: application/json
 
 ###
 
-GET http://localhost:3030/workflow/{{getVectorWorkflow.response.body.$.id}}/all_metadata/zip
+GET http://localhost:3030/workflow/{{getVectorWorkflow.response.body.$.id}}/allMetadata/zip
 Authorization: Bearer {{anonymousSession.response.body.$.id}}
 Content-Type: application/json
 
