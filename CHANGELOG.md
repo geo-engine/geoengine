@@ -27,8 +27,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - https://github.com/geo-engine/geoengine/pull/565
   - Metadata has new field `dataRange`, which is optional
 
-### Changed
+- Added download of workflow metadata (description, result descriptor, citations) as zip file
 
+  - https://github.com/geo-engine/geoengine-python/pull/65
+
+### Changed
 
 - Changed the temporal reference of regular raster time series from a start date to a valid time interval `dataTime`. Before and after the `dataTime`, only one loading info with nodata will be produced instead of lots of nodata-chunks with the original interval of the time series.
 
@@ -40,7 +43,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - https://github.com/geo-engine/geoengine/pull/561
   - `MaskedGrid` replaces `Grid` in `GridOrEmpty` / `RasterTile`
   - GeoTIFF files created by the engine contain the validity mask if not specified otherwise.
-  
+
 - Refactored dataset ids and external provders
 
   - https://github.com/geo-engine/geoengine/pull/554
