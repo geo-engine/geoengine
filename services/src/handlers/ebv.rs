@@ -1396,18 +1396,23 @@ mod tests {
 
         let status = ctx.tasks().status(task_response.task_id).await.unwrap();
 
-        if let TaskStatus::Completed { info } = status {
-            let response: &NetCdfCfOverviewResponse = info.as_any().downcast_ref().unwrap();
-            assert_eq!(
-                *response,
-                NetCdfCfOverviewResponse {
-                    success: vec!["dataset_sm.nc".into(), "dataset_m.nc".into()],
-                    skip: vec![],
-                    error: vec![],
-                }
-            );
+        let mut response = if let TaskStatus::Completed { info } = status {
+            info.as_any()
+                .downcast_ref::<NetCdfCfOverviewResponse>()
+                .unwrap()
+                .clone()
         } else {
             panic!("Task must be completed");
-        }
+        };
+
+        response.success.sort();
+        assert_eq!(
+            response,
+            NetCdfCfOverviewResponse {
+                success: vec!["dataset_m.nc".into(), "dataset_sm.nc".into()],
+                skip: vec![],
+                error: vec![],
+            }
+        );
     }
 }
