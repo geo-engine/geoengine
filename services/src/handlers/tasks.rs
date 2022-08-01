@@ -117,14 +117,15 @@ mod tests {
 
     use crate::{
         contexts::{InMemoryContext, Session, SimpleContext},
-        tasks::{Task, TaskContext, TaskStatus, TaskStatusInfo},
+        tasks::{
+            util::test::wait_for_task_to_finish, Task, TaskContext, TaskStatus, TaskStatusInfo,
+        },
         util::tests::send_test_request,
     };
     use actix_http::header;
     use actix_web_httpauth::headers::authorization::Bearer;
     use futures::channel::oneshot;
     use geoengine_datatypes::{error::ErrorSource, util::test::TestDefault};
-    use std::sync::Arc;
 
     struct NopTask {
         complete_rx: oneshot::Receiver<()>,
@@ -147,22 +148,6 @@ mod tests {
         fn task_unique_id(&self) -> Option<String> {
             Some("highlander task".to_string())
         }
-    }
-
-    async fn wait_for_task_to_finish<C: TaskContext + 'static>(
-        task_manager: Arc<impl TaskManager<C>>,
-        task_id: TaskId,
-    ) {
-        crate::util::retry::retry(3, 100, 2., move || {
-            let task_manager = task_manager.clone();
-            async move {
-                let option =
-                    (!task_manager.status(task_id).await.unwrap().is_running()).then(|| ());
-                option.ok_or(())
-            }
-        })
-        .await
-        .unwrap();
     }
 
     #[tokio::test]

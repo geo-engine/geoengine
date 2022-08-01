@@ -19,7 +19,7 @@ use actix_web::{
 use futures::channel::oneshot;
 use geoengine_datatypes::dataset::DataProviderId;
 use geoengine_datatypes::error::{BoxedResultExt, ErrorSource};
-use log::{debug, warn};
+use log::{debug, log_enabled, warn, Level::Debug};
 use serde::{Deserialize, Serialize};
 use snafu::{ResultExt, Snafu};
 use std::path::PathBuf;
@@ -355,7 +355,7 @@ where
     .boxed_context(error::Internal)?
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 struct NetCdfCfOverviewResponse {
     success: Vec<PathBuf>,
     skip: Vec<PathBuf>,
@@ -399,114 +399,81 @@ impl<C: Context> Task<C::TaskContext> for EvbMultiOverviewTask<C> {
         self: Box<Self>,
         task_ctx: C::TaskContext,
     ) -> Result<Box<dyn crate::tasks::TaskStatusInfo>, Box<dyn ErrorSource>> {
-        todo!("implement task of tasks")
+        let task_ctx = Arc::new(task_ctx);
 
-        // let task_ctx = Arc::new(task_ctx);
+        let files = with_netcdfcf_provider(
+            self.ctx.as_ref(),
+            &self.session.clone().into(),
+            move |provider| {
+                provider
+                    .list_files()
+                    .map_err(|_| EbvError::CdfCfProviderCannotListFiles {
+                        id: NETCDF_CF_PROVIDER_ID,
+                    })
+            },
+        )
+        .await
+        .map_err(ErrorSource::boxed)?;
+        let num_files = files.len();
 
-        // let files = with_netcdfcf_provider(
-        //     self.ctx.as_ref(),
-        //     &self.session.clone().into(),
-        //     move |provider| {
-        //         provider
-        //             .list_files()
-        //             .map_err(|_| EbvError::CdfCfProviderCannotListFiles {
-        //                 id: NETCDF_CF_PROVIDER_ID,
-        //             })
-        //     },
-        // )
-        // .await?;
-        // let num_files = files.len();
+        let mut status = NetCdfCfOverviewResponse {
+            success: vec![],
+            skip: vec![],
+            error: vec![],
+        };
 
-        // let mut status = NetCdfCfOverviewResponse {
-        //     success: vec![],
-        //     skip: vec![],
-        //     error: vec![],
-        // };
+        for (i, file) in files.into_iter().enumerate() {
+            let subtask: Box<dyn Task<C::TaskContext>> = EvbOverviewTask::<C> {
+                session: self.session.clone(),
+                ctx: self.ctx.clone(),
+                params: CreateOverviewParams { file: file.clone() },
+            }
+            .boxed();
 
-        // for (i, file) in files.into_iter().enumerate() {
-        //     let subtask: Box<dyn Task<C::TaskContext>> = EvbOverviewTask::<C> {
-        //         session: self.session.clone().into(),
-        //         ctx: self.ctx.clone(),
-        //         params: params.into_inner(),
-        //     }
-        //     .boxed();
+            let (notification_tx, notification_rx) = oneshot::channel();
 
-        //     let (notification_tx, notification_rx) = oneshot::channel();
+            let _subtask_id = self
+                .ctx
+                .tasks_ref()
+                .schedule(subtask, Some(notification_tx))
+                .await
+                .map_err(ErrorSource::boxed)?;
 
-        //     let subtask_id = self
-        //         .ctx
-        //         .tasks_ref()
-        //         .schedule(subtask, Some(notification_tx))
-        //         .await
-        //         .map_err(ErrorSource::boxed)?;
+            if let Ok(subtask_status) = notification_rx.await {
+                match subtask_status {
+                    TaskStatus::Completed { info } => {
+                        if let Some(response) =
+                            info.as_any().downcast_ref::<NetCdfCfOverviewResponse>()
+                        {
+                            status.success.extend(response.success.clone());
+                            status.skip.extend(response.skip.clone());
+                            status.error.extend(response.error.clone());
+                        } else {
+                            // must not happen, since we spawned a task that only returns a `NetCdfCfOverviewResponse`
+                        }
+                    }
+                    TaskStatus::Failed { error } => {
+                        if log_enabled!(Debug) {
+                            debug!("{:?}", error);
+                        }
+                        status.error.push(file);
+                    }
+                    TaskStatus::Running(_) => {
+                        // must not happen, since we used the callback
+                    }
+                }
+            } else {
+                // TODO: can we ignore this?
+            };
 
-        //     if let Ok(subtask_status) = notification_rx.await {
-        //         match subtask_status {
-        //             TaskStatus::Completed { info } => {
-        //                 let success_msg = info.to_string();
-        //                 status.success.push(subtask_status.path.clone());
-        //             }
-        //             TaskStatus::Failed { error } => {
-        //                 status.skip.push(subtask_status.path.clone());
-        //             }
-        //             TaskStatus::Running(_) => {
-        //                 // must not happen, since we used the callback
-        //             }
-        //         }
-        //     } else {
-        //         // TODO: can we ignore this?
-        //     };
+            Self::update_pct(
+                task_ctx.clone(),
+                ((i + 1) / num_files) as u8,
+                status.clone(),
+            );
+        }
 
-        //     Self::update_pct(
-        //         task_ctx.clone(),
-        //         ((i + 1) / num_files) as u8,
-        //         status.clone(),
-        //     );
-        // }
-
-        // Ok(status.boxed())
-
-        // let response =
-        //     with_netcdfcf_provider(self.ctx.as_ref(), &self.session.into(), move |provider| {
-        //         let mut status = NetCdfCfOverviewResponse {
-        //             success: vec![],
-        //             skip: vec![],
-        //             error: vec![],
-        //         };
-
-        //         let files =
-        //             provider
-        //                 .list_files()
-        //                 .map_err(|_| EbvError::CdfCfProviderCannotListFiles {
-        //                     id: NETCDF_CF_PROVIDER_ID,
-        //                 })?;
-
-        //         let num_files = files.len();
-
-        //         for (i, file) in files.into_iter().enumerate() {
-        //             // TODO: provide some more detailed pct status
-
-        //             match provider.create_overviews(&file) {
-        //                 Ok(OverviewGeneration::Created) => status.success.push(file),
-        //                 Ok(OverviewGeneration::Skipped) => status.skip.push(file),
-        //                 Err(e) => {
-        //                     warn!("Failed to create overviews for {}: {e}", file.display());
-        //                     status.error.push(file);
-        //                 }
-        //             }
-
-        //             Self::update_pct(
-        //                 task_ctx.clone(),
-        //                 ((i + 1) / num_files) as u8,
-        //                 status.clone(),
-        //             );
-        //         }
-
-        //         Result::<_, EbvError>::Ok(status.boxed())
-        //     })
-        //     .await;
-
-        // response.map_err(ErrorSource::boxed)
+        Ok(status.boxed())
     }
 
     fn task_type(&self) -> &'static str {
@@ -594,7 +561,11 @@ impl<C: Context> Task<C::TaskContext> for EvbOverviewTask<C> {
     }
 }
 
-impl TaskStatusInfo for NetCdfCfOverviewResponse {}
+impl TaskStatusInfo for NetCdfCfOverviewResponse {
+    fn as_any(&self) -> &dyn std::any::Any {
+        self
+    }
+}
 
 #[cfg(test)]
 mod tests {
@@ -604,6 +575,7 @@ mod tests {
         contexts::{InMemoryContext, Session, SimpleContext},
         datasets::external::netcdfcf::NetCdfCfDataProviderDefinition,
         server::{configure_extractors, render_404, render_405},
+        tasks::util::test::wait_for_task_to_finish,
         util::tests::read_body_string,
     };
     use actix_web::{dev::ServiceResponse, http, http::header, middleware, test, web, App};
@@ -1382,5 +1354,60 @@ mod tests {
             })
             .to_string()
         );
+    }
+
+    #[tokio::test]
+    async fn test_create_overviews() {
+        crate::util::config::set_config(
+            "session.admin_session_token",
+            "8aca8875-425a-4ef1-8ee6-cdfc62dd7525",
+        )
+        .unwrap();
+
+        let ctx = InMemoryContext::test_default();
+        let admin_session_id = AdminSession::default().id();
+
+        let overview_folder = tempfile::tempdir().unwrap();
+
+        ctx.layer_provider_db_ref()
+            .add_layer_provider(Box::new(NetCdfCfDataProviderDefinition {
+                name: "test".to_string(),
+                path: test_data!("netcdf4d").to_path_buf(),
+                overviews: overview_folder.path().to_path_buf(),
+            }))
+            .await
+            .unwrap();
+
+        let req = actix_web::test::TestRequest::post()
+            .uri("/ebv/create_overviews")
+            .append_header((
+                header::AUTHORIZATION,
+                Bearer::new(admin_session_id.to_string()),
+            ));
+
+        let res = send_test_request(req, ctx.clone(), "http://test".to_string()).await;
+
+        assert_eq!(res.status(), 200, "{:?}", res.response());
+
+        let task_response =
+            serde_json::from_str::<TaskResponse>(&read_body_string(res).await).unwrap();
+
+        wait_for_task_to_finish(ctx.tasks(), task_response.task_id).await;
+
+        let status = ctx.tasks().status(task_response.task_id).await.unwrap();
+
+        if let TaskStatus::Completed { info } = status {
+            let response: &NetCdfCfOverviewResponse = info.as_any().downcast_ref().unwrap();
+            assert_eq!(
+                *response,
+                NetCdfCfOverviewResponse {
+                    success: vec!["dataset_sm.nc".into(), "dataset_m.nc".into()],
+                    skip: vec![],
+                    error: vec![],
+                }
+            );
+        } else {
+            panic!("Task must be completed");
+        }
     }
 }

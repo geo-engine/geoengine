@@ -1,5 +1,6 @@
 mod error;
 mod in_memory;
+pub mod util;
 
 use crate::{
     error::Result,
@@ -14,7 +15,7 @@ use geoengine_datatypes::{error::ErrorSource, identifier};
 pub use in_memory::{SimpleTaskManager, SimpleTaskManagerContext};
 use serde::{Deserialize, Serialize, Serializer};
 use snafu::ensure;
-use std::{fmt, sync::Arc};
+use std::{any::Any, fmt, sync::Arc};
 
 /// A database that allows scheduling and retrieving tasks.
 #[async_trait::async_trait]
@@ -128,19 +129,30 @@ where
 }
 
 /// Trait for information about the status of a task.
-pub trait TaskStatusInfo: erased_serde::Serialize + Send + Sync + fmt::Debug {
+pub trait TaskStatusInfo: erased_serde::Serialize + Send + Sync + fmt::Debug + Any {
     fn boxed(self) -> Box<dyn TaskStatusInfo>
     where
         Self: Sized + 'static,
     {
         Box::new(self)
     }
+
+    /// Propagates `Any`-casting to the underlying provider
+    fn as_any(&self) -> &dyn std::any::Any;
 }
 
 erased_serde::serialize_trait_object!(TaskStatusInfo);
 
-impl TaskStatusInfo for () {}
-impl TaskStatusInfo for String {}
+impl TaskStatusInfo for () {
+    fn as_any(&self) -> &dyn std::any::Any {
+        self
+    }
+}
+impl TaskStatusInfo for String {
+    fn as_any(&self) -> &dyn std::any::Any {
+        self
+    }
+}
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct TaskListOptions {
