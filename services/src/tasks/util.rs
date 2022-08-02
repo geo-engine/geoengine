@@ -13,7 +13,7 @@ pub mod test {
         task_manager: Arc<impl TaskManager<C>>,
         task_id: TaskId,
     ) {
-        crate::util::retry::retry(3, 100, 2., move || {
+        crate::util::retry::retry(5, 100, 2., move || {
             let task_manager = task_manager.clone();
             async move {
                 let option =
