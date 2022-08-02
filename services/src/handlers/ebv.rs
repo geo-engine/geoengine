@@ -18,6 +18,7 @@ use actix_web::{
 };
 use geoengine_datatypes::dataset::DataProviderId;
 use geoengine_datatypes::error::{BoxedResultExt, ErrorSource};
+use geoengine_datatypes::util::gdal::ResamplingMethod;
 use log::{debug, warn};
 use serde::{Deserialize, Serialize};
 use snafu::{ResultExt, Snafu};
@@ -361,16 +362,23 @@ struct NetCdfCfOverviewResponse {
     error: Vec<PathBuf>,
 }
 
+#[derive(Debug, Deserialize)]
+struct CreateOverviewsParams {
+    resampling_method: Option<ResamplingMethod>,
+}
+
 /// Create overviews for a all `NetCDF` files of the provider
 async fn create_overviews<C: Context>(
     session: AdminSession,
     ctx: web::Data<C>,
+    params: web::Json<CreateOverviewsParams>,
 ) -> Result<impl Responder> {
     let ctx = ctx.into_inner();
 
     let task: Box<dyn Task<C::TaskContext>> = EvbMultiOverviewTask::<C> {
         session,
         ctx: ctx.clone(),
+        resampling_method: params.resampling_method,
     }
     .boxed();
 
@@ -382,6 +390,7 @@ async fn create_overviews<C: Context>(
 struct EvbMultiOverviewTask<C: Context> {
     session: AdminSession,
     ctx: Arc<C>,
+    resampling_method: Option<ResamplingMethod>,
 }
 
 impl<C: Context> EvbMultiOverviewTask<C> {
@@ -399,6 +408,7 @@ impl<C: Context> Task<C::TaskContext> for EvbMultiOverviewTask<C> {
         task_ctx: C::TaskContext,
     ) -> Result<Box<dyn crate::tasks::TaskStatusInfo>, Box<dyn ErrorSource>> {
         let task_ctx = Arc::new(task_ctx);
+        let resampling_method = self.resampling_method;
 
         let response =
             with_netcdfcf_provider(self.ctx.as_ref(), &self.session.into(), move |provider| {
@@ -420,7 +430,7 @@ impl<C: Context> Task<C::TaskContext> for EvbMultiOverviewTask<C> {
                 for (i, file) in files.into_iter().enumerate() {
                     // TODO: provide some more detailed pct status
 
-                    match provider.create_overviews(&file) {
+                    match provider.create_overviews(&file, resampling_method) {
                         Ok(OverviewGeneration::Created) => status.success.push(file),
                         Ok(OverviewGeneration::Skipped) => status.skip.push(file),
                         Err(e) => {
@@ -447,6 +457,7 @@ impl<C: Context> Task<C::TaskContext> for EvbMultiOverviewTask<C> {
 #[derive(Debug, Deserialize)]
 struct CreateOverviewParams {
     file: PathBuf,
+    resampling_method: Option<ResamplingMethod>,
 }
 
 /// Create overviews for a single `NetCDF` file
@@ -482,12 +493,13 @@ impl<C: Context> Task<C::TaskContext> for EvbOverviewTask<C> {
         _ctx: C::TaskContext,
     ) -> Result<Box<dyn crate::tasks::TaskStatusInfo>, Box<dyn ErrorSource>> {
         let file = self.params.file;
+        let resampling_method = self.params.resampling_method;
 
         let response =
             with_netcdfcf_provider(self.ctx.as_ref(), &self.session.into(), move |provider| {
                 // TODO: provide some detailed pct status
 
-                Ok(match provider.create_overviews(&file) {
+                Ok(match provider.create_overviews(&file, resampling_method) {
                     Ok(OverviewGeneration::Created) => NetCdfCfOverviewResponse {
                         success: vec![file],
                         skip: vec![],
