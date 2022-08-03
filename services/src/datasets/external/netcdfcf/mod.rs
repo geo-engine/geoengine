@@ -355,6 +355,7 @@ impl NetCdfCfDataProvider {
                         entity_name = entity.name
                     ),
                     description: tree.summary.clone(),
+                    properties: None,
                 });
             }
         }
@@ -906,6 +907,8 @@ async fn listing_from_dir(base: &Path, path: &Path) -> crate::error::Result<Vec<
                 },
                 name: entry.file_name().to_string_lossy().to_string(),
                 description: "".to_string(),
+                entry_label: None,
+                properties: None,
             }));
         }
     }
@@ -913,13 +916,13 @@ async fn listing_from_dir(base: &Path, path: &Path) -> crate::error::Result<Vec<
     Ok(items)
 }
 
-/// List all the groups in the group given by the path `groups`.
-pub fn list_groups(
+/// find the group given by the path `groups`.
+pub fn find_group(
     netcdf_groups: Vec<NetCdfGroup>,
     groups: &[String],
-) -> crate::error::Result<Vec<NetCdfGroup>> {
+) -> crate::error::Result<Option<NetCdfGroup>> {
     if groups.is_empty() {
-        return Ok(netcdf_groups);
+        return Ok(None);
     }
 
     let mut group_stack = groups.iter().collect::<Vec<_>>();
@@ -936,7 +939,7 @@ pub fn list_groups(
             .ok_or(Error::InvalidLayerCollectionId)?;
     }
 
-    Ok(group.groups)
+    Ok(Some(group))
 }
 
 async fn listing_from_netcdf_file(
@@ -953,7 +956,7 @@ async fn listing_from_netcdf_file(
     })
     .await??;
 
-    let groups_list = list_groups(tree.groups, groups)?;
+    let groups_list = find_group(tree.groups.clone(), groups)?.map_or(tree.groups, |g| g.groups);
 
     if groups_list.is_empty() {
         tree.entities
@@ -973,6 +976,7 @@ async fn listing_from_netcdf_file(
                     },
                     name: entity.name,
                     description: "".to_string(),
+                    properties: None,
                 }))
             })
             .collect()
@@ -997,6 +1001,8 @@ async fn listing_from_netcdf_file(
                     },
                     name: group.title.clone(),
                     description: group.description,
+                    entry_label: None,
+                    properties: None,
                 }))
             })
             .collect()
@@ -1108,6 +1114,7 @@ impl LayerCollectionProvider for NetCdfCfDataProvider {
                         ),
                     },
                     symbology: None,
+                    properties: None,
                 })
             }
             _ => return Err(Error::InvalidLayerId),
@@ -1302,6 +1309,7 @@ mod tests {
                 },
                 name: "Test dataset metric: Random metric 1 > entity01".into(),
                 description: "CFake description of test dataset with metric.".into(),
+                properties: None,
             }
         );
         assert_eq!(
@@ -1320,6 +1328,7 @@ mod tests {
                 },
                 name: "Test dataset metric: Random metric 1 > entity02".into(),
                 description: "CFake description of test dataset with metric.".into(),
+                properties: None,
             }
         );
         assert_eq!(
@@ -1338,6 +1347,7 @@ mod tests {
                 },
                 name: "Test dataset metric: Random metric 1 > entity03".into(),
                 description: "CFake description of test dataset with metric.".into(),
+                properties: None,
             }
         );
         assert_eq!(
@@ -1356,6 +1366,7 @@ mod tests {
                 },
                 name: "Test dataset metric: Random metric 2 > entity01".into(),
                 description: "CFake description of test dataset with metric.".into(),
+                properties: None,
             }
         );
         assert_eq!(
@@ -1374,6 +1385,7 @@ mod tests {
                 },
                 name: "Test dataset metric: Random metric 2 > entity02".into(),
                 description: "CFake description of test dataset with metric.".into(),
+                properties: None,
             }
         );
         assert_eq!(
@@ -1392,6 +1404,7 @@ mod tests {
                 },
                 name: "Test dataset metric: Random metric 2 > entity03".into(),
                 description: "CFake description of test dataset with metric.".into(),
+                properties: None,
             }
         );
     }
@@ -1429,6 +1442,7 @@ mod tests {
                     "Test dataset metric and scenario: Sustainability > Random metric 1 > entity01"
                         .into(),
                 description: "Fake description of test dataset with metric and scenario.".into(),
+                properties: None,
             }
         );
         assert_eq!(
@@ -1445,6 +1459,7 @@ mod tests {
                 },
                 name: "Test dataset metric and scenario: Fossil-fueled Development > Random metric 2 > entity02".into(),
                 description: "Fake description of test dataset with metric and scenario.".into(),
+                properties: None,
             }
         );
     }
@@ -1694,6 +1709,7 @@ mod tests {
                     "Test dataset metric and scenario: Sustainability > Random metric 1 > entity01"
                         .into(),
                 description: "Fake description of test dataset with metric and scenario.".into(),
+                properties: None,
             }
         );
         assert_eq!(
@@ -1710,6 +1726,7 @@ mod tests {
                 },
                 name: "Test dataset metric and scenario: Fossil-fueled Development > Random metric 2 > entity02".into(),
                 description: "Fake description of test dataset with metric and scenario.".into(),
+                properties: None,
             }
         );
     }

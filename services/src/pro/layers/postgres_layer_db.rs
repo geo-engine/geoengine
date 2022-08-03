@@ -406,6 +406,7 @@ where
                         },
                         name: row.get(1),
                         description: row.get(2),
+                        properties: None,
                     })
                 } else {
                     CollectionItem::Collection(LayerCollectionListing {
@@ -415,6 +416,8 @@ where
                         },
                         name: row.get(1),
                         description: row.get(2),
+                        entry_label: None,
+                        properties: None,
                     })
                 }
             })
@@ -461,6 +464,7 @@ where
             description: row.get(1),
             workflow: serde_json::from_value(row.get(2)).context(error::SerdeJson)?,
             symbology: serde_json::from_value(row.get(3)).context(error::SerdeJson)?,
+            properties: None,
         })
     }
 }

@@ -77,7 +77,7 @@ struct EbvClasses {
 
 pub async fn get_classes() -> Result<Vec<EbvClass>> {
     let base_url = get_config_element::<crate::util::config::Ebv>()?.api_base_url;
-    let url = format!("{base_url}/ebv");
+    let url = format!("{base_url}/ebv-map");
 
     debug!("Calling {url}");
 

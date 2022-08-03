@@ -1865,7 +1865,8 @@ mod tests {
                     name: "Layer1".to_string(),
                     description: "Layer 1".to_string(),
                     symbology: None,
-                    workflow: workflow.clone()
+                    workflow: workflow.clone(),
+                    properties: None,
                 }
             );
 
@@ -1938,6 +1939,8 @@ mod tests {
                         },
                         name: "Collection1".to_string(),
                         description: "Collection 1".to_string(),
+                        entry_label: None,
+                        properties: None,
                     }),
                     CollectionItem::Collection(LayerCollectionListing {
                         id: ProviderLayerCollectionId {
@@ -1946,6 +1949,8 @@ mod tests {
                         },
                         name: "Unsorted".to_string(),
                         description: "Unsorted Layers".to_string(),
+                        entry_label: None,
+                        properties: None,
                     }),
                     CollectionItem::Layer(LayerListing {
                         id: ProviderLayerId {
@@ -1954,6 +1959,7 @@ mod tests {
                         },
                         name: "Layer1".to_string(),
                         description: "Layer 1".to_string(),
+                        properties: None,
                     })
                 ]
             );
@@ -1981,6 +1987,8 @@ mod tests {
                         },
                         name: "Collection2".to_string(),
                         description: "Collection 2".to_string(),
+                        entry_label: None,
+                        properties: None,
                     }),
                     CollectionItem::Layer(LayerListing {
                         id: ProviderLayerId {
@@ -1989,6 +1997,7 @@ mod tests {
                         },
                         name: "Layer2".to_string(),
                         description: "Layer 2".to_string(),
+                        properties: None,
                     })
                 ]
             );

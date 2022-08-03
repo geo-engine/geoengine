@@ -514,6 +514,7 @@ impl LayerCollectionProvider for ProHashMapDatasetDb {
                     },
                     name: d.name.clone(),
                     description: d.description.clone(),
+                    properties: None,
                 })
             })
             .collect();
@@ -547,6 +548,7 @@ impl LayerCollectionProvider for ProHashMapDatasetDb {
             description: dataset.description.clone(),
             workflow: Workflow { operator },
             symbology: dataset.symbology.clone(),
+            properties: None,
         })
     }
 }

@@ -230,6 +230,7 @@ impl NFDIDataProvider {
                 )?,
             },
             symbology: None,
+            properties: None,
         })
     }
 
@@ -578,6 +579,7 @@ impl LayerCollectionProvider for NFDIDataProvider {
                     },
                     name: ds.name,
                     description: ds.description,
+                    properties: None,
                 })
             })
             .collect())
@@ -641,6 +643,7 @@ impl LayerCollectionProvider for NFDIDataProvider {
             description: dataset.description,
             workflow: Workflow { operator },
             symbology: None,
+            properties: None,
         })
     }
 }

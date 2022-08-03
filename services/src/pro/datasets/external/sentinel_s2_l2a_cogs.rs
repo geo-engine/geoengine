@@ -189,6 +189,7 @@ impl SentinelS2L2aCogsDataProvider {
                             )
                             .expect("valid colorizer"),
                         })), // TODO: individual colorizer per band
+                        properties: None,
                     };
 
                     let dataset = SentinelDataset {
@@ -241,6 +242,7 @@ impl LayerCollectionProvider for SentinelS2L2aCogsDataProvider {
                     id: d.listing.id.clone(),
                     name: d.listing.name.clone(),
                     description: d.listing.description.clone(),
+                    properties: None,
                 }))
             })
             .collect::<Result<Vec<CollectionItem>>>()?;
@@ -276,6 +278,7 @@ impl LayerCollectionProvider for SentinelS2L2aCogsDataProvider {
                 ),
             },
             symbology: dataset.listing.symbology.clone(),
+            properties: None,
         })
     }
 }

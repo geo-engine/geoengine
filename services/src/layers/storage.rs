@@ -313,6 +313,8 @@ impl LayerCollectionProvider for HashMapLayerDb {
                     },
                     name: collection.name.clone(),
                     description: collection.description.clone(),
+                    entry_label: None,
+                    properties: None,
                 })
             });
 
@@ -336,6 +338,7 @@ impl LayerCollectionProvider for HashMapLayerDb {
                     },
                     name: layer.name.clone(),
                     description: layer.description.clone(),
+                    properties: None,
                 })
             });
 
@@ -378,6 +381,7 @@ impl LayerCollectionProvider for HashMapLayerDb {
             description: layer.description.clone(),
             workflow: layer.workflow.clone(),
             symbology: layer.symbology.clone(),
+            properties: None,
         })
     }
 }
@@ -514,7 +518,9 @@ mod tests {
                         collection_id: empty_c_id,
                     },
                     name: "empty collection".to_string(),
-                    description: "description".to_string()
+                    description: "description".to_string(),
+                    entry_label: None,
+                    properties: None,
                 }),
                 CollectionItem::Layer(LayerListing {
                     id: ProviderLayerId {
@@ -523,6 +529,7 @@ mod tests {
                     },
                     name: "layer".to_string(),
                     description: "description".to_string(),
+                    properties: None,
                 })
             ]
         );

@@ -18,7 +18,7 @@ use serde_json::json;
 use snafu::ensure;
 
 use crate::{
-    datasets::external::netcdfcf::list_groups,
+    datasets::external::netcdfcf::find_group,
     error::{Error, Result},
     layers::{
         external::{DataProvider, DataProviderDefinition},
@@ -28,6 +28,7 @@ use crate::{
         },
         listing::{LayerCollectionId, LayerCollectionProvider},
     },
+    projects::{RasterSymbology, Symbology},
     util::user_input::Validated,
     workflows::workflow::Workflow,
 };
@@ -36,7 +37,7 @@ use super::{
     ebvportal_api::{
         get_classes, get_ebv_datasets, get_ebv_subdatasets, NetCdfCfDataProviderPaths,
     },
-    NetCdfCfDataProvider,
+    NetCdfCfDataProvider, TimeCoverage,
 };
 
 /// Singleton Provider with id `77d0bf11-986e-43f5-b11d-898321f1854c`
@@ -160,6 +161,8 @@ impl EbvPortalDataProvider {
                     },
                     name: c.name,
                     description: "".to_string(),
+                    entry_label: Some("EBV Name".to_string()),
+                    properties: None,
                 }))
             })
             .collect()
@@ -193,6 +196,8 @@ impl EbvPortalDataProvider {
                     },
                     name: ebv,
                     description: "".to_string(),
+                    entry_label: Some("EBV Dataset".to_string()),
+                    properties: None,
                 }))
             })
             .collect()
@@ -221,6 +226,18 @@ impl EbvPortalDataProvider {
                     },
                     name: d.name.clone(),
                     description: d.description,
+                    entry_label: Some("Metric".to_string()),
+                    properties: Some(
+                        [
+                            (
+                                "by".to_string(),
+                                format!("{} ({})", d.author_name, d.author_institution),
+                            ),
+                            ("with license".to_string(), d.license),
+                        ]
+                        .into_iter()
+                        .collect(),
+                    ),
                 }))
             })
             .collect()
@@ -260,6 +277,8 @@ impl EbvPortalDataProvider {
                 },
                 name: g.title,
                 description: g.description,
+                entry_label: Some("Entity".to_string()),
+                properties: None,
             }))
         })
         .collect()
@@ -285,7 +304,8 @@ impl EbvPortalDataProvider {
         .await?
         .tree;
 
-        let groups_list = list_groups(tree.groups, groups)?;
+        let groups_list =
+            find_group(tree.groups.clone(), groups)?.map_or(tree.groups, |g| g.groups);
 
         if groups_list.is_empty() {
             tree.entities
@@ -307,6 +327,7 @@ impl EbvPortalDataProvider {
                         },
                         name: entity.name,
                         description: "".to_string(),
+                        properties: None,
                     }))
                 })
                 .collect()
@@ -333,6 +354,8 @@ impl EbvPortalDataProvider {
                         },
                         name: group.title,
                         description: group.description,
+                        entry_label: None,
+                        properties: None,
                     }))
                 })
                 .collect()
@@ -418,6 +441,31 @@ impl LayerCollectionProvider for EbvPortalDataProvider {
                     .find(|e| e.id == *entity)
                     .ok_or(Error::UnknownLayerId { id: id.clone() })?;
 
+                let time_steps = match ebv_hierarchy.tree.time_coverage {
+                    TimeCoverage::Regular { start, end, step } => {
+                        if step.step == 0 {
+                            vec![start]
+                        } else {
+                            let mut steps = vec![start];
+                            let mut current = start;
+                            while current < end {
+                                current = (current + step)?;
+                                steps.push(current);
+                            }
+                            steps
+                        }
+                    }
+                    TimeCoverage::List { time_stamps } => time_stamps,
+                };
+
+                let colorizer = ebv_hierarchy.tree.colorizer;
+
+                let group =
+                    find_group(ebv_hierarchy.tree.groups, groups)?.ok_or(Error::InvalidLayerId)?;
+                let data_range = group
+                    .data_range
+                    .unwrap_or_else(|| (colorizer.min_value(), colorizer.max_value()));
+
                 Ok(Layer {
                     id: ProviderLayerId {
                         provider_id: EBV_PROVIDER_ID,
@@ -445,7 +493,8 @@ impl LayerCollectionProvider for EbvPortalDataProvider {
                             .boxed(),
                         ),
                     },
-                    symbology: None,
+                    symbology: Some(Symbology::Raster(RasterSymbology { opacity: 1.0, colorizer })),
+                    properties: Some([("timeSteps".to_string(), serde_json::to_string(&time_steps)?),("dataRange".to_string(), serde_json::to_string(&data_range)?)].into_iter().collect()),
                 })
             }
             _ => return Err(Error::InvalidLayerId),

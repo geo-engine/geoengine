@@ -198,6 +198,7 @@ impl LayerCollectionProvider for Nature40DataProvider {
                                 .get((band_index - 1) as usize)
                                 .unwrap_or(&"".to_owned())
                         ),
+                        properties: None,
                     })));
                 }
             } else {
@@ -274,6 +275,7 @@ impl LayerCollectionProvider for Nature40DataProvider {
                 ),
             },
             symbology: None,
+            properties: None,
         })
     }
 }
@@ -795,6 +797,7 @@ mod tests {
                     },
                     name: "MOF Luftbild".to_owned(),
                     description: "Band 1: band1".to_owned(),
+                    properties: None,
                 }),
                 CollectionItem::Layer(LayerListing {
                     id: ProviderLayerId {
@@ -806,6 +809,7 @@ mod tests {
                     },
                     name: "MOF Luftbild".to_owned(),
                     description: "Band 2: band2".to_owned(),
+                    properties: None,
                 }),
                 CollectionItem::Layer(LayerListing {
                     id: ProviderLayerId {
@@ -817,6 +821,7 @@ mod tests {
                     },
                     name: "MOF Luftbild".to_owned(),
                     description: "Band 3: band3".to_owned(),
+                    properties: None,
                 }),
                 CollectionItem::Layer(LayerListing {
                     id: ProviderLayerId {
@@ -828,6 +833,7 @@ mod tests {
                     },
                     name: "Topografic Wetness index".to_owned(),
                     description: "Band 1: wetness".to_owned(),
+                    properties: None,
                 })
             ]
         );

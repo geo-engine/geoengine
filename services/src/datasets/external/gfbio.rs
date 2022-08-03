@@ -227,6 +227,7 @@ impl LayerCollectionProvider for GfbioDataProvider {
                     },
                     name: row.get(1),
                     description: row.try_get(2).unwrap_or_else(|_| "".to_owned()),
+                    properties: None,
                 })
             })
             .collect();
@@ -286,6 +287,7 @@ impl LayerCollectionProvider for GfbioDataProvider {
                 ),
             },
             symbology: None, // TODO
+            properties: None,
         })
     }
 }
@@ -583,6 +585,7 @@ mod tests {
                 },
                 name: "Example Title".to_string(),
                 description: "".to_string(),
+                properties: None,
             })]
         );
     }

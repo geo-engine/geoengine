@@ -696,6 +696,7 @@ where
                     },
                     name: row.get(1),
                     description: row.get(2),
+                    properties: None,
                 }))
             })
             .filter_map(Result::ok)
@@ -754,6 +755,7 @@ where
             description,
             workflow: Workflow { operator },
             symbology,
+            properties: None,
         })
     }
 }

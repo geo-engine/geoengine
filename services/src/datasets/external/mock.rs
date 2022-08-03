@@ -106,6 +106,7 @@ impl LayerCollectionProvider for MockExternalDataProvider {
                 },
                 name: dataset.properties.name.clone(),
                 description: dataset.properties.description.clone(),
+                properties: None,
             })));
         }
 
@@ -154,6 +155,7 @@ impl LayerCollectionProvider for MockExternalDataProvider {
                         ),
                     },
                     symbology: d.properties.symbology.clone(),
+                    properties: None,
                 })
             })
     }

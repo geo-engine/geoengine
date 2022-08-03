@@ -1,3 +1,5 @@
+use std::collections::HashMap;
+
 use serde::{Deserialize, Serialize};
 
 use geoengine_datatypes::dataset::{DataProviderId, LayerId};
@@ -29,6 +31,7 @@ pub struct Layer {
     pub description: String,
     pub workflow: Workflow,
     pub symbology: Option<Symbology>,
+    pub properties: Option<HashMap<String, String>>,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone, PartialEq, Eq)]
@@ -36,6 +39,7 @@ pub struct LayerListing {
     pub id: ProviderLayerId,
     pub name: String,
     pub description: String,
+    pub properties: Option<HashMap<String, String>>,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -71,10 +75,13 @@ pub struct LayerCollection {
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
 pub struct LayerCollectionListing {
     pub id: ProviderLayerCollectionId,
     pub name: String,
     pub description: String,
+    pub entry_label: Option<String>, // a common label for the collection's entries, if there is any
+    pub properties: Option<Vec<(String, String)>>,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone, PartialEq, Eq)]
