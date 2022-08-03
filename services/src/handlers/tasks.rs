@@ -2,7 +2,7 @@ use crate::error::Result;
 use crate::tasks::{TaskListOptions, TaskManager};
 use crate::util::user_input::UserInput;
 use crate::{contexts::Context, tasks::TaskId};
-use actix_web::{web, FromRequest, Responder};
+use actix_web::{web, FromRequest, HttpResponse, Responder};
 use serde::{Deserialize, Serialize};
 
 pub(crate) fn init_task_routes<C>(cfg: &mut web::ServiceConfig)
@@ -13,7 +13,11 @@ where
     cfg.service(
         web::scope("/tasks")
             .service(web::resource("/list").route(web::get().to(list_handler::<C>)))
-            .service(web::resource("/{task_id}/status").route(web::get().to(status_handler::<C>))),
+            .service(
+                web::scope("/{task_id}")
+                    .service(web::resource("/status").route(web::get().to(status_handler::<C>)))
+                    .service(web::resource("/abort").route(web::get().to(abort_handler::<C>))),
+            ),
     );
 }
 
@@ -108,6 +112,30 @@ async fn list_handler<C: Context>(
     let task = ctx.tasks_ref().list(task_list_options).await?;
 
     Ok(web::Json(task))
+}
+
+/// Retrieve the status of a task.
+///
+/// # Example
+///
+/// ```text
+/// GET /tasks/420b06de-0a7e-45cb-9c1c-ea901b46ab69/abort
+/// Authorization: Bearer 4f0d02f9-68e8-46fb-9362-80f862b7db54
+/// ```
+///
+/// Response 1:
+///
+/// 200 OK
+async fn abort_handler<C: Context>(
+    _session: C::Session, // TODO: incorporate
+    ctx: web::Data<C>,
+    task_id: web::Path<TaskId>,
+) -> Result<impl Responder> {
+    let task_id = task_id.into_inner();
+
+    ctx.tasks_ref().abort(task_id).await?;
+
+    Ok(HttpResponse::Ok())
 }
 
 #[cfg(test)]
@@ -240,6 +268,48 @@ mod tests {
                     "info": "completed",
                 }
             ])
+        );
+    }
+
+    #[tokio::test]
+    async fn test_abort_task() {
+        let ctx = InMemoryContext::test_default();
+        let session_id = ctx.default_session_ref().await.id();
+
+        // 1. Create task
+
+        let task_id = ctx.tasks_ref().schedule(NopTask {}.boxed()).await.unwrap();
+
+        // 2. Abort task
+
+        let req = actix_web::test::TestRequest::get()
+            .uri(&format!("/tasks/{task_id}/abort"))
+            .append_header((header::CONTENT_LENGTH, 0))
+            .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())));
+
+        let res = send_test_request(req, ctx.clone()).await;
+
+        assert_eq!(res.status(), 200, "{:?}", res.response().error());
+
+        // 3. check status
+
+        let req = actix_web::test::TestRequest::get()
+            .uri(&format!("/tasks/{task_id}/status"))
+            .append_header((header::CONTENT_LENGTH, 0))
+            .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())));
+
+        let res = send_test_request(req, ctx.clone()).await;
+
+        assert_eq!(res.status(), 200, "{:?}", res.response().error());
+
+        let status: serde_json::Value = actix_web::test::read_body_json(res).await;
+
+        assert_eq!(
+            status,
+            serde_json::json!({
+                "status": "failed",
+                "error": format!("Task was aborted by the user: {task_id}"),
+            })
         );
     }
 }

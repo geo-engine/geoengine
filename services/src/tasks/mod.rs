@@ -26,6 +26,8 @@ pub trait TaskManager<C: TaskContext>: Send + Sync {
         &self,
         options: Validated<TaskListOptions>,
     ) -> Result<Vec<TaskStatusWithId>, TaskError>;
+
+    async fn abort(&self, task_id: TaskId) -> Result<(), TaskError>;
 }
 
 identifier!(TaskId);
@@ -34,6 +36,10 @@ identifier!(TaskId);
 #[async_trait::async_trait]
 pub trait Task<C: TaskContext>: Send + Sync {
     async fn run(self: Box<Self>, ctx: C) -> Result<Box<dyn TaskStatusInfo>, Box<dyn ErrorSource>>;
+
+    // TODO
+    /// Clean-up the task on error or abortion
+    // async fn cleanup_on_error(self: Box<Self>, ctx: C) -> Result<(), Box<dyn ErrorSource>>;
 
     fn boxed(self) -> Box<dyn Task<C>>
     where
@@ -63,8 +69,8 @@ pub enum TaskStatus {
     Completed {
         info: Arc<Box<dyn TaskStatusInfo>>,
     },
-    #[serde(serialize_with = "serialize_failed_task_status")]
     Failed {
+        #[serde(serialize_with = "serialize_failed_task_status")]
         error: Arc<Box<dyn ErrorSource>>,
     },
 }
@@ -110,7 +116,8 @@ fn serialize_failed_task_status<S>(
 where
     S: Serializer,
 {
-    serializer.serialize_str(error.to_string().as_str())
+    let error_string = error.to_string();
+    serializer.serialize_str(error_string.as_str())
 }
 
 /// Trait for information about the status of a task.

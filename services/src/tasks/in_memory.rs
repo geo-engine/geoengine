@@ -132,6 +132,34 @@ impl TaskManager<SimpleTaskManagerContext> for SimpleTaskManager {
 
         Ok(result)
     }
+
+    async fn abort(&self, task_id: TaskId) -> Result<(), TaskError> {
+        let mut write_lock = self.write_lock_all().await;
+
+        let task_handle = write_lock
+            .handles
+            .remove(&task_id)
+            .ok_or(TaskError::TaskNotFound { task_id })?;
+
+        task_handle.abort();
+
+        let result = task_handle.await;
+
+        if let Some(task_status) = write_lock.tasks_by_id.get(&task_id) {
+            let mut task_status_lock = task_status.write().await;
+            match result {
+                Ok(()) => (), // could have completed before, so do nothing
+                Err(_) => {
+                    *task_status_lock =
+                        TaskStatus::failed(Arc::new(Box::new(TaskError::TaskAborted { task_id })));
+                }
+            };
+        }
+
+        // TODO: clean up
+
+        Ok(())
+    }
 }
 
 #[derive(Clone)]
