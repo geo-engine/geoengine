@@ -27,6 +27,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - https://github.com/geo-engine/geoengine/pull/565
   - Metadata has new field `dataRange`, which is optional
 
+- Added download of workflow metadata (description, result descriptor, citations) as zip file
+
+  - https://github.com/geo-engine/geoengine-python/pull/65
+
 ### Changed
 
 - Removed the custom Geo Bon EBV portal handlers. Instead, the EBV hierarchy is now browsed through the layer collection API.
