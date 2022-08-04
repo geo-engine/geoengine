@@ -152,20 +152,34 @@ mod tests {
     };
     use actix_http::header;
     use actix_web_httpauth::headers::authorization::Bearer;
-    use futures::channel::oneshot;
+    use futures::{channel::oneshot, lock::Mutex};
     use geoengine_datatypes::{error::ErrorSource, util::test::TestDefault};
+    use std::{pin::Pin, sync::Arc};
 
     struct NopTask {
-        complete_rx: oneshot::Receiver<()>,
+        complete_rx: Arc<Mutex<oneshot::Receiver<()>>>,
+    }
+
+    impl NopTask {
+        pub fn new_with_sender() -> (Self, oneshot::Sender<()>) {
+            let (complete_tx, complete_rx) = oneshot::channel();
+
+            let this = Self {
+                complete_rx: Arc::new(Mutex::new(complete_rx)),
+            };
+
+            (this, complete_tx)
+        }
     }
 
     #[async_trait::async_trait]
     impl<C: TaskContext + 'static> Task<C> for NopTask {
-        async fn run(
-            self: Box<Self>,
-            _ctx: C,
-        ) -> Result<Box<dyn TaskStatusInfo>, Box<dyn ErrorSource>> {
-            self.complete_rx.await.unwrap();
+        async fn run(&self, _ctx: C) -> Result<Box<dyn TaskStatusInfo>, Box<dyn ErrorSource>> {
+            let mut complete_rx_lock = self.complete_rx.lock().await;
+            let pinned_receiver: Pin<&mut oneshot::Receiver<()>> = Pin::new(&mut complete_rx_lock);
+
+            pinned_receiver.await.unwrap();
+
             Ok("completed".to_string().boxed())
         }
 
@@ -187,12 +201,8 @@ mod tests {
         let ctx = InMemoryContext::test_default();
         let session_id = ctx.default_session_ref().await.id();
 
-        let (complete_tx, complete_rx) = oneshot::channel();
-        let task_id = ctx
-            .tasks_ref()
-            .schedule(NopTask { complete_rx }.boxed(), None)
-            .await
-            .unwrap();
+        let (task, complete_tx) = NopTask::new_with_sender();
+        let task_id = ctx.tasks_ref().schedule(task.boxed(), None).await.unwrap();
 
         // 1. initially, we should get a running status
 
@@ -250,12 +260,8 @@ mod tests {
         let ctx = InMemoryContext::test_default();
         let session_id = ctx.default_session_ref().await.id();
 
-        let (complete_tx, complete_rx) = oneshot::channel();
-        let task_id = ctx
-            .tasks_ref()
-            .schedule(NopTask { complete_rx }.boxed(), None)
-            .await
-            .unwrap();
+        let (task, complete_tx) = NopTask::new_with_sender();
+        let task_id = ctx.tasks_ref().schedule(task.boxed(), None).await.unwrap();
 
         complete_tx.send(()).unwrap();
 
@@ -290,12 +296,8 @@ mod tests {
 
         // 1. Create task
 
-        let (_complete_tx, complete_rx) = oneshot::channel();
-        let task_id = ctx
-            .tasks_ref()
-            .schedule(NopTask { complete_rx }.boxed())
-            .await
-            .unwrap();
+        let (task, _complete_tx) = NopTask::new_with_sender();
+        let task_id = ctx.tasks_ref().schedule(task.boxed(), None).await.unwrap();
 
         // 2. Abort task
 
@@ -332,21 +334,15 @@ mod tests {
 
     // TODO: test abort after finish
 
+    #[tokio::test]
     async fn test_duplicate() {
         let ctx = InMemoryContext::test_default();
 
-        let (complete_tx, complete_rx) = oneshot::channel();
-        ctx.tasks_ref()
-            .schedule(NopTask { complete_rx }.boxed(), None)
-            .await
-            .unwrap();
+        let (task, complete_tx) = NopTask::new_with_sender();
+        ctx.tasks_ref().schedule(task.boxed(), None).await.unwrap();
 
-        let (_, complete_rx) = oneshot::channel();
-        assert!(ctx
-            .tasks_ref()
-            .schedule(NopTask { complete_rx }.boxed(), None)
-            .await
-            .is_err());
+        let (task, _) = NopTask::new_with_sender();
+        assert!(ctx.tasks_ref().schedule(task.boxed(), None).await.is_err());
 
         complete_tx.send(()).unwrap();
     }
@@ -357,12 +353,8 @@ mod tests {
 
         // 1. start first task
 
-        let (complete_tx, complete_rx) = oneshot::channel();
-        let task_id = ctx
-            .tasks_ref()
-            .schedule(NopTask { complete_rx }.boxed(), None)
-            .await
-            .unwrap();
+        let (task, complete_tx) = NopTask::new_with_sender();
+        let task_id = ctx.tasks_ref().schedule(task.boxed(), None).await.unwrap();
 
         // 2. wait for task to finish
 
@@ -372,12 +364,8 @@ mod tests {
 
         // 3. start second task
 
-        let (complete_tx, complete_rx) = oneshot::channel();
-        assert!(ctx
-            .tasks_ref()
-            .schedule(NopTask { complete_rx }.boxed(), None)
-            .await
-            .is_ok());
+        let (task, complete_tx) = NopTask::new_with_sender();
+        assert!(ctx.tasks_ref().schedule(task.boxed(), None).await.is_ok());
 
         complete_tx.send(()).unwrap();
     }
@@ -389,10 +377,10 @@ mod tests {
         // 1. start first task
 
         let (schedule_complete_tx, schedule_complete_rx) = oneshot::channel();
-        let (complete_tx, complete_rx) = oneshot::channel();
+        let (task, complete_tx) = NopTask::new_with_sender();
 
         ctx.tasks_ref()
-            .schedule(NopTask { complete_rx }.boxed(), Some(schedule_complete_tx))
+            .schedule(task.boxed(), Some(schedule_complete_tx))
             .await
             .unwrap();
 
