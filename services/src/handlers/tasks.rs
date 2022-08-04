@@ -140,27 +140,45 @@ async fn abort_handler<C: Context>(
 
 #[cfg(test)]
 mod tests {
+
     use super::*;
 
     use crate::{
         contexts::{InMemoryContext, Session, SimpleContext},
-        tasks::{Task, TaskContext, TaskStatusInfo},
+        tasks::{
+            util::test::wait_for_task_to_finish, Task, TaskContext, TaskStatus, TaskStatusInfo,
+        },
         util::tests::send_test_request,
     };
     use actix_http::header;
     use actix_web_httpauth::headers::authorization::Bearer;
+    use futures::channel::oneshot;
     use geoengine_datatypes::{error::ErrorSource, util::test::TestDefault};
 
-    struct NopTask {}
+    struct NopTask {
+        complete_rx: oneshot::Receiver<()>,
+    }
 
     #[async_trait::async_trait]
     impl<C: TaskContext + 'static> Task<C> for NopTask {
-        async fn run(&self, _ctx: C) -> Result<Box<dyn TaskStatusInfo>, Box<dyn ErrorSource>> {
+        async fn run(
+            self: Box<Self>,
+            _ctx: C,
+        ) -> Result<Box<dyn TaskStatusInfo>, Box<dyn ErrorSource>> {
+            self.complete_rx.await.unwrap();
             Ok("completed".to_string().boxed())
         }
 
         async fn cleanup_on_error(&self, ctx: C) -> Result<(), Box<dyn ErrorSource>> {
             todo!()
+        }
+
+        fn task_type(&self) -> &'static str {
+            "nopTask"
+        }
+
+        fn task_unique_id(&self) -> Option<String> {
+            Some("highlander task".to_string())
         }
     }
 
@@ -169,7 +187,12 @@ mod tests {
         let ctx = InMemoryContext::test_default();
         let session_id = ctx.default_session_ref().await.id();
 
-        let task_id = ctx.tasks_ref().schedule(NopTask {}.boxed()).await.unwrap();
+        let (complete_tx, complete_rx) = oneshot::channel();
+        let task_id = ctx
+            .tasks_ref()
+            .schedule(NopTask { complete_rx }.boxed(), None)
+            .await
+            .unwrap();
 
         // 1. initially, we should get a running status
 
@@ -194,17 +217,9 @@ mod tests {
 
         // 2. wait for task to finish
 
-        let task_manager = ctx.tasks();
-        crate::util::retry::retry(3, 100, 2., move || {
-            let task_manager = task_manager.clone();
-            async move {
-                let option =
-                    (!task_manager.status(task_id).await.unwrap().is_running()).then(|| ());
-                option.ok_or(())
-            }
-        })
-        .await
-        .unwrap();
+        complete_tx.send(()).unwrap();
+
+        wait_for_task_to_finish(ctx.tasks(), task_id).await;
 
         // 3. finally, it should complete
 
@@ -235,20 +250,16 @@ mod tests {
         let ctx = InMemoryContext::test_default();
         let session_id = ctx.default_session_ref().await.id();
 
-        let task_id = ctx.tasks_ref().schedule(NopTask {}.boxed()).await.unwrap();
+        let (complete_tx, complete_rx) = oneshot::channel();
+        let task_id = ctx
+            .tasks_ref()
+            .schedule(NopTask { complete_rx }.boxed(), None)
+            .await
+            .unwrap();
 
-        // wait for task to finish
-        let task_manager = ctx.tasks();
-        crate::util::retry::retry(3, 100, 2., move || {
-            let task_manager = task_manager.clone();
-            async move {
-                let option =
-                    (!task_manager.status(task_id).await.unwrap().is_running()).then(|| ());
-                option.ok_or(())
-            }
-        })
-        .await
-        .unwrap();
+        complete_tx.send(()).unwrap();
+
+        wait_for_task_to_finish(ctx.tasks(), task_id).await;
 
         let req = actix_web::test::TestRequest::get()
             .uri("/tasks/list")
@@ -279,7 +290,12 @@ mod tests {
 
         // 1. Create task
 
-        let task_id = ctx.tasks_ref().schedule(NopTask {}.boxed()).await.unwrap();
+        let (_complete_tx, complete_rx) = oneshot::channel();
+        let task_id = ctx
+            .tasks_ref()
+            .schedule(NopTask { complete_rx }.boxed())
+            .await
+            .unwrap();
 
         // 2. Abort task
 
@@ -312,5 +328,82 @@ mod tests {
                 "error": format!("Task was aborted by the user: {task_id}"),
             })
         );
+    }
+
+    // TODO: test abort after finish
+
+    async fn test_duplicate() {
+        let ctx = InMemoryContext::test_default();
+
+        let (complete_tx, complete_rx) = oneshot::channel();
+        ctx.tasks_ref()
+            .schedule(NopTask { complete_rx }.boxed(), None)
+            .await
+            .unwrap();
+
+        let (_, complete_rx) = oneshot::channel();
+        assert!(ctx
+            .tasks_ref()
+            .schedule(NopTask { complete_rx }.boxed(), None)
+            .await
+            .is_err());
+
+        complete_tx.send(()).unwrap();
+    }
+
+    #[tokio::test]
+    async fn test_duplicate_after_finish() {
+        let ctx = InMemoryContext::test_default();
+
+        // 1. start first task
+
+        let (complete_tx, complete_rx) = oneshot::channel();
+        let task_id = ctx
+            .tasks_ref()
+            .schedule(NopTask { complete_rx }.boxed(), None)
+            .await
+            .unwrap();
+
+        // 2. wait for task to finish
+
+        complete_tx.send(()).unwrap();
+
+        wait_for_task_to_finish(ctx.tasks(), task_id).await;
+
+        // 3. start second task
+
+        let (complete_tx, complete_rx) = oneshot::channel();
+        assert!(ctx
+            .tasks_ref()
+            .schedule(NopTask { complete_rx }.boxed(), None)
+            .await
+            .is_ok());
+
+        complete_tx.send(()).unwrap();
+    }
+
+    #[tokio::test]
+    async fn test_notify() {
+        let ctx = InMemoryContext::test_default();
+
+        // 1. start first task
+
+        let (schedule_complete_tx, schedule_complete_rx) = oneshot::channel();
+        let (complete_tx, complete_rx) = oneshot::channel();
+
+        ctx.tasks_ref()
+            .schedule(NopTask { complete_rx }.boxed(), Some(schedule_complete_tx))
+            .await
+            .unwrap();
+
+        // finish task
+        complete_tx.send(()).unwrap();
+
+        // wait for completion notification
+
+        assert!(matches!(
+            schedule_complete_rx.await.unwrap(),
+            TaskStatus::Completed { info: _ }
+        ));
     }
 }

@@ -4,7 +4,9 @@ use crate::{
     util::config::get_config_element,
 };
 use gdal::{raster::RasterCreationOption, Dataset, DatasetOptions, GdalOpenFlags};
-use geoengine_datatypes::{error::BoxedResultExt, primitives::TimeInterval};
+use geoengine_datatypes::{
+    error::BoxedResultExt, primitives::TimeInterval, util::gdal::ResamplingMethod,
+};
 use geoengine_operators::{
     source::{GdalLoadingInfoTemporalSlice, GdalMetaDataList, GdalMetadataNetCdfCf},
     util::gdal::{
@@ -136,6 +138,7 @@ pub fn create_overviews(
     provider_path: &Path,
     dataset_path: &Path,
     overview_path: &Path,
+    resampling_method: Option<ResamplingMethod>,
 ) -> Result<OverviewGeneration> {
     let file_path = provider_path.join(dataset_path);
     let out_folder_path = overview_path.join(dataset_path);
@@ -173,7 +176,7 @@ pub fn create_overviews(
     let time_coverage = time_coverage(&root_group)?;
 
     for conversion in group_tree.conversion_metadata(&file_path, &out_folder_path) {
-        match index_subdataset(&conversion, &time_coverage) {
+        match index_subdataset(&conversion, &time_coverage, resampling_method) {
             Ok(OverviewGeneration::Created) => (),
             Ok(OverviewGeneration::Skipped) => return Ok(OverviewGeneration::Skipped),
             Err(e) => return Err(e),
@@ -220,10 +223,12 @@ fn store_metadata(
 fn index_subdataset(
     conversion: &ConversionMetadata,
     time_coverage: &TimeCoverage,
+    resampling_method: Option<ResamplingMethod>,
 ) -> Result<OverviewGeneration> {
     const COG_BLOCK_SIZE: &str = "512";
     const COMPRESSION_FORMAT: &str = "LZW"; // this is the GDAL default
-    const COMPRESSION_LEVEL: u8 = 6; // this is the GDAL default
+    const DEFAULT_COMPRESSION_LEVEL: u8 = 6; // this is the GDAL default
+    const DEFAULT_RESAMPLING_METHOD: ResamplingMethod = ResamplingMethod::Nearest;
 
     if conversion.dataset_out.exists() {
         debug!("Skipping conversion: {}", conversion.dataset_out.display());
@@ -262,7 +267,10 @@ fn index_subdataset(
         .unwrap_or(COMPRESSION_FORMAT);
     let compression_level = gdal_options
         .compression_z_level
-        .unwrap_or(COMPRESSION_LEVEL)
+        .unwrap_or(DEFAULT_COMPRESSION_LEVEL)
+        .to_string();
+    let resampling_method = resampling_method
+        .unwrap_or(DEFAULT_RESAMPLING_METHOD)
         .to_string();
 
     let cog_driver = gdal::Driver::get("COG").boxed_context(error::CannotCreateOverviews)?;
@@ -286,6 +294,10 @@ fn index_subdataset(
         RasterCreationOption {
             key: "BIGTIFF",
             value: "IF_SAFER", // TODO: test if this suffices
+        },
+        RasterCreationOption {
+            key: "RESAMPLING",
+            value: resampling_method.as_ref(),
         },
     ];
 
@@ -486,6 +498,7 @@ mod tests {
                     step: 1,
                 },
             },
+            None,
         )
         .unwrap();
 
@@ -626,6 +639,7 @@ mod tests {
             test_data!("netcdf4d"),
             Path::new("dataset_m.nc"),
             overview_folder.path(),
+            None,
         )
         .unwrap();
 

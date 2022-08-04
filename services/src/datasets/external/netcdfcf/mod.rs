@@ -26,6 +26,7 @@ use geoengine_datatypes::primitives::{
 };
 use geoengine_datatypes::raster::{GdalGeoTransform, RasterDataType};
 use geoengine_datatypes::spatial_reference::SpatialReference;
+use geoengine_datatypes::util::gdal::ResamplingMethod;
 use geoengine_operators::engine::RasterOperator;
 use geoengine_operators::engine::TypedOperator;
 use geoengine_operators::source::GdalSource;
@@ -577,8 +578,12 @@ impl NetCdfCfDataProvider {
         Ok(files)
     }
 
-    pub fn create_overviews(&self, dataset_path: &Path) -> Result<OverviewGeneration> {
-        create_overviews(&self.path, dataset_path, &self.overviews)
+    pub fn create_overviews(
+        &self,
+        dataset_path: &Path,
+        resampling_method: Option<ResamplingMethod>,
+    ) -> Result<OverviewGeneration> {
+        create_overviews(&self.path, dataset_path, &self.overviews, resampling_method)
     }
 }
 
@@ -1391,7 +1396,7 @@ mod tests {
         };
 
         provider
-            .create_overviews(Path::new("dataset_sm.nc"))
+            .create_overviews(Path::new("dataset_sm.nc"), None)
             .unwrap();
 
         let metadata = provider
@@ -1485,7 +1490,7 @@ mod tests {
         };
 
         provider
-            .create_overviews(Path::new("dataset_sm.nc"))
+            .create_overviews(Path::new("dataset_sm.nc"), None)
             .unwrap();
 
         let provider_id = DataProviderId::from_str("bf6bb6ea-5d5d-467d-bad1-267bf3a54470").unwrap();
