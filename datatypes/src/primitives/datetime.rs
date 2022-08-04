@@ -18,11 +18,11 @@ pub struct DateTime {
 impl DateTime {
     /// The minimum possible `DateTime`.
     pub const MIN: DateTime = DateTime {
-        datetime: chrono::MIN_DATETIME,
+        datetime: chrono::DateTime::<chrono::Utc>::MAX_UTC,
     };
     /// The maximum possible `DateTime`.
     pub const MAX: DateTime = DateTime {
-        datetime: chrono::MAX_DATETIME,
+        datetime: chrono::DateTime::<chrono::Utc>::MAX_UTC,
     };
 
     /// Creates a new `DateTime` from year, month day and hour, minute, second values.
