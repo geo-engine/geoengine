@@ -36,7 +36,12 @@ pub trait TaskManager<C: TaskContext>: Send + Sync {
         options: Validated<TaskListOptions>,
     ) -> Result<Vec<TaskStatusWithId>, TaskError>;
 
-    async fn abort(&self, task_id: TaskId) -> Result<(), TaskError>;
+    /// Abort a running task.
+    ///
+    /// # Parameters
+    ///  - `force`: If `true`, the task will be aborted without calling clean-up functions.
+    ///
+    async fn abort(&self, task_id: TaskId, force: bool) -> Result<(), TaskError>;
 }
 
 identifier!(TaskId);
@@ -80,7 +85,11 @@ pub trait TaskContext: Send + Sync {
 pub enum TaskStatus {
     // Pending, // TODO: at some point, don't just run things
     Running(Arc<RunningTaskStatusInfo>),
+    Aborting(Arc<RunningTaskStatusInfo>),
     Completed {
+        info: Arc<Box<dyn TaskStatusInfo>>,
+    },
+    Aborted {
         info: Arc<Box<dyn TaskStatusInfo>>,
     },
     Failed {
@@ -98,15 +107,29 @@ pub struct TaskStatusWithId {
 
 impl TaskStatus {
     pub fn completed(info: Arc<Box<dyn TaskStatusInfo>>) -> Self {
-        TaskStatus::Completed { info }
+        Self::Completed { info }
+    }
+
+    pub fn aborted(info: Arc<Box<dyn TaskStatusInfo>>) -> Self {
+        Self::Aborted { info }
     }
 
     pub fn failed(error: Arc<Box<dyn ErrorSource>>) -> Self {
-        TaskStatus::Failed { error }
+        Self::Failed { error }
     }
 
     pub fn is_running(&self) -> bool {
         matches!(self, TaskStatus::Running(_))
+    }
+
+    pub fn is_aborting(&self) -> bool {
+        matches!(self, TaskStatus::Aborting(_))
+    }
+
+    pub fn is_finished(&self) -> bool {
+        matches!(self, TaskStatus::Completed { .. })
+            || matches!(self, TaskStatus::Aborted { .. })
+            || matches!(self, TaskStatus::Failed { .. })
     }
 }
 

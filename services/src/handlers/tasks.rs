@@ -114,26 +114,47 @@ async fn list_handler<C: Context>(
     Ok(web::Json(task))
 }
 
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct TaskAbortOptions {
+    #[serde(default)]
+    pub force: bool,
+}
+
 /// Retrieve the status of a task.
 ///
 /// # Example
+///
+/// ## Request 1
 ///
 /// ```text
 /// GET /tasks/420b06de-0a7e-45cb-9c1c-ea901b46ab69/abort
 /// Authorization: Bearer 4f0d02f9-68e8-46fb-9362-80f862b7db54
 /// ```
 ///
-/// Response 1:
+/// Response:
 ///
 /// 200 OK
+///
+/// ## Request 2
+///  
+/// ```text
+/// GET /tasks/420b06de-0a7e-45cb-9c1c-ea901b46ab69/abort?force=true
+/// Authorization: Bearer 4f0d02f9-68e8-46fb-9362-80f862b7db54
+/// ```
+///
+/// Response:
+///
+/// 200 OK
+///
 async fn abort_handler<C: Context>(
     _session: C::Session, // TODO: incorporate
     ctx: web::Data<C>,
     task_id: web::Path<TaskId>,
+    options: web::Query<TaskAbortOptions>,
 ) -> Result<impl Responder> {
     let task_id = task_id.into_inner();
 
-    ctx.tasks_ref().abort(task_id).await?;
+    ctx.tasks_ref().abort(task_id, options.force).await?;
 
     Ok(HttpResponse::Ok())
 }
@@ -183,8 +204,13 @@ mod tests {
             Ok("completed".to_string().boxed())
         }
 
-        async fn cleanup_on_error(&self, ctx: C) -> Result<(), Box<dyn ErrorSource>> {
-            todo!()
+        async fn cleanup_on_error(&self, _ctx: C) -> Result<(), Box<dyn ErrorSource>> {
+            let mut complete_rx_lock = self.complete_rx.lock().await;
+            let pinned_receiver: Pin<&mut oneshot::Receiver<()>> = Pin::new(&mut complete_rx_lock);
+
+            pinned_receiver.await.unwrap();
+
+            Ok(())
         }
 
         fn task_type(&self) -> &'static str {
@@ -296,7 +322,7 @@ mod tests {
 
         // 1. Create task
 
-        let (task, _complete_tx) = NopTask::new_with_sender();
+        let (task, complete_tx) = NopTask::new_with_sender();
         let task_id = ctx.tasks_ref().schedule(task.boxed(), None).await.unwrap();
 
         // 2. Abort task
@@ -310,7 +336,13 @@ mod tests {
 
         assert_eq!(res.status(), 200, "{:?}", res.response().error());
 
-        // 3. check status
+        // 3. Wait for abortion to complete
+
+        complete_tx.send(()).unwrap();
+
+        wait_for_task_to_finish(ctx.tasks(), task_id).await;
+
+        // 4. check status
 
         let req = actix_web::test::TestRequest::get()
             .uri(&format!("/tasks/{task_id}/status"))
@@ -326,13 +358,135 @@ mod tests {
         assert_eq!(
             status,
             serde_json::json!({
-                "status": "failed",
-                "error": format!("Task was aborted by the user: {task_id}"),
+                "status": "aborted",
+                "info": null,
             })
         );
     }
 
-    // TODO: test abort after finish
+    #[tokio::test]
+    async fn test_force_abort_task() {
+        let ctx = InMemoryContext::test_default();
+        let session_id = ctx.default_session_ref().await.id();
+
+        // 1. Create task
+
+        let (task, _complete_tx) = NopTask::new_with_sender();
+        let task_id = ctx.tasks_ref().schedule(task.boxed(), None).await.unwrap();
+
+        // 2. Abort task
+
+        let req = actix_web::test::TestRequest::get()
+            .uri(&format!("/tasks/{task_id}/abort?force=true"))
+            .append_header((header::CONTENT_LENGTH, 0))
+            .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())));
+
+        let res = send_test_request(req, ctx.clone()).await;
+
+        assert_eq!(res.status(), 200, "{:?}", res.response().error());
+
+        // 3. Wait for abortion to complete
+
+        wait_for_task_to_finish(ctx.tasks(), task_id).await;
+
+        // 4. check status
+
+        let req = actix_web::test::TestRequest::get()
+            .uri(&format!("/tasks/{task_id}/status"))
+            .append_header((header::CONTENT_LENGTH, 0))
+            .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())));
+
+        let res = send_test_request(req, ctx.clone()).await;
+
+        assert_eq!(res.status(), 200, "{:?}", res.response().error());
+
+        let status: serde_json::Value = actix_web::test::read_body_json(res).await;
+
+        assert_eq!(
+            status,
+            serde_json::json!({
+                "status": "aborted",
+                "info": null,
+            })
+        );
+    }
+
+    #[tokio::test]
+    async fn test_abort_after_abort() {
+        let ctx = InMemoryContext::test_default();
+        let session_id = ctx.default_session_ref().await.id();
+
+        // 1. Create task
+
+        let (task, _complete_tx) = NopTask::new_with_sender();
+        let task_id = ctx.tasks_ref().schedule(task.boxed(), None).await.unwrap();
+
+        // 2. Abort task
+
+        let req = actix_web::test::TestRequest::get()
+            .uri(&format!("/tasks/{task_id}/abort"))
+            .append_header((header::CONTENT_LENGTH, 0))
+            .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())));
+
+        let res = send_test_request(req, ctx.clone()).await;
+
+        assert_eq!(res.status(), 200, "{:?}", res.response().error());
+
+        // do not call `_complete_tx`
+
+        // 3. Abort again without force
+
+        let req = actix_web::test::TestRequest::get()
+            .uri(&format!("/tasks/{task_id}/abort"))
+            .append_header((header::CONTENT_LENGTH, 0))
+            .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())));
+
+        let res = send_test_request(req, ctx.clone()).await;
+
+        assert_eq!(res.status(), 400, "{:?}", res.response().error());
+
+        let status: serde_json::Value = actix_web::test::read_body_json(res).await;
+
+        assert_eq!(
+            status,
+            serde_json::json!({
+                "error": "TaskError",
+                "message": format!("TaskError: Task was already aborted by the user: {task_id}"),
+            })
+        );
+
+        // 5. Abort again with force
+
+        let req = actix_web::test::TestRequest::get()
+            .uri(&format!("/tasks/{task_id}/abort?force=true"))
+            .append_header((header::CONTENT_LENGTH, 0))
+            .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())));
+
+        let res = send_test_request(req, ctx.clone()).await;
+
+        assert_eq!(res.status(), 200, "{:?}", res.response().error());
+
+        // 6. Check abortion status
+
+        let req = actix_web::test::TestRequest::get()
+            .uri(&format!("/tasks/{task_id}/status"))
+            .append_header((header::CONTENT_LENGTH, 0))
+            .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())));
+
+        let res = send_test_request(req, ctx.clone()).await;
+
+        assert_eq!(res.status(), 200, "{:?}", res.response().error());
+
+        let status: serde_json::Value = actix_web::test::read_body_json(res).await;
+
+        assert_eq!(
+            status,
+            serde_json::json!({
+                "status": "aborted",
+                "info": null,
+            })
+        );
+    }
 
     #[tokio::test]
     async fn test_duplicate() {
