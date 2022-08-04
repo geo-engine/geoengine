@@ -155,11 +155,12 @@ mod tests {
 
     #[async_trait::async_trait]
     impl<C: TaskContext + 'static> Task<C> for NopTask {
-        async fn run(
-            self: Box<Self>,
-            _ctx: C,
-        ) -> Result<Box<dyn TaskStatusInfo>, Box<dyn ErrorSource>> {
+        async fn run(&self, _ctx: C) -> Result<Box<dyn TaskStatusInfo>, Box<dyn ErrorSource>> {
             Ok("completed".to_string().boxed())
+        }
+
+        async fn cleanup_on_error(&self, ctx: C) -> Result<(), Box<dyn ErrorSource>> {
+            todo!()
         }
     }
 

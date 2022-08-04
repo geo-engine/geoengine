@@ -14,23 +14,28 @@ use tokio::{
     task::JoinHandle,
 };
 
+type SharedTask = Arc<Box<dyn Task<SimpleTaskManagerContext>>>;
+
 /// An in-memory implementation of the [`TaskManager`] trait.
 #[derive(Default, Clone)]
 pub struct SimpleTaskManager {
     handles: Db<HashMap<TaskId, JoinHandle<()>>>,
+    tasks: Db<HashMap<TaskId, SharedTask>>,
     tasks_by_id: Db<HashMap<TaskId, Db<TaskStatus>>>,
     task_list: Db<VecDeque<TaskUpdateStatusWithTaskId>>,
 }
 
 impl SimpleTaskManager {
     async fn write_lock_all(&self) -> WriteLockAll {
-        let (handles, tasks_by_id, task_list) = tokio::join!(
+        let (handles, tasks, tasks_by_id, task_list) = tokio::join!(
             self.handles.write(),
+            self.tasks.write(),
             self.tasks_by_id.write(),
             self.task_list.write()
         );
         WriteLockAll {
             handles,
+            tasks,
             tasks_by_id,
             task_list,
         }
@@ -44,6 +49,7 @@ struct TaskUpdateStatusWithTaskId {
 
 struct WriteLockAll<'a> {
     pub handles: RwLockWriteGuard<'a, HashMap<TaskId, JoinHandle<()>>>,
+    pub tasks: RwLockWriteGuard<'a, HashMap<TaskId, SharedTask>>,
     pub tasks_by_id: RwLockWriteGuard<'a, HashMap<TaskId, Db<TaskStatus>>>,
     pub task_list: RwLockWriteGuard<'a, VecDeque<TaskUpdateStatusWithTaskId>>,
 }
@@ -69,6 +75,10 @@ impl TaskManager<SimpleTaskManagerContext> for SimpleTaskManager {
         let task_ctx = SimpleTaskManagerContext {
             status: status.clone(),
         };
+
+        let task = Arc::new(task);
+
+        lock.tasks.insert(task_id, task.clone());
 
         let handle = crate::util::spawn(async move {
             let result = task.run(task_ctx.clone()).await;
@@ -144,19 +154,53 @@ impl TaskManager<SimpleTaskManagerContext> for SimpleTaskManager {
         task_handle.abort();
 
         let result = task_handle.await;
+        let task_finished_before_being_aborted = result.is_ok();
 
-        if let Some(task_status) = write_lock.tasks_by_id.get(&task_id) {
-            let mut task_status_lock = task_status.write().await;
-            match result {
-                Ok(()) => (), // could have completed before, so do nothing
-                Err(_) => {
-                    *task_status_lock =
-                        TaskStatus::failed(Arc::new(Box::new(TaskError::TaskAborted { task_id })));
-                }
-            };
+        if task_finished_before_being_aborted {
+            return Ok(());
         }
 
-        // TODO: clean up
+        // reflect abortion in status
+        let task_status = write_lock
+            .tasks_by_id
+            .get(&task_id)
+            .ok_or(TaskError::TaskNotFound { task_id })?;
+        let mut task_status_lock = task_status.write().await;
+        *task_status_lock =
+            TaskStatus::failed(Arc::new(Box::new(TaskError::TaskAborted { task_id })));
+
+        // clean up task
+        let task = write_lock
+            .tasks
+            .get(&task_id)
+            .ok_or(TaskError::TaskNotFound { task_id })?
+            .clone();
+        let task_ctx = SimpleTaskManagerContext {
+            status: task_status.clone(),
+        };
+
+        // store task handle
+
+        // we can clone here, since all interior stuff is wrapped into `Arc`s
+        let task_manager = self.clone();
+
+        let handle = crate::util::spawn(async move {
+            let result = task.run(task_ctx.clone()).await;
+
+            let (mut handles_lock, mut task_status_lock) =
+                tokio::join!(task_manager.handles.write(), task_ctx.status.write());
+
+            handles_lock.remove(&task_id);
+
+            *task_status_lock = match result {
+                Ok(status) => TaskStatus::completed(Arc::new(status)),
+                Err(err) => TaskStatus::failed(Arc::new(err)),
+            };
+        });
+
+        // TODO: store clean-up status
+
+        write_lock.handles.insert(task_id, handle);
 
         Ok(())
     }

@@ -395,13 +395,14 @@ impl<C: Context> EvbMultiOverviewTask<C> {
 #[async_trait::async_trait]
 impl<C: Context> Task<C::TaskContext> for EvbMultiOverviewTask<C> {
     async fn run(
-        self: Box<Self>,
+        &self,
         task_ctx: C::TaskContext,
     ) -> Result<Box<dyn crate::tasks::TaskStatusInfo>, Box<dyn ErrorSource>> {
         let task_ctx = Arc::new(task_ctx);
+        let session = self.session.clone();
 
         let response =
-            with_netcdfcf_provider(self.ctx.as_ref(), &self.session.into(), move |provider| {
+            with_netcdfcf_provider(self.ctx.as_ref(), &session.into(), move |provider| {
                 let mut status = NetCdfCfOverviewResponse {
                     success: vec![],
                     skip: vec![],
@@ -442,6 +443,10 @@ impl<C: Context> Task<C::TaskContext> for EvbMultiOverviewTask<C> {
 
         response.map_err(ErrorSource::boxed)
     }
+
+    async fn cleanup_on_error(&self, ctx: C::TaskContext) -> Result<(), Box<dyn ErrorSource>> {
+        todo!()
+    }
 }
 
 #[derive(Debug, Deserialize)]
@@ -478,13 +483,14 @@ struct EvbOverviewTask<C: Context> {
 #[async_trait::async_trait]
 impl<C: Context> Task<C::TaskContext> for EvbOverviewTask<C> {
     async fn run(
-        self: Box<Self>,
+        &self,
         _ctx: C::TaskContext,
     ) -> Result<Box<dyn crate::tasks::TaskStatusInfo>, Box<dyn ErrorSource>> {
-        let file = self.params.file;
+        let file = self.params.file.clone();
+        let session = self.session.clone();
 
         let response =
-            with_netcdfcf_provider(self.ctx.as_ref(), &self.session.into(), move |provider| {
+            with_netcdfcf_provider(self.ctx.as_ref(), &session.into(), move |provider| {
                 // TODO: provide some detailed pct status
 
                 Ok(match provider.create_overviews(&file) {
@@ -513,6 +519,10 @@ impl<C: Context> Task<C::TaskContext> for EvbOverviewTask<C> {
         response
             .map(TaskStatusInfo::boxed)
             .map_err(ErrorSource::boxed)
+    }
+
+    async fn cleanup_on_error(&self, ctx: C::TaskContext) -> Result<(), Box<dyn ErrorSource>> {
+        todo!()
     }
 }
 

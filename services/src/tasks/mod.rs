@@ -35,11 +35,10 @@ identifier!(TaskId);
 /// A task that can run asynchronously and reports its status.
 #[async_trait::async_trait]
 pub trait Task<C: TaskContext>: Send + Sync {
-    async fn run(self: Box<Self>, ctx: C) -> Result<Box<dyn TaskStatusInfo>, Box<dyn ErrorSource>>;
+    async fn run(&self, ctx: C) -> Result<Box<dyn TaskStatusInfo>, Box<dyn ErrorSource>>;
 
-    // TODO
     /// Clean-up the task on error or abortion
-    // async fn cleanup_on_error(self: Box<Self>, ctx: C) -> Result<(), Box<dyn ErrorSource>>;
+    async fn cleanup_on_error(&self, ctx: C) -> Result<(), Box<dyn ErrorSource>>;
 
     fn boxed(self) -> Box<dyn Task<C>>
     where
