@@ -372,14 +372,14 @@ struct CreateOverviewsParams {
 async fn create_overviews<C: Context>(
     session: AdminSession,
     ctx: web::Data<C>,
-    params: web::Json<CreateOverviewsParams>,
+    params: Option<web::Json<CreateOverviewsParams>>,
 ) -> Result<impl Responder> {
     let ctx = ctx.into_inner();
 
     let task: Box<dyn Task<C::TaskContext>> = EvbMultiOverviewTask::<C> {
         session,
         ctx: ctx.clone(),
-        resampling_method: params.resampling_method,
+        resampling_method: params.as_ref().and_then(|p| p.resampling_method),
     }
     .boxed();
 
