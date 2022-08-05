@@ -2,5 +2,6 @@
   "type": "EbvPortalDataProviderDefinition",
   "name": "EBV Portal",
   "path": "test_data/netcdf4d/",
+  "baseUrl": "https://portal.geobon.org/api/v1",
   "overviews": "test_data/netcdf4d/overviews/"
 }

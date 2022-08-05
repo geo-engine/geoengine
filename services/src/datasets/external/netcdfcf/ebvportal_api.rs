@@ -5,7 +5,6 @@
 use crate::datasets::external::netcdfcf::NetCdfCfDataProvider;
 use crate::datasets::external::netcdfcf::{error, NetCdfOverview, NETCDF_CF_PROVIDER_ID};
 use crate::error::Result;
-use crate::util::config::get_config_element;
 use error::NetCdfCf4DProviderError;
 use geoengine_datatypes::dataset::DataProviderId;
 use log::debug;
@@ -75,25 +74,128 @@ struct EbvClasses {
     classes: Vec<EbvClass>,
 }
 
-pub async fn get_classes() -> Result<Vec<EbvClass>> {
-    let base_url = get_config_element::<crate::util::config::Ebv>()?.api_base_url;
-    let url = format!("{base_url}/ebv-map");
+#[derive(Debug)]
+pub struct EbvPortalApi {
+    base_url: Url,
+}
 
-    debug!("Calling {url}");
+impl EbvPortalApi {
+    pub fn new(base_url: Url) -> Self {
+        Self { base_url }
+    }
 
-    let response = reqwest::get(url)
-        .await?
-        .json::<portal_responses::EbvClassesResponse>()
-        .await?;
+    pub async fn get_classes(&self) -> Result<Vec<EbvClass>> {
+        let url = format!("{}/ebv-map", self.base_url);
 
-    Ok(response
-        .data
-        .into_iter()
-        .map(|c| EbvClass {
-            name: c.ebv_class,
-            ebv_names: c.ebv_name,
+        debug!("Calling {url}");
+
+        let response = reqwest::get(url)
+            .await?
+            .json::<portal_responses::EbvClassesResponse>()
+            .await?;
+
+        Ok(response
+            .data
+            .into_iter()
+            .map(|c| EbvClass {
+                name: c.ebv_class,
+                ebv_names: c.ebv_name,
+            })
+            .collect())
+    }
+
+    pub async fn get_ebv_datasets(&self, ebv_name: &str) -> Result<Vec<EbvDataset>> {
+        let url = format!("{}/datasets/filter", self.base_url);
+
+        debug!("Calling {url}");
+
+        let response = reqwest::Client::new()
+            .get(url)
+            .query(&[("ebvName", ebv_name)])
+            .send()
+            .await?
+            .json::<portal_responses::EbvDatasetsResponse>()
+            .await?;
+
+        Ok(response
+            .data
+            .into_iter()
+            .map(|data| EbvDataset {
+                id: data.id,
+                name: data.title,
+                author_name: data.creator.creator_name,
+                author_institution: data.creator.creator_institution,
+                description: data.summary,
+                license: data.license,
+                dataset_path: data.dataset.pathname,
+                ebv_class: data.ebv.ebv_class,
+                ebv_name: data.ebv.ebv_name,
+            })
+            .collect())
+    }
+
+    async fn get_dataset_metadata(&self, id: &str) -> Result<EbvDataset> {
+        let url = format!("{}/datasets/{id}", self.base_url);
+
+        debug!("Calling {url}");
+
+        let response = reqwest::get(url)
+            .await?
+            .json::<portal_responses::EbvDatasetsResponse>()
+            .await?;
+
+        let dataset: Option<EbvDataset> = response
+            .data
+            .into_iter()
+            .map(|data| EbvDataset {
+                id: data.id,
+                name: data.title,
+                author_name: data.creator.creator_name,
+                author_institution: data.creator.creator_institution,
+                description: data.summary,
+                license: data.license,
+                dataset_path: data.dataset.pathname,
+                ebv_class: data.ebv.ebv_class,
+                ebv_name: data.ebv.ebv_name,
+            })
+            .next();
+
+        match dataset {
+            Some(dataset) => Ok(dataset),
+            None => Err(NetCdfCf4DProviderError::CannotLookupDataset { id: id.to_string() }.into()),
+        }
+    }
+
+    pub async fn get_ebv_subdatasets(
+        &self,
+        provider_paths: NetCdfCfDataProviderPaths,
+        dataset_id: &str,
+    ) -> Result<EbvHierarchy> {
+        let dataset = self.get_dataset_metadata(dataset_id).await?;
+
+        let listing = {
+            let dataset_path = PathBuf::from(dataset.dataset_path.trim_start_matches('/'));
+
+            debug!("Accessing dataset {}", dataset_path.display());
+
+            crate::util::spawn_blocking(move || {
+                NetCdfCfDataProvider::build_netcdf_tree(
+                    &provider_paths.provider_path,
+                    Some(&provider_paths.overview_path),
+                    &dataset_path,
+                    false,
+                )
+            })
+            .await?
+            .map_err(|e| Box::new(e) as _)
+            .context(error::CannotParseNetCdfFile)?
+        };
+
+        Ok(EbvHierarchy {
+            provider_id: NETCDF_CF_PROVIDER_ID,
+            tree: listing,
         })
-        .collect())
+    }
 }
 
 #[derive(Debug, Serialize)]
@@ -109,107 +211,11 @@ pub struct EbvDataset {
     pub ebv_class: String,
     pub ebv_name: String,
 }
-
-pub async fn get_ebv_datasets(ebv_name: &str) -> Result<Vec<EbvDataset>> {
-    let base_url = get_config_element::<crate::util::config::Ebv>()?.api_base_url;
-    let url = format!("{base_url}/datasets/filter");
-
-    debug!("Calling {url}");
-
-    let response = reqwest::Client::new()
-        .get(url)
-        .query(&[("ebvName", ebv_name)])
-        .send()
-        .await?
-        .json::<portal_responses::EbvDatasetsResponse>()
-        .await?;
-
-    Ok(response
-        .data
-        .into_iter()
-        .map(|data| EbvDataset {
-            id: data.id,
-            name: data.title,
-            author_name: data.creator.creator_name,
-            author_institution: data.creator.creator_institution,
-            description: data.summary,
-            license: data.license,
-            dataset_path: data.dataset.pathname,
-            ebv_class: data.ebv.ebv_class,
-            ebv_name: data.ebv.ebv_name,
-        })
-        .collect())
-}
-
-async fn get_dataset_metadata(base_url: &Url, id: &str) -> Result<EbvDataset> {
-    let url = format!("{base_url}/datasets/{id}");
-
-    debug!("Calling {url}");
-
-    let response = reqwest::get(url)
-        .await?
-        .json::<portal_responses::EbvDatasetsResponse>()
-        .await?;
-
-    let dataset: Option<EbvDataset> = response
-        .data
-        .into_iter()
-        .map(|data| EbvDataset {
-            id: data.id,
-            name: data.title,
-            author_name: data.creator.creator_name,
-            author_institution: data.creator.creator_institution,
-            description: data.summary,
-            license: data.license,
-            dataset_path: data.dataset.pathname,
-            ebv_class: data.ebv.ebv_class,
-            ebv_name: data.ebv.ebv_name,
-        })
-        .next();
-
-    match dataset {
-        Some(dataset) => Ok(dataset),
-        None => Err(NetCdfCf4DProviderError::CannotLookupDataset { id: id.to_string() }.into()),
-    }
-}
-
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct EbvHierarchy {
     pub provider_id: DataProviderId,
     pub tree: NetCdfOverview,
-}
-
-pub async fn get_ebv_subdatasets(
-    provider_paths: NetCdfCfDataProviderPaths,
-    dataset_id: &str,
-) -> Result<EbvHierarchy> {
-    let base_url = get_config_element::<crate::util::config::Ebv>()?.api_base_url;
-
-    let dataset = get_dataset_metadata(&base_url, dataset_id).await?;
-
-    let listing = {
-        let dataset_path = PathBuf::from(dataset.dataset_path.trim_start_matches('/'));
-
-        debug!("Accessing dataset {}", dataset_path.display());
-
-        crate::util::spawn_blocking(move || {
-            NetCdfCfDataProvider::build_netcdf_tree(
-                &provider_paths.provider_path,
-                Some(&provider_paths.overview_path),
-                &dataset_path,
-                false,
-            )
-        })
-        .await?
-        .map_err(|e| Box::new(e) as _)
-        .context(error::CannotParseNetCdfFile)?
-    };
-
-    Ok(EbvHierarchy {
-        provider_id: NETCDF_CF_PROVIDER_ID,
-        tree: listing,
-    })
 }
 
 pub struct NetCdfCfDataProviderPaths {
