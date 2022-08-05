@@ -20,27 +20,41 @@ type SharedTask = Arc<Box<dyn Task<SimpleTaskManagerContext>>>;
 /// An in-memory implementation of the [`TaskManager`] trait.
 #[derive(Default, Clone)]
 pub struct SimpleTaskManager {
-    handles: Db<HashMap<TaskId, JoinHandle<()>>>,
-    tasks: Db<HashMap<TaskId, SharedTask>>,
-    tasks_by_id: Db<HashMap<TaskId, Db<TaskStatus>>>,
-    task_list: Db<VecDeque<TaskUpdateStatusWithTaskId>>,
+    tasks_by_id: Db<HashMap<TaskId, TaskHandle>>,
     unique_tasks: Db<HashSet<(&'static str, String)>>,
+    // these two lists won't be cleaned-up
+    status_by_id: Db<HashMap<TaskId, Db<TaskStatus>>>,
+    status_list: Db<VecDeque<TaskUpdateStatusWithTaskId>>,
+}
+
+struct TaskHandle {
+    task: SharedTask,
+    handle: Option<JoinHandle<()>>,
+    status: Db<TaskStatus>,
+    unique_key: Option<(&'static str, String)>,
 }
 
 impl SimpleTaskManager {
     async fn write_lock_all(&self) -> WriteLockAll {
-        let (handles, tasks, tasks_by_id, task_list, unique_tasks) = tokio::join!(
-            self.handles.write(),
-            self.tasks.write(),
+        let (tasks_by_id, status_by_id, task_list, unique_tasks) = tokio::join!(
             self.tasks_by_id.write(),
-            self.task_list.write(),
+            self.status_by_id.write(),
+            self.status_list.write(),
             self.unique_tasks.write(),
         );
         WriteLockAll {
-            handles,
-            tasks,
             tasks_by_id,
-            task_list,
+            status_by_id,
+            status_list: task_list,
+            unique_tasks,
+        }
+    }
+
+    async fn write_lock_for_update(&self) -> WriteLockForUpdate {
+        let (tasks_by_id, unique_tasks) =
+            tokio::join!(self.tasks_by_id.write(), self.unique_tasks.write());
+        WriteLockForUpdate {
+            tasks_by_id,
             unique_tasks,
         }
     }
@@ -52,48 +66,15 @@ struct TaskUpdateStatusWithTaskId {
 }
 
 struct WriteLockAll<'a> {
-    pub handles: RwLockWriteGuard<'a, HashMap<TaskId, JoinHandle<()>>>,
-    pub tasks: RwLockWriteGuard<'a, HashMap<TaskId, SharedTask>>,
-    pub tasks_by_id: RwLockWriteGuard<'a, HashMap<TaskId, Db<TaskStatus>>>,
-    pub task_list: RwLockWriteGuard<'a, VecDeque<TaskUpdateStatusWithTaskId>>,
+    pub tasks_by_id: RwLockWriteGuard<'a, HashMap<TaskId, TaskHandle>>,
+    pub status_by_id: RwLockWriteGuard<'a, HashMap<TaskId, Db<TaskStatus>>>,
+    pub status_list: RwLockWriteGuard<'a, VecDeque<TaskUpdateStatusWithTaskId>>,
     pub unique_tasks: RwLockWriteGuard<'a, HashSet<(&'static str, String)>>,
 }
 
-impl WriteLockAll<'_> {
-    fn remove_task_handle(&mut self, task_id: TaskId) -> Result<JoinHandle<()>, TaskError> {
-        self.handles
-            .remove(&task_id)
-            .ok_or(TaskError::TaskNotFound { task_id })
-    }
-
-    fn task_status(&self, task_id: TaskId) -> Result<Arc<RwLock<TaskStatus>>, TaskError> {
-        Ok(self
-            .tasks_by_id
-            .get(&task_id)
-            .ok_or(TaskError::TaskNotFound { task_id })?
-            .clone())
-    }
-
-    fn task(&self, task_id: TaskId) -> Result<SharedTask, TaskError> {
-        Ok(self
-            .tasks
-            .get(&task_id)
-            .ok_or(TaskError::TaskNotFound { task_id })?
-            .clone())
-    }
-
-    fn remove_task(&mut self, task_id: TaskId) {
-        let task = self.tasks.remove(&task_id);
-
-        let task_unique_key = task.and_then(|task| {
-            task.task_unique_id()
-                .map(|task_unique_id| (task.task_type(), task_unique_id))
-        });
-
-        if let Some(task_unique_key) = task_unique_key {
-            self.unique_tasks.remove(&task_unique_key);
-        }
-    }
+struct WriteLockForUpdate<'a> {
+    pub tasks_by_id: RwLockWriteGuard<'a, HashMap<TaskId, TaskHandle>>,
+    pub unique_tasks: RwLockWriteGuard<'a, HashSet<(&'static str, String)>>,
 }
 
 #[async_trait::async_trait]
@@ -125,31 +106,35 @@ impl TaskManager<SimpleTaskManagerContext> for SimpleTaskManager {
             }
         }
 
-        let status = Arc::new(RwLock::new(TaskStatus::Running(
-            RunningTaskStatusInfo::new(0, ().boxed()),
-        )));
-
-        let task_ctx = SimpleTaskManagerContext {
-            status: status.clone(),
+        let mut task_handle = TaskHandle {
+            task: Arc::new(task),
+            handle: None,
+            status: Arc::new(RwLock::new(TaskStatus::Running(
+                RunningTaskStatusInfo::new(0, ().boxed()),
+            ))),
+            unique_key: task_unique_key,
         };
 
-        let task = Arc::new(task);
-
-        lock.tasks.insert(task_id, task.clone());
+        let task = task_handle.task.clone();
+        let task_ctx = SimpleTaskManagerContext {
+            status: task_handle.status.clone(),
+        };
 
         let handle = crate::util::spawn(async move {
             let result = task.run(task_ctx.clone()).await;
 
-            let (mut handles_lock, mut unique_tasks, mut task_status_lock) = tokio::join!(
-                task_manager.handles.write(),
-                task_manager.unique_tasks.write(),
-                task_ctx.status.write()
-            );
+            let mut update_lock = task_manager.write_lock_for_update().await;
 
-            handles_lock.remove(&task_id);
+            let task_handle = match update_lock.tasks_by_id.remove(&task_id) {
+                Some(task_handle) => task_handle,
+                None => return, // never happens
+            };
+
+            let mut task_status_lock = task_handle.status.write().await;
 
             *task_status_lock = match result {
                 Ok(status) => TaskStatus::completed(Arc::new(status)),
+                // TODO: add clean-up phase in this case (?)
                 Err(err) => TaskStatus::failed(Arc::new(err)),
             };
 
@@ -159,32 +144,44 @@ impl TaskManager<SimpleTaskManagerContext> for SimpleTaskManager {
                 notify.send(task_status_lock.clone()).unwrap_or_default();
             }
 
-            if let Some(task_unique_id) = task_unique_key {
-                unique_tasks.remove(&task_unique_id);
-            }
+            remove_unique_key(&task_handle, &mut update_lock.unique_tasks);
         });
 
-        lock.handles.insert(task_id, handle);
-        lock.tasks_by_id.insert(task_id, status.clone());
-        lock.task_list
-            .push_front(TaskUpdateStatusWithTaskId { task_id, status });
+        task_handle.handle = Some(handle);
+
+        lock.status_by_id
+            .insert(task_id, task_handle.status.clone());
+        lock.status_list.push_front(TaskUpdateStatusWithTaskId {
+            task_id,
+            status: task_handle.status.clone(),
+        });
+
+        if let Some(task_unique_id) = &task_handle.unique_key {
+            lock.unique_tasks.insert(task_unique_id.clone());
+        }
+
+        lock.tasks_by_id.insert(task_id, task_handle);
 
         Ok(task_id)
     }
 
     async fn status(&self, task_id: TaskId) -> Result<TaskStatus, TaskError> {
-        if let Some(task_result) = self.tasks_by_id.read().await.get(&task_id) {
-            Ok(task_result.read().await.clone())
-        } else {
-            Err(TaskError::TaskNotFound { task_id })
-        }
+        let task_status_map = self.status_by_id.read().await;
+        let task_status = task_status_map
+            .get(&task_id)
+            .ok_or(TaskError::TaskNotFound { task_id })?
+            .read()
+            .await
+            .clone();
+
+        Ok(task_status)
     }
 
     async fn list(
         &self,
         options: Validated<TaskListOptions>,
     ) -> Result<Vec<TaskStatusWithId>, TaskError> {
-        let lock = self.task_list.read().await;
+        let lock = self.status_list.read().await;
 
         let iter = lock.range(options.offset as usize..);
         let stream = futures::stream::iter(iter);
@@ -216,39 +213,53 @@ impl TaskManager<SimpleTaskManagerContext> for SimpleTaskManager {
     async fn abort(&self, task_id: TaskId, force: bool) -> Result<(), TaskError> {
         let mut write_lock = self.write_lock_all().await;
 
-        let task_handle = write_lock.remove_task_handle(task_id)?;
+        let mut task_handle = write_lock
+            .tasks_by_id
+            .remove(&task_id)
+            .ok_or(TaskError::TaskNotFound { task_id })?;
 
-        let task_status = write_lock.task_status(task_id)?;
-
-        let task_status_lock = task_status.read().await;
+        let task_status_lock = task_handle.status.read().await;
 
         if task_status_lock.is_finished() {
             return Err(TaskError::TaskAlreadyFinished { task_id });
         } else if !force && task_status_lock.is_aborting() {
+            drop(task_status_lock);
+
             // put clean-up handle back
-            write_lock.handles.insert(task_id, task_handle);
+            write_lock.tasks_by_id.insert(task_id, task_handle);
 
             return Err(TaskError::TaskAlreadyAborted { task_id });
         }
 
         drop(task_status_lock); // prevent deadlocks on the status lock
 
-        task_handle.abort();
-
-        let result = task_handle.await;
-        let task_finished_before_being_aborted = result.is_ok();
+        let task_finished_before_being_aborted = if let Some(handle) = task_handle.handle.take() {
+            handle.abort();
+            handle.await.is_ok()
+        } else {
+            // this case should not happen, so we just assume that the task finished before being aborted
+            true
+        };
 
         if force || task_finished_before_being_aborted {
-            set_status_to_aborted(&task_status).await?;
+            set_status_to_aborted(&task_handle.status).await?;
 
-            // remove all handles for this task
-            write_lock.remove_task(task_id);
+            remove_unique_key(&task_handle, &mut write_lock.unique_tasks);
 
             // no clean-up in this case
             return Ok(());
         }
 
-        clean_up_phase(self.clone(), task_status, write_lock, task_id).await
+        clean_up_phase(self.clone(), task_handle, write_lock, task_id).await
+    }
+}
+
+fn remove_unique_key(
+    task_handle: &TaskHandle,
+    unique_lock: &mut RwLockWriteGuard<'_, HashSet<(&'static str, String)>>,
+) {
+    if let Some(task_unique_id) = &task_handle.unique_key {
+        unique_lock.remove(task_unique_id);
     }
 }
 
@@ -266,43 +277,40 @@ async fn set_status_to_aborted(task_status: &Db<TaskStatus>) -> Result<(), TaskE
 
 async fn clean_up_phase(
     task_manager: SimpleTaskManager,
-    task_status: Arc<RwLock<TaskStatus>>,
+    mut task_handle: TaskHandle,
     mut write_lock: WriteLockAll<'_>,
     task_id: TaskId,
 ) -> Result<(), TaskError> {
+    set_status_to_aborting(&task_handle.status).await?;
+
+    let task = task_handle.task.clone();
     let task_ctx = SimpleTaskManagerContext {
-        status: task_status,
+        status: task_handle.status.clone(),
     };
-
-    set_status_to_aborting(&task_ctx.status).await?;
-
-    let task = write_lock.task(task_id)?;
 
     let handle = crate::util::spawn(async move {
         let result = task.cleanup_on_error(task_ctx.clone()).await;
 
-        let (mut handles_lock, mut unique_tasks, mut task_status_lock) = tokio::join!(
-            task_manager.handles.write(),
-            task_manager.unique_tasks.write(),
-            task_ctx.status.write()
-        );
+        let mut update_lock = task_manager.write_lock_for_update().await;
 
-        handles_lock.remove(&task_id);
+        let task_handle = match update_lock.tasks_by_id.remove(&task_id) {
+            Some(task_handle) => task_handle,
+            None => return, // never happens
+        };
+
+        let mut task_status_lock = task_handle.status.write().await;
 
         *task_status_lock = match result {
             Ok(status) => TaskStatus::aborted(Arc::new(status.boxed())),
             Err(err) => TaskStatus::failed(Arc::new(err)),
         };
 
-        let task_unique_key = task
-            .task_unique_id()
-            .map(|task_unique_id| (task.task_type(), task_unique_id));
-        if let Some(task_unique_id) = task_unique_key {
-            unique_tasks.remove(&task_unique_id);
-        }
+        remove_unique_key(&task_handle, &mut update_lock.unique_tasks);
     });
 
-    write_lock.handles.insert(task_id, handle);
+    task_handle.handle = Some(handle);
+
+    write_lock.tasks_by_id.insert(task_id, task_handle);
 
     Ok(())
 }
