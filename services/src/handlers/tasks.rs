@@ -120,7 +120,12 @@ pub struct TaskAbortOptions {
     pub force: bool,
 }
 
-/// Retrieve the status of a task.
+/// Abort a running task.
+///
+/// # Parameters
+///
+/// * `force` - If true, the task will be aborted without clean-up.
+///             You can abort a task that is already in the process of aborting.
 ///
 /// # Example
 ///
