@@ -85,13 +85,37 @@ pub trait TaskContext: Send + Sync {
 pub enum TaskStatus {
     // Pending, // TODO: at some point, don't just run things
     Running(Arc<RunningTaskStatusInfo>),
-    Aborting(Arc<RunningTaskStatusInfo>),
+    #[serde(rename_all = "camelCase")]
     Completed {
         info: Arc<Box<dyn TaskStatusInfo>>,
     },
+    #[serde(rename_all = "camelCase")]
+    Aborted {
+        clean_up: TaskCleanUpStatus,
+    },
+    #[serde(rename_all = "camelCase")]
+    Failed {
+        #[serde(serialize_with = "serialize_failed_task_status")]
+        error: Arc<Box<dyn ErrorSource>>,
+        clean_up: TaskCleanUpStatus,
+    },
+}
+
+/// One of the statuses a `Task` clean-up can be in.
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase", tag = "status")]
+pub enum TaskCleanUpStatus {
+    NoCleanUp,
+    Running(Arc<RunningTaskStatusInfo>),
+    #[serde(rename_all = "camelCase")]
+    Completed {
+        info: Arc<Box<dyn TaskStatusInfo>>,
+    },
+    #[serde(rename_all = "camelCase")]
     Aborted {
         info: Arc<Box<dyn TaskStatusInfo>>,
     },
+    #[serde(rename_all = "camelCase")]
     Failed {
         #[serde(serialize_with = "serialize_failed_task_status")]
         error: Arc<Box<dyn ErrorSource>>,
@@ -110,26 +134,47 @@ impl TaskStatus {
         Self::Completed { info }
     }
 
-    pub fn aborted(info: Arc<Box<dyn TaskStatusInfo>>) -> Self {
-        Self::Aborted { info }
+    pub fn aborted(clean_up: TaskCleanUpStatus) -> Self {
+        Self::Aborted { clean_up }
     }
 
-    pub fn failed(error: Arc<Box<dyn ErrorSource>>) -> Self {
-        Self::Failed { error }
+    pub fn failed(error: Arc<Box<dyn ErrorSource>>, clean_up: TaskCleanUpStatus) -> Self {
+        Self::Failed { error, clean_up }
     }
 
     pub fn is_running(&self) -> bool {
         matches!(self, TaskStatus::Running(_))
     }
 
-    pub fn is_aborting(&self) -> bool {
-        matches!(self, TaskStatus::Aborting(_))
+    pub fn has_aborted(&self) -> bool {
+        matches!(self, TaskStatus::Aborted { .. })
+    }
+
+    pub fn has_failed(&self) -> bool {
+        matches!(self, TaskStatus::Failed { .. })
     }
 
     pub fn is_finished(&self) -> bool {
         matches!(self, TaskStatus::Completed { .. })
-            || matches!(self, TaskStatus::Aborted { .. })
-            || matches!(self, TaskStatus::Failed { .. })
+            || matches!(
+                self,
+                TaskStatus::Aborted {
+                    clean_up: TaskCleanUpStatus::NoCleanUp
+                        | TaskCleanUpStatus::Completed { .. }
+                        | TaskCleanUpStatus::Failed { .. }
+                        | TaskCleanUpStatus::Aborted { .. }
+                }
+            )
+            || matches!(
+                self,
+                TaskStatus::Failed {
+                    error: _,
+                    clean_up: TaskCleanUpStatus::NoCleanUp
+                        | TaskCleanUpStatus::Completed { .. }
+                        | TaskCleanUpStatus::Failed { .. }
+                        | TaskCleanUpStatus::Aborted { .. }
+                }
+            )
     }
 }
 
@@ -206,6 +251,7 @@ fn task_list_limit_default() -> u32 {
 #[serde(rename_all = "camelCase")]
 pub enum TaskFilter {
     Running,
+    Aborted,
     Failed,
     Completed,
 }

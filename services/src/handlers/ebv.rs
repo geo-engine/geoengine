@@ -10,7 +10,7 @@ use crate::datasets::external::netcdfcf::{
 use crate::error::Result;
 use crate::layers::external::DataProvider;
 use crate::layers::storage::LayerProviderDb;
-use crate::tasks::{Task, TaskContext, TaskManager, TaskStatus, TaskStatusInfo};
+use crate::tasks::{Task, TaskContext, TaskId, TaskManager, TaskStatus, TaskStatusInfo};
 use crate::{contexts::Context, datasets::external::netcdfcf::NetCdfCfDataProvider};
 use actix_web::{
     web::{self, ServiceConfig},
@@ -18,6 +18,7 @@ use actix_web::{
 };
 use futures::channel::oneshot;
 use futures::lock::Mutex;
+use futures::TryFutureExt;
 use geoengine_datatypes::dataset::DataProviderId;
 use geoengine_datatypes::error::{BoxedResultExt, ErrorSource};
 use geoengine_datatypes::util::gdal::ResamplingMethod;
@@ -381,7 +382,7 @@ async fn create_overviews<C: Context>(
         session,
         ctx: ctx.clone(),
         resampling_method: params.as_ref().and_then(|p| p.resampling_method),
-        current_file: Arc::new(Mutex::new(None)),
+        current_subtask_id: Arc::new(Mutex::new(None)),
     }
     .boxed();
 
@@ -394,7 +395,7 @@ struct EvbMultiOverviewTask<C: Context> {
     session: AdminSession,
     ctx: Arc<C>,
     resampling_method: Option<ResamplingMethod>,
-    current_file: Arc<Mutex<Option<PathBuf>>>,
+    current_subtask_id: Arc<Mutex<Option<TaskId>>>,
 }
 
 impl<C: Context> EvbMultiOverviewTask<C> {
@@ -414,7 +415,7 @@ impl<C: Context> Task<C::TaskContext> for EvbMultiOverviewTask<C> {
         let task_ctx = Arc::new(task_ctx);
         let session = self.session.clone();
         let resampling_method = self.resampling_method;
-        let current_file = self.current_file.clone();
+        let current_subtask_id = self.current_subtask_id.clone();
 
         let files = with_netcdfcf_provider(
             self.ctx.as_ref(),
@@ -450,19 +451,19 @@ impl<C: Context> Task<C::TaskContext> for EvbMultiOverviewTask<C> {
 
             let (notification_tx, notification_rx) = oneshot::channel();
 
-            current_file.lock().await.replace(file.clone());
-
-            let _subtask_id = self
+            let subtask_id = self
                 .ctx
                 .tasks_ref()
                 .schedule(subtask, Some(notification_tx))
                 .await
                 .map_err(ErrorSource::boxed)?;
 
+            current_subtask_id.lock().await.replace(subtask_id);
+
             if let Ok(subtask_status) = notification_rx.await {
                 match subtask_status {
                     TaskStatus::Completed { info } => {
-                        current_file.lock().await.take();
+                        current_subtask_id.lock().await.take();
 
                         if let Some(response) =
                             info.as_any().downcast_ref::<NetCdfCfOverviewResponse>()
@@ -474,19 +475,19 @@ impl<C: Context> Task<C::TaskContext> for EvbMultiOverviewTask<C> {
                             // must not happen, since we spawned a task that only returns a `NetCdfCfOverviewResponse`
                         }
                     }
-                    TaskStatus::Aborted { info } => {
+                    TaskStatus::Aborted { .. } => {
                         if log_enabled!(Debug) {
-                            debug!("{:?}", info);
+                            debug!("Subtask aborted");
                         }
                         status.error.push(file);
                     }
-                    TaskStatus::Failed { error } => {
+                    TaskStatus::Failed { error, .. } => {
                         if log_enabled!(Debug) {
                             debug!("{:?}", error);
                         }
                         status.error.push(file);
                     }
-                    TaskStatus::Running(_) | TaskStatus::Aborting(_) => {
+                    TaskStatus::Running(_) => {
                         // must not happen, since we used the callback
                         debug!("Ran into task status that must not happend: running/aborted after finish");
                     }
@@ -506,23 +507,21 @@ impl<C: Context> Task<C::TaskContext> for EvbMultiOverviewTask<C> {
         Ok(status.boxed())
     }
 
-    async fn cleanup_on_error(&self, ctx: C::TaskContext) -> Result<(), Box<dyn ErrorSource>> {
-        let file = match self.current_file.lock().await.take() {
-            Some(f) => f,
+    async fn cleanup_on_error(&self, _ctx: C::TaskContext) -> Result<(), Box<dyn ErrorSource>> {
+        // Tasks clean-up themselves on error.
+        // On abort, we propagate the abort to the current subtask.
+
+        let subtask_id = match self.current_subtask_id.lock().await.take() {
+            Some(id) => id,
             None => return Ok(()), // no file was in progress, so nothing to clean up
         };
 
-        let subtask: Box<dyn Task<C::TaskContext>> = EvbOverviewTask::<C> {
-            session: self.session.clone(),
-            ctx: self.ctx.clone(),
-            params: CreateOverviewParams {
-                file,
-                resampling_method: self.resampling_method,
-            },
-        }
-        .boxed();
-
-        subtask.cleanup_on_error(ctx).await
+        // cannot be `force=true`, otherwise we wouldn't call this function
+        self.ctx
+            .tasks_ref()
+            .abort(subtask_id, false)
+            .map_err(ErrorSource::boxed)
+            .await
     }
 
     fn task_type(&self) -> &'static str {

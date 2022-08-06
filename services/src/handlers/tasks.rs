@@ -364,7 +364,10 @@ mod tests {
             status,
             serde_json::json!({
                 "status": "aborted",
-                "info": null,
+                "cleanUp": {
+                    "status": "completed",
+                    "info": null
+                },
             })
         );
     }
@@ -411,7 +414,9 @@ mod tests {
             status,
             serde_json::json!({
                 "status": "aborted",
-                "info": null,
+                "cleanUp": {
+                    "status": "noCleanUp"
+                },
             })
         );
     }
@@ -488,7 +493,9 @@ mod tests {
             status,
             serde_json::json!({
                 "status": "aborted",
-                "info": null,
+                "cleanUp": {
+                    "status": "noCleanUp"
+                },
             })
         );
     }

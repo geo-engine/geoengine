@@ -1,11 +1,11 @@
 use super::{
-    RunningTaskStatusInfo, Task, TaskContext, TaskError, TaskFilter, TaskId, TaskListOptions,
-    TaskManager, TaskStatus, TaskStatusInfo, TaskStatusWithId,
+    RunningTaskStatusInfo, Task, TaskCleanUpStatus, TaskContext, TaskError, TaskFilter, TaskId,
+    TaskListOptions, TaskManager, TaskStatus, TaskStatusInfo, TaskStatusWithId,
 };
 use crate::{contexts::Db, error::Result, util::user_input::Validated};
 use futures::channel::oneshot;
 use futures::StreamExt;
-use geoengine_datatypes::util::Identifier;
+use geoengine_datatypes::{error::ErrorSource, util::Identifier};
 use std::{
     collections::{HashMap, HashSet, VecDeque},
     sync::Arc,
@@ -86,9 +86,6 @@ impl TaskManager<SimpleTaskManagerContext> for SimpleTaskManager {
     ) -> Result<TaskId, TaskError> {
         let task_id = TaskId::new();
 
-        // we can clone here, since all interior stuff is wrapped into `Arc`s
-        let task_manager = self.clone();
-
         // get lock before starting the task to prevent a race condition of initial status setting
         let mut lock = self.write_lock_all().await;
 
@@ -120,32 +117,13 @@ impl TaskManager<SimpleTaskManagerContext> for SimpleTaskManager {
             status: task_handle.status.clone(),
         };
 
-        let handle = crate::util::spawn(async move {
-            let result = task.run(task_ctx.clone()).await;
-
-            let mut update_lock = task_manager.write_lock_for_update().await;
-
-            let task_handle = match update_lock.tasks_by_id.remove(&task_id) {
-                Some(task_handle) => task_handle,
-                None => return, // never happens
-            };
-
-            let mut task_status_lock = task_handle.status.write().await;
-
-            *task_status_lock = match result {
-                Ok(status) => TaskStatus::completed(Arc::new(status)),
-                // TODO: add clean-up phase in this case (?)
-                Err(err) => TaskStatus::failed(Arc::new(err)),
-            };
-
-            if let Some(notify) = notify {
-                // we can ignore the returned error because this means
-                // that the receiver has already been dropped
-                notify.send(task_status_lock.clone()).unwrap_or_default();
-            }
-
-            remove_unique_key(&task_handle, &mut update_lock.unique_tasks);
-        });
+        let handle = run_task(
+            self.clone(), // we can clone here, since all interior stuff is wrapped into `Arc`s
+            task_id,
+            task,
+            task_ctx,
+            notify,
+        );
 
         task_handle.handle = Some(handle);
 
@@ -193,8 +171,9 @@ impl TaskManager<SimpleTaskManagerContext> for SimpleTaskManager {
                 match (options.filter, &*task_status) {
                     (None, _)
                     | (Some(TaskFilter::Running), &TaskStatus::Running(_))
-                    | (Some(TaskFilter::Completed), &TaskStatus::Completed { info: _ })
-                    | (Some(TaskFilter::Failed), &TaskStatus::Failed { error: _ }) => {
+                    | (Some(TaskFilter::Completed), &TaskStatus::Completed { .. })
+                    | (Some(TaskFilter::Aborted), &TaskStatus::Aborted { .. })
+                    | (Some(TaskFilter::Failed), &TaskStatus::Failed { .. }) => {
                         Some(TaskStatusWithId {
                             task_id: task_status_with_id.task_id,
                             status: task_status.clone(),
@@ -211,7 +190,7 @@ impl TaskManager<SimpleTaskManagerContext> for SimpleTaskManager {
     }
 
     async fn abort(&self, task_id: TaskId, force: bool) -> Result<(), TaskError> {
-        let mut write_lock = self.write_lock_all().await;
+        let mut write_lock = self.write_lock_for_update().await;
 
         let mut task_handle = write_lock
             .tasks_by_id
@@ -222,7 +201,7 @@ impl TaskManager<SimpleTaskManagerContext> for SimpleTaskManager {
 
         if task_status_lock.is_finished() {
             return Err(TaskError::TaskAlreadyFinished { task_id });
-        } else if !force && task_status_lock.is_aborting() {
+        } else if !force && task_status_lock.has_aborted() {
             drop(task_status_lock);
 
             // put clean-up handle back
@@ -242,7 +221,7 @@ impl TaskManager<SimpleTaskManagerContext> for SimpleTaskManager {
         };
 
         if force || task_finished_before_being_aborted {
-            set_status_to_aborted(&task_handle.status).await?;
+            set_status_to_no_clean_up(&task_handle.status).await;
 
             remove_unique_key(&task_handle, &mut write_lock.unique_tasks);
 
@@ -250,8 +229,73 @@ impl TaskManager<SimpleTaskManagerContext> for SimpleTaskManager {
             return Ok(());
         }
 
-        clean_up_phase(self.clone(), task_handle, write_lock, task_id).await
+        set_status_to_aborting(&task_handle.status).await;
+        clean_up_phase(self.clone(), task_handle, &mut write_lock, task_id).await
     }
+}
+
+fn run_task(
+    task_manager: SimpleTaskManager,
+    task_id: TaskId,
+    task: SharedTask,
+    task_ctx: SimpleTaskManagerContext,
+    notify: Option<oneshot::Sender<TaskStatus>>,
+) -> JoinHandle<()> {
+    crate::util::spawn(async move {
+        let result = task.run(task_ctx.clone()).await;
+
+        let mut update_lock = task_manager.write_lock_for_update().await;
+
+        let task_handle = match update_lock.tasks_by_id.remove(&task_id) {
+            Some(task_handle) => task_handle,
+            None => return, // never happens
+        };
+
+        let task_status = task_handle.status.clone();
+
+        match result {
+            Ok(status) => {
+                *task_handle.status.write().await = TaskStatus::completed(Arc::new(status));
+
+                remove_unique_key(&task_handle, &mut update_lock.unique_tasks);
+            }
+            Err(err) => {
+                let err = Arc::new(err);
+
+                *task_handle.status.write().await = TaskStatus::failed(
+                    err.clone(),
+                    TaskCleanUpStatus::Running(RunningTaskStatusInfo::new(0, ().boxed())),
+                );
+
+                if let Err(clean_up_err) =
+                    clean_up_phase(task_manager.clone(), task_handle, &mut update_lock, task_id)
+                        .await
+                {
+                    *task_status.write().await = TaskStatus::failed(
+                        err,
+                        TaskCleanUpStatus::Failed {
+                            error: Arc::new(Box::new(clean_up_err)),
+                        },
+                    );
+
+                    let task_handle = update_lock.tasks_by_id.remove(&task_id);
+
+                    if let Some(task_handle) = task_handle {
+                        remove_unique_key(&task_handle, &mut update_lock.unique_tasks);
+                    }
+                }
+            }
+        };
+
+        // TODO: move this into clean-up?
+        if let Some(notify) = notify {
+            // we can ignore the returned error because this means
+            // that the receiver has already been dropped
+            notify
+                .send(task_status.read().await.clone())
+                .unwrap_or_default();
+        }
+    })
 }
 
 fn remove_unique_key(
@@ -263,26 +307,61 @@ fn remove_unique_key(
     }
 }
 
-async fn set_status_to_aborting(task_status: &Db<TaskStatus>) -> Result<(), TaskError> {
+async fn set_status_to_aborting(task_status: &Db<TaskStatus>) {
     let mut task_status_lock = task_status.write().await;
-    *task_status_lock = TaskStatus::Aborting(RunningTaskStatusInfo::new(0, ().boxed()));
-    Ok(())
+    *task_status_lock = TaskStatus::aborted(TaskCleanUpStatus::Running(
+        RunningTaskStatusInfo::new(0, ().boxed()),
+    ));
 }
 
-async fn set_status_to_aborted(task_status: &Db<TaskStatus>) -> Result<(), TaskError> {
+async fn set_status_to_clean_up_completed(task_status: &Db<TaskStatus>) {
     let mut task_status_lock = task_status.write().await;
-    *task_status_lock = TaskStatus::aborted(Arc::new(().boxed()));
-    Ok(())
+
+    let task_clean_up_status = TaskCleanUpStatus::Completed {
+        info: Arc::new(().boxed()),
+    };
+
+    *task_status_lock = match &*task_status_lock {
+        TaskStatus::Running(_) | TaskStatus::Completed { .. } => return, // must not happen, ignore
+        TaskStatus::Aborted { .. } => TaskStatus::aborted(task_clean_up_status),
+        TaskStatus::Failed { error, .. } => TaskStatus::failed(error.clone(), task_clean_up_status),
+    };
+}
+
+async fn set_status_to_no_clean_up(task_status: &Db<TaskStatus>) {
+    let mut task_status_lock = task_status.write().await;
+
+    let task_clean_up_status = TaskCleanUpStatus::NoCleanUp;
+
+    *task_status_lock = match &*task_status_lock {
+        TaskStatus::Completed { .. } => return, // must not happen, ignore
+        TaskStatus::Running(_) | TaskStatus::Aborted { .. } => {
+            TaskStatus::aborted(task_clean_up_status)
+        }
+        TaskStatus::Failed { error, .. } => TaskStatus::failed(error.clone(), task_clean_up_status),
+    }
+}
+
+async fn set_status_to_clean_up_failed(task_status: &Db<TaskStatus>, error: Box<dyn ErrorSource>) {
+    let mut task_status_lock = task_status.write().await;
+
+    let task_clean_up_status = TaskCleanUpStatus::Failed {
+        error: Arc::new(error),
+    };
+
+    *task_status_lock = match &*task_status_lock {
+        TaskStatus::Running(_) | TaskStatus::Completed { .. } => return, // must not happen, ignore
+        TaskStatus::Aborted { .. } => TaskStatus::aborted(task_clean_up_status),
+        TaskStatus::Failed { error, .. } => TaskStatus::failed(error.clone(), task_clean_up_status),
+    }
 }
 
 async fn clean_up_phase(
     task_manager: SimpleTaskManager,
     mut task_handle: TaskHandle,
-    mut write_lock: WriteLockAll<'_>,
+    write_lock: &mut WriteLockForUpdate<'_>,
     task_id: TaskId,
 ) -> Result<(), TaskError> {
-    set_status_to_aborting(&task_handle.status).await?;
-
     let task = task_handle.task.clone();
     let task_ctx = SimpleTaskManagerContext {
         status: task_handle.status.clone(),
@@ -298,11 +377,9 @@ async fn clean_up_phase(
             None => return, // never happens
         };
 
-        let mut task_status_lock = task_handle.status.write().await;
-
-        *task_status_lock = match result {
-            Ok(status) => TaskStatus::aborted(Arc::new(status.boxed())),
-            Err(err) => TaskStatus::failed(Arc::new(err)),
+        match result {
+            Ok(_) => set_status_to_clean_up_completed(&task_handle.status).await,
+            Err(err) => set_status_to_clean_up_failed(&task_handle.status, err).await,
         };
 
         remove_unique_key(&task_handle, &mut update_lock.unique_tasks);
@@ -325,12 +402,18 @@ impl TaskContext for SimpleTaskManagerContext {
     async fn set_completion(&self, pct_complete: u8, status: Box<dyn TaskStatusInfo>) {
         let mut task_status = self.status.write().await;
 
-        if task_status.is_running() {
-            *task_status = TaskStatus::Running(RunningTaskStatusInfo::new(pct_complete, status));
-        } else if task_status.is_aborting() {
-            *task_status = TaskStatus::Aborting(RunningTaskStatusInfo::new(pct_complete, status));
-        } else {
-            // already completed, aborted or failed, so we ignore the status update
-        }
+        let status_info = RunningTaskStatusInfo::new(pct_complete, status);
+
+        *task_status = match &*task_status {
+            TaskStatus::Running(_) => TaskStatus::Running(status_info),
+            TaskStatus::Aborted {
+                clean_up: TaskCleanUpStatus::Running(_),
+            } => TaskStatus::aborted(TaskCleanUpStatus::Running(status_info)),
+            TaskStatus::Failed {
+                error,
+                clean_up: TaskCleanUpStatus::Running(_),
+            } => TaskStatus::failed(error.clone(), TaskCleanUpStatus::Running(status_info)),
+            _ => return, // already completed, aborted or failed, so we ignore the status update
+        };
     }
 }
