@@ -11,11 +11,11 @@ use crate::{
 };
 pub use error::TaskError;
 use futures::channel::oneshot;
-use geoengine_datatypes::{error::ErrorSource, identifier};
+use geoengine_datatypes::{error::ErrorSource, identifier, util::AsAny};
 pub use in_memory::{SimpleTaskManager, SimpleTaskManagerContext};
 use serde::{Deserialize, Serialize, Serializer};
 use snafu::ensure;
-use std::{any::Any, fmt, sync::Arc};
+use std::{fmt, sync::Arc};
 
 /// A database that allows scheduling and retrieving tasks.
 #[async_trait::async_trait]
@@ -158,30 +158,19 @@ where
 }
 
 /// Trait for information about the status of a task.
-pub trait TaskStatusInfo: erased_serde::Serialize + Send + Sync + fmt::Debug + Any {
+pub trait TaskStatusInfo: erased_serde::Serialize + Send + Sync + fmt::Debug + AsAny {
     fn boxed(self) -> Box<dyn TaskStatusInfo>
     where
         Self: Sized + 'static,
     {
         Box::new(self)
     }
-
-    /// Propagates `Any`-casting to the underlying provider
-    fn as_any(&self) -> &dyn std::any::Any;
 }
 
 erased_serde::serialize_trait_object!(TaskStatusInfo);
 
-impl TaskStatusInfo for () {
-    fn as_any(&self) -> &dyn std::any::Any {
-        self
-    }
-}
-impl TaskStatusInfo for String {
-    fn as_any(&self) -> &dyn std::any::Any {
-        self
-    }
-}
+impl TaskStatusInfo for () {}
+impl TaskStatusInfo for String {}
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct TaskListOptions {

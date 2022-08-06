@@ -105,10 +105,6 @@ impl DataProvider for PangaeaDataProvider {
             }),
         })
     }
-
-    fn as_any(&self) -> &dyn std::any::Any {
-        self
-    }
 }
 
 #[async_trait]

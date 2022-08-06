@@ -619,11 +619,7 @@ impl<C: Context> Task<C::TaskContext> for EvbOverviewTask<C> {
     }
 }
 
-impl TaskStatusInfo for NetCdfCfOverviewResponse {
-    fn as_any(&self) -> &dyn std::any::Any {
-        self
-    }
-}
+impl TaskStatusInfo for NetCdfCfOverviewResponse {}
 
 #[cfg(test)]
 mod tests {
