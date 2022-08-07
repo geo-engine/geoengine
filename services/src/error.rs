@@ -353,6 +353,17 @@ pub enum Error {
     UnknownLayerCollectionId {
         id: LayerCollectionId,
     },
+
+    #[cfg(feature = "pro")]
+    OIDCDisabled,
+    #[cfg(feature = "pro")]
+    IllegalOIDCProviderConfig,
+    #[cfg(feature = "pro")]
+    IllegalOIDCLoginRequest,
+    #[cfg(feature = "pro")]
+    OIDCLoginFailed {
+        reason: String,
+    },
 }
 
 impl actix_web::error::ResponseError for Error {

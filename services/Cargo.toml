@@ -47,6 +47,8 @@ image = "0.24"
 lazy_static = "1.4"
 log = "0.4"
 mime = "0.3"
+oauth2 = "4.2.3"
+openidconnect = "2.3.2"
 num-traits = "0.2"
 paste = "1.0"
 postgres-types = { version = "0.2", features = ["derive"], optional = true }
@@ -83,6 +85,7 @@ rand = "0.8.4"
 tempfile = "3.1"
 wiremock-grpc = "0.0.3-alpha1"
 xml-rs = "0.8.3"
+mockito = "0.31.0"
 
 [build-dependencies]
 vergen = "7"

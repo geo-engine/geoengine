@@ -4,6 +4,7 @@ mod postgres_userdb;
 mod session;
 mod user;
 mod userdb;
+pub(crate) mod oidc;
 
 pub use hashmap_userdb::HashMapUserDb;
 #[cfg(feature = "postgres")]

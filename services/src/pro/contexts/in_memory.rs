@@ -20,6 +20,8 @@ use rayon::ThreadPool;
 use snafu::ResultExt;
 use std::path::PathBuf;
 use std::sync::Arc;
+use crate::pro::users::oidc::OIDCRequestsDB;
+use crate::pro::util::config::Oidc;
 
 /// A context with references to in-memory versions of the individual databases.
 #[derive(Clone)]
@@ -34,6 +36,7 @@ pub struct ProInMemoryContext {
     exe_ctx_tiling_spec: TilingSpecification,
     query_ctx_chunk_size: ChunkByteSize,
     task_manager: Arc<SimpleTaskManager>,
+    oidc_request_db: Arc<OIDCRequestsDB>,
 }
 
 impl TestDefault for ProInMemoryContext {
@@ -49,6 +52,7 @@ impl TestDefault for ProInMemoryContext {
             exe_ctx_tiling_spec: TestDefault::test_default(),
             query_ctx_chunk_size: TestDefault::test_default(),
             task_manager: Default::default(),
+            oidc_request_db: Default::default(),
         }
     }
 }
@@ -61,6 +65,7 @@ impl ProInMemoryContext {
         layer_collection_defs_path: PathBuf,
         exe_ctx_tiling_spec: TilingSpecification,
         query_ctx_chunk_size: ChunkByteSize,
+        oidc_config : Oidc,
     ) -> Self {
         let mut layer_db = HashMapLayerDb::default();
 
@@ -85,6 +90,7 @@ impl ProInMemoryContext {
             thread_pool: create_rayon_thread_pool(0),
             exe_ctx_tiling_spec,
             query_ctx_chunk_size,
+            oidc_request_db: Arc::new(OIDCRequestsDB::from(oidc_config)),
         }
     }
 
@@ -103,6 +109,23 @@ impl ProInMemoryContext {
             thread_pool: create_rayon_thread_pool(0),
             exe_ctx_tiling_spec,
             query_ctx_chunk_size,
+            oidc_request_db: Default::default(),
+        }
+    }
+
+    pub fn new_with_oidc(oidc_db: OIDCRequestsDB) -> Self {
+        Self {
+            user_db: Default::default(),
+            project_db: Default::default(),
+            workflow_registry: Default::default(),
+            dataset_db: Default::default(),
+            layer_db: Default::default(),
+            layer_provider_db: Default::default(),
+            thread_pool: create_rayon_thread_pool(0),
+            exe_ctx_tiling_spec: TestDefault::test_default(),
+            query_ctx_chunk_size: TestDefault::test_default(),
+            task_manager: Default::default(),
+            oidc_request_db: Arc::new(oidc_db),
         }
     }
 }
@@ -116,6 +139,9 @@ impl ProContext for ProInMemoryContext {
     }
     fn user_db_ref(&self) -> &Self::UserDB {
         &self.user_db
+    }
+    fn oidc_request_db(&self) -> &OIDCRequestsDB {
+        &self.oidc_request_db
     }
 }
 

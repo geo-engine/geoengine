@@ -1,5 +1,5 @@
 use crate::error;
-use crate::error::Result;
+use crate::error::{Error, Result};
 use crate::handlers;
 use crate::pro::contexts::ProContext;
 use crate::pro::users::UserCredentials;
@@ -15,6 +15,7 @@ use crate::util::IdResponse;
 use actix_web::{web, HttpResponse, Responder};
 use snafu::ensure;
 use snafu::ResultExt;
+use crate::pro::users::oidc::AuthCodeResponse;
 
 pub(crate) fn init_user_routes<C>(cfg: &mut web::ServiceConfig)
 where
@@ -31,7 +32,9 @@ where
             web::resource("/session/project/{project}")
                 .route(web::post().to(session_project_handler::<C>)),
         )
-        .service(web::resource("/session/view").route(web::post().to(session_view_handler::<C>)));
+        .service(web::resource("/session/view").route(web::post().to(session_view_handler::<C>)))
+        .service(web::resource("/oidc_init").route(web::post().to(oidc_init::<C>)))
+        .service(web::resource("/oidc_login").route(web::post().to(oidc_login::<C>)));
 }
 
 /// Registers a user by providing [`UserRegistration`] parameters.
@@ -230,15 +233,57 @@ pub(crate) async fn session_view_handler<C: ProContext>(
     Ok(HttpResponse::Ok())
 }
 
+pub(crate) async fn oidc_init<C: ProContext>(
+    ctx: web::Data<C>,
+) -> Result<impl Responder> {
+    ensure!(
+        config::get_config_element::<crate::pro::util::config::Oidc>()?.enabled,
+        error::OIDCDisabled
+    );
+    let request_db = ctx.oidc_request_db();
+    let oidc_client = request_db.get_client()
+        .await
+        .map_err(|_err| Error::IllegalOIDCLoginRequest)?;
+
+    let result = ctx.oidc_request_db()
+        .generate_request(oidc_client)
+        .await
+        .map_err(|_err| Error::IllegalOIDCLoginRequest)?;
+    Ok(web::Json(result))
+}
+
+pub(crate) async fn oidc_login<C: ProContext>(
+    response: web::Json<AuthCodeResponse>,
+    ctx: web::Data<C>,
+) -> Result<impl Responder> {
+    ensure!(
+        config::get_config_element::<crate::pro::util::config::Oidc>()?.enabled,
+        error::OIDCDisabled
+    );
+
+    let request_db = ctx.oidc_request_db();
+    let oidc_client = request_db.get_client()
+        .await
+        .map_err(|_err| Error::IllegalOIDCLoginRequest)?;
+
+    let (user, duration) = request_db
+        .resolve_request(oidc_client, response.into_inner())
+        .await?;
+
+    let session = ctx.user_db_ref()
+        .login_external(user, duration)
+        .await?;
+
+    Ok(web::Json(session))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
 
     use crate::contexts::Session;
     use crate::handlers::ErrorResponse;
-    use crate::pro::util::tests::{
-        create_project_helper, create_session_helper, send_pro_test_request,
-    };
+    use crate::pro::util::tests::{create_project_helper, create_session_helper, mock_jwks, mock_provider_metadata, mock_token_response, MockTokenConfig, send_pro_test_request, SINGLE_STATE};
     use crate::pro::{contexts::ProInMemoryContext, projects::ProProjectDb, users::UserId};
     use crate::util::tests::{check_allowed_http_methods, read_body_string};
     use crate::util::user_input::Validated;
@@ -246,9 +291,12 @@ mod tests {
     use actix_web::dev::ServiceResponse;
     use actix_web::{http::header, http::Method, test};
     use actix_web_httpauth::headers::authorization::Bearer;
+    use mockito::{Mock, mock};
     use geoengine_datatypes::spatial_reference::SpatialReferenceOption;
     use geoengine_datatypes::util::test::TestDefault;
     use serde_json::json;
+    use crate::pro::users::oidc::{AuthCodeRequestURL, OIDCRequestsDB};
+    use crate::pro::util::config::Oidc;
 
     async fn register_test_helper<C: ProContext>(
         ctx: C,
@@ -731,5 +779,299 @@ mod tests {
             "User registration is disabled",
         )
         .await;
+    }
+
+    struct MockIdProvider {
+        _mock_provider : Mock,
+        _mock_jwk : Mock,
+    }
+
+    const MOCKITO_CLIENT_ID : &str = "";
+
+    fn single_state_nonce_mockito_request_db(mockito_issuer: String) -> OIDCRequestsDB{
+        let oidc_config = Oidc {
+            enabled: true,
+            issuer: mockito_issuer,
+            client_id: MOCKITO_CLIENT_ID.to_string(),
+            client_secret: "".to_string(),
+            redirect_uri: "https://dummy-redirect.com/".into(),
+            scopes: vec!["profile".to_string(), "email".to_string()],
+        };
+
+        OIDCRequestsDB::from_oidc_with_static_tokens(oidc_config)
+    }
+
+    fn mock_id_provider() -> MockIdProvider {
+        let mockito_issuer = mockito::server_url();
+        let provider_metadata = mock_provider_metadata(mockito_issuer.as_str()).unwrap();
+        let jwks = mock_jwks().unwrap();
+
+        MockIdProvider {
+            _mock_provider: mock("GET", "/.well-known/openid-configuration")
+                .with_status(200)
+                .with_header("content-type", "application/json")
+                .with_body(serde_json::to_string(&provider_metadata).unwrap())
+                .create(),
+            _mock_jwk: mock("GET", "/jwk")
+                .with_status(200)
+                .with_header("content-type", "application/json")
+                .with_body(serde_json::to_string(&jwks).unwrap())
+                .create()
+        }
+    }
+
+    async fn oidc_init_test_helper(method: Method, ctx: ProInMemoryContext) -> ServiceResponse {
+        let req = test::TestRequest::default()
+            .method(method)
+            .uri("/oidc_init")
+            .append_header((header::CONTENT_LENGTH, 0));
+            // .set_json(&credentials);
+        send_pro_test_request(req, ctx).await
+    }
+
+    async fn oidc_login_test_helper(method: Method, ctx: ProInMemoryContext, auth_code_response: AuthCodeResponse) -> ServiceResponse {
+        let req = test::TestRequest::default()
+            .method(method)
+            .uri("/oidc_login")
+            .append_header((header::CONTENT_LENGTH, 0))
+            .set_json(&auth_code_response);
+        send_pro_test_request(req, ctx).await
+    }
+
+    #[tokio::test]
+    async fn oidc_init() {
+        let mockito_issuer = mockito::server_url();
+        let request_db = single_state_nonce_mockito_request_db(mockito_issuer);
+
+        let _mock_id_provider = mock_id_provider();
+
+        let ctx = ProInMemoryContext::new_with_oidc(request_db);
+        let res = oidc_init_test_helper(Method::POST, ctx).await;
+
+        assert_eq!(res.status(), 200);
+        let _auth_code_url: AuthCodeRequestURL = test::read_body_json(res).await;
+    }
+
+    #[tokio::test]
+    async fn oidc_illegal_provider() {
+        let mockito_issuer = mockito::server_url();
+        let request_db = single_state_nonce_mockito_request_db(mockito_issuer);
+
+        let error_message = "{\
+            \"error_description\": \"Dummy bad request\",
+            \"error\": \"catch_all_error\",
+        }";
+
+        let _mock_provider = mock("GET", "/.well-known/openid-configuration")
+            .with_status(404)
+            .with_header("content-type", "application/json")
+            .with_body(error_message)
+            .create();
+
+        let ctx = ProInMemoryContext::new_with_oidc(request_db);
+        let res = oidc_init_test_helper(Method::POST, ctx).await;
+
+        ErrorResponse::assert(
+            res,
+            400,
+            "IllegalOIDCLoginRequest",
+            "IllegalOIDCLoginRequest",
+        ).await;
+    }
+
+    #[tokio::test]
+    async fn oidc_init_invalid_method() {
+        let ctx = ProInMemoryContext::test_default();
+
+        check_allowed_http_methods(
+            |method| oidc_init_test_helper(method, ctx.clone()),
+            &[Method::POST],
+        ).await;
+    }
+
+    #[tokio::test]
+    async fn oidc_login() {
+        let mockito_issuer = mockito::server_url();
+        let request_db = single_state_nonce_mockito_request_db(mockito_issuer.clone());
+        let _mock_id_provider = mock_id_provider();
+
+        let client = request_db.get_client().await.unwrap();
+        let request = request_db.generate_request(client).await;
+
+        assert!(request.is_ok());
+
+        let mock_token_config = MockTokenConfig::create_from_issuer_and_client(mockito_issuer, MOCKITO_CLIENT_ID.to_string());
+        let token_response = mock_token_response(mock_token_config).unwrap();
+
+        let _mock_token_response = mock("POST", "/token")
+            .with_status(200)
+            .with_header("content-type", "application/json")
+            .with_body(serde_json::to_string(&token_response).unwrap())
+            .create();
+
+        let auth_code_response = AuthCodeResponse {
+            session_state: "".to_string(),
+            code: "".to_string(),
+            state: SINGLE_STATE.to_string()
+        };
+
+        let ctx = ProInMemoryContext::new_with_oidc(request_db);
+        let res = oidc_login_test_helper(Method::POST, ctx, auth_code_response).await;
+
+        assert_eq!(res.status(), 200);
+
+        let _id: UserSession = test::read_body_json(res).await;
+    }
+
+    #[tokio::test]
+    async fn oidc_login_illegal_request() {
+        let mockito_issuer = mockito::server_url();
+        let request_db = single_state_nonce_mockito_request_db(mockito_issuer.clone());
+        let _mock_id_provider = mock_id_provider();
+
+        let mock_token_config = MockTokenConfig::create_from_issuer_and_client(mockito_issuer, MOCKITO_CLIENT_ID.to_string());
+        let token_response = mock_token_response(mock_token_config).unwrap();
+
+        let _mock_token_response = mock("POST", "/token")
+            .with_status(200)
+            .with_header("content-type", "application/json")
+            .with_body(serde_json::to_string(&token_response).unwrap())
+            .create();
+
+        let auth_code_response = AuthCodeResponse {
+            session_state: "".to_string(),
+            code: "".to_string(),
+            state: SINGLE_STATE.to_string()
+        };
+
+        let ctx = ProInMemoryContext::new_with_oidc(request_db);
+        let res = oidc_login_test_helper(Method::POST, ctx, auth_code_response).await;
+
+        ErrorResponse::assert(
+            res,
+            400,
+            "IllegalOIDCLoginRequest",
+            "IllegalOIDCLoginRequest",
+        ).await;
+    }
+
+    #[tokio::test]
+    async fn oidc_login_fail() {
+        let mockito_issuer = mockito::server_url();
+        let request_db = single_state_nonce_mockito_request_db(mockito_issuer);
+        let _mock_id_provider = mock_id_provider();
+
+        let client = request_db.get_client().await.unwrap();
+        let request = request_db.generate_request(client).await;
+
+        assert!(request.is_ok());
+
+        let error_message = "{\
+            \"error_description\": \"Dummy bad request\",
+            \"error\": \"catch_all_error\",
+        }";
+
+        let _mock_provider = mock("POST", "/token")
+            .with_status(404)
+            .with_header("content-type", "application/json")
+            .with_body(error_message)
+            .create();
+
+        let auth_code_response = AuthCodeResponse {
+            session_state: "".to_string(),
+            code: "".to_string(),
+            state: SINGLE_STATE.to_string()
+        };
+
+        let ctx = ProInMemoryContext::new_with_oidc(request_db);
+        let res = oidc_login_test_helper(Method::POST, ctx, auth_code_response).await;
+
+        ErrorResponse::assert(
+            res,
+            400,
+            "OIDCLoginFailed",
+            "OIDCLoginFailed",
+        ).await;
+    }
+
+    #[tokio::test]
+    async fn oidc_login_invalid_method() {
+        let ctx = ProInMemoryContext::test_default();
+
+        let auth_code_response = AuthCodeResponse {
+            session_state: "".to_string(),
+            code: "".to_string(),
+            state: "".to_string()
+        };
+
+        check_allowed_http_methods(
+            |method| oidc_login_test_helper(method, ctx.clone(), auth_code_response.clone()),
+            &[Method::POST],
+        )
+            .await;
+    }
+
+    #[tokio::test]
+    async fn oidc_login_invalid_body() {
+        let ctx = ProInMemoryContext::test_default();
+
+        let req = test::TestRequest::post()
+            .uri("/oidc_login")
+            .append_header((header::CONTENT_LENGTH, 0))
+            .set_payload("no json");
+        let res = send_pro_test_request(req, ctx).await;
+
+        ErrorResponse::assert(
+            res,
+            415,
+            "UnsupportedMediaType",
+            "Unsupported content type header.",
+        )
+            .await;
+    }
+
+    #[tokio::test]
+    async fn oidc_login_missing_fields() {
+        let ctx = ProInMemoryContext::test_default();
+
+        let auth_code_response = json!({
+            "session_state": "",
+            "code": "",
+        });
+
+        // register user
+        let req = test::TestRequest::post()
+            .uri("/oidc_login")
+            .append_header((header::CONTENT_LENGTH, 0))
+            .set_json(&auth_code_response);
+        let res = send_pro_test_request(req, ctx).await;
+
+        ErrorResponse::assert(
+            res,
+            400,
+            "BodyDeserializeError",
+            "missing field `state` at line 1 column 30",
+        )
+            .await;
+    }
+
+    #[tokio::test]
+    async fn oidc_login_invalid_type() {
+        let ctx = ProInMemoryContext::test_default();
+
+        // register user
+        let req = test::TestRequest::post()
+            .uri("/oidc_login")
+            .append_header((header::CONTENT_LENGTH, 0))
+            .append_header((header::CONTENT_TYPE, "text/html"));
+        let res = send_pro_test_request(req, ctx).await;
+
+        ErrorResponse::assert(
+            res,
+            415,
+            "UnsupportedMediaType",
+            "Unsupported content type header.",
+        )
+            .await;
     }
 }

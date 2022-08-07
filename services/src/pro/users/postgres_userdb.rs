@@ -15,8 +15,11 @@ use bb8_postgres::{
     bb8::Pool, tokio_postgres::tls::MakeTlsConnect, tokio_postgres::tls::TlsConnect,
     tokio_postgres::Socket,
 };
+use chrono::Utc;
 use pwhash::bcrypt;
 use uuid::Uuid;
+use geoengine_datatypes::primitives::Duration;
+use crate::pro::users::oidc::ExternalUserClaims;
 
 pub struct PostgresUserDb<Tls>
 where
@@ -232,6 +235,123 @@ where
         } else {
             Err(error::Error::LoginFailed)
         }
+    }
+
+    async fn login_external(&self, user: ExternalUserClaims, duration: Duration) -> Result<UserSession> {
+        let mut conn = self.conn_pool.get().await?;
+        let stmt = conn
+            .prepare("SELECT id, external_id, email, real_name FROM external_users WHERE external_id = $1;")
+            .await?;
+
+        let row = conn
+            .query_opt(&stmt, &[&user.external_id.to_string()])
+            .await
+            .map_err(|_error| error::Error::LoginFailed)?;
+
+        let user_id = match row {
+            Some(row) => {
+                UserId(row.get(0))
+            }
+            None => {
+                let tx = conn.build_transaction().start().await?;
+
+                let user_id = UserId::new();
+
+                let stmt = tx
+                    .prepare("INSERT INTO roles (id, name) VALUES ($1, $2);")
+                    .await?;
+                tx.execute(&stmt, &[&user_id, &user.email]).await?;
+
+                //TODO: Inconsistent to hashmap implementation, where an external user is not part of the user database.
+                //TODO: A user might be able to login without external login using this (internal) id. Would be a problem with anonymous users as well.
+                let stmt = tx
+                    .prepare("INSERT INTO users (id, active) VALUES ($1, TRUE);")
+                    .await?;
+                tx.execute(&stmt, &[&user_id]).await?;
+
+                let stmt = tx
+                    .prepare(
+                        "INSERT INTO external_users (id, external_id, email, real_name, active) VALUES ($1, $2, $3, $4, $5);",
+                    )
+                    .await?;
+
+                tx.execute(
+                    &stmt,
+                    &[
+                        &user_id,
+                        &user.external_id.to_string(),
+                        &user.email,
+                        &user.real_name,
+                        &true,
+                    ],
+                )
+                    .await?;
+
+                let stmt = tx
+                    .prepare("INSERT INTO user_roles (user_id, role_id) VALUES ($1, $2);")
+                    .await?;
+                tx.execute(&stmt, &[&user_id, &user_id]).await?;
+
+                let stmt = tx
+                    .prepare("INSERT INTO user_roles (user_id, role_id) VALUES ($1, $2);")
+                    .await?;
+                tx.execute(&stmt, &[&user_id, &Role::user_role_id()])
+                    .await?;
+
+                tx.commit().await?;
+
+                user_id
+            }
+        };
+
+        let session_id = SessionId::new();
+        let stmt = conn
+            .prepare(
+                "
+            INSERT INTO sessions (id, user_id, created, valid_until)
+            VALUES ($1, $2, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP + make_interval(secs:=$3))
+            RETURNING created, valid_until;",
+            )
+            .await?; //TODO: Check documentation if inconsistent to hashmap implementation - would happen if CURRENT_TIMESTAMP is called twice in postgres for a single query. Worked in tests.
+
+        let row = conn
+            .query_one(
+                &stmt,
+                &[
+                    &session_id,
+                    &user_id,
+                    &(duration.num_seconds() as f64),
+                ],
+            )
+            .await?;
+
+        let stmt = conn
+            .prepare("SELECT role_id FROM user_roles WHERE user_id = $1;")
+            .await?;
+
+        let rows = conn
+            .query(&stmt, &[&user_id])
+            .await
+            .map_err(|_error| error::Error::LoginFailed)?;
+
+        let roles = rows.into_iter().map(|row| row.get(0)).collect();
+
+        let created : chrono::DateTime<Utc> = row.get(0);
+        let valid_until : chrono::DateTime<Utc> = row.get(1);
+
+        Ok(UserSession {
+            id: session_id,
+            user: UserInfo {
+                id: user_id,
+                email : Some(user.email.clone()),
+                real_name : Some(user.real_name.clone()),
+            },
+            created: created.into(),
+            valid_until: valid_until.into(),
+            project: None,
+            view: None,
+            roles,
+        })
     }
 
     async fn logout(&self, session: SessionId) -> Result<()> {

@@ -4,6 +4,8 @@ use crate::pro::users::{UserCredentials, UserId, UserRegistration, UserSession};
 use crate::projects::{ProjectId, STRectangle};
 use crate::util::user_input::Validated;
 use async_trait::async_trait;
+use geoengine_datatypes::primitives::Duration;
+use crate::pro::users::oidc::ExternalUserClaims;
 
 #[async_trait]
 pub trait UserDb: Send + Sync {
@@ -30,6 +32,15 @@ pub trait UserDb: Send + Sync {
     /// This call fails if the `UserCredentials` are invalid.
     ///
     async fn login(&self, user: UserCredentials) -> Result<UserSession>;
+
+    /// Creates a `Session` for authorized user by providing `ExternalUserClaims`.
+    /// If external user is unknown to the internal system, a new user id is created.
+    ///
+    /// # Errors
+    ///
+    /// This call fails if the `ExternalUserClaims` are invalid.
+    ///
+    async fn login_external(&self, user : ExternalUserClaims, duration: Duration) -> Result<UserSession>;
 
     /// Removes a session from the `UserDB`
     ///
