@@ -70,8 +70,8 @@
         "end": "+262143-12-31T23:59:59.999+00:00"
       },
       "bbox": {
-        "lowerLeftCoordinate": [-171.7579504999999926, 78.2261111100000051],
-        "upperRightCoordinate": [179.309363999999988, -54.80944444]
+        "lowerLeftCoordinate": [-171.75795, -54.809444],
+        "upperRightCoordinate": [179.309364, 78.226111]
       }
     }
   }

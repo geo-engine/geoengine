@@ -11,14 +11,16 @@ use crate::datasets::external::netcdfcf::{
 use crate::error::Result;
 use crate::layers::external::DataProvider;
 use crate::layers::storage::LayerProviderDb;
-use crate::tasks::{Task, TaskContext, TaskManager, TaskStatusInfo};
+use crate::tasks::{Task, TaskContext, TaskManager, TaskStatus, TaskStatusInfo};
 use crate::{contexts::Context, datasets::external::netcdfcf::NetCdfCfDataProvider};
 use actix_web::{
     web::{self, ServiceConfig},
     FromRequest, Responder,
 };
+use futures::channel::oneshot;
 use geoengine_datatypes::error::{BoxedResultExt, ErrorSource};
-use log::warn;
+use geoengine_datatypes::util::gdal::ResamplingMethod;
+use log::{debug, log_enabled, warn, Level::Debug};
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 use std::sync::Arc;
@@ -87,27 +89,34 @@ where
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 struct NetCdfCfOverviewResponse {
     success: Vec<PathBuf>,
     skip: Vec<PathBuf>,
     error: Vec<PathBuf>,
 }
 
+#[derive(Debug, Deserialize)]
+struct CreateOverviewsParams {
+    resampling_method: Option<ResamplingMethod>,
+}
+
 /// Create overviews for a all `NetCDF` files of the provider
 async fn create_overviews<C: Context>(
     session: AdminSession,
     ctx: web::Data<C>,
+    params: Option<web::Json<CreateOverviewsParams>>,
 ) -> Result<impl Responder> {
     let ctx = ctx.into_inner();
 
     let task: Box<dyn Task<C::TaskContext>> = EvbMultiOverviewTask::<C> {
         session,
         ctx: ctx.clone(),
+        resampling_method: params.as_ref().and_then(|p| p.resampling_method),
     }
     .boxed();
 
-    let task_id = ctx.tasks_ref().schedule(task).await?;
+    let task_id = ctx.tasks_ref().schedule(task, None).await?;
 
     Ok(web::Json(TaskResponse::new(task_id)))
 }
@@ -115,6 +124,7 @@ async fn create_overviews<C: Context>(
 struct EvbMultiOverviewTask<C: Context> {
     session: AdminSession,
     ctx: Arc<C>,
+    resampling_method: Option<ResamplingMethod>,
 }
 
 impl<C: Context> EvbMultiOverviewTask<C> {
@@ -132,53 +142,95 @@ impl<C: Context> Task<C::TaskContext> for EvbMultiOverviewTask<C> {
         task_ctx: C::TaskContext,
     ) -> Result<Box<dyn crate::tasks::TaskStatusInfo>, Box<dyn ErrorSource>> {
         let task_ctx = Arc::new(task_ctx);
+        let resampling_method = self.resampling_method;
 
-        let response =
-            with_netcdfcf_provider(self.ctx.as_ref(), &self.session.into(), move |provider| {
-                let mut status = NetCdfCfOverviewResponse {
-                    success: vec![],
-                    skip: vec![],
-                    error: vec![],
-                };
-
-                let files = provider.list_files().map_err(|_| {
+        let files = with_netcdfcf_provider(
+            self.ctx.as_ref(),
+            &self.session.clone().into(),
+            move |provider| {
+                provider.list_files().map_err(|_| {
                     NetCdfCf4DProviderError::CdfCfProviderCannotListFiles {
                         id: NETCDF_CF_PROVIDER_ID,
                     }
-                })?;
+                })
+            },
+        )
+        .await
+        .map_err(ErrorSource::boxed)?;
+        let num_files = files.len();
 
-                let num_files = files.len();
+        let mut status = NetCdfCfOverviewResponse {
+            success: vec![],
+            skip: vec![],
+            error: vec![],
+        };
 
-                for (i, file) in files.into_iter().enumerate() {
-                    // TODO: provide some more detailed pct status
+        for (i, file) in files.into_iter().enumerate() {
+            let subtask: Box<dyn Task<C::TaskContext>> = EvbOverviewTask::<C> {
+                session: self.session.clone(),
+                ctx: self.ctx.clone(),
+                params: CreateOverviewParams {
+                    file: file.clone(),
+                    resampling_method,
+                },
+            }
+            .boxed();
 
-                    match provider.create_overviews(&file) {
-                        Ok(OverviewGeneration::Created) => status.success.push(file),
-                        Ok(OverviewGeneration::Skipped) => status.skip.push(file),
-                        Err(e) => {
-                            warn!("Failed to create overviews for {}: {e}", file.display());
-                            status.error.push(file);
+            let (notification_tx, notification_rx) = oneshot::channel();
+
+            let _subtask_id = self
+                .ctx
+                .tasks_ref()
+                .schedule(subtask, Some(notification_tx))
+                .await
+                .map_err(ErrorSource::boxed)?;
+
+            if let Ok(subtask_status) = notification_rx.await {
+                match subtask_status {
+                    TaskStatus::Completed { info } => {
+                        if let Some(response) =
+                            info.as_any().downcast_ref::<NetCdfCfOverviewResponse>()
+                        {
+                            status.success.extend(response.success.clone());
+                            status.skip.extend(response.skip.clone());
+                            status.error.extend(response.error.clone());
+                        } else {
+                            // must not happen, since we spawned a task that only returns a `NetCdfCfOverviewResponse`
                         }
                     }
-
-                    Self::update_pct(
-                        task_ctx.clone(),
-                        ((i + 1) / num_files) as u8,
-                        status.clone(),
-                    );
+                    TaskStatus::Failed { error } => {
+                        if log_enabled!(Debug) {
+                            debug!("{:?}", error);
+                        }
+                        status.error.push(file);
+                    }
+                    TaskStatus::Running(_) => {
+                        // must not happen, since we used the callback
+                    }
                 }
+            } else {
+                // TODO: can we ignore this?
+            };
 
-                Result::<_, NetCdfCf4DProviderError>::Ok(status.boxed())
-            })
-            .await;
+            Self::update_pct(
+                task_ctx.clone(),
+                ((i + 1) / num_files) as u8,
+                status.clone(),
+            );
+        }
 
-        response.map_err(ErrorSource::boxed)
+        Ok(status.boxed())
+    }
+
+    fn task_type(&self) -> &'static str {
+        "evb-multi-overview"
     }
 }
 
 #[derive(Debug, Deserialize)]
 struct CreateOverviewParams {
     file: PathBuf,
+    resampling_method: Option<ResamplingMethod>,
 }
 
 /// Create overviews for a single `NetCDF` file
@@ -196,7 +248,7 @@ async fn create_overview<C: Context>(
     }
     .boxed();
 
-    let task_id = ctx.tasks_ref().schedule(task).await?;
+    let task_id = ctx.tasks_ref().schedule(task, None).await?;
 
     Ok(web::Json(TaskResponse::new(task_id)))
 }
@@ -214,12 +266,13 @@ impl<C: Context> Task<C::TaskContext> for EvbOverviewTask<C> {
         _ctx: C::TaskContext,
     ) -> Result<Box<dyn crate::tasks::TaskStatusInfo>, Box<dyn ErrorSource>> {
         let file = self.params.file;
+        let resampling_method = self.params.resampling_method;
 
         let response =
             with_netcdfcf_provider(self.ctx.as_ref(), &self.session.into(), move |provider| {
                 // TODO: provide some detailed pct status
 
-                Ok(match provider.create_overviews(&file) {
+                Ok(match provider.create_overviews(&file, resampling_method) {
                     Ok(OverviewGeneration::Created) => NetCdfCfOverviewResponse {
                         success: vec![file],
                         skip: vec![],
@@ -246,6 +299,118 @@ impl<C: Context> Task<C::TaskContext> for EvbOverviewTask<C> {
             .map(TaskStatusInfo::boxed)
             .map_err(ErrorSource::boxed)
     }
+
+    fn task_type(&self) -> &'static str {
+        "evb-overview"
+    }
+
+    fn task_unique_id(&self) -> Option<String> {
+        Some(self.params.file.to_string_lossy().to_string())
+    }
 }
 
-impl TaskStatusInfo for NetCdfCfOverviewResponse {}
+impl TaskStatusInfo for NetCdfCfOverviewResponse {
+    fn as_any(&self) -> &dyn std::any::Any {
+        self
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    use crate::{
+        contexts::{InMemoryContext, Session, SimpleContext},
+        datasets::external::netcdfcf::NetCdfCfDataProviderDefinition,
+        server::{configure_extractors, render_404, render_405},
+        tasks::util::test::wait_for_task_to_finish,
+        util::tests::read_body_string,
+    };
+    use actix_web::{dev::ServiceResponse, http, http::header, middleware, test, web, App};
+    use actix_web_httpauth::headers::authorization::Bearer;
+    use geoengine_datatypes::{test_data, util::test::TestDefault};
+
+    async fn send_test_request<C: SimpleContext>(
+        req: test::TestRequest,
+        ctx: C,
+    ) -> ServiceResponse {
+        let app = test::init_service({
+            let app = App::new()
+                .app_data(web::Data::new(ctx))
+                .wrap(
+                    middleware::ErrorHandlers::default()
+                        .handler(http::StatusCode::NOT_FOUND, render_404)
+                        .handler(http::StatusCode::METHOD_NOT_ALLOWED, render_405),
+                )
+                .wrap(middleware::NormalizePath::trim())
+                .configure(configure_extractors)
+                .service(web::scope("/ebv").configure(init_ebv_routes::<C>()));
+
+            app
+        })
+        .await;
+        test::call_service(&app, req.to_request())
+            .await
+            .map_into_boxed_body()
+    }
+
+    #[tokio::test]
+    async fn test_create_overviews() {
+        crate::util::config::set_config(
+            "session.admin_session_token",
+            "8aca8875-425a-4ef1-8ee6-cdfc62dd7525",
+        )
+        .unwrap();
+
+        let ctx = InMemoryContext::test_default();
+        let admin_session_id = AdminSession::default().id();
+
+        let overview_folder = tempfile::tempdir().unwrap();
+
+        ctx.layer_provider_db_ref()
+            .add_layer_provider(Box::new(NetCdfCfDataProviderDefinition {
+                name: "test".to_string(),
+                path: test_data!("netcdf4d").to_path_buf(),
+                overviews: overview_folder.path().to_path_buf(),
+            }))
+            .await
+            .unwrap();
+
+        let req = actix_web::test::TestRequest::post()
+            .uri("/ebv/create_overviews")
+            .append_header((
+                header::AUTHORIZATION,
+                Bearer::new(admin_session_id.to_string()),
+            ));
+
+        let res = send_test_request(req, ctx.clone()).await;
+
+        assert_eq!(res.status(), 200, "{:?}", res.response());
+
+        let task_response =
+            serde_json::from_str::<TaskResponse>(&read_body_string(res).await).unwrap();
+
+        wait_for_task_to_finish(ctx.tasks(), task_response.task_id).await;
+
+        let status = ctx.tasks().status(task_response.task_id).await.unwrap();
+
+        let mut response = if let TaskStatus::Completed { info } = status {
+            info.as_any()
+                .downcast_ref::<NetCdfCfOverviewResponse>()
+                .unwrap()
+                .clone()
+        } else {
+            panic!("Task must be completed");
+        };
+
+        response.success.sort();
+        assert_eq!(
+            response,
+            NetCdfCfOverviewResponse {
+                success: vec!["dataset_m.nc".into(), "dataset_sm.nc".into()],
+                skip: vec![],
+                error: vec![],
+            }
+        );
+    }
+}
