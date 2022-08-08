@@ -413,13 +413,7 @@ impl LayerCollectionProvider for EbvPortalDataProvider {
                 self.get_group_collections(&class, &ebv, &dataset, &groups, &options)
                     .await?
             }
-            EbvCollectionId::Entity {
-                class: _,
-                ebv: _,
-                dataset: _,
-                groups: _,
-                entity: _,
-            } => return Err(Error::InvalidLayerCollectionId),
+            EbvCollectionId::Entity { .. } => return Err(Error::InvalidLayerCollectionId),
         })
     }
 
