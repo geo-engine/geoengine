@@ -2,20 +2,16 @@ use std::path::PathBuf;
 
 use async_trait::async_trait;
 use geoengine_datatypes::{
-    dataset::{DataId, DataProviderId, ExternalDataId, LayerId},
+    dataset::{DataId, DataProviderId, LayerId},
     primitives::{RasterQueryRectangle, VectorQueryRectangle},
 };
 use geoengine_operators::{
-    engine::{
-        MetaData, MetaDataProvider, RasterOperator, RasterResultDescriptor, TypedOperator,
-        VectorResultDescriptor,
-    },
+    engine::{MetaData, MetaDataProvider, RasterResultDescriptor, VectorResultDescriptor},
     mock::MockDatasetDataSourceLoadingInfo,
-    source::{GdalLoadingInfo, GdalSource, GdalSourceParameters, OgrSourceDataset},
+    source::{GdalLoadingInfo, OgrSourceDataset},
 };
 use reqwest::Url;
 use serde::{Deserialize, Serialize};
-use serde_json::json;
 use snafu::ensure;
 
 use crate::{
@@ -29,14 +25,12 @@ use crate::{
         },
         listing::{LayerCollectionId, LayerCollectionProvider},
     },
-    projects::{RasterSymbology, Symbology},
     util::user_input::Validated,
-    workflows::workflow::Workflow,
 };
 
 use super::{
     ebvportal_api::{EbvPortalApi, NetCdfCfDataProviderPaths},
-    NetCdfCfDataProvider, TimeCoverage,
+    layer_from_netcdf_overview, NetCdfCfDataProvider,
 };
 
 /// Singleton Provider with id `77d0bf11-986e-43f5-b11d-898321f1854c`
@@ -426,8 +420,8 @@ impl LayerCollectionProvider for EbvPortalDataProvider {
 
         match &ebv_id {
             EbvCollectionId::Entity {
-                class,
-                ebv,
+                class: _,
+                ebv: _,
                 dataset,
                 groups,
                 entity,
@@ -443,68 +437,7 @@ impl LayerCollectionProvider for EbvPortalDataProvider {
                     )
                     .await?;
 
-                let netcdf_entity = ebv_hierarchy
-                    .tree
-                    .entities
-                    .into_iter()
-                    .find(|e| e.id == *entity)
-                    .ok_or(Error::UnknownLayerId { id: id.clone() })?;
-
-                let time_steps = match ebv_hierarchy.tree.time_coverage {
-                    TimeCoverage::Regular { start, end, step } => {
-                        if step.step == 0 {
-                            vec![start]
-                        } else {
-                            let mut steps = vec![start];
-                            let mut current = start;
-                            while current < end {
-                                current = (current + step)?;
-                                steps.push(current);
-                            }
-                            steps
-                        }
-                    }
-                    TimeCoverage::List { time_stamps } => time_stamps,
-                };
-
-                let colorizer = ebv_hierarchy.tree.colorizer;
-
-                let group =
-                    find_group(ebv_hierarchy.tree.groups, groups)?.ok_or(Error::InvalidLayerId)?;
-                let data_range = group
-                    .data_range
-                    .unwrap_or_else(|| (colorizer.min_value(), colorizer.max_value()));
-
-                Ok(Layer {
-                    id: ProviderLayerId {
-                        provider_id: EBV_PROVIDER_ID,
-                        layer_id: id.clone(),
-                    },
-                    name: format!("{} > {} > {} > {}", class, ebv, ebv_hierarchy.tree.title, /*netcdf_metric.title, */netcdf_entity.name),
-                    description: format!("{} > {} > {} > {}", class, ebv, ebv_hierarchy.tree.title, /* netcdf_metric.title,*/ netcdf_entity.name),
-                    workflow: Workflow {
-                        operator: TypedOperator::Raster(
-                            GdalSource {
-                                params: GdalSourceParameters {
-                                    data: DataId::External(ExternalDataId {
-                                        provider_id: EBV_PROVIDER_ID,
-                                        layer_id: LayerId(
-                                            json!({
-                                                "fileName": ebv_hierarchy.tree.file_name,
-                                                "groupNames": groups,
-                                                "entity": entity
-                                            })
-                                            .to_string(),
-                                        ),
-                                    }),
-                                },
-                            }
-                            .boxed(),
-                        ),
-                    },
-                    symbology: Some(Symbology::Raster(RasterSymbology { opacity: 1.0, colorizer })),
-                    properties: Some([("timeSteps".to_string(), serde_json::to_string(&time_steps)?),("dataRange".to_string(), serde_json::to_string(&data_range)?)].into_iter().collect()),
-                })
+                layer_from_netcdf_overview(EBV_PROVIDER_ID, id, ebv_hierarchy.tree, groups, *entity)
             }
             _ => return Err(Error::InvalidLayerId),
         }

@@ -17,6 +17,8 @@ use crate::layers::layer::ProviderLayerCollectionId;
 use crate::layers::layer::ProviderLayerId;
 use crate::layers::listing::LayerCollectionId;
 use crate::layers::listing::LayerCollectionProvider;
+use crate::projects::RasterSymbology;
+use crate::projects::Symbology;
 use crate::util::user_input::Validated;
 use crate::workflows::workflow::Workflow;
 use async_trait::async_trait;
@@ -931,20 +933,108 @@ pub fn find_group(
     }
 
     let mut group_stack = groups.iter().collect::<Vec<_>>();
+    let target = group_stack.remove(0);
     let mut group = netcdf_groups
         .into_iter()
-        .find(|g| g.name == *group_stack.remove(0))
+        .find(|g| g.name == *target)
         .ok_or(Error::InvalidLayerCollectionId)?;
 
     while !group_stack.is_empty() {
+        let target = group_stack.remove(0);
         group = group
             .groups
             .into_iter()
-            .find(|g| g.name == *group_stack.remove(0))
+            .find(|g| g.name == *target)
             .ok_or(Error::InvalidLayerCollectionId)?;
     }
 
     Ok(Some(group))
+}
+
+pub fn layer_from_netcdf_overview(
+    provider_id: DataProviderId,
+    layer_id: &LayerId,
+    overview: NetCdfOverview,
+    groups: &[String],
+    entity: usize,
+) -> crate::error::Result<Layer> {
+    let netcdf_entity = overview
+        .entities
+        .into_iter()
+        .find(|e| e.id == entity)
+        .ok_or(Error::UnknownLayerId {
+            id: layer_id.clone(),
+        })?;
+
+    let time_steps = match overview.time_coverage {
+        TimeCoverage::Regular { start, end, step } => {
+            if step.step == 0 {
+                vec![start]
+            } else {
+                let mut steps = vec![start];
+                let mut current = start;
+                while current < end {
+                    current = (current + step)?;
+                    steps.push(current);
+                }
+                steps
+            }
+        }
+        TimeCoverage::List { time_stamps } => time_stamps,
+    };
+
+    let colorizer = overview.colorizer;
+
+    let group = find_group(overview.groups, groups)?.ok_or(Error::InvalidLayerId)?;
+    let data_range = group
+        .data_range
+        .unwrap_or_else(|| (colorizer.min_value(), colorizer.max_value()));
+
+    Ok(Layer {
+        id: ProviderLayerId {
+            provider_id,
+            layer_id: layer_id.clone(),
+        },
+        name: netcdf_entity.name.clone(),
+        description: netcdf_entity.name,
+        workflow: Workflow {
+            operator: TypedOperator::Raster(
+                GdalSource {
+                    params:
+                        GdalSourceParameters {
+                            data:
+                                DataId::External(
+                                    ExternalDataId {
+                                        provider_id,
+                                        layer_id:
+                                            LayerId(
+                                                json!({
+                                                    "fileName": overview.file_name,
+                                                    "groupNames": groups,
+                                                    "entity": entity
+                                                })
+                                                .to_string(),
+                                            ),
+                                    },
+                                ),
+                        },
+                }
+                .boxed(),
+            ),
+        },
+        symbology: Some(Symbology::Raster(RasterSymbology {
+            opacity: 1.0,
+            colorizer,
+        })),
+        properties: Some(
+            [
+                ("timeSteps".to_string(), serde_json::to_string(&time_steps)?),
+                ("dataRange".to_string(), serde_json::to_string(&data_range)?),
+            ]
+            .into_iter()
+            .collect(),
+        ),
+    })
 }
 
 async fn listing_from_netcdf_file(
@@ -1080,47 +1170,7 @@ impl LayerCollectionProvider for NetCdfCfDataProvider {
                 })
                 .await??;
 
-                let netcdf_entity = tree
-                    .entities
-                    .into_iter()
-                    .find(|e| e.id == entity)
-                    .ok_or(Error::UnknownLayerId { id: id.clone() })?;
-
-                Ok(Layer {
-                    id: ProviderLayerId {
-                        provider_id: NETCDF_CF_PROVIDER_ID,
-                        layer_id: id.clone(),
-                    },
-                    name: format!("{} > {}", tree.title, netcdf_entity.name),
-                    description: format!("{} > {}", tree.title, netcdf_entity.name),
-                    workflow: Workflow {
-                        operator: TypedOperator::Raster(
-                            GdalSource {
-                                params:
-                                    GdalSourceParameters {
-                                        data:
-                                            DataId::External(
-                                                ExternalDataId {
-                                                    provider_id: NETCDF_CF_PROVIDER_ID,
-                                                    layer_id:
-                                                        LayerId(
-                                                            json!({
-                                                                "fileName": tree.file_name,
-                                                                "groupNames": groups,
-                                                                "entity": entity
-                                                            })
-                                                            .to_string(),
-                                                        ),
-                                                },
-                                            ),
-                                    },
-                            }
-                            .boxed(),
-                        ),
-                    },
-                    symbology: None,
-                    properties: None,
-                })
+                layer_from_netcdf_overview(NETCDF_CF_PROVIDER_ID, id, tree, &groups, entity)
             }
             _ => return Err(Error::InvalidLayerId),
         }
