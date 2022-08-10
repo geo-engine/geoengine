@@ -302,6 +302,38 @@ mod tests {
         }
     }
 
+    struct FailingTaskWithFailingCleanup;
+
+    #[derive(Debug)]
+    struct FailingTaskWithFailingCleanupError;
+
+    impl std::fmt::Display for FailingTaskWithFailingCleanupError {
+        fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+            write!(f, "FailingTaskWithFailingCleanupError")
+        }
+    }
+
+    impl std::error::Error for FailingTaskWithFailingCleanupError {}
+
+    #[async_trait::async_trait]
+    impl<C: TaskContext + 'static> Task<C> for FailingTaskWithFailingCleanup {
+        async fn run(&self, _ctx: C) -> Result<Box<dyn TaskStatusInfo>, Box<dyn ErrorSource>> {
+            Err(Box::new(FailingTaskWithFailingCleanupError))
+        }
+
+        async fn cleanup_on_error(&self, _ctx: C) -> Result<(), Box<dyn ErrorSource>> {
+            Err(Box::new(FailingTaskWithFailingCleanupError))
+        }
+
+        fn task_type(&self) -> &'static str {
+            "FailingTaskWithFailingCleanup"
+        }
+
+        fn task_unique_id(&self) -> Option<String> {
+            None
+        }
+    }
+
     #[tokio::test]
     async fn test_get_status() {
         let ctx = InMemoryContext::test_default();
@@ -732,6 +764,34 @@ mod tests {
             serde_json::json!({
                 "status": "aborted",
                 "cleanUp": {"status": "completed", "info": null}
+            })
+        );
+    }
+
+    #[tokio::test]
+    async fn test_failing_task_with_failing_cleanup() {
+        let ctx = InMemoryContext::test_default();
+
+        // 1. start task
+
+        let task_id = ctx
+            .tasks_ref()
+            .schedule(FailingTaskWithFailingCleanup.boxed(), None)
+            .await
+            .unwrap();
+
+        // 2. wait for completion
+
+        wait_for_task_to_finish(ctx.tasks(), task_id).await;
+
+        // 3. check results
+
+        assert_eq!(
+            serde_json::to_value(ctx.tasks_ref().status(task_id).await.unwrap()).unwrap(),
+            serde_json::json!({
+                "status": "failed",
+                "error": "FailingTaskWithFailingCleanupError",
+                "cleanUp": {"status": "failed", "error": "FailingTaskWithFailingCleanupError"}
             })
         );
     }
