@@ -129,10 +129,10 @@ impl TimeInterval {
         A::Error: Debug,
         B::Error: Debug,
     {
-        Self {
-            start: start.try_into().unwrap(),
-            end: end.try_into().unwrap(),
-        }
+        let start = start.try_into().unwrap();
+        let end = end.try_into().unwrap();
+        debug_assert!(start <= end);
+        Self { start, end }
     }
 
     /// Returns whether the other `TimeInterval` is contained (smaller or equal) within this interval
