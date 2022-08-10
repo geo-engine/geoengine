@@ -18,7 +18,6 @@ use actix_web::{
 };
 use futures::channel::oneshot;
 use futures::lock::Mutex;
-use futures::TryFutureExt;
 use geoengine_datatypes::dataset::DataProviderId;
 use geoengine_datatypes::error::{BoxedResultExt, ErrorSource};
 use geoengine_datatypes::util::gdal::ResamplingMethod;
@@ -506,24 +505,23 @@ impl<C: Context> Task<C::TaskContext> for EvbMultiOverviewTask<C> {
     }
 
     async fn cleanup_on_error(&self, _ctx: C::TaskContext) -> Result<(), Box<dyn ErrorSource>> {
-        // Tasks clean-up themselves on error.
-        // On abort, we propagate the abort to the current subtask.
+        // Abort is propagated to current subtask
+        // i.e. clean-up is performed by subtasks themselves
 
-        let subtask_id = match self.current_subtask_id.lock().await.take() {
-            Some(id) => id,
-            None => return Ok(()), // no file was in progress, so nothing to clean up
-        };
-
-        // cannot be `force=true`, otherwise we wouldn't call this function
-        self.ctx
-            .tasks_ref()
-            .abort(subtask_id, false)
-            .map_err(ErrorSource::boxed)
-            .await
+        Ok(())
     }
 
     fn task_type(&self) -> &'static str {
         "evb-multi-overview"
+    }
+
+    async fn subtasks(&self) -> Vec<TaskId> {
+        self.current_subtask_id
+            .lock()
+            .await
+            .as_ref()
+            .map(|id| vec![*id])
+            .unwrap_or_default()
     }
 }
 

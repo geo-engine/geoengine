@@ -66,6 +66,14 @@ pub trait Task<C: TaskContext>: Send + Sync {
     fn task_unique_id(&self) -> Option<String> {
         None
     }
+
+    /// Return subtasks of this tasks.
+    ///
+    /// For instance, they will get aborted when this tasks gets aborted.
+    ///
+    async fn subtasks(&self) -> Vec<TaskId> {
+        Default::default()
+    }
 }
 
 /// A way to supply status updates from a [`Task`] to a [`TaskManager`].

@@ -184,6 +184,7 @@ mod tests {
 
     struct NopTask {
         complete_rx: Arc<Mutex<oneshot::Receiver<()>>>,
+        unique_id: Option<String>,
     }
 
     impl NopTask {
@@ -192,6 +193,18 @@ mod tests {
 
             let this = Self {
                 complete_rx: Arc::new(Mutex::new(complete_rx)),
+                unique_id: None,
+            };
+
+            (this, complete_tx)
+        }
+
+        pub fn new_with_sender_and_unique_id(unique_id: String) -> (Self, oneshot::Sender<()>) {
+            let (complete_tx, complete_rx) = oneshot::channel();
+
+            let this = Self {
+                complete_rx: Arc::new(Mutex::new(complete_rx)),
+                unique_id: Some(unique_id),
             };
 
             (this, complete_tx)
@@ -223,7 +236,69 @@ mod tests {
         }
 
         fn task_unique_id(&self) -> Option<String> {
-            Some("highlander task".to_string())
+            self.unique_id.clone()
+        }
+    }
+
+    struct TaskWithChildren<T: TaskManager<C>, C: TaskContext + 'static> {
+        children: Arc<Mutex<Vec<Box<dyn Task<C>>>>>,
+        subtask_ids: Arc<Mutex<Vec<TaskId>>>,
+        task_manager: Arc<T>,
+        complete_rx: Arc<Mutex<oneshot::Receiver<()>>>,
+    }
+
+    impl<T: TaskManager<C>, C: TaskContext + 'static> TaskWithChildren<T, C> {
+        pub fn new_with_sender(
+            children: Vec<Box<dyn Task<C>>>,
+            task_manager: Arc<T>,
+        ) -> (Self, oneshot::Sender<()>) {
+            let (complete_tx, complete_rx) = oneshot::channel();
+
+            let this = Self {
+                children: Arc::new(Mutex::new(children)),
+                subtask_ids: Arc::new(Mutex::new(vec![])),
+                task_manager,
+                complete_rx: Arc::new(Mutex::new(complete_rx)),
+            };
+
+            (this, complete_tx)
+        }
+    }
+
+    #[async_trait::async_trait]
+    impl<T: TaskManager<C>, C: TaskContext + 'static> Task<C> for TaskWithChildren<T, C> {
+        async fn run(&self, _ctx: C) -> Result<Box<dyn TaskStatusInfo>, Box<dyn ErrorSource>> {
+            for child in self.children.lock().await.drain(..) {
+                let subtask_id = self
+                    .task_manager
+                    .schedule(child, None)
+                    .await
+                    .map_err(ErrorSource::boxed)?;
+                self.subtask_ids.lock().await.push(subtask_id);
+            }
+
+            let mut complete_rx_lock = self.complete_rx.lock().await;
+            let pinned_receiver: Pin<&mut oneshot::Receiver<()>> = Pin::new(&mut complete_rx_lock);
+
+            pinned_receiver.await.unwrap();
+
+            Ok("completed".to_string().boxed())
+        }
+
+        async fn cleanup_on_error(&self, _ctx: C) -> Result<(), Box<dyn ErrorSource>> {
+            Ok(())
+        }
+
+        fn task_type(&self) -> &'static str {
+            "TaskWithChildren"
+        }
+
+        fn task_unique_id(&self) -> Option<String> {
+            None
+        }
+
+        async fn subtasks(&self) -> Vec<TaskId> {
+            self.subtask_ids.lock().await.clone()
         }
     }
 
@@ -502,12 +577,13 @@ mod tests {
 
     #[tokio::test]
     async fn test_duplicate() {
+        let unique_id = "highlander".to_string();
         let ctx = InMemoryContext::test_default();
 
-        let (task, complete_tx) = NopTask::new_with_sender();
+        let (task, complete_tx) = NopTask::new_with_sender_and_unique_id(unique_id.clone());
         ctx.tasks_ref().schedule(task.boxed(), None).await.unwrap();
 
-        let (task, _) = NopTask::new_with_sender();
+        let (task, _) = NopTask::new_with_sender_and_unique_id(unique_id.clone());
         assert!(ctx.tasks_ref().schedule(task.boxed(), None).await.is_err());
 
         complete_tx.send(()).unwrap();
@@ -515,11 +591,12 @@ mod tests {
 
     #[tokio::test]
     async fn test_duplicate_after_finish() {
+        let unique_id = "highlander".to_string();
         let ctx = InMemoryContext::test_default();
 
         // 1. start first task
 
-        let (task, complete_tx) = NopTask::new_with_sender();
+        let (task, complete_tx) = NopTask::new_with_sender_and_unique_id(unique_id.clone());
         let task_id = ctx.tasks_ref().schedule(task.boxed(), None).await.unwrap();
 
         // 2. wait for task to finish
@@ -530,7 +607,7 @@ mod tests {
 
         // 3. start second task
 
-        let (task, complete_tx) = NopTask::new_with_sender();
+        let (task, complete_tx) = NopTask::new_with_sender_and_unique_id(unique_id.clone());
         assert!(ctx.tasks_ref().schedule(task.boxed(), None).await.is_ok());
 
         complete_tx.send(()).unwrap();
@@ -559,5 +636,103 @@ mod tests {
             schedule_complete_rx.await.unwrap(),
             TaskStatus::Completed { info: _ }
         ));
+    }
+
+    #[tokio::test]
+    async fn abort_subtasks() {
+        let ctx = InMemoryContext::test_default();
+
+        // 1. start super task
+
+        let (subtask_a, complete_tx_a) = NopTask::new_with_sender();
+        let (subtask_b, complete_tx_b) = NopTask::new_with_sender();
+
+        let (task, _complete_tx) = TaskWithChildren::new_with_sender(
+            vec![subtask_a.boxed(), subtask_b.boxed()],
+            ctx.tasks(),
+        );
+
+        let task_id = ctx.tasks_ref().schedule(task.boxed(), None).await.unwrap();
+
+        // 2. wait for all subtasks to schedule
+
+        let all_task_ids: Vec<TaskId> = crate::util::retry::retry(5, 100, 2., || {
+            let task_manager = ctx.tasks();
+            async move {
+                let task_list = task_manager
+                    .list(
+                        TaskListOptions {
+                            filter: None,
+                            offset: 0,
+                            limit: 10,
+                        }
+                        .validated()
+                        .unwrap(),
+                    )
+                    .await
+                    .unwrap();
+
+                if task_list.len() == 3 {
+                    Ok(task_list.into_iter().map(|t| t.task_id).collect())
+                } else {
+                    Err(())
+                }
+            }
+        })
+        .await
+        .unwrap();
+
+        // 3. abort task
+
+        ctx.tasks_ref().abort(task_id, false).await.unwrap();
+
+        // allow clean-up to complete
+        complete_tx_a.send(()).unwrap();
+        complete_tx_b.send(()).unwrap();
+
+        // 4. wait for completion
+
+        for task_id in all_task_ids {
+            wait_for_task_to_finish(ctx.tasks(), task_id).await;
+        }
+
+        // 5. check results
+
+        let list = ctx
+            .tasks_ref()
+            .list(
+                TaskListOptions {
+                    filter: None,
+                    offset: 0,
+                    limit: 10,
+                }
+                .validated()
+                .unwrap(),
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(list.len(), 3);
+        assert_eq!(
+            serde_json::to_value(&list[0].status).unwrap(),
+            serde_json::json!({
+                "status": "aborted",
+                "cleanUp": {"status": "completed", "info": null}
+            })
+        );
+        assert_eq!(
+            serde_json::to_value(&list[1].status).unwrap(),
+            serde_json::json!({
+                "status": "aborted",
+                "cleanUp": {"status": "completed", "info": null}
+            })
+        );
+        assert_eq!(
+            serde_json::to_value(&list[2].status).unwrap(),
+            serde_json::json!({
+                "status": "aborted",
+                "cleanUp": {"status": "completed", "info": null}
+            })
+        );
     }
 }

@@ -6,6 +6,7 @@ use crate::{contexts::Db, error::Result, util::user_input::Validated};
 use futures::channel::oneshot;
 use futures::StreamExt;
 use geoengine_datatypes::{error::ErrorSource, util::Identifier};
+use log::warn;
 use std::{
     collections::{HashMap, HashSet, VecDeque},
     sync::Arc,
@@ -60,6 +61,7 @@ impl SimpleTaskManager {
     }
 }
 
+#[derive(Debug)]
 struct TaskUpdateStatusWithTaskId {
     pub task_id: TaskId,
     pub status: Db<TaskStatus>,
@@ -161,10 +163,9 @@ impl TaskManager<SimpleTaskManagerContext> for SimpleTaskManager {
     ) -> Result<Vec<TaskStatusWithId>, TaskError> {
         let lock = self.status_list.read().await;
 
-        let iter = lock.range(options.offset as usize..);
-        let stream = futures::stream::iter(iter);
+        let stream = futures::stream::iter(lock.iter());
 
-        let result = stream
+        let result: Vec<TaskStatusWithId> = stream
             .filter_map(|task_status_with_id| async {
                 let task_status = task_status_with_id.status.read().await;
 
@@ -182,6 +183,7 @@ impl TaskManager<SimpleTaskManagerContext> for SimpleTaskManager {
                     _ => None,
                 }
             })
+            .skip(options.offset as usize)
             .take(options.limit as usize)
             .collect()
             .await;
@@ -220,17 +222,47 @@ impl TaskManager<SimpleTaskManagerContext> for SimpleTaskManager {
             true
         };
 
+        let subtask_ids = task_handle.task.subtasks().await;
+
         if force || task_finished_before_being_aborted {
             set_status_to_no_clean_up(&task_handle.status).await;
 
             remove_unique_key(&task_handle, &mut write_lock.unique_tasks);
+
+            // propagate abort to subtasks
+            drop(write_lock); // prevent deadlocks because the subtask abort tries to fetch the lock
+            abort_subtasks(self.clone(), subtask_ids, force, task_id).await;
 
             // no clean-up in this case
             return Ok(());
         }
 
         set_status_to_aborting(&task_handle.status).await;
-        clean_up_phase(self.clone(), task_handle, &mut write_lock, task_id).await
+        let result = clean_up_phase(self.clone(), task_handle, &mut write_lock, task_id).await;
+
+        // propagate abort to subtasks
+        drop(write_lock); // prevent deadlocks because the subtask abort tries to fetch the lock
+        abort_subtasks(self.clone(), subtask_ids, force, task_id).await;
+
+        result
+    }
+}
+
+async fn abort_subtasks(
+    task_manager: SimpleTaskManager,
+    subtask_ids: Vec<TaskId>,
+    force: bool,
+    supertask_id: TaskId,
+) {
+    for subtask_id in subtask_ids {
+        // don't fail if subtask failed to abort
+        let subtask_abort_result = task_manager.abort(subtask_id, force).await;
+
+        if let Err(subtask_abort_result) = subtask_abort_result {
+            warn!(
+                "failed to abort subtask {subtask_id} of task {supertask_id}: {subtask_abort_result:?}"
+            );
+        }
     }
 }
 
