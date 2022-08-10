@@ -1346,6 +1346,66 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn test_query_before_data() {
+        let mut exe_ctx = MockExecutionContext::test_default();
+        let query_ctx = MockQueryContext::test_default();
+        let id = add_ndvi_dataset(&mut exe_ctx);
+
+        let output_shape: GridShape2D = [256, 256].into();
+        let output_bounds =
+            SpatialPartition2D::new_unchecked((-180., 90.).into(), (180., -90.).into());
+        let time_interval = TimeInterval::new_unchecked(1_380_585_600_000, 1_380_585_600_000); // 2013-10-01 - 2013-10-01
+
+        let c = query_gdal_source(
+            &mut exe_ctx,
+            &query_ctx,
+            id,
+            output_shape,
+            output_bounds,
+            time_interval,
+        )
+        .await;
+        let c: Vec<RasterTile2D<u8>> = c.into_iter().map(Result::unwrap).collect();
+
+        assert_eq!(c.len(), 4);
+
+        assert_eq!(
+            c[0].time,
+            TimeInterval::new_unchecked(TimeInstance::MIN, 1_388_534_400_000) // bot - 2014-01-01
+        );
+    }
+
+    #[tokio::test]
+    async fn test_query_after_data() {
+        let mut exe_ctx = MockExecutionContext::test_default();
+        let query_ctx = MockQueryContext::test_default();
+        let id = add_ndvi_dataset(&mut exe_ctx);
+
+        let output_shape: GridShape2D = [256, 256].into();
+        let output_bounds =
+            SpatialPartition2D::new_unchecked((-180., 90.).into(), (180., -90.).into());
+        let time_interval = TimeInterval::new_unchecked(1_420_074_000_000, 1_420_074_000_000); // 2015-01-01 - 2015-01-01
+
+        let c = query_gdal_source(
+            &mut exe_ctx,
+            &query_ctx,
+            id,
+            output_shape,
+            output_bounds,
+            time_interval,
+        )
+        .await;
+        let c: Vec<RasterTile2D<u8>> = c.into_iter().map(Result::unwrap).collect();
+
+        assert_eq!(c.len(), 4);
+
+        assert_eq!(
+            c[0].time,
+            TimeInterval::new_unchecked(1_404_172_800_000, TimeInstance::MAX) // 2014-07-01 - eot
+        );
+    }
+
+    #[tokio::test]
     async fn test_nodata() {
         hide_gdal_errors();
 
