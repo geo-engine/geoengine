@@ -22,7 +22,7 @@ use futures::TryFutureExt;
 use geoengine_datatypes::dataset::DataProviderId;
 use geoengine_datatypes::error::{BoxedResultExt, ErrorSource};
 use geoengine_datatypes::util::gdal::ResamplingMethod;
-use log::{debug, log_enabled, warn, Level::Debug};
+use log::{debug, warn};
 use serde::{Deserialize, Serialize};
 use snafu::{ResultExt, Snafu};
 use std::path::PathBuf;
@@ -476,15 +476,13 @@ impl<C: Context> Task<C::TaskContext> for EvbMultiOverviewTask<C> {
                         }
                     }
                     TaskStatus::Aborted { .. } => {
-                        if log_enabled!(Debug) {
-                            debug!("Subtask aborted");
-                        }
+                        debug!("Subtask aborted");
+
                         status.error.push(file);
                     }
                     TaskStatus::Failed { error, .. } => {
-                        if log_enabled!(Debug) {
-                            debug!("{:?}", error);
-                        }
+                        debug!("{:?}", error);
+
                         status.error.push(file);
                     }
                     TaskStatus::Running(_) => {
