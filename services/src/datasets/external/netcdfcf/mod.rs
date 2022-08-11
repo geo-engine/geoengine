@@ -839,10 +839,6 @@ impl DataProvider for NetCdfCfDataProvider {
             provenance: None,
         })
     }
-
-    fn as_any(&self) -> &dyn std::any::Any {
-        self
-    }
 }
 
 #[async_trait]

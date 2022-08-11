@@ -340,10 +340,6 @@ impl DataProvider for GfbioDataProvider {
             }),
         })
     }
-
-    fn as_any(&self) -> &dyn std::any::Any {
-        self
-    }
 }
 
 #[async_trait]
