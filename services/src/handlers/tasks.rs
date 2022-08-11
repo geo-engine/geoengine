@@ -240,22 +240,22 @@ mod tests {
         }
     }
 
-    struct TaskWithChildren<T: TaskManager<C>, C: TaskContext + 'static> {
-        children: Arc<Mutex<Vec<Box<dyn Task<C>>>>>,
+    struct TaskTree<T: TaskManager<C>, C: TaskContext + 'static> {
+        subtasks: Arc<Mutex<Vec<Box<dyn Task<C>>>>>,
         subtask_ids: Arc<Mutex<Vec<TaskId>>>,
         task_manager: Arc<T>,
         complete_rx: Arc<Mutex<oneshot::Receiver<()>>>,
     }
 
-    impl<T: TaskManager<C>, C: TaskContext + 'static> TaskWithChildren<T, C> {
+    impl<T: TaskManager<C>, C: TaskContext + 'static> TaskTree<T, C> {
         pub fn new_with_sender(
-            children: Vec<Box<dyn Task<C>>>,
+            subtasks: Vec<Box<dyn Task<C>>>,
             task_manager: Arc<T>,
         ) -> (Self, oneshot::Sender<()>) {
             let (complete_tx, complete_rx) = oneshot::channel();
 
             let this = Self {
-                children: Arc::new(Mutex::new(children)),
+                subtasks: Arc::new(Mutex::new(subtasks)),
                 subtask_ids: Arc::new(Mutex::new(vec![])),
                 task_manager,
                 complete_rx: Arc::new(Mutex::new(complete_rx)),
@@ -266,12 +266,12 @@ mod tests {
     }
 
     #[async_trait::async_trait]
-    impl<T: TaskManager<C>, C: TaskContext + 'static> Task<C> for TaskWithChildren<T, C> {
+    impl<T: TaskManager<C>, C: TaskContext + 'static> Task<C> for TaskTree<T, C> {
         async fn run(&self, _ctx: C) -> Result<Box<dyn TaskStatusInfo>, Box<dyn ErrorSource>> {
-            for child in self.children.lock().await.drain(..) {
+            for subtask in self.subtasks.lock().await.drain(..) {
                 let subtask_id = self
                     .task_manager
-                    .schedule(child, None)
+                    .schedule(subtask, None)
                     .await
                     .map_err(ErrorSource::boxed)?;
                 self.subtask_ids.lock().await.push(subtask_id);
@@ -290,7 +290,7 @@ mod tests {
         }
 
         fn task_type(&self) -> &'static str {
-            "TaskWithChildren"
+            stringify!(TaskTree)
         }
 
         fn task_unique_id(&self) -> Option<String> {
@@ -679,10 +679,8 @@ mod tests {
         let (subtask_a, complete_tx_a) = NopTask::new_with_sender();
         let (subtask_b, complete_tx_b) = NopTask::new_with_sender();
 
-        let (task, _complete_tx) = TaskWithChildren::new_with_sender(
-            vec![subtask_a.boxed(), subtask_b.boxed()],
-            ctx.tasks(),
-        );
+        let (task, _complete_tx) =
+            TaskTree::new_with_sender(vec![subtask_a.boxed(), subtask_b.boxed()], ctx.tasks());
 
         let task_id = ctx.tasks_ref().schedule(task.boxed(), None).await.unwrap();
 
