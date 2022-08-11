@@ -142,6 +142,9 @@ pub enum NetCdfCf4DProviderError {
     DatasetIsNotInProviderPath {
         source: std::path::StripPrefixError,
     },
+    FileIsNotInProviderPath {
+        file: String,
+    },
     CannotRetrieveUnit {
         source: GdalError,
     },

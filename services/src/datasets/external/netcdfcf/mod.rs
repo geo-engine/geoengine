@@ -19,6 +19,7 @@ use crate::layers::listing::LayerCollectionId;
 use crate::layers::listing::LayerCollectionProvider;
 use crate::projects::RasterSymbology;
 use crate::projects::Symbology;
+use crate::util::canonicalize_subpath;
 use crate::util::user_input::Validated;
 use crate::workflows::workflow::Workflow;
 use async_trait::async_trait;
@@ -393,12 +394,11 @@ impl NetCdfCfDataProvider {
         let dataset_id: NetCdfCf4DDatasetId =
             serde_json::from_str(&dataset.layer_id.0).context(error::CannotParseDatasetId)?;
 
-        let path = path.join(&dataset_id.file_name);
-
-        // check that file does not "escape" the provider path
-        if let Err(source) = path.strip_prefix(&path) {
-            return Err(NetCdfCf4DProviderError::DatasetIsNotInProviderPath { source });
-        }
+        let path = canonicalize_subpath(path, Path::new(&dataset_id.file_name)).map_err(|_| {
+            NetCdfCf4DProviderError::FileIsNotInProviderPath {
+                file: dataset_id.file_name.clone(),
+            }
+        })?;
 
         let group_path = dataset_id.group_names.join("/");
         let gdal_path = format!(
@@ -1038,13 +1038,13 @@ pub fn layer_from_netcdf_overview(
 }
 
 async fn listing_from_netcdf_file(
-    file_path: PathBuf,
+    relative_file_path: PathBuf,
     groups: &[String],
     provider_path: PathBuf,
     overview_path: PathBuf,
     options: &LayerCollectionListOptions,
 ) -> crate::error::Result<Vec<CollectionItem>> {
-    let fp = file_path.clone();
+    let fp = relative_file_path.clone();
     let tree = tokio::task::spawn_blocking(move || {
         NetCdfCfDataProvider::build_netcdf_tree(&provider_path, Some(&overview_path), &fp, false)
             .map_err(|_| Error::InvalidLayerCollectionId)
@@ -1063,7 +1063,7 @@ async fn listing_from_netcdf_file(
                     id: ProviderLayerId {
                         provider_id: NETCDF_CF_PROVIDER_ID,
                         layer_id: NetCdfLayerCollectionId::Entity {
-                            path: file_path.clone(),
+                            path: relative_file_path.clone(),
                             groups: groups.to_owned(),
                             entity: entity.id,
                         }
@@ -1089,7 +1089,7 @@ async fn listing_from_netcdf_file(
                     id: ProviderLayerCollectionId {
                         provider_id: NETCDF_CF_PROVIDER_ID,
                         collection_id: NetCdfLayerCollectionId::Group {
-                            path: file_path.clone(),
+                            path: relative_file_path.clone(),
                             groups: out_groups,
                         }
                         .try_into()?,
@@ -1114,10 +1114,16 @@ impl LayerCollectionProvider for NetCdfCfDataProvider {
         let id: NetCdfLayerCollectionId = serde_json::from_str(&collection.0)?;
 
         match id {
-            NetCdfLayerCollectionId::Path { path } if self.path.join(&path).is_dir() => {
+            NetCdfLayerCollectionId::Path { path }
+                if canonicalize_subpath(&self.path, &path).is_ok()
+                    && self.path.join(&path).is_dir() =>
+            {
                 listing_from_dir(&self.path, &path).await
             }
-            NetCdfLayerCollectionId::Path { path } if self.is_netcdf_file(&path) => {
+            NetCdfLayerCollectionId::Path { path }
+                if canonicalize_subpath(&self.path, &path).is_ok()
+                    && self.is_netcdf_file(&path) =>
+            {
                 listing_from_netcdf_file(
                     path,
                     &[],
@@ -1127,7 +1133,10 @@ impl LayerCollectionProvider for NetCdfCfDataProvider {
                 )
                 .await
             }
-            NetCdfLayerCollectionId::Group { path, groups } if self.is_netcdf_file(&path) => {
+            NetCdfLayerCollectionId::Group { path, groups }
+                if canonicalize_subpath(&self.path, &path).is_ok()
+                    && self.is_netcdf_file(&path) =>
+            {
                 listing_from_netcdf_file(
                     path,
                     &groups,

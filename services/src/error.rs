@@ -1,3 +1,5 @@
+use std::path::PathBuf;
+
 use crate::{datasets::external::netcdfcf::NetCdfCf4DProviderError, handlers::ErrorResponse};
 use crate::{layers::listing::LayerCollectionId, workflows::workflow::WorkflowId};
 use actix_web::http::StatusCode;
@@ -357,6 +359,11 @@ pub enum Error {
     #[snafu(context(false))]
     WorkflowApi {
         source: crate::handlers::workflows::WorkflowApiError,
+    },
+
+    SubPathMustNotEscapeBasePath {
+        base: PathBuf,
+        sub_path: PathBuf,
     },
 }
 
