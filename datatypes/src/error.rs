@@ -288,6 +288,15 @@ pub enum Error {
     },
 
     TimeStepIterStartMustNotBeBeginOfTime,
+
+    MinMustBeSmallerThanMax {
+        min: f64,
+        max: f64,
+    },
+
+    ColorizerRescaleNotSupported {
+        colorizer: String,
+    },
 }
 
 impl From<arrow::error::ArrowError> for Error {

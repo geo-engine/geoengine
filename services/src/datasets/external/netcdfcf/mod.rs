@@ -976,12 +976,17 @@ pub fn layer_from_netcdf_overview(
         TimeCoverage::List { time_stamps } => time_stamps,
     };
 
-    let colorizer = overview.colorizer;
-
     let group = find_group(overview.groups, groups)?.ok_or(Error::InvalidLayerId)?;
-    let data_range = group
-        .data_range
-        .unwrap_or_else(|| (colorizer.min_value(), colorizer.max_value()));
+
+    let (data_range, colorizer) = if let Some(data_range) = group.data_range {
+        (
+            data_range,
+            overview.colorizer.rescale(data_range.0, data_range.1)?,
+        )
+    } else {
+        let colorizer = overview.colorizer;
+        ((colorizer.min_value(), colorizer.max_value()), colorizer)
+    };
 
     Ok(Layer {
         id: ProviderLayerId {
