@@ -41,6 +41,7 @@ mod portal_responses {
         pub license: String,
         pub dataset: EbvDatasetsResponseDataset,
         pub ebv: EbvDatasetsResponseEbv,
+        pub ebv_scenario: EbvDatasetsResponseEbvScenario,
     }
 
     #[derive(Debug, Deserialize)]
@@ -58,6 +59,18 @@ mod portal_responses {
     pub struct EbvDatasetsResponseEbv {
         pub ebv_class: String,
         pub ebv_name: String,
+    }
+
+    #[derive(Debug, Deserialize)]
+    #[serde(untagged)]
+    pub enum EbvDatasetsResponseEbvScenario {
+        String(String),
+        Value(EbvDatasetsResponseEbvScenarioValue),
+    }
+
+    #[derive(Debug, Deserialize)]
+    pub struct EbvDatasetsResponseEbvScenarioValue {
+        pub ebv_scenario_classification_name: String,
     }
 }
 
@@ -130,6 +143,10 @@ impl EbvPortalApi {
                 dataset_path: data.dataset.pathname,
                 ebv_class: data.ebv.ebv_class,
                 ebv_name: data.ebv.ebv_name,
+                has_scenario: matches!(
+                    data.ebv_scenario,
+                    portal_responses::EbvDatasetsResponseEbvScenario::Value(_)
+                ),
             })
             .collect())
     }
@@ -157,6 +174,10 @@ impl EbvPortalApi {
                 dataset_path: data.dataset.pathname,
                 ebv_class: data.ebv.ebv_class,
                 ebv_name: data.ebv.ebv_name,
+                has_scenario: matches!(
+                    data.ebv_scenario,
+                    portal_responses::EbvDatasetsResponseEbvScenario::Value(_)
+                ),
             })
             .next();
 
@@ -210,7 +231,9 @@ pub struct EbvDataset {
     pub dataset_path: String,
     pub ebv_class: String,
     pub ebv_name: String,
+    pub has_scenario: bool,
 }
+
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct EbvHierarchy {
@@ -221,4 +244,26 @@ pub struct EbvHierarchy {
 pub struct NetCdfCfDataProviderPaths {
     pub provider_path: PathBuf,
     pub overview_path: PathBuf,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::portal_responses::EbvDatasetsResponseEbvScenario;
+
+    #[test]
+    fn it_parses_ebv_scenario() {
+        let value: EbvDatasetsResponseEbvScenario = serde_json::from_str(
+            r#"{
+                "ebv_scenario_classification_name": "foo",
+                "other_field": "bar"
+            }"#,
+        )
+        .unwrap();
+
+        matches!(value, EbvDatasetsResponseEbvScenario::Value(_));
+
+        let value: EbvDatasetsResponseEbvScenario = serde_json::from_str(r#""N/A""#).unwrap();
+
+        matches!(value, EbvDatasetsResponseEbvScenario::String(_));
+    }
 }

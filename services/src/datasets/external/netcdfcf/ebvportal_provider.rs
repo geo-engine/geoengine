@@ -229,7 +229,10 @@ impl EbvPortalDataProvider {
                     },
                     name: d.name.clone(),
                     description: d.description,
-                    entry_label: Some("Metric".to_string()),
+                    entry_label: d
+                        .has_scenario
+                        .then_some("Scenario".to_string())
+                        .or_else(|| Some("Metric".to_string())),
                     properties: Some(
                         [
                             (
@@ -281,7 +284,11 @@ impl EbvPortalDataProvider {
                     },
                     name: g.title,
                     description: g.description,
-                    entry_label: Some("Entity".to_string()),
+                    entry_label: g
+                        .groups
+                        .is_empty()
+                        .then_some("Entity".to_string())
+                        .or_else(|| Some("Metric".to_string())),
                     properties: None,
                 }))
             })
