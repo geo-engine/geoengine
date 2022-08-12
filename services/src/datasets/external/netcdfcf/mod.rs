@@ -1,4 +1,3 @@
-#[cfg(feature = "ebv")]
 pub use self::ebvportal_provider::{EbvPortalDataProvider, EBV_PROVIDER_ID};
 pub use self::error::NetCdfCf4DProviderError;
 use self::gdalmd::MdGroup;
@@ -59,9 +58,7 @@ use std::path::{Path, PathBuf};
 use std::str::FromStr;
 use walkdir::{DirEntry, WalkDir};
 
-#[cfg(feature = "ebv")]
 mod ebvportal_api;
-#[cfg(feature = "ebv")]
 mod ebvportal_provider;
 pub mod error;
 pub mod gdalmd;
