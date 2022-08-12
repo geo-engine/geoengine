@@ -11,16 +11,17 @@ use crate::datasets::external::netcdfcf::{
 use crate::error::Result;
 use crate::layers::external::DataProvider;
 use crate::layers::storage::LayerProviderDb;
-use crate::tasks::{Task, TaskContext, TaskManager, TaskStatus, TaskStatusInfo};
+use crate::tasks::{Task, TaskContext, TaskId, TaskManager, TaskStatus, TaskStatusInfo};
 use crate::{contexts::Context, datasets::external::netcdfcf::NetCdfCfDataProvider};
 use actix_web::{
     web::{self, ServiceConfig},
     FromRequest, Responder,
 };
 use futures::channel::oneshot;
+use futures::lock::Mutex;
 use geoengine_datatypes::error::{BoxedResultExt, ErrorSource};
 use geoengine_datatypes::util::gdal::ResamplingMethod;
-use log::{debug, log_enabled, warn, Level::Debug};
+use log::{debug, warn};
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 use std::sync::Arc;
@@ -113,6 +114,7 @@ async fn create_overviews<C: Context>(
         session,
         ctx: ctx.clone(),
         resampling_method: params.as_ref().and_then(|p| p.resampling_method),
+        current_subtask_id: Arc::new(Mutex::new(None)),
     }
     .boxed();
 
@@ -125,6 +127,7 @@ struct EvbMultiOverviewTask<C: Context> {
     session: AdminSession,
     ctx: Arc<C>,
     resampling_method: Option<ResamplingMethod>,
+    current_subtask_id: Arc<Mutex<Option<TaskId>>>,
 }
 
 impl<C: Context> EvbMultiOverviewTask<C> {
@@ -138,15 +141,17 @@ impl<C: Context> EvbMultiOverviewTask<C> {
 #[async_trait::async_trait]
 impl<C: Context> Task<C::TaskContext> for EvbMultiOverviewTask<C> {
     async fn run(
-        self: Box<Self>,
+        &self,
         task_ctx: C::TaskContext,
     ) -> Result<Box<dyn crate::tasks::TaskStatusInfo>, Box<dyn ErrorSource>> {
         let task_ctx = Arc::new(task_ctx);
+        let session = self.session.clone();
         let resampling_method = self.resampling_method;
+        let current_subtask_id = self.current_subtask_id.clone();
 
         let files = with_netcdfcf_provider(
             self.ctx.as_ref(),
-            &self.session.clone().into(),
+            &session.clone().into(),
             move |provider| {
                 provider.list_files().map_err(|_| {
                     NetCdfCf4DProviderError::CdfCfProviderCannotListFiles {
@@ -167,7 +172,7 @@ impl<C: Context> Task<C::TaskContext> for EvbMultiOverviewTask<C> {
 
         for (i, file) in files.into_iter().enumerate() {
             let subtask: Box<dyn Task<C::TaskContext>> = EvbOverviewTask::<C> {
-                session: self.session.clone(),
+                session: session.clone(),
                 ctx: self.ctx.clone(),
                 params: CreateOverviewParams {
                     file: file.clone(),
@@ -178,16 +183,20 @@ impl<C: Context> Task<C::TaskContext> for EvbMultiOverviewTask<C> {
 
             let (notification_tx, notification_rx) = oneshot::channel();
 
-            let _subtask_id = self
+            let subtask_id = self
                 .ctx
                 .tasks_ref()
                 .schedule(subtask, Some(notification_tx))
                 .await
                 .map_err(ErrorSource::boxed)?;
 
+            current_subtask_id.lock().await.replace(subtask_id);
+
             if let Ok(subtask_status) = notification_rx.await {
                 match subtask_status {
                     TaskStatus::Completed { info } => {
+                        current_subtask_id.lock().await.take();
+
                         if let Some(response) =
                             info.as_any().downcast_ref::<NetCdfCfOverviewResponse>()
                         {
@@ -198,20 +207,26 @@ impl<C: Context> Task<C::TaskContext> for EvbMultiOverviewTask<C> {
                             // must not happen, since we spawned a task that only returns a `NetCdfCfOverviewResponse`
                         }
                     }
-                    TaskStatus::Failed { error } => {
-                        if log_enabled!(Debug) {
-                            debug!("{:?}", error);
-                        }
+                    TaskStatus::Aborted { .. } => {
+                        debug!("Subtask aborted");
+
+                        status.error.push(file);
+                    }
+                    TaskStatus::Failed { error, .. } => {
+                        debug!("{:?}", error);
+
                         status.error.push(file);
                     }
                     TaskStatus::Running(_) => {
                         // must not happen, since we used the callback
+                        debug!("Ran into task status that must not happend: running/aborted after finish");
                     }
                 }
             } else {
                 // TODO: can we ignore this?
             };
 
+            // TODO: grab finished pct from subtasks
             Self::update_pct(
                 task_ctx.clone(),
                 ((i + 1) / num_files) as u8,
@@ -222,8 +237,24 @@ impl<C: Context> Task<C::TaskContext> for EvbMultiOverviewTask<C> {
         Ok(status.boxed())
     }
 
+    async fn cleanup_on_error(&self, _ctx: C::TaskContext) -> Result<(), Box<dyn ErrorSource>> {
+        // Abort is propagated to current subtask
+        // i.e. clean-up is performed by subtasks themselves
+
+        Ok(())
+    }
+
     fn task_type(&self) -> &'static str {
         "evb-multi-overview"
+    }
+
+    async fn subtasks(&self) -> Vec<TaskId> {
+        self.current_subtask_id
+            .lock()
+            .await
+            .as_ref()
+            .map(|id| vec![*id])
+            .unwrap_or_default()
     }
 }
 
@@ -262,14 +293,15 @@ struct EvbOverviewTask<C: Context> {
 #[async_trait::async_trait]
 impl<C: Context> Task<C::TaskContext> for EvbOverviewTask<C> {
     async fn run(
-        self: Box<Self>,
+        &self,
         _ctx: C::TaskContext,
     ) -> Result<Box<dyn crate::tasks::TaskStatusInfo>, Box<dyn ErrorSource>> {
-        let file = self.params.file;
+        let file = self.params.file.clone();
+        let session = self.session.clone();
         let resampling_method = self.params.resampling_method;
 
         let response =
-            with_netcdfcf_provider(self.ctx.as_ref(), &self.session.into(), move |provider| {
+            with_netcdfcf_provider(self.ctx.as_ref(), &session.into(), move |provider| {
                 // TODO: provide some detailed pct status
 
                 Ok(match provider.create_overviews(&file, resampling_method) {
@@ -300,6 +332,12 @@ impl<C: Context> Task<C::TaskContext> for EvbOverviewTask<C> {
             .map_err(ErrorSource::boxed)
     }
 
+    async fn cleanup_on_error(&self, _ctx: C::TaskContext) -> Result<(), Box<dyn ErrorSource>> {
+        // TODO: call remove method on overview creator
+
+        Ok(())
+    }
+
     fn task_type(&self) -> &'static str {
         "evb-overview"
     }
@@ -309,11 +347,7 @@ impl<C: Context> Task<C::TaskContext> for EvbOverviewTask<C> {
     }
 }
 
-impl TaskStatusInfo for NetCdfCfOverviewResponse {
-    fn as_any(&self) -> &dyn std::any::Any {
-        self
-    }
-}
+impl TaskStatusInfo for NetCdfCfOverviewResponse {}
 
 #[cfg(test)]
 mod tests {

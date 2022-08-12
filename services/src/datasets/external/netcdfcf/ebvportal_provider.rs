@@ -86,10 +86,6 @@ impl DataProvider for EbvPortalDataProvider {
     ) -> crate::error::Result<crate::datasets::listing::ProvenanceOutput> {
         self.netcdf_cf_provider.provenance(id).await
     }
-
-    fn as_any(&self) -> &dyn std::any::Any {
-        self
-    }
 }
 
 #[derive(Debug, Serialize, Deserialize)]

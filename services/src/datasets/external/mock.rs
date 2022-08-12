@@ -70,10 +70,6 @@ impl DataProvider for MockExternalDataProvider {
             provenance: None,
         })
     }
-
-    fn as_any(&self) -> &dyn std::any::Any {
-        self
-    }
 }
 
 #[async_trait]

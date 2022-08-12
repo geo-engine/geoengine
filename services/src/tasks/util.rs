@@ -16,9 +16,8 @@ pub mod test {
         crate::util::retry::retry(5, 100, 2., move || {
             let task_manager = task_manager.clone();
             async move {
-                let option =
-                    (!task_manager.status(task_id).await.unwrap().is_running()).then(|| ());
-                option.ok_or(())
+                let status = task_manager.status(task_id).await.unwrap();
+                status.is_finished().then_some(()).ok_or(())
             }
         })
         .await

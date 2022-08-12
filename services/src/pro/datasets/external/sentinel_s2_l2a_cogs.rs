@@ -213,10 +213,6 @@ impl DataProvider for SentinelS2L2aCogsDataProvider {
             provenance: None, // TODO
         })
     }
-
-    fn as_any(&self) -> &dyn std::any::Any {
-        self
-    }
 }
 
 #[async_trait]
