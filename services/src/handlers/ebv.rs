@@ -603,9 +603,18 @@ impl<C: Context> Task<C::TaskContext> for EvbOverviewTask<C> {
     }
 
     async fn cleanup_on_error(&self, _ctx: C::TaskContext) -> Result<(), Box<dyn ErrorSource>> {
-        // TODO: call remove method on overview creator
+        let file = self.params.file.clone();
+        let session = self.session.clone();
 
-        Ok(())
+        let response =
+            with_netcdfcf_provider(self.ctx.as_ref(), &session.into(), move |provider| {
+                provider
+                    .remove_overviews(&file, false)
+                    .boxed_context(error::CannotRemoveOverviews)
+            })
+            .await;
+
+        response.map_err(ErrorSource::boxed)
     }
 
     fn task_type(&self) -> &'static str {
