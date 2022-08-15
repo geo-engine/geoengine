@@ -31,7 +31,7 @@ pub struct Layer {
     pub description: String,
     pub workflow: Workflow,
     pub symbology: Option<Symbology>,
-    pub properties: Option<HashMap<String, String>>,
+    pub properties: HashMap<String, String>, // TODO: move to metadata or rename properties to attributes
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone, PartialEq, Eq)]
@@ -39,7 +39,7 @@ pub struct LayerListing {
     pub id: ProviderLayerId,
     pub name: String,
     pub description: String,
-    pub properties: Option<HashMap<String, String>>,
+    pub properties: Vec<(String, String)>,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -81,7 +81,7 @@ pub struct LayerCollectionListing {
     pub name: String,
     pub description: String,
     pub entry_label: Option<String>, // a common label for the collection's entries, if there is any
-    pub properties: Option<Vec<(String, String)>>,
+    pub properties: Vec<(String, String)>,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone, PartialEq, Eq)]

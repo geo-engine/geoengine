@@ -157,7 +157,7 @@ impl EbvPortalDataProvider {
                     name: c.name,
                     description: "".to_string(),
                     entry_label: Some("EBV Name".to_string()),
-                    properties: None,
+                    properties: vec![],
                 }))
             })
             .collect()
@@ -194,7 +194,7 @@ impl EbvPortalDataProvider {
                     name: ebv,
                     description: "".to_string(),
                     entry_label: Some("EBV Dataset".to_string()),
-                    properties: None,
+                    properties: vec![],
                 }))
             })
             .collect()
@@ -229,17 +229,15 @@ impl EbvPortalDataProvider {
                         .has_scenario
                         .then_some("Scenario".to_string())
                         .or_else(|| Some("Metric".to_string())),
-                    properties: Some(
-                        [
-                            (
-                                "by".to_string(),
-                                format!("{} ({})", d.author_name, d.author_institution),
-                            ),
-                            ("with license".to_string(), d.license),
-                        ]
-                        .into_iter()
-                        .collect(),
-                    ),
+                    properties: [
+                        (
+                            "by".to_string(),
+                            format!("{} ({})", d.author_name, d.author_institution),
+                        ),
+                        ("with license".to_string(), d.license),
+                    ]
+                    .into_iter()
+                    .collect(),
                 }))
             })
             .collect()
@@ -285,7 +283,7 @@ impl EbvPortalDataProvider {
                         .is_empty()
                         .then_some("Entity".to_string())
                         .or_else(|| Some("Metric".to_string())),
-                    properties: None,
+                    properties: vec![],
                 }))
             })
             .collect()
@@ -336,7 +334,7 @@ impl EbvPortalDataProvider {
                         },
                         name: entity.name,
                         description: "".to_string(),
-                        properties: None,
+                        properties: vec![],
                     }))
                 })
                 .collect()
@@ -364,7 +362,7 @@ impl EbvPortalDataProvider {
                         name: group.title,
                         description: group.description,
                         entry_label: None,
-                        properties: None,
+                        properties: vec![],
                     }))
                 })
                 .collect()
@@ -594,7 +592,7 @@ mod tests {
                     name: "Community composition".to_string(),
                     description: "".to_string(),
                     entry_label: Some("EBV Name".to_string()),
-                    properties: None
+                    properties: vec![]
                 }),
                 CollectionItem::Collection(LayerCollectionListing {
                     id: ProviderLayerCollectionId {
@@ -609,7 +607,7 @@ mod tests {
                     name: "Ecosystem functioning".to_string(),
                     description: "".to_string(),
                     entry_label: Some("EBV Name".to_string()),
-                    properties: None
+                    properties: vec![]
                 }),
                 CollectionItem::Collection(LayerCollectionListing {
                     id: ProviderLayerCollectionId {
@@ -624,7 +622,7 @@ mod tests {
                     name: "Ecosystem structure".to_string(),
                     description: "".to_string(),
                     entry_label: Some("EBV Name".to_string()),
-                    properties: None
+                    properties: vec![]
                 }),
                 CollectionItem::Collection(LayerCollectionListing {
                     id: ProviderLayerCollectionId {
@@ -639,7 +637,7 @@ mod tests {
                     name: "Species populations".to_string(),
                     description: "".to_string(),
                     entry_label: Some("EBV Name".to_string()),
-                    properties: None
+                    properties: vec![]
                 })
             ]
         );
@@ -722,7 +720,7 @@ mod tests {
                 name: "Ecosystem phenology".to_string(), 
                 description: "".to_string(), 
                 entry_label: Some("EBV Dataset".to_string()), 
-                properties: None,
+                properties: vec![],
             }),
             CollectionItem::Collection(LayerCollectionListing {
                  id: ProviderLayerCollectionId {
@@ -732,7 +730,7 @@ mod tests {
                 name: "Primary productivity".to_string(), 
                 description: "".to_string(), 
                 entry_label: Some("EBV Dataset".to_string()), 
-                properties: None,
+                properties: vec![],
             })]);
     }
 
@@ -861,13 +859,15 @@ mod tests {
             CollectionItem::Collection(LayerCollectionListing {
                 id: ProviderLayerCollectionId {
                     provider_id: DataProviderId::from_str("77d0bf11-986e-43f5-b11d-898321f1854c").unwrap(),
-                    collection_id: LayerCollectionId("{\"Dataset\":{\"class\":\"Ecosystem functioning\",\"ebv\":\"Ecosystem phenology\",\"dataset\":\"10\"}}".into()) },
-                    name: "Vegetation Phenology in Finland".to_string(),
-                    description: "Datasets present the yearly maps of the start of vegetation active period (VAP) in coniferous forests and deciduous vegetation during 2001-2019 in Finland. The start of the vegetation active period is defined as the day when coniferous trees start to photosynthesize and for deciduous vegetation as the day when trees unfold new leaves in spring. The datasets were derived from satellite observations of the Moderate Resolution Imaging Spectroradiometer (MODIS).".to_string(), 
-                    entry_label: Some("Metric".to_string()),
-                    properties: Some(vec![("by".to_string(), "Kristin Böttcher (The Finnish Environment Institute (SYKE))".to_string()),
-                    ("with license".to_string(), "https://creativecommons.org/licenses/by/4.0".to_string())]) })]
-                );
+                    collection_id: LayerCollectionId("{\"Dataset\":{\"class\":\"Ecosystem functioning\",\"ebv\":\"Ecosystem phenology\",\"dataset\":\"10\"}}".into()) 
+                },
+                name: "Vegetation Phenology in Finland".to_string(),
+                description: "Datasets present the yearly maps of the start of vegetation active period (VAP) in coniferous forests and deciduous vegetation during 2001-2019 in Finland. The start of the vegetation active period is defined as the day when coniferous trees start to photosynthesize and for deciduous vegetation as the day when trees unfold new leaves in spring. The datasets were derived from satellite observations of the Moderate Resolution Imaging Spectroradiometer (MODIS).".to_string(), 
+                entry_label: Some("Metric".to_string()),
+                properties: vec![("by".to_string(), "Kristin Böttcher (The Finnish Environment Institute (SYKE))".to_string()),
+                    ("with license".to_string(), "https://creativecommons.org/licenses/by/4.0".to_string())]              
+            })]
+        );
     }
 
     #[tokio::test]
@@ -1001,7 +1001,7 @@ mod tests {
                     name: "Random metric 1".to_string(),
                     description: "Randomly created data".to_string(),
                     entry_label: Some("Entity".to_string()),
-                    properties: None }),
+                    properties: vec![] }),
                 CollectionItem::Collection(LayerCollectionListing {
                     id: ProviderLayerCollectionId {
                         provider_id: DataProviderId::from_str("77d0bf11-986e-43f5-b11d-898321f1854c").unwrap(),
@@ -1010,7 +1010,7 @@ mod tests {
                     name: "Random metric 2".to_string(),
                     description: "Randomly created data".to_string(),
                     entry_label: Some("Entity".to_string()),
-                    properties: None
+                    properties: vec![]
                 })
             ]
         );
@@ -1146,7 +1146,7 @@ mod tests {
                     },
                     name: "entity01".to_string(),
                     description: "".to_string(),
-                    properties: None
+                    properties: vec![]
                 }), CollectionItem::Layer(LayerListing {
                     id: ProviderLayerId {
                         provider_id: DataProviderId::from_str("77d0bf11-986e-43f5-b11d-898321f1854c").unwrap(),
@@ -1154,7 +1154,7 @@ mod tests {
                     },
                     name: "entity02".to_string(),
                     description: "".to_string(),
-                    properties: None
+                    properties: vec![]
                 }), CollectionItem::Layer(LayerListing {
                     id: ProviderLayerId {
                         provider_id: DataProviderId::from_str("77d0bf11-986e-43f5-b11d-898321f1854c").unwrap(),
@@ -1162,7 +1162,7 @@ mod tests {
                     },
                     name: "entity03".to_string(),
                     description: "".to_string(),
-                    properties: None
+                    properties: vec![]
                 })]
         );
     }

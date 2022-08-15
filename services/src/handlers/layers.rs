@@ -42,7 +42,7 @@ async fn list_root_collections_handler<C: Context>(
             name: "Datasets".to_string(),
             description: "Basic Layers for all Datasets".to_string(),
             entry_label: None,
-            properties: None,
+            properties: vec![],
         }));
 
         options.limit -= 1;
@@ -59,7 +59,7 @@ async fn list_root_collections_handler<C: Context>(
             name: "Layers".to_string(),
             description: "All available Geo Engine layers".to_string(),
             entry_label: None,
-            properties: None,
+            properties: vec![],
         }));
 
         options.limit -= 1;
@@ -87,7 +87,7 @@ async fn list_root_collections_handler<C: Context>(
             name: provider_listing.name,
             description: provider_listing.description,
             entry_label: None,
-            properties: None,
+            properties: vec![],
         }));
     }
 

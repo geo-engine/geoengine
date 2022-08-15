@@ -1,4 +1,4 @@
-use std::str::FromStr;
+use std::{collections::HashMap, str::FromStr};
 
 use async_trait::async_trait;
 use bb8_postgres::{
@@ -406,7 +406,7 @@ where
                         },
                         name: row.get(1),
                         description: row.get(2),
-                        properties: None,
+                        properties: vec![],
                     })
                 } else {
                     CollectionItem::Collection(LayerCollectionListing {
@@ -417,7 +417,7 @@ where
                         name: row.get(1),
                         description: row.get(2),
                         entry_label: None,
-                        properties: None,
+                        properties: vec![],
                     })
                 }
             })
@@ -464,7 +464,7 @@ where
             description: row.get(1),
             workflow: serde_json::from_value(row.get(2)).context(error::SerdeJson)?,
             symbology: serde_json::from_value(row.get(3)).context(error::SerdeJson)?,
-            properties: None,
+            properties: HashMap::new(),
         })
     }
 }

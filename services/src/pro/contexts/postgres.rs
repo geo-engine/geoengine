@@ -616,6 +616,7 @@ where
 
 #[cfg(test)]
 mod tests {
+    use std::collections::HashMap;
     use std::str::FromStr;
 
     use super::*;
@@ -1866,7 +1867,7 @@ mod tests {
                     description: "Layer 1".to_string(),
                     symbology: None,
                     workflow: workflow.clone(),
-                    properties: None,
+                    properties: HashMap::new(),
                 }
             );
 
@@ -1940,7 +1941,7 @@ mod tests {
                         name: "Collection1".to_string(),
                         description: "Collection 1".to_string(),
                         entry_label: None,
-                        properties: None,
+                        properties: vec![],
                     }),
                     CollectionItem::Collection(LayerCollectionListing {
                         id: ProviderLayerCollectionId {
@@ -1950,7 +1951,7 @@ mod tests {
                         name: "Unsorted".to_string(),
                         description: "Unsorted Layers".to_string(),
                         entry_label: None,
-                        properties: None,
+                        properties: vec![],
                     }),
                     CollectionItem::Layer(LayerListing {
                         id: ProviderLayerId {
@@ -1959,7 +1960,7 @@ mod tests {
                         },
                         name: "Layer1".to_string(),
                         description: "Layer 1".to_string(),
-                        properties: None,
+                        properties: vec![],
                     })
                 ]
             );
@@ -1988,7 +1989,7 @@ mod tests {
                         name: "Collection2".to_string(),
                         description: "Collection 2".to_string(),
                         entry_label: None,
-                        properties: None,
+                        properties: vec![],
                     }),
                     CollectionItem::Layer(LayerListing {
                         id: ProviderLayerId {
@@ -1997,7 +1998,7 @@ mod tests {
                         },
                         name: "Layer2".to_string(),
                         description: "Layer 2".to_string(),
-                        properties: None,
+                        properties: vec![],
                     })
                 ]
             );

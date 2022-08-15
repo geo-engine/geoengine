@@ -117,6 +117,9 @@ pub struct NetCdfOverview {
     pub entities: Vec<NetCdfEntity>,
     pub time_coverage: TimeCoverage,
     pub colorizer: Colorizer,
+    pub creator_name: Option<String>,
+    pub creator_email: Option<String>,
+    pub creator_institution: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -284,6 +287,12 @@ impl NetCdfCfDataProvider {
             fallback_colorizer()
         })?;
 
+        let creator_name = root_group.attribute_as_string("creator_name").ok();
+
+        let creator_email = root_group.attribute_as_string("creator_email").ok();
+
+        let creator_institution = root_group.attribute_as_string("creator_institution").ok();
+
         Ok(NetCdfOverview {
             file_name: path
                 .strip_prefix(provider_path)
@@ -297,6 +306,9 @@ impl NetCdfCfDataProvider {
             entities,
             time_coverage,
             colorizer,
+            creator_name,
+            creator_email,
+            creator_institution,
         })
     }
 
@@ -356,7 +368,7 @@ impl NetCdfCfDataProvider {
                         entity_name = entity.name
                     ),
                     description: tree.summary.clone(),
-                    properties: None,
+                    properties: vec![],
                 });
             }
         }
@@ -892,7 +904,7 @@ async fn listing_from_dir(base: &Path, path: &Path) -> crate::error::Result<Vec<
 
     let mut items = vec![];
     while let Some(entry) = dir.next_entry().await? {
-        if entry.path().is_dir() || entry.path().extension() == Some("nc".as_ref()) {
+        if entry.path().is_dir() {
             items.push(CollectionItem::Collection(LayerCollectionListing {
                 id: ProviderLayerCollectionId {
                     provider_id: NETCDF_CF_PROVIDER_ID,
@@ -908,7 +920,51 @@ async fn listing_from_dir(base: &Path, path: &Path) -> crate::error::Result<Vec<
                 name: entry.file_name().to_string_lossy().to_string(),
                 description: "".to_string(),
                 entry_label: None,
-                properties: None,
+                properties: vec![],
+            }));
+        } else if entry.path().extension() == Some("nc".as_ref()) {
+            let fp = entry
+                .path()
+                .strip_prefix(base)
+                .map_err(|_| crate::error::Error::SubPathMustNotEscapeBasePath {
+                    base: base.to_owned(),
+                    sub_path: entry.path(),
+                })?
+                .to_owned();
+            let b = base.to_owned();
+            let tree = tokio::task::spawn_blocking(move || {
+                NetCdfCfDataProvider::build_netcdf_tree(&b, None, &fp, false)
+                    .map_err(|_| Error::InvalidLayerCollectionId)
+            })
+            .await??;
+
+            items.push(CollectionItem::Collection(LayerCollectionListing {
+                id: ProviderLayerCollectionId {
+                    provider_id: NETCDF_CF_PROVIDER_ID,
+                    collection_id: NetCdfLayerCollectionId::Path {
+                        path: entry
+                            .path()
+                            .strip_prefix(base)
+                            .map_err(|_| Error::InvalidLayerCollectionId)?
+                            .to_owned(),
+                    }
+                    .try_into()?,
+                },
+                name: tree.title,
+                description: tree.summary,
+                entry_label: None,
+                properties: [(
+                    "author".to_string(),
+                    format!(
+                        "{}, {}, {}",
+                        tree.creator_name.unwrap_or_else(|| "unknown".to_string()),
+                        tree.creator_email.unwrap_or_else(|| "unknown".to_string()),
+                        tree.creator_institution
+                            .unwrap_or_else(|| "unknown".to_string())
+                    ),
+                )]
+                .into_iter()
+                .collect(),
             }));
         }
     }
@@ -1024,14 +1080,12 @@ pub fn layer_from_netcdf_overview(
             opacity: 1.0,
             colorizer,
         })),
-        properties: Some(
-            [
-                ("timeSteps".to_string(), serde_json::to_string(&time_steps)?),
-                ("dataRange".to_string(), serde_json::to_string(&data_range)?),
-            ]
-            .into_iter()
-            .collect(),
-        ),
+        properties: [
+            ("timeSteps".to_string(), serde_json::to_string(&time_steps)?),
+            ("dataRange".to_string(), serde_json::to_string(&data_range)?),
+        ]
+        .into_iter()
+        .collect(),
     })
 }
 
@@ -1069,7 +1123,7 @@ async fn listing_from_netcdf_file(
                     },
                     name: entity.name,
                     description: "".to_string(),
-                    properties: None,
+                    properties: vec![],
                 }))
             })
             .collect()
@@ -1095,7 +1149,7 @@ async fn listing_from_netcdf_file(
                     name: group.title.clone(),
                     description: group.description,
                     entry_label: None,
-                    properties: None,
+                    properties: vec![],
                 }))
             })
             .collect()
@@ -1111,12 +1165,12 @@ impl LayerCollectionProvider for NetCdfCfDataProvider {
     ) -> crate::error::Result<Vec<CollectionItem>> {
         let id: NetCdfLayerCollectionId = serde_json::from_str(&collection.0)?;
 
-        match id {
+        let mut listing = match id {
             NetCdfLayerCollectionId::Path { path }
                 if canonicalize_subpath(&self.path, &path).is_ok()
                     && self.path.join(&path).is_dir() =>
             {
-                listing_from_dir(&self.path, &path).await
+                listing_from_dir(&self.path, &path).await?
             }
             NetCdfLayerCollectionId::Path { path }
                 if canonicalize_subpath(&self.path, &path).is_ok()
@@ -1129,7 +1183,7 @@ impl LayerCollectionProvider for NetCdfCfDataProvider {
                     self.overviews.clone(),
                     &options.user_input,
                 )
-                .await
+                .await?
             }
             NetCdfLayerCollectionId::Group { path, groups }
                 if canonicalize_subpath(&self.path, &path).is_ok()
@@ -1142,10 +1196,19 @@ impl LayerCollectionProvider for NetCdfCfDataProvider {
                     self.overviews.clone(),
                     &options.user_input,
                 )
-                .await
+                .await?
             }
             _ => return Err(Error::InvalidLayerCollectionId),
-        }
+        };
+
+        listing.sort_by(|a, b| a.name().cmp(b.name()));
+        let listing = listing
+            .into_iter()
+            .skip(options.offset as usize)
+            .take(options.limit as usize)
+            .collect();
+
+        Ok(listing)
     }
 
     async fn root_collection_id(&self) -> crate::error::Result<LayerCollectionId> {
@@ -1371,7 +1434,7 @@ mod tests {
                 },
                 name: "Test dataset metric: Random metric 1 > entity01".into(),
                 description: "CFake description of test dataset with metric.".into(),
-                properties: None,
+                properties: vec![],
             }
         );
         assert_eq!(
@@ -1390,7 +1453,7 @@ mod tests {
                 },
                 name: "Test dataset metric: Random metric 1 > entity02".into(),
                 description: "CFake description of test dataset with metric.".into(),
-                properties: None,
+                properties: vec![],
             }
         );
         assert_eq!(
@@ -1409,7 +1472,7 @@ mod tests {
                 },
                 name: "Test dataset metric: Random metric 1 > entity03".into(),
                 description: "CFake description of test dataset with metric.".into(),
-                properties: None,
+                properties: vec![],
             }
         );
         assert_eq!(
@@ -1428,7 +1491,7 @@ mod tests {
                 },
                 name: "Test dataset metric: Random metric 2 > entity01".into(),
                 description: "CFake description of test dataset with metric.".into(),
-                properties: None,
+                properties: vec![],
             }
         );
         assert_eq!(
@@ -1447,7 +1510,7 @@ mod tests {
                 },
                 name: "Test dataset metric: Random metric 2 > entity02".into(),
                 description: "CFake description of test dataset with metric.".into(),
-                properties: None,
+                properties: vec![],
             }
         );
         assert_eq!(
@@ -1466,7 +1529,7 @@ mod tests {
                 },
                 name: "Test dataset metric: Random metric 2 > entity03".into(),
                 description: "CFake description of test dataset with metric.".into(),
-                properties: None,
+                properties: vec![],
             }
         );
     }
@@ -1504,7 +1567,7 @@ mod tests {
                     "Test dataset metric and scenario: Sustainability > Random metric 1 > entity01"
                         .into(),
                 description: "Fake description of test dataset with metric and scenario.".into(),
-                properties: None,
+                properties: vec![],
             }
         );
         assert_eq!(
@@ -1521,7 +1584,7 @@ mod tests {
                 },
                 name: "Test dataset metric and scenario: Fossil-fueled Development > Random metric 2 > entity02".into(),
                 description: "Fake description of test dataset with metric and scenario.".into(),
-                properties: None,
+                properties: vec![],
             }
         );
     }
@@ -1771,7 +1834,7 @@ mod tests {
                     "Test dataset metric and scenario: Sustainability > Random metric 1 > entity01"
                         .into(),
                 description: "Fake description of test dataset with metric and scenario.".into(),
-                properties: None,
+                properties: vec![],
             }
         );
         assert_eq!(
@@ -1788,7 +1851,7 @@ mod tests {
                 },
                 name: "Test dataset metric and scenario: Fossil-fueled Development > Random metric 2 > entity02".into(),
                 description: "Fake description of test dataset with metric and scenario.".into(),
-                properties: None,
+                properties: vec![],
             }
         );
     }

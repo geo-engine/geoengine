@@ -625,6 +625,11 @@ mod tests {
                     no_data_color: RgbaColor::new(0, 0, 0, 0),
                     default_color: RgbaColor::new(0, 0, 0, 0)
                 },
+                creator_name: Some("Luise Quoß".to_string()),
+                creator_email: Some("luise.quoss@idiv.de".to_string()),
+                creator_institution: Some(
+                    "German Centre for Integrative Biodiversity Research (iDiv)".to_string()
+                ),
             }
         );
     }

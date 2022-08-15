@@ -1,3 +1,5 @@
+use std::collections::HashMap;
+
 use crate::datasets::listing::ProvenanceOutput;
 use crate::error::Result;
 use crate::layers::external::{DataProvider, DataProviderDefinition};
@@ -102,7 +104,7 @@ impl LayerCollectionProvider for MockExternalDataProvider {
                 },
                 name: dataset.properties.name.clone(),
                 description: dataset.properties.description.clone(),
-                properties: None,
+                properties: vec![],
             })));
         }
 
@@ -151,7 +153,7 @@ impl LayerCollectionProvider for MockExternalDataProvider {
                         ),
                     },
                     symbology: d.properties.symbology.clone(),
-                    properties: None,
+                    properties: HashMap::new(),
                 })
             })
     }
