@@ -365,6 +365,7 @@ struct NetCdfCfOverviewResponse {
 }
 
 #[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
 struct CreateOverviewsParams {
     resampling_method: Option<ResamplingMethod>,
 }
