@@ -488,7 +488,7 @@ impl Serialize for DateTime {
     where
         S: serde::Serializer,
     {
-        serializer.serialize_str(&self.datetime.to_string())
+        serializer.serialize_str(&self.to_string())
     }
 }
 
@@ -705,5 +705,14 @@ mod tests {
     fn has_time() {
         assert!(!DateTimeParseFormat::custom("%Y-%m-%d".to_string()).has_time());
         assert!(DateTimeParseFormat::custom("%Y-%m-%dT%H:%M:%S%z".to_string()).has_time());
+    }
+
+    #[test]
+    fn test_serialize() {
+        assert_eq!(
+            serde_json::to_string(&DateTime::from_str("2010-01-02T03:04:05.000Z").unwrap())
+                .unwrap(),
+            "\"2010-01-02T03:04:05.000Z\""
+        );
     }
 }

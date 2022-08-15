@@ -1,8 +1,9 @@
+use crate::contexts::AdminSession;
 use crate::error::Result;
 use crate::tasks::{TaskListOptions, TaskManager};
 use crate::util::user_input::UserInput;
 use crate::{contexts::Context, tasks::TaskId};
-use actix_web::{web, FromRequest, HttpResponse, Responder};
+use actix_web::{web, Either, FromRequest, HttpResponse, Responder};
 use serde::{Deserialize, Serialize};
 
 pub(crate) fn init_task_routes<C>(cfg: &mut web::ServiceConfig)
@@ -70,7 +71,7 @@ impl TaskResponse {
 /// }
 /// ```
 async fn status_handler<C: Context>(
-    _session: C::Session, // TODO: incorporate
+    _session: Either<AdminSession, C::Session>, // TODO: check for session auth
     ctx: web::Data<C>,
     task_id: web::Path<TaskId>,
 ) -> Result<impl Responder> {
@@ -103,7 +104,7 @@ async fn status_handler<C: Context>(
 /// ```
 ///
 async fn list_handler<C: Context>(
-    _session: C::Session, // TODO: incorporate
+    _session: Either<AdminSession, C::Session>, // TODO: check for session auth
     ctx: web::Data<C>,
     task_list_options: web::Query<TaskListOptions>,
 ) -> Result<impl Responder> {
@@ -152,7 +153,7 @@ pub struct TaskAbortOptions {
 /// 200 OK
 ///
 async fn abort_handler<C: Context>(
-    _session: C::Session, // TODO: incorporate
+    _session: Either<AdminSession, C::Session>, // TODO: check for session auth
     ctx: web::Data<C>,
     task_id: web::Path<TaskId>,
     options: web::Query<TaskAbortOptions>,
@@ -389,6 +390,44 @@ mod tests {
             serde_json::json!({
                 "status": "completed",
                 "info": "completed",
+            })
+        );
+    }
+
+    #[tokio::test]
+    async fn test_get_status_with_admin_session() {
+        crate::util::config::set_config(
+            "session.admin_session_token",
+            "8aca8875-425a-4ef1-8ee6-cdfc62dd7525",
+        )
+        .unwrap();
+
+        let ctx = InMemoryContext::test_default();
+
+        let (task, _complete_tx) = NopTask::new_with_sender();
+        let task_id = ctx.tasks_ref().schedule(task.boxed(), None).await.unwrap();
+
+        // 1. initially, we should get a running status
+
+        let req = actix_web::test::TestRequest::get()
+            .uri(&format!("/tasks/{task_id}/status"))
+            .append_header((header::CONTENT_LENGTH, 0))
+            .append_header((
+                header::AUTHORIZATION,
+                Bearer::new(AdminSession::default().id().to_string()),
+            ));
+
+        let res = send_test_request(req, ctx.clone()).await;
+
+        assert_eq!(res.status(), 200, "{:?}", res.response());
+
+        let status: serde_json::Value = actix_web::test::read_body_json(res).await;
+        assert_eq!(
+            status,
+            serde_json::json!({
+                "status": "running",
+                "pct_complete": 0,
+                "info": (),
             })
         );
     }
