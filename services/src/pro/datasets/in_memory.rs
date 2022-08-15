@@ -548,7 +548,8 @@ impl LayerCollectionProvider for ProHashMapDatasetDb {
             description: dataset.description.clone(),
             workflow: Workflow { operator },
             symbology: dataset.symbology.clone(),
-            properties: HashMap::new(),
+            properties: vec![],
+            metadata: HashMap::new(),
         })
     }
 }

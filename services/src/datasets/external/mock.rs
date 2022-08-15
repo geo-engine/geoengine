@@ -153,7 +153,8 @@ impl LayerCollectionProvider for MockExternalDataProvider {
                         ),
                     },
                     symbology: d.properties.symbology.clone(),
-                    properties: HashMap::new(),
+                    properties: vec![],
+                    metadata: HashMap::new(),
                 })
             })
     }

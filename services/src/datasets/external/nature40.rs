@@ -272,7 +272,8 @@ impl LayerCollectionProvider for Nature40DataProvider {
                 ),
             },
             symbology: None,
-            properties: HashMap::new(),
+            properties: vec![],
+            metadata: HashMap::new(),
         })
     }
 }

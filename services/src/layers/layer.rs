@@ -31,7 +31,8 @@ pub struct Layer {
     pub description: String,
     pub workflow: Workflow,
     pub symbology: Option<Symbology>,
-    pub properties: HashMap<String, String>, // TODO: move to metadata or rename properties to attributes
+    pub properties: Vec<(String, String)>, // properties to be rendered in the UI
+    pub metadata: HashMap<String, String>, // metadata used for loading the data
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone, PartialEq, Eq)]

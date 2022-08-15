@@ -464,7 +464,8 @@ where
             description: row.get(1),
             workflow: serde_json::from_value(row.get(2)).context(error::SerdeJson)?,
             symbology: serde_json::from_value(row.get(3)).context(error::SerdeJson)?,
-            properties: HashMap::new(),
+            properties: vec![],
+            metadata: HashMap::new(),
         })
     }
 }

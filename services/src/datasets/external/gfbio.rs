@@ -287,7 +287,8 @@ impl LayerCollectionProvider for GfbioDataProvider {
                 ),
             },
             symbology: None, // TODO
-            properties: HashMap::new(),
+            properties: vec![],
+            metadata: HashMap::new(),
         })
     }
 }

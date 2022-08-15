@@ -1867,7 +1867,8 @@ mod tests {
                     description: "Layer 1".to_string(),
                     symbology: None,
                     workflow: workflow.clone(),
-                    properties: HashMap::new(),
+                    properties: vec![],
+                    metadata: HashMap::new(),
                 }
             );
 

@@ -1080,7 +1080,24 @@ pub fn layer_from_netcdf_overview(
             opacity: 1.0,
             colorizer,
         })),
-        properties: [
+        properties: [(
+            "author".to_string(),
+            format!(
+                "{}, {}, {}",
+                overview
+                    .creator_name
+                    .unwrap_or_else(|| "unknown".to_string()),
+                overview
+                    .creator_email
+                    .unwrap_or_else(|| "unknown".to_string()),
+                overview
+                    .creator_institution
+                    .unwrap_or_else(|| "unknown".to_string())
+            ),
+        )]
+        .into_iter()
+        .collect(),
+        metadata: [
             ("timeSteps".to_string(), serde_json::to_string(&time_steps)?),
             ("dataRange".to_string(), serde_json::to_string(&data_range)?),
         ]

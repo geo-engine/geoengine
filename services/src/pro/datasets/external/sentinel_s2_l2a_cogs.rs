@@ -189,7 +189,8 @@ impl SentinelS2L2aCogsDataProvider {
                             )
                             .expect("valid colorizer"),
                         })), // TODO: individual colorizer per band
-                        properties: HashMap::new(),
+                        properties: vec![],
+                        metadata: HashMap::new(),
                     };
 
                     let dataset = SentinelDataset {
@@ -274,7 +275,8 @@ impl LayerCollectionProvider for SentinelS2L2aCogsDataProvider {
                 ),
             },
             symbology: dataset.listing.symbology.clone(),
-            properties: HashMap::new(),
+            properties: vec![],
+            metadata: HashMap::new(),
         })
     }
 }

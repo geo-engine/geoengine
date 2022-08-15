@@ -381,7 +381,8 @@ impl LayerCollectionProvider for HashMapLayerDb {
             description: layer.description.clone(),
             workflow: layer.workflow.clone(),
             symbology: layer.symbology.clone(),
-            properties: HashMap::new(),
+            properties: vec![],
+            metadata: HashMap::new(),
         })
     }
 }

@@ -756,7 +756,8 @@ where
             description,
             workflow: Workflow { operator },
             symbology,
-            properties: HashMap::new(),
+            properties: vec![],
+            metadata: HashMap::new(),
         })
     }
 }

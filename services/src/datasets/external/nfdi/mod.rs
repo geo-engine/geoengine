@@ -230,7 +230,8 @@ impl NFDIDataProvider {
                 )?,
             },
             symbology: None,
-            properties: HashMap::new(),
+            properties: vec![],
+            metadata: HashMap::new(),
         })
     }
 
@@ -639,7 +640,8 @@ impl LayerCollectionProvider for NFDIDataProvider {
             description: dataset.description,
             workflow: Workflow { operator },
             symbology: None,
-            properties: HashMap::new(),
+            properties: vec![],
+            metadata: HashMap::new(),
         })
     }
 }
