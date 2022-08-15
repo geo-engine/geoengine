@@ -169,4 +169,14 @@ pub enum NetCdfCf4DProviderError {
     CannotGenerateLoadingInfo {
         source: Box<dyn ErrorSource>,
     },
+    CannotCreateInProgressFlag {
+        source: Box<dyn ErrorSource>,
+    },
+    CannotRemoveInProgressFlag {
+        source: Box<dyn ErrorSource>,
+    },
+    CannotRemoveOverviewsWhileCreationIsInProgress,
+    CannotRemoveOverviews {
+        source: Box<dyn ErrorSource>,
+    },
 }
