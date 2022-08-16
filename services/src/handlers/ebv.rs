@@ -51,9 +51,15 @@ where
             web::resource("/dataset/{id}/subdatasets")
                 .route(web::get().to(get_ebv_subdatasets::<C>)),
         )
-        .service(web::resource("/createOverviews").route(web::post().to(create_overviews::<C>)))
-        .service(web::resource("/createOverview").route(web::post().to(create_overview::<C>)))
-        .service(web::resource("/removeOverview").route(web::post().to(remove_overview::<C>)));
+        .service(
+            web::scope("/overviews")
+                .route("/all", web::put().to(create_overviews::<C>))
+                .service(
+                    web::scope("/{path:[^{}]+}")
+                        .route("", web::put().to(create_overview::<C>))
+                        .route("", web::delete().to(remove_overview::<C>)),
+                ),
+        );
     })
 }
 
@@ -444,10 +450,8 @@ impl<C: Context> Task<C::TaskContext> for EvbMultiOverviewTask<C> {
             let subtask: Box<dyn Task<C::TaskContext>> = EvbOverviewTask::<C> {
                 session: session.clone(),
                 ctx: self.ctx.clone(),
-                params: CreateOverviewParams {
-                    file: file.clone(),
-                    resampling_method,
-                },
+                file: file.clone(),
+                params: CreateOverviewParams { resampling_method },
             }
             .boxed();
 
@@ -528,9 +532,8 @@ impl<C: Context> Task<C::TaskContext> for EvbMultiOverviewTask<C> {
     }
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, Default)]
 struct CreateOverviewParams {
-    file: PathBuf,
     resampling_method: Option<ResamplingMethod>,
 }
 
@@ -538,14 +541,16 @@ struct CreateOverviewParams {
 async fn create_overview<C: Context>(
     session: AdminSession,
     ctx: web::Data<C>,
-    params: web::Json<CreateOverviewParams>,
+    path: web::Path<PathBuf>,
+    params: Option<web::Json<CreateOverviewParams>>,
 ) -> Result<impl Responder> {
     let ctx = ctx.into_inner();
 
     let task: Box<dyn Task<C::TaskContext>> = EvbOverviewTask::<C> {
         session,
         ctx: ctx.clone(),
-        params: params.into_inner(),
+        file: path.into_inner(),
+        params: params.map(web::Json::into_inner).unwrap_or_default(),
     }
     .boxed();
 
@@ -557,6 +562,7 @@ async fn create_overview<C: Context>(
 struct EvbOverviewTask<C: Context> {
     session: AdminSession,
     ctx: Arc<C>,
+    file: PathBuf,
     params: CreateOverviewParams,
 }
 
@@ -566,7 +572,7 @@ impl<C: Context> Task<C::TaskContext> for EvbOverviewTask<C> {
         &self,
         _ctx: C::TaskContext,
     ) -> Result<Box<dyn crate::tasks::TaskStatusInfo>, Box<dyn ErrorSource>> {
-        let file = self.params.file.clone();
+        let file = self.file.clone();
         let session = self.session.clone();
         let resampling_method = self.params.resampling_method;
 
@@ -603,7 +609,7 @@ impl<C: Context> Task<C::TaskContext> for EvbOverviewTask<C> {
     }
 
     async fn cleanup_on_error(&self, _ctx: C::TaskContext) -> Result<(), Box<dyn ErrorSource>> {
-        let file = self.params.file.clone();
+        let file = self.file.clone();
         let session = self.session.clone();
 
         let response =
@@ -622,15 +628,14 @@ impl<C: Context> Task<C::TaskContext> for EvbOverviewTask<C> {
     }
 
     fn task_unique_id(&self) -> Option<String> {
-        Some(self.params.file.to_string_lossy().to_string())
+        Some(self.file.to_string_lossy().to_string())
     }
 }
 
 impl TaskStatusInfo for NetCdfCfOverviewResponse {}
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, Default)]
 struct RemoveOverviewParams {
-    file: PathBuf,
     #[serde(default)]
     force: bool,
 }
@@ -639,13 +644,15 @@ struct RemoveOverviewParams {
 async fn remove_overview<C: Context>(
     session: AdminSession,
     ctx: web::Data<C>,
-    params: web::Json<RemoveOverviewParams>,
+    path: web::Path<PathBuf>,
+    params: web::Query<RemoveOverviewParams>,
 ) -> Result<impl Responder> {
     let ctx = ctx.into_inner();
 
     let task: Box<dyn Task<C::TaskContext>> = EvbRemoveOverviewTask::<C> {
         session,
         ctx: ctx.clone(),
+        file: path.into_inner(),
         params: params.into_inner(),
     }
     .boxed();
@@ -658,6 +665,7 @@ async fn remove_overview<C: Context>(
 struct EvbRemoveOverviewTask<C: Context> {
     session: AdminSession,
     ctx: Arc<C>,
+    file: PathBuf,
     params: RemoveOverviewParams,
 }
 
@@ -667,7 +675,7 @@ impl<C: Context> Task<C::TaskContext> for EvbRemoveOverviewTask<C> {
         &self,
         _ctx: C::TaskContext,
     ) -> Result<Box<dyn crate::tasks::TaskStatusInfo>, Box<dyn ErrorSource>> {
-        let file = self.params.file.clone();
+        let file = self.file.clone();
         let session = self.session.clone();
         let force = self.params.force;
 
@@ -693,12 +701,14 @@ impl<C: Context> Task<C::TaskContext> for EvbRemoveOverviewTask<C> {
     }
 
     fn task_unique_id(&self) -> Option<String> {
-        Some(self.params.file.to_string_lossy().to_string())
+        Some(self.file.to_string_lossy().to_string())
     }
 }
 
 #[cfg(test)]
 mod tests {
+    use std::path::Path;
+
     use super::*;
 
     use crate::{
@@ -1508,8 +1518,8 @@ mod tests {
             .await
             .unwrap();
 
-        let req = actix_web::test::TestRequest::post()
-            .uri("/ebv/createOverviews")
+        let req = actix_web::test::TestRequest::put()
+            .uri("/ebv/overviews/all")
             .append_header((
                 header::AUTHORIZATION,
                 Bearer::new(admin_session_id.to_string()),
@@ -1548,6 +1558,10 @@ mod tests {
 
     #[tokio::test]
     async fn test_remove_overviews() {
+        fn is_empty(directory: &Path) -> bool {
+            directory.read_dir().unwrap().next().is_none()
+        }
+
         crate::util::config::set_config(
             "session.admin_session_token",
             "8aca8875-425a-4ef1-8ee6-cdfc62dd7525",
@@ -1568,15 +1582,12 @@ mod tests {
             .await
             .unwrap();
 
-        let req = actix_web::test::TestRequest::post()
-            .uri("/ebv/createOverview")
+        let req = actix_web::test::TestRequest::put()
+            .uri("/ebv/overviews/dataset_m.nc")
             .append_header((
                 header::AUTHORIZATION,
                 Bearer::new(admin_session_id.to_string()),
-            ))
-            .set_json(serde_json::json!({
-                "file": "dataset_m.nc"
-            }));
+            ));
 
         let res = send_test_request(req, ctx.clone(), "http://test".to_string()).await;
 
@@ -1610,15 +1621,67 @@ mod tests {
 
         // Now, delete the overviews
 
-        let req = actix_web::test::TestRequest::post()
-            .uri("/ebv/removeOverview")
+        let req = actix_web::test::TestRequest::delete()
+            .uri("/ebv/overviews/dataset_m.nc")
             .append_header((
                 header::AUTHORIZATION,
                 Bearer::new(admin_session_id.to_string()),
-            ))
-            .set_json(serde_json::json!({
-                "file": "dataset_m.nc"
-            }));
+            ));
+
+        let res = send_test_request(req, ctx.clone(), "http://test".to_string()).await;
+
+        assert_eq!(res.status(), 200, "{:?}", res.response());
+
+        let task_response =
+            serde_json::from_str::<TaskResponse>(&read_body_string(res).await).unwrap();
+
+        wait_for_task_to_finish(ctx.tasks(), task_response.task_id).await;
+
+        let status = ctx.tasks().status(task_response.task_id).await.unwrap();
+
+        assert_eq!(
+            serde_json::to_value(status).unwrap(),
+            serde_json::json!({
+                "status": "completed",
+                "info": null,
+            })
+        );
+
+        assert!(is_empty(overview_folder.path()));
+    }
+
+    #[tokio::test]
+    async fn test_remove_overviews_non_existing() {
+        // setup
+
+        crate::util::config::set_config(
+            "session.admin_session_token",
+            "8aca8875-425a-4ef1-8ee6-cdfc62dd7525",
+        )
+        .unwrap();
+
+        let ctx = InMemoryContext::test_default();
+        let admin_session_id = AdminSession::default().id();
+
+        let overview_folder = tempfile::tempdir().unwrap();
+
+        ctx.layer_provider_db_ref()
+            .add_layer_provider(Box::new(NetCdfCfDataProviderDefinition {
+                name: "test".to_string(),
+                path: test_data!("netcdf4d").to_path_buf(),
+                overviews: overview_folder.path().to_path_buf(),
+            }))
+            .await
+            .unwrap();
+
+        // remove overviews that don't exist
+
+        let req = actix_web::test::TestRequest::delete()
+            .uri("/ebv/overviews/path/to/dataset.nc?force=true")
+            .append_header((
+                header::AUTHORIZATION,
+                Bearer::new(admin_session_id.to_string()),
+            ));
 
         let res = send_test_request(req, ctx.clone(), "http://test".to_string()).await;
 
