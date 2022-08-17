@@ -130,3 +130,72 @@ impl From<AdminSession> for UserSession {
         system_session
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    use geoengine_datatypes::{primitives::TimeInstance, spatial_reference::SpatialReference};
+    use std::str::FromStr;
+
+    #[test]
+    fn test_session_serialization() {
+        let session = UserSession {
+            id: SessionId::from_str("d1322969-5ada-4a2c-bacf-a3045383ba41").unwrap(),
+            project: Some(ProjectId::from_str("c26e05b2-6709-4d96-ad00-9361ee68a25c").unwrap()),
+            view: Some(
+                STRectangle::new(
+                    SpatialReference::epsg_4326(),
+                    0.,
+                    1.,
+                    2.,
+                    3.,
+                    TimeInstance::from(DateTime::from_str("2020-01-01T00:00:00Z").unwrap()),
+                    TimeInstance::from(DateTime::from_str("2021-01-01T00:00:00Z").unwrap()),
+                )
+                .unwrap(),
+            ),
+            user: UserInfo {
+                id: UserId::from_str("9273bb02-95a6-49fe-b1c6-a32ff171d4a3").unwrap(),
+                email: Some("foo@bar.de".to_string()),
+                real_name: Some("Max Muster".to_string()),
+            },
+            created: DateTime::from_str("2020-01-01T00:00:00Z").unwrap(),
+            valid_until: DateTime::from_str("2021-01-01T00:00:00Z").unwrap(),
+            roles: vec![RoleId::from_str("da3825dd-6240-460d-a324-02bd06704aaa").unwrap()],
+        };
+
+        assert_eq!(
+            serde_json::to_value(&session).unwrap(),
+            serde_json::json!({
+                "id": "d1322969-5ada-4a2c-bacf-a3045383ba41",
+                "user": {
+                    "id": "9273bb02-95a6-49fe-b1c6-a32ff171d4a3",
+                    "email": "foo@bar.de",
+                    "realName": "Max Muster"
+                },
+                "created": "2020-01-01T00:00:00.000Z",
+                "validUntil": "2021-01-01T00:00:00.000Z",
+                "project": "c26e05b2-6709-4d96-ad00-9361ee68a25c",
+                "view": {
+                    "spatialReference": "EPSG:4326",
+                    "boundingBox": {
+                        "lowerLeftCoordinate": {
+                            "x": 0.0,
+                            "y": 1.0
+                        },
+                        "upperRightCoordinate": {
+                            "x": 2.0,
+                            "y": 3.0
+                        }
+                    },
+                    "timeInterval": {
+                        "start": 1_577_836_800_000_i64,
+                        "end": 1_609_459_200_000_i64
+                    }
+                },
+                "roles": ["da3825dd-6240-460d-a324-02bd06704aaa"]
+            })
+        );
+    }
+}

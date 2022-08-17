@@ -65,3 +65,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
   - https://github.com/geo-engine/geoengine/pull/564
   - **breaking**: since metadata changed to cover two variants of time defintions, overview metadata is no longer valid
+
+- `DateTime` now serializes to ISO 8601 format
+
+  - https://github.com/geo-engine/geoengine/pull/590
+  - Uses the same format now as `Display` or `ToString`
