@@ -39,15 +39,11 @@ mod tests {
     fn time_intervals() {
         let mut builder = DataCollection::builder().finish_header();
 
-        builder.push_time_interval(TimeInterval::default()).unwrap();
+        builder.push_time_interval(TimeInterval::default());
         builder.finish_row();
-        builder
-            .push_time_interval(TimeInterval::new(0, 1).unwrap())
-            .unwrap();
+        builder.push_time_interval(TimeInterval::new(0, 1).unwrap());
         builder.finish_row();
-        builder
-            .push_time_interval(TimeInterval::new(2, 3).unwrap())
-            .unwrap();
+        builder.push_time_interval(TimeInterval::new(2, 3).unwrap());
         builder.finish_row();
 
         let collection = builder.build().unwrap();
@@ -95,14 +91,12 @@ mod tests {
             .unwrap();
         let mut builder = builder.finish_header();
 
-        builder.push_time_interval(TimeInterval::default()).unwrap();
+        builder.push_time_interval(TimeInterval::default());
         builder
             .push_data("a", FeatureDataValue::NullableInt(Some(42)))
             .unwrap();
         builder.finish_row();
-        builder
-            .push_time_interval(TimeInterval::new(0, 1).unwrap())
-            .unwrap();
+        builder.push_time_interval(TimeInterval::new(0, 1).unwrap());
         builder
             .push_data("a", FeatureDataValue::Float(13.37))
             .unwrap_err();
@@ -110,9 +104,7 @@ mod tests {
             .push_data("a", FeatureDataValue::NullableInt(None))
             .unwrap();
         builder.finish_row();
-        builder
-            .push_time_interval(TimeInterval::new(2, 3).unwrap())
-            .unwrap();
+        builder.push_time_interval(TimeInterval::new(2, 3).unwrap());
         builder
             .push_data("a", FeatureDataValue::NullableInt(Some(1337)))
             .unwrap();

@@ -168,15 +168,15 @@ impl ArrowTyped for MultiLineString {
                         let floats_ref = coordinates.value(coordinate_index);
                         let floats: &Float64Array = downcast_array(&floats_ref);
 
-                        coordinate_builder.values().append_slice(floats.values())?;
+                        coordinate_builder.values().append_slice(floats.values());
 
-                        coordinate_builder.append(true)?;
+                        coordinate_builder.append(true);
                     }
 
-                    line_builder.append(true)?;
+                    line_builder.append(true);
                 }
 
-                multi_line_builder.append(true)?;
+                multi_line_builder.append(true);
             }
         }
 
@@ -211,15 +211,15 @@ impl ArrowTyped for MultiLineString {
                     let floats_ref = coordinates.value(coordinate_index);
                     let floats: &Float64Array = downcast_array(&floats_ref);
 
-                    coordinate_builder.values().append_slice(floats.values())?;
+                    coordinate_builder.values().append_slice(floats.values());
 
-                    coordinate_builder.append(true)?;
+                    coordinate_builder.append(true);
                 }
 
-                line_builder.append(true)?;
+                line_builder.append(true);
             }
 
-            multi_line_builder.append(true)?;
+            multi_line_builder.append(true);
         }
 
         Ok(multi_line_builder.finish())
@@ -238,15 +238,15 @@ impl ArrowTyped for MultiLineString {
 
                 for coordinate in line_string {
                     let float_builder = coordinate_builder.values();
-                    float_builder.append_value(coordinate.x)?;
-                    float_builder.append_value(coordinate.y)?;
-                    coordinate_builder.append(true)?;
+                    float_builder.append_value(coordinate.x);
+                    float_builder.append_value(coordinate.y);
+                    coordinate_builder.append(true);
                 }
 
-                line_string_builder.append(true)?;
+                line_string_builder.append(true);
             }
 
-            builder.append(true)?;
+            builder.append(true);
         }
 
         Ok(builder.finish())

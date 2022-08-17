@@ -1,11 +1,10 @@
 use std::any::Any;
 use std::convert::TryFrom;
 
-use arrow::array::{Array, ArrayBuilder, ArrayData, ArrayRef, BooleanArray, JsonEqual};
+use arrow::array::{Array, ArrayBuilder, ArrayData, ArrayRef, BooleanArray};
 use arrow::datatypes::DataType;
 use arrow::error::ArrowError;
 use serde::{Deserialize, Serialize};
-use serde_json::Value;
 
 use crate::collections::VectorDataType;
 use crate::error::Error;
@@ -108,6 +107,10 @@ impl Array for NoArrowArray {
     fn get_array_memory_size(&self) -> usize {
         0
     }
+
+    fn into_data(self) -> ArrayData {
+        unreachable!("There is no implementation since there is no geometry")
+    }
 }
 
 impl ArrayBuilder for NoArrowArray {
@@ -132,12 +135,6 @@ impl ArrayBuilder for NoArrowArray {
     }
 
     fn into_box_any(self: Box<Self>) -> Box<dyn Any> {
-        unreachable!("There is no implementation since there is no geometry")
-    }
-}
-
-impl JsonEqual for NoArrowArray {
-    fn equals_json(&self, _json: &[&Value]) -> bool {
         unreachable!("There is no implementation since there is no geometry")
     }
 }

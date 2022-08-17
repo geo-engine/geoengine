@@ -514,6 +514,8 @@ where
     }
 }
 
+type TimeExtractorType = Box<dyn Fn(&Feature) -> Result<TimeInterval> + Send + Sync + 'static>;
+
 #[pin_project(project = OgrSourceStreamProjection)]
 pub struct OgrSourceStream<G>
 where
@@ -523,7 +525,7 @@ where
     dataset_iterator: Arc<Mutex<OgrDatasetIterator>>,
     data_types: Arc<HashMap<String, FeatureDataType>>,
     feature_collection_builder: FeatureCollectionBuilder<G>,
-    time_extractor: Arc<Box<dyn Fn(&Feature) -> Result<TimeInterval> + Send + Sync + 'static>>,
+    time_extractor: Arc<TimeExtractorType>,
     time_attribute_parser:
         Arc<Box<dyn Fn(FieldValue) -> Result<TimeInstance> + Send + Sync + 'static>>,
     query_rectangle: VectorQueryRectangle,
@@ -543,7 +545,7 @@ impl FeaturesProvider<'_> {
     fn layer_ref(&self) -> &Layer {
         match self {
             FeaturesProvider::Layer(l) => l,
-            FeaturesProvider::ResultSet(r) => &**r,
+            FeaturesProvider::ResultSet(r) => r,
         }
     }
 
@@ -763,7 +765,7 @@ where
         feature_collection_builder: FeatureCollectionBuilder<G>,
         data_types: Arc<HashMap<String, FeatureDataType>>,
         query_rectangle: VectorQueryRectangle,
-        time_extractor: Arc<Box<dyn Fn(&Feature) -> Result<TimeInterval> + Send + Sync>>,
+        time_extractor: Arc<TimeExtractorType>,
         time_attribute_parser: Arc<Box<dyn Fn(FieldValue) -> Result<TimeInstance> + Send + Sync>>,
         chunk_byte_size: usize,
     ) -> Result<FeatureCollection<G>> {
@@ -851,9 +853,7 @@ where
         }
     }
 
-    fn initialize_time_extractors(
-        time: OgrSourceDatasetTimeType,
-    ) -> Box<dyn Fn(&Feature) -> Result<TimeInterval> + Send + Sync> {
+    fn initialize_time_extractors(time: OgrSourceDatasetTimeType) -> TimeExtractorType {
         // TODO: exploit rust-gdal `datetime` feature
 
         match time {
@@ -1191,8 +1191,8 @@ where
             return Ok(());
         }
 
-        builder.push_generic_geometry(geometry)?;
-        builder.push_time_interval(time_interval)?;
+        builder.push_generic_geometry(geometry);
+        builder.push_time_interval(time_interval);
 
         for (column, data_type) in data_types {
             let field = feature.field(&column);
@@ -1389,38 +1389,38 @@ pub trait FeatureCollectionBuilderGeometryHandler<G>
 where
     G: Geometry,
 {
-    fn push_generic_geometry(&mut self, geometry: G) -> Result<()>;
+    fn push_generic_geometry(&mut self, geometry: G);
 }
 
 impl FeatureCollectionBuilderGeometryHandler<MultiPoint>
     for FeatureCollectionRowBuilder<MultiPoint>
 {
-    fn push_generic_geometry(&mut self, geometry: MultiPoint) -> Result<()> {
-        self.push_geometry(geometry).map_err(Into::into)
+    fn push_generic_geometry(&mut self, geometry: MultiPoint) {
+        self.push_geometry(geometry);
     }
 }
 
 impl FeatureCollectionBuilderGeometryHandler<MultiLineString>
     for FeatureCollectionRowBuilder<MultiLineString>
 {
-    fn push_generic_geometry(&mut self, geometry: MultiLineString) -> Result<()> {
-        self.push_geometry(geometry).map_err(Into::into)
+    fn push_generic_geometry(&mut self, geometry: MultiLineString) {
+        self.push_geometry(geometry);
     }
 }
 
 impl FeatureCollectionBuilderGeometryHandler<MultiPolygon>
     for FeatureCollectionRowBuilder<MultiPolygon>
 {
-    fn push_generic_geometry(&mut self, geometry: MultiPolygon) -> Result<()> {
-        self.push_geometry(geometry).map_err(Into::into)
+    fn push_generic_geometry(&mut self, geometry: MultiPolygon) {
+        self.push_geometry(geometry);
     }
 }
 
 impl FeatureCollectionBuilderGeometryHandler<NoGeometry>
     for FeatureCollectionRowBuilder<NoGeometry>
 {
-    fn push_generic_geometry(&mut self, _geometry: NoGeometry) -> Result<()> {
-        Ok(()) // do nothing
+    fn push_generic_geometry(&mut self, _geometry: NoGeometry) {
+        // do nothing
     }
 }
 
@@ -1487,7 +1487,7 @@ mod tests {
             attribute_query: None,
         };
 
-        let serialized_spec = serde_json::to_string(&spec).unwrap();
+        let serialized_spec = serde_json::to_value(&spec).unwrap();
 
         assert_eq!(
             serialized_spec,
@@ -1534,7 +1534,6 @@ mod tests {
                 "sqlQuery": null,
                 "attributeQuery": null
             })
-            .to_string()
         );
 
         let deserialized_spec: OgrSourceDataset = serde_json::from_str(

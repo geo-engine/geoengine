@@ -632,7 +632,7 @@ mod tests {
     use actix_web_httpauth::headers::authorization::Bearer;
     use geoengine_datatypes::{test_data, util::test::TestDefault};
     use httptest::{matchers::request, responders::status_code, Expectation};
-    use serde_json::json;
+    use serde_json::{json, Value};
 
     async fn send_test_request<C: SimpleContext>(
         req: test::TestRequest,
@@ -796,7 +796,7 @@ mod tests {
         assert_eq!(res.status(), 200, "{:?}", res.response());
 
         assert_eq!(
-            read_body_string(res).await,
+            serde_json::from_str::<Value>(&read_body_string(res).await).unwrap(),
             json!({
                 "providerId": "1690c483-b17f-4d98-95c8-00a64849cd0b",
                 "tree": {
@@ -970,7 +970,6 @@ mod tests {
                     }
                 }
             })
-            .to_string()
         );
     }
 
@@ -1060,7 +1059,7 @@ mod tests {
         assert_eq!(res.status(), 200, "{:?}", res.response());
 
         assert_eq!(
-            read_body_string(res).await,
+            serde_json::from_str::<Value>(&read_body_string(res).await).unwrap(),
             json!([{
                     "name": "Genetic composition",
                     "ebvNames": [
@@ -1118,7 +1117,6 @@ mod tests {
                     ]
                 }
             ])
-            .to_string()
         );
     }
 
@@ -1248,7 +1246,7 @@ mod tests {
         assert_eq!(res.status(), 200, "{:?}", res.response());
 
         assert_eq!(
-            read_body_string(res).await,
+            serde_json::from_str::<Value>(&read_body_string(res).await).unwrap(),
             json!([{
                 "id": "5",
                 "name": "Global habitat availability for mammals from 2015-2055",
@@ -1260,7 +1258,6 @@ mod tests {
                 "ebvClass": "Species populations",
                 "ebvName": "Species distributions"
             }])
-            .to_string()
         );
     }
 
@@ -1390,7 +1387,7 @@ mod tests {
         assert_eq!(res.status(), 200, "{:?}", res.response());
 
         assert_eq!(
-            read_body_string(res).await,
+            serde_json::from_str::<Value>(&read_body_string(res).await).unwrap(),
             json!({
                 "id": "5",
                 "name": "Global habitat availability for mammals from 2015-2055",
@@ -1402,7 +1399,6 @@ mod tests {
                 "ebvClass": "Species populations",
                 "ebvName": "Species distributions"
             })
-            .to_string()
         );
     }
 
