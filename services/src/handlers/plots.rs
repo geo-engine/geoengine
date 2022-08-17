@@ -213,7 +213,9 @@ struct WrappedPlotOutput {
 mod tests {
     use super::*;
     use crate::contexts::{InMemoryContext, Session, SimpleContext};
-    use crate::util::tests::{check_allowed_http_methods, read_body_string, send_test_request};
+    use crate::util::tests::{
+        check_allowed_http_methods, read_body_json, read_body_string, send_test_request,
+    };
     use crate::workflows::workflow::Workflow;
     use actix_web;
     use actix_web::dev::ServiceResponse;
@@ -302,7 +304,7 @@ mod tests {
         assert_eq!(res.status(), 200);
 
         assert_eq!(
-            serde_json::from_str::<Value>(&read_body_string(res).await).unwrap(),
+            read_body_json(res).await,
             json!({
                 "outputFormat": "JsonPlain",
                 "plotType": "Statistics",
