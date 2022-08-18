@@ -74,15 +74,27 @@ async fn list_root_collections_handler<C: Context>(
         .await?
     {
         // TODO: resolve providers in parallel
-        let provider = external.layer_provider(provider_listing.id).await?;
-        providers.push(CollectionItem::Collection(LayerCollectionListing {
-            id: ProviderLayerCollectionId {
-                provider_id: provider_listing.id,
-                collection_id: provider.root_collection_id().await?,
-            },
-            name: provider_listing.name,
-            description: provider_listing.description,
-        }));
+        let provider = external.layer_provider(provider_listing.id).await;
+
+        match provider {
+            Ok(provider) => {
+                providers.push(CollectionItem::Collection(LayerCollectionListing {
+                    id: ProviderLayerCollectionId {
+                        provider_id: provider_listing.id,
+                        collection_id: provider.root_collection_id().await?,
+                    },
+                    name: provider_listing.name,
+                    description: provider_listing.description,
+                }));
+            }
+            Err(err) => {
+                log::error!(
+                    "Error listing layer provider {}: {}",
+                    provider_listing.id,
+                    err
+                );
+            }
+        }
     }
 
     Ok(web::Json(providers))
