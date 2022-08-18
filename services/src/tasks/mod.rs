@@ -11,7 +11,7 @@ use crate::{
 };
 pub use error::TaskError;
 use futures::channel::oneshot;
-use geoengine_datatypes::{error::ErrorSource, identifier, util::AsAny};
+use geoengine_datatypes::{error::ErrorSource, identifier, util::AsAnyArc};
 pub use in_memory::{SimpleTaskManager, SimpleTaskManagerContext};
 use serde::{Deserialize, Serialize, Serializer};
 use snafu::ensure;
@@ -95,7 +95,7 @@ pub enum TaskStatus {
     Running(Arc<RunningTaskStatusInfo>),
     #[serde(rename_all = "camelCase")]
     Completed {
-        info: Arc<Box<dyn TaskStatusInfo>>,
+        info: Arc<dyn TaskStatusInfo>,
     },
     #[serde(rename_all = "camelCase")]
     Aborted {
@@ -104,7 +104,7 @@ pub enum TaskStatus {
     #[serde(rename_all = "camelCase")]
     Failed {
         #[serde(serialize_with = "serialize_failed_task_status")]
-        error: Arc<Box<dyn ErrorSource>>,
+        error: Arc<dyn ErrorSource>,
         clean_up: TaskCleanUpStatus,
     },
 }
@@ -126,7 +126,7 @@ pub enum TaskCleanUpStatus {
     #[serde(rename_all = "camelCase")]
     Failed {
         #[serde(serialize_with = "serialize_failed_task_status")]
-        error: Arc<Box<dyn ErrorSource>>,
+        error: Arc<dyn ErrorSource>,
     },
 }
 
@@ -138,7 +138,7 @@ pub struct TaskStatusWithId {
 }
 
 impl TaskStatus {
-    pub fn completed(info: Arc<Box<dyn TaskStatusInfo>>) -> Self {
+    pub fn completed(info: Arc<dyn TaskStatusInfo>) -> Self {
         Self::Completed { info }
     }
 
@@ -146,7 +146,7 @@ impl TaskStatus {
         Self::Aborted { clean_up }
     }
 
-    pub fn failed(error: Arc<Box<dyn ErrorSource>>, clean_up: TaskCleanUpStatus) -> Self {
+    pub fn failed(error: Arc<dyn ErrorSource>, clean_up: TaskCleanUpStatus) -> Self {
         Self::Failed { error, clean_up }
     }
 
@@ -200,7 +200,7 @@ impl RunningTaskStatusInfo {
 
 #[allow(clippy::borrowed_box)]
 fn serialize_failed_task_status<S>(
-    error: &Box<dyn ErrorSource>,
+    error: &dyn ErrorSource,
     serializer: S,
 ) -> Result<S::Ok, S::Error>
 where
@@ -211,7 +211,7 @@ where
 }
 
 /// Trait for information about the status of a task.
-pub trait TaskStatusInfo: erased_serde::Serialize + Send + Sync + fmt::Debug + AsAny {
+pub trait TaskStatusInfo: erased_serde::Serialize + Send + Sync + fmt::Debug + AsAnyArc {
     fn boxed(self) -> Box<dyn TaskStatusInfo>
     where
         Self: Sized + 'static,

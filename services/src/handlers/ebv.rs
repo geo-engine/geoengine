@@ -21,7 +21,7 @@ use futures::lock::Mutex;
 use geoengine_datatypes::dataset::DataProviderId;
 use geoengine_datatypes::error::{BoxedResultExt, ErrorSource};
 use geoengine_datatypes::util::gdal::ResamplingMethod;
-use log::{debug, warn};
+use log::debug;
 use serde::{Deserialize, Serialize};
 use snafu::{ResultExt, Snafu};
 use std::path::PathBuf;
@@ -133,6 +133,11 @@ pub enum EbvError {
     CdfCfProviderCannotListFiles { id: DataProviderId },
     #[snafu(display("NetCdfCf provider cannot remove overviews"))]
     CannotRemoveOverviews { source: Box<dyn ErrorSource> },
+    #[snafu(display("NetCdfCf provider cannot create overviews"))]
+    CannotCreateOverview {
+        dataset: PathBuf,
+        source: Box<dyn ErrorSource>,
+    },
     #[snafu(display("Internal server error"))]
     Internal { source: Box<dyn ErrorSource> },
 }
@@ -472,8 +477,8 @@ impl<C: Context> Task<C::TaskContext> for EvbMultiOverviewTask<C> {
                     TaskStatus::Completed { info } => {
                         current_subtask_id.lock().await.take();
 
-                        if let Some(response) =
-                            info.as_any().downcast_ref::<NetCdfCfOverviewResponse>()
+                        if let Ok(response) =
+                            info.as_any_arc().downcast::<NetCdfCfOverviewResponse>()
                         {
                             status.success.extend(response.success.clone());
                             status.skip.extend(response.skip.clone());
@@ -581,26 +586,22 @@ impl<C: Context> Task<C::TaskContext> for EvbOverviewTask<C> {
             with_netcdfcf_provider(self.ctx.as_ref(), &session.into(), move |provider| {
                 // TODO: provide some detailed pct status
 
-                Ok(match provider.create_overviews(&file, resampling_method) {
-                    Ok(OverviewGeneration::Created) => NetCdfCfOverviewResponse {
+                match provider.create_overviews(&file, resampling_method) {
+                    Ok(OverviewGeneration::Created) => Ok(NetCdfCfOverviewResponse {
                         success: vec![file],
                         skip: vec![],
                         error: vec![],
-                    },
-                    Ok(OverviewGeneration::Skipped) => NetCdfCfOverviewResponse {
+                    }),
+                    Ok(OverviewGeneration::Skipped) => Ok(NetCdfCfOverviewResponse {
                         success: vec![],
                         skip: vec![file],
                         error: vec![],
-                    },
-                    Err(e) => {
-                        warn!("Failed to create overviews for {}: {e}", file.display());
-                        NetCdfCfOverviewResponse {
-                            success: vec![],
-                            skip: vec![],
-                            error: vec![file],
-                        }
-                    }
-                })
+                    }),
+                    Err(e) => Err(EbvError::CannotCreateOverview {
+                        dataset: file,
+                        source: Box::new(e),
+                    }),
+                }
             })
             .await;
 
@@ -708,7 +709,6 @@ impl<C: Context> Task<C::TaskContext> for EvbRemoveOverviewTask<C> {
 
 #[cfg(test)]
 mod tests {
-    use std::path::Path;
 
     use super::*;
 
@@ -724,6 +724,7 @@ mod tests {
     use geoengine_datatypes::{test_data, util::test::TestDefault};
     use httptest::{matchers::request, responders::status_code, Expectation};
     use serde_json::json;
+    use std::path::Path;
 
     async fn send_test_request<C: SimpleContext>(
         req: test::TestRequest,
@@ -1538,9 +1539,10 @@ mod tests {
         let status = ctx.tasks().status(task_response.task_id).await.unwrap();
 
         let mut response = if let TaskStatus::Completed { info } = status {
-            info.as_any()
-                .downcast_ref::<NetCdfCfOverviewResponse>()
+            info.as_any_arc()
+                .downcast::<NetCdfCfOverviewResponse>()
                 .unwrap()
+                .as_ref()
                 .clone()
         } else {
             panic!("Task must be completed");
@@ -1555,6 +1557,69 @@ mod tests {
                 error: vec![],
             }
         );
+    }
+
+    #[tokio::test]
+    async fn test_create_non_existing_overview() {
+        fn is_empty(directory: &Path) -> bool {
+            directory.read_dir().unwrap().next().is_none()
+        }
+
+        crate::util::config::set_config(
+            "session.admin_session_token",
+            "8aca8875-425a-4ef1-8ee6-cdfc62dd7525",
+        )
+        .unwrap();
+
+        let ctx = InMemoryContext::test_default();
+        let admin_session_id = AdminSession::default().id();
+
+        let overview_folder = tempfile::tempdir().unwrap();
+
+        ctx.layer_provider_db_ref()
+            .add_layer_provider(Box::new(NetCdfCfDataProviderDefinition {
+                name: "test".to_string(),
+                path: test_data!("netcdf4d").to_path_buf(),
+                overviews: overview_folder.path().to_path_buf(),
+            }))
+            .await
+            .unwrap();
+
+        let req = actix_web::test::TestRequest::put()
+            .uri("/ebv/overviews/foo/bar.nc")
+            .append_header((
+                header::AUTHORIZATION,
+                Bearer::new(admin_session_id.to_string()),
+            ));
+
+        let res = send_test_request(req, ctx.clone(), "http://test".to_string()).await;
+
+        assert_eq!(res.status(), 200, "{:?}", res.response());
+
+        let task_response =
+            serde_json::from_str::<TaskResponse>(&read_body_string(res).await).unwrap();
+
+        wait_for_task_to_finish(ctx.tasks(), task_response.task_id).await;
+
+        let status = ctx.tasks().status(task_response.task_id).await.unwrap();
+
+        let (error, clean_up) = if let TaskStatus::Failed { error, clean_up } = status {
+            (error, serde_json::to_string(&clean_up).unwrap())
+        } else {
+            panic!("Task must be failed");
+        };
+
+        assert!(matches!(
+            error.into_any_arc().downcast::<EbvError>().unwrap().as_ref(),
+            EbvError::CannotCreateOverview { dataset, source }
+            if dataset.to_string_lossy() == "foo/bar.nc" &&
+            // TODO: use matches clause `NetCdfCf4DProviderError::CannotOpenNetCdfDataset { .. }`
+            source.to_string().contains("CannotOpenNetCdfDataset")
+        ));
+
+        assert_eq!(clean_up, r#"{"status":"completed","info":null}"#);
+
+        assert!(is_empty(overview_folder.path()));
     }
 
     #[tokio::test]
@@ -1602,9 +1667,10 @@ mod tests {
         let status = ctx.tasks().status(task_response.task_id).await.unwrap();
 
         let mut response = if let TaskStatus::Completed { info } = status {
-            info.as_any()
-                .downcast_ref::<NetCdfCfOverviewResponse>()
+            info.as_any_arc()
+                .downcast::<NetCdfCfOverviewResponse>()
                 .unwrap()
+                .as_ref()
                 .clone()
         } else {
             panic!("Task must be completed");

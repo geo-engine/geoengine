@@ -467,6 +467,17 @@ pub fn remove_overviews(dataset_path: &Path, overview_path: &Path, force: bool) 
 
     fs::remove_dir_all(&out_folder_path).boxed_context(error::CannotRemoveOverviews)?;
 
+    // traverse up and remove folder if empty
+
+    let mut dataset_path = dataset_path.to_path_buf();
+    while dataset_path.pop() && /* don't delete `/` */ dataset_path.parent().is_some() {
+        let partial_folder_path = overview_path.join(&dataset_path);
+
+        if fs::remove_dir(partial_folder_path).is_err() {
+            break; // stop traversing up if folder is not empty
+        }
+    }
+
     Ok(())
 }
 

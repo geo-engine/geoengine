@@ -287,15 +287,15 @@ fn run_task(
 
         match result {
             Ok(status) => {
-                *task_handle.status.write().await = TaskStatus::completed(Arc::new(status));
+                *task_handle.status.write().await = TaskStatus::completed(Arc::from(status));
 
                 remove_unique_key(&task_handle, &mut update_lock.unique_tasks);
             }
             Err(err) => {
-                let err = Arc::new(err);
+                let err = Arc::from(err);
 
                 *task_handle.status.write().await = TaskStatus::failed(
-                    err.clone(),
+                    Arc::clone(&err),
                     TaskCleanUpStatus::Running(RunningTaskStatusInfo::new(0, ().boxed())),
                 );
 
@@ -378,7 +378,7 @@ async fn set_status_to_clean_up_failed(task_status: &Db<TaskStatus>, error: Box<
     let mut task_status_lock = task_status.write().await;
 
     let task_clean_up_status = TaskCleanUpStatus::Failed {
-        error: Arc::new(error),
+        error: Arc::from(error),
     };
 
     *task_status_lock = match &*task_status_lock {
