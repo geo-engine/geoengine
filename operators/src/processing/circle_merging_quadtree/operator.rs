@@ -269,8 +269,8 @@ impl VisualPointClusteringProcessor {
         let mut builder = builder.finish_header();
 
         for circle_of_points in circles_of_points {
-            builder.push_geometry(MultiPoint::new(vec![circle_of_points.circle.center()])?)?;
-            builder.push_time_interval(circle_of_points.time_aggregate)?;
+            builder.push_geometry(MultiPoint::new(vec![circle_of_points.circle.center()])?);
+            builder.push_time_interval(circle_of_points.time_aggregate);
 
             builder.push_data(
                 radius_column,

@@ -193,9 +193,9 @@ impl<'a> ToNetCdfSubgroup for MdGroup<'a> {
 #[derive(Debug, Clone, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub(crate) struct NetCdfCf4DDatasetId {
+    pub entity: usize,
     pub file_name: String,
     pub group_names: Vec<String>,
-    pub entity: usize,
 }
 
 impl NetCdfCfDataProvider {
@@ -1528,9 +1528,9 @@ mod tests {
                 id: ProviderLayerId {
                     provider_id,
                     layer_id: LayerId(serde_json::json!({
+                        "entity": 1,
                         "fileName": "dataset_sm.nc",
-                        "groupNames": ["scenario_5", "metric_2"],
-                        "entity": 1
+                        "groupNames": ["scenario_5", "metric_2"]
                     })
                     .to_string()),
                 },

@@ -13,12 +13,8 @@ fn multi_point_collection_benchmarks(c: &mut Criterion) {
         b.iter(|| {
             let mut builder = MultiPointCollection::builder().finish_header();
             for i in 0..100 {
-                builder
-                    .push_geometry(Coordinate2D::new(i as f64, i as f64).into())
-                    .unwrap();
-                builder
-                    .push_time_interval(TimeInterval::new_unchecked(i, i + 1))
-                    .unwrap();
+                builder.push_geometry(Coordinate2D::new(i as f64, i as f64).into());
+                builder.push_time_interval(TimeInterval::new_unchecked(i, i + 1));
                 builder.finish_row();
             }
             black_box(builder.build())
@@ -33,12 +29,8 @@ fn multi_point_collection_benchmarks(c: &mut Criterion) {
                 .unwrap();
             let mut builder = builder.finish_header();
             for i in 0..100 {
-                builder
-                    .push_geometry(Coordinate2D::new(i as f64, i as f64).into())
-                    .unwrap();
-                builder
-                    .push_time_interval(TimeInterval::new_unchecked(i, i + 1))
-                    .unwrap();
+                builder.push_geometry(Coordinate2D::new(i as f64, i as f64).into());
+                builder.push_time_interval(TimeInterval::new_unchecked(i, i + 1));
                 builder
                     .push_data("number", FeatureDataValue::Float(i as f64))
                     .unwrap();

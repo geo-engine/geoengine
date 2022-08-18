@@ -137,19 +137,19 @@ mod tests {
             BoxPlotAttribute::new("A1".to_string(), 12.0, 83.0, 35.0, 20.0, 55.0, true).unwrap(),
         );
 
-        let ser = serde_json::to_string(&bp).unwrap();
+        let ser = serde_json::to_value(&bp).unwrap();
 
         let expected = serde_json::json!({
             "values": [
                 { "name": "A1", "min": 12.0, "max": 83.0, "median" : 35.0, "q1": 20.0, "q3": 55.0, "isExact": true }
             ]
         });
-        assert_eq!(expected.to_string(), ser);
+        assert_eq!(expected, ser);
 
         assert_eq!(
             bp.to_vega_embeddable(false).unwrap(),
             PlotData {
-                vega_string: r#"{"$schema":"https://vega.github.io/schema/vega-lite/v5.json","width":"container","data":{"values":[{"name":"A1","min":12.0,"max":83.0,"median":35.0,"q1":20.0,"q3":55.0,"isExact":true}]},"encoding":{"x":{"field":"name","type":"nominal"}},"layer":[{"mark":{"type":"rule"},"encoding":{"y":{"field":"min","type":"quantitative","scale":{"zero":false}},"y2":{"field":"max"}}},{"mark":{"type":"bar","cornerRadius":5,"width":{"band":0.75}},"encoding":{"y":{"field":"q1","type":"quantitative"},"y2":{"field":"q3"},"color":{"field":"name","type":"nominal"}}},{"mark":{"type":"rect","color":"white","width":{"band":0.75},"height":1},"encoding":{"y":{"field":"median","type":"quantitative"}}}],"config":{"axisXDiscrete":{"title":null},"axisYQuantitative":{"title":null},"legend":{"disable":true}}}"#.to_owned(),
+                vega_string: r#"{"$schema":"https://vega.github.io/schema/vega-lite/v5.json","config":{"axisXDiscrete":{"title":null},"axisYQuantitative":{"title":null},"legend":{"disable":true}},"data":{"values":[{"isExact":true,"max":83.0,"median":35.0,"min":12.0,"name":"A1","q1":20.0,"q3":55.0}]},"encoding":{"x":{"field":"name","type":"nominal"}},"layer":[{"encoding":{"y":{"field":"min","scale":{"zero":false},"type":"quantitative"},"y2":{"field":"max"}},"mark":{"type":"rule"}},{"encoding":{"color":{"field":"name","type":"nominal"},"y":{"field":"q1","type":"quantitative"},"y2":{"field":"q3"}},"mark":{"cornerRadius":5,"type":"bar","width":{"band":0.75}}},{"encoding":{"y":{"field":"median","type":"quantitative"}},"mark":{"color":"white","height":1,"type":"rect","width":{"band":0.75}}}],"width":"container"}"#.to_owned(),
                 metadata: PlotMetaData::None
             }
         );

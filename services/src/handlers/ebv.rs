@@ -626,7 +626,7 @@ mod tests {
         datasets::external::netcdfcf::NetCdfCfDataProviderDefinition,
         server::{configure_extractors, render_404, render_405},
         tasks::util::test::wait_for_task_to_finish,
-        util::tests::read_body_string,
+        util::tests::{read_body_json, read_body_string},
     };
     use actix_web::{dev::ServiceResponse, http, http::header, middleware, test, web, App};
     use actix_web_httpauth::headers::authorization::Bearer;
@@ -796,7 +796,7 @@ mod tests {
         assert_eq!(res.status(), 200, "{:?}", res.response());
 
         assert_eq!(
-            read_body_string(res).await,
+            read_body_json(res).await,
             json!({
                 "providerId": "1690c483-b17f-4d98-95c8-00a64849cd0b",
                 "tree": {
@@ -970,7 +970,6 @@ mod tests {
                     }
                 }
             })
-            .to_string()
         );
     }
 
@@ -1060,7 +1059,7 @@ mod tests {
         assert_eq!(res.status(), 200, "{:?}", res.response());
 
         assert_eq!(
-            read_body_string(res).await,
+            read_body_json(res).await,
             json!([{
                     "name": "Genetic composition",
                     "ebvNames": [
@@ -1118,7 +1117,6 @@ mod tests {
                     ]
                 }
             ])
-            .to_string()
         );
     }
 
@@ -1248,7 +1246,7 @@ mod tests {
         assert_eq!(res.status(), 200, "{:?}", res.response());
 
         assert_eq!(
-            read_body_string(res).await,
+            read_body_json(res).await,
             json!([{
                 "id": "5",
                 "name": "Global habitat availability for mammals from 2015-2055",
@@ -1260,7 +1258,6 @@ mod tests {
                 "ebvClass": "Species populations",
                 "ebvName": "Species distributions"
             }])
-            .to_string()
         );
     }
 
@@ -1390,7 +1387,7 @@ mod tests {
         assert_eq!(res.status(), 200, "{:?}", res.response());
 
         assert_eq!(
-            read_body_string(res).await,
+            read_body_json(res).await,
             json!({
                 "id": "5",
                 "name": "Global habitat availability for mammals from 2015-2055",
@@ -1402,7 +1399,6 @@ mod tests {
                 "ebvClass": "Species populations",
                 "ebvName": "Species distributions"
             })
-            .to_string()
         );
     }
 

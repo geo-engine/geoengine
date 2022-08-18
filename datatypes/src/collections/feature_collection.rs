@@ -308,7 +308,7 @@ where
                 data.arrow_data_type(),
                 data.nullable(),
             ));
-            column_values.push(data.arrow_builder().map(|mut builder| builder.finish())?);
+            column_values.push(data.arrow_builder().finish());
 
             types.insert(
                 new_column_name.to_string(),
@@ -683,9 +683,9 @@ where
 
         for time_interval in time_intervals {
             let date_builder = time_intervals_builder.values();
-            date_builder.append_value(time_interval.start().inner())?;
-            date_builder.append_value(time_interval.end().inner())?;
-            time_intervals_builder.append(true)?;
+            date_builder.append_value(time_interval.start().inner());
+            date_builder.append_value(time_interval.end().inner());
+            time_intervals_builder.append(true);
         }
 
         let time_intervals = time_intervals_builder.finish();
@@ -1223,7 +1223,7 @@ where
             );
 
             columns.push(column);
-            arrays.push(feature_data.arrow_builder()?.finish());
+            arrays.push(feature_data.arrow_builder().finish());
 
             types.insert(name, FeatureDataType::from(&feature_data));
         }
@@ -1630,11 +1630,11 @@ mod tests {
         }
 
         fn time_interval_size(length: usize) -> usize {
-            if length == 0 {
-                return 0;
-            }
-
             let base = 64;
+
+            if length == 0 {
+                return base;
+            }
             let buffer = (((length - 1) / 4) + 1) * ((8 + 8) * 4);
 
             base + buffer
@@ -1649,7 +1649,7 @@ mod tests {
         let struct_stack_size = 168;
         assert_eq!(mem::size_of::<StructArray>(), struct_stack_size);
 
-        let arrow_overhead_bytes = 304;
+        let arrow_overhead_bytes = 240;
 
         for i in 0..10 {
             assert_eq!(

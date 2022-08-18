@@ -12,7 +12,7 @@ use snafu::ensure;
 use std::ops::Add;
 
 /// An `GridShape` describes the shape of an n-dimensional array by storing the size of each axis.
-#[derive(PartialEq, Debug, Copy, Clone, Serialize, Deserialize)]
+#[derive(PartialEq, Eq, Debug, Copy, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct GridShape<A>
 where

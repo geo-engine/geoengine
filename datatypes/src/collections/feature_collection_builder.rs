@@ -35,12 +35,7 @@ where
     G: Geometry,
 {
     /// Push a single geometry feature to the collection.
-    ///
-    /// # Errors
-    ///
-    /// This call fails on internal errors of the builder
-    ///
-    fn push_geometry(&mut self, geometry: G) -> Result<()>;
+    fn push_geometry(&mut self, geometry: G);
 }
 
 /// A default implementation of a feature collection builder
@@ -134,19 +129,12 @@ where
     CollectionType: Geometry + ArrowTyped,
 {
     /// Add a time interval to the collection
-    ///
-    /// # Errors
-    ///
-    /// This call fails on internal errors of the builder
-    ///
-    pub fn push_time_interval(&mut self, time_interval: TimeInterval) -> Result<()> {
+    pub fn push_time_interval(&mut self, time_interval: TimeInterval) {
         let date_builder = self.time_intervals_builder.values();
-        date_builder.append_value(time_interval.start().inner())?;
-        date_builder.append_value(time_interval.end().inner())?;
+        date_builder.append_value(time_interval.start().inner());
+        date_builder.append_value(time_interval.end().inner());
 
-        self.time_intervals_builder.append(true)?;
-
-        Ok(())
+        self.time_intervals_builder.append(true);
     }
 
     /// Add data to the builder
@@ -176,59 +164,59 @@ where
         match data {
             FeatureDataValue::Float(value) => {
                 let float_builder: &mut Float64Builder = downcast_mut_array(data_builder.as_mut());
-                float_builder.append_value(value)?;
+                float_builder.append_value(value);
             }
             FeatureDataValue::NullableFloat(value) => {
                 let float_builder: &mut Float64Builder = downcast_mut_array(data_builder.as_mut());
-                float_builder.append_option(value)?;
+                float_builder.append_option(value);
             }
             FeatureDataValue::Text(value) => {
                 self.string_bytes += value.as_bytes().len();
 
                 let string_builder: &mut StringBuilder = downcast_mut_array(data_builder.as_mut());
-                string_builder.append_value(&value)?;
+                string_builder.append_value(&value);
             }
             FeatureDataValue::NullableText(value) => {
                 self.string_bytes += value.as_ref().map_or(0, |s| s.as_bytes().len());
 
                 let string_builder: &mut StringBuilder = downcast_mut_array(data_builder.as_mut());
                 if let Some(v) = &value {
-                    string_builder.append_value(&v)?;
+                    string_builder.append_value(&v);
                 } else {
-                    string_builder.append_null()?;
+                    string_builder.append_null();
                 }
             }
             FeatureDataValue::Int(value) => {
                 let int_builder: &mut Int64Builder = downcast_mut_array(data_builder.as_mut());
-                int_builder.append_value(value)?;
+                int_builder.append_value(value);
             }
             FeatureDataValue::NullableInt(value) => {
                 let int_builder: &mut Int64Builder = downcast_mut_array(data_builder.as_mut());
-                int_builder.append_option(value)?;
+                int_builder.append_option(value);
             }
             FeatureDataValue::Category(value) => {
                 let category_builder: &mut UInt8Builder = downcast_mut_array(data_builder.as_mut());
-                category_builder.append_value(value)?;
+                category_builder.append_value(value);
             }
             FeatureDataValue::NullableCategory(value) => {
                 let category_builder: &mut UInt8Builder = downcast_mut_array(data_builder.as_mut());
-                category_builder.append_option(value)?;
+                category_builder.append_option(value);
             }
             FeatureDataValue::Bool(value) => {
                 let bool_builder: &mut BooleanBuilder = downcast_mut_array(data_builder.as_mut());
-                bool_builder.append_value(value)?;
+                bool_builder.append_value(value);
             }
             FeatureDataValue::NullableBool(value) => {
                 let bool_builder: &mut BooleanBuilder = downcast_mut_array(data_builder.as_mut());
-                bool_builder.append_option(value)?;
+                bool_builder.append_option(value);
             }
             FeatureDataValue::DateTime(value) => {
                 let dt_builder: &mut Date64Builder = downcast_mut_array(data_builder.as_mut());
-                dt_builder.append_value(value.inner())?;
+                dt_builder.append_value(value.inner());
             }
             FeatureDataValue::NullableDateTime(value) => {
                 let dt_builder: &mut Date64Builder = downcast_mut_array(data_builder.as_mut());
-                dt_builder.append_option(value.map(TimeInstance::inner))?;
+                dt_builder.append_option(value.map(TimeInstance::inner));
             }
         }
 
@@ -250,29 +238,29 @@ where
         match self.types.get(column).expect("checked before") {
             FeatureDataType::Category => {
                 let category_builder: &mut UInt8Builder = downcast_mut_array(data_builder.as_mut());
-                category_builder.append_null()?;
+                category_builder.append_null();
             }
             FeatureDataType::Int => {
                 let category_builder: &mut Int64Builder = downcast_mut_array(data_builder.as_mut());
-                category_builder.append_null()?;
+                category_builder.append_null();
             }
             FeatureDataType::Float => {
                 let category_builder: &mut Float64Builder =
                     downcast_mut_array(data_builder.as_mut());
-                category_builder.append_null()?;
+                category_builder.append_null();
             }
             FeatureDataType::Text => {
                 let category_builder: &mut StringBuilder =
                     downcast_mut_array(data_builder.as_mut());
-                category_builder.append_null()?;
+                category_builder.append_null();
             }
             FeatureDataType::Bool => {
                 let bool_builder: &mut BooleanBuilder = downcast_mut_array(data_builder.as_mut());
-                bool_builder.append_null()?;
+                bool_builder.append_null();
             }
             FeatureDataType::DateTime => {
                 let dt_builder: &mut Date64Builder = downcast_mut_array(data_builder.as_mut());
-                dt_builder.append_null()?;
+                dt_builder.append_null();
             }
         }
 
@@ -395,7 +383,7 @@ where
             let mut struct_builder = StructBuilder::new(columns, builders);
 
             for _ in 0..self.rows {
-                struct_builder.append(true)?;
+                struct_builder.append(true);
             }
 
             struct_builder.finish()

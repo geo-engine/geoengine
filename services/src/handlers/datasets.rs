@@ -699,7 +699,7 @@ mod tests {
     use crate::projects::{PointSymbology, Symbology};
     use crate::test_data;
     use crate::util::tests::{
-        read_body_string, send_test_request, SetMultipartBody, TestDataUploads,
+        read_body_json, read_body_string, send_test_request, SetMultipartBody, TestDataUploads,
     };
     use actix_web;
     use actix_web::http::header;
@@ -720,7 +720,7 @@ mod tests {
     use geoengine_operators::source::{
         OgrSource, OgrSourceDataset, OgrSourceErrorSpec, OgrSourceParameters,
     };
-    use serde_json::json;
+    use serde_json::{json, Value};
     use std::str::FromStr;
 
     #[tokio::test]
@@ -822,7 +822,7 @@ mod tests {
         assert_eq!(res.status(), 200);
 
         assert_eq!(
-            read_body_string(res).await,
+            read_body_json(res).await,
             json!([{
                 "id": "370e99ec-9fd8-401d-828d-d67b431a8742",
                 "name": "OgrDataset2",
@@ -875,7 +875,6 @@ mod tests {
                 },
                 "symbology": null
             }])
-            .to_string()
         );
 
         Ok(())
@@ -1595,7 +1594,7 @@ mod tests {
         let res = send_test_request(req, ctx).await;
 
         let res_status = res.status();
-        let res_body = read_body_string(res).await;
+        let res_body = serde_json::from_str::<Value>(&read_body_string(res).await).unwrap();
         assert_eq!(res_status, 200, "{}", res_body);
 
         assert_eq!(
@@ -1616,7 +1615,6 @@ mod tests {
                 "symbology": null,
                 "provenance": null,
             })
-            .to_string()
         );
 
         Ok(())
