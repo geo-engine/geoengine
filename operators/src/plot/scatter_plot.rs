@@ -33,7 +33,7 @@ const COLLECTOR_TO_HISTOGRAM_THRESHOLD: usize = BATCH_SIZE * 10;
 pub type ScatterPlot = Operator<ScatterPlotParams, SingleVectorSource>;
 
 /// The parameter spec for `ScatterPlot`
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ScatterPlotParams {
     /// Name of the (numeric) attribute for the x-axis.
@@ -51,7 +51,7 @@ impl PlotOperator for ScatterPlot {
     ) -> Result<Box<dyn InitializedPlotOperator>> {
         let source = self.sources.vector.initialize(context).await?;
         for cn in [&self.params.column_x, &self.params.column_y] {
-            match source.result_descriptor().columns.get(cn.as_str()) {
+            match source.result_descriptor().column_data_type(cn.as_str()) {
                 Some(column) if !column.is_numeric() => {
                     return Err(Error::InvalidOperatorSpec {
                         reason: format!("Column '{}' is not numeric.", cn),
@@ -67,14 +67,10 @@ impl PlotOperator for ScatterPlot {
                 }
             }
         }
-        Ok(InitializedScatterPlot::new(
-            PlotResultDescriptor {
-                spatial_reference: source.result_descriptor().spatial_reference,
-            },
-            self.params,
-            source,
-        )
-        .boxed())
+
+        let in_desc = source.result_descriptor().clone();
+
+        Ok(InitializedScatterPlot::new(in_desc.into(), self.params, source).boxed())
     }
 }
 
@@ -302,7 +298,8 @@ mod tests {
                     "type": "MockFeatureCollectionSourceMultiPoint",
                     "params": {
                         "collections": [],
-                        "spatialReference": "EPSG:4326"
+                        "spatialReference": "EPSG:4326",
+                        "measurements": {},
                     }
                 }
             }

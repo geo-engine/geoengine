@@ -1,13 +1,17 @@
 use std::{
     convert::TryInto,
     path::{Path, PathBuf},
+    str::FromStr,
 };
 
 use gdal::{raster::GDALDataType, Dataset, DatasetOptions};
 use geoengine_datatypes::{
-    dataset::{DatasetId, InternalDatasetId},
+    dataset::{DataId, DatasetId},
     hashmap,
-    primitives::{Measurement, TimeGranularity, TimeInstance, TimeStep},
+    primitives::{
+        DateTimeParseFormat, Measurement, SpatialPartition2D, TimeGranularity, TimeInstance,
+        TimeInterval, TimeStep,
+    },
     raster::RasterDataType,
     spatial_reference::SpatialReference,
     util::Identifier,
@@ -25,19 +29,120 @@ use crate::{
     util::Result,
 };
 
+pub fn create_mask_band(dataset: &Dataset, rasterband_index: isize) -> Result<()> {
+    // TODO: move most of this to the GDAL crate. Use all-valid flag to avoid writing data?
+
+    let n_flags = 0x02; // 2 is the flag for shared mask betweeen all bands. It is the only valid flag here!
+    unsafe {
+        let raster_band_ptr =
+            gdal_sys::GDALGetRasterBand(dataset.c_dataset(), rasterband_index as i32);
+        let res = gdal_sys::GDALCreateMaskBand(raster_band_ptr, n_flags);
+        if res != 0 {
+            return Err(Error::Gdal {
+                source: gdal::errors::GdalError::CplError {
+                    class: res,
+                    number: 0,
+                    msg: "Could not create MaskBand".to_string(),
+                },
+            });
+        }
+        Ok(())
+    }
+}
+
+pub fn open_mask_band(
+    dataset: &Dataset,
+    raster_band_index: i32,
+) -> Result<gdal::raster::RasterBand> {
+    // TODO: move most of this to the GDAL crate. Use all-valid flag to avoid writing data?
+    unsafe {
+        let raster_band_ptr = gdal_sys::GDALGetRasterBand(dataset.c_dataset(), raster_band_index);
+        if raster_band_ptr.is_null() {
+            return Err(Error::Gdal {
+                source: gdal::errors::GdalError::NullPointer {
+                    method_name: "GDALGetRasterBand",
+                    msg: "Could not open RasterBand".to_string(),
+                },
+            });
+        }
+        let mask_band_ptr = gdal_sys::GDALGetMaskBand(raster_band_ptr);
+        if mask_band_ptr.is_null() {
+            return Err(Error::Gdal {
+                source: gdal::errors::GdalError::NullPointer {
+                    method_name: "GDALGetMaskBand",
+                    msg: "Could not open MaskBand".to_string(),
+                },
+            });
+        }
+        let mask_band = gdal::raster::RasterBand::from_c_rasterband(dataset, mask_band_ptr);
+        Ok(mask_band)
+    }
+}
+
+/// Wrapper type for gdal mask flags
+pub struct GdalMaskFlags(i32);
+
+impl GdalMaskFlags {
+    const GMF_ALL_VALID: i32 = 0x01;
+    const GMF_PER_DATASET: i32 = 0x02;
+    const GMF_ALPHA: i32 = 0x04;
+    const GMF_NODATA: i32 = 0x08;
+
+    pub fn is_all_valid(&self) -> bool {
+        self.0 & Self::GMF_ALL_VALID != 0
+    }
+
+    pub fn is_per_dataset(&self) -> bool {
+        self.0 & Self::GMF_PER_DATASET != 0
+    }
+
+    pub fn is_alpha(&self) -> bool {
+        self.0 & Self::GMF_ALPHA != 0
+    }
+
+    pub fn is_nodata(&self) -> bool {
+        self.0 & Self::GMF_NODATA != 0
+    }
+}
+
+/// Read the band mask flags for a GDAL `RasterBand`.
+/// From the GDAL docs:
+/// - `GMF_ALL_VALID`(0x01): There are no invalid pixels, all mask values will be 255. When used this will normally be the only flag set.
+/// - `GMF_PER_DATASET`(0x02): The mask band is shared between all bands on the dataset.
+/// - `GMF_ALPHA`(0x04): The mask band is actually an alpha band and may have values other than 0 and 255.
+/// - `GMF_NODATA`(0x08): Indicates the mask is actually being generated from nodata values. (mutually exclusive of `GMF_ALPHA`)
+pub fn get_mask_flags(dataset: &Dataset, raster_band_index: i32) -> Result<GdalMaskFlags> {
+    let raster_band_ptr =
+        unsafe { gdal_sys::GDALGetRasterBand(dataset.c_dataset(), raster_band_index) };
+    if raster_band_ptr.is_null() {
+        return Err(Error::Gdal {
+            source: gdal::errors::GdalError::NullPointer {
+                method_name: "GDALGetRasterBand",
+                msg: "Could not open RasterBand".to_string(),
+            },
+        });
+    }
+    let band_mask_flags = unsafe { gdal_sys::GDALGetMaskFlags(raster_band_ptr) };
+
+    Ok(GdalMaskFlags(band_mask_flags))
+}
+
 // TODO: move test helper somewhere else?
 #[allow(clippy::missing_panics_doc)]
 pub fn create_ndvi_meta_data() -> GdalMetaDataRegular {
     let no_data_value = Some(0.); // TODO: is it really 0?
     GdalMetaDataRegular {
-        start: TimeInstance::from_millis(1_388_534_400_000).unwrap(),
+        data_time: TimeInterval::new_unchecked(
+            TimeInstance::from_str("2014-01-01T00:00:00.000Z").unwrap(),
+            TimeInstance::from_str("2014-07-01T00:00:00.000Z").unwrap(),
+        ),
         step: TimeStep {
             granularity: TimeGranularity::Months,
             step: 1,
         },
         time_placeholders: hashmap! {
             "%_START_TIME_%".to_string() => GdalSourceTimePlaceholder {
-                format: "%Y-%m-%d".to_string(),
+                format: DateTimeParseFormat::custom("%Y-%m-%d".to_string()),
                 reference: TimeReference::Start,
             },
         },
@@ -56,19 +161,27 @@ pub fn create_ndvi_meta_data() -> GdalMetaDataRegular {
             properties_mapping: None,
             gdal_open_options: None,
             gdal_config_options: None,
+            allow_alphaband_as_mask: true,
         },
         result_descriptor: RasterResultDescriptor {
             data_type: RasterDataType::U8,
             spatial_reference: SpatialReference::epsg_4326().into(),
             measurement: Measurement::Unitless,
-            no_data_value,
+            time: Some(TimeInterval::new_unchecked(
+                TimeInstance::from_str("2014-01-01T00:00:00.000Z").unwrap(),
+                TimeInstance::from_str("2014-07-01T00:00:00.000Z").unwrap(),
+            )),
+            bbox: Some(SpatialPartition2D::new_unchecked(
+                (-180., 90.).into(),
+                (180., -90.).into(),
+            )),
         },
     }
 }
 
 // TODO: move test helper somewhere else?
-pub fn add_ndvi_dataset(ctx: &mut MockExecutionContext) -> DatasetId {
-    let id: DatasetId = InternalDatasetId::new().into();
+pub fn add_ndvi_dataset(ctx: &mut MockExecutionContext) -> DataId {
+    let id: DataId = DatasetId::new().into();
     ctx.add_meta_data(id.clone(), Box::new(create_ndvi_meta_data()));
     id
 }
@@ -120,9 +233,46 @@ pub fn raster_descriptor_from_dataset(
     Ok(RasterResultDescriptor {
         data_type,
         spatial_reference: spatial_ref.into(),
-        measurement: Measurement::Unitless,
-        no_data_value: rasterband.no_data_value(),
+        measurement: measurement_from_rasterband(dataset, band)?,
+        time: None,
+        bbox: None,
     })
+}
+
+// TODO: use https://github.com/georust/gdal/pull/271 when merged and released
+fn measurement_from_rasterband(dataset: &Dataset, band: isize) -> Result<Measurement> {
+    unsafe fn _string(raw_ptr: *const std::os::raw::c_char) -> String {
+        let c_str = std::ffi::CStr::from_ptr(raw_ptr);
+        c_str.to_string_lossy().into_owned()
+    }
+
+    unsafe fn _last_null_pointer_err(method_name: &'static str) -> gdal::errors::GdalError {
+        let last_err_msg = _string(gdal_sys::CPLGetLastErrorMsg());
+        gdal_sys::CPLErrorReset();
+        gdal::errors::GdalError::NullPointer {
+            method_name,
+            msg: last_err_msg,
+        }
+    }
+
+    let unit: String = unsafe {
+        // taken from `pub fn rasterband(&self, band_index: isize) -> Result<RasterBand>`
+        let c_band = gdal_sys::GDALGetRasterBand(dataset.c_dataset(), band as std::os::raw::c_int);
+        if c_band.is_null() {
+            return Err(_last_null_pointer_err("GDALGetRasterBand"))?;
+        }
+
+        let str_ptr = gdal_sys::GDALGetRasterUnitType(c_band);
+        Result::<String>::Ok(_string(str_ptr))
+    }?;
+
+    if unit.trim().is_empty() || unit == "no unit" {
+        return Ok(Measurement::Unitless);
+    }
+
+    // TODO: how to check if the measurement is contiuous vs. classification?
+
+    Ok(Measurement::continuous(String::new(), Some(unit)))
 }
 
 /// Create `GdalDatasetParameters` from the infos in the given `dataset` and its `band`.
@@ -148,5 +298,6 @@ pub fn gdal_parameters_from_dataset(
         height: rasterband.y_size(),
         gdal_open_options: open_options,
         gdal_config_options: None,
+        allow_alphaband_as_mask: true,
     })
 }

@@ -1,12 +1,12 @@
 use crate::contexts::Context;
 use crate::error::Result;
+use crate::layers::storage::LayerProviderDb;
 use crate::util::config::{get_config_element, GFBio};
 use actix_web::{web, FromRequest, Responder};
-use chrono::Utc;
 use futures::stream::FuturesUnordered;
 use futures::stream::StreamExt;
-use geoengine_datatypes::dataset::{DatasetId, ExternalDatasetId};
-use geoengine_datatypes::primitives::VectorQueryRectangle;
+use geoengine_datatypes::dataset::{DataId, ExternalDataId, LayerId};
+use geoengine_datatypes::primitives::{DateTime, VectorQueryRectangle};
 use geoengine_operators::engine::{
     MetaDataProvider, TypedResultDescriptor, VectorResultDescriptor,
 };
@@ -18,7 +18,6 @@ use std::collections::HashMap;
 
 use crate::datasets::external::gfbio::{GfbioDataProvider, GFBIO_PROVIDER_ID};
 use crate::datasets::external::pangaea::PANGAEA_PROVIDER_ID;
-use crate::datasets::storage::DatasetProviderDb;
 use geoengine_datatypes::identifier;
 use geoengine_operators::util::input::StringOrNumberRange;
 
@@ -40,9 +39,8 @@ async fn get_basket_handler<C: Context>(
     // Get basket content
     let config = get_config_element::<GFBio>()?;
     let abcd_provider = ctx
-        .dataset_db_ref()
-        .await
-        .dataset_provider(&session, GFBIO_PROVIDER_ID)
+        .layer_provider_db()
+        .layer_provider(GFBIO_PROVIDER_ID)
         .await
         .ok();
 
@@ -78,8 +76,8 @@ struct Basket {
     basket_id: BasketId,
     content: Vec<BasketEntry>,
     user_id: Option<String>,
-    created: chrono::DateTime<Utc>,
-    updated: chrono::DateTime<Utc>,
+    created: DateTime,
+    updated: DateTime,
 }
 
 impl Basket {
@@ -144,9 +142,9 @@ impl Basket {
             };
         }
 
-        let id = DatasetId::External(ExternalDatasetId {
+        let id = DataId::External(ExternalDataId {
             provider_id: PANGAEA_PROVIDER_ID,
-            dataset_id: entry.doi,
+            layer_id: LayerId(entry.doi),
         });
         let mdp = ec as &dyn MetaDataProvider<
             OgrSourceDataset,
@@ -217,9 +215,9 @@ impl Basket {
             }
         };
 
-        let id = DatasetId::External(ExternalDatasetId {
+        let id = DataId::External(ExternalDataId {
             provider_id: GFBIO_PROVIDER_ID,
-            dataset_id: sg_id.to_string(),
+            layer_id: LayerId(sg_id.to_string()),
         });
 
         let mdp = provider
@@ -284,7 +282,7 @@ impl Basket {
 
     async fn generate_loading_info(
         title: String,
-        id: DatasetId,
+        id: DataId,
         mdp: &dyn MetaDataProvider<OgrSourceDataset, VectorResultDescriptor, VectorQueryRectangle>,
         filter: Option<Vec<AttributeFilter>>,
     ) -> BasketEntry {
@@ -323,6 +321,7 @@ struct BasketEntry {
     status: BasketEntryStatus,
 }
 
+#[allow(clippy::large_enum_variant)]
 #[derive(Serialize, Debug)]
 #[serde(tag = "status", rename_all = "camelCase")]
 enum BasketEntryStatus {
@@ -334,7 +333,7 @@ enum BasketEntryStatus {
 #[derive(Serialize, Debug)]
 #[serde(rename_all = "camelCase")]
 struct BasketEntryLoadingDetails {
-    dataset_id: DatasetId,
+    dataset_id: DataId,
     source_operator: String,
     result_descriptor: TypedResultDescriptor,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -351,9 +350,9 @@ struct BasketInternal {
     #[serde(rename = "userId")]
     user_id: Option<String>,
     #[serde(rename = "createdAt")]
-    created: chrono::DateTime<Utc>,
+    created: DateTime,
     #[serde(rename = "updatedAt")]
-    updated: chrono::DateTime<Utc>,
+    updated: DateTime,
 }
 
 #[derive(Debug, Deserialize)]
@@ -371,20 +370,20 @@ struct BasketEntryInternal {
     visualizable: bool,
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Eq)]
 enum TypedBasketEntry {
     Pangaea(PangaeaEntry),
     Abcd(AbcdEntry),
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Eq)]
 struct PangaeaEntry {
     title: String,
     doi: String,
     visualizable: bool,
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Eq)]
 struct AbcdEntry {
     title: String,
     id: String,
@@ -436,7 +435,7 @@ mod tests {
         BasketInternal, TypedBasketEntry,
     };
     use geoengine_datatypes::collections::VectorDataType;
-    use geoengine_datatypes::dataset::{DatasetId, DatasetProviderId, ExternalDatasetId};
+    use geoengine_datatypes::dataset::{DataId, DataProviderId, ExternalDataId, LayerId};
     use geoengine_datatypes::spatial_reference::{SpatialReference, SpatialReferenceOption};
     use geoengine_operators::engine::{TypedResultDescriptor, VectorResultDescriptor};
     use geoengine_operators::source::AttributeFilter;
@@ -478,9 +477,9 @@ mod tests {
 
     #[test]
     fn basket_entry_serialization_ok() {
-        let id = DatasetId::External(ExternalDatasetId {
-            provider_id: DatasetProviderId(Uuid::default()),
-            dataset_id: "1".to_string(),
+        let id = DataId::External(ExternalDataId {
+            provider_id: DataProviderId(Uuid::default()),
+            layer_id: LayerId("1".to_string()),
         });
 
         let be = BasketEntry {
@@ -494,6 +493,8 @@ mod tests {
                         SpatialReference::epsg_4326(),
                     ),
                     columns: Default::default(),
+                    time: None,
+                    bbox: None,
                 }),
                 attribute_filters: None,
             }),
@@ -508,7 +509,9 @@ mod tests {
                 "type": "vector",
                 "dataType": "MultiPoint",
                 "spatialReference": "EPSG:4326",
-                "columns": {}
+                "columns": {},
+                "time": null,
+                "bbox": null
             }
         });
 
@@ -517,9 +520,9 @@ mod tests {
 
     #[test]
     fn basket_entry_serialization_ok_with_filter() {
-        let id = DatasetId::External(ExternalDatasetId {
-            provider_id: DatasetProviderId(Uuid::default()),
-            dataset_id: "1".to_string(),
+        let id = DataId::External(ExternalDataId {
+            provider_id: DataProviderId(Uuid::default()),
+            layer_id: LayerId("1".to_string()),
         });
 
         let be = BasketEntry {
@@ -533,6 +536,8 @@ mod tests {
                         SpatialReference::epsg_4326(),
                     ),
                     columns: Default::default(),
+                    time: None,
+                    bbox: None,
                 }),
                 attribute_filters: Some(vec![AttributeFilter {
                     attribute: "a".to_string(),
@@ -551,7 +556,9 @@ mod tests {
                 "type": "vector",
                 "dataType": "MultiPoint",
                 "spatialReference": "EPSG:4326",
-                "columns": {}
+                "columns": {},
+                "time": null,
+                "bbox": null,
             },
             "attributeFilters": [
                 {

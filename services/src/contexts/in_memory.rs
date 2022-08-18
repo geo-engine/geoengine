@@ -6,6 +6,11 @@ use super::{Session, SimpleContext};
 use crate::contexts::{ExecutionContextImpl, QueryContextImpl, SessionId};
 use crate::datasets::in_memory::HashMapDatasetDb;
 use crate::error::Error;
+use crate::layers::add_from_directory::{
+    add_layer_collections_from_directory, add_layers_from_directory,
+};
+use crate::layers::storage::{HashMapLayerDb, HashMapLayerProviderDb};
+use crate::tasks::{SimpleTaskManager, SimpleTaskManagerContext};
 use crate::{
     datasets::add_from_directory::{add_datasets_from_directory, add_providers_from_directory},
     error::Result,
@@ -17,14 +22,17 @@ use geoengine_datatypes::util::test::TestDefault;
 use geoengine_operators::engine::ChunkByteSize;
 use geoengine_operators::util::create_rayon_thread_pool;
 use rayon::ThreadPool;
-use tokio::sync::{RwLock, RwLockReadGuard, RwLockWriteGuard};
+use tokio::sync::{RwLockReadGuard, RwLockWriteGuard};
 
 /// A context with references to in-memory versions of the individual databases.
 #[derive(Clone)]
 pub struct InMemoryContext {
-    project_db: Db<HashMapProjectDb>,
-    workflow_registry: Db<HashMapRegistry>,
-    dataset_db: Db<HashMapDatasetDb>,
+    project_db: Arc<HashMapProjectDb>,
+    workflow_registry: Arc<HashMapRegistry>,
+    dataset_db: Arc<HashMapDatasetDb>,
+    layer_db: Arc<HashMapLayerDb>,
+    layer_provider_db: Arc<HashMapLayerProviderDb>,
+    task_manager: Arc<SimpleTaskManager>,
     session: Db<SimpleSession>,
     thread_pool: Arc<ThreadPool>,
     exe_ctx_tiling_spec: TilingSpecification,
@@ -37,6 +45,9 @@ impl TestDefault for InMemoryContext {
             project_db: Default::default(),
             workflow_registry: Default::default(),
             dataset_db: Default::default(),
+            layer_db: Default::default(),
+            layer_provider_db: Default::default(),
+            task_manager: Default::default(),
             session: Default::default(),
             thread_pool: create_rayon_thread_pool(0),
             exe_ctx_tiling_spec: TestDefault::test_default(),
@@ -49,21 +60,32 @@ impl InMemoryContext {
     pub async fn new_with_data(
         dataset_defs_path: PathBuf,
         provider_defs_path: PathBuf,
+        layer_defs_path: PathBuf,
+        layer_collection_defs_path: PathBuf,
         exe_ctx_tiling_spec: TilingSpecification,
         query_ctx_chunk_size: ChunkByteSize,
     ) -> Self {
-        let mut db = HashMapDatasetDb::default();
-        add_datasets_from_directory(&mut db, dataset_defs_path).await;
-        add_providers_from_directory(&mut db, provider_defs_path).await;
+        let mut layer_db = HashMapLayerDb::new();
+        add_layers_from_directory(&mut layer_db, layer_defs_path).await;
+        add_layer_collections_from_directory(&mut layer_db, layer_collection_defs_path).await;
+
+        let mut dataset_db = HashMapDatasetDb::default();
+        add_datasets_from_directory(&mut dataset_db, dataset_defs_path).await;
+
+        let mut layer_proivder_db = HashMapLayerProviderDb::default();
+        add_providers_from_directory(&mut layer_proivder_db, provider_defs_path).await;
 
         Self {
             project_db: Default::default(),
             workflow_registry: Default::default(),
+            layer_db: Arc::new(layer_db),
+            layer_provider_db: Arc::new(layer_proivder_db),
+            task_manager: Default::default(),
             session: Default::default(),
             thread_pool: create_rayon_thread_pool(0),
             exe_ctx_tiling_spec,
             query_ctx_chunk_size,
-            dataset_db: Arc::new(RwLock::new(db)),
+            dataset_db: Arc::new(dataset_db),
         }
     }
 
@@ -75,6 +97,9 @@ impl InMemoryContext {
             project_db: Default::default(),
             workflow_registry: Default::default(),
             dataset_db: Default::default(),
+            layer_db: Default::default(),
+            layer_provider_db: Default::default(),
+            task_manager: Default::default(),
             session: Default::default(),
             thread_pool: create_rayon_thread_pool(0),
             exe_ctx_tiling_spec,
@@ -89,37 +114,54 @@ impl Context for InMemoryContext {
     type ProjectDB = HashMapProjectDb;
     type WorkflowRegistry = HashMapRegistry;
     type DatasetDB = HashMapDatasetDb;
+    type LayerDB = HashMapLayerDb;
+    type LayerProviderDB = HashMapLayerProviderDb;
+    type TaskContext = SimpleTaskManagerContext;
+    type TaskManager = SimpleTaskManager;
     type QueryContext = QueryContextImpl;
-    type ExecutionContext = ExecutionContextImpl<SimpleSession, HashMapDatasetDb>;
+    type ExecutionContext =
+        ExecutionContextImpl<SimpleSession, HashMapDatasetDb, HashMapLayerProviderDb>;
 
-    fn project_db(&self) -> Db<Self::ProjectDB> {
+    fn project_db(&self) -> Arc<Self::ProjectDB> {
         self.project_db.clone()
     }
-    async fn project_db_ref(&self) -> RwLockReadGuard<'_, Self::ProjectDB> {
-        self.project_db.read().await
-    }
-    async fn project_db_ref_mut(&self) -> RwLockWriteGuard<'_, Self::ProjectDB> {
-        self.project_db.write().await
+    fn project_db_ref(&self) -> &Self::ProjectDB {
+        &self.project_db
     }
 
-    fn workflow_registry(&self) -> Db<Self::WorkflowRegistry> {
+    fn workflow_registry(&self) -> Arc<Self::WorkflowRegistry> {
         self.workflow_registry.clone()
     }
-    async fn workflow_registry_ref(&self) -> RwLockReadGuard<'_, Self::WorkflowRegistry> {
-        self.workflow_registry.read().await
-    }
-    async fn workflow_registry_ref_mut(&self) -> RwLockWriteGuard<'_, Self::WorkflowRegistry> {
-        self.workflow_registry.write().await
+    fn workflow_registry_ref(&self) -> &Self::WorkflowRegistry {
+        &self.workflow_registry
     }
 
-    fn dataset_db(&self) -> Db<Self::DatasetDB> {
+    fn dataset_db(&self) -> Arc<Self::DatasetDB> {
         self.dataset_db.clone()
     }
-    async fn dataset_db_ref(&self) -> RwLockReadGuard<'_, Self::DatasetDB> {
-        self.dataset_db.read().await
+    fn dataset_db_ref(&self) -> &Self::DatasetDB {
+        &self.dataset_db
     }
-    async fn dataset_db_ref_mut(&self) -> RwLockWriteGuard<'_, Self::DatasetDB> {
-        self.dataset_db.write().await
+
+    fn layer_db(&self) -> Arc<Self::LayerDB> {
+        self.layer_db.clone()
+    }
+    fn layer_db_ref(&self) -> &Self::LayerDB {
+        &self.layer_db
+    }
+
+    fn layer_provider_db(&self) -> Arc<Self::LayerProviderDB> {
+        self.layer_provider_db.clone()
+    }
+    fn layer_provider_db_ref(&self) -> &Self::LayerProviderDB {
+        &self.layer_provider_db
+    }
+
+    fn tasks(&self) -> Arc<Self::TaskManager> {
+        self.task_manager.clone()
+    }
+    fn tasks_ref(&self) -> &Self::TaskManager {
+        &self.task_manager
     }
 
     fn query_context(&self) -> Result<Self::QueryContext> {
@@ -130,14 +172,17 @@ impl Context for InMemoryContext {
     }
 
     fn execution_context(&self, session: SimpleSession) -> Result<Self::ExecutionContext> {
-        Ok(
-            ExecutionContextImpl::<SimpleSession, HashMapDatasetDb>::new(
-                self.dataset_db.clone(),
-                self.thread_pool.clone(),
-                session,
-                self.exe_ctx_tiling_spec,
-            ),
-        )
+        Ok(ExecutionContextImpl::<
+            SimpleSession,
+            HashMapDatasetDb,
+            HashMapLayerProviderDb,
+        >::new(
+            self.dataset_db.clone(),
+            self.layer_provider_db.clone(),
+            self.thread_pool.clone(),
+            session,
+            self.exe_ctx_tiling_spec,
+        ))
     }
 
     async fn session_by_id(&self, session_id: SessionId) -> Result<Self::Session> {

@@ -5,7 +5,7 @@ use crate::util::config::ProjectService;
 use crate::util::user_input::UserInput;
 use crate::workflows::workflow::WorkflowId;
 use crate::{error, util::config::get_config_element};
-use chrono::{DateTime, Utc};
+use geoengine_datatypes::primitives::DateTime;
 use geoengine_datatypes::{identifier, operations::image::RgbaColor};
 use geoengine_datatypes::{operations::image::Colorizer, primitives::TimeInstance};
 use geoengine_datatypes::{
@@ -353,7 +353,7 @@ impl Default for LayerVisibility {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Plot {
     pub workflow: WorkflowId,
     pub name: String,
@@ -386,7 +386,7 @@ pub struct ProjectListing {
     pub description: String,
     pub layer_names: Vec<String>,
     pub plot_names: Vec<String>,
-    pub changed: DateTime<Utc>,
+    pub changed: DateTime,
 }
 
 impl From<&Project> for ProjectListing {
@@ -447,7 +447,7 @@ pub struct UpdateProject {
     pub time_step: Option<TimeStep>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(untagged)]
 pub enum VecUpdate<Content> {
     None(NoUpdate),
@@ -499,17 +499,17 @@ impl UserInput for ProjectListOptions {
 
 identifier!(ProjectVersionId);
 
-#[derive(Debug, PartialEq, Serialize, Deserialize, Clone, Copy)]
+#[derive(Debug, PartialEq, Eq, Serialize, Deserialize, Clone, Copy)]
 pub struct ProjectVersion {
     pub id: ProjectVersionId,
-    pub changed: DateTime<Utc>,
+    pub changed: DateTime,
 }
 
 impl ProjectVersion {
     fn new() -> Self {
         Self {
             id: ProjectVersionId::new(),
-            changed: chrono::offset::Utc::now(),
+            changed: DateTime::now(),
         }
     }
 }
@@ -676,7 +676,7 @@ mod tests {
         });
 
         assert_eq!(
-            serde_json::to_string(&symbology).unwrap(),
+            serde_json::to_value(&symbology).unwrap(),
             json!({
                 "type": "point",
                 "radius": {
@@ -706,15 +706,14 @@ mod tests {
                     }
                 },
                 "text": null
-            })
-            .to_string(),
+            }),
         );
     }
 
     #[test]
     fn serialize_derived_number_param() {
         assert_eq!(
-            serde_json::to_string(&NumberParam::Derived(DerivedNumber {
+            serde_json::to_value(&NumberParam::Derived(DerivedNumber {
                 attribute: "foo".to_owned(),
                 factor: 1.,
                 default_value: 0.
@@ -726,7 +725,6 @@ mod tests {
                 "factor": 1.0,
                 "defaultValue": 0.0
             })
-            .to_string()
         );
     }
 }

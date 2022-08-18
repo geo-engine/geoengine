@@ -1,9 +1,14 @@
 use crate::contexts::{ExecutionContextImpl, QueryContextImpl};
 use crate::error;
-use crate::pro::contexts::{Context, Db, ProContext};
+use crate::layers::add_from_directory::{
+    add_layer_collections_from_directory, add_layers_from_directory,
+};
+use crate::layers::storage::{HashMapLayerDb, HashMapLayerProviderDb};
+use crate::pro::contexts::{Context, ProContext};
 use crate::pro::datasets::{add_datasets_from_directory, ProHashMapDatasetDb};
 use crate::pro::projects::ProHashMapProjectDb;
 use crate::pro::users::{HashMapUserDb, UserDb, UserSession};
+use crate::tasks::{SimpleTaskManager, SimpleTaskManagerContext};
 use crate::workflows::registry::HashMapRegistry;
 use crate::{datasets::add_from_directory::add_providers_from_directory, error::Result};
 use async_trait::async_trait;
@@ -15,18 +20,20 @@ use rayon::ThreadPool;
 use snafu::ResultExt;
 use std::path::PathBuf;
 use std::sync::Arc;
-use tokio::sync::{RwLock, RwLockReadGuard, RwLockWriteGuard};
 
 /// A context with references to in-memory versions of the individual databases.
 #[derive(Clone)]
 pub struct ProInMemoryContext {
-    user_db: Db<HashMapUserDb>,
-    project_db: Db<ProHashMapProjectDb>,
-    workflow_registry: Db<HashMapRegistry>,
-    dataset_db: Db<ProHashMapDatasetDb>,
+    user_db: Arc<HashMapUserDb>,
+    project_db: Arc<ProHashMapProjectDb>,
+    workflow_registry: Arc<HashMapRegistry>,
+    dataset_db: Arc<ProHashMapDatasetDb>,
+    layer_db: Arc<HashMapLayerDb>,
+    layer_provider_db: Arc<HashMapLayerProviderDb>,
     thread_pool: Arc<ThreadPool>,
     exe_ctx_tiling_spec: TilingSpecification,
     query_ctx_chunk_size: ChunkByteSize,
+    task_manager: Arc<SimpleTaskManager>,
 }
 
 impl TestDefault for ProInMemoryContext {
@@ -36,9 +43,12 @@ impl TestDefault for ProInMemoryContext {
             project_db: Default::default(),
             workflow_registry: Default::default(),
             dataset_db: Default::default(),
+            layer_db: Default::default(),
+            layer_provider_db: Default::default(),
             thread_pool: create_rayon_thread_pool(0),
             exe_ctx_tiling_spec: TestDefault::test_default(),
             query_ctx_chunk_size: TestDefault::test_default(),
+            task_manager: Default::default(),
         }
     }
 }
@@ -47,22 +57,34 @@ impl ProInMemoryContext {
     pub async fn new_with_data(
         dataset_defs_path: PathBuf,
         provider_defs_path: PathBuf,
+        layer_defs_path: PathBuf,
+        layer_collection_defs_path: PathBuf,
         exe_ctx_tiling_spec: TilingSpecification,
         query_ctx_chunk_size: ChunkByteSize,
     ) -> Self {
-        let mut db = ProHashMapDatasetDb::default();
-        add_datasets_from_directory(&mut db, dataset_defs_path).await;
-        add_providers_from_directory(&mut db, provider_defs_path.clone()).await;
-        add_providers_from_directory(&mut db, provider_defs_path.join("pro")).await;
+        let mut layer_db = HashMapLayerDb::default();
+
+        add_layers_from_directory(&mut layer_db, layer_defs_path).await;
+        add_layer_collections_from_directory(&mut layer_db, layer_collection_defs_path).await;
+
+        let mut dataset_db = ProHashMapDatasetDb::default();
+        add_datasets_from_directory(&mut dataset_db, dataset_defs_path).await;
+
+        let mut layer_provider_db = HashMapLayerProviderDb::default();
+        add_providers_from_directory(&mut layer_provider_db, provider_defs_path.clone()).await;
+        add_providers_from_directory(&mut layer_provider_db, provider_defs_path.join("pro")).await;
 
         Self {
             user_db: Default::default(),
             project_db: Default::default(),
             workflow_registry: Default::default(),
+            dataset_db: Arc::new(dataset_db),
+            layer_db: Arc::new(layer_db),
+            layer_provider_db: Arc::new(layer_provider_db),
+            task_manager: Default::default(),
             thread_pool: create_rayon_thread_pool(0),
             exe_ctx_tiling_spec,
             query_ctx_chunk_size,
-            dataset_db: Arc::new(RwLock::new(db)),
         }
     }
 
@@ -75,6 +97,9 @@ impl ProInMemoryContext {
             project_db: Default::default(),
             workflow_registry: Default::default(),
             dataset_db: Default::default(),
+            layer_db: Default::default(),
+            layer_provider_db: Default::default(),
+            task_manager: Default::default(),
             thread_pool: create_rayon_thread_pool(0),
             exe_ctx_tiling_spec,
             query_ctx_chunk_size,
@@ -86,14 +111,11 @@ impl ProInMemoryContext {
 impl ProContext for ProInMemoryContext {
     type UserDB = HashMapUserDb;
 
-    fn user_db(&self) -> Db<Self::UserDB> {
+    fn user_db(&self) -> Arc<Self::UserDB> {
         self.user_db.clone()
     }
-    async fn user_db_ref(&self) -> RwLockReadGuard<'_, Self::UserDB> {
-        self.user_db.read().await
-    }
-    async fn user_db_ref_mut(&self) -> RwLockWriteGuard<'_, Self::UserDB> {
-        self.user_db.write().await
+    fn user_db_ref(&self) -> &Self::UserDB {
+        &self.user_db
     }
 }
 
@@ -103,37 +125,54 @@ impl Context for ProInMemoryContext {
     type ProjectDB = ProHashMapProjectDb;
     type WorkflowRegistry = HashMapRegistry;
     type DatasetDB = ProHashMapDatasetDb;
+    type LayerDB = HashMapLayerDb;
+    type LayerProviderDB = HashMapLayerProviderDb;
     type QueryContext = QueryContextImpl;
-    type ExecutionContext = ExecutionContextImpl<UserSession, ProHashMapDatasetDb>;
+    type ExecutionContext =
+        ExecutionContextImpl<UserSession, ProHashMapDatasetDb, HashMapLayerProviderDb>;
+    type TaskContext = SimpleTaskManagerContext;
+    type TaskManager = SimpleTaskManager;
 
-    fn project_db(&self) -> Db<Self::ProjectDB> {
+    fn project_db(&self) -> Arc<Self::ProjectDB> {
         self.project_db.clone()
     }
-    async fn project_db_ref(&self) -> RwLockReadGuard<'_, Self::ProjectDB> {
-        self.project_db.read().await
-    }
-    async fn project_db_ref_mut(&self) -> RwLockWriteGuard<'_, Self::ProjectDB> {
-        self.project_db.write().await
+    fn project_db_ref(&self) -> &Self::ProjectDB {
+        &self.project_db
     }
 
-    fn workflow_registry(&self) -> Db<Self::WorkflowRegistry> {
+    fn workflow_registry(&self) -> Arc<Self::WorkflowRegistry> {
         self.workflow_registry.clone()
     }
-    async fn workflow_registry_ref(&self) -> RwLockReadGuard<'_, Self::WorkflowRegistry> {
-        self.workflow_registry.read().await
-    }
-    async fn workflow_registry_ref_mut(&self) -> RwLockWriteGuard<'_, Self::WorkflowRegistry> {
-        self.workflow_registry.write().await
+    fn workflow_registry_ref(&self) -> &Self::WorkflowRegistry {
+        &self.workflow_registry
     }
 
-    fn dataset_db(&self) -> Db<Self::DatasetDB> {
+    fn dataset_db(&self) -> Arc<Self::DatasetDB> {
         self.dataset_db.clone()
     }
-    async fn dataset_db_ref(&self) -> RwLockReadGuard<'_, Self::DatasetDB> {
-        self.dataset_db.read().await
+    fn dataset_db_ref(&self) -> &Self::DatasetDB {
+        &self.dataset_db
     }
-    async fn dataset_db_ref_mut(&self) -> RwLockWriteGuard<'_, Self::DatasetDB> {
-        self.dataset_db.write().await
+
+    fn layer_db(&self) -> Arc<Self::LayerDB> {
+        self.layer_db.clone()
+    }
+    fn layer_db_ref(&self) -> &Self::LayerDB {
+        &self.layer_db
+    }
+
+    fn layer_provider_db(&self) -> Arc<Self::LayerProviderDB> {
+        self.layer_provider_db.clone()
+    }
+    fn layer_provider_db_ref(&self) -> &Self::LayerProviderDB {
+        &self.layer_provider_db
+    }
+
+    fn tasks(&self) -> Arc<Self::TaskManager> {
+        self.task_manager.clone()
+    }
+    fn tasks_ref(&self) -> &Self::TaskManager {
+        &self.task_manager
     }
 
     fn query_context(&self) -> Result<Self::QueryContext> {
@@ -144,19 +183,21 @@ impl Context for ProInMemoryContext {
     }
 
     fn execution_context(&self, session: UserSession) -> Result<Self::ExecutionContext> {
-        Ok(
-            ExecutionContextImpl::<UserSession, ProHashMapDatasetDb>::new(
-                self.dataset_db.clone(),
-                self.thread_pool.clone(),
-                session,
-                self.exe_ctx_tiling_spec,
-            ),
-        )
+        Ok(ExecutionContextImpl::<
+            UserSession,
+            ProHashMapDatasetDb,
+            HashMapLayerProviderDb,
+        >::new(
+            self.dataset_db.clone(),
+            self.layer_provider_db.clone(),
+            self.thread_pool.clone(),
+            session,
+            self.exe_ctx_tiling_spec,
+        ))
     }
 
     async fn session_by_id(&self, session_id: crate::contexts::SessionId) -> Result<Self::Session> {
         self.user_db_ref()
-            .await
             .session(session_id)
             .await
             .map_err(Box::new)

@@ -1,9 +1,6 @@
 {
   "properties": {
-    "id": {
-      "type": "internal",
-      "datasetId": "a3f6955e-53cc-4752-9e4a-e9f0493add80"
-    },
+    "id": "a3f6955e-53cc-4752-9e4a-e9f0493add80",
     "name": "NDVI3857",
     "description": "NDVI data from MODIS reprojected to EPSG:3857",
     "sourceOperator": "GdalSource",
@@ -21,7 +18,14 @@
       "measurement": {
         "type": "unitless"
       },
-      "noDataValue": 0.0
+      "time": {
+        "start": "2014-01-01T00:00:00.000Z",
+        "end": "2014-07-01T00:00:00.000Z"
+      },
+      "bbox": {
+        "upperLeftCoordinate": [-20026376.39, 20048966.1],
+        "lowerRightCoordinate": [20026376.39, -20048966.1]
+      }
     },
     "params": {
       "filePath": "test_data/raster/modis_ndvi/projected_3857/MOD13A2_M_NDVI_%_START_TIME_%.TIFF",
@@ -45,9 +49,12 @@
         "reference": "start"
       }
     },
-    "start": "2014-01-01T00:00:00.000Z",
+    "dataTime": {
+      "start": "2014-01-01T00:00:00.000Z",
+      "end": "2014-07-01T00:00:00.000Z"
+    },
     "step": {
-      "granularity": "Months",
+      "granularity": "months",
       "step": 1
     }
   }

@@ -1,22 +1,22 @@
+use std::ops::{Mul, Sub};
 use std::{cmp::max, convert::TryInto, ops::Add};
 
-use chrono::{Datelike, Duration, NaiveDate};
-use error::Error::NoDateTimeValid;
 use serde::{Deserialize, Serialize};
 
 #[cfg(feature = "postgres")]
 use postgres_types::{FromSql, ToSql};
-use snafu::OptionExt;
+use snafu::{ensure, OptionExt};
 
 use crate::error::{self, Error};
 use crate::primitives::TimeInstance;
 use crate::util::Result;
 
-use super::TimeInterval;
+use super::{DateTime, Duration, TimeInterval};
 
 /// A time granularity.
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[cfg_attr(feature = "postgres", derive(ToSql, FromSql))]
+#[serde(rename_all = "camelCase")]
 pub enum TimeGranularity {
     Millis,
     Seconds,
@@ -36,25 +36,24 @@ pub struct TimeStep {
 }
 
 impl TimeStep {
-    /// Resolves how many `TimeSteps` fit into a given `TimeInterval`.
+    /// Resolves how many `TimeStep`-sized intervals fit into a given `TimeInterval`.
     /// Remember that `TimeInterval` is not inclusive.
     ///
     /// # Errors
     /// This method uses chrono and therefore fails if a `TimeInstance` is outside chronos valid date range.
     ///
     pub fn num_steps_in_interval(self, time_interval: TimeInterval) -> Result<u32> {
-        let end = time_interval
-            .end()
-            .as_naive_date_time()
-            .ok_or(NoDateTimeValid {
-                time_instance: time_interval.end(),
-            })?;
-        let start = time_interval
-            .start()
-            .as_naive_date_time()
-            .ok_or(NoDateTimeValid {
-                time_instance: time_interval.start(),
-            })?;
+        // TODO: assess failing
+        let end = time_interval.end();
+        // .as_naive_date_time()
+        // .ok_or(NoDateTimeValid {
+        //     time_instance: time_interval.end(),
+        // })?;
+        let start = time_interval.start();
+        // .as_naive_date_time()
+        // .ok_or(NoDateTimeValid {
+        //     time_instance: time_interval.start(),
+        // })?;
 
         let duration = end - start;
 
@@ -63,87 +62,56 @@ impl TimeStep {
         }
 
         let num_steps: i64 = match self.granularity {
-            TimeGranularity::Millis => {
-                let s = duration.num_milliseconds() / i64::from(self.step);
-                if (duration - Duration::milliseconds(s * i64::from(self.step))).is_zero() {
-                    s - 1
-                } else {
-                    s
-                }
-            }
-
-            TimeGranularity::Seconds => {
-                let s = duration.num_seconds() / i64::from(self.step);
-                if (duration - Duration::seconds(s * i64::from(self.step))).is_zero() {
-                    s - 1
-                } else {
-                    s
-                }
-            }
-            TimeGranularity::Minutes => {
-                let s = duration.num_minutes() / i64::from(self.step);
-                if (duration - Duration::minutes(s * i64::from(self.step))).is_zero() {
-                    s - 1
-                } else {
-                    s
-                }
-            }
-            TimeGranularity::Hours => {
-                let s = duration.num_hours() / i64::from(self.step);
-                if (duration - Duration::hours(s * i64::from(self.step))).is_zero() {
-                    s - 1
-                } else {
-                    s
-                }
-            }
-            TimeGranularity::Days => {
-                let s = duration.num_days() / i64::from(self.step);
-                if (duration - Duration::days(s * i64::from(self.step))).is_zero() {
-                    s - 1
-                } else {
-                    s
-                }
-            }
+            TimeGranularity::Millis => duration.num_milliseconds() / i64::from(self.step),
+            TimeGranularity::Seconds => duration.num_seconds() / i64::from(self.step),
+            TimeGranularity::Minutes => duration.num_minutes() / i64::from(self.step),
+            TimeGranularity::Hours => duration.num_hours() / i64::from(self.step),
+            TimeGranularity::Days => duration.num_days() / i64::from(self.step),
             TimeGranularity::Months => {
+                let start = start.as_date_time().ok_or(Error::NoDateTimeValid {
+                    time_instance: time_interval.start(),
+                })?;
+                let end = end.as_date_time().ok_or(Error::NoDateTimeValid {
+                    time_instance: time_interval.start(),
+                })?;
+
                 let diff_years = i64::from(end.year() - start.year());
                 let diff_months =
                     i64::from(end.month()) - i64::from(start.month()) + diff_years * 12;
-                let steps = diff_months / i64::from(self.step);
 
-                let shifted_start = (time_interval.start()
-                    + TimeStep {
-                        granularity: TimeGranularity::Months,
-                        step: self.step * steps as u32,
-                    })
-                .expect("is in valid range");
-
-                if (end
-                    - shifted_start
-                        .as_naive_date_time()
-                        .expect("is in valid range"))
-                .is_zero()
-                {
-                    steps - 1
-                } else {
-                    steps
-                }
+                diff_months / i64::from(self.step)
             }
             TimeGranularity::Years => {
-                let steps = i64::from(end.year() - start.year()) / i64::from(self.step);
+                let start = start.as_date_time().ok_or(Error::NoDateTimeValid {
+                    time_instance: time_interval.start(),
+                })?;
+                let end = end.as_date_time().ok_or(Error::NoDateTimeValid {
+                    time_instance: time_interval.start(),
+                })?;
 
-                let shifted_start = start
-                    .with_year(start.year() + (i64::from(self.step) * steps) as i32)
-                    .expect("is in valid range");
-
-                if (end - shifted_start).is_zero() {
-                    steps - 1
-                } else {
-                    steps
-                }
+                i64::from(end.year() - start.year()) / i64::from(self.step)
             }
         };
 
         Ok(max(0, num_steps as u32))
+    }
+
+    /// Resolves how many `TimeStep`-sized intervals fit into a given `TimeInterval`.
+    /// The last step is included into the result even if it does not fit completely.
+    /// Remember that `TimeInterval` is not inclusive.
+    ///
+    /// # Errors
+    /// This method uses chrono and therefore fails if a `TimeInstance` is outside chronos valid date range.
+    ///
+    pub fn num_steps_in_interval_ceil(self, time_interval: TimeInterval) -> Result<u32> {
+        // compute the number of steps that are still contained in the `time_interval`
+        // this has to be at least 1 as the start of the interval is always contained
+        let mut num_steps = self.num_steps_in_interval(time_interval)?.max(1);
+        if (time_interval.start() + (self * num_steps))? < time_interval.end() {
+            // the next step is partially contained so we need to add one more step
+            num_steps += 1;
+        }
+        Ok(num_steps)
     }
 
     /// Snaps a `TimeInstance` relative to a given reference `TimeInstance`.
@@ -151,100 +119,125 @@ impl TimeStep {
     /// # Errors
     /// This method uses chrono and therefore fails if a `TimeInstance` is outside chronos valid date range.
     ///
+    #[allow(clippy::too_many_lines)] // TODO: split function
     pub fn snap_relative<T>(self, reference: T, time_to_snap: T) -> Result<TimeInstance>
     where
         T: TryInto<TimeInstance>,
         Error: From<T::Error>,
     {
-        let reference = reference.try_into()?;
-        let time_to_snap = time_to_snap.try_into()?;
+        let reference: TimeInstance = reference.try_into()?;
+        let time_to_snap: TimeInstance = time_to_snap.try_into()?;
 
-        let ref_date_time = reference.as_naive_date_time().ok_or(NoDateTimeValid {
+        let ref_date_time = reference.as_date_time().ok_or(Error::NoDateTimeValid {
             time_instance: reference,
-        })?;
-        let time_to_snap_date_time = time_to_snap.as_naive_date_time().ok_or(NoDateTimeValid {
-            time_instance: time_to_snap,
         })?;
 
         let snapped_date_time = match self.granularity {
             TimeGranularity::Millis => {
-                let diff_duration = time_to_snap_date_time - ref_date_time;
+                let diff_duration = time_to_snap - reference;
                 let snapped_millis =
                     (diff_duration.num_milliseconds() as f64 / f64::from(self.step)).floor() as i64
                         * i64::from(self.step);
                 ref_date_time + Duration::milliseconds(snapped_millis)
             }
             TimeGranularity::Seconds => {
-                let diff_duration = time_to_snap_date_time - ref_date_time;
+                let diff_duration = time_to_snap - reference;
                 let snapped_seconds = (diff_duration.num_seconds() as f64 / f64::from(self.step))
                     .floor() as i64
                     * i64::from(self.step);
                 ref_date_time + Duration::seconds(snapped_seconds)
             }
             TimeGranularity::Minutes => {
-                let diff_duration = time_to_snap_date_time - ref_date_time;
+                let diff_duration = time_to_snap - reference;
                 let snapped_minutes = (diff_duration.num_minutes() as f64 / f64::from(self.step))
                     .floor() as i64
                     * i64::from(self.step);
                 ref_date_time + Duration::minutes(snapped_minutes)
             }
             TimeGranularity::Hours => {
-                let diff_duration = time_to_snap_date_time - ref_date_time;
+                let diff_duration = time_to_snap - reference;
                 let snapped_hours = (diff_duration.num_hours() as f64 / f64::from(self.step))
                     .floor() as i64
                     * i64::from(self.step);
                 ref_date_time + Duration::hours(snapped_hours)
             }
             TimeGranularity::Days => {
-                let diff_duration = time_to_snap_date_time - ref_date_time;
+                let diff_duration = time_to_snap - reference;
                 let snapped_days = (diff_duration.num_days() as f64 / f64::from(self.step)).floor()
                     as i64
                     * i64::from(self.step);
                 ref_date_time + Duration::days(snapped_days)
             }
             TimeGranularity::Months => {
+                let time_to_snap_date_time =
+                    time_to_snap.as_date_time().ok_or(Error::NoDateTimeValid {
+                        time_instance: time_to_snap,
+                    })?;
+
                 // first, calculate the total difference in months
                 let diff_months = (time_to_snap_date_time.year() - ref_date_time.year()) * 12
-                    + (time_to_snap_date_time.month() as i32 - ref_date_time.month() as i32);
+                    + (i32::from(time_to_snap_date_time.month())
+                        - i32::from(ref_date_time.month()));
 
                 // get the difference in time steps
                 let snapped_months = (f64::from(diff_months) / f64::from(self.step)).floor() as i32
                     * self.step as i32;
 
                 let snapped_year = if snapped_months.is_negative() {
-                    ref_date_time.year() + (ref_date_time.month() as i32 + snapped_months - 12) / 12
+                    ref_date_time.year()
+                        + (i32::from(ref_date_time.month()) + snapped_months - 12) / 12
                 } else {
-                    ref_date_time.year() + (ref_date_time.month() as i32 + snapped_months - 1) / 12
+                    ref_date_time.year()
+                        + (i32::from(ref_date_time.month()) + snapped_months - 1) / 12
                 };
 
                 let mut snapped_month =
-                    (ref_date_time.month() as i32 + snapped_months).rem_euclid(12);
+                    (i32::from(ref_date_time.month()) + snapped_months).rem_euclid(12);
 
                 if snapped_month == 0 {
                     snapped_month = 12;
                 }
 
                 // TODO: _opt
-                NaiveDate::from_ymd_opt(snapped_year, snapped_month as u32, ref_date_time.day())
-                    .ok_or(Error::DateTimeOutOfBounds {
-                        year: snapped_year,
-                        month: snapped_month as u32,
-                        day: ref_date_time.day(),
-                    })?
-                    .and_time(ref_date_time.time())
+                DateTime::new_utc_checked_with_millis(
+                    snapped_year,
+                    snapped_month as u8,
+                    ref_date_time.day(),
+                    ref_date_time.hour(),
+                    ref_date_time.minute(),
+                    ref_date_time.second(),
+                    ref_date_time.millisecond(),
+                )
+                .ok_or(Error::DateTimeOutOfBounds {
+                    year: snapped_year,
+                    month: snapped_month as u32,
+                    day: u32::from(ref_date_time.day()),
+                })?
             }
             TimeGranularity::Years => {
+                let time_to_snap_date_time =
+                    time_to_snap.as_date_time().ok_or(Error::NoDateTimeValid {
+                        time_instance: time_to_snap,
+                    })?;
+
                 let diff = (time_to_snap_date_time.year() - ref_date_time.year()) as i32;
                 let snapped_year = ref_date_time.year()
                     + ((f64::from(diff) / f64::from(self.step)).floor() as i32 * self.step as i32);
 
-                NaiveDate::from_ymd_opt(snapped_year, ref_date_time.month(), ref_date_time.day())
-                    .ok_or(Error::DateTimeOutOfBounds {
-                        year: snapped_year,
-                        month: ref_date_time.month(),
-                        day: ref_date_time.day(),
-                    })?
-                    .and_time(ref_date_time.time())
+                DateTime::new_utc_checked_with_millis(
+                    snapped_year,
+                    ref_date_time.month(),
+                    ref_date_time.day(),
+                    ref_date_time.hour(),
+                    ref_date_time.minute(),
+                    ref_date_time.second(),
+                    ref_date_time.millisecond(),
+                )
+                .ok_or(Error::DateTimeOutOfBounds {
+                    year: snapped_year,
+                    month: u32::from(ref_date_time.month()),
+                    day: u32::from(ref_date_time.day()),
+                })?
             }
         };
 
@@ -281,7 +274,12 @@ impl Add<TimeStep> for TimeInstance {
     type Output = Result<TimeInstance>;
 
     fn add(self, rhs: TimeStep) -> Self::Output {
-        let date_time = self.as_naive_date_time().ok_or(NoDateTimeValid {
+        if self.is_min() || self.is_max() {
+            // begin and end of time are special values, we don't want to do arithmetics on them
+            return Ok(self);
+        }
+
+        let date_time = self.as_date_time().ok_or(Error::NoDateTimeValid {
             time_instance: self,
         })?;
 
@@ -292,26 +290,132 @@ impl Add<TimeStep> for TimeInstance {
             TimeGranularity::Hours => date_time + Duration::hours(i64::from(rhs.step)),
             TimeGranularity::Days => date_time + Duration::days(i64::from(rhs.step)),
             TimeGranularity::Months => {
-                let months = date_time.month0() + rhs.step;
+                let months = u32::from(date_time.month0()) + rhs.step;
                 let month = months % 12 + 1;
                 let years_from_months = (months / 12) as i32;
                 let year = date_time.year() + years_from_months;
                 let day = date_time.day();
-                NaiveDate::from_ymd_opt(year, month, day)
-                    .context(error::DateTimeOutOfBounds { year, month, day })?
-                    .and_time(date_time.time())
+                DateTime::new_utc_checked_with_millis(
+                    year,
+                    month as u8,
+                    day,
+                    date_time.hour(),
+                    date_time.minute(),
+                    date_time.second(),
+                    date_time.millisecond(),
+                )
+                .context(error::DateTimeOutOfBounds { year, month, day })?
             }
             TimeGranularity::Years => {
                 let year = date_time.year() + rhs.step as i32;
                 let month = date_time.month();
                 let day = date_time.day();
-                NaiveDate::from_ymd_opt(year, month, day)
-                    .context(error::DateTimeOutOfBounds { year, month, day })?
-                    .and_time(date_time.time())
+                DateTime::new_utc_checked_with_millis(
+                    year,
+                    month,
+                    day,
+                    date_time.hour(),
+                    date_time.minute(),
+                    date_time.second(),
+                    date_time.millisecond(),
+                )
+                .context(error::DateTimeOutOfBounds { year, month, day })?
             }
         };
 
         Ok(TimeInstance::from(res_date_time))
+    }
+}
+
+impl Sub<TimeStep> for TimeInstance {
+    type Output = Result<TimeInstance>;
+
+    fn sub(self, rhs: TimeStep) -> Self::Output {
+        if self.is_min() || self.is_max() {
+            // begin and end of time are special values, we don't want to do arithmetics on them
+            return Ok(self);
+        }
+
+        let date_time = self.as_date_time().ok_or(Error::NoDateTimeValid {
+            time_instance: self,
+        })?;
+
+        let res_date_time = match rhs.granularity {
+            TimeGranularity::Millis => date_time - Duration::milliseconds(i64::from(rhs.step)),
+            TimeGranularity::Seconds => date_time - Duration::seconds(i64::from(rhs.step)),
+            TimeGranularity::Minutes => date_time - Duration::minutes(i64::from(rhs.step)),
+            TimeGranularity::Hours => date_time - Duration::hours(i64::from(rhs.step)),
+            TimeGranularity::Days => date_time - Duration::days(i64::from(rhs.step)),
+            TimeGranularity::Months => {
+                let months = i64::from(date_time.month0()) - i64::from(rhs.step);
+
+                let (year, month) = if months < 0 {
+                    let month = (months % 12 + 12) as u32;
+                    let years_from_months = 1 + (months.abs() / 12) as i32;
+                    let year = date_time.year() - years_from_months;
+
+                    (year, month as u8 + 1)
+                } else {
+                    (date_time.year(), months as u8 + 1)
+                };
+
+                let day = date_time.day();
+                DateTime::new_utc_checked_with_millis(
+                    year,
+                    month,
+                    day,
+                    date_time.hour(),
+                    date_time.minute(),
+                    date_time.second(),
+                    date_time.millisecond(),
+                )
+                .context(error::DateTimeOutOfBounds { year, month, day })?
+            }
+            TimeGranularity::Years => {
+                let year = date_time.year() - rhs.step as i32;
+                let month = date_time.month();
+                let day = date_time.day();
+                DateTime::new_utc_checked_with_millis(
+                    year,
+                    month,
+                    day,
+                    date_time.hour(),
+                    date_time.minute(),
+                    date_time.second(),
+                    date_time.millisecond(),
+                )
+                .context(error::DateTimeOutOfBounds { year, month, day })?
+            }
+        };
+
+        Ok(TimeInstance::from(res_date_time))
+    }
+}
+
+impl Add<TimeStep> for TimeInterval {
+    type Output = Result<TimeInterval>;
+
+    fn add(self, step: TimeStep) -> Self::Output {
+        Self::new((self.start() + step)?, (self.end() + step)?)
+    }
+}
+
+impl Sub<TimeStep> for TimeInterval {
+    type Output = Result<TimeInterval>;
+
+    fn sub(self, step: TimeStep) -> Self::Output {
+        Self::new((self.start() - step)?, (self.end() - step)?)
+    }
+}
+
+impl Mul<u32> for TimeStep {
+    type Output = TimeStep;
+
+    fn mul(self, rhs: u32) -> Self::Output {
+        TimeStep {
+            granularity: self.granularity,
+            step: self.step * rhs,
+        }
     }
 }
 
@@ -321,59 +425,51 @@ pub struct TimeStepIter {
     reference_time: TimeInstance,
     time_step: TimeStep,
     curr: u32,
-    max: u32,
+    steps: u32,
 }
 
 impl TimeStepIter {
-    /// Create a new `TimeStepIter` which will include the start `TimeInstance`.
+    /// Create a new `TimeStepIter` with given amount of `steps`.
     /// # Errors
     /// This method fails if the interval [start, max) is not valid in chrono.
-    pub fn new_incl_start(
-        reference_time: TimeInstance,
-        time_step: TimeStep,
-        steps: u32,
-    ) -> Result<Self> {
+    pub fn new(reference_time: TimeInstance, time_step: TimeStep, steps: u32) -> Result<Self> {
+        ensure!(
+            !reference_time.is_min(),
+            error::TimeStepIterStartMustNotBeBeginOfTime,
+        );
+
         let _ = (reference_time
             + TimeStep {
                 granularity: time_step.granularity,
                 step: time_step.step * steps,
             })?;
-        Ok(Self::new_incl_start_unchecked(
-            reference_time,
-            time_step,
-            steps,
-        ))
+        Ok(Self::new_unchecked(reference_time, time_step, steps))
     }
 
-    /// Create a new `TimeStepIter` which will include the start `TimeInstance`.
+    /// Create a new `TimeStepIter` with given amount of `steps`.
     /// This method does not check if the generated `TimeInstance` values are valid.
-    pub fn new_incl_start_unchecked(
-        reference_time: TimeInstance,
-        time_step: TimeStep,
-        steps: u32,
-    ) -> Self {
+    pub fn new_unchecked(reference_time: TimeInstance, time_step: TimeStep, steps: u32) -> Self {
         Self {
             reference_time,
             time_step,
             curr: 0,
-            max: steps,
+            steps,
         }
     }
 
-    /// Create a new `TimeStepIter` which will include the start of the provided `TimeInterval`.
+    /// Create a new `TimeStepIter` which produces all `TimeInstance`s contained in the given `time_interval`.
     /// # Errors
-    /// This method fails if the start or end values of the interval are not valid in chrono.
-    pub fn new_with_interval_incl_start(
-        time_interval: TimeInterval,
-        time_step: TimeStep,
-    ) -> Result<Self> {
-        let num_steps = if time_interval.start() == time_interval.end() {
-            0
-        } else {
-            time_step.num_steps_in_interval(time_interval)?
-        };
+    /// This method fails if the start or end values of the interval are not valid in chrono, or if the start
+    /// value is the begin of time (`TimeInstance::MIN`).
+    pub fn new_with_interval(time_interval: TimeInterval, time_step: TimeStep) -> Result<Self> {
+        ensure!(
+            !time_interval.start().is_min(),
+            error::TimeStepIterStartMustNotBeBeginOfTime,
+        );
 
-        Self::new_incl_start(time_interval.start(), time_step, num_steps)
+        let num_steps = time_step.num_steps_in_interval_ceil(time_interval)?;
+
+        Self::new(time_interval.start(), time_step, num_steps)
     }
 
     /// Create a new `Iterator` which will return `TimeInterval` starting at each `TimeInstance`.
@@ -395,16 +491,11 @@ impl Iterator for TimeStepIter {
     type Item = TimeInstance;
 
     fn next(&mut self) -> Option<Self::Item> {
-        if self.curr > self.max {
+        if self.curr >= self.steps {
             return None;
         }
 
-        let next = (self.reference_time
-            + TimeStep {
-                granularity: self.time_step.granularity,
-                step: self.curr * self.time_step.step,
-            })
-        .unwrap();
+        let next = (self.reference_time + self.time_step * self.curr).unwrap();
 
         self.curr += 1;
 
@@ -414,9 +505,10 @@ impl Iterator for TimeStepIter {
 
 #[cfg(test)]
 mod tests {
-    use chrono::NaiveDateTime;
 
     use super::*;
+
+    use crate::primitives::DateTimeParseFormat;
 
     fn test_snap(
         granularity: TimeGranularity,
@@ -425,15 +517,11 @@ mod tests {
         t_in: &str,
         t_expect: &str,
     ) {
-        let t_ref = TimeInstance::from(
-            NaiveDateTime::parse_from_str(t_start, "%Y-%m-%dT%H:%M:%S%.f").unwrap(),
-        );
-        let t_1 = TimeInstance::from(
-            NaiveDateTime::parse_from_str(t_in, "%Y-%m-%dT%H:%M:%S%.f").unwrap(),
-        );
-        let t_exp = TimeInstance::from(
-            NaiveDateTime::parse_from_str(t_expect, "%Y-%m-%dT%H:%M:%S%.f").unwrap(),
-        );
+        let format = DateTimeParseFormat::custom("%Y-%m-%dT%H:%M:%S%.3f".to_string());
+
+        let t_ref = TimeInstance::from(DateTime::parse_from_str(t_start, &format).unwrap());
+        let t_1 = TimeInstance::from(DateTime::parse_from_str(t_in, &format).unwrap());
+        let t_exp = TimeInstance::from(DateTime::parse_from_str(t_expect, &format).unwrap());
 
         let time_snapper = TimeStep {
             granularity,
@@ -450,10 +538,10 @@ mod tests {
         t_2: &str,
         steps_expect: u32,
     ) {
-        let t_1 =
-            TimeInstance::from(NaiveDateTime::parse_from_str(t_1, "%Y-%m-%dT%H:%M:%S%.f").unwrap());
-        let t_2 =
-            TimeInstance::from(NaiveDateTime::parse_from_str(t_2, "%Y-%m-%dT%H:%M:%S%.f").unwrap());
+        let format = DateTimeParseFormat::custom("%Y-%m-%dT%H:%M:%S%.3f".to_string());
+
+        let t_1 = TimeInstance::from(DateTime::parse_from_str(t_1, &format).unwrap());
+        let t_2 = TimeInstance::from(DateTime::parse_from_str(t_2, &format).unwrap());
 
         let time_snapper = TimeStep {
             granularity,
@@ -469,11 +557,10 @@ mod tests {
     }
 
     fn test_add(granularity: TimeGranularity, t_step: u32, t_1: &str, t_expect: &str) {
-        let t_1 =
-            TimeInstance::from(NaiveDateTime::parse_from_str(t_1, "%Y-%m-%dT%H:%M:%S%.f").unwrap());
-        let t_expect = TimeInstance::from(
-            NaiveDateTime::parse_from_str(t_expect, "%Y-%m-%dT%H:%M:%S%.f").unwrap(),
-        );
+        let format = DateTimeParseFormat::custom("%Y-%m-%dT%H:%M:%S%.3f".to_string());
+
+        let t_1 = TimeInstance::from(DateTime::parse_from_str(t_1, &format).unwrap());
+        let t_expect = TimeInstance::from(DateTime::parse_from_str(t_expect, &format).unwrap());
 
         let time_step = TimeStep {
             granularity,
@@ -481,6 +568,28 @@ mod tests {
         };
 
         assert_eq!((t_1 + time_step).unwrap(), t_expect);
+    }
+
+    fn test_sub(granularity: TimeGranularity, t_step: u32, t_1: &str, t_expect: &str) {
+        let format = DateTimeParseFormat::custom("%Y-%m-%dT%H:%M:%S%.3f".to_string());
+
+        let t_1 = TimeInstance::from(DateTime::parse_from_str(t_1, &format).unwrap());
+        let t_expect = TimeInstance::from(DateTime::parse_from_str(t_expect, &format).unwrap());
+
+        let time_step = TimeStep {
+            granularity,
+            step: t_step,
+        };
+
+        let t_result = (t_1 - time_step).unwrap();
+
+        assert_eq!(
+            t_result,
+            t_expect,
+            "left: {} right: {}",
+            t_1.as_rfc3339(),
+            t_result.as_rfc3339()
+        );
     }
 
     #[test]
@@ -690,6 +799,167 @@ mod tests {
             1000,
             "2000-01-01T00:00:00.0",
             "2000-01-01T00:00:01.0",
+        );
+    }
+
+    #[test]
+    fn test_sub_year() {
+        test_sub(
+            TimeGranularity::Years,
+            0,
+            "2000-01-01T00:00:00.000",
+            "2000-01-01T00:00:00.000",
+        );
+
+        test_sub(
+            TimeGranularity::Years,
+            1,
+            "2000-01-01T00:00:00.000",
+            "1999-01-01T00:00:00.000",
+        );
+    }
+
+    #[test]
+    fn test_sub_month() {
+        test_sub(
+            TimeGranularity::Months,
+            0,
+            "2000-01-01T00:00:00.000",
+            "2000-01-01T00:00:00.000",
+        );
+
+        test_sub(
+            TimeGranularity::Months,
+            1,
+            "2000-01-01T00:00:00.000",
+            "1999-12-01T00:00:00.000",
+        );
+
+        test_sub(
+            TimeGranularity::Months,
+            1,
+            "2000-02-01T00:00:00.000",
+            "2000-01-01T00:00:00.000",
+        );
+    }
+
+    #[test]
+    fn test_sub_day() {
+        test_sub(
+            TimeGranularity::Days,
+            0,
+            "2000-01-01T00:00:00.000",
+            "2000-01-01T00:00:00.000",
+        );
+
+        test_sub(
+            TimeGranularity::Days,
+            1,
+            "2000-01-01T00:00:00.000",
+            "1999-12-31T00:00:00.000",
+        );
+
+        test_sub(
+            TimeGranularity::Days,
+            1,
+            "2000-01-02T00:00:00.000",
+            "2000-01-01T00:00:00.000",
+        );
+    }
+
+    #[test]
+    fn test_sub_hour() {
+        test_sub(
+            TimeGranularity::Hours,
+            0,
+            "2000-01-01T00:00:00.000",
+            "2000-01-01T00:00:00.000",
+        );
+
+        test_sub(
+            TimeGranularity::Hours,
+            1,
+            "2000-01-01T00:00:00.000",
+            "1999-12-31T23:00:00.000",
+        );
+
+        test_sub(
+            TimeGranularity::Hours,
+            1,
+            "2000-01-01T01:00:00.000",
+            "2000-01-01T00:00:00.000",
+        );
+    }
+
+    #[test]
+    fn test_sub_minute() {
+        test_sub(
+            TimeGranularity::Minutes,
+            0,
+            "2000-01-01T00:00:00.000",
+            "2000-01-01T00:00:00.000",
+        );
+
+        test_sub(
+            TimeGranularity::Minutes,
+            1,
+            "2000-01-01T00:01:00.000",
+            "2000-01-01T00:00:00.000",
+        );
+
+        test_sub(
+            TimeGranularity::Minutes,
+            1,
+            "2000-01-01T00:00:00.000",
+            "1999-12-31T23:59:00.000",
+        );
+    }
+
+    #[test]
+    fn test_sub_second() {
+        test_sub(
+            TimeGranularity::Seconds,
+            0,
+            "2000-01-01T00:00:00.000",
+            "2000-01-01T00:00:00.000",
+        );
+
+        test_sub(
+            TimeGranularity::Seconds,
+            1,
+            "2000-01-01T00:00:00.000",
+            "1999-12-31T23:59:59.000",
+        );
+
+        test_sub(
+            TimeGranularity::Seconds,
+            1,
+            "2000-01-01T00:00:01.000",
+            "2000-01-01T00:00:00.000",
+        );
+    }
+
+    #[test]
+    fn test_sub_millisecond() {
+        test_sub(
+            TimeGranularity::Millis,
+            0,
+            "2000-01-01T00:00:00.000",
+            "2000-01-01T00:00:00.000",
+        );
+
+        test_sub(
+            TimeGranularity::Millis,
+            1,
+            "2000-01-01T00:00:00.001",
+            "2000-01-01T00:00:00.000",
+        );
+
+        test_sub(
+            TimeGranularity::Millis,
+            1,
+            "2000-01-01T00:00:00.000",
+            "1999-12-31T23:59:59.999",
         );
     }
 
@@ -1033,7 +1303,7 @@ mod tests {
             1,
             "2001-01-01T01:01:01.0",
             "2002-01-01T01:01:01.0",
-            0,
+            1,
         );
     }
 
@@ -1198,7 +1468,7 @@ mod tests {
             1,
             "2001-01-01T01:01:01.0",
             "2001-01-01T01:01:02.0",
-            0,
+            1,
         );
     }
 
@@ -1209,7 +1479,7 @@ mod tests {
             1,
             "2001-01-01T01:01:01.0",
             "2001-01-01T01:01:03.0",
-            1,
+            2,
         );
     }
 
@@ -1225,20 +1495,89 @@ mod tests {
     }
 
     #[test]
+    fn num_steps_millis() {
+        let step = TimeStep {
+            granularity: TimeGranularity::Millis,
+            step: 11,
+        };
+
+        assert_eq!(
+            step.num_steps_in_interval(TimeInterval::new_unchecked(0, 32))
+                .unwrap(),
+            2
+        );
+        assert_eq!(
+            step.num_steps_in_interval(TimeInterval::new_unchecked(0, 33))
+                .unwrap(),
+            3
+        );
+        assert_eq!(
+            step.num_steps_in_interval(TimeInterval::new_unchecked(0, 34))
+                .unwrap(),
+            3
+        );
+        assert_eq!(
+            step.num_steps_in_interval(TimeInterval::new_unchecked(0, 0))
+                .unwrap(),
+            0
+        );
+    }
+
+    #[test]
+    fn num_steps_ceil() {
+        let step = TimeStep {
+            granularity: TimeGranularity::Millis,
+            step: 10,
+        };
+
+        assert_eq!(
+            step.num_steps_in_interval_ceil(TimeInterval::new_unchecked(0, 5))
+                .unwrap(),
+            1
+        );
+
+        assert_eq!(
+            step.num_steps_in_interval_ceil(TimeInterval::new_unchecked(0, 10))
+                .unwrap(),
+            1
+        );
+
+        assert_eq!(
+            step.num_steps_in_interval_ceil(TimeInterval::new_unchecked(0, 11))
+                .unwrap(),
+            2
+        );
+
+        assert_eq!(
+            step.num_steps_in_interval_ceil(TimeInterval::new_unchecked(0, 15))
+                .unwrap(),
+            2
+        );
+        assert_eq!(
+            step.num_steps_in_interval_ceil(TimeInterval::new_unchecked(0, 20))
+                .unwrap(),
+            2
+        );
+
+        assert_eq!(
+            step.num_steps_in_interval_ceil(TimeInterval::new_unchecked(0, 21))
+                .unwrap(),
+            3
+        );
+    }
+
+    #[test]
     fn test_iter_h_0() {
-        let t_1 = TimeInstance::from(NaiveDate::from_ymd(2001, 1, 1).and_hms(0, 1, 1));
-        let t_2 = TimeInstance::from(NaiveDate::from_ymd(2001, 1, 1).and_hms(0, 1, 1));
+        let t_1 = TimeInstance::from(DateTime::new_utc(2001, 1, 1, 0, 1, 1));
+        let t_2 = TimeInstance::from(DateTime::new_utc(2001, 1, 1, 0, 1, 1));
 
         let t_step = TimeStep {
             granularity: TimeGranularity::Hours,
             step: 1,
         };
 
-        let iter = TimeStepIter::new_with_interval_incl_start(
-            TimeInterval::new_unchecked(t_1, t_2),
-            t_step,
-        )
-        .unwrap();
+        let iter =
+            TimeStepIter::new_with_interval(TimeInterval::new_unchecked(t_1, t_2), t_step).unwrap();
 
         let t_vec: Vec<TimeInstance> = iter.collect();
 
@@ -1247,19 +1586,16 @@ mod tests {
 
     #[test]
     fn test_iter_h_3() {
-        let t_1 = TimeInstance::from(NaiveDate::from_ymd(2001, 1, 1).and_hms(0, 1, 1));
-        let t_2 = TimeInstance::from(NaiveDate::from_ymd(2001, 1, 1).and_hms(3, 1, 1));
+        let t_1 = TimeInstance::from(DateTime::new_utc(2001, 1, 1, 0, 1, 1));
+        let t_2 = TimeInstance::from(DateTime::new_utc(2001, 1, 1, 3, 1, 1));
 
         let t_step = TimeStep {
             granularity: TimeGranularity::Hours,
             step: 1,
         };
 
-        let iter = TimeStepIter::new_with_interval_incl_start(
-            TimeInterval::new_unchecked(t_1, t_2),
-            t_step,
-        )
-        .unwrap();
+        let iter =
+            TimeStepIter::new_with_interval(TimeInterval::new_unchecked(t_1, t_2), t_step).unwrap();
 
         let t_vec: Vec<TimeInstance> = iter.collect();
 
@@ -1267,8 +1603,8 @@ mod tests {
             &t_vec,
             &[
                 t_1,
-                TimeInstance::from(NaiveDate::from_ymd(2001, 1, 1).and_hms(1, 1, 1)),
-                TimeInstance::from(NaiveDate::from_ymd(2001, 1, 1).and_hms(2, 1, 1)),
+                TimeInstance::from(DateTime::new_utc(2001, 1, 1, 1, 1, 1)),
+                TimeInstance::from(DateTime::new_utc(2001, 1, 1, 2, 1, 1)),
             ]
         );
     }

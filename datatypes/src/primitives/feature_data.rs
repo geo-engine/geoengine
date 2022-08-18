@@ -1,5 +1,5 @@
 use crate::error;
-use crate::primitives::{PrimitivesError, TimeInstance};
+use crate::primitives::TimeInstance;
 use crate::util::Result;
 use arrow::bitmap::Bitmap;
 use gdal::vector::OGRFieldType;
@@ -220,7 +220,7 @@ where
 #[derive(Clone, Debug, PartialEq)]
 pub struct FloatDataRef<'f> {
     buffer: &'f [f64],
-    valid_bitmap: &'f Option<arrow::bitmap::Bitmap>,
+    valid_bitmap: Option<&'f arrow::bitmap::Bitmap>,
 }
 
 impl<'f> DataRef<'f, f64> for FloatDataRef<'f> {
@@ -378,7 +378,7 @@ impl<'f> From<FloatDataRef<'f>> for FeatureDataRef<'f> {
 }
 
 impl<'f> FloatDataRef<'f> {
-    pub fn new(buffer: &'f [f64], null_bitmap: &'f Option<arrow::bitmap::Bitmap>) -> Self {
+    pub fn new(buffer: &'f [f64], null_bitmap: Option<&'f arrow::bitmap::Bitmap>) -> Self {
         Self {
             buffer,
             valid_bitmap: null_bitmap,
@@ -389,11 +389,11 @@ impl<'f> FloatDataRef<'f> {
 #[derive(Clone, Debug, PartialEq)]
 pub struct IntDataRef<'f> {
     buffer: &'f [i64],
-    valid_bitmap: &'f Option<arrow::bitmap::Bitmap>,
+    valid_bitmap: Option<&'f arrow::bitmap::Bitmap>,
 }
 
 impl<'f> IntDataRef<'f> {
-    pub fn new(buffer: &'f [i64], null_bitmap: &'f Option<arrow::bitmap::Bitmap>) -> Self {
+    pub fn new(buffer: &'f [i64], null_bitmap: Option<&'f arrow::bitmap::Bitmap>) -> Self {
         Self {
             buffer,
             valid_bitmap: null_bitmap,
@@ -461,7 +461,7 @@ impl<'f> From<IntDataRef<'f>> for FeatureDataRef<'f> {
     }
 }
 
-fn null_bitmap_to_bools(null_bitmap: &Option<Bitmap>, len: usize) -> Vec<bool> {
+fn null_bitmap_to_bools(null_bitmap: Option<&Bitmap>, len: usize) -> Vec<bool> {
     if let Some(nulls) = null_bitmap {
         (0..len).map(|i| !nulls.is_set(i)).collect()
     } else {
@@ -472,11 +472,11 @@ fn null_bitmap_to_bools(null_bitmap: &Option<Bitmap>, len: usize) -> Vec<bool> {
 #[derive(Clone, Debug, PartialEq)]
 pub struct BoolDataRef<'f> {
     buffer: Vec<bool>,
-    valid_bitmap: &'f Option<arrow::bitmap::Bitmap>,
+    valid_bitmap: Option<&'f arrow::bitmap::Bitmap>,
 }
 
 impl<'f> BoolDataRef<'f> {
-    pub fn new(buffer: Vec<bool>, null_bitmap: &'f Option<arrow::bitmap::Bitmap>) -> Self {
+    pub fn new(buffer: Vec<bool>, null_bitmap: Option<&'f arrow::bitmap::Bitmap>) -> Self {
         Self {
             buffer,
             valid_bitmap: null_bitmap,
@@ -577,11 +577,11 @@ impl<'f> Iterator for BoolDataRefFloatOptionIter<'f> {
 #[derive(Clone, Debug, PartialEq)]
 pub struct DateTimeDataRef<'f> {
     buffer: &'f [TimeInstance],
-    valid_bitmap: &'f Option<arrow::bitmap::Bitmap>,
+    valid_bitmap: Option<&'f arrow::bitmap::Bitmap>,
 }
 
 impl<'f> DateTimeDataRef<'f> {
-    pub fn new(buffer: &'f [TimeInstance], null_bitmap: &'f Option<arrow::bitmap::Bitmap>) -> Self {
+    pub fn new(buffer: &'f [TimeInstance], null_bitmap: Option<&'f arrow::bitmap::Bitmap>) -> Self {
         Self {
             buffer,
             valid_bitmap: null_bitmap,
@@ -682,7 +682,7 @@ impl<'f> Iterator for DateTimeDataRefFloatOptionIter<'f> {
 #[derive(Clone, Debug, PartialEq)]
 pub struct CategoryDataRef<'f> {
     buffer: &'f [u8],
-    valid_bitmap: &'f Option<arrow::bitmap::Bitmap>,
+    valid_bitmap: Option<&'f arrow::bitmap::Bitmap>,
 }
 
 impl<'f> DataRef<'f, u8> for CategoryDataRef<'f> {
@@ -746,7 +746,7 @@ impl<'f> From<CategoryDataRef<'f>> for FeatureDataRef<'f> {
 }
 
 impl<'f> CategoryDataRef<'f> {
-    pub fn new(buffer: &'f [u8], null_bitmap: &'f Option<arrow::bitmap::Bitmap>) -> Self {
+    pub fn new(buffer: &'f [u8], null_bitmap: Option<&'f arrow::bitmap::Bitmap>) -> Self {
         Self {
             buffer,
             valid_bitmap: null_bitmap,
@@ -792,7 +792,7 @@ unsafe fn byte_ptr_to_str<'d>(bytes: *const u8, length: usize) -> &'d str {
 pub struct TextDataRef<'f> {
     data_buffer: arrow::buffer::Buffer,
     offsets: &'f [i32],
-    valid_bitmap: &'f Option<arrow::bitmap::Bitmap>,
+    valid_bitmap: Option<&'f arrow::bitmap::Bitmap>,
 }
 
 impl<'f> AsRef<[u8]> for TextDataRef<'f> {
@@ -963,7 +963,7 @@ impl<'r> TextDataRef<'r> {
     pub fn new(
         data_buffer: arrow::buffer::Buffer,
         offsets: &'r [i32],
-        valid_bitmap: &'r Option<arrow::bitmap::Bitmap>,
+        valid_bitmap: Option<&'r arrow::bitmap::Bitmap>,
     ) -> Self {
         Self {
             data_buffer,
@@ -1069,19 +1069,12 @@ impl FeatureData {
     }
 
     /// Creates an `arrow` array builder.
-    ///
-    /// # Errors
-    ///
-    /// This method fails if an `arrow` internal error occurs
-    ///
-    pub(crate) fn arrow_builder(
-        &self,
-    ) -> Result<Box<dyn arrow::array::ArrayBuilder>, PrimitivesError> {
-        Ok(match self {
+    pub(crate) fn arrow_builder(&self) -> Box<dyn arrow::array::ArrayBuilder> {
+        match self {
             Self::Text(v) => {
                 let mut builder = arrow::array::StringBuilder::new(v.len());
                 for text in v {
-                    builder.append_value(text)?;
+                    builder.append_value(text);
                 }
                 Box::new(builder)
             }
@@ -1089,75 +1082,75 @@ impl FeatureData {
                 let mut builder = arrow::array::StringBuilder::new(v.len());
                 for text_opt in v {
                     if let Some(text) = text_opt {
-                        builder.append_value(text)?;
+                        builder.append_value(text);
                     } else {
-                        builder.append_null()?;
+                        builder.append_null();
                     }
                 }
                 Box::new(builder)
             }
             Self::Float(v) => {
                 let mut builder = arrow::array::Float64Builder::new(v.len());
-                builder.append_slice(v)?;
+                builder.append_slice(v);
                 Box::new(builder)
             }
             Self::NullableFloat(v) => {
                 let mut builder = arrow::array::Float64Builder::new(v.len());
                 for &number_option in v {
-                    builder.append_option(number_option)?;
+                    builder.append_option(number_option);
                 }
                 Box::new(builder)
             }
             Self::Int(v) => {
                 let mut builder = arrow::array::Int64Builder::new(v.len());
-                builder.append_slice(v)?;
+                builder.append_slice(v);
                 Box::new(builder)
             }
             Self::NullableInt(v) => {
                 let mut builder = arrow::array::Int64Builder::new(v.len());
                 for &int_option in v {
-                    builder.append_option(int_option)?;
+                    builder.append_option(int_option);
                 }
                 Box::new(builder)
             }
             Self::Category(v) => {
                 let mut builder = arrow::array::UInt8Builder::new(v.len());
-                builder.append_slice(v)?;
+                builder.append_slice(v);
                 Box::new(builder)
             }
             Self::NullableCategory(v) => {
                 let mut builder = arrow::array::UInt8Builder::new(v.len());
                 for &float_option in v {
-                    builder.append_option(float_option)?;
+                    builder.append_option(float_option);
                 }
                 Box::new(builder)
             }
             FeatureData::Bool(v) => {
                 let mut builder = arrow::array::BooleanBuilder::new(v.len());
-                builder.append_slice(v)?;
+                builder.append_slice(v);
                 Box::new(builder)
             }
             FeatureData::NullableBool(v) => {
                 let mut builder = arrow::array::BooleanBuilder::new(v.len());
                 for &bool_option in v {
-                    builder.append_option(bool_option)?;
+                    builder.append_option(bool_option);
                 }
                 Box::new(builder)
             }
             FeatureData::DateTime(v) => {
                 let mut builder = arrow::array::Date64Builder::new(v.len());
                 let x: Vec<_> = v.iter().map(|x| x.inner()).collect();
-                builder.append_slice(&x)?;
+                builder.append_slice(&x);
                 Box::new(builder)
             }
             FeatureData::NullableDateTime(v) => {
                 let mut builder = arrow::array::Date64Builder::new(v.len());
                 for &dt_option in v {
-                    builder.append_option(dt_option.map(TimeInstance::inner))?;
+                    builder.append_option(dt_option.map(TimeInstance::inner));
                 }
                 Box::new(builder)
             }
-        })
+        }
     }
 }
 
@@ -1340,7 +1333,7 @@ mod tests {
 
         let from_dates: Vec<String> = collection.data("dates").unwrap().strings_iter().collect();
         let from_dates_cmp: Vec<String> =
-            ["1999-12-31T23:00:00+00:00", "", "2021-11-09T09:05:29+00:00"]
+            ["1999-12-31T23:00:00.000Z", "", "2021-11-09T09:05:29.000Z"]
                 .iter()
                 .map(ToString::to_string)
                 .collect();

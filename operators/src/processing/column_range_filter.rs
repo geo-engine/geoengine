@@ -185,7 +185,7 @@ mod tests {
         }
         .boxed();
 
-        let serialized = serde_json::to_string(&filter).unwrap();
+        let serialized = serde_json::to_value(&filter).unwrap();
 
         assert_eq!(
             serialized,
@@ -203,15 +203,15 @@ mod tests {
                         "type": "MockFeatureCollectionSourceMultiPoint",
                         "params": {
                             "collections": [],
-                            "spatialReference": "EPSG:4326"
+                            "spatialReference": "EPSG:4326",
+                            "measurements": null,
                         }
                     }
                 },
             })
-            .to_string()
         );
 
-        let _operator: Box<dyn VectorOperator> = serde_json::from_str(&serialized).unwrap();
+        let _operator: Box<dyn VectorOperator> = serde_json::from_value(serialized).unwrap();
     }
 
     #[tokio::test]

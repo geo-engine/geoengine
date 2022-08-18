@@ -15,23 +15,26 @@
     clippy::option_if_let_else,
     clippy::similar_names,
     clippy::single_match_else,
+    clippy::trait_duplication_in_bounds, // TODO: reactivate when bugs are fixed
     clippy::type_repetition_in_bounds,
     clippy::wildcard_imports
 )]
 // enable some restriction lints
 #![warn(clippy::print_stdout, clippy::print_stderr, clippy::dbg_macro)]
 
+pub mod apidoc;
 pub mod contexts;
 pub mod datasets;
 pub mod error;
 pub mod handlers;
+pub mod layers;
 pub mod ogc;
 pub mod projects;
 pub mod server;
 pub mod stac;
 #[macro_use]
 pub mod util;
-pub mod apidoc;
+pub mod tasks;
 pub mod workflows;
 
 /// Compiles Geo Engine Pro

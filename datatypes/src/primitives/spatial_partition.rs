@@ -239,6 +239,20 @@ impl SpatialPartition2D {
         ]
         .into()
     }
+
+    #[must_use]
+    pub fn extend(&mut self, other: &Self) -> Self {
+        Self {
+            upper_left_coordinate: Coordinate2D::new(
+                self.upper_left().x.min(other.upper_left().x),
+                self.upper_left().y.max(other.upper_left().y),
+            ),
+            lower_right_coordinate: Coordinate2D::new(
+                self.lower_right().x.max(other.lower_right().x),
+                self.lower_right().y.min(other.lower_right().y),
+            ),
+        }
+    }
 }
 
 pub trait SpatialPartitioned {
@@ -302,6 +316,27 @@ impl From<&SpatialPartition2D> for geo::Rect<f64> {
     fn from(partition: &SpatialPartition2D) -> geo::Rect<f64> {
         geo::Rect::new(partition.lower_left(), partition.upper_right())
     }
+}
+
+/// Compute the extent of all input partitions. If one partition is None, the output will also be None
+pub fn partitions_extent<I: Iterator<Item = Option<SpatialPartition2D>>>(
+    mut bboxes: I,
+) -> Option<SpatialPartition2D> {
+    let mut extent = if let Some(Some(first)) = bboxes.next() {
+        first
+    } else {
+        return None;
+    };
+
+    for bbox in bboxes {
+        if let Some(bbox) = bbox {
+            extent = extent.extend(&bbox);
+        } else {
+            return None;
+        }
+    }
+
+    Some(extent)
 }
 
 #[cfg(test)]
@@ -444,6 +479,41 @@ mod tests {
                 )
             ),
             [105, 187].into()
+        );
+    }
+
+    #[test]
+    fn extent() {
+        assert_eq!(partitions_extent([None].into_iter()), None);
+        assert_eq!(
+            partitions_extent(
+                [
+                    Some(SpatialPartition2D::new((-50., 50.).into(), (50., -50.).into()).unwrap()),
+                    Some(SpatialPartition2D::new((0., 70.).into(), (70., 0.).into()).unwrap())
+                ]
+                .into_iter()
+            ),
+            Some(SpatialPartition2D::new((-50., 70.).into(), (70., -50.).into()).unwrap())
+        );
+        assert_eq!(
+            partitions_extent(
+                [
+                    Some(SpatialPartition2D::new((-50., 50.).into(), (50., -50.).into()).unwrap()),
+                    None
+                ]
+                .into_iter()
+            ),
+            None
+        );
+        assert_eq!(
+            partitions_extent(
+                [
+                    None,
+                    Some(SpatialPartition2D::new((-50., 50.).into(), (50., -50.).into()).unwrap())
+                ]
+                .into_iter()
+            ),
+            None
         );
     }
 }

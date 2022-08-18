@@ -1,14 +1,14 @@
-use super::RasterProperties;
+use super::masked_grid::MaskedGrid;
 use super::{
-    grid_or_empty::GridOrEmpty, GeoTransform, GeoTransformAccess, Grid, GridBounds, GridIdx2D,
-    GridIndexAccess, GridIndexAccessMut, GridShape, GridShape2D, GridShape3D, GridShapeAccess,
-    GridSize, NoDataValue, Raster, TileInformation,
+    grid_or_empty::GridOrEmpty, GeoTransform, GeoTransformAccess, GridBounds, GridIdx2D,
+    GridIndexAccess, GridShape, GridShape2D, GridShape3D, GridShapeAccess, GridSize, Raster,
+    TileInformation,
 };
+use super::{GridIndexAccessMut, RasterProperties};
 use crate::primitives::{
-    Coordinate2D, SpatialBounded, SpatialPartition2D, SpatialPartitioned, TemporalBounded,
-    TimeInterval,
+    SpatialBounded, SpatialPartition2D, SpatialPartitioned, TemporalBounded, TimeInterval,
 };
-use crate::raster::{CoordinatePixelAccess, Pixel};
+use crate::raster::Pixel;
 use crate::util::Result;
 use serde::{Deserialize, Serialize};
 
@@ -20,7 +20,7 @@ pub type RasterTile2D<T> = RasterTile<GridShape2D, T>;
 pub type RasterTile3D<T> = RasterTile<GridShape3D, T>;
 
 /// A `MaterializedRasterTile` is a `BaseTile` of raster data where the data is represented by `Grid`. It implements mutable access to pixels.
-pub type MaterializedRasterTile<D, T> = BaseTile<Grid<D, T>>;
+pub type MaterializedRasterTile<D, T> = BaseTile<MaskedGrid<D, T>>;
 /// A `MaterializedRasterTile2D` is a 2-dimensional `BaseTile` of raster data where the data is represented by `Grid`. It implements mutable access to pixels.
 pub type MaterializedRasterTile2D<T> = MaterializedRasterTile<GridShape2D, T>;
 /// A `MaterializedRasterTile3D` is a 3-dimensional `BaseTile` of raster data where the data is represented by `Grid`. It implements mutable access to pixels.
@@ -72,7 +72,7 @@ where
 
         let tile_upper_left_coord = self
             .global_geo_transform
-            .grid_idx_to_upper_left_coordinate_2d(global_upper_left_idx);
+            .grid_idx_to_pixel_upper_left_coordinate_2d(global_upper_left_idx);
 
         GeoTransform::new(
             tile_upper_left_coord,
@@ -85,7 +85,7 @@ where
 impl<D, T> BaseTile<GridOrEmpty<D, T>>
 where
     T: Pixel,
-    D: GridSize + Clone,
+    D: GridSize + Clone + PartialEq,
 {
     /// create a new `RasterTile`
     pub fn new_with_tile_info(
@@ -185,16 +185,19 @@ where
     }
 
     /// create a new `RasterTile`
-    pub fn new_without_offset(
+    pub fn new_without_offset<G>(
         time: TimeInterval,
         global_geo_transform: GeoTransform,
-        data: Grid<D, T>,
-    ) -> Self {
+        data: G,
+    ) -> Self
+    where
+        G: Into<GridOrEmpty<D, T>>,
+    {
         Self {
             time,
             tile_position: [0, 0].into(),
             global_geo_transform,
-            grid_array: GridOrEmpty::Grid(data),
+            grid_array: data.into(),
             properties: RasterProperties::default(),
         }
     }
@@ -207,7 +210,7 @@ where
     /// Convert the tile into a materialized tile.
     pub fn into_materialized_tile(self) -> MaterializedRasterTile<D, T> {
         MaterializedRasterTile {
-            grid_array: self.grid_array.into_materialized_grid(),
+            grid_array: self.grid_array.into_materialized_masked_grid(),
             time: self.time,
             tile_position: self.tile_position,
             global_geo_transform: self.global_geo_transform,
@@ -219,7 +222,11 @@ where
         match self.grid_array {
             GridOrEmpty::Grid(_) => {}
             GridOrEmpty::Empty(_) => {
-                self.grid_array = self.grid_array.clone().into_materialized_grid().into();
+                self.grid_array = self
+                    .grid_array
+                    .clone()
+                    .into_materialized_masked_grid()
+                    .into();
             }
         }
     }
@@ -245,8 +252,7 @@ where
     D: GridSize + GridBounds + Clone,
     T: Pixel,
     G: GridIndexAccess<D::IndexArray, T>,
-    Self:
-        SpatialBounded + NoDataValue<NoDataType = T> + GridShapeAccess<ShapeArray = D::ShapeArray>,
+    Self: SpatialBounded + GridShapeAccess<ShapeArray = D::ShapeArray>,
 {
     type DataContainer = G;
 
@@ -255,68 +261,32 @@ where
     }
 }
 
-impl<T, G, I> GridIndexAccess<T, I> for BaseTile<G>
+impl<T, G, I> GridIndexAccess<Option<T>, I> for BaseTile<G>
 where
-    G: GridIndexAccess<T, I>,
+    G: GridIndexAccess<Option<T>, I>,
     T: Pixel,
 {
-    fn get_at_grid_index(&self, grid_index: I) -> Result<T> {
+    fn get_at_grid_index(&self, grid_index: I) -> Result<Option<T>> {
         self.grid_array.get_at_grid_index(grid_index)
     }
 
-    fn get_at_grid_index_unchecked(&self, grid_index: I) -> T {
+    fn get_at_grid_index_unchecked(&self, grid_index: I) -> Option<T> {
         self.grid_array.get_at_grid_index_unchecked(grid_index)
     }
 }
 
-impl<T, G, I> GridIndexAccessMut<T, I> for BaseTile<G>
+impl<T, G, I> GridIndexAccessMut<Option<T>, I> for BaseTile<G>
 where
-    G: GridIndexAccessMut<T, I>,
+    G: GridIndexAccessMut<Option<T>, I>,
     T: Pixel,
 {
-    fn set_at_grid_index(&mut self, grid_index: I, value: T) -> Result<()> {
+    fn set_at_grid_index(&mut self, grid_index: I, value: Option<T>) -> Result<()> {
         self.grid_array.set_at_grid_index(grid_index, value)
     }
 
-    fn set_at_grid_index_unchecked(&mut self, grid_index: I, value: T) {
+    fn set_at_grid_index_unchecked(&mut self, grid_index: I, value: Option<T>) {
         self.grid_array
             .set_at_grid_index_unchecked(grid_index, value);
-    }
-}
-
-impl<G, P> CoordinatePixelAccess<P> for BaseTile<G>
-where
-    G: GridSize + Clone,
-    P: Pixel,
-    Self: GridIndexAccess<P, GridIdx2D>,
-{
-    fn pixel_value_at_coord(&self, coordinate: Coordinate2D) -> Result<P> {
-        // TODO: benchmark the impact of creating the `GeoTransform`s
-
-        let grid_index = self
-            .tile_geo_transform()
-            .coordinate_to_grid_idx_2d(coordinate);
-
-        self.get_at_grid_index(grid_index)
-    }
-
-    fn pixel_value_at_coord_unchecked(&self, coordinate: Coordinate2D) -> P {
-        let grid_index = self
-            .tile_geo_transform()
-            .coordinate_to_grid_idx_2d(coordinate);
-
-        self.get_at_grid_index_unchecked(grid_index)
-    }
-}
-
-impl<G> NoDataValue for BaseTile<G>
-where
-    G: NoDataValue,
-{
-    type NoDataType = G::NoDataType;
-
-    fn no_data_value(&self) -> Option<Self::NoDataType> {
-        self.grid_array.no_data_value()
     }
 }
 
@@ -358,79 +328,7 @@ mod tests {
     use crate::{primitives::Coordinate2D, util::test::TestDefault};
 
     use super::*;
-    use crate::raster::{Grid2D, GridIdx};
-
-    #[test]
-    fn coordinate_pixel_access() {
-        fn validate_coordinate<C: Into<Coordinate2D> + Copy>(
-            raster_tile: &RasterTile2D<i32>,
-            coordinate: C,
-        ) {
-            let coordinate: Coordinate2D = coordinate.into();
-
-            let tile_geo_transform = raster_tile.tile_information().tile_geo_transform();
-
-            let value_a = raster_tile.pixel_value_at_coord(coordinate);
-
-            let value_b = raster_tile
-                .get_at_grid_index(tile_geo_transform.coordinate_to_grid_idx_2d(coordinate));
-
-            match (value_a, value_b) {
-                (Ok(a), Ok(b)) => assert_eq!(a, b),
-                (Err(e1), Err(e2)) => assert_eq!(format!("{:?}", e1), format!("{:?}", e2)),
-                (Err(e), _) | (_, Err(e)) => panic!("{}", e.to_string()),
-            };
-        }
-
-        let raster_tile = RasterTile2D::new_with_tile_info(
-            TimeInterval::default(),
-            TileInformation {
-                global_geo_transform: TestDefault::test_default(),
-                global_tile_position: [0, 0].into(),
-                tile_size_in_pixels: [3, 2].into(),
-            },
-            Grid2D::new([3, 2].into(), vec![1, 2, 3, 4, 5, 6], None)
-                .unwrap()
-                .into(),
-        );
-
-        validate_coordinate(&raster_tile, (0.0, 0.0));
-        validate_coordinate(&raster_tile, (1.0, 0.0));
-
-        assert_eq!(
-            raster_tile.pixel_value_at_coord_unchecked((0.0, 0.0).into()),
-            1
-        );
-        assert_eq!(
-            raster_tile.pixel_value_at_coord_unchecked((1.0, 0.0).into()),
-            2
-        );
-
-        let raster_tile = RasterTile2D::new_with_tile_info(
-            TimeInterval::default(),
-            TileInformation {
-                global_geo_transform: TestDefault::test_default(),
-                global_tile_position: [1, 1].into(),
-                tile_size_in_pixels: [3, 2].into(),
-            },
-            Grid2D::new([3, 2].into(), vec![1, 2, 3, 4, 5, 6], None)
-                .unwrap()
-                .into(),
-        );
-
-        validate_coordinate(&raster_tile, (0.0, 0.0));
-        validate_coordinate(&raster_tile, (2.0, -3.0));
-        validate_coordinate(&raster_tile, (3.0, -3.0));
-
-        assert_eq!(
-            raster_tile.pixel_value_at_coord_unchecked((2.0, -3.0).into()),
-            1
-        );
-        assert_eq!(
-            raster_tile.pixel_value_at_coord_unchecked((3.0, -3.0).into()),
-            2
-        );
-    }
+    use crate::raster::GridIdx;
 
     #[test]
     fn tile_information_new() {

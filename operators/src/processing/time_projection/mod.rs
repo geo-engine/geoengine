@@ -27,7 +27,7 @@ use snafu::{ensure, ResultExt, Snafu};
 ///
 pub type TimeProjection = Operator<TimeProjectionParams, SingleVectorSource>;
 
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct TimeProjectionParams {
     /// Specify the time step granularity and size
     step: TimeStep,
@@ -70,10 +70,14 @@ impl VectorOperator for TimeProjection {
             .params
             .step_reference
             // use UTC 0 as default
-            .unwrap_or_else(|| TimeInstance::from_millis_unchecked(0));
+            .unwrap_or(TimeInstance::EPOCH_START);
+
+        let mut result_descriptor = source.result_descriptor().clone();
+        rewrite_result_descriptor(&mut result_descriptor, self.params.step, step_reference)?;
 
         let initialized_operator = InitializedVectorTimeProjection {
             source,
+            result_descriptor,
             step: self.params.step,
             step_reference,
         };
@@ -82,15 +86,30 @@ impl VectorOperator for TimeProjection {
     }
 }
 
+fn rewrite_result_descriptor(
+    result_descriptor: &mut VectorResultDescriptor,
+    step: TimeStep,
+    step_reference: TimeInstance,
+) -> Result<()> {
+    if let Some(time) = result_descriptor.time {
+        let start = step.snap_relative(step_reference, time.start())?;
+        let end = (step.snap_relative(step_reference, time.end())? + step)?;
+
+        result_descriptor.time = Some(TimeInterval::new(start, end)?);
+    }
+    Ok(())
+}
+
 pub struct InitializedVectorTimeProjection {
     source: Box<dyn InitializedVectorOperator>,
+    result_descriptor: VectorResultDescriptor,
     step: TimeStep,
     step_reference: TimeInstance,
 }
 
 impl InitializedVectorOperator for InitializedVectorTimeProjection {
     fn result_descriptor(&self) -> &VectorResultDescriptor {
-        self.source.result_descriptor()
+        &self.result_descriptor
     }
 
     fn query_processor(&self) -> Result<TypedVectorQueryProcessor> {
@@ -235,10 +254,12 @@ mod tests {
         engine::{MockExecutionContext, MockQueryContext},
         mock::MockFeatureCollectionSource,
     };
-    use chrono::NaiveDate;
     use geoengine_datatypes::{
-        collections::MultiPointCollection,
-        primitives::{BoundingBox2D, MultiPoint, SpatialResolution, TimeGranularity, TimeInterval},
+        collections::{MultiPointCollection, VectorDataType},
+        primitives::{
+            BoundingBox2D, DateTime, MultiPoint, SpatialResolution, TimeGranularity, TimeInterval,
+        },
+        spatial_reference::SpatialReference,
         util::test::TestDefault,
     };
 
@@ -280,63 +301,63 @@ mod tests {
         }
 
         assert_time_interval_transform(
-            NaiveDate::from_ymd(2010, 1, 1).and_hms(0, 0, 0),
-            NaiveDate::from_ymd(2011, 1, 1).and_hms(0, 0, 0),
+            DateTime::new_utc(2010, 1, 1, 0, 0, 0),
+            DateTime::new_utc(2011, 1, 1, 0, 0, 0),
             TimeStep {
                 granularity: TimeGranularity::Years,
                 step: 1,
             },
             TimeInstance::from_millis(0).unwrap(),
-            NaiveDate::from_ymd(2010, 1, 1).and_hms(0, 0, 0),
-            NaiveDate::from_ymd(2011, 1, 1).and_hms(0, 0, 0),
+            DateTime::new_utc(2010, 1, 1, 0, 0, 0),
+            DateTime::new_utc(2011, 1, 1, 0, 0, 0),
         );
 
         assert_time_interval_transform(
-            NaiveDate::from_ymd(2010, 4, 3).and_hms(0, 0, 0),
-            NaiveDate::from_ymd(2010, 5, 14).and_hms(0, 0, 0),
+            DateTime::new_utc(2010, 4, 3, 0, 0, 0),
+            DateTime::new_utc(2010, 5, 14, 0, 0, 0),
             TimeStep {
                 granularity: TimeGranularity::Years,
                 step: 1,
             },
             TimeInstance::from_millis(0).unwrap(),
-            NaiveDate::from_ymd(2010, 1, 1).and_hms(0, 0, 0),
-            NaiveDate::from_ymd(2011, 1, 1).and_hms(0, 0, 0),
+            DateTime::new_utc(2010, 1, 1, 0, 0, 0),
+            DateTime::new_utc(2011, 1, 1, 0, 0, 0),
         );
 
         assert_time_interval_transform(
-            NaiveDate::from_ymd(2009, 4, 3).and_hms(0, 0, 0),
-            NaiveDate::from_ymd(2010, 5, 14).and_hms(0, 0, 0),
+            DateTime::new_utc(2009, 4, 3, 0, 0, 0),
+            DateTime::new_utc(2010, 5, 14, 0, 0, 0),
             TimeStep {
                 granularity: TimeGranularity::Years,
                 step: 1,
             },
             TimeInstance::from_millis(0).unwrap(),
-            NaiveDate::from_ymd(2009, 1, 1).and_hms(0, 0, 0),
-            NaiveDate::from_ymd(2011, 1, 1).and_hms(0, 0, 0),
+            DateTime::new_utc(2009, 1, 1, 0, 0, 0),
+            DateTime::new_utc(2011, 1, 1, 0, 0, 0),
         );
 
         assert_time_interval_transform(
-            NaiveDate::from_ymd(2009, 4, 3).and_hms(0, 0, 0),
-            NaiveDate::from_ymd(2010, 5, 14).and_hms(0, 0, 0),
+            DateTime::new_utc(2009, 4, 3, 0, 0, 0),
+            DateTime::new_utc(2010, 5, 14, 0, 0, 0),
             TimeStep {
                 granularity: TimeGranularity::Months,
                 step: 6,
             },
-            TimeInstance::from(NaiveDate::from_ymd(2010, 3, 1).and_hms(0, 0, 0)),
-            NaiveDate::from_ymd(2009, 3, 1).and_hms(0, 0, 0),
-            NaiveDate::from_ymd(2010, 9, 1).and_hms(0, 0, 0),
+            TimeInstance::from(DateTime::new_utc(2010, 3, 1, 0, 0, 0)),
+            DateTime::new_utc(2009, 3, 1, 0, 0, 0),
+            DateTime::new_utc(2010, 9, 1, 0, 0, 0),
         );
 
         assert_time_interval_transform(
-            NaiveDate::from_ymd(2009, 4, 3).and_hms(0, 0, 0),
-            NaiveDate::from_ymd(2010, 5, 14).and_hms(0, 0, 0),
+            DateTime::new_utc(2009, 4, 3, 0, 0, 0),
+            DateTime::new_utc(2010, 5, 14, 0, 0, 0),
             TimeStep {
                 granularity: TimeGranularity::Months,
                 step: 6,
             },
-            TimeInstance::from(NaiveDate::from_ymd(2020, 1, 1).and_hms(0, 0, 0)),
-            NaiveDate::from_ymd(2009, 1, 1).and_hms(0, 0, 0),
-            NaiveDate::from_ymd(2010, 7, 1).and_hms(0, 0, 0),
+            TimeInstance::from(DateTime::new_utc(2020, 1, 1, 0, 0, 0)),
+            DateTime::new_utc(2009, 1, 1, 0, 0, 0),
+            DateTime::new_utc(2010, 7, 1, 0, 0, 0),
         );
 
         assert_time_interval_transform(
@@ -346,7 +367,7 @@ mod tests {
                 granularity: TimeGranularity::Months,
                 step: 6,
             },
-            TimeInstance::from(NaiveDate::from_ymd(2010, 3, 1).and_hms(0, 0, 0)),
+            TimeInstance::from(DateTime::new_utc(2010, 3, 1, 0, 0, 0)),
             TimeInstance::MIN,
             TimeInstance::MAX,
         );
@@ -358,7 +379,7 @@ mod tests {
                 granularity: TimeGranularity::Months,
                 step: 6,
             },
-            TimeInstance::from(NaiveDate::from_ymd(2010, 3, 1).and_hms(0, 0, 0)),
+            TimeInstance::from(DateTime::new_utc(2010, 3, 1, 0, 0, 0)),
             TimeInstance::MIN,
             TimeInstance::MAX,
         );
@@ -374,18 +395,18 @@ mod tests {
                 MultiPoint::many(vec![(0., 0.), (1., 1.), (2., 2.)]).unwrap(),
                 vec![
                     TimeInterval::new(
-                        NaiveDate::from_ymd(2010, 1, 1).and_hms(0, 0, 0),
-                        NaiveDate::from_ymd(2010, 12, 31).and_hms_milli(23, 59, 59, 999),
+                        DateTime::new_utc(2010, 1, 1, 0, 0, 0),
+                        DateTime::new_utc_with_millis(2010, 12, 31, 23, 59, 59, 999),
                     )
                     .unwrap(),
                     TimeInterval::new(
-                        NaiveDate::from_ymd(2010, 6, 3).and_hms(0, 0, 0),
-                        NaiveDate::from_ymd(2010, 7, 14).and_hms(0, 0, 0),
+                        DateTime::new_utc(2010, 6, 3, 0, 0, 0),
+                        DateTime::new_utc(2010, 7, 14, 0, 0, 0),
                     )
                     .unwrap(),
                     TimeInterval::new(
-                        NaiveDate::from_ymd(2010, 1, 1).and_hms(0, 0, 0),
-                        NaiveDate::from_ymd(2010, 3, 31).and_hms_milli(23, 59, 59, 999),
+                        DateTime::new_utc(2010, 1, 1, 0, 0, 0),
+                        DateTime::new_utc_with_millis(2010, 3, 31, 23, 59, 59, 999),
                     )
                     .unwrap(),
                 ],
@@ -422,8 +443,8 @@ mod tests {
                 VectorQueryRectangle {
                     spatial_bounds: BoundingBox2D::new((0., 0.).into(), (2., 2.).into()).unwrap(),
                     time_interval: TimeInterval::new(
-                        NaiveDate::from_ymd(2010, 4, 3).and_hms(0, 0, 0),
-                        NaiveDate::from_ymd(2010, 5, 14).and_hms(0, 0, 0),
+                        DateTime::new_utc(2010, 4, 3, 0, 0, 0),
+                        DateTime::new_utc(2010, 5, 14, 0, 0, 0),
                     )
                     .unwrap(),
                     spatial_resolution: SpatialResolution::one(),
@@ -444,18 +465,18 @@ mod tests {
             MultiPoint::many(vec![(0., 0.), (1., 1.), (2., 2.)]).unwrap(),
             vec![
                 TimeInterval::new(
-                    NaiveDate::from_ymd(2010, 1, 1).and_hms(0, 0, 0),
-                    NaiveDate::from_ymd(2011, 1, 1).and_hms(0, 0, 0),
+                    DateTime::new_utc(2010, 1, 1, 0, 0, 0),
+                    DateTime::new_utc(2011, 1, 1, 0, 0, 0),
                 )
                 .unwrap(),
                 TimeInterval::new(
-                    NaiveDate::from_ymd(2010, 1, 1).and_hms(0, 0, 0),
-                    NaiveDate::from_ymd(2011, 1, 1).and_hms(0, 0, 0),
+                    DateTime::new_utc(2010, 1, 1, 0, 0, 0),
+                    DateTime::new_utc(2011, 1, 1, 0, 0, 0),
                 )
                 .unwrap(),
                 TimeInterval::new(
-                    NaiveDate::from_ymd(2010, 1, 1).and_hms(0, 0, 0),
-                    NaiveDate::from_ymd(2011, 1, 1).and_hms(0, 0, 0),
+                    DateTime::new_utc(2010, 1, 1, 0, 0, 0),
+                    DateTime::new_utc(2011, 1, 1, 0, 0, 0),
                 )
                 .unwrap(),
             ],
@@ -476,18 +497,18 @@ mod tests {
                 MultiPoint::many(vec![(0., 0.), (1., 1.), (2., 2.)]).unwrap(),
                 vec![
                     TimeInterval::new(
-                        NaiveDate::from_ymd(2009, 1, 1).and_hms(0, 0, 0),
-                        NaiveDate::from_ymd(2010, 12, 31).and_hms_milli(23, 59, 59, 999),
+                        DateTime::new_utc(2009, 1, 1, 0, 0, 0),
+                        DateTime::new_utc_with_millis(2010, 12, 31, 23, 59, 59, 999),
                     )
                     .unwrap(),
                     TimeInterval::new(
-                        NaiveDate::from_ymd(2009, 6, 3).and_hms(0, 0, 0),
-                        NaiveDate::from_ymd(2010, 7, 14).and_hms(0, 0, 0),
+                        DateTime::new_utc(2009, 6, 3, 0, 0, 0),
+                        DateTime::new_utc(2010, 7, 14, 0, 0, 0),
                     )
                     .unwrap(),
                     TimeInterval::new(
-                        NaiveDate::from_ymd(2010, 1, 1).and_hms(0, 0, 0),
-                        NaiveDate::from_ymd(2011, 3, 31).and_hms_milli(23, 59, 59, 999),
+                        DateTime::new_utc(2010, 1, 1, 0, 0, 0),
+                        DateTime::new_utc_with_millis(2011, 3, 31, 23, 59, 59, 999),
                     )
                     .unwrap(),
                 ],
@@ -524,8 +545,8 @@ mod tests {
                 VectorQueryRectangle {
                     spatial_bounds: BoundingBox2D::new((0., 0.).into(), (2., 2.).into()).unwrap(),
                     time_interval: TimeInterval::new(
-                        NaiveDate::from_ymd(2010, 4, 3).and_hms(0, 0, 0),
-                        NaiveDate::from_ymd(2010, 5, 14).and_hms(0, 0, 0),
+                        DateTime::new_utc(2010, 4, 3, 0, 0, 0),
+                        DateTime::new_utc(2010, 5, 14, 0, 0, 0),
                     )
                     .unwrap(),
                     spatial_resolution: SpatialResolution::one(),
@@ -546,18 +567,18 @@ mod tests {
             MultiPoint::many(vec![(0., 0.), (1., 1.), (2., 2.)]).unwrap(),
             vec![
                 TimeInterval::new(
-                    NaiveDate::from_ymd(2009, 1, 1).and_hms(0, 0, 0),
-                    NaiveDate::from_ymd(2011, 1, 1).and_hms(0, 0, 0),
+                    DateTime::new_utc(2009, 1, 1, 0, 0, 0),
+                    DateTime::new_utc(2011, 1, 1, 0, 0, 0),
                 )
                 .unwrap(),
                 TimeInterval::new(
-                    NaiveDate::from_ymd(2009, 1, 1).and_hms(0, 0, 0),
-                    NaiveDate::from_ymd(2011, 1, 1).and_hms(0, 0, 0),
+                    DateTime::new_utc(2009, 1, 1, 0, 0, 0),
+                    DateTime::new_utc(2011, 1, 1, 0, 0, 0),
                 )
                 .unwrap(),
                 TimeInterval::new(
-                    NaiveDate::from_ymd(2010, 1, 1).and_hms(0, 0, 0),
-                    NaiveDate::from_ymd(2012, 1, 1).and_hms(0, 0, 0),
+                    DateTime::new_utc(2010, 1, 1, 0, 0, 0),
+                    DateTime::new_utc(2012, 1, 1, 0, 0, 0),
                 )
                 .unwrap(),
             ],
@@ -566,5 +587,37 @@ mod tests {
         .unwrap();
 
         assert_eq!(result[0], expected);
+    }
+
+    #[test]
+    fn it_rewrites_result_descriptor() {
+        let mut result_descriptor = VectorResultDescriptor {
+            data_type: VectorDataType::MultiPoint,
+            spatial_reference: SpatialReference::epsg_4326().into(),
+            columns: Default::default(),
+            time: Some(TimeInterval::new_unchecked(30_000, 90_000)),
+            bbox: None,
+        };
+
+        rewrite_result_descriptor(
+            &mut result_descriptor,
+            TimeStep {
+                granularity: TimeGranularity::Minutes,
+                step: 1,
+            },
+            TimeInstance::from_millis_unchecked(0),
+        )
+        .unwrap();
+
+        assert_eq!(
+            result_descriptor,
+            VectorResultDescriptor {
+                data_type: VectorDataType::MultiPoint,
+                spatial_reference: SpatialReference::epsg_4326().into(),
+                columns: Default::default(),
+                time: Some(TimeInterval::new_unchecked(0, 120_000)),
+                bbox: None,
+            }
+        );
     }
 }

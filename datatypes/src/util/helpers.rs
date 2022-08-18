@@ -93,6 +93,13 @@ pub fn snap_next(start: f64, step: f64, value: f64) -> f64 {
     start + ((value - start) / step).ceil() * step
 }
 
+/// test if a vlue is equal to another ot if both are NAN
+#[allow(clippy::eq_op)]
+#[inline]
+pub fn equals_or_both_nan<T: PartialEq>(value: &T, no_data_value: &T) -> bool {
+    value == no_data_value || (value != value && no_data_value != no_data_value)
+}
+
 #[cfg(test)]
 mod tests {
     use std::collections::HashMap;
@@ -128,5 +135,69 @@ mod tests {
             "foo" => 23,
             "bar" => 42,
         );
+    }
+
+    #[test]
+    fn no_data_value_false() {
+        let value = 1;
+        let no_data_value = 0;
+
+        assert!(!equals_or_both_nan(&value, &no_data_value));
+    }
+
+    #[test]
+    fn no_data_value_true() {
+        let value = 1;
+        let no_data_value = 1;
+
+        assert!(equals_or_both_nan(&value, &no_data_value));
+    }
+
+    #[test]
+    fn no_data_value_nan_false() {
+        let value = 1.;
+        let no_data_value = f32::NAN;
+
+        assert!(!equals_or_both_nan(&value, &no_data_value));
+    }
+
+    #[test]
+    fn no_data_value_nan_true() {
+        let value = f32::NAN;
+        let no_data_value = f32::NAN;
+
+        assert!(equals_or_both_nan(&value, &no_data_value));
+    }
+
+    #[test]
+    fn no_data_value_option_false() {
+        let value = Some(1);
+        let no_data_value = Some(0);
+
+        assert!(!equals_or_both_nan(&value, &no_data_value));
+    }
+
+    #[test]
+    fn no_data_value_option_true() {
+        let value = Some(1);
+        let no_data_value = Some(1);
+
+        assert!(equals_or_both_nan(&value, &no_data_value));
+    }
+
+    #[test]
+    fn no_data_value_option_nan_false() {
+        let value = Some(1.);
+        let no_data_value = Some(f32::NAN);
+
+        assert!(!equals_or_both_nan(&value, &no_data_value));
+    }
+
+    #[test]
+    fn no_data_value_option_nan_true() {
+        let value = Some(f32::NAN);
+        let no_data_value = Some(f32::NAN);
+
+        assert!(equals_or_both_nan(&value, &no_data_value));
     }
 }

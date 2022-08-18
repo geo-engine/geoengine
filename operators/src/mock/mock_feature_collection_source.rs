@@ -1,16 +1,20 @@
+use std::collections::HashMap;
+
 use crate::engine::QueryContext;
 use crate::engine::{
-    ExecutionContext, InitializedVectorOperator, OperatorDatasets, ResultDescriptor,
-    SourceOperator, TypedVectorQueryProcessor, VectorOperator, VectorQueryProcessor,
-    VectorResultDescriptor,
+    ExecutionContext, InitializedVectorOperator, OperatorData, ResultDescriptor, SourceOperator,
+    TypedVectorQueryProcessor, VectorOperator, VectorQueryProcessor, VectorResultDescriptor,
 };
 use crate::util::Result;
 use async_trait::async_trait;
 use futures::stream::{self, BoxStream, StreamExt};
-use geoengine_datatypes::collections::{FeatureCollection, FeatureCollectionInfos};
-use geoengine_datatypes::dataset::DatasetId;
+use geoengine_datatypes::collections::{
+    FeatureCollection, FeatureCollectionInfos, FeatureCollectionModifications,
+};
+use geoengine_datatypes::dataset::DataId;
 use geoengine_datatypes::primitives::{
-    Geometry, MultiLineString, MultiPoint, MultiPolygon, NoGeometry, VectorQueryRectangle,
+    Geometry, Measurement, MultiLineString, MultiPoint, MultiPolygon, NoGeometry, TimeInterval,
+    VectorQueryRectangle,
 };
 use geoengine_datatypes::spatial_reference::{SpatialReference, SpatialReferenceOption};
 use geoengine_datatypes::util::arrow::ArrowTyped;
@@ -32,14 +36,38 @@ where
 
     async fn vector_query<'a>(
         &'a self,
-        _query: VectorQueryRectangle,
+        query: VectorQueryRectangle,
         _ctx: &'a dyn QueryContext,
     ) -> Result<BoxStream<'a, Result<Self::VectorType>>> {
         // TODO: chunk it up
         // let chunk_size = ctx.chunk_byte_size / std::mem::size_of::<Coordinate2D>();
 
-        Ok(stream::iter(self.collections.iter().map(|c| Ok(c.clone()))).boxed())
+        // TODO: filter spatially
+
+        let stream = stream::iter(
+            self.collections
+                .iter()
+                .map(move |c| filter_time_intervals(c, query.time_interval)),
+        );
+
+        Ok(stream.boxed())
     }
+}
+
+fn filter_time_intervals<G>(
+    feature_collection: &FeatureCollection<G>,
+    time_interval: TimeInterval,
+) -> Result<FeatureCollection<G>>
+where
+    G: Geometry + ArrowTyped,
+{
+    let mask: Vec<bool> = feature_collection
+        .time_intervals()
+        .iter()
+        .map(|ti| ti.intersects(&time_interval))
+        .collect();
+
+    feature_collection.filter(mask).map_err(Into::into)
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -50,15 +78,16 @@ where
 {
     pub collections: Vec<FeatureCollection<G>>,
     pub spatial_reference: SpatialReferenceOption,
+    measurements: Option<HashMap<String, Measurement>>,
 }
 
 pub type MockFeatureCollectionSource<G> = SourceOperator<MockFeatureCollectionSourceParams<G>>;
 
-impl<G> OperatorDatasets for MockFeatureCollectionSource<G>
+impl<G> OperatorData for MockFeatureCollectionSource<G>
 where
     G: Geometry + ArrowTyped,
 {
-    fn datasets_collect(&self, _datasets: &mut Vec<DatasetId>) {}
+    fn data_ids_collect(&self, _data_ids: &mut Vec<DataId>) {}
 }
 
 impl<G> MockFeatureCollectionSource<G>
@@ -70,12 +99,7 @@ where
     }
 
     pub fn multiple(collections: Vec<FeatureCollection<G>>) -> Self {
-        Self {
-            params: MockFeatureCollectionSourceParams {
-                collections,
-                spatial_reference: SpatialReference::epsg_4326().into(),
-            },
-        }
+        Self::with_collections_and_sref(collections, SpatialReference::epsg_4326())
     }
 
     pub fn with_collections_and_sref(
@@ -84,8 +108,22 @@ where
     ) -> Self {
         Self {
             params: MockFeatureCollectionSourceParams {
-                collections,
                 spatial_reference: spatial_reference.into(),
+                measurements: None,
+                collections,
+            },
+        }
+    }
+
+    pub fn with_collections_and_measurements(
+        collections: Vec<FeatureCollection<G>>,
+        measurements: HashMap<String, Measurement>,
+    ) -> Self {
+        Self {
+            params: MockFeatureCollectionSourceParams {
+                collections,
+                spatial_reference: SpatialReference::epsg_4326().into(),
+                measurements: Some(measurements),
             },
         }
     }
@@ -122,10 +160,32 @@ macro_rules! impl_mock_feature_collection_source {
                 self: Box<Self>,
                 _context: &dyn ExecutionContext,
             ) -> Result<Box<dyn InitializedVectorOperator>> {
+                let columns = self.params.collections[0]
+                    .column_types()
+                    .into_iter()
+                    .map(|(name, data_type)| {
+                        let measurement = self
+                            .params
+                            .measurements
+                            .as_ref()
+                            .and_then(|m| m.get(&name).cloned())
+                            .into();
+                        (
+                            name,
+                            crate::engine::VectorColumnInfo {
+                                data_type,
+                                measurement,
+                            },
+                        )
+                    })
+                    .collect();
+
                 let result_descriptor = VectorResultDescriptor {
                     data_type: <$geometry>::DATA_TYPE,
                     spatial_reference: self.params.spatial_reference,
-                    columns: self.params.collections[0].column_types(),
+                    columns,
+                    time: None,
+                    bbox: None,
                 };
 
                 Ok(InitializedMockFeatureCollectionSource {
@@ -186,7 +246,8 @@ mod tests {
 
         let source = MockFeatureCollectionSource::single(collection).boxed();
 
-        let serialized = serde_json::to_string(&source).unwrap();
+        let serialized = serde_json::to_value(&source).unwrap();
+
         let collection_bytes = [
             65, 82, 82, 79, 87, 49, 0, 0, 255, 255, 255, 255, 176, 1, 0, 0, 16, 0, 0, 0, 0, 0, 10,
             0, 14, 0, 12, 0, 11, 0, 4, 0, 10, 0, 0, 0, 20, 0, 0, 0, 0, 0, 0, 1, 4, 0, 10, 0, 12, 0,
@@ -217,33 +278,33 @@ mod tests {
             0, 0, 0, 0, 8, 0, 0, 0, 0, 0, 0, 0, 40, 0, 0, 0, 0, 0, 0, 0, 48, 0, 0, 0, 0, 0, 0, 0,
             88, 0, 0, 0, 0, 0, 0, 0, 8, 0, 0, 0, 0, 0, 0, 0, 96, 0, 0, 0, 0, 0, 0, 0, 8, 0, 0, 0,
             0, 0, 0, 0, 104, 0, 0, 0, 0, 0, 0, 0, 48, 0, 0, 0, 0, 0, 0, 0, 152, 0, 0, 0, 0, 0, 0,
-            0, 8, 0, 0, 0, 0, 0, 0, 0, 160, 0, 0, 0, 0, 0, 0, 0, 24, 0, 0, 0, 0, 0, 0, 0, 7, 0, 0,
-            0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 2, 0, 0, 0, 3, 0, 0, 0, 7, 0, 0, 0, 0, 0, 0, 0,
-            255, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 154, 153, 153, 153, 153, 153, 185,
-            63, 0, 0, 0, 0, 0, 0, 240, 63, 154, 153, 153, 153, 153, 153, 241, 63, 0, 0, 0, 0, 0, 0,
-            0, 64, 205, 204, 204, 204, 204, 204, 8, 64, 7, 0, 0, 0, 0, 0, 0, 0, 255, 0, 0, 0, 0, 0,
-            0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0,
-            0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 5, 0, 0, 0, 0, 0, 0, 0,
-            0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 2, 0, 0, 0, 0, 0, 0, 0, 255, 255, 255,
-            255, 0, 0, 0, 0, 16, 0, 0, 0, 12, 0, 18, 0, 16, 0, 12, 0, 8, 0, 4, 0, 12, 0, 0, 0, 160,
-            1, 0, 0, 184, 1, 0, 0, 16, 0, 0, 0, 4, 0, 10, 0, 12, 0, 0, 0, 8, 0, 4, 0, 10, 0, 0, 0,
-            8, 0, 0, 0, 8, 0, 0, 0, 0, 0, 0, 0, 3, 0, 0, 0, 180, 0, 0, 0, 56, 0, 0, 0, 4, 0, 0, 0,
-            52, 255, 255, 255, 16, 0, 0, 0, 24, 0, 0, 0, 0, 0, 1, 2, 20, 0, 0, 0, 172, 255, 255,
-            255, 64, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 6, 0, 0, 0, 102, 111, 111, 98, 97, 114, 0, 0,
-            152, 255, 255, 255, 24, 0, 0, 0, 12, 0, 0, 0, 0, 0, 0, 16, 76, 0, 0, 0, 1, 0, 0, 0, 12,
-            0, 0, 0, 82, 255, 255, 255, 2, 0, 0, 0, 136, 255, 255, 255, 24, 0, 0, 0, 32, 0, 0, 0,
-            0, 0, 1, 2, 28, 0, 0, 0, 8, 0, 12, 0, 4, 0, 11, 0, 8, 0, 0, 0, 64, 0, 0, 0, 0, 0, 0, 1,
-            0, 0, 0, 0, 4, 0, 0, 0, 105, 116, 101, 109, 0, 0, 0, 0, 6, 0, 0, 0, 95, 95, 116, 105,
-            109, 101, 0, 0, 16, 0, 20, 0, 16, 0, 0, 0, 15, 0, 4, 0, 0, 0, 8, 0, 16, 0, 0, 0, 28, 0,
-            0, 0, 12, 0, 0, 0, 0, 0, 0, 12, 160, 0, 0, 0, 1, 0, 0, 0, 28, 0, 0, 0, 4, 0, 4, 0, 4,
-            0, 0, 0, 16, 0, 20, 0, 16, 0, 14, 0, 15, 0, 4, 0, 0, 0, 8, 0, 16, 0, 0, 0, 32, 0, 0, 0,
-            12, 0, 0, 0, 0, 0, 1, 16, 96, 0, 0, 0, 1, 0, 0, 0, 36, 0, 0, 0, 0, 0, 6, 0, 8, 0, 4, 0,
-            6, 0, 0, 0, 2, 0, 0, 0, 16, 0, 22, 0, 16, 0, 14, 0, 15, 0, 4, 0, 0, 0, 8, 0, 16, 0, 0,
-            0, 24, 0, 0, 0, 28, 0, 0, 0, 0, 0, 1, 3, 24, 0, 0, 0, 0, 0, 6, 0, 8, 0, 6, 0, 6, 0, 0,
-            0, 0, 0, 2, 0, 0, 0, 0, 0, 4, 0, 0, 0, 105, 116, 101, 109, 0, 0, 0, 0, 4, 0, 0, 0, 105,
-            116, 101, 109, 0, 0, 0, 0, 10, 0, 0, 0, 95, 95, 103, 101, 111, 109, 101, 116, 114, 121,
-            0, 0, 1, 0, 0, 0, 192, 1, 0, 0, 0, 0, 0, 0, 88, 1, 0, 0, 0, 0, 0, 0, 184, 0, 0, 0, 0,
-            0, 0, 0, 0, 0, 0, 0, 212, 1, 0, 0, 65, 82, 82, 79, 87, 49,
+            0, 8, 0, 0, 0, 0, 0, 0, 0, 160, 0, 0, 0, 0, 0, 0, 0, 24, 0, 0, 0, 0, 0, 0, 0, 255, 0,
+            0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 2, 0, 0, 0, 3, 0, 0, 0, 255, 0, 0, 0, 0, 0,
+            0, 0, 255, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 154, 153, 153, 153, 153, 153,
+            185, 63, 0, 0, 0, 0, 0, 0, 240, 63, 154, 153, 153, 153, 153, 153, 241, 63, 0, 0, 0, 0,
+            0, 0, 0, 64, 205, 204, 204, 204, 204, 204, 8, 64, 255, 0, 0, 0, 0, 0, 0, 0, 255, 0, 0,
+            0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+            1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 5, 0, 0, 0, 0,
+            0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 2, 0, 0, 0, 0, 0, 0, 0, 255,
+            255, 255, 255, 0, 0, 0, 0, 16, 0, 0, 0, 12, 0, 18, 0, 16, 0, 12, 0, 8, 0, 4, 0, 12, 0,
+            0, 0, 160, 1, 0, 0, 184, 1, 0, 0, 16, 0, 0, 0, 4, 0, 10, 0, 12, 0, 0, 0, 8, 0, 4, 0,
+            10, 0, 0, 0, 8, 0, 0, 0, 8, 0, 0, 0, 0, 0, 0, 0, 3, 0, 0, 0, 180, 0, 0, 0, 56, 0, 0, 0,
+            4, 0, 0, 0, 52, 255, 255, 255, 16, 0, 0, 0, 24, 0, 0, 0, 0, 0, 1, 2, 20, 0, 0, 0, 172,
+            255, 255, 255, 64, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 6, 0, 0, 0, 102, 111, 111, 98, 97,
+            114, 0, 0, 152, 255, 255, 255, 24, 0, 0, 0, 12, 0, 0, 0, 0, 0, 0, 16, 76, 0, 0, 0, 1,
+            0, 0, 0, 12, 0, 0, 0, 82, 255, 255, 255, 2, 0, 0, 0, 136, 255, 255, 255, 24, 0, 0, 0,
+            32, 0, 0, 0, 0, 0, 1, 2, 28, 0, 0, 0, 8, 0, 12, 0, 4, 0, 11, 0, 8, 0, 0, 0, 64, 0, 0,
+            0, 0, 0, 0, 1, 0, 0, 0, 0, 4, 0, 0, 0, 105, 116, 101, 109, 0, 0, 0, 0, 6, 0, 0, 0, 95,
+            95, 116, 105, 109, 101, 0, 0, 16, 0, 20, 0, 16, 0, 0, 0, 15, 0, 4, 0, 0, 0, 8, 0, 16,
+            0, 0, 0, 28, 0, 0, 0, 12, 0, 0, 0, 0, 0, 0, 12, 160, 0, 0, 0, 1, 0, 0, 0, 28, 0, 0, 0,
+            4, 0, 4, 0, 4, 0, 0, 0, 16, 0, 20, 0, 16, 0, 14, 0, 15, 0, 4, 0, 0, 0, 8, 0, 16, 0, 0,
+            0, 32, 0, 0, 0, 12, 0, 0, 0, 0, 0, 1, 16, 96, 0, 0, 0, 1, 0, 0, 0, 36, 0, 0, 0, 0, 0,
+            6, 0, 8, 0, 4, 0, 6, 0, 0, 0, 2, 0, 0, 0, 16, 0, 22, 0, 16, 0, 14, 0, 15, 0, 4, 0, 0,
+            0, 8, 0, 16, 0, 0, 0, 24, 0, 0, 0, 28, 0, 0, 0, 0, 0, 1, 3, 24, 0, 0, 0, 0, 0, 6, 0, 8,
+            0, 6, 0, 6, 0, 0, 0, 0, 0, 2, 0, 0, 0, 0, 0, 4, 0, 0, 0, 105, 116, 101, 109, 0, 0, 0,
+            0, 4, 0, 0, 0, 105, 116, 101, 109, 0, 0, 0, 0, 10, 0, 0, 0, 95, 95, 103, 101, 111, 109,
+            101, 116, 114, 121, 0, 0, 1, 0, 0, 0, 192, 1, 0, 0, 0, 0, 0, 0, 88, 1, 0, 0, 0, 0, 0,
+            0, 184, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 212, 1, 0, 0, 65, 82, 82, 79, 87, 49,
         ]
         .to_vec();
         assert_eq!(
@@ -258,12 +319,12 @@ mod tests {
                         },
                     }],
                     "spatialReference": "EPSG:4326",
-                }
+                    "measurements": null,
+                },
             })
-            .to_string()
         );
 
-        let _operator: Box<dyn VectorOperator> = serde_json::from_str(&serialized).unwrap();
+        let _operator: Box<dyn VectorOperator> = serde_json::from_value(serialized).unwrap();
     }
 
     #[tokio::test]

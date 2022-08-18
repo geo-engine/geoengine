@@ -24,7 +24,7 @@ impl UploadRootPath for UploadId {
     }
 }
 
-#[derive(Debug, Serialize, Deserialize, Clone, PartialEq)]
+#[derive(Debug, Serialize, Deserialize, Clone, PartialEq, Eq)]
 pub struct Upload {
     pub id: UploadId,
     pub files: Vec<FileUpload>,
@@ -39,7 +39,7 @@ impl Upload {
     }
 }
 
-#[derive(Debug, Serialize, Deserialize, Clone, PartialEq)]
+#[derive(Debug, Serialize, Deserialize, Clone, PartialEq, Eq)]
 pub struct FileUpload {
     pub id: FileId,
     pub name: String,
@@ -56,5 +56,5 @@ pub struct UploadListing {
 pub trait UploadDb<S: Session> {
     async fn get_upload(&self, session: &S, upload: UploadId) -> Result<Upload>;
 
-    async fn create_upload(&mut self, session: &S, upload: Upload) -> Result<()>;
+    async fn create_upload(&self, session: &S, upload: Upload) -> Result<()>;
 }

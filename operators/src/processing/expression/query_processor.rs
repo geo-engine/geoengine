@@ -1,24 +1,23 @@
 use std::{marker::PhantomData, sync::Arc};
 
 use async_trait::async_trait;
-use futures::{stream::BoxStream, try_join, StreamExt, TryStreamExt};
+use futures::{stream::BoxStream, StreamExt, TryStreamExt};
 use geoengine_datatypes::{
     primitives::{RasterQueryRectangle, SpatialPartition2D, TimeInterval},
     raster::{
-        ConvertDataType, GeoTransform, Grid2D, GridIdx2D, GridShape2D, GridShapeAccess, GridSize,
-        NoDataValue, Pixel, RasterTile2D,
+        ConvertDataType, EmptyGrid2D, FromIndexFnParallel, GeoTransform, GridIdx2D,
+        GridIndexAccess, GridOrEmpty, GridOrEmpty2D, GridShape2D, GridShapeAccess,
+        MapElementsParallel, Pixel, RasterTile2D, UpdateIndexedElementsParallel,
     },
+    util::helpers::equals_or_both_nan,
 };
 use libloading::Symbol;
 use num_traits::AsPrimitive;
-use rayon::iter::{
-    IndexedParallelIterator, IntoParallelIterator, IntoParallelRefIterator, ParallelIterator,
-};
 
 use crate::{
-    adapters::{QueryWrapper, RasterTimeAdapter},
+    adapters::{QueryWrapper, RasterArrayTimeAdapter, RasterTimeAdapter},
     engine::{BoxRasterQueryProcessor, QueryContext, QueryProcessor},
-    util::{stream_zip::StreamTupleZip, Result},
+    util::Result,
 };
 
 use super::compiled::LinkedExpression;
@@ -55,7 +54,7 @@ where
 }
 
 #[async_trait]
-impl<'a, TO, Tuple> QueryProcessor for ExpressionQueryProcessor<TO, Tuple>
+impl<TO, Tuple> QueryProcessor for ExpressionQueryProcessor<TO, Tuple>
 where
     TO: Pixel,
     Tuple: ExpressionTupleProcessor<TO>,
@@ -77,7 +76,7 @@ where
                     return Ok(Tuple::empty_raster(&rasters));
                 }
 
-                let (out_time, out_tile_position, out_global_geo_transform, output_grid_shape) =
+                let (out_time, out_tile_position, out_global_geo_transform, _output_grid_shape) =
                     Tuple::metadata(&rasters);
 
                 let out_no_data = self.no_data_value;
@@ -85,14 +84,11 @@ where
                 let program = self.program.clone();
                 let map_no_data = self.map_no_data;
 
-                let data = crate::util::spawn_blocking_with_thread_pool(
+                let out = crate::util::spawn_blocking_with_thread_pool(
                     ctx.thread_pool().clone(),
                     move || Tuple::compute_expression(rasters, &program, map_no_data, out_no_data),
                 )
                 .await??;
-
-                let out =
-                    Grid2D::<TO>::new(output_grid_shape, data, Some(self.no_data_value))?.into();
 
                 Ok(RasterTile2D::new(
                     out_time,
@@ -127,7 +123,7 @@ trait ExpressionTupleProcessor<TO: Pixel>: Send + Sync {
         program: &LinkedExpression,
         map_no_data: bool,
         out_no_data: TO,
-    ) -> Result<Vec<TO>>;
+    ) -> Result<GridOrEmpty2D<TO>>;
 }
 
 #[async_trait]
@@ -177,33 +173,36 @@ where
         program: &LinkedExpression,
         map_no_data: bool,
         out_no_data: TO,
-    ) -> Result<Vec<TO>> {
+    ) -> Result<GridOrEmpty2D<TO>> {
         let expression = unsafe {
             // we have to "trust" that the function has the signature we expect
             program.function_3::<f64, bool, f64>()?
         };
 
-        // cannot be empty at this point
-        let tile = raster.into_materialized_tile();
+        let map_fn = |in_value: Option<T1>| {
+            // TODO: could be a |in_value: T1| if map no data is false!
+            if !map_no_data && in_value.is_none() {
+                return None;
+            }
 
-        let data = tile
-            .grid_array
-            .data
-            .par_iter()
-            .with_min_len(tile.grid_array.grid_shape().axis_size_x())
-            .map(|a| {
-                let is_no_data = tile.is_no_data(*a);
+            let expression_in_value = in_value.unwrap_or_default().as_();
 
-                if !map_no_data && is_no_data {
-                    return out_no_data;
-                }
+            let result = expression(expression_in_value, in_value.is_none(), out_no_data.as_());
 
-                let result = expression(a.as_(), is_no_data, out_no_data.as_());
-                TO::from_(result)
-            })
-            .collect();
+            let result_t = TO::from_(result);
 
-        Result::<Vec<TO>>::Ok(data)
+            let out_is_no_data = equals_or_both_nan(&result_t, &out_no_data);
+
+            if out_is_no_data {
+                None
+            } else {
+                Some(result_t)
+            }
+        };
+
+        let res = raster.grid_array.map_elements_parallel(map_fn);
+
+        Result::Ok(res)
     }
 }
 
@@ -259,39 +258,48 @@ where
         program: &LinkedExpression,
         map_no_data: bool,
         out_no_data: TO,
-    ) -> Result<Vec<TO>> {
+    ) -> Result<GridOrEmpty2D<TO>> {
         let expression = unsafe {
             // we have to "trust" that the function has the signature we expect
             program.function_5::<f64, bool, f64, bool, f64>()?
         };
 
-        // TODO: allow iterating over empty rasters
-        let tile_0 = rasters.0.into_materialized_tile();
-        let tile_1 = rasters.1.into_materialized_tile();
+        let map_fn = |lin_idx: usize| {
+            let t0_value = rasters.0.get_at_grid_index_unchecked(lin_idx);
+            let t1_value = rasters.1.get_at_grid_index_unchecked(lin_idx);
 
-        let data = (&tile_0.grid_array.data, &tile_1.grid_array.data)
-            .into_par_iter()
-            .with_min_len(tile_0.grid_array.grid_shape().axis_size_x())
-            .map(|(a, b)| {
-                let is_a_no_data = tile_0.is_no_data(*a);
-                let is_b_no_data = tile_1.is_no_data(*b);
+            let is_t0_no_data = t0_value.is_none();
+            let is_t1_no_data = t1_value.is_none();
 
-                if !map_no_data && (is_a_no_data || is_b_no_data) {
-                    return out_no_data;
-                }
+            if !map_no_data && (is_t0_no_data || is_t1_no_data) {
+                return None;
+            }
 
-                let result = expression(
-                    a.as_(),
-                    is_a_no_data,
-                    b.as_(),
-                    is_b_no_data,
-                    out_no_data.as_(),
-                );
-                TO::from_(result)
-            })
-            .collect();
+            let t0 = t0_value.unwrap_or_default();
+            let t1 = t1_value.unwrap_or_default();
 
-        Result::<Vec<TO>>::Ok(data)
+            let result = expression(
+                t0.as_(),
+                is_t0_no_data,
+                t1.as_(),
+                is_t1_no_data,
+                out_no_data.as_(),
+            );
+            let result_t = TO::from_(result);
+
+            let out_is_no_data = equals_or_both_nan(&result_t, &out_no_data);
+
+            if out_is_no_data {
+                None
+            } else {
+                Some(result_t)
+            }
+        };
+
+        let grid_shape = rasters.0.grid_shape();
+        let out = GridOrEmpty::from_index_fn_parallel(&grid_shape, map_fn);
+
+        Result::Ok(out)
     }
 }
 
@@ -301,6 +309,7 @@ type Function5 = fn(f64, bool, f64, bool, f64, bool, f64, bool, f64, bool, f64) 
 type Function6 = fn(f64, bool, f64, bool, f64, bool, f64, bool, f64, bool, f64, bool, f64) -> f64;
 type Function7 =
     fn(f64, bool, f64, bool, f64, bool, f64, bool, f64, bool, f64, bool, f64, bool, f64) -> f64;
+
 type Function8 = fn(
     f64,
     bool,
@@ -326,15 +335,15 @@ macro_rules! impl_expression_tuple_processor {
         paste::paste! {
             impl_expression_tuple_processor!(
                 @inner
+                $i
+                |
                 $( $x ),*
-                |
-                $( [< T $x >] ),*
-                |
-                $( [< tile_ $x >] ),*
                 |
                 $( [< pixel_ $x >] ),*
                 |
                 $( [< is_nodata_ $x >] ),*
+                |
+                $( [< pixel_unwrapped_ $x >] ),*
                 |
                 [< Function $i >]
             );
@@ -342,17 +351,14 @@ macro_rules! impl_expression_tuple_processor {
     };
 
     // We have `0, 1, 2, …` and `T0, T1, T2, …`
-    (@inner $( $I:tt ),+ | $( $T:tt ),+ | $( $TILE:tt ),+ | $( $PIXEL:tt ),+ | $( $IS_NODATA:tt ),+ | $FN_T:ty ) => {
+    (@inner $N:tt | $( $I:tt ),+ | $( $PIXEL:tt ),+ | $( $IS_NODATA:tt ),+ | $( $PIXEL_UNWRAP:tt ),+ |$FN_T:ty ) => {
         #[async_trait]
-        impl<TO, $($T),*> ExpressionTupleProcessor<TO>
-            for (
-                $(BoxRasterQueryProcessor<$T>),*
-            )
+        impl<TO, T1> ExpressionTupleProcessor<TO> for [BoxRasterQueryProcessor<T1>; $N]
         where
             TO: Pixel,
-            $($T : Pixel + AsPrimitive<TO>),*
+            T1 : Pixel + AsPrimitive<TO>
         {
-            type Tuple = ( $(RasterTile2D<$T>),* );
+            type Tuple = [RasterTile2D<T1>; $N];
 
             #[inline]
             async fn queries<'a>(
@@ -360,33 +366,24 @@ macro_rules! impl_expression_tuple_processor {
                 query: RasterQueryRectangle,
                 ctx: &'a dyn QueryContext,
             ) -> Result<BoxStream<'a, Result<Self::Tuple>>> {
-                // TODO: tile alignment
+                let sources = [$( QueryWrapper { p: &self[$I], ctx } ),*];
 
-                let queries = try_join!(
-                    $( self.$I.query(query, ctx) ),*
-                )?;
-
-                let stream =
-                    StreamTupleZip::new(queries).map(|rasters| Ok((
-                        $( rasters.$I? ),*
-                    )));
-
-                Ok(stream.boxed())
+                Ok(Box::pin(RasterArrayTimeAdapter::new(sources, query)))
             }
 
             #[inline]
             fn all_empty(tuple: &Self::Tuple) -> bool {
-                $( tuple.$I.grid_array.is_empty() )&&*
+                $( tuple[$I].grid_array.is_empty() )&&*
             }
 
             #[inline]
             fn empty_raster(tuple: &Self::Tuple) -> RasterTile2D<TO> {
-                tuple.0.clone().convert_data_type()
+                tuple[0].clone().convert_data_type()
             }
 
             #[inline]
             fn metadata(tuple: &Self::Tuple) -> (TimeInterval, GridIdx2D, GeoTransform, GridShape2D) {
-                let raster = &tuple.0;
+                let raster = &tuple[0];
 
                 (
                     raster.time,
@@ -401,47 +398,52 @@ macro_rules! impl_expression_tuple_processor {
                 program: &LinkedExpression,
                 map_no_data: bool,
                 out_no_data: TO,
-            ) -> Result<Vec<TO>> {
+            ) -> Result<GridOrEmpty2D<TO>> {
                 let expression: Symbol<$FN_T> = unsafe {
                     // we have to "trust" that the function has the signature we expect
                     program.function_nary()?
                 };
 
-                let min_batch_size = rasters.0.grid_array.grid_shape().axis_size_x();
+                let shape = rasters[0].grid_shape().clone();
 
-                // TODO: allow iterating over empty rasters
-                $(
-                    let $TILE = rasters.$I.into_materialized_tile();
-                )*
+                let mut out = GridOrEmpty::from(EmptyGrid2D::<TO>::new(shape));
 
-                let data = (
+                let map_fn = move |lin_idx: usize, _empty: Option<TO>| {
                     $(
-                        & $TILE.grid_array.data
-                    ),*
-                )
-                    .into_par_iter()
-                    .with_min_len(min_batch_size)
-                    .map(|( $($PIXEL),* )| {
+                        let $PIXEL = rasters[$I].get_at_grid_index_unchecked(lin_idx);
+                        let $IS_NODATA = $PIXEL.is_none();
+                    )*
+
+                    if !map_no_data && ( $($IS_NODATA)||* ) {
+                        return (None);
+                    }
+
+                    $(
+                        let $PIXEL_UNWRAP = $PIXEL.unwrap_or_default();
+                    )*
+
+                    let result = expression(
                         $(
-                            let $IS_NODATA = $TILE.is_no_data(* $PIXEL);
+                            $PIXEL_UNWRAP.as_(),
+                            $IS_NODATA,
                         )*
+                        out_no_data.as_(),
+                    );
 
-                        if !map_no_data && ( $($IS_NODATA)||* ) {
-                            return out_no_data;
-                        }
+                    let result_t = TO::from_(result);
 
-                        let result = expression(
-                            $(
-                                $PIXEL.as_(),
-                                $IS_NODATA,
-                            )*
-                            out_no_data.as_(),
-                        );
-                        TO::from_(result)
-                    })
-                    .collect();
+                    let out_is_no_data =  equals_or_both_nan(&result_t, &out_no_data);
 
-                Result::<Vec<TO>>::Ok(data)
+                if out_is_no_data {
+                    None
+                } else {
+                    Some(result_t)
+                }
+            };
+
+            out.update_indexed_elements_parallel(map_fn);
+
+                Result::Ok(out)
             }
         }
     };

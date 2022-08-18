@@ -35,19 +35,21 @@ fn new_satellite_key() -> RasterPropertiesKey {
 
 #[cfg(test)]
 mod test_util {
-    use chrono::{TimeZone, Utc};
+    use std::str::FromStr;
+
     use futures::StreamExt;
     use geoengine_datatypes::hashmap;
     use geoengine_datatypes::util::test::TestDefault;
     use num_traits::AsPrimitive;
 
-    use geoengine_datatypes::dataset::{DatasetId, InternalDatasetId};
+    use geoengine_datatypes::dataset::{DataId, DatasetId};
     use geoengine_datatypes::primitives::{
-        ContinuousMeasurement, Measurement, RasterQueryRectangle, SpatialPartition2D,
-        SpatialResolution, TimeGranularity, TimeInstance, TimeInterval, TimeStep,
+        ContinuousMeasurement, DateTime, DateTimeParseFormat, Measurement, RasterQueryRectangle,
+        SpatialPartition2D, SpatialResolution, TimeGranularity, TimeInstance, TimeInterval,
+        TimeStep,
     };
     use geoengine_datatypes::raster::{
-        EmptyGrid2D, Grid2D, GridOrEmpty, Pixel, RasterDataType, RasterProperties,
+        Grid2D, GridOrEmpty, GridOrEmpty2D, MaskedGrid2D, Pixel, RasterDataType, RasterProperties,
         RasterPropertiesEntry, RasterPropertiesEntryType, RasterTile2D, TileInformation,
     };
     use geoengine_datatypes::spatial_reference::{SpatialReference, SpatialReferenceAuthority};
@@ -131,14 +133,8 @@ mod test_util {
         RasterQueryRectangle {
             spatial_bounds: SpatialPartition2D::new_unchecked(ul, lr),
             time_interval: TimeInterval::new_unchecked(
-                TimeInstance::from(
-                    Utc.datetime_from_str("20121212_1200", "%Y%m%d_%H%M")
-                        .unwrap(),
-                ),
-                TimeInstance::from(
-                    Utc.datetime_from_str("20121212_1215", "%Y%m%d_%H%M")
-                        .unwrap(),
-                ),
+                TimeInstance::from(DateTime::new_utc(2012, 12, 12, 12, 0, 0)),
+                TimeInstance::from(DateTime::new_utc(2012, 12, 12, 12, 15, 0)),
             ),
             spatial_resolution: sr,
         }
@@ -154,28 +150,26 @@ mod test_util {
 
     pub(crate) fn create_mock_source<P: Pixel>(
         props: RasterProperties,
-        custom_data: Option<Vec<P>>,
+        custom_data: Option<GridOrEmpty2D<P>>,
         measurement: Option<Measurement>,
     ) -> MockRasterSource<P> {
-        let no_data_value = Some(P::zero());
-
         let raster = match custom_data {
-            Some(v) if v.is_empty() => {
-                GridOrEmpty::Empty(EmptyGrid2D::new([3, 2].into(), no_data_value.unwrap()))
-            }
-            Some(v) => GridOrEmpty::Grid(Grid2D::new([3, 2].into(), v, no_data_value).unwrap()),
+            Some(g) => g,
             None => GridOrEmpty::Grid(
-                Grid2D::<P>::new(
-                    [3, 2].into(),
-                    vec![
-                        P::from_(1),
-                        P::from_(2),
-                        P::from_(3),
-                        P::from_(4),
-                        P::from_(5),
-                        no_data_value.unwrap(),
-                    ],
-                    no_data_value,
+                MaskedGrid2D::new(
+                    Grid2D::<P>::new(
+                        [3, 2].into(),
+                        vec![
+                            P::from_(1),
+                            P::from_(2),
+                            P::from_(3),
+                            P::from_(4),
+                            P::from_(5),
+                            P::from_(0),
+                        ],
+                    )
+                    .unwrap(),
+                    Grid2D::new([3, 2].into(), vec![true, true, true, true, true, false]).unwrap(),
                 )
                 .unwrap(),
             ),
@@ -204,29 +198,29 @@ mod test_util {
                             unit: None,
                         })
                     }),
-                    no_data_value: no_data_value.map(AsPrimitive::as_),
+                    time: None,
+                    bbox: None,
                 },
             },
         }
     }
 
     pub(crate) fn _create_gdal_src(ctx: &mut MockExecutionContext) -> GdalSource {
-        let dataset_id: DatasetId = InternalDatasetId::new().into();
-
-        let timestamp = Utc
-            .datetime_from_str("20121212_1200", "%Y%m%d_%H%M")
-            .unwrap();
+        let dataset_id: DataId = DatasetId::new().into();
 
         let no_data_value = Some(0.);
         let meta = GdalMetaDataRegular {
-            start: TimeInstance::from(timestamp),
+            data_time: TimeInterval::new_unchecked(
+                TimeInstance::from_str("2012-12-12T12:00:00.000Z").unwrap(),
+                TimeInstance::from_str("2020-12-12T12:00:00.000Z").unwrap(),
+            ),
             step: TimeStep {
                 granularity: TimeGranularity::Minutes,
                 step: 15,
             },
             time_placeholders: hashmap! {
                 "%_START_TIME_%".to_string() => GdalSourceTimePlaceholder {
-                    format: "%Y%m%d_%H%M".to_string(),
+                    format: DateTimeParseFormat::custom("%Y%m%d_%H%M".to_string()),
                     reference: TimeReference::Start,
                 },
             },
@@ -262,6 +256,7 @@ mod test_util {
                 ]),
                 gdal_open_options: None,
                 gdal_config_options: None,
+                allow_alphaband_as_mask: true,
             },
             result_descriptor: RasterResultDescriptor {
                 data_type: RasterDataType::I16,
@@ -271,15 +266,14 @@ mod test_util {
                     measurement: "raw".to_string(),
                     unit: None,
                 }),
-                no_data_value,
+                time: None,
+                bbox: None,
             },
         };
         ctx.add_meta_data(dataset_id.clone(), Box::new(meta));
 
         GdalSource {
-            params: GdalSourceParameters {
-                dataset: dataset_id,
-            },
+            params: GdalSourceParameters { data: dataset_id },
         }
     }
 }

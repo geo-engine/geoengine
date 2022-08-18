@@ -151,12 +151,12 @@ impl ArrowTyped for MultiPoint {
                     let floats: &Float64Array = downcast_array(&floats_ref);
 
                     let new_floats = new_points.values();
-                    new_floats.append_slice(floats.values())?;
+                    new_floats.append_slice(floats.values());
 
-                    new_points.append(true)?;
+                    new_points.append(true);
                 }
 
-                new_multipoints.append(true)?;
+                new_multipoints.append(true);
             }
         }
 
@@ -184,12 +184,12 @@ impl ArrowTyped for MultiPoint {
                     let old_floats: &Float64Array = downcast_array(&old_floats_array);
 
                     let float_builder = coordinate_builder.values();
-                    float_builder.append_slice(old_floats.values())?;
+                    float_builder.append_slice(old_floats.values());
 
-                    coordinate_builder.append(true)?;
+                    coordinate_builder.append(true);
                 }
 
-                new_features.append(true)?;
+                new_features.append(true);
             }
         }
 
@@ -205,11 +205,11 @@ impl ArrowTyped for MultiPoint {
             let coordinate_builder = builder.values();
             for coordinate in multi_point.as_ref() {
                 let float_builder = coordinate_builder.values();
-                float_builder.append_value(coordinate.x)?;
-                float_builder.append_value(coordinate.y)?;
-                coordinate_builder.append(true)?;
+                float_builder.append_value(coordinate.x);
+                float_builder.append_value(coordinate.y);
+                coordinate_builder.append(true);
             }
-            builder.append(true)?;
+            builder.append(true);
         }
 
         Ok(builder.finish())

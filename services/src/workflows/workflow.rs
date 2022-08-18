@@ -23,6 +23,15 @@ pub struct Workflow {
     pub operator: TypedOperator,
 }
 
+impl PartialEq for Workflow {
+    fn eq(&self, other: &Self) -> bool {
+        match (serde_json::to_string(self), serde_json::to_string(other)) {
+            (Ok(a), Ok(b)) => a == b,
+            _ => false,
+        }
+    }
+}
+
 impl utoipa::Component for Workflow {
     fn component() -> utoipa::openapi::Component {
         use utoipa::openapi::*;
@@ -50,7 +59,7 @@ mod tests {
             ),
         };
 
-        let serialized_workflow = serde_json::to_string(&workflow).unwrap();
+        let serialized_workflow = serde_json::to_value(&workflow).unwrap();
 
         assert_eq!(
             serialized_workflow,
@@ -72,7 +81,6 @@ mod tests {
                     }
                 }
             })
-            .to_string()
         );
 
         // TODO: check deserialization

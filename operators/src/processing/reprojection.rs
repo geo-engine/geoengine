@@ -1,3 +1,5 @@
+use std::marker::PhantomData;
+
 use super::map_query::MapQueryProcessor;
 use crate::{
     adapters::{fold_by_coordinate_lookup_future, RasterSubQueryAdapter, TileReprojectionSubQuery},
@@ -7,7 +9,7 @@ use crate::{
         SingleRasterOrVectorSource, TypedRasterQueryProcessor, TypedVectorQueryProcessor,
         VectorOperator, VectorQueryProcessor, VectorResultDescriptor,
     },
-    error,
+    error::{self, Error},
     util::{input::RasterOrVectorOperator, Result},
 };
 use async_trait::async_trait;
@@ -16,14 +18,13 @@ use futures::StreamExt;
 use geoengine_datatypes::{
     operations::reproject::{
         reproject_query, suggest_pixel_size_from_diag_cross_projected, CoordinateProjection,
-        CoordinateProjector, Reproject,
+        CoordinateProjector, Reproject, ReprojectClipped,
     },
     primitives::AxisAlignedRectangle,
     primitives::{BoundingBox2D, RasterQueryRectangle, SpatialPartition2D, VectorQueryRectangle},
     raster::{Pixel, RasterTile2D, TilingSpecification},
     spatial_reference::SpatialReference,
 };
-use num_traits::AsPrimitive;
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Serialize, Deserialize, Clone, Copy)]
@@ -43,7 +44,6 @@ pub struct RasterReprojectionState {
     source_srs: SpatialReference,
     target_srs: SpatialReference,
     tiling_spec: TilingSpecification,
-    out_no_data_value: f64,
 }
 
 pub type Reprojection = Operator<ReprojectionParams, SingleRasterOrVectorSource>;
@@ -79,10 +79,25 @@ impl VectorOperator for Reprojection {
         let vector_operator = vector_operator.initialize(context).await?;
 
         let in_desc: &VectorResultDescriptor = vector_operator.result_descriptor();
+
+        let bbox = if let Some(bbox) = in_desc.bbox {
+            let in_srs: Option<SpatialReference> = in_desc.spatial_reference.into();
+            let projector = CoordinateProjector::from_known_srs(
+                in_srs.ok_or(Error::AllSourcesMustHaveSameSpatialReference)?,
+                self.params.target_spatial_reference,
+            )?;
+
+            Some(bbox.reproject_clipped(&projector)?)
+        } else {
+            None
+        };
+
         let out_desc = VectorResultDescriptor {
             spatial_reference: self.params.target_spatial_reference.into(),
             data_type: in_desc.data_type,
             columns: in_desc.columns.clone(),
+            time: in_desc.time,
+            bbox,
         };
 
         let state = VectorReprojectionState {
@@ -217,20 +232,31 @@ impl RasterOperator for Reprojection {
         let raster_operator = raster_operator.initialize(context).await?;
 
         let in_desc: &RasterResultDescriptor = raster_operator.result_descriptor();
-        let out_no_data_value = in_desc.no_data_value.unwrap_or(0.); // TODO: add option to force a no_data_value
+
+        let bbox = if let Some(bbox) = in_desc.bbox {
+            let in_srs: Option<SpatialReference> = in_desc.spatial_reference.into();
+            let projector = CoordinateProjector::from_known_srs(
+                in_srs.ok_or(Error::AllSourcesMustHaveSameSpatialReference)?,
+                self.params.target_spatial_reference,
+            )?;
+
+            Some(bbox.reproject_clipped(&projector)?)
+        } else {
+            None
+        };
 
         let out_desc = RasterResultDescriptor {
             spatial_reference: self.params.target_spatial_reference.into(),
             data_type: in_desc.data_type,
             measurement: in_desc.measurement.clone(),
-            no_data_value: Some(out_no_data_value),
+            time: in_desc.time,
+            bbox,
         };
 
         let state = RasterReprojectionState {
             source_srs: Option::from(in_desc.spatial_reference).unwrap(),
             target_srs: self.params.target_spatial_reference,
             tiling_spec: context.tiling_specification(),
-            out_no_data_value,
         };
 
         let initialized_operator = InitializedRasterReprojection {
@@ -263,7 +289,6 @@ impl InitializedRasterOperator for InitializedRasterReprojection {
                     s.source_srs,
                     s.target_srs,
                     s.tiling_spec,
-                    s.out_no_data_value.as_(),
                 )))
             }
             geoengine_datatypes::raster::RasterDataType::U16 => {
@@ -273,7 +298,6 @@ impl InitializedRasterOperator for InitializedRasterReprojection {
                     s.source_srs,
                     s.target_srs,
                     s.tiling_spec,
-                    s.out_no_data_value.as_(),
                 )))
             }
 
@@ -284,7 +308,6 @@ impl InitializedRasterOperator for InitializedRasterReprojection {
                     s.source_srs,
                     s.target_srs,
                     s.tiling_spec,
-                    s.out_no_data_value.as_(),
                 )))
             }
             geoengine_datatypes::raster::RasterDataType::U64 => {
@@ -294,7 +317,6 @@ impl InitializedRasterOperator for InitializedRasterReprojection {
                     s.source_srs,
                     s.target_srs,
                     s.tiling_spec,
-                    s.out_no_data_value.as_(),
                 )))
             }
             geoengine_datatypes::raster::RasterDataType::I8 => {
@@ -304,7 +326,6 @@ impl InitializedRasterOperator for InitializedRasterReprojection {
                     s.source_srs,
                     s.target_srs,
                     s.tiling_spec,
-                    s.out_no_data_value.as_(),
                 )))
             }
             geoengine_datatypes::raster::RasterDataType::I16 => {
@@ -314,7 +335,6 @@ impl InitializedRasterOperator for InitializedRasterReprojection {
                     s.source_srs,
                     s.target_srs,
                     s.tiling_spec,
-                    s.out_no_data_value.as_(),
                 )))
             }
             geoengine_datatypes::raster::RasterDataType::I32 => {
@@ -324,7 +344,6 @@ impl InitializedRasterOperator for InitializedRasterReprojection {
                     s.source_srs,
                     s.target_srs,
                     s.tiling_spec,
-                    s.out_no_data_value.as_(),
                 )))
             }
             geoengine_datatypes::raster::RasterDataType::I64 => {
@@ -334,7 +353,6 @@ impl InitializedRasterOperator for InitializedRasterReprojection {
                     s.source_srs,
                     s.target_srs,
                     s.tiling_spec,
-                    s.out_no_data_value.as_(),
                 )))
             }
             geoengine_datatypes::raster::RasterDataType::F32 => {
@@ -344,7 +362,6 @@ impl InitializedRasterOperator for InitializedRasterReprojection {
                     s.source_srs,
                     s.target_srs,
                     s.tiling_spec,
-                    s.out_no_data_value.as_(),
                 )))
             }
             geoengine_datatypes::raster::RasterDataType::F64 => {
@@ -354,7 +371,6 @@ impl InitializedRasterOperator for InitializedRasterReprojection {
                     s.source_srs,
                     s.target_srs,
                     s.tiling_spec,
-                    s.out_no_data_value.as_(),
                 )))
             }
         })
@@ -369,7 +385,7 @@ where
     from: SpatialReference,
     to: SpatialReference,
     tiling_spec: TilingSpecification,
-    no_data_and_fill_value: P,
+    _phantom_data: PhantomData<P>,
 }
 
 impl<Q, P> RasterReprojectionProcessor<Q, P>
@@ -382,14 +398,13 @@ where
         from: SpatialReference,
         to: SpatialReference,
         tiling_spec: TilingSpecification,
-        no_data_and_fill_value: P,
     ) -> Self {
         Self {
             source,
             from,
             to,
             tiling_spec,
-            no_data_and_fill_value,
+            _phantom_data: PhantomData,
         }
     }
 
@@ -451,11 +466,11 @@ where
         let sub_query_spec = TileReprojectionSubQuery {
             in_srs: self.from,
             out_srs: self.to,
-            no_data_and_fill_value: self.no_data_and_fill_value,
             fold_fn: fold_by_coordinate_lookup_future,
             in_spatial_res,
             valid_bounds_in,
             valid_bounds_out,
+            _phantom_data: PhantomData,
         };
 
         // return the adapter which will reproject the tiles and uses the fill adapter to inject missing tiles
@@ -466,7 +481,7 @@ where
             ctx,
             sub_query_spec,
         )
-        .filter_and_fill(self.no_data_and_fill_value))
+        .filter_and_fill())
     }
 }
 
@@ -489,12 +504,13 @@ mod tests {
     use float_cmp::approx_eq;
     use futures::StreamExt;
     use geoengine_datatypes::collections::IntoGeometryIterator;
+    use geoengine_datatypes::primitives::DateTimeParseFormat;
     use geoengine_datatypes::{
         collections::{
             GeometryCollection, MultiLineStringCollection, MultiPointCollection,
             MultiPolygonCollection,
         },
-        dataset::{DatasetId, InternalDatasetId},
+        dataset::{DataId, DatasetId},
         hashmap,
         primitives::{
             BoundingBox2D, Measurement, MultiLineString, MultiPoint, MultiPolygon, QueryRectangle,
@@ -513,6 +529,7 @@ mod tests {
     };
     use std::collections::HashMap;
     use std::path::PathBuf;
+    use std::str::FromStr;
 
     #[tokio::test]
     async fn multi_point() -> Result<()> {
@@ -741,32 +758,26 @@ mod tests {
             4326,
         );
 
-        let no_data_value = Some(0);
-
         let data = vec![
             RasterTile2D {
                 time: TimeInterval::new_unchecked(0, 5),
                 tile_position: [-1, 0].into(),
                 global_geo_transform: TestDefault::test_default(),
-                grid_array: Grid::new([2, 2].into(), vec![1, 2, 3, 4], no_data_value)
-                    .unwrap()
-                    .into(),
+                grid_array: Grid::new([2, 2].into(), vec![1, 2, 3, 4]).unwrap().into(),
                 properties: Default::default(),
             },
             RasterTile2D {
                 time: TimeInterval::new_unchecked(0, 5),
                 tile_position: [-1, 1].into(),
                 global_geo_transform: TestDefault::test_default(),
-                grid_array: Grid::new([2, 2].into(), vec![7, 8, 9, 10], no_data_value)
-                    .unwrap()
-                    .into(),
+                grid_array: Grid::new([2, 2].into(), vec![7, 8, 9, 10]).unwrap().into(),
                 properties: Default::default(),
             },
             RasterTile2D {
                 time: TimeInterval::new_unchecked(5, 10),
                 tile_position: [-1, 0].into(),
                 global_geo_transform: TestDefault::test_default(),
-                grid_array: Grid::new([2, 2].into(), vec![13, 14, 15, 16], no_data_value)
+                grid_array: Grid::new([2, 2].into(), vec![13, 14, 15, 16])
                     .unwrap()
                     .into(),
                 properties: Default::default(),
@@ -775,7 +786,7 @@ mod tests {
                 time: TimeInterval::new_unchecked(5, 10),
                 tile_position: [-1, 1].into(),
                 global_geo_transform: TestDefault::test_default(),
-                grid_array: Grid::new([2, 2].into(), vec![19, 20, 21, 22], no_data_value)
+                grid_array: Grid::new([2, 2].into(), vec![19, 20, 21, 22])
                     .unwrap()
                     .into(),
                 properties: Default::default(),
@@ -789,7 +800,8 @@ mod tests {
                     data_type: RasterDataType::U8,
                     spatial_reference: SpatialReference::epsg_4326().into(),
                     measurement: Measurement::Unitless,
-                    no_data_value: no_data_value.map(AsPrimitive::as_),
+                    time: None,
+                    bbox: None,
                 },
             },
         }
@@ -852,9 +864,7 @@ mod tests {
         // 2014-01-01
 
         let gdal_op = GdalSource {
-            params: GdalSourceParameters {
-                dataset: id.clone(),
-            },
+            params: GdalSourceParameters { data: id.clone() },
         }
         .boxed();
 
@@ -902,14 +912,19 @@ mod tests {
             .collect::<Vec<RasterTile2D<u8>>>()
             .await;
 
+        // Write the tiles to a file
+        // let mut buffer = File::create("MOD13A2_M_NDVI_2014-04-01_tile-20.rst")?;
+        // buffer.write(res[8].clone().into_materialized_tile().grid_array.data.as_slice())?;
+
         // This check is against a tile produced by the operator itself. It was visually validated. TODO: rebuild when open issues are solved.
         // A perfect validation would be against a GDAL output generated like this:
         // gdalwarp -t_srs EPSG:3857 -tr 11111.11111111 11111.11111111 -r near -te 0.0 5011111.111111112 5000000.0 10011111.111111112 -te_srs EPSG:3857 -of GTiff ./MOD13A2_M_NDVI_2014-04-01.TIFF ./MOD13A2_M_NDVI_2014-04-01_tile-20.rst
+
         assert_eq!(
             include_bytes!(
                 "../../../test_data/raster/modis_ndvi/projected_3857/MOD13A2_M_NDVI_2014-04-01_tile-20.rst"
             ) as &[u8],
-            res[8].clone().into_materialized_tile().grid_array.data.as_slice()
+            res[8].clone().into_materialized_tile().grid_array.inner_grid.data.as_slice()
         );
 
         Ok(())
@@ -949,14 +964,17 @@ mod tests {
         let query_ctx = MockQueryContext::test_default();
 
         let m = GdalMetaDataRegular {
-            start: TimeInstance::from_millis(1_388_534_400_000).unwrap(),
+            data_time: TimeInterval::new_unchecked(
+                TimeInstance::from_str("2014-01-01T00:00:00.000Z").unwrap(),
+                TimeInstance::from_str("2014-07-01T00:00:00.000Z").unwrap(),
+            ),
             step: TimeStep {
                 granularity: TimeGranularity::Months,
                 step: 1,
             },
             time_placeholders: hashmap! {
                 "%_START_TIME_%".to_string() => GdalSourceTimePlaceholder {
-                    format: "%Y-%m-%d".to_string(),
+                    format: DateTimeParseFormat::custom("%Y-%m-%d".to_string()),
                     reference: TimeReference::Start,
                 },
             },
@@ -978,17 +996,19 @@ mod tests {
                 properties_mapping: None,
                 gdal_open_options: None,
                 gdal_config_options: None,
+                allow_alphaband_as_mask: true,
             },
             result_descriptor: RasterResultDescriptor {
                 data_type: RasterDataType::U8,
                 spatial_reference: SpatialReference::new(SpatialReferenceAuthority::Epsg, 3857)
                     .into(),
                 measurement: Measurement::Unitless,
-                no_data_value: Some(0.),
+                time: None,
+                bbox: None,
             },
         };
 
-        let id: DatasetId = InternalDatasetId::new().into();
+        let id: DataId = DatasetId::new().into();
         exe_ctx.add_meta_data(id.clone(), Box::new(m));
 
         exe_ctx.tiling_specification = TilingSpecification::new((0.0, 0.0).into(), [60, 60].into());
@@ -999,9 +1019,7 @@ mod tests {
         // 2014-04-01
 
         let gdal_op = GdalSource {
-            params: GdalSourceParameters {
-                dataset: id.clone(),
-            },
+            params: GdalSourceParameters { data: id.clone() },
         }
         .boxed();
 
@@ -1107,17 +1125,19 @@ mod tests {
                 properties_mapping: None,
                 gdal_open_options: None,
                 gdal_config_options: None,
+                allow_alphaband_as_mask: true,
             },
             result_descriptor: RasterResultDescriptor {
                 data_type: RasterDataType::U8,
                 spatial_reference: SpatialReference::new(SpatialReferenceAuthority::Epsg, 32636)
                     .into(),
                 measurement: Measurement::Unitless,
-                no_data_value: Some(0.),
+                time: None,
+                bbox: None,
             },
         };
 
-        let id: DatasetId = InternalDatasetId::new().into();
+        let id: DataId = DatasetId::new().into();
         exe_ctx.add_meta_data(id.clone(), Box::new(m));
 
         exe_ctx.tiling_specification =
@@ -1129,9 +1149,7 @@ mod tests {
         let time_interval = TimeInterval::new_instant(1_388_534_400_000).unwrap(); // 2014-01-01
 
         let gdal_op = GdalSource {
-            params: GdalSourceParameters {
-                dataset: id.clone(),
-            },
+            params: GdalSourceParameters { data: id.clone() },
         }
         .boxed();
 

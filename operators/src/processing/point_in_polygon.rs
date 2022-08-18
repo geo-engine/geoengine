@@ -6,7 +6,7 @@ use std::sync::Arc;
 
 use futures::stream::BoxStream;
 use futures::{StreamExt, TryStreamExt};
-use geoengine_datatypes::dataset::DatasetId;
+use geoengine_datatypes::dataset::DataId;
 use geoengine_datatypes::primitives::VectorQueryRectangle;
 use rayon::ThreadPool;
 use serde::{Deserialize, Serialize};
@@ -17,7 +17,7 @@ use crate::engine::{
     ExecutionContext, InitializedVectorOperator, Operator, QueryContext, TypedVectorQueryProcessor,
     VectorOperator, VectorQueryProcessor, VectorResultDescriptor,
 };
-use crate::engine::{OperatorDatasets, QueryProcessor};
+use crate::engine::{OperatorData, QueryProcessor};
 use crate::error;
 use crate::util::Result;
 use arrow::array::BooleanArray;
@@ -44,10 +44,10 @@ pub struct PointInPolygonFilterSource {
     pub polygons: Box<dyn VectorOperator>,
 }
 
-impl OperatorDatasets for PointInPolygonFilterSource {
-    fn datasets_collect(&self, datasets: &mut Vec<DatasetId>) {
-        self.points.datasets_collect(datasets);
-        self.polygons.datasets_collect(datasets);
+impl OperatorData for PointInPolygonFilterSource {
+    fn data_ids_collect(&self, data_ids: &mut Vec<DataId>) {
+        self.points.data_ids_collect(data_ids);
+        self.polygons.data_ids_collect(data_ids);
     }
 }
 
@@ -87,8 +87,13 @@ impl VectorOperator for PointInPolygonFilter {
             }
         );
 
+        // We use the result descriptor of the points because in the worst case no feature will be excluded.
+        // We cannot use the polygon bbox because a `MultiPoint` could have one point within a polygon (and
+        // thus be included in the result) and one point outside of the bbox of the polygons.
+        let out_desc = points.result_descriptor().clone();
+
         let initialized_operator = InitializedPointInPolygonFilter {
-            result_descriptor: points.result_descriptor().clone(),
+            result_descriptor: out_desc,
             points,
             polygons,
         };

@@ -87,7 +87,7 @@ where
 ///     }
 ///   },
 ///   "timeStep": {
-///     "granularity": "Months",
+///     "granularity": "months",
 ///     "step": 1
 ///   }
 /// }
@@ -103,7 +103,6 @@ where
     let project = project.into_inner();
     let id = ctx
         .project_db_ref()
-        .await
         .load_version(&session, project.0, LoadVersion::Version(project.1))
         .await?;
     Ok(web::Json(id))
@@ -119,7 +118,6 @@ where
 {
     let id = ctx
         .project_db_ref()
-        .await
         .load_version(&session, project.into_inner(), LoadVersion::Latest)
         .await?;
     Ok(web::Json(id))
@@ -159,8 +157,7 @@ where
     C::ProjectDB: ProProjectDb,
 {
     let versions = ctx
-        .project_db_ref_mut()
-        .await
+        .project_db_ref()
         .versions(&session, project.into_inner())
         .await?;
     Ok(web::Json(versions))
@@ -189,8 +186,7 @@ pub(crate) async fn add_permission_handler<C: ProContext>(
 where
     C::ProjectDB: ProProjectDb,
 {
-    ctx.project_db_ref_mut()
-        .await
+    ctx.project_db_ref()
         .add_permission(&session, permission.into_inner())
         .await?;
     Ok(HttpResponse::Ok())
@@ -219,8 +215,7 @@ pub(crate) async fn remove_permission_handler<C: ProContext>(
 where
     C::ProjectDB: ProProjectDb,
 {
-    ctx.project_db_ref_mut()
-        .await
+    ctx.project_db_ref()
         .remove_permission(&session, permission.into_inner())
         .await?;
     Ok(HttpResponse::Ok())
@@ -253,8 +248,7 @@ where
     C::ProjectDB: ProProjectDb,
 {
     let permissions = ctx
-        .project_db_ref_mut()
-        .await
+        .project_db_ref()
         .list_permissions(&session, project.into_inner())
         .await?;
     Ok(web::Json(permissions))
@@ -291,9 +285,7 @@ mod tests {
 
         let (session, project) = create_project_helper(&ctx).await;
 
-        ctx.project_db()
-            .write()
-            .await
+        ctx.project_db_ref()
             .update(
                 &session,
                 update_project_helper(project).validated().unwrap(),
@@ -314,9 +306,7 @@ mod tests {
         assert_eq!(body.name, "TestUpdate");
 
         let versions = ctx
-            .project_db()
-            .read()
-            .await
+            .project_db_ref()
             .versions(&session, project)
             .await
             .unwrap();
@@ -359,9 +349,7 @@ mod tests {
         let (session, project) = create_project_helper(&ctx).await;
 
         let target_user = ctx
-            .user_db()
-            .write()
-            .await
+            .user_db_ref()
             .register(
                 UserRegistration {
                     email: "foo2@bar.de".to_string(),
@@ -389,13 +377,7 @@ mod tests {
 
         assert_eq!(res.status(), 200);
 
-        assert!(ctx
-            .project_db()
-            .write()
-            .await
-            .load(&session, project)
-            .await
-            .is_ok());
+        assert!(ctx.project_db_ref().load(&session, project).await.is_ok());
     }
 
     #[tokio::test]
@@ -405,9 +387,7 @@ mod tests {
         let (_, project) = create_project_helper(&ctx).await;
 
         let target_user = ctx
-            .user_db()
-            .write()
-            .await
+            .user_db_ref()
             .register(
                 UserRegistration {
                     email: "foo2@bar.de".to_string(),
@@ -448,9 +428,7 @@ mod tests {
         let (session, project) = create_project_helper(&ctx).await;
 
         let target_user = ctx
-            .user_db()
-            .write()
-            .await
+            .user_db_ref()
             .register(
                 UserRegistration {
                     email: "foo2@bar.de".to_string(),
@@ -469,9 +447,7 @@ mod tests {
             permission: ProjectPermission::Read,
         };
 
-        ctx.project_db()
-            .write()
-            .await
+        ctx.project_db_ref()
             .add_permission(&session, permission.clone())
             .await
             .unwrap();
@@ -486,8 +462,7 @@ mod tests {
         assert_eq!(res.status(), 200);
 
         let target_user_session = ctx
-            .user_db_ref_mut()
-            .await
+            .user_db_ref()
             .login(UserCredentials {
                 email: "foo2@bar.de".to_string(),
                 password: "secret1234".to_string(),
@@ -496,9 +471,7 @@ mod tests {
             .unwrap();
 
         assert!(ctx
-            .project_db()
-            .write()
-            .await
+            .project_db_ref()
             .load(&target_user_session, project)
             .await
             .is_err());
@@ -511,9 +484,7 @@ mod tests {
         let (session, project) = create_project_helper(&ctx).await;
 
         let target_user = ctx
-            .user_db()
-            .write()
-            .await
+            .user_db_ref()
             .register(
                 UserRegistration {
                     email: "foo2@bar.de".to_string(),
@@ -532,9 +503,7 @@ mod tests {
             permission: ProjectPermission::Read,
         };
 
-        ctx.project_db()
-            .write()
-            .await
+        ctx.project_db_ref()
             .add_permission(&session, permission.clone())
             .await
             .unwrap();
@@ -561,9 +530,7 @@ mod tests {
         let (session, project) = create_project_helper(&ctx).await;
 
         let target_user = ctx
-            .user_db()
-            .write()
-            .await
+            .user_db_ref()
             .register(
                 UserRegistration {
                     email: "foo2@bar.de".to_string(),
@@ -582,9 +549,7 @@ mod tests {
             permission: ProjectPermission::Read,
         };
 
-        ctx.project_db()
-            .write()
-            .await
+        ctx.project_db_ref()
             .add_permission(&session, permission.clone())
             .await
             .unwrap();
@@ -609,9 +574,7 @@ mod tests {
         let (session, project) = create_project_helper(&ctx).await;
 
         let target_user = ctx
-            .user_db()
-            .write()
-            .await
+            .user_db_ref()
             .register(
                 UserRegistration {
                     email: "foo2@bar.de".to_string(),
@@ -630,9 +593,7 @@ mod tests {
             permission: ProjectPermission::Read,
         };
 
-        ctx.project_db()
-            .write()
-            .await
+        ctx.project_db_ref()
             .add_permission(&session, permission.clone())
             .await
             .unwrap();
@@ -657,9 +618,7 @@ mod tests {
 
         let (session, project) = create_project_helper(&ctx).await;
 
-        ctx.project_db()
-            .write()
-            .await
+        ctx.project_db_ref()
             .update(
                 &session,
                 update_project_helper(project).validated().unwrap(),
@@ -696,9 +655,7 @@ mod tests {
 
         let (session, project) = create_project_helper(&ctx).await;
 
-        ctx.project_db()
-            .write()
-            .await
+        ctx.project_db_ref()
             .update(
                 &session,
                 update_project_helper(project).validated().unwrap(),

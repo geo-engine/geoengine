@@ -1,9 +1,6 @@
 {
   "properties": {
-    "id": {
-      "type": "internal",
-      "datasetId": "a9623a5b-b6c5-404b-bc5a-313ff72e4e75"
-    },
+    "id": "a9623a5b-b6c5-404b-bc5a-313ff72e4e75",
     "name": "Natural Earth 10m Ports",
     "description": "Ports from Natural Earth",
     "sourceOperator": "OgrSource",
@@ -37,11 +34,44 @@
       "dataType": "MultiPoint",
       "spatialReference": "EPSG:4326",
       "columns": {
-        "website": "text",
-        "name": "text",
-        "natlscale": "float",
-        "scalerank": "int",
-        "featurecla": "text"
+        "website": {
+          "dataType": "text",
+          "measurement": {
+            "type": "unitless"
+          }
+        },
+        "name": {
+          "dataType": "text",
+          "measurement": {
+            "type": "unitless"
+          }
+        },
+        "natlscale": {
+          "dataType": "float",
+          "measurement": {
+            "type": "unitless"
+          }
+        },
+        "scalerank": {
+          "dataType": "int",
+          "measurement": {
+            "type": "unitless"
+          }
+        },
+        "featurecla": {
+          "dataType": "text",
+          "measurement": {
+            "type": "unitless"
+          }
+        }
+      },
+      "time": {
+        "start": "-262144-01-01T00:00:00+00:00",
+        "end": "+262143-12-31T23:59:59.999+00:00"
+      },
+      "bbox": {
+        "lowerLeftCoordinate": [-171.75795, -54.809444],
+        "upperRightCoordinate": [179.309364, 78.226111]
       }
     }
   }

@@ -8,8 +8,6 @@ use crate::engine::{
 use crate::util::Result;
 use async_trait::async_trait;
 use num_traits::AsPrimitive;
-use rayon::iter::{IndexedParallelIterator, ParallelIterator};
-use rayon::slice::ParallelSlice;
 use rayon::ThreadPool;
 use TypedRasterQueryProcessor::F32 as QueryProcessorOut;
 
@@ -17,12 +15,11 @@ use crate::error::Error;
 use futures::stream::BoxStream;
 use futures::{StreamExt, TryStreamExt};
 use geoengine_datatypes::primitives::{
-    ClassificationMeasurement, ContinuousMeasurement, Measurement, RasterQueryRectangle,
+    ClassificationMeasurement, ContinuousMeasurement, DateTime, Measurement, RasterQueryRectangle,
     SpatialPartition2D,
 };
 use geoengine_datatypes::raster::{
-    EmptyGrid, Grid2D, GridShapeAccess, GridSize, MaterializedRasterTile2D, NoDataValue,
-    RasterDataType, RasterPropertiesKey, RasterTile2D,
+    GridIdx2D, MapIndexedElementsParallel, RasterDataType, RasterPropertiesKey, RasterTile2D,
 };
 use serde::{Deserialize, Serialize};
 
@@ -31,16 +28,13 @@ type PixelOut = f32;
 use crate::processing::meteosat::satellite::{Channel, Satellite};
 use crate::processing::meteosat::{new_channel_key, new_satellite_key};
 use crate::util::sunpos::SunPos;
-use chrono::{DateTime, Datelike, Utc};
 use RasterDataType::F32 as RasterOut;
-
-const OUT_NO_DATA_VALUE: PixelOut = PixelOut::NAN;
 
 /// Parameters for the `Reflectance` operator.
 /// * `solar_correction` switch to enable solar correction.
 /// * `force_hrv` switch to force the use of the hrv channel.
 /// * `force_satellite` forces the use of the satellite with the given name.
-#[derive(Debug, Serialize, Deserialize, PartialEq, Clone, Default, Copy)]
+#[derive(Debug, Serialize, Deserialize, PartialEq, Eq, Clone, Default, Copy)]
 #[serde(rename_all = "camelCase")]
 pub struct ReflectanceParams {
     pub solar_correction: bool,
@@ -110,7 +104,8 @@ impl RasterOperator for Reflectance {
                 measurement: "reflectance".into(),
                 unit: Some("fraction".into()),
             }),
-            no_data_value: Some(f64::from(OUT_NO_DATA_VALUE)),
+            time: in_desc.time,
+            bbox: in_desc.bbox,
         };
 
         let initialized_operator = InitializedReflectance {
@@ -196,111 +191,54 @@ where
         pool: Arc<ThreadPool>,
     ) -> Result<RasterTile2D<PixelOut>> {
         if tile.is_empty() {
-            return Ok(RasterTile2D::new_with_properties(
-                tile.time,
-                tile.tile_position,
-                tile.global_geo_transform,
-                EmptyGrid::new(tile.grid_shape(), OUT_NO_DATA_VALUE).into(),
-                tile.properties,
-            ));
+            return Ok(tile);
         }
 
         let satellite = self.satellite(&tile)?;
         let channel = self.channel(&tile, satellite)?;
         let solar_correction = self.params.solar_correction;
+        let timestamp = tile
+            .time
+            .start()
+            .as_date_time()
+            .ok_or(Error::InvalidUTCTimestamp)?;
+        let sun_pos_option = if solar_correction {
+            Some(SunPos::new(&timestamp))
+        } else {
+            None
+        };
+        let etsr = channel.etsr / std::f64::consts::PI;
+        let esd = calculate_esd(&timestamp);
+        let tile_geo_transform = tile.tile_geo_transform();
 
-        let mat_tile = tile.into_materialized_tile(); // NOTE: the tile is already materialized.
+        let map_fn = move |grid_idx: GridIdx2D, pixel_option: Option<PixelOut>| {
+            pixel_option.map(|p| {
+                if let Some(sun_pos) = sun_pos_option {
+                    let geos_coord =
+                        tile_geo_transform.grid_idx_to_pixel_center_coordinate_2d(grid_idx);
 
-        let refl_tile = crate::util::spawn_blocking(move || {
-            process_tile(mat_tile, solar_correction, channel, &pool)
+                    let (lat, lon) = channel.view_angle_lat_lon(geos_coord, 0.0);
+                    let (_, zenith) = sun_pos.solar_azimuth_zenith(lat, lon);
+
+                    (f64::from(p) * esd * esd / (etsr * zenith.min(80.0).to_radians().cos()))
+                        as PixelOut
+                } else {
+                    (f64::from(p) * esd * esd / etsr).as_()
+                }
+            })
+        };
+
+        let refl_tile = crate::util::spawn_blocking_with_thread_pool(pool, move || {
+            tile.map_indexed_elements_parallel(map_fn)
         })
-        .await??;
+        .await?;
 
         Ok(refl_tile)
     }
 }
 
-fn process_tile(
-    tile: MaterializedRasterTile2D<PixelOut>,
-    solar_correction: bool,
-    channel: &Channel,
-    pool: &ThreadPool,
-) -> Result<RasterTile2D<PixelOut>> {
-    pool.install(|| {
-        let timestamp = tile
-            .time
-            .start()
-            .as_utc_date_time()
-            .ok_or(Error::InvalidUTCTimestamp)?;
-
-        // get extra terrestrial solar radiation (...) and ESD (solar position)
-        let etsr = channel.etsr / std::f64::consts::PI;
-        let esd = calculate_esd(&timestamp);
-
-        let grid = &tile.grid_array;
-        // Apply solar correction
-        let out_grid = if solar_correction {
-            let sunpos = SunPos::new(&timestamp);
-
-            let tile_geo_transform = tile.tile_geo_transform();
-
-            grid.data
-                .par_chunks_exact(grid.axis_size_x()) // we know that a raster is always a perfect grid. Exact will always include all elements
-                .enumerate()
-                .map(|(y, row)| {
-                    row.iter().enumerate().map(move |(x, &pixel)| {
-                        if grid.is_no_data(pixel) {
-                            OUT_NO_DATA_VALUE
-                        } else {
-                            let grid_idx = [y as isize, x as isize].into();
-                            let geos_coord =
-                                tile_geo_transform.grid_idx_to_center_coordinate_2d(grid_idx);
-
-                            let (lat, lon) = channel.view_angle_lat_lon(geos_coord, 0.0);
-                            let (_, zenith) = sunpos.solar_azimuth_zenith(lat, lon);
-
-                            (f64::from(pixel) * esd * esd
-                                / (etsr * zenith.min(80.0).to_radians().cos()))
-                                as PixelOut
-                        }
-                    })
-                })
-                .flatten_iter()
-                .collect::<Vec<f32>>()
-        } else {
-            grid.data
-                .par_chunks(grid.axis_size_x())
-                .map(|row| {
-                    row.iter().map(|&p| {
-                        if grid.is_no_data(p) {
-                            OUT_NO_DATA_VALUE
-                        } else {
-                            (f64::from(p) * esd * esd / etsr).as_()
-                        }
-                    })
-                })
-                .flatten_iter()
-                .collect::<Vec<f32>>()
-        };
-
-        let out_grid = Grid2D::new(
-            tile.grid_array.grid_shape(),
-            out_grid,
-            Some(OUT_NO_DATA_VALUE),
-        )?;
-
-        Ok(RasterTile2D::new_with_properties(
-            tile.time,
-            tile.tile_position,
-            tile.global_geo_transform,
-            out_grid.into(),
-            tile.properties,
-        ))
-    })
-}
-
-fn calculate_esd(timestamp: &DateTime<Utc>) -> f64 {
-    let perihelion = f64::from(timestamp.ordinal()) - 3.0;
+fn calculate_esd(timestamp: &DateTime) -> f64 {
+    let perihelion = f64::from(timestamp.day_of_year()) - 3.0;
     let e = 0.0167;
     let theta = std::f64::consts::TAU * (perihelion / 365.0);
     1.0 - e * theta.cos()
@@ -328,15 +266,15 @@ where
 #[cfg(test)]
 mod tests {
     use crate::engine::{MockExecutionContext, RasterOperator, SingleRasterSource};
-    use crate::processing::meteosat::reflectance::{
-        Reflectance, ReflectanceParams, OUT_NO_DATA_VALUE,
-    };
+    use crate::processing::meteosat::reflectance::{Reflectance, ReflectanceParams};
     use crate::processing::meteosat::test_util;
     use crate::util::Result;
     use geoengine_datatypes::primitives::{
         ClassificationMeasurement, ContinuousMeasurement, Measurement,
     };
-    use geoengine_datatypes::raster::{EmptyGrid2D, Grid2D, RasterTile2D, TilingSpecification};
+    use geoengine_datatypes::raster::{
+        EmptyGrid2D, Grid2D, GridOrEmpty, MaskedGrid2D, RasterTile2D, TilingSpecification,
+    };
     use std::collections::HashMap;
 
     async fn process_mock(
@@ -357,7 +295,11 @@ mod tests {
         test_util::process(
             || {
                 let props = test_util::create_properties(channel, satellite, None, None);
-                let cc = if empty { Some(Vec::new()) } else { None };
+                let cc = if empty {
+                    Some(EmptyGrid2D::new([3, 2].into()).into())
+                } else {
+                    None
+                };
 
                 let m = measurement.or_else(|| {
                     Some(Measurement::Continuous(ContinuousMeasurement {
@@ -366,7 +308,7 @@ mod tests {
                     }))
                 });
 
-                let src = test_util::create_mock_source::<u8>(props, cc, m);
+                let src = test_util::create_mock_source::<f32>(props, cc, m);
 
                 RasterOperator::boxed(Reflectance {
                     params,
@@ -414,9 +356,10 @@ mod tests {
         let result = process_mock(ReflectanceParams::default(), Some(1), Some(1), true, None).await;
 
         assert!(result.is_ok());
-        assert!(geoengine_datatypes::util::test::eq_with_no_data(
-            &result.as_ref().unwrap().grid_array,
-            &EmptyGrid2D::new([3, 2].into(), OUT_NO_DATA_VALUE,).into()
+        println!("{:?}", result);
+        assert!(geoengine_datatypes::util::test::grid_or_empty_grid_eq(
+            &result.unwrap().grid_array,
+            &GridOrEmpty::from(EmptyGrid2D::new([3, 2].into()))
         ));
     }
 
@@ -426,19 +369,22 @@ mod tests {
             process_mock(ReflectanceParams::default(), Some(1), Some(1), false, None).await;
 
         assert!(result.is_ok());
-        assert!(geoengine_datatypes::util::test::eq_with_no_data(
+        assert!(geoengine_datatypes::util::test::grid_or_empty_grid_eq(
             &result.as_ref().unwrap().grid_array,
-            &Grid2D::new(
-                [3, 2].into(),
-                vec![
-                    0.046_567_827_f32,
-                    0.093_135_655_f32,
-                    0.139_703_48_f32,
-                    0.186_271_31_f32,
-                    0.232_839_14_f32,
-                    OUT_NO_DATA_VALUE,
-                ],
-                Some(OUT_NO_DATA_VALUE),
+            &MaskedGrid2D::new(
+                Grid2D::new(
+                    [3, 2].into(),
+                    vec![
+                        0.046_567_827_f32,
+                        0.093_135_655_f32,
+                        0.139_703_48_f32,
+                        0.186_271_31_f32,
+                        0.232_839_14_f32,
+                        0.
+                    ],
+                )
+                .unwrap(),
+                Grid2D::new([3, 2].into(), vec![true, true, true, true, true, false,],).unwrap(),
             )
             .unwrap()
             .into()
@@ -454,19 +400,22 @@ mod tests {
         let result = process_mock(params, Some(1), Some(1), false, None).await;
 
         assert!(result.is_ok());
-        assert!(geoengine_datatypes::util::test::eq_with_no_data(
+        assert!(geoengine_datatypes::util::test::grid_or_empty_grid_eq(
             &result.as_ref().unwrap().grid_array,
-            &Grid2D::new(
-                [3, 2].into(),
-                vec![
-                    0.046_542_14_f32,
-                    0.093_084_28_f32,
-                    0.139_626_43_f32,
-                    0.186_168_57_f32,
-                    0.232_710_7_f32,
-                    OUT_NO_DATA_VALUE
-                ],
-                Some(OUT_NO_DATA_VALUE),
+            &MaskedGrid2D::new(
+                Grid2D::new(
+                    [3, 2].into(),
+                    vec![
+                        0.046_542_14_f32,
+                        0.093_084_28_f32,
+                        0.139_626_43_f32,
+                        0.186_168_57_f32,
+                        0.232_710_7_f32,
+                        0. // TODO: check nodata mask
+                    ],
+                )
+                .unwrap(),
+                Grid2D::new([3, 2].into(), vec![true, true, true, true, true, false,],).unwrap()
             )
             .unwrap()
             .into()
@@ -482,19 +431,22 @@ mod tests {
         let result = process_mock(params, Some(1), Some(1), false, None).await;
 
         assert!(result.is_ok());
-        assert!(geoengine_datatypes::util::test::eq_with_no_data(
+        assert!(geoengine_datatypes::util::test::grid_or_empty_grid_eq(
             &result.as_ref().unwrap().grid_array,
-            &Grid2D::new(
-                [3, 2].into(),
-                vec![
-                    0.038_567_86_f32,
-                    0.077_135_72_f32,
-                    0.115_703_575_f32,
-                    0.154_271_44_f32,
-                    0.192_839_3_f32,
-                    OUT_NO_DATA_VALUE
-                ],
-                Some(OUT_NO_DATA_VALUE),
+            &MaskedGrid2D::new(
+                Grid2D::new(
+                    [3, 2].into(),
+                    vec![
+                        0.038_567_86_f32,
+                        0.077_135_72_f32,
+                        0.115_703_575_f32,
+                        0.154_271_44_f32,
+                        0.192_839_3_f32,
+                        0. // TODO: check nodata mask
+                    ],
+                )
+                .unwrap(),
+                Grid2D::new([3, 2].into(), vec![true, true, true, true, true, false,],).unwrap(),
             )
             .unwrap()
             .into()
@@ -510,19 +462,22 @@ mod tests {
         let result = process_mock(params, Some(1), Some(1), false, None).await;
 
         assert!(result.is_ok());
-        assert!(geoengine_datatypes::util::test::eq_with_no_data(
+        assert!(geoengine_datatypes::util::test::grid_or_empty_grid_eq(
             &result.as_ref().unwrap().grid_array,
-            &Grid2D::new(
-                [3, 2].into(),
-                vec![
-                    0.268_173_43_f32,
-                    0.536_346_85_f32,
-                    0.804_520_3_f32,
-                    1.072_693_7_f32,
-                    1.340_867_2_f32,
-                    OUT_NO_DATA_VALUE
-                ],
-                Some(OUT_NO_DATA_VALUE),
+            &MaskedGrid2D::new(
+                Grid2D::new(
+                    [3, 2].into(),
+                    vec![
+                        0.268_173_43_f32,
+                        0.536_346_85_f32,
+                        0.804_520_3_f32,
+                        1.072_693_7_f32,
+                        1.340_867_2_f32,
+                        0.
+                    ],
+                )
+                .unwrap(),
+                Grid2D::new([3, 2].into(), vec![true, true, true, true, true, false],).unwrap(),
             )
             .unwrap()
             .into()

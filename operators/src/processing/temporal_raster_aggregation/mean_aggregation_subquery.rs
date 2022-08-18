@@ -1,11 +1,12 @@
-use std::sync::Arc;
+use std::{marker::PhantomData, sync::Arc};
 
+use async_trait::async_trait;
 use futures::{future::BoxFuture, Future, FutureExt, TryFuture, TryFutureExt};
 use geoengine_datatypes::{
     primitives::{RasterQueryRectangle, SpatialPartitioned, TimeInstance, TimeInterval, TimeStep},
     raster::{
-        EmptyGrid2D, GeoTransform, Grid2D, GridIdx2D, GridOrEmpty, GridOrEmpty2D, GridShapeAccess,
-        NoDataValue, Pixel, RasterTile2D, TileInformation,
+        EmptyGrid2D, GeoTransform, GridIdx2D, GridIndexAccess, GridOrEmpty, GridOrEmpty2D,
+        GridShapeAccess, MapElements, Pixel, RasterTile2D, TileInformation, UpdateIndexedElements,
     },
 };
 use num_traits::AsPrimitive;
@@ -41,15 +42,11 @@ pub struct TemporalMeanTileAccu<T> {
     time: TimeInterval,
     tile_position: GridIdx2D,
     global_geo_transform: GeoTransform,
-
-    value_grid: GridOrEmpty2D<f64>,
-    count_grid: Grid2D<u64>,
+    value_grid: GridOrEmpty2D<(f64, u64)>,
     ignore_no_data: bool,
-    out_no_data_value: T,
-
     initial_state: bool,
-
     pool: Arc<ThreadPool>,
+    _phantom_pixel_type: PhantomData<T>,
 }
 
 impl<T> TemporalMeanTileAccu<T> {
@@ -58,6 +55,8 @@ impl<T> TemporalMeanTileAccu<T> {
         T: Copy + AsPrimitive<f64> + Pixel,
     {
         self.time = self.time.union(&in_tile.time)?;
+
+        debug_assert!(self.value_grid.grid_shape() == in_tile.grid_shape());
 
         let in_tile_grid = match in_tile.grid_array {
             GridOrEmpty::Grid(g) => g,
@@ -73,50 +72,40 @@ impl<T> TemporalMeanTileAccu<T> {
             }
 
             GridOrEmpty::Empty(_) => {
-                let mut accu_grid = self.value_grid.clone().into_materialized_grid();
-
-                for ((acc_value, acc_count), new_value) in accu_grid
-                    .data
-                    .iter_mut()
-                    .zip(self.count_grid.data.iter_mut())
-                    .zip(in_tile_grid.data.iter())
-                {
-                    if in_tile_grid.is_no_data(*new_value) {
-                        *acc_count = 0;
-                    } else {
+                // this could stay empty?
+                let map_fn = |lin_idx: usize, _acc_values_option| {
+                    let new_value_option = in_tile_grid.get_at_grid_index_unchecked(lin_idx);
+                    if let Some(new_value) = new_value_option {
                         let ivf: f64 = new_value.as_();
-                        *acc_value = ivf;
-                        *acc_count = 1;
+                        Some((ivf, 1))
+                    } else {
+                        None
                     }
-                }
-
-                self.value_grid = accu_grid.into();
+                };
+                self.value_grid.update_indexed_elements(map_fn); // TODO: make this parallel?
             }
 
-            GridOrEmpty::Grid(accu_grid) => {
-                for ((acc_value, acc_count), new_value) in accu_grid
-                    .data
-                    .iter_mut()
-                    .zip(self.count_grid.data.iter_mut())
-                    .zip(in_tile_grid.data.iter())
-                {
-                    if in_tile_grid.is_no_data(*new_value) {
-                        // The input pixel value is nodata
-                        if !self.ignore_no_data {
-                            // once nodata always nodata
-                            *acc_count = 0;
+            GridOrEmpty::Grid(g) => {
+                let map_fn = |lin_idx: usize, acc_values_option: Option<(f64, u64)>| {
+                    let new_value_option = in_tile_grid.get_at_grid_index_unchecked(lin_idx);
+                    match (acc_values_option, new_value_option) {
+                        (None, Some(new_value)) if self.ignore_no_data || self.initial_state => {
+                            let ivf: f64 = new_value.as_();
+                            Some((ivf, 1))
                         }
-                    } else {
-                        let ivf: f64 = new_value.as_();
-                        if self.ignore_no_data || *acc_count > 0 {
-                            // we either ignore nodata, then we add all non-nodata pixels or the count is > 0, so not nodata
-                            // *av += ivf;
-                            *acc_count += 1;
-                            let delta = ivf - *acc_value;
-                            *acc_value += delta / (*acc_count as f64);
+                        (Some(acc_value), None) if self.ignore_no_data => Some(acc_value),
+                        (Some((acc_value, acc_count)), Some(new_value)) => {
+                            let ivf: f64 = new_value.as_();
+                            let new_acc_count = acc_count + 1;
+                            let delta = ivf - acc_value;
+                            let new_acc_value = acc_value + delta / (new_acc_count as f64);
+                            Some((new_acc_value, new_acc_count))
                         }
+                        (None, Some(_) | None) | (Some(_), None) => None,
                     }
-                }
+                };
+
+                g.update_indexed_elements(map_fn); // TODO: make this parallel?
             }
         }
 
@@ -125,57 +114,57 @@ impl<T> TemporalMeanTileAccu<T> {
     }
 }
 
+#[async_trait]
 impl<T> FoldTileAccu for TemporalMeanTileAccu<T>
 where
     T: Pixel,
 {
     type RasterType = T;
 
-    fn into_tile(self) -> RasterTile2D<Self::RasterType> {
+    async fn into_tile(self) -> Result<RasterTile2D<Self::RasterType>> {
         let TemporalMeanTileAccu {
             time,
             tile_position,
             global_geo_transform,
             value_grid,
-            count_grid,
             ignore_no_data: _,
-            out_no_data_value,
             initial_state: _,
             pool: _pool,
+            _phantom_pixel_type: _,
         } = self;
 
         let value_grid = match value_grid {
             GridOrEmpty::Grid(g) => g,
             GridOrEmpty::Empty(_) => {
-                return RasterTile2D::new(
+                return Ok(RasterTile2D::new(
                     time,
                     tile_position,
                     global_geo_transform,
-                    EmptyGrid2D::new(value_grid.grid_shape(), out_no_data_value).into(),
-                )
+                    EmptyGrid2D::new(value_grid.grid_shape()).into(),
+                ))
             }
         };
 
-        let res: Vec<T> = value_grid
-            .data
-            .into_iter()
-            .zip(count_grid.data.into_iter())
-            .map(|(v, c)| {
-                if c == 0 {
-                    out_no_data_value
+        let map_fn = |value_option| {
+            if let Some((acc_value, acc_count)) = value_option {
+                if acc_count == 0 {
+                    None
                 } else {
-                    T::from_(v) // lets hope that this works..
+                    Some(T::from_(acc_value))
                 }
-            })
-            .collect();
-
-        let res_grid = Grid2D {
-            shape: value_grid.shape,
-            data: res,
-            no_data_value: Some(out_no_data_value),
+            } else {
+                None
+            }
         };
 
-        RasterTile2D::new(time, tile_position, global_geo_transform, res_grid.into())
+        let res_grid = value_grid.map_elements(map_fn);
+
+        Ok(RasterTile2D::new(
+            time,
+            tile_position,
+            global_geo_transform,
+            res_grid.into(),
+        ))
     }
 
     fn thread_pool(&self) -> &Arc<ThreadPool> {
@@ -186,9 +175,10 @@ where
 #[derive(Debug, Clone)]
 pub struct TemporalRasterMeanAggregationSubQuery<F, T: Pixel> {
     pub fold_fn: F,
-    pub no_data_value: T,
     pub ignore_no_data: bool,
     pub step: TimeStep,
+    pub step_reference: TimeInstance,
+    pub _phantom_pixel_type: PhantomData<T>,
 }
 
 impl<'a, T, FoldM, FoldF> SubQueryTileAggregator<'a, T>
@@ -211,14 +201,7 @@ where
         query_rect: RasterQueryRectangle,
         pool: &Arc<ThreadPool>,
     ) -> Self::TileAccuFuture {
-        build_accu(
-            query_rect,
-            tile_info,
-            pool.clone(),
-            self.ignore_no_data,
-            self.no_data_value,
-        )
-        .boxed()
+        build_accu(query_rect, tile_info, pool.clone(), self.ignore_no_data).boxed()
     }
 
     fn tile_query_rectangle(
@@ -227,10 +210,11 @@ where
         query_rect: RasterQueryRectangle,
         start_time: TimeInstance,
     ) -> Result<Option<RasterQueryRectangle>> {
+        let snapped_start = self.step.snap_relative(self.step_reference, start_time)?;
         Ok(Some(RasterQueryRectangle {
             spatial_bounds: tile_info.spatial_partition(),
             spatial_resolution: query_rect.spatial_resolution,
-            time_interval: TimeInterval::new(start_time, (start_time + self.step)?)?,
+            time_interval: TimeInterval::new(snapped_start, (snapped_start + self.step)?)?,
         }))
     }
 
@@ -244,18 +228,16 @@ fn build_accu<T: Pixel>(
     tile_info: TileInformation,
     pool: Arc<ThreadPool>,
     ignore_no_data: bool,
-    no_data_value: T,
 ) -> impl Future<Output = Result<TemporalMeanTileAccu<T>>> {
     crate::util::spawn_blocking(move || TemporalMeanTileAccu {
         time: query_rect.time_interval,
         tile_position: tile_info.global_tile_position,
         global_geo_transform: tile_info.global_geo_transform,
-        value_grid: EmptyGrid2D::new(tile_info.tile_size_in_pixels, 0.).into(),
-        count_grid: Grid2D::new_filled(tile_info.tile_size_in_pixels, 0, None),
+        value_grid: EmptyGrid2D::new(tile_info.tile_size_in_pixels).into(),
         ignore_no_data,
-        out_no_data_value: no_data_value,
         initial_state: true,
         pool,
+        _phantom_pixel_type: PhantomData,
     })
     .map_err(From::from)
 }

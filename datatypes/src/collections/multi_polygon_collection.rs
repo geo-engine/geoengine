@@ -257,7 +257,7 @@ impl<'l> GeometryRandomAccess<'l> for MultiPolygonCollection {
 }
 
 impl GeoFeatureCollectionRowBuilder<MultiPolygon> for FeatureCollectionRowBuilder<MultiPolygon> {
-    fn push_geometry(&mut self, geometry: MultiPolygon) -> Result<()> {
+    fn push_geometry(&mut self, geometry: MultiPolygon) {
         let polygon_builder = self.geometries_builder.values();
 
         for polygon in geometry.polygons() {
@@ -269,20 +269,18 @@ impl GeoFeatureCollectionRowBuilder<MultiPolygon> for FeatureCollectionRowBuilde
                 for coordinate in ring {
                     coordinate_builder
                         .values()
-                        .append_slice(coordinate.as_ref())?;
+                        .append_slice(coordinate.as_ref());
 
-                    coordinate_builder.append(true)?;
+                    coordinate_builder.append(true);
                 }
 
-                ring_builder.append(true)?;
+                ring_builder.append(true);
             }
 
-            polygon_builder.append(true)?;
+            polygon_builder.append(true);
         }
 
-        self.geometries_builder.append(true)?;
-
-        Ok(())
+        self.geometries_builder.append(true);
     }
 }
 
@@ -385,9 +383,7 @@ impl From<Vec<geo::MultiPolygon<f64>>> for MultiPolygonCollection {
             .set_polygons(coordinates, ring_offsets, polygon_offsets, feature_offsets)
             .expect("setting polygons always works");
 
-        builder
-            .set_default_time_intervals()
-            .expect("setting default time always works");
+        builder.set_default_time_intervals();
 
         builder
             .finish()
@@ -415,32 +411,28 @@ mod tests {
     fn single_polygons() {
         let mut builder = MultiPolygonCollection::builder().finish_header();
 
-        builder
-            .push_geometry(
-                MultiPolygon::new(vec![vec![vec![
-                    (0.0, 0.1).into(),
-                    (0.0, 1.1).into(),
-                    (1.0, 0.1).into(),
-                    (0.0, 0.1).into(),
-                ]]])
-                .unwrap(),
-            )
-            .unwrap();
-        builder
-            .push_geometry(
-                MultiPolygon::new(vec![vec![vec![
-                    (2.0, 2.1).into(),
-                    (2.0, 3.1).into(),
-                    (3.0, 3.1).into(),
-                    (3.0, 2.1).into(),
-                    (2.0, 2.1).into(),
-                ]]])
-                .unwrap(),
-            )
-            .unwrap();
+        builder.push_geometry(
+            MultiPolygon::new(vec![vec![vec![
+                (0.0, 0.1).into(),
+                (0.0, 1.1).into(),
+                (1.0, 0.1).into(),
+                (0.0, 0.1).into(),
+            ]]])
+            .unwrap(),
+        );
+        builder.push_geometry(
+            MultiPolygon::new(vec![vec![vec![
+                (2.0, 2.1).into(),
+                (2.0, 3.1).into(),
+                (3.0, 3.1).into(),
+                (3.0, 2.1).into(),
+                (2.0, 2.1).into(),
+            ]]])
+            .unwrap(),
+        );
 
         for _ in 0..2 {
-            builder.push_time_interval(TimeInterval::default()).unwrap();
+            builder.push_time_interval(TimeInterval::default());
 
             builder.finish_row();
         }
@@ -482,49 +474,45 @@ mod tests {
     fn multi_polygons() {
         let mut builder = MultiPolygonCollection::builder().finish_header();
 
-        builder
-            .push_geometry(
-                MultiPolygon::new(vec![
-                    vec![vec![
-                        (0.0, 0.1).into(),
-                        (0.0, 1.1).into(),
-                        (1.0, 0.1).into(),
-                        (0.0, 0.1).into(),
-                    ]],
-                    vec![vec![
-                        (2.0, 2.1).into(),
-                        (2.0, 3.1).into(),
-                        (3.0, 2.1).into(),
-                        (2.0, 2.1).into(),
-                    ]],
-                ])
-                .unwrap(),
-            )
-            .unwrap();
-        builder
-            .push_geometry(
-                MultiPolygon::new(vec![vec![
-                    vec![
-                        (4.0, 4.1).into(),
-                        (4.0, 8.1).into(),
-                        (8.0, 8.1).into(),
-                        (8.0, 4.1).into(),
-                        (4.0, 4.1).into(),
-                    ],
-                    vec![
-                        (5.0, 5.1).into(),
-                        (5.0, 7.1).into(),
-                        (7.0, 7.1).into(),
-                        (7.0, 5.1).into(),
-                        (5.0, 5.1).into(),
-                    ],
-                ]])
-                .unwrap(),
-            )
-            .unwrap();
+        builder.push_geometry(
+            MultiPolygon::new(vec![
+                vec![vec![
+                    (0.0, 0.1).into(),
+                    (0.0, 1.1).into(),
+                    (1.0, 0.1).into(),
+                    (0.0, 0.1).into(),
+                ]],
+                vec![vec![
+                    (2.0, 2.1).into(),
+                    (2.0, 3.1).into(),
+                    (3.0, 2.1).into(),
+                    (2.0, 2.1).into(),
+                ]],
+            ])
+            .unwrap(),
+        );
+        builder.push_geometry(
+            MultiPolygon::new(vec![vec![
+                vec![
+                    (4.0, 4.1).into(),
+                    (4.0, 8.1).into(),
+                    (8.0, 8.1).into(),
+                    (8.0, 4.1).into(),
+                    (4.0, 4.1).into(),
+                ],
+                vec![
+                    (5.0, 5.1).into(),
+                    (5.0, 7.1).into(),
+                    (7.0, 7.1).into(),
+                    (7.0, 5.1).into(),
+                    (5.0, 5.1).into(),
+                ],
+            ]])
+            .unwrap(),
+        );
 
         for _ in 0..2 {
-            builder.push_time_interval(TimeInterval::default()).unwrap();
+            builder.push_time_interval(TimeInterval::default());
 
             builder.finish_row();
         }
@@ -582,53 +570,48 @@ mod tests {
     }
 
     #[test]
-    #[allow(clippy::eq_op)]
     fn equals() {
         let mut builder = MultiPolygonCollection::builder().finish_header();
 
-        builder
-            .push_geometry(
-                MultiPolygon::new(vec![
-                    vec![vec![
-                        (0.0, 0.1).into(),
-                        (0.0, 1.1).into(),
-                        (1.0, 0.1).into(),
-                        (0.0, 0.1).into(),
-                    ]],
-                    vec![vec![
-                        (2.0, 2.1).into(),
-                        (2.0, 3.1).into(),
-                        (3.0, 2.1).into(),
-                        (2.0, 2.1).into(),
-                    ]],
-                ])
-                .unwrap(),
-            )
-            .unwrap();
-        builder
-            .push_geometry(
-                MultiPolygon::new(vec![vec![
-                    vec![
-                        (4.0, 4.1).into(),
-                        (4.0, 8.1).into(),
-                        (8.0, 8.1).into(),
-                        (8.0, 4.1).into(),
-                        (4.0, 4.1).into(),
-                    ],
-                    vec![
-                        (5.0, 5.1).into(),
-                        (5.0, 7.1).into(),
-                        (7.0, 7.1).into(),
-                        (7.0, 5.1).into(),
-                        (5.0, 5.1).into(),
-                    ],
-                ]])
-                .unwrap(),
-            )
-            .unwrap();
+        builder.push_geometry(
+            MultiPolygon::new(vec![
+                vec![vec![
+                    (0.0, 0.1).into(),
+                    (0.0, 1.1).into(),
+                    (1.0, 0.1).into(),
+                    (0.0, 0.1).into(),
+                ]],
+                vec![vec![
+                    (2.0, 2.1).into(),
+                    (2.0, 3.1).into(),
+                    (3.0, 2.1).into(),
+                    (2.0, 2.1).into(),
+                ]],
+            ])
+            .unwrap(),
+        );
+        builder.push_geometry(
+            MultiPolygon::new(vec![vec![
+                vec![
+                    (4.0, 4.1).into(),
+                    (4.0, 8.1).into(),
+                    (8.0, 8.1).into(),
+                    (8.0, 4.1).into(),
+                    (4.0, 4.1).into(),
+                ],
+                vec![
+                    (5.0, 5.1).into(),
+                    (5.0, 7.1).into(),
+                    (7.0, 7.1).into(),
+                    (7.0, 5.1).into(),
+                    (5.0, 5.1).into(),
+                ],
+            ]])
+            .unwrap(),
+        );
 
         for _ in 0..2 {
-            builder.push_time_interval(TimeInterval::default()).unwrap();
+            builder.push_time_interval(TimeInterval::default());
 
             builder.finish_row();
         }
@@ -644,60 +627,54 @@ mod tests {
     fn filter() {
         let mut builder = MultiPolygonCollection::builder().finish_header();
 
-        builder
-            .push_geometry(
-                MultiPolygon::new(vec![vec![vec![
+        builder.push_geometry(
+            MultiPolygon::new(vec![vec![vec![
+                (0.0, 0.1).into(),
+                (0.0, 1.1).into(),
+                (1.0, 0.1).into(),
+                (0.0, 0.1).into(),
+            ]]])
+            .unwrap(),
+        );
+        builder.push_geometry(
+            MultiPolygon::new(vec![
+                vec![vec![
                     (0.0, 0.1).into(),
                     (0.0, 1.1).into(),
                     (1.0, 0.1).into(),
                     (0.0, 0.1).into(),
-                ]]])
-                .unwrap(),
-            )
-            .unwrap();
-        builder
-            .push_geometry(
-                MultiPolygon::new(vec![
-                    vec![vec![
-                        (0.0, 0.1).into(),
-                        (0.0, 1.1).into(),
-                        (1.0, 0.1).into(),
-                        (0.0, 0.1).into(),
-                    ]],
-                    vec![vec![
-                        (2.0, 2.1).into(),
-                        (2.0, 3.1).into(),
-                        (3.0, 2.1).into(),
-                        (2.0, 2.1).into(),
-                    ]],
-                ])
-                .unwrap(),
-            )
-            .unwrap();
-        builder
-            .push_geometry(
-                MultiPolygon::new(vec![vec![
-                    vec![
-                        (4.0, 4.1).into(),
-                        (4.0, 8.1).into(),
-                        (8.0, 8.1).into(),
-                        (8.0, 4.1).into(),
-                        (4.0, 4.1).into(),
-                    ],
-                    vec![
-                        (5.0, 5.1).into(),
-                        (5.0, 7.1).into(),
-                        (7.0, 7.1).into(),
-                        (7.0, 5.1).into(),
-                        (5.0, 5.1).into(),
-                    ],
-                ]])
-                .unwrap(),
-            )
-            .unwrap();
+                ]],
+                vec![vec![
+                    (2.0, 2.1).into(),
+                    (2.0, 3.1).into(),
+                    (3.0, 2.1).into(),
+                    (2.0, 2.1).into(),
+                ]],
+            ])
+            .unwrap(),
+        );
+        builder.push_geometry(
+            MultiPolygon::new(vec![vec![
+                vec![
+                    (4.0, 4.1).into(),
+                    (4.0, 8.1).into(),
+                    (8.0, 8.1).into(),
+                    (8.0, 4.1).into(),
+                    (4.0, 4.1).into(),
+                ],
+                vec![
+                    (5.0, 5.1).into(),
+                    (5.0, 7.1).into(),
+                    (7.0, 7.1).into(),
+                    (7.0, 5.1).into(),
+                    (5.0, 5.1).into(),
+                ],
+            ]])
+            .unwrap(),
+        );
 
         for _ in 0..3 {
-            builder.push_time_interval(TimeInterval::default()).unwrap();
+            builder.push_time_interval(TimeInterval::default());
 
             builder.finish_row();
         }
@@ -737,46 +714,42 @@ mod tests {
     fn append() {
         let mut builder = MultiPolygonCollection::builder().finish_header();
 
-        builder
-            .push_geometry(
-                MultiPolygon::new(vec![vec![vec![
-                    (0.0, 0.1).into(),
-                    (0.0, 1.1).into(),
-                    (1.0, 0.1).into(),
-                    (0.0, 0.1).into(),
-                ]]])
-                .unwrap(),
-            )
-            .unwrap();
-        builder.push_time_interval(TimeInterval::default()).unwrap();
+        builder.push_geometry(
+            MultiPolygon::new(vec![vec![vec![
+                (0.0, 0.1).into(),
+                (0.0, 1.1).into(),
+                (1.0, 0.1).into(),
+                (0.0, 0.1).into(),
+            ]]])
+            .unwrap(),
+        );
+        builder.push_time_interval(TimeInterval::default());
         builder.finish_row();
 
         let collection_a = builder.build().unwrap();
 
         let mut builder = MultiPolygonCollection::builder().finish_header();
 
-        builder
-            .push_geometry(
-                MultiPolygon::new(vec![vec![
-                    vec![
-                        (4.0, 4.1).into(),
-                        (4.0, 8.1).into(),
-                        (8.0, 8.1).into(),
-                        (8.0, 4.1).into(),
-                        (4.0, 4.1).into(),
-                    ],
-                    vec![
-                        (5.0, 5.1).into(),
-                        (5.0, 7.1).into(),
-                        (7.0, 7.1).into(),
-                        (7.0, 5.1).into(),
-                        (5.0, 5.1).into(),
-                    ],
-                ]])
-                .unwrap(),
-            )
-            .unwrap();
-        builder.push_time_interval(TimeInterval::default()).unwrap();
+        builder.push_geometry(
+            MultiPolygon::new(vec![vec![
+                vec![
+                    (4.0, 4.1).into(),
+                    (4.0, 8.1).into(),
+                    (8.0, 8.1).into(),
+                    (8.0, 4.1).into(),
+                    (4.0, 4.1).into(),
+                ],
+                vec![
+                    (5.0, 5.1).into(),
+                    (5.0, 7.1).into(),
+                    (7.0, 7.1).into(),
+                    (7.0, 5.1).into(),
+                    (5.0, 5.1).into(),
+                ],
+            ]])
+            .unwrap(),
+        );
+        builder.push_time_interval(TimeInterval::default());
         builder.finish_row();
 
         let collection_b = builder.build().unwrap();

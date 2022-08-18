@@ -1,6 +1,9 @@
+use std::path::PathBuf;
+
 use gdal::errors::GdalError;
-use geoengine_datatypes::dataset::DatasetProviderId;
 use snafu::Snafu;
+
+use geoengine_datatypes::{dataset::DataProviderId, error::ErrorSource};
 
 #[derive(Debug, Snafu)]
 #[snafu(visibility(pub(crate)))]
@@ -32,6 +35,9 @@ pub enum NetCdfCf4DProviderError {
     MissingEntities {
         source: GdalError,
     },
+    MissingTimeDimension {
+        source: GdalError,
+    },
     MissingGroupName,
     MissingFileName,
     NoTitleForGroup {
@@ -45,7 +51,13 @@ pub enum NetCdfCf4DProviderError {
         source: std::num::ParseIntError,
     },
     CannotParseTimeCoverageDate {
-        source: chrono::format::ParseError,
+        source: Box<dyn ErrorSource>,
+    },
+    CannotComputeMinMax {
+        source: GdalError,
+    },
+    TimeCoverageYearOverflows {
+        year: i32,
     },
     CannotParseTimeCoverageResolution {
         source: chrono::format::ParseError,
@@ -64,16 +76,19 @@ pub enum NetCdfCf4DProviderError {
     GeneratingParametersFromDataset {
         source: geoengine_operators::error::Error,
     },
+    InvalidTimeCoverageInstant {
+        source: geoengine_datatypes::error::Error,
+    },
     InvalidTimeCoverageInterval {
         source: geoengine_datatypes::error::Error,
     },
     CannotCalculateStepsInTimeCoverageInterval {
         source: geoengine_datatypes::error::Error,
     },
-    InvalidExternalDatasetId {
-        provider: DatasetProviderId,
+    InvalidExternalDataId {
+        provider: DataProviderId,
     },
-    InvalidDatasetIdLength {
+    InvalidDataIdLength {
         length: usize,
     },
     InvalidDatasetIdFile {
@@ -129,5 +144,29 @@ pub enum NetCdfCf4DProviderError {
     },
     CannotRetrieveUnit {
         source: GdalError,
+    },
+    CannotReadDimensions {
+        source: GdalError,
+    },
+    InvalidDirectory {
+        source: Box<dyn ErrorSource>,
+    },
+    CannotCreateOverviews {
+        source: Box<dyn ErrorSource>,
+    },
+    CannotWriteMetadataFile {
+        source: Box<dyn ErrorSource>,
+    },
+    CannotReadInputFileDir {
+        path: PathBuf,
+    },
+    CannotOpenNetCdfDataset {
+        source: Box<dyn ErrorSource>,
+    },
+    CannotOpenNetCdfSubdataset {
+        source: Box<dyn ErrorSource>,
+    },
+    CannotGenerateLoadingInfo {
+        source: Box<dyn ErrorSource>,
     },
 }

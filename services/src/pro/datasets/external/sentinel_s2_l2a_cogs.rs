@@ -1,37 +1,41 @@
-use crate::datasets::listing::{
-    DatasetListOptions, DatasetListing, ExternalDatasetProvider, ProvenanceOutput,
+use crate::datasets::listing::ProvenanceOutput;
+use crate::error::{self, Error, Result};
+use crate::layers::external::{DataProvider, DataProviderDefinition};
+use crate::layers::layer::{
+    CollectionItem, Layer, LayerCollectionListOptions, LayerListing, ProviderLayerId,
 };
-use crate::datasets::storage::ExternalDatasetProviderDefinition;
-use crate::error::{self, Result};
+use crate::layers::listing::{LayerCollectionId, LayerCollectionProvider};
 use crate::projects::{RasterSymbology, Symbology};
 use crate::stac::{Feature as StacFeature, FeatureCollection as StacCollection, StacAsset};
+use crate::util::operators::source_operator_from_dataset;
 use crate::util::retry::retry;
 use crate::util::user_input::Validated;
+use crate::workflows::workflow::Workflow;
 use async_trait::async_trait;
-use chrono::{DateTime, Duration, Utc};
-use geoengine_datatypes::dataset::{DatasetId, DatasetProviderId, ExternalDatasetId};
+use geoengine_datatypes::dataset::{DataId, DataProviderId, ExternalDataId, LayerId};
 use geoengine_datatypes::operations::image::{Colorizer, RgbaColor};
 use geoengine_datatypes::operations::reproject::{
     CoordinateProjection, CoordinateProjector, ReprojectClipped,
 };
 use geoengine_datatypes::primitives::{
-    AxisAlignedRectangle, BoundingBox2D, Measurement, RasterQueryRectangle, SpatialPartitioned,
-    TimeInstance, TimeInterval, VectorQueryRectangle,
+    AxisAlignedRectangle, BoundingBox2D, DateTime, Duration, Measurement, RasterQueryRectangle,
+    SpatialPartitioned, TimeInstance, TimeInterval, VectorQueryRectangle,
 };
 use geoengine_datatypes::raster::RasterDataType;
 use geoengine_datatypes::spatial_reference::{SpatialReference, SpatialReferenceAuthority};
 use geoengine_operators::engine::{
-    MetaData, MetaDataProvider, RasterResultDescriptor, VectorResultDescriptor,
+    MetaData, MetaDataProvider, OperatorName, RasterOperator, RasterResultDescriptor,
+    TypedOperator, VectorResultDescriptor,
 };
 use geoengine_operators::mock::MockDatasetDataSourceLoadingInfo;
 use geoengine_operators::source::{
     GdalDatasetGeoTransform, GdalDatasetParameters, GdalLoadingInfo, GdalLoadingInfoTemporalSlice,
-    GdalLoadingInfoTemporalSliceIterator, OgrSourceDataset,
+    GdalLoadingInfoTemporalSliceIterator, GdalSource, GdalSourceParameters, OgrSourceDataset,
 };
 use log::debug;
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
-use snafu::ResultExt;
+use snafu::{ensure, ResultExt};
 use std::collections::HashMap;
 use std::convert::TryInto;
 use std::fmt::Debug;
@@ -41,7 +45,7 @@ use std::path::PathBuf;
 #[serde(rename_all = "camelCase")]
 pub struct SentinelS2L2ACogsProviderDefinition {
     name: String,
-    id: DatasetProviderId,
+    id: DataProviderId,
     api_url: String,
     bands: Vec<Band>,
     zones: Vec<Zone>,
@@ -70,10 +74,8 @@ impl Default for StacApiRetries {
 
 #[typetag::serde]
 #[async_trait]
-impl ExternalDatasetProviderDefinition for SentinelS2L2ACogsProviderDefinition {
-    async fn initialize(
-        self: Box<Self>,
-    ) -> crate::error::Result<Box<dyn crate::datasets::listing::ExternalDatasetProvider>> {
+impl DataProviderDefinition for SentinelS2L2ACogsProviderDefinition {
+    async fn initialize(self: Box<Self>) -> crate::error::Result<Box<dyn DataProvider>> {
         Ok(Box::new(SentinelS2L2aCogsDataProvider::new(
             self.id,
             self.api_url,
@@ -91,7 +93,7 @@ impl ExternalDatasetProviderDefinition for SentinelS2L2ACogsProviderDefinition {
         self.name.clone()
     }
 
-    fn id(&self) -> DatasetProviderId {
+    fn id(&self) -> DataProviderId {
         self.id
     }
 }
@@ -114,27 +116,30 @@ pub struct Zone {
 pub struct SentinelDataset {
     band: Band,
     zone: Zone,
-    listing: DatasetListing,
+    listing: Layer,
 }
 
 #[derive(Debug)]
 pub struct SentinelS2L2aCogsDataProvider {
+    id: DataProviderId,
+
     api_url: String,
 
-    datasets: HashMap<DatasetId, SentinelDataset>,
+    datasets: HashMap<LayerId, SentinelDataset>,
 
     stac_api_retries: StacApiRetries,
 }
 
 impl SentinelS2L2aCogsDataProvider {
     pub fn new(
-        id: DatasetProviderId,
+        id: DataProviderId,
         api_url: String,
         bands: &[Band],
         zones: &[Zone],
         stac_api_retries: StacApiRetries,
     ) -> Self {
         Self {
+            id,
             api_url,
             datasets: Self::create_datasets(&id, bands, zones),
             stac_api_retries,
@@ -142,36 +147,32 @@ impl SentinelS2L2aCogsDataProvider {
     }
 
     fn create_datasets(
-        id: &DatasetProviderId,
+        id: &DataProviderId,
         bands: &[Band],
         zones: &[Zone],
-    ) -> HashMap<DatasetId, SentinelDataset> {
+    ) -> HashMap<LayerId, SentinelDataset> {
         zones
             .iter()
             .flat_map(|zone| {
                 bands.iter().map(move |band| {
-                    let dataset_id: DatasetId = ExternalDatasetId {
-                        provider_id: *id,
-                        dataset_id: format!("{}:{}", zone.name, band.name),
-                    }
-                    .into();
-                    let listing = DatasetListing {
-                        id: dataset_id.clone(),
+                    let layer_id = LayerId(format!("{}:{}", zone.name, band.name));
+                    let listing = Layer {
+                        id: ProviderLayerId {
+                            provider_id: *id,
+                            layer_id: layer_id.clone(),
+                        },
                         name: format!("Sentinel S2 L2A COGS {}:{}", zone.name, band.name),
                         description: "".to_owned(),
-                        tags: vec![],
-                        source_operator: "GdalSource".to_owned(),
-                        result_descriptor: RasterResultDescriptor {
-                            data_type: band.data_type,
-                            spatial_reference: SpatialReference::new(
-                                SpatialReferenceAuthority::Epsg,
-                                zone.epsg,
+                        workflow: Workflow {
+                            operator: source_operator_from_dataset(
+                                GdalSource::TYPE_NAME,
+                                &DataId::External(ExternalDataId {
+                                    provider_id: *id,
+                                    layer_id: layer_id.clone(),
+                                }),
                             )
-                            .into(),
-                            measurement: Measurement::Unitless, // TODO: add measurement
-                            no_data_value: band.no_data_value,
-                        }
-                        .into(),
+                            .expect("Gdal source is a valid operator."),
+                        },
                         symbology: Some(Symbology::Raster(RasterSymbology {
                             opacity: 1.0,
                             colorizer: Colorizer::linear_gradient(
@@ -196,7 +197,7 @@ impl SentinelS2L2aCogsDataProvider {
                         listing,
                     };
 
-                    (dataset_id, dataset)
+                    (layer_id, dataset)
                 })
             })
             .collect()
@@ -204,24 +205,74 @@ impl SentinelS2L2aCogsDataProvider {
 }
 
 #[async_trait]
-impl ExternalDatasetProvider for SentinelS2L2aCogsDataProvider {
-    async fn list(&self, _options: Validated<DatasetListOptions>) -> Result<Vec<DatasetListing>> {
-        // TODO: options
-        let mut x: Vec<DatasetListing> =
-            self.datasets.values().map(|d| d.listing.clone()).collect();
-        x.sort_by_key(|e| e.name.clone());
-        Ok(x)
-    }
-
-    async fn provenance(&self, dataset: &DatasetId) -> Result<ProvenanceOutput> {
+impl DataProvider for SentinelS2L2aCogsDataProvider {
+    async fn provenance(&self, id: &DataId) -> Result<ProvenanceOutput> {
         Ok(ProvenanceOutput {
-            dataset: dataset.clone(),
+            data: id.clone(),
             provenance: None, // TODO
         })
     }
+}
 
-    fn as_any(&self) -> &dyn std::any::Any {
-        self
+#[async_trait]
+impl LayerCollectionProvider for SentinelS2L2aCogsDataProvider {
+    async fn collection_items(
+        &self,
+        collection: &LayerCollectionId,
+        _options: Validated<LayerCollectionListOptions>,
+    ) -> Result<Vec<CollectionItem>> {
+        ensure!(
+            *collection == self.root_collection_id().await?,
+            error::UnknownLayerCollectionId {
+                id: collection.clone()
+            }
+        );
+
+        // TODO: options
+        let mut x = self
+            .datasets
+            .values()
+            .map(|d| {
+                Ok(CollectionItem::Layer(LayerListing {
+                    id: d.listing.id.clone(),
+                    name: d.listing.name.clone(),
+                    description: d.listing.description.clone(),
+                }))
+            })
+            .collect::<Result<Vec<CollectionItem>>>()?;
+        x.sort_by_key(|e| e.name().to_string());
+        Ok(x)
+    }
+
+    async fn root_collection_id(&self) -> Result<LayerCollectionId> {
+        Ok(LayerCollectionId("SentinelS2L2ACogs".to_owned()))
+    }
+
+    async fn get_layer(&self, id: &LayerId) -> Result<Layer> {
+        let dataset = self.datasets.get(id).ok_or(Error::UnknownDataId)?;
+
+        Ok(Layer {
+            id: ProviderLayerId {
+                provider_id: self.id,
+                layer_id: id.clone(),
+            },
+            name: dataset.listing.name.clone(),
+            description: dataset.listing.description.clone(),
+            workflow: Workflow {
+                operator: TypedOperator::Raster(
+                    GdalSource {
+                        params: GdalSourceParameters {
+                            data: DataId::External(ExternalDataId {
+                                provider_id: self.id,
+                                layer_id: id.clone(),
+                            }),
+                        },
+                    }
+                    .boxed(),
+                ),
+            },
+            symbology: dataset.listing.symbology.clone(),
+        })
     }
 }
 
@@ -358,6 +409,7 @@ impl SentinelS2L2aCogsMetaData {
                 properties_mapping: None,
                 gdal_open_options: None,
                 gdal_config_options: None,
+                allow_alphaband_as_mask: true,
             }),
         })
     }
@@ -456,10 +508,10 @@ impl SentinelS2L2aCogsMetaData {
         .await
     }
 
-    fn time_range_request(time: &TimeInterval) -> Result<(DateTime<Utc>, DateTime<Utc>)> {
+    fn time_range_request(time: &TimeInterval) -> Result<(DateTime, DateTime)> {
         let t_start =
             time.start()
-                .as_utc_date_time()
+                .as_date_time()
                 .ok_or(geoengine_operators::error::Error::DataType {
                     source: geoengine_datatypes::error::Error::NoDateTimeValid {
                         time_instance: time.start(),
@@ -471,7 +523,7 @@ impl SentinelS2L2aCogsMetaData {
 
         let t_end =
             time.end()
-                .as_utc_date_time()
+                .as_date_time()
                 .ok_or(geoengine_operators::error::Error::DataType {
                     source: geoengine_datatypes::error::Error::NoDateTimeValid {
                         time_instance: time.end(),
@@ -508,7 +560,8 @@ impl MetaData<GdalLoadingInfo, RasterResultDescriptor, RasterQueryRectangle>
             )
             .into(),
             measurement: Measurement::Unitless,
-            no_data_value: self.band.no_data_value,
+            time: None,
+            bbox: None,
         })
     }
 
@@ -525,15 +578,21 @@ impl MetaDataProvider<GdalLoadingInfo, RasterResultDescriptor, RasterQueryRectan
 {
     async fn meta_data(
         &self,
-        dataset: &DatasetId,
+        id: &DataId,
     ) -> Result<
         Box<dyn MetaData<GdalLoadingInfo, RasterResultDescriptor, RasterQueryRectangle>>,
         geoengine_operators::error::Error,
     > {
         let dataset = self
             .datasets
-            .get(dataset)
-            .ok_or(geoengine_operators::error::Error::UnknownDatasetId)?;
+            .get(
+                &id.external()
+                    .ok_or(geoengine_operators::error::Error::LoadingInfo {
+                        source: Box::new(error::Error::DataIdTypeMissMatch),
+                    })?
+                    .layer_id,
+            )
+            .ok_or(geoengine_operators::error::Error::UnknownDataId)?;
 
         Ok(Box::new(SentinelS2L2aCogsMetaData {
             api_url: self.api_url.clone(),
@@ -551,7 +610,7 @@ impl
 {
     async fn meta_data(
         &self,
-        _dataset: &DatasetId,
+        _id: &DataId,
     ) -> Result<
         Box<
             dyn MetaData<
@@ -572,7 +631,7 @@ impl MetaDataProvider<OgrSourceDataset, VectorResultDescriptor, VectorQueryRecta
 {
     async fn meta_data(
         &self,
-        _dataset: &DatasetId,
+        _id: &DataId,
     ) -> Result<
         Box<dyn MetaData<OgrSourceDataset, VectorResultDescriptor, VectorQueryRectangle>>,
         geoengine_operators::error::Error,
@@ -608,21 +667,20 @@ mod tests {
     async fn loading_info() -> Result<()> {
         // TODO: mock STAC endpoint
 
-        let def: Box<dyn ExternalDatasetProviderDefinition> =
-            serde_json::from_reader(BufReader::new(File::open(test_data!(
-                "provider_defs/pro/sentinel_s2_l2a_cogs.json"
-            ))?))?;
+        let def: Box<dyn DataProviderDefinition> = serde_json::from_reader(BufReader::new(
+            File::open(test_data!("provider_defs/pro/sentinel_s2_l2a_cogs.json"))?,
+        ))?;
 
         let provider = def.initialize().await?;
 
         let meta: Box<dyn MetaData<GdalLoadingInfo, RasterResultDescriptor, RasterQueryRectangle>> =
             provider
                 .meta_data(
-                    &ExternalDatasetId {
-                        provider_id: DatasetProviderId::from_str(
+                    &ExternalDataId {
+                        provider_id: DataProviderId::from_str(
                             "5779494c-f3a2-48b3-8a2d-5fbba8c5b6c5",
                         )?,
-                        dataset_id: "UTM32N:B01".to_owned(),
+                        layer_id: LayerId("UTM32N:B01".to_owned()),
                     }
                     .into(),
                 )
@@ -635,11 +693,7 @@ mod tests {
                     (166_021.44, 0.00).into(),
                     (534_994.66, 9_329_005.18).into(),
                 ),
-                time_interval: TimeInterval::new_instant(
-                    DateTime::parse_from_rfc3339("2021-01-02T10:02:26Z")
-                        .unwrap()
-                        .timestamp_millis(),
-                )?,
+                time_interval: TimeInterval::new_instant(DateTime::new_utc(2021, 1, 2, 10, 2, 26))?,
                 spatial_resolution: SpatialResolution::one(),
             })
             .await
@@ -662,6 +716,7 @@ mod tests {
                 properties_mapping: None,
                 gdal_open_options: None,
                 gdal_config_options: None,
+                allow_alphaband_as_mask: true,
             }),
         }];
 
@@ -684,30 +739,29 @@ mod tests {
 
         let mut exe = MockExecutionContext::test_default();
 
-        let def: Box<dyn ExternalDatasetProviderDefinition> =
-            serde_json::from_reader(BufReader::new(File::open(test_data!(
-                "provider_defs/pro/sentinel_s2_l2a_cogs.json"
-            ))?))?;
+        let def: Box<dyn DataProviderDefinition> = serde_json::from_reader(BufReader::new(
+            File::open(test_data!("provider_defs/pro/sentinel_s2_l2a_cogs.json"))?,
+        ))?;
 
         let provider = def.initialize().await?;
 
         let meta: Box<dyn MetaData<GdalLoadingInfo, RasterResultDescriptor, RasterQueryRectangle>> =
             provider
                 .meta_data(
-                    &ExternalDatasetId {
-                        provider_id: DatasetProviderId::from_str(
+                    &ExternalDataId {
+                        provider_id: DataProviderId::from_str(
                             "5779494c-f3a2-48b3-8a2d-5fbba8c5b6c5",
                         )?,
-                        dataset_id: "UTM32N:B01".to_owned(),
+                        layer_id: LayerId("UTM32N:B01".to_owned()),
                     }
                     .into(),
                 )
                 .await?;
 
         exe.add_meta_data(
-            ExternalDatasetId {
-                provider_id: DatasetProviderId::from_str("5779494c-f3a2-48b3-8a2d-5fbba8c5b6c5")?,
-                dataset_id: "UTM32N:B01".to_owned(),
+            ExternalDataId {
+                provider_id: DataProviderId::from_str("5779494c-f3a2-48b3-8a2d-5fbba8c5b6c5")?,
+                layer_id: LayerId("UTM32N:B01".to_owned()),
             }
             .into(),
             meta,
@@ -715,11 +769,9 @@ mod tests {
 
         let op = GdalSource {
             params: GdalSourceParameters {
-                dataset: ExternalDatasetId {
-                    provider_id: DatasetProviderId::from_str(
-                        "5779494c-f3a2-48b3-8a2d-5fbba8c5b6c5",
-                    )?,
-                    dataset_id: "UTM32N:B01".to_owned(),
+                data: ExternalDataId {
+                    provider_id: DataProviderId::from_str("5779494c-f3a2-48b3-8a2d-5fbba8c5b6c5")?,
+                    layer_id: LayerId("UTM32N:B01".to_owned()),
                 }
                 .into(),
             },
@@ -736,11 +788,7 @@ mod tests {
                 (166_021.44, 9_329_005.18).into(),
                 (534_994.66, 0.00).into(),
             ),
-            time_interval: TimeInterval::new_instant(
-                DateTime::parse_from_rfc3339("2021-01-02T10:02:26Z")
-                    .unwrap()
-                    .timestamp_millis(),
-            )?,
+            time_interval: TimeInterval::new_instant(DateTime::new_utc(2021, 1, 2, 10, 2, 26))?,
             spatial_resolution: SpatialResolution::new_unchecked(
                 166_021.44 / 256.,
                 (9_329_005.18 - 534_994.66) / 256.,
@@ -800,10 +848,9 @@ mod tests {
             ]),
         );
 
-        let provider_id: DatasetProviderId =
-            "5779494c-f3a2-48b3-8a2d-5fbba8c5b6c5".parse().unwrap();
+        let provider_id: DataProviderId = "5779494c-f3a2-48b3-8a2d-5fbba8c5b6c5".parse().unwrap();
 
-        let provider_def: Box<dyn ExternalDatasetProviderDefinition> =
+        let provider_def: Box<dyn DataProviderDefinition> =
             Box::new(SentinelS2L2ACogsProviderDefinition {
                 name: "Element 84 AWS STAC".into(),
                 id: provider_id,
@@ -825,9 +872,9 @@ mod tests {
         let meta: Box<dyn MetaData<GdalLoadingInfo, RasterResultDescriptor, RasterQueryRectangle>> =
             provider
                 .meta_data(
-                    &ExternalDatasetId {
+                    &ExternalDataId {
                         provider_id,
-                        dataset_id: "UTM36S:B04".to_owned(),
+                        layer_id: LayerId("UTM36S:B04".to_owned()),
                     }
                     .into(),
                 )
@@ -839,12 +886,8 @@ mod tests {
                 (600_000.00, 9_750_100.).into(),
                 (600_100.0, 9_750_000.).into(),
             ),
-            time_interval: TimeInterval::new_instant(
-                DateTime::parse_from_rfc3339("2021-09-23T08:10:44Z")
-                    .unwrap()
-                    .timestamp_millis(),
-            )
-            .unwrap(),
+            time_interval: TimeInterval::new_instant(DateTime::new_utc(2021, 9, 23, 8, 10, 44))
+                .unwrap(),
             spatial_resolution: SpatialResolution::new_unchecked(10., 10.),
         };
 
@@ -875,6 +918,7 @@ mod tests {
                     properties_mapping: None,
                     gdal_open_options: None,
                     gdal_config_options: None,
+                    allow_alphaband_as_mask: true,
                 }),
             }]
         );

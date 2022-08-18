@@ -165,7 +165,7 @@ where
 {
     let wfs_url = wfs_url(workflow_id)?;
 
-    let workflow = ctx.workflow_registry_ref().await.load(&workflow_id).await?;
+    let workflow = ctx.workflow_registry_ref().load(&workflow_id).await?;
 
     let exe_ctx = ctx.execution_context(session)?;
     let operator = workflow
@@ -420,7 +420,7 @@ async fn get_feature<C: Context>(
         return get_feature_mock(request);
     }
 
-    let workflow: Workflow = ctx.workflow_registry_ref().await.load(&type_names).await?;
+    let workflow: Workflow = ctx.workflow_registry_ref().load(&type_names).await?;
 
     let operator = workflow.operator.get_vector().context(error::Operator)?;
 
@@ -603,7 +603,7 @@ mod tests {
     use actix_web::http::header;
     use actix_web::{http::Method, test};
     use actix_web_httpauth::headers::authorization::Bearer;
-    use geoengine_datatypes::dataset::DatasetId;
+    use geoengine_datatypes::dataset::{DataId, DatasetId};
     use geoengine_datatypes::raster::{GridShape2D, TilingSpecification};
     use geoengine_datatypes::test_data;
     use geoengine_datatypes::util::test::TestDefault;
@@ -740,9 +740,7 @@ x;y
         };
 
         let workflow_id = ctx
-            .workflow_registry()
-            .write()
-            .await
+            .workflow_registry_ref()
             .register(workflow)
             .await
             .unwrap();
@@ -808,9 +806,7 @@ x;y
         };
 
         let id = ctx
-            .workflow_registry()
-            .write()
-            .await
+            .workflow_registry_ref()
             .register(workflow.clone())
             .await
             .unwrap();
@@ -926,9 +922,7 @@ x;y
         };
 
         let workflow_id = ctx
-            .workflow_registry()
-            .write()
-            .await
+            .workflow_registry_ref()
             .register(workflow)
             .await
             .unwrap();
@@ -1044,7 +1038,7 @@ x;y
         let data = data.replace("test_data/", test_data!("./").to_str().unwrap());
         let def: DatasetDefinition = serde_json::from_str(&data).unwrap();
 
-        let mut db = ctx.dataset_db_ref_mut().await;
+        let db = ctx.dataset_db_ref();
 
         db.add_dataset(
             &*ctx.default_session_ref().await,
@@ -1070,13 +1064,16 @@ x;y
 
         let session_id = ctx.default_session_ref().await.id();
 
-        let ndvi_id =
-            add_dataset_definition_to_datasets(&ctx, test_data!("dataset_defs/ndvi.json")).await;
-        let ne_10m_ports_id = add_dataset_definition_to_datasets(
+        let ndvi_id: DataId =
+            add_dataset_definition_to_datasets(&ctx, test_data!("dataset_defs/ndvi.json"))
+                .await
+                .into();
+        let ne_10m_ports_id: DataId = add_dataset_definition_to_datasets(
             &ctx,
             test_data!("dataset_defs/points_with_time.json"),
         )
-        .await;
+        .await
+        .into();
 
         let workflow = serde_json::json!({
             "type": "Vector",
@@ -1093,14 +1090,14 @@ x;y
                     "vector": {
                         "type": "OgrSource",
                         "params": {
-                            "dataset": ne_10m_ports_id,
+                            "data": ne_10m_ports_id,
                             "attributeProjection": null
                         }
                     },
                     "rasters": [{
                         "type": "GdalSource",
                         "params": {
-                            "dataset": ndvi_id,
+                            "data": ndvi_id,
                         }
                     }],
                 }
@@ -1112,9 +1109,7 @@ x;y
         let workflow = serde_json::from_str(&json).unwrap();
 
         let workflow_id = ctx
-            .workflow_registry()
-            .write()
-            .await
+            .workflow_registry_ref()
             .register(workflow)
             .await
             .unwrap();

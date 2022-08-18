@@ -65,6 +65,8 @@ pub async fn start_server(static_files_dir: Option<PathBuf>) -> Result<()> {
     let ctx = InMemoryContext::new_with_data(
         data_path_config.dataset_defs_path,
         data_path_config.provider_defs_path,
+        data_path_config.layer_defs_path,
+        data_path_config.layer_collection_defs_path,
         tiling_spec,
         chunk_byte_size,
     )
@@ -103,11 +105,13 @@ where
             .wrap(middleware::NormalizePath::trim())
             .configure(configure_extractors)
             .configure(handlers::datasets::init_dataset_routes::<C>)
+            .configure(handlers::layers::init_layer_routes::<C>)
             .configure(handlers::plots::init_plot_routes::<C>)
             .configure(handlers::projects::init_project_routes::<C>)
             .configure(handlers::session::init_session_routes::<C>)
             .configure(handlers::spatial_references::init_spatial_reference_routes::<C>)
             .configure(handlers::upload::init_upload_routes::<C>)
+            .configure(handlers::tasks::init_task_routes::<C>)
             .configure(handlers::wcs::init_wcs_routes::<C>)
             .configure(handlers::wfs::init_wfs_routes::<C>)
             .configure(handlers::wms::init_wms_routes::<C>)

@@ -1,9 +1,6 @@
 {
   "properties": {
-    "id": {
-      "type": "internal",
-      "datasetId": "9ee3619e-d0f9-4ced-9c44-3d407c3aed69"
-    },
+    "id": "9ee3619e-d0f9-4ced-9c44-3d407c3aed69",
     "name": "Land Cover",
     "description": "Land Cover derived from MODIS/Terra+Aqua Land Cover",
     "sourceOperator": "GdalSource",
@@ -14,7 +11,7 @@
         "colors": {
           "0": [134, 201, 227, 255],
           "1": [30, 129, 62, 255],
-          "2": [59, 194, 212, 65],
+          "2": [59, 194, 212, 255],
           "3": [157, 194, 63, 255],
           "4": [159, 225, 127, 255],
           "5": [125, 194, 127, 255],
@@ -69,7 +66,15 @@
           "16": "Barren or Sparsely Vegetated"
         }
       },
-      "noDataValue": 255.0
+      "noDataValue": 255.0,
+      "time": {
+        "start": "-262144-01-01T00:00:00+00:00",
+        "end": "+262143-12-31T23:59:59.999+00:00"
+      },
+      "bbox": {
+        "upperLeftCoordinate": [-180.0, 90.0],
+        "lowerRightCoordinate": [180.0, -90.0]
+      }
     },
     "params": {
       "filePath": "test_data/raster/landcover/landcover.tif",

@@ -24,7 +24,7 @@ impl<PIn: Pixel, POut: Pixel> RasterConversionQueryProcessor<PIn, POut> {
 }
 
 #[async_trait]
-impl<'a, PIn: Pixel, POut: Pixel> QueryProcessor for RasterConversionQueryProcessor<PIn, POut>
+impl<PIn: Pixel, POut: Pixel> QueryProcessor for RasterConversionQueryProcessor<PIn, POut>
 where
     PIn: AsPrimitive<POut>,
 {

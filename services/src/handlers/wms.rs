@@ -27,7 +27,6 @@ use geoengine_operators::processing::{Reprojection, ReprojectionParams};
 use geoengine_operators::{
     call_on_generic_raster_processor, util::raster_stream_to_png::raster_stream_to_png_bytes,
 };
-use num_traits::AsPrimitive;
 use std::str::FromStr;
 
 pub(crate) fn init_wms_routes<C>(cfg: &mut web::ServiceConfig)
@@ -127,7 +126,7 @@ where
 {
     let wms_url = wms_url(workflow_id)?;
 
-    let workflow = ctx.workflow_registry_ref().await.load(&workflow_id).await?;
+    let workflow = ctx.workflow_registry_ref().load(&workflow_id).await?;
 
     let exe_ctx = ctx.execution_context(session)?;
     let operator = workflow
@@ -238,7 +237,6 @@ async fn get_map<C: Context>(
 
     let workflow = ctx
         .workflow_registry_ref()
-        .await
         .load(&WorkflowId::from_str(&request.layers)?)
         .await?;
 
@@ -279,8 +277,6 @@ async fn get_map<C: Context>(
             .context(error::Operator)?
     };
 
-    let no_data_value: Option<f64> = initialized.result_descriptor().no_data_value;
-
     let processor = initialized.query_processor().context(error::Operator)?;
 
     let query_bbox: SpatialPartition2D = request.bbox.bounds(request_spatial_ref)?;
@@ -303,7 +299,7 @@ async fn get_map<C: Context>(
     let image_bytes = call_on_generic_raster_processor!(
         processor,
         p =>
-            raster_stream_to_png_bytes(p, query_rect, query_ctx, request.width, request.height, request.time, colorizer, no_data_value.map(AsPrimitive::as_)).await
+            raster_stream_to_png_bytes(p, query_rect, query_ctx, request.width, request.height, request.time, colorizer).await
     ).map_err(error::Error::from)?;
 
     Ok(HttpResponse::Ok()
@@ -352,7 +348,9 @@ fn default_time_from_config() -> TimeInterval {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::contexts::{InMemoryContext, Session, SimpleContext, SimpleSession};
+    use crate::contexts::{
+        InMemoryContext, Session, SimpleContext, SimpleSession, /*SimpleSession*/
+    };
     use crate::handlers::ErrorResponse;
     use crate::util::tests::{
         check_allowed_http_methods, register_ndvi_workflow_helper, send_test_request,
@@ -362,13 +360,13 @@ mod tests {
     use actix_web::http::Method;
     use actix_web_httpauth::headers::authorization::Bearer;
     use geoengine_datatypes::operations::image::RgbaColor;
-    use geoengine_datatypes::primitives::SpatialPartition2D;
     use geoengine_datatypes::raster::{GridShape2D, TilingSpecification};
     use geoengine_datatypes::util::test::TestDefault;
     use geoengine_operators::engine::{ExecutionContext, RasterQueryProcessor};
     use geoengine_operators::source::GdalSourceProcessor;
     use geoengine_operators::util::gdal::create_ndvi_meta_data;
     use std::convert::TryInto;
+    use std::marker::PhantomData;
     use xml::ParserConfig;
 
     async fn test_test_helper(method: Method, path: Option<&str>) -> ServiceResponse {
@@ -448,6 +446,7 @@ mod tests {
         check_allowed_http_methods(get_capabilities_test_helper, &[Method::GET]).await;
     }
 
+    // The result should be similar to the GDAL output of this command: gdalwarp -tr 1 1 -r near -srcnodata 0 -dstnodata 0  MOD13A2_M_NDVI_2014-01-01.TIFF MOD13A2_M_NDVI_2014-01-01_360_180_near_0.TIFF
     #[tokio::test]
     async fn png_from_stream_non_full() {
         let ctx = InMemoryContext::test_default();
@@ -456,7 +455,7 @@ mod tests {
         let gdal_source = GdalSourceProcessor::<u8> {
             tiling_specification: exe_ctx.tiling_specification(),
             meta_data: Box::new(create_ndvi_meta_data()),
-            no_data_value: None,
+            _phantom_data: PhantomData,
         };
 
         let query_partition =
@@ -473,7 +472,6 @@ mod tests {
             ctx.query_context().unwrap(),
             360,
             180,
-            None,
             None,
             None,
         )

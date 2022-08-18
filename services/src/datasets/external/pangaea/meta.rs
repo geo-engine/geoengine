@@ -5,11 +5,11 @@ use crate::error::Error;
 use futures::StreamExt;
 use geoengine_datatypes::collections::VectorDataType;
 use geoengine_datatypes::primitives::{
-    AxisAlignedRectangle, BoundingBox2D, Coordinate2D, FeatureDataType, MultiPoint, MultiPolygon,
-    TypedGeometry, VectorQueryRectangle,
+    AxisAlignedRectangle, BoundingBox2D, Coordinate2D, FeatureDataType, Measurement, MultiPoint,
+    MultiPolygon, TypedGeometry, VectorQueryRectangle,
 };
 use geoengine_datatypes::spatial_reference::SpatialReference;
-use geoengine_operators::engine::{StaticMetaData, VectorResultDescriptor};
+use geoengine_operators::engine::{StaticMetaData, VectorColumnInfo, VectorResultDescriptor};
 use geoengine_operators::source::{
     CsvHeader, FormatSpecifics, OgrSourceColumnSpec, OgrSourceDataset, OgrSourceDatasetTimeType,
     OgrSourceErrorSpec,
@@ -40,12 +40,9 @@ pub struct PangeaMetaData {
 impl PangeaMetaData {
     /// Retrieves the link to the TSV file for the dataset
     fn get_tsv_file(&self) -> Option<&Distribution> {
-        for d in &self.distributions {
-            if d.encoding == "text/tab-separated-values" {
-                return Some(d);
-            }
-        }
-        None
+        self.distributions
+            .iter()
+            .find(|&d| d.encoding == "text/tab-separated-values")
     }
 
     fn get_result_descriptor(&self) -> VectorResultDescriptor {
@@ -55,12 +52,24 @@ impl PangeaMetaData {
             _ => VectorDataType::MultiPoint,
         };
 
-        let column_map: HashMap<String, FeatureDataType> = self
+        let column_map: HashMap<String, VectorColumnInfo> = self
             .columns
             .iter()
             .map(|param| match param {
-                PangeaParam::Numeric { .. } => (param.full_name(), FeatureDataType::Float),
-                PangeaParam::String { .. } => (param.full_name(), FeatureDataType::Text),
+                PangeaParam::Numeric { .. } => (
+                    param.full_name(),
+                    VectorColumnInfo {
+                        data_type: FeatureDataType::Float,
+                        measurement: Measurement::Unitless, // TOOD: get measurement
+                    },
+                ),
+                PangeaParam::String { .. } => (
+                    param.full_name(),
+                    VectorColumnInfo {
+                        data_type: FeatureDataType::Text,
+                        measurement: Measurement::Unitless,
+                    },
+                ),
             })
             .collect();
 
@@ -68,6 +77,8 @@ impl PangeaMetaData {
             spatial_reference: SpatialReference::epsg_4326().into(),
             data_type: feature_type,
             columns: column_map,
+            time: None, // TODO: determine time
+            bbox: None, // TODO: determine bbox
         }
     }
 

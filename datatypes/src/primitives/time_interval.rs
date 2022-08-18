@@ -66,8 +66,7 @@ impl TimeInterval {
     where
         A: TryInto<TimeInstance>,
         B: TryInto<TimeInstance>,
-        error::Error: From<A::Error>,
-        error::Error: From<B::Error>,
+        error::Error: From<A::Error> + From<B::Error>,
     {
         let start_instant = start.try_into()?;
         let end_instant = end.try_into()?;
@@ -131,10 +130,10 @@ impl TimeInterval {
         A::Error: Debug,
         B::Error: Debug,
     {
-        Self {
-            start: start.try_into().unwrap(),
-            end: end.try_into().unwrap(),
-        }
+        let start = start.try_into().unwrap();
+        let end = end.try_into().unwrap();
+        debug_assert!(start <= end);
+        Self { start, end }
     }
 
     /// Returns whether the other `TimeInterval` is contained (smaller or equal) within this interval
@@ -442,12 +441,12 @@ impl ArrowTyped for TimeInterval {
             let ints_a: &Int64Array = downcast_array(&ints_a_ref);
             let ints_b: &Int64Array = downcast_array(&ints_b_ref);
 
-            int_builder.append_slice(ints_a.values())?;
-            int_builder.append_slice(ints_b.values())?;
+            int_builder.append_slice(ints_a.values());
+            int_builder.append_slice(ints_b.values());
         }
 
         for _ in 0..new_length {
-            new_time_intervals.append(true)?;
+            new_time_intervals.append(true);
         }
 
         Ok(new_time_intervals.finish())
@@ -472,9 +471,9 @@ impl ArrowTyped for TimeInterval {
             let old_timestamps: &Int64Array = downcast_array(&old_timestamps_ref);
 
             let date_builder = new_time_intervals.values();
-            date_builder.append_slice(old_timestamps.values())?;
+            date_builder.append_slice(old_timestamps.values());
 
-            new_time_intervals.append(true)?;
+            new_time_intervals.append(true);
         }
 
         Ok(new_time_intervals.finish())
@@ -489,19 +488,41 @@ impl ArrowTyped for TimeInterval {
         let mut builder = Self::arrow_builder(time_intervals.len());
         for time_interval in time_intervals {
             let date_builder = builder.values();
-            date_builder.append_value(time_interval.start().into())?;
-            date_builder.append_value(time_interval.end().into())?;
-            builder.append(true)?;
+            date_builder.append_value(time_interval.start().into());
+            date_builder.append_value(time_interval.end().into());
+            builder.append(true);
         }
 
         Ok(builder.finish())
     }
 }
 
+/// Compute the extent of all input time intervals. If one time interval is None, the output will also be None
+pub fn time_interval_extent<I: Iterator<Item = Option<TimeInterval>>>(
+    mut times: I,
+) -> Option<TimeInterval> {
+    let mut extent = if let Some(Some(first)) = times.next() {
+        first
+    } else {
+        return None;
+    };
+
+    for time in times {
+        if let Some(time) = time {
+            extent = extent.extend(&time);
+        } else {
+            return None;
+        }
+    }
+
+    Some(extent)
+}
+
 #[cfg(test)]
 mod tests {
+    use crate::primitives::DateTime;
+
     use super::*;
-    use chrono::NaiveDate;
 
     #[test]
     fn to_geo_json_event() {
@@ -551,8 +572,8 @@ mod tests {
         );
 
         let time_interval = TimeInterval::new(
-            TimeInstance::from(NaiveDate::from_ymd(1990, 1, 1).and_hms(0, 0, 0)),
-            TimeInstance::from(NaiveDate::from_ymd(2000, 1, 1).and_hms(0, 0, 0)),
+            TimeInstance::from(DateTime::new_utc(1990, 1, 1, 0, 0, 0)),
+            TimeInstance::from(DateTime::new_utc(2000, 1, 1, 0, 0, 0)),
         )
         .unwrap();
 
@@ -678,5 +699,28 @@ mod tests {
 
         assert!(a.is_instant());
         assert!(!b.is_instant());
+    }
+
+    #[test]
+    fn extent() {
+        assert_eq!(time_interval_extent([None].into_iter()), None);
+        assert_eq!(
+            time_interval_extent(
+                [
+                    Some(TimeInterval::new(1, 2).unwrap()),
+                    Some(TimeInterval::new(5, 6).unwrap())
+                ]
+                .into_iter()
+            ),
+            Some(TimeInterval::new_unchecked(1, 6))
+        );
+        assert_eq!(
+            time_interval_extent([Some(TimeInterval::new(1, 2).unwrap()), None].into_iter()),
+            None
+        );
+        assert_eq!(
+            time_interval_extent([None, Some(TimeInterval::new(5, 6).unwrap())].into_iter()),
+            None
+        );
     }
 }

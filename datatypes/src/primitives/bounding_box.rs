@@ -343,6 +343,18 @@ impl BoundingBox2D {
         self.upper_right_coordinate = self.upper_right_coordinate.max_elements(coord);
     }
 
+    #[must_use]
+    pub fn extend(&mut self, other: &Self) -> Self {
+        Self {
+            lower_left_coordinate: self
+                .lower_left_coordinate
+                .min_elements(other.lower_left_coordinate),
+            upper_right_coordinate: self
+                .upper_right_coordinate
+                .max_elements(other.upper_right_coordinate),
+        }
+    }
+
     pub fn from_coord_iter<I: IntoIterator<Item = Coordinate2D>>(iter: I) -> Option<Self> {
         let mut iterator = iter.into_iter();
 
@@ -566,10 +578,34 @@ impl ApproxEq for BoundingBox2D {
     }
 }
 
+/// Compute the extent of all input bboxes. If one bbox is None, the output will also be None
+pub fn bboxes_extent<I: Iterator<Item = Option<BoundingBox2D>>>(
+    mut bboxes: I,
+) -> Option<BoundingBox2D> {
+    let mut extent = if let Some(Some(first)) = bboxes.next() {
+        first
+    } else {
+        return None;
+    };
+
+    for bbox in bboxes {
+        if let Some(bbox) = bbox {
+            extent = extent.extend(&bbox);
+        } else {
+            return None;
+        }
+    }
+
+    Some(extent)
+}
+
 #[cfg(test)]
 mod tests {
 
-    use crate::primitives::{AxisAlignedRectangle, BoundingBox2D, Coordinate2D, SpatialBounded};
+    use crate::primitives::{
+        bounding_box::bboxes_extent, AxisAlignedRectangle, BoundingBox2D, Coordinate2D,
+        SpatialBounded,
+    };
 
     #[test]
     #[allow(clippy::float_cmp)]
@@ -1105,6 +1141,41 @@ mod tests {
         assert_eq!(
             BoundingBox2D::new_from_center((0., 0.).into(), 50., 50.).unwrap(),
             BoundingBox2D::new((-50., -50.).into(), (50., 50.).into()).unwrap(),
+        );
+    }
+
+    #[test]
+    fn extent() {
+        assert_eq!(bboxes_extent([None].into_iter()), None);
+        assert_eq!(
+            bboxes_extent(
+                [
+                    Some(BoundingBox2D::new((-50., -50.).into(), (50., 50.).into()).unwrap()),
+                    Some(BoundingBox2D::new((0., 0.).into(), (70., 70.).into()).unwrap())
+                ]
+                .into_iter()
+            ),
+            Some(BoundingBox2D::new((-50., -50.).into(), (70., 70.).into()).unwrap())
+        );
+        assert_eq!(
+            bboxes_extent(
+                [
+                    Some(BoundingBox2D::new((-50., -50.).into(), (50., 50.).into()).unwrap()),
+                    None
+                ]
+                .into_iter()
+            ),
+            None
+        );
+        assert_eq!(
+            bboxes_extent(
+                [
+                    None,
+                    Some(BoundingBox2D::new((-50., -50.).into(), (50., 50.).into()).unwrap())
+                ]
+                .into_iter()
+            ),
+            None
         );
     }
 }

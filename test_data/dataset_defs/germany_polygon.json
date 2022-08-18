@@ -1,9 +1,6 @@
 {
   "properties": {
-    "id": {
-      "type": "internal",
-      "datasetId": "b6191257-6d61-4c6b-90a4-ebfb1b23899d"
-    },
+    "id": "b6191257-6d61-4c6b-90a4-ebfb1b23899d",
     "name": "Germany",
     "description": "Boundaries of Germany",
     "sourceOperator": "OgrSource"
@@ -29,7 +26,15 @@
       "type": "vector",
       "dataType": "MultiPolygon",
       "spatialReference": "EPSG:4326",
-      "columns": {}
+      "columns": {},
+      "time": {
+        "start": "-262144-01-01T00:00:00+00:00",
+        "end": "+262143-12-31T23:59:59.999+00:00"
+      },
+      "bbox": {
+        "lowerLeftCoordinate": [5.8524898680001103, 47.2711209110000965],
+        "upperRightCoordinate": [15.0220593670001001, 55.0653343770000987]
+      }
     }
   }
 }

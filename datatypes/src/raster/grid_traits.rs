@@ -67,18 +67,14 @@ where
     A: AsRef<[isize]>,
 {
     fn contains(&self, rhs: &GridIdx<A>) -> bool {
-        for ((&min_idx, &max_idx), &idx) in self
-            .min_index()
+        debug_assert!(self.min_index().as_slice().len() == rhs.as_slice().len()); // this must never fail since the array type A has a fixed size. However, one might implement that for a Vec so better check it here.
+
+        self.min_index()
             .as_slice()
             .iter()
             .zip(self.max_index().as_slice())
             .zip(rhs.as_slice())
-        {
-            if !crate::util::ranges::value_in_range_inclusive(idx, min_idx, max_idx) {
-                return false;
-            }
-        }
-        true
+            .all(|((&min_idx, &max_idx), idx)| (min_idx..=max_idx).contains(idx))
     }
 }
 
@@ -151,21 +147,6 @@ pub trait GridShapeAccess {
     }
 }
 
-/// Provides the the value used to represent a no data entry.
-pub trait NoDataValue {
-    type NoDataType: PartialEq + Copy;
-
-    fn no_data_value(&self) -> Option<Self::NoDataType>;
-
-    #[allow(clippy::eq_op)]
-    fn is_no_data(&self, value: Self::NoDataType) -> bool {
-        self.no_data_value().map_or(false, |no_data_value| {
-            // value is equal no-data value or both are NAN.
-            value == no_data_value || (no_data_value != no_data_value && value != value)
-        })
-    }
-}
-
 /// Change the bounds of gridded data.
 pub trait ChangeGridBounds<I>: BoundedGrid<IndexArray = I>
 where
@@ -232,33 +213,4 @@ where
     I: AsRef<[isize]> + Into<GridIdx<I>> + Clone,
     GridBoundingBox<I>: GridSize,
 {
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    impl NoDataValue for f32 {
-        type NoDataType = f32;
-
-        fn no_data_value(&self) -> Option<Self::NoDataType> {
-            Some(*self)
-        }
-    }
-
-    #[test]
-    fn no_data_nan() {
-        let no_data_value = f32::NAN;
-
-        assert!(!no_data_value.is_no_data(42.));
-        assert!(no_data_value.is_no_data(f32::NAN));
-    }
-
-    #[test]
-    fn no_data_float() {
-        let no_data_value: f32 = 42.;
-
-        assert!(no_data_value.is_no_data(42.));
-        assert!(!no_data_value.is_no_data(f32::NAN));
-    }
 }

@@ -22,14 +22,14 @@ pub enum WcsRequest {
 }
 
 // sample: SERVICE=WCS&request=GetCapabilities&VERSION=1.0.0
-#[derive(PartialEq, Debug, Deserialize, Serialize)]
+#[derive(PartialEq, Eq, Debug, Deserialize, Serialize)]
 pub struct GetCapabilities {
     #[serde(alias = "VERSION")]
     pub version: Option<String>,
 }
 
 // sample: SERVICE=WCS&request=DescribeCoverage&VERSION=1.1.1&IDENTIFIERS=nurc:Arc_Sample
-#[derive(PartialEq, Debug, Deserialize, Serialize)]
+#[derive(PartialEq, Eq, Debug, Deserialize, Serialize)]
 pub struct DescribeCoverage {
     #[serde(alias = "VERSION")]
     pub version: String,
@@ -77,6 +77,11 @@ pub struct GetCoverage {
     #[serde(default)]
     #[serde(deserialize_with = "from_str_option")]
     resy: Option<f64>,
+
+    // Geo Engine specific
+    #[serde(default)]
+    #[serde(deserialize_with = "from_str_option")]
+    pub nodatavalue: Option<f64>,
 }
 
 impl GetCoverage {
@@ -138,7 +143,7 @@ impl GridOrigin {
     }
 }
 
-#[derive(PartialEq, Debug, Deserialize, Serialize)]
+#[derive(PartialEq, Eq, Debug, Deserialize, Serialize)]
 pub enum GetCoverageFormat {
     #[serde(rename = "image/tiff")]
     ImageTiff,
@@ -231,7 +236,8 @@ mod tests {
                 }),
                 time: Some(TimeInterval::new_instant(1_388_534_400_000).unwrap()),
                 resx: None,
-                resy: None
+                resy: None,
+                nodatavalue: None,
             },
             coverage
         );

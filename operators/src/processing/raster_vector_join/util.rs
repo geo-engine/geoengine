@@ -15,7 +15,7 @@ use crate::processing::point_in_polygon::PointInPolygonTesterWithCollection;
 ///
 /// Both, `feature_index_start` and `feature_index_end` are inclusive.
 ///
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct FeatureTimeSpan {
     pub feature_index_start: usize,
     pub feature_index_end: usize,
@@ -107,7 +107,7 @@ pub struct MultiPointCoveredPixels {
     collection: FeatureCollection<MultiPoint>,
 }
 
-impl<'a> CoveredPixels<MultiPoint> for MultiPointCoveredPixels {
+impl CoveredPixels<MultiPoint> for MultiPointCoveredPixels {
     fn initialize(collection: FeatureCollection<MultiPoint>) -> Self {
         Self { collection }
     }
@@ -165,7 +165,7 @@ impl CoveredPixels<MultiPolygon> for MultiPolygonCoveredPixels {
         for row in 0..height {
             for col in 0..width {
                 let idx = [row as isize, col as isize].into();
-                let coordinate = geo_transform.grid_idx_to_upper_left_coordinate_2d(idx);
+                let coordinate = geo_transform.grid_idx_to_pixel_upper_left_coordinate_2d(idx);
 
                 if tester.multi_polygon_contains_coordinate(coordinate, feature_index) {
                     pixels.push(idx);

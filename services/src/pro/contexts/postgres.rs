@@ -1,14 +1,17 @@
 use crate::datasets::add_from_directory::add_providers_from_directory;
 use crate::error::{self, Result};
+use crate::layers::add_from_directory::{
+    add_layer_collections_from_directory, add_layers_from_directory, UNSORTED_COLLECTION_ID,
+};
+use crate::layers::storage::INTERNAL_LAYER_DB_ROOT_COLLECTION_ID;
 use crate::pro::datasets::{add_datasets_from_directory, PostgresDatasetDb, Role};
+use crate::pro::layers::postgres_layer_db::{PostgresLayerDb, PostgresLayerProviderDb};
 use crate::pro::projects::ProjectPermission;
 use crate::pro::users::{UserDb, UserId, UserSession};
 use crate::pro::workflows::postgres_workflow_registry::PostgresWorkflowRegistry;
 use crate::projects::ProjectId;
-use crate::{
-    contexts::{Context, Db},
-    pro::users::PostgresUserDb,
-};
+use crate::tasks::{SimpleTaskManager, SimpleTaskManagerContext};
+use crate::{contexts::Context, pro::users::PostgresUserDb};
 use crate::{
     contexts::{ExecutionContextImpl, QueryContextImpl},
     pro::projects::PostgresProjectDb,
@@ -28,7 +31,6 @@ use rayon::ThreadPool;
 use snafu::ResultExt;
 use std::path::PathBuf;
 use std::sync::Arc;
-use tokio::sync::{RwLock, RwLockReadGuard, RwLockWriteGuard};
 
 use super::ProContext;
 
@@ -43,13 +45,16 @@ where
     <Tls as MakeTlsConnect<Socket>>::TlsConnect: Send,
     <<Tls as MakeTlsConnect<Socket>>::TlsConnect as TlsConnect<Socket>>::Future: Send,
 {
-    user_db: Db<PostgresUserDb<Tls>>,
-    project_db: Db<PostgresProjectDb<Tls>>,
-    workflow_registry: Db<PostgresWorkflowRegistry<Tls>>,
-    dataset_db: Db<PostgresDatasetDb<Tls>>,
+    user_db: Arc<PostgresUserDb<Tls>>,
+    project_db: Arc<PostgresProjectDb<Tls>>,
+    workflow_registry: Arc<PostgresWorkflowRegistry<Tls>>,
+    dataset_db: Arc<PostgresDatasetDb<Tls>>,
+    layer_db: Arc<PostgresLayerDb<Tls>>,
+    layer_provider_db: Arc<PostgresLayerProviderDb<Tls>>,
     thread_pool: Arc<ThreadPool>,
     exe_ctx_tiling_spec: TilingSpecification,
     query_ctx_chunk_size: ChunkByteSize,
+    task_manager: Arc<SimpleTaskManager>,
 }
 
 impl<Tls> PostgresContext<Tls>
@@ -72,10 +77,13 @@ where
         Self::update_schema(pool.get().await?).await?;
 
         Ok(Self {
-            user_db: Arc::new(RwLock::new(PostgresUserDb::new(pool.clone()))),
-            project_db: Arc::new(RwLock::new(PostgresProjectDb::new(pool.clone()))),
-            workflow_registry: Arc::new(RwLock::new(PostgresWorkflowRegistry::new(pool.clone()))),
-            dataset_db: Arc::new(RwLock::new(PostgresDatasetDb::new(pool.clone()))),
+            user_db: Arc::new(PostgresUserDb::new(pool.clone())),
+            project_db: Arc::new(PostgresProjectDb::new(pool.clone())),
+            workflow_registry: Arc::new(PostgresWorkflowRegistry::new(pool.clone())),
+            dataset_db: Arc::new(PostgresDatasetDb::new(pool.clone())),
+            layer_db: Arc::new(PostgresLayerDb::new(pool.clone())),
+            layer_provider_db: Arc::new(PostgresLayerProviderDb::new(pool.clone())),
+            task_manager: Arc::new(SimpleTaskManager::default()),
             thread_pool: create_rayon_thread_pool(0),
             exe_ctx_tiling_spec,
             query_ctx_chunk_size,
@@ -83,11 +91,14 @@ where
     }
 
     // TODO: check if the datasets exist already and don't output warnings when skipping them
+    #[allow(clippy::too_many_arguments)]
     pub async fn new_with_data(
         config: Config,
         tls: Tls,
         dataset_defs_path: PathBuf,
         provider_defs_path: PathBuf,
+        layer_defs_path: PathBuf,
+        layer_collection_defs_path: PathBuf,
         exe_ctx_tiling_spec: TilingSpecification,
         query_ctx_chunk_size: ChunkByteSize,
     ) -> Result<Self> {
@@ -97,16 +108,29 @@ where
 
         Self::update_schema(pool.get().await?).await?;
 
+        let workflow_db = PostgresWorkflowRegistry::new(pool.clone());
+        let mut layer_db = PostgresLayerDb::new(pool.clone());
+
+        add_layers_from_directory(&mut layer_db, layer_defs_path).await;
+        add_layer_collections_from_directory(&mut layer_db, layer_collection_defs_path).await;
+
         let mut dataset_db = PostgresDatasetDb::new(pool.clone());
+
         add_datasets_from_directory(&mut dataset_db, dataset_defs_path).await;
-        add_providers_from_directory(&mut dataset_db, provider_defs_path.clone()).await;
-        add_providers_from_directory(&mut dataset_db, provider_defs_path.join("pro")).await;
+
+        let mut layer_provider_db = PostgresLayerProviderDb::new(pool.clone());
+
+        add_providers_from_directory(&mut layer_provider_db, provider_defs_path.clone()).await;
+        add_providers_from_directory(&mut layer_provider_db, provider_defs_path.join("pro")).await;
 
         Ok(Self {
-            user_db: Arc::new(RwLock::new(PostgresUserDb::new(pool.clone()))),
-            project_db: Arc::new(RwLock::new(PostgresProjectDb::new(pool.clone()))),
-            workflow_registry: Arc::new(RwLock::new(PostgresWorkflowRegistry::new(pool.clone()))),
-            dataset_db: Arc::new(RwLock::new(dataset_db)),
+            user_db: Arc::new(PostgresUserDb::new(pool.clone())),
+            project_db: Arc::new(PostgresProjectDb::new(pool.clone())),
+            workflow_registry: Arc::new(workflow_db),
+            dataset_db: Arc::new(dataset_db),
+            layer_db: Arc::new(layer_db),
+            layer_provider_db: Arc::new(PostgresLayerProviderDb::new(pool.clone())),
+            task_manager: Arc::new(SimpleTaskManager::default()),
             thread_pool: create_rayon_thread_pool(0),
             exe_ctx_tiling_spec,
             query_ctx_chunk_size,
@@ -325,15 +349,6 @@ where
                             provenance json
                         );
 
-                        -- TODO: should name be unique (per user)?
-                        CREATE TABLE dataset_providers (
-                            id UUID PRIMARY KEY,
-                            type_name text NOT NULL,
-                            name text NOT NULL,
-
-                            definition json NOT NULL
-                        );
-
                         -- TODO: add constraint not null
                         -- TODO: add constaint byte_size >= 0
                         CREATE TYPE "FileUpload" AS (
@@ -371,6 +386,69 @@ where
                             FROM 
                                 user_roles r JOIN dataset_permissions p ON (r.role_id = p.role_id);
 
+
+                        CREATE TABLE layer_collections (
+                            id UUID PRIMARY KEY,
+                            name text NOT NULL,
+                            description text NOT NULL
+                        );
+
+                        -- insert the root layer collection
+                        INSERT INTO layer_collections (
+                            id,
+                            name,
+                            description
+                        ) VALUES (
+                            '{root_layer_collection_id}',
+                            'Layers',
+                            'All available Geo Engine layers'
+                        );
+
+                        -- insert the unsorted layer collection
+                        INSERT INTO layer_collections (
+                            id,
+                            name,
+                            description
+                        ) VALUES (
+                            '{unsorted_layer_collection_id}',
+                            'Unsorted',
+                            'Unsorted Layers'
+                        );
+    
+
+                        CREATE TABLE layers (
+                            id UUID PRIMARY KEY,
+                            name text NOT NULL,
+                            description text NOT NULL,
+                            workflow json NOT NULL,
+                            symbology json 
+                        );
+
+                        CREATE TABLE collection_layers (
+                            collection UUID REFERENCES layer_collections(id) ON DELETE CASCADE NOT NULL,
+                            layer UUID REFERENCES layers(id) ON DELETE CASCADE NOT NULL,
+                            PRIMARY KEY (collection, layer)
+                        );
+
+                        CREATE TABLE collection_children (
+                            parent UUID REFERENCES layer_collections(id) ON DELETE CASCADE NOT NULL,
+                            child UUID REFERENCES layer_collections(id) ON DELETE CASCADE NOT NULL,
+                            PRIMARY KEY (parent, child)
+                        );
+
+                        -- add unsorted layers to root layer collection
+                        INSERT INTO collection_children (parent, child) VALUES
+                        ('{root_layer_collection_id}', '{unsorted_layer_collection_id}');
+
+                        -- TODO: should name be unique (per user)?
+                        CREATE TABLE layer_providers (
+                            id UUID PRIMARY KEY,
+                            type_name text NOT NULL,
+                            name text NOT NULL,
+
+                            definition json NOT NULL
+                        );
+
                         -- TODO: uploads, providers permissions
 
                         -- TODO: relationship between uploads and datasets?                        
@@ -378,7 +456,9 @@ where
                     ,
                     system_role_id = Role::system_role_id(),
                     user_role_id = Role::user_role_id(),
-                    anonymous_role_id = Role::anonymous_role_id()))
+                    anonymous_role_id = Role::anonymous_role_id(),
+                    root_layer_collection_id = INTERNAL_LAYER_DB_ROOT_COLLECTION_ID,
+                    unsorted_layer_collection_id = UNSORTED_COLLECTION_ID))
                     .await?;
                     debug!("Updated user database to schema version {}", version + 1);
                 }
@@ -433,14 +513,11 @@ where
 {
     type UserDB = PostgresUserDb<Tls>;
 
-    fn user_db(&self) -> Db<Self::UserDB> {
+    fn user_db(&self) -> Arc<Self::UserDB> {
         self.user_db.clone()
     }
-    async fn user_db_ref(&self) -> RwLockReadGuard<'_, Self::UserDB> {
-        self.user_db.read().await
-    }
-    async fn user_db_ref_mut(&self) -> RwLockWriteGuard<'_, Self::UserDB> {
-        self.user_db.write().await
+    fn user_db_ref(&self) -> &Self::UserDB {
+        &self.user_db
     }
 }
 
@@ -456,39 +533,54 @@ where
     type ProjectDB = PostgresProjectDb<Tls>;
     type WorkflowRegistry = PostgresWorkflowRegistry<Tls>;
     type DatasetDB = PostgresDatasetDb<Tls>;
+    type LayerDB = PostgresLayerDb<Tls>;
+    type LayerProviderDB = PostgresLayerProviderDb<Tls>;
+    type TaskContext = SimpleTaskManagerContext;
+    type TaskManager = SimpleTaskManager; // this does not persist across restarts
     type QueryContext = QueryContextImpl;
-    type ExecutionContext = ExecutionContextImpl<UserSession, PostgresDatasetDb<Tls>>;
+    type ExecutionContext =
+        ExecutionContextImpl<UserSession, PostgresDatasetDb<Tls>, PostgresLayerProviderDb<Tls>>;
 
-    fn project_db(&self) -> Db<Self::ProjectDB> {
+    fn project_db(&self) -> Arc<Self::ProjectDB> {
         self.project_db.clone()
     }
-    async fn project_db_ref(&self) -> RwLockReadGuard<'_, Self::ProjectDB> {
-        self.project_db.read().await
-    }
-    async fn project_db_ref_mut(&self) -> RwLockWriteGuard<'_, Self::ProjectDB> {
-        self.project_db.write().await
+    fn project_db_ref(&self) -> &Self::ProjectDB {
+        &self.project_db
     }
 
-    fn workflow_registry(&self) -> Db<Self::WorkflowRegistry> {
+    fn workflow_registry(&self) -> Arc<Self::WorkflowRegistry> {
         self.workflow_registry.clone()
     }
-    async fn workflow_registry_ref(&self) -> RwLockReadGuard<'_, Self::WorkflowRegistry> {
-        self.workflow_registry.read().await
-    }
-    async fn workflow_registry_ref_mut(&self) -> RwLockWriteGuard<'_, Self::WorkflowRegistry> {
-        self.workflow_registry.write().await
+    fn workflow_registry_ref(&self) -> &Self::WorkflowRegistry {
+        &self.workflow_registry
     }
 
-    fn dataset_db(&self) -> Db<Self::DatasetDB> {
+    fn dataset_db(&self) -> Arc<Self::DatasetDB> {
         self.dataset_db.clone()
     }
-
-    async fn dataset_db_ref(&self) -> RwLockReadGuard<'_, Self::DatasetDB> {
-        self.dataset_db.read().await
+    fn dataset_db_ref(&self) -> &Self::DatasetDB {
+        &self.dataset_db
     }
 
-    async fn dataset_db_ref_mut(&self) -> RwLockWriteGuard<'_, Self::DatasetDB> {
-        self.dataset_db.write().await
+    fn layer_db(&self) -> Arc<Self::LayerDB> {
+        self.layer_db.clone()
+    }
+    fn layer_db_ref(&self) -> &Self::LayerDB {
+        &self.layer_db
+    }
+
+    fn layer_provider_db(&self) -> Arc<Self::LayerProviderDB> {
+        self.layer_provider_db.clone()
+    }
+    fn layer_provider_db_ref(&self) -> &Self::LayerProviderDB {
+        &self.layer_provider_db
+    }
+
+    fn tasks(&self) -> Arc<Self::TaskManager> {
+        self.task_manager.clone()
+    }
+    fn tasks_ref(&self) -> &Self::TaskManager {
+        &self.task_manager
     }
 
     fn query_context(&self) -> Result<Self::QueryContext> {
@@ -500,19 +592,21 @@ where
     }
 
     fn execution_context(&self, session: UserSession) -> Result<Self::ExecutionContext> {
-        Ok(
-            ExecutionContextImpl::<UserSession, PostgresDatasetDb<Tls>>::new(
-                self.dataset_db.clone(),
-                self.thread_pool.clone(),
-                session,
-                self.exe_ctx_tiling_spec,
-            ),
-        )
+        Ok(ExecutionContextImpl::<
+            UserSession,
+            PostgresDatasetDb<Tls>,
+            PostgresLayerProviderDb<Tls>,
+        >::new(
+            self.dataset_db.clone(),
+            self.layer_provider_db.clone(),
+            self.thread_pool.clone(),
+            session,
+            self.exe_ctx_tiling_spec,
+        ))
     }
 
     async fn session_by_id(&self, session_id: crate::contexts::SessionId) -> Result<Self::Session> {
         self.user_db_ref()
-            .await
             .session(session_id)
             .await
             .map_err(Box::new)
@@ -525,16 +619,24 @@ mod tests {
     use std::str::FromStr;
 
     use super::*;
-    use crate::datasets::external::mock::MockExternalDataProviderDefinition;
+    use crate::datasets::external::mock::MockExternalLayerProviderDefinition;
     use crate::datasets::listing::SessionMetaDataProvider;
     use crate::datasets::listing::{DatasetListOptions, DatasetListing, ProvenanceOutput};
     use crate::datasets::listing::{DatasetProvider, Provenance};
     use crate::datasets::storage::{
-        AddDataset, DatasetDefinition, DatasetProviderDb, DatasetProviderListOptions,
-        DatasetProviderListing, DatasetStore, MetaDataDefinition,
+        AddDataset, DatasetDefinition, DatasetStore, MetaDataDefinition,
     };
     use crate::datasets::upload::{FileId, UploadId};
     use crate::datasets::upload::{FileUpload, Upload, UploadDb};
+    use crate::layers::layer::{
+        AddLayer, AddLayerCollection, CollectionItem, LayerCollectionListOptions,
+        LayerCollectionListing, LayerListing, ProviderLayerCollectionId, ProviderLayerId,
+    };
+    use crate::layers::listing::{LayerCollectionId, LayerCollectionProvider};
+    use crate::layers::storage::{
+        LayerDb, LayerProviderDb, LayerProviderListing, LayerProviderListingOptions,
+        INTERNAL_PROVIDER_ID,
+    };
     use crate::pro::datasets::{DatasetPermission, Permission, UpdateDatasetPermissions};
     use crate::pro::projects::{LoadVersion, ProProjectDb, UserProjectPermission};
     use crate::pro::users::{UserCredentials, UserDb, UserRegistration};
@@ -550,11 +652,9 @@ mod tests {
     use bb8_postgres::tokio_postgres::{self, NoTls};
     use futures::Future;
     use geoengine_datatypes::collections::VectorDataType;
-    use geoengine_datatypes::dataset::{
-        DatasetId, DatasetProviderId, ExternalDatasetId, InternalDatasetId,
-    };
+    use geoengine_datatypes::dataset::{DataProviderId, DatasetId};
     use geoengine_datatypes::primitives::{
-        BoundingBox2D, Coordinate2D, FeatureDataType, SpatialResolution, TimeInterval,
+        BoundingBox2D, Coordinate2D, FeatureDataType, Measurement, SpatialResolution, TimeInterval,
         VectorQueryRectangle,
     };
     use geoengine_datatypes::spatial_reference::{SpatialReference, SpatialReferenceOption};
@@ -562,7 +662,7 @@ mod tests {
     use geoengine_datatypes::util::Identifier;
     use geoengine_operators::engine::{
         MetaData, MultipleRasterSources, PlotOperator, StaticMetaData, TypedOperator,
-        TypedResultDescriptor, VectorOperator, VectorResultDescriptor,
+        TypedResultDescriptor, VectorColumnInfo, VectorOperator, VectorResultDescriptor,
     };
     use geoengine_operators::mock::{MockPointSource, MockPointSourceParams};
     use geoengine_operators::plot::{Statistics, StatisticsParams};
@@ -658,9 +758,7 @@ mod tests {
             let _user_id = user_reg_login(&ctx).await;
 
             let session = ctx
-                .user_db()
-                .write()
-                .await
+                .user_db_ref()
                 .login(UserCredentials {
                     email: "foo@bar.de".into(),
                     password: "secret123".into(),
@@ -691,7 +789,7 @@ mod tests {
             password: "secret123".into(),
         };
 
-        let mut user_db = ctx.user_db_ref_mut().await;
+        let user_db = ctx.user_db_ref();
 
         let session = user_db.login(credentials).await.unwrap();
 
@@ -718,15 +816,13 @@ mod tests {
         session: &UserSession,
         project_id: ProjectId,
     ) {
-        ctx.project_db_ref_mut()
-            .await
+        ctx.project_db_ref()
             .delete(session, project_id)
             .await
             .unwrap();
 
         assert!(ctx
             .project_db_ref()
-            .await
             .load(session, project_id)
             .await
             .is_err());
@@ -739,7 +835,6 @@ mod tests {
     ) {
         assert_eq!(
             ctx.project_db_ref()
-                .await
                 .list_permissions(session, project_id)
                 .await
                 .unwrap()
@@ -748,8 +843,7 @@ mod tests {
         );
 
         let user2 = ctx
-            .user_db_ref_mut()
-            .await
+            .user_db_ref()
             .register(
                 UserRegistration {
                     email: "user2@example.com".into(),
@@ -762,8 +856,7 @@ mod tests {
             .await
             .unwrap();
 
-        ctx.project_db_ref_mut()
-            .await
+        ctx.project_db_ref()
             .add_permission(
                 session,
                 UserProjectPermission {
@@ -777,7 +870,6 @@ mod tests {
 
         assert_eq!(
             ctx.project_db_ref()
-                .await
                 .list_permissions(session, project_id)
                 .await
                 .unwrap()
@@ -792,15 +884,13 @@ mod tests {
         project_id: ProjectId,
     ) {
         let project = ctx
-            .project_db_ref_mut()
-            .await
+            .project_db_ref()
             .load_version(session, project_id, LoadVersion::Latest)
             .await
             .unwrap();
 
         let layer_workflow_id = ctx
-            .workflow_registry_ref_mut()
-            .await
+            .workflow_registry_ref()
             .register(Workflow {
                 operator: TypedOperator::Vector(
                     MockPointSource {
@@ -816,14 +906,12 @@ mod tests {
 
         assert!(ctx
             .workflow_registry_ref()
-            .await
             .load(&layer_workflow_id)
             .await
             .is_ok());
 
         let plot_workflow_id = ctx
-            .workflow_registry_ref_mut()
-            .await
+            .workflow_registry_ref()
             .register(Workflow {
                 operator: Statistics {
                     params: StatisticsParams {},
@@ -837,7 +925,6 @@ mod tests {
 
         assert!(ctx
             .workflow_registry_ref()
-            .await
             .load(&plot_workflow_id)
             .await
             .is_ok());
@@ -859,15 +946,13 @@ mod tests {
             bounds: None,
             time_step: None,
         };
-        ctx.project_db_ref_mut()
-            .await
+        ctx.project_db_ref()
             .update(session, update.validated().unwrap())
             .await
             .unwrap();
 
         let versions = ctx
             .project_db_ref()
-            .await
             .versions(session, project_id)
             .await
             .unwrap();
@@ -886,12 +971,7 @@ mod tests {
         }
         .validated()
         .unwrap();
-        let projects = ctx
-            .project_db_ref_mut()
-            .await
-            .list(session, options)
-            .await
-            .unwrap();
+        let projects = ctx.project_db_ref().list(session, options).await.unwrap();
 
         assert_eq!(projects.len(), 2);
         assert_eq!(projects[0].name, "Test9");
@@ -918,17 +998,12 @@ mod tests {
             }
             .validated()
             .unwrap();
-            ctx.project_db_ref_mut()
-                .await
-                .create(session, create)
-                .await
-                .unwrap();
+            ctx.project_db_ref().create(session, create).await.unwrap();
         }
     }
 
     async fn user_reg_login(ctx: &PostgresContext<NoTls>) -> UserId {
-        let user_db = ctx.user_db();
-        let mut db = user_db.write().await;
+        let db = ctx.user_db_ref();
 
         let user_registration = UserRegistration {
             email: "foo@bar.de".into(),
@@ -957,8 +1032,7 @@ mod tests {
     }
 
     async fn anonymous(ctx: &PostgresContext<NoTls>) {
-        let user_db = ctx.user_db();
-        let mut db = user_db.write().await;
+        let db = ctx.user_db_ref();
 
         let session = db.anonymous().await.unwrap();
 
@@ -984,8 +1058,7 @@ mod tests {
             };
 
             let id = ctx
-                .workflow_registry_ref_mut()
-                .await
+                .workflow_registry_ref()
                 .register(workflow)
                 .await
                 .unwrap();
@@ -996,7 +1069,7 @@ mod tests {
                 .await
                 .unwrap();
 
-            let workflow = ctx.workflow_registry_ref().await.load(&id).await.unwrap();
+            let workflow = ctx.workflow_registry_ref().load(&id).await.unwrap();
 
             let json = serde_json::to_string(&workflow).unwrap();
             assert_eq!(json, r#"{"type":"Vector","operator":{"type":"MockPointSource","params":{"points":[{"x":1.0,"y":2.0},{"x":1.0,"y":2.0},{"x":1.0,"y":2.0}]}}}"#);
@@ -1008,13 +1081,7 @@ mod tests {
     #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
     async fn it_persists_datasets() {
         with_temp_context(|ctx, _| async move {
-            let db_ = ctx.dataset_db();
-            let mut db = db_.write().await;
-
-            let dataset_id = DatasetId::Internal {
-                dataset_id: InternalDatasetId::from_str("2e8af98d-3b98-4e2c-a35b-e487bffad7b6")
-                    .unwrap(),
-            };
+            let dataset_id = DatasetId::from_str("2e8af98d-3b98-4e2c-a35b-e487bffad7b6").unwrap();
 
             let loading_info = OgrSourceDataset {
                 file_name: PathBuf::from("test.csv"),
@@ -1055,20 +1122,29 @@ mod tests {
                 result_descriptor: VectorResultDescriptor {
                     data_type: VectorDataType::MultiPoint,
                     spatial_reference: SpatialReference::epsg_4326().into(),
-                    columns: [("foo".to_owned(), FeatureDataType::Float)]
-                        .into_iter()
-                        .collect(),
+                    columns: [(
+                        "foo".to_owned(),
+                        VectorColumnInfo {
+                            data_type: FeatureDataType::Float,
+                            measurement: Measurement::Unitless,
+                        },
+                    )]
+                    .into_iter()
+                    .collect(),
+                    time: None,
+                    bbox: None,
                 },
                 phantom: Default::default(),
             });
 
-            let session = ctx.user_db_ref_mut().await.anonymous().await.unwrap();
+            let session = ctx.user_db_ref().anonymous().await.unwrap();
 
+            let db = ctx.dataset_db_ref();
             let wrap = db.wrap_meta_data(meta_data);
             db.add_dataset(
                 &session,
                 AddDataset {
-                    id: Some(dataset_id.clone()),
+                    id: Some(dataset_id),
                     name: "Ogr Test".to_owned(),
                     description: "desc".to_owned(),
                     source_operator: "OgrSource".to_owned(),
@@ -1106,7 +1182,7 @@ mod tests {
             assert_eq!(
                 datasets[0],
                 DatasetListing {
-                    id: dataset_id.clone(),
+                    id: dataset_id,
                     name: "Ogr Test".to_owned(),
                     description: "desc".to_owned(),
                     source_operator: "OgrSource".to_owned(),
@@ -1115,9 +1191,17 @@ mod tests {
                     result_descriptor: TypedResultDescriptor::Vector(VectorResultDescriptor {
                         data_type: VectorDataType::MultiPoint,
                         spatial_reference: SpatialReference::epsg_4326().into(),
-                        columns: [("foo".to_owned(), FeatureDataType::Float)]
-                            .into_iter()
-                            .collect(),
+                        columns: [(
+                            "foo".to_owned(),
+                            VectorColumnInfo {
+                                data_type: FeatureDataType::Float,
+                                measurement: Measurement::Unitless
+                            }
+                        )]
+                        .into_iter()
+                        .collect(),
+                        time: None,
+                        bbox: None,
                     }),
                 },
             );
@@ -1127,7 +1211,7 @@ mod tests {
             assert_eq!(
                 provenance,
                 ProvenanceOutput {
-                    dataset: dataset_id.clone(),
+                    data: dataset_id.into(),
                     provenance: Some(Provenance {
                         citation: "citation".to_owned(),
                         license: "license".to_owned(),
@@ -1136,8 +1220,10 @@ mod tests {
                 }
             );
 
-            let meta_data: Box<dyn MetaData<OgrSourceDataset, _, _>> =
-                db.session_meta_data(&session, &dataset_id).await.unwrap();
+            let meta_data: Box<dyn MetaData<OgrSourceDataset, _, _>> = db
+                .session_meta_data(&session, &dataset_id.into())
+                .await
+                .unwrap();
 
             assert_eq!(
                 meta_data
@@ -1160,8 +1246,7 @@ mod tests {
     #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
     async fn it_persists_uploads() {
         with_temp_context(|ctx, _| async move {
-            let db_ = ctx.dataset_db();
-            let mut db = db_.write().await;
+            let db = ctx.dataset_db_ref();
 
             let id = UploadId::from_str("2de18cd8-4a38-4111-a445-e3734bc18a80").unwrap();
             let input = Upload {
@@ -1173,7 +1258,7 @@ mod tests {
                 }],
             };
 
-            let session = ctx.user_db_ref_mut().await.anonymous().await.unwrap();
+            let session = ctx.user_db_ref().anonymous().await.unwrap();
             db.create_upload(&session, input.clone()).await.unwrap();
 
             let upload = db.get_upload(&session, id).await.unwrap();
@@ -1185,15 +1270,12 @@ mod tests {
 
     #[allow(clippy::too_many_lines)]
     #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
-    async fn it_persists_dataset_providers() {
+    async fn it_persists_layer_providers() {
         with_temp_context(|ctx, _| async move {
-            let db_ = ctx.dataset_db();
-            let mut db = db_.write().await;
-
-            let session = ctx.user_db_ref_mut().await.anonymous().await.unwrap();
+            let db = ctx.layer_provider_db_ref();
 
             let provider_id =
-                DatasetProviderId::from_str("7b20c8d7-d754-4f8f-ad44-dddd25df22d2").unwrap();
+                DataProviderId::from_str("7b20c8d7-d754-4f8f-ad44-dddd25df22d2").unwrap();
 
             let loading_info = OgrSourceDataset {
                 file_name: PathBuf::from("test.csv"),
@@ -1234,21 +1316,26 @@ mod tests {
                 result_descriptor: VectorResultDescriptor {
                     data_type: VectorDataType::MultiPoint,
                     spatial_reference: SpatialReference::epsg_4326().into(),
-                    columns: [("foo".to_owned(), FeatureDataType::Float)]
-                        .into_iter()
-                        .collect(),
+                    columns: [(
+                        "foo".to_owned(),
+                        VectorColumnInfo {
+                            data_type: FeatureDataType::Float,
+                            measurement: Measurement::Unitless,
+                        },
+                    )]
+                    .into_iter()
+                    .collect(),
+                    time: None,
+                    bbox: None,
                 },
                 phantom: Default::default(),
             });
 
-            let provider = MockExternalDataProviderDefinition {
+            let provider = MockExternalLayerProviderDefinition {
                 id: provider_id,
                 datasets: vec![DatasetDefinition {
                     properties: AddDataset {
-                        id: Some(DatasetId::External(ExternalDatasetId {
-                            provider_id,
-                            dataset_id: "test".to_owned(),
-                        })),
+                        id: Some(DatasetId::new()),
                         name: "test".to_owned(),
                         description: "desc".to_owned(),
                         source_operator: "MockPointSource".to_owned(),
@@ -1259,14 +1346,11 @@ mod tests {
                 }],
             };
 
-            db.add_dataset_provider(&session, Box::new(provider))
-                .await
-                .unwrap();
+            db.add_layer_provider(Box::new(provider)).await.unwrap();
 
             let providers = db
-                .list_dataset_providers(
-                    &session,
-                    DatasetProviderListOptions {
+                .list_layer_providers(
+                    LayerProviderListingOptions {
                         offset: 0,
                         limit: 10,
                     }
@@ -1280,20 +1364,19 @@ mod tests {
 
             assert_eq!(
                 providers[0],
-                DatasetProviderListing {
+                LayerProviderListing {
                     id: provider_id,
-                    type_name: "MockType".to_owned(),
                     name: "MockName".to_owned(),
+                    description: "MockType".to_owned(),
                 }
             );
 
-            let provider = db.dataset_provider(&session, provider_id).await.unwrap();
+            let provider = db.layer_provider(provider_id).await.unwrap();
 
             let datasets = provider
-                .list(
-                    DatasetListOptions {
-                        filter: None,
-                        order: crate::datasets::listing::OrderBy::NameAsc,
+                .collection_items(
+                    &provider.root_collection_id().await.unwrap(),
+                    LayerCollectionListOptions {
                         offset: 0,
                         limit: 10,
                     }
@@ -1311,13 +1394,15 @@ mod tests {
     #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
     async fn it_lists_only_permitted_datasets() {
         with_temp_context(|ctx, _| async move {
-            let session1 = ctx.user_db_ref_mut().await.anonymous().await.unwrap();
-            let session2 = ctx.user_db_ref_mut().await.anonymous().await.unwrap();
+            let session1 = ctx.user_db_ref().anonymous().await.unwrap();
+            let session2 = ctx.user_db_ref().anonymous().await.unwrap();
 
             let descriptor = VectorResultDescriptor {
                 data_type: VectorDataType::Data,
                 spatial_reference: SpatialReferenceOption::Unreferenced,
                 columns: Default::default(),
+                time: None,
+                bbox: None,
             };
 
             let ds = AddDataset {
@@ -1348,20 +1433,17 @@ mod tests {
             };
 
             let meta = ctx
-                .dataset_db_ref_mut()
-                .await
+                .dataset_db_ref()
                 .wrap_meta_data(MetaDataDefinition::OgrMetaData(meta));
 
             let _id = ctx
-                .dataset_db_ref_mut()
-                .await
+                .dataset_db_ref()
                 .add_dataset(&session1, ds.validated().unwrap(), meta)
                 .await
                 .unwrap();
 
             let list1 = ctx
                 .dataset_db_ref()
-                .await
                 .list(
                     &session1,
                     DatasetListOptions {
@@ -1380,7 +1462,6 @@ mod tests {
 
             let list2 = ctx
                 .dataset_db_ref()
-                .await
                 .list(
                     &session2,
                     DatasetListOptions {
@@ -1403,13 +1484,15 @@ mod tests {
     #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
     async fn it_shows_only_permitted_provenance() {
         with_temp_context(|ctx, _| async move {
-            let session1 = ctx.user_db_ref_mut().await.anonymous().await.unwrap();
-            let session2 = ctx.user_db_ref_mut().await.anonymous().await.unwrap();
+            let session1 = ctx.user_db_ref().anonymous().await.unwrap();
+            let session2 = ctx.user_db_ref().anonymous().await.unwrap();
 
             let descriptor = VectorResultDescriptor {
                 data_type: VectorDataType::Data,
                 spatial_reference: SpatialReferenceOption::Unreferenced,
                 columns: Default::default(),
+                time: None,
+                bbox: None,
             };
 
             let ds = AddDataset {
@@ -1440,27 +1523,23 @@ mod tests {
             };
 
             let meta = ctx
-                .dataset_db_ref_mut()
-                .await
+                .dataset_db_ref()
                 .wrap_meta_data(MetaDataDefinition::OgrMetaData(meta));
 
             let id = ctx
-                .dataset_db_ref_mut()
-                .await
+                .dataset_db_ref()
                 .add_dataset(&session1, ds.validated().unwrap(), meta)
                 .await
                 .unwrap();
 
             assert!(ctx
                 .dataset_db_ref()
-                .await
                 .provenance(&session1, &id)
                 .await
                 .is_ok());
 
             assert!(ctx
                 .dataset_db_ref()
-                .await
                 .provenance(&session2, &id)
                 .await
                 .is_err());
@@ -1471,13 +1550,15 @@ mod tests {
     #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
     async fn it_updates_permissions() {
         with_temp_context(|ctx, _| async move {
-            let session1 = ctx.user_db_ref_mut().await.anonymous().await.unwrap();
-            let session2 = ctx.user_db_ref_mut().await.anonymous().await.unwrap();
+            let session1 = ctx.user_db_ref().anonymous().await.unwrap();
+            let session2 = ctx.user_db_ref().anonymous().await.unwrap();
 
             let descriptor = VectorResultDescriptor {
                 data_type: VectorDataType::Data,
                 spatial_reference: SpatialReferenceOption::Unreferenced,
                 columns: Default::default(),
+                time: None,
+                bbox: None,
             };
 
             let ds = AddDataset {
@@ -1508,50 +1589,32 @@ mod tests {
             };
 
             let meta = ctx
-                .dataset_db_ref_mut()
-                .await
+                .dataset_db_ref()
                 .wrap_meta_data(MetaDataDefinition::OgrMetaData(meta));
 
             let id = ctx
-                .dataset_db_ref_mut()
-                .await
+                .dataset_db_ref()
                 .add_dataset(&session1, ds.validated().unwrap(), meta)
                 .await
                 .unwrap();
 
-            assert!(ctx
-                .dataset_db_ref()
-                .await
-                .load(&session1, &id)
-                .await
-                .is_ok());
+            assert!(ctx.dataset_db_ref().load(&session1, &id).await.is_ok());
 
-            assert!(ctx
-                .dataset_db_ref()
-                .await
-                .load(&session2, &id)
-                .await
-                .is_err());
+            assert!(ctx.dataset_db_ref().load(&session2, &id).await.is_err());
 
-            ctx.dataset_db_ref_mut()
-                .await
+            ctx.dataset_db_ref()
                 .add_dataset_permission(
                     &session1,
                     DatasetPermission {
                         role: session2.user.id.into(),
-                        dataset: id.clone(),
+                        dataset: id,
                         permission: Permission::Read,
                     },
                 )
                 .await
                 .unwrap();
 
-            assert!(ctx
-                .dataset_db_ref()
-                .await
-                .load(&session2, &id)
-                .await
-                .is_ok());
+            assert!(ctx.dataset_db_ref().load(&session2, &id).await.is_ok());
         })
         .await;
     }
@@ -1559,13 +1622,15 @@ mod tests {
     #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
     async fn it_uses_roles_for_permissions() {
         with_temp_context(|ctx, _| async move {
-            let session1 = ctx.user_db_ref_mut().await.anonymous().await.unwrap();
-            let session2 = ctx.user_db_ref_mut().await.anonymous().await.unwrap();
+            let session1 = ctx.user_db_ref().anonymous().await.unwrap();
+            let session2 = ctx.user_db_ref().anonymous().await.unwrap();
 
             let descriptor = VectorResultDescriptor {
                 data_type: VectorDataType::Data,
                 spatial_reference: SpatialReferenceOption::Unreferenced,
                 columns: Default::default(),
+                time: None,
+                bbox: None,
             };
 
             let ds = AddDataset {
@@ -1596,50 +1661,32 @@ mod tests {
             };
 
             let meta = ctx
-                .dataset_db_ref_mut()
-                .await
+                .dataset_db_ref()
                 .wrap_meta_data(MetaDataDefinition::OgrMetaData(meta));
 
             let id = ctx
-                .dataset_db_ref_mut()
-                .await
+                .dataset_db_ref()
                 .add_dataset(&session1, ds.validated().unwrap(), meta)
                 .await
                 .unwrap();
 
-            assert!(ctx
-                .dataset_db_ref()
-                .await
-                .load(&session1, &id)
-                .await
-                .is_ok());
+            assert!(ctx.dataset_db_ref().load(&session1, &id).await.is_ok());
 
-            assert!(ctx
-                .dataset_db_ref()
-                .await
-                .load(&session2, &id)
-                .await
-                .is_err());
+            assert!(ctx.dataset_db_ref().load(&session2, &id).await.is_err());
 
-            ctx.dataset_db_ref_mut()
-                .await
+            ctx.dataset_db_ref()
                 .add_dataset_permission(
                     &session1,
                     DatasetPermission {
                         role: session2.user.id.into(),
-                        dataset: id.clone(),
+                        dataset: id,
                         permission: Permission::Read,
                     },
                 )
                 .await
                 .unwrap();
 
-            assert!(ctx
-                .dataset_db_ref()
-                .await
-                .load(&session2, &id)
-                .await
-                .is_ok());
+            assert!(ctx.dataset_db_ref().load(&session2, &id).await.is_ok());
         })
         .await;
     }
@@ -1647,13 +1694,15 @@ mod tests {
     #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
     async fn it_secures_meta_data() {
         with_temp_context(|ctx, _| async move {
-            let session1 = ctx.user_db_ref_mut().await.anonymous().await.unwrap();
-            let session2 = ctx.user_db_ref_mut().await.anonymous().await.unwrap();
+            let session1 = ctx.user_db_ref().anonymous().await.unwrap();
+            let session2 = ctx.user_db_ref().anonymous().await.unwrap();
 
             let descriptor = VectorResultDescriptor {
                 data_type: VectorDataType::Data,
                 spatial_reference: SpatialReferenceOption::Unreferenced,
                 columns: Default::default(),
+                time: None,
+                bbox: None,
             };
 
             let ds = AddDataset {
@@ -1684,13 +1733,11 @@ mod tests {
             };
 
             let meta = ctx
-                .dataset_db_ref_mut()
-                .await
+                .dataset_db_ref()
                 .wrap_meta_data(MetaDataDefinition::OgrMetaData(meta));
 
             let id = ctx
-                .dataset_db_ref_mut()
-                .await
+                .dataset_db_ref()
                 .add_dataset(&session1, ds.validated().unwrap(), meta)
                 .await
                 .unwrap();
@@ -1699,8 +1746,7 @@ mod tests {
                 Box<dyn MetaData<OgrSourceDataset, VectorResultDescriptor, VectorQueryRectangle>>,
             > = ctx
                 .dataset_db_ref()
-                .await
-                .session_meta_data(&session1, &id)
+                .session_meta_data(&session1, &id.into())
                 .await;
 
             assert!(meta.is_ok());
@@ -1709,19 +1755,17 @@ mod tests {
                 Box<dyn MetaData<OgrSourceDataset, VectorResultDescriptor, VectorQueryRectangle>>,
             > = ctx
                 .dataset_db_ref()
-                .await
-                .session_meta_data(&session2, &id)
+                .session_meta_data(&session2, &id.into())
                 .await;
 
             assert!(meta.is_err());
 
-            ctx.dataset_db_ref_mut()
-                .await
+            ctx.dataset_db_ref()
                 .add_dataset_permission(
                     &session1,
                     DatasetPermission {
                         role: session2.user.id.into(),
-                        dataset: id.clone(),
+                        dataset: id,
                         permission: Permission::Read,
                     },
                 )
@@ -1732,8 +1776,7 @@ mod tests {
                 Box<dyn MetaData<OgrSourceDataset, VectorResultDescriptor, VectorQueryRectangle>>,
             > = ctx
                 .dataset_db_ref()
-                .await
-                .session_meta_data(&session2, &id)
+                .session_meta_data(&session2, &id.into())
                 .await;
 
             assert!(meta.is_ok());
@@ -1744,8 +1787,8 @@ mod tests {
     #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
     async fn it_secures_uploads() {
         with_temp_context(|ctx, _| async move {
-            let session1 = ctx.user_db_ref_mut().await.anonymous().await.unwrap();
-            let session2 = ctx.user_db_ref_mut().await.anonymous().await.unwrap();
+            let session1 = ctx.user_db_ref().anonymous().await.unwrap();
+            let session2 = ctx.user_db_ref().anonymous().await.unwrap();
 
             let upload_id = UploadId::new();
 
@@ -1758,25 +1801,197 @@ mod tests {
                 }],
             };
 
-            ctx.dataset_db_ref_mut()
-                .await
+            ctx.dataset_db_ref()
                 .create_upload(&session1, upload)
                 .await
                 .unwrap();
 
             assert!(ctx
                 .dataset_db_ref()
-                .await
                 .get_upload(&session1, upload_id)
                 .await
                 .is_ok());
 
             assert!(ctx
                 .dataset_db_ref()
-                .await
                 .get_upload(&session2, upload_id)
                 .await
                 .is_err());
+        })
+        .await;
+    }
+
+    #[allow(clippy::too_many_lines)]
+    #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
+    async fn it_collects_layers() {
+        with_temp_context(|ctx, _| async move {
+            let layer_db = ctx.layer_db_ref();
+
+            let workflow = Workflow {
+                operator: TypedOperator::Vector(
+                    MockPointSource {
+                        params: MockPointSourceParams {
+                            points: vec![Coordinate2D::new(1., 2.); 3],
+                        },
+                    }
+                    .boxed(),
+                ),
+            };
+
+            let root_collection_id = layer_db.root_collection_id().await.unwrap();
+
+            let layer1 = layer_db
+                .add_layer(
+                    AddLayer {
+                        name: "Layer1".to_string(),
+                        description: "Layer 1".to_string(),
+                        symbology: None,
+                        workflow: workflow.clone(),
+                    }
+                    .validated()
+                    .unwrap(),
+                    &root_collection_id,
+                )
+                .await
+                .unwrap();
+
+            assert_eq!(
+                layer_db.get_layer(&layer1).await.unwrap(),
+                crate::layers::layer::Layer {
+                    id: ProviderLayerId {
+                        provider_id: INTERNAL_PROVIDER_ID,
+                        layer_id: layer1.clone(),
+                    },
+                    name: "Layer1".to_string(),
+                    description: "Layer 1".to_string(),
+                    symbology: None,
+                    workflow: workflow.clone()
+                }
+            );
+
+            let collection1 = layer_db
+                .add_collection(
+                    AddLayerCollection {
+                        name: "Collection1".to_string(),
+                        description: "Collection 1".to_string(),
+                    }
+                    .validated()
+                    .unwrap(),
+                    &root_collection_id,
+                )
+                .await
+                .unwrap();
+
+            let layer2 = layer_db
+                .add_layer(
+                    AddLayer {
+                        name: "Layer2".to_string(),
+                        description: "Layer 2".to_string(),
+                        symbology: None,
+                        workflow: workflow.clone(),
+                    }
+                    .validated()
+                    .unwrap(),
+                    &collection1,
+                )
+                .await
+                .unwrap();
+
+            let collection2 = layer_db
+                .add_collection(
+                    AddLayerCollection {
+                        name: "Collection2".to_string(),
+                        description: "Collection 2".to_string(),
+                    }
+                    .validated()
+                    .unwrap(),
+                    &collection1,
+                )
+                .await
+                .unwrap();
+
+            layer_db
+                .add_collection_to_parent(&collection2, &collection1)
+                .await
+                .unwrap();
+
+            let root_list = layer_db
+                .collection_items(
+                    &root_collection_id,
+                    LayerCollectionListOptions {
+                        offset: 0,
+                        limit: 20,
+                    }
+                    .validated()
+                    .unwrap(),
+                )
+                .await
+                .unwrap();
+
+            assert_eq!(
+                root_list,
+                vec![
+                    CollectionItem::Collection(LayerCollectionListing {
+                        id: ProviderLayerCollectionId {
+                            provider_id: INTERNAL_PROVIDER_ID,
+                            collection_id: collection1.clone(),
+                        },
+                        name: "Collection1".to_string(),
+                        description: "Collection 1".to_string(),
+                    }),
+                    CollectionItem::Collection(LayerCollectionListing {
+                        id: ProviderLayerCollectionId {
+                            provider_id: INTERNAL_PROVIDER_ID,
+                            collection_id: LayerCollectionId(UNSORTED_COLLECTION_ID.to_string()),
+                        },
+                        name: "Unsorted".to_string(),
+                        description: "Unsorted Layers".to_string(),
+                    }),
+                    CollectionItem::Layer(LayerListing {
+                        id: ProviderLayerId {
+                            provider_id: INTERNAL_PROVIDER_ID,
+                            layer_id: layer1,
+                        },
+                        name: "Layer1".to_string(),
+                        description: "Layer 1".to_string(),
+                    })
+                ]
+            );
+
+            let collection1_list = layer_db
+                .collection_items(
+                    &collection1,
+                    LayerCollectionListOptions {
+                        offset: 0,
+                        limit: 20,
+                    }
+                    .validated()
+                    .unwrap(),
+                )
+                .await
+                .unwrap();
+
+            assert_eq!(
+                collection1_list,
+                vec![
+                    CollectionItem::Collection(LayerCollectionListing {
+                        id: ProviderLayerCollectionId {
+                            provider_id: INTERNAL_PROVIDER_ID,
+                            collection_id: collection2,
+                        },
+                        name: "Collection2".to_string(),
+                        description: "Collection 2".to_string(),
+                    }),
+                    CollectionItem::Layer(LayerListing {
+                        id: ProviderLayerId {
+                            provider_id: INTERNAL_PROVIDER_ID,
+                            layer_id: layer2,
+                        },
+                        name: "Layer2".to_string(),
+                        description: "Layer 2".to_string(),
+                    })
+                ]
+            );
         })
         .await;
     }

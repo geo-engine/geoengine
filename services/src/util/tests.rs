@@ -37,9 +37,7 @@ pub async fn create_project_helper<C: SimpleContext>(ctx: &C) -> (SimpleSession,
     let session = ctx.default_session_ref().await;
 
     let project = ctx
-        .project_db()
-        .write()
-        .await
+        .project_db_ref()
         .create(
             &session,
             CreateProject {
@@ -93,16 +91,16 @@ pub async fn register_ndvi_workflow_helper(ctx: &InMemoryContext) -> (Workflow, 
     let workflow = Workflow {
         operator: TypedOperator::Raster(
             GdalSource {
-                params: GdalSourceParameters { dataset },
+                params: GdalSourceParameters {
+                    data: dataset.into(),
+                },
             }
             .boxed(),
         ),
     };
 
     let id = ctx
-        .workflow_registry()
-        .write()
-        .await
+        .workflow_registry_ref()
         .register(workflow.clone())
         .await
         .unwrap();
@@ -127,8 +125,7 @@ pub async fn add_ndvi_to_datasets(ctx: &InMemoryContext) -> DatasetId {
         meta_data: MetaDataDefinition::GdalMetaDataRegular(create_ndvi_meta_data()),
     };
 
-    ctx.dataset_db_ref_mut()
-        .await
+    ctx.dataset_db_ref()
         .add_dataset(
             &SimpleSession::default(),
             ndvi.properties
@@ -202,6 +199,7 @@ pub async fn send_test_request<C: SimpleContext>(
             .configure(handlers::session::init_session_routes::<C>)
             .configure(handlers::spatial_references::init_spatial_reference_routes::<C>)
             .configure(handlers::upload::init_upload_routes::<C>)
+            .configure(handlers::tasks::init_task_routes::<C>)
             .configure(handlers::wcs::init_wcs_routes::<C>)
             .configure(handlers::wfs::init_wfs_routes::<C>)
             .configure(handlers::wms::init_wms_routes::<C>)
@@ -216,6 +214,12 @@ pub async fn send_test_request<C: SimpleContext>(
 pub async fn read_body_string(res: ServiceResponse) -> String {
     let body = test::read_body(res).await;
     String::from_utf8(body.to_vec()).expect("Body is utf 8 string")
+}
+
+pub async fn read_body_json(res: ServiceResponse) -> serde_json::Value {
+    let body = test::read_body(res).await;
+    let s = String::from_utf8(body.to_vec()).expect("Body is utf 8 string");
+    serde_json::from_str(&s).expect("Body is valid json")
 }
 
 /// Helper struct that removes all specified uploads on drop

@@ -55,19 +55,17 @@ impl MetaData<GdalLoadingInfo, RasterResultDescriptor, RasterQueryRectangle>
     }
 }
 
-/// Meta data for a regular time series that begins (is anchored) at `start` with multiple gdal data
+/// Meta data for a regular time series that begins and ends at the given `data_time` interval with multiple gdal data
 /// sets `step` time apart. The `time_placeholders` in the file path of the dataset are replaced with the
-/// specified time `reference` in specified time `format`.
-// TODO: `start` is actually more a reference time, because the time series also goes in
-//        negative direction. Maybe it would be better to have a real start and end time, then
-//        everything before start and after end is just one big nodata raster instead of many
+/// specified time `reference` in specified time `format`. Inside the `data_time` the gdal source will load the data
+/// from the files and outside it will create nodata.
 #[derive(PartialEq, Serialize, Deserialize, Debug, Clone)]
 #[serde(rename_all = "camelCase")]
 pub struct GdalMetaDataRegular {
     pub result_descriptor: RasterResultDescriptor,
     pub params: GdalDatasetParameters,
     pub time_placeholders: HashMap<String, GdalSourceTimePlaceholder>,
-    pub start: TimeInstance,
+    pub data_time: TimeInterval,
     pub step: TimeStep,
 }
 
@@ -76,24 +74,14 @@ impl MetaData<GdalLoadingInfo, RasterResultDescriptor, RasterQueryRectangle>
     for GdalMetaDataRegular
 {
     async fn loading_info(&self, query: RasterQueryRectangle) -> Result<GdalLoadingInfo> {
-        let snapped_start = self
-            .step
-            .snap_relative(self.start, query.time_interval.start())?;
-
-        let snapped_interval =
-            TimeInterval::new_unchecked(snapped_start, query.time_interval.end()); // TODO: snap end?
-
-        let time_iterator =
-            TimeStepIter::new_with_interval_incl_start(snapped_interval, self.step)?;
-
         Ok(GdalLoadingInfo {
             info: GdalLoadingInfoTemporalSliceIterator::Dynamic(
                 DynamicGdalLoadingInfoPartIterator::new(
-                    time_iterator,
                     self.params.clone(),
                     self.time_placeholders.clone(),
                     self.step,
-                    query.time_interval.end(),
+                    query.time_interval,
+                    self.data_time,
                 )?,
             ),
         })
@@ -128,6 +116,7 @@ pub struct GdalMetadataNetCdfCf {
 }
 
 #[async_trait]
+// TODO: handle queries before and after valid time like in `GdalMetaDataRegular`
 impl MetaData<GdalLoadingInfo, RasterResultDescriptor, RasterQueryRectangle>
     for GdalMetadataNetCdfCf
 {
@@ -155,8 +144,7 @@ impl MetaData<GdalLoadingInfo, RasterResultDescriptor, RasterQueryRectangle>
         let snapped_interval =
             TimeInterval::new_unchecked(snapped_start, query.time_interval.end()); // TODO: snap end?
 
-        let time_iterator =
-            TimeStepIter::new_with_interval_incl_start(snapped_interval, self.step)?;
+        let time_iterator = TimeStepIter::new_with_interval(snapped_interval, self.step)?;
 
         Ok(GdalLoadingInfo {
             info: GdalLoadingInfoTemporalSliceIterator::NetCdfCf(
@@ -221,21 +209,34 @@ impl MetaData<GdalLoadingInfo, RasterResultDescriptor, RasterQueryRectangle> for
 }
 
 #[derive(Debug, Clone)]
+/// An iterator for gdal loading infos based on time placeholders that generates
+/// a new loading info for each time step within `data_time` and an empty loading info
+/// for the time before and after `date_time`.
 pub struct DynamicGdalLoadingInfoPartIterator {
     time_step_iter: TimeStepIter,
     params: GdalDatasetParameters,
     time_placeholders: HashMap<String, GdalSourceTimePlaceholder>,
     step: TimeStep,
-    max_t2: TimeInstance,
+    query_time: TimeInterval,
+    data_time: TimeInterval,
+    state: DynamicGdalLoadingInfoPartIteratorState,
+}
+
+#[derive(Debug, Clone)]
+enum DynamicGdalLoadingInfoPartIteratorState {
+    BeforeDataTime,
+    WithinDataTime,
+    AfterDataTime,
+    Finished,
 }
 
 impl DynamicGdalLoadingInfoPartIterator {
     fn new(
-        time_step_iter: TimeStepIter,
         params: GdalDatasetParameters,
         time_placeholders: HashMap<String, GdalSourceTimePlaceholder>,
         step: TimeStep,
-        max_t2: TimeInstance,
+        query_time: TimeInterval,
+        data_time: TimeInterval,
     ) -> Result<Self> {
         // TODO: maybe fail on deserialization
         if time_placeholders.is_empty()
@@ -247,12 +248,49 @@ impl DynamicGdalLoadingInfoPartIterator {
             return Err(Error::DynamicGdalSourceSpecHasEmptyTimePlaceholders);
         }
 
+        // depending on whether the query starts before, within or after the data, the time step iterator has to begin at a different point in time
+        // because it only produces time steps within the data time. Before and after are handled separately.
+        let (snapped_start, state) = if query_time.start() < data_time.start() {
+            (
+                data_time.start(),
+                DynamicGdalLoadingInfoPartIteratorState::BeforeDataTime,
+            )
+        } else if query_time.start() < data_time.end() {
+            (
+                step.snap_relative(data_time.start(), query_time.start())?,
+                DynamicGdalLoadingInfoPartIteratorState::WithinDataTime,
+            )
+        } else {
+            (
+                data_time.end(),
+                DynamicGdalLoadingInfoPartIteratorState::AfterDataTime,
+            )
+        };
+
+        // cap at end of data
+        let mut end = query_time.end().min(data_time.end());
+
+        // snap the end time to the _next_ step within in the `data_time`
+        let snapped_end = step.snap_relative(data_time.start(), end)?;
+        if snapped_end < end {
+            end = (snapped_end + step)?;
+        }
+
+        // ensure start <= end
+        end = end.max(snapped_start);
+
+        let snapped_interval = TimeInterval::new_unchecked(snapped_start, end);
+
+        let time_step_iter = TimeStepIter::new_with_interval(snapped_interval, step)?;
+
         Ok(Self {
             time_step_iter,
             params,
             time_placeholders,
             step,
-            max_t2,
+            query_time,
+            data_time,
+            state,
         })
     }
 }
@@ -261,22 +299,60 @@ impl Iterator for DynamicGdalLoadingInfoPartIterator {
     type Item = Result<GdalLoadingInfoTemporalSlice>;
 
     fn next(&mut self) -> Option<Self::Item> {
-        let t1 = self.time_step_iter.next()?;
+        match self.state {
+            DynamicGdalLoadingInfoPartIteratorState::BeforeDataTime => {
+                if self.query_time.end() > self.data_time.start() {
+                    self.state = DynamicGdalLoadingInfoPartIteratorState::WithinDataTime;
+                } else {
+                    self.state = DynamicGdalLoadingInfoPartIteratorState::Finished;
+                }
+                Some(Ok(GdalLoadingInfoTemporalSlice {
+                    time: TimeInterval::new_unchecked(TimeInstance::MIN, self.data_time.start()),
+                    params: None,
+                }))
+            }
+            DynamicGdalLoadingInfoPartIteratorState::WithinDataTime => {
+                if let Some(t) = self.time_step_iter.next() {
+                    let t2 = t + self.step;
+                    let t2 = t2.unwrap_or_else(|_| self.data_time.end());
+                    let time_interval = TimeInterval::new_unchecked(t, t2);
 
-        let t2 = t1 + self.step;
-        let t2 = t2.unwrap_or(self.max_t2);
+                    let loading_info_part = self
+                        .params
+                        .replace_time_placeholders(&self.time_placeholders, time_interval)
+                        .map(|loading_info_part_params| GdalLoadingInfoTemporalSlice {
+                            time: time_interval,
+                            params: Some(loading_info_part_params),
+                        })
+                        .map_err(Into::into);
 
-        let time_interval = TimeInterval::new_unchecked(t1, t2);
+                    Some(loading_info_part)
+                } else {
+                    self.state = DynamicGdalLoadingInfoPartIteratorState::Finished;
 
-        let loading_info_part = self
-            .params
-            .replace_time_placeholders(&self.time_placeholders, time_interval)
-            .map(|loading_info_part_params| GdalLoadingInfoTemporalSlice {
-                time: time_interval,
-                params: Some(loading_info_part_params),
-            });
+                    if self.query_time.end() > self.data_time.end() {
+                        Some(Ok(GdalLoadingInfoTemporalSlice {
+                            time: TimeInterval::new_unchecked(
+                                self.data_time.end(),
+                                TimeInstance::MAX,
+                            ),
+                            params: None,
+                        }))
+                    } else {
+                        None
+                    }
+                }
+            }
+            DynamicGdalLoadingInfoPartIteratorState::AfterDataTime => {
+                self.state = DynamicGdalLoadingInfoPartIteratorState::Finished;
 
-        Some(loading_info_part)
+                Some(Ok(GdalLoadingInfoTemporalSlice {
+                    time: TimeInterval::new_unchecked(self.data_time.end(), TimeInstance::MAX),
+                    params: None,
+                }))
+            }
+            DynamicGdalLoadingInfoPartIteratorState::Finished => None,
+        }
     }
 }
 
@@ -336,15 +412,10 @@ impl Iterator for NetCdfCfGdalLoadingInfoPartIterator {
             return None;
         }
 
-        // off by one if date is larger than reference time
-        let steps_between = if t1 == self.dataset_time_start {
-            0
-        } else {
-            1 + self
-                .step
-                .num_steps_in_interval(TimeInterval::new_unchecked(self.dataset_time_start, t1))
-                .unwrap() // TODO: what to do if this fails?
-        };
+        let steps_between = self
+            .step
+            .num_steps_in_interval(TimeInterval::new_unchecked(self.dataset_time_start, t1))
+            .unwrap(); // TODO: what to do if this fails?
 
         // our first band is the reference time
         let mut params = self.params.clone();
@@ -396,10 +467,12 @@ pub struct GdalLoadingInfoTemporalSlice {
 
 #[cfg(test)]
 mod tests {
-    use chrono::NaiveDate;
     use geoengine_datatypes::{
         hashmap,
-        primitives::{Measurement, SpatialPartition2D, SpatialResolution, TimeGranularity},
+        primitives::{
+            DateTime, DateTimeParseFormat, Measurement, SpatialPartition2D, SpatialResolution,
+            TimeGranularity,
+        },
         raster::RasterDataType,
         spatial_reference::SpatialReference,
         util::test::TestDefault,
@@ -409,16 +482,16 @@ mod tests {
 
     use super::*;
 
-    #[tokio::test]
-    async fn test_regular_meta_data() {
+    fn create_regular_metadata() -> GdalMetaDataRegular {
         let no_data_value = Some(0.);
 
-        let meta_data = GdalMetaDataRegular {
+        GdalMetaDataRegular {
             result_descriptor: RasterResultDescriptor {
                 data_type: RasterDataType::U8,
                 spatial_reference: SpatialReference::epsg_4326().into(),
                 measurement: Measurement::Unitless,
-                no_data_value,
+                time: None,
+                bbox: None,
             },
             params: GdalDatasetParameters {
                 file_path: "/foo/bar_%TIME%.tiff".into(),
@@ -431,19 +504,28 @@ mod tests {
                 properties_mapping: None,
                 gdal_open_options: None,
                 gdal_config_options: None,
+                allow_alphaband_as_mask: true,
             },
             time_placeholders: hashmap! {
                 "%TIME%".to_string() => GdalSourceTimePlaceholder {
-                    format: "%f".to_string(),
+                    format: DateTimeParseFormat::custom("%f".to_string()),
                     reference: TimeReference::Start,
                 },
             },
-            start: TimeInstance::from_millis_unchecked(11),
+            data_time: TimeInterval::new_unchecked(
+                TimeInstance::from_millis_unchecked(0),
+                TimeInstance::from_millis_unchecked(33),
+            ),
             step: TimeStep {
                 granularity: TimeGranularity::Millis,
                 step: 11,
             },
-        };
+        }
+    }
+
+    #[tokio::test]
+    async fn test_regular_meta_data_result_descriptor() {
+        let meta_data = create_regular_metadata();
 
         assert_eq!(
             meta_data.result_descriptor().await.unwrap(),
@@ -451,9 +533,15 @@ mod tests {
                 data_type: RasterDataType::U8,
                 spatial_reference: SpatialReference::epsg_4326().into(),
                 measurement: Measurement::Unitless,
-                no_data_value: Some(0.)
+                time: None,
+                bbox: None,
             }
         );
+    }
+
+    #[tokio::test]
+    async fn test_regular_meta_data_0_30() {
+        let meta_data = create_regular_metadata();
 
         assert_eq!(
             meta_data
@@ -468,19 +556,205 @@ mod tests {
                 .await
                 .unwrap()
                 .info
-                .map(|p| p
-                    .unwrap()
-                    .params
-                    .unwrap()
-                    .file_path
-                    .to_str()
-                    .unwrap()
-                    .to_owned())
+                .map(|p| {
+                    let p = p.unwrap();
+                    (
+                        p.time,
+                        p.params.map(|p| p.file_path.to_str().unwrap().to_owned()),
+                    )
+                })
                 .collect::<Vec<_>>(),
             &[
-                "/foo/bar_000000000.tiff",
-                "/foo/bar_011000000.tiff",
-                "/foo/bar_022000000.tiff"
+                (
+                    TimeInterval::new_unchecked(0, 11),
+                    Some("/foo/bar_000000000.tiff".to_owned())
+                ),
+                (
+                    TimeInterval::new_unchecked(11, 22),
+                    Some("/foo/bar_011000000.tiff".to_owned())
+                ),
+                (
+                    TimeInterval::new_unchecked(22, 33),
+                    Some("/foo/bar_022000000.tiff".to_owned())
+                ),
+            ]
+        );
+    }
+
+    #[tokio::test]
+    async fn test_regular_meta_data_default_time() {
+        let meta_data = create_regular_metadata();
+
+        assert_eq!(
+            meta_data
+                .loading_info(RasterQueryRectangle {
+                    spatial_bounds: SpatialPartition2D::new_unchecked(
+                        (0., 1.).into(),
+                        (1., 0.).into()
+                    ),
+                    time_interval: TimeInterval::default(),
+                    spatial_resolution: SpatialResolution::one(),
+                })
+                .await
+                .unwrap()
+                .info
+                .map(|p| {
+                    let p = p.unwrap();
+                    (
+                        p.time,
+                        p.params.map(|p| p.file_path.to_str().unwrap().to_owned()),
+                    )
+                })
+                .collect::<Vec<_>>(),
+            &[
+                (TimeInterval::new_unchecked(TimeInstance::MIN, 0), None),
+                (
+                    TimeInterval::new_unchecked(0, 11),
+                    Some("/foo/bar_000000000.tiff".to_owned())
+                ),
+                (
+                    TimeInterval::new_unchecked(11, 22),
+                    Some("/foo/bar_011000000.tiff".to_owned())
+                ),
+                (
+                    TimeInterval::new_unchecked(22, 33),
+                    Some("/foo/bar_022000000.tiff".to_owned())
+                ),
+                (TimeInterval::new_unchecked(33, TimeInstance::MAX), None)
+            ]
+        );
+    }
+
+    #[tokio::test]
+    async fn test_regular_meta_data_before_data() {
+        let meta_data = create_regular_metadata();
+
+        assert_eq!(
+            meta_data
+                .loading_info(RasterQueryRectangle {
+                    spatial_bounds: SpatialPartition2D::new_unchecked(
+                        (0., 1.).into(),
+                        (1., 0.).into()
+                    ),
+                    time_interval: TimeInterval::new_unchecked(-10, -5),
+                    spatial_resolution: SpatialResolution::one(),
+                })
+                .await
+                .unwrap()
+                .info
+                .map(|p| {
+                    let p = p.unwrap();
+                    (
+                        p.time,
+                        p.params.map(|p| p.file_path.to_str().unwrap().to_owned()),
+                    )
+                })
+                .collect::<Vec<_>>(),
+            &[(TimeInterval::new_unchecked(TimeInstance::MIN, 0), None),]
+        );
+    }
+
+    #[tokio::test]
+    async fn test_regular_meta_data_after_data() {
+        let meta_data = create_regular_metadata();
+
+        assert_eq!(
+            meta_data
+                .loading_info(RasterQueryRectangle {
+                    spatial_bounds: SpatialPartition2D::new_unchecked(
+                        (0., 1.).into(),
+                        (1., 0.).into()
+                    ),
+                    time_interval: TimeInterval::new_unchecked(50, 55),
+                    spatial_resolution: SpatialResolution::one(),
+                })
+                .await
+                .unwrap()
+                .info
+                .map(|p| {
+                    let p = p.unwrap();
+                    (
+                        p.time,
+                        p.params.map(|p| p.file_path.to_str().unwrap().to_owned()),
+                    )
+                })
+                .collect::<Vec<_>>(),
+            &[(TimeInterval::new_unchecked(33, TimeInstance::MAX), None)]
+        );
+    }
+
+    #[tokio::test]
+    async fn test_regular_meta_data_0_22() {
+        let meta_data = create_regular_metadata();
+
+        assert_eq!(
+            meta_data
+                .loading_info(RasterQueryRectangle {
+                    spatial_bounds: SpatialPartition2D::new_unchecked(
+                        (0., 1.).into(),
+                        (1., 0.).into()
+                    ),
+                    time_interval: TimeInterval::new_unchecked(0, 22),
+                    spatial_resolution: SpatialResolution::one(),
+                })
+                .await
+                .unwrap()
+                .info
+                .map(|p| {
+                    let p = p.unwrap();
+                    (
+                        p.time,
+                        p.params.map(|p| p.file_path.to_str().unwrap().to_owned()),
+                    )
+                })
+                .collect::<Vec<_>>(),
+            &[
+                (
+                    TimeInterval::new_unchecked(0, 11),
+                    Some("/foo/bar_000000000.tiff".to_owned())
+                ),
+                (
+                    TimeInterval::new_unchecked(11, 22),
+                    Some("/foo/bar_011000000.tiff".to_owned())
+                ),
+            ]
+        );
+    }
+
+    #[tokio::test]
+    async fn test_regular_meta_data_0_20() {
+        let meta_data = create_regular_metadata();
+
+        assert_eq!(
+            meta_data
+                .loading_info(RasterQueryRectangle {
+                    spatial_bounds: SpatialPartition2D::new_unchecked(
+                        (0., 1.).into(),
+                        (1., 0.).into()
+                    ),
+                    time_interval: TimeInterval::new_unchecked(0, 20),
+                    spatial_resolution: SpatialResolution::one(),
+                })
+                .await
+                .unwrap()
+                .info
+                .map(|p| {
+                    let p = p.unwrap();
+                    (
+                        p.time,
+                        p.params.map(|p| p.file_path.to_str().unwrap().to_owned()),
+                    )
+                })
+                .collect::<Vec<_>>(),
+            &[
+                (
+                    TimeInterval::new_unchecked(0, 11),
+                    Some("/foo/bar_000000000.tiff".to_owned())
+                ),
+                (
+                    TimeInterval::new_unchecked(11, 22),
+                    Some("/foo/bar_011000000.tiff".to_owned())
+                ),
             ]
         );
     }
@@ -494,7 +768,8 @@ mod tests {
                 data_type: RasterDataType::U8,
                 spatial_reference: SpatialReference::epsg_4326().into(),
                 measurement: Measurement::Unitless,
-                no_data_value,
+                time: None,
+                bbox: None,
             },
             params: vec![
                 GdalLoadingInfoTemporalSlice {
@@ -510,6 +785,7 @@ mod tests {
                         properties_mapping: None,
                         gdal_open_options: None,
                         gdal_config_options: None,
+                        allow_alphaband_as_mask: true,
                     }),
                 },
                 GdalLoadingInfoTemporalSlice {
@@ -525,6 +801,7 @@ mod tests {
                         properties_mapping: None,
                         gdal_open_options: None,
                         gdal_config_options: None,
+                        allow_alphaband_as_mask: true,
                     }),
                 },
                 GdalLoadingInfoTemporalSlice {
@@ -540,6 +817,7 @@ mod tests {
                         properties_mapping: None,
                         gdal_open_options: None,
                         gdal_config_options: None,
+                        allow_alphaband_as_mask: true,
                     }),
                 },
             ],
@@ -551,7 +829,8 @@ mod tests {
                 data_type: RasterDataType::U8,
                 spatial_reference: SpatialReference::epsg_4326().into(),
                 measurement: Measurement::Unitless,
-                no_data_value: Some(0.)
+                time: None,
+                bbox: None,
             }
         );
 
@@ -583,8 +862,8 @@ mod tests {
 
     #[tokio::test]
     async fn netcdf_cf_single_time_step() {
-        let time_start = TimeInstance::from(NaiveDate::from_ymd(2000, 1, 1).and_hms(0, 0, 0));
-        let time_end = TimeInstance::from(NaiveDate::from_ymd(2000, 1, 1).and_hms(0, 0, 0));
+        let time_start = TimeInstance::from(DateTime::new_utc(2000, 1, 1, 0, 0, 0));
+        let time_end = TimeInstance::from(DateTime::new_utc(2000, 1, 1, 0, 0, 0));
         let time_step = TimeStep {
             step: 0,
             granularity: TimeGranularity::Years,
@@ -595,7 +874,8 @@ mod tests {
                 data_type: RasterDataType::U8,
                 spatial_reference: SpatialReference::epsg_4326().into(),
                 measurement: Measurement::Unitless,
-                no_data_value: None,
+                time: None,
+                bbox: None,
             },
             params: GdalDatasetParameters {
                 file_path: "path/to/ds".into(),
@@ -612,6 +892,7 @@ mod tests {
                 properties_mapping: None,
                 gdal_open_options: None,
                 gdal_config_options: None,
+                allow_alphaband_as_mask: true,
             },
             start: time_start,
             end: time_end,
@@ -633,8 +914,8 @@ mod tests {
         assert_eq!(
             step_1.time,
             TimeInterval::new(
-                TimeInstance::from(NaiveDate::from_ymd(2000, 1, 1).and_hms(0, 0, 0)),
-                TimeInstance::from(NaiveDate::from_ymd(2000, 1, 1).and_hms(0, 0, 0))
+                TimeInstance::from(DateTime::new_utc(2000, 1, 1, 0, 0, 0)),
+                TimeInstance::from(DateTime::new_utc(2000, 1, 1, 0, 0, 0))
             )
             .unwrap()
         );
@@ -645,8 +926,8 @@ mod tests {
 
     #[tokio::test]
     async fn netcdf_cf_single_time_step_with_offset() {
-        let time_start = TimeInstance::from(NaiveDate::from_ymd(2000, 1, 1).and_hms(0, 0, 0));
-        let time_end = TimeInstance::from(NaiveDate::from_ymd(2000, 1, 1).and_hms(0, 0, 0));
+        let time_start = TimeInstance::from(DateTime::new_utc(2000, 1, 1, 0, 0, 0));
+        let time_end = TimeInstance::from(DateTime::new_utc(2000, 1, 1, 0, 0, 0));
         let time_step = TimeStep {
             step: 0,
             granularity: TimeGranularity::Years,
@@ -657,7 +938,8 @@ mod tests {
                 data_type: RasterDataType::U8,
                 spatial_reference: SpatialReference::epsg_4326().into(),
                 measurement: Measurement::Unitless,
-                no_data_value: None,
+                time: None,
+                bbox: None,
             },
             params: GdalDatasetParameters {
                 file_path: "path/to/ds".into(),
@@ -674,6 +956,7 @@ mod tests {
                 properties_mapping: None,
                 gdal_open_options: None,
                 gdal_config_options: None,
+                allow_alphaband_as_mask: true,
             },
             start: time_start,
             end: time_end,
@@ -695,8 +978,8 @@ mod tests {
         assert_eq!(
             step_1.time,
             TimeInterval::new(
-                TimeInstance::from(NaiveDate::from_ymd(2000, 1, 1).and_hms(0, 0, 0)),
-                TimeInstance::from(NaiveDate::from_ymd(2000, 1, 1).and_hms(0, 0, 0))
+                TimeInstance::from(DateTime::new_utc(2000, 1, 1, 0, 0, 0)),
+                TimeInstance::from(DateTime::new_utc(2000, 1, 1, 0, 0, 0))
             )
             .unwrap()
         );
@@ -707,8 +990,8 @@ mod tests {
 
     #[tokio::test]
     async fn netcdf_cf_time_steps_before_after() {
-        let time_start = TimeInstance::from(NaiveDate::from_ymd(2010, 1, 1).and_hms(0, 0, 0));
-        let time_end = TimeInstance::from(NaiveDate::from_ymd(2012, 1, 1).and_hms(0, 0, 0));
+        let time_start = TimeInstance::from(DateTime::new_utc(2010, 1, 1, 0, 0, 0));
+        let time_end = TimeInstance::from(DateTime::new_utc(2012, 1, 1, 0, 0, 0));
         let time_step = TimeStep {
             step: 1,
             granularity: TimeGranularity::Years,
@@ -719,7 +1002,8 @@ mod tests {
                 data_type: RasterDataType::U8,
                 spatial_reference: SpatialReference::epsg_4326().into(),
                 measurement: Measurement::Unitless,
-                no_data_value: None,
+                time: None,
+                bbox: None,
             },
             params: GdalDatasetParameters {
                 file_path: "path/to/ds".into(),
@@ -736,6 +1020,7 @@ mod tests {
                 properties_mapping: None,
                 gdal_open_options: None,
                 gdal_config_options: None,
+                allow_alphaband_as_mask: true,
             },
             start: time_start,
             end: time_end,
@@ -746,8 +1031,8 @@ mod tests {
         let query = RasterQueryRectangle {
             spatial_bounds: SpatialPartition2D::new_unchecked((0., 128.).into(), (128., 0.).into()),
             time_interval: TimeInterval::new_unchecked(
-                TimeInstance::from(NaiveDate::from_ymd(2009, 7, 1).and_hms(0, 0, 0)),
-                TimeInstance::from(NaiveDate::from_ymd(2013, 3, 1).and_hms(0, 0, 0)),
+                TimeInstance::from(DateTime::new_utc(2009, 7, 1, 0, 0, 0)),
+                TimeInstance::from(DateTime::new_utc(2013, 3, 1, 0, 0, 0)),
             ),
             spatial_resolution: SpatialResolution::one(),
         };
@@ -760,8 +1045,8 @@ mod tests {
         assert_eq!(
             step_1.time,
             TimeInterval::new(
-                TimeInstance::from(NaiveDate::from_ymd(2009, 1, 1).and_hms(0, 0, 0)),
-                TimeInstance::from(NaiveDate::from_ymd(2010, 1, 1).and_hms(0, 0, 0))
+                TimeInstance::from(DateTime::new_utc(2009, 1, 1, 0, 0, 0)),
+                TimeInstance::from(DateTime::new_utc(2010, 1, 1, 0, 0, 0))
             )
             .unwrap()
         );
@@ -772,8 +1057,8 @@ mod tests {
         assert_eq!(
             step_2.time,
             TimeInterval::new(
-                TimeInstance::from(NaiveDate::from_ymd(2010, 1, 1).and_hms(0, 0, 0)),
-                TimeInstance::from(NaiveDate::from_ymd(2011, 1, 1).and_hms(0, 0, 0))
+                TimeInstance::from(DateTime::new_utc(2010, 1, 1, 0, 0, 0)),
+                TimeInstance::from(DateTime::new_utc(2011, 1, 1, 0, 0, 0))
             )
             .unwrap()
         );
@@ -784,8 +1069,8 @@ mod tests {
         assert_eq!(
             step_3.time,
             TimeInterval::new(
-                TimeInstance::from(NaiveDate::from_ymd(2011, 1, 1).and_hms(0, 0, 0)),
-                TimeInstance::from(NaiveDate::from_ymd(2012, 1, 1).and_hms(0, 0, 0))
+                TimeInstance::from(DateTime::new_utc(2011, 1, 1, 0, 0, 0)),
+                TimeInstance::from(DateTime::new_utc(2012, 1, 1, 0, 0, 0))
             )
             .unwrap()
         );
@@ -796,14 +1081,14 @@ mod tests {
 
     #[test]
     fn netcdf_cf_time_steps() {
-        let time_start = TimeInstance::from(NaiveDate::from_ymd(2010, 1, 1).and_hms(0, 0, 0));
-        let time_end = TimeInstance::from(NaiveDate::from_ymd(2022, 1, 1).and_hms(0, 0, 0));
+        let time_start = TimeInstance::from(DateTime::new_utc(2010, 1, 1, 0, 0, 0));
+        let time_end = TimeInstance::from(DateTime::new_utc(2022, 1, 1, 0, 0, 0));
         let time_step = TimeStep {
             step: 1,
             granularity: TimeGranularity::Years,
         };
         let mut iter = NetCdfCfGdalLoadingInfoPartIterator {
-            time_step_iter: TimeStepIter::new_with_interval_incl_start(
+            time_step_iter: TimeStepIter::new_with_interval(
                 TimeInterval::new(time_start, time_end).unwrap(),
                 time_step,
             )
@@ -823,6 +1108,7 @@ mod tests {
                 properties_mapping: None,
                 gdal_open_options: None,
                 gdal_config_options: None,
+                allow_alphaband_as_mask: true,
             },
             step: time_step,
             dataset_time_start: time_start,
@@ -835,8 +1121,8 @@ mod tests {
         assert_eq!(
             step_1.time,
             TimeInterval::new(
-                TimeInstance::from(NaiveDate::from_ymd(2010, 1, 1).and_hms(0, 0, 0)),
-                TimeInstance::from(NaiveDate::from_ymd(2011, 1, 1).and_hms(0, 0, 0))
+                TimeInstance::from(DateTime::new_utc(2010, 1, 1, 0, 0, 0)),
+                TimeInstance::from(DateTime::new_utc(2011, 1, 1, 0, 0, 0))
             )
             .unwrap()
         );
@@ -847,8 +1133,8 @@ mod tests {
         assert_eq!(
             step_2.time,
             TimeInterval::new(
-                TimeInstance::from(NaiveDate::from_ymd(2011, 1, 1).and_hms(0, 0, 0)),
-                TimeInstance::from(NaiveDate::from_ymd(2012, 1, 1).and_hms(0, 0, 0))
+                TimeInstance::from(DateTime::new_utc(2011, 1, 1, 0, 0, 0)),
+                TimeInstance::from(DateTime::new_utc(2012, 1, 1, 0, 0, 0))
             )
             .unwrap()
         );
@@ -859,8 +1145,8 @@ mod tests {
         assert_eq!(
             step_3.time,
             TimeInterval::new(
-                TimeInstance::from(NaiveDate::from_ymd(2012, 1, 1).and_hms(0, 0, 0)),
-                TimeInstance::from(NaiveDate::from_ymd(2013, 1, 1).and_hms(0, 0, 0))
+                TimeInstance::from(DateTime::new_utc(2012, 1, 1, 0, 0, 0)),
+                TimeInstance::from(DateTime::new_utc(2013, 1, 1, 0, 0, 0))
             )
             .unwrap()
         );
@@ -883,7 +1169,7 @@ mod tests {
                 granularity: TimeGranularity::Years,
             };
             NetCdfCfGdalLoadingInfoPartIterator {
-                time_step_iter: TimeStepIter::new_with_interval_incl_start(
+                time_step_iter: TimeStepIter::new_with_interval(
                     TimeInterval::new_instant(instance).unwrap(),
                     time_step,
                 )
@@ -903,27 +1189,25 @@ mod tests {
                     properties_mapping: None,
                     gdal_open_options: None,
                     gdal_config_options: None,
+                    allow_alphaband_as_mask: true,
                 },
                 step: time_step,
-                dataset_time_start: TimeInstance::from(
-                    NaiveDate::from_ymd(2010, 1, 1).and_hms(0, 0, 0),
-                ),
-                max_t2: TimeInstance::from(NaiveDate::from_ymd(2022, 1, 1).and_hms(0, 0, 0)),
+                dataset_time_start: TimeInstance::from(DateTime::new_utc(2010, 1, 1, 0, 0, 0)),
+                max_t2: TimeInstance::from(DateTime::new_utc(2022, 1, 1, 0, 0, 0)),
                 band_offset: 0,
             }
         }
 
-        let mut iter = iter_for_instance(TimeInstance::from(
-            NaiveDate::from_ymd(2014, 1, 1).and_hms(0, 0, 0),
-        ));
+        let mut iter =
+            iter_for_instance(TimeInstance::from(DateTime::new_utc(2014, 1, 1, 0, 0, 0)));
 
         let step = iter.next().unwrap().unwrap();
 
         assert_eq!(
             step.time,
             TimeInterval::new(
-                TimeInstance::from(NaiveDate::from_ymd(2014, 1, 1).and_hms(0, 0, 0)),
-                TimeInstance::from(NaiveDate::from_ymd(2015, 1, 1).and_hms(0, 0, 0))
+                TimeInstance::from(DateTime::new_utc(2014, 1, 1, 0, 0, 0)),
+                TimeInstance::from(DateTime::new_utc(2015, 1, 1, 0, 0, 0))
             )
             .unwrap()
         );
@@ -931,17 +1215,16 @@ mod tests {
 
         assert!(iter.next().is_none());
 
-        let mut iter = iter_for_instance(TimeInstance::from(
-            NaiveDate::from_ymd(2010, 1, 1).and_hms(0, 0, 0),
-        ));
+        let mut iter =
+            iter_for_instance(TimeInstance::from(DateTime::new_utc(2010, 1, 1, 0, 0, 0)));
 
         let step = iter.next().unwrap().unwrap();
 
         assert_eq!(
             step.time,
             TimeInterval::new(
-                TimeInstance::from(NaiveDate::from_ymd(2010, 1, 1).and_hms(0, 0, 0)),
-                TimeInstance::from(NaiveDate::from_ymd(2011, 1, 1).and_hms(0, 0, 0))
+                TimeInstance::from(DateTime::new_utc(2010, 1, 1, 0, 0, 0)),
+                TimeInstance::from(DateTime::new_utc(2011, 1, 1, 0, 0, 0))
             )
             .unwrap()
         );
@@ -949,17 +1232,16 @@ mod tests {
 
         assert!(iter.next().is_none());
 
-        let mut iter = iter_for_instance(TimeInstance::from(
-            NaiveDate::from_ymd(2021, 1, 1).and_hms(0, 0, 0),
-        ));
+        let mut iter =
+            iter_for_instance(TimeInstance::from(DateTime::new_utc(2021, 1, 1, 0, 0, 0)));
 
         let step = iter.next().unwrap().unwrap();
 
         assert_eq!(
             step.time,
             TimeInterval::new(
-                TimeInstance::from(NaiveDate::from_ymd(2021, 1, 1).and_hms(0, 0, 0)),
-                TimeInstance::from(NaiveDate::from_ymd(2022, 1, 1).and_hms(0, 0, 0))
+                TimeInstance::from(DateTime::new_utc(2021, 1, 1, 0, 0, 0)),
+                TimeInstance::from(DateTime::new_utc(2022, 1, 1, 0, 0, 0))
             )
             .unwrap()
         );
@@ -967,26 +1249,24 @@ mod tests {
 
         assert!(iter.next().is_none());
 
-        let iter = iter_for_instance(TimeInstance::from(
-            NaiveDate::from_ymd(2009, 1, 1).and_hms(0, 0, 0),
-        ))
-        .next()
-        .unwrap()
-        .unwrap();
+        let iter = iter_for_instance(TimeInstance::from(DateTime::new_utc(2009, 1, 1, 0, 0, 0)))
+            .next()
+            .unwrap()
+            .unwrap();
         assert_eq!(
             iter.time,
             TimeInterval::new(
-                TimeInstance::from(NaiveDate::from_ymd(2009, 1, 1).and_hms(0, 0, 0)),
-                TimeInstance::from(NaiveDate::from_ymd(2010, 1, 1).and_hms(0, 0, 0))
+                TimeInstance::from(DateTime::new_utc(2009, 1, 1, 0, 0, 0)),
+                TimeInstance::from(DateTime::new_utc(2010, 1, 1, 0, 0, 0))
             )
             .unwrap(),
         );
         assert!(iter.params.is_none());
 
-        assert!(iter_for_instance(TimeInstance::from(
-            NaiveDate::from_ymd(2022, 1, 1).and_hms(0, 0, 0),
-        ))
-        .next()
-        .is_none());
+        assert!(
+            iter_for_instance(TimeInstance::from(DateTime::new_utc(2022, 1, 1, 0, 0, 0),))
+                .next()
+                .is_none()
+        );
     }
 }

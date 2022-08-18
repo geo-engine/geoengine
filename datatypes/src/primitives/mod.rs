@@ -1,6 +1,7 @@
 mod bounding_box;
 mod circle;
 mod coordinate;
+mod datetime;
 pub(self) mod error;
 mod feature_data;
 mod geometry;
@@ -18,9 +19,10 @@ mod time_instance;
 mod time_interval;
 mod time_step;
 
-pub use bounding_box::BoundingBox2D;
+pub use bounding_box::{bboxes_extent, BoundingBox2D};
 pub use circle::Circle;
 pub use coordinate::Coordinate2D;
+pub use datetime::{DateTime, DateTimeParseFormat, Duration};
 pub(crate) use error::PrimitivesError;
 pub use feature_data::{
     BoolDataRef, CategoryDataRef, DataRef, DateTimeDataRef, FeatureData, FeatureDataRef,
@@ -36,9 +38,11 @@ pub use no_geometry::NoGeometry;
 pub use query_rectangle::{
     PlotQueryRectangle, QueryRectangle, RasterQueryRectangle, VectorQueryRectangle,
 };
-pub use spatial_partition::{AxisAlignedRectangle, SpatialPartition2D, SpatialPartitioned};
+pub use spatial_partition::{
+    partitions_extent, AxisAlignedRectangle, SpatialPartition2D, SpatialPartitioned,
+};
 pub use spatial_resolution::SpatialResolution;
 pub use spatio_temporal_bounded::{SpatialBounded, TemporalBounded};
 pub use time_instance::TimeInstance;
-pub use time_interval::TimeInterval;
+pub use time_interval::{time_interval_extent, TimeInterval};
 pub use time_step::{TimeGranularity, TimeStep, TimeStepIter};

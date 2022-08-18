@@ -11,6 +11,10 @@ list_limit = 20
 [dataset_service]
 list_limit = 20
 
+[task_manager]
+list_default_limit = 10
+list_limit = 20
+
 [postgres]
 host = "localhost"
 port = 5432
@@ -60,18 +64,27 @@ tile_limit = 4
 [dataprovider]
 dataset_defs_path = "./test_data/dataset_defs"
 provider_defs_path = "./test_data/provider_defs"
+layer_defs_path = "./test_data/layer_defs"
+layer_collection_defs_path = "./test_data/layer_collection_defs"
 
 [gdal]
 # TODO: find good default
 # Use 0 for `ALL_CPUS` option or a number >0 for a specific number of threads.
 compression_num_threads = 8
+compression_z_level = 6
+compression_algorithm = "LZW"
 
 [session]
 # Whether to allow requests to `/anonymous` that return a valid session.
 anonymous_access = true
+
 # Specifies a fixed session token. Otherwise, a random token is generated.
 # This can be directly used for Bearer authentication in HTTP requests.
 # fixed_session_token = "18fec623-6600-41af-b82b-24ccf47cb9f9"
+
+# Specifies an admin session token. Otherwise, a random token is generated.
+# This can be directly used for Bearer authentication in specific HTTP requests.
+# admin_session_token = "8aca8875-425a-4ef1-8ee6-cdfc62dd7525"
 
 # Settings for Geo Engine Pro
 [user]

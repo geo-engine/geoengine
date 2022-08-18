@@ -14,7 +14,7 @@ use crate::util::IdResponse;
 
 use actix_web::{web, Responder};
 use futures_util::StreamExt;
-use geoengine_datatypes::dataset::{DatasetId, InternalDatasetId};
+use geoengine_datatypes::dataset::DatasetId;
 use geoengine_datatypes::primitives::Measurement;
 use geoengine_datatypes::raster::RasterDataType;
 use geoengine_datatypes::spatial_reference::SpatialReference;
@@ -192,9 +192,7 @@ where
 /// ```text
 /// {
 ///   "upload": "3086f494-d5a4-4b51-a14b-3b29f8bf7bb0",
-///   "dataset": {
-///     "type": "internal",
-///     "datasetId": "94230f0b-4e8a-4cba-9adc-3ace837fe5d4"
+///   "dataset": "94230f0b-4e8a-4cba-9adc-3ace837fe5d4"
 ///   }
 /// }
 /// ```
@@ -268,7 +266,7 @@ where
 
     let dataset_definition = dataset_definition_from_geotiff(&tiff_path).await?;
 
-    let mut db = ctx.dataset_db_ref_mut().await;
+    let db = ctx.dataset_db_ref();
     let meta = db.wrap_meta_data(dataset_definition.meta_data);
 
     let dataset = db
@@ -297,7 +295,7 @@ async fn dataset_definition_from_geotiff(
 
         Ok(DatasetDefinition {
             properties: AddDataset {
-                id: Some(InternalDatasetId::new().into()),
+                id: Some(DatasetId::new()),
                 name: "ODM Result".to_owned(), // TODO: more info
                 description: "".to_owned(),    // TODO: more info
                 source_operator: "GdalSource".to_owned(),
@@ -311,7 +309,8 @@ async fn dataset_definition_from_geotiff(
                     data_type: RasterDataType::U8,
                     spatial_reference: spatial_reference.into(),
                     measurement: Measurement::Unitless,
-                    no_data_value: None, // TODO
+                    time: None, // TODO: determine time
+                    bbox: None, // TODO: determine bbox
                 },
             }),
         })
@@ -392,7 +391,7 @@ mod tests {
     use std::path::PathBuf;
 
     #[allow(clippy::too_many_lines)]
-    #[tokio::test]
+    #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
     async fn it_works() -> Result<()> {
         let mut test_data = TestDataUploads::default(); // remember created folder and remove them on drop
 
@@ -498,7 +497,7 @@ mod tests {
         let meta: Box<dyn MetaData<GdalLoadingInfo, RasterResultDescriptor, RasterQueryRectangle>> =
             ctx.execution_context(session.clone())
                 .unwrap()
-                .meta_data(&dataset_id)
+                .meta_data(&dataset_id.into())
                 .await
                 .unwrap();
 
@@ -510,7 +509,8 @@ mod tests {
                 spatial_reference: SpatialReference::new(SpatialReferenceAuthority::Epsg, 32630)
                     .into(),
                 measurement: Measurement::Unitless,
-                no_data_value: None,
+                time: None,
+                bbox: None,
             }
         );
 
@@ -559,6 +559,7 @@ mod tests {
                     properties_mapping: None,
                     gdal_open_options: None,
                     gdal_config_options: None,
+                    allow_alphaband_as_mask: true,
                 }),
             }
         );
@@ -566,7 +567,7 @@ mod tests {
         // test if the data can be loaded
         let op = GdalSource {
             params: GdalSourceParameters {
-                dataset: dataset_id,
+                data: dataset_id.into(),
             },
         }
         .boxed();
@@ -608,7 +609,7 @@ mod tests {
                         zip.start_file(name, options).unwrap();
                         let mut f = std::fs::File::open(path)?;
                         f.read_to_end(&mut buffer)?;
-                        zip.write_all(&*buffer)?;
+                        zip.write_all(&buffer)?;
                         buffer.clear();
                     } else if !name.is_empty() {
                         zip.add_directory(name, options).unwrap();

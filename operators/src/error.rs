@@ -1,6 +1,6 @@
 use crate::util::statistics::StatisticsError;
-use chrono::ParseError;
-use geoengine_datatypes::dataset::DatasetId;
+use geoengine_datatypes::dataset::DataId;
+use geoengine_datatypes::error::ErrorSource;
 use geoengine_datatypes::primitives::FeatureDataType;
 use snafu::prelude::*;
 use std::ops::Range;
@@ -148,7 +148,7 @@ pub enum Error {
     TimeIntervalDurationMissing,
 
     TimeParse {
-        source: chrono::format::ParseError,
+        source: Box<dyn ErrorSource>,
     },
 
     TimeInstanceNotDisplayable,
@@ -165,15 +165,15 @@ pub enum Error {
         source: arrow::error::ArrowError,
     },
 
-    NoDatasetWithGivenId {
-        id: DatasetId,
+    NoDataWithGivenId {
+        id: DataId,
     },
 
     RasterRootPathNotConfigured, // TODO: remove when GdalSource uses LoadingInfo
 
-    InvalidDatasetId,
-    DatasetLoadingInfoProviderMismatch,
-    UnknownDatasetId,
+    InvalidDataId,
+    InvalidMetaDataType,
+    UnknownDataId,
 
     // TODO: this error should not be propagated to user
     #[snafu(display("Could not open gdal dataset for file path {:?}", file_path))]
@@ -193,7 +193,7 @@ pub enum Error {
 
     OgrFieldValueIsNotDateTime,
     OgrFieldValueIsNotString,
-    OgrFieldValueIsNotValidForSeconds,
+    OgrFieldValueIsNotValidForTimestamp,
     OgrColumnFieldTypeMismatch {
         expected: String,
         field_value: gdal::vector::FieldValue,
@@ -288,6 +288,16 @@ pub enum Error {
     MockRasterSource {
         source: crate::mock::MockRasterSourceError,
     },
+    #[snafu(context(false))]
+    InterpolationOperator {
+        source: crate::processing::InterpolationError,
+    },
+    #[snafu(context(false))]
+    TimeShift {
+        source: crate::processing::TimeShiftError,
+    },
+
+    AlphaBandAsMaskNotAllowed,
 }
 
 impl From<crate::adapters::SparseTilesFillAdapterError> for Error {
@@ -337,12 +347,6 @@ impl From<serde_json::Error> for Error {
         Self::SerdeJson {
             source: serde_json_error,
         }
-    }
-}
-
-impl From<chrono::format::ParseError> for Error {
-    fn from(source: ParseError) -> Self {
-        Self::TimeParse { source }
     }
 }
 

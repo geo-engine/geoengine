@@ -1,9 +1,6 @@
 {
   "properties": {
-    "id": {
-      "type": "internal",
-      "datasetId": "f47fc99c-c085-4fe3-90f3-120491facb28"
-    },
+    "id": "f47fc99c-c085-4fe3-90f3-120491facb28",
     "name": "Natural Earth 10m Ports 3857",
     "description": "Ports from Natural Earth reprojected to EPSG:3857",
     "sourceOperator": "OgrSource",
@@ -37,11 +34,44 @@
       "dataType": "MultiPoint",
       "spatialReference": "EPSG:3857",
       "columns": {
-        "website": "text",
-        "name": "text",
-        "natlscale": "int",
-        "scalerank": "float",
-        "featurecla": "text"
+        "website": {
+          "dataType": "text",
+          "measurement": {
+            "type": "unitless"
+          }
+        },
+        "name": {
+          "dataType": "text",
+          "measurement": {
+            "type": "unitless"
+          }
+        },
+        "natlscale": {
+          "dataType": "float",
+          "measurement": {
+            "type": "unitless"
+          }
+        },
+        "scalerank": {
+          "dataType": "int",
+          "measurement": {
+            "type": "unitless"
+          }
+        },
+        "featurecla": {
+          "dataType": "text",
+          "measurement": {
+            "type": "unitless"
+          }
+        }
+      },
+      "time": {
+        "start": "-262144-01-01T00:00:00+00:00",
+        "end": "+262143-12-31T23:59:59.999+00:00"
+      },
+      "bbox": {
+        "lowerLeftCoordinate": [-19120007.589356, -7324970.649647],
+        "upperRightCoordinate": [19960627.094946, 14490886.335637]
       }
     }
   }

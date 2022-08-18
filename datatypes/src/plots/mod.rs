@@ -1,4 +1,5 @@
 mod area_line_plot;
+mod bar_chart;
 mod box_plot;
 mod histogram;
 mod histogram2d;
@@ -6,6 +7,7 @@ mod multi_line_plot;
 mod scatter_plot;
 
 pub use area_line_plot::AreaLineChart;
+pub use bar_chart::BarChart;
 pub use box_plot::{BoxPlot, BoxPlotAttribute};
 pub use histogram::{Histogram, HistogramBuilder};
 pub use histogram2d::{Histogram2D, HistogramDimension};
@@ -29,14 +31,14 @@ pub trait Plot {
     // fn to_png(&self, width_px: u16, height_px: u16) -> Vec<u8>;
 }
 
-#[derive(Debug, Clone, Deserialize, PartialEq, Serialize)]
+#[derive(Debug, Clone, Deserialize, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct PlotData {
     pub vega_string: String,
     pub metadata: PlotMetaData,
 }
 
-#[derive(Debug, Clone, Deserialize, PartialEq, Serialize)]
+#[derive(Debug, Clone, Deserialize, PartialEq, Eq, Serialize)]
 #[serde(untagged)]
 pub enum PlotMetaData {
     None,
@@ -46,7 +48,7 @@ pub enum PlotMetaData {
     },
 }
 
-#[derive(Debug, Clone, Deserialize, PartialEq, Serialize)]
+#[derive(Debug, Clone, Deserialize, PartialEq, Eq, Serialize)]
 pub enum PlotOutputFormat {
     JsonPlain,
     JsonVega,

@@ -6,9 +6,8 @@ use crate::contexts::SessionId;
 use crate::error::{self, Result};
 use crate::util::parsing::{deserialize_base_url, deserialize_base_url_option};
 
-use chrono::{DateTime, FixedOffset};
 use config::{Config, Environment, File};
-use geoengine_datatypes::primitives::{TimeInstance, TimeInterval};
+use geoengine_datatypes::primitives::{DateTime, TimeInstance, TimeInterval};
 use geoengine_operators::util::raster_stream_to_geotiff::GdalCompressionNumThreads;
 use lazy_static::lazy_static;
 use serde::Deserialize;
@@ -26,7 +25,6 @@ lazy_static! {
         #[cfg(not(test))]
         let files = ["Settings-default.toml", "Settings.toml"];
 
-        #[allow(clippy::filter_map)]
         let files: Vec<File<_, _>> = files
             .iter()
             .map(|f| dir.join(f))
@@ -207,6 +205,16 @@ impl ConfigElement for DatasetService {
 }
 
 #[derive(Debug, Deserialize)]
+pub struct TaskManager {
+    pub list_limit: u32,
+    pub list_default_limit: u32,
+}
+
+impl ConfigElement for TaskManager {
+    const KEY: &'static str = "task_manager";
+}
+
+#[derive(Debug, Deserialize)]
 pub struct Upload {
     pub path: PathBuf,
 }
@@ -240,12 +248,10 @@ impl OgcDefaultTime {
     pub fn time_interval(&self) -> TimeInterval {
         match self {
             OgcDefaultTime::Now => {
-                TimeInterval::new_instant(TimeInstance::from(chrono::offset::Utc::now()))
-                    .expect("config error")
+                TimeInterval::new_instant(TimeInstance::now()).expect("config error")
             }
             OgcDefaultTime::Value(value) => {
-                TimeInterval::new(value.start.timestamp_millis(), value.end.timestamp_millis())
-                    .expect("config error")
+                TimeInterval::new(&value.start, &value.end).expect("config error")
             }
         }
     }
@@ -257,8 +263,8 @@ pub trait DefaultTime {
 
 #[derive(Debug, Deserialize)]
 pub struct TimeStartEnd {
-    pub start: DateTime<FixedOffset>,
-    pub end: DateTime<FixedOffset>,
+    pub start: DateTime,
+    pub end: DateTime,
 }
 
 #[derive(Debug, Deserialize)]
@@ -312,6 +318,8 @@ impl ConfigElement for Odm {
 pub struct DataProvider {
     pub dataset_defs_path: PathBuf,
     pub provider_defs_path: PathBuf,
+    pub layer_defs_path: PathBuf,
+    pub layer_collection_defs_path: PathBuf,
 }
 
 impl ConfigElement for DataProvider {
@@ -321,6 +329,8 @@ impl ConfigElement for DataProvider {
 #[derive(Debug, Deserialize)]
 pub struct Gdal {
     pub compression_num_threads: GdalCompressionNumThreads,
+    pub compression_z_level: Option<u8>,
+    pub compression_algorithm: Option<Box<str>>,
 }
 
 impl ConfigElement for Gdal {
@@ -331,6 +341,7 @@ impl ConfigElement for Gdal {
 pub struct Session {
     pub anonymous_access: bool,
     pub fixed_session_token: Option<SessionId>,
+    pub admin_session_token: Option<SessionId>,
 }
 
 impl ConfigElement for Session {

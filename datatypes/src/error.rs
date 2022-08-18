@@ -1,4 +1,4 @@
-use snafu::prelude::*;
+use snafu::{prelude::*, AsErrorSource, ErrorCompat, IntoError};
 use std::convert::Infallible;
 
 use crate::{
@@ -10,6 +10,40 @@ use crate::{
     primitives::{Coordinate2D, PrimitivesError, TimeInterval},
     raster::RasterDataType,
 };
+
+pub trait ErrorSource: std::error::Error + Send + Sync + 'static + AsErrorSource {
+    fn boxed(self) -> Box<dyn ErrorSource>
+    where
+        Self: Sized + 'static,
+    {
+        Box::new(self)
+    }
+}
+
+impl ErrorSource for dyn std::error::Error + Send + Sync + 'static {}
+
+impl<T> ErrorSource for T where T: std::error::Error + Send + Sync + 'static {}
+
+pub trait BoxedResultExt<T, E>: Sized {
+    fn boxed_context<C, E2>(self, context: C) -> Result<T, E2>
+    where
+        C: IntoError<E2, Source = Box<dyn ErrorSource>>,
+        E2: std::error::Error + ErrorCompat;
+}
+
+impl<T, E> BoxedResultExt<T, E> for Result<T, E>
+where
+    E: ErrorSource,
+{
+    fn boxed_context<C, E2>(self, context: C) -> Result<T, E2>
+    where
+        C: IntoError<E2, Source = Box<dyn ErrorSource>>,
+        E2: std::error::Error + ErrorCompat,
+    {
+        self.map_err(|e| Box::new(e) as Box<dyn ErrorSource>)
+            .context(context)
+    }
+}
 
 #[derive(Debug, Snafu)]
 #[snafu(visibility(pub(crate)))]
@@ -82,6 +116,12 @@ pub enum Error {
         index: Vec<isize>,
         min_index: Vec<isize>,
         max_index: Vec<isize>,
+    },
+
+    #[snafu(display("{:?} is not a valid index in the bounds 0, {:?} ", index, max_index,))]
+    LinearIndexOutOfBounds {
+        index: usize,
+        max_index: usize,
     },
 
     #[snafu(display("Invalid GridIndex ({:?}), reason: \"{}\".", grid_index, description))]
@@ -246,6 +286,8 @@ pub enum Error {
     MissingRasterProperty {
         property: String,
     },
+
+    TimeStepIterStartMustNotBeBeginOfTime,
 }
 
 impl From<arrow::error::ArrowError> for Error {

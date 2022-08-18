@@ -5,7 +5,7 @@ mod util;
 
 use crate::engine::{
     ExecutionContext, InitializedRasterOperator, InitializedVectorOperator, Operator,
-    SingleVectorMultipleRasterSources, TypedVectorQueryProcessor, VectorOperator,
+    SingleVectorMultipleRasterSources, TypedVectorQueryProcessor, VectorColumnInfo, VectorOperator,
     VectorQueryProcessor, VectorResultDescriptor,
 };
 use crate::error::{self, Error};
@@ -32,7 +32,7 @@ pub type RasterVectorJoin = Operator<RasterVectorJoinParams, SingleVectorMultipl
 const MAX_NUMBER_OF_RASTER_INPUTS: usize = 8;
 
 /// The parameter spec for `RasterVectorJoin`
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct RasterVectorJoinParams {
     /// Each name reflects the output column of the join result.
@@ -49,7 +49,7 @@ pub struct RasterVectorJoinParams {
 /// How to aggregate the values for the geometries inside a feature e.g.
 /// the mean of all the raster values corresponding to the individual
 /// points inside a `MultiPoint` feature.
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Copy)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Copy)]
 #[serde(rename_all = "camelCase")]
 pub enum FeatureAggregationMethod {
     First,
@@ -60,7 +60,7 @@ pub enum FeatureAggregationMethod {
 /// If there are multiple rasters valid during the validity of a feature
 /// the featuer is either split into multiple (None-aggregation) or the
 /// values are aggreagated
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Copy)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Copy)]
 #[serde(rename_all = "camelCase")]
 pub enum TemporalAggregationMethod {
     None,
@@ -151,7 +151,13 @@ impl VectorOperator for RasterVectorJoin {
                     }
                     TemporalAggregationMethod::Mean => FeatureDataType::Float,
                 };
-                columns.insert(new_column_name.clone(), feature_data_type);
+                columns.insert(
+                    new_column_name.clone(),
+                    VectorColumnInfo {
+                        data_type: feature_data_type,
+                        measurement: raster_sources[i].result_descriptor().measurement.clone(),
+                    },
+                );
             }
             columns
         });
@@ -267,16 +273,15 @@ mod tests {
     use crate::mock::MockFeatureCollectionSource;
     use crate::source::{GdalSource, GdalSourceParameters};
     use crate::util::gdal::add_ndvi_dataset;
-    use chrono::NaiveDate;
     use futures::StreamExt;
     use geoengine_datatypes::collections::{FeatureCollectionInfos, MultiPointCollection};
-    use geoengine_datatypes::dataset::DatasetId;
+    use geoengine_datatypes::dataset::DataId;
     use geoengine_datatypes::primitives::{
-        BoundingBox2D, DataRef, FeatureDataRef, MultiPoint, SpatialResolution, TimeInterval,
-        VectorQueryRectangle,
+        BoundingBox2D, DataRef, DateTime, FeatureDataRef, MultiPoint, SpatialResolution,
+        TimeInterval, VectorQueryRectangle,
     };
     use geoengine_datatypes::spatial_reference::SpatialReference;
-    use geoengine_datatypes::util::test::TestDefault;
+    use geoengine_datatypes::util::{gdal::hide_gdal_errors, test::TestDefault};
     use serde_json::json;
 
     #[test]
@@ -305,7 +310,8 @@ mod tests {
                     "type": "MockFeatureCollectionSourceMultiPoint",
                     "params": {
                         "collections": [],
-                        "spatialReference": "EPSG:4326"
+                        "spatialReference": "EPSG:4326",
+                        "measurements": {},
                     }
                 },
                 "rasters": [],
@@ -318,9 +324,9 @@ mod tests {
         assert_eq!(deserialized.params, raster_vector_join.params);
     }
 
-    fn ndvi_source(id: DatasetId) -> Box<dyn RasterOperator> {
+    fn ndvi_source(id: DataId) -> Box<dyn RasterOperator> {
         let gdal_source = GdalSource {
-            params: GdalSourceParameters { dataset: id },
+            params: GdalSourceParameters { data: id },
         };
 
         gdal_source.boxed()
@@ -339,8 +345,8 @@ mod tests {
                 .unwrap(),
                 vec![
                     TimeInterval::new(
-                        NaiveDate::from_ymd(2014, 1, 1).and_hms(0, 0, 0),
-                        NaiveDate::from_ymd(2014, 1, 1).and_hms(0, 0, 0),
+                        DateTime::new_utc(2014, 1, 1, 0, 0, 0),
+                        DateTime::new_utc(2014, 1, 1, 0, 0, 0),
                     )
                     .unwrap();
                     4
@@ -412,8 +418,8 @@ mod tests {
                 .unwrap(),
                 vec![
                     TimeInterval::new(
-                        NaiveDate::from_ymd(2014, 1, 1).and_hms(0, 0, 0),
-                        NaiveDate::from_ymd(2014, 3, 1).and_hms(0, 0, 0),
+                        DateTime::new_utc(2014, 1, 1, 0, 0, 0),
+                        DateTime::new_utc(2014, 3, 1, 0, 0, 0),
                     )
                     .unwrap();
                     4
@@ -482,6 +488,8 @@ mod tests {
     #[tokio::test]
     #[allow(clippy::float_cmp)]
     async fn ndvi_with_default_time() {
+        hide_gdal_errors();
+
         let point_source = MockFeatureCollectionSource::single(
             MultiPointCollection::from_data(
                 MultiPoint::many(vec![
