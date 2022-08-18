@@ -3,18 +3,18 @@ use std::sync::Arc;
 use oauth2::basic::{BasicErrorResponseType, BasicRevocationErrorResponse, BasicTokenType};
 use oauth2::{Scope, StandardRevocableToken};
 use openidconnect::reqwest::async_http_client;
-use openidconnect::{AccessTokenHash, AuthorizationCode, Client, ClientId, ClientSecret, CsrfToken, EmptyAdditionalClaims, EmptyAdditionalProviderMetadata, IssuerUrl, JsonWebKeySet, Nonce, OAuth2TokenResponse, PkceCodeChallenge, PkceCodeVerifier, ProviderMetadata, RedirectUrl, ResponseTypes, StandardErrorResponse, SubjectIdentifier, TokenResponse};
+use openidconnect::{AccessTokenHash, AuthorizationCode, Client, ClientId, ClientSecret, CsrfToken, DiscoveryError, EmptyAdditionalClaims, EmptyAdditionalProviderMetadata, IssuerUrl, JsonWebKeySet, Nonce, OAuth2TokenResponse, PkceCodeChallenge, PkceCodeVerifier, ProviderMetadata, RedirectUrl, ResponseTypes, StandardErrorResponse, SubjectIdentifier, TokenResponse};
 use openidconnect::core::{CoreAuthDisplay, CoreAuthenticationFlow, CoreAuthPrompt, CoreClaimName, CoreClaimType, CoreClient, CoreClientAuthMethod, CoreGenderClaim, CoreGrantType, CoreJsonWebKey, CoreJsonWebKeyType, CoreJsonWebKeyUse, CoreJweContentEncryptionAlgorithm, CoreJweKeyManagementAlgorithm, CoreJwsSigningAlgorithm, CoreProviderMetadata, CoreResponseMode, CoreResponseType, CoreSubjectIdentifierType, CoreTokenIntrospectionResponse, CoreTokenResponse};
 use serde::{Serialize, Deserialize};
-use url::Url;
+use url::{ParseError, Url};
 use geoengine_datatypes::primitives::Duration;
 use crate::contexts::Db;
-use crate::error::Error::{IllegalOIDCLoginRequest, OIDCLoginFailed, IllegalOIDCProviderConfig};
 use crate::pro::users::UserId;
 use crate::error::Result;
-use crate::error::Error;
 use crate::pro::util::config::Oidc;
 use crate::pro::util::tests::{SINGLE_NONCE, SINGLE_STATE};
+use snafu::Snafu;
+use geoengine_datatypes::error::ErrorSource;
 
 pub type DefaultProviderMetadata = ProviderMetadata<
     EmptyAdditionalProviderMetadata,
@@ -101,50 +101,97 @@ pub struct ExternalUserClaims {
     pub real_name: String,
 }
 
+#[derive(Debug, Snafu)]
+#[snafu(visibility(pub(crate)))]
+#[snafu(context(suffix(false)))]
+pub enum OidcError {
+    OidcDisabled,
+    IllegalProviderConfig {
+        source : ParseError,
+    },
+    ProviderDiscoveryError {
+        source : DiscoveryError<oauth2::reqwest::Error<reqwest::Error>>,
+    },
+    #[snafu(display("Illegal OIDC Provider: {}", reason))]
+    IllegalProvider {
+        reason : String,
+    },
+    #[snafu(display("Verification failed: {}", reason))]
+    TokenExchangeError {
+        reason: String,
+        source : Box<dyn ErrorSource>,
+    },
+    #[snafu(display("Response error regarding field: {}, reason: {}", field, reason))]
+    ResponseFieldError {
+        field: String,
+        reason: String,
+    },
+    #[snafu(display("Login failed: {}", reason))]
+    LoginFailed {
+        reason: String,
+    },
+}
+
+impl From<DiscoveryError<oauth2::reqwest::Error<reqwest::Error>>> for OidcError {
+    fn from(source: DiscoveryError<oauth2::reqwest::Error<reqwest::Error>>) -> Self {
+        Self::ProviderDiscoveryError { source }
+    }
+}
+
+impl From<ParseError> for OidcError {
+    fn from(source: ParseError) -> Self {
+        Self::IllegalProviderConfig { source }
+    }
+}
+
 impl OIDCRequestsDB {
 
-    pub async fn get_client(&self) -> Result<DefaultClient, Error>
+    pub async fn get_client(&self) -> Result<DefaultClient, OidcError>
     {
-        let issuer_url = IssuerUrl::new(self.issuer.to_string()).unwrap();
+        let issuer_url = IssuerUrl::new(self.issuer.to_string())?;
 
         //TODO: Provider meta data could be added as a fixed field in the DB, making discovery a one-time process. This would have implications for server startup.
         let provider_metadata : DefaultProviderMetadata = CoreProviderMetadata::discover_async(issuer_url, async_http_client)
-                .await
-                .map_err(|_discovery_error| IllegalOIDCProviderConfig)?;
+                .await?;
 
         let response_types_supported = provider_metadata.response_types_supported();
         if !response_types_supported.contains(&ResponseTypes::new(vec![CoreResponseType::Code])) {
-            return Err(IllegalOIDCProviderConfig);
+            return Err(OidcError::IllegalProvider { reason: "provider does not support authorization code flow".to_string() });
         }
 
         let signing_alg = provider_metadata.id_token_signing_alg_values_supported();
         if !signing_alg.contains(&CoreJwsSigningAlgorithm::RsaSsaPssSha256) {
-            return Err(IllegalOIDCProviderConfig);
+            return Err(OidcError::IllegalProvider { reason: "provider does not support RSA signing".to_string() });
         }
 
-        let scopes_supported = provider_metadata.scopes_supported().ok_or(IllegalOIDCProviderConfig)?;
+        let scopes_supported = provider_metadata.scopes_supported()
+            .ok_or(OidcError::IllegalProvider { reason: "provider does not support any scopes".to_string() })?;
         for scope in &self.scopes {
             if !scopes_supported.contains(&Scope::new(scope.clone())) {
-                return Err(IllegalOIDCProviderConfig);
+                return Err(OidcError::IllegalProvider { reason: format!("provider does not support requested scope: '{}'", scope) });
             }
         };
 
-        let claims_supported = provider_metadata.claims_supported().ok_or(IllegalOIDCProviderConfig)?;
-        if !claims_supported.contains(&CoreClaimName::new("email".to_string())) ||
-            !claims_supported.contains(&CoreClaimName::new("name".to_string())) {
-            return Err(IllegalOIDCProviderConfig);
+        let claims_supported = provider_metadata.claims_supported()
+            .ok_or(OidcError::IllegalProvider { reason: "provider does not support any claims".to_string() })?;
+        if !claims_supported.contains(&CoreClaimName::new("email".to_string())) {
+            return Err(OidcError::IllegalProvider { reason: "provider does not support required claim: email".to_string() });
+        }
+        if !claims_supported.contains(&CoreClaimName::new("name".to_string())) {
+            return Err(OidcError::IllegalProvider { reason: "provider does not support required claim: name".to_string() });
         }
 
         let result = CoreClient::from_provider_metadata(
             provider_metadata,
             ClientId::new(self.client_id.to_string()),
             Some(ClientSecret::new(self.client_secret.to_string()))) //TODO: Think about client secret
-            .set_redirect_uri(RedirectUrl::new(self.redirect_uri.to_string()).map_err(|_parser_error| IllegalOIDCProviderConfig)?);
+            .set_redirect_uri(RedirectUrl::new(self.redirect_uri.to_string())?
+            );
 
         Ok(result)
     }
 
-    pub async fn generate_request(&self, client : DefaultClient) -> Result<AuthCodeRequestURL, Error> {
+    pub async fn generate_request(&self, client : DefaultClient) -> Result<AuthCodeRequestURL, OidcError> {
         let mut user_db = self.users.write().await;
 
         let mut auth_request = client
@@ -167,8 +214,8 @@ impl OIDCRequestsDB {
         //TODO: Alternative for error would be a loop, but that would make a theoretical endless loop possible.
         //TODO: There might be the possibility of guessing states here, which might be a security flaw, but I don't see it.
         if user_db.contains_key(csrf_token.secret()) {
-            return Err(OIDCLoginFailed {
-                reason: "Generated duplicate state".to_string()
+            return Err(OidcError::LoginFailed {
+                reason: "Failed to generate unique state".to_string()
             });
         }
 
@@ -180,40 +227,52 @@ impl OIDCRequestsDB {
         Ok(AuthCodeRequestURL{url : auth_url})
     }
 
-    pub async fn resolve_request(&self, client: DefaultClient, auth_code_response: AuthCodeResponse) -> Result<(ExternalUserClaims, Duration), Error> {
+    pub async fn resolve_request(&self, client: DefaultClient, auth_code_response: AuthCodeResponse) -> Result<(ExternalUserClaims, Duration), OidcError> {
         let mut user_db = self.users.write().await;
-        let pending_request = user_db.remove(&auth_code_response.state).ok_or(IllegalOIDCLoginRequest)?;
+        let pending_request = user_db.remove(&auth_code_response.state).ok_or(
+            OidcError::LoginFailed {
+                reason: "Request unknown".to_string()
+            }
+        )?;
 
         let token_response = client.exchange_code(AuthorizationCode::new(auth_code_response.code))
             .set_pkce_verifier(pending_request.code_verifier)
             .request_async(async_http_client)
             .await
-            .map_err(|_token_error| OIDCLoginFailed {
-                reason: "Failed code to token exchange".to_string()
+            .map_err(|token_error| OidcError::TokenExchangeError {
+                reason: "Request for code to token exchange failed".to_string(),
+                source: Box::new(token_error)
             })?;
 
         let id_token = token_response
             .id_token()
-            .ok_or_else(|| OIDCLoginFailed {
-                reason: "No id token returned".to_string()
+            .ok_or_else(|| OidcError::ResponseFieldError {
+                field: "id token".to_string(),
+                reason: "missing".to_string()
             })?;
 
         let claims = id_token.claims(&client.id_token_verifier(), &pending_request.nonce)
-            .map_err(|_claims_error| OIDCLoginFailed {
-                reason: "Failed to verify claims".to_string()
+            .map_err(|claims_error| OidcError::TokenExchangeError {
+                reason: "Failed to verify claims".to_string(),
+                source: Box::new(claims_error)
             })?;
 
         if let Some(expected_access_token_hash) = claims.access_token_hash() {
             let actual_access_token_hash = AccessTokenHash::from_token(
                 token_response.access_token(),
                 &id_token.signing_alg()
-                    .map_err(|_signing_error| OIDCLoginFailed { reason: "Unsupported Signing Algorithm".to_string()})?
-            ).map_err(|_signing_error| OIDCLoginFailed {
-                reason: "Unsupported Signing Algorithm".to_string()
+                    .map_err(|signing_error| OidcError::TokenExchangeError {
+                        reason: "Unsupported Signing Algorithm".to_string(),
+                        source: Box::new(signing_error)
+                    })?
+            ).map_err(|signing_error| OidcError::TokenExchangeError {
+                reason: "Unsupported Signing Algorithm".to_string(),
+                source: Box::new(signing_error)
             })?;
             if actual_access_token_hash != *expected_access_token_hash {
-                return Err(OIDCLoginFailed {
-                    reason: "Illegal access token".to_string()
+                return Err(OidcError::ResponseFieldError {
+                    field: "access token".to_string(),
+                    reason: "wrong hash".to_string()
                 });
             }
         }
@@ -222,17 +281,26 @@ impl OIDCRequestsDB {
         let user = ExternalUserClaims {
             external_id: claims.subject().clone(),
             email: match claims.email() {
-                None => {Err(OIDCLoginFailed { reason: "Missing e-mail claim".to_string()})}
+                None => {Err(OidcError::ResponseFieldError {
+                    field: "e-mail".to_string(),
+                    reason: "missing".to_string()
+                })}
                 Some(x) => {Ok(x.to_string())}
             }?,
             real_name: match claims.name() {
-                None => {Err(OIDCLoginFailed { reason: "Missing name claim".to_string()})}
+                None => {Err(OidcError::ResponseFieldError {
+                    field: "name".to_string(),
+                    reason: "missing".to_string()
+                })}
                 Some(x) => {Ok(x.get(None).unwrap().to_string())} //TODO: There is no Local logic.
             }?
         };
 
         let validity = match token_response.expires_in(){
-            None => {Err(OIDCLoginFailed { reason: "No Duration in token".to_string() })}
+            None => {Err(OidcError::ResponseFieldError {
+                field: "duration".to_string(),
+                reason: "missing".to_string()
+            })}
             Some(x) => {Ok(x)}
         }?;
 
@@ -296,7 +364,8 @@ mod tests {
     use openidconnect::core::{CoreClient, CoreIdTokenFields, CoreTokenResponse, CoreTokenType};
     use openidconnect::Nonce;
     use crate::error::{Result, Error};
-    use crate::pro::users::oidc::{AuthCodeResponse, DefaultClient, ExternalUserClaims, OIDCRequestsDB};
+    use crate::pro::users::oidc::{AuthCodeResponse, DefaultClient, OIDCRequestsDB};
+    use crate::pro::users::oidc::OidcError::{IllegalProvider, LoginFailed, ProviderDiscoveryError, ResponseFieldError, TokenExchangeError};
     use crate::pro::util::tests::{mock_jwks, mock_provider_metadata, mock_token_response, MockTokenConfig, SINGLE_NONCE, SINGLE_STATE};
 
     const ALTERNATIVE_ACCESS_TOKEN: &str = "DUMMY_ACCESS_TOKEN_2";
@@ -364,14 +433,6 @@ mod tests {
         }
     }
 
-    //TODO: What is the Rust way for expected Exceptions/Errors?
-    fn match_login_failed_reason(response: Result<(ExternalUserClaims, geoengine_datatypes::primitives::Duration), Error>, expected_reason: &str) {
-        match response {
-            Err(Error::OIDCLoginFailed { reason } ) => {assert_eq!(reason, expected_reason)}
-            _ => {panic!("Wrong Error Type")}
-        }
-    }
-
     #[tokio::test]
     async fn get_client_success() {
         let request_db = single_state_nonce_mockito_request_db();
@@ -413,7 +474,7 @@ mod tests {
 
         let client = request_db.get_client().await;
 
-        assert!(client.is_err());
+        assert!(matches!(client,  Err(ProviderDiscoveryError{ source: _ })));
     }
 
     #[tokio::test]
@@ -439,7 +500,7 @@ mod tests {
 
         let client = request_db.get_client().await;
 
-        assert!(client.is_err());
+        assert!(matches!(client, Err(IllegalProvider{reason}) if reason == "provider does not support authorization code flow"));
     }
 
     #[tokio::test]
@@ -465,7 +526,7 @@ mod tests {
 
         let client = request_db.get_client().await;
 
-        assert!(client.is_err());
+        assert!(matches!(client, Err(IllegalProvider{reason}) if reason == "provider does not support RSA signing"));
     }
 
     #[tokio::test]
@@ -491,7 +552,7 @@ mod tests {
 
         let client = request_db.get_client().await;
 
-        assert!(client.is_err());
+        assert!(matches!(client, Err(IllegalProvider{reason}) if reason == "provider does not support any scopes"));
     }
 
     #[tokio::test]
@@ -517,8 +578,10 @@ mod tests {
 
         let client = request_db.get_client().await;
 
-        assert!(client.is_err());
+        assert!(matches!(client, Err(IllegalProvider{reason}) if reason == "provider does not support any claims"));
     }
+
+    //TODO: Did not test illegal config (e.g., provider url cannot be parsed).
 
     #[tokio::test]
     async fn generate_request_success() {
@@ -570,7 +633,7 @@ mod tests {
 
         let second_request = request_db.generate_request(client).await;
 
-        assert!(second_request.is_err());
+        assert!(matches!(second_request, Err(LoginFailed{reason}) if reason == "Failed to generate unique state"));
     }
 
     #[tokio::test]
@@ -602,7 +665,7 @@ mod tests {
         };
 
         let response = request_db.resolve_request(client, auth_code_response).await;
-        assert!(response.is_err());
+        assert!(matches!(response, Err(LoginFailed{reason}) if reason == "Request unknown"));
     }
 
     #[tokio::test]
@@ -619,11 +682,10 @@ mod tests {
             code: "".to_string(),
             state: "Illegal Request State".to_string()
         };
+
         let response = request_db.resolve_request(client, auth_code_response).await;
-
-        assert!(response.is_err());
+        assert!(matches!(response, Err(LoginFailed{reason}) if reason == "Request unknown"));
     }
-
 
     #[tokio::test]
     async fn resolve_request_no_id_token() {
@@ -652,10 +714,8 @@ mod tests {
         let auth_code_response = auth_code_response_empty_with_valid_state();
         let response = request_db.resolve_request(client, auth_code_response).await;
 
-        assert!(response.is_err());
-        match_login_failed_reason(response, "No id token returned");
+        assert!(matches!(response, Err(ResponseFieldError{field, reason}) if field == "id token" && reason == "missing"));
     }
-
 
     #[tokio::test]
     async fn resolve_request_no_nonce() {
@@ -672,8 +732,7 @@ mod tests {
         let auth_code_response = auth_code_response_empty_with_valid_state();
         let response = request_db.resolve_request(client, auth_code_response).await;
 
-        assert!(response.is_err());
-        match_login_failed_reason(response, "Failed to verify claims");
+        assert!(matches!(response, Err(TokenExchangeError{reason, source: _}) if reason == "Failed to verify claims"));
     }
 
     #[tokio::test]
@@ -691,10 +750,8 @@ mod tests {
         let auth_code_response = auth_code_response_empty_with_valid_state();
         let response = request_db.resolve_request(client, auth_code_response).await;
 
-        assert!(response.is_err());
-        match_login_failed_reason(response, "Failed to verify claims");
+        assert!(matches!(response, Err(TokenExchangeError{reason, source: _}) if reason == "Failed to verify claims"));
     }
-
 
     #[tokio::test]
     async fn resolve_request_no_email() {
@@ -711,10 +768,8 @@ mod tests {
         let auth_code_response = auth_code_response_empty_with_valid_state();
         let response = request_db.resolve_request(client, auth_code_response).await;
 
-        assert!(response.is_err());
-        match_login_failed_reason(response, "Missing e-mail claim");
+        assert!(matches!(response, Err(ResponseFieldError{field, reason}) if field == "e-mail" && reason == "missing"));
     }
-
 
     #[tokio::test]
     async fn resolve_request_no_name() {
@@ -731,8 +786,7 @@ mod tests {
         let auth_code_response = auth_code_response_empty_with_valid_state();
         let response = request_db.resolve_request(client, auth_code_response).await;
 
-        assert!(response.is_err());
-        match_login_failed_reason(response, "Missing name claim");
+        assert!(matches!(response, Err(ResponseFieldError{field, reason}) if field == "name" && reason == "missing"));
     }
 
     #[tokio::test]
@@ -750,8 +804,7 @@ mod tests {
         let auth_code_response = auth_code_response_empty_with_valid_state();
         let response = request_db.resolve_request(client, auth_code_response).await;
 
-        assert!(response.is_err());
-        match_login_failed_reason(response, "No Duration in token");
+        assert!(matches!(response, Err(ResponseFieldError{field, reason}) if field == "duration" && reason == "missing"));
     }
 
     #[tokio::test]
@@ -772,8 +825,7 @@ mod tests {
         let auth_code_response = auth_code_response_empty_with_valid_state();
         let response = request_db.resolve_request(client, auth_code_response).await;
 
-        assert!(response.is_err());
-        match_login_failed_reason(response, "Illegal access token");
+        assert!(matches!(response, Err(ResponseFieldError{field, reason}) if field == "access token" && reason == "wrong hash"));
     }
 
     #[tokio::test]
@@ -795,7 +847,7 @@ mod tests {
         let auth_code_response = auth_code_response_empty_with_valid_state();
         let response = request_db.resolve_request(client, auth_code_response).await;
 
-        assert!(response.is_err());
+        assert!(matches!(response, Err(LoginFailed{reason}) if reason == "Request unknown"));
     }
 
     #[tokio::test]
@@ -880,8 +932,7 @@ mod tests {
         let auth_code_response = auth_code_response_empty_with_valid_state();
         let response = request_db.resolve_request(client, auth_code_response).await;
 
-        assert!(response.is_err());
-        match_login_failed_reason(response, "Failed code to token exchange");
+        assert!(matches!(response, Err(TokenExchangeError{reason, source: _}) if reason == "Request for code to token exchange failed"));
     }
 
     #[tokio::test]
@@ -905,13 +956,12 @@ mod tests {
         let auth_code_response = auth_code_response_empty_with_valid_state();
         let response_bad = request_db.resolve_request(client.clone(), auth_code_response).await;
 
-        assert!(response_bad.is_err());
-        match_login_failed_reason(response_bad, "Failed code to token exchange");
+        assert!(matches!(response_bad, Err(TokenExchangeError{reason, source: _}) if reason == "Request for code to token exchange failed"));
 
         let auth_code_response = auth_code_response_empty_with_valid_state();
         let response = request_db.resolve_request(client, auth_code_response).await;
 
-        assert!(response.is_err());
+        assert!(matches!(response, Err(LoginFailed{reason}) if reason == "Request unknown"));
     }
 
     //TODO: Did not test code and PKCE verifier.

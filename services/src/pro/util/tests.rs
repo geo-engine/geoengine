@@ -23,7 +23,6 @@ use oauth2::basic::BasicTokenType;
 use openidconnect::core::{CoreClaimName, CoreIdToken, CoreIdTokenClaims, CoreIdTokenFields, CoreJsonWebKey, CoreJwsSigningAlgorithm, CoreProviderMetadata, CoreResponseType, CoreRsaPrivateSigningKey, CoreTokenResponse, CoreTokenType};
 use openidconnect::{Audience, EmptyAdditionalClaims, EmptyAdditionalProviderMetadata, EndUserEmail, EndUserName, IssuerUrl, JsonWebKeySet, JsonWebKeySetUrl, LocalizedClaim, Nonce, ResponseTypes, StandardClaims, SubjectIdentifier};
 use crate::error::Error;
-use crate::error::Error::OIDCLoginFailed;
 use crate::pro::users::oidc::{DefaultJsonWebKeySet, DefaultProviderMetadata};
 
 #[allow(clippy::missing_panics_doc)]
@@ -263,11 +262,11 @@ pub fn mock_token_response(mock_token_config: MockTokenConfig) -> Result<Standar
         &CoreRsaPrivateSigningKey::from_pem(
             TEST_PRIVATE_KEY,
             None
-        ).expect("Invalid RSA private key"),
+        ).expect("Cannot create mock of RSA private key"),
         CoreJwsSigningAlgorithm::RsaSsaPkcs1V15Sha256,
         Some(&AccessToken::new(mock_token_config.access_for_id.to_string())),
         None,
-    ).map_err(|_err| OIDCLoginFailed {reason : "Cannot create default ID Token".into()})?; //TODO: Error should never happen.
+    ).expect("Cannot create mock of ID Token");
 
     let mut result = CoreTokenResponse::new(
         AccessToken::new(mock_token_config.access.to_string()),

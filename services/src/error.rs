@@ -355,15 +355,10 @@ pub enum Error {
     },
 
     #[cfg(feature = "pro")]
-    OIDCDisabled,
-    #[cfg(feature = "pro")]
-    IllegalOIDCProviderConfig,
-    #[cfg(feature = "pro")]
-    IllegalOIDCLoginRequest,
-    #[cfg(feature = "pro")]
-    OIDCLoginFailed {
-        reason: String,
-    },
+    #[snafu(context(false))]
+    OidcError {
+        source: crate::pro::users::oidc::OidcError,
+    }
 }
 
 impl actix_web::error::ResponseError for Error {

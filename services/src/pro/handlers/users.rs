@@ -1,5 +1,5 @@
 use crate::error;
-use crate::error::{Error, Result};
+use crate::error::Result;
 use crate::handlers;
 use crate::pro::contexts::ProContext;
 use crate::pro::users::UserCredentials;
@@ -238,17 +238,16 @@ pub(crate) async fn oidc_init<C: ProContext>(
 ) -> Result<impl Responder> {
     ensure!(
         config::get_config_element::<crate::pro::util::config::Oidc>()?.enabled,
-        error::OIDCDisabled
+        crate::pro::users::oidc::OidcDisabled
     );
     let request_db = ctx.oidc_request_db();
     let oidc_client = request_db.get_client()
-        .await
-        .map_err(|_err| Error::IllegalOIDCLoginRequest)?;
+        .await?;
 
     let result = ctx.oidc_request_db()
         .generate_request(oidc_client)
-        .await
-        .map_err(|_err| Error::IllegalOIDCLoginRequest)?;
+        .await?;
+
     Ok(web::Json(result))
 }
 
@@ -258,13 +257,12 @@ pub(crate) async fn oidc_login<C: ProContext>(
 ) -> Result<impl Responder> {
     ensure!(
         config::get_config_element::<crate::pro::util::config::Oidc>()?.enabled,
-        error::OIDCDisabled
+        crate::pro::users::oidc::OidcDisabled
     );
 
     let request_db = ctx.oidc_request_db();
     let oidc_client = request_db.get_client()
-        .await
-        .map_err(|_err| Error::IllegalOIDCLoginRequest)?;
+        .await?;
 
     let (user, duration) = request_db
         .resolve_request(oidc_client, response.into_inner())
@@ -874,8 +872,8 @@ mod tests {
         ErrorResponse::assert(
             res,
             400,
-            "IllegalOIDCLoginRequest",
-            "IllegalOIDCLoginRequest",
+            "OidcError",
+            "OidcError: ProviderDiscoveryError: Server returned invalid response: HTTP status code 404 Not Found",
         ).await;
     }
 
@@ -950,8 +948,8 @@ mod tests {
         ErrorResponse::assert(
             res,
             400,
-            "IllegalOIDCLoginRequest",
-            "IllegalOIDCLoginRequest",
+            "OidcError",
+            "OidcError: Login failed: Request unknown",
         ).await;
     }
 
@@ -989,8 +987,8 @@ mod tests {
         ErrorResponse::assert(
             res,
             400,
-            "OIDCLoginFailed",
-            "OIDCLoginFailed",
+            "OidcError",
+            "OidcError: Verification failed: Request for code to token exchange failed",
         ).await;
     }
 
