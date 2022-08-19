@@ -143,10 +143,12 @@ pub fn create_overviews(
     let file_path = provider_path.join(dataset_path);
     let out_folder_path = overview_path.join(dataset_path);
 
+    // TODO: refactor with new method from Michael
     // check that file does not "escape" the provider path
     if let Err(source) = file_path.strip_prefix(provider_path) {
         return Err(NetCdfCf4DProviderError::DatasetIsNotInProviderPath { source });
     }
+    // TODO: refactor with new method from Michael
     // check that file does not "escape" the overview path
     if let Err(source) = out_folder_path.strip_prefix(overview_path) {
         return Err(NetCdfCf4DProviderError::DatasetIsNotInProviderPath { source });
@@ -162,6 +164,13 @@ pub fn create_overviews(
         },
     )
     .boxed_context(error::CannotOpenNetCdfDataset)?;
+
+    if !out_folder_path.exists() {
+        fs::create_dir_all(&out_folder_path).boxed_context(error::InvalidDirectory)?;
+    }
+
+    // must have this flag before any write operations
+    let in_progress_flag = InProgressFlag::create(&out_folder_path)?;
 
     let root_group = MdGroup::from_dataset(&dataset)?;
 
@@ -183,7 +192,70 @@ pub fn create_overviews(
         }
     }
 
+    in_progress_flag.remove()?;
+
     Ok(OverviewGeneration::Created)
+}
+
+/// A flag that indicates on-going process of an overview folder.
+///
+/// Cleans up the folder if dropped.
+pub struct InProgressFlag {
+    path: PathBuf,
+}
+
+impl InProgressFlag {
+    const IN_PROGRESS_FLAG_NAME: &'static str = ".in_progress";
+
+    fn create(folder: &Path) -> Result<Self> {
+        if !folder.is_dir() {
+            return Err(NetCdfCf4DProviderError::InvalidDirectory {
+                source: Box::new(std::io::Error::new(
+                    std::io::ErrorKind::NotFound, // TODO: use `NotADirectory` if stable
+                    folder.to_string_lossy().to_string(),
+                )),
+            });
+        }
+        let this = Self {
+            path: folder.join(Self::IN_PROGRESS_FLAG_NAME),
+        };
+
+        std::fs::OpenOptions::new()
+            .write(true)
+            .create_new(true)
+            .open(&this.path)
+            .boxed_context(error::CannotCreateInProgressFlag)?;
+
+        Ok(this)
+    }
+
+    fn remove(self) -> Result<()> {
+        fs::remove_file(&self.path).boxed_context(error::CannotRemoveInProgressFlag)?;
+        Ok(())
+    }
+
+    pub fn is_in_progress(folder: &Path) -> bool {
+        if !folder.is_dir() {
+            return false;
+        }
+
+        let path = folder.join(Self::IN_PROGRESS_FLAG_NAME);
+
+        path.exists()
+    }
+}
+
+impl Drop for InProgressFlag {
+    fn drop(&mut self) {
+        if !self.path.exists() {
+            return;
+        }
+
+        if let Err(e) = fs::remove_file(&self.path).boxed_context(error::CannotRemoveInProgressFlag)
+        {
+            log::error!("Cannot remove in progress flag: {}", e);
+        }
+    }
 }
 
 fn store_metadata(
@@ -375,6 +447,28 @@ fn generate_loading_info(
             })
         }
     })
+}
+
+pub fn remove_overviews(dataset_path: &Path, overview_path: &Path, force: bool) -> Result<()> {
+    let out_folder_path = overview_path.join(dataset_path);
+
+    // TODO: refactor with new method from Michael
+    // check that file does not "escape" the overview path
+    if let Err(source) = out_folder_path.strip_prefix(overview_path) {
+        return Err(NetCdfCf4DProviderError::DatasetIsNotInProviderPath { source });
+    }
+
+    if !out_folder_path.exists() {
+        return Ok(());
+    }
+
+    if !force && InProgressFlag::is_in_progress(&out_folder_path) {
+        return Err(NetCdfCf4DProviderError::CannotRemoveOverviewsWhileCreationIsInProgress);
+    }
+
+    fs::remove_dir_all(&out_folder_path).boxed_context(error::CannotRemoveOverviews)?;
+
+    Ok(())
 }
 
 #[cfg(test)]
@@ -654,5 +748,32 @@ mod tests {
 
         assert!(dataset_folder.join("metric_2/ebv_cube.tiff").exists());
         assert!(dataset_folder.join("metric_2/ebv_cube.json").exists());
+    }
+
+    #[test]
+    fn test_remove_overviews() {
+        fn is_empty(directory: &Path) -> bool {
+            directory.read_dir().unwrap().next().is_none()
+        }
+
+        hide_gdal_errors();
+
+        let overview_folder = tempfile::tempdir().unwrap();
+
+        let dataset_path = Path::new("dataset_m.nc");
+
+        create_overviews(
+            test_data!("netcdf4d"),
+            dataset_path,
+            overview_folder.path(),
+            None,
+        )
+        .unwrap();
+
+        assert!(!is_empty(overview_folder.path()));
+
+        remove_overviews(dataset_path, overview_folder.path(), false).unwrap();
+
+        assert!(is_empty(overview_folder.path()));
     }
 }
