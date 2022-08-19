@@ -143,12 +143,6 @@ pub fn create_overviews(
     let file_path = provider_path.join(dataset_path);
     let out_folder_path = overview_path.join(dataset_path);
 
-    if !out_folder_path.exists() {
-        fs::create_dir_all(&out_folder_path).boxed_context(error::InvalidDirectory)?;
-    }
-
-    let in_progress_flag = InProgressFlag::create(&out_folder_path)?;
-
     // TODO: refactor with new method from Michael
     // check that file does not "escape" the provider path
     if let Err(source) = file_path.strip_prefix(provider_path) {
@@ -170,6 +164,13 @@ pub fn create_overviews(
         },
     )
     .boxed_context(error::CannotOpenNetCdfDataset)?;
+
+    if !out_folder_path.exists() {
+        fs::create_dir_all(&out_folder_path).boxed_context(error::InvalidDirectory)?;
+    }
+
+    // must have this flag before any write operations
+    let in_progress_flag = InProgressFlag::create(&out_folder_path)?;
 
     let root_group = MdGroup::from_dataset(&dataset)?;
 
@@ -466,17 +467,6 @@ pub fn remove_overviews(dataset_path: &Path, overview_path: &Path, force: bool) 
     }
 
     fs::remove_dir_all(&out_folder_path).boxed_context(error::CannotRemoveOverviews)?;
-
-    // traverse up and remove folder if empty
-
-    let mut dataset_path = dataset_path.to_path_buf();
-    while dataset_path.pop() && /* don't delete `/` */ dataset_path.parent().is_some() {
-        let partial_folder_path = overview_path.join(&dataset_path);
-
-        if fs::remove_dir(partial_folder_path).is_err() {
-            break; // stop traversing up if folder is not empty
-        }
-    }
 
     Ok(())
 }
