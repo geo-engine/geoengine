@@ -440,12 +440,12 @@ impl ArrowTyped for TimeInterval {
             let ints_a: &Int64Array = downcast_array(&ints_a_ref);
             let ints_b: &Int64Array = downcast_array(&ints_b_ref);
 
-            int_builder.append_slice(ints_a.values())?;
-            int_builder.append_slice(ints_b.values())?;
+            int_builder.append_slice(ints_a.values());
+            int_builder.append_slice(ints_b.values());
         }
 
         for _ in 0..new_length {
-            new_time_intervals.append(true)?;
+            new_time_intervals.append(true);
         }
 
         Ok(new_time_intervals.finish())
@@ -470,9 +470,9 @@ impl ArrowTyped for TimeInterval {
             let old_timestamps: &Int64Array = downcast_array(&old_timestamps_ref);
 
             let date_builder = new_time_intervals.values();
-            date_builder.append_slice(old_timestamps.values())?;
+            date_builder.append_slice(old_timestamps.values());
 
-            new_time_intervals.append(true)?;
+            new_time_intervals.append(true);
         }
 
         Ok(new_time_intervals.finish())
@@ -487,9 +487,9 @@ impl ArrowTyped for TimeInterval {
         let mut builder = Self::arrow_builder(time_intervals.len());
         for time_interval in time_intervals {
             let date_builder = builder.values();
-            date_builder.append_value(time_interval.start().into())?;
-            date_builder.append_value(time_interval.end().into())?;
-            builder.append(true)?;
+            date_builder.append_value(time_interval.start().into());
+            date_builder.append_value(time_interval.end().into());
+            builder.append(true);
         }
 
         Ok(builder.finish())

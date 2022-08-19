@@ -52,7 +52,7 @@ where
         }
     }
 
-    async fn process_collections<'a>(
+    fn process_collections<'a>(
         collection: BoxStream<'a, Result<FeatureCollection<G>>>,
         raster_processor: &'a TypedRasterQueryProcessor,
         new_column_name: &'a str,
@@ -258,6 +258,7 @@ where
         for (raster_processor, new_column_name) in
             self.raster_processors.iter().zip(&self.column_names)
         {
+            // TODO: spawn task
             stream = Self::process_collections(
                 stream,
                 raster_processor,
@@ -265,8 +266,7 @@ where
                 query,
                 ctx,
                 self.aggregation_method,
-            )
-            .await;
+            );
         }
 
         Ok(stream)

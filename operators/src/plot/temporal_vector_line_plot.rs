@@ -268,6 +268,7 @@ mod tests {
             BoundingBox2D, DateTime, FeatureData, MultiPoint, SpatialResolution, TimeInterval,
         },
     };
+    use serde_json::{json, Value};
 
     use crate::{
         engine::{ChunkByteSize, MockExecutionContext, MockQueryContext, VectorOperator},
@@ -275,6 +276,7 @@ mod tests {
     };
 
     #[tokio::test]
+    #[allow(clippy::too_many_lines)]
     async fn plot() {
         let point_source = MockFeatureCollectionSource::single(
             MultiPointCollection::from_data(
@@ -340,16 +342,59 @@ mod tests {
             .await
             .unwrap();
 
+        assert!(matches!(result.metadata, PlotMetaData::None));
+
+        let vega_json: Value = serde_json::from_str(&result.vega_string).unwrap();
+
         assert_eq!(
-            result,
-            PlotData {
-                vega_string: r#"{"$schema":"https://vega.github.io/schema/vega-lite/v4.17.0.json","data":{"values":[{"x":"2014-01-01T00:00:00+00:00","y":0.0,"series":"S0"},{"x":"2014-02-01T00:00:00+00:00","y":1.0,"series":"S0"},{"x":"2014-01-01T00:00:00+00:00","y":2.0,"series":"S1"}]},"description":"Multi Line Chart","encoding":{"x":{"field":"x","title":"Time","type":"temporal"},"y":{"field":"y","title":"","type":"quantitative"},"color":{"field":"series","scale":{"scheme":"category20"}}},"mark":{"type":"line","line":true,"point":true}}"#.to_owned(),
-                metadata: PlotMetaData::None,
-            }
+            vega_json,
+            json!({
+                "$schema": "https://vega.github.io/schema/vega-lite/v4.17.0.json",
+                "data": {
+                    "values": [{
+                        "x": "2014-01-01T00:00:00+00:00",
+                        "y": 0.0,
+                        "series": "S0"
+                    }, {
+                        "x": "2014-02-01T00:00:00+00:00",
+                        "y": 1.0,
+                        "series": "S0"
+                    }, {
+                        "x": "2014-01-01T00:00:00+00:00",
+                        "y": 2.0,
+                        "series": "S1"
+                    }]
+                },
+                "description": "Multi Line Chart",
+                "encoding": {
+                    "x": {
+                        "field": "x",
+                        "title": "Time",
+                        "type": "temporal"
+                    },
+                    "y": {
+                        "field": "y",
+                        "title": "",
+                        "type": "quantitative"
+                    },
+                    "color": {
+                        "field": "series",
+                        "scale": {
+                            "scheme": "category20"
+                        }
+                    }
+                },
+                "mark": {
+                    "type": "line",
+                    "line": true,
+                    "point": true
+                }
+            })
         );
     }
 
     #[tokio::test]
+    #[allow(clippy::too_many_lines)]
     async fn plot_with_nulls() {
         let point_source = MockFeatureCollectionSource::single(
             MultiPointCollection::from_data(
@@ -440,16 +485,59 @@ mod tests {
             .await
             .unwrap();
 
+        assert!(matches!(result.metadata, PlotMetaData::None));
+
+        let vega_json: Value = serde_json::from_str(&result.vega_string).unwrap();
+
         assert_eq!(
-            result,
-            PlotData {
-                vega_string: r#"{"$schema":"https://vega.github.io/schema/vega-lite/v4.17.0.json","data":{"values":[{"x":"2014-01-01T00:00:00+00:00","y":0.0,"series":"S0"},{"x":"2014-02-01T00:00:00+00:00","y":1.0,"series":"S0"},{"x":"2014-01-01T00:00:00+00:00","y":2.0,"series":"S1"}]},"description":"Multi Line Chart","encoding":{"x":{"field":"x","title":"Time","type":"temporal"},"y":{"field":"y","title":"","type":"quantitative"},"color":{"field":"series","scale":{"scheme":"category20"}}},"mark":{"type":"line","line":true,"point":true}}"#.to_owned(),
-                metadata: PlotMetaData::None,
-            }
+            vega_json,
+            json!({
+                "$schema": "https://vega.github.io/schema/vega-lite/v4.17.0.json",
+                "data": {
+                    "values": [{
+                        "x": "2014-01-01T00:00:00+00:00",
+                        "y": 0.0,
+                        "series": "S0"
+                    }, {
+                        "x": "2014-02-01T00:00:00+00:00",
+                        "y": 1.0,
+                        "series": "S0"
+                    }, {
+                        "x": "2014-01-01T00:00:00+00:00",
+                        "y": 2.0,
+                        "series": "S1"
+                    }]
+                },
+                "description": "Multi Line Chart",
+                "encoding": {
+                    "x": {
+                        "field": "x",
+                        "title": "Time",
+                        "type": "temporal"
+                    },
+                    "y": {
+                        "field": "y",
+                        "title": "",
+                        "type": "quantitative"
+                    },
+                    "color": {
+                        "field": "series",
+                        "scale": {
+                            "scheme": "category20"
+                        }
+                    }
+                },
+                "mark": {
+                    "type": "line",
+                    "line": true,
+                    "point": true
+                }
+            })
         );
     }
 
     #[tokio::test]
+    #[allow(clippy::too_many_lines)]
     async fn plot_with_duplicates() {
         let point_source = MockFeatureCollectionSource::single(
             MultiPointCollection::from_data(
@@ -528,12 +616,58 @@ mod tests {
             .await
             .unwrap();
 
+        assert!(matches!(result.metadata, PlotMetaData::None));
+
+        let vega_json: Value = serde_json::from_str(&result.vega_string).unwrap();
+
         assert_eq!(
-            result,
-            PlotData {
-                vega_string: r#"{"$schema":"https://vega.github.io/schema/vega-lite/v4.17.0.json","data":{"values":[{"x":"2014-01-01T00:00:00+00:00","y":0.0,"series":"S0"},{"x":"2014-02-01T00:00:00+00:00","y":1.0,"series":"S0"},{"x":"2014-02-01T00:00:00+00:00","y":1.0,"series":"S0"},{"x":"2014-01-01T00:00:00+00:00","y":2.0,"series":"S1"}]},"description":"Multi Line Chart","encoding":{"x":{"field":"x","title":"Time","type":"temporal"},"y":{"field":"y","title":"","type":"quantitative"},"color":{"field":"series","scale":{"scheme":"category20"}}},"mark":{"type":"line","line":true,"point":true}}"#.to_owned(),
-                metadata: PlotMetaData::None,
-            }
+            vega_json,
+            json!({
+                "$schema": "https://vega.github.io/schema/vega-lite/v4.17.0.json",
+                "data": {
+                    "values": [{
+                        "x": "2014-01-01T00:00:00+00:00",
+                        "y": 0.0,
+                        "series": "S0"
+                    }, {
+                        "x": "2014-02-01T00:00:00+00:00",
+                        "y": 1.0,
+                        "series": "S0"
+                    }, {
+                        "x": "2014-02-01T00:00:00+00:00",
+                        "y": 1.0,
+                        "series": "S0"
+                    }, {
+                        "x": "2014-01-01T00:00:00+00:00",
+                        "y": 2.0,
+                        "series": "S1"
+                    }]
+                },
+                "description": "Multi Line Chart",
+                "encoding": {
+                    "x": {
+                        "field": "x",
+                        "title": "Time",
+                        "type": "temporal"
+                    },
+                    "y": {
+                        "field": "y",
+                        "title": "",
+                        "type": "quantitative"
+                    },
+                    "color": {
+                        "field": "series",
+                        "scale": {
+                            "scheme": "category20"
+                        }
+                    }
+                },
+                "mark": {
+                    "type": "line",
+                    "line": true,
+                    "point": true
+                }
+            })
         );
     }
 }

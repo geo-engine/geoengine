@@ -655,8 +655,8 @@ mod tests {
     use geoengine_datatypes::collections::VectorDataType;
     use geoengine_datatypes::dataset::{DataProviderId, DatasetId};
     use geoengine_datatypes::primitives::{
-        BoundingBox2D, Coordinate2D, FeatureDataType, Measurement, SpatialResolution, TimeInterval,
-        VectorQueryRectangle,
+        BoundingBox2D, Coordinate2D, DateTime, FeatureDataType, Measurement, SpatialResolution,
+        TimeInterval, VectorQueryRectangle,
     };
     use geoengine_datatypes::spatial_reference::{SpatialReference, SpatialReferenceOption};
     use geoengine_datatypes::util::test::TestDefault;
@@ -1035,7 +1035,12 @@ mod tests {
     async fn anonymous(ctx: &PostgresContext<NoTls>) {
         let db = ctx.user_db_ref();
 
+        let now: DateTime = chrono::offset::Utc::now().into();
         let session = db.anonymous().await.unwrap();
+        let then: DateTime = chrono::offset::Utc::now().into();
+
+        assert!(session.created >= now && session.created <= then);
+        assert!(session.valid_until > session.created);
 
         let session = db.session(session.id).await.unwrap();
 

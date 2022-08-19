@@ -216,6 +216,12 @@ pub async fn read_body_string(res: ServiceResponse) -> String {
     String::from_utf8(body.to_vec()).expect("Body is utf 8 string")
 }
 
+pub async fn read_body_json(res: ServiceResponse) -> serde_json::Value {
+    let body = test::read_body(res).await;
+    let s = String::from_utf8(body.to_vec()).expect("Body is utf 8 string");
+    serde_json::from_str(&s).expect("Body is valid json")
+}
+
 /// Helper struct that removes all specified uploads on drop
 #[derive(Default)]
 pub struct TestDataUploads {

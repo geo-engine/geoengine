@@ -230,12 +230,11 @@ mod tests {
             "left_column": "foo",
             "right_column": "bar",
             "right_column_suffix": "baz",
-        })
-        .to_string();
+        });
 
-        assert_eq!(json, serde_json::to_string(&params).unwrap());
+        assert_eq!(json, serde_json::to_value(&params).unwrap());
 
-        let params_deserialized: VectorJoinParams = serde_json::from_str(&json).unwrap();
+        let params_deserialized: VectorJoinParams = serde_json::from_value(json).unwrap();
 
         assert_eq!(params, params_deserialized);
     }

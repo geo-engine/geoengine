@@ -213,7 +213,9 @@ struct WrappedPlotOutput {
 mod tests {
     use super::*;
     use crate::contexts::{InMemoryContext, Session, SimpleContext};
-    use crate::util::tests::{check_allowed_http_methods, read_body_string, send_test_request};
+    use crate::util::tests::{
+        check_allowed_http_methods, read_body_json, read_body_string, send_test_request,
+    };
     use crate::workflows::workflow::Workflow;
     use actix_web;
     use actix_web::dev::ServiceResponse;
@@ -232,7 +234,7 @@ mod tests {
     use geoengine_operators::plot::{
         Histogram, HistogramBounds, HistogramParams, Statistics, StatisticsParams,
     };
-    use serde_json::json;
+    use serde_json::{json, Value};
 
     fn example_raster_source() -> Box<dyn RasterOperator> {
         MockRasterSource {
@@ -302,7 +304,7 @@ mod tests {
         assert_eq!(res.status(), 200);
 
         assert_eq!(
-            read_body_string(res).await,
+            read_body_json(res).await,
             json!({
                 "outputFormat": "JsonPlain",
                 "plotType": "Statistics",
@@ -315,7 +317,6 @@ mod tests {
                     "stddev": 1.707_825_127_659_933
                 }]
             })
-            .to_string()
         );
     }
 
@@ -364,17 +365,59 @@ mod tests {
 
         assert_eq!(res.status(), 200);
 
+        let response = serde_json::from_str::<Value>(&read_body_string(res).await).unwrap();
+
+        assert_eq!(response["outputFormat"], "JsonVega");
+        assert_eq!(response["plotType"], "Histogram");
+        assert!(response["plotType"]["metadata"].is_null());
+
+        let vega_json: Value =
+            serde_json::from_str(response["data"]["vegaString"].as_str().unwrap()).unwrap();
+
         assert_eq!(
-            read_body_string(res).await,
+            vega_json,
             json!({
-                "outputFormat": "JsonVega",
-                "plotType": "Histogram",
+                "$schema": "https://vega.github.io/schema/vega-lite/v4.json",
                 "data": {
-                    "vegaString": "{\"$schema\":\"https://vega.github.io/schema/vega-lite/v4.json\",\"data\":{\"values\":[{\"binStart\":0.0,\"binEnd\":2.5,\"Frequency\":2},{\"binStart\":2.5,\"binEnd\":5.0,\"Frequency\":2},{\"binStart\":5.0,\"binEnd\":7.5,\"Frequency\":2},{\"binStart\":7.5,\"binEnd\":10.0,\"Frequency\":0}]},\"mark\":\"bar\",\"encoding\":{\"x\":{\"field\":\"binStart\",\"bin\":{\"binned\":true,\"step\":2.5},\"axis\":{\"title\":\"\"}},\"x2\":{\"field\":\"binEnd\"},\"y\":{\"field\":\"Frequency\",\"type\":\"quantitative\"}}}",
-                    "metadata": null
+                    "values": [{
+                        "binStart": 0.0,
+                        "binEnd": 2.5,
+                        "Frequency": 2
+                    }, {
+                        "binStart": 2.5,
+                        "binEnd": 5.0,
+                        "Frequency": 2
+                    }, {
+                        "binStart": 5.0,
+                        "binEnd": 7.5,
+                        "Frequency": 2
+                    }, {
+                        "binStart": 7.5,
+                        "binEnd": 10.0,
+                        "Frequency": 0
+                    }]
+                },
+                "mark": "bar",
+                "encoding": {
+                    "x": {
+                        "field": "binStart",
+                        "bin": {
+                            "binned": true,
+                            "step": 2.5
+                        },
+                        "axis": {
+                            "title": ""
+                        }
+                    },
+                    "x2": {
+                        "field": "binEnd"
+                    },
+                    "y": {
+                        "field": "Frequency",
+                        "type": "quantitative"
+                    }
                 }
             })
-            .to_string()
         );
     }
 
