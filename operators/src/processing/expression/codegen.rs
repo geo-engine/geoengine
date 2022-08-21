@@ -64,15 +64,22 @@ impl ToTokens for ExpressionAst {
             .parameters
             .iter()
             .map(|p| match p {
-                Parameter::Number(param) => quote! { #param: #dtype },
-                Parameter::Boolean(param) => quote! { #param: bool },
+                Parameter::Number(param) => quote! { #param: Option<#dtype> },
             })
             .collect();
         let content = &self.root;
 
         tokens.extend(quote! {
+            #[inline]
+            fn apply(a: Option<#dtype>, b: Option<#dtype>, f: fn(#dtype, #dtype) -> #dtype) -> Option<#dtype> {
+                match (a, b) {
+                    (Some(a), Some(b)) => Some(f(a, b)),
+                    _ => None,
+                }
+            }
+
             #[no_mangle]
-            pub extern "C" fn #fn_name (#(#params),*) -> #dtype {
+            pub extern "Rust" fn #fn_name (#(#params),*) -> Option<#dtype> {
                 #content
             }
         });
@@ -82,6 +89,7 @@ impl ToTokens for ExpressionAst {
 #[derive(Debug, Clone)]
 pub enum AstNode {
     Constant(f64),
+    NoData,
     Variable(Identifier),
     Operation {
         left: Box<AstNode>,
@@ -105,11 +113,13 @@ pub enum AstNode {
 impl ToTokens for AstNode {
     fn to_tokens(&self, tokens: &mut TokenStream) {
         let new_tokens = match self {
-            Self::Constant(n) => quote! { #n },
+            Self::Constant(n) => quote! { Some(#n) },
+            Self::NoData => quote! { None },
             Self::Variable(v) => quote! { #v },
             Self::Operation { left, op, right } => {
-                quote! { ( #left #op #right ) }
+                quote! { apply(#left, #right, #op) }
             }
+            // TODO:
             Self::Function { name, args } => {
                 let fn_name = format_ident!("import_{}__{}", name.as_ref(), args.len());
                 quote! { #fn_name(#(#args),*) }
@@ -215,10 +225,10 @@ pub enum AstOperator {
 impl ToTokens for AstOperator {
     fn to_tokens(&self, tokens: &mut TokenStream) {
         let new_tokens = match self {
-            Self::Add => quote! { + },
-            Self::Subtract => quote! { - },
-            Self::Multiply => quote! { * },
-            Self::Divide => quote! { / },
+            AstOperator::Add => quote! { std::ops::Add::add },
+            AstOperator::Subtract => quote! { std::ops::Sub::sub },
+            AstOperator::Multiply => quote! { std::ops::Mul::mul },
+            AstOperator::Divide => quote! { std::ops::Div::div },
         };
 
         tokens.extend(new_tokens);
@@ -233,7 +243,6 @@ pub struct Branch {
 
 #[derive(Debug, Clone)]
 pub enum BooleanExpression {
-    Variable(Identifier),
     Constant(bool),
     Comparison {
         left: Box<AstNode>,
@@ -250,9 +259,8 @@ pub enum BooleanExpression {
 impl ToTokens for BooleanExpression {
     fn to_tokens(&self, tokens: &mut TokenStream) {
         let new_tokens = match self {
-            Self::Variable(v) => quote! { #v },
             Self::Constant(b) => quote! { #b },
-            Self::Comparison { left, op, right } => quote! { ( (#left) #op (#right) ) },
+            Self::Comparison { left, op, right } => quote! { ((#left) #op (#right)) },
             Self::Operation { left, op, right } => quote! { ( (#left) #op (#right) ) },
         };
 
@@ -325,13 +333,12 @@ impl ToTokens for Assignment {
 #[derive(Debug, Clone)]
 pub enum Parameter {
     Number(Identifier),
-    Boolean(Identifier),
 }
 
 impl AsRef<str> for Parameter {
     fn as_ref(&self) -> &str {
         match self {
-            Self::Number(identifier) | Self::Boolean(identifier) => identifier.as_ref(),
+            Self::Number(identifier) => identifier.as_ref(),
         }
     }
 }

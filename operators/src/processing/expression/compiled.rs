@@ -58,7 +58,7 @@ impl LinkedExpression {
 
     /// Returns a function with 3 input parameters
     #[allow(clippy::type_complexity)]
-    pub unsafe fn function_3<A, B, C>(&self) -> Result<Symbol<fn(A, B, C) -> f64>> {
+    pub unsafe fn function_1<A>(&self) -> Result<Symbol<fn(A) -> Option<f64>>> {
         self.library
             .get(self.function_name.as_bytes())
             .map_err(|error| ExpressionError::LinkedFunctionNotFound {
@@ -67,7 +67,7 @@ impl LinkedExpression {
     }
     /// Returns a function with 5 input parameters
     #[allow(clippy::type_complexity)]
-    pub unsafe fn function_5<A, B, C, D, E>(&self) -> Result<Symbol<fn(A, B, C, D, E) -> f64>> {
+    pub unsafe fn function_2<A, B>(&self) -> Result<Symbol<fn(A, B) -> Option<f64>>> {
         self.library
             .get(self.function_name.as_bytes())
             .map_err(|error| ExpressionError::LinkedFunctionNotFound {
