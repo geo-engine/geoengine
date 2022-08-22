@@ -197,4 +197,19 @@ pub enum NetCdfCf4DProviderError {
     Internal {
         source: Box<dyn ErrorSource>,
     },
+    CannotCreateInProgressFlag {
+        source: Box<dyn ErrorSource>,
+    }, //
+    CannotRemoveInProgressFlag {
+        source: Box<dyn ErrorSource>,
+    },
+    CannotRemoveOverviewsWhileCreationIsInProgress,
+    CannotRemoveOverviews {
+        source: Box<dyn ErrorSource>,
+    },
+    #[snafu(display("NetCdfCf provider cannot create overviews"))]
+    CannotCreateOverview {
+        dataset: PathBuf,
+        source: Box<dyn ErrorSource>,
+    },
 }

@@ -232,24 +232,30 @@ POST http://localhost:3000/task/new/upload/530a6809-34c0-457f-8cb9-52c7b89f1ad6
 
 ###
 
-POST http://localhost:3030/ebv/create_overviews
+# @name lastTask
+PUT http://localhost:3030/ebv/overviews/all
 Authorization: Bearer 8aca8875-425a-4ef1-8ee6-cdfc62dd7525
 Accept: application/json
 
 ###
 
-POST http://localhost:3030/ebv/create_overview
+# @name lastTask
+PUT http://localhost:3030/ebv/overviews/dataset_sm.nc
 Authorization: Bearer 8aca8875-425a-4ef1-8ee6-cdfc62dd7525
 Content-Type: application/json
 Accept: application/json
 
-{
-  "file": "dataset_sm.nc"
-}
+###
+
+GET http://localhost:3030/tasks/{{lastTask.response.body.$.task_id}}/status
+Authorization: Bearer {{anonymousSession.response.body.$.id}}
 
 ###
 
-GET http://localhost:3030/tasks/e2df22e4-83a8-4d90-8eec-08b83cb60a74/status
-Authorization: Bearer 18fec623-6600-41af-b82b-24ccf47cb9f9
+# @name lastTask
+DELETE http://localhost:3030/ebv/overviews/dataset_sm.nc
+Authorization: Bearer 8aca8875-425a-4ef1-8ee6-cdfc62dd7525
+Content-Type: application/json
+Accept: application/json
 
 ###

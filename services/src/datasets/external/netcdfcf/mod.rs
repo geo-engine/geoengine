@@ -1,6 +1,8 @@
 pub use self::ebvportal_provider::{EbvPortalDataProvider, EBV_PROVIDER_ID};
 pub use self::error::NetCdfCf4DProviderError;
 use self::gdalmd::MdGroup;
+use self::overviews::remove_overviews;
+use self::overviews::InProgressFlag;
 pub use self::overviews::OverviewGeneration;
 use self::overviews::{create_overviews, METADATA_FILE_NAME};
 use crate::datasets::listing::ProvenanceOutput;
@@ -215,7 +217,13 @@ impl NetCdfCfDataProvider {
         overview_path: &Path,
         dataset_path: &Path,
     ) -> Option<NetCdfOverview> {
-        let tree_file_path = overview_path.join(dataset_path).join(METADATA_FILE_NAME);
+        let overview_dataset_path = overview_path.join(dataset_path);
+
+        if InProgressFlag::is_in_progress(&overview_dataset_path) {
+            return None;
+        }
+
+        let tree_file_path = overview_dataset_path.join(METADATA_FILE_NAME);
         let file = std::fs::File::open(&tree_file_path).ok()?;
         let buf_reader = BufReader::new(file);
         serde_json::from_reader::<_, NetCdfOverview>(buf_reader).ok()
@@ -605,6 +613,10 @@ impl NetCdfCfDataProvider {
         resampling_method: Option<ResamplingMethod>,
     ) -> Result<OverviewGeneration> {
         create_overviews(&self.path, dataset_path, &self.overviews, resampling_method)
+    }
+
+    pub fn remove_overviews(&self, dataset_path: &Path, force: bool) -> Result<()> {
+        remove_overviews(dataset_path, &self.overviews, force)
     }
 
     fn is_netcdf_file(&self, path: &Path) -> bool {
@@ -1054,24 +1066,19 @@ pub fn layer_from_netcdf_overview(
         workflow: Workflow {
             operator: TypedOperator::Raster(
                 GdalSource {
-                    params:
-                        GdalSourceParameters {
-                            data:
-                                DataId::External(
-                                    ExternalDataId {
-                                        provider_id,
-                                        layer_id:
-                                            LayerId(
-                                                json!({
-                                                    "fileName": overview.file_name,
-                                                    "groupNames": groups,
-                                                    "entity": entity
-                                                })
-                                                .to_string(),
-                                            ),
-                                    },
-                                ),
-                        },
+                    params: GdalSourceParameters {
+                        data: DataId::External(ExternalDataId {
+                            provider_id,
+                            layer_id: LayerId(
+                                json!({
+                                    "fileName": overview.file_name,
+                                    "groupNames": groups,
+                                    "entity": entity
+                                })
+                                .to_string(),
+                            ),
+                        }),
+                    },
                 }
                 .boxed(),
             ),
