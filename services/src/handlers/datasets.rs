@@ -1668,7 +1668,7 @@ mod tests {
         let req = actix_web::test::TestRequest::post()
             .uri("/upload")
             .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())))
-            .set_multipart(body);
+            .set_multipart(body.clone());
 
         let res = send_test_request(req, ctx.clone()).await;
 
@@ -1676,6 +1676,11 @@ mod tests {
 
         let upload: IdResponse<UploadId> = actix_web::test::read_body_json(res).await;
         test_data.uploads.push(upload.id);
+
+        let upload_content =
+            std::fs::read_to_string(upload.id.root_path().unwrap().join("test.json")).unwrap();
+
+        assert_eq!(&upload_content, body[0].1);
 
         let req = actix_web::test::TestRequest::get()
             .uri(&format!("/dataset/suggest?upload={}", upload.id))
