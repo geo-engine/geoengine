@@ -911,11 +911,19 @@ impl TryFrom<NetCdfLayerCollectionId> for LayerId {
     }
 }
 
-async fn listing_from_dir(base: &Path, path: &Path) -> crate::error::Result<Vec<CollectionItem>> {
+async fn listing_from_dir(
+    overview_path: &Path,
+    base: &Path,
+    path: &Path,
+) -> crate::error::Result<Vec<CollectionItem>> {
     let mut dir = tokio::fs::read_dir(base.join(&path)).await?;
 
     let mut items = vec![];
     while let Some(entry) = dir.next_entry().await? {
+        if entry.path().canonicalize()? == overview_path.canonicalize()? {
+            continue;
+        }
+
         if entry.path().is_dir() {
             items.push(CollectionItem::Collection(LayerCollectionListing {
                 id: ProviderLayerCollectionId {
@@ -1194,7 +1202,7 @@ impl LayerCollectionProvider for NetCdfCfDataProvider {
                 if canonicalize_subpath(&self.path, &path).is_ok()
                     && self.path.join(&path).is_dir() =>
             {
-                listing_from_dir(&self.path, &path).await?
+                listing_from_dir(&self.overviews, &self.path, &path).await?
             }
             NetCdfLayerCollectionId::Path { path }
                 if canonicalize_subpath(&self.path, &path).is_ok()
