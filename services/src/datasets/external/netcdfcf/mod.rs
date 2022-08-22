@@ -95,8 +95,8 @@ impl DataProviderDefinition for NetCdfCfDataProviderDefinition {
         }))
     }
 
-    fn type_name(&self) -> String {
-        "NetCdfCfProviderDefinition".to_owned()
+    fn type_name(&self) -> &'static str {
+        "NetCdfCfProviderDefinition"
     }
 
     fn name(&self) -> String {

@@ -88,8 +88,8 @@ impl DataProviderDefinition for Nature40DataProviderDefinition {
         }))
     }
 
-    fn type_name(&self) -> String {
-        "Nature4.0".to_owned()
+    fn type_name(&self) -> &'static str {
+        "Nature4.0"
     }
 
     fn name(&self) -> String {

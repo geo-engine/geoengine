@@ -419,7 +419,7 @@ impl LayerProviderDb for HashMapLayerProviderDb {
             .map(|(id, provider)| LayerProviderListing {
                 id: *id,
                 name: provider.name(),
-                description: provider.type_name(),
+                description: provider.type_name().to_string(),
             })
             .collect::<Vec<_>>();
 

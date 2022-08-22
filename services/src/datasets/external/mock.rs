@@ -45,8 +45,8 @@ impl DataProviderDefinition for MockExternalLayerProviderDefinition {
         }))
     }
 
-    fn type_name(&self) -> String {
-        "MockType".to_owned()
+    fn type_name(&self) -> &'static str {
+        "MockType"
     }
 
     fn name(&self) -> String {

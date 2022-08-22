@@ -65,8 +65,8 @@ impl DataProviderDefinition for EbvPortalDataProviderDefinition {
         }))
     }
 
-    fn type_name(&self) -> String {
-        "EbvPortalProviderDefinition".to_owned()
+    fn type_name(&self) -> &'static str {
+        "EbvPortalProviderDefinition"
     }
 
     fn name(&self) -> String {

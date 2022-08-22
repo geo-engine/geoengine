@@ -85,8 +85,8 @@ impl DataProviderDefinition for SentinelS2L2ACogsProviderDefinition {
         )))
     }
 
-    fn type_name(&self) -> String {
-        "SentinelS2L2ACogs".to_owned()
+    fn type_name(&self) -> &'static str {
+        "SentinelS2L2ACogs"
     }
 
     fn name(&self) -> String {

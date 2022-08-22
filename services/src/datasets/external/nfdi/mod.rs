@@ -68,8 +68,8 @@ impl DataProviderDefinition for NFDIDataProviderDefinition {
         Ok(Box::new(NFDIDataProvider::new(self).await?))
     }
 
-    fn type_name(&self) -> String {
-        "NFDI".to_owned()
+    fn type_name(&self) -> &'static str {
+        "NFDI"
     }
 
     fn name(&self) -> String {

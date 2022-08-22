@@ -82,8 +82,8 @@ impl DataProviderDefinition for GfbioDataProviderDefinition {
         Ok(Box::new(GfbioDataProvider::new(self.db_config).await?))
     }
 
-    fn type_name(&self) -> String {
-        "GFBio".to_owned()
+    fn type_name(&self) -> &'static str {
+        "GFBio"
     }
 
     fn name(&self) -> String {
