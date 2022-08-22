@@ -89,6 +89,7 @@ impl DataProvider for EbvPortalDataProvider {
 }
 
 #[derive(Debug, Serialize, Deserialize)]
+#[serde(tag = "type", rename_all = "camelCase")]
 enum EbvCollectionId {
     Classes,
     Class {
@@ -586,7 +587,7 @@ mod tests {
                         )
                         .unwrap(),
                         collection_id: LayerCollectionId(
-                            "{\"Class\":{\"class\":\"Community composition\"}}".into()
+                            r#"{"type":"class","class":"Community composition"}"#.into()
                         )
                     },
                     name: "Community composition".to_string(),
@@ -601,7 +602,7 @@ mod tests {
                         )
                         .unwrap(),
                         collection_id: LayerCollectionId(
-                            "{\"Class\":{\"class\":\"Ecosystem functioning\"}}".into()
+                            r#"{"type":"class","class":"Ecosystem functioning"}"#.into()
                         )
                     },
                     name: "Ecosystem functioning".to_string(),
@@ -616,7 +617,7 @@ mod tests {
                         )
                         .unwrap(),
                         collection_id: LayerCollectionId(
-                            "{\"Class\":{\"class\":\"Ecosystem structure\"}}".into()
+                            r#"{"type":"class","class":"Ecosystem structure"}"#.into()
                         )
                     },
                     name: "Ecosystem structure".to_string(),
@@ -631,7 +632,7 @@ mod tests {
                         )
                         .unwrap(),
                         collection_id: LayerCollectionId(
-                            "{\"Class\":{\"class\":\"Species populations\"}}".into()
+                            r#"{"type":"class","class":"Species populations"}"#.into()
                         )
                     },
                     name: "Species populations".to_string(),
@@ -700,7 +701,7 @@ mod tests {
 
         let items = provider
             .collection_items(
-                &LayerCollectionId("{\"Class\":{\"class\":\"Ecosystem functioning\"}}".into()),
+                &LayerCollectionId(r#"{"type":"class","class":"Ecosystem functioning"}"#.into()),
                 LayerCollectionListOptions {
                     offset: 0,
                     limit: 20,
@@ -715,7 +716,7 @@ mod tests {
             CollectionItem::Collection(LayerCollectionListing {
                 id: ProviderLayerCollectionId {
                     provider_id: DataProviderId::from_str("77d0bf11-986e-43f5-b11d-898321f1854c").unwrap(), 
-                    collection_id: LayerCollectionId("{\"Ebv\":{\"class\":\"Ecosystem functioning\",\"ebv\":\"Ecosystem phenology\"}}".into()) 
+                    collection_id: LayerCollectionId(r#"{"type":"ebv","class":"Ecosystem functioning","ebv":"Ecosystem phenology"}"#.into()) 
                 },
                 name: "Ecosystem phenology".to_string(), 
                 description: "".to_string(), 
@@ -725,7 +726,7 @@ mod tests {
             CollectionItem::Collection(LayerCollectionListing {
                  id: ProviderLayerCollectionId {
                     provider_id: DataProviderId::from_str("77d0bf11-986e-43f5-b11d-898321f1854c").unwrap(), 
-                    collection_id: LayerCollectionId("{\"Ebv\":{\"class\":\"Ecosystem functioning\",\"ebv\":\"Primary productivity\"}}".into()) 
+                    collection_id: LayerCollectionId(r#"{"type":"ebv","class":"Ecosystem functioning","ebv":"Primary productivity"}"#.into()) 
                 },
                 name: "Primary productivity".to_string(), 
                 description: "".to_string(), 
@@ -844,7 +845,10 @@ mod tests {
 
         let items = provider
             .collection_items(
-                &LayerCollectionId("{\"Ebv\":{\"class\":\"Ecosystem functioning\",\"ebv\":\"Ecosystem phenology\"}}".into()),
+                &LayerCollectionId(
+                    r#"{"type":"ebv","class":"Ecosystem functioning","ebv":"Ecosystem phenology"}"#
+                        .into(),
+                ),
                 LayerCollectionListOptions {
                     offset: 0,
                     limit: 20,
@@ -859,7 +863,7 @@ mod tests {
             CollectionItem::Collection(LayerCollectionListing {
                 id: ProviderLayerCollectionId {
                     provider_id: DataProviderId::from_str("77d0bf11-986e-43f5-b11d-898321f1854c").unwrap(),
-                    collection_id: LayerCollectionId("{\"Dataset\":{\"class\":\"Ecosystem functioning\",\"ebv\":\"Ecosystem phenology\",\"dataset\":\"10\"}}".into()) 
+                    collection_id: LayerCollectionId(r#"{"type":"dataset","class":"Ecosystem functioning","ebv":"Ecosystem phenology","dataset":"10"}"#.into()) 
                 },
                 name: "Vegetation Phenology in Finland".to_string(),
                 description: "Datasets present the yearly maps of the start of vegetation active period (VAP) in coniferous forests and deciduous vegetation during 2001-2019 in Finland. The start of the vegetation active period is defined as the day when coniferous trees start to photosynthesize and for deciduous vegetation as the day when trees unfold new leaves in spring. The datasets were derived from satellite observations of the Moderate Resolution Imaging Spectroradiometer (MODIS).".to_string(), 
@@ -980,7 +984,7 @@ mod tests {
 
         let items = provider
             .collection_items(
-                &LayerCollectionId("{\"Dataset\":{\"class\":\"Ecosystem functioning\",\"ebv\":\"Ecosystem phenology\",\"dataset\":\"10\"}}".into()),
+                &LayerCollectionId(r#"{"type":"dataset","class":"Ecosystem functioning","ebv":"Ecosystem phenology","dataset":"10"}"#.into()),
                 LayerCollectionListOptions {
                     offset: 0,
                     limit: 20,
@@ -996,7 +1000,7 @@ mod tests {
             vec![CollectionItem::Collection(LayerCollectionListing {
                     id: ProviderLayerCollectionId {
                         provider_id: DataProviderId::from_str("77d0bf11-986e-43f5-b11d-898321f1854c").unwrap(),
-                        collection_id: LayerCollectionId("{\"Group\":{\"class\":\"Ecosystem functioning\",\"ebv\":\"Ecosystem phenology\",\"dataset\":\"10\",\"groups\":[\"metric_1\"]}}".into())
+                        collection_id: LayerCollectionId(r#"{"type":"group","class":"Ecosystem functioning","ebv":"Ecosystem phenology","dataset":"10","groups":["metric_1"]}"#.into())
                     },
                     name: "Random metric 1".to_string(),
                     description: "Randomly created data".to_string(),
@@ -1005,7 +1009,7 @@ mod tests {
                 CollectionItem::Collection(LayerCollectionListing {
                     id: ProviderLayerCollectionId {
                         provider_id: DataProviderId::from_str("77d0bf11-986e-43f5-b11d-898321f1854c").unwrap(),
-                        collection_id: LayerCollectionId("{\"Group\":{\"class\":\"Ecosystem functioning\",\"ebv\":\"Ecosystem phenology\",\"dataset\":\"10\",\"groups\":[\"metric_2\"]}}".into()) 
+                        collection_id: LayerCollectionId(r#"{"type":"group","class":"Ecosystem functioning","ebv":"Ecosystem phenology","dataset":"10","groups":["metric_2"]}"#.into()) 
                     },
                     name: "Random metric 2".to_string(),
                     description: "Randomly created data".to_string(),
@@ -1126,7 +1130,7 @@ mod tests {
 
         let items = provider
             .collection_items(
-                &LayerCollectionId("{\"Group\":{\"class\":\"Ecosystem functioning\",\"ebv\":\"Ecosystem phenology\",\"dataset\":\"10\",\"groups\":[\"metric_1\"]}}".into()),
+                &LayerCollectionId(r#"{"type":"group","class":"Ecosystem functioning","ebv":"Ecosystem phenology","dataset":"10","groups":["metric_1"]}"#.into()),
                 LayerCollectionListOptions {
                     offset: 0,
                     limit: 20,
@@ -1142,7 +1146,7 @@ mod tests {
             vec![CollectionItem::Layer(LayerListing {
                     id: ProviderLayerId {
                         provider_id: DataProviderId::from_str("77d0bf11-986e-43f5-b11d-898321f1854c").unwrap(),
-                        layer_id: LayerId("{\"Entity\":{\"class\":\"Ecosystem functioning\",\"ebv\":\"Ecosystem phenology\",\"dataset\":\"10\",\"groups\":[\"metric_1\"],\"entity\":0}}".into()) 
+                        layer_id: LayerId(r#"{"type":"entity","class":"Ecosystem functioning","ebv":"Ecosystem phenology","dataset":"10","groups":["metric_1"],"entity":0}"#.into()) 
                     },
                     name: "entity01".to_string(),
                     description: "".to_string(),
@@ -1150,7 +1154,7 @@ mod tests {
                 }), CollectionItem::Layer(LayerListing {
                     id: ProviderLayerId {
                         provider_id: DataProviderId::from_str("77d0bf11-986e-43f5-b11d-898321f1854c").unwrap(),
-                        layer_id: LayerId("{\"Entity\":{\"class\":\"Ecosystem functioning\",\"ebv\":\"Ecosystem phenology\",\"dataset\":\"10\",\"groups\":[\"metric_1\"],\"entity\":1}}".into()) 
+                        layer_id: LayerId(r#"{"type":"entity","class":"Ecosystem functioning","ebv":"Ecosystem phenology","dataset":"10","groups":["metric_1"],"entity":1}"#.into()) 
                     },
                     name: "entity02".to_string(),
                     description: "".to_string(),
@@ -1158,7 +1162,7 @@ mod tests {
                 }), CollectionItem::Layer(LayerListing {
                     id: ProviderLayerId {
                         provider_id: DataProviderId::from_str("77d0bf11-986e-43f5-b11d-898321f1854c").unwrap(),
-                        layer_id: LayerId("{\"Entity\":{\"class\":\"Ecosystem functioning\",\"ebv\":\"Ecosystem phenology\",\"dataset\":\"10\",\"groups\":[\"metric_1\"],\"entity\":2}}".into()) 
+                        layer_id: LayerId(r#"{"type":"entity","class":"Ecosystem functioning","ebv":"Ecosystem phenology","dataset":"10","groups":["metric_1"],"entity":2}"#.into()) 
                     },
                     name: "entity03".to_string(),
                     description: "".to_string(),
