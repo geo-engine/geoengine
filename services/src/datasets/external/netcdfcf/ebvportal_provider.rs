@@ -89,6 +89,7 @@ impl DataProvider for EbvPortalDataProvider {
 }
 
 #[derive(Debug, Serialize, Deserialize)]
+#[serde(tag = "type", rename_all = "camelCase")]
 enum EbvCollectionId {
     Classes,
     Class {

@@ -880,6 +880,7 @@ impl DataProvider for NetCdfCfDataProvider {
 }
 
 #[derive(Deserialize, Serialize, Debug, Clone)]
+#[serde(tag = "type", rename_all = "camelCase")]
 enum NetCdfLayerCollectionId {
     Path {
         path: PathBuf,
