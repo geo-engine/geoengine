@@ -71,13 +71,14 @@ where
 /// Canonicalize `base`/`subpath` and ensure the `subpath` doesn't escape the `base`
 /// returns an error if the `sub_path` escapes the `base`
 pub fn canonicalize_subpath(base: &Path, sub_path: &Path) -> crate::error::Result<PathBuf> {
+    let base = base.canonicalize()?;
     let path = base.join(sub_path).canonicalize()?;
 
-    if path.starts_with(base) {
+    if path.starts_with(&base) {
         Ok(path)
     } else {
         Err(crate::error::Error::SubPathMustNotEscapeBasePath {
-            base: base.into(),
+            base,
             sub_path: sub_path.into(),
         })
     }
