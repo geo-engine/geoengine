@@ -22,11 +22,10 @@ lazy_static::lazy_static! {
                     },
                     3 => quote! {
                         fn #fn_name(a: Option<f64>, b: Option<f64>, c: Option<f64>) -> Option<f64> {
-                            apply(
-                                apply(a, b, f64::min),
-                                c,
-                                f64::min
-                            )
+                            match (a, b, c) {
+                                (Some(a), Some(b), Some(c)) => Some(f64::min(a, f64::min(b, c))),
+                                _ => None,
+                            }
                         }
                     },
                     _ => TokenStream::new(),
@@ -45,11 +44,10 @@ lazy_static::lazy_static! {
                     },
                     3 => quote! {
                         fn #fn_name(a: Option<f64>, b: Option<f64>, c: Option<f64>) -> Option<f64> {
-                            apply(
-                                apply(a, b, f64::max),
-                                c,
-                                f64::max
-                            )
+                            match (a, b, c) {
+                                (Some(a), Some(b), Some(c)) => Some(f64::max(a, f64::max(b, c))),
+                                _ => None,
+                            }
                         }
                     },
                     _ => TokenStream::new(),
