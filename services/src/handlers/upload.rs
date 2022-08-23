@@ -65,11 +65,21 @@ async fn upload_handler<C: Context>(
             .await
             .context(error::Io)?;
 
+        eprintln!(
+            "created file: {}",
+            root.join(&file_name).as_os_str().to_str().unwrap()
+        );
+
         let mut byte_size = 0_u64;
         while let Some(chunk) = field.next().await {
             let bytes = chunk?;
             file.write_all(&bytes).await.context(error::Io)?;
             byte_size += bytes.len() as u64;
+        }
+        file.flush().await.context(error::Io)?;
+
+        if let Ok(s) = std::fs::read_to_string(root.join(&file_name)) {
+            eprintln!("written string: {}", s);
         }
 
         files.push(FileUpload {

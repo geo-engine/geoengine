@@ -1677,6 +1677,23 @@ mod tests {
         let upload: IdResponse<UploadId> = actix_web::test::read_body_json(res).await;
         test_data.uploads.push(upload.id);
 
+        eprintln!("upload id: {}", upload.id);
+        eprintln!(
+            "upload path: {}",
+            upload
+                .id
+                .root_path()
+                .unwrap()
+                .join("test.json")
+                .as_os_str()
+                .to_str()
+                .unwrap()
+        );
+        eprintln!(
+            "file exists: {}",
+            upload.id.root_path().unwrap().join("test.json").exists()
+        );
+
         let upload_content =
             std::fs::read_to_string(upload.id.root_path().unwrap().join("test.json")).unwrap();
 
