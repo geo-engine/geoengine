@@ -289,7 +289,9 @@ mod tests {
     use actix_web::dev::ServiceResponse;
     use actix_web::{http::header, http::Method, test};
     use actix_web_httpauth::headers::authorization::Bearer;
-    use mockito::{Mock, mock};
+    use httptest::{Expectation, Server};
+    use httptest::matchers::request;
+    use httptest::responders::status_code;
     use geoengine_datatypes::spatial_reference::SpatialReferenceOption;
     use geoengine_datatypes::util::test::TestDefault;
     use serde_json::json;
@@ -779,18 +781,13 @@ mod tests {
         .await;
     }
 
-    struct MockIdProvider {
-        _mock_provider : Mock,
-        _mock_jwk : Mock,
-    }
+    const MOCK_CLIENT_ID: &str = "";
 
-    const MOCKITO_CLIENT_ID : &str = "";
-
-    fn single_state_nonce_mockito_request_db(mockito_issuer: String) -> OIDCRequestsDB{
+    fn single_state_nonce_request_db(issuer: String) -> OIDCRequestsDB{
         let oidc_config = Oidc {
             enabled: true,
-            issuer: mockito_issuer,
-            client_id: MOCKITO_CLIENT_ID.to_string(),
+            issuer,
+            client_id: MOCK_CLIENT_ID.to_string(),
             client_secret: "".to_string(),
             redirect_uri: "https://dummy-redirect.com/".into(),
             scopes: vec!["profile".to_string(), "email".to_string()],
@@ -799,23 +796,32 @@ mod tests {
         OIDCRequestsDB::from_oidc_with_static_tokens(oidc_config)
     }
 
-    fn mock_id_provider() -> MockIdProvider {
-        let mockito_issuer = mockito::server_url();
-        let provider_metadata = mock_provider_metadata(mockito_issuer.as_str()).unwrap();
+    fn mock_valid_provider_discovery(expected_discoveries : usize) -> Server {
+        let server = Server::run();
+        let server_url = format!("http://{}", server.addr());
+
+        let provider_metadata = mock_provider_metadata(server_url.as_str()).unwrap();
         let jwks = mock_jwks().unwrap();
 
-        MockIdProvider {
-            _mock_provider: mock("GET", "/.well-known/openid-configuration")
-                .with_status(200)
-                .with_header("content-type", "application/json")
-                .with_body(serde_json::to_string(&provider_metadata).unwrap())
-                .create(),
-            _mock_jwk: mock("GET", "/jwk")
-                .with_status(200)
-                .with_header("content-type", "application/json")
-                .with_body(serde_json::to_string(&jwks).unwrap())
-                .create()
-        }
+        server.expect(
+            Expectation::matching(request::method_path("GET", "/.well-known/openid-configuration"))
+                .times(expected_discoveries)
+                .respond_with(
+                    status_code(200)
+                        .insert_header("content-type", "application/json")
+                        .body(serde_json::to_string(&provider_metadata).unwrap())
+                )
+        );
+        server.expect(
+            Expectation::matching(request::method_path("GET", "/jwk"))
+                .times(expected_discoveries)
+                .respond_with(
+                    status_code(200)
+                        .insert_header("content-type", "application/json")
+                        .body(serde_json::to_string(&jwks).unwrap())
+                )
+        );
+        server
     }
 
     async fn oidc_init_test_helper(method: Method, ctx: ProInMemoryContext) -> ServiceResponse {
@@ -823,7 +829,6 @@ mod tests {
             .method(method)
             .uri("/oidc_init")
             .append_header((header::CONTENT_LENGTH, 0));
-            // .set_json(&credentials);
         send_pro_test_request(req, ctx).await
     }
 
@@ -838,10 +843,9 @@ mod tests {
 
     #[tokio::test]
     async fn oidc_init() {
-        let mockito_issuer = mockito::server_url();
-        let request_db = single_state_nonce_mockito_request_db(mockito_issuer);
-
-        let _mock_id_provider = mock_id_provider();
+        let server = mock_valid_provider_discovery(1);
+        let server_url = format!("http://{}", server.addr());
+        let request_db = single_state_nonce_request_db(server_url);
 
         let ctx = ProInMemoryContext::new_with_oidc(request_db);
         let res = oidc_init_test_helper(Method::POST, ctx).await;
@@ -852,19 +856,23 @@ mod tests {
 
     #[tokio::test]
     async fn oidc_illegal_provider() {
-        let mockito_issuer = mockito::server_url();
-        let request_db = single_state_nonce_mockito_request_db(mockito_issuer);
+        let server = Server::run();
+        let server_url = format!("http://{}", server.addr());
+        let request_db = single_state_nonce_request_db(server_url);
 
-        let error_message = "{\
-            \"error_description\": \"Dummy bad request\",
-            \"error\": \"catch_all_error\",
-        }";
+        let error_message = serde_json::to_string(&json!({
+            "error_description": "Dummy bad request",
+            "error": "catch_all_error"
+        })).expect("Serde Json unsuccessful");
 
-        let _mock_provider = mock("GET", "/.well-known/openid-configuration")
-            .with_status(404)
-            .with_header("content-type", "application/json")
-            .with_body(error_message)
-            .create();
+        server.expect(
+            Expectation::matching(request::method_path("GET", "/.well-known/openid-configuration"))
+                .respond_with(
+                    status_code(404)
+                        .insert_header("content-type", "application/json")
+                        .body(error_message)
+                )
+        );
 
         let ctx = ProInMemoryContext::new_with_oidc(request_db);
         let res = oidc_init_test_helper(Method::POST, ctx).await;
@@ -889,23 +897,25 @@ mod tests {
 
     #[tokio::test]
     async fn oidc_login() {
-        let mockito_issuer = mockito::server_url();
-        let request_db = single_state_nonce_mockito_request_db(mockito_issuer.clone());
-        let _mock_id_provider = mock_id_provider();
+        let server = mock_valid_provider_discovery(2);
+        let server_url = format!("http://{}", server.addr());
+        let request_db = single_state_nonce_request_db(server_url.clone());
 
         let client = request_db.get_client().await.unwrap();
         let request = request_db.generate_request(client).await;
 
         assert!(request.is_ok());
 
-        let mock_token_config = MockTokenConfig::create_from_issuer_and_client(mockito_issuer, MOCKITO_CLIENT_ID.to_string());
+        let mock_token_config = MockTokenConfig::create_from_issuer_and_client(server_url, MOCK_CLIENT_ID.to_string());
         let token_response = mock_token_response(mock_token_config).unwrap();
-
-        let _mock_token_response = mock("POST", "/token")
-            .with_status(200)
-            .with_header("content-type", "application/json")
-            .with_body(serde_json::to_string(&token_response).unwrap())
-            .create();
+        server.expect(
+            Expectation::matching(request::method_path("POST", "/token"))
+                .respond_with(
+                    status_code(200)
+                        .insert_header("content-type", "application/json")
+                        .body(serde_json::to_string(&token_response).unwrap())
+                )
+        );
 
         let auth_code_response = AuthCodeResponse {
             session_state: "".to_string(),
@@ -923,18 +933,9 @@ mod tests {
 
     #[tokio::test]
     async fn oidc_login_illegal_request() {
-        let mockito_issuer = mockito::server_url();
-        let request_db = single_state_nonce_mockito_request_db(mockito_issuer.clone());
-        let _mock_id_provider = mock_id_provider();
-
-        let mock_token_config = MockTokenConfig::create_from_issuer_and_client(mockito_issuer, MOCKITO_CLIENT_ID.to_string());
-        let token_response = mock_token_response(mock_token_config).unwrap();
-
-        let _mock_token_response = mock("POST", "/token")
-            .with_status(200)
-            .with_header("content-type", "application/json")
-            .with_body(serde_json::to_string(&token_response).unwrap())
-            .create();
+        let server = mock_valid_provider_discovery(1);
+        let server_url = format!("http://{}", server.addr());
+        let request_db = single_state_nonce_request_db(server_url.clone());
 
         let auth_code_response = AuthCodeResponse {
             session_state: "".to_string(),
@@ -955,25 +956,28 @@ mod tests {
 
     #[tokio::test]
     async fn oidc_login_fail() {
-        let mockito_issuer = mockito::server_url();
-        let request_db = single_state_nonce_mockito_request_db(mockito_issuer);
-        let _mock_id_provider = mock_id_provider();
+        let server = mock_valid_provider_discovery(2);
+        let server_url = format!("http://{}", server.addr());
+        let request_db = single_state_nonce_request_db(server_url);
 
         let client = request_db.get_client().await.unwrap();
         let request = request_db.generate_request(client).await;
 
         assert!(request.is_ok());
 
-        let error_message = "{\
-            \"error_description\": \"Dummy bad request\",
-            \"error\": \"catch_all_error\",
-        }";
+        let error_message = serde_json::to_string(&json!({
+            "error_description": "Dummy bad request",
+            "error": "catch_all_error"
+        })).expect("Serde Json unsuccessful");
 
-        let _mock_provider = mock("POST", "/token")
-            .with_status(404)
-            .with_header("content-type", "application/json")
-            .with_body(error_message)
-            .create();
+        server.expect(
+            Expectation::matching(request::method_path("POST", "/token"))
+                .respond_with(
+                    status_code(404)
+                        .insert_header("content-type", "application/json")
+                        .body(error_message)
+                )
+        );
 
         let auth_code_response = AuthCodeResponse {
             session_state: "".to_string(),

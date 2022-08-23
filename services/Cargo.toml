@@ -85,7 +85,6 @@ rand = "0.8.4"
 tempfile = "3.1"
 wiremock-grpc = "0.0.3-alpha1"
 xml-rs = "0.8.3"
-mockito = "0.31.0"
 
 [build-dependencies]
 vergen = "7"

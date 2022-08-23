@@ -358,13 +358,16 @@ impl From<Oidc> for OIDCRequestsDB {
 mod tests {
     use std::collections::HashMap;
     use std::sync::Arc;
-    use mockito::{mock, Mock};
+    use httptest::{Expectation, Server};
+    use httptest::matchers::request;
+    use httptest::responders::status_code;
     use oauth2::{AccessToken, ClientId, ClientSecret, CsrfToken, EmptyExtraTokenFields, RedirectUrl, StandardTokenResponse};
     use oauth2::basic::BasicTokenType;
     use openidconnect::core::{CoreClient, CoreIdTokenFields, CoreTokenResponse, CoreTokenType};
     use openidconnect::Nonce;
+    use serde_json::json;
     use crate::error::{Result, Error};
-    use crate::pro::users::oidc::{AuthCodeResponse, DefaultClient, OIDCRequestsDB};
+    use crate::pro::users::oidc::{AuthCodeResponse, DefaultClient, DefaultJsonWebKeySet, DefaultProviderMetadata, OIDCRequestsDB};
     use crate::pro::users::oidc::OidcError::{IllegalProvider, LoginFailed, ProviderDiscoveryError, ResponseFieldError, TokenExchangeError};
     use crate::pro::util::tests::{mock_jwks, mock_provider_metadata, mock_token_response, MockTokenConfig, SINGLE_NONCE, SINGLE_STATE};
 
@@ -385,9 +388,9 @@ mod tests {
         }
     }
 
-    fn single_state_nonce_mockito_request_db() -> OIDCRequestsDB{
+    fn single_state_nonce_mocked_request_db(server_url : String) -> OIDCRequestsDB{
         OIDCRequestsDB {
-            issuer: mockito::server_url(),
+            issuer: server_url,
             client_id: "".to_string(),
             client_secret: "".to_string(),
             redirect_uri: REDIRECT_URI.to_string(),
@@ -417,12 +420,35 @@ mod tests {
         Ok(result)
     }
 
-    fn mock_valid_request(token_response: &StandardTokenResponse<CoreIdTokenFields, BasicTokenType>) -> Mock {
-        mock("POST", "/token")
-            .with_status(200)
-            .with_header("content-type", "application/json")
-            .with_body(serde_json::to_string(token_response).unwrap())
-            .create()
+    fn mock_provider_discovery(server: &Server, provider_metadata: DefaultProviderMetadata, jwks: DefaultJsonWebKeySet){
+        server.expect(
+            Expectation::matching(request::method_path("GET", "/.well-known/openid-configuration"))
+                .respond_with(
+                    status_code(200)
+                        .insert_header("content-type", "application/json")
+                        .body(serde_json::to_string(&provider_metadata).unwrap())
+                )
+        );
+
+        server.expect(
+            Expectation::matching(request::method_path("GET", "/jwk"))
+                .respond_with(
+                    status_code(200)
+                        .insert_header("content-type", "application/json")
+                        .body(serde_json::to_string(&jwks).unwrap())
+                )
+        );
+    }
+
+    fn mock_valid_request(server: &Server, token_response: &StandardTokenResponse<CoreIdTokenFields, BasicTokenType>) {
+        server.expect(
+            Expectation::matching(request::method_path("POST", "/token"))
+                .respond_with(
+                    status_code(200)
+                        .insert_header("content-type", "application/json")
+                        .body(serde_json::to_string(token_response).unwrap())
+                )
+        );
     }
 
     fn auth_code_response_empty_with_valid_state() -> AuthCodeResponse {
@@ -435,22 +461,14 @@ mod tests {
 
     #[tokio::test]
     async fn get_client_success() {
-        let request_db = single_state_nonce_mockito_request_db();
+        let server = Server::run();
+        let server_url = format!("http://{}", server.addr());
+        let request_db = single_state_nonce_mocked_request_db(server_url);
 
         let provider_metadata = mock_provider_metadata(request_db.issuer.as_str()).unwrap();
         let jwks = mock_jwks().unwrap();
 
-        let _mock_provider = mock("GET", "/.well-known/openid-configuration")
-            .with_status(200)
-            .with_header("content-type", "application/json")
-            .with_body(serde_json::to_string(&provider_metadata).unwrap())
-            .create();
-
-        let _mock_jwk = mock("GET", "/jwk")
-            .with_status(200)
-            .with_header("content-type", "application/json")
-            .with_body(serde_json::to_string(&jwks).unwrap())
-            .create();
+        mock_provider_discovery(&server, provider_metadata, jwks);
 
         let client = request_db.get_client().await;
 
@@ -459,18 +477,22 @@ mod tests {
 
     #[tokio::test]
     async fn get_client_bad_request() {
-        let request_db = single_state_nonce_mockito_request_db();
+        let server = Server::run();
+        let server_url = format!("http://{}", server.addr());
+        let request_db = single_state_nonce_mocked_request_db(server_url);
 
-        let error_message = "{\
-            \"error_description\": \"Dummy bad request\",
-            \"error\": \"catch_all_error\",
-        }";
+        let error_message = serde_json::to_string(&json!({
+            "error_description": "Dummy bad request",
+            "error": "catch_all_error"
+        })).expect("Serde Json unsuccessful");
 
-        let _mock_provider = mock("GET", "/.well-known/openid-configuration")
-            .with_status(404)
-            .with_header("content-type", "application/json")
-            .with_body(error_message)
-            .create();
+        server.expect(
+            Expectation::matching(request::method_path("GET", "/.well-known/openid-configuration"))
+                .respond_with(
+                    status_code(404)
+                        .insert_header("content-type", "application/json")
+                        .body(error_message))
+        );
 
         let client = request_db.get_client().await;
 
@@ -479,24 +501,16 @@ mod tests {
 
     #[tokio::test]
     async fn get_client_auth_code_unsupported() {
-        let request_db = single_state_nonce_mockito_request_db();
+        let server = Server::run();
+        let server_url = format!("http://{}", server.addr());
+        let request_db = single_state_nonce_mocked_request_db(server_url);
 
         let provider_metadata = mock_provider_metadata(request_db.issuer.as_str())
             .unwrap()
             .set_response_types_supported(vec![]);
         let jwks = mock_jwks().unwrap();
 
-        let _mock_provider = mock("GET", "/.well-known/openid-configuration")
-            .with_status(200)
-            .with_header("content-type", "application/json")
-            .with_body(serde_json::to_string(&provider_metadata).unwrap())
-            .create();
-
-        let _mock_jwk = mock("GET", "/jwk")
-            .with_status(200)
-            .with_header("content-type", "application/json")
-            .with_body(serde_json::to_string(&jwks).unwrap())
-            .create();
+        mock_provider_discovery(&server, provider_metadata, jwks);
 
         let client = request_db.get_client().await;
 
@@ -505,24 +519,16 @@ mod tests {
 
     #[tokio::test]
     async fn get_client_id_rsa_signing_unsupported() {
-        let request_db = single_state_nonce_mockito_request_db();
+        let server = Server::run();
+        let server_url = format!("http://{}", server.addr());
+        let request_db = single_state_nonce_mocked_request_db(server_url);
 
         let provider_metadata = mock_provider_metadata(request_db.issuer.as_str())
             .unwrap()
             .set_id_token_signing_alg_values_supported(vec![]);
         let jwks = mock_jwks().unwrap();
 
-        let _mock_provider = mock("GET", "/.well-known/openid-configuration")
-            .with_status(200)
-            .with_header("content-type", "application/json")
-            .with_body(serde_json::to_string(&provider_metadata).unwrap())
-            .create();
-
-        let _mock_jwk = mock("GET", "/jwk")
-            .with_status(200)
-            .with_header("content-type", "application/json")
-            .with_body(serde_json::to_string(&jwks).unwrap())
-            .create();
+        mock_provider_discovery(&server, provider_metadata, jwks);
 
         let client = request_db.get_client().await;
 
@@ -531,24 +537,16 @@ mod tests {
 
     #[tokio::test]
     async fn get_client_missing_scopes() {
-        let request_db = single_state_nonce_mockito_request_db();
+        let server = Server::run();
+        let server_url = format!("http://{}", server.addr());
+        let request_db = single_state_nonce_mocked_request_db(server_url);
 
         let provider_metadata = mock_provider_metadata(request_db.issuer.as_str())
             .unwrap()
             .set_scopes_supported(None);
         let jwks = mock_jwks().unwrap();
 
-        let _mock_provider = mock("GET", "/.well-known/openid-configuration")
-            .with_status(200)
-            .with_header("content-type", "application/json")
-            .with_body(serde_json::to_string(&provider_metadata).unwrap())
-            .create();
-
-        let _mock_jwk = mock("GET", "/jwk")
-            .with_status(200)
-            .with_header("content-type", "application/json")
-            .with_body(serde_json::to_string(&jwks).unwrap())
-            .create();
+        mock_provider_discovery(&server, provider_metadata, jwks);
 
         let client = request_db.get_client().await;
 
@@ -557,24 +555,16 @@ mod tests {
 
     #[tokio::test]
     async fn get_client_missing_claims() {
-        let request_db = single_state_nonce_mockito_request_db();
+        let server = Server::run();
+        let server_url = format!("http://{}", server.addr());
+        let request_db = single_state_nonce_mocked_request_db(server_url);
 
         let provider_metadata = mock_provider_metadata(request_db.issuer.as_str())
             .unwrap()
             .set_claims_supported(None);
         let jwks = mock_jwks().unwrap();
 
-        let _mock_provider = mock("GET", "/.well-known/openid-configuration")
-            .with_status(200)
-            .with_header("content-type", "application/json")
-            .with_body(serde_json::to_string(&provider_metadata).unwrap())
-            .create();
-
-        let _mock_jwk = mock("GET", "/jwk")
-            .with_status(200)
-            .with_header("content-type", "application/json")
-            .with_body(serde_json::to_string(&jwks).unwrap())
-            .create();
+        mock_provider_discovery(&server, provider_metadata, jwks);
 
         let client = request_db.get_client().await;
 
@@ -638,14 +628,16 @@ mod tests {
 
     #[tokio::test]
     async fn resolve_request_success() {
-        let request_db = single_state_nonce_mockito_request_db();
+        let server = Server::run();
+        let server_url = format!("http://{}", server.addr());
+        let request_db = single_state_nonce_mocked_request_db(server_url);
         let client = mock_client(&request_db).unwrap();
 
         request_db.generate_request(client.clone()).await.unwrap();
 
         let mock_token_config = MockTokenConfig::create_from_issuer_and_client(request_db.issuer.clone(), request_db.client_id.clone());
         let token_response = mock_token_response(mock_token_config).unwrap();
-        let _mock = mock_valid_request(&token_response);
+        mock_valid_request(&server, &token_response);
 
         let auth_code_response = auth_code_response_empty_with_valid_state();
         let response = request_db.resolve_request(client, auth_code_response).await;
@@ -689,21 +681,17 @@ mod tests {
 
     #[tokio::test]
     async fn resolve_request_no_id_token() {
-        let request_db = single_state_nonce_mockito_request_db();
+        let server = Server::run();
+        let server_url = format!("http://{}", server.addr());
+        let request_db = single_state_nonce_mocked_request_db(server_url);
 
         let mock_token_config = MockTokenConfig::create_from_issuer_and_client(request_db.issuer.clone(), request_db.client_id.clone());
-
         let mut token_response = CoreTokenResponse::new(
             AccessToken::new(mock_token_config.access),
             CoreTokenType::Bearer,
             CoreIdTokenFields::new(None, EmptyExtraTokenFields {}));
         token_response.set_expires_in(mock_token_config.duration.as_ref());
-
-        let _m = mock("POST", "/token")
-            .with_status(200)
-            .with_header("content-type", "application/json")
-            .with_body(serde_json::to_string(&token_response).unwrap())
-            .create();
+        mock_valid_request(&server, &token_response);
 
         let client = mock_client(&request_db).unwrap();
 
@@ -719,7 +707,9 @@ mod tests {
 
     #[tokio::test]
     async fn resolve_request_no_nonce() {
-        let request_db = single_state_nonce_mockito_request_db();
+        let server = Server::run();
+        let server_url = format!("http://{}", server.addr());
+        let request_db = single_state_nonce_mocked_request_db(server_url);
         let client = mock_client(&request_db).unwrap();
 
         request_db.generate_request(client.clone()).await.unwrap();
@@ -727,7 +717,7 @@ mod tests {
         let mut mock_token_config = MockTokenConfig::create_from_issuer_and_client(request_db.issuer.clone(), request_db.client_id.clone());
         mock_token_config.nonce = None;
         let token_response = mock_token_response(mock_token_config).unwrap();
-        let _mock = mock_valid_request(&token_response);
+        mock_valid_request(&server, &token_response);
 
         let auth_code_response = auth_code_response_empty_with_valid_state();
         let response = request_db.resolve_request(client, auth_code_response).await;
@@ -737,7 +727,9 @@ mod tests {
 
     #[tokio::test]
     async fn resolve_request_wrong_nonce() {
-        let request_db = single_state_nonce_mockito_request_db();
+        let server = Server::run();
+        let server_url = format!("http://{}", server.addr());
+        let request_db = single_state_nonce_mocked_request_db(server_url);
         let client = mock_client(&request_db).unwrap();
 
         request_db.generate_request(client.clone()).await.unwrap();
@@ -745,7 +737,7 @@ mod tests {
         let mut mock_token_config = MockTokenConfig::create_from_issuer_and_client(request_db.issuer.clone(), request_db.client_id.clone());
         mock_token_config.nonce = Some(Nonce::new("Wrong Nonce".to_string()));
         let token_response = mock_token_response(mock_token_config).unwrap();
-        let _mock = mock_valid_request(&token_response);
+        mock_valid_request(&server, &token_response);
 
         let auth_code_response = auth_code_response_empty_with_valid_state();
         let response = request_db.resolve_request(client, auth_code_response).await;
@@ -755,7 +747,9 @@ mod tests {
 
     #[tokio::test]
     async fn resolve_request_no_email() {
-        let request_db = single_state_nonce_mockito_request_db();
+        let server = Server::run();
+        let server_url = format!("http://{}", server.addr());
+        let request_db = single_state_nonce_mocked_request_db(server_url);
         let client = mock_client(&request_db).unwrap();
 
         request_db.generate_request(client.clone()).await.unwrap();
@@ -763,7 +757,7 @@ mod tests {
         let mut mock_token_config = MockTokenConfig::create_from_issuer_and_client(request_db.issuer.clone(), request_db.client_id.clone());
         mock_token_config.email = None;
         let token_response = mock_token_response(mock_token_config).unwrap();
-        let _mock = mock_valid_request(&token_response);
+        mock_valid_request(&server, &token_response);
 
         let auth_code_response = auth_code_response_empty_with_valid_state();
         let response = request_db.resolve_request(client, auth_code_response).await;
@@ -773,7 +767,9 @@ mod tests {
 
     #[tokio::test]
     async fn resolve_request_no_name() {
-        let request_db = single_state_nonce_mockito_request_db();
+        let server = Server::run();
+        let server_url = format!("http://{}", server.addr());
+        let request_db = single_state_nonce_mocked_request_db(server_url);
         let client = mock_client(&request_db).unwrap();
 
         request_db.generate_request(client.clone()).await.unwrap();
@@ -781,7 +777,7 @@ mod tests {
         let mut mock_token_config = MockTokenConfig::create_from_issuer_and_client(request_db.issuer.clone(), request_db.client_id.clone());
         mock_token_config.name = None;
         let token_response = mock_token_response(mock_token_config).unwrap();
-        let _mock = mock_valid_request(&token_response);
+        mock_valid_request(&server, &token_response);
 
         let auth_code_response = auth_code_response_empty_with_valid_state();
         let response = request_db.resolve_request(client, auth_code_response).await;
@@ -791,7 +787,9 @@ mod tests {
 
     #[tokio::test]
     async fn resolve_request_no_access_token_duration() {
-        let request_db = single_state_nonce_mockito_request_db();
+        let server = Server::run();
+        let server_url = format!("http://{}", server.addr());
+        let request_db = single_state_nonce_mocked_request_db(server_url);
         let client = mock_client(&request_db).unwrap();
 
         request_db.generate_request(client.clone()).await.unwrap();
@@ -799,7 +797,7 @@ mod tests {
         let mut mock_token_config = MockTokenConfig::create_from_issuer_and_client(request_db.issuer.clone(), request_db.client_id.clone());
         mock_token_config.duration = None;
         let token_response = mock_token_response(mock_token_config).unwrap();
-        let _mock = mock_valid_request(&token_response);
+        mock_valid_request(&server, &token_response);
 
         let auth_code_response = auth_code_response_empty_with_valid_state();
         let response = request_db.resolve_request(client, auth_code_response).await;
@@ -810,7 +808,9 @@ mod tests {
     #[tokio::test]
     async fn resolve_request_access_hashcode_mismatch() {
 
-        let request_db = single_state_nonce_mockito_request_db();
+        let server = Server::run();
+        let server_url = format!("http://{}", server.addr());
+        let request_db = single_state_nonce_mocked_request_db(server_url);
         let client = mock_client(&request_db).unwrap();
 
         request_db.generate_request(client.clone()).await.unwrap();
@@ -820,7 +820,7 @@ mod tests {
         mock_token_config.access_for_id = ALTERNATIVE_ACCESS_TOKEN.to_string();
 
         let token_response = mock_token_response(mock_token_config).unwrap();
-        let _mock = mock_valid_request(&token_response);
+        mock_valid_request(&server, &token_response);
 
         let auth_code_response = auth_code_response_empty_with_valid_state();
         let response = request_db.resolve_request(client, auth_code_response).await;
@@ -830,14 +830,16 @@ mod tests {
 
     #[tokio::test]
     async fn resolve_request_twice() {
-        let request_db = single_state_nonce_mockito_request_db();
+        let server = Server::run();
+        let server_url = format!("http://{}", server.addr());
+        let request_db = single_state_nonce_mocked_request_db(server_url);
         let client = mock_client(&request_db).unwrap();
 
         request_db.generate_request(client.clone()).await.unwrap();
 
         let mock_token_config = MockTokenConfig::create_from_issuer_and_client(request_db.issuer.clone(), request_db.client_id.clone());
         let token_response = mock_token_response(mock_token_config).unwrap();
-        let _mock = mock_valid_request(&token_response);
+        mock_valid_request(&server, &token_response);
 
         let auth_code_response = auth_code_response_empty_with_valid_state();
         let response = request_db.resolve_request(client.clone(), auth_code_response).await;
@@ -852,7 +854,9 @@ mod tests {
 
     #[tokio::test]
     async fn resolve_multiple_requests() {
-        let mut request_db = single_state_nonce_mockito_request_db();
+        let server = Server::run();
+        let server_url = format!("http://{}", server.addr());
+        let mut request_db = single_state_nonce_mocked_request_db(server_url);
         let client = mock_client(&request_db).unwrap();
 
         //TODO: Not sure how to do multiple requests deterministically in a good way.
@@ -900,7 +904,7 @@ mod tests {
             let mut mock_token_config = MockTokenConfig::create_from_issuer_and_client(request_db.issuer.clone(), request_db.client_id.clone());
             mock_token_config.nonce = nonce;
             let token_response = mock_token_response(mock_token_config).unwrap();
-            let _mock = mock_valid_request(&token_response);
+            mock_valid_request(&server, &token_response);
 
             let mut auth_code_response = auth_code_response_empty_with_valid_state();
             auth_code_response.state = state;
@@ -912,22 +916,27 @@ mod tests {
 
     #[tokio::test]
     async fn resolve_bad_request() {
-        let request_db = single_state_nonce_mockito_request_db();
+        let server = Server::run();
+        let server_url = format!("http://{}", server.addr());
+        let request_db = single_state_nonce_mocked_request_db(server_url);
         let client = mock_client(&request_db).unwrap();
 
         request_db.generate_request(client.clone()).await.unwrap();
 
         //TODO: Maybe search for more detailed error types and test/display them more gracefully.
-        let error_message = "{\
-            \"error_description\": \"Dummy bad request\",
-            \"error\": \"catch_all_error\",
-        }";
+        let error_message = serde_json::to_string(&json!({
+            "error_description": "Dummy bad request",
+            "error": "catch_all_error"
+        })).expect("Serde Json unsuccessful");
 
-        let _mock = mock("POST", "/token")
-                .with_status(400)
-                .with_header("content-type", "application/json")
-                .with_body(error_message)
-                .create();
+        server.expect(
+            Expectation::matching(request::method_path("POST", "/token"))
+                .respond_with(
+                    status_code(404)
+                        .insert_header("content-type", "application/json")
+                        .body(error_message)
+                )
+        );
 
         let auth_code_response = auth_code_response_empty_with_valid_state();
         let response = request_db.resolve_request(client, auth_code_response).await;
@@ -937,21 +946,26 @@ mod tests {
 
     #[tokio::test]
     async fn resolve_after_bad_request() {
-        let request_db = single_state_nonce_mockito_request_db();
+        let server = Server::run();
+        let server_url = format!("http://{}", server.addr());
+        let request_db = single_state_nonce_mocked_request_db(server_url);
         let client = mock_client(&request_db).unwrap();
 
         request_db.generate_request(client.clone()).await.unwrap();
 
-        let error_message = "{\
-            \"error_description\": \"Dummy bad request\",
-            \"error\": \"catch_all_error\",
-        }";
+        let error_message = serde_json::to_string(&json!({
+            "error_description": "Dummy bad request",
+            "error": "catch_all_error"
+        })).expect("Serde Json unsuccessful");
 
-        let _mock = mock("POST", "/token")
-            .with_status(400)
-            .with_header("content-type", "application/json")
-            .with_body(error_message)
-            .create();
+        server.expect(
+            Expectation::matching(request::method_path("POST", "/token"))
+                .respond_with(
+                    status_code(404)
+                        .insert_header("content-type", "application/json")
+                        .body(error_message)
+                )
+        );
 
         let auth_code_response = auth_code_response_empty_with_valid_state();
         let response_bad = request_db.resolve_request(client.clone(), auth_code_response).await;
