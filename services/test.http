@@ -248,12 +248,36 @@ Accept: application/json
 ###
 
 GET http://localhost:3030/tasks/{{lastTask.response.body.$.task_id}}/status
-Authorization: Bearer {{anonymousSession.response.body.$.id}}
+Authorization: Bearer 8aca8875-425a-4ef1-8ee6-cdfc62dd7525
 
 ###
 
 # @name lastTask
 DELETE http://localhost:3030/ebv/overviews/dataset_sm.nc
+Authorization: Bearer 8aca8875-425a-4ef1-8ee6-cdfc62dd7525
+Content-Type: application/json
+Accept: application/json
+
+###
+
+# @name lastTask
+PUT http://localhost:3030/ebv/overviews/purvis_comcom_id6_20220208_v1.nc
+Authorization: Bearer 8aca8875-425a-4ef1-8ee6-cdfc62dd7525
+Content-Type: application/json
+Accept: application/json
+
+###
+
+# @name lastTask
+DELETE http://localhost:3030/ebv/overviews/purvis_comcom_id6_20220208_v1.nc
+Authorization: Bearer 8aca8875-425a-4ef1-8ee6-cdfc62dd7525
+Content-Type: application/json
+Accept: application/json
+
+###
+
+# @name lastTask
+PUT http://localhost:3030/ebv/overviews/baisero_spepop_id5_20220215_v1.nc
 Authorization: Bearer 8aca8875-425a-4ef1-8ee6-cdfc62dd7525
 Content-Type: application/json
 Accept: application/json

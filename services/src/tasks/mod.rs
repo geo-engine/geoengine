@@ -12,6 +12,7 @@ use crate::{
 pub use error::TaskError;
 use futures::channel::oneshot;
 use geoengine_datatypes::{error::ErrorSource, identifier, util::AsAnyArc};
+use geoengine_operators::util::number_statistics::NumberStatistics;
 pub use in_memory::{SimpleTaskManager, SimpleTaskManagerContext};
 use serde::{Deserialize, Serialize, Serializer};
 use snafu::ensure;
@@ -189,13 +190,81 @@ impl TaskStatus {
 #[derive(Debug, Serialize)]
 pub struct RunningTaskStatusInfo {
     pct_complete: u8,
+    #[serde(serialize_with = "serialize_time_estimate_seconds")]
+    time_estimate_seconds: NumberStatistics,
+    #[serde(skip_serializing)]
+    last_time_stamp: std::time::Instant,
     info: Box<dyn TaskStatusInfo>,
 }
 
 impl RunningTaskStatusInfo {
     pub fn new(pct_complete: u8, info: Box<dyn TaskStatusInfo>) -> Arc<Self> {
-        Arc::new(RunningTaskStatusInfo { pct_complete, info })
+        Arc::new(RunningTaskStatusInfo {
+            pct_complete,
+            time_estimate_seconds: NumberStatistics::default(),
+            last_time_stamp: std::time::Instant::now(),
+            info,
+        })
     }
+
+    pub fn update(&self, pct_complete: u8, info: Box<dyn TaskStatusInfo>) -> Arc<Self> {
+        let mut time_estimate_seconds = self.time_estimate_seconds;
+
+        let mut last_time_stamp = std::time::Instant::now();
+        let elapsed_secs = (last_time_stamp - self.last_time_stamp).as_secs();
+
+        let elapsed_pct = pct_complete - self.pct_complete;
+
+        if elapsed_pct > 0 {
+            // if zero or smaller, don't update
+            time_estimate_seconds.add(elapsed_secs as f64 / f64::from(elapsed_pct));
+
+            // … and keep previous timestamp
+            last_time_stamp = self.last_time_stamp;
+        }
+
+        Arc::new(RunningTaskStatusInfo {
+            pct_complete,
+            time_estimate_seconds,
+            last_time_stamp,
+            info,
+        })
+    }
+}
+
+#[allow(clippy::borrowed_box)]
+fn serialize_time_estimate_seconds<S>(
+    time_estimate_seconds: &NumberStatistics,
+    serializer: S,
+) -> Result<S::Ok, S::Error>
+where
+    S: Serializer,
+{
+    let mean = time_estimate_seconds.mean();
+    let std_dev = time_estimate_seconds.std_dev();
+
+    let mean = if mean.is_nan() {
+        "?".to_string()
+    } else {
+        hms_from_secs(mean)
+    };
+
+    let std_dev = if std_dev.is_nan() {
+        "?".to_string()
+    } else {
+        hms_from_secs(std_dev)
+    };
+
+    serializer.serialize_str(&format!("{mean} (± {std_dev})"))
+}
+
+fn hms_from_secs(seconds: f64) -> String {
+    let secs = seconds as u64;
+    let hours = secs / 3600;
+    let secs = secs % 3600;
+    let mins = secs / 60;
+    let secs = secs % 60;
+    format!("{:02}:{:02}:{:02}", hours, mins, secs)
 }
 
 #[allow(clippy::borrowed_box)]

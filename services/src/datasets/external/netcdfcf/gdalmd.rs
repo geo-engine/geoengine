@@ -87,7 +87,7 @@ impl<'d> MdGroup<'d> {
         ret_val
     }
 
-    unsafe fn _last_null_pointer_err(method_name: &'static str) -> GdalError {
+    pub(super) unsafe fn _last_null_pointer_err(method_name: &'static str) -> GdalError {
         let last_err_msg = Self::_string(gdal_sys::CPLGetLastErrorMsg());
         gdal_sys::CPLErrorReset();
         GdalError::NullPointer {

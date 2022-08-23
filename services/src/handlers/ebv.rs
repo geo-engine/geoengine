@@ -576,7 +576,7 @@ struct EvbOverviewTask<C: Context> {
 impl<C: Context> Task<C::TaskContext> for EvbOverviewTask<C> {
     async fn run(
         &self,
-        _ctx: C::TaskContext,
+        ctx: C::TaskContext,
     ) -> Result<Box<dyn crate::tasks::TaskStatusInfo>, Box<dyn ErrorSource>> {
         let file = self.file.clone();
         let session = self.session.clone();
@@ -586,7 +586,7 @@ impl<C: Context> Task<C::TaskContext> for EvbOverviewTask<C> {
             with_netcdfcf_provider(self.ctx.as_ref(), &session.into(), move |provider| {
                 // TODO: provide some detailed pct status
 
-                match provider.create_overviews(&file, resampling_method) {
+                match provider.create_overviews(&file, resampling_method, &ctx) {
                     Ok(OverviewGeneration::Created) => Ok(NetCdfCfOverviewResponse {
                         success: vec![file],
                         skip: vec![],

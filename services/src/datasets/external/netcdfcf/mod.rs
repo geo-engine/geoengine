@@ -14,6 +14,7 @@ use crate::layers::layer::LayerListing;
 use crate::layers::layer::ProviderLayerId;
 use crate::layers::listing::LayerCollectionId;
 use crate::layers::listing::LayerCollectionProvider;
+use crate::tasks::TaskContext;
 use crate::util::user_input::Validated;
 use crate::workflows::workflow::Workflow;
 use async_trait::async_trait;
@@ -22,6 +23,7 @@ use geoengine_datatypes::dataset::DataProviderId;
 use geoengine_datatypes::dataset::LayerId;
 use geoengine_datatypes::dataset::{DataId, ExternalDataId};
 use geoengine_datatypes::operations::image::{Colorizer, RgbaColor};
+use geoengine_datatypes::primitives::TimeStepIter;
 use geoengine_datatypes::primitives::{
     DateTime, DateTimeParseFormat, Measurement, RasterQueryRectangle, TimeGranularity,
     TimeInstance, TimeInterval, TimeStep, VectorQueryRectangle,
@@ -276,7 +278,7 @@ impl NetCdfCfDataProvider {
             })
             .collect::<Result<Vec<_>>>()?;
 
-        let time_coverage = time_coverage(&root_group)?;
+        let time_coverage = TimeCoverage::from_root_group(&root_group)?;
 
         let colorizer = load_colorizer(&path).or_else(|error| {
             debug!("Use fallback colorizer: {:?}", error);
@@ -415,7 +417,7 @@ impl NetCdfCfDataProvider {
 
         let root_group = MdGroup::from_dataset(&dataset)?;
 
-        let time_coverage = time_coverage(&root_group)?;
+        let time_coverage = TimeCoverage::from_root_group(&root_group)?;
 
         let geo_transform = {
             let crs_array = root_group.open_array("crs")?;
@@ -586,12 +588,19 @@ impl NetCdfCfDataProvider {
         Ok(files)
     }
 
-    pub fn create_overviews(
+    pub fn create_overviews<C: TaskContext>(
         &self,
         dataset_path: &Path,
         resampling_method: Option<ResamplingMethod>,
+        task_context: &C,
     ) -> Result<OverviewGeneration> {
-        create_overviews(&self.path, dataset_path, &self.overviews, resampling_method)
+        create_overviews(
+            &self.path,
+            dataset_path,
+            &self.overviews,
+            resampling_method,
+            task_context,
+        )
     }
 
     pub fn remove_overviews(&self, dataset_path: &Path, force: bool) -> Result<()> {
@@ -782,58 +791,87 @@ pub enum TimeCoverage {
     List { time_stamps: Vec<TimeInstance> },
 }
 
-fn time_coverage(root_group: &MdGroup) -> Result<TimeCoverage> {
-    let start = root_group
-        .attribute_as_string("time_coverage_start")
-        .context(error::MissingTimeCoverageStart)?;
-    let end = root_group
-        .attribute_as_string("time_coverage_end")
-        .context(error::MissingTimeCoverageEnd)?;
-    let step = root_group
-        .attribute_as_string("time_coverage_resolution")
-        .context(error::MissingTimeCoverageResolution)?;
+impl TimeCoverage {
+    fn from_root_group(root_group: &MdGroup) -> Result<Self> {
+        let start = root_group
+            .attribute_as_string("time_coverage_start")
+            .context(error::MissingTimeCoverageStart)?;
+        let end = root_group
+            .attribute_as_string("time_coverage_end")
+            .context(error::MissingTimeCoverageEnd)?;
+        let step = root_group
+            .attribute_as_string("time_coverage_resolution")
+            .context(error::MissingTimeCoverageResolution)?;
 
-    // we can parse coverages starting with `P`,
-    let time_p_res = parse_time_coverage(&start, &end, &step);
-    if time_p_res.is_ok() {
-        debug!(
-            "Using time parsed from: start: {start}, end:{end}, step: {step} -> {:?} ",
-            time_p_res.as_ref().expect("was just checked with ok")
-        );
-        return time_p_res;
+        // we can parse coverages starting with `P`,
+        let time_p_res = parse_time_coverage(&start, &end, &step);
+        if time_p_res.is_ok() {
+            debug!(
+                "Using time parsed from: start: {start}, end:{end}, step: {step} -> {:?} ",
+                time_p_res.as_ref().expect("was just checked with ok")
+            );
+            return time_p_res;
+        }
+
+        // something went wrong parsing a regular time as defined in the NetCDF CF standard.
+        debug!("Could not parse time from: start: {start}, end:{end}, step: {step}");
+
+        // try to read time from dimension:
+        TimeCoverage::from_dimension(root_group)
     }
 
-    // something went wrong parsing a regular time as defined in the NetCDF CF standard.
-    debug!("Could not parse time from: start: {start}, end:{end}, step: {step}");
+    fn from_dimension(root_group: &MdGroup) -> Result<Self> {
+        // TODO: are there other variants for the time unit?
+        // `:units = "days since 1860-01-01 00:00:00.0";`
 
-    // try to read time from dimension:
-    time_coverage_from_dimension(root_group)
-}
+        let days_since_1860 = root_group
+            .dimension_as_double_array("time")
+            .context(error::MissingTimeDimension)?;
 
-fn time_coverage_from_dimension(root_group: &MdGroup) -> Result<TimeCoverage> {
-    // TODO: are there other variants for the time unit?
-    // `:units = "days since 1860-01-01 00:00:00.0";`
+        let unix_offset_millis = TimeInstance::from(DateTime::new_utc(1860, 1, 1, 0, 0, 0)).inner();
 
-    let days_since_1860 = root_group
-        .dimension_as_double_array("time")
-        .context(error::MissingTimeDimension)?;
+        let mut time_stamps = Vec::with_capacity(days_since_1860.len());
+        for days in days_since_1860 {
+            let days = days;
+            let hours = days * 24.;
+            let seconds = hours * 60. * 60.;
+            let milliseconds = seconds * 1_000.;
 
-    let unix_offset_millis = TimeInstance::from(DateTime::new_utc(1860, 1, 1, 0, 0, 0)).inner();
+            time_stamps.push(
+                TimeInstance::from_millis(milliseconds as i64 + unix_offset_millis)
+                    .context(error::InvalidTimeCoverageInstant)?,
+            );
+        }
 
-    let mut time_stamps = Vec::with_capacity(days_since_1860.len());
-    for days in days_since_1860 {
-        let days = days;
-        let hours = days * 24.;
-        let seconds = hours * 60. * 60.;
-        let milliseconds = seconds * 1_000.;
-
-        time_stamps.push(
-            TimeInstance::from_millis(milliseconds as i64 + unix_offset_millis)
-                .context(error::InvalidTimeCoverageInstant)?,
-        );
+        Ok(TimeCoverage::List { time_stamps })
     }
 
-    Ok(TimeCoverage::List { time_stamps })
+    fn number_of_time_steps(&self) -> Result<u32> {
+        match self {
+            TimeCoverage::Regular { start, end, step } => {
+                let time_interval = TimeInterval::new(*start, *end);
+                let time_steps = time_interval
+                    .and_then(|time_interval| step.num_steps_in_interval(time_interval));
+                time_steps.context(error::InvalidTimeCoverageInterval)
+            }
+            TimeCoverage::List { time_stamps } => Ok(time_stamps.len() as u32),
+        }
+    }
+
+    fn time_steps(&self) -> Result<Vec<TimeInstance>> {
+        match self {
+            TimeCoverage::Regular {
+                start,
+                end: _,
+                step,
+            } => {
+                let time_step_iter = TimeStepIter::new(*start, *step, self.number_of_time_steps()?)
+                    .context(error::InvalidTimeCoverageInterval)?;
+                Ok(time_step_iter.collect())
+            }
+            TimeCoverage::List { time_stamps } => Ok(time_stamps.clone()),
+        }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -1028,6 +1066,8 @@ mod tests {
         FileNotFoundHandling, GdalDatasetGeoTransform, GdalDatasetParameters,
         GdalLoadingInfoTemporalSlice,
     };
+
+    use crate::tasks::util::NopTaskContext;
 
     use super::*;
 
@@ -1404,7 +1444,7 @@ mod tests {
         };
 
         provider
-            .create_overviews(Path::new("dataset_sm.nc"), None)
+            .create_overviews(Path::new("dataset_sm.nc"), None, &NopTaskContext)
             .unwrap();
 
         let metadata = provider
@@ -1498,7 +1538,7 @@ mod tests {
         };
 
         provider
-            .create_overviews(Path::new("dataset_sm.nc"), None)
+            .create_overviews(Path::new("dataset_sm.nc"), None, &NopTaskContext)
             .unwrap();
 
         let provider_id = DataProviderId::from_str("bf6bb6ea-5d5d-467d-bad1-267bf3a54470").unwrap();

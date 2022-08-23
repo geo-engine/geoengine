@@ -148,6 +148,9 @@ pub enum NetCdfCf4DProviderError {
     CannotReadDimensions {
         source: GdalError,
     },
+    CannotCreateVrt {
+        source: GdalError,
+    },
     InvalidDirectory {
         source: Box<dyn ErrorSource>,
     },
@@ -178,5 +181,8 @@ pub enum NetCdfCf4DProviderError {
     CannotRemoveOverviewsWhileCreationIsInProgress,
     CannotRemoveOverviews {
         source: Box<dyn ErrorSource>,
+    },
+    CFfi {
+        source: std::ffi::NulError,
     },
 }

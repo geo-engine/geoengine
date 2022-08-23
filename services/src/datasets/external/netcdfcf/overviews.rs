@@ -1,14 +1,24 @@
-use super::{error, time_coverage, NetCdfCf4DProviderError, TimeCoverage};
+use super::{error, NetCdfCf4DProviderError, TimeCoverage};
 use crate::{
-    datasets::external::netcdfcf::{gdalmd::MdGroup, Metadata, NetCdfCfDataProvider},
+    datasets::{
+        external::netcdfcf::{gdalmd::MdGroup, NetCdfCfDataProvider},
+        storage::MetaDataDefinition,
+    },
+    tasks::{TaskContext, TaskStatusInfo},
     util::config::get_config_element,
 };
 use gdal::{raster::RasterCreationOption, Dataset, DatasetOptions, GdalOpenFlags};
+use gdal_sys::VSIUnlink;
 use geoengine_datatypes::{
-    error::BoxedResultExt, primitives::TimeInterval, util::gdal::ResamplingMethod,
+    error::BoxedResultExt,
+    primitives::{DateTimeParseFormat, TimeInterval},
+    util::gdal::ResamplingMethod,
 };
 use geoengine_operators::{
-    source::{GdalLoadingInfoTemporalSlice, GdalMetaDataList, GdalMetadataNetCdfCf},
+    source::{
+        GdalLoadingInfoTemporalSlice, GdalMetaDataList, GdalMetaDataRegular,
+        GdalSourceTimePlaceholder, TimeReference,
+    },
     util::gdal::{
         gdal_open_dataset_ex, gdal_parameters_from_dataset, raster_descriptor_from_dataset,
     },
@@ -19,6 +29,7 @@ use std::{
     collections::HashSet,
     fs::{self, File},
     io::{BufWriter, Write},
+    ops::Deref,
     path::{Path, PathBuf},
 };
 
@@ -36,7 +47,8 @@ struct NetCdfGroup {
 #[derive(Debug, Clone)]
 struct ConversionMetadata {
     pub dataset_in: String,
-    pub dataset_out: PathBuf,
+    pub dataset_out_folder: PathBuf,
+    pub number_of_time_steps: u32,
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -82,6 +94,7 @@ impl NetCdfGroup {
         &self,
         file_path: &Path,
         out_root_path: &Path,
+        number_of_time_steps: u32,
     ) -> Vec<ConversionMetadata> {
         let in_path = file_path.to_string_lossy();
         let mut metadata = Vec::new();
@@ -90,7 +103,8 @@ impl NetCdfGroup {
             let md_path = data_path.join("/");
             metadata.push(ConversionMetadata {
                 dataset_in: format!("NETCDF:\"{in_path}\":/{md_path}"),
-                dataset_out: out_root_path.join(md_path).with_extension("tiff"),
+                dataset_out_folder: out_root_path.join(md_path),
+                number_of_time_steps,
             });
         }
 
@@ -134,15 +148,86 @@ impl NetCdfVisitor for MdGroup<'_> {
     }
 }
 
-pub fn create_overviews(
+pub fn create_overviews<C: TaskContext>(
     provider_path: &Path,
     dataset_path: &Path,
     overview_path: &Path,
     resampling_method: Option<ResamplingMethod>,
+    task_context: &C,
 ) -> Result<OverviewGeneration> {
     let file_path = provider_path.join(dataset_path);
     let out_folder_path = overview_path.join(dataset_path);
 
+    check_paths(&file_path, provider_path, &out_folder_path, overview_path)?;
+
+    let (group_tree, time_coverage) = create_group_tree_and_time_coverage(&file_path)?;
+
+    if !out_folder_path.exists() {
+        fs::create_dir_all(&out_folder_path).boxed_context(error::InvalidDirectory)?;
+    }
+
+    // must have this flag before any write operations
+    let in_progress_flag = InProgressFlag::create(&out_folder_path)?;
+
+    // TODO: defer calculating stats
+    match store_metadata(provider_path, dataset_path, &out_folder_path) {
+        Ok(OverviewGeneration::Created) => (),
+        Ok(OverviewGeneration::Skipped) => return Ok(OverviewGeneration::Skipped),
+        Err(e) => return Err(e),
+    };
+
+    let conversion_metadata = group_tree.conversion_metadata(
+        &file_path,
+        &out_folder_path,
+        time_coverage.number_of_time_steps()?,
+    );
+    let number_of_conversions = conversion_metadata.len();
+    for (i, conversion) in conversion_metadata.into_iter().enumerate() {
+        emit_status(
+            task_context,
+            i as f64 / number_of_conversions as f64,
+            format!(
+                "Processing {} of {number_of_conversions} subdatasets",
+                i + 1
+            ),
+        );
+
+        match index_subdataset(
+            &conversion,
+            &time_coverage,
+            resampling_method,
+            task_context,
+            i,
+            number_of_conversions,
+        ) {
+            Ok(OverviewGeneration::Created) => (),
+            Ok(OverviewGeneration::Skipped) => return Ok(OverviewGeneration::Skipped),
+            Err(e) => return Err(e),
+        };
+    }
+
+    in_progress_flag.remove()?;
+
+    Ok(OverviewGeneration::Created)
+}
+
+fn emit_status<C: TaskContext>(task_context: &C, pct: f64, status: String) {
+    // TODO: more elegant way to do this?
+    tokio::task::block_in_place(move || {
+        tokio::runtime::Handle::current().block_on(async move {
+            task_context
+                .set_completion((pct * 100.) as u8, status.boxed())
+                .await;
+        });
+    });
+}
+
+fn check_paths(
+    file_path: &Path,
+    provider_path: &Path,
+    out_folder_path: &Path,
+    overview_path: &Path,
+) -> Result<()> {
     // TODO: refactor with new method from Michael
     // check that file does not "escape" the provider path
     if let Err(source) = file_path.strip_prefix(provider_path) {
@@ -153,9 +238,12 @@ pub fn create_overviews(
     if let Err(source) = out_folder_path.strip_prefix(overview_path) {
         return Err(NetCdfCf4DProviderError::DatasetIsNotInProviderPath { source });
     }
+    Ok(())
+}
 
+fn create_group_tree_and_time_coverage(file_path: &Path) -> Result<(NetCdfGroup, TimeCoverage)> {
     let dataset = gdal_open_dataset_ex(
-        &file_path,
+        file_path,
         DatasetOptions {
             open_flags: GdalOpenFlags::GDAL_OF_MULTIDIM_RASTER,
             allowed_drivers: Some(&["netCDF"]),
@@ -165,36 +253,13 @@ pub fn create_overviews(
     )
     .boxed_context(error::CannotOpenNetCdfDataset)?;
 
-    if !out_folder_path.exists() {
-        fs::create_dir_all(&out_folder_path).boxed_context(error::InvalidDirectory)?;
-    }
-
-    // must have this flag before any write operations
-    let in_progress_flag = InProgressFlag::create(&out_folder_path)?;
-
     let root_group = MdGroup::from_dataset(&dataset)?;
 
     let group_tree = root_group.group_tree()?;
 
-    match store_metadata(provider_path, dataset_path, &out_folder_path) {
-        Ok(OverviewGeneration::Created) => (),
-        Ok(OverviewGeneration::Skipped) => return Ok(OverviewGeneration::Skipped),
-        Err(e) => return Err(e),
-    };
+    let time_coverage = TimeCoverage::from_root_group(&root_group)?;
 
-    let time_coverage = time_coverage(&root_group)?;
-
-    for conversion in group_tree.conversion_metadata(&file_path, &out_folder_path) {
-        match index_subdataset(&conversion, &time_coverage, resampling_method) {
-            Ok(OverviewGeneration::Created) => (),
-            Ok(OverviewGeneration::Skipped) => return Ok(OverviewGeneration::Skipped),
-            Err(e) => return Err(e),
-        }
-    }
-
-    in_progress_flag.remove()?;
-
-    Ok(OverviewGeneration::Created)
+    Ok((group_tree, time_coverage))
 }
 
 /// A flag that indicates on-going process of an overview folder.
@@ -292,22 +357,167 @@ fn store_metadata(
     Ok(OverviewGeneration::Created)
 }
 
-fn index_subdataset(
+#[derive(Debug)]
+struct TempVrt {
+    mem_path: String,
+    dataset: Dataset,
+}
+
+impl TempVrt {
+    fn new(dataset_in: &Dataset, band: u32) -> Result<Self> {
+        let mem_path = format!("/vsimem/{}", uuid::Uuid::new_v4());
+
+        // Get raw handles to the datasets
+        let mut datasets_raw: Vec<gdal_sys::GDALDatasetH> = vec![unsafe { dataset_in.c_dataset() }];
+
+        let c_dest = std::ffi::CString::new(mem_path.as_bytes()).context(error::CFfi)?;
+
+        let cstr_args = vec!["-b".to_string(), band.to_string()]
+            .into_iter()
+            .map(|v| std::ffi::CString::new(v).context(error::CFfi))
+            .collect::<std::result::Result<Vec<_>, _>>()?;
+        let mut c_args = cstr_args
+            .iter()
+            .map(|x| x.as_ptr() as *mut std::ffi::c_char)
+            .chain(std::iter::once(std::ptr::null_mut()))
+            .collect::<Vec<_>>();
+        let c_options =
+            unsafe { gdal_sys::GDALBuildVRTOptionsNew(c_args.as_mut_ptr(), std::ptr::null_mut()) };
+
+        let dataset_out = unsafe {
+            gdal_sys::GDALBuildVRT(
+                c_dest.as_ptr(),
+                datasets_raw.len() as std::ffi::c_int,
+                datasets_raw.as_mut_ptr(),
+                std::ptr::null(),
+                c_options,
+                std::ptr::null_mut(),
+            )
+        };
+
+        unsafe {
+            gdal_sys::GDALBuildVRTOptionsFree(c_options);
+        }
+
+        if dataset_out.is_null() {
+            return Err(unsafe { super::gdalmd::MdGroup::_last_null_pointer_err("GDALBuildVRT") })
+                .context(error::CannotCreateVrt);
+        }
+
+        let dataset = unsafe { Dataset::from_c_dataset(dataset_out) };
+
+        Ok(Self { mem_path, dataset })
+    }
+}
+
+impl Deref for TempVrt {
+    type Target = Dataset;
+
+    fn deref(&self) -> &Self::Target {
+        &self.dataset
+    }
+}
+
+impl Drop for TempVrt {
+    fn drop(&mut self) {
+        unsafe {
+            let c_string = std::ffi::CString::from_vec_unchecked(self.mem_path.bytes().collect());
+            VSIUnlink(c_string.as_ptr());
+        }
+    }
+}
+
+struct CogRasterCreationOptions {
+    compression_format: String,
+    compression_level: String,
+    num_threads: String,
+    resampling_method: String,
+}
+
+impl CogRasterCreationOptions {
+    fn new(resampling_method: Option<ResamplingMethod>) -> Result<Self> {
+        const COMPRESSION_FORMAT: &str = "LZW"; // this is the GDAL default
+        const DEFAULT_COMPRESSION_LEVEL: u8 = 6; // this is the GDAL default
+        const DEFAULT_RESAMPLING_METHOD: ResamplingMethod = ResamplingMethod::Nearest;
+
+        let gdal_options = get_config_element::<crate::util::config::Gdal>()
+            .boxed_context(error::CannotCreateOverviews)?;
+        let num_threads = gdal_options.compression_num_threads.to_string();
+        let compression_format = gdal_options
+            .compression_algorithm
+            .as_deref()
+            .unwrap_or(COMPRESSION_FORMAT)
+            .to_string();
+        let compression_level = gdal_options
+            .compression_z_level
+            .unwrap_or(DEFAULT_COMPRESSION_LEVEL)
+            .to_string();
+        let resampling_method = resampling_method
+            .unwrap_or(DEFAULT_RESAMPLING_METHOD)
+            .to_string();
+
+        Ok(Self {
+            compression_format,
+            compression_level,
+            num_threads,
+            resampling_method,
+        })
+    }
+}
+
+impl CogRasterCreationOptions {
+    fn options(&self) -> Vec<RasterCreationOption<'_>> {
+        const COG_BLOCK_SIZE: &str = "512";
+
+        vec![
+            RasterCreationOption {
+                key: "COMPRESS",
+                value: &self.compression_format,
+            },
+            RasterCreationOption {
+                key: "LEVEL",
+                value: &self.compression_level,
+            },
+            RasterCreationOption {
+                key: "NUM_THREADS",
+                value: &self.num_threads,
+            },
+            RasterCreationOption {
+                key: "BLOCKSIZE",
+                value: COG_BLOCK_SIZE,
+            },
+            RasterCreationOption {
+                key: "BIGTIFF",
+                value: "IF_SAFER", // TODO: test if this suffices
+            },
+            RasterCreationOption {
+                key: "RESAMPLING",
+                value: &self.resampling_method,
+            },
+        ]
+    }
+}
+
+fn index_subdataset<C: TaskContext>(
     conversion: &ConversionMetadata,
     time_coverage: &TimeCoverage,
     resampling_method: Option<ResamplingMethod>,
+    task_context: &C,
+    conversion_index: usize,
+    number_of_conversions: usize,
 ) -> Result<OverviewGeneration> {
-    const COG_BLOCK_SIZE: &str = "512";
-    const COMPRESSION_FORMAT: &str = "LZW"; // this is the GDAL default
-    const DEFAULT_COMPRESSION_LEVEL: u8 = 6; // this is the GDAL default
-    const DEFAULT_RESAMPLING_METHOD: ResamplingMethod = ResamplingMethod::Nearest;
-
-    if conversion.dataset_out.exists() {
-        debug!("Skipping conversion: {}", conversion.dataset_out.display());
+    if conversion.dataset_out_folder.exists() {
+        debug!(
+            "Skipping conversion: {}",
+            conversion.dataset_out_folder.display()
+        );
         return Ok(OverviewGeneration::Skipped);
     }
 
-    debug!("Indexing conversion: {}", conversion.dataset_out.display());
+    debug!(
+        "Indexing conversion: {}",
+        conversion.dataset_out_folder.display()
+    );
 
     let subdataset = gdal_open_dataset_ex(
         Path::new(&conversion.dataset_in),
@@ -320,119 +530,159 @@ fn index_subdataset(
     )
     .boxed_context(error::CannotOpenNetCdfSubdataset)?;
 
-    fs::create_dir_all(
-        conversion
-            .dataset_out
-            .parent()
-            .context(error::CannotReadInputFileDir {
-                path: conversion.dataset_out.clone(),
-            })?,
-    )
+    fs::create_dir_all(conversion.dataset_out_folder.parent().context(
+        error::CannotReadInputFileDir {
+            path: conversion.dataset_out_folder.clone(),
+        },
+    )?)
     .boxed_context(error::CannotCreateOverviews)?;
 
-    let gdal_options = get_config_element::<crate::util::config::Gdal>()
-        .boxed_context(error::CannotCreateOverviews)?;
-    let num_threads = gdal_options.compression_num_threads.to_string();
-    let compression_format = gdal_options
-        .compression_algorithm
-        .as_deref()
-        .unwrap_or(COMPRESSION_FORMAT);
-    let compression_level = gdal_options
-        .compression_z_level
-        .unwrap_or(DEFAULT_COMPRESSION_LEVEL)
-        .to_string();
-    let resampling_method = resampling_method
-        .unwrap_or(DEFAULT_RESAMPLING_METHOD)
-        .to_string();
-
     let cog_driver = gdal::Driver::get("COG").boxed_context(error::CannotCreateOverviews)?;
-    let options = vec![
-        RasterCreationOption {
-            key: "COMPRESS",
-            value: compression_format,
-        },
-        RasterCreationOption {
-            key: "LEVEL",
-            value: compression_level.as_ref(),
-        },
-        RasterCreationOption {
-            key: "NUM_THREADS",
-            value: &num_threads,
-        },
-        RasterCreationOption {
-            key: "BLOCKSIZE",
-            value: COG_BLOCK_SIZE,
-        },
-        RasterCreationOption {
-            key: "BIGTIFF",
-            value: "IF_SAFER", // TODO: test if this suffices
-        },
-        RasterCreationOption {
-            key: "RESAMPLING",
-            value: resampling_method.as_ref(),
-        },
-    ];
+    let options = CogRasterCreationOptions::new(resampling_method)?;
 
-    debug!("Overview creation GDAL options: {:?}", &options);
+    debug!("Overview creation GDAL options: {:?}", options.options());
 
-    subdataset
-        .create_copy(&cog_driver, &conversion.dataset_out, &options)
-        .boxed_context(error::CannotCreateOverviews)?;
+    let number_of_rasters = subdataset.raster_count();
+    let number_of_other_dimensions = (number_of_rasters as u32) / conversion.number_of_time_steps;
 
-    let loading_info = generate_loading_info(&subdataset, &conversion.dataset_out, time_coverage)?;
+    let time_steps = time_coverage.time_steps()?;
 
-    let loading_info_file = File::create(conversion.dataset_out.with_extension("json"))
-        .boxed_context(error::CannotWriteMetadataFile)?;
+    for dimension in 1..=number_of_other_dimensions {
+        let dimension_folder = conversion.dataset_out_folder.join(dimension.to_string());
 
+        fs::create_dir_all(&dimension_folder).boxed_context(error::CannotCreateOverviews)?;
+
+        emit_subtask_status(
+            conversion_index,
+            number_of_conversions,
+            dimension,
+            number_of_other_dimensions,
+            task_context,
+        );
+
+        for (t, time_step) in time_steps.iter().enumerate() {
+            let band = 1 + (dimension - 1) * conversion.number_of_time_steps + (t as u32);
+
+            let vrt = TempVrt::new(&subdataset, band)?;
+
+            let filename = dimension_folder.join(&format!(
+                "{}.tiff",
+                time_step.as_date_time().map_or_else(
+                    || time_step.as_rfc3339(), // TODO: better fallback?
+                    |d| d.format(&DateTimeParseFormat::custom(
+                        "%Y-%m-%dT%H:%M:%S%.3f".to_string()
+                    )),
+                )
+            ));
+
+            // create COG from VRT
+            vrt.create_copy(&cog_driver, &filename, &options.options())
+                .boxed_context(error::CannotCreateOverviews)?;
+
+            // create loading info from first time step / band
+            if t > 1 {
+                continue;
+            }
+
+            let first_band_dataset = gdal_open_dataset_ex(
+                &filename,
+                DatasetOptions {
+                    open_flags: GdalOpenFlags::GDAL_OF_READONLY,
+                    allowed_drivers: Some(&["COG", "GTiff"]),
+                    open_options: None,
+                    sibling_files: None,
+                },
+            )
+            .boxed_context(error::CannotOpenNetCdfSubdataset)?;
+            let loading_info =
+                generate_loading_info(&first_band_dataset, &filename, time_coverage)?;
+
+            write_loading_info(&filename.with_file_name("loading_info.json"), &loading_info)?;
+        }
+    }
+
+    Ok(OverviewGeneration::Created)
+}
+
+fn emit_subtask_status<C: TaskContext>(
+    conversion_index: usize,
+    number_of_conversions: usize,
+    dimension: u32,
+    number_of_other_dimensions: u32,
+    task_context: &C,
+) {
+    let min_pct = conversion_index as f64 / number_of_conversions as f64;
+    let max_pct = (conversion_index + 1) as f64 / number_of_conversions as f64;
+    let dimension_pct = f64::from(dimension - 1) / f64::from(number_of_other_dimensions);
+    emit_status(
+        task_context,
+        min_pct + dimension_pct * (max_pct - min_pct),
+        format!("Processing {} of {number_of_conversions} subdatasets; Dimension {dimension} of {number_of_other_dimensions}", conversion_index + 1),
+    );
+}
+
+fn write_loading_info(file_path: &Path, loading_info: &MetaDataDefinition) -> Result<()> {
+    let loading_info_file =
+        File::create(file_path).boxed_context(error::CannotWriteMetadataFile)?;
     let mut writer = BufWriter::new(loading_info_file);
-
     writer
         .write_all(
             serde_json::to_string(&loading_info)
                 .boxed_context(error::CannotWriteMetadataFile)?
                 .as_bytes(),
         )
-        .boxed_context(error::CannotWriteMetadataFile)?;
-
-    Ok(OverviewGeneration::Created)
+        .boxed_context(error::CannotWriteMetadataFile)
 }
 
 fn generate_loading_info(
     dataset: &Dataset,
     overview_dataset_path: &Path,
     time_coverage: &TimeCoverage,
-) -> Result<Metadata> {
-    const SAMPLE_BAND: usize = 1;
+) -> Result<MetaDataDefinition> {
+    // every raster has a single band
+    const BAND: usize = 1;
 
     let result_descriptor = raster_descriptor_from_dataset(dataset, 1, None)
         .boxed_context(error::CannotGenerateLoadingInfo)?;
 
-    let params = gdal_parameters_from_dataset(
-        dataset,
-        SAMPLE_BAND,
-        overview_dataset_path,
-        Some(0), // we calculate offsets in our source
-        None,
-    )
-    .boxed_context(error::CannotGenerateLoadingInfo)?;
+    let mut params =
+        gdal_parameters_from_dataset(dataset, BAND, overview_dataset_path, Some(BAND), None)
+            .boxed_context(error::CannotGenerateLoadingInfo)?;
 
     Ok(match *time_coverage {
         TimeCoverage::Regular { start, end, step } => {
-            Metadata::NetCDF(GdalMetadataNetCdfCf {
+            let placeholder = "%_START_TIME_%".to_string();
+            params.file_path = params
+                .file_path
+                .with_file_name(&placeholder)
+                .with_extension("tiff");
+
+            MetaDataDefinition::GdalMetaDataRegular(GdalMetaDataRegular {
                 result_descriptor,
                 params,
-                start,
-                end,
+                time_placeholders: [(
+                    placeholder,
+                    GdalSourceTimePlaceholder {
+                        format: DateTimeParseFormat::custom("%Y-%m-%dT%H:%M:%S%.3f".to_string()),
+                        reference: TimeReference::Start,
+                    },
+                )]
+                .into_iter()
+                .collect(),
+                data_time: TimeInterval::new(start, end)
+                    .context(error::InvalidTimeRangeForDataset)?,
                 step,
-                band_offset: 0, // must be changed if there are other dimensions then geo & time
             })
         }
         TimeCoverage::List { ref time_stamps } => {
             let mut params_list = Vec::with_capacity(time_stamps.len());
-            for (i, time_instance) in time_stamps.iter().enumerate() {
+            for time_instance in time_stamps.iter() {
                 let mut params = params.clone();
 
-                params.rasterband_channel = i + 1;
+                params.file_path = params
+                    .file_path
+                    .with_file_name(time_instance.as_rfc3339())
+                    .with_extension("tiff");
 
                 params_list.push(GdalLoadingInfoTemporalSlice {
                     time: TimeInterval::new_instant(*time_instance)
@@ -441,7 +691,7 @@ fn generate_loading_info(
                 });
             }
 
-            Metadata::List(GdalMetaDataList {
+            MetaDataDefinition::GdalMetaDataList(GdalMetaDataList {
                 result_descriptor,
                 params: params_list,
             })
@@ -475,10 +725,14 @@ pub fn remove_overviews(dataset_path: &Path, overview_path: &Path, force: bool) 
 mod tests {
     use super::*;
 
-    use crate::datasets::external::netcdfcf::{
-        NetCdfEntity, NetCdfGroup as FullNetCdfGroup, NetCdfOverview,
+    use crate::{
+        datasets::external::netcdfcf::{
+            NetCdfEntity, NetCdfGroup as FullNetCdfGroup, NetCdfOverview,
+        },
+        tasks::util::NopTaskContext,
     };
     use geoengine_datatypes::{
+        hashmap,
         operations::image::{Colorizer, RgbaColor},
         primitives::{DateTime, Measurement, TimeGranularity, TimeStep},
         raster::RasterDataType,
@@ -529,7 +783,7 @@ mod tests {
 
         assert_eq!(
             loading_info,
-            Metadata::NetCDF(GdalMetadataNetCdfCf {
+            MetaDataDefinition::GdalMetaDataRegular(GdalMetaDataRegular {
                 result_descriptor: RasterResultDescriptor {
                     data_type: RasterDataType::I16,
                     spatial_reference: SpatialReference::epsg_4326().into(),
@@ -554,13 +808,21 @@ mod tests {
                     gdal_config_options: None,
                     allow_alphaband_as_mask: true,
                 },
-                start: DateTime::new_utc(2020, 1, 1, 0, 0, 0).into(),
-                end: DateTime::new_utc(2021, 1, 1, 0, 0, 0).into(),
                 step: TimeStep {
                     granularity: TimeGranularity::Months,
                     step: 1,
                 },
-                band_offset: 0,
+                time_placeholders: hashmap! {
+                    "%TIME%".to_string() => GdalSourceTimePlaceholder {
+                        format: DateTimeParseFormat::custom("%f".to_string()),
+                        reference: TimeReference::Start,
+                    },
+                },
+                data_time: TimeInterval::new(
+                    DateTime::new_utc(2020, 1, 1, 0, 0, 0),
+                    DateTime::new_utc(2021, 1, 1, 0, 0, 0)
+                )
+                .unwrap(),
             })
         );
     }
@@ -582,7 +844,8 @@ mod tests {
         index_subdataset(
             &ConversionMetadata {
                 dataset_in,
-                dataset_out: dataset_out.clone(),
+                dataset_out_folder: dataset_out.clone(),
+                number_of_time_steps: 12,
             },
             &TimeCoverage::Regular {
                 start: DateTime::new_utc(2020, 1, 1, 0, 0, 0).into(),
@@ -593,6 +856,9 @@ mod tests {
                 },
             },
             None,
+            &NopTaskContext,
+            0,
+            1,
         )
         .unwrap();
 
@@ -734,6 +1000,7 @@ mod tests {
             Path::new("dataset_m.nc"),
             overview_folder.path(),
             None,
+            &NopTaskContext,
         )
         .unwrap();
 
@@ -767,6 +1034,7 @@ mod tests {
             dataset_path,
             overview_folder.path(),
             None,
+            &NopTaskContext,
         )
         .unwrap();
 
