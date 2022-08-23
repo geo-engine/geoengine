@@ -119,7 +119,6 @@ impl ToTokens for AstNode {
             Self::Operation { left, op, right } => {
                 quote! { apply(#left, #right, #op) }
             }
-            // TODO:
             Self::Function { name, args } => {
                 let fn_name = format_ident!("import_{}__{}", name.as_ref(), args.len());
                 quote! { #fn_name(#(#args),*) }
