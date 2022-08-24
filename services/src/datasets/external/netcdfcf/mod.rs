@@ -31,7 +31,7 @@ use geoengine_datatypes::dataset::{DataId, ExternalDataId};
 use geoengine_datatypes::operations::image::{Colorizer, RgbaColor};
 use geoengine_datatypes::primitives::{
     DateTime, DateTimeParseFormat, Measurement, RasterQueryRectangle, TimeGranularity,
-    TimeInstance, TimeInterval, TimeStep, VectorQueryRectangle,
+    TimeInstance, TimeInterval, TimeStep, TimeStepIter, VectorQueryRectangle,
 };
 use geoengine_datatypes::raster::{GdalGeoTransform, RasterDataType};
 use geoengine_datatypes::spatial_reference::SpatialReference;
@@ -1041,13 +1041,7 @@ pub fn layer_from_netcdf_overview(
             if step.step == 0 {
                 vec![start]
             } else {
-                let mut steps = vec![start];
-                let mut current = start;
-                while current < end {
-                    current = (current + step)?;
-                    steps.push(current);
-                }
-                steps
+                TimeStepIter::new_with_interval(TimeInterval::new(start, end)?, step)?.collect()
             }
         }
         TimeCoverage::List { time_stamps } => time_stamps,
