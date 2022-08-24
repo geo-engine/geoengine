@@ -324,14 +324,11 @@ impl GdalRasterLoader {
         tile_time: TimeInterval,
     ) -> Result<RasterTile2D<T>> {
         let start = Instant::now();
-        // TODO: handle datasets where origin is not in the upper left corner
-
-        let output_bounds = tile_information.spatial_partition();
 
         debug!(
             "GridOrEmpty2D<{:?}> requested for {:?}.",
             T::TYPE,
-            &output_bounds
+            &tile_information.spatial_partition()
         );
 
         let options = dataset_params
@@ -450,16 +447,25 @@ where
             start.elapsed()
         );
 
-        // TODO: evaluate if there are GeoTransforms with positive y-axis
+        // A `GeoTransform` maps pixel space to world space.
+        // We are not aware of spatial reference systems where the x-axis points tot he right.
+        // However, there are spatial reference systems where the y-axis points downwards.
         // The "Pixel-space" starts at the top-left corner of a `GeoTransform`.
         // Therefore, the pixel size on the x-axis is always increasing
+        debug_assert!(query.spatial_bounds.x_axis_is_increasing());
         let spatial_resolution = query.spatial_resolution;
-
         let pixel_size_x = spatial_resolution.x;
         debug_assert!(pixel_size_x.is_sign_positive());
-        // and the pixel size on  the y-axis is always decreasing
-        let pixel_size_y = spatial_resolution.y * -1.0;
-        debug_assert!(pixel_size_y.is_sign_negative());
+        // and the y-axis should only be positive if the y-axis is pointing "down".
+        let pixel_size_y = if query.spatial_bounds.y_axis_is_increasing() {
+            spatial_resolution.y * -1.0;
+        } else {
+            spatial_resolution.y
+        };
+        debug_assert_eq!(
+            pixel_size_y.is_sign_negative(),
+            query.spatial_bounds.y_axis_is_increasing()
+        );
 
         let tiling_strategy = self
             .tiling_specification
@@ -683,13 +689,15 @@ where
 fn read_grid_and_handle_edges<T>(
     tile_info: TileInformation,
     dataset: &gdal::Dataset,
-    dataset_bounds: SpatialPartition2D,
-    dataset_geo_transform: GeoTransform,
     dataset_params: &GdalDatasetParameters,
 ) -> Result<GridOrEmpty2D<T>>
 where
     T: Pixel + GdalType + Default + FromPrimitive,
 {
+    // this are the bounds from the datasets def!
+    let dataset_bounds = dataset_params.spatial_partition();
+    let dataset_geo_transform = dataset_params.geo_transform.try_into()?;
+
     let output_bounds = tile_info.spatial_partition();
     let dataset_intersects_tile = dataset_bounds.intersection(&output_bounds);
     let output_shape = tile_info.tile_size_in_pixels();
@@ -740,14 +748,9 @@ fn read_raster_tile_with_properties<T: Pixel + gdal::raster::GdalType + FromPrim
         properties_from_band(&mut properties, &rasterband);
     }
 
-    let dataset_geo_transform = dataset_params.geo_transform.try_into()?;
-    let dataset_bounds = dataset_params.spatial_partition();
-
     let result_grid = read_grid_and_handle_edges(
         tile_info,
         dataset,
-        dataset_bounds,
-        dataset_geo_transform,
         dataset_params,
     )?;
 
