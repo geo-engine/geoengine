@@ -38,8 +38,8 @@ impl DataProviderDefinition for PangaeaDataProviderDefinition {
         Ok(Box::new(PangaeaDataProvider::new(self.base_url)))
     }
 
-    fn type_name(&self) -> String {
-        "Pangaea".to_owned()
+    fn type_name(&self) -> &'static str {
+        "Pangaea"
     }
 
     fn name(&self) -> String {

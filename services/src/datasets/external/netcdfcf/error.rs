@@ -142,6 +142,9 @@ pub enum NetCdfCf4DProviderError {
     DatasetIsNotInProviderPath {
         source: std::path::StripPrefixError,
     },
+    FileIsNotInProviderPath {
+        file: String,
+    },
     CannotRetrieveUnit {
         source: GdalError,
     },
@@ -169,14 +172,44 @@ pub enum NetCdfCf4DProviderError {
     CannotGenerateLoadingInfo {
         source: Box<dyn ErrorSource>,
     },
-    CannotCreateInProgressFlag {
+    InvalidCollectionId {
+        id: String,
+    },
+
+    #[snafu(display("Cannot parse NetCDF file metadata: {source}"))]
+    CannotParseNetCdfFile {
         source: Box<dyn ErrorSource>,
     },
+    #[snafu(display("Cannot lookup dataset with id {id}"))]
+    CannotLookupDataset {
+        id: String,
+    },
+    #[snafu(display("Cannot find NetCdfCf provider with id {id}"))]
+    NoNetCdfCfProviderForId {
+        id: DataProviderId,
+    },
+    NoNetCdfCfProviderAvailable,
+    #[snafu(display("NetCdfCf provider with id {id} cannot list files"))]
+    CdfCfProviderCannotListFiles {
+        id: DataProviderId,
+    },
+    #[snafu(display("Internal server error"))]
+    Internal {
+        source: Box<dyn ErrorSource>,
+    },
+    CannotCreateInProgressFlag {
+        source: Box<dyn ErrorSource>,
+    }, //
     CannotRemoveInProgressFlag {
         source: Box<dyn ErrorSource>,
     },
     CannotRemoveOverviewsWhileCreationIsInProgress,
     CannotRemoveOverviews {
+        source: Box<dyn ErrorSource>,
+    },
+    #[snafu(display("NetCdfCf provider cannot create overviews"))]
+    CannotCreateOverview {
+        dataset: PathBuf,
         source: Box<dyn ErrorSource>,
     },
 }

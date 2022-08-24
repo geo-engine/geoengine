@@ -116,8 +116,7 @@ where
 
         #[cfg(feature = "ebv")]
         {
-            app = app
-                .service(web::scope("/ebv").configure(handlers::ebv::init_ebv_routes::<C>(None)));
+            app = app.service(web::scope("/ebv").configure(handlers::ebv::init_ebv_routes::<C>()));
         }
 
         #[cfg(feature = "nfdi")]
