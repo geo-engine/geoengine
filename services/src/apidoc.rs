@@ -37,7 +37,7 @@ use utoipa::{Modify, OpenApi};
         handlers::workflows::dataset_from_workflow_handler,
     ),
     components(
-        SimpleSession,        
+        SimpleSession,
 
         DataId,
         DataProviderId,
