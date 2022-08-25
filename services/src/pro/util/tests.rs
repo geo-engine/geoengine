@@ -22,8 +22,7 @@ use oauth2::{AccessToken, AuthUrl, EmptyExtraTokenFields, Scope, StandardTokenRe
 use oauth2::basic::BasicTokenType;
 use openidconnect::core::{CoreClaimName, CoreIdToken, CoreIdTokenClaims, CoreIdTokenFields, CoreJsonWebKey, CoreJwsSigningAlgorithm, CoreProviderMetadata, CoreResponseType, CoreRsaPrivateSigningKey, CoreTokenResponse, CoreTokenType};
 use openidconnect::{Audience, EmptyAdditionalClaims, EmptyAdditionalProviderMetadata, EndUserEmail, EndUserName, IssuerUrl, JsonWebKeySet, JsonWebKeySetUrl, LocalizedClaim, Nonce, ResponseTypes, StandardClaims, SubjectIdentifier};
-use crate::error::Error;
-use crate::pro::users::oidc::{DefaultJsonWebKeySet, DefaultProviderMetadata};
+use crate::pro::users::{DefaultJsonWebKeySet, DefaultProviderMetadata};
 
 #[allow(clippy::missing_panics_doc)]
 pub async fn create_session_helper<C: ProContext>(ctx: &C) -> UserSession {
@@ -181,10 +180,10 @@ const TEST_JWK: &str = "{\
         }";
 
 const ACCESS_TOKEN: &str = "DUMMY_ACCESS_TOKEN_1";
-pub const SINGLE_STATE : &str = "State_1";
-pub const SINGLE_NONCE : &str = "Nonce_1";
+pub(in crate::pro) const SINGLE_STATE : &str = "State_1";
+pub(in crate::pro)  const SINGLE_NONCE : &str = "Nonce_1";
 
-pub struct MockTokenConfig {
+pub(in crate::pro) struct MockTokenConfig {
     issuer : String,
     client_id : String,
     pub email: Option<EndUserEmail>,
@@ -216,11 +215,11 @@ impl MockTokenConfig {
 
 }
 
-pub fn mock_provider_metadata(provider_base_url : &str) -> Result<DefaultProviderMetadata, Error> {
+pub(in crate::pro) fn mock_provider_metadata(provider_base_url : &str) -> DefaultProviderMetadata {
     let result = CoreProviderMetadata::new(
-        IssuerUrl::new(provider_base_url.to_string())?,
-        AuthUrl::new(provider_base_url.to_owned() + "/authorize")?,
-        JsonWebKeySetUrl::new(provider_base_url.to_owned() + "/jwk")?,
+        IssuerUrl::new(provider_base_url.to_string()).expect("Parsing mock issuer should not fail"),
+        AuthUrl::new(provider_base_url.to_owned() + "/authorize").expect("Parsing mock auth url should not fail"),
+        JsonWebKeySetUrl::new(provider_base_url.to_owned() + "/jwk").expect("Parsing mock jwk url should not fail"),
         vec![
             ResponseTypes::new(vec![CoreResponseType::Code]),
         ],
@@ -228,7 +227,7 @@ pub fn mock_provider_metadata(provider_base_url : &str) -> Result<DefaultProvide
         vec![CoreJwsSigningAlgorithm::RsaSsaPssSha256],
         EmptyAdditionalProviderMetadata {},
     )
-        .set_token_endpoint(Some(TokenUrl::new(provider_base_url.to_owned() + "/token")?))
+        .set_token_endpoint(Some(TokenUrl::new(provider_base_url.to_owned() + "/token").expect("Parsing mock token url should not fail")))
         .set_scopes_supported(Some(vec![
             Scope::new("openid".to_string()),
             Scope::new("email".to_string()),
@@ -239,18 +238,18 @@ pub fn mock_provider_metadata(provider_base_url : &str) -> Result<DefaultProvide
             CoreClaimName::new("email".to_string()),
             CoreClaimName::new("name".to_string()),
         ]));
-    Ok(result)
+    result
 }
 
-pub fn mock_jwks() -> Result<DefaultJsonWebKeySet, Error> {
-    let jwk : CoreJsonWebKey = serde_json::from_str(TEST_JWK)?;
-    Ok(JsonWebKeySet::new(vec![jwk]))
+pub(in crate::pro) fn mock_jwks() -> DefaultJsonWebKeySet {
+    let jwk : CoreJsonWebKey = serde_json::from_str(TEST_JWK).expect("Parsing mock jwk should not fail");
+    JsonWebKeySet::new(vec![jwk])
 }
 
-pub fn mock_token_response(mock_token_config: MockTokenConfig) -> Result<StandardTokenResponse<CoreIdTokenFields, BasicTokenType>, Error> {
+pub(in crate::pro) fn mock_token_response(mock_token_config: MockTokenConfig) -> StandardTokenResponse<CoreIdTokenFields, BasicTokenType> {
     let id_token = CoreIdToken::new(
         CoreIdTokenClaims::new(
-            IssuerUrl::new(mock_token_config.issuer)?,
+            IssuerUrl::new(mock_token_config.issuer).expect("Parsing mock issuer should not fail"),
             vec![Audience::new(mock_token_config.client_id)],
             Utc::now() + Duration::seconds(300),
             Utc::now(),
@@ -276,5 +275,5 @@ pub fn mock_token_response(mock_token_config: MockTokenConfig) -> Result<Standar
 
     result.set_expires_in(mock_token_config.duration.as_ref());
 
-    Ok(result)
+    result
 }

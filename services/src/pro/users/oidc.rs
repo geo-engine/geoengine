@@ -10,7 +10,7 @@ use url::{ParseError, Url};
 use geoengine_datatypes::primitives::Duration;
 use crate::contexts::Db;
 use crate::pro::users::UserId;
-use crate::error::Result;
+use crate::error::{Error, Result};
 use crate::pro::util::config::Oidc;
 use crate::pro::util::tests::{SINGLE_NONCE, SINGLE_STATE};
 use snafu::Snafu;
@@ -41,7 +41,7 @@ pub type DefaultJsonWebKeySet = JsonWebKeySet<
     CoreJsonWebKey
 >;
 
-pub type DefaultClient = Client<
+type DefaultClient = Client<
     EmptyAdditionalClaims,
     CoreAuthDisplay,
     CoreGenderClaim,
@@ -59,7 +59,7 @@ pub type DefaultClient = Client<
 >;
 
 
-pub struct OIDCRequestsDB {
+pub struct OidcRequestDb {
     issuer : String,
     client_id : String,
     client_secret : String,
@@ -70,7 +70,7 @@ pub struct OIDCRequestsDB {
     nonce_function : fn() -> Nonce,
 }
 
-pub struct PendingRequest {
+struct PendingRequest {
     nonce : Nonce, //TODO: Is nonce unnecessary in code flow?
     code_verifier : PkceCodeVerifier,
 }
@@ -144,7 +144,7 @@ impl From<ParseError> for OidcError {
     }
 }
 
-impl OIDCRequestsDB {
+impl OidcRequestDb {
 
     pub async fn get_client(&self) -> Result<DefaultClient, OidcError>
     {
@@ -172,6 +172,7 @@ impl OIDCRequestsDB {
             }
         };
 
+        //Currently, we expect e-mail and real-name to be present claims to match required fields for internal users.
         let claims_supported = provider_metadata.claims_supported()
             .ok_or(OidcError::IllegalProvider { reason: "provider does not support any claims".to_string() })?;
         if !claims_supported.contains(&CoreClaimName::new("email".to_string())) {
@@ -184,16 +185,14 @@ impl OIDCRequestsDB {
         let result = CoreClient::from_provider_metadata(
             provider_metadata,
             ClientId::new(self.client_id.to_string()),
-            Some(ClientSecret::new(self.client_secret.to_string()))) //TODO: Think about client secret
+            Some(ClientSecret::new(self.client_secret.to_string()))) //TODO: Could be made optional.
             .set_redirect_uri(RedirectUrl::new(self.redirect_uri.to_string())?
             );
 
         Ok(result)
     }
 
-    pub async fn generate_request(&self, client : DefaultClient) -> Result<AuthCodeRequestURL, OidcError> {
-        let mut user_db = self.users.write().await;
-
+    async fn generate_unique_state_and_insert(&self, client: &DefaultClient) -> Result<Url, OidcError> {
         let mut auth_request = client
             .authorize_url(
                 CoreAuthenticationFlow::AuthorizationCode,
@@ -211,8 +210,8 @@ impl OIDCRequestsDB {
             .set_pkce_challenge(pkce_challenge)
             .url();
 
-        //TODO: Alternative for error would be a loop, but that would make a theoretical endless loop possible.
-        //TODO: There might be the possibility of guessing states here, which might be a security flaw, but I don't see it.
+        let mut user_db = self.users.write().await;
+
         if user_db.contains_key(csrf_token.secret()) {
             return Err(OidcError::LoginFailed {
                 reason: "Failed to generate unique state".to_string()
@@ -224,7 +223,21 @@ impl OIDCRequestsDB {
             code_verifier: pkce_verifier,
         });
 
-        Ok(AuthCodeRequestURL{url : auth_url})
+        Ok(auth_url)
+    }
+
+    pub async fn generate_request(&self, client: DefaultClient) -> Result<AuthCodeRequestURL, OidcError> {
+        let mut result = self.generate_unique_state_and_insert(&client).await;
+        let mut max_retries = 5;
+
+        while result.is_err() && max_retries > 0 {
+            result = self.generate_unique_state_and_insert(&client).await;
+            max_retries -= 1;
+        }
+
+        let url = result?;
+
+        Ok(AuthCodeRequestURL{url})
     }
 
     pub async fn resolve_request(&self, client: DefaultClient, auth_code_response: AuthCodeResponse) -> Result<(ExternalUserClaims, Duration), OidcError> {
@@ -277,7 +290,7 @@ impl OIDCRequestsDB {
             }
         }
 
-        //TODO: Failing at missing claims seems unnecessary for external users, but UI expects email and real name.
+        //Currently, we expect e-mail and real-name to be present claims to match required fields for internal users.
         let user = ExternalUserClaims {
             external_id: claims.subject().clone(),
             email: match claims.email() {
@@ -304,12 +317,11 @@ impl OIDCRequestsDB {
             Some(x) => {Ok(x)}
         }?;
 
-        Ok((user, Duration::milliseconds(validity.as_millis() as i64))) //TODO: Is that cast ok, how does Geo Engine handle conversions between durations?
+        Ok((user, Duration::milliseconds(validity.as_millis() as i64))) //TODO: Consider allowing u128 for durations to avoid cast.
     }
 
-    //TODO: Is there a better way to do that for testing? Seems hacky.
-    pub fn from_oidc_with_static_tokens(value: Oidc) -> Self {
-        OIDCRequestsDB {
+    pub(in crate::pro) fn from_oidc_with_static_tokens(value: Oidc) -> Self {
+        OidcRequestDb {
             issuer: value.issuer.to_string(),
             client_id: value.client_id.to_string(),
             client_secret: value.client_secret.to_string(),
@@ -322,34 +334,24 @@ impl OIDCRequestsDB {
     }
 }
 
-impl Default for OIDCRequestsDB {
+impl TryFrom<Oidc> for OidcRequestDb {
+    type Error = Error;
 
-    fn default() -> Self {
-        OIDCRequestsDB {
-            issuer: "".to_string(),
-            client_id: "".to_string(),
-            client_secret: "".to_string(),
-            redirect_uri: "".to_string(),
-            scopes: vec![],
-            users: Arc::new(Default::default()),
-            state_function: CsrfToken::new_random,
-            nonce_function: Nonce::new_random
-        }
-    }
-
-}
-
-impl From<Oidc> for OIDCRequestsDB {
-    fn from(value: Oidc) -> Self {
-        OIDCRequestsDB {
-            issuer: value.issuer.to_string(),
-            client_id: value.client_id.to_string(),
-            client_secret: value.client_secret.to_string(),
-            redirect_uri: value.redirect_uri.to_string(),
-            scopes: value.scopes,
-            users: Arc::new(Default::default()),
-            state_function: CsrfToken::new_random,
-            nonce_function: Nonce::new_random,
+    fn try_from(value: Oidc) -> Result<Self, Self::Error> {
+        if value.enabled {
+            Err(Error::OidcError { source: OidcError::OidcDisabled })
+        } else {
+            let db = OidcRequestDb {
+                issuer: value.issuer.to_string(),
+                client_id: value.client_id.to_string(),
+                client_secret: value.client_secret.to_string(),
+                redirect_uri: value.redirect_uri.to_string(),
+                scopes: value.scopes,
+                users: Arc::new(Default::default()),
+                state_function: CsrfToken::new_random,
+                nonce_function: Nonce::new_random,
+            };
+            Ok(db)
         }
     }
 }
@@ -367,7 +369,7 @@ mod tests {
     use openidconnect::Nonce;
     use serde_json::json;
     use crate::error::{Result, Error};
-    use crate::pro::users::oidc::{AuthCodeResponse, DefaultClient, DefaultJsonWebKeySet, DefaultProviderMetadata, OIDCRequestsDB};
+    use crate::pro::users::oidc::{AuthCodeResponse, DefaultClient, DefaultJsonWebKeySet, DefaultProviderMetadata, OidcRequestDb};
     use crate::pro::users::oidc::OidcError::{IllegalProvider, LoginFailed, ProviderDiscoveryError, ResponseFieldError, TokenExchangeError};
     use crate::pro::util::tests::{mock_jwks, mock_provider_metadata, mock_token_response, MockTokenConfig, SINGLE_NONCE, SINGLE_STATE};
 
@@ -375,8 +377,8 @@ mod tests {
     const ISSUER_URL : &str = "https://dummy-issuer.com/";
     const REDIRECT_URI : &str = "https://dummy-redirect.com/";
 
-    fn single_state_nonce_request_db() -> OIDCRequestsDB{
-        OIDCRequestsDB {
+    fn single_state_nonce_request_db() -> OidcRequestDb {
+        OidcRequestDb {
             issuer: ISSUER_URL.to_string(),
             client_id: "DummyClient".to_string(),
             client_secret: "DummySecret".to_string(),
@@ -388,8 +390,8 @@ mod tests {
         }
     }
 
-    fn single_state_nonce_mocked_request_db(server_url : String) -> OIDCRequestsDB{
-        OIDCRequestsDB {
+    fn single_state_nonce_mocked_request_db(server_url : String) -> OidcRequestDb {
+        OidcRequestDb {
             issuer: server_url,
             client_id: "".to_string(),
             client_secret: "".to_string(),
@@ -401,14 +403,13 @@ mod tests {
         }
     }
 
-    fn mock_client(request_db: &OIDCRequestsDB) -> Result<DefaultClient, Error> {
+    fn mock_client(request_db: &OidcRequestDb) -> Result<DefaultClient, Error> {
         let client_id = request_db.client_id.clone();
         let client_secret = request_db.client_secret.clone();
         let redirect_uri = request_db.redirect_uri.clone();
 
         let provider_metadata = mock_provider_metadata(request_db.issuer.as_str())
-            .unwrap()
-            .set_jwks(mock_jwks().unwrap());
+            .set_jwks(mock_jwks());
 
         let result = CoreClient::from_provider_metadata(
             provider_metadata,
@@ -465,8 +466,8 @@ mod tests {
         let server_url = format!("http://{}", server.addr());
         let request_db = single_state_nonce_mocked_request_db(server_url);
 
-        let provider_metadata = mock_provider_metadata(request_db.issuer.as_str()).unwrap();
-        let jwks = mock_jwks().unwrap();
+        let provider_metadata = mock_provider_metadata(request_db.issuer.as_str());
+        let jwks = mock_jwks();
 
         mock_provider_discovery(&server, provider_metadata, jwks);
 
@@ -506,9 +507,8 @@ mod tests {
         let request_db = single_state_nonce_mocked_request_db(server_url);
 
         let provider_metadata = mock_provider_metadata(request_db.issuer.as_str())
-            .unwrap()
             .set_response_types_supported(vec![]);
-        let jwks = mock_jwks().unwrap();
+        let jwks = mock_jwks();
 
         mock_provider_discovery(&server, provider_metadata, jwks);
 
@@ -524,9 +524,8 @@ mod tests {
         let request_db = single_state_nonce_mocked_request_db(server_url);
 
         let provider_metadata = mock_provider_metadata(request_db.issuer.as_str())
-            .unwrap()
             .set_id_token_signing_alg_values_supported(vec![]);
-        let jwks = mock_jwks().unwrap();
+        let jwks = mock_jwks();
 
         mock_provider_discovery(&server, provider_metadata, jwks);
 
@@ -542,9 +541,8 @@ mod tests {
         let request_db = single_state_nonce_mocked_request_db(server_url);
 
         let provider_metadata = mock_provider_metadata(request_db.issuer.as_str())
-            .unwrap()
             .set_scopes_supported(None);
-        let jwks = mock_jwks().unwrap();
+        let jwks = mock_jwks();
 
         mock_provider_discovery(&server, provider_metadata, jwks);
 
@@ -560,9 +558,8 @@ mod tests {
         let request_db = single_state_nonce_mocked_request_db(server_url);
 
         let provider_metadata = mock_provider_metadata(request_db.issuer.as_str())
-            .unwrap()
             .set_claims_supported(None);
-        let jwks = mock_jwks().unwrap();
+        let jwks = mock_jwks();
 
         mock_provider_discovery(&server, provider_metadata, jwks);
 
@@ -575,7 +572,7 @@ mod tests {
 
     #[tokio::test]
     async fn generate_request_success() {
-        let request_db = OIDCRequestsDB {
+        let request_db = OidcRequestDb {
             issuer: ISSUER_URL.to_owned() + "oidc/test",
             client_id: "DummyClient".to_string(),
             client_secret: "DummySecret".to_string(),
@@ -636,7 +633,7 @@ mod tests {
         request_db.generate_request(client.clone()).await.unwrap();
 
         let mock_token_config = MockTokenConfig::create_from_issuer_and_client(request_db.issuer.clone(), request_db.client_id.clone());
-        let token_response = mock_token_response(mock_token_config).unwrap();
+        let token_response = mock_token_response(mock_token_config);
         mock_valid_request(&server, &token_response);
 
         let auth_code_response = auth_code_response_empty_with_valid_state();
@@ -716,7 +713,7 @@ mod tests {
 
         let mut mock_token_config = MockTokenConfig::create_from_issuer_and_client(request_db.issuer.clone(), request_db.client_id.clone());
         mock_token_config.nonce = None;
-        let token_response = mock_token_response(mock_token_config).unwrap();
+        let token_response = mock_token_response(mock_token_config);
         mock_valid_request(&server, &token_response);
 
         let auth_code_response = auth_code_response_empty_with_valid_state();
@@ -736,7 +733,7 @@ mod tests {
 
         let mut mock_token_config = MockTokenConfig::create_from_issuer_and_client(request_db.issuer.clone(), request_db.client_id.clone());
         mock_token_config.nonce = Some(Nonce::new("Wrong Nonce".to_string()));
-        let token_response = mock_token_response(mock_token_config).unwrap();
+        let token_response = mock_token_response(mock_token_config);
         mock_valid_request(&server, &token_response);
 
         let auth_code_response = auth_code_response_empty_with_valid_state();
@@ -756,7 +753,7 @@ mod tests {
 
         let mut mock_token_config = MockTokenConfig::create_from_issuer_and_client(request_db.issuer.clone(), request_db.client_id.clone());
         mock_token_config.email = None;
-        let token_response = mock_token_response(mock_token_config).unwrap();
+        let token_response = mock_token_response(mock_token_config);
         mock_valid_request(&server, &token_response);
 
         let auth_code_response = auth_code_response_empty_with_valid_state();
@@ -776,7 +773,7 @@ mod tests {
 
         let mut mock_token_config = MockTokenConfig::create_from_issuer_and_client(request_db.issuer.clone(), request_db.client_id.clone());
         mock_token_config.name = None;
-        let token_response = mock_token_response(mock_token_config).unwrap();
+        let token_response = mock_token_response(mock_token_config);
         mock_valid_request(&server, &token_response);
 
         let auth_code_response = auth_code_response_empty_with_valid_state();
@@ -796,7 +793,7 @@ mod tests {
 
         let mut mock_token_config = MockTokenConfig::create_from_issuer_and_client(request_db.issuer.clone(), request_db.client_id.clone());
         mock_token_config.duration = None;
-        let token_response = mock_token_response(mock_token_config).unwrap();
+        let token_response = mock_token_response(mock_token_config);
         mock_valid_request(&server, &token_response);
 
         let auth_code_response = auth_code_response_empty_with_valid_state();
@@ -819,7 +816,7 @@ mod tests {
         assert_ne!(mock_token_config.access_for_id, ALTERNATIVE_ACCESS_TOKEN);
         mock_token_config.access_for_id = ALTERNATIVE_ACCESS_TOKEN.to_string();
 
-        let token_response = mock_token_response(mock_token_config).unwrap();
+        let token_response = mock_token_response(mock_token_config);
         mock_valid_request(&server, &token_response);
 
         let auth_code_response = auth_code_response_empty_with_valid_state();
@@ -838,7 +835,7 @@ mod tests {
         request_db.generate_request(client.clone()).await.unwrap();
 
         let mock_token_config = MockTokenConfig::create_from_issuer_and_client(request_db.issuer.clone(), request_db.client_id.clone());
-        let token_response = mock_token_response(mock_token_config).unwrap();
+        let token_response = mock_token_response(mock_token_config);
         mock_valid_request(&server, &token_response);
 
         let auth_code_response = auth_code_response_empty_with_valid_state();
@@ -903,7 +900,7 @@ mod tests {
 
             let mut mock_token_config = MockTokenConfig::create_from_issuer_and_client(request_db.issuer.clone(), request_db.client_id.clone());
             mock_token_config.nonce = nonce;
-            let token_response = mock_token_response(mock_token_config).unwrap();
+            let token_response = mock_token_response(mock_token_config);
             mock_valid_request(&server, &token_response);
 
             let mut auth_code_response = auth_code_response_empty_with_valid_state();

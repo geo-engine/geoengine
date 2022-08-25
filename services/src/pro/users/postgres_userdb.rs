@@ -15,7 +15,6 @@ use bb8_postgres::{
     bb8::Pool, tokio_postgres::tls::MakeTlsConnect, tokio_postgres::tls::TlsConnect,
     tokio_postgres::Socket,
 };
-use chrono::Utc;
 use pwhash::bcrypt;
 use uuid::Uuid;
 use geoengine_datatypes::primitives::Duration;
@@ -336,9 +335,6 @@ where
 
         let roles = rows.into_iter().map(|row| row.get(0)).collect();
 
-        let created : chrono::DateTime<Utc> = row.get(0);
-        let valid_until : chrono::DateTime<Utc> = row.get(1);
-
         Ok(UserSession {
             id: session_id,
             user: UserInfo {
@@ -346,8 +342,8 @@ where
                 email : Some(user.email.clone()),
                 real_name : Some(user.real_name.clone()),
             },
-            created: created.into(),
-            valid_until: valid_until.into(),
+            created: row.get(0),
+            valid_until: row.get(1),
             project: None,
             view: None,
             roles,

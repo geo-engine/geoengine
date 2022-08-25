@@ -7,7 +7,7 @@ use crate::layers::storage::INTERNAL_LAYER_DB_ROOT_COLLECTION_ID;
 use crate::pro::datasets::{add_datasets_from_directory, PostgresDatasetDb, Role};
 use crate::pro::layers::postgres_layer_db::{PostgresLayerDb, PostgresLayerProviderDb};
 use crate::pro::projects::ProjectPermission;
-use crate::pro::users::{UserDb, UserId, UserSession};
+use crate::pro::users::{OidcRequestDb, UserDb, UserId, UserSession};
 use crate::pro::workflows::postgres_workflow_registry::PostgresWorkflowRegistry;
 use crate::projects::ProjectId;
 use crate::tasks::{SimpleTaskManager, SimpleTaskManagerContext};
@@ -31,7 +31,6 @@ use rayon::ThreadPool;
 use snafu::ResultExt;
 use std::path::PathBuf;
 use std::sync::Arc;
-use crate::pro::users::oidc::OIDCRequestsDB;
 use crate::pro::util::config::Oidc;
 
 use super::ProContext;
@@ -57,7 +56,7 @@ where
     exe_ctx_tiling_spec: TilingSpecification,
     query_ctx_chunk_size: ChunkByteSize,
     task_manager: Arc<SimpleTaskManager>,
-    oidc_request_db: Arc<OIDCRequestsDB>,
+    oidc_request_db: Arc<Option<OidcRequestDb>>,
 }
 
 impl<Tls> PostgresContext<Tls>
@@ -90,7 +89,7 @@ where
             thread_pool: create_rayon_thread_pool(0),
             exe_ctx_tiling_spec,
             query_ctx_chunk_size,
-            oidc_request_db: Default::default(),
+            oidc_request_db: Arc::new(None),
         })
     }
 
@@ -139,7 +138,7 @@ where
             thread_pool: create_rayon_thread_pool(0),
             exe_ctx_tiling_spec,
             query_ctx_chunk_size,
-            oidc_request_db: Arc::new(OIDCRequestsDB::from(oidc_config)),
+            oidc_request_db: Arc::new(OidcRequestDb::try_from(oidc_config).ok()),
         })
     }
 
@@ -533,9 +532,8 @@ where
     fn user_db_ref(&self) -> &Self::UserDB {
         &self.user_db
     }
-
-    fn oidc_request_db(&self) -> &OIDCRequestsDB {
-        &self.oidc_request_db
+    fn oidc_request_db(&self) -> Option<&OidcRequestDb> {
+        self.oidc_request_db.as_ref().as_ref()
     }
 }
 
@@ -657,7 +655,7 @@ mod tests {
     };
     use crate::pro::datasets::{DatasetPermission, Permission, UpdateDatasetPermissions};
     use crate::pro::projects::{LoadVersion, ProProjectDb, UserProjectPermission};
-    use crate::pro::users::{UserCredentials, UserDb, UserRegistration};
+    use crate::pro::users::{ExternalUserClaims, UserCredentials, UserDb, UserRegistration};
     use crate::projects::{
         CreateProject, Layer, LayerUpdate, OrderBy, Plot, PlotUpdate, PointSymbology, ProjectDb,
         ProjectFilter, ProjectId, ProjectListOptions, ProjectListing, STRectangle, UpdateProject,
@@ -688,7 +686,6 @@ mod tests {
     };
     use rand::RngCore;
     use tokio::runtime::Handle;
-    use crate::pro::users::oidc::ExternalUserClaims;
 
     /// Setup database schema and return its name.
     async fn setup_db() -> (tokio_postgres::Config, String) {
@@ -800,7 +797,6 @@ mod tests {
         .await;
     }
 
-    //TODO: Could probably share code with test() with a little refactoring.
     #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
     async fn test_external() {
         with_temp_context(|ctx, _| async move {
@@ -835,25 +831,9 @@ mod tests {
 
         let session = user_db.login(credentials).await.unwrap();
 
-        user_db
-            .set_session_project(&session, projects[0].id)
-            .await
-            .unwrap();
-
-        assert_eq!(
-            user_db.session(session.id).await.unwrap().project,
-            Some(projects[0].id)
-        );
-
-        let rect = STRectangle::new_unchecked(SpatialReference::epsg_4326(), 0., 1., 2., 3., 1, 2);
-        user_db
-            .set_session_view(&session, rect.clone())
-            .await
-            .unwrap();
-        assert_eq!(user_db.session(session.id).await.unwrap().view, Some(rect));
+        set_session_in_database(user_db, projects, session).await
     }
 
-    //TODO: Could combine with set_session by providing session as a parameter.
     async fn set_session_external(ctx: &PostgresContext<NoTls>, projects: &[ProjectListing]) {
         let external_user_claims = ExternalUserClaims {
             external_id: SubjectIdentifier::new("Foo bar Id".into()),
@@ -865,6 +845,10 @@ mod tests {
 
         let session = user_db.login_external(external_user_claims, Duration::minutes(10)).await.unwrap();
 
+        set_session_in_database(user_db, projects, session).await
+    }
+
+    async fn set_session_in_database(user_db : &PostgresUserDb<NoTls>, projects: &[ProjectListing], session : UserSession) {
         user_db
             .set_session_project(&session, projects[0].id)
             .await

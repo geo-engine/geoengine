@@ -2,7 +2,7 @@ use crate::error;
 use crate::error::Result;
 use crate::handlers;
 use crate::pro::contexts::ProContext;
-use crate::pro::users::UserCredentials;
+use crate::pro::users::{AuthCodeResponse, UserCredentials};
 use crate::pro::users::UserDb;
 use crate::pro::users::UserRegistration;
 use crate::pro::users::UserSession;
@@ -15,7 +15,7 @@ use crate::util::IdResponse;
 use actix_web::{web, HttpResponse, Responder};
 use snafu::ensure;
 use snafu::ResultExt;
-use crate::pro::users::oidc::AuthCodeResponse;
+use crate::pro::users::OidcError::OidcDisabled;
 
 pub(crate) fn init_user_routes<C>(cfg: &mut web::ServiceConfig)
 where
@@ -33,8 +33,8 @@ where
                 .route(web::post().to(session_project_handler::<C>)),
         )
         .service(web::resource("/session/view").route(web::post().to(session_view_handler::<C>)))
-        .service(web::resource("/oidc_init").route(web::post().to(oidc_init::<C>)))
-        .service(web::resource("/oidc_login").route(web::post().to(oidc_login::<C>)));
+        .service(web::resource("/oidcInit").route(web::post().to(oidc_init::<C>)))
+        .service(web::resource("/oidcLogin").route(web::post().to(oidc_login::<C>)));
 }
 
 /// Registers a user by providing [`UserRegistration`] parameters.
@@ -233,34 +233,87 @@ pub(crate) async fn session_view_handler<C: ProContext>(
     Ok(HttpResponse::Ok())
 }
 
+/// Initializes the Open Id Connect login procedure by requesting a parametrized url to the configured Id Provider.
+///
+/// # Example
+///
+/// ```text
+/// POST /oidcInit
+///
+/// ```
+/// Response:
+/// ```text
+/// {
+///   "url": "http://someissuer.com/authorize?client_id=someclient&redirect_uri=someuri&response_type=code&scope=somescope&state=somestate&nonce=somenonce&codechallenge=somechallenge&code_challenge_method=S256"
+/// }
+/// ```
+///
+/// # Errors
+///
+/// This call fails if Open ID Connect is disabled, misconfigured or the Id Provider is unreachable.
 pub(crate) async fn oidc_init<C: ProContext>(
     ctx: web::Data<C>,
 ) -> Result<impl Responder> {
     ensure!(
         config::get_config_element::<crate::pro::util::config::Oidc>()?.enabled,
-        crate::pro::users::oidc::OidcDisabled
+        crate::pro::users::OidcDisabled
     );
-    let request_db = ctx.oidc_request_db();
+    let request_db = ctx.oidc_request_db().ok_or(OidcDisabled)?;
     let oidc_client = request_db.get_client()
         .await?;
 
-    let result = ctx.oidc_request_db()
+    let result = ctx.oidc_request_db().ok_or(OidcDisabled)?
         .generate_request(oidc_client)
         .await?;
 
     Ok(web::Json(result))
 }
 
+/// Creates a session for a user via a login with Open Id Connect.
+/// This call must be preceded by a call to oidcInit and match the parameters of that call.
+///
+/// # Example
+///
+/// ```text
+/// POST /oidcLogin
+///
+/// {
+///   "session_state": "somesessionstate",
+///   "code": "somecode",
+///   "state": "somestate"
+/// }
+/// ```
+/// Response:
+/// ```text
+/// {
+///   "id": "208fa24e-7a92-4f57-a3fe-d1177d9f18ad",
+///   "user": {
+///     "id": "5b4466d2-8bab-4ed8-a182-722af3c80958",
+///     "email": "foo@bar.de",
+///     "realName": "Foo Bar"
+///   },
+///   "created": "2021-04-26T13:47:10.579724800Z",
+///   "validUntil": "2021-04-26T14:47:10.579775400Z",
+///   "project": null,
+///   "view": null
+/// }
+/// ```
+///
+/// # Errors
+///
+/// This call fails if the [`AuthCodeResponse`] is invalid,
+/// if a previous oidcLogin call with the same state was already successfully or unsuccessfully resolved,
+/// if the Open Id Connect configuration is invalid,
+/// or if the Id Provider is unreachable.
 pub(crate) async fn oidc_login<C: ProContext>(
     response: web::Json<AuthCodeResponse>,
     ctx: web::Data<C>,
 ) -> Result<impl Responder> {
     ensure!(
         config::get_config_element::<crate::pro::util::config::Oidc>()?.enabled,
-        crate::pro::users::oidc::OidcDisabled
+        crate::pro::users::OidcDisabled
     );
-
-    let request_db = ctx.oidc_request_db();
+    let request_db = ctx.oidc_request_db().ok_or(OidcDisabled)?;
     let oidc_client = request_db.get_client()
         .await?;
 
@@ -295,7 +348,7 @@ mod tests {
     use geoengine_datatypes::spatial_reference::SpatialReferenceOption;
     use geoengine_datatypes::util::test::TestDefault;
     use serde_json::json;
-    use crate::pro::users::oidc::{AuthCodeRequestURL, OIDCRequestsDB};
+    use crate::pro::users::{AuthCodeRequestURL, OidcRequestDb};
     use crate::pro::util::config::Oidc;
 
     async fn register_test_helper<C: ProContext>(
@@ -783,7 +836,7 @@ mod tests {
 
     const MOCK_CLIENT_ID: &str = "";
 
-    fn single_state_nonce_request_db(issuer: String) -> OIDCRequestsDB{
+    fn single_state_nonce_request_db(issuer: String) -> OidcRequestDb {
         let oidc_config = Oidc {
             enabled: true,
             issuer,
@@ -793,15 +846,15 @@ mod tests {
             scopes: vec!["profile".to_string(), "email".to_string()],
         };
 
-        OIDCRequestsDB::from_oidc_with_static_tokens(oidc_config)
+        OidcRequestDb::from_oidc_with_static_tokens(oidc_config)
     }
 
     fn mock_valid_provider_discovery(expected_discoveries : usize) -> Server {
         let server = Server::run();
         let server_url = format!("http://{}", server.addr());
 
-        let provider_metadata = mock_provider_metadata(server_url.as_str()).unwrap();
-        let jwks = mock_jwks().unwrap();
+        let provider_metadata = mock_provider_metadata(server_url.as_str());
+        let jwks = mock_jwks();
 
         server.expect(
             Expectation::matching(request::method_path("GET", "/.well-known/openid-configuration"))
@@ -827,7 +880,7 @@ mod tests {
     async fn oidc_init_test_helper(method: Method, ctx: ProInMemoryContext) -> ServiceResponse {
         let req = test::TestRequest::default()
             .method(method)
-            .uri("/oidc_init")
+            .uri("/oidcInit")
             .append_header((header::CONTENT_LENGTH, 0));
         send_pro_test_request(req, ctx).await
     }
@@ -835,7 +888,7 @@ mod tests {
     async fn oidc_login_test_helper(method: Method, ctx: ProInMemoryContext, auth_code_response: AuthCodeResponse) -> ServiceResponse {
         let req = test::TestRequest::default()
             .method(method)
-            .uri("/oidc_login")
+            .uri("/oidcLogin")
             .append_header((header::CONTENT_LENGTH, 0))
             .set_json(&auth_code_response);
         send_pro_test_request(req, ctx).await
@@ -907,7 +960,7 @@ mod tests {
         assert!(request.is_ok());
 
         let mock_token_config = MockTokenConfig::create_from_issuer_and_client(server_url, MOCK_CLIENT_ID.to_string());
-        let token_response = mock_token_response(mock_token_config).unwrap();
+        let token_response = mock_token_response(mock_token_config);
         server.expect(
             Expectation::matching(request::method_path("POST", "/token"))
                 .respond_with(
@@ -1018,7 +1071,7 @@ mod tests {
         let ctx = ProInMemoryContext::test_default();
 
         let req = test::TestRequest::post()
-            .uri("/oidc_login")
+            .uri("/oidcLogin")
             .append_header((header::CONTENT_LENGTH, 0))
             .set_payload("no json");
         let res = send_pro_test_request(req, ctx).await;
@@ -1043,7 +1096,7 @@ mod tests {
 
         // register user
         let req = test::TestRequest::post()
-            .uri("/oidc_login")
+            .uri("/oidcLogin")
             .append_header((header::CONTENT_LENGTH, 0))
             .set_json(&auth_code_response);
         let res = send_pro_test_request(req, ctx).await;
@@ -1063,7 +1116,7 @@ mod tests {
 
         // register user
         let req = test::TestRequest::post()
-            .uri("/oidc_login")
+            .uri("/oidcLogin")
             .append_header((header::CONTENT_LENGTH, 0))
             .append_header((header::CONTENT_TYPE, "text/html"));
         let res = send_pro_test_request(req, ctx).await;

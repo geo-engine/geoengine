@@ -10,10 +10,9 @@ pub use in_memory::ProInMemoryContext;
 pub use postgres::PostgresContext;
 
 use crate::contexts::Context;
-use crate::pro::users::{UserDb, UserSession};
+use crate::pro::users::{OidcRequestDb, UserDb, UserSession};
 
 use async_trait::async_trait;
-use crate::pro::users::oidc::OIDCRequestsDB;
 
 /// A pro contexts that extends the default context.
 // TODO: avoid locking the individual DBs here IF they are already thread safe (e.g. guaranteed by postgres)
@@ -23,5 +22,5 @@ pub trait ProContext: Context<Session = UserSession> {
 
     fn user_db(&self) -> Arc<Self::UserDB>;
     fn user_db_ref(&self) -> &Self::UserDB;
-    fn oidc_request_db(&self) -> &OIDCRequestsDB;
+    fn oidc_request_db(&self) -> Option<&OidcRequestDb>;
 }

@@ -357,7 +357,7 @@ pub enum Error {
     #[cfg(feature = "pro")]
     #[snafu(context(false))]
     OidcError {
-        source: crate::pro::users::oidc::OidcError,
+        source: crate::pro::users::OidcError,
     }
 }
 
