@@ -85,8 +85,8 @@ impl DataProviderDefinition for SentinelS2L2ACogsProviderDefinition {
         )))
     }
 
-    fn type_name(&self) -> String {
-        "SentinelS2L2ACogs".to_owned()
+    fn type_name(&self) -> &'static str {
+        "SentinelS2L2ACogs"
     }
 
     fn name(&self) -> String {
@@ -189,6 +189,8 @@ impl SentinelS2L2aCogsDataProvider {
                             )
                             .expect("valid colorizer"),
                         })), // TODO: individual colorizer per band
+                        properties: vec![],
+                        metadata: HashMap::new(),
                     };
 
                     let dataset = SentinelDataset {
@@ -237,6 +239,7 @@ impl LayerCollectionProvider for SentinelS2L2aCogsDataProvider {
                     id: d.listing.id.clone(),
                     name: d.listing.name.clone(),
                     description: d.listing.description.clone(),
+                    properties: vec![],
                 }))
             })
             .collect::<Result<Vec<CollectionItem>>>()?;
@@ -272,6 +275,8 @@ impl LayerCollectionProvider for SentinelS2L2aCogsDataProvider {
                 ),
             },
             symbology: dataset.listing.symbology.clone(),
+            properties: vec![],
+            metadata: HashMap::new(),
         })
     }
 }

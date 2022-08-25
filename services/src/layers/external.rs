@@ -22,7 +22,7 @@ pub trait DataProviderDefinition:
     async fn initialize(self: Box<Self>) -> Result<Box<dyn DataProvider>>;
 
     /// the type of the provider
-    fn type_name(&self) -> String;
+    fn type_name(&self) -> &'static str;
 
     /// name of the external data source
     fn name(&self) -> String;

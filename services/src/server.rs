@@ -122,8 +122,7 @@ where
 
         #[cfg(feature = "ebv")]
         {
-            app = app
-                .service(web::scope("/ebv").configure(handlers::ebv::init_ebv_routes::<C>(None)));
+            app = app.service(web::scope("/ebv").configure(handlers::ebv::init_ebv_routes::<C>()));
         }
 
         #[cfg(feature = "nfdi")]
@@ -288,24 +287,6 @@ pub(crate) struct VersionInfo {
     build_date: Option<String>,
     commit_hash: Option<String>,
 }
-
-// impl utoipa::Component for VersionInfo {
-//     fn component() -> utoipa::openapi::Component {
-//         use utoipa::openapi::*;
-//         ObjectBuilder::new()
-//             .property(
-//                 "buildDate",
-//                 PropertyBuilder::new()
-//                     .component_type(ComponentType::String)
-//                     .format(Some(ComponentFormat::Date)),
-//             )
-//             .property("commitHash", Property::new(ComponentType::String))
-//             .example(Some(serde_json::json!({
-//                 "buildDate": "2021-05-17", "commitHash": "16cd0881a79b6f03bb5f1f6ef2b2711e570b9865"
-//             })))
-//             .into()
-//     }
-// }
 
 /// Shows information about the server software version.
 #[utoipa::path(

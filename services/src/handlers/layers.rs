@@ -41,6 +41,8 @@ async fn list_root_collections_handler<C: Context>(
             },
             name: "Datasets".to_string(),
             description: "Basic Layers for all Datasets".to_string(),
+            entry_label: None,
+            properties: vec![],
         }));
 
         options.limit -= 1;
@@ -56,6 +58,8 @@ async fn list_root_collections_handler<C: Context>(
             },
             name: "Layers".to_string(),
             description: "All available Geo Engine layers".to_string(),
+            entry_label: None,
+            properties: vec![],
         }));
 
         options.limit -= 1;
@@ -74,14 +78,34 @@ async fn list_root_collections_handler<C: Context>(
         .await?
     {
         // TODO: resolve providers in parallel
-        let provider = external.layer_provider(provider_listing.id).await?;
+        let provider = match external.layer_provider(provider_listing.id).await {
+            Ok(provider) => provider,
+            Err(err) => {
+                log::error!("Error loading provider: {err}");
+                continue;
+            }
+        };
+
+        let collection_id = match provider.root_collection_id().await {
+            Ok(root) => root,
+            Err(err) => {
+                log::error!(
+                    "Error loading provider {}, could not get root collection id: {err}",
+                    provider_listing.id,
+                );
+                continue;
+            }
+        };
+
         providers.push(CollectionItem::Collection(LayerCollectionListing {
             id: ProviderLayerCollectionId {
                 provider_id: provider_listing.id,
-                collection_id: provider.root_collection_id().await?,
+                collection_id,
             },
             name: provider_listing.name,
             description: provider_listing.description,
+            entry_label: None,
+            properties: vec![],
         }));
     }
 

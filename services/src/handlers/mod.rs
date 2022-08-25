@@ -63,8 +63,8 @@ impl actix_web::ResponseError for ErrorResponse {
 }
 
 impl fmt::Display for ErrorResponse {
-    fn fmt(&self, _f: &mut fmt::Formatter) -> fmt::Result {
-        unimplemented!("required by ResponseError")
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "{}: {}", self.error, self.message)
     }
 }
 

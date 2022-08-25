@@ -1,17 +1,26 @@
+pub use self::ebvportal_provider::{EbvPortalDataProvider, EBV_PROVIDER_ID};
 pub use self::error::NetCdfCf4DProviderError;
 use self::gdalmd::MdGroup;
+use self::overviews::remove_overviews;
+use self::overviews::InProgressFlag;
 pub use self::overviews::OverviewGeneration;
 use self::overviews::{create_overviews, METADATA_FILE_NAME};
 use crate::datasets::listing::ProvenanceOutput;
+use crate::error::Error;
 use crate::layers::external::DataProvider;
 use crate::layers::external::DataProviderDefinition;
 use crate::layers::layer::CollectionItem;
 use crate::layers::layer::Layer;
 use crate::layers::layer::LayerCollectionListOptions;
+use crate::layers::layer::LayerCollectionListing;
 use crate::layers::layer::LayerListing;
+use crate::layers::layer::ProviderLayerCollectionId;
 use crate::layers::layer::ProviderLayerId;
 use crate::layers::listing::LayerCollectionId;
 use crate::layers::listing::LayerCollectionProvider;
+use crate::projects::RasterSymbology;
+use crate::projects::Symbology;
+use crate::util::canonicalize_subpath;
 use crate::util::user_input::Validated;
 use crate::workflows::workflow::Workflow;
 use async_trait::async_trait;
@@ -22,7 +31,7 @@ use geoengine_datatypes::dataset::{DataId, ExternalDataId};
 use geoengine_datatypes::operations::image::{Colorizer, RgbaColor};
 use geoengine_datatypes::primitives::{
     DateTime, DateTimeParseFormat, Measurement, RasterQueryRectangle, TimeGranularity,
-    TimeInstance, TimeInterval, TimeStep, VectorQueryRectangle,
+    TimeInstance, TimeInterval, TimeStep, TimeStepIter, VectorQueryRectangle,
 };
 use geoengine_datatypes::raster::{GdalGeoTransform, RasterDataType};
 use geoengine_datatypes::spatial_reference::SpatialReference;
@@ -43,7 +52,7 @@ use geoengine_operators::{
 };
 use log::debug;
 use serde::{Deserialize, Serialize};
-use snafu::ensure;
+use serde_json::json;
 use snafu::{OptionExt, ResultExt};
 use std::collections::VecDeque;
 use std::io::BufReader;
@@ -51,7 +60,9 @@ use std::path::{Path, PathBuf};
 use std::str::FromStr;
 use walkdir::{DirEntry, WalkDir};
 
-mod error;
+mod ebvportal_api;
+mod ebvportal_provider;
+pub mod error;
 pub mod gdalmd;
 mod overviews;
 
@@ -84,8 +95,8 @@ impl DataProviderDefinition for NetCdfCfDataProviderDefinition {
         }))
     }
 
-    fn type_name(&self) -> String {
-        "NetCdfCfProviderDefinition".to_owned()
+    fn type_name(&self) -> &'static str {
+        "NetCdfCfProviderDefinition"
     }
 
     fn name(&self) -> String {
@@ -108,6 +119,9 @@ pub struct NetCdfOverview {
     pub entities: Vec<NetCdfEntity>,
     pub time_coverage: TimeCoverage,
     pub colorizer: Colorizer,
+    pub creator_name: Option<String>,
+    pub creator_email: Option<String>,
+    pub creator_institution: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -203,7 +217,13 @@ impl NetCdfCfDataProvider {
         overview_path: &Path,
         dataset_path: &Path,
     ) -> Option<NetCdfOverview> {
-        let tree_file_path = overview_path.join(dataset_path).join(METADATA_FILE_NAME);
+        let overview_dataset_path = overview_path.join(dataset_path);
+
+        if InProgressFlag::is_in_progress(&overview_dataset_path) {
+            return None;
+        }
+
+        let tree_file_path = overview_dataset_path.join(METADATA_FILE_NAME);
         let file = std::fs::File::open(&tree_file_path).ok()?;
         let buf_reader = BufReader::new(file);
         serde_json::from_reader::<_, NetCdfOverview>(buf_reader).ok()
@@ -275,6 +295,12 @@ impl NetCdfCfDataProvider {
             fallback_colorizer()
         })?;
 
+        let creator_name = root_group.attribute_as_string("creator_name").ok();
+
+        let creator_email = root_group.attribute_as_string("creator_email").ok();
+
+        let creator_institution = root_group.attribute_as_string("creator_institution").ok();
+
         Ok(NetCdfOverview {
             file_name: path
                 .strip_prefix(provider_path)
@@ -288,6 +314,9 @@ impl NetCdfCfDataProvider {
             entities,
             time_coverage,
             colorizer,
+            creator_name,
+            creator_email,
+            creator_institution,
         })
     }
 
@@ -347,6 +376,7 @@ impl NetCdfCfDataProvider {
                         entity_name = entity.name
                     ),
                     description: tree.summary.clone(),
+                    properties: vec![],
                 });
             }
         }
@@ -381,12 +411,11 @@ impl NetCdfCfDataProvider {
         let dataset_id: NetCdfCf4DDatasetId =
             serde_json::from_str(&dataset.layer_id.0).context(error::CannotParseDatasetId)?;
 
-        let path = path.join(&dataset_id.file_name);
-
-        // check that file does not "escape" the provider path
-        if let Err(source) = path.strip_prefix(&path) {
-            return Err(NetCdfCf4DProviderError::DatasetIsNotInProviderPath { source });
-        }
+        let path = canonicalize_subpath(path, Path::new(&dataset_id.file_name)).map_err(|_| {
+            NetCdfCf4DProviderError::FileIsNotInProviderPath {
+                file: dataset_id.file_name.clone(),
+            }
+        })?;
 
         let group_path = dataset_id.group_names.join("/");
         let gdal_path = format!(
@@ -584,6 +613,15 @@ impl NetCdfCfDataProvider {
         resampling_method: Option<ResamplingMethod>,
     ) -> Result<OverviewGeneration> {
         create_overviews(&self.path, dataset_path, &self.overviews, resampling_method)
+    }
+
+    pub fn remove_overviews(&self, dataset_path: &Path, force: bool) -> Result<()> {
+        remove_overviews(dataset_path, &self.overviews, force)
+    }
+
+    fn is_netcdf_file(&self, path: &Path) -> bool {
+        let real_path = self.path.join(path);
+        real_path.is_file() && real_path.extension() == Some("nc".as_ref())
     }
 }
 
@@ -841,6 +879,310 @@ impl DataProvider for NetCdfCfDataProvider {
     }
 }
 
+#[derive(Deserialize, Serialize, Debug, Clone)]
+#[serde(tag = "type", rename_all = "camelCase")]
+enum NetCdfLayerCollectionId {
+    Path {
+        path: PathBuf,
+    },
+    Group {
+        path: PathBuf,
+        groups: Vec<String>,
+    },
+    Entity {
+        path: PathBuf,
+        groups: Vec<String>,
+        entity: usize,
+    },
+}
+
+impl TryFrom<NetCdfLayerCollectionId> for LayerCollectionId {
+    type Error = crate::error::Error;
+
+    fn try_from(id: NetCdfLayerCollectionId) -> crate::error::Result<Self> {
+        Ok(LayerCollectionId(serde_json::to_string(&id)?))
+    }
+}
+
+impl TryFrom<NetCdfLayerCollectionId> for LayerId {
+    type Error = crate::error::Error;
+
+    fn try_from(id: NetCdfLayerCollectionId) -> crate::error::Result<Self> {
+        Ok(LayerId(serde_json::to_string(&id)?))
+    }
+}
+
+async fn listing_from_dir(
+    overview_path: &Path,
+    base: &Path,
+    path: &Path,
+) -> crate::error::Result<Vec<CollectionItem>> {
+    let mut dir = tokio::fs::read_dir(base.join(&path)).await?;
+
+    let mut items = vec![];
+    while let Some(entry) = dir.next_entry().await? {
+        if entry.path().canonicalize()? == overview_path.canonicalize()? {
+            continue;
+        }
+
+        if entry.path().is_dir() {
+            items.push(CollectionItem::Collection(LayerCollectionListing {
+                id: ProviderLayerCollectionId {
+                    provider_id: NETCDF_CF_PROVIDER_ID,
+                    collection_id: NetCdfLayerCollectionId::Path {
+                        path: entry
+                            .path()
+                            .strip_prefix(base)
+                            .map_err(|_| Error::InvalidLayerCollectionId)?
+                            .to_owned(),
+                    }
+                    .try_into()?,
+                },
+                name: entry.file_name().to_string_lossy().to_string(),
+                description: "".to_string(),
+                entry_label: None,
+                properties: vec![],
+            }));
+        } else if entry.path().extension() == Some("nc".as_ref()) {
+            let fp = entry
+                .path()
+                .strip_prefix(base)
+                .map_err(|_| crate::error::Error::SubPathMustNotEscapeBasePath {
+                    base: base.to_owned(),
+                    sub_path: entry.path(),
+                })?
+                .to_owned();
+            let b = base.to_owned();
+            let tree = tokio::task::spawn_blocking(move || {
+                NetCdfCfDataProvider::build_netcdf_tree(&b, None, &fp, false)
+                    .map_err(|_| Error::InvalidLayerCollectionId)
+            })
+            .await??;
+
+            items.push(CollectionItem::Collection(LayerCollectionListing {
+                id: ProviderLayerCollectionId {
+                    provider_id: NETCDF_CF_PROVIDER_ID,
+                    collection_id: NetCdfLayerCollectionId::Path {
+                        path: entry
+                            .path()
+                            .strip_prefix(base)
+                            .map_err(|_| Error::InvalidLayerCollectionId)?
+                            .to_owned(),
+                    }
+                    .try_into()?,
+                },
+                name: tree.title,
+                description: tree.summary,
+                entry_label: None,
+                properties: [(
+                    "author".to_string(),
+                    format!(
+                        "{}, {}, {}",
+                        tree.creator_name.unwrap_or_else(|| "unknown".to_string()),
+                        tree.creator_email.unwrap_or_else(|| "unknown".to_string()),
+                        tree.creator_institution
+                            .unwrap_or_else(|| "unknown".to_string())
+                    ),
+                )]
+                .into_iter()
+                .collect(),
+            }));
+        }
+    }
+
+    Ok(items)
+}
+
+/// find the group given by the path `groups`.
+pub fn find_group(
+    netcdf_groups: Vec<NetCdfGroup>,
+    groups: &[String],
+) -> crate::error::Result<Option<NetCdfGroup>> {
+    if groups.is_empty() {
+        return Ok(None);
+    }
+
+    let mut group_stack = groups.iter().collect::<Vec<_>>();
+    let target = group_stack.remove(0);
+    let mut group = netcdf_groups
+        .into_iter()
+        .find(|g| g.name == *target)
+        .ok_or(Error::InvalidLayerCollectionId)?;
+
+    while !group_stack.is_empty() {
+        let target = group_stack.remove(0);
+        group = group
+            .groups
+            .into_iter()
+            .find(|g| g.name == *target)
+            .ok_or(Error::InvalidLayerCollectionId)?;
+    }
+
+    Ok(Some(group))
+}
+
+pub fn layer_from_netcdf_overview(
+    provider_id: DataProviderId,
+    layer_id: &LayerId,
+    overview: NetCdfOverview,
+    groups: &[String],
+    entity: usize,
+) -> crate::error::Result<Layer> {
+    let netcdf_entity = overview
+        .entities
+        .into_iter()
+        .find(|e| e.id == entity)
+        .ok_or(Error::UnknownLayerId {
+            id: layer_id.clone(),
+        })?;
+
+    let time_steps = match overview.time_coverage {
+        TimeCoverage::Regular { start, end, step } => {
+            if step.step == 0 {
+                vec![start]
+            } else {
+                TimeStepIter::new_with_interval(TimeInterval::new(start, end)?, step)?.collect()
+            }
+        }
+        TimeCoverage::List { time_stamps } => time_stamps,
+    };
+
+    let group = find_group(overview.groups, groups)?.ok_or(Error::InvalidLayerId)?;
+
+    let (data_range, colorizer) = if let Some(data_range) = group.data_range {
+        (
+            data_range,
+            overview.colorizer.rescale(data_range.0, data_range.1)?,
+        )
+    } else {
+        let colorizer = overview.colorizer;
+        ((colorizer.min_value(), colorizer.max_value()), colorizer)
+    };
+
+    Ok(Layer {
+        id: ProviderLayerId {
+            provider_id,
+            layer_id: layer_id.clone(),
+        },
+        name: netcdf_entity.name.clone(),
+        description: netcdf_entity.name,
+        workflow: Workflow {
+            operator: TypedOperator::Raster(
+                GdalSource {
+                    params: GdalSourceParameters {
+                        data: DataId::External(ExternalDataId {
+                            provider_id,
+                            layer_id: LayerId(
+                                json!({
+                                    "fileName": overview.file_name,
+                                    "groupNames": groups,
+                                    "entity": entity
+                                })
+                                .to_string(),
+                            ),
+                        }),
+                    },
+                }
+                .boxed(),
+            ),
+        },
+        symbology: Some(Symbology::Raster(RasterSymbology {
+            opacity: 1.0,
+            colorizer,
+        })),
+        properties: [(
+            "author".to_string(),
+            format!(
+                "{}, {}, {}",
+                overview
+                    .creator_name
+                    .unwrap_or_else(|| "unknown".to_string()),
+                overview
+                    .creator_email
+                    .unwrap_or_else(|| "unknown".to_string()),
+                overview
+                    .creator_institution
+                    .unwrap_or_else(|| "unknown".to_string())
+            ),
+        )]
+        .into_iter()
+        .collect(),
+        metadata: [
+            ("timeSteps".to_string(), serde_json::to_string(&time_steps)?),
+            ("dataRange".to_string(), serde_json::to_string(&data_range)?),
+        ]
+        .into_iter()
+        .collect(),
+    })
+}
+
+async fn listing_from_netcdf_file(
+    relative_file_path: PathBuf,
+    groups: &[String],
+    provider_path: PathBuf,
+    overview_path: PathBuf,
+    options: &LayerCollectionListOptions,
+) -> crate::error::Result<Vec<CollectionItem>> {
+    let fp = relative_file_path.clone();
+    let tree = tokio::task::spawn_blocking(move || {
+        NetCdfCfDataProvider::build_netcdf_tree(&provider_path, Some(&overview_path), &fp, false)
+            .map_err(|_| Error::InvalidLayerCollectionId)
+    })
+    .await??;
+
+    let groups_list = find_group(tree.groups.clone(), groups)?.map_or(tree.groups, |g| g.groups);
+
+    if groups_list.is_empty() {
+        tree.entities
+            .into_iter()
+            .skip(options.offset as usize)
+            .take(options.limit as usize)
+            .map(|entity| {
+                Ok(CollectionItem::Layer(LayerListing {
+                    id: ProviderLayerId {
+                        provider_id: NETCDF_CF_PROVIDER_ID,
+                        layer_id: NetCdfLayerCollectionId::Entity {
+                            path: relative_file_path.clone(),
+                            groups: groups.to_owned(),
+                            entity: entity.id,
+                        }
+                        .try_into()?,
+                    },
+                    name: entity.name,
+                    description: "".to_string(),
+                    properties: vec![],
+                }))
+            })
+            .collect()
+    } else {
+        let out_groups = groups.to_owned();
+
+        groups_list
+            .into_iter()
+            .skip(options.offset as usize)
+            .take(options.limit as usize)
+            .map(|group| {
+                let mut out_groups = out_groups.clone();
+                out_groups.push(group.name.clone());
+                Ok(CollectionItem::Collection(LayerCollectionListing {
+                    id: ProviderLayerCollectionId {
+                        provider_id: NETCDF_CF_PROVIDER_ID,
+                        collection_id: NetCdfLayerCollectionId::Group {
+                            path: relative_file_path.clone(),
+                            groups: out_groups,
+                        }
+                        .try_into()?,
+                    },
+                    name: group.title.clone(),
+                    description: group.description,
+                    entry_label: None,
+                    properties: vec![],
+                }))
+            })
+            .collect()
+    }
+}
+
 #[async_trait]
 impl LayerCollectionProvider for NetCdfCfDataProvider {
     async fn collection_items(
@@ -848,96 +1190,87 @@ impl LayerCollectionProvider for NetCdfCfDataProvider {
         collection: &LayerCollectionId,
         options: Validated<LayerCollectionListOptions>,
     ) -> crate::error::Result<Vec<CollectionItem>> {
-        ensure!(
-            *collection == self.root_collection_id().await?,
-            crate::error::UnknownLayerCollectionId {
-                id: collection.clone()
+        let id: NetCdfLayerCollectionId = serde_json::from_str(&collection.0)?;
+
+        let mut listing = match id {
+            NetCdfLayerCollectionId::Path { path }
+                if canonicalize_subpath(&self.path, &path).is_ok()
+                    && self.path.join(&path).is_dir() =>
+            {
+                listing_from_dir(&self.overviews, &self.path, &path).await?
             }
-        );
-
-        let mut dir = tokio::fs::read_dir(&self.path).await?;
-
-        let mut datasets = vec![];
-        while let Some(entry) = dir.next_entry().await? {
-            if !entry.path().is_file() {
-                continue;
-            }
-
-            let provider_path = self.path.clone();
-            let overviews_path = self.overviews.clone();
-            let relative_path = if let Ok(p) = entry.path().strip_prefix(&provider_path) {
-                p.to_path_buf()
-            } else {
-                // cannot actually happen since `entry` is listed from `provider_path`
-                continue;
-            };
-
-            let listing = tokio::task::spawn_blocking(move || {
-                Self::listing_from_netcdf(
-                    NETCDF_CF_PROVIDER_ID,
-                    &provider_path,
-                    Some(&overviews_path),
-                    &relative_path,
-                    false,
+            NetCdfLayerCollectionId::Path { path }
+                if canonicalize_subpath(&self.path, &path).is_ok()
+                    && self.is_netcdf_file(&path) =>
+            {
+                listing_from_netcdf_file(
+                    path,
+                    &[],
+                    self.path.clone(),
+                    self.overviews.clone(),
+                    &options.user_input,
                 )
-                .map(|l| {
-                    l.into_iter()
-                        .map(|l| {
-                            CollectionItem::Layer(LayerListing {
-                                id: l.id,
-                                name: l.name,
-                                description: l.description,
-                            })
-                        })
-                        .collect::<Vec<_>>()
-                })
-            })
-            .await?;
-
-            match listing {
-                Ok(listing) => datasets.extend(listing),
-                Err(e) => debug!("Failed to list dataset: {}", e),
+                .await?
             }
-        }
+            NetCdfLayerCollectionId::Group { path, groups }
+                if canonicalize_subpath(&self.path, &path).is_ok()
+                    && self.is_netcdf_file(&path) =>
+            {
+                listing_from_netcdf_file(
+                    path,
+                    &groups,
+                    self.path.clone(),
+                    self.overviews.clone(),
+                    &options.user_input,
+                )
+                .await?
+            }
+            _ => return Err(Error::InvalidLayerCollectionId),
+        };
 
-        // TODO: react to filter and sort options
-        // TODO: don't compute everything and filter then
-        let datasets = datasets
+        listing.sort_by(|a, b| a.name().cmp(b.name()));
+        let listing = listing
             .into_iter()
-            .skip(options.user_input.offset as usize)
-            .take(options.user_input.limit as usize)
+            .skip(options.offset as usize)
+            .take(options.limit as usize)
             .collect();
 
-        Ok(datasets)
+        Ok(listing)
     }
 
     async fn root_collection_id(&self) -> crate::error::Result<LayerCollectionId> {
-        Ok(LayerCollectionId("root".to_string()))
+        Ok(NetCdfLayerCollectionId::Path { path: ".".into() }.try_into()?)
     }
 
     async fn get_layer(&self, id: &LayerId) -> crate::error::Result<Layer> {
-        Ok(Layer {
-            id: ProviderLayerId {
-                provider_id: NETCDF_CF_PROVIDER_ID,
-                layer_id: id.clone(),
-            },
-            name: "".to_string(),        // TODO: get from file or overview
-            description: "".to_string(), // TODO: get from file or overview
-            workflow: Workflow {
-                operator: TypedOperator::Raster(
-                    GdalSource {
-                        params: GdalSourceParameters {
-                            data: DataId::External(ExternalDataId {
-                                provider_id: NETCDF_CF_PROVIDER_ID,
-                                layer_id: id.clone(),
-                            }),
-                        },
-                    }
-                    .boxed(),
-                ),
-            },
-            symbology: None,
-        })
+        let netcdf_id = serde_json::from_str(&id.0)?;
+
+        match netcdf_id {
+            NetCdfLayerCollectionId::Entity {
+                path,
+                groups,
+                entity,
+            } => {
+                let rp = path.clone();
+
+                let provider_path = self.path.clone();
+                let overviews_path = self.overviews.clone();
+
+                let tree = tokio::task::spawn_blocking(move || {
+                    NetCdfCfDataProvider::build_netcdf_tree(
+                        &provider_path,
+                        Some(&overviews_path),
+                        &rp,
+                        false,
+                    )
+                    .map_err(|_| Error::InvalidLayerCollectionId)
+                })
+                .await??;
+
+                layer_from_netcdf_overview(NETCDF_CF_PROVIDER_ID, id, tree, &groups, entity)
+            }
+            _ => return Err(Error::InvalidLayerId),
+        }
     }
 }
 
@@ -1128,6 +1461,7 @@ mod tests {
                 },
                 name: "Test dataset metric: Random metric 1 > entity01".into(),
                 description: "CFake description of test dataset with metric.".into(),
+                properties: vec![],
             }
         );
         assert_eq!(
@@ -1146,6 +1480,7 @@ mod tests {
                 },
                 name: "Test dataset metric: Random metric 1 > entity02".into(),
                 description: "CFake description of test dataset with metric.".into(),
+                properties: vec![],
             }
         );
         assert_eq!(
@@ -1164,6 +1499,7 @@ mod tests {
                 },
                 name: "Test dataset metric: Random metric 1 > entity03".into(),
                 description: "CFake description of test dataset with metric.".into(),
+                properties: vec![],
             }
         );
         assert_eq!(
@@ -1182,6 +1518,7 @@ mod tests {
                 },
                 name: "Test dataset metric: Random metric 2 > entity01".into(),
                 description: "CFake description of test dataset with metric.".into(),
+                properties: vec![],
             }
         );
         assert_eq!(
@@ -1200,6 +1537,7 @@ mod tests {
                 },
                 name: "Test dataset metric: Random metric 2 > entity02".into(),
                 description: "CFake description of test dataset with metric.".into(),
+                properties: vec![],
             }
         );
         assert_eq!(
@@ -1218,6 +1556,7 @@ mod tests {
                 },
                 name: "Test dataset metric: Random metric 2 > entity03".into(),
                 description: "CFake description of test dataset with metric.".into(),
+                properties: vec![],
             }
         );
     }
@@ -1255,6 +1594,7 @@ mod tests {
                     "Test dataset metric and scenario: Sustainability > Random metric 1 > entity01"
                         .into(),
                 description: "Fake description of test dataset with metric and scenario.".into(),
+                properties: vec![],
             }
         );
         assert_eq!(
@@ -1271,6 +1611,7 @@ mod tests {
                 },
                 name: "Test dataset metric and scenario: Fossil-fueled Development > Random metric 2 > entity02".into(),
                 description: "Fake description of test dataset with metric and scenario.".into(),
+                properties: vec![],
             }
         );
     }
@@ -1520,6 +1861,7 @@ mod tests {
                     "Test dataset metric and scenario: Sustainability > Random metric 1 > entity01"
                         .into(),
                 description: "Fake description of test dataset with metric and scenario.".into(),
+                properties: vec![],
             }
         );
         assert_eq!(
@@ -1536,6 +1878,7 @@ mod tests {
                 },
                 name: "Test dataset metric and scenario: Fossil-fueled Development > Random metric 2 > entity02".into(),
                 description: "Fake description of test dataset with metric and scenario.".into(),
+                properties: vec![],
             }
         );
     }

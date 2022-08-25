@@ -414,6 +414,7 @@ impl LayerCollectionProvider for HashMapDatasetDb {
                     },
                     name: d.name.clone(),
                     description: d.description.clone(),
+                    properties: vec![],
                 })
             })
             .collect();
@@ -447,6 +448,8 @@ impl LayerCollectionProvider for HashMapDatasetDb {
             description: dataset.description.clone(),
             workflow: Workflow { operator },
             symbology: dataset.symbology.clone(),
+            properties: vec![],
+            metadata: HashMap::new(),
         })
     }
 }

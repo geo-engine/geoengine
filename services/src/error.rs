@@ -1,10 +1,13 @@
-use crate::{datasets::external::netcdfcf::NetCdfCf4DProviderError, handlers::ErrorResponse};
+#[cfg(feature = "ebv")]
+use crate::datasets::external::netcdfcf::NetCdfCf4DProviderError;
+use crate::handlers::ErrorResponse;
 use crate::{layers::listing::LayerCollectionId, workflows::workflow::WorkflowId};
 use actix_web::http::StatusCode;
 use actix_web::HttpResponse;
-use geoengine_datatypes::dataset::DatasetId;
+use geoengine_datatypes::dataset::{DatasetId, LayerId};
 use geoengine_datatypes::{dataset::DataProviderId, spatial_reference::SpatialReferenceOption};
 use snafu::prelude::*;
+use std::path::PathBuf;
 use strum::IntoStaticStr;
 use tonic::Status;
 
@@ -315,14 +318,10 @@ pub enum Error {
     },
     MissingNFDIMetaData,
 
+    #[cfg(feature = "ebv")]
     #[snafu(context(false))]
     NetCdfCf4DProvider {
         source: NetCdfCf4DProviderError,
-    },
-    #[cfg(feature = "ebv")]
-    #[snafu(context(false))]
-    EbvHandler {
-        source: crate::handlers::ebv::EbvError,
     },
     #[cfg(feature = "nfdi")]
     #[snafu(display("Could not parse GFBio basket: {}", message,))]
@@ -353,10 +352,20 @@ pub enum Error {
     UnknownLayerCollectionId {
         id: LayerCollectionId,
     },
+    UnknownLayerId {
+        id: LayerId,
+    },
+    InvalidLayerCollectionId,
+    InvalidLayerId,
 
     #[snafu(context(false))]
     WorkflowApi {
         source: crate::handlers::workflows::WorkflowApiError,
+    },
+
+    SubPathMustNotEscapeBasePath {
+        base: PathBuf,
+        sub_path: PathBuf,
     },
 }
 

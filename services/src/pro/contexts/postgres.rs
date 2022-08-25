@@ -616,6 +616,7 @@ where
 
 #[cfg(test)]
 mod tests {
+    use std::collections::HashMap;
     use std::str::FromStr;
 
     use super::*;
@@ -654,8 +655,8 @@ mod tests {
     use geoengine_datatypes::collections::VectorDataType;
     use geoengine_datatypes::dataset::{DataProviderId, DatasetId};
     use geoengine_datatypes::primitives::{
-        BoundingBox2D, Coordinate2D, FeatureDataType, Measurement, SpatialResolution, TimeInterval,
-        VectorQueryRectangle,
+        BoundingBox2D, Coordinate2D, DateTime, FeatureDataType, Measurement, SpatialResolution,
+        TimeInterval, VectorQueryRectangle,
     };
     use geoengine_datatypes::spatial_reference::{SpatialReference, SpatialReferenceOption};
     use geoengine_datatypes::util::test::TestDefault;
@@ -1034,7 +1035,12 @@ mod tests {
     async fn anonymous(ctx: &PostgresContext<NoTls>) {
         let db = ctx.user_db_ref();
 
+        let now: DateTime = chrono::offset::Utc::now().into();
         let session = db.anonymous().await.unwrap();
+        let then: DateTime = chrono::offset::Utc::now().into();
+
+        assert!(session.created >= now && session.created <= then);
+        assert!(session.valid_until > session.created);
 
         let session = db.session(session.id).await.unwrap();
 
@@ -1865,7 +1871,9 @@ mod tests {
                     name: "Layer1".to_string(),
                     description: "Layer 1".to_string(),
                     symbology: None,
-                    workflow: workflow.clone()
+                    workflow: workflow.clone(),
+                    properties: vec![],
+                    metadata: HashMap::new(),
                 }
             );
 
@@ -1938,6 +1946,8 @@ mod tests {
                         },
                         name: "Collection1".to_string(),
                         description: "Collection 1".to_string(),
+                        entry_label: None,
+                        properties: vec![],
                     }),
                     CollectionItem::Collection(LayerCollectionListing {
                         id: ProviderLayerCollectionId {
@@ -1946,6 +1956,8 @@ mod tests {
                         },
                         name: "Unsorted".to_string(),
                         description: "Unsorted Layers".to_string(),
+                        entry_label: None,
+                        properties: vec![],
                     }),
                     CollectionItem::Layer(LayerListing {
                         id: ProviderLayerId {
@@ -1954,6 +1966,7 @@ mod tests {
                         },
                         name: "Layer1".to_string(),
                         description: "Layer 1".to_string(),
+                        properties: vec![],
                     })
                 ]
             );
@@ -1981,6 +1994,8 @@ mod tests {
                         },
                         name: "Collection2".to_string(),
                         description: "Collection 2".to_string(),
+                        entry_label: None,
+                        properties: vec![],
                     }),
                     CollectionItem::Layer(LayerListing {
                         id: ProviderLayerId {
@@ -1989,6 +2004,7 @@ mod tests {
                         },
                         name: "Layer2".to_string(),
                         description: "Layer 2".to_string(),
+                        properties: vec![],
                     })
                 ]
             );
