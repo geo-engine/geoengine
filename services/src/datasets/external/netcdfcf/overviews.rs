@@ -1,9 +1,13 @@
-use super::{error, time_coverage, NetCdfCf4DProviderError, TimeCoverage};
+use super::{error, NetCdfCf4DProviderError, TimeCoverage};
 use crate::{
-    datasets::external::netcdfcf::{gdalmd::MdGroup, Metadata, NetCdfCfDataProvider},
+    datasets::external::netcdfcf::{Metadata, NetCdfCfDataProvider},
     util::config::get_config_element,
 };
-use gdal::{raster::RasterCreationOption, Dataset, DatasetOptions, GdalOpenFlags};
+use gdal::{
+    cpl::CslStringList,
+    raster::{Group, RasterCreationOption},
+    Dataset, DatasetOptions, GdalOpenFlags,
+};
 use geoengine_datatypes::{
     error::BoxedResultExt, primitives::TimeInterval, util::gdal::ResamplingMethod,
 };
@@ -100,24 +104,51 @@ impl NetCdfGroup {
 
 trait NetCdfVisitor {
     fn group_tree(&self) -> Result<NetCdfGroup>;
+
+    fn array_names_options() -> CslStringList {
+        let mut options = CslStringList::new();
+        options
+            .set_name_value("SHOW_ZERO_DIM", "NO")
+            .unwrap_or_else(|e| debug!("{}", e));
+        options
+            .set_name_value("SHOW_COORDINATES", "NO")
+            .unwrap_or_else(|e| debug!("{}", e));
+        options
+            .set_name_value("SHOW_INDEXING", "NO")
+            .unwrap_or_else(|e| debug!("{}", e));
+        options
+            .set_name_value("SHOW_BOUNDS", "NO")
+            .unwrap_or_else(|e| debug!("{}", e));
+        options
+            .set_name_value("SHOW_TIME", "NO")
+            .unwrap_or_else(|e| debug!("{}", e));
+        options
+            .set_name_value("GROUP_BY", "SAME_DIMENSION")
+            .unwrap_or_else(|e| debug!("{}", e));
+        options
+    }
 }
 
-impl NetCdfVisitor for MdGroup<'_> {
+impl NetCdfVisitor for Group<'_> {
     fn group_tree(&self) -> Result<NetCdfGroup> {
         let mut groups = Vec::new();
-        for subgroup_name in self.group_names() {
-            let subgroup = self.open_group(&subgroup_name)?;
+        for subgroup_name in self.group_names(Default::default()) {
+            let subgroup = self
+                .open_group(&subgroup_name, Default::default())
+                .context(error::GdalMd)?;
             groups.push(subgroup.group_tree()?);
         }
 
+        // TODO: why does this crash?
         let dimension_names: HashSet<String> = self
-            .dimension_names()
+            .dimensions(Self::array_names_options())
             .map_err(|source| NetCdfCf4DProviderError::CannotReadDimensions { source })?
             .into_iter()
+            .map(|dim| dim.name())
             .collect();
 
         let mut arrays = Vec::new();
-        for array_name in self.array_names() {
+        for array_name in self.array_names(Self::array_names_options()) {
             // filter out arrays that are actually dimensions
             if dimension_names.contains(&array_name) {
                 continue;
@@ -127,7 +158,7 @@ impl NetCdfVisitor for MdGroup<'_> {
         }
 
         Ok(NetCdfGroup {
-            name: self.name.clone(),
+            name: self.name(),
             groups,
             arrays,
         })
@@ -157,7 +188,7 @@ pub fn create_overviews(
     let dataset = gdal_open_dataset_ex(
         &file_path,
         DatasetOptions {
-            open_flags: GdalOpenFlags::GDAL_OF_MULTIDIM_RASTER,
+            open_flags: GdalOpenFlags::GDAL_OF_READONLY | GdalOpenFlags::GDAL_OF_MULTIDIM_RASTER,
             allowed_drivers: Some(&["netCDF"]),
             open_options: None,
             sibling_files: None,
@@ -172,7 +203,7 @@ pub fn create_overviews(
     // must have this flag before any write operations
     let in_progress_flag = InProgressFlag::create(&out_folder_path)?;
 
-    let root_group = MdGroup::from_dataset(&dataset)?;
+    let root_group = dataset.root_group().context(error::GdalMd)?;
 
     let group_tree = root_group.group_tree()?;
 
@@ -182,7 +213,7 @@ pub fn create_overviews(
         Err(e) => return Err(e),
     };
 
-    let time_coverage = time_coverage(&root_group)?;
+    let time_coverage = TimeCoverage::from_root_group(&root_group)?;
 
     for conversion in group_tree.conversion_metadata(&file_path, &out_folder_path) {
         match index_subdataset(&conversion, &time_coverage, resampling_method) {
