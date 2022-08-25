@@ -1751,7 +1751,6 @@ mod tests {
             })
         );
 
-        drop(test_data);
         Ok(())
     }
 }
