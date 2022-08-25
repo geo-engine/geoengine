@@ -348,18 +348,6 @@ impl ConfigElement for Session {
     const KEY: &'static str = "session";
 }
 
-#[cfg(feature = "ebv")]
-#[derive(Debug, Deserialize)]
-pub struct Ebv {
-    #[serde(deserialize_with = "deserialize_base_url")]
-    pub api_base_url: url::Url,
-}
-
-#[cfg(feature = "ebv")]
-impl ConfigElement for Ebv {
-    const KEY: &'static str = "ebv";
-}
-
 #[cfg(feature = "nfdi")]
 #[derive(Debug, Deserialize)]
 pub struct GFBio {

@@ -1,3 +1,4 @@
+use std::collections::HashMap;
 use std::path::Path;
 
 use crate::datasets::listing::ProvenanceOutput;
@@ -87,8 +88,8 @@ impl DataProviderDefinition for Nature40DataProviderDefinition {
         }))
     }
 
-    fn type_name(&self) -> String {
-        "Nature4.0".to_owned()
+    fn type_name(&self) -> &'static str {
+        "Nature4.0"
     }
 
     fn name(&self) -> String {
@@ -194,6 +195,7 @@ impl LayerCollectionProvider for Nature40DataProvider {
                                 .get((band_index - 1) as usize)
                                 .unwrap_or(&"".to_owned())
                         ),
+                        properties: vec![],
                     })));
                 }
             } else {
@@ -270,6 +272,8 @@ impl LayerCollectionProvider for Nature40DataProvider {
                 ),
             },
             symbology: None,
+            properties: vec![],
+            metadata: HashMap::new(),
         })
     }
 }
@@ -791,6 +795,7 @@ mod tests {
                     },
                     name: "MOF Luftbild".to_owned(),
                     description: "Band 1: band1".to_owned(),
+                    properties: vec![],
                 }),
                 CollectionItem::Layer(LayerListing {
                     id: ProviderLayerId {
@@ -802,6 +807,7 @@ mod tests {
                     },
                     name: "MOF Luftbild".to_owned(),
                     description: "Band 2: band2".to_owned(),
+                    properties: vec![],
                 }),
                 CollectionItem::Layer(LayerListing {
                     id: ProviderLayerId {
@@ -813,6 +819,7 @@ mod tests {
                     },
                     name: "MOF Luftbild".to_owned(),
                     description: "Band 3: band3".to_owned(),
+                    properties: vec![],
                 }),
                 CollectionItem::Layer(LayerListing {
                     id: ProviderLayerId {
@@ -824,6 +831,7 @@ mod tests {
                     },
                     name: "Topografic Wetness index".to_owned(),
                     description: "Band 1: wetness".to_owned(),
+                    properties: vec![],
                 })
             ]
         );

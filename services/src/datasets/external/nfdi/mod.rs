@@ -68,8 +68,8 @@ impl DataProviderDefinition for NFDIDataProviderDefinition {
         Ok(Box::new(NFDIDataProvider::new(self).await?))
     }
 
-    fn type_name(&self) -> String {
-        "NFDI".to_owned()
+    fn type_name(&self) -> &'static str {
+        "NFDI"
     }
 
     fn name(&self) -> String {
@@ -230,6 +230,8 @@ impl NFDIDataProvider {
                 )?,
             },
             symbology: None,
+            properties: vec![],
+            metadata: HashMap::new(),
         })
     }
 
@@ -574,6 +576,7 @@ impl LayerCollectionProvider for NFDIDataProvider {
                     },
                     name: ds.name,
                     description: ds.description,
+                    properties: vec![],
                 })
             })
             .collect())
@@ -637,6 +640,8 @@ impl LayerCollectionProvider for NFDIDataProvider {
             description: dataset.description,
             workflow: Workflow { operator },
             symbology: None,
+            properties: vec![],
+            metadata: HashMap::new(),
         })
     }
 }

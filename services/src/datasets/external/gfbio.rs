@@ -82,8 +82,8 @@ impl DataProviderDefinition for GfbioDataProviderDefinition {
         Ok(Box::new(GfbioDataProvider::new(self.db_config).await?))
     }
 
-    fn type_name(&self) -> String {
-        "GFBio".to_owned()
+    fn type_name(&self) -> &'static str {
+        "GFBio"
     }
 
     fn name(&self) -> String {
@@ -227,6 +227,7 @@ impl LayerCollectionProvider for GfbioDataProvider {
                     },
                     name: row.get(1),
                     description: row.try_get(2).unwrap_or_else(|_| "".to_owned()),
+                    properties: vec![],
                 })
             })
             .collect();
@@ -286,6 +287,8 @@ impl LayerCollectionProvider for GfbioDataProvider {
                 ),
             },
             symbology: None, // TODO
+            properties: vec![],
+            metadata: HashMap::new(),
         })
     }
 }
@@ -579,6 +582,7 @@ mod tests {
                 },
                 name: "Example Title".to_string(),
                 description: "".to_string(),
+                properties: vec![],
             })]
         );
     }

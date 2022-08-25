@@ -533,26 +533,16 @@ impl Sub<Duration> for DateTime {
 #[cfg(feature = "postgres")]
 mod sql {
     use super::*;
-    use postgres_protocol::types::{timestamp_from_sql, timestamp_to_sql};
     use postgres_types::{
-        accepts, private::BytesMut, to_sql_checked, FromSql, IsNull, ToSql, Type, WrongType,
+        accepts, private::BytesMut, to_sql_checked, FromSql, IsNull, ToSql, Type,
     };
     use std::error::Error;
 
     impl<'a> FromSql<'a> for DateTime {
         fn from_sql(ty: &Type, raw: &'a [u8]) -> Result<Self, Box<dyn Error + Sync + Send>> {
-            if !<Self as postgres_types::FromSql>::accepts(ty) {
-                return Err(Box::new(WrongType::new::<Self>(ty.clone())));
-            }
-
-            let timestamp_microseconds = timestamp_from_sql(raw)?;
-            let timestamp_milliseconds = timestamp_microseconds / 1_000;
-            let time_instance = TimeInstance::try_from(timestamp_milliseconds)?;
-
-            match DateTime::try_from(time_instance) {
-                Ok(date_time) => Ok(date_time),
-                Err(err) => Err(Box::new(err)),
-            }
+            let naive = chrono::NaiveDateTime::from_sql(ty, raw)?;
+            let datetime = chrono::DateTime::from_utc(naive, chrono::Utc);
+            Ok(DateTime { datetime })
         }
 
         postgres_types::accepts!(TIMESTAMPTZ);
@@ -561,15 +551,10 @@ mod sql {
     impl ToSql for DateTime {
         fn to_sql(
             &self,
-            _: &Type,
+            type_: &Type,
             w: &mut BytesMut,
         ) -> Result<IsNull, Box<dyn Error + Sync + Send>> {
-            let timestamp_milliseconds = TimeInstance::from(self).inner();
-            let timestamp_microseconds = timestamp_milliseconds * 1_000;
-
-            timestamp_to_sql(timestamp_microseconds, w);
-
-            Ok(IsNull::No)
+            self.datetime.naive_utc().to_sql(type_, w)
         }
 
         accepts!(TIMESTAMPTZ);

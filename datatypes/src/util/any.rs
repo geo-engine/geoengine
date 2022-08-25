@@ -1,4 +1,4 @@
-use std::any::Any;
+use std::{any::Any, sync::Arc};
 
 /// Easy `Any`-casting by propagating the call to the underlying implementor
 pub trait AsAny: Any {
@@ -13,3 +13,20 @@ where
         self
     }
 }
+
+/// Easy `Any`-casting for `Arc`s by propagating the call to the underlying implementor
+pub trait AsAnyArc {
+    /// Returns the required Arc type for calling `Arc::downcast`
+    fn as_any_arc(self: Arc<Self>) -> Arc<(dyn Any + Send + Sync)>;
+}
+
+impl<T> AsAnyArc for T
+where
+    T: Any + Send + Sync,
+{
+    fn as_any_arc(self: Arc<Self>) -> Arc<(dyn Any + Send + Sync)> {
+        self
+    }
+}
+
+// TODO: test that everything works as expected

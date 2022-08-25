@@ -1,3 +1,4 @@
+use std::collections::HashMap;
 use std::str::FromStr;
 
 use crate::datasets::listing::ProvenanceOutput;
@@ -696,6 +697,7 @@ where
                     },
                     name: row.get(1),
                     description: row.get(2),
+                    properties: vec![],
                 }))
             })
             .filter_map(Result::ok)
@@ -754,6 +756,8 @@ where
             description,
             workflow: Workflow { operator },
             symbology,
+            properties: vec![],
+            metadata: HashMap::new(),
         })
     }
 }
