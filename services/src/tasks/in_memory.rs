@@ -434,17 +434,22 @@ impl TaskContext for SimpleTaskManagerContext {
     async fn set_completion(&self, pct_complete: u8, status: Box<dyn TaskStatusInfo>) {
         let mut task_status = self.status.write().await;
 
-        let status_info = RunningTaskStatusInfo::new(pct_complete, status);
-
         *task_status = match &*task_status {
-            TaskStatus::Running(_) => TaskStatus::Running(status_info),
+            TaskStatus::Running(current_info) => {
+                TaskStatus::Running(current_info.update(pct_complete, status))
+            }
             TaskStatus::Aborted {
-                clean_up: TaskCleanUpStatus::Running(_),
-            } => TaskStatus::aborted(TaskCleanUpStatus::Running(status_info)),
+                clean_up: TaskCleanUpStatus::Running(current_info),
+            } => TaskStatus::aborted(TaskCleanUpStatus::Running(
+                current_info.update(pct_complete, status),
+            )),
             TaskStatus::Failed {
                 error,
-                clean_up: TaskCleanUpStatus::Running(_),
-            } => TaskStatus::failed(error.clone(), TaskCleanUpStatus::Running(status_info)),
+                clean_up: TaskCleanUpStatus::Running(current_info),
+            } => TaskStatus::failed(
+                error.clone(),
+                TaskCleanUpStatus::Running(current_info.update(pct_complete, status)),
+            ),
             _ => return, // already completed, aborted or failed, so we ignore the status update
         };
     }

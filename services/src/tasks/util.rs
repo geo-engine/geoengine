@@ -1,4 +1,4 @@
-use super::{TaskContext, TaskId, TaskManager};
+use super::{TaskContext, TaskId, TaskManager, TaskStatusInfo};
 
 pub mod test {
     use super::{TaskContext, TaskId, TaskManager};
@@ -23,4 +23,12 @@ pub mod test {
         .await
         .unwrap();
     }
+}
+
+/// A task context for testing that does nothing
+pub struct NopTaskContext;
+
+#[async_trait::async_trait]
+impl TaskContext for NopTaskContext {
+    async fn set_completion(&self, _pct_complete: u8, _status: Box<dyn TaskStatusInfo>) {}
 }
