@@ -39,6 +39,7 @@ impl From<QueryRectangle<BoundingBox2D>> for QueryRectangle<SpatialPartition2D> 
     }
 }
 
+/// manual implementation, because derivation can't handle the `SpatialBounds` generic (yet)
 impl utoipa::Component for QueryRectangle<SpatialPartition2D> {
     fn component() -> utoipa::openapi::Component {
         use utoipa::openapi::*;
@@ -47,6 +48,27 @@ impl utoipa::Component for QueryRectangle<SpatialPartition2D> {
                 "spatialBounds",
                 Ref::from_component_name("SpatialPartition2D"),
             )
+            .required("spatialBounds")
+            .property("timeInterval", Ref::from_component_name("TimeInterval"))
+            .required("timeInterval")
+            .property(
+                "spatialResolution",
+                Ref::from_component_name("SpatialResolution"),
+            )
+            .required("spatialResolution")
+            .description(Some(
+                "A spatio-temporal rectangle with a specified resolution",
+            ))
+            .into()
+    }
+}
+
+/// manual implementation, because derivation can't handle the `SpatialBounds` generic (yet)
+impl utoipa::Component for QueryRectangle<BoundingBox2D> {
+    fn component() -> utoipa::openapi::Component {
+        use utoipa::openapi::*;
+        ObjectBuilder::new()
+            .property("spatialBounds", Ref::from_component_name("BoundingBox2D"))
             .required("spatialBounds")
             .property("timeInterval", Ref::from_component_name("TimeInterval"))
             .required("timeInterval")

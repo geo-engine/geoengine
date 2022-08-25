@@ -31,6 +31,7 @@ use serde::{Deserialize, Serialize};
 use snafu::{ResultExt, Snafu};
 use tokio::fs;
 use utoipa::Component;
+use utoipa::IntoParams;
 use zip::{write::FileOptions, ZipWriter};
 
 pub(crate) fn init_workflow_routes<C>(cfg: &mut web::ServiceConfig)
@@ -65,34 +66,9 @@ where
     );
 }
 
-/// Registers a new [Workflow].
-///
-/// # Example
-///
-/// ```text
-/// POST /workflow
-/// Authorization: Bearer e9da345c-b1df-464b-901c-0335a0419227
-///
-/// {
-///   "type": "Vector",
-///   "operator": {
-///     "type": "MockPointSource",
-///     "params": {
-///       "points": [
-///         { "x": 0.0, "y": 0.1 },
-///         { "x": 1.0, "y": 1.1 }
-///       ]
-///     }
-///   }
-/// }
-/// ```
-/// Response:
-/// ```text
-/// {
-///   "id": "cee25e8c-18a0-5f1b-a504-0bc30de21e06"
-/// }
-/// ```
+/// Registers a new Workflow.
 #[utoipa::path(
+    tag = "Workflows",
     post,
     path = "/workflow",
     request_body = Workflow,
@@ -136,36 +112,9 @@ async fn register_workflow_handler<C: Context>(
     Ok(web::Json(IdResponse::from(id)))
 }
 
-/// Retrieves an existing [Workflow] using its id.
-///
-/// # Example
-///
-/// ```text
-/// GET /workflow/cee25e8c-18a0-5f1b-a504-0bc30de21e06
-/// Authorization: Bearer e9da345c-b1df-464b-901c-0335a0419227
-/// ```
-/// Response:
-/// ```text
-/// {
-///   "type": "Vector",
-///   "operator": {
-///     "type": "MockPointSource",
-///     "params": {
-///       "points": [
-///         {
-///           "x": 0.0,
-///           "y": 0.1
-///         },
-///         {
-///           "x": 1.0,
-///           "y": 1.1
-///         }
-///       ]
-///     }
-///   }
-/// }
-/// ```
+/// Retrieves an existing Workflow.
 #[utoipa::path(
+    tag = "Workflows",
     get,
     path = "/workflow/{id}",
     responses(
@@ -174,7 +123,7 @@ async fn register_workflow_handler<C: Context>(
         )
     ),
     params(
-        ("id", description = "Workflow id")
+        ("id" = WorkflowId, description = "Workflow id")
     ),
     security(
         ("session_token" = [])
@@ -189,24 +138,9 @@ async fn load_workflow_handler<C: Context>(
     Ok(web::Json(wf))
 }
 
-/// Gets the metadata of a workflow.
-///
-/// # Example
-///
-/// ```text
-/// GET /workflow/cee25e8c-18a0-5f1b-a504-0bc30de21e06/metadata
-/// Authorization: Bearer e9da345c-b1df-464b-901c-0335a0419227
-/// ```
-/// Response:
-/// ```text
-/// {
-///   "type": "vector",
-///   "dataType": "MultiPoint",
-///   "spatialReference": "EPSG:4326",
-///   "columns": {}
-/// }
-/// ```
+/// Gets the metadata of a workflow
 #[utoipa::path(
+    tag = "Workflows",
     get,
     path = "/workflow/{id}/metadata",
     responses(
@@ -215,7 +149,7 @@ async fn load_workflow_handler<C: Context>(
         )
     ),
     params(
-        ("id", description = "Workflow id")
+        ("id" = WorkflowId, description = "Workflow id")
     ),
     security(
         ("session_token" = [])
@@ -256,38 +190,8 @@ async fn workflow_metadata<C: Context>(
 }
 
 /// Gets the provenance of all datasets used in a workflow.
-///
-/// # Example
-///
-/// ```text
-/// GET /workflow/cee25e8c-18a0-5f1b-a504-0bc30de21e06/provenance
-/// Authorization: Bearer e9da345c-b1df-464b-901c-0335a0419227
-/// ```
-/// Response:
-/// ```text
-/// [{
-///   "dataset": {
-///     "type": "internal",
-///     "datasetId": "846a823a-6859-4b94-ab0a-c1de80f593d8"
-///   },
-///   "provenance": {
-///     "citation": "Author, Dataset Tile",
-///     "license": "Some license",
-///     "uri": "http://example.org/"
-///   }
-/// }, {
-///   "dataset": {
-///     "type": "internal",
-///     "datasetId": "453cd398-f271-437b-9c3d-7f42213ea30a"
-///   },
-///   "provenance": {
-///     "citation": "Another Author, Another Dataset Tile",
-///     "license": "Some other license",
-///     "uri": "http://example.org/"
-///   }
-/// }]
-/// ```
 #[utoipa::path(
+    tag = "Workflows",
     get,
     path = "/workflow/{id}/provenance",
     responses(
@@ -296,7 +200,7 @@ async fn workflow_metadata<C: Context>(
         )
     ),
     params(
-        ("id", description = "Workflow id")
+        ("id" = WorkflowId, description = "Workflow id")
     ),
     security(
         ("session_token" = [])
@@ -307,7 +211,7 @@ async fn get_workflow_provenance_handler<C: Context>(
     session: C::Session,
     ctx: web::Data<C>,
 ) -> Result<impl Responder> {
-    let workflow = ctx.workflow_registry_ref().load(&id.into_inner()).await?;
+    let workflow: Workflow = ctx.workflow_registry_ref().load(&id.into_inner()).await?;
 
     let provenance = workflow_provenance(&workflow, ctx.get_ref(), session).await?;
 
@@ -468,51 +372,10 @@ pub struct RasterDatasetFromWorkflowResult {
     upload: UploadId,
 }
 
-/// Create a new dataset from the result of the given workflow and query
+/// Create a new dataset from the result of the given workflow and query.
 /// Returns the id of the created dataset and upload
-///
-/// # Example
-///
-/// ```text
-/// POST /datasetFromWorkflow/{workflow_id}
-/// Authorization: Bearer fc9b5dc2-a1eb-400f-aeed-a7845d9935c9
-/// Content-Type: application/json
-///
-/// {
-///     "name": "foo",
-///     "description": null,
-///     "query": {
-///         "spatialBounds": {
-///             "upperLeftCoordinate": {
-///                 "x": -10.0,
-///                 "y": 80.0
-///             },
-///             "lowerRightCoordinate": {
-///                 "x": 50.0,
-///                 "y": 20.0
-///             }
-///         },
-///         "timeInterval": {
-///             "start": 1388534400000,
-///             "end": 1388534401000
-///         },
-///         "spatialResolution": {
-///             "x": 0.1,
-///             "y": 0.1
-///         }
-///     }
-/// }
-///
-/// ```text
-/// {
-///   "upload": "3086f494-d5a4-4b51-a14b-3b29f8bf7bb0",
-///   "data": {
-///     "type": "internal",
-///     "datasetId": "94230f0b-4e8a-4cba-9adc-3ace837fe5d4"
-///   }
-/// }
-/// ```
 #[utoipa::path(
+    tag = "Workflows",
     post,
     path = "/datasetFromWorkflow/{id}",
     request_body = RasterDatasetFromWorkflow,

@@ -47,7 +47,7 @@ tempfile = "3.1"
 tokio = { version = "1.15", features = ["macros", "signal", "sync", "rt-multi-thread", "time"] }
 tracing = "0.1"
 typetag = "0.2"
-utoipa = "0.2.0"
+utoipa = "1.1.0"
 uuid = { version = "1.1", features = ["serde", "v4", "v5"] }
 
 [dev-dependencies]

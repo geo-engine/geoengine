@@ -3,45 +3,12 @@ use std::collections::{BTreeMap, HashMap};
 use std::fmt;
 use std::str::FromStr;
 
-#[derive(Clone, Debug, PartialEq, Eq, Deserialize, Serialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Deserialize, Serialize, utoipa::Component)]
 #[serde(rename_all = "camelCase", tag = "type")]
 pub enum Measurement {
     Unitless,
     Continuous(ContinuousMeasurement),
     Classification(ClassificationMeasurement),
-}
-
-impl utoipa::Component for Measurement {
-    // TODO: set discriminator once utoipa supports it
-    fn component() -> utoipa::openapi::Component {
-        use utoipa::openapi::*;
-        OneOfBuilder::new()
-            .item(
-                // Unitless
-                ObjectBuilder::new()
-                    .property("type", Property::new(ComponentType::String))
-                    .required("type"),
-            )
-            .item(
-                // Continuous
-                ObjectBuilder::new()
-                    .property("type", Property::new(ComponentType::String))
-                    .required("type")
-                    .property("measurement", Property::new(ComponentType::String))
-                    .required("measurement")
-                    .property("unit", Property::new(ComponentType::String)),
-            )
-            .item(
-                // Classification
-                ObjectBuilder::new()
-                    .property("type", Property::new(ComponentType::String))
-                    .required("type")
-                    .property("measurement", Property::new(ComponentType::String))
-                    .required("measurement")
-                    .property("classes", Property::new(ComponentType::Object)),
-            )
-            .into()
-    }
 }
 
 impl Measurement {
@@ -63,13 +30,13 @@ impl Default for Measurement {
     }
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, Deserialize, Serialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Deserialize, Serialize, utoipa::Component)]
 pub struct ContinuousMeasurement {
     pub measurement: String,
     pub unit: Option<String>,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, Deserialize, Serialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Deserialize, Serialize, utoipa::Component)]
 #[serde(
     try_from = "SerializableClassificationMeasurement",
     into = "SerializableClassificationMeasurement"

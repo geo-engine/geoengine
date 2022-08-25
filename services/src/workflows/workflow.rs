@@ -17,7 +17,7 @@ impl WorkflowId {
     }
 }
 
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, Serialize, Deserialize, utoipa::Component)]
 pub struct Workflow {
     #[serde(flatten)]
     pub operator: TypedOperator,
@@ -29,13 +29,6 @@ impl PartialEq for Workflow {
             (Ok(a), Ok(b)) => a == b,
             _ => false,
         }
-    }
-}
-
-impl utoipa::Component for Workflow {
-    fn component() -> utoipa::openapi::Component {
-        use utoipa::openapi::*;
-        Ref::from_component_name("TypedOperator").into()
     }
 }
 

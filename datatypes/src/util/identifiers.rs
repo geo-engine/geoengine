@@ -6,7 +6,17 @@ pub trait Identifier: Sized {
 #[macro_export]
 macro_rules! identifier {
     ($id_name: ident) => {
-        #[derive(Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize, Clone, Copy, Hash)]
+        #[derive(
+            Debug,
+            PartialEq,
+            Eq,
+            serde::Serialize,
+            serde::Deserialize,
+            Clone,
+            Copy,
+            Hash,
+            utoipa::Component,
+        )]
         pub struct $id_name(pub uuid::Uuid);
 
         impl $id_name {
@@ -34,13 +44,6 @@ macro_rules! identifier {
                 Ok(Self(
                     uuid::Uuid::from_str(s).map_err(|_error| $crate::error::Error::InvalidUuid)?,
                 ))
-            }
-        }
-
-        impl utoipa::Component for $id_name {
-            fn component() -> utoipa::openapi::Component {
-                use utoipa::openapi::*;
-                Property::new(ComponentType::String).into()
             }
         }
 
@@ -84,6 +87,14 @@ macro_rules! identifier {
                 Self: Sized,
             {
                 <uuid::Uuid as postgres_types::ToSql>::accepts(ty)
+            }
+        }
+
+        impl utoipa::IntoParams for $id_name {
+            fn into_params(
+                _parameter_in_provider: impl Fn() -> Option<utoipa::openapi::path::ParameterIn>,
+            ) -> Vec<utoipa::openapi::path::Parameter> {
+                vec![]
             }
         }
     };

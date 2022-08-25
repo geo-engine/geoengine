@@ -191,7 +191,6 @@ pub async fn send_test_request<C: SimpleContext>(
                     .handler(http::StatusCode::NOT_FOUND, render_404)
                     .handler(http::StatusCode::METHOD_NOT_ALLOWED, render_405),
             )
-            .wrap(middleware::NormalizePath::trim())
             .configure(configure_extractors)
             .configure(handlers::datasets::init_dataset_routes::<C>)
             .configure(handlers::plots::init_plot_routes::<C>)

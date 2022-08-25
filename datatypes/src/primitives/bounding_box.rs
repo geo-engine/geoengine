@@ -9,7 +9,7 @@ use postgres_types::{FromSql, ToSql};
 use serde::{Deserialize, Serialize};
 use snafu::ensure;
 
-#[derive(Copy, Clone, Serialize, Deserialize, PartialEq, Debug)]
+#[derive(Copy, Clone, Serialize, Deserialize, PartialEq, Debug, utoipa::Component)]
 #[cfg_attr(feature = "postgres", derive(ToSql, FromSql))]
 #[repr(C)]
 #[serde(rename_all = "camelCase")]

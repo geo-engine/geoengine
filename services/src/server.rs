@@ -102,7 +102,6 @@ where
                     .handler(http::StatusCode::METHOD_NOT_ALLOWED, render_405),
             )
             .wrap(TracingLogger::<CustomRootSpanBuilder>::new())
-            .wrap(middleware::NormalizePath::trim())
             .configure(configure_extractors)
             .configure(handlers::datasets::init_dataset_routes::<C>)
             .configure(handlers::layers::init_layer_routes::<C>)
@@ -283,46 +282,34 @@ pub(crate) fn configure_extractors(cfg: &mut web::ServiceConfig) {
     }));
 }
 
-#[derive(serde::Serialize)]
+#[derive(serde::Serialize, utoipa::Component)]
 #[serde(rename_all = "camelCase")]
 pub(crate) struct VersionInfo {
     build_date: Option<String>,
     commit_hash: Option<String>,
 }
 
-impl utoipa::Component for VersionInfo {
-    fn component() -> utoipa::openapi::Component {
-        use utoipa::openapi::*;
-        ObjectBuilder::new()
-            .property(
-                "buildDate",
-                PropertyBuilder::new()
-                    .component_type(ComponentType::String)
-                    .format(Some(ComponentFormat::Date)),
-            )
-            .property("commitHash", Property::new(ComponentType::String))
-            .example(Some(serde_json::json!({
-                "buildDate": "2021-05-17", "commitHash": "16cd0881a79b6f03bb5f1f6ef2b2711e570b9865"
-            })))
-            .into()
-    }
-}
+// impl utoipa::Component for VersionInfo {
+//     fn component() -> utoipa::openapi::Component {
+//         use utoipa::openapi::*;
+//         ObjectBuilder::new()
+//             .property(
+//                 "buildDate",
+//                 PropertyBuilder::new()
+//                     .component_type(ComponentType::String)
+//                     .format(Some(ComponentFormat::Date)),
+//             )
+//             .property("commitHash", Property::new(ComponentType::String))
+//             .example(Some(serde_json::json!({
+//                 "buildDate": "2021-05-17", "commitHash": "16cd0881a79b6f03bb5f1f6ef2b2711e570b9865"
+//             })))
+//             .into()
+//     }
+// }
 
 /// Shows information about the server software version.
-///
-/// # Example
-///
-/// ```text
-/// GET /version
-/// ```
-/// Response:
-/// ```text
-/// {
-///   "buildDate": "2021-05-17",
-///   "commitHash": "16cd0881a79b6f03bb5f1f6ef2b2711e570b9865"
-/// }
-/// ```
 #[utoipa::path(
+    tag = "General",
     get,
     path = "/version",
     responses(

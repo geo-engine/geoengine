@@ -48,7 +48,7 @@ pub trait ResultDescriptor: Clone + Serialize {
 }
 
 /// A `ResultDescriptor` for raster queries
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, utoipa::Component)]
 #[serde(rename_all = "camelCase")]
 pub struct RasterResultDescriptor {
     pub data_type: RasterDataType,
@@ -106,7 +106,7 @@ impl ResultDescriptor for RasterResultDescriptor {
 impl RasterResultDescriptor {}
 
 /// A `ResultDescriptor` for vector queries
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, utoipa::Component)]
 #[serde(rename_all = "camelCase")]
 pub struct VectorResultDescriptor {
     pub data_type: VectorDataType,
@@ -195,7 +195,7 @@ impl ResultDescriptor for VectorResultDescriptor {
 }
 
 /// A `ResultDescriptor` for plot queries
-#[derive(Debug, Copy, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Copy, Clone, PartialEq, Serialize, Deserialize, utoipa::Component)]
 #[serde(rename_all = "camelCase")]
 pub struct PlotResultDescriptor {
     pub spatial_reference: SpatialReferenceOption,
@@ -264,71 +264,12 @@ impl From<RasterResultDescriptor> for PlotResultDescriptor {
     }
 }
 
-#[derive(Debug, Serialize, Deserialize, Clone, PartialEq)]
+#[derive(Debug, Serialize, Deserialize, Clone, PartialEq, utoipa::Component)]
 #[serde(rename_all = "camelCase", tag = "type")]
 pub enum TypedResultDescriptor {
     Plot(PlotResultDescriptor),
     Raster(RasterResultDescriptor),
     Vector(VectorResultDescriptor),
-}
-
-impl utoipa::Component for TypedResultDescriptor {
-    // TODO: set discriminator once utoipa supports it
-    fn component() -> utoipa::openapi::Component {
-        use utoipa::openapi::*;
-        OneOfBuilder::new()
-            .item(
-                // plot
-                ObjectBuilder::new()
-                    .property("type", Property::new(ComponentType::String))
-                    .required("type")
-                    .property(
-                        "spatialReference",
-                        Ref::from_component_name("SpatialReferenceOption"),
-                    )
-                    .required("spatialReference")
-                    .description(Some("A `ResultDescriptor` for plot queries")),
-            )
-            .item(
-                // raster
-                ObjectBuilder::new()
-                    .property("type", Property::new(ComponentType::String))
-                    .required("type")
-                    .property("dataType", Ref::from_component_name("RasterDataType"))
-                    .required("dataType")
-                    .property(
-                        "spatialReference",
-                        Ref::from_component_name("SpatialReferenceOption"),
-                    )
-                    .required("spatialReference")
-                    .property("measurement", Ref::from_component_name("Measurement"))
-                    .required("measurement")
-                    .property(
-                        "noDataValue",
-                        PropertyBuilder::new()
-                            .component_type(ComponentType::Number)
-                            .format(Some(ComponentFormat::Float)),
-                    )
-                    .description(Some("A `ResultDescriptor` for raster queries")),
-            )
-            .item(
-                // vector
-                ObjectBuilder::new()
-                    .property("type", Property::new(ComponentType::String))
-                    .required("type")
-                    .property("dataType", Ref::from_component_name("VectorDataType"))
-                    .required("dataType")
-                    .property(
-                        "spatialReference",
-                        Ref::from_component_name("SpatialReferenceOption"),
-                    )
-                    .required("spatialReference")
-                    .property("columns", ObjectBuilder::new())
-                    .required("columns")
-                    .description(Some("A `ResultDescriptor` for vector queries")),
-            )
-            .into()
-    }
 }
 
 impl From<PlotResultDescriptor> for TypedResultDescriptor {

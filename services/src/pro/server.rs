@@ -1,3 +1,4 @@
+use crate::apidoc::ApiDoc;
 use crate::error::{Error, Result};
 use crate::handlers;
 use crate::pro;
@@ -18,6 +19,8 @@ use log::{info, warn};
 use std::net::SocketAddr;
 use std::path::PathBuf;
 use url::Url;
+use utoipa::OpenApi;
+use utoipa_swagger_ui::SwaggerUi;
 
 async fn start<C>(
     static_files_dir: Option<PathBuf>,
@@ -53,7 +56,11 @@ where
             .configure(handlers::wcs::init_wcs_routes::<C>)
             .configure(handlers::wfs::init_wfs_routes::<C>)
             .configure(handlers::wms::init_wms_routes::<C>)
-            .configure(handlers::workflows::init_workflow_routes::<C>);
+            .configure(handlers::workflows::init_workflow_routes::<C>)
+            .service(
+                SwaggerUi::new("/swagger-ui/{_:.*}")
+                    .url("/api-doc/openapi.json", ApiDoc::openapi()),
+            );
 
         #[cfg(feature = "odm")]
         {
