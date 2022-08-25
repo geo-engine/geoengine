@@ -61,7 +61,7 @@ where
             ),
     )
     .service(
-        web::resource("datasetFromWorkflow/{workflow_id}")
+        web::resource("datasetFromWorkflow/{id}")
             .route(web::post().to(dataset_from_workflow_handler::<C>)),
     );
 }
@@ -372,7 +372,7 @@ pub struct RasterDatasetFromWorkflowResult {
     upload: UploadId,
 }
 
-/// Create a new dataset from the result of the given workflow and query.
+/// Create a new dataset from the result of the workflow given by its `id` and the dataset parameters in the request body.
 /// Returns the id of the created dataset and upload
 #[utoipa::path(
     tag = "Workflows",
@@ -392,14 +392,14 @@ pub struct RasterDatasetFromWorkflowResult {
     )
 )]
 async fn dataset_from_workflow_handler<C: Context>(
-    workflow_id: web::Path<WorkflowId>,
+    id: web::Path<WorkflowId>,
     session: C::Session,
     ctx: web::Data<C>,
     info: web::Json<RasterDatasetFromWorkflow>,
 ) -> Result<impl Responder> {
     // TODO: support datasets with multiple time steps
 
-    let workflow = ctx.workflow_registry_ref().load(&workflow_id).await?;
+    let workflow = ctx.workflow_registry_ref().load(&id).await?;
 
     let operator = workflow
         .operator

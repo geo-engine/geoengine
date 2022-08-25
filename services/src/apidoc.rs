@@ -1,7 +1,9 @@
+use crate::contexts::{SessionId, SimpleSession};
 use crate::datasets::listing::{Provenance, ProvenanceOutput};
 use crate::datasets::upload::UploadId;
 use crate::handlers;
 use crate::handlers::workflows::{RasterDatasetFromWorkflow, RasterDatasetFromWorkflowResult};
+use crate::projects::{ProjectId, STRectangle};
 use crate::server::VersionInfo;
 use crate::util::IdResponse;
 use crate::workflows::workflow::{Workflow, WorkflowId};
@@ -27,6 +29,7 @@ use utoipa::{Modify, OpenApi};
 #[openapi(
     handlers(
         crate::server::show_version_handler,
+        handlers::session::anonymous_handler,
         handlers::workflows::register_workflow_handler,
         handlers::workflows::load_workflow_handler,
         handlers::workflows::get_workflow_metadata_handler,
@@ -34,12 +37,16 @@ use utoipa::{Modify, OpenApi};
         handlers::workflows::dataset_from_workflow_handler,
     ),
     components(
+        SimpleSession,        
+
         DataId,
         DataProviderId,
         DatasetId,
         ExternalDataId,
         IdResponse<WorkflowId>,
         LayerId,
+        ProjectId,
+        SessionId,
         UploadId,
         WorkflowId,
 
@@ -56,6 +63,7 @@ use utoipa::{Modify, OpenApi};
         Measurement,
         ContinuousMeasurement,
         ClassificationMeasurement,
+        STRectangle,
 
         ProvenanceOutput,
         Provenance,
@@ -93,6 +101,7 @@ impl Modify for SecurityAddon {
                 HttpBuilder::new()
                     .scheme(HttpAuthScheme::Bearer)
                     .bearer_format("UUID")
+                    .description(Some("A valid session token can be obtained via the /anonymous or /login (pro only) endpoints. Alternatively, it can be defined as a fixed value in the Settings.toml file."))
                     .build(),
             ),
         );

@@ -22,28 +22,21 @@ where
         );
 }
 
-/// Creates session for anonymous user.
-///
-/// # Example
-///
-/// ```text
-/// POST /anonymous
-/// ```
-/// Response:
-/// ```text
-/// {
-///   "id": "2fee8652-3192-4d3e-8adc-14257064224a",
-///   "user": {
-///     "id": "744b83ff-2c5b-401a-b4bf-2ba7213ad5d5",
-///     "email": null,
-///     "realName": null
-///   },
-///   "created": "2021-04-18T16:54:55.728758Z",
-///   "validUntil": "2021-04-18T17:54:55.730196200Z",
-///   "project": null,
-///   "view": null
-/// }
-/// ```
+/// Creates session for anonymous user. The `id` field serves as a Bearer token for requests.
+#[utoipa::path(
+    tag = "Session",
+    post,
+    path = "/anonymous",
+    responses(
+        (status = 200, description = "The created session", body = SimpleSession,
+            example = json!({
+                "id": "2fee8652-3192-4d3e-8adc-14257064224a",
+                "project": null,
+                "view": null
+            })
+        )
+    )
+)]
 async fn anonymous_handler<C: SimpleContext>(ctx: web::Data<C>) -> Result<impl Responder> {
     if !config::get_config_element::<crate::util::config::Session>()?.anonymous_access {
         return Err(error::Error::Authorization {

@@ -15,7 +15,7 @@ use futures_util::FutureExt;
 use geoengine_datatypes::primitives::DateTime;
 use serde::{Deserialize, Serialize};
 
-#[derive(Debug, PartialEq, Eq, Serialize, Deserialize, Clone)]
+#[derive(Debug, PartialEq, Eq, Serialize, Deserialize, Clone, utoipa::Component)]
 #[serde(rename_all = "camelCase")]
 pub struct UserInfo {
     pub id: UserId,
@@ -23,7 +23,7 @@ pub struct UserInfo {
     pub real_name: Option<String>,
 }
 
-#[derive(Debug, PartialEq, Serialize, Deserialize, Clone)]
+#[derive(Debug, PartialEq, Serialize, Deserialize, Clone, utoipa::Component)]
 #[serde(rename_all = "camelCase")]
 pub struct UserSession {
     pub id: SessionId,

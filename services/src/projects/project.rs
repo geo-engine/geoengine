@@ -119,7 +119,7 @@ impl Project {
     }
 }
 
-#[derive(Debug, PartialEq, Serialize, Deserialize, Clone)]
+#[derive(Debug, PartialEq, Serialize, Deserialize, Clone, utoipa::Component)]
 #[cfg_attr(feature = "postgres", derive(ToSql, FromSql))]
 #[allow(clippy::upper_case_acronyms)]
 #[serde(rename_all = "camelCase")]
