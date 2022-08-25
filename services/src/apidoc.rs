@@ -77,7 +77,7 @@ use utoipa::{Modify, OpenApi};
         VectorQueryRectangle,
         PlotQueryRectangle,
     ),
-    modifiers(&SecurityAddon),
+    modifiers(&SecurityAddon, &ApiDocInfo),
     external_docs(url = "https://docs.geoengine.io", description = "Geo Engine Docs")
 )]
 pub struct ApiDoc;
@@ -95,6 +95,30 @@ impl Modify for SecurityAddon {
                     .bearer_format("UUID")
                     .build(),
             ),
+        );
+    }
+}
+
+struct ApiDocInfo;
+
+impl Modify for ApiDocInfo {
+    fn modify(&self, openapi: &mut utoipa::openapi::OpenApi) {
+        openapi.info.title = "Geo Engine API".to_string();
+
+        openapi.info.contact = Some(
+            utoipa::openapi::ContactBuilder::new()
+                .name(Some("Geo Engine Developers"))
+                .email(Some("dev@geoengine.de"))
+                .build(),
+        );
+
+        openapi.info.license = Some(
+            utoipa::openapi::LicenseBuilder::new()
+                .name("Apache 2.0 (pro features excluded)")
+                .url(Some(
+                    "https://github.com/geo-engine/geoengine/blob/master/LICENSE",
+                ))
+                .build(),
         );
     }
 }
