@@ -264,6 +264,8 @@ pub enum Error {
 
     NoMatchingFeatureDataTypeForOgrFieldType,
 
+    GdalRasterDataTypeNotSupported,
+
     InvalidProjDefinition {
         proj_definition: String,
     },

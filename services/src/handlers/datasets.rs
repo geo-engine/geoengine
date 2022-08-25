@@ -22,8 +22,11 @@ use crate::{
     util::IdResponse,
 };
 use actix_web::{web, FromRequest, Responder};
-use gdal::{vector::Layer, Dataset};
 use gdal::{vector::OGRFieldType, DatasetOptions};
+use gdal::{
+    vector::{Layer, LayerAccess},
+    Dataset,
+};
 use geoengine_datatypes::{
     collections::VectorDataType,
     dataset::DatasetId,

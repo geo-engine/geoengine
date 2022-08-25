@@ -1,13 +1,14 @@
 use super::{error, NetCdfCf4DProviderError, TimeCoverage};
 use crate::{
-    datasets::{
-        external::netcdfcf::{gdalmd::MdGroup, NetCdfCfDataProvider},
-        storage::MetaDataDefinition,
-    },
+    datasets::{external::netcdfcf::NetCdfCfDataProvider, storage::MetaDataDefinition},
     tasks::{TaskContext, TaskStatusInfo},
     util::config::get_config_element,
 };
-use gdal::{raster::RasterCreationOption, Dataset, DatasetOptions, GdalOpenFlags};
+use gdal::{
+    cpl::CslStringList,
+    raster::{Group, RasterCreationOption},
+    Dataset, DatasetOptions, GdalOpenFlags,
+};
 use gdal_sys::VSIUnlink;
 use geoengine_datatypes::{
     error::BoxedResultExt,
@@ -113,25 +114,51 @@ impl NetCdfGroup {
 }
 
 trait NetCdfVisitor {
+    fn array_names_options() -> CslStringList {
+        let mut options = CslStringList::new();
+        options
+            .set_name_value("SHOW_ZERO_DIM", "NO")
+            .unwrap_or_else(|e| debug!("{}", e));
+        options
+            .set_name_value("SHOW_COORDINATES", "NO")
+            .unwrap_or_else(|e| debug!("{}", e));
+        options
+            .set_name_value("SHOW_INDEXING", "NO")
+            .unwrap_or_else(|e| debug!("{}", e));
+        options
+            .set_name_value("SHOW_BOUNDS", "NO")
+            .unwrap_or_else(|e| debug!("{}", e));
+        options
+            .set_name_value("SHOW_TIME", "NO")
+            .unwrap_or_else(|e| debug!("{}", e));
+        options
+            .set_name_value("GROUP_BY", "SAME_DIMENSION")
+            .unwrap_or_else(|e| debug!("{}", e));
+        options
+    }
+
     fn group_tree(&self) -> Result<NetCdfGroup>;
 }
 
-impl NetCdfVisitor for MdGroup<'_> {
+impl NetCdfVisitor for Group<'_> {
     fn group_tree(&self) -> Result<NetCdfGroup> {
         let mut groups = Vec::new();
-        for subgroup_name in self.group_names() {
-            let subgroup = self.open_group(&subgroup_name)?;
+        for subgroup_name in self.group_names(Default::default()) {
+            let subgroup = self
+                .open_group(&subgroup_name, Default::default())
+                .context(error::GdalMd)?;
             groups.push(subgroup.group_tree()?);
         }
 
         let dimension_names: HashSet<String> = self
-            .dimension_names()
+            .dimensions(Default::default())
             .map_err(|source| NetCdfCf4DProviderError::CannotReadDimensions { source })?
             .into_iter()
+            .map(|dim| dim.name())
             .collect();
 
         let mut arrays = Vec::new();
-        for array_name in self.array_names() {
+        for array_name in self.array_names(Self::array_names_options()) {
             // filter out arrays that are actually dimensions
             if dimension_names.contains(&array_name) {
                 continue;
@@ -141,7 +168,7 @@ impl NetCdfVisitor for MdGroup<'_> {
         }
 
         Ok(NetCdfGroup {
-            name: self.name.clone(),
+            name: self.name(),
             groups,
             arrays,
         })
@@ -253,7 +280,7 @@ fn create_group_tree_and_time_coverage(file_path: &Path) -> Result<(NetCdfGroup,
     )
     .boxed_context(error::CannotOpenNetCdfDataset)?;
 
-    let root_group = MdGroup::from_dataset(&dataset)?;
+    let root_group = dataset.root_group().context(error::GdalMd)?;
 
     let group_tree = root_group.group_tree()?;
 
@@ -537,7 +564,8 @@ fn index_subdataset<C: TaskContext>(
     )?)
     .boxed_context(error::CannotCreateOverviews)?;
 
-    let cog_driver = gdal::Driver::get("COG").boxed_context(error::CannotCreateOverviews)?;
+    let cog_driver =
+        gdal::Driver::get_by_name("COG").boxed_context(error::CannotCreateOverviews)?;
     let options = CogRasterCreationOptions::new(resampling_method)?;
 
     debug!("Overview creation GDAL options: {:?}", options.options());

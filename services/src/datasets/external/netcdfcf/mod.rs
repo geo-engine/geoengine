@@ -1,5 +1,4 @@
 pub use self::error::NetCdfCf4DProviderError;
-use self::gdalmd::MdGroup;
 use self::overviews::remove_overviews;
 use self::overviews::InProgressFlag;
 pub use self::overviews::OverviewGeneration;
@@ -18,6 +17,8 @@ use crate::tasks::TaskContext;
 use crate::util::user_input::Validated;
 use crate::workflows::workflow::Workflow;
 use async_trait::async_trait;
+use gdal::raster::Dimension;
+use gdal::raster::Group;
 use gdal::{DatasetOptions, GdalOpenFlags};
 use geoengine_datatypes::dataset::DataProviderId;
 use geoengine_datatypes::dataset::LayerId;
@@ -139,28 +140,43 @@ trait ToNetCdfSubgroup {
     fn to_net_cdf_subgroup(&self, compute_stats: bool) -> Result<NetCdfGroup>;
 }
 
-impl<'a> ToNetCdfSubgroup for MdGroup<'a> {
+impl<'a> ToNetCdfSubgroup for Group<'a> {
     fn to_net_cdf_subgroup(&self, compute_stats: bool) -> Result<NetCdfGroup> {
-        let name = self.name.clone();
+        let name = self.name();
         debug!("to_net_cdf_subgroup for {name} with stats={compute_stats}");
 
         let title = self
-            .attribute_as_string("standard_name")
-            .unwrap_or_default();
-        let description = self.attribute_as_string("long_name").unwrap_or_default();
-        let unit = self.attribute_as_string("units").unwrap_or_default();
+            .attribute("standard_name")
+            .map_or_else(|_| String::default(), |a| a.read_as_string());
+        let description = self
+            .attribute("long_name")
+            .map_or_else(|_| String::default(), |a| a.read_as_string());
+        let unit = self
+            .attribute("units")
+            .map_or_else(|_| String::default(), |a| a.read_as_string());
 
-        let group_names = self.group_names();
+        let group_names = self.group_names(Default::default());
 
         if group_names.is_empty() {
-            let data_type = Some(self.datatype_of_numeric_array("ebv_cube")?);
+            let data_type = Some(
+                RasterDataType::from_gdal_data_type(
+                    self.open_md_array("ebv_cube", Default::default())
+                        .context(error::GdalMd)?
+                        .datatype()
+                        .numeric_datatype(),
+                )
+                .unwrap_or(RasterDataType::F64),
+            );
 
-            let data_range = if compute_stats {
-                let array = self.open_array("ebv_cube")?;
-                Some(array.min_max().context(error::CannotComputeMinMax)?)
-            } else {
-                None
-            };
+            // TODO: guess range from output datasets
+            // TODO: implement `GDALMDArrayGetStatistics` in `georust/gdal`
+            // let data_range = if compute_stats {
+            // let array = self.open_md_array("ebv_cube", Default::default())?;
+            // Some(array.min_max().context(error::CannotComputeMinMax)?)
+            // } else {
+            //     None
+            // };
+            let data_range = None;
 
             return Ok(NetCdfGroup {
                 name,
@@ -177,7 +193,8 @@ impl<'a> ToNetCdfSubgroup for MdGroup<'a> {
 
         for subgroup in group_names {
             groups.push(
-                self.open_group(&subgroup)?
+                self.open_group(&subgroup, Default::default())
+                    .context(error::GdalMd)?
                     .to_net_cdf_subgroup(compute_stats)?,
             );
         }
@@ -193,6 +210,8 @@ impl<'a> ToNetCdfSubgroup for MdGroup<'a> {
         })
     }
 }
+
+// impl DynamicRasterDataType for ExtendedDataType {}
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -244,36 +263,42 @@ impl NetCdfCfDataProvider {
         )
         .context(error::InvalidDatasetIdFile)?;
 
-        let root_group = MdGroup::from_dataset(&ds)?;
+        let root_group = ds.root_group().context(error::GdalMd)?;
 
         let title = root_group
-            .attribute_as_string("title")
-            .context(error::MissingTitle)?;
+            .attribute("title")
+            .context(error::MissingTitle)?
+            .read_as_string();
 
         let summary = root_group
-            .attribute_as_string("summary")
-            .context(error::MissingSummary)?;
+            .attribute("summary")
+            .context(error::MissingSummary)?
+            .read_as_string();
 
         let spatial_reference = root_group
-            .attribute_as_string("geospatial_bounds_crs")
-            .context(error::MissingCrs)?;
+            .attribute("geospatial_bounds_crs")
+            .context(error::MissingCrs)?
+            .read_as_string();
         let spatial_reference: SpatialReference =
             SpatialReference::from_str(&spatial_reference).context(error::CannotParseCrs)?;
 
         let entities = root_group
-            .dimension_as_string_array("entity")
+            .open_md_array("entity", Default::default())
             .context(error::MissingEntities)?
+            .read_as_string_array()
+            .context(error::GdalMd)?
             .into_iter()
             .enumerate()
             .map(|(id, name)| NetCdfEntity { id, name })
             .collect::<Vec<_>>();
 
         let groups = root_group
-            .group_names()
+            .group_names(Default::default())
             .iter()
             .map(|name| {
                 root_group
-                    .open_group(name)?
+                    .open_group(name, Default::default())
+                    .context(error::GdalMd)?
                     .to_net_cdf_subgroup(compute_stats)
             })
             .collect::<Result<Vec<_>>>()?;
@@ -415,43 +440,53 @@ impl NetCdfCfDataProvider {
         )
         .context(error::InvalidDatasetIdFile)?;
 
-        let root_group = MdGroup::from_dataset(&dataset)?;
+        let root_group = dataset.root_group().context(error::GdalMd)?;
 
         let time_coverage = TimeCoverage::from_root_group(&root_group)?;
 
         let geo_transform = {
-            let crs_array = root_group.open_array("crs")?;
+            let crs_array = root_group
+                .open_md_array("crs", Default::default())
+                .context(error::GdalMd)?;
             let geo_transform = crs_array
-                .attribute_as_string("GeoTransform")
-                .context(error::CannotGetGeoTransform)?;
+                .attribute("GeoTransform")
+                .context(error::CannotGetGeoTransform)?
+                .read_as_string();
             parse_geo_transform(&geo_transform)?
         };
 
         // traverse groups
         let mut group_stack = vec![root_group];
 
-        // let mut group = root_group;
         for group_name in &dataset_id.group_names {
             group_stack.push(
                 group_stack
                     .last()
                     .expect("at least root group in here")
-                    .open_group(group_name)?,
+                    .open_group(group_name, Default::default())
+                    .context(error::GdalMd)?,
             );
-            // group = group.open_group(group_name)?;
         }
 
         let data_array = group_stack
             .last()
             .expect("at least root group in here")
-            .open_array("ebv_cube")?;
+            .open_md_array("ebv_cube", Default::default())
+            .context(error::GdalMd)?;
 
-        let dimensions = data_array.dimensions()?;
+        let dimensions = data_array.dimensions().context(error::GdalMd)?;
 
         let result_descriptor = RasterResultDescriptor {
-            data_type: data_array.data_type()?,
-            spatial_reference: data_array.spatial_reference()?,
-            measurement: derive_measurement(data_array.unit().context(error::CannotRetrieveUnit)?),
+            data_type: RasterDataType::from_gdal_data_type(
+                data_array.datatype().numeric_datatype(),
+            )
+            .unwrap_or(RasterDataType::F64),
+            spatial_reference: SpatialReference::try_from(
+                data_array.spatial_reference().context(error::GdalMd)?,
+            )
+            .context(error::CannotParseCrs)?
+            .into(),
+            measurement: derive_measurement(data_array.unit()),
 
             time: None,
             bbox: None,
@@ -462,10 +497,16 @@ impl NetCdfCfDataProvider {
             rasterband_channel: 0, // we calculate offsets below
             geo_transform,
             file_not_found_handling: FileNotFoundHandling::Error,
-            no_data_value: data_array.no_data_value(), // we could also leave this empty. The gdal source will try to get the correct one.
+            no_data_value: data_array.no_data_value_as_double(), // we could also leave this empty. The gdal source will try to get the correct one.
             properties_mapping: None,
-            width: dimensions.lon,
-            height: dimensions.lat,
+            width: dimensions
+                .get(3 /* 3 is lon */)
+                .map(Dimension::size)
+                .unwrap_or_default(),
+            height: dimensions
+                .get(2 /* 2 is lat */)
+                .map(Dimension::size)
+                .unwrap_or_default(),
             gdal_open_options: None,
             gdal_config_options: None,
             allow_alphaband_as_mask: true,
@@ -478,15 +519,24 @@ impl NetCdfCfDataProvider {
                 start,
                 end, // TODO: Use this or time dimension size (number of steps)?
                 step,
-                band_offset: dataset_id.entity as usize * dimensions.time,
+                band_offset: dataset_id.entity as usize
+                    * dimensions
+                        .get(1 /* 1 is time */)
+                        .map(Dimension::size)
+                        .unwrap_or_default(),
             }),
             TimeCoverage::List { time_stamps } => {
                 let mut params_list = Vec::with_capacity(time_stamps.len());
                 for (i, time_instance) in time_stamps.iter().enumerate() {
                     let mut params = params.clone();
 
-                    params.rasterband_channel =
-                        dataset_id.entity as usize * dimensions.time + i + 1;
+                    params.rasterband_channel = dataset_id.entity as usize
+                        * dimensions
+                            .get(1 /* 1 is time */)
+                            .map(Dimension::size)
+                            .unwrap_or_default()
+                        + i
+                        + 1;
 
                     params_list.push(GdalLoadingInfoTemporalSlice {
                         time: TimeInterval::new_instant(*time_instance)
@@ -792,16 +842,19 @@ pub enum TimeCoverage {
 }
 
 impl TimeCoverage {
-    fn from_root_group(root_group: &MdGroup) -> Result<Self> {
+    fn from_root_group(root_group: &Group) -> Result<Self> {
         let start = root_group
-            .attribute_as_string("time_coverage_start")
-            .context(error::MissingTimeCoverageStart)?;
+            .attribute("time_coverage_start")
+            .context(error::MissingTimeCoverageStart)?
+            .read_as_string();
         let end = root_group
-            .attribute_as_string("time_coverage_end")
-            .context(error::MissingTimeCoverageEnd)?;
+            .attribute("time_coverage_end")
+            .context(error::MissingTimeCoverageEnd)?
+            .read_as_string();
         let step = root_group
-            .attribute_as_string("time_coverage_resolution")
-            .context(error::MissingTimeCoverageResolution)?;
+            .attribute("time_coverage_resolution")
+            .context(error::MissingTimeCoverageResolution)?
+            .read_as_string();
 
         // we can parse coverages starting with `P`,
         let time_p_res = parse_time_coverage(&start, &end, &step);
@@ -820,13 +873,21 @@ impl TimeCoverage {
         TimeCoverage::from_dimension(root_group)
     }
 
-    fn from_dimension(root_group: &MdGroup) -> Result<Self> {
+    fn from_dimension(root_group: &Group) -> Result<Self> {
         // TODO: are there other variants for the time unit?
         // `:units = "days since 1860-01-01 00:00:00.0";`
 
-        let days_since_1860 = root_group
-            .dimension_as_double_array("time")
-            .context(error::MissingTimeDimension)?;
+        let days_since_1860 = {
+            let time_array = root_group
+                .open_md_array("time", Default::default())
+                .context(error::MissingTimeDimension)?;
+
+            let number_of_values = time_array.num_elements() as usize;
+
+            time_array
+                .read_as::<f64>(vec![0], vec![number_of_values])
+                .context(error::MissingTimeDimension)?
+        };
 
         let unix_offset_millis = TimeInstance::from(DateTime::new_utc(1860, 1, 1, 0, 0, 0)).inner();
 
