@@ -345,7 +345,8 @@ fn index_subdataset(
         .unwrap_or(DEFAULT_RESAMPLING_METHOD)
         .to_string();
 
-    let cog_driver = gdal::Driver::get("COG").boxed_context(error::CannotCreateOverviews)?;
+    let cog_driver =
+        gdal::Driver::get_by_name("COG").boxed_context(error::CannotCreateOverviews)?;
     let options = vec![
         RasterCreationOption {
             key: "COMPRESS",
