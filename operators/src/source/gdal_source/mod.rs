@@ -206,35 +206,6 @@ impl GdalDatasetGeoTransform {
         [grid_y_index, grid_x_index].into()
     }
 
-    /// compute the index of the upper left pixel that is contained in the `partition`
-    pub fn upper_left_pixel_idx(&self, partition: &SpatialPartition2D) -> GridIdx2D {
-        // choose the epsilon relative to the pixel size
-        const EPSILON: f64 = 0.000_001;
-        let epsilon: Coordinate2D =
-            (self.x_pixel_size * EPSILON, self.y_pixel_size * EPSILON).into();
-
-        let upper_left_coordinate = partition.upper_left() + epsilon;
-
-        self.coordinate_to_grid_idx_2d(upper_left_coordinate)
-    }
-
-    /// compute the index of the lower right pixel that is contained in the `partition`
-    pub fn lower_right_pixel_idx(&self, partition: &SpatialPartition2D) -> GridIdx2D {
-        // as the lower right coordinate is not included in the partition we subtract an epsilon
-        // in order to not include the next pixel if the lower right coordinate is exactly on the
-        // edge of the next pixel
-
-        // choose the epsilon relative to the pixel size
-        const EPSILON: f64 = 0.000_001;
-        let epsilon: Coordinate2D =
-            (self.x_pixel_size * EPSILON, self.y_pixel_size * EPSILON).into();
-
-        // shift lower right by epsilon
-        let lower_right = partition.lower_right() - epsilon;
-
-        self.coordinate_to_grid_idx_2d(lower_right)
-    }
-
     fn spatial_partition_to_read_window(
         &self,
         spatial_partition: &SpatialPartition2D,
@@ -256,8 +227,10 @@ impl GdalDatasetGeoTransform {
             )
         };
 
+        // Move the coordinate near the origin a bit inside the bbox by adding an epsilon of the pixel size.
         let safe_near_coord = near_origin_coord + epsilon;
-        let safe_far_coord = far_origin_coord - epsilon; // TODO: we could also just do + epsilon and skip the +1 at the size...
+        // Move the coordinate far from the origin a bit inside the bbox by subtracting an epsilon of the pixel size
+        let safe_far_coord = far_origin_coord - epsilon; // Note: we could also just do + epsilon and skip the +1 at the size...
 
         let GridIdx([near_idx_y, near_idx_x]) = self.coordinate_to_grid_idx_2d(safe_near_coord);
         let GridIdx([far_idx_y, far_idx_x]) = self.coordinate_to_grid_idx_2d(safe_far_coord);
