@@ -11,7 +11,8 @@ use crate::datasets::upload::{Upload, UploadDb, UploadId};
 use crate::error;
 use crate::error::Result;
 use crate::layers::layer::{
-    CollectionItem, Layer, LayerCollectionListOptions, LayerListing, ProviderLayerId,
+    CollectionItem, Layer, LayerCollection, LayerCollectionListOptions, LayerListing,
+    ProviderLayerId,
 };
 use crate::layers::listing::{LayerCollectionId, LayerCollectionProvider};
 use crate::pro::datasets::Permission;
@@ -484,11 +485,11 @@ impl UploadDb<UserSession> for ProHashMapDatasetDb {
 
 #[async_trait]
 impl LayerCollectionProvider for ProHashMapDatasetDb {
-    async fn collection_items(
+    async fn collection(
         &self,
         collection: &LayerCollectionId,
         options: Validated<LayerCollectionListOptions>,
-    ) -> Result<Vec<CollectionItem>> {
+    ) -> Result<LayerCollection> {
         ensure!(
             *collection == self.root_collection_id().await?,
             error::UnknownLayerCollectionId {
@@ -500,7 +501,7 @@ impl LayerCollectionProvider for ProHashMapDatasetDb {
 
         let backend = self.backend.read().await;
 
-        let listing = backend
+        let items = backend
             .datasets
             .iter()
             .skip(options.offset as usize)
@@ -519,7 +520,12 @@ impl LayerCollectionProvider for ProHashMapDatasetDb {
             })
             .collect();
 
-        Ok(listing)
+        Ok(LayerCollection {
+            id: collection.clone(),
+            name: "Datasets".to_string(),
+            description: "Basic Layers for all Datasets".to_string(),
+            items,
+        })
     }
 
     async fn root_collection_id(&self) -> Result<LayerCollectionId> {

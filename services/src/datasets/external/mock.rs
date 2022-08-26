@@ -4,7 +4,8 @@ use crate::datasets::listing::ProvenanceOutput;
 use crate::error::Result;
 use crate::layers::external::{DataProvider, DataProviderDefinition};
 use crate::layers::layer::{
-    CollectionItem, Layer, LayerCollectionListOptions, LayerListing, ProviderLayerId,
+    CollectionItem, Layer, LayerCollection, LayerCollectionListOptions, LayerListing,
+    ProviderLayerId,
 };
 use crate::layers::listing::{LayerCollectionId, LayerCollectionProvider};
 use crate::workflows::workflow::Workflow;
@@ -76,11 +77,11 @@ impl DataProvider for MockExternalDataProvider {
 
 #[async_trait]
 impl LayerCollectionProvider for MockExternalDataProvider {
-    async fn collection_items(
+    async fn collection(
         &self,
         collection: &LayerCollectionId,
         _options: Validated<LayerCollectionListOptions>,
-    ) -> Result<Vec<CollectionItem>> {
+    ) -> Result<LayerCollection> {
         ensure!(
             *collection == self.root_collection_id().await?,
             error::UnknownLayerCollectionId {
@@ -108,10 +109,17 @@ impl LayerCollectionProvider for MockExternalDataProvider {
             })));
         }
 
-        Ok(listing
+        let items = listing
             .into_iter()
             .filter_map(|d: Result<_>| if let Ok(d) = d { Some(d) } else { None })
-            .collect())
+            .collect();
+
+        Ok(LayerCollection {
+            id: collection.clone(),
+            name: "MockName".to_owned(),
+            description: "MockType".to_owned(),
+            items,
+        })
     }
 
     async fn root_collection_id(&self) -> Result<LayerCollectionId> {

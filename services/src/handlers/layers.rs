@@ -3,7 +3,9 @@ use geoengine_datatypes::dataset::{DataProviderId, LayerId};
 
 use crate::error::Result;
 
-use crate::layers::layer::{CollectionItem, LayerCollectionListing, ProviderLayerCollectionId};
+use crate::layers::layer::{
+    CollectionItem, LayerCollection, LayerCollectionListing, ProviderLayerCollectionId,
+};
 use crate::layers::listing::{LayerCollectionId, LayerCollectionProvider};
 use crate::layers::storage::{LayerProviderDb, LayerProviderListingOptions};
 use crate::util::user_input::UserInput;
@@ -109,7 +111,16 @@ async fn list_root_collections_handler<C: Context>(
         }));
     }
 
-    Ok(web::Json(providers))
+    let root_collection = LayerCollection {
+        id: LayerCollectionId(
+            crate::layers::storage::INTERNAL_LAYER_DB_ROOT_COLLECTION_ID.to_string(),
+        ),
+        name: "Layer Providers".to_string(),
+        description: "All available Geo Engine layer providers".to_string(),
+        items: providers,
+    };
+
+    Ok(web::Json(root_collection))
 }
 
 async fn list_collection_handler<C: Context>(
@@ -122,7 +133,7 @@ async fn list_collection_handler<C: Context>(
     if provider == crate::datasets::storage::DATASET_DB_LAYER_PROVIDER_ID {
         let collection = ctx
             .dataset_db_ref()
-            .collection_items(&item, options.into_inner().validated()?)
+            .collection(&item, options.into_inner().validated()?)
             .await?;
 
         return Ok(web::Json(collection));
@@ -131,7 +142,7 @@ async fn list_collection_handler<C: Context>(
     if provider == crate::layers::storage::INTERNAL_PROVIDER_ID {
         let collection = ctx
             .layer_db_ref()
-            .collection_items(&item, options.into_inner().validated()?)
+            .collection(&item, options.into_inner().validated()?)
             .await?;
 
         return Ok(web::Json(collection));
@@ -141,7 +152,7 @@ async fn list_collection_handler<C: Context>(
         .layer_provider_db_ref()
         .layer_provider(provider)
         .await?
-        .collection_items(&item, options.into_inner().validated()?)
+        .collection(&item, options.into_inner().validated()?)
         .await?;
 
     Ok(web::Json(collection))

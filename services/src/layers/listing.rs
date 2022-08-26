@@ -6,7 +6,7 @@ use geoengine_datatypes::dataset::LayerId;
 use crate::error::Result;
 use crate::util::user_input::Validated;
 
-use super::layer::{CollectionItem, Layer, LayerCollectionListOptions};
+use super::layer::{Layer, LayerCollection, LayerCollectionListOptions};
 
 use serde::{Deserialize, Serialize};
 
@@ -22,12 +22,12 @@ impl fmt::Display for LayerCollectionId {
 #[async_trait]
 /// Listing of layers and layer collections
 pub trait LayerCollectionProvider {
-    /// list all the items in the given `collection`
-    async fn collection_items(
+    /// get the given `collection`
+    async fn collection(
         &self,
         collection: &LayerCollectionId,
         options: Validated<LayerCollectionListOptions>,
-    ) -> Result<Vec<CollectionItem>>;
+    ) -> Result<LayerCollection>;
 
     /// get the id of the root collection
     async fn root_collection_id(&self) -> Result<LayerCollectionId>;

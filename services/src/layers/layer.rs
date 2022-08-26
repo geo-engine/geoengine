@@ -67,12 +67,13 @@ pub struct LayerDefinition {
     pub symbology: Option<Symbology>,
 }
 
-#[derive(Debug, Serialize, Deserialize, Clone)]
+#[derive(Debug, Serialize, Deserialize, Clone, PartialEq, Eq)]
 pub struct LayerCollection {
-    id: LayerCollectionId,
-    name: String,
-    description: String,
-    items: Vec<CollectionItem>,
+    pub id: LayerCollectionId, // TODO: include provider id?
+    pub name: String,
+    pub description: String,
+    pub items: Vec<CollectionItem>,
+    // TODO: properties
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone, PartialEq, Eq)]
@@ -81,6 +82,7 @@ pub struct LayerCollectionListing {
     pub id: ProviderLayerCollectionId,
     pub name: String,
     pub description: String,
+    // TODO: move to LayerCollection
     pub entry_label: Option<String>, // a common label for the collection's entries, if there is any
     pub properties: Vec<(String, String)>,
 }

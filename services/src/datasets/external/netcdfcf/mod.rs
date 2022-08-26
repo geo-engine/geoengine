@@ -9,13 +9,13 @@ use crate::datasets::listing::ProvenanceOutput;
 use crate::error::Error;
 use crate::layers::external::DataProvider;
 use crate::layers::external::DataProviderDefinition;
-use crate::layers::layer::CollectionItem;
 use crate::layers::layer::Layer;
 use crate::layers::layer::LayerCollectionListOptions;
 use crate::layers::layer::LayerCollectionListing;
 use crate::layers::layer::LayerListing;
 use crate::layers::layer::ProviderLayerCollectionId;
 use crate::layers::layer::ProviderLayerId;
+use crate::layers::layer::{CollectionItem, LayerCollection};
 use crate::layers::listing::LayerCollectionId;
 use crate::layers::listing::LayerCollectionProvider;
 use crate::projects::RasterSymbology;
@@ -1185,14 +1185,14 @@ async fn listing_from_netcdf_file(
 
 #[async_trait]
 impl LayerCollectionProvider for NetCdfCfDataProvider {
-    async fn collection_items(
+    async fn collection(
         &self,
         collection: &LayerCollectionId,
         options: Validated<LayerCollectionListOptions>,
-    ) -> crate::error::Result<Vec<CollectionItem>> {
+    ) -> crate::error::Result<LayerCollection> {
         let id: NetCdfLayerCollectionId = serde_json::from_str(&collection.0)?;
 
-        let mut listing = match id {
+        let mut items = match id {
             NetCdfLayerCollectionId::Path { path }
                 if canonicalize_subpath(&self.path, &path).is_ok()
                     && self.path.join(&path).is_dir() =>
@@ -1228,14 +1228,19 @@ impl LayerCollectionProvider for NetCdfCfDataProvider {
             _ => return Err(Error::InvalidLayerCollectionId),
         };
 
-        listing.sort_by(|a, b| a.name().cmp(b.name()));
-        let listing = listing
+        items.sort_by(|a, b| a.name().cmp(b.name()));
+        let items = items
             .into_iter()
             .skip(options.offset as usize)
             .take(options.limit as usize)
             .collect();
 
-        Ok(listing)
+        Ok(LayerCollection {
+            id: collection.clone(),
+            name: "".to_string(),        // TODO
+            description: "".to_string(), // TODO
+            items,
+        })
     }
 
     async fn root_collection_id(&self) -> crate::error::Result<LayerCollectionId> {

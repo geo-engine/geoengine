@@ -1,7 +1,7 @@
 use crate::datasets::external::pangaea::meta::PangeaMetaData;
 use crate::datasets::listing::{Provenance, ProvenanceOutput};
 use crate::layers::external::{DataProvider, DataProviderDefinition};
-use crate::layers::layer::{CollectionItem, Layer, LayerCollectionListOptions};
+use crate::layers::layer::{Layer, LayerCollection, LayerCollectionListOptions};
 use crate::layers::listing::{LayerCollectionId, LayerCollectionProvider};
 use async_trait::async_trait;
 use geoengine_datatypes::dataset::{DataId, DataProviderId, LayerId};
@@ -109,11 +109,11 @@ impl DataProvider for PangaeaDataProvider {
 
 #[async_trait]
 impl LayerCollectionProvider for PangaeaDataProvider {
-    async fn collection_items(
+    async fn collection(
         &self,
         _collection: &LayerCollectionId,
         _options: Validated<LayerCollectionListOptions>,
-    ) -> Result<Vec<CollectionItem>> {
+    ) -> Result<LayerCollection> {
         Err(Error::NotYetImplemented)
     }
 

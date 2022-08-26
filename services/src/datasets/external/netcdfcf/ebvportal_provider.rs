@@ -20,8 +20,8 @@ use crate::{
     layers::{
         external::{DataProvider, DataProviderDefinition},
         layer::{
-            CollectionItem, Layer, LayerCollectionListOptions, LayerCollectionListing,
-            LayerListing, ProviderLayerCollectionId, ProviderLayerId,
+            CollectionItem, Layer, LayerCollection, LayerCollectionListOptions,
+            LayerCollectionListing, LayerListing, ProviderLayerCollectionId, ProviderLayerId,
         },
         listing::{LayerCollectionId, LayerCollectionProvider},
     },
@@ -373,16 +373,16 @@ impl EbvPortalDataProvider {
 
 #[async_trait]
 impl LayerCollectionProvider for EbvPortalDataProvider {
-    async fn collection_items(
+    async fn collection(
         &self,
         collection: &LayerCollectionId,
         options: Validated<LayerCollectionListOptions>,
-    ) -> Result<Vec<CollectionItem>> {
+    ) -> Result<LayerCollection> {
         let id: EbvCollectionId = serde_json::from_str(&collection.0)?;
 
         let options = options.user_input;
 
-        Ok(match id {
+        let items = match id {
             EbvCollectionId::Classes => self.get_classes_collections(&options).await?,
             EbvCollectionId::Class { class } => {
                 self.get_class_collections(collection, &class, &options)
@@ -410,6 +410,13 @@ impl LayerCollectionProvider for EbvPortalDataProvider {
                     .await?
             }
             EbvCollectionId::Entity { .. } => return Err(Error::InvalidLayerCollectionId),
+        };
+
+        Ok(LayerCollection {
+            id: collection.clone(),
+            name: "foo".to_string(),        // TODO
+            description: "bar".to_string(), // TODO
+            items,
         })
     }
 
@@ -564,9 +571,11 @@ mod tests {
         .await
         .unwrap();
 
-        let items = provider
-            .collection_items(
-                &provider.root_collection_id().await.unwrap(),
+        let root_id = provider.root_collection_id().await.unwrap();
+
+        let collection = provider
+            .collection(
+                &root_id,
                 LayerCollectionListOptions {
                     offset: 0,
                     limit: 20,
@@ -578,69 +587,74 @@ mod tests {
             .unwrap();
 
         assert_eq!(
-            items,
-            vec![
-                CollectionItem::Collection(LayerCollectionListing {
-                    id: ProviderLayerCollectionId {
-                        provider_id: DataProviderId::from_str(
-                            "77d0bf11-986e-43f5-b11d-898321f1854c"
-                        )
-                        .unwrap(),
-                        collection_id: LayerCollectionId(
-                            r#"{"type":"class","class":"Community composition"}"#.into()
-                        )
-                    },
-                    name: "Community composition".to_string(),
-                    description: "".to_string(),
-                    entry_label: Some("EBV Name".to_string()),
-                    properties: vec![]
-                }),
-                CollectionItem::Collection(LayerCollectionListing {
-                    id: ProviderLayerCollectionId {
-                        provider_id: DataProviderId::from_str(
-                            "77d0bf11-986e-43f5-b11d-898321f1854c"
-                        )
-                        .unwrap(),
-                        collection_id: LayerCollectionId(
-                            r#"{"type":"class","class":"Ecosystem functioning"}"#.into()
-                        )
-                    },
-                    name: "Ecosystem functioning".to_string(),
-                    description: "".to_string(),
-                    entry_label: Some("EBV Name".to_string()),
-                    properties: vec![]
-                }),
-                CollectionItem::Collection(LayerCollectionListing {
-                    id: ProviderLayerCollectionId {
-                        provider_id: DataProviderId::from_str(
-                            "77d0bf11-986e-43f5-b11d-898321f1854c"
-                        )
-                        .unwrap(),
-                        collection_id: LayerCollectionId(
-                            r#"{"type":"class","class":"Ecosystem structure"}"#.into()
-                        )
-                    },
-                    name: "Ecosystem structure".to_string(),
-                    description: "".to_string(),
-                    entry_label: Some("EBV Name".to_string()),
-                    properties: vec![]
-                }),
-                CollectionItem::Collection(LayerCollectionListing {
-                    id: ProviderLayerCollectionId {
-                        provider_id: DataProviderId::from_str(
-                            "77d0bf11-986e-43f5-b11d-898321f1854c"
-                        )
-                        .unwrap(),
-                        collection_id: LayerCollectionId(
-                            r#"{"type":"class","class":"Species populations"}"#.into()
-                        )
-                    },
-                    name: "Species populations".to_string(),
-                    description: "".to_string(),
-                    entry_label: Some("EBV Name".to_string()),
-                    properties: vec![]
-                })
-            ]
+            collection,
+            LayerCollection {
+                id: root_id,
+                name: "".to_string(),
+                description: "".to_string(),
+                items: vec![
+                    CollectionItem::Collection(LayerCollectionListing {
+                        id: ProviderLayerCollectionId {
+                            provider_id: DataProviderId::from_str(
+                                "77d0bf11-986e-43f5-b11d-898321f1854c"
+                            )
+                            .unwrap(),
+                            collection_id: LayerCollectionId(
+                                r#"{"type":"class","class":"Community composition"}"#.into()
+                            )
+                        },
+                        name: "Community composition".to_string(),
+                        description: "".to_string(),
+                        entry_label: Some("EBV Name".to_string()),
+                        properties: vec![]
+                    }),
+                    CollectionItem::Collection(LayerCollectionListing {
+                        id: ProviderLayerCollectionId {
+                            provider_id: DataProviderId::from_str(
+                                "77d0bf11-986e-43f5-b11d-898321f1854c"
+                            )
+                            .unwrap(),
+                            collection_id: LayerCollectionId(
+                                r#"{"type":"class","class":"Ecosystem functioning"}"#.into()
+                            )
+                        },
+                        name: "Ecosystem functioning".to_string(),
+                        description: "".to_string(),
+                        entry_label: Some("EBV Name".to_string()),
+                        properties: vec![]
+                    }),
+                    CollectionItem::Collection(LayerCollectionListing {
+                        id: ProviderLayerCollectionId {
+                            provider_id: DataProviderId::from_str(
+                                "77d0bf11-986e-43f5-b11d-898321f1854c"
+                            )
+                            .unwrap(),
+                            collection_id: LayerCollectionId(
+                                r#"{"type":"class","class":"Ecosystem structure"}"#.into()
+                            )
+                        },
+                        name: "Ecosystem structure".to_string(),
+                        description: "".to_string(),
+                        entry_label: Some("EBV Name".to_string()),
+                        properties: vec![]
+                    }),
+                    CollectionItem::Collection(LayerCollectionListing {
+                        id: ProviderLayerCollectionId {
+                            provider_id: DataProviderId::from_str(
+                                "77d0bf11-986e-43f5-b11d-898321f1854c"
+                            )
+                            .unwrap(),
+                            collection_id: LayerCollectionId(
+                                r#"{"type":"class","class":"Species populations"}"#.into()
+                            )
+                        },
+                        name: "Species populations".to_string(),
+                        description: "".to_string(),
+                        entry_label: Some("EBV Name".to_string()),
+                        properties: vec![]
+                    })
+                ]
+            }
         );
     }
 
@@ -699,9 +713,10 @@ mod tests {
         .await
         .unwrap();
 
-        let items = provider
-            .collection_items(
-                &LayerCollectionId(r#"{"type":"class","class":"Ecosystem functioning"}"#.into()),
+        let id = LayerCollectionId(r#"{"type":"class","class":"Ecosystem functioning"}"#.into());
+        let collection = provider
+            .collection(
+                &id,
                 LayerCollectionListOptions {
                     offset: 0,
                     limit: 20,
@@ -712,7 +727,11 @@ mod tests {
             .await
             .unwrap();
 
-        assert_eq!(items, vec![
+        assert_eq!(collection, LayerCollection{
+            id,
+            name: "Ecosystem functioning".to_string(),
+            description: "".to_string(),
+            items: vec![
             CollectionItem::Collection(LayerCollectionListing {
                 id: ProviderLayerCollectionId {
                     provider_id: DataProviderId::from_str("77d0bf11-986e-43f5-b11d-898321f1854c").unwrap(), 
@@ -732,7 +751,7 @@ mod tests {
                 description: "".to_string(), 
                 entry_label: Some("EBV Dataset".to_string()), 
                 properties: vec![],
-            })]);
+            })]});
     }
 
     #[tokio::test]
@@ -843,12 +862,13 @@ mod tests {
         .await
         .unwrap();
 
-        let items = provider
-            .collection_items(
-                &LayerCollectionId(
-                    r#"{"type":"ebv","class":"Ecosystem functioning","ebv":"Ecosystem phenology"}"#
-                        .into(),
-                ),
+        let id = LayerCollectionId(
+            r#"{"type":"ebv","class":"Ecosystem functioning","ebv":"Ecosystem phenology"}"#.into(),
+        );
+
+        let collection = provider
+            .collection(
+                &id,
                 LayerCollectionListOptions {
                     offset: 0,
                     limit: 20,
@@ -859,7 +879,11 @@ mod tests {
             .await
             .unwrap();
 
-        assert_eq!(items, vec![
+        assert_eq!(collection, LayerCollection {
+            id,
+            name: "Ecosystem functioning".to_string(),
+            description: "".to_string(),
+            items: vec![
             CollectionItem::Collection(LayerCollectionListing {
                 id: ProviderLayerCollectionId {
                     provider_id: DataProviderId::from_str("77d0bf11-986e-43f5-b11d-898321f1854c").unwrap(),
@@ -870,7 +894,7 @@ mod tests {
                 entry_label: Some("Metric".to_string()),
                 properties: vec![("by".to_string(), "Kristin Böttcher (The Finnish Environment Institute (SYKE))".to_string()),
                     ("with license".to_string(), "https://creativecommons.org/licenses/by/4.0".to_string())]              
-            })]
+            })]}
         );
     }
 
@@ -982,9 +1006,11 @@ mod tests {
         .await
         .unwrap();
 
-        let items = provider
-            .collection_items(
-                &LayerCollectionId(r#"{"type":"dataset","class":"Ecosystem functioning","ebv":"Ecosystem phenology","dataset":"10"}"#.into()),
+        let id = LayerCollectionId(r#"{"type":"dataset","class":"Ecosystem functioning","ebv":"Ecosystem phenology","dataset":"10"}"#.into());
+
+        let collection = provider
+            .collection(
+                &id,
                 LayerCollectionListOptions {
                     offset: 0,
                     limit: 20,
@@ -996,8 +1022,11 @@ mod tests {
             .unwrap();
 
         assert_eq!(
-            items,
-            vec![CollectionItem::Collection(LayerCollectionListing {
+            collection, LayerCollection {
+                id,
+                name: "".to_string(),
+                description: "".to_string(),
+                items: vec![CollectionItem::Collection(LayerCollectionListing {
                     id: ProviderLayerCollectionId {
                         provider_id: DataProviderId::from_str("77d0bf11-986e-43f5-b11d-898321f1854c").unwrap(),
                         collection_id: LayerCollectionId(r#"{"type":"group","class":"Ecosystem functioning","ebv":"Ecosystem phenology","dataset":"10","groups":["metric_1"]}"#.into())
@@ -1016,7 +1045,7 @@ mod tests {
                     entry_label: Some("Entity".to_string()),
                     properties: vec![]
                 })
-            ]
+            ]}
         );
     }
 
@@ -1128,9 +1157,11 @@ mod tests {
         .await
         .unwrap();
 
-        let items = provider
-            .collection_items(
-                &LayerCollectionId(r#"{"type":"group","class":"Ecosystem functioning","ebv":"Ecosystem phenology","dataset":"10","groups":["metric_1"]}"#.into()),
+        let id = LayerCollectionId(r#"{"type":"group","class":"Ecosystem functioning","ebv":"Ecosystem phenology","dataset":"10","groups":["metric_1"]}"#.into());
+
+        let collection = provider
+            .collection(
+                &id,
                 LayerCollectionListOptions {
                     offset: 0,
                     limit: 20,
@@ -1142,8 +1173,12 @@ mod tests {
             .unwrap();
 
         assert_eq!(
-            items,
-            vec![CollectionItem::Layer(LayerListing {
+            collection,
+            LayerCollection {
+                id,
+                name: "".to_string(),
+                description: "".to_string(),
+                items: vec![CollectionItem::Layer(LayerListing {
                     id: ProviderLayerId {
                         provider_id: DataProviderId::from_str("77d0bf11-986e-43f5-b11d-898321f1854c").unwrap(),
                         layer_id: LayerId(r#"{"type":"entity","class":"Ecosystem functioning","ebv":"Ecosystem phenology","dataset":"10","groups":["metric_1"],"entity":0}"#.into()) 
@@ -1168,6 +1203,7 @@ mod tests {
                     description: "".to_string(),
                     properties: vec![]
                 })]
+            }
         );
     }
 }

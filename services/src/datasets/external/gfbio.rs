@@ -6,7 +6,8 @@ use crate::error::Result;
 use crate::error::{self, Error};
 use crate::layers::external::{DataProvider, DataProviderDefinition};
 use crate::layers::layer::{
-    CollectionItem, Layer, LayerCollectionListOptions, LayerListing, ProviderLayerId,
+    CollectionItem, Layer, LayerCollection, LayerCollectionListOptions, LayerListing,
+    ProviderLayerId,
 };
 use crate::layers::listing::{LayerCollectionId, LayerCollectionProvider};
 use crate::util::user_input::Validated;
@@ -174,11 +175,11 @@ impl GfbioDataProvider {
 
 #[async_trait]
 impl LayerCollectionProvider for GfbioDataProvider {
-    async fn collection_items(
+    async fn collection(
         &self,
         collection: &LayerCollectionId,
         options: Validated<LayerCollectionListOptions>,
-    ) -> Result<Vec<CollectionItem>> {
+    ) -> Result<LayerCollection> {
         ensure!(
             *collection == self.root_collection_id().await?,
             error::UnknownLayerCollectionId {
@@ -217,7 +218,7 @@ impl LayerCollectionProvider for GfbioDataProvider {
             )
             .await?;
 
-        let listings: Vec<_> = rows
+        let items: Vec<_> = rows
             .into_iter()
             .map(|row| {
                 CollectionItem::Layer(LayerListing {
@@ -232,7 +233,12 @@ impl LayerCollectionProvider for GfbioDataProvider {
             })
             .collect();
 
-        Ok(listings)
+        Ok(LayerCollection {
+            id: collection.clone(),
+            name: "GFBio".to_owned(),
+            description: "GFBio".to_owned(),
+            items,
+        })
     }
 
     async fn root_collection_id(&self) -> Result<LayerCollectionId> {
@@ -557,9 +563,11 @@ mod tests {
         .await
         .unwrap();
 
-        let listing = provider
-            .collection_items(
-                &provider.root_collection_id().await.unwrap(),
+        let root_id = provider.root_collection_id().await.unwrap();
+
+        let collection = provider
+            .collection(
+                &root_id,
                 LayerCollectionListOptions {
                     offset: 0,
                     limit: 10,
@@ -571,19 +579,24 @@ mod tests {
 
         cleanup_test_data(&db_config, test_schema).await;
 
-        let listing = listing.unwrap();
+        let collection = collection.unwrap();
 
         assert_eq!(
-            listing,
-            vec![CollectionItem::Layer(LayerListing {
-                id: ProviderLayerId {
-                    provider_id: GFBIO_PROVIDER_ID,
-                    layer_id: LayerId("1".to_string()),
-                },
-                name: "Example Title".to_string(),
-                description: "".to_string(),
-                properties: vec![],
-            })]
+            collection,
+            LayerCollection {
+                id: root_id,
+                name: "Gfbio".to_string(),
+                description: "Gfbio".to_string(),
+                items: vec![CollectionItem::Layer(LayerListing {
+                    id: ProviderLayerId {
+                        provider_id: GFBIO_PROVIDER_ID,
+                        layer_id: LayerId("1".to_string()),
+                    },
+                    name: "Example Title".to_string(),
+                    description: "".to_string(),
+                    properties: vec![],
+                })]
+            }
         );
     }
 

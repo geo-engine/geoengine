@@ -2,7 +2,8 @@ use crate::datasets::listing::ProvenanceOutput;
 use crate::error::{self, Error, Result};
 use crate::layers::external::{DataProvider, DataProviderDefinition};
 use crate::layers::layer::{
-    CollectionItem, Layer, LayerCollectionListOptions, LayerListing, ProviderLayerId,
+    CollectionItem, Layer, LayerCollection, LayerCollectionListOptions, LayerListing,
+    ProviderLayerId,
 };
 use crate::layers::listing::{LayerCollectionId, LayerCollectionProvider};
 use crate::projects::{RasterSymbology, Symbology};
@@ -218,11 +219,11 @@ impl DataProvider for SentinelS2L2aCogsDataProvider {
 
 #[async_trait]
 impl LayerCollectionProvider for SentinelS2L2aCogsDataProvider {
-    async fn collection_items(
+    async fn collection(
         &self,
         collection: &LayerCollectionId,
-        _options: Validated<LayerCollectionListOptions>,
-    ) -> Result<Vec<CollectionItem>> {
+        options: Validated<LayerCollectionListOptions>,
+    ) -> Result<LayerCollection> {
         ensure!(
             *collection == self.root_collection_id().await?,
             error::UnknownLayerCollectionId {
@@ -230,8 +231,9 @@ impl LayerCollectionProvider for SentinelS2L2aCogsDataProvider {
             }
         );
 
-        // TODO: options
-        let mut x = self
+        let options = options.user_input;
+
+        let mut items = self
             .datasets
             .values()
             .map(|d| {
@@ -243,8 +245,20 @@ impl LayerCollectionProvider for SentinelS2L2aCogsDataProvider {
                 }))
             })
             .collect::<Result<Vec<CollectionItem>>>()?;
-        x.sort_by_key(|e| e.name().to_string());
-        Ok(x)
+        items.sort_by_key(|e| e.name().to_string());
+
+        let items = items
+            .into_iter()
+            .skip(options.offset as usize)
+            .take(options.limit as usize)
+            .collect();
+
+        Ok(LayerCollection {
+            id: collection.clone(),
+            name: "Element 84 AWS STAC".to_owned(),
+            description: "SentinelS2L2ACogs".to_owned(),
+            items,
+        })
     }
 
     async fn root_collection_id(&self) -> Result<LayerCollectionId> {
