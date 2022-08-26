@@ -203,7 +203,7 @@ impl GdalDatasetGeoTransform {
         let grid_y_index =
             ((coord.y - self.origin_coordinate.y) / self.y_pixel_size).floor() as isize;
 
-        [dbg!(grid_y_index), dbg!(grid_x_index)].into()
+        [grid_y_index, grid_x_index].into()
     }
 
     /// compute the index of the upper left pixel that is contained in the `partition`
@@ -211,9 +211,9 @@ impl GdalDatasetGeoTransform {
         // choose the epsilon relative to the pixel size
         const EPSILON: f64 = 0.000_001;
         let epsilon: Coordinate2D =
-            dbg!((self.x_pixel_size * EPSILON, self.y_pixel_size * EPSILON).into());
+            (self.x_pixel_size * EPSILON, self.y_pixel_size * EPSILON).into();
 
-        let upper_left_coordinate = dbg!(partition.upper_left() + epsilon);
+        let upper_left_coordinate = partition.upper_left() + epsilon;
 
         self.coordinate_to_grid_idx_2d(upper_left_coordinate)
     }
@@ -227,10 +227,10 @@ impl GdalDatasetGeoTransform {
         // choose the epsilon relative to the pixel size
         const EPSILON: f64 = 0.000_001;
         let epsilon: Coordinate2D =
-            dbg!((self.x_pixel_size * EPSILON, self.y_pixel_size * EPSILON).into());
+            (self.x_pixel_size * EPSILON, self.y_pixel_size * EPSILON).into();
 
         // shift lower right by epsilon
-        let lower_right = dbg!(partition.lower_right() - epsilon);
+        let lower_right = partition.lower_right() - epsilon;
 
         self.coordinate_to_grid_idx_2d(lower_right)
     }
@@ -242,7 +242,7 @@ impl GdalDatasetGeoTransform {
         // choose the epsilon relative to the pixel size
         const EPSILON: f64 = 0.000_001;
         let epsilon: Coordinate2D =
-            dbg!((self.x_pixel_size * EPSILON, self.y_pixel_size * EPSILON).into());
+            (self.x_pixel_size * EPSILON, self.y_pixel_size * EPSILON).into();
 
         let (near_origin_coord, far_origin_coord) = if self.y_pixel_size.is_sign_negative() {
             (
@@ -259,20 +259,14 @@ impl GdalDatasetGeoTransform {
         let safe_near_coord = near_origin_coord + epsilon;
         let safe_far_coord = far_origin_coord - epsilon; // TODO: we could also just do + epsilon and skip the +1 at the size...
 
-        dbg!(safe_near_coord, safe_far_coord);
-
         let GridIdx([near_idx_y, near_idx_x]) = self.coordinate_to_grid_idx_2d(safe_near_coord);
         let GridIdx([far_idx_y, far_idx_x]) = self.coordinate_to_grid_idx_2d(safe_far_coord);
-
-        dbg!(near_idx_y, near_idx_x, far_idx_y, far_idx_x);
 
         debug_assert!(near_idx_x <= far_idx_x);
         debug_assert!(near_idx_y <= far_idx_y);
 
         let read_size_x = (far_idx_x - near_idx_x) as usize + 1;
         let read_size_y = (far_idx_y - near_idx_y) as usize + 1;
-
-        dbg!(read_size_x, read_size_y);
 
         GdalReadWindow {
             read_start_x: near_idx_x,

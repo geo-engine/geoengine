@@ -321,6 +321,7 @@ where
     }
 
     /// reverse this grid along the y-axis. Returns an "up-side-down" `Grid`.
+    #[must_use]
     pub fn reversed_y_axis_grid(&self) -> Grid<D, T>
     where
         D: Clone,
