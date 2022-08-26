@@ -319,6 +319,28 @@ where
     pub fn inner_ref(&self) -> &Vec<T> {
         &self.data
     }
+
+    /// reverse this grid along the y-axis. Returns an "up-side-down" `Grid`.
+    pub fn reversed_y_axis_grid(&self) -> Grid<D, T>
+    where
+        D: Clone,
+    {
+        let mut reversed_data_vec = Vec::with_capacity(self.data.len());
+
+        self.data
+            .chunks(self.shape.axis_size_x() * self.shape.axis_size_y())
+            .for_each(|big_chunk| {
+                big_chunk
+                    .chunks_exact(self.shape.axis_size_x())
+                    .rev()
+                    .for_each(|c| reversed_data_vec.extend_from_slice(c));
+            });
+
+        Grid {
+            data: reversed_data_vec,
+            shape: self.shape.clone(),
+        }
+    }
 }
 
 impl<D, T> GridSize for Grid<D, T>
@@ -698,5 +720,21 @@ mod tests {
         let l = a.linear_space_index_unchecked([1, 1, 1]);
         assert_eq!(l, 1 * 42 * 42 + 1 * 42 + 1);
         assert_eq!(a.grid_idx_unchecked(l), [1, 1, 1].into());
+    }
+
+    #[test]
+    fn reversed_y_axis_grid_2d() {
+        let g2d = Grid2D::new([2, 3].into(), vec![1, 1, 1, 2, 2, 2]).unwrap();
+        let g2d_flipped_y = g2d.reversed_y_axis_grid();
+        assert_eq!(g2d_flipped_y.shape, [2, 3].into());
+        assert_eq!(g2d_flipped_y.data, vec![2, 2, 2, 1, 1, 1])
+    }
+
+    #[test]
+    fn reversed_y_axis_grid_3d() {
+        let g2d = Grid3D::new([2, 2, 3].into(), vec![1, 1, 1, 2, 2, 2, 3, 3, 3, 4, 4, 4]).unwrap();
+        let g2d_flipped_y = g2d.reversed_y_axis_grid();
+        assert_eq!(g2d_flipped_y.shape, [2, 2, 3].into());
+        assert_eq!(g2d_flipped_y.data, vec![2, 2, 2, 1, 1, 1, 4, 4, 4, 3, 3, 3])
     }
 }
