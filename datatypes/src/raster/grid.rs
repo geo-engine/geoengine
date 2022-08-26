@@ -728,7 +728,7 @@ mod tests {
         let g2d = Grid2D::new([2, 3].into(), vec![1, 1, 1, 2, 2, 2]).unwrap();
         let g2d_flipped_y = g2d.reversed_y_axis_grid();
         assert_eq!(g2d_flipped_y.shape, [2, 3].into());
-        assert_eq!(g2d_flipped_y.data, vec![2, 2, 2, 1, 1, 1])
+        assert_eq!(g2d_flipped_y.data, vec![2, 2, 2, 1, 1, 1]);
     }
 
     #[test]
@@ -736,6 +736,6 @@ mod tests {
         let g2d = Grid3D::new([2, 2, 3].into(), vec![1, 1, 1, 2, 2, 2, 3, 3, 3, 4, 4, 4]).unwrap();
         let g2d_flipped_y = g2d.reversed_y_axis_grid();
         assert_eq!(g2d_flipped_y.shape, [2, 2, 3].into());
-        assert_eq!(g2d_flipped_y.data, vec![2, 2, 2, 1, 1, 1, 4, 4, 4, 3, 3, 3])
+        assert_eq!(g2d_flipped_y.data, vec![2, 2, 2, 1, 1, 1, 4, 4, 4, 3, 3, 3]);
     }
 }
