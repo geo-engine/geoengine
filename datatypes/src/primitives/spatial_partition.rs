@@ -232,6 +232,16 @@ impl SpatialPartition2D {
             ),
         }
     }
+
+    /// Returns true if the x value of the left edge is smaller then the x value of the right edge. Spatial x-axis "points right".
+    pub fn x_axis_is_increasing(&self) -> bool {
+        self.upper_left_coordinate.x <= self.lower_right_coordinate.x
+    }
+
+    /// Returns true if the y value of the lower edge is smaller then the x value of the upper edge. Spatial y-axis "points up".
+    pub fn y_axis_is_increasing(&self) -> bool {
+        self.lower_right_coordinate.y <= self.upper_left_coordinate.y
+    }
 }
 
 pub trait SpatialPartitioned {
