@@ -207,7 +207,7 @@ impl GdalDatasetGeoTransform {
         &self,
         spatial_partition: &SpatialPartition2D,
     ) -> GdalReadWindow {
-        // choose the epsilon relative to the pixel size
+        // World coordinates and pixel sizes use float values. Since the float imprecision might cause overflowing into the next pixel we use an epsilon to correct values very close the pixel borders. This logic is the same as used in [`GeoTransform::grid_idx_to_pixel_upper_left_coordinate_2d`].
         const EPSILON: f64 = 0.000_001;
         let epsilon: Coordinate2D =
             (self.x_pixel_size * EPSILON, self.y_pixel_size * EPSILON).into();
@@ -227,7 +227,7 @@ impl GdalDatasetGeoTransform {
         // Move the coordinate near the origin a bit inside the bbox by adding an epsilon of the pixel size.
         let safe_near_coord = near_origin_coord + epsilon;
         // Move the coordinate far from the origin a bit inside the bbox by subtracting an epsilon of the pixel size
-        let safe_far_coord = far_origin_coord - epsilon; // Note: we could also just do + epsilon and skip the +1 at the size...
+        let safe_far_coord = far_origin_coord - epsilon; // TODO: why does + epsilon  and +1 for the size change the tests?
 
         let GridIdx([near_idx_y, near_idx_x]) = self.coordinate_to_grid_idx_2d(safe_near_coord);
         let GridIdx([far_idx_y, far_idx_x]) = self.coordinate_to_grid_idx_2d(safe_far_coord);
