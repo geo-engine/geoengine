@@ -554,7 +554,7 @@ mod tests {
         let test_schema = create_test_data(&db_config).await;
 
         let provider = Box::new(GfbioDataProviderDefinition {
-            name: "Gfbio".to_string(),
+            name: "GFBio".to_string(),
             db_config: DatabaseConnectionConfig {
                 host: db_config.host.clone(),
                 port: db_config.port,
@@ -593,8 +593,8 @@ mod tests {
                     provider_id: GFBIO_PROVIDER_ID,
                     collection_id: root_id,
                 },
-                name: "Gfbio".to_string(),
-                description: "Gfbio".to_string(),
+                name: "GFBio".to_string(),
+                description: "GFBio".to_string(),
                 items: vec![CollectionItem::Layer(LayerListing {
                     id: ProviderLayerId {
                         provider_id: GFBIO_PROVIDER_ID,
@@ -625,7 +625,7 @@ mod tests {
             let ogr_pg_string = provider_db_config.ogr_pg_config();
 
             let provider = Box::new(GfbioDataProviderDefinition {
-                name: "Gfbio".to_string(),
+                name: "GFBio".to_string(),
                 db_config: provider_db_config,
             })
             .initialize()
@@ -795,7 +795,7 @@ mod tests {
     async fn it_loads() {
         async fn test(db_config: &config::Postgres, test_schema: &str) -> Result<(), String> {
             let provider = Box::new(GfbioDataProviderDefinition {
-                name: "Gfbio".to_string(),
+                name: "GFBio".to_string(),
                 db_config: DatabaseConnectionConfig {
                     host: db_config.host.clone(),
                     port: db_config.port,
@@ -898,7 +898,7 @@ mod tests {
     async fn it_cites() {
         async fn test(db_config: &config::Postgres, test_schema: &str) -> Result<(), String> {
             let provider = Box::new(GfbioDataProviderDefinition {
-                name: "Gfbio".to_string(),
+                name: "GFBio".to_string(),
                 db_config: DatabaseConnectionConfig {
                     host: db_config.host.clone(),
                     port: db_config.port,
