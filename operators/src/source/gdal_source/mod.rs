@@ -831,9 +831,6 @@ fn read_grid_and_handle_edges<T>(
 where
     T: Pixel + GdalType + Default + FromPrimitive,
 {
-    // this are the bounds from the datasets def!
-    // let dataset_bounds = dataset_params.spatial_partition();
-    // let dataset_geo_transform: GeoTransform = dataset_params.geo_transform.try_into()?;
     let gdal_dataset_geotransform = GdalDatasetGeoTransform::from(dataset.geo_transform()?);
     let (gdal_dataset_pixels_x, gdal_dataset_pixels_y) = dataset.raster_size();
     let gdal_dataset_bounds =
