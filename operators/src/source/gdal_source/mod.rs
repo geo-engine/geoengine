@@ -574,27 +574,20 @@ where
             start.elapsed()
         );
 
-        // A `GeoTransform` maps pixel space to world space.
-        // We are not aware of spatial reference systems where the x-axis points tot he right.
-        // However, there are spatial reference systems where the y-axis points downwards.
-        // The "pixel-space" starts at the top-left corner of a `GeoTransform`.
-        // Therefore, the pixel size on the x-axis is always increasing
-        debug_assert!(query.spatial_bounds.x_axis_is_increasing());
         let spatial_resolution = query.spatial_resolution;
+
+        // A `GeoTransform` maps pixel space to world space.
+        // Usually a SRS has axis directions pointing "up" (y-axis) and "up" (y-axis).
+        // We are not aware of spatial reference systems where the x-axis points to the right.
+        // However, there are spatial reference systems where the y-axis points downwards.
+        // The standard "pixel-space" starts at the top-left corner of a `GeoTransform` and points down-right.
+        // Therefore, the pixel size on the x-axis is always increasing
         let pixel_size_x = spatial_resolution.x;
         debug_assert!(pixel_size_x.is_sign_positive());
         // and the y-axis should only be positive if the y-axis of the spatial reference system also "points down".
         // NOTE: at the moment we do not allow "down pointing" y-axis.
-        let pixel_size_y = if query.spatial_bounds.y_axis_is_increasing() {
-            spatial_resolution.y * -1.0
-        } else {
-            spatial_resolution.y
-        };
-
-        debug_assert_eq!(
-            pixel_size_y.is_sign_negative(),
-            query.spatial_bounds.y_axis_is_increasing()
-        );
+        let pixel_size_y = spatial_resolution.y * -1.0;
+        debug_assert!(pixel_size_y.is_sign_negative());
 
         let tiling_strategy = self
             .tiling_specification
