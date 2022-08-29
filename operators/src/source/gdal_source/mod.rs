@@ -153,6 +153,8 @@ impl GdalReadWindow {
 /// A user friendly representation of Gdal's geo transform. In contrast to [`GeoTransform`] this
 /// geo transform allows arbitrary pixel sizes and can thus also represent rasters where the origin is not located
 /// in the upper left corner. It should only be used for loading rasters with Gdal and not internally.
+/// The GDAL pixel space is usually anchored at the "top-left" corner of the data spatial bounds. Therefore the raster data is stored with spatial coordinate y-values decreasing with the rasters rows. This is represented by a negative pixel size.
+/// However, there are datasets where the data is stored "upside-down". If this is the case, the pixel size is positive.
 #[derive(Copy, Clone, PartialEq, Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct GdalDatasetGeoTransform {
@@ -162,13 +164,8 @@ pub struct GdalDatasetGeoTransform {
 }
 
 impl GdalDatasetGeoTransform {
-    pub fn standardized_spatial_partition(
-        &self,
-        x_size: usize,
-        y_size: usize,
-    ) -> SpatialPartition2D {
-        // The geo transform of a gdal dataset might have flipped axis. So correct that.
-
+    /// Produce the `SpatialPartition` anchored at the datasets origin with a size of x * y pixels. This method handles non-standard pixel sizes.
+    pub fn spatial_partition(&self, x_size: usize, y_size: usize) -> SpatialPartition2D {
         // the opposite y value (y value of the non origin edge)
         let opposite_coord_y = self.origin_coordinate.y + self.y_pixel_size * y_size as f64;
 
@@ -292,7 +289,7 @@ impl From<gdal::GeoTransform> for GdalDatasetGeoTransform {
 impl SpatialPartitioned for GdalDatasetParameters {
     fn spatial_partition(&self) -> SpatialPartition2D {
         self.geo_transform
-            .standardized_spatial_partition(self.width, self.height)
+            .spatial_partition(self.width, self.height)
     }
 }
 
@@ -816,8 +813,8 @@ where
     // let dataset_geo_transform: GeoTransform = dataset_params.geo_transform.try_into()?;
     let gdal_dataset_geotransform = GdalDatasetGeoTransform::from(dataset.geo_transform()?);
     let (gdal_dataset_pixels_x, gdal_dataset_pixels_y) = dataset.raster_size();
-    let gdal_dataset_bounds = gdal_dataset_geotransform
-        .standardized_spatial_partition(gdal_dataset_pixels_x, gdal_dataset_pixels_y);
+    let gdal_dataset_bounds =
+        gdal_dataset_geotransform.spatial_partition(gdal_dataset_pixels_x, gdal_dataset_pixels_y);
 
     let output_bounds = tile_info.spatial_partition();
     let dataset_intersects_tile = gdal_dataset_bounds.intersection(&output_bounds);
@@ -1761,7 +1758,7 @@ mod tests {
             y_pixel_size: -1.,
         };
 
-        let sb = gt.standardized_spatial_partition(10, 10);
+        let sb = gt.spatial_partition(10, 10);
 
         let exp = SpatialPartition2D::new(Coordinate2D::new(0., 0.), Coordinate2D::new(10., -10.))
             .unwrap();
@@ -1777,7 +1774,7 @@ mod tests {
             y_pixel_size: -0.5,
         };
 
-        let sb = gt.standardized_spatial_partition(10, 10);
+        let sb = gt.spatial_partition(10, 10);
 
         let exp =
             SpatialPartition2D::new(Coordinate2D::new(5., 5.), Coordinate2D::new(10., 0.)).unwrap();
@@ -1793,7 +1790,7 @@ mod tests {
             y_pixel_size: 1.,
         };
 
-        let sb = gt.standardized_spatial_partition(10, 10);
+        let sb = gt.spatial_partition(10, 10);
 
         let exp = SpatialPartition2D::new(Coordinate2D::new(0., 10.), Coordinate2D::new(10., 0.))
             .unwrap();
@@ -1809,7 +1806,7 @@ mod tests {
             y_pixel_size: 0.5,
         };
 
-        let sb = gt.standardized_spatial_partition(10, 10);
+        let sb = gt.spatial_partition(10, 10);
 
         let exp = SpatialPartition2D::new(Coordinate2D::new(5., 0.), Coordinate2D::new(10., -5.))
             .unwrap();
