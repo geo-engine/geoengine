@@ -212,6 +212,37 @@ impl GdalDatasetGeoTransform {
         let epsilon: Coordinate2D =
             (self.x_pixel_size * EPSILON, self.y_pixel_size * EPSILON).into();
 
+        /*
+        The read window is relative to the transform of the gdal dataset. The `SpatialPartition` is oriented at axis of the spatial SRS. This usually causes this situation:
+
+        The gdal data is stored with origin coordinate identival tu the "ur" of the `SpatialPartition`. In this case we can calculate where to read from gdal starting there.
+
+        ur                      ul
+        +_______________________+
+        |_|_ row 1              |
+        | |_|_  row 2           |
+        |   |_|_  row ...       |
+        |     |_|               |
+        |_______________________|
+        +                       *
+        ll                      lr
+
+        However, sometimes the data is up-side down. Like this:
+
+        The gdal data is stored starting at "lr" with a positive pixel size so reading the raster data needs to starts at this anchor.
+
+        ur                      ul
+        +_______________________+
+        |      _                |
+        |    _|_|  row ...      |
+        |  _|_|  row 3          |
+        | |_|  row 2            |
+        |_______________________|
+        +                       *
+        ll                      lr
+
+        Therefore we need to select the raster read start based on the coordinate next to the raster data origin. From there we then calculate the size of the window to read.
+        */
         let (near_origin_coord, far_origin_coord) = if self.y_pixel_size.is_sign_negative() {
             (
                 spatial_partition.upper_left(),
