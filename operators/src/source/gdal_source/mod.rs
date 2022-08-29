@@ -1818,34 +1818,7 @@ mod tests {
     }
 
     #[test]
-    fn gdal_read_window_a() {
-        let gt = GdalDatasetGeoTransform {
-            origin_coordinate: Coordinate2D::new(0., 0.),
-            x_pixel_size: 1.,
-            y_pixel_size: -1.,
-        };
-
-        let sb = gt.standardized_spatial_partition(10, 10);
-
-        let exp = SpatialPartition2D::new(Coordinate2D::new(0., 0.), Coordinate2D::new(10., -10.))
-            .unwrap();
-
-        assert_eq!(sb, exp);
-
-        let rw = gt.spatial_partition_to_read_window(&sb);
-
-        let exp = GdalReadWindow {
-            read_size_x: 10,
-            read_size_y: 10,
-            read_start_x: 0,
-            read_start_y: 0,
-        };
-
-        assert_eq!(rw, exp);
-    }
-
-    #[test]
-    fn gdal_read_window_b() {
+    fn gdal_read_window_data_origin_upper_left() {
         let gt = GdalDatasetGeoTransform {
             origin_coordinate: Coordinate2D::new(5., -5.),
             x_pixel_size: 0.5,
@@ -1868,7 +1841,7 @@ mod tests {
     }
 
     #[test]
-    fn gdal_read_window_c() {
+    fn gdal_read_window_data_origin_lower_left() {
         let gt = GdalDatasetGeoTransform {
             origin_coordinate: Coordinate2D::new(0., 0.),
             x_pixel_size: 1.,
@@ -1888,5 +1861,90 @@ mod tests {
         };
 
         assert_eq!(rw, exp);
+    }
+
+    #[test]
+    fn read_up_side_down_raster() {
+        let output_shape: GridShape2D = [8, 8].into();
+        let output_bounds =
+            SpatialPartition2D::new_unchecked((-180., 90.).into(), (180., -90.).into());
+
+        let up_side_down_params = GdalDatasetParameters {
+            file_path: test_data!(
+                "raster/modis_ndvi/flipped_axis_y/MOD13A2_M_NDVI_2014-01-01_flipped_y.tiff"
+            )
+            .into(),
+            rasterband_channel: 1,
+            geo_transform: GdalDatasetGeoTransform {
+                origin_coordinate: (-180., -90.).into(),
+                x_pixel_size: 0.1,
+                y_pixel_size: 0.1,
+            },
+            width: 3600,
+            height: 1800,
+            file_not_found_handling: FileNotFoundHandling::NoData,
+            no_data_value: Some(0.),
+            properties_mapping: Some(vec![
+                GdalMetadataMapping {
+                    source_key: RasterPropertiesKey {
+                        domain: None,
+                        key: "AREA_OR_POINT".to_string(),
+                    },
+                    target_type: RasterPropertiesEntryType::String,
+                    target_key: RasterPropertiesKey {
+                        domain: None,
+                        key: "AREA_OR_POINT".to_string(),
+                    },
+                },
+                GdalMetadataMapping {
+                    source_key: RasterPropertiesKey {
+                        domain: Some("IMAGE_STRUCTURE".to_string()),
+                        key: "COMPRESSION".to_string(),
+                    },
+                    target_type: RasterPropertiesEntryType::String,
+                    target_key: RasterPropertiesKey {
+                        domain: Some("IMAGE_STRUCTURE_INFO".to_string()),
+                        key: "COMPRESSION".to_string(),
+                    },
+                },
+            ]),
+            gdal_open_options: None,
+            gdal_config_options: None,
+            allow_alphaband_as_mask: true,
+        };
+
+        let tile_information =
+            TileInformation::with_partition_and_shape(output_bounds, output_shape);
+
+        let RasterTile2D {
+            global_geo_transform: _,
+            grid_array: grid,
+            tile_position: _,
+            time: _,
+            properties: _,
+        } = GdalRasterLoader::load_tile_data::<u8>(
+            &up_side_down_params,
+            tile_information,
+            TimeInterval::default(),
+        )
+        .unwrap();
+
+        assert!(!grid.is_empty());
+
+        let grid = grid.into_materialized_masked_grid();
+
+        assert_eq!(grid.inner_grid.data.len(), 64);
+        assert_eq!(
+            grid.inner_grid.data,
+            &[
+                255, 255, 255, 255, 255, 255, 255, 255, 255, 75, 37, 255, 44, 34, 39, 32, 255, 86,
+                255, 255, 255, 30, 96, 255, 255, 255, 255, 255, 90, 255, 255, 255, 255, 255, 202,
+                255, 193, 255, 255, 255, 255, 255, 89, 255, 111, 255, 255, 255, 255, 255, 255, 255,
+                255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255
+            ]
+        );
+
+        assert_eq!(grid.validity_mask.data.len(), 64);
+        assert_eq!(grid.validity_mask.data, &[true; 64]);
     }
 }
