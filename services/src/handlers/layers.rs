@@ -11,6 +11,9 @@ use crate::layers::storage::{LayerProviderDb, LayerProviderListingOptions};
 use crate::util::user_input::UserInput;
 use crate::{contexts::Context, layers::layer::LayerCollectionListOptions};
 
+pub const ROOT_PROVIDER_ID: DataProviderId =
+    DataProviderId::from_u128(0x1c3b_8042_300b_485c_95b5_0147_d9dc_068d);
+
 pub const ROOT_COLLECTION_ID: DataProviderId =
     DataProviderId::from_u128(0xf242_4474_ef24_4c18_ab84_6859_2e12_ce48);
 
@@ -32,10 +35,18 @@ where
 
 async fn list_root_collections_handler<C: Context>(
     ctx: web::Data<C>,
-    mut options: web::Query<LayerCollectionListOptions>,
+    options: web::Query<LayerCollectionListOptions>,
 ) -> Result<impl Responder> {
-    let mut providers = vec![];
+    let root_collection = get_layer_providers(options, ctx).await?;
 
+    Ok(web::Json(root_collection))
+}
+
+async fn get_layer_providers<C: Context>(
+    mut options: web::Query<LayerCollectionListOptions>,
+    ctx: web::Data<C>,
+) -> Result<LayerCollection> {
+    let mut providers = vec![];
     if options.offset == 0 && options.limit > 0 {
         providers.push(CollectionItem::Collection(LayerCollectionListing {
             id: ProviderLayerCollectionId {
@@ -50,7 +61,6 @@ async fn list_root_collections_handler<C: Context>(
 
         options.limit -= 1;
     }
-
     if options.offset <= 1 && options.limit > 1 {
         providers.push(CollectionItem::Collection(LayerCollectionListing {
             id: ProviderLayerCollectionId {
@@ -65,9 +75,7 @@ async fn list_root_collections_handler<C: Context>(
 
         options.limit -= 1;
     }
-
     let external = ctx.layer_provider_db_ref();
-
     for provider_listing in external
         .list_layer_providers(
             LayerProviderListingOptions {
@@ -107,13 +115,10 @@ async fn list_root_collections_handler<C: Context>(
             description: provider_listing.description,
         }));
     }
-
     let root_collection = LayerCollection {
         id: ProviderLayerCollectionId {
-            provider_id: ROOT_COLLECTION_ID,
-            collection_id: LayerCollectionId(
-                crate::layers::storage::INTERNAL_LAYER_DB_ROOT_COLLECTION_ID.to_string(),
-            ),
+            provider_id: ROOT_PROVIDER_ID,
+            collection_id: LayerCollectionId(ROOT_COLLECTION_ID.to_string()),
         },
         name: "Layer Providers".to_string(),
         description: "All available Geo Engine layer providers".to_string(),
@@ -121,8 +126,7 @@ async fn list_root_collections_handler<C: Context>(
         entry_label: None,
         properties: vec![],
     };
-
-    Ok(web::Json(root_collection))
+    Ok(root_collection)
 }
 
 async fn list_collection_handler<C: Context>(
@@ -130,8 +134,12 @@ async fn list_collection_handler<C: Context>(
     path: web::Path<(DataProviderId, LayerCollectionId)>,
     options: web::Query<LayerCollectionListOptions>,
 ) -> Result<impl Responder> {
-    // TODO: route for root
     let (provider, item) = path.into_inner();
+
+    if provider == ROOT_PROVIDER_ID && item == LayerCollectionId(ROOT_COLLECTION_ID.to_string()) {
+        let collection = get_layer_providers(options, ctx).await?;
+        return Ok(web::Json(collection));
+    }
 
     if provider == crate::datasets::storage::DATASET_DB_LAYER_PROVIDER_ID {
         let collection = ctx
