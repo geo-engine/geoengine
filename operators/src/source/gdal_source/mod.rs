@@ -215,8 +215,7 @@ impl GdalDatasetGeoTransform {
         /*
         The read window is relative to the transform of the gdal dataset. The `SpatialPartition` is oriented at axis of the spatial SRS. This usually causes this situation:
 
-        The gdal data is stored with origin coordinate identival tu the "ur" of the `SpatialPartition`. In this case we can calculate where to read from gdal starting there.
-
+        The gdal data is stored with negative pixel size. The "ur" coordinate of the `SpatialPartition` is neareest to the origin of the gdal raster data.
         ur                      ul
         +_______________________+
         |_|_ row 1              |
@@ -227,9 +226,9 @@ impl GdalDatasetGeoTransform {
         +                       *
         ll                      lr
 
-        However, sometimes the data is up-side down. Like this:
+        However, sometimes the data is stored up-side down. Like this:
 
-        The gdal data is stored starting at "lr" with a positive pixel size so reading the raster data needs to starts at this anchor.
+        The gdal data is stored with a positive pixel size. So the "ll" coordinate is nearest to the reading the raster data needs to starts at this anchor.
 
         ur                      ul
         +_______________________+
@@ -258,7 +257,7 @@ impl GdalDatasetGeoTransform {
         // Move the coordinate near the origin a bit inside the bbox by adding an epsilon of the pixel size.
         let safe_near_coord = near_origin_coord + epsilon;
         // Move the coordinate far from the origin a bit inside the bbox by subtracting an epsilon of the pixel size
-        let safe_far_coord = far_origin_coord - epsilon; // TODO: why does + epsilon  and +1 for the size change the tests?
+        let safe_far_coord = far_origin_coord - epsilon;
 
         let GridIdx([near_idx_y, near_idx_x]) = self.coordinate_to_grid_idx_2d(safe_near_coord);
         let GridIdx([far_idx_y, far_idx_x]) = self.coordinate_to_grid_idx_2d(safe_far_coord);
