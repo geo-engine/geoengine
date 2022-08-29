@@ -415,22 +415,14 @@ impl GdalRasterLoader {
     ) -> Result<RasterTile2D<T>> {
         match dataset_params {
             // TODO: discuss if we need this check here. The metadata provider should only pass on loading infos if the query intersects the datasets bounds! And the tiling strategy should only generate tiles that intersect the querys bbox.
-            Some(ds)
-                if tile_information
-                    .spatial_partition()
-                    .intersects(&ds.spatial_partition()) =>
-            {
+            Some(ds) => {
                 debug!(
                     "Loading tile {:?}, from {:?}, band: {}",
                     &tile_information, ds.file_path, ds.rasterband_channel
                 );
                 Self::load_tile_data_async(ds, tile_information, tile_time).await
             }
-            Some(_) => {
-                debug!("Skipping tile not in query rect {:?}", &tile_information);
 
-                Ok(create_no_data_tile(tile_information, tile_time))
-            }
             _ => {
                 debug!(
                     "Skipping tile without GdalDatasetParameters {:?}",
@@ -566,8 +558,6 @@ where
             &query
         );
 
-        let meta_data = self.meta_data.loading_info(query).await?;
-
         debug!(
             "GdalSourceProcessor<{:?}> meta data loaded, took {:?}.",
             P::TYPE,
@@ -593,7 +583,37 @@ where
             .tiling_specification
             .strategy(pixel_size_x, pixel_size_y);
 
-        let source_stream = stream::iter(meta_data.info);
+        let result_descriptor = self.meta_data.result_descriptor().await?;
+
+        let mut empty = false;
+
+        if let Some(data_spatial_bounds) = result_descriptor.bbox {
+            if !data_spatial_bounds.intersects(&query.spatial_bounds) {
+                debug!("query does not intersect spatial data bounds");
+                empty = true;
+            }
+        }
+
+        // TODO: use the time bounds to early return.
+        /*
+        if let Some(data_time_bounds) = result_descriptor.time {
+            if !data_time_bounds.intersects(&query.time_interval) {
+                debug!("query does not intersect temporal data bounds");
+                empty = true;
+            }
+        }
+        */
+
+        let loading_iter = if empty {
+            GdalLoadingInfoTemporalSliceIterator::Static {
+                parts: vec![].into_iter(),
+            }
+        } else {
+            let loading_info = self.meta_data.loading_info(query).await?;
+            loading_info.info
+        };
+
+        let source_stream = stream::iter(loading_iter);
 
         let source_stream =
             GdalRasterLoader::loading_info_to_tile_stream(source_stream, query, tiling_strategy);
