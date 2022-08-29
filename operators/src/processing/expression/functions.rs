@@ -16,13 +16,16 @@ lazy_static::lazy_static! {
             token_fn: |num_args, fn_name| {
                 match num_args {
                     2 => quote! {
-                        fn #fn_name(a: f64, b: f64) -> f64 {
-                            f64::min(a, b)
+                        fn #fn_name(a: Option<f64>, b: Option<f64>) -> Option<f64> {
+                            apply(a, b, f64::min)
                         }
                     },
                     3 => quote! {
-                        fn #fn_name(a: f64, b: f64, c: f64) -> f64 {
-                            f64::min(f64::min(a, b), c)
+                        fn #fn_name(a: Option<f64>, b: Option<f64>, c: Option<f64>) -> Option<f64> {
+                            match (a, b, c) {
+                                (Some(a), Some(b), Some(c)) => Some(f64::min(a, f64::min(b, c))),
+                                _ => None,
+                            }
                         }
                     },
                     _ => TokenStream::new(),
@@ -35,13 +38,16 @@ lazy_static::lazy_static! {
             token_fn: |num_args, fn_name| {
                 match num_args {
                     2 => quote! {
-                        fn #fn_name(a: f64, b: f64) -> f64 {
-                            f64::max(a, b)
+                        fn #fn_name(a: Option<f64>, b: Option<f64>) -> Option<f64> {
+                            apply(a, b, f64::max)
                         }
                     },
                     3 => quote! {
-                        fn #fn_name(a: f64, b: f64, c: f64) -> f64 {
-                            f64::max(f64::max(a, b), c)
+                        fn #fn_name(a: Option<f64>, b: Option<f64>, c: Option<f64>) -> Option<f64> {
+                            match (a, b, c) {
+                                (Some(a), Some(b), Some(c)) => Some(f64::max(a, f64::max(b, c))),
+                                _ => None,
+                            }
                         }
                     },
                     _ => TokenStream::new(),
@@ -52,8 +58,8 @@ lazy_static::lazy_static! {
         functions.insert("abs", Function {
             num_args: 1..=1,
             token_fn: |_, fn_name| quote! {
-                fn #fn_name(a: f64) -> f64 {
-                    f64::abs(a)
+                fn #fn_name(a: Option<f64>) -> Option<f64> {
+                    a.map(f64::abs)
                 }
             },
         });
@@ -61,8 +67,8 @@ lazy_static::lazy_static! {
         functions.insert("pow", Function {
             num_args: 2..=2,
             token_fn: |_, fn_name| quote! {
-                fn #fn_name(a: f64, b: f64) -> f64 {
-                    f64::powf(a, b)
+                fn #fn_name(a: Option<f64>, b: Option<f64>) -> Option<f64> {
+                    apply(a, b, f64::powf)
                 }
             },
         });
@@ -70,8 +76,8 @@ lazy_static::lazy_static! {
         functions.insert("sqrt", Function {
             num_args: 1..=1,
             token_fn: |_, fn_name| quote! {
-                fn #fn_name(a: f64) -> f64 {
-                    f64::sqrt(a)
+                fn #fn_name(a: Option<f64>) -> Option<f64> {
+                    a.map(f64::sqrt)
                 }
             },
         });
@@ -79,8 +85,8 @@ lazy_static::lazy_static! {
         functions.insert("cos", Function {
             num_args: 1..=1,
             token_fn: |_, fn_name| quote! {
-                fn #fn_name(a: f64) -> f64 {
-                    f64::cos(a)
+                fn #fn_name(a: Option<f64>) -> Option<f64> {
+                    a.map(f64::cos)
                 }
             },
         });
@@ -88,8 +94,8 @@ lazy_static::lazy_static! {
         functions.insert("sin", Function {
             num_args: 1..=1,
             token_fn: |_, fn_name| quote! {
-                fn #fn_name(a: f64) -> f64 {
-                    f64::sin(a)
+                fn #fn_name(a: Option<f64>) -> Option<f64> {
+                    a.map(f64::sin)
                 }
             },
         });
@@ -97,8 +103,8 @@ lazy_static::lazy_static! {
         functions.insert("tan", Function {
             num_args: 1..=1,
             token_fn: |_, fn_name| quote! {
-                fn #fn_name(a: f64) -> f64 {
-                    f64::tan(a)
+                fn #fn_name(a: Option<f64>) -> Option<f64> {
+                    a.map(f64::tan)
                 }
             },
         });
@@ -106,8 +112,8 @@ lazy_static::lazy_static! {
         functions.insert("acos", Function {
             num_args: 1..=1,
             token_fn: |_, fn_name| quote! {
-                fn #fn_name(a: f64) -> f64 {
-                    f64::acos(a)
+                fn #fn_name(a: Option<f64>) -> Option<f64> {
+                    a.map(f64::acos)
                 }
             },
         });
@@ -115,8 +121,8 @@ lazy_static::lazy_static! {
         functions.insert("asin", Function {
             num_args: 1..=1,
             token_fn: |_, fn_name| quote! {
-                fn #fn_name(a: f64) -> f64 {
-                    f64::asin(a)
+                fn #fn_name(a: Option<f64>) -> Option<f64> {
+                    a.map(f64::asin)
                 }
             },
         });
@@ -124,8 +130,8 @@ lazy_static::lazy_static! {
         functions.insert("atan", Function {
             num_args: 1..=1,
             token_fn: |_, fn_name| quote! {
-                fn #fn_name(a: f64) -> f64 {
-                    f64::atan(a)
+                fn #fn_name(a: Option<f64>) -> Option<f64> {
+                    a.map(f64::atan)
                 }
             },
         });
@@ -133,8 +139,8 @@ lazy_static::lazy_static! {
         functions.insert("log10", Function {
             num_args: 1..=1,
             token_fn: |_, fn_name| quote! {
-                fn #fn_name(a: f64) -> f64 {
-                    f64::log10(a)
+                fn #fn_name(a: Option<f64>) -> Option<f64> {
+                    a.map(f64::log10)
                 }
             },
         });
@@ -142,8 +148,8 @@ lazy_static::lazy_static! {
         functions.insert("ln", Function {
             num_args: 1..=1,
             token_fn: |_, fn_name| quote! {
-                fn #fn_name(a: f64) -> f64 {
-                    f64::ln(a)
+                fn #fn_name(a: Option<f64>) -> Option<f64> {
+                    a.map(f64::ln)
                 }
             },
         });
@@ -151,8 +157,8 @@ lazy_static::lazy_static! {
         functions.insert("pi", Function {
             num_args: 0..=0,
             token_fn: |_, fn_name| quote! {
-                fn #fn_name() -> f64 {
-                    std::f64::consts::PI
+                fn #fn_name() -> Option<f64> {
+                    Some(std::f64::consts::PI)
                 }
             },
         });
@@ -160,8 +166,8 @@ lazy_static::lazy_static! {
         functions.insert("e", Function {
             num_args: 0..=0,
             token_fn: |_, fn_name| quote! {
-                fn #fn_name() -> f64 {
-                    std::f64::consts::E
+                fn #fn_name() -> Option<f64> {
+                    Some(std::f64::consts::E)
                 }
             },
         });
@@ -169,8 +175,8 @@ lazy_static::lazy_static! {
         functions.insert("round", Function {
             num_args: 1..=1,
             token_fn: |_, fn_name| quote! {
-                fn #fn_name(a: f64) -> f64 {
-                    f64::round(a)
+                fn #fn_name(a: Option<f64>) -> Option<f64> {
+                    a.map(f64::round)
                 }
             },
         });
@@ -178,8 +184,8 @@ lazy_static::lazy_static! {
         functions.insert("ceil", Function {
             num_args: 1..=1,
             token_fn: |_, fn_name| quote! {
-                fn #fn_name(a: f64) -> f64 {
-                    f64::ceil(a)
+                fn #fn_name(a: Option<f64>) -> Option<f64> {
+                    a.map(f64::ceil)
                 }
             },
         });
@@ -187,8 +193,8 @@ lazy_static::lazy_static! {
         functions.insert("floor", Function {
             num_args: 1..=1,
             token_fn: |_, fn_name| quote! {
-                fn #fn_name(a: f64) -> f64 {
-                    f64::floor(a)
+                fn #fn_name(a: Option<f64>) -> Option<f64> {
+                    a.map(f64::floor)
                 }
             },
         });
@@ -196,8 +202,8 @@ lazy_static::lazy_static! {
         functions.insert("mod", Function {
             num_args: 2..=2,
             token_fn: |_, fn_name| quote! {
-                fn #fn_name(a: f64, b: f64) -> f64 {
-                    a % b
+                fn #fn_name(a: Option<f64>, b: Option<f64>) -> Option<f64> {
+                    apply(a, b, std::ops::Rem::rem)
                 }
             },
         });
@@ -205,8 +211,8 @@ lazy_static::lazy_static! {
         functions.insert("to_radians", Function {
             num_args: 1..=1,
             token_fn: |_, fn_name| quote! {
-                fn #fn_name(a: f64) -> f64 {
-                    f64::to_radians(a)
+                fn #fn_name(a: Option<f64>) -> Option<f64> {
+                    a.map(f64::to_radians)
                 }
             },
         });
@@ -214,8 +220,8 @@ lazy_static::lazy_static! {
         functions.insert("to_degrees", Function {
             num_args: 1..=1,
             token_fn: |_, fn_name| quote! {
-                fn #fn_name(a: f64) -> f64 {
-                    f64::to_degrees(a)
+                fn #fn_name(a: Option<f64>) -> Option<f64> {
+                    a.map(f64::to_degrees)
                 }
             },
         });
