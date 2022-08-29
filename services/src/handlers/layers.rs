@@ -11,6 +11,9 @@ use crate::layers::storage::{LayerProviderDb, LayerProviderListingOptions};
 use crate::util::user_input::UserInput;
 use crate::{contexts::Context, layers::layer::LayerCollectionListOptions};
 
+pub const ROOT_COLLECTION_ID: DataProviderId =
+    DataProviderId::from_u128(0xf242_4474_ef24_4c18_ab84_6859_2e12_ce48);
+
 pub(crate) fn init_layer_routes<C>(cfg: &mut web::ServiceConfig)
 where
     C: Context,
@@ -43,8 +46,6 @@ async fn list_root_collections_handler<C: Context>(
             },
             name: "Datasets".to_string(),
             description: "Basic Layers for all Datasets".to_string(),
-            entry_label: None,
-            properties: vec![],
         }));
 
         options.limit -= 1;
@@ -60,8 +61,6 @@ async fn list_root_collections_handler<C: Context>(
             },
             name: "Layers".to_string(),
             description: "All available Geo Engine layers".to_string(),
-            entry_label: None,
-            properties: vec![],
         }));
 
         options.limit -= 1;
@@ -106,18 +105,21 @@ async fn list_root_collections_handler<C: Context>(
             },
             name: provider_listing.name,
             description: provider_listing.description,
-            entry_label: None,
-            properties: vec![],
         }));
     }
 
     let root_collection = LayerCollection {
-        id: LayerCollectionId(
-            crate::layers::storage::INTERNAL_LAYER_DB_ROOT_COLLECTION_ID.to_string(),
-        ),
+        id: ProviderLayerCollectionId {
+            provider_id: ROOT_COLLECTION_ID,
+            collection_id: LayerCollectionId(
+                crate::layers::storage::INTERNAL_LAYER_DB_ROOT_COLLECTION_ID.to_string(),
+            ),
+        },
         name: "Layer Providers".to_string(),
         description: "All available Geo Engine layer providers".to_string(),
         items: providers,
+        entry_label: None,
+        properties: vec![],
     };
 
     Ok(web::Json(root_collection))
@@ -128,6 +130,7 @@ async fn list_collection_handler<C: Context>(
     path: web::Path<(DataProviderId, LayerCollectionId)>,
     options: web::Query<LayerCollectionListOptions>,
 ) -> Result<impl Responder> {
+    // TODO: route for root
     let (provider, item) = path.into_inner();
 
     if provider == crate::datasets::storage::DATASET_DB_LAYER_PROVIDER_ID {

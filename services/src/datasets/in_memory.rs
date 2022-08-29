@@ -5,7 +5,7 @@ use crate::error;
 use crate::error::Result;
 use crate::layers::layer::{
     CollectionItem, Layer, LayerCollection, LayerCollectionListOptions, LayerListing,
-    ProviderLayerId,
+    ProviderLayerCollectionId, ProviderLayerId,
 };
 use crate::layers::listing::{LayerCollectionId, LayerCollectionProvider};
 use crate::util::operators::source_operator_from_dataset;
@@ -415,16 +415,20 @@ impl LayerCollectionProvider for HashMapDatasetDb {
                     },
                     name: d.name.clone(),
                     description: d.description.clone(),
-                    properties: vec![],
                 })
             })
             .collect();
 
         Ok(LayerCollection {
-            id: collection.clone(),
+            id: ProviderLayerCollectionId {
+                provider_id: DATASET_DB_LAYER_PROVIDER_ID,
+                collection_id: collection.clone(),
+            },
             name: "Datasets".to_string(),
             description: "Basic Layers for all Datasets".to_string(),
             items,
+            entry_label: None,
+            properties: vec![],
         })
     }
 

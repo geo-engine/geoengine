@@ -3,7 +3,7 @@ use crate::error::{self, Error, Result};
 use crate::layers::external::{DataProvider, DataProviderDefinition};
 use crate::layers::layer::{
     CollectionItem, Layer, LayerCollection, LayerCollectionListOptions, LayerListing,
-    ProviderLayerId,
+    ProviderLayerCollectionId, ProviderLayerId,
 };
 use crate::layers::listing::{LayerCollectionId, LayerCollectionProvider};
 use crate::projects::{RasterSymbology, Symbology};
@@ -241,7 +241,6 @@ impl LayerCollectionProvider for SentinelS2L2aCogsDataProvider {
                     id: d.listing.id.clone(),
                     name: d.listing.name.clone(),
                     description: d.listing.description.clone(),
-                    properties: vec![],
                 }))
             })
             .collect::<Result<Vec<CollectionItem>>>()?;
@@ -254,10 +253,15 @@ impl LayerCollectionProvider for SentinelS2L2aCogsDataProvider {
             .collect();
 
         Ok(LayerCollection {
-            id: collection.clone(),
+            id: ProviderLayerCollectionId {
+                provider_id: self.id,
+                collection_id: collection.clone(),
+            },
             name: "Element 84 AWS STAC".to_owned(),
             description: "SentinelS2L2ACogs".to_owned(),
             items,
+            entry_label: None,
+            properties: vec![],
         })
     }
 

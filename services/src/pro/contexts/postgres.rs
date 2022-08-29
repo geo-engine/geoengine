@@ -1939,9 +1939,12 @@ mod tests {
             assert_eq!(
                 root_collection,
                 LayerCollection {
-                    id: root_collection_id,
-                    name: "foo".to_string(),
-                    description: "bar".to_string(),
+                    id: ProviderLayerCollectionId {
+                        provider_id: INTERNAL_PROVIDER_ID,
+                        collection_id: root_collection_id,
+                    },
+                    name: "Layers".to_string(),
+                    description: "All available Geo Engine layers".to_string(),
                     items: vec![
                         CollectionItem::Collection(LayerCollectionListing {
                             id: ProviderLayerCollectionId {
@@ -1950,8 +1953,6 @@ mod tests {
                             },
                             name: "Collection1".to_string(),
                             description: "Collection 1".to_string(),
-                            entry_label: None,
-                            properties: vec![],
                         }),
                         CollectionItem::Collection(LayerCollectionListing {
                             id: ProviderLayerCollectionId {
@@ -1962,8 +1963,6 @@ mod tests {
                             },
                             name: "Unsorted".to_string(),
                             description: "Unsorted Layers".to_string(),
-                            entry_label: None,
-                            properties: vec![],
                         }),
                         CollectionItem::Layer(LayerListing {
                             id: ProviderLayerId {
@@ -1972,9 +1971,10 @@ mod tests {
                             },
                             name: "Layer1".to_string(),
                             description: "Layer 1".to_string(),
-                            properties: vec![],
                         })
                     ],
+                    entry_label: None,
+                    properties: vec![],
                 }
             );
 
@@ -1994,9 +1994,12 @@ mod tests {
             assert_eq!(
                 collection1,
                 LayerCollection {
-                    id: collection1_id,
-                    name: "foo".to_string(),
-                    description: "bar".to_string(),
+                    id: ProviderLayerCollectionId {
+                        provider_id: INTERNAL_PROVIDER_ID,
+                        collection_id: collection1_id,
+                    },
+                    name: "Collection1".to_string(),
+                    description: "Collection 1".to_string(),
                     items: vec![
                         CollectionItem::Collection(LayerCollectionListing {
                             id: ProviderLayerCollectionId {
@@ -2005,8 +2008,6 @@ mod tests {
                             },
                             name: "Collection2".to_string(),
                             description: "Collection 2".to_string(),
-                            entry_label: None,
-                            properties: vec![],
                         }),
                         CollectionItem::Layer(LayerListing {
                             id: ProviderLayerId {
@@ -2015,9 +2016,10 @@ mod tests {
                             },
                             name: "Layer2".to_string(),
                             description: "Layer 2".to_string(),
-                            properties: vec![],
                         })
-                    ]
+                    ],
+                    entry_label: None,
+                    properties: vec![],
                 }
             );
         })

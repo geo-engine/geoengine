@@ -16,9 +16,11 @@ use crate::layers::layer::Layer;
 use crate::layers::layer::LayerCollection;
 use crate::layers::layer::LayerCollectionListOptions;
 use crate::layers::layer::LayerListing;
+use crate::layers::layer::ProviderLayerCollectionId;
 use crate::layers::layer::ProviderLayerId;
 use crate::layers::listing::LayerCollectionId;
 use crate::layers::listing::LayerCollectionProvider;
+use crate::layers::storage::INTERNAL_PROVIDER_ID;
 use crate::pro::datasets::storage::UpdateDatasetPermissions;
 use crate::pro::datasets::RoleId;
 use crate::projects::Symbology;
@@ -698,17 +700,21 @@ where
                     },
                     name: row.get(1),
                     description: row.get(2),
-                    properties: vec![],
                 }))
             })
             .filter_map(Result::ok)
             .collect();
 
         Ok(LayerCollection {
-            id: collection.clone(),
+            id: ProviderLayerCollectionId {
+                provider_id: INTERNAL_PROVIDER_ID,
+                collection_id: collection.clone(),
+            },
             name: "Datasets".to_string(),
             description: "Basic Layers for all Datasets".to_string(),
             items,
+            entry_label: None,
+            properties: vec![],
         })
     }
 

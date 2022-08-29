@@ -4,7 +4,7 @@ use crate::datasets::listing::{
 };
 use crate::error::{Error, Result, self};
 use crate::layers::external::{DataProviderDefinition, DataProvider};
-use crate::layers::layer::{LayerCollectionListOptions, CollectionItem, Layer, LayerListing, ProviderLayerId, LayerCollection};
+use crate::layers::layer::{LayerCollectionListOptions, CollectionItem, Layer, LayerListing, ProviderLayerId, LayerCollection, ProviderLayerCollectionId};
 use crate::layers::listing::{LayerCollectionProvider, LayerCollectionId};
 use crate::util::operators::source_operator_from_dataset;
 use crate::util::user_input::Validated;
@@ -578,16 +578,20 @@ impl LayerCollectionProvider for NFDIDataProvider {
                     },
                     name: ds.name,
                     description: ds.description,
-                    properties: vec![],
                 })
             })
             .collect();
 
         Ok(LayerCollection {
-            id: collection.clone(),
+            id: ProviderLayerCollectionId {
+                provider_id: self.id,
+                collection_id: collection.clone(),
+            },
             name: self.name.clone(),
             description: "NFDI".to_string(),
             items,
+            entry_label: None,
+            properties: vec![],
         })
     }
 

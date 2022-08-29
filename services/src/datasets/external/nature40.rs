@@ -6,6 +6,7 @@ use crate::error::Error;
 use crate::error::Result;
 use crate::layers::external::{DataProvider, DataProviderDefinition};
 use crate::layers::layer::LayerCollection;
+use crate::layers::layer::ProviderLayerCollectionId;
 use crate::layers::layer::{
     CollectionItem, Layer, LayerCollectionListOptions, LayerListing, ProviderLayerId,
 };
@@ -196,7 +197,6 @@ impl LayerCollectionProvider for Nature40DataProvider {
                                 .get((band_index - 1) as usize)
                                 .unwrap_or(&"".to_owned())
                         ),
-                        properties: vec![],
                     })));
                 }
             } else {
@@ -211,10 +211,15 @@ impl LayerCollectionProvider for Nature40DataProvider {
         items.sort_by(|a, b| a.name().cmp(b.name()));
 
         Ok(LayerCollection {
-            id: collection.clone(),
+            id: ProviderLayerCollectionId {
+                provider_id: self.id,
+                collection_id: collection.clone(),
+            },
             name: "Nature 4.0".to_owned(),
             description: "Nature 4.0".to_owned(),
             items,
+            entry_label: None,
+            properties: vec![],
         })
     }
 
@@ -512,7 +517,7 @@ mod tests {
     };
     use serde_json::json;
 
-    use crate::{test_data, util::user_input::UserInput};
+    use crate::{layers::layer::ProviderLayerCollectionId, test_data, util::user_input::UserInput};
 
     use super::*;
 
@@ -764,8 +769,10 @@ mod tests {
         expect_geonode_requests(&mut server);
         expect_lidar_requests(&mut server);
 
+        let provider_id = DataProviderId::from_str("2cb964d5-b9fa-4f8f-ab6f-f6c7fb47d4cd").unwrap();
+
         let provider = Box::new(Nature40DataProviderDefinition {
-            id: DataProviderId::from_str("2cb964d5-b9fa-4f8f-ab6f-f6c7fb47d4cd").unwrap(),
+            id: provider_id,
             name: "Nature40".to_owned(),
             base_url: Url::parse(&server.url_str("")).unwrap(),
             user: "geoengine".to_owned(),
@@ -794,9 +801,12 @@ mod tests {
         assert_eq!(
             collection,
             LayerCollection {
-                id: root_id,
-                name: "root".to_owned(),
-                description: "".to_owned(),
+                id: ProviderLayerCollectionId {
+                    provider_id,
+                    collection_id: root_id,
+                },
+                name: "Nature 4.0".to_string(),
+                description: "Nature 4.0".to_string(),
                 items: vec![
                     CollectionItem::Layer(LayerListing {
                         id: ProviderLayerId {
@@ -808,7 +818,6 @@ mod tests {
                         },
                         name: "MOF Luftbild".to_owned(),
                         description: "Band 1: band1".to_owned(),
-                        properties: vec![],
                     }),
                     CollectionItem::Layer(LayerListing {
                         id: ProviderLayerId {
@@ -820,7 +829,6 @@ mod tests {
                         },
                         name: "MOF Luftbild".to_owned(),
                         description: "Band 2: band2".to_owned(),
-                        properties: vec![],
                     }),
                     CollectionItem::Layer(LayerListing {
                         id: ProviderLayerId {
@@ -832,7 +840,6 @@ mod tests {
                         },
                         name: "MOF Luftbild".to_owned(),
                         description: "Band 3: band3".to_owned(),
-                        properties: vec![],
                     }),
                     CollectionItem::Layer(LayerListing {
                         id: ProviderLayerId {
@@ -844,9 +851,10 @@ mod tests {
                         },
                         name: "Topografic Wetness index".to_owned(),
                         description: "Band 1: wetness".to_owned(),
-                        properties: vec![],
                     })
-                ]
+                ],
+                entry_label: None,
+                properties: vec![],
             }
         );
     }

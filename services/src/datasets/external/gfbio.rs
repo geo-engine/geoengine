@@ -7,7 +7,7 @@ use crate::error::{self, Error};
 use crate::layers::external::{DataProvider, DataProviderDefinition};
 use crate::layers::layer::{
     CollectionItem, Layer, LayerCollection, LayerCollectionListOptions, LayerListing,
-    ProviderLayerId,
+    ProviderLayerCollectionId, ProviderLayerId,
 };
 use crate::layers::listing::{LayerCollectionId, LayerCollectionProvider};
 use crate::util::user_input::Validated;
@@ -228,16 +228,20 @@ impl LayerCollectionProvider for GfbioDataProvider {
                     },
                     name: row.get(1),
                     description: row.try_get(2).unwrap_or_else(|_| "".to_owned()),
-                    properties: vec![],
                 })
             })
             .collect();
 
         Ok(LayerCollection {
-            id: collection.clone(),
+            id: ProviderLayerCollectionId {
+                provider_id: GFBIO_PROVIDER_ID,
+                collection_id: collection.clone(),
+            },
             name: "GFBio".to_owned(),
             description: "GFBio".to_owned(),
             items,
+            entry_label: None,
+            properties: vec![],
         })
     }
 
@@ -488,6 +492,7 @@ mod tests {
     use geoengine_operators::{engine::MockQueryContext, source::OgrSourceProcessor};
     use rand::RngCore;
 
+    use crate::layers::layer::ProviderLayerCollectionId;
     use crate::test_data;
     use crate::util::{config, user_input::UserInput};
     use std::{fs::File, io::Read, path::PathBuf};
@@ -584,7 +589,10 @@ mod tests {
         assert_eq!(
             collection,
             LayerCollection {
-                id: root_id,
+                id: ProviderLayerCollectionId {
+                    provider_id: GFBIO_PROVIDER_ID,
+                    collection_id: root_id,
+                },
                 name: "Gfbio".to_string(),
                 description: "Gfbio".to_string(),
                 items: vec![CollectionItem::Layer(LayerListing {
@@ -594,8 +602,9 @@ mod tests {
                     },
                     name: "Example Title".to_string(),
                     description: "".to_string(),
-                    properties: vec![],
-                })]
+                })],
+                entry_label: None,
+                properties: vec![],
             }
         );
     }

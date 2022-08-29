@@ -378,7 +378,6 @@ impl NetCdfCfDataProvider {
                         entity_name = entity.name
                     ),
                     description: tree.summary.clone(),
-                    properties: vec![],
                 });
             }
         }
@@ -961,8 +960,6 @@ async fn listing_from_dir(
                 },
                 name: entry.file_name().to_string_lossy().to_string(),
                 description: "".to_string(),
-                entry_label: None,
-                properties: vec![],
             }));
         } else if entry.path().extension() == Some("nc".as_ref()) {
             let fp = entry
@@ -994,19 +991,6 @@ async fn listing_from_dir(
                 },
                 name: tree.title,
                 description: tree.summary,
-                entry_label: None,
-                properties: [(
-                    "author".to_string(),
-                    format!(
-                        "{}, {}, {}",
-                        tree.creator_name.unwrap_or_else(|| "unknown".to_string()),
-                        tree.creator_email.unwrap_or_else(|| "unknown".to_string()),
-                        tree.creator_institution
-                            .unwrap_or_else(|| "unknown".to_string())
-                    ),
-                )]
-                .into_iter()
-                .collect(),
             }));
         }
     }
@@ -1019,10 +1003,15 @@ async fn listing_from_dir(
         .collect();
 
     Ok(LayerCollection {
-        id: collection.clone(),
+        id: ProviderLayerCollectionId {
+            provider_id: NETCDF_CF_PROVIDER_ID,
+            collection_id: collection.clone(),
+        },
         name,
         description,
         items,
+        entry_label: None,
+        properties: vec![],
     })
 }
 
@@ -1171,6 +1160,23 @@ async fn listing_from_netcdf_file(
         |g| (g.title.clone(), g.description.clone()),
     );
 
+    let properties = if groups.is_empty() {
+        [(
+            "author".to_string(),
+            format!(
+                "{}, {}, {}",
+                tree.creator_name.unwrap_or_else(|| "unknown".to_string()),
+                tree.creator_email.unwrap_or_else(|| "unknown".to_string()),
+                tree.creator_institution
+                    .unwrap_or_else(|| "unknown".to_string())
+            ),
+        )]
+        .into_iter()
+        .collect()
+    } else {
+        vec![]
+    };
+
     let groups_list = group.map_or(tree.groups, |g| g.groups);
 
     let items = if groups_list.is_empty() {
@@ -1191,7 +1197,6 @@ async fn listing_from_netcdf_file(
                     },
                     name: entity.name,
                     description: "".to_string(),
-                    properties: vec![],
                 }))
             })
             .collect::<crate::error::Result<Vec<CollectionItem>>>()?
@@ -1216,18 +1221,21 @@ async fn listing_from_netcdf_file(
                     },
                     name: group.title.clone(),
                     description: group.description,
-                    entry_label: None,
-                    properties: vec![],
                 }))
             })
             .collect::<crate::error::Result<Vec<CollectionItem>>>()?
     };
 
     Ok(LayerCollection {
-        id: collection.clone(),
+        id: ProviderLayerCollectionId {
+            provider_id: NETCDF_CF_PROVIDER_ID,
+            collection_id: collection.clone(),
+        },
         name,
         description,
         items,
+        entry_label: None,
+        properties,
     })
 }
 
@@ -1510,7 +1518,6 @@ mod tests {
                 },
                 name: "Test dataset metric: Random metric 1 > entity01".into(),
                 description: "CFake description of test dataset with metric.".into(),
-                properties: vec![],
             }
         );
         assert_eq!(
@@ -1529,7 +1536,6 @@ mod tests {
                 },
                 name: "Test dataset metric: Random metric 1 > entity02".into(),
                 description: "CFake description of test dataset with metric.".into(),
-                properties: vec![],
             }
         );
         assert_eq!(
@@ -1548,7 +1554,6 @@ mod tests {
                 },
                 name: "Test dataset metric: Random metric 1 > entity03".into(),
                 description: "CFake description of test dataset with metric.".into(),
-                properties: vec![],
             }
         );
         assert_eq!(
@@ -1567,7 +1572,6 @@ mod tests {
                 },
                 name: "Test dataset metric: Random metric 2 > entity01".into(),
                 description: "CFake description of test dataset with metric.".into(),
-                properties: vec![],
             }
         );
         assert_eq!(
@@ -1586,7 +1590,6 @@ mod tests {
                 },
                 name: "Test dataset metric: Random metric 2 > entity02".into(),
                 description: "CFake description of test dataset with metric.".into(),
-                properties: vec![],
             }
         );
         assert_eq!(
@@ -1605,7 +1608,6 @@ mod tests {
                 },
                 name: "Test dataset metric: Random metric 2 > entity03".into(),
                 description: "CFake description of test dataset with metric.".into(),
-                properties: vec![],
             }
         );
     }
@@ -1643,7 +1645,6 @@ mod tests {
                     "Test dataset metric and scenario: Sustainability > Random metric 1 > entity01"
                         .into(),
                 description: "Fake description of test dataset with metric and scenario.".into(),
-                properties: vec![],
             }
         );
         assert_eq!(
@@ -1660,7 +1661,6 @@ mod tests {
                 },
                 name: "Test dataset metric and scenario: Fossil-fueled Development > Random metric 2 > entity02".into(),
                 description: "Fake description of test dataset with metric and scenario.".into(),
-                properties: vec![],
             }
         );
     }
@@ -1914,7 +1914,6 @@ mod tests {
                     "Test dataset metric and scenario: Sustainability > Random metric 1 > entity01"
                         .into(),
                 description: "Fake description of test dataset with metric and scenario.".into(),
-                properties: vec![],
             }
         );
         assert_eq!(
@@ -1931,7 +1930,6 @@ mod tests {
                 },
                 name: "Test dataset metric and scenario: Fossil-fueled Development > Random metric 2 > entity02".into(),
                 description: "Fake description of test dataset with metric and scenario.".into(),
-                properties: vec![],
             }
         );
     }

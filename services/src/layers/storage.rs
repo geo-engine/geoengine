@@ -322,8 +322,6 @@ impl LayerCollectionProvider for HashMapLayerDb {
                     },
                     name: collection.name.clone(),
                     description: collection.description.clone(),
-                    entry_label: None,
-                    properties: vec![],
                 })
             });
 
@@ -347,7 +345,6 @@ impl LayerCollectionProvider for HashMapLayerDb {
                     },
                     name: layer.name.clone(),
                     description: layer.description.clone(),
-                    properties: vec![],
                 })
             });
 
@@ -365,10 +362,15 @@ impl LayerCollectionProvider for HashMapLayerDb {
         });
 
         Ok(LayerCollection {
-            id: collection_id.clone(),
+            id: ProviderLayerCollectionId {
+                provider_id: INTERNAL_PROVIDER_ID,
+                collection_id: collection_id.clone(),
+            },
             name: collection.name.clone(),
             description: collection.description.clone(),
             items,
+            entry_label: None,
+            properties: vec![],
         })
     }
 
@@ -527,7 +529,10 @@ mod tests {
         assert_eq!(
             items,
             LayerCollection {
-                id: top_c_id.clone(),
+                id: ProviderLayerCollectionId {
+                    provider_id: INTERNAL_PROVIDER_ID,
+                    collection_id: top_c_id.clone(),
+                },
                 name: "top collection".to_string(),
                 description: "description".to_string(),
                 items: vec![
@@ -538,8 +543,6 @@ mod tests {
                         },
                         name: "empty collection".to_string(),
                         description: "description".to_string(),
-                        entry_label: None,
-                        properties: vec![],
                     }),
                     CollectionItem::Layer(LayerListing {
                         id: ProviderLayerId {
@@ -548,9 +551,10 @@ mod tests {
                         },
                         name: "layer".to_string(),
                         description: "description".to_string(),
-                        properties: vec![],
                     })
                 ],
+                entry_label: None,
+                properties: vec![],
             }
         );
 

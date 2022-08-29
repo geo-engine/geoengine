@@ -5,7 +5,7 @@ use crate::error::Result;
 use crate::layers::external::{DataProvider, DataProviderDefinition};
 use crate::layers::layer::{
     CollectionItem, Layer, LayerCollection, LayerCollectionListOptions, LayerListing,
-    ProviderLayerId,
+    ProviderLayerCollectionId, ProviderLayerId,
 };
 use crate::layers::listing::{LayerCollectionId, LayerCollectionProvider};
 use crate::workflows::workflow::Workflow;
@@ -105,7 +105,6 @@ impl LayerCollectionProvider for MockExternalDataProvider {
                 },
                 name: dataset.properties.name.clone(),
                 description: dataset.properties.description.clone(),
-                properties: vec![],
             })));
         }
 
@@ -115,10 +114,15 @@ impl LayerCollectionProvider for MockExternalDataProvider {
             .collect();
 
         Ok(LayerCollection {
-            id: collection.clone(),
+            id: ProviderLayerCollectionId {
+                provider_id: self.id,
+                collection_id: collection.clone(),
+            },
             name: "MockName".to_owned(),
             description: "MockType".to_owned(),
             items,
+            entry_label: None,
+            properties: vec![],
         })
     }
 

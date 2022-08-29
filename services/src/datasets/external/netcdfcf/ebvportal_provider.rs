@@ -162,17 +162,20 @@ impl EbvPortalDataProvider {
                     },
                     name: c.name,
                     description: "".to_string(),
-                    entry_label: Some("EBV Name".to_string()),
-                    properties: vec![],
                 }))
             })
             .collect::<Result<Vec<CollectionItem>>>()?;
 
         Ok(LayerCollection {
-            id: collection.clone(),
+            id: ProviderLayerCollectionId {
+                provider_id: EBV_PROVIDER_ID,
+                collection_id: collection.clone(),
+            },
             name: self.name.clone(),
             description: "EbvPortalProviderDefinition".to_string(),
             items,
+            entry_label: Some("EBV Class".to_string()),
+            properties: vec![],
         })
     }
 
@@ -207,17 +210,20 @@ impl EbvPortalDataProvider {
                     },
                     name: ebv,
                     description: "".to_string(),
-                    entry_label: Some("EBV Dataset".to_string()),
-                    properties: vec![],
                 }))
             })
             .collect::<Result<Vec<CollectionItem>>>()?;
 
         Ok(LayerCollection {
-            id: collection.clone(),
+            id: ProviderLayerCollectionId {
+                provider_id: EBV_PROVIDER_ID,
+                collection_id: collection.clone(),
+            },
             name: class.to_string(),
             description: "".to_string(),
             items,
+            entry_label: Some("EBV Name".to_string()),
+            properties: vec![],
         })
     }
 
@@ -248,28 +254,20 @@ impl EbvPortalDataProvider {
                     },
                     name: d.name.clone(),
                     description: d.description,
-                    entry_label: d
-                        .has_scenario
-                        .then_some("Scenario".to_string())
-                        .or_else(|| Some("Metric".to_string())),
-                    properties: [
-                        (
-                            "by".to_string(),
-                            format!("{} ({})", d.author_name, d.author_institution),
-                        ),
-                        ("with license".to_string(), d.license),
-                    ]
-                    .into_iter()
-                    .collect(),
                 }))
             })
             .collect::<Result<Vec<CollectionItem>>>()?;
 
         Ok(LayerCollection {
-            id: collection.clone(),
+            id: ProviderLayerCollectionId {
+                provider_id: EBV_PROVIDER_ID,
+                collection_id: collection.clone(),
+            },
             name: ebv.to_string(),
             description: "".to_string(),
             items,
+            entry_label: Some("EBV Dataset".to_string()),
+            properties: vec![],
         })
     }
 
@@ -320,21 +318,31 @@ impl EbvPortalDataProvider {
                     },
                     name: g.title,
                     description: g.description,
-                    entry_label: g
-                        .groups
-                        .is_empty()
-                        .then_some("Entity".to_string())
-                        .or_else(|| Some("Metric".to_string())),
-                    properties: vec![],
                 }))
             })
             .collect::<Result<Vec<CollectionItem>>>()?;
 
         Ok(LayerCollection {
-            id: collection.clone(),
+            id: ProviderLayerCollectionId {
+                provider_id: EBV_PROVIDER_ID,
+                collection_id: collection.clone(),
+            },
             name: dataset.name.to_string(),
             description: dataset.description,
             items,
+            entry_label: dataset
+                .has_scenario
+                .then_some("Scenario".to_string())
+                .or_else(|| Some("Metric".to_string())),
+            properties: [
+                (
+                    "by".to_string(),
+                    format!("{} ({})", dataset.author_name, dataset.author_institution),
+                ),
+                ("with license".to_string(), dataset.license),
+            ]
+            .into_iter()
+            .collect(),
         })
     }
 
@@ -366,7 +374,7 @@ impl EbvPortalDataProvider {
                 id: collection.clone(),
             })?;
 
-        let sub_groups = group.groups;
+        let sub_groups = &group.groups;
 
         let items = if sub_groups.is_empty() {
             tree.entities
@@ -388,7 +396,6 @@ impl EbvPortalDataProvider {
                         },
                         name: entity.name,
                         description: "".to_string(),
-                        properties: vec![],
                     }))
                 })
                 .collect::<Result<Vec<CollectionItem>>>()?
@@ -396,7 +403,7 @@ impl EbvPortalDataProvider {
             let out_groups = groups.to_owned();
 
             sub_groups
-                .into_iter()
+                .iter()
                 .skip(options.offset as usize)
                 .take(options.limit as usize)
                 .map(|group| {
@@ -413,20 +420,27 @@ impl EbvPortalDataProvider {
                             }
                             .try_into()?,
                         },
-                        name: group.title,
-                        description: group.description,
-                        entry_label: None,
-                        properties: vec![],
+                        name: group.title.clone(),
+                        description: group.description.clone(),
                     }))
                 })
                 .collect::<Result<Vec<CollectionItem>>>()?
         };
 
         Ok(LayerCollection {
-            id: collection.clone(),
+            id: ProviderLayerCollectionId {
+                provider_id: EBV_PROVIDER_ID,
+                collection_id: collection.clone(),
+            },
             name: group.title,
             description: group.description,
             items,
+            entry_label: group
+                .groups
+                .is_empty()
+                .then_some("Entity".to_string())
+                .or_else(|| Some("Metric".to_string())),
+            properties: vec![],
         })
     }
 }
@@ -643,7 +657,10 @@ mod tests {
         assert_eq!(
             collection,
             LayerCollection {
-                id: root_id,
+                id: ProviderLayerCollectionId {
+                    provider_id: EBV_PROVIDER_ID,
+                    collection_id: root_id,
+                },
                 name: "EBV Portal".to_string(),
                 description: "EbvPortalProviderDefinition".to_string(),
                 items: vec![
@@ -659,8 +676,6 @@ mod tests {
                         },
                         name: "Community composition".to_string(),
                         description: "".to_string(),
-                        entry_label: Some("EBV Name".to_string()),
-                        properties: vec![]
                     }),
                     CollectionItem::Collection(LayerCollectionListing {
                         id: ProviderLayerCollectionId {
@@ -674,8 +689,6 @@ mod tests {
                         },
                         name: "Ecosystem functioning".to_string(),
                         description: "".to_string(),
-                        entry_label: Some("EBV Name".to_string()),
-                        properties: vec![]
                     }),
                     CollectionItem::Collection(LayerCollectionListing {
                         id: ProviderLayerCollectionId {
@@ -689,8 +702,6 @@ mod tests {
                         },
                         name: "Ecosystem structure".to_string(),
                         description: "".to_string(),
-                        entry_label: Some("EBV Name".to_string()),
-                        properties: vec![]
                     }),
                     CollectionItem::Collection(LayerCollectionListing {
                         id: ProviderLayerCollectionId {
@@ -704,10 +715,10 @@ mod tests {
                         },
                         name: "Species populations".to_string(),
                         description: "".to_string(),
-                        entry_label: Some("EBV Name".to_string()),
-                        properties: vec![]
                     })
-                ]
+                ],
+                entry_label: Some("EBV Class".to_string()),
+                properties: vec![],
             }
         );
     }
@@ -781,31 +792,33 @@ mod tests {
             .await
             .unwrap();
 
-        assert_eq!(collection, LayerCollection{
-            id,
+        assert_eq!(collection, LayerCollection {
+            id: ProviderLayerCollectionId {
+                provider_id: EBV_PROVIDER_ID,
+                collection_id: id,
+            },
             name: "Ecosystem functioning".to_string(),
             description: "".to_string(),
             items: vec![
-            CollectionItem::Collection(LayerCollectionListing {
-                id: ProviderLayerCollectionId {
-                    provider_id: DataProviderId::from_str("77d0bf11-986e-43f5-b11d-898321f1854c").unwrap(), 
-                    collection_id: LayerCollectionId(r#"{"type":"ebv","class":"Ecosystem functioning","ebv":"Ecosystem phenology"}"#.into()) 
-                },
-                name: "Ecosystem phenology".to_string(), 
-                description: "".to_string(), 
-                entry_label: Some("EBV Dataset".to_string()), 
-                properties: vec![],
-            }),
-            CollectionItem::Collection(LayerCollectionListing {
-                 id: ProviderLayerCollectionId {
-                    provider_id: DataProviderId::from_str("77d0bf11-986e-43f5-b11d-898321f1854c").unwrap(), 
-                    collection_id: LayerCollectionId(r#"{"type":"ebv","class":"Ecosystem functioning","ebv":"Primary productivity"}"#.into()) 
-                },
-                name: "Primary productivity".to_string(), 
-                description: "".to_string(), 
-                entry_label: Some("EBV Dataset".to_string()), 
-                properties: vec![],
-            })]});
+                CollectionItem::Collection(LayerCollectionListing {
+                    id: ProviderLayerCollectionId {
+                        provider_id: DataProviderId::from_str("77d0bf11-986e-43f5-b11d-898321f1854c").unwrap(),
+                        collection_id: LayerCollectionId(r#"{"type":"ebv","class":"Ecosystem functioning","ebv":"Ecosystem phenology"}"#.into())
+                    },
+                    name: "Ecosystem phenology".to_string(),
+                    description: "".to_string(),
+                }),
+                CollectionItem::Collection(LayerCollectionListing {
+                    id: ProviderLayerCollectionId {
+                        provider_id: DataProviderId::from_str("77d0bf11-986e-43f5-b11d-898321f1854c").unwrap(),
+                        collection_id: LayerCollectionId(r#"{"type":"ebv","class":"Ecosystem functioning","ebv":"Primary productivity"}"#.into())
+                    },
+                    name: "Primary productivity".to_string(),
+                    description: "".to_string(),
+                })],
+            entry_label: Some("EBV Name".to_string()),
+            properties: vec![],
+        });
     }
 
     #[tokio::test]
@@ -934,22 +947,24 @@ mod tests {
             .unwrap();
 
         assert_eq!(collection, LayerCollection {
-            id,
+            id: ProviderLayerCollectionId {
+                provider_id: EBV_PROVIDER_ID,
+                collection_id: id,
+            },
             name: "Ecosystem phenology".to_string(),
             description: "".to_string(),
             items: vec![
-            CollectionItem::Collection(LayerCollectionListing {
-                id: ProviderLayerCollectionId {
-                    provider_id: DataProviderId::from_str("77d0bf11-986e-43f5-b11d-898321f1854c").unwrap(),
-                    collection_id: LayerCollectionId(r#"{"type":"dataset","class":"Ecosystem functioning","ebv":"Ecosystem phenology","dataset":"10"}"#.into()) 
-                },
-                name: "Vegetation Phenology in Finland".to_string(),
-                description: "Datasets present the yearly maps of the start of vegetation active period (VAP) in coniferous forests and deciduous vegetation during 2001-2019 in Finland. The start of the vegetation active period is defined as the day when coniferous trees start to photosynthesize and for deciduous vegetation as the day when trees unfold new leaves in spring. The datasets were derived from satellite observations of the Moderate Resolution Imaging Spectroradiometer (MODIS).".to_string(), 
-                entry_label: Some("Metric".to_string()),
-                properties: vec![("by".to_string(), "Kristin Böttcher (The Finnish Environment Institute (SYKE))".to_string()),
-                    ("with license".to_string(), "https://creativecommons.org/licenses/by/4.0".to_string())]              
-            })]}
-        );
+                CollectionItem::Collection(LayerCollectionListing {
+                    id: ProviderLayerCollectionId {
+                        provider_id: DataProviderId::from_str("77d0bf11-986e-43f5-b11d-898321f1854c").unwrap(),
+                        collection_id: LayerCollectionId(r#"{"type":"dataset","class":"Ecosystem functioning","ebv":"Ecosystem phenology","dataset":"10"}"#.into()) 
+                    },
+                    name: "Vegetation Phenology in Finland".to_string(),
+                    description: "Datasets present the yearly maps of the start of vegetation active period (VAP) in coniferous forests and deciduous vegetation during 2001-2019 in Finland. The start of the vegetation active period is defined as the day when coniferous trees start to photosynthesize and for deciduous vegetation as the day when trees unfold new leaves in spring. The datasets were derived from satellite observations of the Moderate Resolution Imaging Spectroradiometer (MODIS).".to_string(), 
+                })],
+            entry_label: Some("EBV Dataset".to_string()),
+            properties: vec![],
+        });
     }
 
     #[tokio::test]
@@ -1170,7 +1185,10 @@ mod tests {
 
         assert_eq!(
             collection, LayerCollection {
-                id,
+                id: ProviderLayerCollectionId {
+                    provider_id: EBV_PROVIDER_ID,
+                    collection_id: id,
+                },
                 name: "Vegetation Phenology in Finland".to_string(),
                 description: "Datasets present the yearly maps of the start of vegetation active period (VAP) in coniferous forests and deciduous vegetation during 2001-2019 in Finland. The start of the vegetation active period is defined as the day when coniferous trees start to photosynthesize and for deciduous vegetation as the day when trees unfold new leaves in spring. The datasets were derived from satellite observations of the Moderate Resolution Imaging Spectroradiometer (MODIS).".to_string(),
                 items: vec![CollectionItem::Collection(LayerCollectionListing {
@@ -1180,20 +1198,19 @@ mod tests {
                     },
                     name: "Random metric 1".to_string(),
                     description: "Randomly created data".to_string(),
-                    entry_label: Some("Entity".to_string()),
-                    properties: vec![] }),
+                }),
                 CollectionItem::Collection(LayerCollectionListing {
                     id: ProviderLayerCollectionId {
                         provider_id: DataProviderId::from_str("77d0bf11-986e-43f5-b11d-898321f1854c").unwrap(),
-                        collection_id: LayerCollectionId(r#"{"type":"group","class":"Ecosystem functioning","ebv":"Ecosystem phenology","dataset":"10","groups":["metric_2"]}"#.into()) 
+                        collection_id: LayerCollectionId(r#"{"type":"group","class":"Ecosystem functioning","ebv":"Ecosystem phenology","dataset":"10","groups":["metric_2"]}"#.into())
                     },
                     name: "Random metric 2".to_string(),
                     description: "Randomly created data".to_string(),
-                    entry_label: Some("Entity".to_string()),
-                    properties: vec![]
-                })
-            ]}
-        );
+                })],
+                entry_label: Some("Metric".to_string()),
+                properties: vec![("by".to_string(), "Kristin Böttcher (The Finnish Environment Institute (SYKE))".to_string()),
+                    ("with license".to_string(), "https://creativecommons.org/licenses/by/4.0".to_string())]              
+        });
     }
 
     #[tokio::test]
@@ -1322,34 +1339,36 @@ mod tests {
         assert_eq!(
             collection,
             LayerCollection {
-                id,
+                id: ProviderLayerCollectionId {
+                    provider_id: EBV_PROVIDER_ID,
+                    collection_id: id,
+                },
                 name: "Random metric 1".to_string(),
                 description: "Randomly created data".to_string(),
                 items: vec![CollectionItem::Layer(LayerListing {
-                    id: ProviderLayerId {
-                        provider_id: DataProviderId::from_str("77d0bf11-986e-43f5-b11d-898321f1854c").unwrap(),
-                        layer_id: LayerId(r#"{"type":"entity","class":"Ecosystem functioning","ebv":"Ecosystem phenology","dataset":"10","groups":["metric_1"],"entity":0}"#.into())
-                    },
-                    name: "entity01".to_string(),
-                    description: "".to_string(),
-                    properties: vec![]
-                }), CollectionItem::Layer(LayerListing {
-                    id: ProviderLayerId {
-                        provider_id: DataProviderId::from_str("77d0bf11-986e-43f5-b11d-898321f1854c").unwrap(),
-                        layer_id: LayerId(r#"{"type":"entity","class":"Ecosystem functioning","ebv":"Ecosystem phenology","dataset":"10","groups":["metric_1"],"entity":1}"#.into())
-                    },
-                    name: "entity02".to_string(),
-                    description: "".to_string(),
-                    properties: vec![]
-                }), CollectionItem::Layer(LayerListing {
-                    id: ProviderLayerId {
-                        provider_id: DataProviderId::from_str("77d0bf11-986e-43f5-b11d-898321f1854c").unwrap(),
-                        layer_id: LayerId(r#"{"type":"entity","class":"Ecosystem functioning","ebv":"Ecosystem phenology","dataset":"10","groups":["metric_1"],"entity":2}"#.into())
-                    },
-                    name: "entity03".to_string(),
-                    description: "".to_string(),
-                    properties: vec![]
-                })]
+                        id: ProviderLayerId {
+                            provider_id: DataProviderId::from_str("77d0bf11-986e-43f5-b11d-898321f1854c").unwrap(),
+                            layer_id: LayerId(r#"{"type":"entity","class":"Ecosystem functioning","ebv":"Ecosystem phenology","dataset":"10","groups":["metric_1"],"entity":0}"#.into())
+                        },
+                        name: "entity01".to_string(),
+                        description: "".to_string(),
+                    }), CollectionItem::Layer(LayerListing {
+                        id: ProviderLayerId {
+                            provider_id: DataProviderId::from_str("77d0bf11-986e-43f5-b11d-898321f1854c").unwrap(),
+                            layer_id: LayerId(r#"{"type":"entity","class":"Ecosystem functioning","ebv":"Ecosystem phenology","dataset":"10","groups":["metric_1"],"entity":1}"#.into())
+                        },
+                        name: "entity02".to_string(),
+                        description: "".to_string(),
+                    }), CollectionItem::Layer(LayerListing {
+                        id: ProviderLayerId {
+                            provider_id: DataProviderId::from_str("77d0bf11-986e-43f5-b11d-898321f1854c").unwrap(),
+                            layer_id: LayerId(r#"{"type":"entity","class":"Ecosystem functioning","ebv":"Ecosystem phenology","dataset":"10","groups":["metric_1"],"entity":2}"#.into())
+                        },
+                        name: "entity03".to_string(),
+                        description: "".to_string(),
+                    })],
+                entry_label: Some("Entity".to_string()),
+                properties: vec![],
             }
         );
     }

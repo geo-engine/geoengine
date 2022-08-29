@@ -420,7 +420,6 @@ where
                         },
                         name: row.get(1),
                         description: row.get(2),
-                        properties: vec![],
                     })
                 } else {
                     CollectionItem::Collection(LayerCollectionListing {
@@ -430,18 +429,21 @@ where
                         },
                         name: row.get(1),
                         description: row.get(2),
-                        entry_label: None,
-                        properties: vec![],
                     })
                 }
             })
             .collect();
 
         Ok(LayerCollection {
-            id: collection_id.clone(),
+            id: ProviderLayerCollectionId {
+                provider_id: INTERNAL_PROVIDER_ID,
+                collection_id: collection_id.clone(),
+            },
             name,
             description,
             items,
+            entry_label: None,
+            properties: vec![],
         })
     }
 
