@@ -19,7 +19,7 @@ pub struct RasterTypeConversionParams {
     output_data_type: RasterDataType,
 }
 
-pub type RasterTypeConversionOperator = Operator<RasterTypeConversionParams, SingleRasterSource>;
+pub type RasterTypeConversion = Operator<RasterTypeConversionParams, SingleRasterSource>;
 
 pub struct InitializedRasterTypeConversionOperator {
     result_descriptor: RasterResultDescriptor,
@@ -28,7 +28,7 @@ pub struct InitializedRasterTypeConversionOperator {
 
 #[typetag::serde]
 #[async_trait]
-impl RasterOperator for RasterTypeConversionOperator {
+impl RasterOperator for RasterTypeConversion {
     async fn initialize(
         self: Box<Self>,
         context: &dyn ExecutionContext,
@@ -183,7 +183,7 @@ mod tests {
         }
         .boxed();
 
-        let op = RasterTypeConversionOperator {
+        let op = RasterTypeConversion {
             params: RasterTypeConversionParams {
                 output_data_type: RasterDataType::F32,
             },
