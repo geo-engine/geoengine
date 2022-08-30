@@ -30,5 +30,5 @@ pub struct NopTaskContext;
 
 #[async_trait::async_trait]
 impl TaskContext for NopTaskContext {
-    async fn set_completion(&self, _pct_complete: u8, _status: Box<dyn TaskStatusInfo>) {}
+    async fn set_completion(&self, _pct_complete: f64, _status: Box<dyn TaskStatusInfo>) {}
 }

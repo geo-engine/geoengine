@@ -4,7 +4,9 @@ use self::overviews::remove_overviews;
 use self::overviews::InProgressFlag;
 pub use self::overviews::OverviewGeneration;
 use self::overviews::{create_overviews, METADATA_FILE_NAME};
+use crate::datasets::external::netcdfcf::overviews::LOADING_INFO_FILE_NAME;
 use crate::datasets::listing::ProvenanceOutput;
+use crate::datasets::storage::MetaDataDefinition;
 use crate::error::Error;
 use crate::layers::external::DataProvider;
 use crate::layers::external::DataProviderDefinition;
@@ -19,6 +21,7 @@ use crate::layers::listing::LayerCollectionId;
 use crate::layers::listing::LayerCollectionProvider;
 use crate::projects::RasterSymbology;
 use crate::projects::Symbology;
+use crate::tasks::TaskContext;
 use crate::util::canonicalize_subpath;
 use crate::util::user_input::Validated;
 use crate::workflows::workflow::Workflow;
@@ -28,6 +31,7 @@ use gdal::{DatasetOptions, GdalOpenFlags};
 use geoengine_datatypes::dataset::DataProviderId;
 use geoengine_datatypes::dataset::LayerId;
 use geoengine_datatypes::dataset::{DataId, ExternalDataId};
+use geoengine_datatypes::error::BoxedResultExt;
 use geoengine_datatypes::operations::image::{Colorizer, RgbaColor};
 use geoengine_datatypes::primitives::{
     DateTime, DateTimeParseFormat, Measurement, RasterQueryRectangle, TimeGranularity,
@@ -54,7 +58,7 @@ use log::debug;
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 use snafu::{OptionExt, ResultExt};
-use std::collections::VecDeque;
+use std::collections::{HashMap, VecDeque};
 use std::io::BufReader;
 use std::path::{Path, PathBuf};
 use std::str::FromStr;
@@ -145,13 +149,24 @@ pub struct NetCdfEntity {
 }
 
 trait ToNetCdfSubgroup {
-    fn to_net_cdf_subgroup(&self, compute_stats: bool) -> Result<NetCdfGroup>;
+    fn to_net_cdf_subgroup(
+        &self,
+        group_path: &Path,
+        stats_for_group: &HashMap<String, (f64, f64)>,
+    ) -> Result<NetCdfGroup>;
 }
 
 impl<'a> ToNetCdfSubgroup for Group<'a> {
-    fn to_net_cdf_subgroup(&self, compute_stats: bool) -> Result<NetCdfGroup> {
+    fn to_net_cdf_subgroup(
+        &self,
+        group_path: &Path,
+        stats_for_group: &HashMap<String, (f64, f64)>,
+    ) -> Result<NetCdfGroup> {
         let name = self.name();
-        debug!("to_net_cdf_subgroup for {name} with stats={compute_stats}");
+        debug!(
+            "to_net_cdf_subgroup for {name} with stats={stats_available}",
+            stats_available = !stats_for_group.is_empty()
+        );
 
         let title = self
             .attribute("standard_name")
@@ -179,15 +194,9 @@ impl<'a> ToNetCdfSubgroup for Group<'a> {
                 .unwrap_or(RasterDataType::F64),
             );
 
-            // TODO: guess range from output datasets
-            // TODO: implement `GDALMDArrayGetStatistics` in `georust/gdal`
-            // let data_range = if compute_stats {
-            //     let array = self.open_md_array("ebv_cube", Default::default())?;
-            //     Some(array.min_max().context(error::CannotComputeMinMax)?)
-            // } else {
-            //     None
-            // };
-            let data_range = None;
+            let data_range = stats_for_group
+                .get(&group_path.to_string_lossy().to_string())
+                .copied();
 
             return Ok(NetCdfGroup {
                 name,
@@ -203,10 +212,11 @@ impl<'a> ToNetCdfSubgroup for Group<'a> {
         let mut groups = Vec::with_capacity(group_names.len());
 
         for subgroup in group_names {
+            let group_path = group_path.join(&subgroup);
             groups.push(
                 self.open_group(&subgroup, Default::default())
                     .context(error::GdalMd)?
-                    .to_net_cdf_subgroup(compute_stats)?,
+                    .to_net_cdf_subgroup(&group_path, stats_for_group)?,
             );
         }
 
@@ -251,7 +261,7 @@ impl NetCdfCfDataProvider {
         provider_path: &Path,
         overview_path: Option<&Path>,
         dataset_path: &Path,
-        compute_stats: bool,
+        stats_for_group: &HashMap<String, (f64, f64)>,
     ) -> Result<NetCdfOverview> {
         if let Some(netcdf_tree) = overview_path.and_then(|overview_path| {
             NetCdfCfDataProvider::netcdf_tree_from_overviews(overview_path, dataset_path)
@@ -308,7 +318,7 @@ impl NetCdfCfDataProvider {
                 root_group
                     .open_group(name, Default::default())
                     .context(error::GdalMd)?
-                    .to_net_cdf_subgroup(compute_stats)
+                    .to_net_cdf_subgroup(Path::new(name), stats_for_group)
             })
             .collect::<Result<Vec<_>>>()?;
 
@@ -337,7 +347,7 @@ impl NetCdfCfDataProvider {
         Ok(NetCdfOverview {
             file_name: path
                 .strip_prefix(provider_path)
-                .context(error::DatasetIsNotInProviderPath)?
+                .boxed_context(error::DatasetIsNotInProviderPath)?
                 .to_string_lossy()
                 .to_string(),
             title,
@@ -359,10 +369,10 @@ impl NetCdfCfDataProvider {
         provider_path: &Path,
         overview_path: Option<&Path>,
         dataset_path: &Path,
-        compute_stats: bool,
+        stats_for_group: &HashMap<String, (f64, f64)>,
     ) -> Result<Vec<LayerListing>> {
         let tree =
-            Self::build_netcdf_tree(provider_path, overview_path, dataset_path, compute_stats)?;
+            Self::build_netcdf_tree(provider_path, overview_path, dataset_path, stats_for_group)?;
 
         let mut paths: VecDeque<Vec<&NetCdfGroup>> = tree.groups.iter().map(|s| vec![s]).collect();
 
@@ -436,8 +446,12 @@ impl NetCdfCfDataProvider {
         // try to load from overviews
         if let Some(loading_info) = Self::meta_data_from_overviews(overviews, &dataset_id) {
             return match loading_info {
-                Metadata::NetCDF(loading_info) => Ok(Box::new(loading_info)),
-                Metadata::List(loading_info) => Ok(Box::new(loading_info)),
+                MetaDataDefinition::GdalMetadataNetCdfCf(loading_info) => {
+                    Ok(Box::new(loading_info))
+                }
+                MetaDataDefinition::GdalMetaDataList(loading_info) => Ok(Box::new(loading_info)),
+                MetaDataDefinition::GdalMetaDataRegular(loading_info) => Ok(Box::new(loading_info)),
+                _ => Err(NetCdfCf4DProviderError::UnsupportedMetaDataDefinition),
             };
         }
 
@@ -579,11 +593,12 @@ impl NetCdfCfDataProvider {
     fn meta_data_from_overviews(
         overview_path: &Path,
         dataset_id: &NetCdfCf4DDatasetId,
-    ) -> Option<Metadata> {
+    ) -> Option<MetaDataDefinition> {
         let loading_info_path = overview_path
             .join(&dataset_id.file_name)
             .join(&dataset_id.group_names.join("/"))
-            .join("ebv_cube.json");
+            .join(dataset_id.entity.to_string())
+            .join(LOADING_INFO_FILE_NAME);
 
         let loading_info_file = match std::fs::File::open(&loading_info_path) {
             Ok(file) => file,
@@ -595,36 +610,17 @@ impl NetCdfCfDataProvider {
 
         debug!("Using overview for {dataset_id:?}. Overview path is {overview_path:?}.");
 
-        let loading_info: Metadata =
+        let loading_info: MetaDataDefinition =
             serde_json::from_reader(BufReader::new(loading_info_file)).ok()?;
 
         match loading_info {
-            Metadata::NetCDF(mut loading_info) => {
-                let time_steps_per_entity = loading_info
-                    .step
-                    .num_steps_in_interval(
-                        TimeInterval::new(loading_info.start, loading_info.end).ok()?,
-                    )
-                    .ok()?;
-
-                // change start band wrt. entity
-                loading_info.band_offset = dataset_id.entity * time_steps_per_entity as usize;
-
-                Some(Metadata::NetCDF(loading_info))
+            MetaDataDefinition::GdalMetaDataList(loading_info) => {
+                Some(MetaDataDefinition::GdalMetaDataList(loading_info))
             }
-            Metadata::List(mut loading_info) => {
-                let time_steps_per_entity = loading_info.params.len();
-
-                // change start band wrt. entity
-                for temporal_slice in &mut loading_info.params {
-                    if let Some(params) = &mut temporal_slice.params {
-                        params.rasterband_channel +=
-                            dataset_id.entity * time_steps_per_entity as usize;
-                    }
-                }
-
-                Some(Metadata::List(loading_info))
+            MetaDataDefinition::GdalMetaDataRegular(loading_info) => {
+                Some(MetaDataDefinition::GdalMetaDataRegular(loading_info))
             }
+            _ => None, // we only support some definitions here
         }
     }
 
@@ -661,12 +657,19 @@ impl NetCdfCfDataProvider {
         Ok(files)
     }
 
-    pub fn create_overviews(
+    pub fn create_overviews<C: TaskContext>(
         &self,
         dataset_path: &Path,
         resampling_method: Option<ResamplingMethod>,
+        task_context: &C,
     ) -> Result<OverviewGeneration> {
-        create_overviews(&self.path, dataset_path, &self.overviews, resampling_method)
+        create_overviews(
+            &self.path,
+            dataset_path,
+            &self.overviews,
+            resampling_method,
+            task_context,
+        )
     }
 
     pub fn remove_overviews(&self, dataset_path: &Path, force: bool) -> Result<()> {
@@ -927,13 +930,33 @@ impl TimeCoverage {
 
         Ok(TimeCoverage::List { time_stamps })
     }
-}
 
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-#[serde(tag = "type", rename_all = "camelCase")]
-enum Metadata {
-    NetCDF(GdalMetadataNetCdfCf),
-    List(GdalMetaDataList),
+    fn number_of_time_steps(&self) -> Result<u32> {
+        match self {
+            TimeCoverage::Regular { start, end, step } => {
+                let time_interval = TimeInterval::new(*start, *end);
+                let time_steps = time_interval
+                    .and_then(|time_interval| step.num_steps_in_interval(time_interval));
+                time_steps.context(error::InvalidTimeCoverageInterval)
+            }
+            TimeCoverage::List { time_stamps } => Ok(time_stamps.len() as u32),
+        }
+    }
+
+    fn time_steps(&self) -> Result<Vec<TimeInstance>> {
+        match self {
+            TimeCoverage::Regular {
+                start,
+                end: _,
+                step,
+            } => {
+                let time_step_iter = TimeStepIter::new(*start, *step, self.number_of_time_steps()?)
+                    .context(error::InvalidTimeCoverageInterval)?;
+                Ok(time_step_iter.collect())
+            }
+            TimeCoverage::List { time_stamps } => Ok(time_stamps.clone()),
+        }
+    }
 }
 
 #[async_trait]
@@ -1021,7 +1044,7 @@ async fn listing_from_dir(
                 .to_owned();
             let b = base.to_owned();
             let tree = tokio::task::spawn_blocking(move || {
-                NetCdfCfDataProvider::build_netcdf_tree(&b, None, &fp, false)
+                NetCdfCfDataProvider::build_netcdf_tree(&b, None, &fp, &Default::default())
                     .map_err(|_| Error::InvalidLayerCollectionId)
             })
             .await??;
@@ -1192,8 +1215,13 @@ async fn listing_from_netcdf_file(
 ) -> crate::error::Result<Vec<CollectionItem>> {
     let fp = relative_file_path.clone();
     let tree = tokio::task::spawn_blocking(move || {
-        NetCdfCfDataProvider::build_netcdf_tree(&provider_path, Some(&overview_path), &fp, false)
-            .map_err(|_| Error::InvalidLayerCollectionId)
+        NetCdfCfDataProvider::build_netcdf_tree(
+            &provider_path,
+            Some(&overview_path),
+            &fp,
+            &Default::default(),
+        )
+        .map_err(|_| Error::InvalidLayerCollectionId)
     })
     .await??;
 
@@ -1328,7 +1356,7 @@ impl LayerCollectionProvider for NetCdfCfDataProvider {
                         &provider_path,
                         Some(&overviews_path),
                         &rp,
-                        false,
+                        &Default::default(),
                     )
                     .map_err(|_| Error::InvalidLayerCollectionId)
                 })
@@ -1405,6 +1433,9 @@ impl MetaDataProvider<OgrSourceDataset, VectorResultDescriptor, VectorQueryRecta
 
 #[cfg(test)]
 mod tests {
+    use super::*;
+
+    use crate::tasks::util::NopTaskContext;
     use geoengine_datatypes::{
         dataset::LayerId,
         primitives::{SpatialPartition2D, SpatialResolution, TimeInterval},
@@ -1416,8 +1447,6 @@ mod tests {
         FileNotFoundHandling, GdalDatasetGeoTransform, GdalDatasetParameters,
         GdalLoadingInfoTemporalSlice,
     };
-
-    use super::*;
 
     #[test]
     fn test_parse_time_coverage() {
@@ -1506,7 +1535,7 @@ mod tests {
             test_data!("netcdf4d"),
             None,
             Path::new("dataset_m.nc"),
-            false,
+            &Default::default(),
         )
         .unwrap();
 
@@ -1637,7 +1666,7 @@ mod tests {
             test_data!("netcdf4d"),
             None,
             Path::new("dataset_sm.nc"),
-            false,
+            &Default::default(),
         )
         .unwrap();
 
@@ -1788,7 +1817,7 @@ mod tests {
         assert_eq!(files, expected_files);
     }
 
-    #[tokio::test]
+    #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
     async fn test_loading_info_from_index() {
         hide_gdal_errors();
 
@@ -1800,7 +1829,7 @@ mod tests {
         };
 
         provider
-            .create_overviews(Path::new("dataset_sm.nc"), None)
+            .create_overviews(Path::new("dataset_sm.nc"), None, &NopTaskContext)
             .unwrap();
 
         let metadata = provider
@@ -1855,7 +1884,7 @@ mod tests {
 
         let file_path = overview_folder
             .path()
-            .join("dataset_sm.nc/scenario_5/metric_2/ebv_cube.tiff");
+            .join("dataset_sm.nc/scenario_5/metric_2/1/2000-01-01T00:00:00.000Z.tiff");
 
         assert_eq!(
             loading_info_parts[0],
@@ -1863,7 +1892,7 @@ mod tests {
                 time: TimeInterval::new_unchecked(946_684_800_000, 1_262_304_000_000),
                 params: Some(GdalDatasetParameters {
                     file_path,
-                    rasterband_channel: 4,
+                    rasterband_channel: 1,
                     geo_transform: GdalDatasetGeoTransform {
                         origin_coordinate: (3_580_000.0, 2_370_000.0).into(),
                         x_pixel_size: 1000.0,
@@ -1882,7 +1911,7 @@ mod tests {
         );
     }
 
-    #[tokio::test]
+    #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
     async fn test_listing_from_netcdf_sm_from_index() {
         hide_gdal_errors();
 
@@ -1894,7 +1923,7 @@ mod tests {
         };
 
         provider
-            .create_overviews(Path::new("dataset_sm.nc"), None)
+            .create_overviews(Path::new("dataset_sm.nc"), None, &NopTaskContext)
             .unwrap();
 
         let provider_id = DataProviderId::from_str("bf6bb6ea-5d5d-467d-bad1-267bf3a54470").unwrap();
@@ -1904,7 +1933,7 @@ mod tests {
             test_data!("netcdf4d"),
             Some(overview_folder.path()),
             Path::new("dataset_sm.nc"),
-            false,
+            &Default::default(),
         )
         .unwrap();
 

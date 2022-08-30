@@ -367,6 +367,11 @@ pub enum Error {
         base: PathBuf,
         sub_path: PathBuf,
     },
+
+    PathMustNotContainParentReferences {
+        base: PathBuf,
+        sub_path: PathBuf,
+    },
 }
 
 impl actix_web::error::ResponseError for Error {

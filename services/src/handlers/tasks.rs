@@ -705,7 +705,7 @@ mod tests {
 
         assert!(matches!(
             schedule_complete_rx.await.unwrap(),
-            TaskStatus::Completed { info: _ }
+            TaskStatus::Completed { .. }
         ));
     }
 

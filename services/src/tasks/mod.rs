@@ -1,7 +1,9 @@
 mod error;
 mod in_memory;
+mod time_estimation;
 pub mod util;
 
+use self::time_estimation::TimeEstimation;
 use crate::{
     error::Result,
     util::{
@@ -12,7 +14,6 @@ use crate::{
 pub use error::TaskError;
 use futures::channel::oneshot;
 use geoengine_datatypes::{error::ErrorSource, identifier, util::AsAnyArc};
-use geoengine_operators::util::number_statistics::NumberStatistics;
 pub use in_memory::{SimpleTaskManager, SimpleTaskManagerContext};
 use serde::{Deserialize, Serialize, Serializer};
 use snafu::ensure;
@@ -81,11 +82,11 @@ pub trait Task<C: TaskContext>: Send + Sync {
 #[async_trait::async_trait]
 pub trait TaskContext: Send + Sync {
     /// Set the completion percentage (%) of the task.
-    /// This is a number between 0 and 100.
+    /// This is a number between `0.0` and `1.0`.
     ///
     /// Moreover, set a status message.
     ///
-    async fn set_completion(&self, pct_complete: u8, status: Box<dyn TaskStatusInfo>);
+    async fn set_completion(&self, pct_complete: f64, status: Box<dyn TaskStatusInfo>);
 }
 
 /// One of the statuses a `Task` can be in.
@@ -97,6 +98,7 @@ pub enum TaskStatus {
     #[serde(rename_all = "camelCase")]
     Completed {
         info: Arc<dyn TaskStatusInfo>,
+        time_total: String,
     },
     #[serde(rename_all = "camelCase")]
     Aborted {
@@ -139,8 +141,12 @@ pub struct TaskStatusWithId {
 }
 
 impl TaskStatus {
-    pub fn completed(info: Arc<dyn TaskStatusInfo>) -> Self {
-        Self::Completed { info }
+    #[must_use]
+    pub fn completed(&self, info: Arc<dyn TaskStatusInfo>) -> Self {
+        Self::Completed {
+            info,
+            time_total: self.time_total(),
+        }
     }
 
     pub fn aborted(clean_up: TaskCleanUpStatus) -> Self {
@@ -185,86 +191,44 @@ impl TaskStatus {
                 }
             )
     }
+
+    fn time_total(&self) -> String {
+        match self {
+            TaskStatus::Running(info) => info.time_estimate.time_total(),
+            _ => String::new(),
+        }
+    }
 }
 
 #[derive(Debug, Serialize)]
 pub struct RunningTaskStatusInfo {
-    pct_complete: u8,
-    #[serde(serialize_with = "serialize_time_estimate_seconds")]
-    time_estimate_seconds: NumberStatistics,
-    #[serde(skip_serializing)]
-    last_time_stamp: std::time::Instant,
+    #[serde(serialize_with = "serialize_as_pct")]
+    pct_complete: f64,
+    time_estimate: TimeEstimation,
     info: Box<dyn TaskStatusInfo>,
 }
 
 impl RunningTaskStatusInfo {
-    pub fn new(pct_complete: u8, info: Box<dyn TaskStatusInfo>) -> Arc<Self> {
+    pub fn new(pct_complete: f64, info: Box<dyn TaskStatusInfo>) -> Arc<Self> {
         Arc::new(RunningTaskStatusInfo {
-            pct_complete,
-            time_estimate_seconds: NumberStatistics::default(),
-            last_time_stamp: std::time::Instant::now(),
+            pct_complete: pct_complete.clamp(0., 1.),
+            time_estimate: TimeEstimation::new(),
             info,
         })
     }
 
-    pub fn update(&self, pct_complete: u8, info: Box<dyn TaskStatusInfo>) -> Arc<Self> {
-        let mut time_estimate_seconds = self.time_estimate_seconds;
+    pub fn update(&self, pct_complete: f64, info: Box<dyn TaskStatusInfo>) -> Arc<Self> {
+        let pct_complete = pct_complete.clamp(0., 1.);
 
-        let mut last_time_stamp = std::time::Instant::now();
-        let elapsed_secs = (last_time_stamp - self.last_time_stamp).as_secs();
-
-        let elapsed_pct = pct_complete - self.pct_complete;
-
-        if elapsed_pct > 0 {
-            // if zero or smaller, don't update
-            time_estimate_seconds.add(elapsed_secs as f64 / f64::from(elapsed_pct));
-
-            // … and keep previous timestamp
-            last_time_stamp = self.last_time_stamp;
-        }
+        let mut time_estimate = self.time_estimate;
+        time_estimate.update_now(pct_complete);
 
         Arc::new(RunningTaskStatusInfo {
             pct_complete,
-            time_estimate_seconds,
-            last_time_stamp,
+            time_estimate,
             info,
         })
     }
-}
-
-#[allow(clippy::borrowed_box)]
-fn serialize_time_estimate_seconds<S>(
-    time_estimate_seconds: &NumberStatistics,
-    serializer: S,
-) -> Result<S::Ok, S::Error>
-where
-    S: Serializer,
-{
-    let mean = time_estimate_seconds.mean();
-    let std_dev = time_estimate_seconds.std_dev();
-
-    let mean = if mean.is_nan() {
-        "?".to_string()
-    } else {
-        hms_from_secs(mean)
-    };
-
-    let std_dev = if std_dev.is_nan() {
-        "?".to_string()
-    } else {
-        hms_from_secs(std_dev)
-    };
-
-    serializer.serialize_str(&format!("{mean} (± {std_dev})"))
-}
-
-fn hms_from_secs(seconds: f64) -> String {
-    let secs = seconds as u64;
-    let hours = secs / 3600;
-    let secs = secs % 3600;
-    let mins = secs / 60;
-    let secs = secs % 60;
-    format!("{:02}:{:02}:{:02}", hours, mins, secs)
 }
 
 #[allow(clippy::borrowed_box)]
@@ -277,6 +241,14 @@ where
 {
     let error_string = error.to_string();
     serializer.serialize_str(error_string.as_str())
+}
+
+#[allow(clippy::trivially_copy_pass_by_ref)] // must adhere to serde's signature
+fn serialize_as_pct<S>(pct: &f64, serializer: S) -> Result<S::Ok, S::Error>
+where
+    S: Serializer,
+{
+    serializer.serialize_str(&format!("{:.2}%", pct * 100.))
 }
 
 /// Trait for information about the status of a task.
