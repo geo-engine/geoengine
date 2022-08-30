@@ -10,6 +10,9 @@ identifier = @{
     ASCII_ALPHA ~ (ASCII_ALPHANUMERIC | "_")*
 }
 
+// special identifier
+nodata = { ^"nodata" }
+
 function = {
     identifier ~ "(" ~ ")" |
     identifier ~ "(" ~ expression ~ ("," ~ expression)* ~ ")"
@@ -26,7 +29,7 @@ operator = _{
 
 
 expression = { term ~ (operator ~ term)* }
-term = _{ branch | number | function | identifier | "(" ~ expression ~ ")" }
+term = _{ branch | number | function | nodata | identifier | "(" ~ expression ~ ")" }
 
 boolean_comparator= _{
     equals | not_equals | smaller_equals | smaller | larger_equals | larger
@@ -44,7 +47,7 @@ boolean_operator = _{ and | or }
     or  = { "||" }
 
 boolean_expression = { boolean_term ~ (boolean_operator ~ boolean_term)* }
-boolean_term = _{ boolean_true | boolean_false | boolean_comparison | identifier_is_nodata | identifier | "(" ~ boolean_expression ~ ")" }
+boolean_term = _{ boolean_true | boolean_false | boolean_comparison | identifier_is_nodata | "(" ~ boolean_expression ~ ")" }
     boolean_true = { ^"true" }
     boolean_false = { ^"false" }
     boolean_comparison = { expression ~ boolean_comparator ~ expression }

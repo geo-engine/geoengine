@@ -380,7 +380,6 @@ fn bench_mock_source_operator_with_expression(bench_collector: &mut BenchmarkCol
             params: ExpressionParams {
                 expression: "A+B".to_string(),
                 output_type: RasterDataType::U8,
-                output_no_data_value: 0., //  cast no_data_valuee to f64
                 output_measurement: Some(Measurement::Unitless),
                 map_no_data: false,
             },
@@ -650,7 +649,6 @@ fn bench_gdal_source_operator_with_expression_tile_size(bench_collector: &mut Be
         params: ExpressionParams {
             expression: "A+B".to_string(),
             output_type: RasterDataType::U8,
-            output_no_data_value: 0., //  cast no_data_valuee to f64
             output_measurement: Some(Measurement::Unitless),
             map_no_data: false,
         },

@@ -1109,7 +1109,6 @@ mod tests {
             params: ExpressionParams {
                 expression: "A - B".to_string(),
                 output_type: RasterDataType::F64,
-                output_no_data_value: -9999.,
                 output_measurement: None,
                 map_no_data: false,
             },
