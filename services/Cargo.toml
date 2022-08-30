@@ -73,11 +73,11 @@ tracing-actix-web = "0.6"
 tracing-subscriber = { version = "0.3", features = ["local-time", "ansi"] }
 typetag = "0.2"
 url = { version = "2.2", features = ["serde"] }
+utoipa = { version = "1.1.0", features = ["actix_extras", "uuid"] }
+utoipa-swagger-ui = { version = "1.1.0", features = ["actix-web"] }
 uuid = { version = "1.1", features = ["serde", "v4", "v5"] } # must be compatible with `bb8-postgres`
 walkdir = "2.3"
 zip = "0.6"
-utoipa = { version = "1.1.0", features = ["actix_extras", "uuid"] }
-utoipa-swagger-ui = { version = "1.1.0", features = ["actix-web"] }
 
 [dev-dependencies]
 httptest = "0.15.2"
