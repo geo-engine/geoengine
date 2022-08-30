@@ -43,7 +43,6 @@ where
                     .handler(http::StatusCode::METHOD_NOT_ALLOWED, render_405),
             )
             .wrap(middleware::Logger::default())
-            .wrap(middleware::NormalizePath::trim())
             .configure(configure_extractors)
             .configure(handlers::datasets::init_dataset_routes::<C>)
             .configure(handlers::layers::init_layer_routes::<C>)
