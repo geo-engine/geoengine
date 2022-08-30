@@ -359,8 +359,9 @@ mod tests {
             status,
             serde_json::json!({
                 "status": "running",
-                "pct_complete": 0,
+                "pct_complete": "0.00%",
                 "info": (),
+                "time_estimate": "? (± ?)",
             })
         );
 
@@ -390,6 +391,7 @@ mod tests {
             serde_json::json!({
                 "status": "completed",
                 "info": "completed",
+                "timeTotal": "00:00:00",
             })
         );
     }
@@ -426,8 +428,9 @@ mod tests {
             status,
             serde_json::json!({
                 "status": "running",
-                "pct_complete": 0,
+                "pct_complete": "0.00%",
                 "info": (),
+                "time_estimate": "? (± ?)",
             })
         );
     }
@@ -461,6 +464,7 @@ mod tests {
                     "task_id": task_id,
                     "status": "completed",
                     "info": "completed",
+                    "timeTotal": "00:00:00",
                 }
             ])
         );
