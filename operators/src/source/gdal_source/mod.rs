@@ -215,8 +215,8 @@ impl GdalDatasetGeoTransform {
         /*
         The read window is relative to the transform of the gdal dataset. The `SpatialPartition` is oriented at axis of the spatial SRS. This usually causes this situation:
 
-        The gdal data is stored with negative pixel size. The "ur" coordinate of the `SpatialPartition` is neareest to the origin of the gdal raster data.
-        ur                      ul
+        The gdal data is stored with negative pixel size. The "ul" coordinate of the `SpatialPartition` is neareest to the origin of the gdal raster data.
+        ul                      ur
         +_______________________+
         |_|_ row 1              |
         | |_|_  row 2           |
@@ -230,7 +230,7 @@ impl GdalDatasetGeoTransform {
 
         The gdal data is stored with a positive pixel size. So the "ll" coordinate is nearest to the reading the raster data needs to starts at this anchor.
 
-        ur                      ul
+        ul                      ur
         +_______________________+
         |      _                |
         |    _|_|  row ...      |
