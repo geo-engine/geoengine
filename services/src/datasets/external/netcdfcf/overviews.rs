@@ -15,7 +15,7 @@ use gdal::{
 use gdal_sys::GDALGetRasterStatistics;
 use geoengine_datatypes::{
     error::BoxedResultExt,
-    primitives::{DateTimeParseFormat, TimeInterval},
+    primitives::{DateTimeParseFormat, TimeInstance, TimeInterval},
     util::gdal::ResamplingMethod,
 };
 use geoengine_operators::{
@@ -405,7 +405,6 @@ fn store_metadata(
     Ok(OverviewGeneration::Created)
 }
 
-#[allow(clippy::too_many_lines)] // TODO: refactor method
 fn index_subdataset<C: TaskContext>(
     conversion: &ConversionMetadata,
     time_coverage: &TimeCoverage,
@@ -467,74 +466,25 @@ fn index_subdataset<C: TaskContext>(
         let mut first_overview_dataset = None;
 
         for (time_idx, time_step) in time_steps.iter().enumerate() {
-            let time_str = time_step.as_rfc3339_with_millis();
-
-            let destination = conversion
-                .dataset_out_base
-                .join(entity.to_string())
-                .join(time_str + ".tiff");
-
-            let name = format!("/{}", conversion.array_path);
-            let view = format!("[{entity},{time_idx},:,:]",);
-
-            let mut options = vec![
-                "-array".to_string(),
-                format!("name={name},view={view}"),
-                "-of".to_string(),
-                "COG".to_string(),
-            ];
-            for raster_creation_option in &raster_creation_options {
-                options.push("-co".to_string());
-                options.push(format!(
-                    "{key}={value}",
-                    key = raster_creation_option.key,
-                    value = raster_creation_option.value
-                ));
-            }
-
-            let overview_dataset = multi_dim_translate(
-                &[&subdataset],
-                MultiDimTranslateDestination::path(&destination).context(error::GdalMd)?,
-                Some(MultiDimTranslateOptions::new(options).context(error::GdalMd)?),
-            )
-            .context(error::GdalMd)?;
-
-            // TODO: implement in `georust/gdal`
-            let min_max = (|| unsafe {
-                let c_band =
-                    gdal_sys::GDALGetRasterBand(overview_dataset.c_dataset(), 1 as std::ffi::c_int);
-                if c_band.is_null() {
-                    return None;
-                }
-
-                let mut min = 0.;
-                let mut max = 0.;
-                let rv = GDALGetRasterStatistics(
-                    c_band,
-                    std::ffi::c_int::from(false),
-                    std::ffi::c_int::from(true),
-                    std::ptr::addr_of_mut!(min),
-                    std::ptr::addr_of_mut!(max),
-                    std::ptr::null_mut(),
-                    std::ptr::null_mut(),
-                );
-
-                RasterBand::from_c_rasterband(&overview_dataset, c_band);
-
-                if rv != gdal_sys::CPLErr::CE_None {
-                    return None;
-                }
-
-                Some((min, max))
-            })();
+            let CreateSubdatasetTiffResult {
+                overview_dataset,
+                overview_destination,
+                min_max,
+            } = create_subdataset_tiff(
+                *time_step,
+                conversion,
+                entity,
+                &raster_creation_options,
+                &subdataset,
+                time_idx,
+            )?;
 
             if let Some((min, max)) = min_max {
                 value_min = value_min.min(min);
                 value_max = value_max.max(max);
             }
-
             if time_idx == 0 {
-                first_overview_dataset = Some((overview_dataset, destination));
+                first_overview_dataset = Some((overview_dataset, overview_destination));
             }
         }
 
@@ -571,6 +521,82 @@ fn index_subdataset<C: TaskContext>(
     }
 
     Ok(OverviewGeneration::Created)
+}
+
+struct CreateSubdatasetTiffResult {
+    overview_dataset: Dataset,
+    overview_destination: PathBuf,
+    min_max: Option<(f64, f64)>,
+}
+
+fn create_subdataset_tiff(
+    time_step: TimeInstance,
+    conversion: &ConversionMetadata,
+    entity: usize,
+    raster_creation_options: &Vec<RasterCreationOption>,
+    subdataset: &Dataset,
+    time_idx: usize,
+) -> Result<CreateSubdatasetTiffResult> {
+    let time_str = time_step.as_rfc3339_with_millis();
+    let destination = conversion
+        .dataset_out_base
+        .join(entity.to_string())
+        .join(time_str + ".tiff");
+    let name = format!("/{}", conversion.array_path);
+    let view = format!("[{entity},{time_idx},:,:]",);
+    let mut options = vec![
+        "-array".to_string(),
+        format!("name={name},view={view}"),
+        "-of".to_string(),
+        "COG".to_string(),
+    ];
+    for raster_creation_option in raster_creation_options {
+        options.push("-co".to_string());
+        options.push(format!(
+            "{key}={value}",
+            key = raster_creation_option.key,
+            value = raster_creation_option.value
+        ));
+    }
+    let overview_dataset = multi_dim_translate(
+        &[subdataset],
+        MultiDimTranslateDestination::path(&destination).context(error::GdalMd)?,
+        Some(MultiDimTranslateOptions::new(options).context(error::GdalMd)?),
+    )
+    .context(error::GdalMd)?;
+    let min_max = (|| unsafe {
+        let c_band =
+            gdal_sys::GDALGetRasterBand(overview_dataset.c_dataset(), 1 as std::ffi::c_int);
+        if c_band.is_null() {
+            return None;
+        }
+
+        let mut min = 0.;
+        let mut max = 0.;
+        let rv = GDALGetRasterStatistics(
+            c_band,
+            std::ffi::c_int::from(false),
+            std::ffi::c_int::from(true),
+            std::ptr::addr_of_mut!(min),
+            std::ptr::addr_of_mut!(max),
+            std::ptr::null_mut(),
+            std::ptr::null_mut(),
+        );
+
+        RasterBand::from_c_rasterband(&overview_dataset, c_band);
+
+        if rv != gdal_sys::CPLErr::CE_None {
+            return None;
+        }
+
+        Some((min, max))
+    })();
+
+    Ok(CreateSubdatasetTiffResult {
+        overview_dataset,
+        overview_destination: destination,
+        min_max,
+    })
 }
 
 struct CogRasterCreationOptions {
