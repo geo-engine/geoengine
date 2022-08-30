@@ -564,6 +564,7 @@ mod tests {
             serde_json::json!({
                 "status": "completed",
                 "info": null,
+                "timeTotal": "00:00:00",
             })
         );
 
@@ -619,6 +620,7 @@ mod tests {
             serde_json::json!({
                 "status": "completed",
                 "info": null,
+                "timeTotal": "00:00:00",
             })
         );
     }
