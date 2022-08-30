@@ -12,7 +12,7 @@ use crate::{
         users::{UserCredentials, UserDb, UserId, UserInfo, UserRegistration, UserSession},
     },
     projects::{CreateProject, ProjectDb, ProjectId, STRectangle},
-    server::{configure_extractors, render_404, render_405},
+    util::server::{configure_extractors, render_404, render_405},
     util::user_input::UserInput,
 };
 use actix_web::dev::ServiceResponse;

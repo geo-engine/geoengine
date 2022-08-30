@@ -12,6 +12,7 @@ pub mod config;
 pub mod operators;
 pub mod parsing;
 pub mod retry;
+pub mod server;
 pub mod tests;
 pub mod user_input;
 

@@ -10,7 +10,7 @@ use crate::projects::{
     CreateProject, Layer, LayerUpdate, ProjectDb, ProjectId, RasterSymbology, STRectangle,
     Symbology, UpdateProject,
 };
-use crate::server::{configure_extractors, render_404, render_405};
+use crate::util::server::{configure_extractors, render_404, render_405};
 use crate::util::user_input::UserInput;
 use crate::util::Identifier;
 use crate::workflows::registry::WorkflowRegistry;

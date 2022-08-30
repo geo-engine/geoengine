@@ -1,14 +1,14 @@
-use crate::apidoc::ApiDoc;
 use crate::error::{Error, Result};
 use crate::handlers;
 use crate::pro;
+use crate::pro::apidoc::ApiDoc;
 #[cfg(feature = "postgres")]
 use crate::pro::contexts::PostgresContext;
 use crate::pro::contexts::{ProContext, ProInMemoryContext};
 use crate::util::config::{self, get_config_element, Backend};
 
 use super::projects::ProProjectDb;
-use crate::server::{
+use crate::util::server::{
     calculate_max_blocking_threads_per_worker, configure_extractors, render_404, render_405,
 };
 use actix_files::Files;
@@ -79,7 +79,7 @@ where
         if version_api {
             app = app.route(
                 "/version",
-                web::get().to(crate::server::show_version_handler),
+                web::get().to(crate::util::server::show_version_handler),
             );
         }
         if let Some(static_files_dir) = static_files_dir.clone() {
