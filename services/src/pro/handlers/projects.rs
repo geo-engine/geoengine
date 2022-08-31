@@ -352,7 +352,7 @@ mod tests {
             .user_db_ref()
             .register(
                 UserRegistration {
-                    email: "foo2@bar.de".to_string(),
+                    email: "foo2@example.com".to_string(),
                     password: "secret1234".to_string(),
                     real_name: "Foo2 Bar".to_string(),
                 }
@@ -390,7 +390,7 @@ mod tests {
             .user_db_ref()
             .register(
                 UserRegistration {
-                    email: "foo2@bar.de".to_string(),
+                    email: "foo2@example.com".to_string(),
                     password: "secret1234".to_string(),
                     real_name: "Foo2 Bar".to_string(),
                 }
@@ -431,7 +431,7 @@ mod tests {
             .user_db_ref()
             .register(
                 UserRegistration {
-                    email: "foo2@bar.de".to_string(),
+                    email: "foo2@example.com".to_string(),
                     password: "secret1234".to_string(),
                     real_name: "Foo2 Bar".to_string(),
                 }
@@ -464,7 +464,7 @@ mod tests {
         let target_user_session = ctx
             .user_db_ref()
             .login(UserCredentials {
-                email: "foo2@bar.de".to_string(),
+                email: "foo2@example.com".to_string(),
                 password: "secret1234".to_string(),
             })
             .await
@@ -487,7 +487,7 @@ mod tests {
             .user_db_ref()
             .register(
                 UserRegistration {
-                    email: "foo2@bar.de".to_string(),
+                    email: "foo2@example.com".to_string(),
                     password: "secret1234".to_string(),
                     real_name: "Foo2 Bar".to_string(),
                 }
@@ -533,7 +533,7 @@ mod tests {
             .user_db_ref()
             .register(
                 UserRegistration {
-                    email: "foo2@bar.de".to_string(),
+                    email: "foo2@example.com".to_string(),
                     password: "secret1234".to_string(),
                     real_name: "Foo2 Bar".to_string(),
                 }
@@ -577,7 +577,7 @@ mod tests {
             .user_db_ref()
             .register(
                 UserRegistration {
-                    email: "foo2@bar.de".to_string(),
+                    email: "foo2@example.com".to_string(),
                     password: "secret1234".to_string(),
                     real_name: "Foo2 Bar".to_string(),
                 }

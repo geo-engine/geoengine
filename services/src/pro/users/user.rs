@@ -8,8 +8,13 @@ use crate::util::user_input::UserInput;
 use geoengine_datatypes::identifier;
 use geoengine_datatypes::util::Identifier;
 
-#[derive(Debug, PartialEq, Eq, Serialize, Deserialize, Clone, Hash)]
+#[derive(Debug, PartialEq, Eq, Serialize, Deserialize, Clone, Hash, utoipa::Component)]
 #[serde(rename_all = "camelCase")]
+#[component(example = json!({
+    "email": "foo@example.com",
+    "password": "secret123",
+    "realName": "Foo Bar"
+}))]
 pub struct UserRegistration {
     pub email: String,
     pub password: String,
@@ -44,7 +49,11 @@ impl UserInput for UserRegistration {
     }
 }
 
-#[derive(Debug, PartialEq, Eq, Serialize, Deserialize, Clone, Hash)]
+#[derive(Debug, PartialEq, Eq, Serialize, Deserialize, Clone, Hash, utoipa::Component)]
+#[component(example = json!({
+    "email": "foo@example.com",
+    "password": "secret123",
+}))]
 pub struct UserCredentials {
     pub email: String,
     pub password: String,

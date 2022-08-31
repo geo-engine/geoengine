@@ -23,7 +23,7 @@ pub async fn create_session_helper<C: ProContext>(ctx: &C) -> UserSession {
     ctx.user_db_ref()
         .register(
             UserRegistration {
-                email: "foo@bar.de".to_string(),
+                email: "foo@example.com".to_string(),
                 password: "secret123".to_string(),
                 real_name: "Foo Bar".to_string(),
             }
@@ -35,7 +35,7 @@ pub async fn create_session_helper<C: ProContext>(ctx: &C) -> UserSession {
 
     ctx.user_db_ref()
         .login(UserCredentials {
-            email: "foo@bar.de".to_string(),
+            email: "foo@example.com".to_string(),
             password: "secret123".to_string(),
         })
         .await

@@ -149,7 +149,7 @@ mod tests {
         let user_db = HashMapUserDb::default();
 
         let user_registration = UserRegistration {
-            email: "foo@bar.de".into(),
+            email: "foo@example.com".into(),
             password: "secret123".into(),
             real_name: "Foo Bar".into(),
         }
@@ -164,7 +164,7 @@ mod tests {
         let user_db = HashMapUserDb::default();
 
         let user_registration = UserRegistration {
-            email: "foo@bar.de".into(),
+            email: "foo@example.com".into(),
             password: "secret123".into(),
             real_name: "Foo Bar".into(),
         }
@@ -174,7 +174,7 @@ mod tests {
         assert!(user_db.register(user_registration).await.is_ok());
 
         let user_credentials = UserCredentials {
-            email: "foo@bar.de".into(),
+            email: "foo@example.com".into(),
             password: "secret123".into(),
         };
 
@@ -186,7 +186,7 @@ mod tests {
         let user_db = HashMapUserDb::default();
 
         let user_registration = UserRegistration {
-            email: "foo@bar.de".into(),
+            email: "foo@example.com".into(),
             password: "secret123".into(),
             real_name: "Foo Bar".into(),
         }
@@ -196,7 +196,7 @@ mod tests {
         assert!(user_db.register(user_registration).await.is_ok());
 
         let user_credentials = UserCredentials {
-            email: "foo@bar.de".into(),
+            email: "foo@example.com".into(),
             password: "secret123".into(),
         };
 
@@ -210,7 +210,7 @@ mod tests {
         let user_db = HashMapUserDb::default();
 
         let user_registration = UserRegistration {
-            email: "foo@bar.de".into(),
+            email: "foo@example.com".into(),
             password: "secret123".into(),
             real_name: "Foo Bar".into(),
         }
@@ -220,7 +220,7 @@ mod tests {
         assert!(user_db.register(user_registration).await.is_ok());
 
         let user_credentials = UserCredentials {
-            email: "foo@bar.de".into(),
+            email: "foo@example.com".into(),
             password: "secret123".into(),
         };
 

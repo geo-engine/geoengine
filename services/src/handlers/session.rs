@@ -62,7 +62,7 @@ async fn anonymous_handler<C: SimpleContext>(ctx: web::Data<C>) -> Result<impl R
 ///   "id": "29fb1e93-7b6b-466f-952a-fdde87736c62",
 ///   "user": {
 ///     "id": "f33429a5-d207-4e59-827d-fc48f9630c9c",
-///     "email": "foo@bar.de",
+///     "email": "foo@example.com",
 ///     "realName": "Foo Bar"
 ///   },
 ///   "created": "2021-04-18T17:20:44.190720500Z",

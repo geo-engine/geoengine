@@ -761,7 +761,7 @@ mod tests {
             let session = ctx
                 .user_db_ref()
                 .login(UserCredentials {
-                    email: "foo@bar.de".into(),
+                    email: "foo@example.com".into(),
                     password: "secret123".into(),
                 })
                 .await
@@ -786,7 +786,7 @@ mod tests {
 
     async fn set_session(ctx: &PostgresContext<NoTls>, projects: &[ProjectListing]) {
         let credentials = UserCredentials {
-            email: "foo@bar.de".into(),
+            email: "foo@example.com".into(),
             password: "secret123".into(),
         };
 
@@ -1007,7 +1007,7 @@ mod tests {
         let db = ctx.user_db_ref();
 
         let user_registration = UserRegistration {
-            email: "foo@bar.de".into(),
+            email: "foo@example.com".into(),
             password: "secret123".into(),
             real_name: "Foo Bar".into(),
         }
@@ -1017,7 +1017,7 @@ mod tests {
         let user_id = db.register(user_registration).await.unwrap();
 
         let credentials = UserCredentials {
-            email: "foo@bar.de".into(),
+            email: "foo@example.com".into(),
             password: "secret123".into(),
         };
 

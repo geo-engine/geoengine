@@ -34,30 +34,19 @@ where
         .service(web::resource("/session/view").route(web::post().to(session_view_handler::<C>)));
 }
 
-/// Registers a user by providing [`UserRegistration`] parameters.
-///
-/// # Example
-///
-/// ```text
-/// POST /user
-///
-/// {
-///   "email": "foo@bar.de",
-///   "password": "secret123",
-///   "realName": "Foo Bar"
-/// }
-/// ```
-/// Response:
-/// ```text
-/// {
-///   "id": "5b4466d2-8bab-4ed8-a182-722af3c80958"
-/// }
-/// ```
-///
-/// # Errors
-///
-/// This call fails if the [`UserRegistration`] is invalid
-/// or an account with the given e-mail already exists.
+/// Registers a user.
+#[utoipa::path(
+    tag = "Session",
+    post,
+    path = "/user",
+    request_body = UserRegistration,
+    responses(
+        (status = 200, description = "The id of the created user", body = UserId,
+            example = json!({
+                "id": "5b4466d2-8bab-4ed8-a182-722af3c80958"
+            })
+        )
+    ))]
 pub(crate) async fn register_user_handler<C: ProContext>(
     user: web::Json<UserRegistration>,
     ctx: web::Data<C>,
@@ -72,37 +61,32 @@ pub(crate) async fn register_user_handler<C: ProContext>(
     Ok(web::Json(IdResponse::from(id)))
 }
 
-/// Creates a session by providing [`UserCredentials`].
-///
-/// # Example
-///
-/// ```text
-/// POST /login
-///
-/// {
-///   "email": "foo@bar.de",
-///   "password": "secret123"
-/// }
-/// ```
-/// Response:
-/// ```text
-/// {
-///   "id": "208fa24e-7a92-4f57-a3fe-d1177d9f18ad",
-///   "user": {
-///     "id": "5b4466d2-8bab-4ed8-a182-722af3c80958",
-///     "email": "foo@bar.de",
-///     "realName": "Foo Bar"
-///   },
-///   "created": "2021-04-26T13:47:10.579724800Z",
-///   "validUntil": "2021-04-26T14:47:10.579775400Z",
-///   "project": null,
-///   "view": null
-/// }
-/// ```
-///
-/// # Errors
-///
-/// This call fails if the [`UserCredentials`] are invalid.
+/// Creates a session by providing user credentials.
+#[utoipa::path(
+tag = "Session",
+post,
+path = "/login",
+request_body = UserCredentials,
+responses(
+    (status = 200, description = "The created session", body = UserSession,
+        example = json!({
+            "id": "208fa24e-7a92-4f57-a3fe-d1177d9f18ad",
+            "user": {
+                "id": "5b4466d2-8bab-4ed8-a182-722af3c80958",
+                "email": "foo@example.com",
+                "realName": "Foo Bar"
+            },
+            "created": "2021-04-26T13:47:10.579724800Z",
+            "validUntil": "2021-04-26T14:47:10.579775400Z",
+            "project": null,
+            "view": null,
+            "roles": [
+                "fa5be363-bc0d-4bfa-85c7-ebb5cd9a8783",
+                "4e8081b6-8aa6-4275-af0c-2fa2da557d28"
+            ]
+        })
+    )
+))]
 pub(crate) async fn login_handler<C: ProContext>(
     user: web::Json<UserCredentials>,
     ctx: web::Data<C>,
@@ -117,17 +101,17 @@ pub(crate) async fn login_handler<C: ProContext>(
 }
 
 /// Ends a session.
-///
-/// # Example
-///
-/// ```text
-/// POST /logout
-/// Authorization: Bearer fc9b5dc2-a1eb-400f-aeed-a7845d9935c9
-/// ```
-///
-/// # Errors
-///
-/// This call fails if the session is invalid.
+#[utoipa::path(
+    tag = "Session",
+    post,
+    path = "/logout",
+    responses(
+        (status = 200, description = "The Session was deleted.")
+    ),
+    security(
+        ("session_token" = [])
+    )
+)]
 pub(crate) async fn logout_handler<C: ProContext>(
     session: UserSession,
     ctx: web::Data<C>,
@@ -137,27 +121,31 @@ pub(crate) async fn logout_handler<C: ProContext>(
 }
 
 /// Creates session for anonymous user.
-///
-/// # Example
-///
-/// ```text
-/// POST /anonymous
-/// ```
-/// Response:
-/// ```text
-/// {
-///   "id": "2fee8652-3192-4d3e-8adc-14257064224a",
-///   "user": {
-///     "id": "744b83ff-2c5b-401a-b4bf-2ba7213ad5d5",
-///     "email": null,
-///     "realName": null
-///   },
-///   "created": "2021-04-18T16:54:55.728758Z",
-///   "validUntil": "2021-04-18T17:54:55.730196200Z",
-///   "project": null,
-///   "view": null
-/// }
-/// ```
+#[utoipa::path(
+    tag = "Session",
+    post,
+    path = "/anonymous",
+    responses(
+        (status = 200, description = "The created session", body = UserSession,
+            example = json!({
+                "id": "208fa24e-7a92-4f57-a3fe-d1177d9f18ad",
+                "user": {
+                    "id": "5b4466d2-8bab-4ed8-a182-722af3c80958",
+                    "email": null,
+                    "realName": null
+                },
+                "created": "2021-04-26T13:47:10.579724800Z",
+                "validUntil": "2021-04-26T14:47:10.579775400Z",
+                "project": null,
+                "view": null,
+                "roles": [
+                    "8a27e61f-cc4d-4d0b-ae8c-4f1c91d07f5a",
+                    "fd8e87bf-515c-4f36-8da6-1a53702ff102"
+                ]
+            })
+        )
+    )
+)]
 pub(crate) async fn anonymous_handler<C: ProContext>(ctx: web::Data<C>) -> Result<impl Responder> {
     if !config::get_config_element::<crate::util::config::Session>()?.anonymous_access {
         return Err(error::Error::Authorization {
@@ -277,7 +265,7 @@ mod tests {
     async fn register() {
         let ctx = ProInMemoryContext::test_default();
 
-        let res = register_test_helper(ctx, Method::POST, "foo@bar.de").await;
+        let res = register_test_helper(ctx, Method::POST, "foo@example.com").await;
 
         assert_eq!(res.status(), 200);
 
@@ -303,10 +291,10 @@ mod tests {
     async fn register_duplicate_email() {
         let ctx = ProInMemoryContext::test_default();
 
-        register_test_helper(ctx.clone(), Method::POST, "foo@bar.de").await;
+        register_test_helper(ctx.clone(), Method::POST, "foo@example.com").await;
 
         // register user
-        let res = register_test_helper(ctx, Method::POST, "foo@bar.de").await;
+        let res = register_test_helper(ctx, Method::POST, "foo@example.com").await;
 
         ErrorResponse::assert(
             res,
@@ -322,7 +310,7 @@ mod tests {
         let ctx = ProInMemoryContext::test_default();
 
         check_allowed_http_methods(
-            |method| register_test_helper(ctx.clone(), method, "foo@bar.de"),
+            |method| register_test_helper(ctx.clone(), method, "foo@example.com"),
             &[Method::POST],
         )
         .await;
@@ -398,7 +386,7 @@ mod tests {
 
         let user = Validated {
             user_input: UserRegistration {
-                email: "foo@bar.de".to_string(),
+                email: "foo@example.com".to_string(),
                 password: "secret123".to_string(),
                 real_name: " Foo Bar".to_string(),
             },
@@ -407,7 +395,7 @@ mod tests {
         ctx.user_db_ref().register(user).await.unwrap();
 
         let credentials = UserCredentials {
-            email: "foo@bar.de".to_string(),
+            email: "foo@example.com".to_string(),
             password: password.to_string(),
         };
 
@@ -476,7 +464,7 @@ mod tests {
 
         let user = Validated {
             user_input: UserRegistration {
-                email: "foo@bar.de".to_string(),
+                email: "foo@example.com".to_string(),
                 password: "secret123".to_string(),
                 real_name: " Foo Bar".to_string(),
             },
@@ -485,7 +473,7 @@ mod tests {
         ctx.user_db_ref().register(user).await.unwrap();
 
         let credentials = json!({
-            "email": "foo@bar.de",
+            "email": "foo@example.com",
         });
 
         let req = test::TestRequest::post()
@@ -498,7 +486,7 @@ mod tests {
             res,
             400,
             "BodyDeserializeError",
-            "missing field `password` at line 1 column 22",
+            "missing field `password` at line 1 column 27",
         )
         .await;
     }
@@ -508,7 +496,7 @@ mod tests {
 
         let user = Validated {
             user_input: UserRegistration {
-                email: "foo@bar.de".to_string(),
+                email: "foo@example.com".to_string(),
                 password: "secret123".to_string(),
                 real_name: " Foo Bar".to_string(),
             },
@@ -517,7 +505,7 @@ mod tests {
         ctx.user_db_ref().register(user).await.unwrap();
 
         let credentials = UserCredentials {
-            email: "foo@bar.de".to_string(),
+            email: "foo@example.com".to_string(),
             password: "secret123".to_string(),
         };
 
@@ -699,7 +687,7 @@ mod tests {
         let ctx = ProInMemoryContext::test_default();
 
         let user_reg = UserRegistration {
-            email: "foo@bar.de".to_owned(),
+            email: "foo@example.com".to_owned(),
             password: "secret123".to_owned(),
             real_name: "Foo Bar".to_owned(),
         };

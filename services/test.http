@@ -2,7 +2,7 @@ POST http://localhost:3030/user
 Content-Type: application/json
 
 {
-  "email": "foo@bar.de",
+  "email": "foo@example.com",
   "password": "secret123",
   "realName": "Foo Bar"
 }
@@ -13,7 +13,7 @@ POST http://localhost:3030/login
 Content-Type: application/json
 
 {
-  "email": "foo@bar.de",
+  "email": "foo@example.com",
   "password": "secret123"
 }
 
@@ -37,7 +37,7 @@ Authorization: Bearer c04e0cd9-e7a9-476c-b201-521db83da0ce
 Content-Type: application/json
 
 {
-  "email": "foo@bar.de",
+  "email": "foo@example.com",
   "password": "secret123"
 }
 
@@ -48,7 +48,7 @@ POST http://localhost:3030/login
 Content-Type: application/json
 
 {
-  "email": "foo@bar.de",
+  "email": "foo@example.com",
   "password": "wrong"
 }
 

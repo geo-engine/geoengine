@@ -1,8 +1,9 @@
-use crate::contexts::{SessionId, SimpleSession};
+use crate::contexts::SessionId;
 use crate::datasets::listing::{Provenance, ProvenanceOutput};
 use crate::datasets::upload::UploadId;
 use crate::handlers;
 use crate::handlers::workflows::{RasterDatasetFromWorkflow, RasterDatasetFromWorkflowResult};
+use crate::pro;
 use crate::projects::{ProjectId, STRectangle};
 use crate::util::server::VersionInfo;
 use crate::util::IdResponse;
@@ -10,9 +11,9 @@ use crate::workflows::workflow::{Workflow, WorkflowId};
 use geoengine_datatypes::collections::VectorDataType;
 use geoengine_datatypes::dataset::{DataId, DataProviderId, DatasetId, ExternalDataId, LayerId};
 use geoengine_datatypes::primitives::{
-    BoundingBox2D, ClassificationMeasurement, ContinuousMeasurement, Coordinate2D, Measurement,
-    PlotQueryRectangle, RasterQueryRectangle, SpatialPartition2D, SpatialResolution, TimeInstance,
-    TimeInterval, VectorQueryRectangle,
+    BoundingBox2D, ClassificationMeasurement, ContinuousMeasurement, Coordinate2D, DateTime,
+    Measurement, PlotQueryRectangle, RasterQueryRectangle, SpatialPartition2D, SpatialResolution,
+    TimeInstance, TimeInterval, VectorQueryRectangle,
 };
 use geoengine_datatypes::raster::RasterDataType;
 use geoengine_datatypes::spatial_reference::{
@@ -25,19 +26,29 @@ use geoengine_operators::engine::{
 use utoipa::openapi::security::{HttpAuthScheme, HttpBuilder, SecurityScheme};
 use utoipa::{Modify, OpenApi};
 
+use super::datasets::RoleId;
+use super::users::{UserCredentials, UserId, UserInfo, UserRegistration, UserSession};
+
 #[derive(OpenApi)]
 #[openapi(
     handlers(
         crate::util::server::show_version_handler,
-        handlers::session::anonymous_handler,
         handlers::workflows::register_workflow_handler,
         handlers::workflows::load_workflow_handler,
         handlers::workflows::get_workflow_metadata_handler,
         handlers::workflows::get_workflow_provenance_handler,
         handlers::workflows::dataset_from_workflow_handler,
+        pro::handlers::users::register_user_handler,
+        pro::handlers::users::login_handler,
+        pro::handlers::users::logout_handler,
+        pro::handlers::users::anonymous_handler,
     ),
     components(
-        SimpleSession,
+        UserSession,
+        UserCredentials,
+        UserRegistration,
+        DateTime,
+        UserInfo,
 
         DataId,
         DataProviderId,
@@ -46,8 +57,10 @@ use utoipa::{Modify, OpenApi};
         IdResponse<WorkflowId>,
         LayerId,
         ProjectId,
+        RoleId,
         SessionId,
         UploadId,
+        UserId,
         WorkflowId,
 
         TimeInstance,
