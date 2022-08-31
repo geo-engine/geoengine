@@ -208,7 +208,7 @@ mod tests {
 
         let typed_processor = match query_processor {
             TypedRasterQueryProcessor::F32(rqp) => rqp,
-            _ => panic!("expected TypedRasterQueryProcessor::U8"),
+            _ => panic!("expected TypedRasterQueryProcessor::F32"),
         };
 
         let stream = typed_processor
