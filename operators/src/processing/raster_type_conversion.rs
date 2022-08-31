@@ -19,6 +19,8 @@ pub struct RasterTypeConversionParams {
     output_data_type: RasterDataType,
 }
 
+/// This operator converts the type of raster data into another type. This may cause precision loss as e.g. `3.1_f32` converted to `u8` will result in `3_u8`.
+/// In case the value range is to small the operator will clip the values at the bounds of the data range. An example is this: The `u32` value `10000_u32` is converted to `u8`, which has a value range of 0..256. The result is `255_u8` since this is the highest value a `u8` can represent.
 pub type RasterTypeConversion = Operator<RasterTypeConversionParams, SingleRasterSource>;
 
 pub struct InitializedRasterTypeConversionOperator {
