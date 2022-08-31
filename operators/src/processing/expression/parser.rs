@@ -31,7 +31,6 @@ struct _ExpressionParser;
 pub struct ExpressionParser {
     parameters: Vec<Parameter>,
     numeric_parameters: HashSet<Identifier>,
-    boolean_parameters: HashSet<Identifier>,
     variables: Rc<RefCell<Vec<Identifier>>>,
     functions: Rc<RefCell<Vec<AstFunction>>>,
 }
@@ -61,19 +60,16 @@ impl ExpressionParser {
             }
         };
 
-        let mut numeric_parameters = HashSet::with_capacity(parameters.len() / 2);
-        let mut boolean_parameters = HashSet::with_capacity(parameters.len() / 2);
+        let mut numeric_parameters = HashSet::with_capacity(parameters.len());
         for parameter in parameters {
             match parameter {
                 Parameter::Number(name) => numeric_parameters.insert(name.clone()),
-                Parameter::Boolean(name) => boolean_parameters.insert(name.clone()),
             };
         }
 
         Ok(Self {
             parameters: parameters.to_vec(),
             numeric_parameters,
-            boolean_parameters,
             variables: Rc::new(RefCell::new(Vec::new())),
             functions: Rc::new(RefCell::new(vec![])),
         })
@@ -120,6 +116,7 @@ impl ExpressionParser {
                     })
                 }
             }
+            Rule::nodata => Ok(AstNode::NoData),
             Rule::function => self.resolve_function(pair.into_inner()),
             Rule::branch => {
                 // pairs are boolean -> expression
@@ -285,35 +282,22 @@ impl ExpressionParser {
 
     fn resolve_boolean_expression_rule(&self, pair: Pair<Rule>) -> Result<BooleanExpression> {
         match pair.as_rule() {
-            Rule::identifier => {
-                let identifier = pair.as_str().into();
-                if self.boolean_parameters.contains(&identifier) {
-                    Ok(BooleanExpression::Variable(identifier))
-                } else {
-                    Err(ExpressionError::UnknownBooleanVariable {
-                        variable: identifier.to_string(),
-                    })
-                }
-            }
             Rule::identifier_is_nodata => {
-                // convert `A IS NODATA` to the variable `A_is_nodata`
+                // convert `A IS NODATA` to the check for `A.is_none()`
 
                 let mut pairs = pair.into_inner();
 
                 let identifier = pairs
                     .next()
                     .ok_or(ExpressionError::MissingIdentifier)?
-                    .as_str();
+                    .as_str()
+                    .into();
 
-                let new_identifier = format!("{}_is_nodata", identifier).into();
-
-                if self.boolean_parameters.contains(&new_identifier) {
-                    Ok(BooleanExpression::Variable(new_identifier))
-                } else {
-                    Err(ExpressionError::UnknownBooleanVariable {
-                        variable: identifier.to_string(),
-                    })
-                }
+                Ok(BooleanExpression::Comparison {
+                    left: Box::new(AstNode::Variable(identifier)),
+                    op: BooleanComparator::Equal,
+                    right: Box::new(AstNode::NoData),
+                })
             }
             Rule::boolean_true => Ok(BooleanExpression::Constant(true)),
             Rule::boolean_false => Ok(BooleanExpression::Constant(false)),
@@ -386,19 +370,14 @@ impl ExpressionParser {
 
 #[cfg(test)]
 mod tests {
-    use quote::{quote, ToTokens};
-
     use super::*;
 
-    fn parse(name: &str, parameters: &[&str], boolean_parameters: &[&str], input: &str) -> String {
+    use quote::{quote, ToTokens};
+
+    fn parse(name: &str, parameters: &[&str], input: &str) -> String {
         let parameters: Vec<Parameter> = parameters
             .iter()
             .map(|&p| Parameter::Number(Identifier::from(p)))
-            .chain(
-                boolean_parameters
-                    .iter()
-                    .map(|&p| Parameter::Boolean(Identifier::from(p))),
-            )
             .collect();
 
         let parser = ExpressionParser::new(&parameters).unwrap();
@@ -407,73 +386,104 @@ mod tests {
         ast.into_token_stream().to_string()
     }
 
+    fn prelude() -> impl ToTokens {
+        quote! {
+            #[inline]
+            fn apply(a: Option<f64>, b: Option<f64>, f: fn(f64, f64) -> f64) -> Option<f64> {
+                match (a, b) {
+                    (Some(a), Some(b)) => Some(f(a, b)),
+                    _ => None,
+                }
+            }
+        }
+    }
+
     #[test]
     fn simple() {
+        let prelude = prelude();
+
         assert_eq!(
-            parse("expression", &[], &[], "1"),
+            parse("expression", &[], "1"),
             quote! {
+                #prelude
+
                 #[no_mangle]
-                pub extern "C" fn expression() -> f64 {
-                    1f64
+                pub extern "Rust" fn expression() -> Option<f64> {
+                    Some(1f64)
                 }
             }
             .to_string()
         );
 
         assert_eq!(
-            parse("foo", &[], &[], "1 + 2"),
+            parse("foo", &[], "1 + 2"),
             quote! {
+                #prelude
+
                 #[no_mangle]
-                pub extern "C" fn foo() -> f64 {
-                    (1f64 + 2f64)
+                pub extern "Rust" fn foo() -> Option<f64> {
+                    apply(Some(1f64), Some(2f64), std::ops::Add::add)
                 }
             }
             .to_string()
         );
 
         assert_eq!(
-            parse("bar", &[], &[], "-1 + 2"),
+            parse("bar", &[], "-1 + 2"),
             quote! {
+                #prelude
+
                 #[no_mangle]
-                pub extern "C" fn bar() -> f64 {
-                    (-1f64 + 2f64)
+                pub extern "Rust" fn bar() -> Option<f64> {
+                    apply(Some(-1f64), Some(2f64), std::ops::Add::add)
                 }
             }
             .to_string()
         );
 
         assert_eq!(
-            parse("baz", &[], &[], "1 - -2"),
+            parse("baz", &[], "1 - -2"),
             quote! {
+                #prelude
+
                 #[no_mangle]
-                pub extern "C" fn baz() -> f64 {
-                    (1f64 - -2f64)
+                pub extern "Rust" fn baz() -> Option<f64> {
+                    apply(Some(1f64), Some(-2f64), std::ops::Sub::sub)
                 }
             }
             .to_string()
         );
 
         assert_eq!(
-            parse("expression", &[], &[], "1 + 2 / 3"),
+            parse("expression", &[], "1 + 2 / 3"),
             quote! {
+                #prelude
+
                 #[no_mangle]
-                pub extern "C" fn expression() -> f64 {
-                    (1f64 + (2f64 / 3f64))
+                pub extern "Rust" fn expression() -> Option<f64> {
+                    apply(
+                        Some(1f64),
+                        apply(Some(2f64), Some(3f64), std::ops::Div::div),
+                        std::ops::Add::add
+                    )
                 }
             }
             .to_string()
         );
 
         assert_eq!(
-            parse("expression", &[], &[], "2**4"),
+            parse("expression", &[], "2**4"),
             quote! {
                 #[inline]
-                fn import_pow__2(a: f64, b: f64) -> f64 {
-                    f64::powf(a, b)
+                fn import_pow__2(a: Option<f64>, b: Option<f64>) -> Option<f64> {
+                    apply(a, b, f64::powf)
                 }
+
+                #prelude
+
                 #[no_mangle]
-                pub extern "C" fn expression() -> f64 {
-                    import_pow__2(2f64 , 4f64)
+                pub extern "Rust" fn expression() -> Option<f64> {
+                    import_pow__2(Some(2f64) , Some(4f64))
                 }
             }
             .to_string()
@@ -482,23 +492,33 @@ mod tests {
 
     #[test]
     fn params() {
+        let prelude = prelude();
+
         assert_eq!(
-            parse("expression", &["a"], &[], "a + 1"),
+            parse("expression", &["a"], "a + 1"),
             quote! {
+                #prelude
+
                 #[no_mangle]
-                pub extern "C" fn expression(a: f64) -> f64 {
-                    (a + 1f64)
+                pub extern "Rust" fn expression(a: Option<f64>) -> Option<f64> {
+                    apply(a, Some(1f64), std::ops::Add::add)
                 }
             }
             .to_string()
         );
 
         assert_eq!(
-            parse("ndvi", &["a", "b"], &[], "(a-b) / (a+b)"),
+            parse("ndvi", &["a", "b"], "(a-b) / (a+b)"),
             quote! {
+                #prelude
+
                 #[no_mangle]
-                pub extern "C" fn ndvi(a: f64, b: f64) -> f64 {
-                    ((a - b) / (a + b))
+                pub extern "Rust" fn ndvi(a: Option<f64>, b: Option<f64>) -> Option<f64> {
+                    apply(
+                        apply(a, b, std::ops::Sub::sub),
+                        apply(a, b, std::ops::Add::add),
+                        std::ops::Div::div
+                    )
                 }
             }
             .to_string()
@@ -508,92 +528,106 @@ mod tests {
     #[test]
     #[allow(clippy::too_many_lines)]
     fn functions() {
+        let prelude = prelude();
+
         assert_eq!(
-            parse("expression", &["a"], &[], "max(a, 0)"),
+            parse("expression", &["a"], "max(a, 0)"),
             quote! {
                 #[inline]
-                fn import_max__2(a: f64, b: f64) -> f64 {
-                    f64::max(a, b)
+                fn import_max__2(a: Option<f64>, b: Option<f64>) -> Option<f64> {
+                    apply(a, b, f64::max)
                 }
+
+                #prelude
+
                 #[no_mangle]
-                pub extern "C" fn expression(a: f64) -> f64 {
-                    import_max__2(a, 0f64)
+                pub extern "Rust" fn expression(a: Option<f64>) -> Option<f64> {
+                    import_max__2(a, Some(0f64))
                 }
             }
             .to_string()
         );
 
         assert_eq!(
-            parse("expression", &["a"], &[], "pow(sqrt(a), 2)"),
+            parse("expression", &["a"], "pow(sqrt(a), 2)"),
             quote! {
                 #[inline]
-                fn import_pow__2(a: f64, b: f64) -> f64 {
-                    f64::powf(a, b)
+                fn import_pow__2(a: Option<f64>, b: Option<f64>) -> Option<f64> {
+                    apply(a, b, f64::powf)
                 }
                 #[inline]
-                fn import_sqrt__1(a: f64) -> f64 {
-                    f64::sqrt(a)
+                fn import_sqrt__1(a: Option<f64>) -> Option<f64> {
+                    a.map(f64::sqrt)
                 }
+
+                #prelude
+
                 #[no_mangle]
-                pub extern "C" fn expression(a: f64) -> f64 {
-                    import_pow__2(import_sqrt__1(a), 2f64)
+                pub extern "Rust" fn expression(a: Option<f64>) -> Option<f64> {
+                    import_pow__2(import_sqrt__1(a), Some(2f64))
                 }
             }
             .to_string()
         );
 
         assert_eq!(
-            parse("waves", &[], &[], "cos(sin(tan(acos(asin(atan(1))))))"),
+            parse("waves", &[],  "cos(sin(tan(acos(asin(atan(1))))))"),
             quote! {
                 #[inline]
-                fn import_acos__1(a: f64) -> f64 {
-                    f64::acos(a)
+                fn import_acos__1(a: Option<f64>) -> Option<f64> {
+                    a.map(f64::acos)
                 }
                 #[inline]
-                fn import_asin__1(a: f64) -> f64 {
-                    f64::asin(a)
+                fn import_asin__1(a: Option<f64>) -> Option<f64> {
+                    a.map(f64::asin)
                 }
                 #[inline]
-                fn import_atan__1(a: f64) -> f64 {
-                    f64::atan(a)
+                fn import_atan__1(a: Option<f64>) -> Option<f64> {
+                    a.map(f64::atan)
                 }
                 #[inline]
-                fn import_cos__1(a: f64) -> f64 {
-                    f64::cos(a)
+                fn import_cos__1(a: Option<f64>) -> Option<f64> {
+                    a.map(f64::cos)
                 }
                 #[inline]
-                fn import_sin__1(a: f64) -> f64 {
-                    f64::sin(a)
+                fn import_sin__1(a: Option<f64>) -> Option<f64> {
+                    a.map(f64::sin)
                 }
                 #[inline]
-                fn import_tan__1(a: f64) -> f64 {
-                    f64::tan(a)
+                fn import_tan__1(a: Option<f64>) -> Option<f64> {
+                    a.map(f64::tan)
                 }
+
+                #prelude
+
                 #[no_mangle]
-                pub extern "C" fn waves() -> f64 {
-                    import_cos__1(import_sin__1(import_tan__1(import_acos__1(import_asin__1(import_atan__1(1f64))))))
+                pub extern "Rust" fn waves() -> Option<f64> {
+                    import_cos__1(import_sin__1(import_tan__1(import_acos__1(import_asin__1(import_atan__1(Some(1f64)))))))
                 }
             }
             .to_string()
         );
 
         assert_eq!(
-            parse("non_linear", &[], &[], "ln(log10(pi()))"),
+            parse("non_linear", &[], "ln(log10(pi()))"),
             quote! {
                 #[inline]
-                fn import_ln__1(a: f64) -> f64 {
-                    f64::ln(a)
+                fn import_ln__1(a: Option<f64>) -> Option<f64> {
+                    a.map(f64::ln)
                 }
                 #[inline]
-                fn import_log10__1(a: f64) -> f64 {
-                    f64::log10(a)
+                fn import_log10__1(a: Option<f64>) -> Option<f64> {
+                    a.map(f64::log10)
                 }
                 #[inline]
-                fn import_pi__0() -> f64 {
-                    std::f64::consts::PI
+                fn import_pi__0() -> Option<f64> {
+                    Some(std::f64::consts::PI)
                 }
+
+                #prelude
+
                 #[no_mangle]
-                pub extern "C" fn non_linear() -> f64 {
+                pub extern "Rust" fn non_linear() -> Option<f64> {
                     import_ln__1(import_log10__1(import_pi__0()))
                 }
             }
@@ -601,80 +635,106 @@ mod tests {
         );
 
         assert_eq!(
-            parse("three", &[], &[], "min(1, 2, max(3, 4, 5))"),
+            parse("three", &[],  "min(1, 2, max(3, 4, 5))"),
             quote! {
                 #[inline]
-                fn import_max__3(a: f64, b: f64, c: f64) -> f64 {
-                    f64::max(f64::max(a, b), c)
+                fn import_max__3(a: Option<f64>, b: Option<f64>, c: Option<f64>) -> Option<f64> {
+                    match (a, b, c) {
+                        (Some(a), Some(b), Some(c)) => Some(f64::max(a, f64::max(b, c))),
+                        _ => None,
+                    }
                 }
                 #[inline]
-                fn import_min__3(a: f64, b: f64, c: f64) -> f64 {
-                    f64::min(f64::min(a, b), c)
+                fn import_min__3(a: Option<f64>, b: Option<f64>, c: Option<f64>) -> Option<f64> {
+                    match (a, b, c) {
+                        (Some(a), Some(b), Some(c)) => Some(f64::min(a, f64::min(b, c))),
+                        _ => None,
+                    }
                 }
+
+                #prelude
+
                 #[no_mangle]
-                pub extern "C" fn three() -> f64 {
-                    import_min__3(1f64, 2f64, import_max__3(3f64, 4f64, 5f64))
+                pub extern "Rust" fn three() -> Option<f64> {
+                    import_min__3(Some(1f64), Some(2f64), import_max__3(Some(3f64), Some(4f64), Some(5f64)))
                 }
             }
             .to_string()
         );
 
         assert_eq!(
-            parse("rounding", &[], &[], "round(1.3) + ceil(1.2) + floor(1.1)"),
+            parse("rounding", &[], "round(1.3) + ceil(1.2) + floor(1.1)"),
             quote! {
                 #[inline]
-                fn import_ceil__1(a: f64) -> f64 {
-                    f64::ceil(a)
+                fn import_ceil__1(a: Option<f64>) -> Option<f64> {
+                    a.map(f64::ceil)
                 }
                 #[inline]
-                fn import_floor__1(a: f64) -> f64 {
-                    f64::floor(a)
+                fn import_floor__1(a: Option<f64>) -> Option<f64> {
+                    a.map(f64::floor)
                 }
                 #[inline]
-                fn import_round__1(a: f64) -> f64 {
-                    f64::round(a)
+                fn import_round__1(a: Option<f64>) -> Option<f64> {
+                    a.map(f64::round)
                 }
+
+                #prelude
+
                 #[no_mangle]
-                pub extern "C" fn rounding() -> f64 {
-                    ((import_round__1(1.3f64) + import_ceil__1(1.2f64)) + import_floor__1(1.1f64))
+                pub extern "Rust" fn rounding() -> Option<f64> {
+                    apply(
+                        apply(
+                            import_round__1(Some(1.3f64)),
+                            import_ceil__1(Some(1.2f64)),
+                            std::ops::Add::add
+                        ),
+                        import_floor__1(Some(1.1f64)),
+                        std::ops::Add::add
+                    )
                 }
             }
             .to_string()
         );
 
         assert_eq!(
-            parse("radians", &[], &[], "to_radians(1.3) + to_degrees(1.3)"),
+            parse("radians", &[], "to_radians(1.3) + to_degrees(1.3)"),
             quote! {
                 #[inline]
-                fn import_to_degrees__1(a: f64) -> f64 {
-                    f64::to_degrees(a)
+                fn import_to_degrees__1(a: Option<f64>) -> Option<f64> {
+                    a.map(f64::to_degrees)
                 }
                 #[inline]
-                fn import_to_radians__1(a: f64) -> f64 {
-                    f64::to_radians(a)
+                fn import_to_radians__1(a: Option<f64>) -> Option<f64> {
+                    a.map(f64::to_radians)
                 }
+
+                #prelude
+
                 #[no_mangle]
-                pub extern "C" fn radians() -> f64 {
-                    (import_to_radians__1(1.3f64) + import_to_degrees__1(1.3f64))
+                pub extern "Rust" fn radians() -> Option<f64> {
+                    apply(import_to_radians__1(Some(1.3f64)), import_to_degrees__1(Some(1.3f64)), std::ops::Add::add)
                 }
             }
             .to_string()
         );
 
         assert_eq!(
-            parse("mod_e", &[], &[], "mod(5, e())"),
+            parse("mod_e", &[], "mod(5, e())"),
             quote! {
                 #[inline]
-                fn import_e__0() -> f64 {
-                    std::f64::consts::E
+                fn import_e__0() -> Option<f64> {
+                    Some(std::f64::consts::E)
                 }
                 #[inline]
-                fn import_mod__2(a: f64, b: f64) -> f64 {
-                    a % b
+                fn import_mod__2(a: Option<f64>, b: Option<f64>) -> Option<f64> {
+                    apply(a, b, std::ops::Rem::rem)
                 }
+
+                #prelude
+
                 #[no_mangle]
-                pub extern "C" fn mod_e() -> f64 {
-                    import_mod__2(5f64, import_e__0())
+                pub extern "Rust" fn mod_e() -> Option<f64> {
+                    import_mod__2(Some(5f64), import_e__0())
                 }
             }
             .to_string()
@@ -683,18 +743,17 @@ mod tests {
 
     #[test]
     fn boolean_params() {
+        let prelude = prelude();
+
         assert_eq!(
-            parse(
-                "expression",
-                &["a"],
-                &["a_is_nodata"],
-                "if a is nodata { 0 } else { a }"
-            ),
+            parse("expression", &["a"], "if a is nodata { 0 } else { a }"),
             quote! {
+                #prelude
+
                 #[no_mangle]
-                pub extern "C" fn expression(a: f64, a_is_nodata: bool) -> f64 {
-                    if a_is_nodata {
-                        0f64
+                pub extern "Rust" fn expression(a: Option<f64>) -> Option<f64> {
+                    if ((a) == (None)) {
+                        Some(0f64)
                     } else {
                         a
                     }
@@ -706,23 +765,24 @@ mod tests {
         assert_eq!(
             parse(
                 "expression",
-                &["A", "B", "out_nodata"],
-                &["A_is_nodata", "B_is_nodata"],
+                &["A", "B"],
                 "if A IS NODATA {
                     B * 2
                 } else if A == 6 {
-                    out_nodata
+                    NODATA
                 } else {
                     A
                 }"
             ),
             quote! {
+                #prelude
+
                 #[no_mangle]
-                pub extern "C" fn expression(A: f64, B: f64, out_nodata: f64, A_is_nodata: bool, B_is_nodata: bool) -> f64 {
-                    if A_is_nodata {
-                        (B * 2f64)
-                    } else if ((A) == (6f64)) {
-                        out_nodata
+                pub extern "Rust" fn expression(A: Option<f64>, B: Option<f64>) -> Option<f64> {
+                    if ((A) == (None)) {
+                        apply(B, Some(2f64), std::ops::Mul::mul)
+                    } else if ((A) == (Some(6f64))) {
+                        None
                     } else {
                         A
                     }
@@ -733,16 +793,21 @@ mod tests {
     }
 
     #[test]
+    #[allow(clippy::too_many_lines)]
     fn branches() {
+        let prelude = prelude();
+
         assert_eq!(
-            parse("expression", &[], &[], "if true { 1 } else { 2 }"),
+            parse("expression", &[], "if true { 1 } else { 2 }"),
             quote! {
+                #prelude
+
                 #[no_mangle]
-                pub extern "C" fn expression() -> f64 {
+                pub extern "Rust" fn expression() -> Option<f64> {
                     if true {
-                        1f64
+                        Some(1f64)
                     } else {
-                        2f64
+                        Some(2f64)
                     }
                 }
             }
@@ -752,19 +817,20 @@ mod tests {
         assert_eq!(
             parse(
                 "expression",
-                &[],
                 &[],
                 "if TRUE { 1 } else if false { 2 } else { 1 + 2 }"
             ),
             quote! {
+                #prelude
+
                 #[no_mangle]
-                pub extern "C" fn expression() -> f64 {
+                pub extern "Rust" fn expression() -> Option<f64> {
                     if true {
-                        1f64
+                        Some(1f64)
                     } else if false {
-                        2f64
+                        Some(2f64)
                     } else {
-                        (1f64 + 2f64)
+                        apply(Some(1f64), Some(2f64), std::ops::Add::add)
                     }
                 }
             }
@@ -774,19 +840,20 @@ mod tests {
         assert_eq!(
             parse(
                 "expression",
-                &[],
                 &[],
                 "if 1 < 2 { 1 } else if 1 + 5 < 3 - 1 { 2 } else { 1 + 2 }"
             ),
             quote! {
+                #prelude
+
                 #[no_mangle]
-                pub extern "C" fn expression() -> f64 {
-                    if ((1f64) < (2f64)) {
-                        1f64
-                    } else if (((1f64 + 5f64)) < ((3f64 - 1f64))) {
-                        2f64
+                pub extern "Rust" fn expression() -> Option<f64> {
+                    if ((Some(1f64)) < (Some(2f64))) {
+                        Some(1f64)
+                    } else if ((apply(Some(1f64), Some(5f64), std::ops::Add::add)) < (apply(Some(3f64), Some(1f64), std::ops::Sub::sub))) {
+                        Some(2f64)
                     } else {
-                        (1f64 + 2f64)
+                        apply(Some(1f64), Some(2f64), std::ops::Add::add)
                     }
                 }
             }
@@ -796,7 +863,6 @@ mod tests {
         assert_eq!(
             parse(
                 "expression",
-                &[],
                 &[],
                 "if true && false {
                     1
@@ -808,17 +874,20 @@ mod tests {
             ),
             quote! {
                 #[inline]
-                fn import_max__2(a: f64, b: f64) -> f64 {
-                    f64::max(a, b)
+                fn import_max__2(a: Option<f64>, b: Option<f64>) -> Option<f64> {
+                    apply(a, b, f64::max)
                 }
+
+                #prelude
+
                 #[no_mangle]
-                pub extern "C" fn expression() -> f64 {
+                pub extern "Rust" fn expression() -> Option<f64> {
                     if ((true) && (false)) {
-                        1f64
-                    } else if ((((1f64) < (2f64))) && (true)) {
-                        2f64
+                        Some(1f64)
+                    } else if ( (( (Some(1f64)) < (Some(2f64)) )) && (true) ) {
+                        Some(2f64)
                     } else {
-                        import_max__2(1f64, 2f64)
+                        import_max__2(Some(1f64), Some(2f64))
                     }
                 }
             }
@@ -828,21 +897,28 @@ mod tests {
 
     #[test]
     fn assignments() {
+        let prelude = prelude();
+
         assert_eq!(
             parse(
                 "expression",
-                &[],
                 &[],
                 "let a = 1.2;
                 let b = 2;
                 a + b + 1"
             ),
             quote! {
+                #prelude
+
                 #[no_mangle]
-                pub extern "C" fn expression() -> f64 {
-                    let a = 1.2f64;
-                    let b = 2f64;
-                    ((a + b) + 1f64)
+                pub extern "Rust" fn expression() -> Option<f64> {
+                    let a = Some(1.2f64);
+                    let b = Some(2f64);
+                    apply(
+                        apply(a, b, std::ops::Add::add),
+                        Some(1f64),
+                        std::ops::Add::add
+                    )
                 }
             }
             .to_string()

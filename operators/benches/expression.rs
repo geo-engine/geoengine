@@ -30,7 +30,6 @@ fn expression_on_sources(
         params: ExpressionParams {
             expression: "(A - B) / (A + B)".to_string(),
             output_type: RasterDataType::F64,
-            output_no_data_value: 0.,
             output_measurement: Some(Measurement::Unitless),
             map_no_data: false,
         },

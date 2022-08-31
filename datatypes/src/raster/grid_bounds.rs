@@ -3,8 +3,8 @@ use snafu::ensure;
 use crate::{error, util::Result};
 
 use super::{
-    BoundedGrid, GridBounds, GridContains, GridIdx, GridIntersection, GridSize,
-    GridSpaceToLinearSpace,
+    BoundedGrid, GridBounds, GridContains, GridIdx, GridIntersection, GridShape, GridShapeAccess,
+    GridSize, GridSpaceToLinearSpace,
 };
 
 #[derive(Debug, Ord, PartialOrd, Eq, PartialEq, Clone)]
@@ -62,6 +62,19 @@ impl GridSize for GridBoundingBox<[isize; 1]> {
     fn number_of_elements(&self) -> usize {
         let [a] = self.axis_size();
         a
+    }
+}
+
+impl<A, B> GridShapeAccess for GridBoundingBox<A>
+where
+    Self: GridSize<ShapeArray = B>,
+    A: AsRef<[isize]>,
+    B: AsRef<[usize]>,
+    GridShape<B>: From<B>,
+{
+    type ShapeArray = B;
+    fn grid_shape_array(&self) -> Self::ShapeArray {
+        self.axis_size()
     }
 }
 

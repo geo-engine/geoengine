@@ -5,7 +5,7 @@ use crate::{
         RasterQueryProcessor, RasterResultDescriptor, TypedRasterQueryProcessor,
     },
     processing::expression::{codegen::Parameter, query_processor::ExpressionQueryProcessor},
-    util::{input::float_with_nan, Result},
+    util::Result,
 };
 use async_trait::async_trait;
 use futures::try_join;
@@ -14,7 +14,6 @@ use geoengine_datatypes::{
     primitives::{partitions_extent, time_interval_extent, Measurement},
     raster::RasterDataType,
 };
-use num_traits::AsPrimitive;
 use serde::{Deserialize, Serialize};
 use snafu::ensure;
 
@@ -36,13 +35,11 @@ mod query_processor;
 ///
 /// # Warning // TODO
 /// The operator *currently* only temporally aligns the inputs when there are exactly two sources
-#[derive(Debug, Serialize, Deserialize, PartialEq, Clone)]
+#[derive(Debug, Serialize, Deserialize, PartialEq, Eq, Clone)]
 #[serde(rename_all = "camelCase")]
 pub struct ExpressionParams {
     pub expression: String,
     pub output_type: RasterDataType,
-    #[serde(with = "float_with_nan")]
-    pub output_no_data_value: f64, // TODO: check value is valid for given output type during deserialization
     pub output_measurement: Option<Measurement>,
     pub map_no_data: bool,
 }
@@ -234,28 +231,16 @@ impl RasterOperator for Expression {
 
         // we refer to rasters by A, B, C, …
         let parameters = (0..self.sources.number_of_sources())
-            .flat_map(|i| {
+            .map(|i| {
                 let parameter = index_to_parameter(i);
-                let boolean_parameter = format!("{}_is_nodata", &parameter);
-                [
-                    Parameter::Number(parameter.into()),
-                    Parameter::Boolean(boolean_parameter.into()),
-                ]
+                Parameter::Number(parameter.into())
             })
-            .chain([Parameter::Number("out_nodata".into())])
             .collect::<Vec<_>>();
 
         let expression = ExpressionParser::new(&parameters)?.parse(
             "expression", // TODO: generate and store a unique name
             &self.params.expression,
         )?;
-
-        ensure!(
-            self.params
-                .output_type
-                .is_valid(self.params.output_no_data_value),
-            crate::error::InvalidNoDataValueValueForOutputDataType
-        );
 
         let sources = self.sources.initialize(context).await?;
 
@@ -297,7 +282,6 @@ impl RasterOperator for Expression {
             sources,
             expression,
             map_no_data: self.params.map_no_data,
-            output_no_data_value: self.params.output_no_data_value,
         };
 
         Ok(initialized_operator.boxed())
@@ -309,7 +293,6 @@ pub struct InitializedExpression {
     sources: ExpressionInitializedSources,
     expression: ExpressionAst,
     map_no_data: bool,
-    output_no_data_value: f64,
 }
 
 pub struct ExpressionInitializedSources {
@@ -344,8 +327,6 @@ impl ExpressionInitializedSources {
 impl InitializedRasterOperator for InitializedExpression {
     fn query_processor(&self) -> Result<TypedRasterQueryProcessor> {
         let output_type = self.result_descriptor().data_type;
-        // TODO: allow processing expression without NO DATA
-        let output_no_data_value = self.output_no_data_value;
 
         let expression = LinkedExpression::new(&self.expression)?;
 
@@ -361,13 +342,8 @@ impl InitializedRasterOperator for InitializedExpression {
                 let query_processor = a.into_f64();
                 call_generic_raster_processor!(
                     output_type,
-                    ExpressionQueryProcessor::new(
-                        expression,
-                        query_processor,
-                        output_no_data_value.as_(),
-                        self.map_no_data,
-                    )
-                    .boxed()
+                    ExpressionQueryProcessor::new(expression, query_processor, self.map_no_data)
+                        .boxed()
                 )
 
                 // TODO: We could save prior conversions by monomophizing the differnt expressions
@@ -391,13 +367,8 @@ impl InitializedRasterOperator for InitializedExpression {
                 let query_processors = (a.into_f64(), b.into_f64());
                 call_generic_raster_processor!(
                     output_type,
-                    ExpressionQueryProcessor::new(
-                        expression,
-                        query_processors,
-                        output_no_data_value.as_(),
-                        self.map_no_data,
-                    )
-                    .boxed()
+                    ExpressionQueryProcessor::new(expression, query_processors, self.map_no_data)
+                        .boxed()
                 )
 
                 // TODO: We could save prior conversions by monomophizing the differnt expressions
@@ -421,13 +392,8 @@ impl InitializedRasterOperator for InitializedExpression {
                 let query_processors = [a.into_f64(), b.into_f64(), c.into_f64()];
                 call_generic_raster_processor!(
                     output_type,
-                    ExpressionQueryProcessor::new(
-                        expression,
-                        query_processors,
-                        output_no_data_value.as_(),
-                        self.map_no_data,
-                    )
-                    .boxed()
+                    ExpressionQueryProcessor::new(expression, query_processors, self.map_no_data)
+                        .boxed()
                 )
             }
             4 => {
@@ -436,13 +402,8 @@ impl InitializedRasterOperator for InitializedExpression {
                 let query_processors = [a.into_f64(), b.into_f64(), c.into_f64(), d.into_f64()];
                 call_generic_raster_processor!(
                     output_type,
-                    ExpressionQueryProcessor::new(
-                        expression,
-                        query_processors,
-                        output_no_data_value.as_(),
-                        self.map_no_data,
-                    )
-                    .boxed()
+                    ExpressionQueryProcessor::new(expression, query_processors, self.map_no_data)
+                        .boxed()
                 )
             }
             5 => {
@@ -457,13 +418,8 @@ impl InitializedRasterOperator for InitializedExpression {
                 ];
                 call_generic_raster_processor!(
                     output_type,
-                    ExpressionQueryProcessor::new(
-                        expression,
-                        query_processors,
-                        output_no_data_value.as_(),
-                        self.map_no_data,
-                    )
-                    .boxed()
+                    ExpressionQueryProcessor::new(expression, query_processors, self.map_no_data)
+                        .boxed()
                 )
             }
             6 => {
@@ -479,13 +435,8 @@ impl InitializedRasterOperator for InitializedExpression {
                 ];
                 call_generic_raster_processor!(
                     output_type,
-                    ExpressionQueryProcessor::new(
-                        expression,
-                        query_processors,
-                        output_no_data_value.as_(),
-                        self.map_no_data,
-                    )
-                    .boxed()
+                    ExpressionQueryProcessor::new(expression, query_processors, self.map_no_data)
+                        .boxed()
                 )
             }
 
@@ -503,13 +454,8 @@ impl InitializedRasterOperator for InitializedExpression {
                 ];
                 call_generic_raster_processor!(
                     output_type,
-                    ExpressionQueryProcessor::new(
-                        expression,
-                        query_processors,
-                        output_no_data_value.as_(),
-                        self.map_no_data,
-                    )
-                    .boxed()
+                    ExpressionQueryProcessor::new(expression, query_processors, self.map_no_data)
+                        .boxed()
                 )
             }
             8 => {
@@ -527,13 +473,8 @@ impl InitializedRasterOperator for InitializedExpression {
                 ];
                 call_generic_raster_processor!(
                     output_type,
-                    ExpressionQueryProcessor::new(
-                        expression,
-                        query_processors,
-                        output_no_data_value.as_(),
-                        self.map_no_data,
-                    )
-                    .boxed()
+                    ExpressionQueryProcessor::new(expression, query_processors, self.map_no_data)
+                        .boxed()
                 )
             }
             _ => return Err(crate::error::Error::InvalidNumberOfExpressionInputs),
@@ -563,14 +504,14 @@ mod tests {
 
     #[test]
     fn deserialize_params() {
-        let s = r#"{"expression":"1*A","outputType":"F64","outputNoDataValue":0.0,"outputMeasurement":null,"mapNoData":false}"#;
+        let s =
+            r#"{"expression":"1*A","outputType":"F64","outputMeasurement":null,"mapNoData":false}"#;
 
         assert_eq!(
             serde_json::from_str::<ExpressionParams>(s).unwrap(),
             ExpressionParams {
                 expression: "1*A".to_owned(),
                 output_type: RasterDataType::F64,
-                output_no_data_value: 0.0,
                 output_measurement: None,
                 map_no_data: false,
             }
@@ -578,33 +519,15 @@ mod tests {
     }
 
     #[test]
-    fn deserialize_params_no_data() {
-        let s = r#"{"expression":"1*A","outputType":"F64","outputNoDataValue":"nan","outputMeasurement":null,"mapNoData":false}"#;
-
-        assert!(f64::is_nan(
-            serde_json::from_str::<ExpressionParams>(s)
-                .unwrap()
-                .output_no_data_value
-        ),);
-    }
-
-    #[test]
-    fn deserialize_params_missing_no_data() {
-        let s = r#"{"expression":"1*A","outputType":"F64","outputNoDataValue":null,"outputMeasurement":null,"mapNoData":false}"#;
-
-        assert!(serde_json::from_str::<ExpressionParams>(s).is_err());
-    }
-
-    #[test]
     fn serialize_params() {
-        let s = r#"{"expression":"1*A","outputType":"F64","outputNoDataValue":0.0,"outputMeasurement":null,"mapNoData":false}"#;
+        let s =
+            r#"{"expression":"1*A","outputType":"F64","outputMeasurement":null,"mapNoData":false}"#;
 
         assert_eq!(
             s,
             serde_json::to_string(&ExpressionParams {
                 expression: "1*A".to_owned(),
                 output_type: RasterDataType::F64,
-                output_no_data_value: 0.0,
                 output_measurement: None,
                 map_no_data: false,
             })
@@ -614,14 +537,14 @@ mod tests {
 
     #[test]
     fn serialize_params_no_data() {
-        let s = r#"{"expression":"1*A","outputType":"F64","outputNoDataValue":"nan","outputMeasurement":null,"mapNoData":false}"#;
+        let s =
+            r#"{"expression":"1*A","outputType":"F64","outputMeasurement":null,"mapNoData":false}"#;
 
         assert_eq!(
             s,
             serde_json::to_string(&ExpressionParams {
                 expression: "1*A".to_owned(),
                 output_type: RasterDataType::F64,
-                output_no_data_value: f64::NAN,
                 output_measurement: None,
                 map_no_data: false,
             })
@@ -631,7 +554,6 @@ mod tests {
 
     #[tokio::test]
     async fn basic_unary() {
-        let no_data_value = 3;
         let tile_size_in_pixels = [3, 2].into();
         let tiling_specification = TilingSpecification {
             origin_coordinate: [0.0, 0.0].into(),
@@ -646,7 +568,6 @@ mod tests {
             params: ExpressionParams {
                 expression: "2 * A".to_string(),
                 output_type: RasterDataType::I8,
-                output_no_data_value: no_data_value.as_(), //  cast no_data_value to f64
                 output_measurement: Some(Measurement::Unitless),
                 map_no_data: false,
             },
@@ -702,7 +623,6 @@ mod tests {
 
     #[tokio::test]
     async fn unary_map_no_data() {
-        let no_data_value = 3;
         let tile_size_in_pixels = [3, 2].into();
         let tiling_specification = TilingSpecification {
             origin_coordinate: [0.0, 0.0].into(),
@@ -717,7 +637,6 @@ mod tests {
             params: ExpressionParams {
                 expression: "2 * A".to_string(),
                 output_type: RasterDataType::I8,
-                output_no_data_value: no_data_value.as_(), //  cast no_data_value to f64
                 output_measurement: Some(Measurement::Unitless),
                 map_no_data: true,
             },
@@ -773,7 +692,6 @@ mod tests {
 
     #[tokio::test]
     async fn basic_binary() {
-        let no_data_value = 42;
         let tile_size_in_pixels = [3, 2].into();
         let tiling_specification = TilingSpecification {
             origin_coordinate: [0.0, 0.0].into(),
@@ -789,7 +707,6 @@ mod tests {
             params: ExpressionParams {
                 expression: "A+B".to_string(),
                 output_type: RasterDataType::I8,
-                output_no_data_value: no_data_value.as_(), //  cast no_data_valuee to f64
                 output_measurement: Some(Measurement::Unitless),
                 map_no_data: false,
             },
@@ -857,13 +774,12 @@ mod tests {
                 expression: "if A IS NODATA {
                        B * 2
                    } else if A == 6 {
-                       out_nodata
+                       NODATA
                    } else {
                        A
                    }"
                 .to_string(),
                 output_type: RasterDataType::I8,
-                output_no_data_value: 0., //  cast no_data_valuee to f64
                 output_measurement: Some(Measurement::Unitless),
                 map_no_data: true,
             },
@@ -938,7 +854,6 @@ mod tests {
             params: ExpressionParams {
                 expression: "A+B+C".to_string(),
                 output_type: RasterDataType::I8,
-                output_no_data_value: no_data_value.as_(), //  cast no_data_valuee to f64
                 output_measurement: Some(Measurement::Unitless),
                 map_no_data: false,
             },
@@ -993,7 +908,7 @@ mod tests {
 
         assert_eq!(
             res,
-            [None, Some(6), None, Some(12), Some(15), Some(18)] // first None is because 1+1+1 == no_data_value, second None is because all inputs are masked because 3 == no_data_value
+            [Some(3), Some(6), None, Some(12), Some(15), Some(18)] // third is None is because all inputs are masked because 3 == no_data_value
         );
     }
 
@@ -1023,7 +938,6 @@ mod tests {
             params: ExpressionParams {
                 expression: "A+B+C+D+E+F+G+H".to_string(),
                 output_type: RasterDataType::I8,
-                output_no_data_value: no_data_value.as_(), //  cast no_data_valuee to f64
                 output_measurement: Some(Measurement::Unitless),
                 map_no_data: false,
             },
@@ -1090,7 +1004,6 @@ mod tests {
             params: ExpressionParams {
                 expression: "min(A * pi(), 10)".to_string(),
                 output_type: RasterDataType::I8,
-                output_no_data_value: no_data_value.as_(), //  cast no_data_value to f64
                 output_measurement: Some(Measurement::Unitless),
                 map_no_data: false,
             },
