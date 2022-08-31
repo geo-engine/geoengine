@@ -40,20 +40,20 @@ impl From<QueryRectangle<BoundingBox2D>> for QueryRectangle<SpatialPartition2D> 
 }
 
 /// manual implementation, because derivation can't handle the `SpatialBounds` generic (yet)
-impl utoipa::Component for QueryRectangle<SpatialPartition2D> {
-    fn component() -> utoipa::openapi::Component {
+impl utoipa::ToSchema for QueryRectangle<SpatialPartition2D> {
+    fn schema() -> utoipa::openapi::Schema {
         use utoipa::openapi::*;
         ObjectBuilder::new()
             .property(
                 "spatialBounds",
-                Ref::from_component_name("SpatialPartition2D"),
+                Ref::from_response_name("SpatialPartition2D"),
             )
             .required("spatialBounds")
-            .property("timeInterval", Ref::from_component_name("TimeInterval"))
+            .property("timeInterval", Ref::from_response_name("TimeInterval"))
             .required("timeInterval")
             .property(
                 "spatialResolution",
-                Ref::from_component_name("SpatialResolution"),
+                Ref::from_response_name("SpatialResolution"),
             )
             .required("spatialResolution")
             .description(Some(
@@ -64,17 +64,17 @@ impl utoipa::Component for QueryRectangle<SpatialPartition2D> {
 }
 
 /// manual implementation, because derivation can't handle the `SpatialBounds` generic (yet)
-impl utoipa::Component for QueryRectangle<BoundingBox2D> {
-    fn component() -> utoipa::openapi::Component {
+impl utoipa::ToSchema for QueryRectangle<BoundingBox2D> {
+    fn schema() -> utoipa::openapi::Schema {
         use utoipa::openapi::*;
         ObjectBuilder::new()
-            .property("spatialBounds", Ref::from_component_name("BoundingBox2D"))
+            .property("spatialBounds", Ref::from_response_name("BoundingBox2D"))
             .required("spatialBounds")
-            .property("timeInterval", Ref::from_component_name("TimeInterval"))
+            .property("timeInterval", Ref::from_response_name("TimeInterval"))
             .required("timeInterval")
             .property(
                 "spatialResolution",
-                Ref::from_component_name("SpatialResolution"),
+                Ref::from_response_name("SpatialResolution"),
             )
             .required("spatialResolution")
             .description(Some(

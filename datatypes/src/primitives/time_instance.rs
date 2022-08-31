@@ -16,9 +16,8 @@ use std::{
     ops::{Add, Sub},
     str::FromStr,
 };
-use utoipa::Component;
 
-#[derive(Clone, Copy, Serialize, PartialEq, Eq, PartialOrd, Ord, Debug, Component)]
+#[derive(Clone, Copy, Serialize, PartialEq, Eq, PartialOrd, Ord, Debug, utoipa::ToSchema)]
 #[repr(C)]
 pub struct TimeInstance(i64);
 

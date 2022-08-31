@@ -148,7 +148,7 @@ pub(crate) fn configure_extractors(cfg: &mut web::ServiceConfig) {
     }));
 }
 
-#[derive(serde::Serialize, utoipa::Component)]
+#[derive(serde::Serialize, utoipa::ToSchema)]
 #[serde(rename_all = "camelCase")]
 pub(crate) struct VersionInfo {
     build_date: Option<String>,

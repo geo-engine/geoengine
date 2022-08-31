@@ -8,7 +8,7 @@ use crate::util::user_input::UserInput;
 use geoengine_datatypes::identifier;
 use geoengine_datatypes::util::Identifier;
 
-#[derive(Debug, PartialEq, Eq, Serialize, Deserialize, Clone, Hash, utoipa::Component)]
+#[derive(Debug, PartialEq, Eq, Serialize, Deserialize, Clone, Hash, utoipa::ToSchema)]
 #[serde(rename_all = "camelCase")]
 #[component(example = json!({
     "email": "foo@example.com",
@@ -49,7 +49,7 @@ impl UserInput for UserRegistration {
     }
 }
 
-#[derive(Debug, PartialEq, Eq, Serialize, Deserialize, Clone, Hash, utoipa::Component)]
+#[derive(Debug, PartialEq, Eq, Serialize, Deserialize, Clone, Hash, utoipa::ToSchema)]
 #[component(example = json!({
     "email": "foo@example.com",
     "password": "secret123",

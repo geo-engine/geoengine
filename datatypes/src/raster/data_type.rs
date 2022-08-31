@@ -4,7 +4,6 @@ use crate::raster::TypedRasterConversion;
 use num_traits::{AsPrimitive, Bounded, Num};
 use serde::{Deserialize, Serialize};
 use std::convert::TryFrom;
-use utoipa::Component;
 
 use super::{GridShape2D, GridShape3D};
 
@@ -76,7 +75,17 @@ impl Pixel for f32 {}
 impl Pixel for f64 {}
 
 #[derive(
-    Debug, Ord, PartialOrd, Eq, PartialEq, Hash, Deserialize, Serialize, Copy, Clone, Component,
+    Debug,
+    Ord,
+    PartialOrd,
+    Eq,
+    PartialEq,
+    Hash,
+    Deserialize,
+    Serialize,
+    Copy,
+    Clone,
+    utoipa::ToSchema,
 )]
 pub enum RasterDataType {
     U8,

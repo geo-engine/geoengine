@@ -4,10 +4,9 @@ use crate::primitives::error;
 use crate::util::Result;
 use serde::{Deserialize, Serialize};
 use snafu::ensure;
-use utoipa::Component;
 
 /// The spatial resolution in SRS units
-#[derive(Copy, Clone, Debug, PartialEq, Deserialize, Serialize, Component)]
+#[derive(Copy, Clone, Debug, PartialEq, Deserialize, Serialize, utoipa::ToSchema)]
 pub struct SpatialResolution {
     pub x: f64,
     pub y: f64,

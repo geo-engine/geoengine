@@ -1,6 +1,6 @@
 use serde::de::Error;
 use serde::{Deserialize, Serialize};
-use utoipa::Component;
+use utoipa::ToSchema;
 
 use std::path::{Path, PathBuf};
 use std::str::FromStr;

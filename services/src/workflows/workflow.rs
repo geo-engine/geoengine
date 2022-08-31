@@ -17,7 +17,7 @@ impl WorkflowId {
     }
 }
 
-#[derive(Clone, Debug, Serialize, Deserialize, utoipa::Component)]
+#[derive(Clone, Debug, Serialize, Deserialize, utoipa::ToSchema)]
 #[component(example = json!({
     "type": "Vector",
     "operator": {

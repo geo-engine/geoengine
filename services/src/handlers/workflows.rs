@@ -30,8 +30,8 @@ use geoengine_operators::{call_on_generic_raster_processor_gdal_types, call_on_t
 use serde::{Deserialize, Serialize};
 use snafu::{ResultExt, Snafu};
 use tokio::fs;
-use utoipa::Component;
 use utoipa::IntoParams;
+use utoipa::ToSchema;
 use zip::{write::FileOptions, ZipWriter};
 
 pub(crate) fn init_workflow_routes<C>(cfg: &mut web::ServiceConfig)

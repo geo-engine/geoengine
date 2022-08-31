@@ -12,9 +12,10 @@ use std::{
     ops::{Add, Div, Mul, Sub},
     slice,
 };
-use utoipa::Component;
 
-#[derive(Clone, Copy, Debug, Deserialize, PartialEq, PartialOrd, Serialize, Default, Component)]
+#[derive(
+    Clone, Copy, Debug, Deserialize, PartialEq, PartialOrd, Serialize, Default, utoipa::ToSchema,
+)]
 #[cfg_attr(feature = "postgres", derive(ToSql, FromSql))]
 #[repr(C)]
 pub struct Coordinate2D {

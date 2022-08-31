@@ -3,24 +3,30 @@ use std::collections::{BTreeMap, HashMap};
 use std::fmt;
 use std::str::FromStr;
 
-#[derive(Clone, Debug, PartialEq, Eq, Deserialize, Serialize, utoipa::Component)]
+#[derive(Clone, Debug, PartialEq, Eq, Deserialize, Serialize, utoipa::ToSchema)]
 #[serde(rename_all = "camelCase", tag = "type")]
 pub enum Measurement {
     Unitless,
-    Continuous(ContinuousMeasurement),
-    Classification(ClassificationMeasurement),
+    Continuous {
+        measurement: String,
+        unit: Option<String>,
+    },
+    Classification {
+        measurement: String,
+        classes: HashMap<u8, String>,
+    },
 }
 
 impl Measurement {
     pub fn continuous(measurement: String, unit: Option<String>) -> Self {
-        Self::Continuous(ContinuousMeasurement { measurement, unit })
+        Self::Continuous { measurement, unit }
     }
 
     pub fn classification(measurement: String, classes: HashMap<u8, String>) -> Self {
-        Self::Classification(ClassificationMeasurement {
+        Self::Classification {
             measurement,
             classes,
-        })
+        }
     }
 }
 
@@ -30,13 +36,13 @@ impl Default for Measurement {
     }
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, Deserialize, Serialize, utoipa::Component)]
+#[derive(Clone, Debug, PartialEq, Eq, Deserialize, Serialize, utoipa::ToSchema)]
 pub struct ContinuousMeasurement {
     pub measurement: String,
     pub unit: Option<String>,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, Deserialize, Serialize, utoipa::Component)]
+#[derive(Clone, Debug, PartialEq, Eq, Deserialize, Serialize, utoipa::ToSchema)]
 #[serde(
     try_from = "SerializableClassificationMeasurement",
     into = "SerializableClassificationMeasurement"
@@ -105,17 +111,17 @@ impl fmt::Display for Measurement {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Measurement::Unitless => Ok(()),
-            Measurement::Continuous(ContinuousMeasurement {
+            Measurement::Continuous {
                 measurement,
                 unit: unit_option,
-            }) => {
+            } => {
                 write!(f, "{}", measurement)?;
                 if let Some(unit) = unit_option {
                     return write!(f, " in {}", unit);
                 }
                 Ok(())
             }
-            Measurement::Classification(ClassificationMeasurement { measurement, .. }) => {
+            Measurement::Classification { measurement, .. } => {
                 write!(f, "{}", measurement)
             }
         }

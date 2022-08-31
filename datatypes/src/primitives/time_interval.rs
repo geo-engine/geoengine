@@ -11,10 +11,9 @@ use serde::{Deserialize, Serialize};
 use snafu::ensure;
 use std::fmt::{Debug, Display};
 use std::{cmp::Ordering, convert::TryInto};
-use utoipa::Component;
 
 /// Stores time intervals in ms in close-open semantic [start, end)
-#[derive(Clone, Copy, Deserialize, Serialize, PartialEq, Eq, Component)]
+#[derive(Clone, Copy, Deserialize, Serialize, PartialEq, Eq, utoipa::ToSchema)]
 #[cfg_attr(feature = "postgres", derive(ToSql, FromSql))]
 #[repr(C)]
 pub struct TimeInterval {

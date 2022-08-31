@@ -6,19 +6,20 @@ identifier!(DataProviderId);
 // Identifier for datasets managed by Geo Engine
 identifier!(DatasetId);
 
-#[derive(Debug, Clone, Hash, Eq, PartialEq, Deserialize, Serialize, utoipa::Component)]
+#[derive(Debug, Clone, Hash, Eq, PartialEq, Deserialize, Serialize, utoipa::ToSchema)]
 #[serde(rename_all = "camelCase", tag = "type")]
 /// The identifier for loadable data. It is used in the source operators to get the loading info (aka parametrization)
 /// for accessing the data. Internal data is loaded from datasets, external from `DataProvider`s.
 pub enum DataId {
     #[serde(rename_all = "camelCase")]
-    Internal {
-        dataset_id: DatasetId,
+    Internal { dataset_id: DatasetId },
+    External {
+        provider_id: DataProviderId,
+        layer_id: LayerId,
     },
-    External(ExternalDataId),
 }
 
-#[derive(Debug, Serialize, Deserialize, Clone, PartialEq, Eq, Hash, utoipa::Component)]
+#[derive(Debug, Serialize, Deserialize, Clone, PartialEq, Eq, Hash, utoipa::ToSchema)]
 pub struct LayerId(pub String);
 
 impl std::fmt::Display for LayerId {
@@ -27,7 +28,7 @@ impl std::fmt::Display for LayerId {
     }
 }
 
-#[derive(Debug, Clone, Hash, Eq, PartialEq, Deserialize, Serialize, utoipa::Component)]
+#[derive(Debug, Clone, Hash, Eq, PartialEq, Deserialize, Serialize, utoipa::ToSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct ExternalDataId {
     pub provider_id: DataProviderId,
@@ -46,8 +47,15 @@ impl DataId {
     }
 
     pub fn external(&self) -> Option<ExternalDataId> {
-        if let Self::External(id) = self {
-            return Some(id.clone());
+        if let Self::External {
+            provider_id,
+            layer_id,
+        } = self
+        {
+            return Some(ExternalDataId {
+                provider_id: *provider_id,
+                layer_id: layer_id.clone(),
+            });
         }
         None
     }
@@ -61,6 +69,9 @@ impl From<DatasetId> for DataId {
 
 impl From<ExternalDataId> for DataId {
     fn from(value: ExternalDataId) -> Self {
-        DataId::External(value)
+        DataId::External {
+            provider_id: value.provider_id,
+            layer_id: value.layer_id,
+        }
     }
 }

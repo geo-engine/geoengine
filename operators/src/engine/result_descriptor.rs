@@ -48,7 +48,7 @@ pub trait ResultDescriptor: Clone + Serialize {
 }
 
 /// A `ResultDescriptor` for raster queries
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, utoipa::Component)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, utoipa::ToSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct RasterResultDescriptor {
     pub data_type: RasterDataType,
@@ -106,7 +106,7 @@ impl ResultDescriptor for RasterResultDescriptor {
 impl RasterResultDescriptor {}
 
 /// A `ResultDescriptor` for vector queries
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, utoipa::Component)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, utoipa::ToSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct VectorResultDescriptor {
     pub data_type: VectorDataType,
@@ -195,7 +195,7 @@ impl ResultDescriptor for VectorResultDescriptor {
 }
 
 /// A `ResultDescriptor` for plot queries
-#[derive(Debug, Copy, Clone, PartialEq, Serialize, Deserialize, utoipa::Component)]
+#[derive(Debug, Copy, Clone, PartialEq, Serialize, Deserialize, utoipa::ToSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct PlotResultDescriptor {
     pub spatial_reference: SpatialReferenceOption,
@@ -264,7 +264,7 @@ impl From<RasterResultDescriptor> for PlotResultDescriptor {
     }
 }
 
-#[derive(Debug, Serialize, Deserialize, Clone, PartialEq, utoipa::Component)]
+#[derive(Debug, Serialize, Deserialize, Clone, PartialEq, utoipa::ToSchema)]
 #[serde(rename_all = "camelCase", tag = "type")]
 pub enum TypedResultDescriptor {
     Plot(PlotResultDescriptor),

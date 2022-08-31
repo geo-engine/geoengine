@@ -27,7 +27,7 @@ pub trait MockableSession: Session {
     fn mock() -> Self;
 }
 
-#[derive(Clone, Debug, Deserialize, Serialize, PartialEq, utoipa::Component)]
+#[derive(Clone, Debug, Deserialize, Serialize, PartialEq, utoipa::ToSchema)]
 pub struct SimpleSession {
     id: SessionId,
     pub project: Option<ProjectId>,

@@ -31,7 +31,7 @@ pub trait AxisAlignedRectangle: Copy {
 }
 
 /// A partition of space that include the upper left but excludes the lower right coordinate
-#[derive(Copy, Clone, Serialize, Deserialize, PartialEq, Debug, utoipa::Component)]
+#[derive(Copy, Clone, Serialize, Deserialize, PartialEq, Debug, utoipa::ToSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct SpatialPartition2D {
     upper_left_coordinate: Coordinate2D,

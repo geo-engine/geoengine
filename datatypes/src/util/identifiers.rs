@@ -15,7 +15,7 @@ macro_rules! identifier {
             Clone,
             Copy,
             Hash,
-            utoipa::Component,
+            utoipa::ToSchema,
         )]
         pub struct $id_name(pub uuid::Uuid);
 

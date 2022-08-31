@@ -128,10 +128,10 @@ mod tests {
                 TimeInstance::from(DateTime::new_utc(2014, 1, 1, 0, 0, 0)),
             ],
             vec![0., 1., 4., 9., 7.],
-            Measurement::Continuous(ContinuousMeasurement {
+            Measurement::Continuous {
                 measurement: "Joy".to_owned(),
                 unit: Some("Pct".to_owned()),
-            }),
+            },
             false,
         )
         .unwrap();

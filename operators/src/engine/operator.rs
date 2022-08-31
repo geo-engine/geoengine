@@ -169,14 +169,14 @@ pub enum TypedOperator {
     Plot(Box<dyn PlotOperator>),
 }
 
-impl utoipa::Component for TypedOperator {
-    fn component() -> utoipa::openapi::Component {
+impl utoipa::ToSchema for TypedOperator {
+    fn schema() -> utoipa::openapi::Schema {
         use utoipa::openapi::*;
         ObjectBuilder::new()
             .property(
                 "type",
-                PropertyBuilder::new()
-                    .component_type(ComponentType::String)
+                ObjectBuilder::new()
+                    .schema_type(SchemaType::String)
                     .enum_values(Some(vec!["Vector", "Raster", "Plot"]))
             )
             .required("type")
@@ -185,16 +185,16 @@ impl utoipa::Component for TypedOperator {
                 ObjectBuilder::new()
                     .property(
                         "type",
-                        Property::new(ComponentType::String)
+                        Object::with_type(SchemaType::String)
                     )
                     .required("type")
                     .property(
                         "params",
-                        Property::new(ComponentType::Object)
+                        Object::with_type(SchemaType::Object)
                     )
                     .property(
                         "sources",
-                        Property::new(ComponentType::Object)
+                        Object::with_type(SchemaType::Object)
                     )
             )
             .required("operator")
