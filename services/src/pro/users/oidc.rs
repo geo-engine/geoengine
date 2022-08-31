@@ -82,6 +82,7 @@ pub struct AuthCodeRequestURL{
 
 #[derive(Clone, Serialize, Deserialize)]
 pub struct AuthCodeResponse {
+    #[serde(rename = "sessionState")]
     pub session_state : String,
     pub code : String,
     pub state : String,
@@ -339,8 +340,6 @@ impl TryFrom<Oidc> for OidcRequestDb {
 
     fn try_from(value: Oidc) -> Result<Self, Self::Error> {
         if value.enabled {
-            Err(Error::OidcError { source: OidcError::OidcDisabled })
-        } else {
             let db = OidcRequestDb {
                 issuer: value.issuer.to_string(),
                 client_id: value.client_id.to_string(),
@@ -352,6 +351,8 @@ impl TryFrom<Oidc> for OidcRequestDb {
                 nonce_function: Nonce::new_random,
             };
             Ok(db)
+        } else {
+            Err(Error::OidcError { source: OidcError::OidcDisabled })
         }
     }
 }
