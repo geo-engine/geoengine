@@ -12,6 +12,7 @@ use crate::{
     util::Result,
 };
 use async_trait::async_trait;
+use float_cmp::{approx_eq, ApproxEq};
 use futures::{
     stream::{self, BoxStream, StreamExt},
     Stream,
@@ -288,6 +289,20 @@ impl TestDefault for GdalDatasetGeoTransform {
     }
 }
 
+impl ApproxEq for GdalDatasetGeoTransform {
+    type Margin = float_cmp::F64Margin;
+
+    fn approx_eq<M>(self, other: Self, margin: M) -> bool
+    where
+        M: Into<Self::Margin>,
+    {
+        let m = margin.into();
+        self.origin_coordinate.approx_eq(other.origin_coordinate, m)
+            && self.x_pixel_size.approx_eq(other.x_pixel_size, m)
+            && self.y_pixel_size.approx_eq(other.y_pixel_size, m)
+    }
+}
+
 /// Direct conversion from `GdalDatasetGeoTransform` to [`GeoTransform`] only works if origin is located in the upper left corner.
 impl TryFrom<GdalDatasetGeoTransform> for GeoTransform {
     type Error = Error;
@@ -415,12 +430,21 @@ impl GdalRasterLoader {
     ) -> Result<RasterTile2D<T>> {
         match dataset_params {
             // TODO: discuss if we need this check here. The metadata provider should only pass on loading infos if the query intersects the datasets bounds! And the tiling strategy should only generate tiles that intersect the querys bbox.
-            Some(ds) => {
+            Some(ds)
+                if tile_information
+                    .spatial_partition()
+                    .intersects(&ds.spatial_partition()) =>
+            {
                 debug!(
                     "Loading tile {:?}, from {:?}, band: {}",
                     &tile_information, ds.file_path, ds.rasterband_channel
                 );
                 Self::load_tile_data_async(ds, tile_information, tile_time).await
+            }
+            Some(_) => {
+                debug!("Skipping tile not in query rect {:?}", &tile_information);
+
+                Ok(create_no_data_tile(tile_information, tile_time))
             }
 
             _ => {
@@ -853,6 +877,15 @@ where
 {
     let gdal_dataset_geotransform = GdalDatasetGeoTransform::from(dataset.geo_transform()?);
     let (gdal_dataset_pixels_x, gdal_dataset_pixels_y) = dataset.raster_size();
+
+    debug_assert!(approx_eq!(
+        GdalDatasetGeoTransform,
+        gdal_dataset_geotransform,
+        dataset_params.geo_transform
+    ));
+    debug_assert_eq!(gdal_dataset_pixels_x, dataset_params.width);
+    debug_assert_eq!(gdal_dataset_pixels_y, dataset_params.height);
+
     let gdal_dataset_bounds =
         gdal_dataset_geotransform.spatial_partition(gdal_dataset_pixels_x, gdal_dataset_pixels_y);
 
