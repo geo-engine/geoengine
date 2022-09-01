@@ -27,10 +27,12 @@ where
             .route(web::get().to(list_root_collections_handler::<C>)),
     )
     .service(
-        web::resource("/layers/collections/{provider}/{item}")
+        web::resource(r#"/layers/collections/{provider}/{item:.+}"#)
             .route(web::get().to(list_collection_handler::<C>)),
     )
-    .service(web::resource("/layers/{provider}/{item}").route(web::get().to(layer_handler::<C>)));
+    .service(
+        web::resource("/layers/{provider}/{path:[^{}]+}").route(web::get().to(layer_handler::<C>)),
+    );
 }
 
 async fn list_root_collections_handler<C: Context>(
