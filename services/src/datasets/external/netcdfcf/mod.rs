@@ -9,13 +9,13 @@ use crate::datasets::listing::ProvenanceOutput;
 use crate::error::Error;
 use crate::layers::external::DataProvider;
 use crate::layers::external::DataProviderDefinition;
-use crate::layers::layer::CollectionItem;
 use crate::layers::layer::Layer;
 use crate::layers::layer::LayerCollectionListOptions;
 use crate::layers::layer::LayerCollectionListing;
 use crate::layers::layer::LayerListing;
 use crate::layers::layer::ProviderLayerCollectionId;
 use crate::layers::layer::ProviderLayerId;
+use crate::layers::layer::{CollectionItem, LayerCollection};
 use crate::layers::listing::LayerCollectionId;
 use crate::layers::listing::LayerCollectionProvider;
 use crate::projects::RasterSymbology;
@@ -81,6 +81,7 @@ pub struct NetCdfCfDataProviderDefinition {
 
 #[derive(Debug)]
 pub struct NetCdfCfDataProvider {
+    pub name: String,
     pub path: PathBuf,
     pub overviews: PathBuf,
 }
@@ -90,6 +91,7 @@ pub struct NetCdfCfDataProvider {
 impl DataProviderDefinition for NetCdfCfDataProviderDefinition {
     async fn initialize(self: Box<Self>) -> crate::error::Result<Box<dyn DataProvider>> {
         Ok(Box::new(NetCdfCfDataProvider {
+            name: self.name,
             path: self.path,
             overviews: self.overviews,
         }))
@@ -376,7 +378,6 @@ impl NetCdfCfDataProvider {
                         entity_name = entity.name
                     ),
                     description: tree.summary.clone(),
-                    properties: vec![],
                 });
             }
         }
@@ -913,11 +914,30 @@ impl TryFrom<NetCdfLayerCollectionId> for LayerId {
 }
 
 async fn listing_from_dir(
+    provider_name: &str,
+    collection: &LayerCollectionId,
     overview_path: &Path,
     base: &Path,
     path: &Path,
-) -> crate::error::Result<Vec<CollectionItem>> {
-    let mut dir = tokio::fs::read_dir(base.join(&path)).await?;
+    options: &LayerCollectionListOptions,
+) -> crate::error::Result<LayerCollection> {
+    let dir_path = base.join(&path);
+
+    let (name, description) = if path == Path::new(".") {
+        (
+            provider_name.to_string(),
+            "NetCdfCfProviderDefinition".to_string(),
+        )
+    } else {
+        (
+            path.file_name()
+                .map(|n| n.to_string_lossy().to_string())
+                .unwrap_or_default(),
+            "".to_string(),
+        )
+    };
+
+    let mut dir = tokio::fs::read_dir(&dir_path).await?;
 
     let mut items = vec![];
     while let Some(entry) = dir.next_entry().await? {
@@ -940,8 +960,6 @@ async fn listing_from_dir(
                 },
                 name: entry.file_name().to_string_lossy().to_string(),
                 description: "".to_string(),
-                entry_label: None,
-                properties: vec![],
             }));
         } else if entry.path().extension() == Some("nc".as_ref()) {
             let fp = entry
@@ -973,24 +991,28 @@ async fn listing_from_dir(
                 },
                 name: tree.title,
                 description: tree.summary,
-                entry_label: None,
-                properties: [(
-                    "author".to_string(),
-                    format!(
-                        "{}, {}, {}",
-                        tree.creator_name.unwrap_or_else(|| "unknown".to_string()),
-                        tree.creator_email.unwrap_or_else(|| "unknown".to_string()),
-                        tree.creator_institution
-                            .unwrap_or_else(|| "unknown".to_string())
-                    ),
-                )]
-                .into_iter()
-                .collect(),
             }));
         }
     }
 
-    Ok(items)
+    items.sort_by(|a, b| a.name().cmp(b.name()));
+    let items = items
+        .into_iter()
+        .skip(options.offset as usize)
+        .take(options.limit as usize)
+        .collect();
+
+    Ok(LayerCollection {
+        id: ProviderLayerCollectionId {
+            provider_id: NETCDF_CF_PROVIDER_ID,
+            collection_id: collection.clone(),
+        },
+        name,
+        description,
+        items,
+        entry_label: None,
+        properties: vec![],
+    })
 }
 
 /// find the group given by the path `groups`.
@@ -1117,12 +1139,13 @@ pub fn layer_from_netcdf_overview(
 }
 
 async fn listing_from_netcdf_file(
+    collection: &LayerCollectionId,
     relative_file_path: PathBuf,
     groups: &[String],
     provider_path: PathBuf,
     overview_path: PathBuf,
     options: &LayerCollectionListOptions,
-) -> crate::error::Result<Vec<CollectionItem>> {
+) -> crate::error::Result<LayerCollection> {
     let fp = relative_file_path.clone();
     let tree = tokio::task::spawn_blocking(move || {
         NetCdfCfDataProvider::build_netcdf_tree(&provider_path, Some(&overview_path), &fp, false)
@@ -1130,9 +1153,33 @@ async fn listing_from_netcdf_file(
     })
     .await??;
 
-    let groups_list = find_group(tree.groups.clone(), groups)?.map_or(tree.groups, |g| g.groups);
+    let group = find_group(tree.groups.clone(), groups)?;
 
-    if groups_list.is_empty() {
+    let (name, description) = group.as_ref().map_or_else(
+        || (tree.title, tree.summary),
+        |g| (g.title.clone(), g.description.clone()),
+    );
+
+    let properties = if groups.is_empty() {
+        [(
+            "author".to_string(),
+            format!(
+                "{}, {}, {}",
+                tree.creator_name.unwrap_or_else(|| "unknown".to_string()),
+                tree.creator_email.unwrap_or_else(|| "unknown".to_string()),
+                tree.creator_institution
+                    .unwrap_or_else(|| "unknown".to_string())
+            ),
+        )]
+        .into_iter()
+        .collect()
+    } else {
+        vec![]
+    };
+
+    let groups_list = group.map_or(tree.groups, |g| g.groups);
+
+    let items = if groups_list.is_empty() {
         tree.entities
             .into_iter()
             .skip(options.offset as usize)
@@ -1150,10 +1197,9 @@ async fn listing_from_netcdf_file(
                     },
                     name: entity.name,
                     description: "".to_string(),
-                    properties: vec![],
                 }))
             })
-            .collect()
+            .collect::<crate::error::Result<Vec<CollectionItem>>>()?
     } else {
         let out_groups = groups.to_owned();
 
@@ -1175,35 +1221,54 @@ async fn listing_from_netcdf_file(
                     },
                     name: group.title.clone(),
                     description: group.description,
-                    entry_label: None,
-                    properties: vec![],
                 }))
             })
-            .collect()
-    }
+            .collect::<crate::error::Result<Vec<CollectionItem>>>()?
+    };
+
+    Ok(LayerCollection {
+        id: ProviderLayerCollectionId {
+            provider_id: NETCDF_CF_PROVIDER_ID,
+            collection_id: collection.clone(),
+        },
+        name,
+        description,
+        items,
+        entry_label: None,
+        properties,
+    })
 }
 
 #[async_trait]
 impl LayerCollectionProvider for NetCdfCfDataProvider {
-    async fn collection_items(
+    async fn collection(
         &self,
         collection: &LayerCollectionId,
         options: Validated<LayerCollectionListOptions>,
-    ) -> crate::error::Result<Vec<CollectionItem>> {
+    ) -> crate::error::Result<LayerCollection> {
         let id: NetCdfLayerCollectionId = serde_json::from_str(&collection.0)?;
 
-        let mut listing = match id {
+        Ok(match id {
             NetCdfLayerCollectionId::Path { path }
                 if canonicalize_subpath(&self.path, &path).is_ok()
                     && self.path.join(&path).is_dir() =>
             {
-                listing_from_dir(&self.overviews, &self.path, &path).await?
+                listing_from_dir(
+                    &self.name,
+                    collection,
+                    &self.overviews,
+                    &self.path,
+                    &path,
+                    &options.user_input,
+                )
+                .await?
             }
             NetCdfLayerCollectionId::Path { path }
                 if canonicalize_subpath(&self.path, &path).is_ok()
                     && self.is_netcdf_file(&path) =>
             {
                 listing_from_netcdf_file(
+                    collection,
                     path,
                     &[],
                     self.path.clone(),
@@ -1217,6 +1282,7 @@ impl LayerCollectionProvider for NetCdfCfDataProvider {
                     && self.is_netcdf_file(&path) =>
             {
                 listing_from_netcdf_file(
+                    collection,
                     path,
                     &groups,
                     self.path.clone(),
@@ -1226,16 +1292,7 @@ impl LayerCollectionProvider for NetCdfCfDataProvider {
                 .await?
             }
             _ => return Err(Error::InvalidLayerCollectionId),
-        };
-
-        listing.sort_by(|a, b| a.name().cmp(b.name()));
-        let listing = listing
-            .into_iter()
-            .skip(options.offset as usize)
-            .take(options.limit as usize)
-            .collect();
-
-        Ok(listing)
+        })
     }
 
     async fn root_collection_id(&self) -> crate::error::Result<LayerCollectionId> {
@@ -1461,7 +1518,6 @@ mod tests {
                 },
                 name: "Test dataset metric: Random metric 1 > entity01".into(),
                 description: "CFake description of test dataset with metric.".into(),
-                properties: vec![],
             }
         );
         assert_eq!(
@@ -1480,7 +1536,6 @@ mod tests {
                 },
                 name: "Test dataset metric: Random metric 1 > entity02".into(),
                 description: "CFake description of test dataset with metric.".into(),
-                properties: vec![],
             }
         );
         assert_eq!(
@@ -1499,7 +1554,6 @@ mod tests {
                 },
                 name: "Test dataset metric: Random metric 1 > entity03".into(),
                 description: "CFake description of test dataset with metric.".into(),
-                properties: vec![],
             }
         );
         assert_eq!(
@@ -1518,7 +1572,6 @@ mod tests {
                 },
                 name: "Test dataset metric: Random metric 2 > entity01".into(),
                 description: "CFake description of test dataset with metric.".into(),
-                properties: vec![],
             }
         );
         assert_eq!(
@@ -1537,7 +1590,6 @@ mod tests {
                 },
                 name: "Test dataset metric: Random metric 2 > entity02".into(),
                 description: "CFake description of test dataset with metric.".into(),
-                properties: vec![],
             }
         );
         assert_eq!(
@@ -1556,7 +1608,6 @@ mod tests {
                 },
                 name: "Test dataset metric: Random metric 2 > entity03".into(),
                 description: "CFake description of test dataset with metric.".into(),
-                properties: vec![],
             }
         );
     }
@@ -1594,7 +1645,6 @@ mod tests {
                     "Test dataset metric and scenario: Sustainability > Random metric 1 > entity01"
                         .into(),
                 description: "Fake description of test dataset with metric and scenario.".into(),
-                properties: vec![],
             }
         );
         assert_eq!(
@@ -1611,7 +1661,6 @@ mod tests {
                 },
                 name: "Test dataset metric and scenario: Fossil-fueled Development > Random metric 2 > entity02".into(),
                 description: "Fake description of test dataset with metric and scenario.".into(),
-                properties: vec![],
             }
         );
     }
@@ -1619,6 +1668,7 @@ mod tests {
     #[tokio::test]
     async fn test_metadata_from_netcdf_sm() {
         let provider = NetCdfCfDataProvider {
+            name: "Test Provider".to_string(),
             path: test_data!("netcdf4d/").to_path_buf(),
             overviews: test_data!("netcdf4d/overviews").to_path_buf(),
         };
@@ -1710,6 +1760,7 @@ mod tests {
     #[test]
     fn list_files() {
         let provider = NetCdfCfDataProvider {
+            name: "Test Provider".to_string(),
             path: test_data!("netcdf4d/").to_path_buf(),
             overviews: test_data!("netcdf4d/overviews").to_path_buf(),
         };
@@ -1728,6 +1779,7 @@ mod tests {
         let overview_folder = tempfile::tempdir().unwrap();
 
         let provider = NetCdfCfDataProvider {
+            name: "Test Provider".to_string(),
             path: test_data!("netcdf4d/").to_path_buf(),
             overviews: overview_folder.path().to_path_buf(),
         };
@@ -1822,6 +1874,7 @@ mod tests {
         let overview_folder = tempfile::tempdir().unwrap();
 
         let provider = NetCdfCfDataProvider {
+            name: "Test Provider".to_string(),
             path: test_data!("netcdf4d/").to_path_buf(),
             overviews: overview_folder.path().to_path_buf(),
         };
@@ -1861,7 +1914,6 @@ mod tests {
                     "Test dataset metric and scenario: Sustainability > Random metric 1 > entity01"
                         .into(),
                 description: "Fake description of test dataset with metric and scenario.".into(),
-                properties: vec![],
             }
         );
         assert_eq!(
@@ -1878,7 +1930,6 @@ mod tests {
                 },
                 name: "Test dataset metric and scenario: Fossil-fueled Development > Random metric 2 > entity02".into(),
                 description: "Fake description of test dataset with metric and scenario.".into(),
-                properties: vec![],
             }
         );
     }
