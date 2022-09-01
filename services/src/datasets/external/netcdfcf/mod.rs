@@ -149,6 +149,9 @@ pub struct NetCdfEntity {
 }
 
 trait ToNetCdfSubgroup {
+    /// Creates group information for a given `group_path`.
+    /// If you pass `stats_for_group`, it will be used to extract the group statistics (min/max).
+    /// If the `HashMap` is empty, the group statistics will be set to `None`.
     fn to_net_cdf_subgroup(
         &self,
         group_path: &Path,
