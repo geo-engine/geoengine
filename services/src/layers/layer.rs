@@ -40,7 +40,6 @@ pub struct LayerListing {
     pub id: ProviderLayerId,
     pub name: String,
     pub description: String,
-    pub properties: Vec<(String, String)>,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -67,12 +66,15 @@ pub struct LayerDefinition {
     pub symbology: Option<Symbology>,
 }
 
-#[derive(Debug, Serialize, Deserialize, Clone)]
+#[derive(Debug, Serialize, Deserialize, Clone, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
 pub struct LayerCollection {
-    id: LayerCollectionId,
-    name: String,
-    description: String,
-    items: Vec<CollectionItem>,
+    pub id: ProviderLayerCollectionId,
+    pub name: String,
+    pub description: String,
+    pub items: Vec<CollectionItem>,
+    pub entry_label: Option<String>, // a common label for the collection's entries, if there is any // TODO: separate labels for collections and layers?
+    pub properties: Vec<(String, String)>,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone, PartialEq, Eq)]
@@ -81,8 +83,6 @@ pub struct LayerCollectionListing {
     pub id: ProviderLayerCollectionId,
     pub name: String,
     pub description: String,
-    pub entry_label: Option<String>, // a common label for the collection's entries, if there is any
-    pub properties: Vec<(String, String)>,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone, PartialEq, Eq)]

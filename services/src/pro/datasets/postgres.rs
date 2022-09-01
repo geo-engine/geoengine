@@ -13,11 +13,14 @@ use crate::datasets::upload::{Upload, UploadDb, UploadId};
 use crate::error::{self, Error, Result};
 use crate::layers::layer::CollectionItem;
 use crate::layers::layer::Layer;
+use crate::layers::layer::LayerCollection;
 use crate::layers::layer::LayerCollectionListOptions;
 use crate::layers::layer::LayerListing;
+use crate::layers::layer::ProviderLayerCollectionId;
 use crate::layers::layer::ProviderLayerId;
 use crate::layers::listing::LayerCollectionId;
 use crate::layers::listing::LayerCollectionProvider;
+use crate::layers::storage::INTERNAL_PROVIDER_ID;
 use crate::pro::datasets::storage::UpdateDatasetPermissions;
 use crate::pro::datasets::RoleId;
 use crate::projects::Symbology;
@@ -647,11 +650,11 @@ where
     <Tls as MakeTlsConnect<Socket>>::TlsConnect: Send,
     <<Tls as MakeTlsConnect<Socket>>::TlsConnect as TlsConnect<Socket>>::Future: Send,
 {
-    async fn collection_items(
+    async fn collection(
         &self,
         collection: &LayerCollectionId,
         options: Validated<LayerCollectionListOptions>,
-    ) -> Result<Vec<CollectionItem>> {
+    ) -> Result<LayerCollection> {
         ensure!(
             *collection == self.root_collection_id().await?,
             error::UnknownLayerCollectionId {
@@ -687,7 +690,7 @@ where
             )
             .await?;
 
-        Ok(rows
+        let items = rows
             .iter()
             .map(|row| {
                 Result::<CollectionItem>::Ok(CollectionItem::Layer(LayerListing {
@@ -697,11 +700,22 @@ where
                     },
                     name: row.get(1),
                     description: row.get(2),
-                    properties: vec![],
                 }))
             })
             .filter_map(Result::ok)
-            .collect())
+            .collect();
+
+        Ok(LayerCollection {
+            id: ProviderLayerCollectionId {
+                provider_id: INTERNAL_PROVIDER_ID,
+                collection_id: collection.clone(),
+            },
+            name: "Datasets".to_string(),
+            description: "Basic Layers for all Datasets".to_string(),
+            items,
+            entry_label: None,
+            properties: vec![],
+        })
     }
 
     async fn root_collection_id(&self) -> Result<LayerCollectionId> {

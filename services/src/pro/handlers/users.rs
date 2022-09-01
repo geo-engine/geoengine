@@ -273,7 +273,7 @@ mod tests {
         send_pro_test_request(req, ctx).await
     }
 
-    #[tokio::test]
+    #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
     async fn register() {
         let ctx = ProInMemoryContext::test_default();
 
