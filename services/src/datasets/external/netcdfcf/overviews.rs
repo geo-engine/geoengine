@@ -677,7 +677,7 @@ fn generate_loading_info(
 ) -> Result<MetaDataDefinition> {
     const ONLY_BAND: usize = 1;
 
-    let result_descriptor = raster_descriptor_from_dataset(dataset, 1, None)
+    let result_descriptor = raster_descriptor_from_dataset(dataset, 1)
         .boxed_context(error::CannotGenerateLoadingInfo)?;
 
     let mut params = gdal_parameters_from_dataset(

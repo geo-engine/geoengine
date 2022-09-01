@@ -439,7 +439,7 @@ impl MetaDataProvider<GdalLoadingInfo, RasterResultDescriptor, RasterQueryRectan
                 None,
                 Some(self.auth().to_vec()),
             )?,
-            result_descriptor: raster_descriptor_from_dataset(&dataset, band_index as isize, None)?,
+            result_descriptor: raster_descriptor_from_dataset(&dataset, band_index as isize)?,
         }))
     }
 }
