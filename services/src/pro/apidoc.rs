@@ -12,8 +12,8 @@ use geoengine_datatypes::collections::VectorDataType;
 use geoengine_datatypes::dataset::{DataId, DataProviderId, DatasetId, ExternalDataId, LayerId};
 use geoengine_datatypes::primitives::{
     BoundingBox2D, ClassificationMeasurement, ContinuousMeasurement, Coordinate2D, DateTime,
-    Measurement, PlotQueryRectangle, RasterQueryRectangle, SpatialPartition2D, SpatialResolution,
-    TimeInstance, TimeInterval, VectorQueryRectangle,
+    FeatureDataType, Measurement, PlotQueryRectangle, RasterQueryRectangle, SpatialPartition2D,
+    SpatialResolution, TimeInstance, TimeInterval, VectorQueryRectangle,
 };
 use geoengine_datatypes::raster::RasterDataType;
 use geoengine_datatypes::spatial_reference::{
@@ -31,7 +31,7 @@ use super::users::{UserCredentials, UserId, UserInfo, UserRegistration, UserSess
 
 #[derive(OpenApi)]
 #[openapi(
-    handlers(
+    paths(
         crate::util::server::show_version_handler,
         handlers::workflows::register_workflow_handler,
         handlers::workflows::load_workflow_handler,
@@ -44,59 +44,62 @@ use super::users::{UserCredentials, UserId, UserInfo, UserRegistration, UserSess
         pro::handlers::users::anonymous_handler,
     ),
     components(
-        UserSession,
-        UserCredentials,
-        UserRegistration,
-        DateTime,
-        UserInfo,
+        schemas(
+            UserSession,
+            UserCredentials,
+            UserRegistration,
+            DateTime,
+            UserInfo,
 
-        DataId,
-        DataProviderId,
-        DatasetId,
-        ExternalDataId,
-        IdResponse<WorkflowId>,
-        LayerId,
-        ProjectId,
-        RoleId,
-        SessionId,
-        UploadId,
-        UserId,
-        WorkflowId,
+            DataId,
+            DataProviderId,
+            DatasetId,
+            ExternalDataId,
+            IdResponse<WorkflowId>,
+            LayerId,
+            ProjectId,
+            RoleId,
+            SessionId,
+            UploadId,
+            UserId,
+            WorkflowId,
 
-        TimeInstance,
-        TimeInterval,
+            TimeInstance,
+            TimeInterval,
 
-        Coordinate2D,
-        BoundingBox2D,
-        SpatialPartition2D,
-        SpatialResolution,
-        SpatialReference,
-        SpatialReferenceOption,
-        SpatialReferenceAuthority,
-        Measurement,
-        ContinuousMeasurement,
-        ClassificationMeasurement,
-        STRectangle,
+            Coordinate2D,
+            BoundingBox2D,
+            SpatialPartition2D,
+            SpatialResolution,
+            SpatialReference,
+            SpatialReferenceOption,
+            SpatialReferenceAuthority,
+            Measurement,
+            ContinuousMeasurement,
+            ClassificationMeasurement,
+            STRectangle,
 
-        ProvenanceOutput,
-        Provenance,
+            ProvenanceOutput,
+            Provenance,
 
-        VectorDataType,
-        RasterDataType,
+            VectorDataType,
+            FeatureDataType,
+            RasterDataType,
 
-        VersionInfo,
+            VersionInfo,
 
-        Workflow,
-        TypedOperator,
-        TypedResultDescriptor,
-        PlotResultDescriptor,
-        RasterResultDescriptor,
-        VectorResultDescriptor,
-        RasterDatasetFromWorkflow,
-        RasterDatasetFromWorkflowResult,
-        RasterQueryRectangle,
-        VectorQueryRectangle,
-        PlotQueryRectangle,
+            Workflow,
+            TypedOperator,
+            TypedResultDescriptor,
+            PlotResultDescriptor,
+            RasterResultDescriptor,
+            VectorResultDescriptor,
+            RasterDatasetFromWorkflow,
+            RasterDatasetFromWorkflowResult,
+            RasterQueryRectangle,
+            VectorQueryRectangle,
+            PlotQueryRectangle,
+        ),
     ),
     modifiers(&SecurityAddon, &ApiDocInfo),
     external_docs(url = "https://docs.geoengine.io", description = "Geo Engine Docs")
@@ -125,7 +128,7 @@ struct ApiDocInfo;
 
 impl Modify for ApiDocInfo {
     fn modify(&self, openapi: &mut utoipa::openapi::OpenApi) {
-        openapi.info.title = "Geo Engine API".to_string();
+        openapi.info.title = "Geo Engine Pro API".to_string();
 
         openapi.info.contact = Some(
             utoipa::openapi::ContactBuilder::new()

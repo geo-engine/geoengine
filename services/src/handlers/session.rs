@@ -22,7 +22,7 @@ where
         );
 }
 
-/// Creates session for anonymous user. The `id` field serves as a Bearer token for requests.
+/// Creates session for anonymous user. The session's id serves as a Bearer token for requests.
 #[utoipa::path(
     tag = "Session",
     post,

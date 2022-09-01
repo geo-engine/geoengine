@@ -61,7 +61,7 @@ pub(crate) async fn register_user_handler<C: ProContext>(
     Ok(web::Json(IdResponse::from(id)))
 }
 
-/// Creates a session by providing user credentials.
+/// Creates a session by providing user credentials. The session's id serves as a Bearer token for requests.
 #[utoipa::path(
 tag = "Session",
 post,
@@ -120,7 +120,7 @@ pub(crate) async fn logout_handler<C: ProContext>(
     Ok(HttpResponse::Ok())
 }
 
-/// Creates session for anonymous user.
+/// Creates session for anonymous user. The session's id serves as a Bearer token for requests.
 #[utoipa::path(
     tag = "Session",
     post,

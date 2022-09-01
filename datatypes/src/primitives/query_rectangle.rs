@@ -44,16 +44,13 @@ impl utoipa::ToSchema for QueryRectangle<SpatialPartition2D> {
     fn schema() -> utoipa::openapi::Schema {
         use utoipa::openapi::*;
         ObjectBuilder::new()
-            .property(
-                "spatialBounds",
-                Ref::from_response_name("SpatialPartition2D"),
-            )
+            .property("spatialBounds", Ref::from_schema_name("SpatialPartition2D"))
             .required("spatialBounds")
-            .property("timeInterval", Ref::from_response_name("TimeInterval"))
+            .property("timeInterval", Ref::from_schema_name("TimeInterval"))
             .required("timeInterval")
             .property(
                 "spatialResolution",
-                Ref::from_response_name("SpatialResolution"),
+                Ref::from_schema_name("SpatialResolution"),
             )
             .required("spatialResolution")
             .description(Some(
@@ -68,13 +65,13 @@ impl utoipa::ToSchema for QueryRectangle<BoundingBox2D> {
     fn schema() -> utoipa::openapi::Schema {
         use utoipa::openapi::*;
         ObjectBuilder::new()
-            .property("spatialBounds", Ref::from_response_name("BoundingBox2D"))
+            .property("spatialBounds", Ref::from_schema_name("BoundingBox2D"))
             .required("spatialBounds")
-            .property("timeInterval", Ref::from_response_name("TimeInterval"))
+            .property("timeInterval", Ref::from_schema_name("TimeInterval"))
             .required("timeInterval")
             .property(
                 "spatialResolution",
-                Ref::from_response_name("SpatialResolution"),
+                Ref::from_schema_name("SpatialResolution"),
             )
             .required("spatialResolution")
             .description(Some(

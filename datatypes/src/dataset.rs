@@ -12,11 +12,10 @@ identifier!(DatasetId);
 /// for accessing the data. Internal data is loaded from datasets, external from `DataProvider`s.
 pub enum DataId {
     #[serde(rename_all = "camelCase")]
-    Internal { dataset_id: DatasetId },
-    External {
-        provider_id: DataProviderId,
-        layer_id: LayerId,
+    Internal {
+        dataset_id: DatasetId,
     },
+    External(ExternalDataId),
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone, PartialEq, Eq, Hash, utoipa::ToSchema)]
@@ -47,15 +46,8 @@ impl DataId {
     }
 
     pub fn external(&self) -> Option<ExternalDataId> {
-        if let Self::External {
-            provider_id,
-            layer_id,
-        } = self
-        {
-            return Some(ExternalDataId {
-                provider_id: *provider_id,
-                layer_id: layer_id.clone(),
-            });
+        if let Self::External(id) = self {
+            return Some(id.clone());
         }
         None
     }
@@ -69,9 +61,6 @@ impl From<DatasetId> for DataId {
 
 impl From<ExternalDataId> for DataId {
     fn from(value: ExternalDataId) -> Self {
-        DataId::External {
-            provider_id: value.provider_id,
-            layer_id: value.layer_id,
-        }
+        DataId::External(value)
     }
 }

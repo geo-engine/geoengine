@@ -116,7 +116,7 @@ pub struct VectorResultDescriptor {
     pub bbox: Option<BoundingBox2D>,
 }
 
-#[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize, utoipa::ToSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct VectorColumnInfo {
     pub data_type: FeatureDataType,

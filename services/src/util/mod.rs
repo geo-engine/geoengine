@@ -1,6 +1,5 @@
 use serde::de::Error;
 use serde::{Deserialize, Serialize};
-use utoipa::ToSchema;
 
 use std::path::{Path, PathBuf};
 use std::str::FromStr;
@@ -16,9 +15,9 @@ pub mod server;
 pub mod tests;
 pub mod user_input;
 
-#[derive(Debug, Serialize, Deserialize, Clone, Copy, Component)]
+#[derive(Debug, Serialize, Deserialize, Clone, Copy, utoipa::ToSchema)]
 pub struct IdResponse<T> {
-    #[component(value_type = String)]
+    #[schema(value_type = String)]
     pub id: T,
 }
 

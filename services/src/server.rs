@@ -87,6 +87,8 @@ where
 {
     let wrapped_ctx = web::Data::new(ctx);
 
+    let openapi = ApiDoc::openapi();
+
     HttpServer::new(move || {
         #[allow(unused_mut)]
         let mut app = App::new()
@@ -111,8 +113,7 @@ where
             .configure(handlers::wms::init_wms_routes::<C>)
             .configure(handlers::workflows::init_workflow_routes::<C>)
             .service(
-                SwaggerUi::new("/swagger-ui/{_:.*}")
-                    .url("/api-doc/openapi.json", ApiDoc::openapi()),
+                SwaggerUi::new("/swagger-ui/{_:.*}").url("/api-doc/openapi.json", openapi.clone()),
             );
 
         #[cfg(feature = "ebv")]

@@ -16,7 +16,6 @@ use geoengine_operators::mock::MockDatasetDataSourceLoadingInfo;
 use geoengine_operators::source::{GdalLoadingInfo, OgrSourceDataset};
 use serde::{Deserialize, Serialize};
 use snafu::ensure;
-use utoipa::ToSchema;
 
 #[derive(Debug, Serialize, Deserialize, Clone, PartialEq)]
 #[serde(rename_all = "camelCase")]
@@ -110,13 +109,13 @@ pub trait DatasetProvider<S: Session>:
     async fn provenance(&self, session: &S, dataset: &DatasetId) -> Result<ProvenanceOutput>;
 }
 
-#[derive(Debug, Serialize, Deserialize, PartialEq, Eq, Hash, Component)]
+#[derive(Debug, Serialize, Deserialize, PartialEq, Eq, Hash, utoipa::ToSchema)]
 pub struct ProvenanceOutput {
     pub data: DataId,
     pub provenance: Option<Provenance>,
 }
 
-#[derive(Debug, Serialize, Deserialize, Clone, PartialEq, Eq, Hash, Component)]
+#[derive(Debug, Serialize, Deserialize, Clone, PartialEq, Eq, Hash, utoipa::ToSchema)]
 pub struct Provenance {
     pub citation: String,
     pub license: String,

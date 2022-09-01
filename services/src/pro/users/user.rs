@@ -10,7 +10,7 @@ use geoengine_datatypes::util::Identifier;
 
 #[derive(Debug, PartialEq, Eq, Serialize, Deserialize, Clone, Hash, utoipa::ToSchema)]
 #[serde(rename_all = "camelCase")]
-#[component(example = json!({
+#[schema(example = json!({
     "email": "foo@example.com",
     "password": "secret123",
     "realName": "Foo Bar"
@@ -50,7 +50,7 @@ impl UserInput for UserRegistration {
 }
 
 #[derive(Debug, PartialEq, Eq, Serialize, Deserialize, Clone, Hash, utoipa::ToSchema)]
-#[component(example = json!({
+#[schema(example = json!({
     "email": "foo@example.com",
     "password": "secret123",
 }))]

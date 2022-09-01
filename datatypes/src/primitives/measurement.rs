@@ -7,26 +7,20 @@ use std::str::FromStr;
 #[serde(rename_all = "camelCase", tag = "type")]
 pub enum Measurement {
     Unitless,
-    Continuous {
-        measurement: String,
-        unit: Option<String>,
-    },
-    Classification {
-        measurement: String,
-        classes: HashMap<u8, String>,
-    },
+    Continuous(ContinuousMeasurement),
+    Classification(ClassificationMeasurement),
 }
 
 impl Measurement {
     pub fn continuous(measurement: String, unit: Option<String>) -> Self {
-        Self::Continuous { measurement, unit }
+        Self::Continuous(ContinuousMeasurement { measurement, unit })
     }
 
     pub fn classification(measurement: String, classes: HashMap<u8, String>) -> Self {
-        Self::Classification {
+        Self::Classification(ClassificationMeasurement {
             measurement,
             classes,
-        }
+        })
     }
 }
 
@@ -111,17 +105,17 @@ impl fmt::Display for Measurement {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Measurement::Unitless => Ok(()),
-            Measurement::Continuous {
+            Measurement::Continuous(ContinuousMeasurement {
                 measurement,
                 unit: unit_option,
-            } => {
+            }) => {
                 write!(f, "{}", measurement)?;
                 if let Some(unit) = unit_option {
                     return write!(f, " in {}", unit);
                 }
                 Ok(())
             }
-            Measurement::Classification { measurement, .. } => {
+            Measurement::Classification(ClassificationMeasurement { measurement, .. }) => {
                 write!(f, "{}", measurement)
             }
         }

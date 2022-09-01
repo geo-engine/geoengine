@@ -18,7 +18,7 @@ impl WorkflowId {
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize, utoipa::ToSchema)]
-#[component(example = json!({
+#[schema(example = json!({
     "type": "Vector",
     "operator": {
       "type": "MockPointSource",

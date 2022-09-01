@@ -30,8 +30,6 @@ use geoengine_operators::{call_on_generic_raster_processor_gdal_types, call_on_t
 use serde::{Deserialize, Serialize};
 use snafu::{ResultExt, Snafu};
 use tokio::fs;
-use utoipa::IntoParams;
-use utoipa::ToSchema;
 use zip::{write::FileOptions, ZipWriter};
 
 pub(crate) fn init_workflow_routes<C>(cfg: &mut web::ServiceConfig)
@@ -348,13 +346,13 @@ async fn resolve_provenance<C: Context>(
 }
 
 /// parameter for the dataset from workflow handler (body)
-#[derive(Clone, Debug, Deserialize, Serialize, Component)]
-#[component(example = json!({"name": "foo", "description": null, "query": {"spatialBounds": {"upperLeftCoordinate": {"x": -10.0, "y": 80.0}, "lowerRightCoordinate": {"x": 50.0, "y": 20.0}}, "timeInterval": {"start": 1_388_534_400_000_i64, "end": 1_388_534_401_000_i64}, "spatialResolution": {"x": 0.1, "y": 0.1}}}))]
+#[derive(Clone, Debug, Deserialize, Serialize, utoipa::ToSchema)]
+#[schema(example = json!({"name": "foo", "description": null, "query": {"spatialBounds": {"upperLeftCoordinate": {"x": -10.0, "y": 80.0}, "lowerRightCoordinate": {"x": 50.0, "y": 20.0}}, "timeInterval": {"start": 1_388_534_400_000_i64, "end": 1_388_534_401_000_i64}, "spatialResolution": {"x": 0.1, "y": 0.1}}}))]
 pub struct RasterDatasetFromWorkflow {
     name: String,
     description: Option<String>,
     query: RasterQueryRectangle,
-    #[component(default = default_as_cog)]
+    #[schema(default = default_as_cog)]
     #[serde(default = "default_as_cog")]
     as_cog: bool,
 }
@@ -366,7 +364,7 @@ const fn default_as_cog() -> bool {
 }
 
 /// response of the dataset from workflow handler
-#[derive(Clone, Debug, Deserialize, Serialize, Component)]
+#[derive(Clone, Debug, Deserialize, Serialize, utoipa::ToSchema)]
 pub struct RasterDatasetFromWorkflowResult {
     dataset: DatasetId,
     upload: UploadId,

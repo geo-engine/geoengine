@@ -68,8 +68,12 @@ where
             .prepare("SELECT workflow FROM workflows WHERE id = $1")
             .await?;
 
-        let row = conn.query_one(&stmt, &[&id]).await?;
+        let row = conn.query(&stmt, &[&id]).await?;
 
-        Ok(serde_json::from_value(row.get(0)).context(error::SerdeJson)?)
+        if row.is_empty() {
+            return Err(error::Error::NoWorkflowForGivenId);
+        }
+
+        Ok(serde_json::from_value(row[0].get(0)).context(error::SerdeJson)?)
     }
 }
