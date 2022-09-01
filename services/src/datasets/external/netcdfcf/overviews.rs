@@ -40,6 +40,7 @@ type Result<T, E = NetCdfCf4DProviderError> = std::result::Result<T, E>;
 
 pub const METADATA_FILE_NAME: &str = "metadata.json";
 pub const LOADING_INFO_FILE_NAME: &str = "loading_info.json";
+const OVERVIEW_GENERATION_OF_TOTAL_PCT: f64 = 0.9; // just say the last 10% are metadata
 
 #[derive(Debug, Clone)]
 struct NetCdfGroup {
@@ -259,7 +260,7 @@ pub fn create_overviews<C: TaskContext>(
 
     emit_status(
         task_context,
-        0.9, // just say the last 10% are metadata
+        OVERVIEW_GENERATION_OF_TOTAL_PCT,
         "Collecting metadata".to_string(),
     );
 
@@ -298,9 +299,11 @@ fn emit_subtask_status<C: TaskContext>(
     let min_pct = conversion_index as f64 / number_of_conversions as f64;
     let max_pct = (conversion_index + 1) as f64 / number_of_conversions as f64;
     let dimension_pct = f64::from(entity) / f64::from(number_of_other_entities);
+    let pct = min_pct + dimension_pct * (max_pct - min_pct);
+
     emit_status(
         task_context,
-        min_pct + dimension_pct * (max_pct - min_pct),
+        pct * OVERVIEW_GENERATION_OF_TOTAL_PCT,
         format!("Processing {} of {number_of_conversions} subdatasets; Entity {entity} of {number_of_other_entities}", conversion_index + 1),
     );
 }
@@ -675,16 +678,16 @@ fn generate_loading_info(
     overview_dataset_path: &Path,
     time_coverage: &TimeCoverage,
 ) -> Result<MetaDataDefinition> {
-    const ONLY_BAND: usize = 1;
+    const TIFF_BAND_INDEX: usize = 1;
 
     let result_descriptor = raster_descriptor_from_dataset(dataset, 1)
         .boxed_context(error::CannotGenerateLoadingInfo)?;
 
     let mut params = gdal_parameters_from_dataset(
         dataset,
-        ONLY_BAND,
+        TIFF_BAND_INDEX,
         overview_dataset_path,
-        Some(ONLY_BAND),
+        Some(TIFF_BAND_INDEX),
         None,
     )
     .boxed_context(error::CannotGenerateLoadingInfo)?;
