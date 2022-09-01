@@ -33,15 +33,16 @@ use super::users::{UserCredentials, UserId, UserInfo, UserRegistration, UserSess
 #[openapi(
     paths(
         crate::util::server::show_version_handler,
-        handlers::workflows::register_workflow_handler,
-        handlers::workflows::load_workflow_handler,
+        handlers::workflows::dataset_from_workflow_handler,
         handlers::workflows::get_workflow_metadata_handler,
         handlers::workflows::get_workflow_provenance_handler,
-        handlers::workflows::dataset_from_workflow_handler,
-        pro::handlers::users::register_user_handler,
+        handlers::workflows::load_workflow_handler,
+        handlers::workflows::register_workflow_handler,
+        pro::handlers::users::anonymous_handler,
         pro::handlers::users::login_handler,
         pro::handlers::users::logout_handler,
-        pro::handlers::users::anonymous_handler,
+        pro::handlers::users::register_user_handler,
+        pro::handlers::users::session_handler,
     ),
     components(
         schemas(

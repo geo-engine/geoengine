@@ -1,6 +1,5 @@
 use crate::error;
 use crate::error::Result;
-use crate::handlers;
 use crate::pro::contexts::ProContext;
 use crate::pro::users::UserCredentials;
 use crate::pro::users::UserDb;
@@ -24,9 +23,7 @@ where
         .service(web::resource("/anonymous").route(web::post().to(anonymous_handler::<C>)))
         .service(web::resource("/login").route(web::post().to(login_handler::<C>)))
         .service(web::resource("/logout").route(web::post().to(logout_handler::<C>)))
-        .service(
-            web::resource("/session").route(web::get().to(handlers::session::session_handler::<C>)),
-        )
+        .service(web::resource("/session").route(web::get().to(session_handler::<C>)))
         .service(
             web::resource("/session/project/{project}")
                 .route(web::post().to(session_project_handler::<C>)),
@@ -120,6 +117,40 @@ pub(crate) async fn logout_handler<C: ProContext>(
     Ok(HttpResponse::Ok())
 }
 
+/// Retrieves details about the current session.
+#[utoipa::path(
+    tag = "Session",
+    get,
+    path = "/session",
+    responses(
+        (status = 200, description = "The current session", body = UserSession,
+            example = json!({
+                "id": "208fa24e-7a92-4f57-a3fe-d1177d9f18ad",
+                "user": {
+                    "id": "5b4466d2-8bab-4ed8-a182-722af3c80958",
+                    "email": "foo@example.com",
+                    "realName": "Foo Bar"
+                },
+                "created": "2021-04-26T13:47:10.579724800Z",
+                "validUntil": "2021-04-26T14:47:10.579775400Z",
+                "project": null,
+                "view": null,
+                "roles": [
+                    "fa5be363-bc0d-4bfa-85c7-ebb5cd9a8783",
+                    "4e8081b6-8aa6-4275-af0c-2fa2da557d28"
+                ]
+            })
+        )
+    ),
+    security(
+        ("session_token" = [])
+    )
+)]
+#[allow(clippy::unused_async)] // the function signature of request handlers requires it
+pub(crate) async fn session_handler<C: ProContext>(session: C::Session) -> impl Responder {
+    web::Json(session)
+}
+
 /// Creates session for anonymous user. The session's id serves as a Bearer token for requests.
 #[utoipa::path(
     tag = "Session",
@@ -158,17 +189,20 @@ pub(crate) async fn anonymous_handler<C: ProContext>(ctx: web::Data<C>) -> Resul
 }
 
 /// Sets the active project of the session.
-///
-/// # Example
-///
-/// ```text
-/// POST /session/project/c8d88d83-d409-46f7-bab2-815bba87ccd8
-/// Authorization: Bearer fc9b5dc2-a1eb-400f-aeed-a7845d9935c9
-/// ```
-///
-/// # Errors
-///
-/// This call fails if the session is invalid.
+#[utoipa::path(
+    tag = "Session",
+    post,
+    path = "/session/project/{project}",
+    responses(
+        (status = 200, description = "The project of the session was updated."),
+    ),
+    params(
+        ("project" = ProjectId, description = "Project id")
+    ),
+    security(
+        ("session_token" = [])
+    )
+)]
 pub(crate) async fn session_project_handler<C: ProContext>(
     project: web::Path<ProjectId>,
     session: UserSession,
@@ -182,30 +216,18 @@ pub(crate) async fn session_project_handler<C: ProContext>(
 }
 
 // TODO: /view instead of /session/view
-/// Sets the active view of the session.
-///
-/// # Example
-///
-/// ```text
-/// POST /session/view
-/// Authorization: Bearer fc9b5dc2-a1eb-400f-aeed-a7845d9935c9
-///
-/// {
-///   "spatialReference": "",
-///   "boundingBox": {
-///     "lowerLeftCoordinate": { "x": 0, "y": 0 },
-///     "upperRightCoordinate": { "x": 1, "y": 1 }
-///   },
-///   "timeInterval": {
-///     "start": 0,
-///     "end": 1
-///   }
-/// }
-/// ```
-///
-/// # Errors
-///
-/// This call fails if the session is invalid.
+#[utoipa::path(
+    tag = "Session",
+    post,
+    path = "/session/view",
+    request_body = STRectangle,
+    responses(
+        (status = 200, description = "The view of the session was updated."),
+    ),
+    security(
+        ("session_token" = [])
+    )
+)]
 pub(crate) async fn session_view_handler<C: ProContext>(
     session: C::Session,
     ctx: web::Data<C>,

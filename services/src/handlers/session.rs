@@ -48,50 +48,44 @@ async fn anonymous_handler<C: SimpleContext>(ctx: web::Data<C>) -> Result<impl R
     Ok(web::Json(session))
 }
 
-/// Retrieves details about the [Session].
-///
-/// # Example
-///
-/// ```text
-/// GET /session
-/// Authorization: Bearer fc9b5dc2-a1eb-400f-aeed-a7845d9935c9
-/// ```
-/// Response:
-/// ```text
-/// {
-///   "id": "29fb1e93-7b6b-466f-952a-fdde87736c62",
-///   "user": {
-///     "id": "f33429a5-d207-4e59-827d-fc48f9630c9c",
-///     "email": "foo@example.com",
-///     "realName": "Foo Bar"
-///   },
-///   "created": "2021-04-18T17:20:44.190720500Z",
-///   "validUntil": "2021-04-18T18:20:44.190726700Z",
-///   "project": null,
-///   "view": null
-/// }
-/// ```
-///
-/// # Errors
-///
-/// This call fails if the session is invalid.
+/// Retrieves details about the current session.
+#[utoipa::path(
+    tag = "Session",
+    get,
+    path = "/session",
+    responses(
+        (status = 200, description = "The current session", body = SimpleSession,
+            example = json!({
+                "id": "2fee8652-3192-4d3e-8adc-14257064224a",
+                "project": null,
+                "view": null
+            })
+        )
+    ),
+    security(
+        ("session_token" = [])
+    )
+)]
 #[allow(clippy::unused_async)] // the function signature of request handlers requires it
 pub(crate) async fn session_handler<C: Context>(session: C::Session) -> impl Responder {
     web::Json(session)
 }
 
 /// Sets the active project of the session.
-///
-/// # Example
-///
-/// ```text
-/// POST /session/project/c8d88d83-d409-46f7-bab2-815bba87ccd8
-/// Authorization: Bearer fc9b5dc2-a1eb-400f-aeed-a7845d9935c9
-/// ```
-///
-/// # Errors
-///
-/// This call fails if the session is invalid.
+#[utoipa::path(
+    tag = "Session",
+    post,
+    path = "/session/project/{project}",
+    responses(
+        (status = 200, description = "The project of the session was updated."),
+    ),
+    params(
+        ("project" = ProjectId, description = "Project id")
+    ),
+    security(
+        ("session_token" = [])
+    )
+)]
 async fn session_project_handler<C: SimpleContext>(
     project: web::Path<ProjectId>,
     _session: C::Session,
@@ -102,31 +96,19 @@ async fn session_project_handler<C: SimpleContext>(
     HttpResponse::Ok()
 }
 
-// TODO: /view instead of /session/view
 /// Sets the active view of the session.
-///
-/// # Example
-///
-/// ```text
-/// POST /session/view
-/// Authorization: Bearer fc9b5dc2-a1eb-400f-aeed-a7845d9935c9
-///
-/// {
-///   "spatialReference": "",
-///   "boundingBox": {
-///     "lowerLeftCoordinate": { "x": 0, "y": 0 },
-///     "upperRightCoordinate": { "x": 1, "y": 1 }
-///   },
-///   "timeInterval": {
-///     "start": 0,
-///     "end": 1
-///   }
-/// }
-/// ```
-///
-/// # Errors
-///
-/// This call fails if the session is invalid.
+#[utoipa::path(
+    tag = "Session",
+    post,
+    path = "/session/view",
+    request_body = STRectangle,
+    responses(
+        (status = 200, description = "The view of the session was updated."),
+    ),
+    security(
+        ("session_token" = [])
+    )
+)]
 async fn session_view_handler<C: SimpleContext>(
     _session: C::Session,
     ctx: web::Data<C>,

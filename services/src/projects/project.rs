@@ -123,6 +123,24 @@ impl Project {
 #[cfg_attr(feature = "postgres", derive(ToSql, FromSql))]
 #[allow(clippy::upper_case_acronyms)]
 #[serde(rename_all = "camelCase")]
+// TODO: add example, once utoipas schema macro can co-exist with postgres
+// #[schema(example = json!({
+//     "boundingBox": {
+//         "lowerLeftCoordinate": {
+//             "x": -180.0,
+//             "y": -90.0
+//         },
+//         "upperRightCoordinate": {
+//             "x": 180.0,
+//             "y": 90.0
+//         }
+//     },
+//     "spatialReference": "EPSG:4326",
+//     "timeInterval": {
+//         "end": 1_388_534_400_000_i64,
+//         "start": 1_388_534_400_000_i64
+//     }
+// }))]
 pub struct STRectangle {
     pub spatial_reference: SpatialReferenceOption,
     pub bounding_box: BoundingBox2D,

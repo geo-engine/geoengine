@@ -30,11 +30,14 @@ use utoipa::{Modify, OpenApi};
     paths(
         crate::util::server::show_version_handler,
         handlers::session::anonymous_handler,
-        handlers::workflows::register_workflow_handler,
-        handlers::workflows::load_workflow_handler,
+        handlers::session::session_handler,
+        handlers::session::session_project_handler,
+        handlers::session::session_view_handler,
+        handlers::workflows::dataset_from_workflow_handler,
         handlers::workflows::get_workflow_metadata_handler,
         handlers::workflows::get_workflow_provenance_handler,
-        handlers::workflows::dataset_from_workflow_handler,
+        handlers::workflows::load_workflow_handler,
+        handlers::workflows::register_workflow_handler,
     ),
     components(
         schemas(
