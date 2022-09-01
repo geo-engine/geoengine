@@ -434,6 +434,10 @@ impl NetCdfCfDataProvider {
         id: &DataId,
     ) -> Result<Box<dyn MetaData<GdalLoadingInfo, RasterResultDescriptor, RasterQueryRectangle>>>
     {
+        const LON_DIMENSION_INDEX: usize = 3;
+        const LAT_DIMENSION_INDEX: usize = 2;
+        const TIME_DIMENSION_INDEX: usize = 1;
+
         let dataset = id
             .external()
             .ok_or(NetCdfCf4DProviderError::InvalidExternalDataId {
@@ -542,11 +546,11 @@ impl NetCdfCfDataProvider {
             no_data_value: data_array.no_data_value_as_double(), // we could also leave this empty. The gdal source will try to get the correct one.
             properties_mapping: None,
             width: dimensions
-                .get(3 /* 3 is lon */)
+                .get(LON_DIMENSION_INDEX)
                 .map(Dimension::size)
                 .unwrap_or_default(),
             height: dimensions
-                .get(2 /* 2 is lat */)
+                .get(LAT_DIMENSION_INDEX)
                 .map(Dimension::size)
                 .unwrap_or_default(),
             gdal_open_options: None,
@@ -555,7 +559,7 @@ impl NetCdfCfDataProvider {
         };
 
         let dimensions_time = dimensions
-            .get(1 /* 1 is time */)
+            .get(TIME_DIMENSION_INDEX)
             .map(Dimension::size)
             .unwrap_or_default();
         Ok(match time_coverage {
