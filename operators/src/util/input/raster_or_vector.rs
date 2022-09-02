@@ -68,12 +68,11 @@ mod tests {
     fn it_serializes() {
         let operator = RasterOrVectorOperator::Raster(
             GdalSource {
-                params:
-                    GdalSourceParameters {
-                        data: DatasetId::from_str("fc734022-61e0-49da-b327-257ba9d602a7")
-                            .unwrap()
-                            .into(),
-                    },
+                params: GdalSourceParameters {
+                    data: DatasetId::from_str("fc734022-61e0-49da-b327-257ba9d602a7")
+                        .unwrap()
+                        .into(),
+                },
             }
             .boxed(),
         );

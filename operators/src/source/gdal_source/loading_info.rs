@@ -276,6 +276,9 @@ impl DynamicGdalLoadingInfoPartIterator {
             end = (snapped_end + step)?;
         }
 
+        // ensure start <= end
+        end = end.max(snapped_start);
+
         let snapped_interval = TimeInterval::new_unchecked(snapped_start, end);
 
         let time_step_iter = TimeStepIter::new_with_interval(snapped_interval, step)?;

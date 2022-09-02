@@ -5,8 +5,9 @@ use std::sync::Arc;
 use super::add_from_directory::UNSORTED_COLLECTION_ID;
 use super::external::{DataProvider, DataProviderDefinition};
 use super::layer::{
-    AddLayer, AddLayerCollection, CollectionItem, Layer, LayerCollectionListOptions,
-    LayerCollectionListing, LayerListing, ProviderLayerCollectionId, ProviderLayerId,
+    AddLayer, AddLayerCollection, CollectionItem, Layer, LayerCollection,
+    LayerCollectionListOptions, LayerCollectionListing, LayerListing, ProviderLayerCollectionId,
+    ProviderLayerId,
 };
 use super::listing::{LayerCollectionId, LayerCollectionProvider};
 use crate::error::{Error, Result};
@@ -25,6 +26,8 @@ use uuid::Uuid;
 pub enum LayerDbError {
     #[snafu(display("There is no layer with the given id {id}"))]
     NoLayerForGivenId { id: LayerId },
+    #[snafu(display("There is no layer collection with the given id {id}"))]
+    NoLayerCollectionForGivenId { id: LayerCollectionId },
 }
 
 pub const INTERNAL_PROVIDER_ID: DataProviderId =
@@ -285,20 +288,26 @@ impl LayerDb for HashMapLayerDb {
 
 #[async_trait]
 impl LayerCollectionProvider for HashMapLayerDb {
-    async fn collection_items(
+    async fn collection(
         &self,
-        collection: &LayerCollectionId,
+        collection_id: &LayerCollectionId,
         options: Validated<LayerCollectionListOptions>,
-    ) -> Result<Vec<CollectionItem>> {
+    ) -> Result<LayerCollection> {
         let options = options.user_input;
 
         let backend = self.backend.read().await;
 
         let empty = vec![];
 
+        let collection = backend.collections.get(collection_id).ok_or(
+            LayerDbError::NoLayerCollectionForGivenId {
+                id: collection_id.clone(),
+            },
+        )?;
+
         let collections = backend
             .collection_children
-            .get(collection)
+            .get(collection_id)
             .unwrap_or(&empty)
             .iter()
             .map(|c| {
@@ -320,7 +329,7 @@ impl LayerCollectionProvider for HashMapLayerDb {
 
         let layers = backend
             .collection_layers
-            .get(collection)
+            .get(collection_id)
             .unwrap_or(&empty)
             .iter()
             .map(|l| {
@@ -339,20 +348,30 @@ impl LayerCollectionProvider for HashMapLayerDb {
                 })
             });
 
-        let mut listing = collections
+        let mut items = collections
             .chain(layers)
             .skip(options.offset as usize)
             .take(options.limit as usize)
             .collect::<Vec<_>>();
 
-        listing.sort_by(|a, b| match (a, b) {
+        items.sort_by(|a, b| match (a, b) {
             (CollectionItem::Collection(a), CollectionItem::Collection(b)) => a.name.cmp(&b.name),
             (CollectionItem::Layer(a), CollectionItem::Layer(b)) => a.name.cmp(&b.name),
             (CollectionItem::Collection(_), CollectionItem::Layer(_)) => Ordering::Less,
             (CollectionItem::Layer(_), CollectionItem::Collection(_)) => Ordering::Greater,
         });
 
-        Ok(listing)
+        Ok(LayerCollection {
+            id: ProviderLayerCollectionId {
+                provider_id: INTERNAL_PROVIDER_ID,
+                collection_id: collection_id.clone(),
+            },
+            name: collection.name.clone(),
+            description: collection.description.clone(),
+            items,
+            entry_label: None,
+            properties: vec![],
+        })
     }
 
     async fn root_collection_id(&self) -> Result<LayerCollectionId> {
@@ -378,6 +397,8 @@ impl LayerCollectionProvider for HashMapLayerDb {
             description: layer.description.clone(),
             workflow: layer.workflow.clone(),
             symbology: layer.symbology.clone(),
+            properties: vec![],
+            metadata: HashMap::new(),
         })
     }
 }
@@ -414,7 +435,7 @@ impl LayerProviderDb for HashMapLayerProviderDb {
             .map(|(id, provider)| LayerProviderListing {
                 id: *id,
                 name: provider.name(),
-                description: provider.type_name(),
+                description: provider.type_name().to_string(),
             })
             .collect::<Vec<_>>();
 
@@ -495,7 +516,7 @@ mod tests {
         let empty_c_id = db.add_collection(collection, &top_c_id).await?;
 
         let items = db
-            .collection_items(
+            .collection(
                 &top_c_id,
                 LayerCollectionListOptions {
                     offset: 0,
@@ -507,24 +528,34 @@ mod tests {
 
         assert_eq!(
             items,
-            vec![
-                CollectionItem::Collection(LayerCollectionListing {
-                    id: ProviderLayerCollectionId {
-                        provider_id: INTERNAL_PROVIDER_ID,
-                        collection_id: empty_c_id,
-                    },
-                    name: "empty collection".to_string(),
-                    description: "description".to_string()
-                }),
-                CollectionItem::Layer(LayerListing {
-                    id: ProviderLayerId {
-                        provider_id: INTERNAL_PROVIDER_ID,
-                        layer_id: l_id,
-                    },
-                    name: "layer".to_string(),
-                    description: "description".to_string(),
-                })
-            ]
+            LayerCollection {
+                id: ProviderLayerCollectionId {
+                    provider_id: INTERNAL_PROVIDER_ID,
+                    collection_id: top_c_id.clone(),
+                },
+                name: "top collection".to_string(),
+                description: "description".to_string(),
+                items: vec![
+                    CollectionItem::Collection(LayerCollectionListing {
+                        id: ProviderLayerCollectionId {
+                            provider_id: INTERNAL_PROVIDER_ID,
+                            collection_id: empty_c_id,
+                        },
+                        name: "empty collection".to_string(),
+                        description: "description".to_string(),
+                    }),
+                    CollectionItem::Layer(LayerListing {
+                        id: ProviderLayerId {
+                            provider_id: INTERNAL_PROVIDER_ID,
+                            layer_id: l_id,
+                        },
+                        name: "layer".to_string(),
+                        description: "description".to_string(),
+                    })
+                ],
+                entry_label: None,
+                properties: vec![],
+            }
         );
 
         Ok(())

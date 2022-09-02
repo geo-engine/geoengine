@@ -447,7 +447,7 @@ pub struct UpdateProject {
     pub time_step: Option<TimeStep>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(untagged)]
 pub enum VecUpdate<Content> {
     None(NoUpdate),
@@ -676,7 +676,7 @@ mod tests {
         });
 
         assert_eq!(
-            serde_json::to_string(&symbology).unwrap(),
+            serde_json::to_value(&symbology).unwrap(),
             json!({
                 "type": "point",
                 "radius": {
@@ -706,15 +706,14 @@ mod tests {
                     }
                 },
                 "text": null
-            })
-            .to_string(),
+            }),
         );
     }
 
     #[test]
     fn serialize_derived_number_param() {
         assert_eq!(
-            serde_json::to_string(&NumberParam::Derived(DerivedNumber {
+            serde_json::to_value(&NumberParam::Derived(DerivedNumber {
                 attribute: "foo".to_owned(),
                 factor: 1.,
                 default_value: 0.
@@ -726,7 +725,6 @@ mod tests {
                 "factor": 1.0,
                 "defaultValue": 0.0
             })
-            .to_string()
         );
     }
 }

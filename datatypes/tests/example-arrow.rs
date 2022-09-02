@@ -14,11 +14,9 @@ use std::{mem, slice};
 #[test]
 fn simple() {
     let mut primitive_array_builder = Int32Builder::new(5);
-    primitive_array_builder.append_value(1).unwrap();
-    primitive_array_builder.append_value(2).unwrap();
-    primitive_array_builder
-        .append_slice(&(3..=5).collect::<Vec<i32>>())
-        .unwrap();
+    primitive_array_builder.append_value(1);
+    primitive_array_builder.append_value(2);
+    primitive_array_builder.append_slice(&(3..=5).collect::<Vec<i32>>());
 
     let primitive_array = primitive_array_builder.finish();
 
@@ -38,9 +36,9 @@ fn simple() {
 #[test]
 fn null_values() {
     let mut primitive_array_builder = Int32Builder::new(5);
-    primitive_array_builder.append_value(1).unwrap();
-    primitive_array_builder.append_null().unwrap();
-    primitive_array_builder.append_slice(&[3, 4, 5]).unwrap();
+    primitive_array_builder.append_value(1);
+    primitive_array_builder.append_null();
+    primitive_array_builder.append_slice(&[3, 4, 5]);
 
     let primitive_array = primitive_array_builder.finish();
 
@@ -58,11 +56,11 @@ fn null_values() {
 #[test]
 fn null_bytes() {
     let mut primitive_array_builder = Int32Builder::new(2);
-    primitive_array_builder.append_value(1).unwrap();
-    primitive_array_builder.append_null().unwrap();
-    primitive_array_builder.append_option(None).unwrap();
-    primitive_array_builder.append_option(Some(4)).unwrap();
-    primitive_array_builder.append_null().unwrap();
+    primitive_array_builder.append_value(1);
+    primitive_array_builder.append_null();
+    primitive_array_builder.append_option(None);
+    primitive_array_builder.append_option(Some(4));
+    primitive_array_builder.append_null();
 
     let primitive_array = primitive_array_builder.finish();
 
@@ -84,9 +82,7 @@ fn null_bytes() {
 fn offset() {
     let array = {
         let mut array_builder = Float64Builder::new(5);
-        array_builder
-            .append_slice(&[2e10, 4e40, 20., 9.4, 0.])
-            .unwrap();
+        array_builder.append_slice(&[2e10, 4e40, 20., 9.4, 0.]);
         array_builder.finish()
     };
 
@@ -145,7 +141,7 @@ fn strings2() {
         let mut builder = StringBuilder::new(5);
 
         for string in &["hello", "from", "the", "other", "side"] {
-            builder.append_value(string).unwrap();
+            builder.append_value(string);
         }
 
         builder.finish()
@@ -174,13 +170,13 @@ fn list() {
     let array = {
         let mut builder = ListBuilder::new(Int32Builder::new(0));
 
-        builder.values().append_value(0).unwrap();
-        builder.values().append_value(1).unwrap();
-        builder.append(true).unwrap();
-        builder.values().append_value(2).unwrap();
-        builder.values().append_value(3).unwrap();
-        builder.values().append_value(4).unwrap();
-        builder.append(true).unwrap();
+        builder.values().append_value(0);
+        builder.values().append_value(1);
+        builder.append(true);
+        builder.values().append_value(2);
+        builder.values().append_value(3);
+        builder.values().append_value(4);
+        builder.append(true);
 
         builder.finish()
     };
@@ -199,10 +195,7 @@ fn list() {
             .values(),
         &[0, 1, 2, 3, 4],
     );
-    assert_eq!(
-        unsafe { array.data().buffers()[0].typed_data::<i32>() },
-        &[0, 2, 5]
-    ); // its in buffer 0... kind of unstable...
+    assert_eq!(array.data().buffers()[0].typed_data::<i32>(), &[0, 2, 5]); // its in buffer 0... kind of unstable...
 }
 
 #[test]
@@ -210,15 +203,15 @@ fn fixed_size_list() {
     let array = {
         let mut builder = FixedSizeListBuilder::new(Int32Builder::new(0), 2);
 
-        builder.values().append_value(0).unwrap();
-        builder.values().append_value(1).unwrap();
-        builder.append(true).unwrap();
-        builder.values().append_value(2).unwrap();
-        builder.values().append_value(3).unwrap();
-        builder.append(true).unwrap();
-        builder.values().append_value(4).unwrap();
-        builder.values().append_value(5).unwrap();
-        builder.append(true).unwrap();
+        builder.values().append_value(0);
+        builder.values().append_value(1);
+        builder.append(true);
+        builder.values().append_value(2);
+        builder.values().append_value(3);
+        builder.append(true);
+        builder.values().append_value(4);
+        builder.values().append_value(5);
+        builder.append(true);
 
         builder.finish()
     };
@@ -299,9 +292,7 @@ fn binary() {
 fn serialize() {
     let array = {
         let mut builder = Int32Builder::new(5);
-        builder
-            .append_slice(&(1..=5).collect::<Vec<i32>>())
-            .unwrap();
+        builder.append_slice(&(1..=5).collect::<Vec<i32>>());
 
         builder.finish()
     };
@@ -326,14 +317,14 @@ fn table() {
 
         for &(feature_start, time) in &[(0_u64, 0_i64), (1, 10), (2, 20), (3, 30), (4, 40)] {
             builder
-                .field_builder(0)
-                .and_then(|builder: &mut UInt64Builder| builder.append_value(feature_start).ok())
-                .unwrap();
+                .field_builder::<UInt64Builder>(0)
+                .unwrap()
+                .append_value(feature_start);
             builder
-                .field_builder(1)
-                .and_then(|builder: &mut Date64Builder| builder.append_value(time).ok())
-                .unwrap();
-            builder.append(true).unwrap();
+                .field_builder::<Date64Builder>(1)
+                .unwrap()
+                .append_value(time);
+            builder.append(true);
         }
 
         builder.finish()
@@ -370,19 +361,15 @@ fn nested_lists() {
         let mut builder = ListBuilder::new(ListBuilder::new(Int32Builder::new(0)));
 
         // [[[10, 11, 12], [20, 21]], [[30]]
-        builder
-            .values()
-            .values()
-            .append_slice(&[10, 11, 12])
-            .unwrap();
-        builder.values().append(true).unwrap();
-        builder.values().values().append_slice(&[20, 21]).unwrap();
-        builder.values().append(true).unwrap();
-        builder.append(true).unwrap();
+        builder.values().values().append_slice(&[10, 11, 12]);
+        builder.values().append(true);
+        builder.values().values().append_slice(&[20, 21]);
+        builder.values().append(true);
+        builder.append(true);
 
-        builder.values().values().append_slice(&[30]).unwrap();
-        builder.values().append(true).unwrap();
-        builder.append(true).unwrap();
+        builder.values().values().append_slice(&[30]);
+        builder.values().append(true);
+        builder.append(true);
 
         builder.finish()
     };
@@ -420,14 +407,14 @@ fn nested_lists() {
 
     assert_eq!(array.data().buffers().len(), 1);
     assert_eq!(
-        unsafe { array.data().buffers()[0].typed_data::<i32>() },
+        array.data().buffers()[0].typed_data::<i32>(),
         &[0, 2, 3], // indices of first level arrays in second level structure
     );
 
     assert_eq!(array.data().child_data().len(), 1);
     assert_eq!(array.data().child_data()[0].buffers().len(), 1);
     assert_eq!(
-        unsafe { array.data().child_data()[0].buffers()[0].typed_data::<i32>() },
+        array.data().child_data()[0].buffers()[0].typed_data::<i32>(),
         &[0, 3, 5, 6], // indices of second level arrays in actual data
     );
 
@@ -437,7 +424,7 @@ fn nested_lists() {
         1,
     );
     assert_eq!(
-        unsafe { array.data().child_data()[0].child_data()[0].buffers()[0].typed_data::<i32>() },
+        array.data().child_data()[0].child_data()[0].buffers()[0].typed_data::<i32>(),
         &[10, 11, 12, 20, 21, 30], // data
     );
 }
@@ -447,38 +434,37 @@ fn multipoints() {
     use arrow::datatypes::ToByteSlice;
 
     let array = {
-        let data =
-            ArrayData::builder(DataType::List(Box::new(Field::new(
-                "",
-                DataType::FixedSizeList(Box::new(Field::new("", DataType::Float64, false)), 2),
-                false,
-            ))))
-            .len(2) // number of multipoints
-            .add_buffer(Buffer::from(&[0_i32, 2, 5].to_byte_slice()))
+        let data = ArrayData::builder(DataType::List(Box::new(Field::new(
+            "",
+            DataType::FixedSizeList(Box::new(Field::new("", DataType::Float64, false)), 2),
+            false,
+        ))))
+        .len(2) // number of multipoints
+        .add_buffer(Buffer::from(&[0_i32, 2, 5].to_byte_slice()))
+        .add_child_data(
+            ArrayData::builder(DataType::FixedSizeList(
+                Box::new(Field::new("", DataType::Float64, false)),
+                2,
+            ))
+            .len(5) // number of coordinates
             .add_child_data(
-                ArrayData::builder(DataType::FixedSizeList(
-                    Box::new(Field::new("", DataType::Float64, false)),
-                    2,
-                ))
-                .len(5) // number of coordinates
-                .add_child_data(
-                    ArrayData::builder(DataType::Float64)
-                        .len(10) // number of floats
-                        .add_buffer(Buffer::from(
-                            &[
-                                1_f64, 2., 11., 12., 21., 22., 31., 32., 41., 42., 51., 52., 61.,
-                                62., 71., 72., 81., 82., 91., 92.,
-                            ]
-                            .to_byte_slice(),
-                        ))
-                        .build()
-                        .unwrap(),
-                )
-                .build()
-                .unwrap(),
+                ArrayData::builder(DataType::Float64)
+                    .len(10) // number of floats
+                    .add_buffer(Buffer::from(
+                        &[
+                            1_f64, 2., 11., 12., 21., 22., 31., 32., 41., 42., 51., 52., 61., 62.,
+                            71., 72., 81., 82., 91., 92.,
+                        ]
+                        .to_byte_slice(),
+                    ))
+                    .build()
+                    .unwrap(),
             )
             .build()
-            .unwrap();
+            .unwrap(),
+        )
+        .build()
+        .unwrap();
 
         ListArray::from(data)
     };
@@ -515,38 +501,33 @@ fn multipoint_builder() {
     multi_point_builder
         .values()
         .values()
-        .append_slice(&[0.0, 0.1])
-        .unwrap();
-    multi_point_builder.values().append(true).unwrap();
+        .append_slice(&[0.0, 0.1]);
+    multi_point_builder.values().append(true);
     multi_point_builder
         .values()
         .values()
-        .append_slice(&[1.0, 1.1])
-        .unwrap();
-    multi_point_builder.values().append(true).unwrap();
+        .append_slice(&[1.0, 1.1]);
+    multi_point_builder.values().append(true);
 
-    multi_point_builder.append(true).unwrap(); // first multi point
+    multi_point_builder.append(true); // first multi point
 
     multi_point_builder
         .values()
         .values()
-        .append_slice(&[2.0, 2.1])
-        .unwrap();
-    multi_point_builder.values().append(true).unwrap();
+        .append_slice(&[2.0, 2.1]);
+    multi_point_builder.values().append(true);
     multi_point_builder
         .values()
         .values()
-        .append_slice(&[3.0, 3.1])
-        .unwrap();
-    multi_point_builder.values().append(true).unwrap();
+        .append_slice(&[3.0, 3.1]);
+    multi_point_builder.values().append(true);
     multi_point_builder
         .values()
         .values()
-        .append_slice(&[4.0, 4.1])
-        .unwrap();
-    multi_point_builder.values().append(true).unwrap();
+        .append_slice(&[4.0, 4.1]);
+    multi_point_builder.values().append(true);
 
-    multi_point_builder.append(true).unwrap(); // second multi point
+    multi_point_builder.append(true); // second multi point
 
     let multi_point = multi_point_builder.finish();
 
@@ -588,7 +569,7 @@ fn multipoint_builder_bytes() {
         .append_value(&[1.0, 1.1].to_byte_slice())
         .unwrap();
 
-    multi_point_builder.append(true).unwrap(); // first multi point
+    multi_point_builder.append(true); // first multi point
 
     multi_point_builder
         .values()
@@ -603,7 +584,7 @@ fn multipoint_builder_bytes() {
         .append_value(&[4.0, 4.1].to_byte_slice())
         .unwrap();
 
-    multi_point_builder.append(true).unwrap(); // second multi point
+    multi_point_builder.append(true); // second multi point
 
     let multi_point = multi_point_builder.finish();
 
@@ -638,27 +619,27 @@ fn multipoint_builder_bytes() {
 #[test]
 fn float_equality() {
     let mut floats = Float64Builder::new(3);
-    floats.append_value(4.0).unwrap();
-    floats.append_null().unwrap();
-    floats.append_value(f64::NAN).unwrap();
+    floats.append_value(4.0);
+    floats.append_null();
+    floats.append_value(f64::NAN);
 
     let floats = floats.finish();
 
     assert_eq!(floats, floats);
 
     let mut floats2 = Float64Builder::new(3);
-    floats2.append_value(4.0).unwrap();
-    floats2.append_null().unwrap();
-    floats2.append_value(f64::NAN).unwrap();
+    floats2.append_value(4.0);
+    floats2.append_null();
+    floats2.append_value(f64::NAN);
 
     let floats2 = floats2.finish();
 
     assert_eq!(floats, floats2);
 
     let mut floats3 = Float64Builder::new(3);
-    floats3.append_value(f64::NAN).unwrap();
-    floats3.append_null().unwrap();
-    floats3.append_value(4.0).unwrap();
+    floats3.append_value(f64::NAN);
+    floats3.append_null();
+    floats3.append_value(4.0);
 
     let floats3 = floats3.finish();
 

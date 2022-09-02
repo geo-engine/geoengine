@@ -12,7 +12,7 @@ pub struct Operator<Params, Sources> {
     pub sources: Sources,
 }
 
-#[derive(Debug, Serialize, Deserialize, PartialEq, Clone)]
+#[derive(Debug, Serialize, Deserialize, PartialEq, Eq, Clone)]
 #[serde(rename_all = "camelCase")]
 pub struct SourceOperator<Params> {
     pub params: Params,

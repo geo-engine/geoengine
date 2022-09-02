@@ -348,8 +348,8 @@ impl Stream for CsvSourceStream {
 
                     // TODO: filter time
                     if bbox.contains_coordinate(&parsed_row.coordinate) {
-                        builder.push_geometry(parsed_row.coordinate.into())?;
-                        builder.push_time_interval(parsed_row.time_interval)?;
+                        builder.push_geometry(parsed_row.coordinate.into());
+                        builder.push_time_interval(parsed_row.time_interval);
                         builder.finish_row();
 
                         number_of_entries += 1;
@@ -630,7 +630,7 @@ x;y
 
         let operator = CsvSource { params }.boxed();
 
-        let operator_json = serde_json::to_string(&operator).unwrap();
+        let operator_json = serde_json::to_value(&operator).unwrap();
 
         assert_eq!(
             operator_json,
@@ -647,9 +647,8 @@ x;y
                     "time": "None"
                 }
             })
-            .to_string()
         );
 
-        let _operator: Box<dyn VectorOperator> = serde_json::from_str(&operator_json).unwrap();
+        let _operator: Box<dyn VectorOperator> = serde_json::from_value(operator_json).unwrap();
     }
 }

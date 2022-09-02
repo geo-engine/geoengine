@@ -40,12 +40,9 @@ pub struct PangeaMetaData {
 impl PangeaMetaData {
     /// Retrieves the link to the TSV file for the dataset
     fn get_tsv_file(&self) -> Option<&Distribution> {
-        for d in &self.distributions {
-            if d.encoding == "text/tab-separated-values" {
-                return Some(d);
-            }
-        }
-        None
+        self.distributions
+            .iter()
+            .find(|&d| d.encoding == "text/tab-separated-values")
     }
 
     fn get_result_descriptor(&self) -> VectorResultDescriptor {

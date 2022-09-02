@@ -302,7 +302,7 @@ mod tests {
         }
         .boxed();
 
-        let serialized = serde_json::to_string(&mrs).unwrap();
+        let serialized = serde_json::to_value(&mrs).unwrap();
 
         let spec = serde_json::json!({
             "type": "MockRasterSourceu8",
@@ -353,11 +353,10 @@ mod tests {
                     "bbox": null
                 }
             }
-        })
-        .to_string();
+        });
         assert_eq!(serialized, spec);
 
-        let deserialized: Box<dyn RasterOperator> = serde_json::from_str(&serialized).unwrap();
+        let deserialized: Box<dyn RasterOperator> = serde_json::from_value(serialized).unwrap();
 
         let tile_size_in_pixels = [3, 2].into();
         let tiling_specification = TilingSpecification {

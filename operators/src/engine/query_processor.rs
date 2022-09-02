@@ -1,5 +1,5 @@
 use super::query::QueryContext;
-use crate::adapters::RasterConversionQueryProcessor;
+use crate::processing::RasterTypeConversionQueryProcessor;
 use crate::util::Result;
 use async_trait::async_trait;
 use futures::stream::BoxStream;
@@ -265,15 +265,15 @@ impl TypedRasterQueryProcessor {
 
     pub fn into_f64(self) -> BoxRasterQueryProcessor<f64> {
         match self {
-            Self::U8(r) => RasterConversionQueryProcessor::new(r).boxed(),
-            Self::U16(r) => RasterConversionQueryProcessor::new(r).boxed(),
-            Self::U32(r) => RasterConversionQueryProcessor::new(r).boxed(),
-            Self::U64(r) => RasterConversionQueryProcessor::new(r).boxed(),
-            Self::I8(r) => RasterConversionQueryProcessor::new(r).boxed(),
-            Self::I16(r) => RasterConversionQueryProcessor::new(r).boxed(),
-            Self::I32(r) => RasterConversionQueryProcessor::new(r).boxed(),
-            Self::I64(r) => RasterConversionQueryProcessor::new(r).boxed(),
-            Self::F32(r) => RasterConversionQueryProcessor::new(r).boxed(),
+            Self::U8(r) => RasterTypeConversionQueryProcessor::new(r).boxed(),
+            Self::U16(r) => RasterTypeConversionQueryProcessor::new(r).boxed(),
+            Self::U32(r) => RasterTypeConversionQueryProcessor::new(r).boxed(),
+            Self::U64(r) => RasterTypeConversionQueryProcessor::new(r).boxed(),
+            Self::I8(r) => RasterTypeConversionQueryProcessor::new(r).boxed(),
+            Self::I16(r) => RasterTypeConversionQueryProcessor::new(r).boxed(),
+            Self::I32(r) => RasterTypeConversionQueryProcessor::new(r).boxed(),
+            Self::I64(r) => RasterTypeConversionQueryProcessor::new(r).boxed(),
+            Self::F32(r) => RasterTypeConversionQueryProcessor::new(r).boxed(),
             Self::F64(r) => r,
         }
     }

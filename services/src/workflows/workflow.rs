@@ -52,7 +52,7 @@ mod tests {
             ),
         };
 
-        let serialized_workflow = serde_json::to_string(&workflow).unwrap();
+        let serialized_workflow = serde_json::to_value(&workflow).unwrap();
 
         assert_eq!(
             serialized_workflow,
@@ -74,7 +74,6 @@ mod tests {
                     }
                 }
             })
-            .to_string()
         );
 
         // TODO: check deserialization

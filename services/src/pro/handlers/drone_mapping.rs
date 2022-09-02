@@ -609,7 +609,7 @@ mod tests {
                         zip.start_file(name, options).unwrap();
                         let mut f = std::fs::File::open(path)?;
                         f.read_to_end(&mut buffer)?;
-                        zip.write_all(&*buffer)?;
+                        zip.write_all(&buffer)?;
                         buffer.clear();
                     } else if !name.is_empty() {
                         zip.add_directory(name, options).unwrap();

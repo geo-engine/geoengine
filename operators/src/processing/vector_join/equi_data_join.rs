@@ -273,8 +273,8 @@ where
 
             // add time and geo
             for (_, time_interval) in join_inner_batch_matches {
-                builder.push_geometry(geometry.clone())?;
-                builder.push_time_interval(time_interval)?;
+                builder.push_geometry(geometry.clone());
+                builder.push_time_interval(time_interval);
                 builder.finish_row();
             }
 

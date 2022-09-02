@@ -1,4 +1,4 @@
-use std::str::FromStr;
+use std::{collections::HashMap, str::FromStr};
 
 use async_trait::async_trait;
 use bb8_postgres::{
@@ -18,8 +18,9 @@ use crate::{
     layers::{
         external::{DataProvider, DataProviderDefinition},
         layer::{
-            AddLayer, AddLayerCollection, CollectionItem, Layer, LayerCollectionListOptions,
-            LayerCollectionListing, LayerListing, ProviderLayerCollectionId, ProviderLayerId,
+            AddLayer, AddLayerCollection, CollectionItem, Layer, LayerCollection,
+            LayerCollectionListOptions, LayerCollectionListing, LayerListing,
+            ProviderLayerCollectionId, ProviderLayerId,
         },
         listing::{LayerCollectionId, LayerCollectionProvider},
         storage::{
@@ -340,19 +341,32 @@ where
     <Tls as MakeTlsConnect<Socket>>::TlsConnect: Send,
     <<Tls as MakeTlsConnect<Socket>>::TlsConnect as TlsConnect<Socket>>::Future: Send,
 {
-    async fn collection_items(
+    async fn collection(
         &self,
-        collection: &LayerCollectionId,
+        collection_id: &LayerCollectionId,
         options: Validated<LayerCollectionListOptions>,
-    ) -> Result<Vec<CollectionItem>> {
+    ) -> Result<LayerCollection> {
         let collection =
-            Uuid::from_str(&collection.0).map_err(|_| error::Error::IdStringMustBeUuid {
-                found: collection.0.clone(),
+            Uuid::from_str(&collection_id.0).map_err(|_| error::Error::IdStringMustBeUuid {
+                found: collection_id.0.clone(),
             })?;
 
         let conn = self.conn_pool.get().await?;
 
         let options = options.user_input;
+
+        let stmt = conn
+            .prepare(
+                "
+        SELECT name, description
+        FROM layer_collections WHERE id = $1;",
+            )
+            .await?;
+
+        let row = conn.query_one(&stmt, &[&collection]).await?;
+
+        let name: String = row.get(0);
+        let description: String = row.get(1);
 
         let stmt = conn
             .prepare(
@@ -393,7 +407,7 @@ where
             )
             .await?;
 
-        Ok(rows
+        let items = rows
             .into_iter()
             .map(|row| {
                 let is_layer: bool = row.get(3);
@@ -418,7 +432,19 @@ where
                     })
                 }
             })
-            .collect())
+            .collect();
+
+        Ok(LayerCollection {
+            id: ProviderLayerCollectionId {
+                provider_id: INTERNAL_PROVIDER_ID,
+                collection_id: collection_id.clone(),
+            },
+            name,
+            description,
+            items,
+            entry_label: None,
+            properties: vec![],
+        })
     }
 
     async fn root_collection_id(&self) -> Result<LayerCollectionId> {
@@ -461,6 +487,8 @@ where
             description: row.get(1),
             workflow: serde_json::from_value(row.get(2)).context(error::SerdeJson)?,
             symbology: serde_json::from_value(row.get(3)).context(error::SerdeJson)?,
+            properties: vec![],
+            metadata: HashMap::new(),
         })
     }
 }

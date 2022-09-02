@@ -1,9 +1,12 @@
+use std::collections::HashMap;
 use std::path::Path;
 
 use crate::datasets::listing::ProvenanceOutput;
 use crate::error::Error;
 use crate::error::Result;
 use crate::layers::external::{DataProvider, DataProviderDefinition};
+use crate::layers::layer::LayerCollection;
+use crate::layers::layer::ProviderLayerCollectionId;
 use crate::layers::layer::{
     CollectionItem, Layer, LayerCollectionListOptions, LayerListing, ProviderLayerId,
 };
@@ -87,8 +90,8 @@ impl DataProviderDefinition for Nature40DataProviderDefinition {
         }))
     }
 
-    fn type_name(&self) -> String {
-        "Nature4.0".to_owned()
+    fn type_name(&self) -> &'static str {
+        "Nature4.0"
     }
 
     fn name(&self) -> String {
@@ -148,19 +151,15 @@ impl DataProvider for Nature40DataProvider {
             provenance: None,
         })
     }
-
-    fn as_any(&self) -> &dyn std::any::Any {
-        self
-    }
 }
 
 #[async_trait]
 impl LayerCollectionProvider for Nature40DataProvider {
-    async fn collection_items(
+    async fn collection(
         &self,
         collection: &LayerCollectionId,
         _options: Validated<LayerCollectionListOptions>,
-    ) -> Result<Vec<CollectionItem>> {
+    ) -> Result<LayerCollection> {
         ensure!(
             *collection == self.root_collection_id().await?,
             error::UnknownLayerCollectionId {
@@ -171,7 +170,7 @@ impl LayerCollectionProvider for Nature40DataProvider {
         // TODO: query the other dbs as well
         let raster_dbs = self.load_raster_dbs().await?;
 
-        let mut listing = vec![];
+        let mut items = vec![];
 
         let datasets = raster_dbs
             .rasterdbs
@@ -185,7 +184,7 @@ impl LayerCollectionProvider for Nature40DataProvider {
                 let (dataset, band_labels) = self.get_band_labels(dataset).await?;
 
                 for band_index in 1..=dataset.raster_count() {
-                    listing.push(Ok(CollectionItem::Layer(LayerListing {
+                    items.push(Ok(CollectionItem::Layer(LayerListing {
                         id: ProviderLayerId {
                             provider_id: self.id,
                             layer_id: LayerId(format!("{}:{}", db.name.clone(), band_index)),
@@ -205,12 +204,23 @@ impl LayerCollectionProvider for Nature40DataProvider {
             }
         }
 
-        let mut listing: Vec<_> = listing
+        let mut items: Vec<_> = items
             .into_iter()
             .filter_map(|d: Result<CollectionItem>| if let Ok(d) = d { Some(d) } else { None })
             .collect();
-        listing.sort_by(|a, b| a.name().cmp(b.name()));
-        Ok(listing)
+        items.sort_by(|a, b| a.name().cmp(b.name()));
+
+        Ok(LayerCollection {
+            id: ProviderLayerCollectionId {
+                provider_id: self.id,
+                collection_id: collection.clone(),
+            },
+            name: "Nature 4.0".to_owned(),
+            description: "Nature 4.0".to_owned(),
+            items,
+            entry_label: None,
+            properties: vec![],
+        })
     }
 
     async fn root_collection_id(&self) -> Result<LayerCollectionId> {
@@ -274,6 +284,8 @@ impl LayerCollectionProvider for Nature40DataProvider {
                 ),
             },
             symbology: None,
+            properties: vec![],
+            metadata: HashMap::new(),
         })
     }
 }
@@ -505,7 +517,7 @@ mod tests {
     };
     use serde_json::json;
 
-    use crate::{test_data, util::user_input::UserInput};
+    use crate::{layers::layer::ProviderLayerCollectionId, test_data, util::user_input::UserInput};
 
     use super::*;
 
@@ -757,8 +769,10 @@ mod tests {
         expect_geonode_requests(&mut server);
         expect_lidar_requests(&mut server);
 
+        let provider_id = DataProviderId::from_str("2cb964d5-b9fa-4f8f-ab6f-f6c7fb47d4cd").unwrap();
+
         let provider = Box::new(Nature40DataProviderDefinition {
-            id: DataProviderId::from_str("2cb964d5-b9fa-4f8f-ab6f-f6c7fb47d4cd").unwrap(),
+            id: provider_id,
             name: "Nature40".to_owned(),
             base_url: Url::parse(&server.url_str("")).unwrap(),
             user: "geoengine".to_owned(),
@@ -769,9 +783,11 @@ mod tests {
         .await
         .unwrap();
 
-        let listing = provider
-            .collection_items(
-                &provider.root_collection_id().await.unwrap(),
+        let root_id = provider.root_collection_id().await.unwrap();
+
+        let collection = provider
+            .collection(
+                &root_id,
                 LayerCollectionListOptions {
                     offset: 0,
                     limit: 10,
@@ -783,53 +799,63 @@ mod tests {
             .unwrap();
 
         assert_eq!(
-            listing,
-            vec![
-                CollectionItem::Layer(LayerListing {
-                    id: ProviderLayerId {
-                        provider_id: DataProviderId::from_str(
-                            "2cb964d5-b9fa-4f8f-ab6f-f6c7fb47d4cd"
-                        )
-                        .unwrap(),
-                        layer_id: LayerId("geonode_ortho_muf_1m:1".to_owned())
-                    },
-                    name: "MOF Luftbild".to_owned(),
-                    description: "Band 1: band1".to_owned(),
-                }),
-                CollectionItem::Layer(LayerListing {
-                    id: ProviderLayerId {
-                        provider_id: DataProviderId::from_str(
-                            "2cb964d5-b9fa-4f8f-ab6f-f6c7fb47d4cd"
-                        )
-                        .unwrap(),
-                        layer_id: LayerId("geonode_ortho_muf_1m:2".to_owned())
-                    },
-                    name: "MOF Luftbild".to_owned(),
-                    description: "Band 2: band2".to_owned(),
-                }),
-                CollectionItem::Layer(LayerListing {
-                    id: ProviderLayerId {
-                        provider_id: DataProviderId::from_str(
-                            "2cb964d5-b9fa-4f8f-ab6f-f6c7fb47d4cd"
-                        )
-                        .unwrap(),
-                        layer_id: LayerId("geonode_ortho_muf_1m:3".to_owned())
-                    },
-                    name: "MOF Luftbild".to_owned(),
-                    description: "Band 3: band3".to_owned(),
-                }),
-                CollectionItem::Layer(LayerListing {
-                    id: ProviderLayerId {
-                        provider_id: DataProviderId::from_str(
-                            "2cb964d5-b9fa-4f8f-ab6f-f6c7fb47d4cd"
-                        )
-                        .unwrap(),
-                        layer_id: LayerId("lidar_2018_wetness_1m:1".to_owned())
-                    },
-                    name: "Topografic Wetness index".to_owned(),
-                    description: "Band 1: wetness".to_owned(),
-                })
-            ]
+            collection,
+            LayerCollection {
+                id: ProviderLayerCollectionId {
+                    provider_id,
+                    collection_id: root_id,
+                },
+                name: "Nature 4.0".to_string(),
+                description: "Nature 4.0".to_string(),
+                items: vec![
+                    CollectionItem::Layer(LayerListing {
+                        id: ProviderLayerId {
+                            provider_id: DataProviderId::from_str(
+                                "2cb964d5-b9fa-4f8f-ab6f-f6c7fb47d4cd"
+                            )
+                            .unwrap(),
+                            layer_id: LayerId("geonode_ortho_muf_1m:1".to_owned())
+                        },
+                        name: "MOF Luftbild".to_owned(),
+                        description: "Band 1: band1".to_owned(),
+                    }),
+                    CollectionItem::Layer(LayerListing {
+                        id: ProviderLayerId {
+                            provider_id: DataProviderId::from_str(
+                                "2cb964d5-b9fa-4f8f-ab6f-f6c7fb47d4cd"
+                            )
+                            .unwrap(),
+                            layer_id: LayerId("geonode_ortho_muf_1m:2".to_owned())
+                        },
+                        name: "MOF Luftbild".to_owned(),
+                        description: "Band 2: band2".to_owned(),
+                    }),
+                    CollectionItem::Layer(LayerListing {
+                        id: ProviderLayerId {
+                            provider_id: DataProviderId::from_str(
+                                "2cb964d5-b9fa-4f8f-ab6f-f6c7fb47d4cd"
+                            )
+                            .unwrap(),
+                            layer_id: LayerId("geonode_ortho_muf_1m:3".to_owned())
+                        },
+                        name: "MOF Luftbild".to_owned(),
+                        description: "Band 3: band3".to_owned(),
+                    }),
+                    CollectionItem::Layer(LayerListing {
+                        id: ProviderLayerId {
+                            provider_id: DataProviderId::from_str(
+                                "2cb964d5-b9fa-4f8f-ab6f-f6c7fb47d4cd"
+                            )
+                            .unwrap(),
+                            layer_id: LayerId("lidar_2018_wetness_1m:1".to_owned())
+                        },
+                        name: "Topografic Wetness index".to_owned(),
+                        description: "Band 1: wetness".to_owned(),
+                    })
+                ],
+                entry_label: None,
+                properties: vec![],
+            }
         );
     }
 

@@ -2,7 +2,8 @@ use crate::datasets::listing::ProvenanceOutput;
 use crate::error::{self, Error, Result};
 use crate::layers::external::{DataProvider, DataProviderDefinition};
 use crate::layers::layer::{
-    CollectionItem, Layer, LayerCollectionListOptions, LayerListing, ProviderLayerId,
+    CollectionItem, Layer, LayerCollection, LayerCollectionListOptions, LayerListing,
+    ProviderLayerCollectionId, ProviderLayerId,
 };
 use crate::layers::listing::{LayerCollectionId, LayerCollectionProvider};
 use crate::projects::{RasterSymbology, Symbology};
@@ -85,8 +86,8 @@ impl DataProviderDefinition for SentinelS2L2ACogsProviderDefinition {
         )))
     }
 
-    fn type_name(&self) -> String {
-        "SentinelS2L2ACogs".to_owned()
+    fn type_name(&self) -> &'static str {
+        "SentinelS2L2ACogs"
     }
 
     fn name(&self) -> String {
@@ -189,6 +190,8 @@ impl SentinelS2L2aCogsDataProvider {
                             )
                             .expect("valid colorizer"),
                         })), // TODO: individual colorizer per band
+                        properties: vec![],
+                        metadata: HashMap::new(),
                     };
 
                     let dataset = SentinelDataset {
@@ -212,19 +215,15 @@ impl DataProvider for SentinelS2L2aCogsDataProvider {
             provenance: None, // TODO
         })
     }
-
-    fn as_any(&self) -> &dyn std::any::Any {
-        self
-    }
 }
 
 #[async_trait]
 impl LayerCollectionProvider for SentinelS2L2aCogsDataProvider {
-    async fn collection_items(
+    async fn collection(
         &self,
         collection: &LayerCollectionId,
-        _options: Validated<LayerCollectionListOptions>,
-    ) -> Result<Vec<CollectionItem>> {
+        options: Validated<LayerCollectionListOptions>,
+    ) -> Result<LayerCollection> {
         ensure!(
             *collection == self.root_collection_id().await?,
             error::UnknownLayerCollectionId {
@@ -232,8 +231,9 @@ impl LayerCollectionProvider for SentinelS2L2aCogsDataProvider {
             }
         );
 
-        // TODO: options
-        let mut x = self
+        let options = options.user_input;
+
+        let mut items = self
             .datasets
             .values()
             .map(|d| {
@@ -244,8 +244,25 @@ impl LayerCollectionProvider for SentinelS2L2aCogsDataProvider {
                 }))
             })
             .collect::<Result<Vec<CollectionItem>>>()?;
-        x.sort_by_key(|e| e.name().to_string());
-        Ok(x)
+        items.sort_by_key(|e| e.name().to_string());
+
+        let items = items
+            .into_iter()
+            .skip(options.offset as usize)
+            .take(options.limit as usize)
+            .collect();
+
+        Ok(LayerCollection {
+            id: ProviderLayerCollectionId {
+                provider_id: self.id,
+                collection_id: collection.clone(),
+            },
+            name: "Element 84 AWS STAC".to_owned(),
+            description: "SentinelS2L2ACogs".to_owned(),
+            items,
+            entry_label: None,
+            properties: vec![],
+        })
     }
 
     async fn root_collection_id(&self) -> Result<LayerCollectionId> {
@@ -276,6 +293,8 @@ impl LayerCollectionProvider for SentinelS2L2aCogsDataProvider {
                 ),
             },
             symbology: dataset.listing.symbology.clone(),
+            properties: vec![],
+            metadata: HashMap::new(),
         })
     }
 }

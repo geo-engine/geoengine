@@ -27,8 +27,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - https://github.com/geo-engine/geoengine/pull/565
   - Metadata has new field `dataRange`, which is optional
 
+- Added download of workflow metadata (description, result descriptor, citations) as zip file
+
+  - https://github.com/geo-engine/geoengine-python/pull/65
+
 ### Changed
 
+- Removed the custom Geo Bon EBV portal handlers. Instead, the EBV hierarchy is now browsed through the layer collection API.
+
+  - https://github.com/geo-engine/geoengine/pull/581
 
 - Changed the temporal reference of regular raster time series from a start date to a valid time interval `dataTime`. Before and after the `dataTime`, only one loading info with nodata will be produced instead of lots of nodata-chunks with the original interval of the time series.
 
@@ -40,7 +47,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - https://github.com/geo-engine/geoengine/pull/561
   - `MaskedGrid` replaces `Grid` in `GridOrEmpty` / `RasterTile`
   - GeoTIFF files created by the engine contain the validity mask if not specified otherwise.
-  
+
 - Refactored dataset ids and external provders
 
   - https://github.com/geo-engine/geoengine/pull/554
@@ -62,3 +69,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
   - https://github.com/geo-engine/geoengine/pull/564
   - **breaking**: since metadata changed to cover two variants of time defintions, overview metadata is no longer valid
+
+- `DateTime` now serializes to ISO 8601 format
+
+  - https://github.com/geo-engine/geoengine/pull/590
+  - Uses the same format now as `Display` or `ToString`

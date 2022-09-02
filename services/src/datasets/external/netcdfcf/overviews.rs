@@ -4,7 +4,9 @@ use crate::{
     util::config::get_config_element,
 };
 use gdal::{raster::RasterCreationOption, Dataset, DatasetOptions, GdalOpenFlags};
-use geoengine_datatypes::{error::BoxedResultExt, primitives::TimeInterval};
+use geoengine_datatypes::{
+    error::BoxedResultExt, primitives::TimeInterval, util::gdal::ResamplingMethod,
+};
 use geoengine_operators::{
     source::{GdalLoadingInfoTemporalSlice, GdalMetaDataList, GdalMetadataNetCdfCf},
     util::gdal::{
@@ -136,14 +138,17 @@ pub fn create_overviews(
     provider_path: &Path,
     dataset_path: &Path,
     overview_path: &Path,
+    resampling_method: Option<ResamplingMethod>,
 ) -> Result<OverviewGeneration> {
     let file_path = provider_path.join(dataset_path);
     let out_folder_path = overview_path.join(dataset_path);
 
+    // TODO: refactor with new method from Michael
     // check that file does not "escape" the provider path
     if let Err(source) = file_path.strip_prefix(provider_path) {
         return Err(NetCdfCf4DProviderError::DatasetIsNotInProviderPath { source });
     }
+    // TODO: refactor with new method from Michael
     // check that file does not "escape" the overview path
     if let Err(source) = out_folder_path.strip_prefix(overview_path) {
         return Err(NetCdfCf4DProviderError::DatasetIsNotInProviderPath { source });
@@ -160,6 +165,13 @@ pub fn create_overviews(
     )
     .boxed_context(error::CannotOpenNetCdfDataset)?;
 
+    if !out_folder_path.exists() {
+        fs::create_dir_all(&out_folder_path).boxed_context(error::InvalidDirectory)?;
+    }
+
+    // must have this flag before any write operations
+    let in_progress_flag = InProgressFlag::create(&out_folder_path)?;
+
     let root_group = MdGroup::from_dataset(&dataset)?;
 
     let group_tree = root_group.group_tree()?;
@@ -173,14 +185,77 @@ pub fn create_overviews(
     let time_coverage = time_coverage(&root_group)?;
 
     for conversion in group_tree.conversion_metadata(&file_path, &out_folder_path) {
-        match index_subdataset(&conversion, &time_coverage) {
+        match index_subdataset(&conversion, &time_coverage, resampling_method) {
             Ok(OverviewGeneration::Created) => (),
             Ok(OverviewGeneration::Skipped) => return Ok(OverviewGeneration::Skipped),
             Err(e) => return Err(e),
         }
     }
 
+    in_progress_flag.remove()?;
+
     Ok(OverviewGeneration::Created)
+}
+
+/// A flag that indicates on-going process of an overview folder.
+///
+/// Cleans up the folder if dropped.
+pub struct InProgressFlag {
+    path: PathBuf,
+}
+
+impl InProgressFlag {
+    const IN_PROGRESS_FLAG_NAME: &'static str = ".in_progress";
+
+    fn create(folder: &Path) -> Result<Self> {
+        if !folder.is_dir() {
+            return Err(NetCdfCf4DProviderError::InvalidDirectory {
+                source: Box::new(std::io::Error::new(
+                    std::io::ErrorKind::NotFound, // TODO: use `NotADirectory` if stable
+                    folder.to_string_lossy().to_string(),
+                )),
+            });
+        }
+        let this = Self {
+            path: folder.join(Self::IN_PROGRESS_FLAG_NAME),
+        };
+
+        std::fs::OpenOptions::new()
+            .write(true)
+            .create_new(true)
+            .open(&this.path)
+            .boxed_context(error::CannotCreateInProgressFlag)?;
+
+        Ok(this)
+    }
+
+    fn remove(self) -> Result<()> {
+        fs::remove_file(&self.path).boxed_context(error::CannotRemoveInProgressFlag)?;
+        Ok(())
+    }
+
+    pub fn is_in_progress(folder: &Path) -> bool {
+        if !folder.is_dir() {
+            return false;
+        }
+
+        let path = folder.join(Self::IN_PROGRESS_FLAG_NAME);
+
+        path.exists()
+    }
+}
+
+impl Drop for InProgressFlag {
+    fn drop(&mut self) {
+        if !self.path.exists() {
+            return;
+        }
+
+        if let Err(e) = fs::remove_file(&self.path).boxed_context(error::CannotRemoveInProgressFlag)
+        {
+            log::error!("Cannot remove in progress flag: {}", e);
+        }
+    }
 }
 
 fn store_metadata(
@@ -220,10 +295,12 @@ fn store_metadata(
 fn index_subdataset(
     conversion: &ConversionMetadata,
     time_coverage: &TimeCoverage,
+    resampling_method: Option<ResamplingMethod>,
 ) -> Result<OverviewGeneration> {
     const COG_BLOCK_SIZE: &str = "512";
     const COMPRESSION_FORMAT: &str = "LZW"; // this is the GDAL default
-    const COMPRESSION_LEVEL: u8 = 6; // this is the GDAL default
+    const DEFAULT_COMPRESSION_LEVEL: u8 = 6; // this is the GDAL default
+    const DEFAULT_RESAMPLING_METHOD: ResamplingMethod = ResamplingMethod::Nearest;
 
     if conversion.dataset_out.exists() {
         debug!("Skipping conversion: {}", conversion.dataset_out.display());
@@ -262,7 +339,10 @@ fn index_subdataset(
         .unwrap_or(COMPRESSION_FORMAT);
     let compression_level = gdal_options
         .compression_z_level
-        .unwrap_or(COMPRESSION_LEVEL)
+        .unwrap_or(DEFAULT_COMPRESSION_LEVEL)
+        .to_string();
+    let resampling_method = resampling_method
+        .unwrap_or(DEFAULT_RESAMPLING_METHOD)
         .to_string();
 
     let cog_driver = gdal::Driver::get("COG").boxed_context(error::CannotCreateOverviews)?;
@@ -286,6 +366,10 @@ fn index_subdataset(
         RasterCreationOption {
             key: "BIGTIFF",
             value: "IF_SAFER", // TODO: test if this suffices
+        },
+        RasterCreationOption {
+            key: "RESAMPLING",
+            value: resampling_method.as_ref(),
         },
     ];
 
@@ -363,6 +447,28 @@ fn generate_loading_info(
             })
         }
     })
+}
+
+pub fn remove_overviews(dataset_path: &Path, overview_path: &Path, force: bool) -> Result<()> {
+    let out_folder_path = overview_path.join(dataset_path);
+
+    // TODO: refactor with new method from Michael
+    // check that file does not "escape" the overview path
+    if let Err(source) = out_folder_path.strip_prefix(overview_path) {
+        return Err(NetCdfCf4DProviderError::DatasetIsNotInProviderPath { source });
+    }
+
+    if !out_folder_path.exists() {
+        return Ok(());
+    }
+
+    if !force && InProgressFlag::is_in_progress(&out_folder_path) {
+        return Err(NetCdfCf4DProviderError::CannotRemoveOverviewsWhileCreationIsInProgress);
+    }
+
+    fs::remove_dir_all(&out_folder_path).boxed_context(error::CannotRemoveOverviews)?;
+
+    Ok(())
 }
 
 #[cfg(test)]
@@ -486,6 +592,7 @@ mod tests {
                     step: 1,
                 },
             },
+            None,
         )
         .unwrap();
 
@@ -612,6 +719,11 @@ mod tests {
                     no_data_color: RgbaColor::new(0, 0, 0, 0),
                     default_color: RgbaColor::new(0, 0, 0, 0)
                 },
+                creator_name: Some("Luise Quoß".to_string()),
+                creator_email: Some("luise.quoss@idiv.de".to_string()),
+                creator_institution: Some(
+                    "German Centre for Integrative Biodiversity Research (iDiv)".to_string()
+                ),
             }
         );
     }
@@ -626,6 +738,7 @@ mod tests {
             test_data!("netcdf4d"),
             Path::new("dataset_m.nc"),
             overview_folder.path(),
+            None,
         )
         .unwrap();
 
@@ -640,5 +753,32 @@ mod tests {
 
         assert!(dataset_folder.join("metric_2/ebv_cube.tiff").exists());
         assert!(dataset_folder.join("metric_2/ebv_cube.json").exists());
+    }
+
+    #[test]
+    fn test_remove_overviews() {
+        fn is_empty(directory: &Path) -> bool {
+            directory.read_dir().unwrap().next().is_none()
+        }
+
+        hide_gdal_errors();
+
+        let overview_folder = tempfile::tempdir().unwrap();
+
+        let dataset_path = Path::new("dataset_m.nc");
+
+        create_overviews(
+            test_data!("netcdf4d"),
+            dataset_path,
+            overview_folder.path(),
+            None,
+        )
+        .unwrap();
+
+        assert!(!is_empty(overview_folder.path()));
+
+        remove_overviews(dataset_path, overview_folder.path(), false).unwrap();
+
+        assert!(is_empty(overview_folder.path()));
     }
 }

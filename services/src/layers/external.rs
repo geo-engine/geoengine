@@ -1,6 +1,7 @@
 use async_trait::async_trait;
 use geoengine_datatypes::dataset::{DataId, DataProviderId};
 use geoengine_datatypes::primitives::{RasterQueryRectangle, VectorQueryRectangle};
+use geoengine_datatypes::util::AsAny;
 use geoengine_operators::engine::{
     MetaDataProvider, RasterResultDescriptor, VectorResultDescriptor,
 };
@@ -21,7 +22,7 @@ pub trait DataProviderDefinition:
     async fn initialize(self: Box<Self>) -> Result<Box<dyn DataProvider>>;
 
     /// the type of the provider
-    fn type_name(&self) -> String;
+    fn type_name(&self) -> &'static str;
 
     /// name of the external data source
     fn name(&self) -> String;
@@ -63,10 +64,8 @@ pub trait DataProvider: LayerCollectionProvider
     + Send
     + Sync
     + std::fmt::Debug
+    + AsAny
 {
     // TODO: unify provenance method for internal and external provider as a separate trait. We need to figure out session handling before, though.
     async fn provenance(&self, id: &DataId) -> Result<ProvenanceOutput>;
-
-    /// Propagates `Any`-casting to the underlying provider
-    fn as_any(&self) -> &dyn std::any::Any;
 }

@@ -632,6 +632,7 @@ where
 
 #[cfg(test)]
 mod tests {
+    use std::collections::HashMap;
     use std::str::FromStr;
 
     use super::*;
@@ -645,7 +646,7 @@ mod tests {
     use crate::datasets::upload::{FileId, UploadId};
     use crate::datasets::upload::{FileUpload, Upload, UploadDb};
     use crate::layers::layer::{
-        AddLayer, AddLayerCollection, CollectionItem, LayerCollectionListOptions,
+        AddLayer, AddLayerCollection, CollectionItem, LayerCollection, LayerCollectionListOptions,
         LayerCollectionListing, LayerListing, ProviderLayerCollectionId, ProviderLayerId,
     };
     use crate::layers::listing::{LayerCollectionId, LayerCollectionProvider};
@@ -670,7 +671,10 @@ mod tests {
     use openidconnect::SubjectIdentifier;
     use geoengine_datatypes::collections::VectorDataType;
     use geoengine_datatypes::dataset::{DataProviderId, DatasetId};
-    use geoengine_datatypes::primitives::{BoundingBox2D, Coordinate2D, Duration, FeatureDataType, Measurement, SpatialResolution, TimeInterval, VectorQueryRectangle};
+    use geoengine_datatypes::primitives::{
+        BoundingBox2D, Coordinate2D, Duration, DateTime, FeatureDataType, Measurement, SpatialResolution,
+        TimeInterval, VectorQueryRectangle,
+    };
     use geoengine_datatypes::spatial_reference::{SpatialReference, SpatialReferenceOption};
     use geoengine_datatypes::util::test::TestDefault;
     use geoengine_datatypes::util::Identifier;
@@ -1143,7 +1147,12 @@ mod tests {
     async fn anonymous(ctx: &PostgresContext<NoTls>) {
         let db = ctx.user_db_ref();
 
+        let now: DateTime = chrono::offset::Utc::now().into();
         let session = db.anonymous().await.unwrap();
+        let then: DateTime = chrono::offset::Utc::now().into();
+
+        assert!(session.created >= now && session.created <= then);
+        assert!(session.valid_until > session.created);
 
         let session = db.session(session.id).await.unwrap();
 
@@ -1483,7 +1492,7 @@ mod tests {
             let provider = db.layer_provider(provider_id).await.unwrap();
 
             let datasets = provider
-                .collection_items(
+                .collection(
                     &provider.root_collection_id().await.unwrap(),
                     LayerCollectionListOptions {
                         offset: 0,
@@ -1495,7 +1504,7 @@ mod tests {
                 .await
                 .unwrap();
 
-            assert_eq!(datasets.len(), 1);
+            assert_eq!(datasets.items.len(), 1);
         })
         .await;
     }
@@ -1974,11 +1983,13 @@ mod tests {
                     name: "Layer1".to_string(),
                     description: "Layer 1".to_string(),
                     symbology: None,
-                    workflow: workflow.clone()
+                    workflow: workflow.clone(),
+                    properties: vec![],
+                    metadata: HashMap::new(),
                 }
             );
 
-            let collection1 = layer_db
+            let collection1_id = layer_db
                 .add_collection(
                     AddLayerCollection {
                         name: "Collection1".to_string(),
@@ -2001,12 +2012,12 @@ mod tests {
                     }
                     .validated()
                     .unwrap(),
-                    &collection1,
+                    &collection1_id,
                 )
                 .await
                 .unwrap();
 
-            let collection2 = layer_db
+            let collection2_id = layer_db
                 .add_collection(
                     AddLayerCollection {
                         name: "Collection2".to_string(),
@@ -2014,18 +2025,18 @@ mod tests {
                     }
                     .validated()
                     .unwrap(),
-                    &collection1,
+                    &collection1_id,
                 )
                 .await
                 .unwrap();
 
             layer_db
-                .add_collection_to_parent(&collection2, &collection1)
+                .add_collection_to_parent(&collection2_id, &collection1_id)
                 .await
                 .unwrap();
 
-            let root_list = layer_db
-                .collection_items(
+            let root_collection = layer_db
+                .collection(
                     &root_collection_id,
                     LayerCollectionListOptions {
                         offset: 0,
@@ -2038,38 +2049,50 @@ mod tests {
                 .unwrap();
 
             assert_eq!(
-                root_list,
-                vec![
-                    CollectionItem::Collection(LayerCollectionListing {
-                        id: ProviderLayerCollectionId {
-                            provider_id: INTERNAL_PROVIDER_ID,
-                            collection_id: collection1.clone(),
-                        },
-                        name: "Collection1".to_string(),
-                        description: "Collection 1".to_string(),
-                    }),
-                    CollectionItem::Collection(LayerCollectionListing {
-                        id: ProviderLayerCollectionId {
-                            provider_id: INTERNAL_PROVIDER_ID,
-                            collection_id: LayerCollectionId(UNSORTED_COLLECTION_ID.to_string()),
-                        },
-                        name: "Unsorted".to_string(),
-                        description: "Unsorted Layers".to_string(),
-                    }),
-                    CollectionItem::Layer(LayerListing {
-                        id: ProviderLayerId {
-                            provider_id: INTERNAL_PROVIDER_ID,
-                            layer_id: layer1,
-                        },
-                        name: "Layer1".to_string(),
-                        description: "Layer 1".to_string(),
-                    })
-                ]
+                root_collection,
+                LayerCollection {
+                    id: ProviderLayerCollectionId {
+                        provider_id: INTERNAL_PROVIDER_ID,
+                        collection_id: root_collection_id,
+                    },
+                    name: "Layers".to_string(),
+                    description: "All available Geo Engine layers".to_string(),
+                    items: vec![
+                        CollectionItem::Collection(LayerCollectionListing {
+                            id: ProviderLayerCollectionId {
+                                provider_id: INTERNAL_PROVIDER_ID,
+                                collection_id: collection1_id.clone(),
+                            },
+                            name: "Collection1".to_string(),
+                            description: "Collection 1".to_string(),
+                        }),
+                        CollectionItem::Collection(LayerCollectionListing {
+                            id: ProviderLayerCollectionId {
+                                provider_id: INTERNAL_PROVIDER_ID,
+                                collection_id: LayerCollectionId(
+                                    UNSORTED_COLLECTION_ID.to_string()
+                                ),
+                            },
+                            name: "Unsorted".to_string(),
+                            description: "Unsorted Layers".to_string(),
+                        }),
+                        CollectionItem::Layer(LayerListing {
+                            id: ProviderLayerId {
+                                provider_id: INTERNAL_PROVIDER_ID,
+                                layer_id: layer1,
+                            },
+                            name: "Layer1".to_string(),
+                            description: "Layer 1".to_string(),
+                        })
+                    ],
+                    entry_label: None,
+                    properties: vec![],
+                }
             );
 
-            let collection1_list = layer_db
-                .collection_items(
-                    &collection1,
+            let collection1 = layer_db
+                .collection(
+                    &collection1_id,
                     LayerCollectionListOptions {
                         offset: 0,
                         limit: 20,
@@ -2081,25 +2104,35 @@ mod tests {
                 .unwrap();
 
             assert_eq!(
-                collection1_list,
-                vec![
-                    CollectionItem::Collection(LayerCollectionListing {
-                        id: ProviderLayerCollectionId {
-                            provider_id: INTERNAL_PROVIDER_ID,
-                            collection_id: collection2,
-                        },
-                        name: "Collection2".to_string(),
-                        description: "Collection 2".to_string(),
-                    }),
-                    CollectionItem::Layer(LayerListing {
-                        id: ProviderLayerId {
-                            provider_id: INTERNAL_PROVIDER_ID,
-                            layer_id: layer2,
-                        },
-                        name: "Layer2".to_string(),
-                        description: "Layer 2".to_string(),
-                    })
-                ]
+                collection1,
+                LayerCollection {
+                    id: ProviderLayerCollectionId {
+                        provider_id: INTERNAL_PROVIDER_ID,
+                        collection_id: collection1_id,
+                    },
+                    name: "Collection1".to_string(),
+                    description: "Collection 1".to_string(),
+                    items: vec![
+                        CollectionItem::Collection(LayerCollectionListing {
+                            id: ProviderLayerCollectionId {
+                                provider_id: INTERNAL_PROVIDER_ID,
+                                collection_id: collection2_id,
+                            },
+                            name: "Collection2".to_string(),
+                            description: "Collection 2".to_string(),
+                        }),
+                        CollectionItem::Layer(LayerListing {
+                            id: ProviderLayerId {
+                                provider_id: INTERNAL_PROVIDER_ID,
+                                layer_id: layer2,
+                            },
+                            name: "Layer2".to_string(),
+                            description: "Layer 2".to_string(),
+                        })
+                    ],
+                    entry_label: None,
+                    properties: vec![],
+                }
             );
         })
         .await;

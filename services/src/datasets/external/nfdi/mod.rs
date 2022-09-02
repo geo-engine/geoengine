@@ -4,7 +4,7 @@ use crate::datasets::listing::{
 };
 use crate::error::{Error, Result, self};
 use crate::layers::external::{DataProviderDefinition, DataProvider};
-use crate::layers::layer::{LayerCollectionListOptions, CollectionItem, Layer, LayerListing, ProviderLayerId};
+use crate::layers::layer::{LayerCollectionListOptions, CollectionItem, Layer, LayerListing, ProviderLayerId, LayerCollection, ProviderLayerCollectionId};
 use crate::layers::listing::{LayerCollectionProvider, LayerCollectionId};
 use crate::util::operators::source_operator_from_dataset;
 use crate::util::user_input::Validated;
@@ -68,8 +68,8 @@ impl DataProviderDefinition for NFDIDataProviderDefinition {
         Ok(Box::new(NFDIDataProvider::new(self).await?))
     }
 
-    fn type_name(&self) -> String {
-        "NFDI".to_owned()
+    fn type_name(&self) -> &'static str {
+        "NFDI"
     }
 
     fn name(&self) -> String {
@@ -114,6 +114,7 @@ impl Interceptor for APITokenInterceptor {
 /// is cheap.
 #[derive(Debug)]
 pub struct NFDIDataProvider {
+    name: String,
     id: DataProviderId,
     project_id: String,
     project_stub: ProjectServiceClient<InterceptedService<Channel, APITokenInterceptor>>,
@@ -140,6 +141,7 @@ impl NFDIDataProvider {
         let object_stub = ObjectLoadServiceClient::with_interceptor(channel, interceptor);
 
         Ok(NFDIDataProvider {
+            name: def.name,
             id: def.id,
             project_id: def.project_id,
             project_stub,
@@ -230,6 +232,8 @@ impl NFDIDataProvider {
                 )?,
             },
             symbology: None,
+            properties: vec![],
+            metadata: HashMap::new(),
         })
     }
 
@@ -538,19 +542,15 @@ impl DataProvider for NFDIDataProvider {
             provenance: metadata.provenance,
         })
     }
-
-    fn as_any(&self) -> &dyn std::any::Any {
-        self
-    }
 }
 
 #[async_trait::async_trait]
 impl LayerCollectionProvider for NFDIDataProvider {
-    async fn collection_items(
+    async fn collection(
         &self,
         collection: &LayerCollectionId,
         _options: Validated<LayerCollectionListOptions>,
-    ) -> Result<Vec<CollectionItem>> {
+    ) -> Result<LayerCollection> {
         ensure!(
             *collection == self.root_collection_id().await?,
             error::UnknownLayerCollectionId {
@@ -567,7 +567,7 @@ impl LayerCollectionProvider for NFDIDataProvider {
             .await?
             .into_inner();
 
-        Ok(resp
+        let items = resp
             .datasets
             .into_iter()
             .map(|ds| {
@@ -580,7 +580,19 @@ impl LayerCollectionProvider for NFDIDataProvider {
                     description: ds.description,
                 })
             })
-            .collect())
+            .collect();
+
+        Ok(LayerCollection {
+            id: ProviderLayerCollectionId {
+                provider_id: self.id,
+                collection_id: collection.clone(),
+            },
+            name: self.name.clone(),
+            description: "NFDI".to_string(),
+            items,
+            entry_label: None,
+            properties: vec![],
+        })
     }
 
     async fn root_collection_id(&self) -> Result<LayerCollectionId> {
@@ -641,6 +653,8 @@ impl LayerCollectionProvider for NFDIDataProvider {
             description: dataset.description,
             workflow: Workflow { operator },
             symbology: None,
+            properties: vec![],
+            metadata: HashMap::new(),
         })
     }
 }
@@ -1184,10 +1198,10 @@ mod tests {
         .validated()
         .unwrap();
 
-        let res = provider.collection_items(&root, opts).await;
+        let res = provider.collection(&root, opts).await;
         assert!(res.is_ok());
         let res = res.unwrap();
-        assert_eq!(1, res.len());
+        assert_eq!(1, res.items.len());
     }
 
     #[tokio::test]

@@ -236,11 +236,7 @@ mod tests {
         mock::{MockRasterSource, MockRasterSourceParams},
         source::GdalSourceParameters,
     };
-    use geoengine_datatypes::{
-        dataset::DatasetId,
-        plots::{PlotData, PlotMetaData},
-        primitives::DateTime,
-    };
+    use geoengine_datatypes::{dataset::DatasetId, plots::PlotMetaData, primitives::DateTime};
     use geoengine_datatypes::{
         primitives::{BoundingBox2D, Measurement, SpatialResolution, TimeInterval},
         util::Identifier,
@@ -250,7 +246,7 @@ mod tests {
         raster::{Grid2D, RasterDataType, TileInformation},
         util::test::TestDefault,
     };
-    use serde_json::json;
+    use serde_json::{json, Value};
 
     #[test]
     fn serialization() {
@@ -349,12 +345,39 @@ mod tests {
             .await
             .unwrap();
 
+        assert!(matches!(result.metadata, PlotMetaData::None));
+
+        let vega_json: Value = serde_json::from_str(&result.vega_string).unwrap();
+
         assert_eq!(
-            result,
-            PlotData {
-                vega_string: r#"{"$schema":"https://vega.github.io/schema/vega-lite/v4.17.0.json","data":{"values":[{"x":"1995-01-01T00:00:00+00:00","y":3.5}]},"description":"Area Plot","encoding":{"x":{"field":"x","title":"Time","type":"temporal"},"y":{"field":"y","title":"","type":"quantitative"}},"mark":{"type":"area","line":true,"point":true}}"#.to_owned(),
-                metadata: PlotMetaData::None,
-            }
+            vega_json,
+            json!({
+                "$schema": "https://vega.github.io/schema/vega-lite/v4.17.0.json",
+                "data": {
+                    "values": [{
+                        "x": "1995-01-01T00:00:00+00:00",
+                        "y": 3.5
+                    }]
+                },
+                "description": "Area Plot",
+                "encoding": {
+                    "x": {
+                        "field": "x",
+                        "title": "Time",
+                        "type": "temporal"
+                    },
+                    "y": {
+                        "field": "y",
+                        "title": "",
+                        "type": "quantitative"
+                    }
+                },
+                "mark": {
+                    "type": "area",
+                    "line": true,
+                    "point": true
+                }
+            })
         );
     }
 

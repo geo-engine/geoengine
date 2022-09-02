@@ -39,7 +39,7 @@ fn map_indexed_elements_1d_simple(c: &mut Criterion) {
 
 fn map_indexed_elements_1d(c: &mut Criterion) {
     let cpu_cores = std::thread::available_parallelism().unwrap();
-    let thread_nums = (0..=cpu_cores.log2()).map(|exp| 2_usize.pow(exp)); //[1, 2, 4, 8, 16, 32];
+    let thread_nums = (0..=cpu_cores.ilog2()).map(|exp| 2_usize.pow(exp)); //[1, 2, 4, 8, 16, 32];
 
     let grid_shape = GridShape::from([512 * 512]);
     let grid = MaskedGrid::new_filled(grid_shape, 123);
@@ -119,7 +119,7 @@ fn map_indexed_elements_2d_simple(c: &mut Criterion) {
 
 fn map_indexed_elements_2d(c: &mut Criterion) {
     let cpu_cores = std::thread::available_parallelism().unwrap();
-    let thread_nums = (0..=cpu_cores.log2()).map(|exp| 2_usize.pow(exp)); //[1, 2, 4, 8, 16, 32];
+    let thread_nums = (0..=cpu_cores.ilog2()).map(|exp| 2_usize.pow(exp)); //[1, 2, 4, 8, 16, 32];
 
     let grid_shape = GridShape::from([512, 512]);
     let grid = MaskedGrid::new_filled(grid_shape, 123);

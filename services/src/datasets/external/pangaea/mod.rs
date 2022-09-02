@@ -1,7 +1,7 @@
 use crate::datasets::external::pangaea::meta::PangeaMetaData;
 use crate::datasets::listing::{Provenance, ProvenanceOutput};
 use crate::layers::external::{DataProvider, DataProviderDefinition};
-use crate::layers::layer::{CollectionItem, Layer, LayerCollectionListOptions};
+use crate::layers::layer::{Layer, LayerCollection, LayerCollectionListOptions};
 use crate::layers::listing::{LayerCollectionId, LayerCollectionProvider};
 use async_trait::async_trait;
 use geoengine_datatypes::dataset::{DataId, DataProviderId, LayerId};
@@ -38,8 +38,8 @@ impl DataProviderDefinition for PangaeaDataProviderDefinition {
         Ok(Box::new(PangaeaDataProvider::new(self.base_url)))
     }
 
-    fn type_name(&self) -> String {
-        "Pangaea".to_owned()
+    fn type_name(&self) -> &'static str {
+        "Pangaea"
     }
 
     fn name(&self) -> String {
@@ -105,19 +105,15 @@ impl DataProvider for PangaeaDataProvider {
             }),
         })
     }
-
-    fn as_any(&self) -> &dyn std::any::Any {
-        self
-    }
 }
 
 #[async_trait]
 impl LayerCollectionProvider for PangaeaDataProvider {
-    async fn collection_items(
+    async fn collection(
         &self,
         _collection: &LayerCollectionId,
         _options: Validated<LayerCollectionListOptions>,
-    ) -> Result<Vec<CollectionItem>> {
+    ) -> Result<LayerCollection> {
         Err(Error::NotYetImplemented)
     }
 
