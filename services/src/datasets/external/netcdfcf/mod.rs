@@ -1676,21 +1676,21 @@ mod tests {
                 },
                 name: "Test dataset metric".to_string(),
                 description: "CFake description of test dataset with metric.".to_string(),
-                items: vec![CollectionItem::Collection(LayerCollectionListing { 
-                    id: ProviderLayerCollectionId { 
-                        provider_id: NETCDF_CF_PROVIDER_ID, 
-                        collection_id: LayerCollectionId("dataset_m.nc/metric_1".to_string()) 
-                    }, 
-                    name: "Random metric 1".to_string(), 
+                items: vec![CollectionItem::Collection(LayerCollectionListing {
+                    id: ProviderLayerCollectionId {
+                        provider_id: NETCDF_CF_PROVIDER_ID,
+                        collection_id: LayerCollectionId("dataset_m.nc/metric_1".to_string())
+                    },
+                    name: "Random metric 1".to_string(),
                     description: "Randomly created data" .to_string()
-                }), CollectionItem::Collection(LayerCollectionListing { 
-                    id: ProviderLayerCollectionId { 
-                        provider_id: NETCDF_CF_PROVIDER_ID, 
+                }), CollectionItem::Collection(LayerCollectionListing {
+                    id: ProviderLayerCollectionId {
+                        provider_id: NETCDF_CF_PROVIDER_ID,
                         collection_id: LayerCollectionId("dataset_m.nc/metric_2".to_string()) 
-                    }, 
+                    },
                     name: "Random metric 2".to_string(), 
                     description: "Randomly created data".to_string()
-                })], 
+                })],
                 entry_label: None,
                 properties: vec![("author".to_string(), "Luise Quoß, luise.quoss@idiv.de, German Centre for Integrative Biodiversity Research (iDiv)".to_string())]
             }
@@ -1732,42 +1732,42 @@ mod tests {
                 },
                 name: "Test dataset metric and scenario".to_string(),
                 description: "Fake description of test dataset with metric and scenario.".to_string(),
-                items: vec![CollectionItem::Collection(LayerCollectionListing { 
-                    id: ProviderLayerCollectionId { 
-                        provider_id: NETCDF_CF_PROVIDER_ID, 
-                        collection_id: LayerCollectionId("dataset_sm.nc/scenario_1".to_string()) 
-                    }, 
-                    name: "Sustainability".to_string(), 
+                items: vec![CollectionItem::Collection(LayerCollectionListing {
+                    id: ProviderLayerCollectionId {
+                        provider_id: NETCDF_CF_PROVIDER_ID,
+                        collection_id: LayerCollectionId("dataset_sm.nc/scenario_1".to_string())
+                    },
+                    name: "Sustainability".to_string(),
                     description: "SSP1-RCP2.6" .to_string()
-                }), CollectionItem::Collection(LayerCollectionListing { 
-                    id: ProviderLayerCollectionId { 
-                        provider_id: NETCDF_CF_PROVIDER_ID, 
-                        collection_id: LayerCollectionId("dataset_sm.nc/scenario_2".to_string()) 
-                    }, 
-                    name: "Middle of the Road ".to_string(), 
+                }), CollectionItem::Collection(LayerCollectionListing {
+                    id: ProviderLayerCollectionId {
+                        provider_id: NETCDF_CF_PROVIDER_ID,
+                        collection_id: LayerCollectionId("dataset_sm.nc/scenario_2".to_string())
+                    },
+                    name: "Middle of the Road ".to_string(),
                     description: "SSP2-RCP4.5".to_string()
-                }), CollectionItem::Collection(LayerCollectionListing { 
-                    id: ProviderLayerCollectionId { 
-                        provider_id: NETCDF_CF_PROVIDER_ID, 
-                        collection_id: LayerCollectionId("dataset_sm.nc/scenario_3".to_string()) 
-                    }, 
+                }), CollectionItem::Collection(LayerCollectionListing {
+                    id: ProviderLayerCollectionId {
+                        provider_id: NETCDF_CF_PROVIDER_ID,
+                        collection_id: LayerCollectionId("dataset_sm.nc/scenario_3".to_string())
+                    },
                     name: "Regional Rivalry".to_string(), 
                     description: "SSP3-RCP6.0".to_string()
-                }), CollectionItem::Collection(LayerCollectionListing { 
-                    id: ProviderLayerCollectionId { 
-                        provider_id: NETCDF_CF_PROVIDER_ID, 
-                        collection_id: LayerCollectionId("dataset_sm.nc/scenario_4".to_string()) 
-                    }, 
-                    name: "Inequality".to_string(), 
+                }), CollectionItem::Collection(LayerCollectionListing {
+                    id: ProviderLayerCollectionId {
+                        provider_id: NETCDF_CF_PROVIDER_ID,
+                        collection_id: LayerCollectionId("dataset_sm.nc/scenario_4".to_string())
+                    },
+                    name: "Inequality".to_string(),
                     description: "SSP4-RCP6.0".to_string()
-                }), CollectionItem::Collection(LayerCollectionListing { 
-                    id: ProviderLayerCollectionId { 
-                        provider_id: NETCDF_CF_PROVIDER_ID, 
-                        collection_id: LayerCollectionId("dataset_sm.nc/scenario_5".to_string()) 
-                    }, 
-                    name: "Fossil-fueled Development".to_string(), 
+                }), CollectionItem::Collection(LayerCollectionListing {
+                    id: ProviderLayerCollectionId {
+                        provider_id: NETCDF_CF_PROVIDER_ID,
+                        collection_id: LayerCollectionId("dataset_sm.nc/scenario_5".to_string())
+                    },
+                    name: "Fossil-fueled Development".to_string(),
                     description: "SSP5-RCP8.5".to_string()
-                })], 
+                })],
                 entry_label: None,
                 properties: vec![("author".to_string(), "Luise Quoß, luise.quoss@idiv.de, German Centre for Integrative Biodiversity Research (iDiv)".to_string())]
             }
@@ -2015,42 +2015,42 @@ mod tests {
                 },
                 name: "Test dataset metric and scenario".to_string(),
                 description: "Fake description of test dataset with metric and scenario.".to_string(),
-                items: vec![CollectionItem::Collection(LayerCollectionListing { 
-                    id: ProviderLayerCollectionId { 
-                        provider_id: NETCDF_CF_PROVIDER_ID, 
-                        collection_id: LayerCollectionId("dataset_sm.nc/scenario_1".to_string()) 
-                    }, 
-                    name: "Sustainability".to_string(), 
+                items: vec![CollectionItem::Collection(LayerCollectionListing {
+                    id: ProviderLayerCollectionId {
+                        provider_id: NETCDF_CF_PROVIDER_ID,
+                        collection_id: LayerCollectionId("dataset_sm.nc/scenario_1".to_string())
+                    },
+                    name: "Sustainability".to_string(),
                     description: "SSP1-RCP2.6" .to_string()
-                }), CollectionItem::Collection(LayerCollectionListing { 
-                    id: ProviderLayerCollectionId { 
-                        provider_id: NETCDF_CF_PROVIDER_ID, 
-                        collection_id: LayerCollectionId("dataset_sm.nc/scenario_2".to_string()) 
-                    }, 
-                    name: "Middle of the Road ".to_string(), 
+                }), CollectionItem::Collection(LayerCollectionListing {
+                    id: ProviderLayerCollectionId {
+                        provider_id: NETCDF_CF_PROVIDER_ID,
+                        collection_id: LayerCollectionId("dataset_sm.nc/scenario_2".to_string())
+                    },
+                    name: "Middle of the Road ".to_string(),
                     description: "SSP2-RCP4.5".to_string()
-                }), CollectionItem::Collection(LayerCollectionListing { 
-                    id: ProviderLayerCollectionId { 
-                        provider_id: NETCDF_CF_PROVIDER_ID, 
-                        collection_id: LayerCollectionId("dataset_sm.nc/scenario_3".to_string()) 
-                    }, 
-                    name: "Regional Rivalry".to_string(), 
+                }), CollectionItem::Collection(LayerCollectionListing {
+                    id: ProviderLayerCollectionId {
+                        provider_id: NETCDF_CF_PROVIDER_ID,
+                        collection_id: LayerCollectionId("dataset_sm.nc/scenario_3".to_string())
+                    },
+                    name: "Regional Rivalry".to_string(),
                     description: "SSP3-RCP6.0".to_string()
-                }), CollectionItem::Collection(LayerCollectionListing { 
-                    id: ProviderLayerCollectionId { 
-                        provider_id: NETCDF_CF_PROVIDER_ID, 
-                        collection_id: LayerCollectionId("dataset_sm.nc/scenario_4".to_string()) 
-                    }, 
-                    name: "Inequality".to_string(), 
+                }), CollectionItem::Collection(LayerCollectionListing {
+                    id: ProviderLayerCollectionId {
+                        provider_id: NETCDF_CF_PROVIDER_ID,
+                        collection_id: LayerCollectionId("dataset_sm.nc/scenario_4".to_string())
+                    },
+                    name: "Inequality".to_string(),
                     description: "SSP4-RCP6.0".to_string()
-                }), CollectionItem::Collection(LayerCollectionListing { 
-                    id: ProviderLayerCollectionId { 
-                        provider_id: NETCDF_CF_PROVIDER_ID, 
+                }), CollectionItem::Collection(LayerCollectionListing {
+                    id: ProviderLayerCollectionId {
+                        provider_id: NETCDF_CF_PROVIDER_ID,
                         collection_id: LayerCollectionId("dataset_sm.nc/scenario_5".to_string()) 
-                    }, 
+                    },
                     name: "Fossil-fueled Development".to_string(), 
                     description: "SSP5-RCP8.5".to_string()
-                })], 
+                })],
                 entry_label: None,
                 properties: vec![("author".to_string(), "Luise Quoß, luise.quoss@idiv.de, German Centre for Integrative Biodiversity Research (iDiv)".to_string())]
             }
