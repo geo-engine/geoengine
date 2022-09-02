@@ -936,6 +936,7 @@ async fn listing_from_dir(
     options: &LayerCollectionListOptions,
 ) -> crate::error::Result<LayerCollection> {
     let dir_path = base.join(&path);
+    eprintln!("dir path {:?}", &dir_path);
 
     let (name, description) = if path == Path::new(".") {
         (
@@ -952,9 +953,11 @@ async fn listing_from_dir(
     };
 
     let mut dir = tokio::fs::read_dir(&dir_path).await?;
+    eprintln!("read dir");
 
     let mut items = vec![];
     while let Some(entry) = dir.next_entry().await? {
+        eprintln!("entry {:?}", entry.path());
         if entry.path().canonicalize()? == overview_path.canonicalize()? {
             continue;
         }
@@ -1261,7 +1264,7 @@ impl LayerCollectionProvider for NetCdfCfDataProvider {
         options: Validated<LayerCollectionListOptions>,
     ) -> crate::error::Result<LayerCollection> {
         let id = NetCdfLayerCollectionId::from_str(&collection.0)?;
-
+        eprintln!("id {:?}", &id);
         Ok(match id {
             NetCdfLayerCollectionId::Path { path }
                 if canonicalize_subpath(&self.path, &path).is_ok()
