@@ -31,7 +31,7 @@ where
             .route(web::get().to(list_collection_handler::<C>)),
     )
     .service(
-        web::resource("/layers/{provider}/{path:[^{}]+}").route(web::get().to(layer_handler::<C>)),
+        web::resource("/layers/{provider}/{item:.+}").route(web::get().to(layer_handler::<C>)),
     );
 }
 
