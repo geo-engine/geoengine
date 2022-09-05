@@ -2,20 +2,20 @@ use crate::error;
 use crate::error::Result;
 use crate::handlers;
 use crate::pro::contexts::ProContext;
-use crate::pro::users::{AuthCodeResponse, UserCredentials};
 use crate::pro::users::UserDb;
 use crate::pro::users::UserRegistration;
 use crate::pro::users::UserSession;
+use crate::pro::users::{AuthCodeResponse, UserCredentials};
 use crate::projects::ProjectId;
 use crate::projects::STRectangle;
 use crate::util::config;
 use crate::util::user_input::UserInput;
 use crate::util::IdResponse;
 
+use crate::pro::users::OidcError::OidcDisabled;
 use actix_web::{web, HttpResponse, Responder};
 use snafu::ensure;
 use snafu::ResultExt;
-use crate::pro::users::OidcError::OidcDisabled;
 
 pub(crate) fn init_user_routes<C>(cfg: &mut web::ServiceConfig)
 where
@@ -251,18 +251,17 @@ pub(crate) async fn session_view_handler<C: ProContext>(
 /// # Errors
 ///
 /// This call fails if Open ID Connect is disabled, misconfigured or the Id Provider is unreachable.
-pub(crate) async fn oidc_init<C: ProContext>(
-    ctx: web::Data<C>,
-) -> Result<impl Responder> {
+pub(crate) async fn oidc_init<C: ProContext>(ctx: web::Data<C>) -> Result<impl Responder> {
     ensure!(
         config::get_config_element::<crate::pro::util::config::Oidc>()?.enabled,
         crate::pro::users::OidcDisabled
     );
     let request_db = ctx.oidc_request_db().ok_or(OidcDisabled)?;
-    let oidc_client = request_db.get_client()
-        .await?;
+    let oidc_client = request_db.get_client().await?;
 
-    let result = ctx.oidc_request_db().ok_or(OidcDisabled)?
+    let result = ctx
+        .oidc_request_db()
+        .ok_or(OidcDisabled)?
         .generate_request(oidc_client)
         .await?;
 
@@ -314,16 +313,13 @@ pub(crate) async fn oidc_login<C: ProContext>(
         crate::pro::users::OidcDisabled
     );
     let request_db = ctx.oidc_request_db().ok_or(OidcDisabled)?;
-    let oidc_client = request_db.get_client()
-        .await?;
+    let oidc_client = request_db.get_client().await?;
 
     let (user, duration) = request_db
         .resolve_request(oidc_client, response.into_inner())
         .await?;
 
-    let session = ctx.user_db_ref()
-        .login_external(user, duration)
-        .await?;
+    let session = ctx.user_db_ref().login_external(user, duration).await?;
 
     Ok(web::Json(session))
 }
@@ -334,22 +330,27 @@ mod tests {
 
     use crate::contexts::Session;
     use crate::handlers::ErrorResponse;
-    use crate::pro::util::tests::{create_project_helper, create_session_helper, mock_jwks, mock_provider_metadata, mock_token_response, MockTokenConfig, send_pro_test_request, SINGLE_STATE};
+    use crate::pro::util::tests::{
+        create_project_helper, create_session_helper, send_pro_test_request
+    };
+    use crate::pro::util::tests::mock_oidc::{
+        mock_jwks, mock_provider_metadata, mock_token_response, MockTokenConfig, SINGLE_STATE,
+    };
     use crate::pro::{contexts::ProInMemoryContext, projects::ProProjectDb, users::UserId};
     use crate::util::tests::{check_allowed_http_methods, read_body_string};
     use crate::util::user_input::Validated;
 
+    use crate::pro::users::{AuthCodeRequestURL, OidcRequestDb};
+    use crate::pro::util::config::Oidc;
     use actix_web::dev::ServiceResponse;
     use actix_web::{http::header, http::Method, test};
     use actix_web_httpauth::headers::authorization::Bearer;
-    use httptest::{Expectation, Server};
-    use httptest::matchers::request;
-    use httptest::responders::status_code;
     use geoengine_datatypes::spatial_reference::SpatialReferenceOption;
     use geoengine_datatypes::util::test::TestDefault;
+    use httptest::matchers::request;
+    use httptest::responders::status_code;
+    use httptest::{Expectation, Server};
     use serde_json::json;
-    use crate::pro::users::{AuthCodeRequestURL, OidcRequestDb};
-    use crate::pro::util::config::Oidc;
 
     async fn register_test_helper<C: ProContext>(
         ctx: C,
@@ -849,7 +850,7 @@ mod tests {
         OidcRequestDb::from_oidc_with_static_tokens(oidc_config)
     }
 
-    fn mock_valid_provider_discovery(expected_discoveries : usize) -> Server {
+    fn mock_valid_provider_discovery(expected_discoveries: usize) -> Server {
         let server = Server::run();
         let server_url = format!("http://{}", server.addr());
 
@@ -857,13 +858,16 @@ mod tests {
         let jwks = mock_jwks();
 
         server.expect(
-            Expectation::matching(request::method_path("GET", "/.well-known/openid-configuration"))
-                .times(expected_discoveries)
-                .respond_with(
-                    status_code(200)
-                        .insert_header("content-type", "application/json")
-                        .body(serde_json::to_string(&provider_metadata).unwrap())
-                )
+            Expectation::matching(request::method_path(
+                "GET",
+                "/.well-known/openid-configuration",
+            ))
+            .times(expected_discoveries)
+            .respond_with(
+                status_code(200)
+                    .insert_header("content-type", "application/json")
+                    .body(serde_json::to_string(&provider_metadata).unwrap()),
+            ),
         );
         server.expect(
             Expectation::matching(request::method_path("GET", "/jwk"))
@@ -871,8 +875,8 @@ mod tests {
                 .respond_with(
                     status_code(200)
                         .insert_header("content-type", "application/json")
-                        .body(serde_json::to_string(&jwks).unwrap())
-                )
+                        .body(serde_json::to_string(&jwks).unwrap()),
+                ),
         );
         server
     }
@@ -885,7 +889,11 @@ mod tests {
         send_pro_test_request(req, ctx).await
     }
 
-    async fn oidc_login_test_helper(method: Method, ctx: ProInMemoryContext, auth_code_response: AuthCodeResponse) -> ServiceResponse {
+    async fn oidc_login_test_helper(
+        method: Method,
+        ctx: ProInMemoryContext,
+        auth_code_response: AuthCodeResponse,
+    ) -> ServiceResponse {
         let req = test::TestRequest::default()
             .method(method)
             .uri("/oidcLogin")
@@ -916,15 +924,19 @@ mod tests {
         let error_message = serde_json::to_string(&json!({
             "error_description": "Dummy bad request",
             "error": "catch_all_error"
-        })).expect("Serde Json unsuccessful");
+        }))
+        .expect("Serde Json unsuccessful");
 
         server.expect(
-            Expectation::matching(request::method_path("GET", "/.well-known/openid-configuration"))
-                .respond_with(
-                    status_code(404)
-                        .insert_header("content-type", "application/json")
-                        .body(error_message)
-                )
+            Expectation::matching(request::method_path(
+                "GET",
+                "/.well-known/openid-configuration",
+            ))
+            .respond_with(
+                status_code(404)
+                    .insert_header("content-type", "application/json")
+                    .body(error_message),
+            ),
         );
 
         let ctx = ProInMemoryContext::new_with_oidc(request_db);
@@ -945,7 +957,8 @@ mod tests {
         check_allowed_http_methods(
             |method| oidc_init_test_helper(method, ctx.clone()),
             &[Method::POST],
-        ).await;
+        )
+        .await;
     }
 
     #[tokio::test]
@@ -959,21 +972,21 @@ mod tests {
 
         assert!(request.is_ok());
 
-        let mock_token_config = MockTokenConfig::create_from_issuer_and_client(server_url, MOCK_CLIENT_ID.to_string());
+        let mock_token_config =
+            MockTokenConfig::create_from_issuer_and_client(server_url, MOCK_CLIENT_ID.to_string());
         let token_response = mock_token_response(mock_token_config);
         server.expect(
-            Expectation::matching(request::method_path("POST", "/token"))
-                .respond_with(
-                    status_code(200)
-                        .insert_header("content-type", "application/json")
-                        .body(serde_json::to_string(&token_response).unwrap())
-                )
+            Expectation::matching(request::method_path("POST", "/token")).respond_with(
+                status_code(200)
+                    .insert_header("content-type", "application/json")
+                    .body(serde_json::to_string(&token_response).unwrap()),
+            ),
         );
 
         let auth_code_response = AuthCodeResponse {
             session_state: "".to_string(),
             code: "".to_string(),
-            state: SINGLE_STATE.to_string()
+            state: SINGLE_STATE.to_string(),
         };
 
         let ctx = ProInMemoryContext::new_with_oidc(request_db);
@@ -993,7 +1006,7 @@ mod tests {
         let auth_code_response = AuthCodeResponse {
             session_state: "".to_string(),
             code: "".to_string(),
-            state: SINGLE_STATE.to_string()
+            state: SINGLE_STATE.to_string(),
         };
 
         let ctx = ProInMemoryContext::new_with_oidc(request_db);
@@ -1004,7 +1017,8 @@ mod tests {
             400,
             "OidcError",
             "OidcError: Login failed: Request unknown",
-        ).await;
+        )
+        .await;
     }
 
     #[tokio::test]
@@ -1021,21 +1035,21 @@ mod tests {
         let error_message = serde_json::to_string(&json!({
             "error_description": "Dummy bad request",
             "error": "catch_all_error"
-        })).expect("Serde Json unsuccessful");
+        }))
+        .expect("Serde Json unsuccessful");
 
         server.expect(
-            Expectation::matching(request::method_path("POST", "/token"))
-                .respond_with(
-                    status_code(404)
-                        .insert_header("content-type", "application/json")
-                        .body(error_message)
-                )
+            Expectation::matching(request::method_path("POST", "/token")).respond_with(
+                status_code(404)
+                    .insert_header("content-type", "application/json")
+                    .body(error_message),
+            ),
         );
 
         let auth_code_response = AuthCodeResponse {
             session_state: "".to_string(),
             code: "".to_string(),
-            state: SINGLE_STATE.to_string()
+            state: SINGLE_STATE.to_string(),
         };
 
         let ctx = ProInMemoryContext::new_with_oidc(request_db);
@@ -1046,7 +1060,8 @@ mod tests {
             400,
             "OidcError",
             "OidcError: Verification failed: Request for code to token exchange failed",
-        ).await;
+        )
+        .await;
     }
 
     #[tokio::test]
@@ -1056,14 +1071,14 @@ mod tests {
         let auth_code_response = AuthCodeResponse {
             session_state: "".to_string(),
             code: "".to_string(),
-            state: "".to_string()
+            state: "".to_string(),
         };
 
         check_allowed_http_methods(
             |method| oidc_login_test_helper(method, ctx.clone(), auth_code_response.clone()),
             &[Method::POST],
         )
-            .await;
+        .await;
     }
 
     #[tokio::test]
@@ -1082,7 +1097,7 @@ mod tests {
             "UnsupportedMediaType",
             "Unsupported content type header.",
         )
-            .await;
+        .await;
     }
 
     #[tokio::test]
@@ -1107,7 +1122,7 @@ mod tests {
             "BodyDeserializeError",
             "missing field `state` at line 1 column 30",
         )
-            .await;
+        .await;
     }
 
     #[tokio::test]
@@ -1127,6 +1142,6 @@ mod tests {
             "UnsupportedMediaType",
             "Unsupported content type header.",
         )
-            .await;
+        .await;
     }
 }

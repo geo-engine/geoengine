@@ -8,6 +8,7 @@ use crate::pro::contexts::{Context, ProContext};
 use crate::pro::datasets::{add_datasets_from_directory, ProHashMapDatasetDb};
 use crate::pro::projects::ProHashMapProjectDb;
 use crate::pro::users::{HashMapUserDb, OidcRequestDb, UserDb, UserSession};
+use crate::pro::util::config::Oidc;
 use crate::tasks::{SimpleTaskManager, SimpleTaskManagerContext};
 use crate::workflows::registry::HashMapRegistry;
 use crate::{datasets::add_from_directory::add_providers_from_directory, error::Result};
@@ -20,7 +21,6 @@ use rayon::ThreadPool;
 use snafu::ResultExt;
 use std::path::PathBuf;
 use std::sync::Arc;
-use crate::pro::util::config::Oidc;
 
 /// A context with references to in-memory versions of the individual databases.
 #[derive(Clone)]
@@ -64,7 +64,7 @@ impl ProInMemoryContext {
         layer_collection_defs_path: PathBuf,
         exe_ctx_tiling_spec: TilingSpecification,
         query_ctx_chunk_size: ChunkByteSize,
-        oidc_config : Oidc,
+        oidc_config: Oidc,
     ) -> Self {
         let mut layer_db = HashMapLayerDb::default();
 

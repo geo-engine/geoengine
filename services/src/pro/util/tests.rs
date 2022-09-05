@@ -1,7 +1,6 @@
 use geoengine_datatypes::{
     primitives::DateTime, spatial_reference::SpatialReferenceOption, util::Identifier,
 };
-
 use crate::{
     contexts::SessionId,
     handlers, pro,
@@ -17,12 +16,7 @@ use crate::{
 };
 use actix_web::dev::ServiceResponse;
 use actix_web::{http, middleware, test, web, App};
-use chrono::{Duration, Utc};
-use oauth2::{AccessToken, AuthUrl, EmptyExtraTokenFields, Scope, StandardTokenResponse, TokenUrl};
-use oauth2::basic::BasicTokenType;
-use openidconnect::core::{CoreClaimName, CoreIdToken, CoreIdTokenClaims, CoreIdTokenFields, CoreJsonWebKey, CoreJwsSigningAlgorithm, CoreProviderMetadata, CoreResponseType, CoreRsaPrivateSigningKey, CoreTokenResponse, CoreTokenType};
-use openidconnect::{Audience, EmptyAdditionalClaims, EmptyAdditionalProviderMetadata, EndUserEmail, EndUserName, IssuerUrl, JsonWebKeySet, JsonWebKeySetUrl, LocalizedClaim, Nonce, ResponseTypes, StandardClaims, SubjectIdentifier};
-use crate::pro::users::{DefaultJsonWebKeySet, DefaultProviderMetadata};
+
 
 #[allow(clippy::missing_panics_doc)]
 pub async fn create_session_helper<C: ProContext>(ctx: &C) -> UserSession {
@@ -133,7 +127,24 @@ where
         .map_into_boxed_body()
 }
 
-const TEST_PRIVATE_KEY: &str = "-----BEGIN RSA PRIVATE KEY-----\n\
+#[cfg(test)]
+pub(in crate::pro) mod mock_oidc {
+    use crate::pro::users::{DefaultJsonWebKeySet, DefaultProviderMetadata};
+    use oauth2::basic::BasicTokenType;
+    use oauth2::{AccessToken, AuthUrl, EmptyExtraTokenFields, Scope, StandardTokenResponse, TokenUrl};
+    use openidconnect::core::{
+        CoreClaimName, CoreIdToken, CoreIdTokenClaims, CoreIdTokenFields, CoreJsonWebKey,
+        CoreJwsSigningAlgorithm, CoreProviderMetadata, CoreResponseType, CoreRsaPrivateSigningKey,
+        CoreTokenResponse, CoreTokenType,
+    };
+    use openidconnect::{
+        Audience, EmptyAdditionalClaims, EmptyAdditionalProviderMetadata, EndUserEmail, EndUserName,
+        IssuerUrl, JsonWebKeySet, JsonWebKeySetUrl, LocalizedClaim, Nonce, ResponseTypes,
+        StandardClaims, SubjectIdentifier,
+    };
+    use chrono::{Duration, Utc};
+
+    const TEST_PRIVATE_KEY: &str = "-----BEGIN RSA PRIVATE KEY-----\n\
 	    MIIEogIBAAKCAQEAxIm5pngAgY4V+6XJPtlATkU6Gbcen22M3Tf16Gwl4uuFagEp\n\
 	    SQ4u/HXvcyAYvdNfAwR34nsAyS1qFQasWYtcU4HwmFvo5ADfdJpfo6myRiGN3ocA\n\
 	    4+/S1tH8HqLH+w7U/9SopwUP0n0+N0UaaFA1htkRY4zNWEDnJ2AVN2Vi0dUtS62D\n\
@@ -161,7 +172,7 @@ const TEST_PRIVATE_KEY: &str = "-----BEGIN RSA PRIVATE KEY-----\n\
 	    Wj4iz6nkuRK0fTLfTu6Nglx6mjX8Q3rz0UUFVjOL/gpgEWxzoHk=\n\
 	    -----END RSA PRIVATE KEY-----";
 
-const TEST_JWK: &str = "{\
+    const TEST_JWK: &str = "{\
         \"kty\":\"RSA\",
         \"use\":\"sig\",
         \"n\":\"xIm5pngAgY4V-6XJPtlATkU6Gbcen22M3Tf16Gwl4uuFagEpSQ4u_HXvcyAYv\
@@ -179,101 +190,110 @@ const TEST_JWK: &str = "{\
             W2BV7Z53i7uyea9g5RuwQ\"
         }";
 
-const ACCESS_TOKEN: &str = "DUMMY_ACCESS_TOKEN_1";
-pub(in crate::pro) const SINGLE_STATE : &str = "State_1";
-pub(in crate::pro)  const SINGLE_NONCE : &str = "Nonce_1";
+    const ACCESS_TOKEN: &str = "DUMMY_ACCESS_TOKEN_1";
 
-pub(in crate::pro) struct MockTokenConfig {
-    issuer : String,
-    client_id : String,
-    pub email: Option<EndUserEmail>,
-    pub name: Option<LocalizedClaim<EndUserName>>,
-    pub nonce: Option<Nonce>,
-    pub duration: Option<core::time::Duration>,
-    pub access : String,
-    pub access_for_id : String,
-}
+    pub const SINGLE_STATE: &str = "State_1";
+    pub const SINGLE_NONCE: &str = "Nonce_1";
 
-impl MockTokenConfig {
+    pub struct MockTokenConfig {
+        issuer: String,
+        client_id: String,
+        pub email: Option<EndUserEmail>,
+        pub name: Option<LocalizedClaim<EndUserName>>,
+        pub nonce: Option<Nonce>,
+        pub duration: Option<core::time::Duration>,
+        pub access: String,
+        pub access_for_id: String,
+    }
 
-    pub fn create_from_issuer_and_client(issuer: String, client_id: String) -> Self {
-        let mut name = LocalizedClaim::new();
-        name.insert(None, EndUserName::new("Robin".to_string()));
-        let name = Some(name);
+    impl MockTokenConfig {
+        pub fn create_from_issuer_and_client(issuer: String, client_id: String) -> Self {
+            let mut name = LocalizedClaim::new();
+            name.insert(None, EndUserName::new("Robin".to_string()));
+            let name = Some(name);
 
-        MockTokenConfig {
-            issuer,
-            client_id,
-            email: Some(EndUserEmail::new("robin@dummy_db.com".to_string())),
-            name,
-            nonce: Some(Nonce::new(SINGLE_NONCE.to_string())),
-            duration: Some(core::time::Duration::from_secs(1800)),
-            access: ACCESS_TOKEN.to_string(),
-            access_for_id: ACCESS_TOKEN.to_string(),
+            MockTokenConfig {
+                issuer,
+                client_id,
+                email: Some(EndUserEmail::new("robin@dummy_db.com".to_string())),
+                name,
+                nonce: Some(Nonce::new(SINGLE_NONCE.to_string())),
+                duration: Some(core::time::Duration::from_secs(1800)),
+                access: ACCESS_TOKEN.to_string(),
+                access_for_id: ACCESS_TOKEN.to_string(),
+            }
         }
     }
 
+    pub fn mock_provider_metadata(provider_base_url: &str) -> DefaultProviderMetadata {
+        CoreProviderMetadata::new(
+            IssuerUrl::new(provider_base_url.to_string()).expect("Parsing mock issuer should not fail"),
+            AuthUrl::new(provider_base_url.to_owned() + "/authorize")
+                .expect("Parsing mock auth url should not fail"),
+            JsonWebKeySetUrl::new(provider_base_url.to_owned() + "/jwk")
+                .expect("Parsing mock jwk url should not fail"),
+            vec![ResponseTypes::new(vec![CoreResponseType::Code])],
+            vec![],
+            vec![CoreJwsSigningAlgorithm::RsaSsaPssSha256],
+            EmptyAdditionalProviderMetadata {},
+        )
+            .set_token_endpoint(Some(
+                TokenUrl::new(provider_base_url.to_owned() + "/token")
+                    .expect("Parsing mock token url should not fail"),
+            ))
+            .set_scopes_supported(Some(vec![
+                Scope::new("openid".to_string()),
+                Scope::new("email".to_string()),
+                Scope::new("profile".to_string()),
+            ]))
+            .set_claims_supported(Some(vec![
+                CoreClaimName::new("sub".to_string()),
+                CoreClaimName::new("email".to_string()),
+                CoreClaimName::new("name".to_string()),
+            ]))
+    }
+
+    pub fn mock_jwks() -> DefaultJsonWebKeySet {
+        let jwk: CoreJsonWebKey =
+            serde_json::from_str(TEST_JWK).expect("Parsing mock jwk should not fail");
+        JsonWebKeySet::new(vec![jwk])
+    }
+
+    pub fn mock_token_response(
+        mock_token_config: MockTokenConfig,
+    ) -> StandardTokenResponse<CoreIdTokenFields, BasicTokenType> {
+        let id_token = CoreIdToken::new(
+            CoreIdTokenClaims::new(
+                IssuerUrl::new(mock_token_config.issuer).expect("Parsing mock issuer should not fail"),
+                vec![Audience::new(mock_token_config.client_id)],
+                Utc::now() + Duration::seconds(300),
+                Utc::now(),
+                StandardClaims::new(SubjectIdentifier::new("DUMMY_SUBJECT_ID".to_string()))
+                    .set_email(mock_token_config.email)
+                    .set_name(mock_token_config.name),
+                EmptyAdditionalClaims {},
+            )
+                .set_nonce(mock_token_config.nonce),
+            &CoreRsaPrivateSigningKey::from_pem(TEST_PRIVATE_KEY, None)
+                .expect("Cannot create mock of RSA private key"),
+            CoreJwsSigningAlgorithm::RsaSsaPkcs1V15Sha256,
+            Some(&AccessToken::new(
+                mock_token_config.access_for_id.to_string(),
+            )),
+            None,
+        )
+            .expect("Cannot create mock of ID Token");
+
+        let mut result = CoreTokenResponse::new(
+            AccessToken::new(mock_token_config.access.to_string()),
+            CoreTokenType::Bearer,
+            CoreIdTokenFields::new(Some(id_token), EmptyExtraTokenFields {}),
+        );
+
+        result.set_expires_in(mock_token_config.duration.as_ref());
+
+        result
+    }
 }
 
-pub(in crate::pro) fn mock_provider_metadata(provider_base_url : &str) -> DefaultProviderMetadata {
-    let result = CoreProviderMetadata::new(
-        IssuerUrl::new(provider_base_url.to_string()).expect("Parsing mock issuer should not fail"),
-        AuthUrl::new(provider_base_url.to_owned() + "/authorize").expect("Parsing mock auth url should not fail"),
-        JsonWebKeySetUrl::new(provider_base_url.to_owned() + "/jwk").expect("Parsing mock jwk url should not fail"),
-        vec![
-            ResponseTypes::new(vec![CoreResponseType::Code]),
-        ],
-        vec![],
-        vec![CoreJwsSigningAlgorithm::RsaSsaPssSha256],
-        EmptyAdditionalProviderMetadata {},
-    )
-        .set_token_endpoint(Some(TokenUrl::new(provider_base_url.to_owned() + "/token").expect("Parsing mock token url should not fail")))
-        .set_scopes_supported(Some(vec![
-            Scope::new("openid".to_string()),
-            Scope::new("email".to_string()),
-            Scope::new("profile".to_string()),
-        ]))
-        .set_claims_supported(Some(vec![
-            CoreClaimName::new("sub".to_string()),
-            CoreClaimName::new("email".to_string()),
-            CoreClaimName::new("name".to_string()),
-        ]));
-    result
-}
 
-pub(in crate::pro) fn mock_jwks() -> DefaultJsonWebKeySet {
-    let jwk : CoreJsonWebKey = serde_json::from_str(TEST_JWK).expect("Parsing mock jwk should not fail");
-    JsonWebKeySet::new(vec![jwk])
-}
-
-pub(in crate::pro) fn mock_token_response(mock_token_config: MockTokenConfig) -> StandardTokenResponse<CoreIdTokenFields, BasicTokenType> {
-    let id_token = CoreIdToken::new(
-        CoreIdTokenClaims::new(
-            IssuerUrl::new(mock_token_config.issuer).expect("Parsing mock issuer should not fail"),
-            vec![Audience::new(mock_token_config.client_id)],
-            Utc::now() + Duration::seconds(300),
-            Utc::now(),
-            StandardClaims::new(SubjectIdentifier::new("DUMMY_SUBJECT_ID".to_string()))
-                .set_email(mock_token_config.email)
-                .set_name(mock_token_config.name),
-            EmptyAdditionalClaims {},
-        ).set_nonce(mock_token_config.nonce),
-        &CoreRsaPrivateSigningKey::from_pem(
-            TEST_PRIVATE_KEY,
-            None
-        ).expect("Cannot create mock of RSA private key"),
-        CoreJwsSigningAlgorithm::RsaSsaPkcs1V15Sha256,
-        Some(&AccessToken::new(mock_token_config.access_for_id.to_string())),
-        None,
-    ).expect("Cannot create mock of ID Token");
-
-    let mut result = CoreTokenResponse::new(
-        AccessToken::new(mock_token_config.access.to_string()),
-        CoreTokenType::Bearer,
-        CoreIdTokenFields::new(Some(id_token), EmptyExtraTokenFields {}),
-    );
-
-    result.set_expires_in(mock_token_config.duration.as_ref());
-
-    result
-}

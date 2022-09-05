@@ -1,11 +1,11 @@
 use crate::contexts::SessionId;
 use crate::error::Result;
+use crate::pro::users::oidc::ExternalUserClaims;
 use crate::pro::users::{UserCredentials, UserId, UserRegistration, UserSession};
 use crate::projects::{ProjectId, STRectangle};
 use crate::util::user_input::Validated;
 use async_trait::async_trait;
 use geoengine_datatypes::primitives::Duration;
-use crate::pro::users::oidc::ExternalUserClaims;
 
 #[async_trait]
 pub trait UserDb: Send + Sync {
@@ -40,7 +40,11 @@ pub trait UserDb: Send + Sync {
     ///
     /// This call fails if the `ExternalUserClaims` are invalid.
     ///
-    async fn login_external(&self, user : ExternalUserClaims, duration: Duration) -> Result<UserSession>;
+    async fn login_external(
+        &self,
+        user: ExternalUserClaims,
+        duration: Duration,
+    ) -> Result<UserSession>;
 
     /// Removes a session from the `UserDB`
     ///

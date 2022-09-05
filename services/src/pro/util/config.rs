@@ -24,12 +24,12 @@ impl ConfigElement for Odm {
 
 #[derive(Debug, Deserialize)]
 pub struct Oidc {
-    pub enabled : bool,
-    pub issuer : String,
-    pub client_id : String,
-    pub client_secret : String,
-    pub redirect_uri : String, //TODO: Maybe URL type
-    pub scopes : Vec<String>,
+    pub enabled: bool,
+    pub issuer: String,
+    pub client_id: String,
+    pub client_secret: String,
+    pub redirect_uri: String, //TODO: Maybe URL type
+    pub scopes: Vec<String>,
 }
 
 impl ConfigElement for Oidc {

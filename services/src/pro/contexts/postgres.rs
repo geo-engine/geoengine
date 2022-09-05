@@ -8,6 +8,7 @@ use crate::pro::datasets::{add_datasets_from_directory, PostgresDatasetDb, Role}
 use crate::pro::layers::postgres_layer_db::{PostgresLayerDb, PostgresLayerProviderDb};
 use crate::pro::projects::ProjectPermission;
 use crate::pro::users::{OidcRequestDb, UserDb, UserId, UserSession};
+use crate::pro::util::config::Oidc;
 use crate::pro::workflows::postgres_workflow_registry::PostgresWorkflowRegistry;
 use crate::projects::ProjectId;
 use crate::tasks::{SimpleTaskManager, SimpleTaskManagerContext};
@@ -31,7 +32,6 @@ use rayon::ThreadPool;
 use snafu::ResultExt;
 use std::path::PathBuf;
 use std::sync::Arc;
-use crate::pro::util::config::Oidc;
 
 use super::ProContext;
 
@@ -104,7 +104,7 @@ where
         layer_collection_defs_path: PathBuf,
         exe_ctx_tiling_spec: TilingSpecification,
         query_ctx_chunk_size: ChunkByteSize,
-        oidc_config : Oidc,
+        oidc_config: Oidc,
     ) -> Result<Self> {
         let pg_mgr = PostgresConnectionManager::new(config, tls);
 
@@ -668,12 +668,11 @@ mod tests {
     use bb8_postgres::bb8::ManageConnection;
     use bb8_postgres::tokio_postgres::{self, NoTls};
     use futures::Future;
-    use openidconnect::SubjectIdentifier;
     use geoengine_datatypes::collections::VectorDataType;
     use geoengine_datatypes::dataset::{DataProviderId, DatasetId};
     use geoengine_datatypes::primitives::{
-        BoundingBox2D, Coordinate2D, Duration, DateTime, FeatureDataType, Measurement, SpatialResolution,
-        TimeInterval, VectorQueryRectangle,
+        BoundingBox2D, Coordinate2D, DateTime, Duration, FeatureDataType, Measurement,
+        SpatialResolution, TimeInterval, VectorQueryRectangle,
     };
     use geoengine_datatypes::spatial_reference::{SpatialReference, SpatialReferenceOption};
     use geoengine_datatypes::util::test::TestDefault;
@@ -688,6 +687,7 @@ mod tests {
         CsvHeader, FormatSpecifics, OgrSourceColumnSpec, OgrSourceDataset,
         OgrSourceDatasetTimeType, OgrSourceDurationSpec, OgrSourceErrorSpec, OgrSourceTimeFormat,
     };
+    use openidconnect::SubjectIdentifier;
     use rand::RngCore;
     use tokio::runtime::Handle;
 
@@ -822,7 +822,7 @@ mod tests {
 
             delete_project(&ctx, &session, project_id).await;
         })
-            .await;
+        .await;
     }
 
     async fn set_session(ctx: &PostgresContext<NoTls>, projects: &[ProjectListing]) {
@@ -835,7 +835,7 @@ mod tests {
 
         let session = user_db.login(credentials).await.unwrap();
 
-        set_session_in_database(user_db, projects, session).await
+        set_session_in_database(user_db, projects, session).await;
     }
 
     async fn set_session_external(ctx: &PostgresContext<NoTls>, projects: &[ProjectListing]) {
@@ -847,12 +847,19 @@ mod tests {
 
         let user_db = ctx.user_db_ref();
 
-        let session = user_db.login_external(external_user_claims, Duration::minutes(10)).await.unwrap();
+        let session = user_db
+            .login_external(external_user_claims, Duration::minutes(10))
+            .await
+            .unwrap();
 
-        set_session_in_database(user_db, projects, session).await
+        set_session_in_database(user_db, projects, session).await;
     }
 
-    async fn set_session_in_database(user_db : &PostgresUserDb<NoTls>, projects: &[ProjectListing], session : UserSession) {
+    async fn set_session_in_database(
+        user_db: &PostgresUserDb<NoTls>,
+        projects: &[ProjectListing],
+        session: UserSession,
+    ) {
         user_db
             .set_session_project(&session, projects[0].id)
             .await
@@ -1103,7 +1110,9 @@ mod tests {
         let duration = Duration::minutes(30);
 
         //NEW
-        let login_result = db.login_external(external_user_claims.clone(), duration).await;
+        let login_result = db
+            .login_external(external_user_claims.clone(), duration)
+            .await;
         assert!(login_result.is_ok());
 
         let session_1 = login_result.unwrap();
@@ -1124,7 +1133,9 @@ mod tests {
         assert!(db.session(session_1.id).await.is_err());
 
         let duration = Duration::minutes(10);
-        let login_result = db.login_external(external_user_claims.clone(), duration).await;
+        let login_result = db
+            .login_external(external_user_claims.clone(), duration)
+            .await;
         assert!(login_result.is_ok());
 
         let session_2 = login_result.unwrap();

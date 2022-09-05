@@ -2,6 +2,7 @@ use crate::contexts::SessionId;
 use crate::error::Result;
 use crate::pro::datasets::Role;
 use crate::pro::projects::ProjectPermission;
+use crate::pro::users::oidc::ExternalUserClaims;
 use crate::pro::users::{
     User, UserCredentials, UserDb, UserId, UserInfo, UserRegistration, UserSession,
 };
@@ -15,10 +16,9 @@ use bb8_postgres::{
     bb8::Pool, tokio_postgres::tls::MakeTlsConnect, tokio_postgres::tls::TlsConnect,
     tokio_postgres::Socket,
 };
+use geoengine_datatypes::primitives::Duration;
 use pwhash::bcrypt;
 use uuid::Uuid;
-use geoengine_datatypes::primitives::Duration;
-use crate::pro::users::oidc::ExternalUserClaims;
 
 pub struct PostgresUserDb<Tls>
 where
@@ -236,7 +236,11 @@ where
         }
     }
 
-    async fn login_external(&self, user: ExternalUserClaims, duration: Duration) -> Result<UserSession> {
+    async fn login_external(
+        &self,
+        user: ExternalUserClaims,
+        duration: Duration,
+    ) -> Result<UserSession> {
         let mut conn = self.conn_pool.get().await?;
         let stmt = conn
             .prepare("SELECT id, external_id, email, real_name FROM external_users WHERE external_id = $1;")
@@ -248,9 +252,7 @@ where
             .map_err(|_error| error::Error::LoginFailed)?;
 
         let user_id = match row {
-            Some(row) => {
-                UserId(row.get(0))
-            }
+            Some(row) => UserId(row.get(0)),
             None => {
                 let tx = conn.build_transaction().start().await?;
 
@@ -284,7 +286,7 @@ where
                         &true,
                     ],
                 )
-                    .await?;
+                .await?;
 
                 let stmt = tx
                     .prepare("INSERT INTO user_roles (user_id, role_id) VALUES ($1, $2);")
@@ -316,11 +318,7 @@ where
         let row = conn
             .query_one(
                 &stmt,
-                &[
-                    &session_id,
-                    &user_id,
-                    &(duration.num_seconds() as f64),
-                ],
+                &[&session_id, &user_id, &(duration.num_seconds() as f64)],
             )
             .await?;
 
@@ -339,8 +337,8 @@ where
             id: session_id,
             user: UserInfo {
                 id: user_id,
-                email : Some(user.email.clone()),
-                real_name : Some(user.real_name.clone()),
+                email: Some(user.email.clone()),
+                real_name: Some(user.real_name.clone()),
             },
             created: row.get(0),
             valid_until: row.get(1),

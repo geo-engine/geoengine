@@ -1,21 +1,21 @@
 use std::collections::HashMap;
 
 use async_trait::async_trait;
-use openidconnect::SubjectIdentifier;
 use geoengine_datatypes::primitives::{DateTime, Duration};
+use openidconnect::SubjectIdentifier;
 use pwhash::bcrypt;
 use snafu::ensure;
 
 use crate::contexts::{Db, SessionId};
 use crate::error::{self, Result};
 use crate::pro::datasets::Role;
+use crate::pro::users::oidc::{ExternalUser, ExternalUserClaims};
 use crate::pro::users::{
     User, UserCredentials, UserDb, UserId, UserInfo, UserRegistration, UserSession,
 };
 use crate::projects::{ProjectId, STRectangle};
 use crate::util::user_input::Validated;
 use geoengine_datatypes::util::Identifier;
-use crate::pro::users::oidc::{ExternalUser, ExternalUserClaims};
 
 #[derive(Default)]
 pub struct HashMapUserDb {
@@ -105,21 +105,23 @@ impl UserDb for HashMapUserDb {
         }
     }
 
-    async fn login_external(&self, user: ExternalUserClaims, duration: Duration) -> Result<UserSession> {
+    async fn login_external(
+        &self,
+        user: ExternalUserClaims,
+        duration: Duration,
+    ) -> Result<UserSession> {
         let mut db = self.external_users.write().await;
 
         let external_id = user.external_id.clone();
 
         let internal_id = match db.get(&external_id) {
-            Some(user) => {
-                user.id
-            }
+            Some(user) => user.id,
             None => {
                 let id = UserId::new();
                 let result = ExternalUser {
                     id,
                     claims: user.clone(),
-                    active: true
+                    active: true,
                 };
                 db.insert(external_id, result);
                 id
@@ -286,7 +288,9 @@ mod tests {
             real_name: "Foo Bar".into(),
         };
         let duration = Duration::minutes(30);
-        let login_result = db.login_external(external_user_claims.clone(), duration).await;
+        let login_result = db
+            .login_external(external_user_claims.clone(), duration)
+            .await;
         assert!(login_result.is_ok());
 
         let session_1 = login_result.unwrap();
@@ -307,7 +311,9 @@ mod tests {
         assert!(db.session(session_1.id).await.is_err());
 
         let duration = Duration::minutes(10);
-        let login_result = db.login_external(external_user_claims.clone(), duration).await;
+        let login_result = db
+            .login_external(external_user_claims.clone(), duration)
+            .await;
         assert!(login_result.is_ok());
 
         let session_2 = login_result.unwrap();
