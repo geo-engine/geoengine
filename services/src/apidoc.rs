@@ -10,9 +10,8 @@ use crate::workflows::workflow::{Workflow, WorkflowId};
 use geoengine_datatypes::collections::VectorDataType;
 use geoengine_datatypes::dataset::{DataId, DataProviderId, DatasetId, ExternalDataId, LayerId};
 use geoengine_datatypes::primitives::{
-    BoundingBox2D, ClassificationMeasurement, ContinuousMeasurement, Coordinate2D, FeatureDataType,
-    Measurement, PlotQueryRectangle, RasterQueryRectangle, SpatialPartition2D, SpatialResolution,
-    TimeInstance, TimeInterval, VectorQueryRectangle,
+    BoundingBox2D, ClassificationMeasurement, ContinuousMeasurement, Coordinate2D, Measurement,
+    RasterQueryRectangle, SpatialPartition2D, SpatialResolution, TimeInstance, TimeInterval,
 };
 use geoengine_datatypes::raster::RasterDataType;
 use geoengine_datatypes::spatial_reference::{
@@ -20,7 +19,7 @@ use geoengine_datatypes::spatial_reference::{
 };
 use geoengine_operators::engine::{
     PlotResultDescriptor, RasterResultDescriptor, TypedOperator, TypedResultDescriptor,
-    VectorResultDescriptor,
+    VectorColumnInfo, VectorResultDescriptor,
 };
 use utoipa::openapi::security::{HttpAuthScheme, HttpBuilder, SecurityScheme};
 use utoipa::{Modify, OpenApi};
@@ -73,7 +72,7 @@ use utoipa::{Modify, OpenApi};
             Provenance,
 
             VectorDataType,
-            FeatureDataType,
+            // FeatureDataType,
             RasterDataType,
 
             VersionInfo,
@@ -84,11 +83,12 @@ use utoipa::{Modify, OpenApi};
             PlotResultDescriptor,
             RasterResultDescriptor,
             VectorResultDescriptor,
+            VectorColumnInfo,
             RasterDatasetFromWorkflow,
             RasterDatasetFromWorkflowResult,
             RasterQueryRectangle,
-            VectorQueryRectangle,
-            PlotQueryRectangle,
+            // VectorQueryRectangle,
+            // PlotQueryRectangle,
         ),
     ),
     modifiers(&SecurityAddon, &ApiDocInfo),

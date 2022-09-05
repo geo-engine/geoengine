@@ -383,7 +383,7 @@ pub struct RasterDatasetFromWorkflowResult {
         )
     ),
     params(
-        ("id", description = "Workflow id")
+        ("id" = WorkflowId, description = "Workflow id")
     ),
     security(
         ("session_token" = [])
