@@ -59,7 +59,7 @@ where
             .configure(handlers::wms::init_wms_routes::<C>)
             .configure(handlers::workflows::init_workflow_routes::<C>)
             .service(
-                SwaggerUi::new("/swagger-ui/{_:.*}").url("/api-doc/openapi.json", openapi.clone()),
+                SwaggerUi::new("/swagger-ui/{_:.*}").url("/api-docs/openapi.json", openapi.clone()),
             );
 
         #[cfg(feature = "odm")]
