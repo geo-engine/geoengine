@@ -2,6 +2,8 @@ use crate::contexts::Db;
 use crate::error::{Error, Result};
 use crate::pro::users::UserId;
 use crate::pro::util::config::Oidc;
+#[cfg(test)]
+use crate::pro::util::tests::mock_oidc::{SINGLE_NONCE, SINGLE_STATE};
 use geoengine_datatypes::error::ErrorSource;
 use geoengine_datatypes::primitives::Duration;
 use oauth2::basic::{BasicErrorResponseType, BasicRevocationErrorResponse, BasicTokenType};
@@ -14,21 +16,19 @@ use openidconnect::core::{
     CoreResponseType, CoreSubjectIdentifierType, CoreTokenIntrospectionResponse, CoreTokenResponse,
 };
 use openidconnect::reqwest::async_http_client;
+#[cfg(test)]
+use openidconnect::JsonWebKeySet;
 use openidconnect::{
     AccessTokenHash, AuthorizationCode, Client, ClientId, ClientSecret, CsrfToken, DiscoveryError,
-    EmptyAdditionalClaims, EmptyAdditionalProviderMetadata, IssuerUrl, Nonce,
-    OAuth2TokenResponse, PkceCodeChallenge, PkceCodeVerifier, ProviderMetadata, RedirectUrl,
-    ResponseTypes, StandardErrorResponse, SubjectIdentifier, TokenResponse,
+    EmptyAdditionalClaims, EmptyAdditionalProviderMetadata, IssuerUrl, Nonce, OAuth2TokenResponse,
+    PkceCodeChallenge, PkceCodeVerifier, ProviderMetadata, RedirectUrl, ResponseTypes,
+    StandardErrorResponse, SubjectIdentifier, TokenResponse,
 };
 use serde::{Deserialize, Serialize};
 use snafu::Snafu;
 use std::collections::HashMap;
 use std::sync::Arc;
 use url::{ParseError, Url};
-#[cfg(test)]
-use crate::pro::util::tests::mock_oidc::{SINGLE_NONCE, SINGLE_STATE};
-#[cfg(test)]
-use openidconnect::JsonWebKeySet;
 
 pub type DefaultProviderMetadata = ProviderMetadata<
     EmptyAdditionalProviderMetadata,

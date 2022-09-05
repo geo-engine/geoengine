@@ -1,6 +1,3 @@
-use geoengine_datatypes::{
-    primitives::DateTime, spatial_reference::SpatialReferenceOption, util::Identifier,
-};
 use crate::{
     contexts::SessionId,
     handlers, pro,
@@ -16,7 +13,9 @@ use crate::{
 };
 use actix_web::dev::ServiceResponse;
 use actix_web::{http, middleware, test, web, App};
-
+use geoengine_datatypes::{
+    primitives::DateTime, spatial_reference::SpatialReferenceOption, util::Identifier,
+};
 
 #[allow(clippy::missing_panics_doc)]
 pub async fn create_session_helper<C: ProContext>(ctx: &C) -> UserSession {
@@ -130,19 +129,21 @@ where
 #[cfg(test)]
 pub(in crate::pro) mod mock_oidc {
     use crate::pro::users::{DefaultJsonWebKeySet, DefaultProviderMetadata};
+    use chrono::{Duration, Utc};
     use oauth2::basic::BasicTokenType;
-    use oauth2::{AccessToken, AuthUrl, EmptyExtraTokenFields, Scope, StandardTokenResponse, TokenUrl};
+    use oauth2::{
+        AccessToken, AuthUrl, EmptyExtraTokenFields, Scope, StandardTokenResponse, TokenUrl,
+    };
     use openidconnect::core::{
         CoreClaimName, CoreIdToken, CoreIdTokenClaims, CoreIdTokenFields, CoreJsonWebKey,
         CoreJwsSigningAlgorithm, CoreProviderMetadata, CoreResponseType, CoreRsaPrivateSigningKey,
         CoreTokenResponse, CoreTokenType,
     };
     use openidconnect::{
-        Audience, EmptyAdditionalClaims, EmptyAdditionalProviderMetadata, EndUserEmail, EndUserName,
-        IssuerUrl, JsonWebKeySet, JsonWebKeySetUrl, LocalizedClaim, Nonce, ResponseTypes,
-        StandardClaims, SubjectIdentifier,
+        Audience, EmptyAdditionalClaims, EmptyAdditionalProviderMetadata, EndUserEmail,
+        EndUserName, IssuerUrl, JsonWebKeySet, JsonWebKeySetUrl, LocalizedClaim, Nonce,
+        ResponseTypes, StandardClaims, SubjectIdentifier,
     };
-    use chrono::{Duration, Utc};
 
     const TEST_PRIVATE_KEY: &str = "-----BEGIN RSA PRIVATE KEY-----\n\
 	    MIIEogIBAAKCAQEAxIm5pngAgY4V+6XJPtlATkU6Gbcen22M3Tf16Gwl4uuFagEp\n\
@@ -227,7 +228,8 @@ pub(in crate::pro) mod mock_oidc {
 
     pub fn mock_provider_metadata(provider_base_url: &str) -> DefaultProviderMetadata {
         CoreProviderMetadata::new(
-            IssuerUrl::new(provider_base_url.to_string()).expect("Parsing mock issuer should not fail"),
+            IssuerUrl::new(provider_base_url.to_string())
+                .expect("Parsing mock issuer should not fail"),
             AuthUrl::new(provider_base_url.to_owned() + "/authorize")
                 .expect("Parsing mock auth url should not fail"),
             JsonWebKeySetUrl::new(provider_base_url.to_owned() + "/jwk")
@@ -237,20 +239,20 @@ pub(in crate::pro) mod mock_oidc {
             vec![CoreJwsSigningAlgorithm::RsaSsaPssSha256],
             EmptyAdditionalProviderMetadata {},
         )
-            .set_token_endpoint(Some(
-                TokenUrl::new(provider_base_url.to_owned() + "/token")
-                    .expect("Parsing mock token url should not fail"),
-            ))
-            .set_scopes_supported(Some(vec![
-                Scope::new("openid".to_string()),
-                Scope::new("email".to_string()),
-                Scope::new("profile".to_string()),
-            ]))
-            .set_claims_supported(Some(vec![
-                CoreClaimName::new("sub".to_string()),
-                CoreClaimName::new("email".to_string()),
-                CoreClaimName::new("name".to_string()),
-            ]))
+        .set_token_endpoint(Some(
+            TokenUrl::new(provider_base_url.to_owned() + "/token")
+                .expect("Parsing mock token url should not fail"),
+        ))
+        .set_scopes_supported(Some(vec![
+            Scope::new("openid".to_string()),
+            Scope::new("email".to_string()),
+            Scope::new("profile".to_string()),
+        ]))
+        .set_claims_supported(Some(vec![
+            CoreClaimName::new("sub".to_string()),
+            CoreClaimName::new("email".to_string()),
+            CoreClaimName::new("name".to_string()),
+        ]))
     }
 
     pub fn mock_jwks() -> DefaultJsonWebKeySet {
@@ -264,7 +266,8 @@ pub(in crate::pro) mod mock_oidc {
     ) -> StandardTokenResponse<CoreIdTokenFields, BasicTokenType> {
         let id_token = CoreIdToken::new(
             CoreIdTokenClaims::new(
-                IssuerUrl::new(mock_token_config.issuer).expect("Parsing mock issuer should not fail"),
+                IssuerUrl::new(mock_token_config.issuer)
+                    .expect("Parsing mock issuer should not fail"),
                 vec![Audience::new(mock_token_config.client_id)],
                 Utc::now() + Duration::seconds(300),
                 Utc::now(),
@@ -273,7 +276,7 @@ pub(in crate::pro) mod mock_oidc {
                     .set_name(mock_token_config.name),
                 EmptyAdditionalClaims {},
             )
-                .set_nonce(mock_token_config.nonce),
+            .set_nonce(mock_token_config.nonce),
             &CoreRsaPrivateSigningKey::from_pem(TEST_PRIVATE_KEY, None)
                 .expect("Cannot create mock of RSA private key"),
             CoreJwsSigningAlgorithm::RsaSsaPkcs1V15Sha256,
@@ -282,7 +285,7 @@ pub(in crate::pro) mod mock_oidc {
             )),
             None,
         )
-            .expect("Cannot create mock of ID Token");
+        .expect("Cannot create mock of ID Token");
 
         let mut result = CoreTokenResponse::new(
             AccessToken::new(mock_token_config.access.to_string()),
@@ -295,5 +298,3 @@ pub(in crate::pro) mod mock_oidc {
         result
     }
 }
-
-
