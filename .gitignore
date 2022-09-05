@@ -18,3 +18,4 @@ services/test_upload/
 **/*.gpkg-wal
 geo_engine_*.log
 **/**.aux.xml
+test_data/netcdf4d/overviews/*

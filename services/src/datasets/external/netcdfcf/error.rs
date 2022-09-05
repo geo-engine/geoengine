@@ -140,7 +140,7 @@ pub enum NetCdfCf4DProviderError {
         source: geoengine_datatypes::error::Error,
     },
     DatasetIsNotInProviderPath {
-        source: std::path::StripPrefixError,
+        source: Box<dyn ErrorSource>,
     },
     FileIsNotInProviderPath {
         file: String,
@@ -203,6 +203,9 @@ pub enum NetCdfCf4DProviderError {
     CannotRemoveInProgressFlag {
         source: Box<dyn ErrorSource>,
     },
+    NoOverviewsGeneratedForSource {
+        path: String,
+    },
     CannotRemoveOverviewsWhileCreationIsInProgress,
     CannotRemoveOverviews {
         source: Box<dyn ErrorSource>,
@@ -212,4 +215,5 @@ pub enum NetCdfCf4DProviderError {
         dataset: PathBuf,
         source: Box<dyn ErrorSource>,
     },
+    UnsupportedMetaDataDefinition,
 }

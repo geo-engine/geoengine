@@ -260,6 +260,8 @@ pub enum Error {
         source: gdal::errors::GdalError,
     },
 
+    GdalRasterDataTypeNotSupported,
+
     NoMatchingVectorDataTypeForOgrGeometryType,
 
     NoMatchingFeatureDataTypeForOgrFieldType,
