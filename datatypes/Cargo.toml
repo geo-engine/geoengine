@@ -18,7 +18,7 @@ arrow = { version = "20.0", features = ["simd"] }
 async-trait = "0.1"
 chrono = "0.4"
 float-cmp = "0.9"
-gdal = "0.12"
+gdal =  "0.13"
 geo = "0.22"
 geojson = "0.23"
 image = "0.24"

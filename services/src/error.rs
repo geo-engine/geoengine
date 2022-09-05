@@ -368,6 +368,11 @@ pub enum Error {
         sub_path: PathBuf,
     },
 
+    PathMustNotContainParentReferences {
+        base: PathBuf,
+        sub_path: PathBuf,
+    },
+    
     #[cfg(feature = "pro")]
     #[snafu(context(false))]
     OidcError {

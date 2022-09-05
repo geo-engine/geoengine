@@ -16,7 +16,7 @@ use futures::task::Context;
 use futures::{ready, Stream, StreamExt};
 use futures::{Future, FutureExt};
 use gdal::vector::sql::ResultSet;
-use gdal::vector::{Feature, FieldValue, Layer, LayerCaps, OGRwkbGeometryType};
+use gdal::vector::{Feature, FieldValue, Layer, LayerAccess, LayerCaps, OGRwkbGeometryType};
 use log::debug;
 use pin_project::pin_project;
 use postgres_protocol::escape::{escape_identifier, escape_literal};
