@@ -372,7 +372,7 @@ pub enum Error {
         base: PathBuf,
         sub_path: PathBuf,
     },
-    
+
     #[cfg(feature = "pro")]
     #[snafu(context(false))]
     OidcError {
