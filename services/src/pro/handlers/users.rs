@@ -1105,7 +1105,7 @@ mod tests {
         let ctx = ProInMemoryContext::test_default();
 
         let auth_code_response = json!({
-            "session_state": "",
+            "sessionState": "",
             "code": "",
         });
 
@@ -1120,7 +1120,7 @@ mod tests {
             res,
             400,
             "BodyDeserializeError",
-            "missing field `state` at line 1 column 30",
+            "missing field `state` at line 1 column 29",
         )
         .await;
     }
