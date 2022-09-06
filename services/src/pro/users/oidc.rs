@@ -73,7 +73,7 @@ type DefaultClient = Client<
 pub struct OidcRequestDb {
     issuer: String,
     client_id: String,
-    client_secret: String,
+    client_secret: Option<String>,
     redirect_uri: String,
     scopes: Vec<String>,
     users: Db<HashMap<String, PendingRequest>>,
@@ -213,8 +213,10 @@ impl OidcRequestDb {
         let result = CoreClient::from_provider_metadata(
             provider_metadata,
             ClientId::new(self.client_id.to_string()),
-            Some(ClientSecret::new(self.client_secret.to_string())),
-        ) //TODO: Could be made optional.
+            self.client_secret
+                .as_ref()
+                .map(|s| ClientSecret::new(s.clone())),
+        )
         .set_redirect_uri(RedirectUrl::new(self.redirect_uri.to_string())?);
 
         Ok(result)
@@ -368,7 +370,7 @@ impl OidcRequestDb {
         OidcRequestDb {
             issuer: value.issuer.to_string(),
             client_id: value.client_id.to_string(),
-            client_secret: value.client_secret.to_string(),
+            client_secret: value.client_secret.clone(),
             redirect_uri: value.redirect_uri.to_string(),
             scopes: value.scopes,
             users: Arc::new(Default::default()),
@@ -386,7 +388,7 @@ impl TryFrom<Oidc> for OidcRequestDb {
             let db = OidcRequestDb {
                 issuer: value.issuer.to_string(),
                 client_id: value.client_id.to_string(),
-                client_secret: value.client_secret.to_string(),
+                client_secret: value.client_secret.clone(),
                 redirect_uri: value.redirect_uri.to_string(),
                 scopes: value.scopes,
                 users: Arc::new(Default::default()),
@@ -439,7 +441,7 @@ mod tests {
         OidcRequestDb {
             issuer: ISSUER_URL.to_string(),
             client_id: "DummyClient".to_string(),
-            client_secret: "DummySecret".to_string(),
+            client_secret: Some("DummySecret".to_string()),
             redirect_uri: REDIRECT_URI.to_string(),
             scopes: vec!["profile".to_string(), "email".to_string()],
             users: Arc::new(Default::default()),
@@ -452,7 +454,7 @@ mod tests {
         OidcRequestDb {
             issuer: server_url,
             client_id: "".to_string(),
-            client_secret: "".to_string(),
+            client_secret: None,
             redirect_uri: REDIRECT_URI.to_string(),
             scopes: vec!["profile".to_string(), "email".to_string()],
             users: Arc::new(Default::default()),
@@ -472,7 +474,7 @@ mod tests {
         let result = CoreClient::from_provider_metadata(
             provider_metadata,
             ClientId::new(client_id),
-            Some(ClientSecret::new(client_secret)),
+            client_secret.map(ClientSecret::new),
         )
         .set_redirect_uri(RedirectUrl::new(redirect_uri)?);
 
@@ -654,7 +656,7 @@ mod tests {
         let request_db = OidcRequestDb {
             issuer: ISSUER_URL.to_owned() + "oidc/test",
             client_id: "DummyClient".to_string(),
-            client_secret: "DummySecret".to_string(),
+            client_secret: Some("DummySecret".to_string()),
             redirect_uri: REDIRECT_URI.to_string(),
             scopes: vec!["profile".to_string(), "email".to_string()],
             users: Arc::new(Default::default()),

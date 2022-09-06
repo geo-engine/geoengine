@@ -108,6 +108,5 @@ group_abcd_units = true
 enabled = false
 issuer = ""
 client_id = ""
-client_secret = ""
 redirect_uri = ""
 scopes = [ ]

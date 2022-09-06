@@ -27,7 +27,7 @@ pub struct Oidc {
     pub enabled: bool,
     pub issuer: String,
     pub client_id: String,
-    pub client_secret: String,
+    pub client_secret: Option<String>,
     pub redirect_uri: String, //TODO: Maybe URL type
     pub scopes: Vec<String>,
 }
