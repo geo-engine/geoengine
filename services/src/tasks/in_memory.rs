@@ -109,7 +109,7 @@ impl TaskManager<SimpleTaskManagerContext> for SimpleTaskManager {
             task: Arc::new(task),
             handle: None,
             status: Arc::new(RwLock::new(TaskStatus::Running(
-                RunningTaskStatusInfo::new(0, ().boxed()),
+                RunningTaskStatusInfo::new(0., ().boxed()),
             ))),
             unique_key: task_unique_key,
         };
@@ -287,7 +287,9 @@ fn run_task(
 
         match result {
             Ok(status) => {
-                *task_handle.status.write().await = TaskStatus::completed(Arc::from(status));
+                let mut task_status_lock = task_handle.status.write().await;
+                let completed_task_status = task_status_lock.completed(Arc::from(status));
+                *task_status_lock = completed_task_status;
 
                 remove_unique_key(&task_handle, &mut update_lock.unique_tasks);
             }
@@ -296,7 +298,7 @@ fn run_task(
 
                 *task_handle.status.write().await = TaskStatus::failed(
                     Arc::clone(&err),
-                    TaskCleanUpStatus::Running(RunningTaskStatusInfo::new(0, ().boxed())),
+                    TaskCleanUpStatus::Running(RunningTaskStatusInfo::new(0., ().boxed())),
                 );
 
                 if let Err(clean_up_err) =
@@ -342,7 +344,7 @@ fn remove_unique_key(
 async fn set_status_to_aborting(task_status: &Db<TaskStatus>) {
     let mut task_status_lock = task_status.write().await;
     *task_status_lock = TaskStatus::aborted(TaskCleanUpStatus::Running(
-        RunningTaskStatusInfo::new(0, ().boxed()),
+        RunningTaskStatusInfo::new(0., ().boxed()),
     ));
 }
 
@@ -431,20 +433,25 @@ pub struct SimpleTaskManagerContext {
 
 #[async_trait::async_trait]
 impl TaskContext for SimpleTaskManagerContext {
-    async fn set_completion(&self, pct_complete: u8, status: Box<dyn TaskStatusInfo>) {
+    async fn set_completion(&self, pct_complete: f64, status: Box<dyn TaskStatusInfo>) {
         let mut task_status = self.status.write().await;
 
-        let status_info = RunningTaskStatusInfo::new(pct_complete, status);
-
         *task_status = match &*task_status {
-            TaskStatus::Running(_) => TaskStatus::Running(status_info),
+            TaskStatus::Running(current_info) => {
+                TaskStatus::Running(current_info.update(pct_complete, status))
+            }
             TaskStatus::Aborted {
-                clean_up: TaskCleanUpStatus::Running(_),
-            } => TaskStatus::aborted(TaskCleanUpStatus::Running(status_info)),
+                clean_up: TaskCleanUpStatus::Running(current_info),
+            } => TaskStatus::aborted(TaskCleanUpStatus::Running(
+                current_info.update(pct_complete, status),
+            )),
             TaskStatus::Failed {
                 error,
-                clean_up: TaskCleanUpStatus::Running(_),
-            } => TaskStatus::failed(error.clone(), TaskCleanUpStatus::Running(status_info)),
+                clean_up: TaskCleanUpStatus::Running(current_info),
+            } => TaskStatus::failed(
+                error.clone(),
+                TaskCleanUpStatus::Running(current_info.update(pct_complete, status)),
+            ),
             _ => return, // already completed, aborted or failed, so we ignore the status update
         };
     }

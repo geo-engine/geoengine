@@ -248,7 +248,7 @@ Accept: application/json
 ###
 
 GET http://localhost:3030/tasks/{{lastTask.response.body.$.task_id}}/status
-Authorization: Bearer {{anonymousSession.response.body.$.id}}
+Authorization: Bearer 8aca8875-425a-4ef1-8ee6-cdfc62dd7525
 
 ###
 
