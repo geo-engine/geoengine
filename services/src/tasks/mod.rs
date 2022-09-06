@@ -1,7 +1,9 @@
 mod error;
 mod in_memory;
+mod time_estimation;
 pub mod util;
 
+use self::time_estimation::TimeEstimation;
 use crate::{
     error::Result,
     util::{
@@ -80,11 +82,11 @@ pub trait Task<C: TaskContext>: Send + Sync {
 #[async_trait::async_trait]
 pub trait TaskContext: Send + Sync {
     /// Set the completion percentage (%) of the task.
-    /// This is a number between 0 and 100.
+    /// This is a number between `0.0` and `1.0`.
     ///
     /// Moreover, set a status message.
     ///
-    async fn set_completion(&self, pct_complete: u8, status: Box<dyn TaskStatusInfo>);
+    async fn set_completion(&self, pct_complete: f64, status: Box<dyn TaskStatusInfo>);
 }
 
 /// One of the statuses a `Task` can be in.
@@ -96,6 +98,7 @@ pub enum TaskStatus {
     #[serde(rename_all = "camelCase")]
     Completed {
         info: Arc<dyn TaskStatusInfo>,
+        time_total: String,
     },
     #[serde(rename_all = "camelCase")]
     Aborted {
@@ -138,8 +141,12 @@ pub struct TaskStatusWithId {
 }
 
 impl TaskStatus {
-    pub fn completed(info: Arc<dyn TaskStatusInfo>) -> Self {
-        Self::Completed { info }
+    #[must_use]
+    pub fn completed(&self, info: Arc<dyn TaskStatusInfo>) -> Self {
+        Self::Completed {
+            info,
+            time_total: self.time_total(),
+        }
     }
 
     pub fn aborted(clean_up: TaskCleanUpStatus) -> Self {
@@ -184,17 +191,43 @@ impl TaskStatus {
                 }
             )
     }
+
+    fn time_total(&self) -> String {
+        match self {
+            TaskStatus::Running(info) => info.time_estimate.time_total(),
+            _ => String::new(),
+        }
+    }
 }
 
 #[derive(Debug, Serialize)]
 pub struct RunningTaskStatusInfo {
-    pct_complete: u8,
+    #[serde(serialize_with = "serialize_as_pct")]
+    pct_complete: f64,
+    time_estimate: TimeEstimation,
     info: Box<dyn TaskStatusInfo>,
 }
 
 impl RunningTaskStatusInfo {
-    pub fn new(pct_complete: u8, info: Box<dyn TaskStatusInfo>) -> Arc<Self> {
-        Arc::new(RunningTaskStatusInfo { pct_complete, info })
+    pub fn new(pct_complete: f64, info: Box<dyn TaskStatusInfo>) -> Arc<Self> {
+        Arc::new(RunningTaskStatusInfo {
+            pct_complete: pct_complete.clamp(0., 1.),
+            time_estimate: TimeEstimation::new(),
+            info,
+        })
+    }
+
+    pub fn update(&self, pct_complete: f64, info: Box<dyn TaskStatusInfo>) -> Arc<Self> {
+        let pct_complete = pct_complete.clamp(0., 1.);
+
+        let mut time_estimate = self.time_estimate;
+        time_estimate.update_now(pct_complete);
+
+        Arc::new(RunningTaskStatusInfo {
+            pct_complete,
+            time_estimate,
+            info,
+        })
     }
 }
 
@@ -208,6 +241,14 @@ where
 {
     let error_string = error.to_string();
     serializer.serialize_str(error_string.as_str())
+}
+
+#[allow(clippy::trivially_copy_pass_by_ref)] // must adhere to serde's signature
+fn serialize_as_pct<S>(pct: &f64, serializer: S) -> Result<S::Ok, S::Error>
+where
+    S: Serializer,
+{
+    serializer.serialize_str(&format!("{:.2}%", pct * 100.))
 }
 
 /// Trait for information about the status of a task.

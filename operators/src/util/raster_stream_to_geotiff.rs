@@ -185,7 +185,7 @@ impl<P: Pixel + GdalType> GdalDatasetWriter<P> {
         let thread_local_configs =
             gdal_config_options.map(TemporaryGdalThreadLocalConfigOptions::new);
 
-        let driver = Driver::get("GTiff")?;
+        let driver = Driver::get_by_name("GTiff")?;
         let options = create_gdal_tiff_options(
             &compression_num_threads,
             gdal_tiff_options.as_cog,
@@ -466,7 +466,7 @@ fn geotiff_to_cog(
     as_big_tiff: bool,
 ) -> Result<()> {
     let input_driver = input_dataset.driver();
-    let output_driver = Driver::get("COG")?;
+    let output_driver = Driver::get_by_name("COG")?;
     let num_threads = &compression_num_threads.to_string();
 
     let mut options = vec![

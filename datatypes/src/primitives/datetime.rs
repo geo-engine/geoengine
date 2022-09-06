@@ -175,6 +175,11 @@ impl DateTime {
         chrono_date_time.to_rfc3339()
     }
 
+    pub fn to_rfc3339_with_millis(self) -> String {
+        let chrono_date_time: chrono::DateTime<chrono::FixedOffset> = self.into();
+        chrono_date_time.to_rfc3339_opts(chrono::SecondsFormat::Millis, true)
+    }
+
     /// Now in UTC.
     pub fn now() -> Self {
         chrono::offset::Utc::now().into()
@@ -698,6 +703,14 @@ mod tests {
             serde_json::to_string(&DateTime::from_str("2010-01-02T03:04:05.000Z").unwrap())
                 .unwrap(),
             "\"2010-01-02T03:04:05.000Z\""
+        );
+    }
+
+    #[test]
+    fn test_as_rfc() {
+        assert_eq!(
+            DateTime::new_utc(2010, 1, 2, 3, 4, 5).to_rfc3339_with_millis(),
+            "2010-01-02T03:04:05.000Z"
         );
     }
 }

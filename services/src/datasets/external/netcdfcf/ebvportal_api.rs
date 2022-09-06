@@ -204,7 +204,7 @@ impl EbvPortalApi {
                     &provider_paths.provider_path,
                     Some(&provider_paths.overview_path),
                     &dataset_path,
-                    false,
+                    &Default::default(),
                 )
             })
             .await?

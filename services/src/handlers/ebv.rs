@@ -140,7 +140,7 @@ struct EvbMultiOverviewTask<C: Context> {
 }
 
 impl<C: Context> EvbMultiOverviewTask<C> {
-    fn update_pct(task_ctx: Arc<C::TaskContext>, pct: u8, status: NetCdfCfOverviewResponse) {
+    fn update_pct(task_ctx: Arc<C::TaskContext>, pct: f64, status: NetCdfCfOverviewResponse) {
         crate::util::spawn(async move {
             task_ctx.set_completion(pct, status.boxed()).await;
         });
@@ -201,7 +201,7 @@ impl<C: Context> Task<C::TaskContext> for EvbMultiOverviewTask<C> {
 
             if let Ok(subtask_status) = notification_rx.await {
                 match subtask_status {
-                    TaskStatus::Completed { info } => {
+                    TaskStatus::Completed { info, .. } => {
                         current_subtask_id.lock().await.take();
 
                         if let Ok(response) =
@@ -236,7 +236,7 @@ impl<C: Context> Task<C::TaskContext> for EvbMultiOverviewTask<C> {
             // TODO: grab finished pct from subtasks
             Self::update_pct(
                 task_ctx.clone(),
-                ((i + 1) / num_files) as u8,
+                ((i + 1) as f64) / (num_files as f64),
                 status.clone(),
             );
         }
@@ -303,7 +303,7 @@ struct EvbOverviewTask<C: Context> {
 impl<C: Context> Task<C::TaskContext> for EvbOverviewTask<C> {
     async fn run(
         &self,
-        _ctx: C::TaskContext,
+        ctx: C::TaskContext,
     ) -> Result<Box<dyn crate::tasks::TaskStatusInfo>, Box<dyn ErrorSource>> {
         let file = self.file.clone();
         let session = self.session.clone();
@@ -313,7 +313,7 @@ impl<C: Context> Task<C::TaskContext> for EvbOverviewTask<C> {
             with_netcdfcf_provider(self.ctx.as_ref(), &session.into(), move |provider| {
                 // TODO: provide some detailed pct status
 
-                match provider.create_overviews(&file, resampling_method) {
+                match provider.create_overviews(&file, resampling_method, &ctx) {
                     Ok(OverviewGeneration::Created) => Ok(NetCdfCfOverviewResponse {
                         success: vec![file],
                         skip: vec![],
@@ -519,7 +519,7 @@ mod tests {
 
         let status = ctx.tasks().status(task_response.task_id).await.unwrap();
 
-        let mut response = if let TaskStatus::Completed { info } = status {
+        let mut response = if let TaskStatus::Completed { info, .. } = status {
             info.as_any_arc()
                 .downcast::<NetCdfCfOverviewResponse>()
                 .unwrap()
@@ -564,6 +564,7 @@ mod tests {
             serde_json::json!({
                 "status": "completed",
                 "info": null,
+                "timeTotal": "00:00:00",
             })
         );
 
@@ -619,6 +620,7 @@ mod tests {
             serde_json::json!({
                 "status": "completed",
                 "info": null,
+                "timeTotal": "00:00:00",
             })
         );
     }
@@ -673,13 +675,16 @@ mod tests {
             panic!("Task must be failed");
         };
 
-        assert!(matches!(
-            error.into_any_arc().downcast::<NetCdfCf4DProviderError>().unwrap().as_ref(),
-            NetCdfCf4DProviderError::CannotCreateOverview { dataset, source }
-            if dataset.to_string_lossy() == "foo/bar.nc" &&
-            // TODO: use matches clause `NetCdfCf4DProviderError::CannotOpenNetCdfDataset { .. }`
-            source.to_string().contains("CannotOpenNetCdfDataset")
-        ));
+        assert!(
+            matches!(
+                error.clone().into_any_arc().downcast::<NetCdfCf4DProviderError>().unwrap().as_ref(),
+                NetCdfCf4DProviderError::CannotCreateOverview { dataset, source }
+                if dataset.to_string_lossy() == "foo/bar.nc" &&
+                // TODO: use matches clause `NetCdfCf4DProviderError::DatasetIsNotInProviderPath { .. }`
+                source.to_string().contains("DatasetIsNotInProviderPath")
+            ),
+            "{error:?}"
+        );
 
         assert_eq!(clean_up, r#"{"status":"completed","info":null}"#);
 

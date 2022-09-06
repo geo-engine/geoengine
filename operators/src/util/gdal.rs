@@ -4,7 +4,7 @@ use std::{
     str::FromStr,
 };
 
-use gdal::{raster::GDALDataType, Dataset, DatasetOptions};
+use gdal::{Dataset, DatasetOptions};
 use geoengine_datatypes::{
     dataset::{DataId, DatasetId},
     hashmap,
@@ -211,24 +211,14 @@ pub fn gdal_open_dataset_ex(path: &Path, dataset_options: DatasetOptions) -> Res
 pub fn raster_descriptor_from_dataset(
     dataset: &Dataset,
     band: isize,
-    default_data_type: Option<RasterDataType>,
 ) -> Result<RasterResultDescriptor> {
     let rasterband = &dataset.rasterband(band)?;
 
     let spatial_ref: SpatialReference =
         dataset.spatial_ref()?.try_into().context(error::DataType)?;
 
-    let data_type = match rasterband.band_type() {
-        GDALDataType::GDT_Byte => RasterDataType::U8,
-        GDALDataType::GDT_UInt16 => RasterDataType::U16,
-        GDALDataType::GDT_Int16 => RasterDataType::I16,
-        GDALDataType::GDT_UInt32 => RasterDataType::U32,
-        GDALDataType::GDT_Int32 => RasterDataType::I32,
-        GDALDataType::GDT_Float32 => RasterDataType::F32,
-        GDALDataType::GDT_Float64 => RasterDataType::F64,
-        GDALDataType::GDT_Unknown => default_data_type.unwrap_or(RasterDataType::F64),
-        _ => return Err(Error::GdalRasterDataTypeNotSupported),
-    };
+    let data_type = RasterDataType::from_gdal_data_type(rasterband.band_type())
+        .map_err(|_| Error::GdalRasterDataTypeNotSupported)?;
 
     Ok(RasterResultDescriptor {
         data_type,
