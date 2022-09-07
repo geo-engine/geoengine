@@ -22,8 +22,11 @@ use crate::{
     util::IdResponse,
 };
 use actix_web::{web, FromRequest, Responder};
-use gdal::{vector::Layer, Dataset};
 use gdal::{vector::OGRFieldType, DatasetOptions};
+use gdal::{
+    vector::{Layer, LayerAccess},
+    Dataset,
+};
 use geoengine_datatypes::{
     collections::VectorDataType,
     dataset::DatasetId,
@@ -1612,6 +1615,140 @@ mod tests {
                 "sourceOperator": "OgrSource",
                 "symbology": null,
                 "provenance": null,
+            })
+        );
+
+        Ok(())
+    }
+
+    #[tokio::test]
+    #[allow(clippy::too_many_lines)]
+    async fn it_suggests_metadata() -> Result<()> {
+        let mut test_data = TestDataUploads::default(); // remember created folder and remove them on drop
+
+        let ctx = InMemoryContext::test_default();
+        let session_id = ctx.default_session_ref().await.id();
+
+        let body = vec![(
+            "test.json",
+            r#"{
+                "type": "FeatureCollection",
+                "features": [
+                  {
+                    "type": "Feature",
+                    "geometry": {
+                      "type": "Point",
+                      "coordinates": [
+                        1,
+                        1
+                      ]
+                    },
+                    "properties": {
+                      "name": "foo",
+                      "id": 1
+                    }
+                  },
+                  {
+                    "type": "Feature",
+                    "geometry": {
+                      "type": "Point",
+                      "coordinates": [
+                        2,
+                        2
+                      ]
+                    },
+                    "properties": {
+                      "name": "bar",
+                      "id": 2
+                    }
+                  }
+                ]
+              }"#,
+        )];
+
+        let req = actix_web::test::TestRequest::post()
+            .uri("/upload")
+            .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())))
+            .set_multipart(body.clone());
+
+        let res = send_test_request(req, ctx.clone()).await;
+
+        assert_eq!(res.status(), 200);
+
+        let upload: IdResponse<UploadId> = actix_web::test::read_body_json(res).await;
+        test_data.uploads.push(upload.id);
+
+        let upload_content =
+            std::fs::read_to_string(upload.id.root_path().unwrap().join("test.json")).unwrap();
+
+        assert_eq!(&upload_content, body[0].1);
+
+        let req = actix_web::test::TestRequest::get()
+            .uri(&format!("/dataset/suggest?upload={}", upload.id))
+            .append_header((header::CONTENT_LENGTH, 0))
+            .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())));
+        let res = send_test_request(req, ctx).await;
+
+        let res_status = res.status();
+        let res_body = read_body_string(res).await;
+        assert_eq!(res_status, 200, "{}", res_body);
+
+        assert_eq!(
+            serde_json::from_str::<serde_json::Value>(&res_body).unwrap(),
+            json!({
+              "mainFile": "test.json",
+              "metaData": {
+                "type": "OgrMetaData",
+                "loadingInfo": {
+                  "fileName": format!("test_upload/{}/test.json", upload.id),
+                  "layerName": "test",
+                  "dataType": "MultiPoint",
+                  "time": {
+                    "type": "none"
+                  },
+                  "defaultGeometry": null,
+                  "columns": {
+                    "formatSpecifics": null,
+                    "x": "",
+                    "y": null,
+                    "int": [
+                      "id"
+                    ],
+                    "float": [],
+                    "text": [
+                      "name"
+                    ],
+                    "bool": [],
+                    "datetime": [],
+                    "rename": null
+                  },
+                  "forceOgrTimeFilter": false,
+                  "forceOgrSpatialFilter": false,
+                  "onError": "ignore",
+                  "sqlQuery": null,
+                  "attributeQuery": null
+                },
+                "resultDescriptor": {
+                  "dataType": "MultiPoint",
+                  "spatialReference": "EPSG:4326",
+                  "columns": {
+                    "id": {
+                      "dataType": "int",
+                      "measurement": {
+                        "type": "unitless"
+                      }
+                    },
+                    "name": {
+                      "dataType": "text",
+                      "measurement": {
+                        "type": "unitless"
+                      }
+                    }
+                  },
+                  "time": null,
+                  "bbox": null
+                }
+              }
             })
         );
 

@@ -6,7 +6,8 @@ use crate::error::Result;
 use crate::error::{self, Error};
 use crate::layers::external::{DataProvider, DataProviderDefinition};
 use crate::layers::layer::{
-    CollectionItem, Layer, LayerCollectionListOptions, LayerListing, ProviderLayerId,
+    CollectionItem, Layer, LayerCollection, LayerCollectionListOptions, LayerListing,
+    ProviderLayerCollectionId, ProviderLayerId,
 };
 use crate::layers::listing::{LayerCollectionId, LayerCollectionProvider};
 use crate::util::user_input::Validated;
@@ -174,11 +175,11 @@ impl GfbioDataProvider {
 
 #[async_trait]
 impl LayerCollectionProvider for GfbioDataProvider {
-    async fn collection_items(
+    async fn collection(
         &self,
         collection: &LayerCollectionId,
         options: Validated<LayerCollectionListOptions>,
-    ) -> Result<Vec<CollectionItem>> {
+    ) -> Result<LayerCollection> {
         ensure!(
             *collection == self.root_collection_id().await?,
             error::UnknownLayerCollectionId {
@@ -217,7 +218,7 @@ impl LayerCollectionProvider for GfbioDataProvider {
             )
             .await?;
 
-        let listings: Vec<_> = rows
+        let items: Vec<_> = rows
             .into_iter()
             .map(|row| {
                 CollectionItem::Layer(LayerListing {
@@ -227,12 +228,21 @@ impl LayerCollectionProvider for GfbioDataProvider {
                     },
                     name: row.get(1),
                     description: row.try_get(2).unwrap_or_else(|_| "".to_owned()),
-                    properties: vec![],
                 })
             })
             .collect();
 
-        Ok(listings)
+        Ok(LayerCollection {
+            id: ProviderLayerCollectionId {
+                provider_id: GFBIO_PROVIDER_ID,
+                collection_id: collection.clone(),
+            },
+            name: "GFBio".to_owned(),
+            description: "GFBio".to_owned(),
+            items,
+            entry_label: None,
+            properties: vec![],
+        })
     }
 
     async fn root_collection_id(&self) -> Result<LayerCollectionId> {
@@ -482,6 +492,7 @@ mod tests {
     use geoengine_operators::{engine::MockQueryContext, source::OgrSourceProcessor};
     use rand::RngCore;
 
+    use crate::layers::layer::ProviderLayerCollectionId;
     use crate::test_data;
     use crate::util::{config, user_input::UserInput};
     use std::{fs::File, io::Read, path::PathBuf};
@@ -543,7 +554,7 @@ mod tests {
         let test_schema = create_test_data(&db_config).await;
 
         let provider = Box::new(GfbioDataProviderDefinition {
-            name: "Gfbio".to_string(),
+            name: "GFBio".to_string(),
             db_config: DatabaseConnectionConfig {
                 host: db_config.host.clone(),
                 port: db_config.port,
@@ -557,9 +568,11 @@ mod tests {
         .await
         .unwrap();
 
-        let listing = provider
-            .collection_items(
-                &provider.root_collection_id().await.unwrap(),
+        let root_id = provider.root_collection_id().await.unwrap();
+
+        let collection = provider
+            .collection(
+                &root_id,
                 LayerCollectionListOptions {
                     offset: 0,
                     limit: 10,
@@ -571,19 +584,28 @@ mod tests {
 
         cleanup_test_data(&db_config, test_schema).await;
 
-        let listing = listing.unwrap();
+        let collection = collection.unwrap();
 
         assert_eq!(
-            listing,
-            vec![CollectionItem::Layer(LayerListing {
-                id: ProviderLayerId {
+            collection,
+            LayerCollection {
+                id: ProviderLayerCollectionId {
                     provider_id: GFBIO_PROVIDER_ID,
-                    layer_id: LayerId("1".to_string()),
+                    collection_id: root_id,
                 },
-                name: "Example Title".to_string(),
-                description: "".to_string(),
+                name: "GFBio".to_string(),
+                description: "GFBio".to_string(),
+                items: vec![CollectionItem::Layer(LayerListing {
+                    id: ProviderLayerId {
+                        provider_id: GFBIO_PROVIDER_ID,
+                        layer_id: LayerId("1".to_string()),
+                    },
+                    name: "Example Title".to_string(),
+                    description: "".to_string(),
+                })],
+                entry_label: None,
                 properties: vec![],
-            })]
+            }
         );
     }
 
@@ -603,7 +625,7 @@ mod tests {
             let ogr_pg_string = provider_db_config.ogr_pg_config();
 
             let provider = Box::new(GfbioDataProviderDefinition {
-                name: "Gfbio".to_string(),
+                name: "GFBio".to_string(),
                 db_config: provider_db_config,
             })
             .initialize()
@@ -773,7 +795,7 @@ mod tests {
     async fn it_loads() {
         async fn test(db_config: &config::Postgres, test_schema: &str) -> Result<(), String> {
             let provider = Box::new(GfbioDataProviderDefinition {
-                name: "Gfbio".to_string(),
+                name: "GFBio".to_string(),
                 db_config: DatabaseConnectionConfig {
                     host: db_config.host.clone(),
                     port: db_config.port,
@@ -876,7 +898,7 @@ mod tests {
     async fn it_cites() {
         async fn test(db_config: &config::Postgres, test_schema: &str) -> Result<(), String> {
             let provider = Box::new(GfbioDataProviderDefinition {
-                name: "Gfbio".to_string(),
+                name: "GFBio".to_string(),
                 db_config: DatabaseConnectionConfig {
                     host: db_config.host.clone(),
                     port: db_config.port,

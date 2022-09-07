@@ -48,6 +48,15 @@ impl TimeInstance {
             .to_rfc3339()
     }
 
+    pub fn as_rfc3339_with_millis(self) -> String {
+        let instance = self.clamp(TimeInstance::MIN, TimeInstance::MAX);
+
+        instance
+            .as_date_time()
+            .expect("TimeInstance is not valid")
+            .to_rfc3339_with_millis()
+    }
+
     pub const fn inner(self) -> i64 {
         self.0
     }

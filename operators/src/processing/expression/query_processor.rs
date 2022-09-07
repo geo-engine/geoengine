@@ -5,11 +5,10 @@ use futures::{stream::BoxStream, StreamExt, TryStreamExt};
 use geoengine_datatypes::{
     primitives::{RasterQueryRectangle, SpatialPartition2D, TimeInterval},
     raster::{
-        ConvertDataType, EmptyGrid2D, FromIndexFnParallel, GeoTransform, GridIdx2D,
-        GridIndexAccess, GridOrEmpty, GridOrEmpty2D, GridShape2D, GridShapeAccess,
-        MapElementsParallel, Pixel, RasterTile2D, UpdateIndexedElementsParallel,
+        ConvertDataType, FromIndexFnParallel, GeoTransform, GridIdx2D, GridIndexAccess,
+        GridOrEmpty, GridOrEmpty2D, GridShape2D, GridShapeAccess, MapElementsParallel, Pixel,
+        RasterTile2D,
     },
-    util::helpers::equals_or_both_nan,
 };
 use libloading::Symbol;
 use num_traits::AsPrimitive;
@@ -29,7 +28,6 @@ where
     pub sources: Sources,
     pub phantom_data: PhantomData<TO>,
     pub program: Arc<LinkedExpression>,
-    pub no_data_value: TO,
     pub map_no_data: bool,
 }
 
@@ -37,17 +35,11 @@ impl<TO, Sources> ExpressionQueryProcessor<TO, Sources>
 where
     TO: Pixel,
 {
-    pub fn new(
-        program: LinkedExpression,
-        sources: Sources,
-        no_data_value: TO,
-        map_no_data: bool,
-    ) -> Self {
+    pub fn new(program: LinkedExpression, sources: Sources, map_no_data: bool) -> Self {
         Self {
             sources,
             program: Arc::new(program),
             phantom_data: PhantomData::default(),
-            no_data_value,
             map_no_data,
         }
     }
@@ -79,14 +71,12 @@ where
                 let (out_time, out_tile_position, out_global_geo_transform, _output_grid_shape) =
                     Tuple::metadata(&rasters);
 
-                let out_no_data = self.no_data_value;
-
                 let program = self.program.clone();
                 let map_no_data = self.map_no_data;
 
                 let out = crate::util::spawn_blocking_with_thread_pool(
                     ctx.thread_pool().clone(),
-                    move || Tuple::compute_expression(rasters, &program, map_no_data, out_no_data),
+                    move || Tuple::compute_expression(rasters, &program, map_no_data),
                 )
                 .await??;
 
@@ -122,7 +112,6 @@ trait ExpressionTupleProcessor<TO: Pixel>: Send + Sync {
         tuple: Self::Tuple,
         program: &LinkedExpression,
         map_no_data: bool,
-        out_no_data: TO,
     ) -> Result<GridOrEmpty2D<TO>>;
 }
 
@@ -172,11 +161,10 @@ where
         raster: Self::Tuple,
         program: &LinkedExpression,
         map_no_data: bool,
-        out_no_data: TO,
     ) -> Result<GridOrEmpty2D<TO>> {
         let expression = unsafe {
             // we have to "trust" that the function has the signature we expect
-            program.function_3::<f64, bool, f64>()?
+            program.function_1::<Option<f64>>()?
         };
 
         let map_fn = |in_value: Option<T1>| {
@@ -185,19 +173,9 @@ where
                 return None;
             }
 
-            let expression_in_value = in_value.unwrap_or_default().as_();
+            let result = expression(in_value.map(AsPrimitive::as_));
 
-            let result = expression(expression_in_value, in_value.is_none(), out_no_data.as_());
-
-            let result_t = TO::from_(result);
-
-            let out_is_no_data = equals_or_both_nan(&result_t, &out_no_data);
-
-            if out_is_no_data {
-                None
-            } else {
-                Some(result_t)
-            }
+            result.map(TO::from_)
         };
 
         let res = raster.grid_array.map_elements_parallel(map_fn);
@@ -257,43 +235,26 @@ where
         rasters: Self::Tuple,
         program: &LinkedExpression,
         map_no_data: bool,
-        out_no_data: TO,
     ) -> Result<GridOrEmpty2D<TO>> {
         let expression = unsafe {
             // we have to "trust" that the function has the signature we expect
-            program.function_5::<f64, bool, f64, bool, f64>()?
+            program.function_2::<Option<f64>, Option<f64>>()?
         };
 
         let map_fn = |lin_idx: usize| {
             let t0_value = rasters.0.get_at_grid_index_unchecked(lin_idx);
             let t1_value = rasters.1.get_at_grid_index_unchecked(lin_idx);
 
-            let is_t0_no_data = t0_value.is_none();
-            let is_t1_no_data = t1_value.is_none();
-
-            if !map_no_data && (is_t0_no_data || is_t1_no_data) {
+            if !map_no_data && (t0_value.is_none() || t1_value.is_none()) {
                 return None;
             }
 
-            let t0 = t0_value.unwrap_or_default();
-            let t1 = t1_value.unwrap_or_default();
-
             let result = expression(
-                t0.as_(),
-                is_t0_no_data,
-                t1.as_(),
-                is_t1_no_data,
-                out_no_data.as_(),
+                t0_value.map(AsPrimitive::as_),
+                t1_value.map(AsPrimitive::as_),
             );
-            let result_t = TO::from_(result);
 
-            let out_is_no_data = equals_or_both_nan(&result_t, &out_no_data);
-
-            if out_is_no_data {
-                None
-            } else {
-                Some(result_t)
-            }
+            result.map(TO::from_)
         };
 
         let grid_shape = rasters.0.grid_shape();
@@ -303,32 +264,30 @@ where
     }
 }
 
-type Function3 = fn(f64, bool, f64, bool, f64, bool, f64) -> f64;
-type Function4 = fn(f64, bool, f64, bool, f64, bool, f64, bool, f64) -> f64;
-type Function5 = fn(f64, bool, f64, bool, f64, bool, f64, bool, f64, bool, f64) -> f64;
-type Function6 = fn(f64, bool, f64, bool, f64, bool, f64, bool, f64, bool, f64, bool, f64) -> f64;
-type Function7 =
-    fn(f64, bool, f64, bool, f64, bool, f64, bool, f64, bool, f64, bool, f64, bool, f64) -> f64;
-
+type Function3 = fn(Option<f64>, Option<f64>, Option<f64>) -> Option<f64>;
+type Function4 = fn(Option<f64>, Option<f64>, Option<f64>, Option<f64>) -> Option<f64>;
+type Function5 = fn(Option<f64>, Option<f64>, Option<f64>, Option<f64>, Option<f64>) -> Option<f64>;
+type Function6 =
+    fn(Option<f64>, Option<f64>, Option<f64>, Option<f64>, Option<f64>, Option<f64>) -> Option<f64>;
+type Function7 = fn(
+    Option<f64>,
+    Option<f64>,
+    Option<f64>,
+    Option<f64>,
+    Option<f64>,
+    Option<f64>,
+    Option<f64>,
+) -> Option<f64>;
 type Function8 = fn(
-    f64,
-    bool,
-    f64,
-    bool,
-    f64,
-    bool,
-    f64,
-    bool,
-    f64,
-    bool,
-    f64,
-    bool,
-    f64,
-    bool,
-    f64,
-    bool,
-    f64,
-) -> f64;
+    Option<f64>,
+    Option<f64>,
+    Option<f64>,
+    Option<f64>,
+    Option<f64>,
+    Option<f64>,
+    Option<f64>,
+    Option<f64>,
+) -> Option<f64>;
 
 macro_rules! impl_expression_tuple_processor {
     ( $i:tt => $( $x:tt ),+ ) => {
@@ -343,15 +302,13 @@ macro_rules! impl_expression_tuple_processor {
                 |
                 $( [< is_nodata_ $x >] ),*
                 |
-                $( [< pixel_unwrapped_ $x >] ),*
-                |
                 [< Function $i >]
             );
         }
     };
 
     // We have `0, 1, 2, …` and `T0, T1, T2, …`
-    (@inner $N:tt | $( $I:tt ),+ | $( $PIXEL:tt ),+ | $( $IS_NODATA:tt ),+ | $( $PIXEL_UNWRAP:tt ),+ |$FN_T:ty ) => {
+    (@inner $N:tt | $( $I:tt ),+ | $( $PIXEL:tt ),+ | $( $IS_NODATA:tt ),+ | $FN_T:ty ) => {
         #[async_trait]
         impl<TO, T1> ExpressionTupleProcessor<TO> for [BoxRasterQueryProcessor<T1>; $N]
         where
@@ -397,51 +354,33 @@ macro_rules! impl_expression_tuple_processor {
                 rasters: Self::Tuple,
                 program: &LinkedExpression,
                 map_no_data: bool,
-                out_no_data: TO,
             ) -> Result<GridOrEmpty2D<TO>> {
                 let expression: Symbol<$FN_T> = unsafe {
                     // we have to "trust" that the function has the signature we expect
                     program.function_nary()?
                 };
 
-                let shape = rasters[0].grid_shape().clone();
-
-                let mut out = GridOrEmpty::from(EmptyGrid2D::<TO>::new(shape));
-
-                let map_fn = move |lin_idx: usize, _empty: Option<TO>| {
+                let map_fn = |lin_idx: usize| {
                     $(
                         let $PIXEL = rasters[$I].get_at_grid_index_unchecked(lin_idx);
                         let $IS_NODATA = $PIXEL.is_none();
                     )*
 
                     if !map_no_data && ( $($IS_NODATA)||* ) {
-                        return (None);
+                        return None;
                     }
-
-                    $(
-                        let $PIXEL_UNWRAP = $PIXEL.unwrap_or_default();
-                    )*
 
                     let result = expression(
                         $(
-                            $PIXEL_UNWRAP.as_(),
-                            $IS_NODATA,
-                        )*
-                        out_no_data.as_(),
+                            $PIXEL.map(AsPrimitive::as_)
+                        ),*
                     );
 
-                    let result_t = TO::from_(result);
+                    result.map(TO::from_)
+                };
 
-                    let out_is_no_data =  equals_or_both_nan(&result_t, &out_no_data);
-
-                if out_is_no_data {
-                    None
-                } else {
-                    Some(result_t)
-                }
-            };
-
-            out.update_indexed_elements_parallel(map_fn);
+                let grid_shape = rasters[0].grid_shape();
+                let out = GridOrEmpty::from_index_fn_parallel(&grid_shape, map_fn);
 
                 Result::Ok(out)
             }
