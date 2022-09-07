@@ -31,6 +31,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
   - https://github.com/geo-engine/geoengine-python/pull/65
 
+- Added Open ID Connect authentication
+
+  - https://github.com/geo-engine/geoengine/pull/587
+
 ### Changed
 
 - Removed the custom Geo Bon EBV portal handlers. Instead, the EBV hierarchy is now browsed through the layer collection API.

@@ -17,3 +17,11 @@ raster_data_root_path = "../test_data/raster" # relative to sub crate directory 
 
 [upload]
 path = "test_upload"
+
+[oidc]
+enabled = true
+issuer = ""
+client_id = ""
+client_secret = ""
+redirect_uri = ""
+scopes = [ ]
