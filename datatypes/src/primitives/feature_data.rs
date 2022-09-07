@@ -768,7 +768,7 @@ unsafe fn byte_ptr_to_str<'d>(bytes: *const u8, length: usize) -> &'d str {
 /// use arrow::array::{StringBuilder, Array};
 ///
 /// let string_array = {
-///     let mut builder = StringBuilder::new(3);
+///     let mut builder = StringBuilder::with_capacity(3);
 ///     builder.append_value("foobar");
 ///     builder.append_null();
 ///     builder.append_value("bar");
@@ -777,7 +777,7 @@ unsafe fn byte_ptr_to_str<'d>(bytes: *const u8, length: usize) -> &'d str {
 ///
 /// assert_eq!(string_array.len(), 3);
 ///
-/// let text_data_ref = TextDataRef::new(string_array.value_data(), string_array.value_offsets(), string_array.data_ref().null_bitmap());
+/// let text_data_ref = TextDataRef::with_capacity(string_array.value_data(), string_array.value_offsets(), string_array.data_ref().null_bitmap());
 ///
 /// assert_eq!(text_data_ref.as_ref().len(), 9);
 /// assert_eq!(text_data_ref.offsets().len(), 4);
@@ -842,7 +842,7 @@ impl<'r> DataRef<'r, u8> for TextDataRef<'r> {
     /// use arrow::array::{StringBuilder, Array};
     ///
     /// let string_array = {
-    ///     let mut builder = StringBuilder::new(3);
+    ///     let mut builder = StringBuilder::with_capacity(3, 6+3);
     ///     builder.append_value("foobar");
     ///     builder.append_null();
     ///     builder.append_value("bar");
