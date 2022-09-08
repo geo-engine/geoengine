@@ -103,3 +103,10 @@ basket_api_base_url= "https://dev.gfbio.uni-jena.de/daisi-api/api/baskets/"
 # This is the behavious of the old VAT system.
 # If false, every basket entry translates into a layer on the map.
 group_abcd_units = true
+
+[oidc]
+enabled = false
+issuer = ""
+client_id = ""
+redirect_uri = ""
+scopes = [ ]

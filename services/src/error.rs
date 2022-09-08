@@ -387,6 +387,12 @@ pub enum Error {
     InvalidSpatialReferenceString {
         spatial_reference_string: String,
     },
+
+    #[cfg(feature = "pro")]
+    #[snafu(context(false))]
+    OidcError {
+        source: crate::pro::users::OidcError,
+    },
 }
 
 impl actix_web::error::ResponseError for Error {

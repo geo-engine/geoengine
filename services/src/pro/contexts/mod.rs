@@ -10,7 +10,7 @@ pub use in_memory::ProInMemoryContext;
 pub use postgres::PostgresContext;
 
 use crate::contexts::Context;
-use crate::pro::users::{UserDb, UserSession};
+use crate::pro::users::{OidcRequestDb, UserDb, UserSession};
 
 use async_trait::async_trait;
 
@@ -22,4 +22,5 @@ pub trait ProContext: Context<Session = UserSession> {
 
     fn user_db(&self) -> Arc<Self::UserDB>;
     fn user_db_ref(&self) -> &Self::UserDB;
+    fn oidc_request_db(&self) -> Option<&OidcRequestDb>;
 }

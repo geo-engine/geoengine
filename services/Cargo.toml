@@ -47,6 +47,8 @@ image = "0.24"
 lazy_static = "1.4"
 log = "0.4"
 mime = "0.3"
+oauth2 = "4.2.3"
+openidconnect = "2.3.2"
 num-traits = "0.2"
 paste = "1.0"
 postgres-types = { version = "0.2", features = ["derive"], optional = true }
