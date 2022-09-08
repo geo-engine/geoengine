@@ -104,7 +104,7 @@ impl PlotOperator for Statistics {
                 let initialized_vector = vector.initialize(context).await?;
                 let in_descriptor = initialized_vector.result_descriptor();
 
-                let column_names = if self.params.column_names.len() > 0 {
+                let column_names = if !self.params.column_names.is_empty() {
                     for cn in &self.params.column_names {
                         match in_descriptor.column_data_type(cn.as_str()) {
                             Some(column) if !column.is_numeric() => {
@@ -129,7 +129,7 @@ impl PlotOperator for Statistics {
                         .clone()
                         .into_iter()
                         .filter(|(_, info)| info.data_type.is_numeric())
-                        .map(|(name, _)| name.clone())
+                        .map(|(name, _)| name)
                         .collect()
                 };
 
@@ -237,15 +237,15 @@ impl PlotQueryProcessor for StatisticsVectorQueryProcessor {
             while let Some(collection) = query.next().await {
                 let collection = collection?;
 
-                for (column, stats) in number_statistics.iter_mut() {
-                    collection.data(&column).expect("checked in param").float_options_iter().for_each(
+                for (column, stats) in &mut number_statistics {
+                    collection.data(column).expect("checked in param").float_options_iter().for_each(
                         | value | {
                             match value {
                                 Some(v) => stats.add(v),
                                 None => stats.add_no_data()
                             }
                         }
-                    )
+                    );
                 }
             }
         });
@@ -796,8 +796,7 @@ mod tests {
         let statistics = statistics.boxed().initialize(&execution_context).await;
 
         assert!(
-            matches!(statistics, Err(error::Error::InvalidOperatorSpec{reason}) if reason == "Statistics on raster data must either contain a name/alias for every input ('column_names' parameter) or no names at all."
-                .to_string())
+            matches!(statistics, Err(error::Error::InvalidOperatorSpec{reason}) if reason == *"Statistics on raster data must either contain a name/alias for every input ('column_names' parameter) or no names at all.")
         );
     }
 
