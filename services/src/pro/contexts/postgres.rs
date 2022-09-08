@@ -678,9 +678,8 @@ mod tests {
     use geoengine_datatypes::util::test::TestDefault;
     use geoengine_datatypes::util::Identifier;
     use geoengine_operators::engine::{
-        MetaData, MultipleRasterOrSingleVectorSource, MultipleRasterSources, PlotOperator,
-        StaticMetaData, TypedOperator, TypedResultDescriptor, VectorColumnInfo, VectorOperator,
-        VectorResultDescriptor,
+        MetaData, MultipleRasterOrSingleVectorSource, PlotOperator, StaticMetaData, TypedOperator,
+        TypedResultDescriptor, VectorColumnInfo, VectorOperator, VectorResultDescriptor,
     };
     use geoengine_operators::mock::{MockPointSource, MockPointSourceParams};
     use geoengine_operators::plot::{Statistics, StatisticsParams};

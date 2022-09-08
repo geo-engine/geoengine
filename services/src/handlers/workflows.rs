@@ -612,7 +612,7 @@ mod tests {
     use geoengine_datatypes::spatial_reference::SpatialReference;
     use geoengine_datatypes::util::test::TestDefault;
     use geoengine_operators::engine::{
-        MultipleRasterOrSingleVectorSource, MultipleRasterSources, PlotOperator, TypedOperator,
+        MultipleRasterOrSingleVectorSource, PlotOperator, TypedOperator,
     };
     use geoengine_operators::engine::{RasterOperator, RasterResultDescriptor, VectorOperator};
     use geoengine_operators::mock::{
