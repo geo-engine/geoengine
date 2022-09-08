@@ -39,7 +39,7 @@ pub type Statistics = Operator<StatisticsParams, MultipleRasterOrSingleVectorSou
 pub struct StatisticsParams {
     /// Names of the (numeric) attributes to compute the statistics on.
     #[serde(default)]
-    column_names: Vec<String>,
+    pub column_names: Vec<String>,
 }
 
 #[typetag::serde]

@@ -273,7 +273,9 @@ mod tests {
 
         let workflow = Workflow {
             operator: Statistics {
-                params: StatisticsParams {},
+                params: StatisticsParams {
+                    column_names: vec![],
+                },
                 sources: vec![example_raster_source()].into(),
             }
             .boxed()
@@ -454,7 +456,9 @@ mod tests {
 
             let workflow = Workflow {
                 operator: Statistics {
-                    params: StatisticsParams {},
+                    params: StatisticsParams {
+                        column_names: vec![],
+                    },
                     sources: vec![example_raster_source()].into(),
                 }
                 .boxed()
