@@ -1,3 +1,14 @@
+use crate::api::model::datatypes::{
+    BoundingBox2D, ClassificationMeasurement, ContinuousMeasurement, Coordinate2D, DataId,
+    DataProviderId, DatasetId, ExternalDataId, FeatureDataType, LayerId, Measurement,
+    RasterDataType, RasterQueryRectangle, SpatialPartition2D, SpatialReference,
+    SpatialReferenceAuthority, SpatialReferenceOption, SpatialResolution, TimeInstance,
+    TimeInterval, VectorDataType,
+};
+use crate::api::model::operators::{
+    PlotResultDescriptor, RasterResultDescriptor, TypedOperator, TypedResultDescriptor,
+    VectorColumnInfo, VectorResultDescriptor,
+};
 use crate::contexts::{SessionId, SimpleSession};
 use crate::datasets::listing::{Provenance, ProvenanceOutput};
 use crate::datasets::upload::UploadId;
@@ -7,20 +18,6 @@ use crate::projects::{ProjectId, STRectangle};
 use crate::util::server::VersionInfo;
 use crate::util::IdResponse;
 use crate::workflows::workflow::{Workflow, WorkflowId};
-use geoengine_datatypes::collections::VectorDataType;
-use geoengine_datatypes::dataset::{DataId, DataProviderId, DatasetId, ExternalDataId, LayerId};
-use geoengine_datatypes::primitives::{
-    BoundingBox2D, ClassificationMeasurement, ContinuousMeasurement, Coordinate2D, Measurement,
-    RasterQueryRectangle, SpatialPartition2D, SpatialResolution, TimeInstance, TimeInterval,
-};
-use geoengine_datatypes::raster::RasterDataType;
-use geoengine_datatypes::spatial_reference::{
-    SpatialReference, SpatialReferenceAuthority, SpatialReferenceOption,
-};
-use geoengine_operators::engine::{
-    PlotResultDescriptor, RasterResultDescriptor, TypedOperator, TypedResultDescriptor,
-    VectorColumnInfo, VectorResultDescriptor,
-};
 use utoipa::openapi::security::{HttpAuthScheme, HttpBuilder, SecurityScheme};
 use utoipa::{Modify, OpenApi};
 
@@ -72,7 +69,7 @@ use utoipa::{Modify, OpenApi};
             Provenance,
 
             VectorDataType,
-            // FeatureDataType,
+            FeatureDataType,
             RasterDataType,
 
             VersionInfo,

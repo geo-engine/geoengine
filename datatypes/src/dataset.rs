@@ -6,7 +6,7 @@ identifier!(DataProviderId);
 // Identifier for datasets managed by Geo Engine
 identifier!(DatasetId);
 
-#[derive(Debug, Clone, Hash, Eq, PartialEq, Deserialize, Serialize, utoipa::ToSchema)]
+#[derive(Debug, Clone, Hash, Eq, PartialEq, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase", tag = "type")]
 /// The identifier for loadable data. It is used in the source operators to get the loading info (aka parametrization)
 /// for accessing the data. Internal data is loaded from datasets, external from `DataProvider`s.
@@ -18,7 +18,7 @@ pub enum DataId {
     External(ExternalDataId),
 }
 
-#[derive(Debug, Serialize, Deserialize, Clone, PartialEq, Eq, Hash, utoipa::ToSchema)]
+#[derive(Debug, Serialize, Deserialize, Clone, PartialEq, Eq, Hash)]
 pub struct LayerId(pub String);
 
 impl std::fmt::Display for LayerId {
@@ -27,7 +27,7 @@ impl std::fmt::Display for LayerId {
     }
 }
 
-#[derive(Debug, Clone, Hash, Eq, PartialEq, Deserialize, Serialize, utoipa::ToSchema)]
+#[derive(Debug, Clone, Hash, Eq, PartialEq, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ExternalDataId {
     pub provider_id: DataProviderId,

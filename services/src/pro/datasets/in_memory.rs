@@ -1,3 +1,5 @@
+use crate::api::model::datatypes::LayerId;
+use crate::api::model::datatypes::{DataId, DatasetId};
 use crate::contexts::Db;
 use crate::datasets::listing::SessionMetaDataProvider;
 use crate::datasets::listing::{
@@ -22,12 +24,8 @@ use crate::util::operators::source_operator_from_dataset;
 use crate::util::user_input::Validated;
 use crate::workflows::workflow::Workflow;
 use async_trait::async_trait;
-use geoengine_datatypes::dataset::LayerId;
 use geoengine_datatypes::primitives::{RasterQueryRectangle, VectorQueryRectangle};
-use geoengine_datatypes::{
-    dataset::{DataId, DatasetId},
-    util::Identifier,
-};
+use geoengine_datatypes::util::Identifier;
 use geoengine_operators::engine::{
     MetaData, RasterResultDescriptor, StaticMetaData, TypedResultDescriptor, VectorResultDescriptor,
 };

@@ -10,7 +10,7 @@ use std::ops::{Add, Sub};
 use std::str::FromStr;
 
 /// An object that composes the date and a timestamp with time zone.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, utoipa::ToSchema)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct DateTime {
     datetime: chrono::DateTime<chrono::Utc>,
 }

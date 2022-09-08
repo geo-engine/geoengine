@@ -6,7 +6,7 @@ use serde::{Deserialize, Serialize};
 use snafu::ensure;
 
 /// The spatial resolution in SRS units
-#[derive(Copy, Clone, Debug, PartialEq, Deserialize, Serialize, utoipa::ToSchema)]
+#[derive(Copy, Clone, Debug, PartialEq, Deserialize, Serialize)]
 pub struct SpatialResolution {
     pub x: f64,
     pub y: f64,

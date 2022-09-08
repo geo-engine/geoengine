@@ -1,14 +1,17 @@
-pub trait Identifier: Sized {
-    /// Create a new (random) identifier
-    fn new() -> Self;
-
-    fn uuid(&self) -> &uuid::Uuid;
-}
-
 #[macro_export]
 macro_rules! identifier {
     ($id_name: ident) => {
-        #[derive(Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize, Clone, Copy, Hash)]
+        #[derive(
+            Debug,
+            PartialEq,
+            Eq,
+            serde::Serialize,
+            serde::Deserialize,
+            Clone,
+            Copy,
+            Hash,
+            utoipa::ToSchema,
+        )]
         pub struct $id_name(pub uuid::Uuid);
 
         impl $id_name {
@@ -17,7 +20,7 @@ macro_rules! identifier {
             }
         }
 
-        impl $crate::util::Identifier for $id_name {
+        impl geoengine_datatypes::util::identifiers::Identifier for $id_name {
             fn new() -> Self {
                 Self(uuid::Uuid::new_v4())
             }
@@ -83,6 +86,14 @@ macro_rules! identifier {
                 Self: Sized,
             {
                 <uuid::Uuid as postgres_types::ToSql>::accepts(ty)
+            }
+        }
+
+        impl utoipa::IntoParams for $id_name {
+            fn into_params(
+                _parameter_in_provider: impl Fn() -> Option<utoipa::openapi::path::ParameterIn>,
+            ) -> Vec<utoipa::openapi::path::Parameter> {
+                vec![]
             }
         }
     };

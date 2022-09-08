@@ -169,43 +169,6 @@ pub enum TypedOperator {
     Plot(Box<dyn PlotOperator>),
 }
 
-impl utoipa::ToSchema for TypedOperator {
-    fn schema() -> utoipa::openapi::Schema {
-        use utoipa::openapi::*;
-        ObjectBuilder::new()
-            .property(
-                "type",
-                ObjectBuilder::new()
-                    .schema_type(SchemaType::String)
-                    .enum_values(Some(vec!["Vector", "Raster", "Plot"]))
-            )
-            .required("type")
-            .property(
-                "operator",
-                ObjectBuilder::new()
-                    .property(
-                        "type",
-                        Object::with_type(SchemaType::String)
-                    )
-                    .required("type")
-                    .property(
-                        "params",
-                        Object::with_type(SchemaType::Object)
-                    )
-                    .property(
-                        "sources",
-                        Object::with_type(SchemaType::Object)
-                    )
-            )
-            .required("operator")
-            .example(Some(serde_json::json!(
-                {"type": "MockPointSource", "params": {"points": [{"x": 0.0, "y": 0.1}, {"x": 1.0, "y": 1.1}]}
-            })))
-            .description(Some("An enum to differentiate between `Operator` variants"))
-            .into()
-    }
-}
-
 impl TypedOperator {
     pub fn get_vector(self) -> Result<Box<dyn VectorOperator>> {
         if let TypedOperator::Vector(o) = self {

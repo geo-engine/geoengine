@@ -19,9 +19,7 @@ use std::str::FromStr;
 use std::{convert::TryFrom, fmt::Formatter};
 
 /// A spatial reference authority that is part of a spatial reference definition
-#[derive(
-    Debug, Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Serialize, Deserialize, utoipa::ToSchema,
-)]
+#[derive(Debug, Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Serialize, Deserialize)]
 #[cfg_attr(feature = "postgres", derive(ToSql, FromSql))]
 #[serde(rename_all = "SCREAMING-KEBAB-CASE")]
 pub enum SpatialReferenceAuthority {
@@ -47,7 +45,7 @@ impl std::fmt::Display for SpatialReferenceAuthority {
 }
 
 /// A spatial reference consists of an authority and a code
-#[derive(Debug, Copy, Clone, Eq, PartialEq, Ord, PartialOrd, utoipa::ToSchema)]
+#[derive(Debug, Copy, Clone, Eq, PartialEq, Ord, PartialOrd)]
 #[cfg_attr(feature = "postgres", derive(ToSql, FromSql))]
 pub struct SpatialReference {
     authority: SpatialReferenceAuthority,
@@ -226,7 +224,7 @@ impl TryFrom<SpatialReference> for SpatialRef {
     }
 }
 
-#[derive(Debug, Copy, Clone, Eq, PartialEq, Ord, PartialOrd, utoipa::ToSchema)]
+#[derive(Debug, Copy, Clone, Eq, PartialEq, Ord, PartialOrd)]
 pub enum SpatialReferenceOption {
     SpatialReference(SpatialReference),
     Unreferenced,

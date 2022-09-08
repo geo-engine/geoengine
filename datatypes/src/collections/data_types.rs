@@ -19,19 +19,7 @@ use crate::primitives::{
 use crate::util::Result;
 
 /// An enum that contains all possible vector data types
-#[derive(
-    Debug,
-    Ord,
-    PartialOrd,
-    Eq,
-    PartialEq,
-    Hash,
-    Deserialize,
-    Serialize,
-    Copy,
-    Clone,
-    utoipa::ToSchema,
-)]
+#[derive(Debug, Ord, PartialOrd, Eq, PartialEq, Hash, Deserialize, Serialize, Copy, Clone)]
 pub enum VectorDataType {
     Data,
     MultiPoint,

@@ -1,6 +1,7 @@
 use crate::contexts::{Context, InMemoryContext};
 use crate::error::{self, Error};
 use crate::handlers::get_token;
+use crate::identifier;
 use crate::projects::ProjectId;
 use crate::projects::STRectangle;
 use crate::util::config;
@@ -8,10 +9,10 @@ use actix_http::Payload;
 use actix_web::{web, FromRequest, HttpRequest};
 use futures::future::{err, LocalBoxFuture};
 use futures_util::FutureExt;
-use geoengine_datatypes::identifier;
 use geoengine_datatypes::primitives::DateTime;
 use geoengine_datatypes::util::Identifier;
 use serde::{Deserialize, Serialize};
+use utoipa::ToSchema;
 
 identifier!(SessionId);
 
@@ -27,7 +28,7 @@ pub trait MockableSession: Session {
     fn mock() -> Self;
 }
 
-#[derive(Clone, Debug, Deserialize, Serialize, PartialEq, utoipa::ToSchema)]
+#[derive(Clone, Debug, Deserialize, Serialize, PartialEq, ToSchema)]
 pub struct SimpleSession {
     id: SessionId,
     pub project: Option<ProjectId>,

@@ -620,6 +620,7 @@ mod tests {
     use std::str::FromStr;
 
     use super::*;
+    use crate::api::model::datatypes::{DataProviderId, DatasetId};
     use crate::datasets::external::mock::MockExternalLayerProviderDefinition;
     use crate::datasets::listing::SessionMetaDataProvider;
     use crate::datasets::listing::{DatasetListOptions, DatasetListing, ProvenanceOutput};
@@ -653,7 +654,6 @@ mod tests {
     use bb8_postgres::tokio_postgres::{self, NoTls};
     use futures::Future;
     use geoengine_datatypes::collections::VectorDataType;
-    use geoengine_datatypes::dataset::{DataProviderId, DatasetId};
     use geoengine_datatypes::primitives::{
         BoundingBox2D, Coordinate2D, DateTime, FeatureDataType, Measurement, SpatialResolution,
         TimeInterval, VectorQueryRectangle,

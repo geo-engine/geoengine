@@ -11,6 +11,7 @@ use log::debug;
 use std::num::NonZeroUsize;
 use tracing::Span;
 use tracing_actix_web::{RequestId, RootSpanBuilder};
+use utoipa::ToSchema;
 
 /// Custom root span for web requests that paste a request id to all logs.
 pub struct CustomRootSpanBuilder;
@@ -148,7 +149,7 @@ pub(crate) fn configure_extractors(cfg: &mut web::ServiceConfig) {
     }));
 }
 
-#[derive(serde::Serialize, utoipa::ToSchema)]
+#[derive(serde::Serialize, ToSchema)]
 #[serde(rename_all = "camelCase")]
 pub(crate) struct VersionInfo {
     build_date: Option<String>,

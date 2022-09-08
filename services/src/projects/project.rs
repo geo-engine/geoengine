@@ -1,12 +1,13 @@
 use std::{convert::TryInto, fmt::Debug};
 
 use crate::error::{Error, Result};
+use crate::identifier;
 use crate::util::config::ProjectService;
 use crate::util::user_input::UserInput;
 use crate::workflows::workflow::WorkflowId;
 use crate::{error, util::config::get_config_element};
+use geoengine_datatypes::operations::image::RgbaColor;
 use geoengine_datatypes::primitives::DateTime;
-use geoengine_datatypes::{identifier, operations::image::RgbaColor};
 use geoengine_datatypes::{operations::image::Colorizer, primitives::TimeInstance};
 use geoengine_datatypes::{
     primitives::{BoundingBox2D, Coordinate2D, TimeGranularity, TimeInterval, TimeStep},
@@ -21,6 +22,7 @@ use geoengine_operators::string_token;
 use postgres_types::{FromSql, ToSql};
 use serde::{Deserialize, Serialize};
 use snafu::{ensure, ResultExt};
+use utoipa::ToSchema;
 
 identifier!(ProjectId);
 
@@ -119,11 +121,11 @@ impl Project {
     }
 }
 
-#[derive(Debug, PartialEq, Serialize, Deserialize, Clone, utoipa::ToSchema)]
+#[derive(Debug, PartialEq, Serialize, Deserialize, Clone, ToSchema)]
 #[cfg_attr(feature = "postgres", derive(ToSql, FromSql))]
 #[allow(clippy::upper_case_acronyms)]
 #[serde(rename_all = "camelCase")]
-// TODO: add example, once utoipas schema macro can co-exist with postgres
+// TODO: add example, once utoipas schema macro can co-exist with postgres OR: split type into API and database model
 // #[schema(example = json!({
 //     "boundingBox": {
 //         "lowerLeftCoordinate": {

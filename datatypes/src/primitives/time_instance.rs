@@ -17,7 +17,7 @@ use std::{
     str::FromStr,
 };
 
-#[derive(Clone, Copy, Serialize, PartialEq, Eq, PartialOrd, Ord, Debug, utoipa::ToSchema)]
+#[derive(Clone, Copy, Serialize, PartialEq, Eq, PartialOrd, Ord, Debug)]
 #[repr(C)]
 pub struct TimeInstance(i64);
 

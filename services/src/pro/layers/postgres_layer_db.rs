@@ -1,5 +1,6 @@
 use std::{collections::HashMap, str::FromStr};
 
+use crate::api::model::datatypes::{DataProviderId, LayerId};
 use async_trait::async_trait;
 use bb8_postgres::{
     bb8::Pool,
@@ -9,7 +10,6 @@ use bb8_postgres::{
     },
     PostgresConnectionManager,
 };
-use geoengine_datatypes::dataset::{DataProviderId, LayerId};
 use snafu::ResultExt;
 use uuid::Uuid;
 

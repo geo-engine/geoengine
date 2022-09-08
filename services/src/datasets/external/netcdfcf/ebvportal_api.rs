@@ -2,11 +2,11 @@
 //!
 //! Connects to <https://portal.geobon.org/api/v1/>.
 
+use crate::api::model::datatypes::DataProviderId;
 use crate::datasets::external::netcdfcf::NetCdfCfDataProvider;
 use crate::datasets::external::netcdfcf::{error, NetCdfOverview, NETCDF_CF_PROVIDER_ID};
 use crate::error::Result;
 use error::NetCdfCf4DProviderError;
-use geoengine_datatypes::dataset::DataProviderId;
 use log::debug;
 use serde::Serialize;
 use snafu::ResultExt;

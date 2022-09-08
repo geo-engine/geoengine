@@ -76,19 +76,7 @@ impl Pixel for i64 {}
 impl Pixel for f32 {}
 impl Pixel for f64 {}
 
-#[derive(
-    Debug,
-    Ord,
-    PartialOrd,
-    Eq,
-    PartialEq,
-    Hash,
-    Deserialize,
-    Serialize,
-    Copy,
-    Clone,
-    utoipa::ToSchema,
-)]
+#[derive(Debug, Ord, PartialOrd, Eq, PartialEq, Hash, Deserialize, Serialize, Copy, Clone)]
 pub enum RasterDataType {
     U8,
     U16,

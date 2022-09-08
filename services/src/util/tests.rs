@@ -135,6 +135,7 @@ pub async fn add_ndvi_to_datasets(ctx: &InMemoryContext) -> DatasetId {
         )
         .await
         .expect("dataset db access")
+        .into()
 }
 
 pub async fn check_allowed_http_methods2<T, TRes, P, PParam>(

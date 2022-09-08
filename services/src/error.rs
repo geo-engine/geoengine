@@ -1,11 +1,12 @@
+use crate::api::model::datatypes::{
+    DataProviderId, DatasetId, LayerId, SpatialReferenceOption, TimeInstance,
+};
 #[cfg(feature = "ebv")]
 use crate::datasets::external::netcdfcf::NetCdfCf4DProviderError;
 use crate::handlers::ErrorResponse;
 use crate::{layers::listing::LayerCollectionId, workflows::workflow::WorkflowId};
 use actix_web::http::StatusCode;
 use actix_web::HttpResponse;
-use geoengine_datatypes::dataset::{DatasetId, LayerId};
-use geoengine_datatypes::{dataset::DataProviderId, spatial_reference::SpatialReferenceOption};
 use snafu::prelude::*;
 use std::path::PathBuf;
 use strum::IntoStaticStr;
@@ -123,9 +124,7 @@ pub enum Error {
     TokioPostgresTimeout,
 
     #[snafu(display("Identifier does not have the right format."))]
-    InvalidUuid {
-        source: geoengine_datatypes::error::Error,
-    },
+    InvalidUuid,
     SessionNotInitialized,
 
     ConfigLockFailed,
@@ -371,6 +370,22 @@ pub enum Error {
     PathMustNotContainParentReferences {
         base: PathBuf,
         sub_path: PathBuf,
+    },
+
+    #[snafu(display("Time instance must be between {} and {}, but is {}", min.inner(), max.inner(), is))]
+    InvalidTimeInstance {
+        min: TimeInstance,
+        max: TimeInstance,
+        is: i64,
+    },
+
+    #[snafu(display("ParseU32: {}", source))]
+    ParseU32 {
+        source: <u32 as std::str::FromStr>::Err,
+    },
+    #[snafu(display("InvalidSpatialReferenceString: {}", spatial_reference_string))]
+    InvalidSpatialReferenceString {
+        spatial_reference_string: String,
     },
 }
 

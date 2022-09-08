@@ -1,7 +1,8 @@
 use serde::{Deserialize, Serialize};
+use utoipa::ToSchema;
 use uuid::Uuid;
 
-use geoengine_datatypes::identifier;
+use crate::identifier;
 use geoengine_operators::engine::TypedOperator;
 
 identifier!(WorkflowId);
@@ -17,7 +18,7 @@ impl WorkflowId {
     }
 }
 
-#[derive(Clone, Debug, Serialize, Deserialize, utoipa::ToSchema)]
+#[derive(Clone, Debug, Serialize, Deserialize, ToSchema)]
 #[schema(example = json!({
     "type": "Vector",
     "operator": {

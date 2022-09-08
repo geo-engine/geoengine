@@ -1,6 +1,7 @@
 use std::collections::HashSet;
 use std::io::{Cursor, Write};
 
+use crate::api::model::datatypes::{DataId, DatasetId};
 use crate::datasets::listing::{DatasetProvider, ProvenanceOutput};
 use crate::datasets::storage::{AddDataset, DatasetDefinition, DatasetStore, MetaDataDefinition};
 use crate::datasets::upload::{UploadId, UploadRootPath};
@@ -14,7 +15,6 @@ use crate::workflows::registry::WorkflowRegistry;
 use crate::workflows::workflow::{Workflow, WorkflowId};
 use actix_web::{web, FromRequest, HttpResponse, Responder};
 use futures::future::join_all;
-use geoengine_datatypes::dataset::{DataId, DatasetId};
 use geoengine_datatypes::error::{BoxedResultExt, ErrorSource};
 use geoengine_datatypes::primitives::{AxisAlignedRectangle, RasterQueryRectangle};
 use geoengine_datatypes::spatial_reference::SpatialReference;
@@ -27,9 +27,11 @@ use geoengine_operators::util::raster_stream_to_geotiff::{
     raster_stream_to_geotiff, GdalGeoTiffDatasetMetadata, GdalGeoTiffOptions,
 };
 use geoengine_operators::{call_on_generic_raster_processor_gdal_types, call_on_typed_operator};
+
 use serde::{Deserialize, Serialize};
 use snafu::{ResultExt, Snafu};
 use tokio::fs;
+use utoipa::ToSchema;
 use zip::{write::FileOptions, ZipWriter};
 
 pub(crate) fn init_workflow_routes<C>(cfg: &mut web::ServiceConfig)
@@ -221,7 +223,12 @@ async fn workflow_provenance<C: Context>(
     ctx: &C,
     session: C::Session,
 ) -> Result<Vec<ProvenanceOutput>> {
-    let datasets = workflow.operator.data_ids();
+    let datasets: Vec<DataId> = workflow
+        .operator
+        .data_ids()
+        .into_iter()
+        .map(Into::into)
+        .collect();
 
     let db = ctx.dataset_db_ref();
     let providers = ctx.layer_provider_db_ref();
@@ -346,7 +353,7 @@ async fn resolve_provenance<C: Context>(
 }
 
 /// parameter for the dataset from workflow handler (body)
-#[derive(Clone, Debug, Deserialize, Serialize, utoipa::ToSchema)]
+#[derive(Clone, Debug, Deserialize, Serialize, ToSchema)]
 #[schema(example = json!({"name": "foo", "description": null, "query": {"spatialBounds": {"upperLeftCoordinate": {"x": -10.0, "y": 80.0}, "lowerRightCoordinate": {"x": 50.0, "y": 20.0}}, "timeInterval": {"start": 1_388_534_400_000_i64, "end": 1_388_534_401_000_i64}, "spatialResolution": {"x": 0.1, "y": 0.1}}}))]
 pub struct RasterDatasetFromWorkflow {
     name: String,
@@ -364,7 +371,7 @@ const fn default_as_cog() -> bool {
 }
 
 /// response of the dataset from workflow handler
-#[derive(Clone, Debug, Deserialize, Serialize, utoipa::ToSchema)]
+#[derive(Clone, Debug, Deserialize, Serialize, ToSchema)]
 pub struct RasterDatasetFromWorkflowResult {
     dataset: DatasetId,
     upload: UploadId,
@@ -472,7 +479,7 @@ async fn create_dataset<C: Context>(
     result_descriptor: &geoengine_operators::engine::RasterResultDescriptor,
     ctx: &C,
     session: <C as Context>::Session,
-) -> Result<geoengine_datatypes::dataset::DatasetId> {
+) -> Result<DatasetId> {
     let dataset_id = DatasetId::new();
     let dataset_definition = DatasetDefinition {
         properties: AddDataset {
@@ -1092,10 +1099,11 @@ mod tests {
             uploads: vec![response.upload],
         };
 
+        let dataset_id: geoengine_datatypes::dataset::DatasetId = response.dataset.into();
         // query the newly created dataset
         let op = GdalSource {
             params: GdalSourceParameters {
-                data: response.dataset.into(),
+                data: dataset_id.into(),
             },
         }
         .boxed();

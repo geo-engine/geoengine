@@ -11,7 +11,7 @@ use std::convert::TryFrom;
 use std::str;
 use std::{marker::PhantomData, slice};
 
-#[derive(Clone, Copy, Debug, Eq, PartialEq, Deserialize, Serialize, utoipa::ToSchema)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub enum FeatureDataType {
     Category,

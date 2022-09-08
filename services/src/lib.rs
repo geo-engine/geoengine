@@ -22,6 +22,7 @@
 // enable some restriction lints
 #![warn(clippy::print_stdout, clippy::print_stderr, clippy::dbg_macro)]
 
+pub mod api;
 #[cfg(not(feature = "pro"))]
 pub mod apidoc;
 pub mod contexts;
