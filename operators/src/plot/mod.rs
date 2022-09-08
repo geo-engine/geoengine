@@ -15,7 +15,8 @@ pub use self::histogram::{
     HistogramVectorQueryProcessor, InitializedHistogram,
 };
 pub use self::statistics::{
-    InitializedStatistics, Statistics, StatisticsParams, StatisticsRasterQueryProcessor, StatisticsVectorQueryProcessor
+    InitializedStatistics, Statistics, StatisticsParams, StatisticsRasterQueryProcessor,
+    StatisticsVectorQueryProcessor,
 };
 pub use self::temporal_raster_mean_plot::{
     InitializedMeanRasterPixelValuesOverTime, MeanRasterPixelValuesOverTime,

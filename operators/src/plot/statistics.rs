@@ -1,21 +1,29 @@
-use std::collections::HashMap;
-use crate::engine::{ExecutionContext, InitializedPlotOperator, InitializedRasterOperator, InitializedVectorOperator, MultipleRasterOrSingleVectorSource, Operator, PlotOperator, PlotQueryProcessor, PlotResultDescriptor, QueryContext, QueryProcessor, TypedPlotQueryProcessor, TypedRasterQueryProcessor, TypedVectorQueryProcessor};
+use crate::engine::{
+    ExecutionContext, InitializedPlotOperator, InitializedRasterOperator,
+    InitializedVectorOperator, MultipleRasterOrSingleVectorSource, Operator, PlotOperator,
+    PlotQueryProcessor, PlotResultDescriptor, QueryContext, QueryProcessor,
+    TypedPlotQueryProcessor, TypedRasterQueryProcessor, TypedVectorQueryProcessor,
+};
 use crate::error;
+use crate::error::Error;
+use crate::util::input::MultiRasterOrVectorOperator::{Raster, Vector};
 use crate::util::number_statistics::NumberStatistics;
 use crate::util::Result;
 use async_trait::async_trait;
 use futures::future::join_all;
 use futures::stream::select_all;
 use futures::{FutureExt, StreamExt, TryFutureExt, TryStreamExt};
-use geoengine_datatypes::primitives::{partitions_extent, time_interval_extent, AxisAlignedRectangle, BoundingBox2D, VectorQueryRectangle, PlotQueryRectangle};
+use geoengine_datatypes::collections::FeatureCollectionInfos;
+use geoengine_datatypes::primitives::{
+    partitions_extent, time_interval_extent, AxisAlignedRectangle, BoundingBox2D,
+    PlotQueryRectangle, VectorQueryRectangle,
+};
 use geoengine_datatypes::raster::ConvertDataTypeParallel;
 use geoengine_datatypes::raster::{GridOrEmpty, GridSize};
 use geoengine_datatypes::spatial_reference::SpatialReferenceOption;
 use serde::{Deserialize, Serialize};
 use snafu::ensure;
-use geoengine_datatypes::collections::FeatureCollectionInfos;
-use crate::error::Error;
-use crate::util::input::MultiRasterOrVectorOperator::{Raster, Vector};
+use std::collections::HashMap;
 
 pub const STATISTICS_OPERATOR_NAME: &str = "Statistics";
 
@@ -57,12 +65,7 @@ impl PlotOperator for Statistics {
                     self.params.column_names.clone()
                 };
 
-                let rasters = join_all(
-                    rasters
-                        .into_iter()
-                        .map(|s| s.initialize(context)),
-                )
-                    .await;
+                let rasters = join_all(rasters.into_iter().map(|s| s.initialize(context))).await;
                 let rasters = rasters.into_iter().collect::<Result<Vec<_>>>()?;
 
                 let in_descriptors = rasters
@@ -73,9 +76,9 @@ impl PlotOperator for Statistics {
                 if rasters.len() > 1 {
                     let srs = in_descriptors[0].spatial_reference;
                     ensure!(
-                in_descriptors.iter().all(|d| d.spatial_reference == srs),
-                error::AllSourcesMustHaveSameSpatialReference
-            );
+                        in_descriptors.iter().all(|d| d.spatial_reference == srs),
+                        error::AllSourcesMustHaveSameSpatialReference
+                    );
                 }
 
                 let time = time_interval_extent(in_descriptors.iter().map(|d| d.time));
@@ -88,14 +91,15 @@ impl PlotOperator for Statistics {
                             |r| r.result_descriptor().spatial_reference,
                         ),
                         time,
-                        bbox: bbox.and_then(|p| BoundingBox2D::new(p.lower_left(), p.upper_right()).ok()),
+                        bbox: bbox
+                            .and_then(|p| BoundingBox2D::new(p.lower_left(), p.upper_right()).ok()),
                     },
                     output_names,
                     rasters,
                 );
 
                 Ok(initialized_operator.boxed())
-            },
+            }
             Vector(vector) => {
                 let initialized_vector = vector.initialize(context).await?;
                 let in_descriptor = initialized_vector.result_descriptor();
@@ -120,7 +124,13 @@ impl PlotOperator for Statistics {
                     }
                     self.params.column_names.clone()
                 } else {
-                    in_descriptor.columns.clone().into_iter().filter(|(_, info)| info.data_type.is_numeric()).map(|(name, _)| name.clone()).collect()
+                    in_descriptor
+                        .columns
+                        .clone()
+                        .into_iter()
+                        .filter(|(_, info)| info.data_type.is_numeric())
+                        .map(|(name, _)| name.clone())
+                        .collect()
                 };
 
                 let initialized_operator = InitializedStatistics::new(
@@ -130,7 +140,7 @@ impl PlotOperator for Statistics {
                         bbox: in_descriptor.bbox,
                     },
                     column_names,
-                    initialized_vector
+                    initialized_vector,
                 );
 
                 Ok(initialized_operator.boxed())
@@ -147,7 +157,11 @@ pub struct InitializedStatistics<Op> {
 }
 
 impl<Op> InitializedStatistics<Op> {
-    pub fn new(result_descriptor: PlotResultDescriptor, column_names: Vec<String>, source: Op) -> Self {
+    pub fn new(
+        result_descriptor: PlotResultDescriptor,
+        column_names: Vec<String>,
+        source: Op,
+    ) -> Self {
         Self {
             result_descriptor,
             column_names,
@@ -165,8 +179,9 @@ impl InitializedPlotOperator for InitializedStatistics<Box<dyn InitializedVector
         Ok(TypedPlotQueryProcessor::JsonPlain(
             StatisticsVectorQueryProcessor {
                 vector: self.source.query_processor()?,
-                column_names: self.column_names.clone()
-            }.boxed()
+                column_names: self.column_names.clone(),
+            }
+            .boxed(),
         ))
     }
 }
@@ -184,7 +199,7 @@ impl InitializedPlotOperator for InitializedStatistics<Vec<Box<dyn InitializedRa
                     .iter()
                     .map(InitializedRasterOperator::query_processor)
                     .collect::<Result<Vec<_>>>()?,
-                column_names: self.column_names.clone()
+                column_names: self.column_names.clone(),
             }
             .boxed(),
         ))
@@ -205,8 +220,16 @@ impl PlotQueryProcessor for StatisticsVectorQueryProcessor {
         STATISTICS_OPERATOR_NAME
     }
 
-    async fn plot_query<'a>(&'a self, query: PlotQueryRectangle, ctx: &'a dyn QueryContext) -> Result<Self::OutputFormat> {
-        let mut number_statistics: HashMap<String, NumberStatistics> = self.column_names.iter().map(|column| (column.clone(), NumberStatistics::default())).collect();
+    async fn plot_query<'a>(
+        &'a self,
+        query: PlotQueryRectangle,
+        ctx: &'a dyn QueryContext,
+    ) -> Result<Self::OutputFormat> {
+        let mut number_statistics: HashMap<String, NumberStatistics> = self
+            .column_names
+            .iter()
+            .map(|column| (column.clone(), NumberStatistics::default()))
+            .collect();
 
         call_on_generic_vector_processor!(&self.vector, processor => {
             let mut query = processor.query(query, ctx).await?;
@@ -227,7 +250,15 @@ impl PlotQueryProcessor for StatisticsVectorQueryProcessor {
             }
         });
 
-        let output: HashMap<String, VectorColumnStatisticsOutput> = number_statistics.iter().map(|(column, number_statistics)| (column.clone(), VectorColumnStatisticsOutput::from(number_statistics))).collect();
+        let output: HashMap<String, VectorColumnStatisticsOutput> = number_statistics
+            .iter()
+            .map(|(column, number_statistics)| {
+                (
+                    column.clone(),
+                    VectorColumnStatisticsOutput::from(number_statistics),
+                )
+            })
+            .collect();
         serde_json::to_value(&output).map_err(Into::into)
     }
 }
@@ -351,29 +382,35 @@ impl From<&NumberStatistics> for RasterStatisticsOutput {
 
 #[cfg(test)]
 mod tests {
+    use geoengine_datatypes::collections::DataCollection;
     use geoengine_datatypes::util::test::TestDefault;
     use serde_json::json;
-    use geoengine_datatypes::collections::DataCollection;
 
     use super::*;
+    use crate::engine::VectorOperator;
     use crate::engine::{
         ChunkByteSize, MockExecutionContext, MockQueryContext, RasterOperator,
         RasterResultDescriptor,
     };
     use crate::mock::{MockFeatureCollectionSource, MockRasterSource, MockRasterSourceParams};
-    use geoengine_datatypes::primitives::{BoundingBox2D, FeatureData, Measurement, NoGeometry, SpatialResolution, TimeInterval};
+    use crate::util::input::MultiRasterOrVectorOperator::Raster;
+    use geoengine_datatypes::primitives::{
+        BoundingBox2D, FeatureData, Measurement, NoGeometry, SpatialResolution, TimeInterval,
+    };
     use geoengine_datatypes::raster::{
         Grid2D, RasterDataType, RasterTile2D, TileInformation, TilingSpecification,
     };
     use geoengine_datatypes::spatial_reference::SpatialReference;
-    use crate::util::input::MultiRasterOrVectorOperator::Raster;
-    use crate::engine::VectorOperator;
 
     #[test]
     fn serialization() {
         let statistics = Statistics {
-            params: StatisticsParams { column_names: vec![] },
-            sources: MultipleRasterOrSingleVectorSource { source: Raster(vec![]) },
+            params: StatisticsParams {
+                column_names: vec![],
+            },
+            sources: MultipleRasterOrSingleVectorSource {
+                source: Raster(vec![]),
+            },
         };
 
         let serialized = json!({
@@ -420,10 +457,12 @@ mod tests {
                 },
             },
         }
-            .boxed();
+        .boxed();
 
         let statistics = Statistics {
-            params: StatisticsParams { column_names: vec![] },
+            params: StatisticsParams {
+                column_names: vec![],
+            },
             sources: vec![raster_source].into(),
         };
 
@@ -462,7 +501,7 @@ mod tests {
                     "stddev": 1.707_825_127_659_933,
                 }
             })
-                .to_string()
+            .to_string()
         );
     }
 
@@ -496,7 +535,8 @@ mod tests {
                         bbox: None,
                     },
                 },
-            }.boxed(),
+            }
+            .boxed(),
             MockRasterSource {
                 params: MockRasterSourceParams {
                     data: vec![RasterTile2D::new_with_tile_info(
@@ -518,11 +558,14 @@ mod tests {
                         bbox: None,
                     },
                 },
-            }.boxed(),
+            }
+            .boxed(),
         ];
 
         let statistics = Statistics {
-            params: StatisticsParams { column_names: vec![] },
+            params: StatisticsParams {
+                column_names: vec![],
+            },
             sources: raster_source.into(),
         };
 
@@ -569,7 +612,7 @@ mod tests {
                     "stddev": 1.707_825_127_659_933
                 },
             })
-                .to_string()
+            .to_string()
         );
     }
 
@@ -603,7 +646,8 @@ mod tests {
                         bbox: None,
                     },
                 },
-            }.boxed(),
+            }
+            .boxed(),
             MockRasterSource {
                 params: MockRasterSourceParams {
                     data: vec![RasterTile2D::new_with_tile_info(
@@ -625,11 +669,14 @@ mod tests {
                         bbox: None,
                     },
                 },
-            }.boxed(),
+            }
+            .boxed(),
         ];
 
         let statistics = Statistics {
-            params: StatisticsParams { column_names: vec!["A".to_string(), "B".to_string()] },
+            params: StatisticsParams {
+                column_names: vec!["A".to_string(), "B".to_string()],
+            },
             sources: raster_source.into(),
         };
 
@@ -676,7 +723,7 @@ mod tests {
                     "stddev": 1.707_825_127_659_933
                 },
             })
-                .to_string()
+            .to_string()
         );
     }
 
@@ -710,7 +757,8 @@ mod tests {
                         bbox: None,
                     },
                 },
-            }.boxed(),
+            }
+            .boxed(),
             MockRasterSource {
                 params: MockRasterSourceParams {
                     data: vec![RasterTile2D::new_with_tile_info(
@@ -732,23 +780,25 @@ mod tests {
                         bbox: None,
                     },
                 },
-            }.boxed(),
+            }
+            .boxed(),
         ];
 
         let statistics = Statistics {
-            params: StatisticsParams { column_names: vec!["A".to_string()] },
+            params: StatisticsParams {
+                column_names: vec!["A".to_string()],
+            },
             sources: raster_source.into(),
         };
 
         let execution_context = MockExecutionContext::new_with_tiling_spec(tiling_specification);
 
-        let statistics = statistics
-            .boxed()
-            .initialize(&execution_context)
-            .await;
+        let statistics = statistics.boxed().initialize(&execution_context).await;
 
-        assert!(matches!(statistics, Err(error::Error::InvalidOperatorSpec{reason}) if reason == "Statistics on raster data must either contain a name/alias for every input ('column_names' parameter) or no names at all."
-                .to_string()));
+        assert!(
+            matches!(statistics, Err(error::Error::InvalidOperatorSpec{reason}) if reason == "Statistics on raster data must either contain a name/alias for every input ('column_names' parameter) or no names at all."
+                .to_string())
+        );
     }
 
     #[tokio::test]
@@ -790,11 +840,13 @@ mod tests {
                     ),
                 ],
             )
-                .unwrap()])
-                .boxed();
+            .unwrap()])
+            .boxed();
 
         let statistics = Statistics {
-            params: StatisticsParams { column_names: vec![] },
+            params: StatisticsParams {
+                column_names: vec![],
+            },
             sources: vector_source.into(),
         };
 
@@ -840,7 +892,8 @@ mod tests {
                     "mean": 2.666_666_666_666_667,
                     "stddev": 1.699_673_171_197_595
                 },
-            }).to_string()
+            })
+            .to_string()
         );
     }
 
@@ -883,11 +936,13 @@ mod tests {
                     ),
                 ],
             )
-                .unwrap()])
-                .boxed();
+            .unwrap()])
+            .boxed();
 
         let statistics = Statistics {
-            params: StatisticsParams { column_names: vec!["foo".to_string()] },
+            params: StatisticsParams {
+                column_names: vec!["foo".to_string()],
+            },
             sources: vector_source.into(),
         };
 
@@ -925,7 +980,8 @@ mod tests {
                     "mean": 3.333_333_333_333_333,
                     "stddev": 2.054_804_667_656_325_6
                 },
-            }).to_string()
+            })
+            .to_string()
         );
     }
 
@@ -968,11 +1024,13 @@ mod tests {
                     ),
                 ],
             )
-                .unwrap()])
-                .boxed();
+            .unwrap()])
+            .boxed();
 
         let statistics = Statistics {
-            params: StatisticsParams { column_names: vec!["foo".to_string(), "bar".to_string()] },
+            params: StatisticsParams {
+                column_names: vec!["foo".to_string(), "bar".to_string()],
+            },
             sources: vector_source.into(),
         };
 
@@ -1018,7 +1076,8 @@ mod tests {
                     "mean": 2.666_666_666_666_667,
                     "stddev": 1.699_673_171_197_595
                 },
-            }).to_string()
+            })
+            .to_string()
         );
     }
 }
