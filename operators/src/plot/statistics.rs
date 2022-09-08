@@ -104,7 +104,15 @@ impl PlotOperator for Statistics {
                 let initialized_vector = vector.initialize(context).await?;
                 let in_descriptor = initialized_vector.result_descriptor();
 
-                let column_names = if !self.params.column_names.is_empty() {
+                let column_names = if self.params.column_names.is_empty() {
+                    in_descriptor
+                        .columns
+                        .clone()
+                        .into_iter()
+                        .filter(|(_, info)| info.data_type.is_numeric())
+                        .map(|(name, _)| name)
+                        .collect()
+                } else {
                     for cn in &self.params.column_names {
                         match in_descriptor.column_data_type(cn.as_str()) {
                             Some(column) if !column.is_numeric() => {
@@ -123,14 +131,6 @@ impl PlotOperator for Statistics {
                         }
                     }
                     self.params.column_names.clone()
-                } else {
-                    in_descriptor
-                        .columns
-                        .clone()
-                        .into_iter()
-                        .filter(|(_, info)| info.data_type.is_numeric())
-                        .map(|(name, _)| name)
-                        .collect()
                 };
 
                 let initialized_operator = InitializedStatistics::new(
