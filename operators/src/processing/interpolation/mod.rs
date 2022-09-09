@@ -189,6 +189,7 @@ where
         if query.spatial_resolution.x >= self.input_resolution.x
             && query.spatial_resolution.y >= self.input_resolution.y
         {
+            // TODO: should we use the query or the input resolution here?
             return self.source.query(query, ctx).await;
         }
 
