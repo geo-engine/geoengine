@@ -126,6 +126,7 @@ impl Project {
 #[allow(clippy::upper_case_acronyms)]
 #[serde(rename_all = "camelCase")]
 // TODO: add example, once utoipas schema macro can co-exist with postgres OR: split type into API and database model
+// cf. utoipa issue: https://github.com/juhaku/utoipa/issues/266
 // #[schema(example = json!({
 //     "boundingBox": {
 //         "lowerLeftCoordinate": {
