@@ -42,6 +42,7 @@ jobs:
           export CPLUS_INCLUDE_PATH=/usr/include/gdal:$CPLUS_INCLUDE_PATH
           sudo ldconfig
       - name: Generate code coverage
+        uses: actions-rs/toolchain@v1
         run: |
           cargo install cargo-tarpaulin
           cargo tarpaulin --verbose --workspace --timeout 120 --out Lcov --all-features --run-types Tests
