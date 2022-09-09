@@ -1028,9 +1028,7 @@ impl FeatureDataType {
 
     pub fn arrow_builder(self, len: usize) -> Box<dyn arrow::array::ArrayBuilder> {
         match self {
-            Self::Text => Box::new(arrow::array::StringBuilder::with_capacity(
-                len, len, /* TODO: better byte estimate for strings */
-            )),
+            Self::Text => Box::new(arrow::array::StringBuilder::with_capacity(len, 0)),
             Self::Float => Box::new(arrow::array::Float64Builder::with_capacity(len)),
             Self::Int => Box::new(arrow::array::Int64Builder::with_capacity(len)),
             Self::Category => Box::new(arrow::array::UInt8Builder::with_capacity(len)),
@@ -1076,7 +1074,7 @@ impl FeatureData {
             Self::Text(v) => {
                 let mut builder = arrow::array::StringBuilder::with_capacity(
                     v.len(),
-                    v.len(), /* TODO: better byte estimate for strings */
+                    v.iter().map(String::len).sum(),
                 );
                 for text in v {
                     builder.append_value(text);
@@ -1086,7 +1084,9 @@ impl FeatureData {
             Self::NullableText(v) => {
                 let mut builder = arrow::array::StringBuilder::with_capacity(
                     v.len(),
-                    v.len(), /* TODO: better byte estimate for strings */
+                    v.iter()
+                        .map(|text_option| text_option.as_ref().map_or(0, String::len))
+                        .sum(),
                 );
                 for text_opt in v {
                     if let Some(text) = text_opt {
