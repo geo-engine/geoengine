@@ -44,7 +44,7 @@ jobs:
       - name: Generate code coverage
         run: |
           cargo install cargo-tarpaulin
-          cargo tarpaulin --verbose --workspace --timeout 120 --out Lcov --all-features
+          cargo tarpaulin --verbose --workspace --timeout 120 --out Lcov --all-features --run-types Tests Doctests
       - name: Upload coverage to Coveralls
         uses: coverallsapp/github-action@v1.1.1
         with:
