@@ -238,14 +238,17 @@ impl PlotQueryProcessor for StatisticsVectorQueryProcessor {
                 let collection = collection?;
 
                 for (column, stats) in &mut number_statistics {
-                    collection.data(column).expect("checked in param").float_options_iter().for_each(
-                        | value | {
-                            match value {
-                                Some(v) => stats.add(v),
-                                None => stats.add_no_data()
+                    match collection.data(column) {
+                        Ok(data) => data.float_options_iter().for_each(
+                            | value | {
+                                match value {
+                                    Some(v) => stats.add(v),
+                                    None => stats.add_no_data()
+                                }
                             }
-                        }
-                    );
+                        ),
+                        Err(_) => stats.add_no_data_batch(collection.len())
+                    }
                 }
             }
         });
