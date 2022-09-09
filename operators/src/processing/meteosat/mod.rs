@@ -200,6 +200,7 @@ mod test_util {
                     }),
                     time: None,
                     bbox: None,
+                    resolution: None,
                 },
             },
         }
@@ -268,6 +269,7 @@ mod test_util {
                 }),
                 time: None,
                 bbox: None,
+                resolution: None,
             },
         };
         ctx.add_meta_data(dataset_id.clone(), Box::new(meta));

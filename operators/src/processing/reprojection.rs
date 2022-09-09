@@ -251,6 +251,7 @@ impl RasterOperator for Reprojection {
             measurement: in_desc.measurement.clone(),
             time: in_desc.time,
             bbox,
+            resolution: None, // TODO: calculate resolution
         };
 
         let state = RasterReprojectionState {
@@ -802,6 +803,7 @@ mod tests {
                     measurement: Measurement::Unitless,
                     time: None,
                     bbox: None,
+                    resolution: None,
                 },
             },
         }
@@ -1005,6 +1007,7 @@ mod tests {
                 measurement: Measurement::Unitless,
                 time: None,
                 bbox: None,
+                resolution: None,
             },
         };
 
@@ -1134,6 +1137,7 @@ mod tests {
                 measurement: Measurement::Unitless,
                 time: None,
                 bbox: None,
+                resolution: None,
             },
         };
 

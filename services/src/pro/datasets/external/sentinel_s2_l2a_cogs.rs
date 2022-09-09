@@ -585,6 +585,7 @@ impl MetaData<GdalLoadingInfo, RasterResultDescriptor, RasterQueryRectangle>
             measurement: Measurement::Unitless,
             time: None,
             bbox: None,
+            resolution: None,
         })
     }
 

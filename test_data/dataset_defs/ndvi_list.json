@@ -292,6 +292,10 @@
       "bbox": {
         "upperLeftCoordinate": [-180.0, 90.0],
         "lowerRightCoordinate": [180.0, -90.0]
+      },
+      "resolution": {
+        "x": 0.1,
+        "y": 0.1
       }
     },
     "params": [

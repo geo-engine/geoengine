@@ -492,6 +492,7 @@ mod tests {
                 measurement: Measurement::Unitless,
                 time: None,
                 bbox: None,
+                resolution: None,
             },
             params: GdalDatasetParameters {
                 file_path: "/foo/bar_%TIME%.tiff".into(),
@@ -535,6 +536,7 @@ mod tests {
                 measurement: Measurement::Unitless,
                 time: None,
                 bbox: None,
+                resolution: None,
             }
         );
     }
@@ -770,6 +772,7 @@ mod tests {
                 measurement: Measurement::Unitless,
                 time: None,
                 bbox: None,
+                resolution: None,
             },
             params: vec![
                 GdalLoadingInfoTemporalSlice {
@@ -831,6 +834,7 @@ mod tests {
                 measurement: Measurement::Unitless,
                 time: None,
                 bbox: None,
+                resolution: None,
             }
         );
 
@@ -876,6 +880,7 @@ mod tests {
                 measurement: Measurement::Unitless,
                 time: None,
                 bbox: None,
+                resolution: None,
             },
             params: GdalDatasetParameters {
                 file_path: "path/to/ds".into(),
@@ -940,6 +945,7 @@ mod tests {
                 measurement: Measurement::Unitless,
                 time: None,
                 bbox: None,
+                resolution: None,
             },
             params: GdalDatasetParameters {
                 file_path: "path/to/ds".into(),
@@ -1004,6 +1010,7 @@ mod tests {
                 measurement: Measurement::Unitless,
                 time: None,
                 bbox: None,
+                resolution: None,
             },
             params: GdalDatasetParameters {
                 file_path: "path/to/ds".into(),

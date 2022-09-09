@@ -279,6 +279,7 @@ impl NFDIDataProvider {
                 .map_or(Measurement::Unitless, Clone::clone),
             time: None,
             bbox: None,
+            resolution: None,
         }
     }
 

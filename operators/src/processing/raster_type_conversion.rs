@@ -46,6 +46,7 @@ impl RasterOperator for RasterTypeConversion {
             measurement: in_desc.measurement.clone(),
             bbox: in_desc.bbox,
             time: in_desc.time,
+            resolution: in_desc.resolution,
         };
 
         let initialized_operator = InitializedRasterTypeConversionOperator {
@@ -180,6 +181,7 @@ mod tests {
                     measurement: Measurement::Unitless,
                     bbox: None,
                     time: None,
+                    resolution: None,
                 },
             },
         }

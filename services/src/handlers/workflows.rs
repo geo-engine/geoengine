@@ -897,6 +897,7 @@ mod tests {
                         }),
                         time: None,
                         bbox: None,
+                        resolution: None,
                     },
                 },
             }

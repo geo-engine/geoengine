@@ -309,8 +309,9 @@ async fn dataset_definition_from_geotiff(
                     data_type: RasterDataType::U8,
                     spatial_reference: spatial_reference.into(),
                     measurement: Measurement::Unitless,
-                    time: None, // TODO: determine time
-                    bbox: None, // TODO: determine bbox
+                    time: None,       // TODO: determine time
+                    bbox: None,       // TODO: determine bbox
+                    resolution: None, // TODO: determine resolution
                 },
             }),
         })
@@ -511,6 +512,7 @@ mod tests {
                 measurement: Measurement::Unitless,
                 time: None,
                 bbox: None,
+                resolution: None,
             }
         );
 

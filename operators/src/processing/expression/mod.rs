@@ -11,7 +11,7 @@ use async_trait::async_trait;
 use futures::try_join;
 use geoengine_datatypes::{
     dataset::DataId,
-    primitives::{partitions_extent, time_interval_extent, Measurement},
+    primitives::{partitions_extent, time_interval_extent, Measurement, SpatialResolution},
     raster::RasterDataType,
 };
 use serde::{Deserialize, Serialize};
@@ -265,6 +265,17 @@ impl RasterOperator for Expression {
         let time = time_interval_extent(in_descriptors.iter().map(|d| d.time));
         let bbox = partitions_extent(in_descriptors.iter().map(|d| d.bbox));
 
+        let resolution = in_descriptors
+            .iter()
+            .map(|d| d.resolution)
+            .reduce(|a, b| match (a, b) {
+                (Some(a), Some(b)) => {
+                    Some(SpatialResolution::new_unchecked(a.x.min(b.x), a.y.min(b.y)))
+                }
+                _ => None,
+            })
+            .flatten();
+
         let result_descriptor = RasterResultDescriptor {
             data_type: self.params.output_type,
             spatial_reference,
@@ -275,6 +286,7 @@ impl RasterOperator for Expression {
                 .map_or(Measurement::Unitless, Measurement::clone),
             time,
             bbox,
+            resolution,
         };
 
         let initialized_operator = InitializedExpression {
@@ -1093,6 +1105,7 @@ mod tests {
                     measurement: Measurement::Unitless,
                     time: None,
                     bbox: None,
+                    resolution: None,
                 },
             },
         }
