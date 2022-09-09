@@ -51,16 +51,6 @@ pub enum InterpolationMethod {
 #[snafu(visibility(pub(crate)), context(suffix(false)), module(error))]
 pub enum InterpolationError {
     #[snafu(display(
-        "The query resolution ({:?}) must be smaller than the input resolution ({:?})",
-        query_resolution,
-        input_resolution
-    ))]
-    QueryResolutionMustBeSmallerThanInputResolution {
-        query_resolution: SpatialResolution,
-        input_resolution: SpatialResolution,
-    },
-
-    #[snafu(display(
         "The input resolution was defined as `native` but the source resolution is unknown.",
     ))]
     UnknownInputResolution,
@@ -195,14 +185,12 @@ where
         query: RasterQueryRectangle,
         ctx: &'a dyn QueryContext,
     ) -> Result<BoxStream<'a, Result<Self::Output>>> {
-        ensure!(
-            query.spatial_resolution.x < self.input_resolution.x
-                && query.spatial_resolution.y < self.input_resolution.y,
-            error::QueryResolutionMustBeSmallerThanInputResolution {
-                query_resolution: query.spatial_resolution,
-                input_resolution: self.input_resolution,
-            }
-        );
+        // do not interpolate if the source resolution is already fine enough
+        if query.spatial_resolution.x >= self.input_resolution.x
+            && query.spatial_resolution.y >= self.input_resolution.y
+        {
+            return self.source.query(query, ctx).await;
+        }
 
         let sub_query = InterpolationSubQuery::<_, P, I> {
             input_resolution: self.input_resolution,
