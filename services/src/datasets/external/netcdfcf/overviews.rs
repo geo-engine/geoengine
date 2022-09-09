@@ -775,7 +775,7 @@ mod tests {
     use geoengine_datatypes::{
         hashmap,
         operations::image::{Colorizer, RgbaColor},
-        primitives::{DateTime, Measurement, TimeGranularity, TimeStep},
+        primitives::{DateTime, Measurement, SpatialResolution, TimeGranularity, TimeStep},
         raster::RasterDataType,
         spatial_reference::SpatialReference,
         test_data,
@@ -834,7 +834,7 @@ mod tests {
                     measurement: Measurement::Unitless,
                     time: None,
                     bbox: None,
-                    resolution: None
+                    resolution: Some(SpatialResolution::new_unchecked(1.0, 1.0))
                 },
                 params: GdalDatasetParameters {
                     file_path: Path::new("foo/%_START_TIME_%.tiff").into(),
@@ -928,7 +928,7 @@ mod tests {
                     measurement: Measurement::Unitless,
                     time: None,
                     bbox: None,
-                    resolution: None
+                    resolution: Some(SpatialResolution::new_unchecked(1.0, 1.0)),
                 },
                 params: GdalDatasetParameters {
                     file_path: tempdir_path.join("1/%_START_TIME_%.tiff"),
@@ -1192,7 +1192,7 @@ mod tests {
                     measurement: Measurement::Unitless,
                     time: None,
                     bbox: None,
-                    resolution: None
+                    resolution: Some(SpatialResolution::new_unchecked(1.0, 1.0)),
                 },
                 params: vec![
                     GdalLoadingInfoTemporalSlice {

@@ -351,7 +351,8 @@ mod tests {
                         "type": "unitless"
                     },
                     "time": null,
-                    "bbox": null
+                    "bbox": null,
+                    "resolution": null
                 }
             }
         });

@@ -1920,7 +1920,7 @@ mod tests {
                 measurement: Measurement::Unitless,
                 time: None,
                 bbox: None,
-                resolution: None,
+                resolution: Some(SpatialResolution::new_unchecked(1000.0, 1000.0)),
             }
         );
 
