@@ -1,6 +1,6 @@
 use crate::adapters::SparseTilesFillAdapter;
 use crate::engine::{MetaData, OperatorData, OperatorName, QueryProcessor};
-use crate::util::gdal::{gdal_open_dataset_ex, get_mask_flags, open_mask_band};
+use crate::util::gdal::gdal_open_dataset_ex;
 use crate::util::input::float_option_with_nan;
 use crate::util::TemporaryGdalThreadLocalConfigOptions;
 use crate::{
@@ -19,7 +19,7 @@ use futures::{
 };
 use futures::{Future, TryStreamExt};
 use gdal::raster::{GdalType, RasterBand as GdalRasterBand};
-use gdal::{DatasetOptions, GdalOpenFlags, Metadata as GdalMetadata};
+use gdal::{Dataset as GdalDataset, DatasetOptions, GdalOpenFlags, Metadata as GdalMetadata};
 use geoengine_datatypes::primitives::{
     AxisAlignedRectangle, Coordinate2D, DateTimeParseFormat, RasterQueryRectangle,
     SpatialPartition2D, SpatialPartitioned,
@@ -760,7 +760,7 @@ impl InitializedRasterOperator for InitializedGdalSourceOperator {
 /// It fails if the tile is not within the dataset.
 #[allow(clippy::float_cmp)]
 fn read_grid_from_raster<T, D>(
-    dataset: &gdal::Dataset,
+    rasterband: &GdalRasterBand,
     read_window: &GdalReadWindow,
     out_shape: D,
     dataset_params: &GdalDatasetParameters,
@@ -770,10 +770,6 @@ where
     T: Pixel + GdalType + Default + FromPrimitive,
     D: Clone + GridSize + PartialEq,
 {
-    let raster_band_index = dataset_params.rasterband_channel;
-
-    let rasterband = dataset.rasterband(raster_band_index as isize)?;
-
     let gdal_out_shape = (out_shape.axis_size_x(), out_shape.axis_size_y());
 
     let buffer = rasterband.read_as::<T>(
@@ -790,7 +786,7 @@ where
         data_grid
     };
 
-    let dataset_mask_flags = get_mask_flags(dataset, raster_band_index as i32)?;
+    let dataset_mask_flags = rasterband.mask_flags()?;
 
     if dataset_mask_flags.is_all_valid() {
         debug!("all pixels are valid --> skip no-data and mask handling.");
@@ -817,7 +813,7 @@ where
 
     debug!("use mask based no-data handling.");
 
-    let mask_band = open_mask_band(dataset, raster_band_index as i32)?;
+    let mask_band = rasterband.open_mask_band()?;
     let mask_buffer = mask_band.read_as::<u8>(
         read_window.gdal_window_start(), // pixelspace origin
         read_window.gdal_window_size(),  // pixelspace size
@@ -840,7 +836,7 @@ where
 /// If the tile overlaps the borders of the dataset only the data in the dataset bounds is read.
 /// The data read from the dataset is clipped into a grid with the requested size filled  with the `no_data_value`.
 fn read_partial_grid_from_raster<T>(
-    dataset: &gdal::Dataset,
+    rasterband: &GdalRasterBand,
     gdal_read_window: &GdalReadWindow,
     out_tile_read_bounds: GridBoundingBox2D,
     out_tile_shape: GridShape2D,
@@ -851,7 +847,7 @@ where
     T: Pixel + GdalType + Default + FromPrimitive,
 {
     let dataset_raster = read_grid_from_raster(
-        dataset,
+        rasterband,
         gdal_read_window,
         out_tile_read_bounds,
         dataset_params,
@@ -869,7 +865,8 @@ where
 /// If the tile overlaps the borders of the dataset it uses the `read_partial_grid_from_raster` method.  
 fn read_grid_and_handle_edges<T>(
     tile_info: TileInformation,
-    dataset: &gdal::Dataset,
+    dataset: &GdalDataset,
+    rasterband: &GdalRasterBand,
     dataset_params: &GdalDatasetParameters,
 ) -> Result<GridOrEmpty2D<T>>
 where
@@ -914,7 +911,7 @@ where
 
     let result_grid = if dataset_intersection_area == output_bounds {
         read_grid_from_raster(
-            dataset,
+            rasterband,
             &gdal_read_window,
             output_shape,
             dataset_params,
@@ -925,7 +922,7 @@ where
             tile_geo_transform.spatial_to_grid_bounds(&dataset_intersection_area);
 
         read_partial_grid_from_raster(
-            dataset,
+            rasterband,
             &gdal_read_window,
             partial_tile_grid_bounds,
             output_shape,
@@ -939,12 +936,14 @@ where
 
 /// This method reads the data for a single tile with a specified size from the GDAL dataset and adds the requested metadata as properties to the tile.
 fn read_raster_tile_with_properties<T: Pixel + gdal::raster::GdalType + FromPrimitive>(
-    dataset: &gdal::Dataset,
+    dataset: &GdalDataset,
     dataset_params: &GdalDatasetParameters,
     tile_info: TileInformation,
     tile_time: TimeInterval,
 ) -> Result<RasterTile2D<T>> {
-    // TODO: open the RasterBand here and pass it down to the read methods once access to the mask band and mask flags are merged into the gdal crate.
+    let rasterband = dataset.rasterband(dataset_params.rasterband_channel as isize)?;
+
+    let result_grid = read_grid_and_handle_edges(tile_info, dataset, &rasterband, dataset_params)?;
 
     let mut properties = RasterProperties::default();
 
@@ -954,8 +953,6 @@ fn read_raster_tile_with_properties<T: Pixel + gdal::raster::GdalType + FromPrim
         properties_from_gdal(&mut properties, &rasterband, properties_mapping);
         properties_from_band(&mut properties, &rasterband);
     }
-
-    let result_grid = read_grid_and_handle_edges(tile_info, dataset, dataset_params)?;
 
     Ok(RasterTile2D::new_with_tile_info_and_properties(
         tile_time,

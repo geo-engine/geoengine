@@ -13,7 +13,7 @@ use std::{mem, slice};
 
 #[test]
 fn simple() {
-    let mut primitive_array_builder = Int32Builder::new(5);
+    let mut primitive_array_builder = Int32Builder::with_capacity(5);
     primitive_array_builder.append_value(1);
     primitive_array_builder.append_value(2);
     primitive_array_builder.append_slice(&(3..=5).collect::<Vec<i32>>());
@@ -35,7 +35,7 @@ fn simple() {
 
 #[test]
 fn null_values() {
-    let mut primitive_array_builder = Int32Builder::new(5);
+    let mut primitive_array_builder = Int32Builder::with_capacity(5);
     primitive_array_builder.append_value(1);
     primitive_array_builder.append_null();
     primitive_array_builder.append_slice(&[3, 4, 5]);
@@ -55,7 +55,7 @@ fn null_values() {
 
 #[test]
 fn null_bytes() {
-    let mut primitive_array_builder = Int32Builder::new(2);
+    let mut primitive_array_builder = Int32Builder::with_capacity(2);
     primitive_array_builder.append_value(1);
     primitive_array_builder.append_null();
     primitive_array_builder.append_option(None);
@@ -81,7 +81,7 @@ fn null_bytes() {
 #[allow(clippy::float_cmp)]
 fn offset() {
     let array = {
-        let mut array_builder = Float64Builder::new(5);
+        let mut array_builder = Float64Builder::with_capacity(5);
         array_builder.append_slice(&[2e10, 4e40, 20., 9.4, 0.]);
         array_builder.finish()
     };
@@ -138,7 +138,7 @@ fn strings() {
 #[test]
 fn strings2() {
     let array = {
-        let mut builder = StringBuilder::new(5);
+        let mut builder = StringBuilder::with_capacity(5, 5 * 3);
 
         for string in &["hello", "from", "the", "other", "side"] {
             builder.append_value(string);
@@ -168,7 +168,7 @@ fn strings2() {
 #[test]
 fn list() {
     let array = {
-        let mut builder = ListBuilder::new(Int32Builder::new(0));
+        let mut builder = ListBuilder::new(Int32Builder::with_capacity(0));
 
         builder.values().append_value(0);
         builder.values().append_value(1);
@@ -201,7 +201,7 @@ fn list() {
 #[test]
 fn fixed_size_list() {
     let array = {
-        let mut builder = FixedSizeListBuilder::new(Int32Builder::new(0), 2);
+        let mut builder = FixedSizeListBuilder::with_capacity(Int32Builder::with_capacity(0), 2, 2);
 
         builder.values().append_value(0);
         builder.values().append_value(1);
@@ -242,7 +242,8 @@ fn binary() {
     assert_eq!(t1, t2);
 
     let array = {
-        let mut builder = FixedSizeBinaryBuilder::new(3, mem::size_of::<TimeInterval>() as i32);
+        let mut builder =
+            FixedSizeBinaryBuilder::with_capacity(3, mem::size_of::<TimeInterval>() as i32);
 
         for &t in &[
             TimeInterval::new(0, 1).unwrap(),
@@ -291,7 +292,7 @@ fn binary() {
 #[test]
 fn serialize() {
     let array = {
-        let mut builder = Int32Builder::new(5);
+        let mut builder = Int32Builder::with_capacity(5);
         builder.append_slice(&(1..=5).collect::<Vec<i32>>());
 
         builder.finish()
@@ -358,7 +359,7 @@ fn table() {
 #[test]
 fn nested_lists() {
     let array = {
-        let mut builder = ListBuilder::new(ListBuilder::new(Int32Builder::new(0)));
+        let mut builder = ListBuilder::new(ListBuilder::new(Int32Builder::with_capacity(0)));
 
         // [[[10, 11, 12], [20, 21]], [[30]]
         builder.values().values().append_slice(&[10, 11, 12]);
@@ -494,7 +495,7 @@ fn multipoints() {
 #[test]
 #[allow(clippy::float_cmp)]
 fn multipoint_builder() {
-    let float_builder = arrow::array::Float64Builder::new(0);
+    let float_builder = arrow::array::Float64Builder::with_capacity(0);
     let coordinate_builder = arrow::array::FixedSizeListBuilder::new(float_builder, 2);
     let mut multi_point_builder = arrow::array::ListBuilder::new(coordinate_builder);
 
@@ -556,8 +557,10 @@ fn multipoint_builder() {
 fn multipoint_builder_bytes() {
     use arrow::datatypes::ToByteSlice;
 
-    let coordinate_builder =
-        arrow::array::FixedSizeBinaryBuilder::new(0, std::mem::size_of::<[f64; 2]>() as i32);
+    let coordinate_builder = arrow::array::FixedSizeBinaryBuilder::with_capacity(
+        0,
+        std::mem::size_of::<[f64; 2]>() as i32,
+    );
     let mut multi_point_builder = arrow::array::ListBuilder::new(coordinate_builder);
 
     multi_point_builder
@@ -618,7 +621,7 @@ fn multipoint_builder_bytes() {
 
 #[test]
 fn float_equality() {
-    let mut floats = Float64Builder::new(3);
+    let mut floats = Float64Builder::with_capacity(3);
     floats.append_value(4.0);
     floats.append_null();
     floats.append_value(f64::NAN);
@@ -627,7 +630,7 @@ fn float_equality() {
 
     assert_eq!(floats, floats);
 
-    let mut floats2 = Float64Builder::new(3);
+    let mut floats2 = Float64Builder::with_capacity(3);
     floats2.append_value(4.0);
     floats2.append_null();
     floats2.append_value(f64::NAN);
@@ -636,7 +639,7 @@ fn float_equality() {
 
     assert_eq!(floats, floats2);
 
-    let mut floats3 = Float64Builder::new(3);
+    let mut floats3 = Float64Builder::with_capacity(3);
     floats3.append_value(f64::NAN);
     floats3.append_null();
     floats3.append_value(4.0);
