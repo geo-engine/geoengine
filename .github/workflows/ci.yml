@@ -29,15 +29,13 @@ jobs:
     strategy:
       matrix:
         os:
-          - ubuntu-20.04
+          - ubuntu-22.04
         features: ["", "--features pro", "--all-features"]
         build: ["", "--release"]
 
     steps:
       - name: Checkout code
         uses: actions/checkout@v2
-      - name: Add UbuntuGIS ppa
-        run: sudo add-apt-repository ppa:ubuntugis/ubuntugis-unstable
       - name: APT update
         run: sudo apt-get update
       - name: Install lld
@@ -48,10 +46,6 @@ jobs:
           export C_INCLUDE_PATH=/usr/include/gdal:$C_INCLUDE_PATH
           export CPLUS_INCLUDE_PATH=/usr/include/gdal:$CPLUS_INCLUDE_PATH
           sudo ldconfig
-      - name: Setup building
-        run: |
-          export CC="clang-9"
-          export CXX="clang++-9"
       - name: Check with Rustfmt
         uses: actions-rs/cargo@v1
         with:
@@ -74,7 +68,7 @@ jobs:
           args: ${{ matrix.features }} --verbose
 
   coverage:
-    runs-on: ubuntu-20.04
+    runs-on: ubuntu-22.04
 
     services:
       postgres:
@@ -90,8 +84,6 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v2
-      - name: Add UbuntuGIS ppa
-        run: sudo add-apt-repository ppa:ubuntugis/ubuntugis-unstable
       - name: APT update
         run: sudo apt-get update
       - name: Install lld
@@ -102,10 +94,6 @@ jobs:
           export C_INCLUDE_PATH=/usr/include/gdal:$C_INCLUDE_PATH
           export CPLUS_INCLUDE_PATH=/usr/include/gdal:$CPLUS_INCLUDE_PATH
           sudo ldconfig
-      - name: Setup building
-        run: |
-          export CC="clang-9"
-          export CXX="clang++-9"
       - name: Generate code coverage
         run: |
           cargo install cargo-tarpaulin
