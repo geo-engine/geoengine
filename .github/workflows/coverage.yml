@@ -45,7 +45,7 @@ jobs:
         uses: actions-rs/toolchain@v1
         with:
           profile: minimal
-          toolchain: stable
+          toolchain: nightly
       - name: Generate code coverage
         run: |
           cargo install cargo-tarpaulin
