@@ -400,6 +400,47 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn empty_raster_input() {
+        let tile_size_in_pixels = [3, 2].into();
+        let tiling_specification = TilingSpecification {
+            origin_coordinate: [0.0, 0.0].into(),
+            tile_size_in_pixels,
+        };
+
+        let statistics = Statistics {
+            params: StatisticsParams {
+                column_names: vec![],
+            },
+            sources: vec![].into(),
+        };
+
+        let execution_context = MockExecutionContext::new_with_tiling_spec(tiling_specification);
+
+        let statistics = statistics
+            .boxed()
+            .initialize(&execution_context)
+            .await
+            .unwrap();
+
+        let processor = statistics.query_processor().unwrap().json_plain().unwrap();
+
+        let result = processor
+            .plot_query(
+                VectorQueryRectangle {
+                    spatial_bounds: BoundingBox2D::new((-180., -90.).into(), (180., 90.).into())
+                        .unwrap(),
+                    time_interval: TimeInterval::default(),
+                    spatial_resolution: SpatialResolution::one(),
+                },
+                &MockQueryContext::new(ChunkByteSize::MIN),
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(result.to_string(), json!({}).to_string());
+    }
+
+    #[tokio::test]
     async fn single_raster_implicit_name() {
         let tile_size_in_pixels = [3, 2].into();
         let tiling_specification = TilingSpecification {
