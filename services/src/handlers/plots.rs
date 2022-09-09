@@ -312,8 +312,8 @@ mod tests {
                 "plotType": "Statistics",
                 "data": {
                     "Raster-1": {
-                        "pixelCount": 6,
-                        "nanCount": 0,
+                        "valueCount": 6,
+                        "validCount": 6,
                         "min": 1.0,
                         "max": 6.0,
                         "mean": 3.5,

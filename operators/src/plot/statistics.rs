@@ -250,13 +250,10 @@ impl PlotQueryProcessor for StatisticsVectorQueryProcessor {
             }
         });
 
-        let output: HashMap<String, VectorColumnStatisticsOutput> = number_statistics
+        let output: HashMap<String, StatisticsOutput> = number_statistics
             .iter()
             .map(|(column, number_statistics)| {
-                (
-                    column.clone(),
-                    VectorColumnStatisticsOutput::from(number_statistics),
-                )
+                (column.clone(), StatisticsOutput::from(number_statistics))
             })
             .collect();
         serde_json::to_value(&output).map_err(Into::into)
@@ -310,7 +307,7 @@ impl PlotQueryProcessor for StatisticsRasterQueryProcessor {
                 },
             )
             .map(|number_statistics| {
-                let output: HashMap<String, RasterStatisticsOutput> = number_statistics?.iter().enumerate().map(|(i, stat)| (self.column_names[i].clone(), RasterStatisticsOutput::from(stat))).collect();
+                let output: HashMap<String, StatisticsOutput> = number_statistics?.iter().enumerate().map(|(i, stat)| (self.column_names[i].clone(), StatisticsOutput::from(stat))).collect();
                 serde_json::to_value(&output).map_err(Into::into)
             })
             .await
@@ -330,48 +327,23 @@ where
     }
 }
 
-/// The statistics summary output type for vector input column
+/// The statistics summary output type for each raster input/vector input column
 #[derive(Debug, Clone, Copy, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-struct VectorColumnStatisticsOutput {
+struct StatisticsOutput {
     pub value_count: usize,
-    pub nan_count: usize,
+    pub valid_count: usize,
     pub min: f64,
     pub max: f64,
     pub mean: f64,
     pub stddev: f64,
 }
 
-impl From<&NumberStatistics> for VectorColumnStatisticsOutput {
+impl From<&NumberStatistics> for StatisticsOutput {
     fn from(number_statistics: &NumberStatistics) -> Self {
         Self {
-            value_count: number_statistics.count(),
-            nan_count: number_statistics.nan_count(),
-            min: number_statistics.min(),
-            max: number_statistics.max(),
-            mean: number_statistics.mean(),
-            stddev: number_statistics.std_dev(),
-        }
-    }
-}
-
-/// The statistics summary output type for each raster input
-#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-struct RasterStatisticsOutput {
-    pub pixel_count: usize,
-    pub nan_count: usize,
-    pub min: f64,
-    pub max: f64,
-    pub mean: f64,
-    pub stddev: f64,
-}
-
-impl From<&NumberStatistics> for RasterStatisticsOutput {
-    fn from(number_statistics: &NumberStatistics) -> Self {
-        Self {
-            pixel_count: number_statistics.count(),
-            nan_count: number_statistics.nan_count(),
+            value_count: number_statistics.count() + number_statistics.nan_count(),
+            valid_count: number_statistics.count(),
             min: number_statistics.min(),
             max: number_statistics.max(),
             mean: number_statistics.mean(),
@@ -493,8 +465,8 @@ mod tests {
             result.to_string(),
             json!({
                 "Raster-1": {
-                    "pixelCount": 6,
-                    "nanCount": 64_794, // (360*180)-6
+                    "valueCount": 64_800, // 360*180
+                    "validCount": 6,
                     "min": 1.0,
                     "max": 6.0,
                     "mean": 3.5,
@@ -596,16 +568,16 @@ mod tests {
             result.to_string(),
             json!({
                 "Raster-1": {
-                    "pixelCount": 6,
-                    "nanCount": 64_794, // (360*180)-6
+                    "valueCount": 64_800, // 360*180
+                    "validCount": 6,
                     "min": 1.0,
                     "max": 6.0,
                     "mean": 3.5,
                     "stddev": 1.707_825_127_659_933
                 },
                 "Raster-2": {
-                    "pixelCount": 6,
-                    "nanCount": 64_794, // (360*180)-6
+                    "valueCount": 64_800, // 360*180
+                    "validCount": 6,
                     "min": 7.0,
                     "max": 12.0,
                     "mean": 9.5,
@@ -707,16 +679,16 @@ mod tests {
             result.to_string(),
             json!({
                 "A": {
-                    "pixelCount": 6,
-                    "nanCount": 64_794, // (360*180)-6
+                    "valueCount": 64_800, // 360*180
+                    "validCount": 6,
                     "min": 1.0,
                     "max": 6.0,
                     "mean": 3.5,
                     "stddev": 1.707_825_127_659_933
                 },
                 "B": {
-                    "pixelCount": 6,
-                    "nanCount": 64_794, // (360*180)-6
+                    "valueCount": 64_800, // 360*180
+                    "validCount": 6,
                     "min": 7.0,
                     "max": 12.0,
                     "mean": 9.5,
@@ -876,16 +848,16 @@ mod tests {
             result.to_string(),
             json!({
                 "foo": {
-                    "valueCount": 3,
-                    "nanCount": 4,
+                    "valueCount": 7,
+                    "validCount": 3,
                     "min": 1.0,
                     "max": 6.0,
                     "mean": 3.333_333_333_333_333,
                     "stddev": 2.054_804_667_656_325_6
                 },
                 "bar": {
-                    "valueCount": 3,
-                    "nanCount": 4,
+                    "valueCount": 7,
+                    "validCount": 3,
                     "min": 1.0,
                     "max": 5.0,
                     "mean": 2.666_666_666_666_667,
@@ -972,8 +944,8 @@ mod tests {
             result.to_string(),
             json!({
                 "foo": {
-                    "valueCount": 3,
-                    "nanCount": 4,
+                    "valueCount": 7,
+                    "validCount": 3,
                     "min": 1.0,
                     "max": 6.0,
                     "mean": 3.333_333_333_333_333,
@@ -1060,16 +1032,16 @@ mod tests {
             result.to_string(),
             json!({
                 "foo": {
-                    "valueCount": 3,
-                    "nanCount": 4,
+                    "valueCount": 7,
+                    "validCount": 3,
                     "min": 1.0,
                     "max": 6.0,
                     "mean": 3.333_333_333_333_333,
                     "stddev": 2.054_804_667_656_325_6
                 },
                 "bar": {
-                    "valueCount": 3,
-                    "nanCount": 4,
+                    "valueCount": 7,
+                    "validCount": 3,
                     "min": 1.0,
                     "max": 5.0,
                     "mean": 2.666_666_666_666_667,
