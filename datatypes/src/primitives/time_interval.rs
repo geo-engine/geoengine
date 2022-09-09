@@ -420,7 +420,10 @@ impl ArrowTyped for TimeInterval {
         // TODO: use date if dates out-of-range is fixed for us
         // arrow::array::FixedSizeListBuilder::new(arrow::array::Date64Builder::new(2 * capacity), 2)
 
-        arrow::array::FixedSizeListBuilder::new(arrow::array::Int64Builder::new(2 * capacity), 2)
+        arrow::array::FixedSizeListBuilder::new(
+            arrow::array::Int64Builder::with_capacity(2 * capacity),
+            2,
+        )
     }
 
     fn concat(a: &Self::ArrowArray, b: &Self::ArrowArray) -> Result<Self::ArrowArray, ArrowError> {

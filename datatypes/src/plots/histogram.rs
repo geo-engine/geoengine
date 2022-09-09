@@ -425,7 +425,7 @@ mod tests {
             .unwrap();
 
         let data = {
-            let mut builder = Float64Builder::new(4);
+            let mut builder = Float64Builder::with_capacity(4);
             builder.append_slice(&[0., 0.49, 0.5, 1.0]);
             builder.finish()
         };
@@ -448,7 +448,7 @@ mod tests {
             .unwrap();
 
         let data = {
-            let mut builder = Float64Builder::new(4);
+            let mut builder = Float64Builder::with_capacity(4);
             builder.append_value(0.);
             builder.append_null();
             builder.append_value(0.5);
@@ -475,7 +475,7 @@ mod tests {
             .unwrap();
 
         let data = {
-            let mut builder = Int64Builder::new(4);
+            let mut builder = Int64Builder::with_capacity(4);
             builder.append_slice(&[0, 1, 2, 3]);
             builder.finish()
         };
@@ -498,7 +498,7 @@ mod tests {
             .unwrap();
 
         let data = {
-            let mut builder = UInt8Builder::new(4);
+            let mut builder = UInt8Builder::with_capacity(4);
             builder.append_slice(&[0, 1, 0, 0, 1]);
             builder.finish()
         };
@@ -521,7 +521,7 @@ mod tests {
             .unwrap();
 
         let data = {
-            let mut builder = Int64Builder::new(6);
+            let mut builder = Int64Builder::with_capacity(6);
             builder.append_slice(&[-1, -1, -1, 0, 1, 1]);
             builder.finish()
         };
@@ -545,7 +545,7 @@ mod tests {
             .unwrap();
 
         let data = {
-            let mut builder = Float64Builder::new(4);
+            let mut builder = Float64Builder::with_capacity(4);
             builder.append_slice(&[0., 0.49, 0.5, 1.0]);
             builder.finish()
         };
