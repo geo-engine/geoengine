@@ -1,4 +1,4 @@
-name: CI
+name: coverage
 
 on:
   push:
@@ -12,8 +12,8 @@ env:
   CARGO_TERM_COLOR: always
 
 jobs:
-  build:
-    runs-on: ${{matrix.os}}
+  coveralls:
+    runs-on: ubuntu-20.04
 
     services:
       postgres:
@@ -25,13 +25,6 @@ jobs:
         ports:
           - 5432:5432
         options: --health-cmd pg_isready --health-interval 10s --health-timeout 5s --health-retries 5
-
-    strategy:
-      matrix:
-        os:
-          - ubuntu-20.04
-        features: ["", "--features pro", "--all-features"]
-        build: ["", "--release"]
 
     steps:
       - name: Checkout code
@@ -48,23 +41,12 @@ jobs:
           export C_INCLUDE_PATH=/usr/include/gdal:$C_INCLUDE_PATH
           export CPLUS_INCLUDE_PATH=/usr/include/gdal:$CPLUS_INCLUDE_PATH
           sudo ldconfig
-      - name: Check with Rustfmt
-        uses: actions-rs/cargo@v1
+      - name: Generate code coverage
+        run: |
+          cargo install cargo-tarpaulin
+          cargo tarpaulin --verbose --workspace --timeout 120 --out Lcov --all-features  --implicit-test-threads --run-types Tests
+      - name: Upload coverage to Coveralls
+        uses: coverallsapp/github-action@v1.1.1
         with:
-          command: fmt
-          args: --all -- --check
-      - name: Check with Clippy
-        uses: actions-rs/clippy-check@v1
-        with:
-          token: ${{ secrets.GITHUB_TOKEN }}
-          args: --all-targets ${{ matrix.features }} -- -D warnings
-      - name: Build
-        uses: actions-rs/cargo@v1
-        with:
-          command: build
-          args: ${{ matrix.features }} ${{ matrix.build }} --verbose
-      - name: Run tests
-        uses: actions-rs/cargo@v1
-        with:
-          command: test
-          args: ${{ matrix.features }} --verbose
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          path-to-lcov: lcov.info
