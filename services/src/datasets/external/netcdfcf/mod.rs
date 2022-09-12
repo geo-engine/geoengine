@@ -4,6 +4,7 @@ use self::overviews::remove_overviews;
 use self::overviews::InProgressFlag;
 pub use self::overviews::OverviewGeneration;
 use self::overviews::{create_overviews, METADATA_FILE_NAME};
+use crate::api::model::datatypes::{DataId, DataProviderId, ExternalDataId, LayerId};
 use crate::datasets::external::netcdfcf::overviews::LOADING_INFO_FILE_NAME;
 use crate::datasets::listing::ProvenanceOutput;
 use crate::datasets::storage::MetaDataDefinition;
@@ -28,9 +29,6 @@ use crate::workflows::workflow::Workflow;
 use async_trait::async_trait;
 use gdal::raster::{Dimension, Group};
 use gdal::{DatasetOptions, GdalOpenFlags};
-use geoengine_datatypes::dataset::DataProviderId;
-use geoengine_datatypes::dataset::LayerId;
-use geoengine_datatypes::dataset::{DataId, ExternalDataId};
 use geoengine_datatypes::error::BoxedResultExt;
 use geoengine_datatypes::operations::image::{Colorizer, RgbaColor};
 use geoengine_datatypes::primitives::{
@@ -1199,7 +1197,8 @@ pub fn layer_from_netcdf_overview(
                                 })
                                 .to_string(),
                             ),
-                        }),
+                        })
+                        .into(),
                     },
                 }
                 .boxed(),
@@ -1439,12 +1438,12 @@ impl MetaDataProvider<GdalLoadingInfo, RasterResultDescriptor, RasterQueryRectan
 {
     async fn meta_data(
         &self,
-        id: &DataId,
+        id: &geoengine_datatypes::dataset::DataId,
     ) -> Result<
         Box<dyn MetaData<GdalLoadingInfo, RasterResultDescriptor, RasterQueryRectangle>>,
         geoengine_operators::error::Error,
     > {
-        let dataset = id.clone();
+        let dataset = id.clone().into();
         let path = self.path.clone();
         let overviews = self.overviews.clone();
         crate::util::spawn_blocking(move || {
@@ -1465,7 +1464,7 @@ impl
 {
     async fn meta_data(
         &self,
-        _id: &DataId,
+        _id: &geoengine_datatypes::dataset::DataId,
     ) -> Result<
         Box<
             dyn MetaData<
@@ -1486,7 +1485,7 @@ impl MetaDataProvider<OgrSourceDataset, VectorResultDescriptor, VectorQueryRecta
 {
     async fn meta_data(
         &self,
-        _id: &DataId,
+        _id: &geoengine_datatypes::dataset::DataId,
     ) -> Result<
         Box<dyn MetaData<OgrSourceDataset, VectorResultDescriptor, VectorQueryRectangle>>,
         geoengine_operators::error::Error,
@@ -1501,7 +1500,6 @@ mod tests {
 
     use crate::tasks::util::NopTaskContext;
     use geoengine_datatypes::{
-        dataset::LayerId,
         primitives::{SpatialPartition2D, SpatialResolution, TimeInterval},
         spatial_reference::SpatialReferenceAuthority,
         test_data,
@@ -1777,17 +1775,20 @@ mod tests {
         };
 
         let metadata = provider
-            .meta_data(&DataId::External(ExternalDataId {
-                provider_id: NETCDF_CF_PROVIDER_ID,
-                layer_id: LayerId(
-                    serde_json::json!({
-                        "fileName": "dataset_sm.nc",
-                        "groupNames": ["scenario_5", "metric_2"],
-                        "entity": 1
-                    })
-                    .to_string(),
-                ),
-            }))
+            .meta_data(
+                &DataId::External(ExternalDataId {
+                    provider_id: NETCDF_CF_PROVIDER_ID,
+                    layer_id: LayerId(
+                        serde_json::json!({
+                            "fileName": "dataset_sm.nc",
+                            "groupNames": ["scenario_5", "metric_2"],
+                            "entity": 1
+                        })
+                        .to_string(),
+                    ),
+                })
+                .into(),
+            )
             .await
             .unwrap();
 
@@ -1896,17 +1897,20 @@ mod tests {
             .unwrap();
 
         let metadata = provider
-            .meta_data(&DataId::External(ExternalDataId {
-                provider_id: NETCDF_CF_PROVIDER_ID,
-                layer_id: LayerId(
-                    serde_json::json!({
-                        "fileName": "dataset_sm.nc",
-                        "groupNames": ["scenario_5", "metric_2"],
-                        "entity": 1
-                    })
-                    .to_string(),
-                ),
-            }))
+            .meta_data(
+                &DataId::External(ExternalDataId {
+                    provider_id: NETCDF_CF_PROVIDER_ID,
+                    layer_id: LayerId(
+                        serde_json::json!({
+                            "fileName": "dataset_sm.nc",
+                            "groupNames": ["scenario_5", "metric_2"],
+                            "entity": 1
+                        })
+                        .to_string(),
+                    ),
+                })
+                .into(),
+            )
             .await
             .unwrap();
 

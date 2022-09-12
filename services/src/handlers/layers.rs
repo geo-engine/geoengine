@@ -1,5 +1,5 @@
+use crate::api::model::datatypes::{DataProviderId, LayerId};
 use actix_web::{web, FromRequest, Responder};
-use geoengine_datatypes::dataset::{DataProviderId, LayerId};
 
 use crate::error::Result;
 

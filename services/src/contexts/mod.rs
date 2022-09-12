@@ -185,14 +185,14 @@ where
         match data_id {
             DataId::Internal { dataset_id: _ } => self
                 .dataset_db
-                .session_meta_data(&self.session, data_id)
+                .session_meta_data(&self.session, &data_id.clone().into())
                 .await
                 .map_err(|e| geoengine_operators::error::Error::LoadingInfo {
                     source: Box::new(e),
                 }),
             DataId::External(external) => {
                 self.layer_provider_db
-                    .layer_provider(external.provider_id)
+                    .layer_provider(external.provider_id.into())
                     .await
                     .map_err(|e| geoengine_operators::error::Error::DatasetMetaData {
                         source: Box::new(e),
@@ -224,14 +224,14 @@ where
         match data_id {
             DataId::Internal { dataset_id: _ } => self
                 .dataset_db
-                .session_meta_data(&self.session, data_id)
+                .session_meta_data(&self.session, &data_id.clone().into())
                 .await
                 .map_err(|e| geoengine_operators::error::Error::LoadingInfo {
                     source: Box::new(e),
                 }),
             DataId::External(external) => {
                 self.layer_provider_db
-                    .layer_provider(external.provider_id)
+                    .layer_provider(external.provider_id.into())
                     .await
                     .map_err(|e| geoengine_operators::error::Error::DatasetMetaData {
                         source: Box::new(e),
@@ -263,14 +263,14 @@ where
         match data_id {
             DataId::Internal { dataset_id: _ } => self
                 .dataset_db
-                .session_meta_data(&self.session, data_id)
+                .session_meta_data(&self.session, &data_id.clone().into())
                 .await
                 .map_err(|e| geoengine_operators::error::Error::LoadingInfo {
                     source: Box::new(e),
                 }),
             DataId::External(external) => {
                 self.layer_provider_db
-                    .layer_provider(external.provider_id)
+                    .layer_provider(external.provider_id.into())
                     .await
                     .map_err(|e| geoengine_operators::error::Error::DatasetMetaData {
                         source: Box::new(e),

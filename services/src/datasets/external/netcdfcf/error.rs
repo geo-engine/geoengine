@@ -3,7 +3,8 @@ use std::path::PathBuf;
 use gdal::errors::GdalError;
 use snafu::Snafu;
 
-use geoengine_datatypes::{dataset::DataProviderId, error::ErrorSource};
+use crate::api::model::datatypes::DataProviderId;
+use geoengine_datatypes::error::ErrorSource;
 
 #[derive(Debug, Snafu)]
 #[snafu(visibility(pub(crate)))]

@@ -294,7 +294,7 @@ mod tests {
         ];
         let req = actix_web::test::TestRequest::get()
             .uri(&format!(
-                "/plot/{}/?{}",
+                "/plot/{}?{}",
                 id,
                 &serde_urlencoded::to_string(params).unwrap()
             ))
@@ -356,7 +356,7 @@ mod tests {
         ];
         let req = actix_web::test::TestRequest::get()
             .uri(&format!(
-                "/plot/{}/?{}",
+                "/plot/{}?{}",
                 id,
                 &serde_urlencoded::to_string(params).unwrap()
             ))
@@ -475,7 +475,7 @@ mod tests {
             let req = actix_web::test::TestRequest::default()
                 .method(method)
                 .uri(&format!(
-                    "/plot/{}/?{}",
+                    "/plot/{}?{}",
                     id,
                     &serde_urlencoded::to_string(params).unwrap()
                 ))

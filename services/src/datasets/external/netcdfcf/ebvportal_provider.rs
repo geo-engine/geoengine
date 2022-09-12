@@ -1,10 +1,8 @@
 use std::path::PathBuf;
 
+use crate::api::model::datatypes::{DataId, DataProviderId, LayerId};
 use async_trait::async_trait;
-use geoengine_datatypes::{
-    dataset::{DataId, DataProviderId, LayerId},
-    primitives::{RasterQueryRectangle, VectorQueryRectangle},
-};
+use geoengine_datatypes::primitives::{RasterQueryRectangle, VectorQueryRectangle};
 use geoengine_operators::{
     engine::{MetaData, MetaDataProvider, RasterResultDescriptor, VectorResultDescriptor},
     mock::MockDatasetDataSourceLoadingInfo,
@@ -85,7 +83,7 @@ impl DataProviderDefinition for EbvPortalDataProviderDefinition {
 impl DataProvider for EbvPortalDataProvider {
     async fn provenance(
         &self,
-        id: &geoengine_datatypes::dataset::DataId,
+        id: &DataId,
     ) -> crate::error::Result<crate::datasets::listing::ProvenanceOutput> {
         self.netcdf_cf_provider.provenance(id).await
     }
@@ -527,7 +525,7 @@ impl MetaDataProvider<GdalLoadingInfo, RasterResultDescriptor, RasterQueryRectan
 {
     async fn meta_data(
         &self,
-        id: &DataId,
+        id: &geoengine_datatypes::dataset::DataId,
     ) -> Result<
         Box<dyn MetaData<GdalLoadingInfo, RasterResultDescriptor, RasterQueryRectangle>>,
         geoengine_operators::error::Error,
@@ -543,7 +541,7 @@ impl
 {
     async fn meta_data(
         &self,
-        _id: &DataId,
+        _id: &geoengine_datatypes::dataset::DataId,
     ) -> Result<
         Box<
             dyn MetaData<
@@ -564,7 +562,7 @@ impl MetaDataProvider<OgrSourceDataset, VectorResultDescriptor, VectorQueryRecta
 {
     async fn meta_data(
         &self,
-        _id: &DataId,
+        _id: &geoengine_datatypes::dataset::DataId,
     ) -> Result<
         Box<dyn MetaData<OgrSourceDataset, VectorResultDescriptor, VectorQueryRectangle>>,
         geoengine_operators::error::Error,

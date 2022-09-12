@@ -4,6 +4,7 @@ mod time_estimation;
 pub mod util;
 
 use self::time_estimation::TimeEstimation;
+use crate::identifier;
 use crate::{
     error::Result,
     util::{
@@ -13,7 +14,7 @@ use crate::{
 };
 pub use error::TaskError;
 use futures::channel::oneshot;
-use geoengine_datatypes::{error::ErrorSource, identifier, util::AsAnyArc};
+use geoengine_datatypes::{error::ErrorSource, util::AsAnyArc};
 pub use in_memory::{SimpleTaskManager, SimpleTaskManagerContext};
 use serde::{Deserialize, Serialize, Serializer};
 use snafu::ensure;
