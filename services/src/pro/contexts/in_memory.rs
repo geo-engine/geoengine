@@ -7,7 +7,8 @@ use crate::layers::storage::{HashMapLayerDb, HashMapLayerProviderDb};
 use crate::pro::contexts::{Context, ProContext};
 use crate::pro::datasets::{add_datasets_from_directory, ProHashMapDatasetDb};
 use crate::pro::projects::ProHashMapProjectDb;
-use crate::pro::users::{HashMapUserDb, UserDb, UserSession};
+use crate::pro::users::{HashMapUserDb, OidcRequestDb, UserDb, UserSession};
+use crate::pro::util::config::Oidc;
 use crate::tasks::{SimpleTaskManager, SimpleTaskManagerContext};
 use crate::workflows::registry::HashMapRegistry;
 use crate::{datasets::add_from_directory::add_providers_from_directory, error::Result};
@@ -34,6 +35,7 @@ pub struct ProInMemoryContext {
     exe_ctx_tiling_spec: TilingSpecification,
     query_ctx_chunk_size: ChunkByteSize,
     task_manager: Arc<SimpleTaskManager>,
+    oidc_request_db: Arc<Option<OidcRequestDb>>,
 }
 
 impl TestDefault for ProInMemoryContext {
@@ -49,6 +51,7 @@ impl TestDefault for ProInMemoryContext {
             exe_ctx_tiling_spec: TestDefault::test_default(),
             query_ctx_chunk_size: TestDefault::test_default(),
             task_manager: Default::default(),
+            oidc_request_db: Arc::new(None),
         }
     }
 }
@@ -61,6 +64,7 @@ impl ProInMemoryContext {
         layer_collection_defs_path: PathBuf,
         exe_ctx_tiling_spec: TilingSpecification,
         query_ctx_chunk_size: ChunkByteSize,
+        oidc_config: Oidc,
     ) -> Self {
         let mut layer_db = HashMapLayerDb::default();
 
@@ -85,6 +89,7 @@ impl ProInMemoryContext {
             thread_pool: create_rayon_thread_pool(0),
             exe_ctx_tiling_spec,
             query_ctx_chunk_size,
+            oidc_request_db: Arc::new(OidcRequestDb::try_from(oidc_config).ok()),
         }
     }
 
@@ -103,6 +108,23 @@ impl ProInMemoryContext {
             thread_pool: create_rayon_thread_pool(0),
             exe_ctx_tiling_spec,
             query_ctx_chunk_size,
+            oidc_request_db: Arc::new(None),
+        }
+    }
+
+    pub fn new_with_oidc(oidc_db: OidcRequestDb) -> Self {
+        Self {
+            user_db: Default::default(),
+            project_db: Default::default(),
+            workflow_registry: Default::default(),
+            dataset_db: Default::default(),
+            layer_db: Default::default(),
+            layer_provider_db: Default::default(),
+            thread_pool: create_rayon_thread_pool(0),
+            exe_ctx_tiling_spec: TestDefault::test_default(),
+            query_ctx_chunk_size: TestDefault::test_default(),
+            task_manager: Default::default(),
+            oidc_request_db: Arc::new(Some(oidc_db)),
         }
     }
 }
@@ -116,6 +138,9 @@ impl ProContext for ProInMemoryContext {
     }
     fn user_db_ref(&self) -> &Self::UserDB {
         &self.user_db
+    }
+    fn oidc_request_db(&self) -> Option<&OidcRequestDb> {
+        self.oidc_request_db.as_ref().as_ref()
     }
 }
 

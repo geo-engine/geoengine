@@ -112,6 +112,7 @@ pub async fn start_pro_server(static_files_dir: Option<PathBuf>) -> Result<()> {
 
     let session_config: crate::util::config::Session = get_config_element()?;
     let user_config: crate::pro::util::config::User = get_config_element()?;
+    let oidc_config: crate::pro::util::config::Oidc = get_config_element()?;
 
     if session_config.anonymous_access {
         info!("Anonymous access is enabled");
@@ -127,6 +128,12 @@ pub async fn start_pro_server(static_files_dir: Option<PathBuf>) -> Result<()> {
         info!("User registration is enabled");
     } else {
         info!("User registration is disabled");
+    }
+
+    if oidc_config.enabled {
+        info!("OIDC is enabled");
+    } else {
+        info!("OIDC is disabled");
     }
 
     let data_path_config: config::DataProvider = get_config_element()?;
@@ -147,6 +154,7 @@ pub async fn start_pro_server(static_files_dir: Option<PathBuf>) -> Result<()> {
                 data_path_config.layer_collection_defs_path,
                 tiling_spec,
                 chunk_byte_size,
+                oidc_config,
             )
             .await;
 
@@ -182,6 +190,7 @@ pub async fn start_pro_server(static_files_dir: Option<PathBuf>) -> Result<()> {
                     data_path_config.layer_collection_defs_path,
                     tiling_spec,
                     chunk_byte_size,
+                    oidc_config,
                 )
                 .await?;
 

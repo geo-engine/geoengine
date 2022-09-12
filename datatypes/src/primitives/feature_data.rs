@@ -768,7 +768,7 @@ unsafe fn byte_ptr_to_str<'d>(bytes: *const u8, length: usize) -> &'d str {
 /// use arrow::array::{StringBuilder, Array};
 ///
 /// let string_array = {
-///     let mut builder = StringBuilder::new(3);
+///     let mut builder = StringBuilder::with_capacity(3, 6+3);
 ///     builder.append_value("foobar");
 ///     builder.append_null();
 ///     builder.append_value("bar");
@@ -842,7 +842,7 @@ impl<'r> DataRef<'r, u8> for TextDataRef<'r> {
     /// use arrow::array::{StringBuilder, Array};
     ///
     /// let string_array = {
-    ///     let mut builder = StringBuilder::new(3);
+    ///     let mut builder = StringBuilder::with_capacity(3, 6+3);
     ///     builder.append_value("foobar");
     ///     builder.append_null();
     ///     builder.append_value("bar");
@@ -1028,12 +1028,12 @@ impl FeatureDataType {
 
     pub fn arrow_builder(self, len: usize) -> Box<dyn arrow::array::ArrayBuilder> {
         match self {
-            Self::Text => Box::new(arrow::array::StringBuilder::new(len)),
-            Self::Float => Box::new(arrow::array::Float64Builder::new(len)),
-            Self::Int => Box::new(arrow::array::Int64Builder::new(len)),
-            Self::Category => Box::new(arrow::array::UInt8Builder::new(len)),
-            Self::Bool => Box::new(arrow::array::BooleanBuilder::new(len)),
-            Self::DateTime => Box::new(arrow::array::Date64Builder::new(len)),
+            Self::Text => Box::new(arrow::array::StringBuilder::with_capacity(len, 0)),
+            Self::Float => Box::new(arrow::array::Float64Builder::with_capacity(len)),
+            Self::Int => Box::new(arrow::array::Int64Builder::with_capacity(len)),
+            Self::Category => Box::new(arrow::array::UInt8Builder::with_capacity(len)),
+            Self::Bool => Box::new(arrow::array::BooleanBuilder::with_capacity(len)),
+            Self::DateTime => Box::new(arrow::array::Date64Builder::with_capacity(len)),
         }
     }
 }
@@ -1072,14 +1072,22 @@ impl FeatureData {
     pub(crate) fn arrow_builder(&self) -> Box<dyn arrow::array::ArrayBuilder> {
         match self {
             Self::Text(v) => {
-                let mut builder = arrow::array::StringBuilder::new(v.len());
+                let mut builder = arrow::array::StringBuilder::with_capacity(
+                    v.len(),
+                    v.iter().map(String::len).sum(),
+                );
                 for text in v {
                     builder.append_value(text);
                 }
                 Box::new(builder)
             }
             Self::NullableText(v) => {
-                let mut builder = arrow::array::StringBuilder::new(v.len());
+                let mut builder = arrow::array::StringBuilder::with_capacity(
+                    v.len(),
+                    v.iter()
+                        .map(|text_option| text_option.as_ref().map_or(0, String::len))
+                        .sum(),
+                );
                 for text_opt in v {
                     if let Some(text) = text_opt {
                         builder.append_value(text);
@@ -1090,61 +1098,61 @@ impl FeatureData {
                 Box::new(builder)
             }
             Self::Float(v) => {
-                let mut builder = arrow::array::Float64Builder::new(v.len());
+                let mut builder = arrow::array::Float64Builder::with_capacity(v.len());
                 builder.append_slice(v);
                 Box::new(builder)
             }
             Self::NullableFloat(v) => {
-                let mut builder = arrow::array::Float64Builder::new(v.len());
+                let mut builder = arrow::array::Float64Builder::with_capacity(v.len());
                 for &number_option in v {
                     builder.append_option(number_option);
                 }
                 Box::new(builder)
             }
             Self::Int(v) => {
-                let mut builder = arrow::array::Int64Builder::new(v.len());
+                let mut builder = arrow::array::Int64Builder::with_capacity(v.len());
                 builder.append_slice(v);
                 Box::new(builder)
             }
             Self::NullableInt(v) => {
-                let mut builder = arrow::array::Int64Builder::new(v.len());
+                let mut builder = arrow::array::Int64Builder::with_capacity(v.len());
                 for &int_option in v {
                     builder.append_option(int_option);
                 }
                 Box::new(builder)
             }
             Self::Category(v) => {
-                let mut builder = arrow::array::UInt8Builder::new(v.len());
+                let mut builder = arrow::array::UInt8Builder::with_capacity(v.len());
                 builder.append_slice(v);
                 Box::new(builder)
             }
             Self::NullableCategory(v) => {
-                let mut builder = arrow::array::UInt8Builder::new(v.len());
+                let mut builder = arrow::array::UInt8Builder::with_capacity(v.len());
                 for &float_option in v {
                     builder.append_option(float_option);
                 }
                 Box::new(builder)
             }
             FeatureData::Bool(v) => {
-                let mut builder = arrow::array::BooleanBuilder::new(v.len());
+                let mut builder = arrow::array::BooleanBuilder::with_capacity(v.len());
                 builder.append_slice(v);
                 Box::new(builder)
             }
             FeatureData::NullableBool(v) => {
-                let mut builder = arrow::array::BooleanBuilder::new(v.len());
+                let mut builder = arrow::array::BooleanBuilder::with_capacity(v.len());
                 for &bool_option in v {
                     builder.append_option(bool_option);
                 }
                 Box::new(builder)
             }
             FeatureData::DateTime(v) => {
-                let mut builder = arrow::array::Date64Builder::new(v.len());
+                let mut builder = arrow::array::Date64Builder::with_capacity(v.len());
                 let x: Vec<_> = v.iter().map(|x| x.inner()).collect();
                 builder.append_slice(&x);
                 Box::new(builder)
             }
             FeatureData::NullableDateTime(v) => {
-                let mut builder = arrow::array::Date64Builder::new(v.len());
+                let mut builder = arrow::array::Date64Builder::with_capacity(v.len());
                 for &dt_option in v {
                     builder.append_option(dt_option.map(TimeInstance::inner));
                 }

@@ -372,6 +372,12 @@ pub enum Error {
         base: PathBuf,
         sub_path: PathBuf,
     },
+
+    #[cfg(feature = "pro")]
+    #[snafu(context(false))]
+    OidcError {
+        source: crate::pro::users::OidcError,
+    },
 }
 
 impl actix_web::error::ResponseError for Error {
