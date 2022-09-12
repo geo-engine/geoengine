@@ -23,9 +23,9 @@ use futures::lock::Mutex;
 use geoengine_datatypes::error::{BoxedResultExt, ErrorSource};
 use log::debug;
 use serde::{Deserialize, Serialize};
-use utoipa::openapi::security::{SecurityScheme, HttpBuilder, HttpAuthScheme};
 use std::path::PathBuf;
 use std::sync::Arc;
+use utoipa::openapi::security::{HttpAuthScheme, HttpBuilder, SecurityScheme};
 use utoipa::{Modify, OpenApi, ToSchema};
 
 #[derive(OpenApi)]
@@ -60,7 +60,9 @@ impl Modify for SecurityAddon {
                 HttpBuilder::new()
                     .scheme(HttpAuthScheme::Bearer)
                     .bearer_format("UUID")
-                    .description(Some("Use the configured admin session token to authenticate."))
+                    .description(Some(
+                        "Use the configured admin session token to authenticate.",
+                    ))
                     .build(),
             ),
         );
@@ -102,8 +104,7 @@ where
     C::Session: FromRequest,
 {
     Box::new(move |cfg: &mut web::ServiceConfig| {
-        cfg
-        .service(
+        cfg.service(
             web::scope("/overviews")
                 .route("/all", web::put().to(create_overviews::<C>))
                 .service(
@@ -185,7 +186,7 @@ struct CreateOverviewsParams {
     request_body = Option<CreateOverviewsParams>,
     responses(
         (
-            status = 200, 
+            status = 200,
             description = "The id of the task that creates the overviews.", 
             body = TaskResponse,
             example = json!({"taskId": "ca0c86e0-04b2-47b6-9190-122c6f06c45c"})
@@ -364,7 +365,7 @@ struct CreateOverviewParams {
     request_body = Option<CreateOverviewParams>,
     responses(
         (
-            status = 200, 
+            status = 200,
             description = "The id of the task that creates the overview.", 
             body = TaskResponse,
             example = json!({"taskId": "ca0c86e0-04b2-47b6-9190-122c6f06c45c"})
@@ -487,7 +488,7 @@ struct RemoveOverviewParams {
     request_body = Option<RemoveOverviewParams>,
     responses(
         (
-            status = 200, 
+            status = 200,
             description = "The id of the task that removes the overview.", 
             body = TaskResponse,
             example = json!({"taskId": "ca0c86e0-04b2-47b6-9190-122c6f06c45c"})

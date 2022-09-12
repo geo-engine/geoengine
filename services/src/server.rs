@@ -112,9 +112,12 @@ where
             .configure(handlers::wfs::init_wfs_routes::<C>)
             .configure(handlers::wms::init_wms_routes::<C>)
             .configure(handlers::workflows::init_workflow_routes::<C>);
-        
+
         #[allow(unused_mut)] // clippy warns here otherwise if no additional feature is activated
-        let mut api_urls = vec![(utoipa_swagger_ui::Url::new("Geo Engine", "/api-docs/openapi.json"), openapi.clone())];
+        let mut api_urls = vec![(
+            utoipa_swagger_ui::Url::new("Geo Engine", "/api-docs/openapi.json"),
+            openapi.clone(),
+        )];
 
         #[cfg(feature = "ebv")]
         {
@@ -130,9 +133,7 @@ where
             app = app.configure(handlers::gfbio::init_gfbio_routes::<C>);
         }
 
-        app = app.service(
-            SwaggerUi::new("/swagger-ui/{_:.*}").urls(api_urls),
-        );
+        app = app.service(SwaggerUi::new("/swagger-ui/{_:.*}").urls(api_urls));
 
         if version_api {
             app = app.route(
