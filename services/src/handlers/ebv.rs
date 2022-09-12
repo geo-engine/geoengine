@@ -442,8 +442,8 @@ mod tests {
     use crate::{
         contexts::{InMemoryContext, Session, SimpleContext},
         datasets::external::netcdfcf::NetCdfCfDataProviderDefinition,
-        server::{configure_extractors, render_404, render_405},
         tasks::util::test::wait_for_task_to_finish,
+        util::server::{configure_extractors, render_404, render_405},
         util::tests::read_body_string,
     };
     use actix_web::{dev::ServiceResponse, http, http::header, middleware, test, web, App};

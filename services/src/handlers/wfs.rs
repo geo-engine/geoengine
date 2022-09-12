@@ -593,6 +593,7 @@ fn default_time_from_config() -> TimeInterval {
 mod tests {
     use super::*;
 
+    use crate::api::model::datatypes::{DataId, DatasetId};
     use crate::contexts::{Session, SimpleContext};
     use crate::datasets::storage::{DatasetDefinition, DatasetStore};
     use crate::handlers::ErrorResponse;
@@ -603,7 +604,6 @@ mod tests {
     use actix_web::http::header;
     use actix_web::{http::Method, test};
     use actix_web_httpauth::headers::authorization::Bearer;
-    use geoengine_datatypes::dataset::{DataId, DatasetId};
     use geoengine_datatypes::raster::{GridShape2D, TilingSpecification};
     use geoengine_datatypes::test_data;
     use geoengine_datatypes::util::test::TestDefault;

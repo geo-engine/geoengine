@@ -78,7 +78,7 @@ pub fn get_token(req: &HttpRequest) -> Result<SessionId> {
     let scheme = Bearer::parse(header).map_err(|_| Error::Authorization {
         source: Box::new(Error::InvalidAuthorizationScheme),
     })?;
-    SessionId::from_str(scheme.token()).map_err(|err| Error::Authorization {
-        source: Box::new(Error::InvalidUuid { source: err }),
+    SessionId::from_str(scheme.token()).map_err(|_err| Error::Authorization {
+        source: Box::new(Error::InvalidUuid),
     })
 }

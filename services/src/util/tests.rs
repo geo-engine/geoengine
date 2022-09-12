@@ -10,7 +10,7 @@ use crate::projects::{
     CreateProject, Layer, LayerUpdate, ProjectDb, ProjectId, RasterSymbology, STRectangle,
     Symbology, UpdateProject,
 };
-use crate::server::{configure_extractors, render_404, render_405};
+use crate::util::server::{configure_extractors, render_404, render_405};
 use crate::util::user_input::UserInput;
 use crate::util::Identifier;
 use crate::workflows::registry::WorkflowRegistry;
@@ -135,6 +135,7 @@ pub async fn add_ndvi_to_datasets(ctx: &InMemoryContext) -> DatasetId {
         )
         .await
         .expect("dataset db access")
+        .into()
 }
 
 pub async fn check_allowed_http_methods2<T, TRes, P, PParam>(
@@ -191,7 +192,6 @@ pub async fn send_test_request<C: SimpleContext>(
                     .handler(http::StatusCode::NOT_FOUND, render_404)
                     .handler(http::StatusCode::METHOD_NOT_ALLOWED, render_405),
             )
-            .wrap(middleware::NormalizePath::trim())
             .configure(configure_extractors)
             .configure(handlers::datasets::init_dataset_routes::<C>)
             .configure(handlers::plots::init_plot_routes::<C>)

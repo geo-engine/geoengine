@@ -1,6 +1,4 @@
-use std::collections::HashMap;
-use std::path::Path;
-
+use crate::api::model::datatypes::{DataId, DataProviderId, ExternalDataId, LayerId};
 use crate::datasets::listing::ProvenanceOutput;
 use crate::error::Error;
 use crate::error::Result;
@@ -19,9 +17,9 @@ use async_trait::async_trait;
 use futures::future::join_all;
 use gdal::DatasetOptions;
 use gdal::Metadata;
-use geoengine_datatypes::dataset::ExternalDataId;
-use geoengine_datatypes::dataset::LayerId;
-use geoengine_datatypes::dataset::{DataId, DataProviderId};
+use std::collections::HashMap;
+use std::path::Path;
+
 use geoengine_datatypes::primitives::{RasterQueryRectangle, VectorQueryRectangle};
 use geoengine_operators::engine::RasterOperator;
 use geoengine_operators::engine::TypedOperator;
@@ -277,7 +275,8 @@ impl LayerCollectionProvider for Nature40DataProvider {
                             data: DataId::External(ExternalDataId {
                                 provider_id: self.id,
                                 layer_id: id.clone(),
-                            }),
+                            })
+                            .into(),
                         },
                     }
                     .boxed(),
@@ -402,11 +401,13 @@ impl MetaDataProvider<GdalLoadingInfo, RasterResultDescriptor, RasterQueryRectan
 {
     async fn meta_data(
         &self,
-        id: &DataId,
+        id: &geoengine_datatypes::dataset::DataId,
     ) -> Result<
         Box<dyn MetaData<GdalLoadingInfo, RasterResultDescriptor, RasterQueryRectangle>>,
         geoengine_operators::error::Error,
     > {
+        let id: DataId = id.clone().into();
+
         let dataset = id
             .external()
             .ok_or(geoengine_operators::error::Error::LoadingInfo {
@@ -463,7 +464,7 @@ impl
 {
     async fn meta_data(
         &self,
-        _id: &DataId,
+        _id: &geoengine_datatypes::dataset::DataId,
     ) -> Result<
         Box<
             dyn MetaData<
@@ -484,7 +485,7 @@ impl MetaDataProvider<OgrSourceDataset, VectorResultDescriptor, VectorQueryRecta
 {
     async fn meta_data(
         &self,
-        _id: &DataId,
+        _id: &geoengine_datatypes::dataset::DataId,
     ) -> Result<
         Box<dyn MetaData<OgrSourceDataset, VectorResultDescriptor, VectorQueryRectangle>>,
         geoengine_operators::error::Error,
@@ -498,7 +499,6 @@ mod tests {
     use std::{fs::File, io::Read, path::PathBuf, str::FromStr};
 
     use geoengine_datatypes::{
-        dataset::{ExternalDataId, LayerId},
         primitives::{
             Measurement, QueryRectangle, SpatialPartition2D, SpatialResolution, TimeInterval,
         },
@@ -879,11 +879,16 @@ mod tests {
 
         let meta: Box<dyn MetaData<GdalLoadingInfo, RasterResultDescriptor, RasterQueryRectangle>> =
             provider
-                .meta_data(&DataId::External(ExternalDataId {
-                    provider_id: DataProviderId::from_str("2cb964d5-b9fa-4f8f-ab6f-f6c7fb47d4cd")
+                .meta_data(
+                    &DataId::External(ExternalDataId {
+                        provider_id: DataProviderId::from_str(
+                            "2cb964d5-b9fa-4f8f-ab6f-f6c7fb47d4cd",
+                        )
                         .unwrap(),
-                    layer_id: LayerId("lidar_2018_wetness_1m:1".to_owned()),
-                }))
+                        layer_id: LayerId("lidar_2018_wetness_1m:1".to_owned()),
+                    })
+                    .into(),
+                )
                 .await
                 .unwrap();
 

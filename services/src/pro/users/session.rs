@@ -14,8 +14,9 @@ use futures_util::future::LocalBoxFuture;
 use futures_util::FutureExt;
 use geoengine_datatypes::primitives::DateTime;
 use serde::{Deserialize, Serialize};
+use utoipa::ToSchema;
 
-#[derive(Debug, PartialEq, Eq, Serialize, Deserialize, Clone)]
+#[derive(Debug, PartialEq, Eq, Serialize, Deserialize, Clone, ToSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct UserInfo {
     pub id: UserId,
@@ -23,7 +24,7 @@ pub struct UserInfo {
     pub real_name: Option<String>,
 }
 
-#[derive(Debug, PartialEq, Serialize, Deserialize, Clone)]
+#[derive(Debug, PartialEq, Serialize, Deserialize, Clone, ToSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct UserSession {
     pub id: SessionId,
@@ -157,7 +158,7 @@ mod tests {
             ),
             user: UserInfo {
                 id: UserId::from_str("9273bb02-95a6-49fe-b1c6-a32ff171d4a3").unwrap(),
-                email: Some("foo@bar.de".to_string()),
+                email: Some("foo@example.com".to_string()),
                 real_name: Some("Max Muster".to_string()),
             },
             created: DateTime::from_str("2020-01-01T00:00:00Z").unwrap(),
@@ -171,7 +172,7 @@ mod tests {
                 "id": "d1322969-5ada-4a2c-bacf-a3045383ba41",
                 "user": {
                     "id": "9273bb02-95a6-49fe-b1c6-a32ff171d4a3",
-                    "email": "foo@bar.de",
+                    "email": "foo@example.com",
                     "realName": "Max Muster"
                 },
                 "created": "2020-01-01T00:00:00.000Z",

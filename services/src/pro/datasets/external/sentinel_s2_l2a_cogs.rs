@@ -1,3 +1,4 @@
+use crate::api::model::datatypes::{DataId, DataProviderId, ExternalDataId, LayerId};
 use crate::datasets::listing::ProvenanceOutput;
 use crate::error::{self, Error, Result};
 use crate::layers::external::{DataProvider, DataProviderDefinition};
@@ -13,7 +14,6 @@ use crate::util::retry::retry;
 use crate::util::user_input::Validated;
 use crate::workflows::workflow::Workflow;
 use async_trait::async_trait;
-use geoengine_datatypes::dataset::{DataId, DataProviderId, ExternalDataId, LayerId};
 use geoengine_datatypes::operations::image::{Colorizer, RgbaColor};
 use geoengine_datatypes::operations::reproject::{
     CoordinateProjection, CoordinateProjector, ReprojectClipped,
@@ -170,7 +170,8 @@ impl SentinelS2L2aCogsDataProvider {
                                 &DataId::External(ExternalDataId {
                                     provider_id: *id,
                                     layer_id: layer_id.clone(),
-                                }),
+                                })
+                                .into(),
                             )
                             .expect("Gdal source is a valid operator."),
                         },
@@ -286,7 +287,8 @@ impl LayerCollectionProvider for SentinelS2L2aCogsDataProvider {
                             data: DataId::External(ExternalDataId {
                                 provider_id: self.id,
                                 layer_id: id.clone(),
-                            }),
+                            })
+                            .into(),
                         },
                     }
                     .boxed(),
@@ -602,11 +604,13 @@ impl MetaDataProvider<GdalLoadingInfo, RasterResultDescriptor, RasterQueryRectan
 {
     async fn meta_data(
         &self,
-        id: &DataId,
+        id: &geoengine_datatypes::dataset::DataId,
     ) -> Result<
         Box<dyn MetaData<GdalLoadingInfo, RasterResultDescriptor, RasterQueryRectangle>>,
         geoengine_operators::error::Error,
     > {
+        let id: DataId = id.clone().into();
+
         let dataset = self
             .datasets
             .get(
@@ -634,7 +638,7 @@ impl
 {
     async fn meta_data(
         &self,
-        _id: &DataId,
+        _id: &geoengine_datatypes::dataset::DataId,
     ) -> Result<
         Box<
             dyn MetaData<
@@ -655,7 +659,7 @@ impl MetaDataProvider<OgrSourceDataset, VectorResultDescriptor, VectorQueryRecta
 {
     async fn meta_data(
         &self,
-        _id: &DataId,
+        _id: &geoengine_datatypes::dataset::DataId,
     ) -> Result<
         Box<dyn MetaData<OgrSourceDataset, VectorResultDescriptor, VectorQueryRectangle>>,
         geoengine_operators::error::Error,

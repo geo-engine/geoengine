@@ -1,6 +1,7 @@
 use std::collections::HashMap;
 use std::str::FromStr;
 
+use crate::api::model::datatypes::{DataId, DatasetId, LayerId};
 use crate::datasets::listing::ProvenanceOutput;
 use crate::datasets::listing::SessionMetaDataProvider;
 use crate::datasets::storage::DATASET_DB_LAYER_PROVIDER_ID;
@@ -36,13 +37,9 @@ use bb8_postgres::bb8::Pool;
 use bb8_postgres::tokio_postgres::tls::{MakeTlsConnect, TlsConnect};
 use bb8_postgres::tokio_postgres::Socket;
 use bb8_postgres::PostgresConnectionManager;
-use geoengine_datatypes::dataset::DataId;
-use geoengine_datatypes::dataset::DatasetId;
-use geoengine_datatypes::dataset::LayerId;
 use geoengine_datatypes::primitives::RasterQueryRectangle;
 use geoengine_datatypes::primitives::VectorQueryRectangle;
 use geoengine_datatypes::util::Identifier;
-
 use geoengine_operators::engine::{
     MetaData, RasterResultDescriptor, StaticMetaData, TypedResultDescriptor, VectorResultDescriptor,
 };

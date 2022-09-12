@@ -1646,10 +1646,10 @@ mod tests {
             empty_hash_map_size
         );
 
-        let struct_stack_size = 168;
+        let struct_stack_size = 176;
         assert_eq!(mem::size_of::<StructArray>(), struct_stack_size);
 
-        let arrow_overhead_bytes = 240;
+        let arrow_overhead_bytes = 264;
 
         for i in 0..10 {
             assert_eq!(
@@ -1657,7 +1657,8 @@ mod tests {
                 empty_hash_map_size
                     + struct_stack_size
                     + arrow_overhead_bytes
-                    + time_interval_size(i)
+                    + time_interval_size(i),
+                "failed for i={i}"
             );
         }
     }

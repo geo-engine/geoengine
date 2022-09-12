@@ -1,5 +1,5 @@
+use crate::api::model::datatypes::{DataId, DataProviderId};
 use async_trait::async_trait;
-use geoengine_datatypes::dataset::{DataId, DataProviderId};
 use geoengine_datatypes::primitives::{RasterQueryRectangle, VectorQueryRectangle};
 use geoengine_datatypes::util::AsAny;
 use geoengine_operators::engine::{
