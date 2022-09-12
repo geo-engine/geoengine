@@ -21,10 +21,10 @@ pro = ["postgres", "geoengine-operators/pro", "geoengine-datatypes/pro"]
 
 [dependencies]
 actix-files = "0.6"
-actix-http = "3.0"
+actix-http = "3.2"
 actix-multipart = "0.4"
 actix-rt = "2.6"
-actix-web = "4.0"
+actix-web = { version = "4.2", features = ["macros", "compress-brotli", "compress-gzip", "cookies"], default-features = false } # TODO: use default feautures when https://github.com/actix/actix-web/issues/2869 is resolved
 actix-web-httpauth = "0.8"
 async-trait = "0.1"
 base64 = "0.13"
