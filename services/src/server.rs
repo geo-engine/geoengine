@@ -111,20 +111,29 @@ where
             .configure(handlers::wcs::init_wcs_routes::<C>)
             .configure(handlers::wfs::init_wfs_routes::<C>)
             .configure(handlers::wms::init_wms_routes::<C>)
-            .configure(handlers::workflows::init_workflow_routes::<C>)
-            .service(
-                SwaggerUi::new("/swagger-ui/{_:.*}").url("/api-docs/openapi.json", openapi.clone()),
-            );
+            .configure(handlers::workflows::init_workflow_routes::<C>);
+        
+        #[allow(unused_mut)] // clippy warns here otherwise if no additional feature is activated
+        let mut api_urls = vec![(utoipa_swagger_ui::Url::new("Geo Engine", "/api-docs/openapi.json"), openapi.clone())];
 
         #[cfg(feature = "ebv")]
         {
             app = app.service(web::scope("/ebv").configure(handlers::ebv::init_ebv_routes::<C>()));
+            api_urls.push((
+                utoipa_swagger_ui::Url::new("EBV", "/api-docs/ebv/openapi.json"),
+                crate::handlers::ebv::ApiDoc::openapi(),
+            ));
         }
 
         #[cfg(feature = "nfdi")]
         {
             app = app.configure(handlers::gfbio::init_gfbio_routes::<C>);
         }
+
+        app = app.service(
+            SwaggerUi::new("/swagger-ui/{_:.*}").urls(api_urls),
+        );
+
         if version_api {
             app = app.route(
                 "/version",

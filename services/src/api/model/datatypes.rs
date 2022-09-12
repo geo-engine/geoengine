@@ -629,3 +629,27 @@ pub enum RasterDataType {
     F32,
     F64,
 }
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
+#[serde(rename_all = "UPPERCASE")]
+pub enum ResamplingMethod {
+    Nearest,
+    Average,
+    Bilinear,
+    Cubic,
+    CubicSpline,
+    Lanczos,
+}
+
+impl std::fmt::Display for ResamplingMethod {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            ResamplingMethod::Nearest => write!(f, "NEAREST"),
+            ResamplingMethod::Average => write!(f, "AVERAGE"),
+            ResamplingMethod::Bilinear => write!(f, "BILINEAR"),
+            ResamplingMethod::Cubic => write!(f, "CUBIC"),
+            ResamplingMethod::CubicSpline => write!(f, "CUBICSPLINE"),
+            ResamplingMethod::Lanczos => write!(f, "LANCZOS"),
+        }
+    }
+}

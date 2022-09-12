@@ -4,7 +4,9 @@ use self::overviews::remove_overviews;
 use self::overviews::InProgressFlag;
 pub use self::overviews::OverviewGeneration;
 use self::overviews::{create_overviews, METADATA_FILE_NAME};
-use crate::api::model::datatypes::{DataId, DataProviderId, ExternalDataId, LayerId};
+use crate::api::model::datatypes::{
+    DataId, DataProviderId, ExternalDataId, LayerId, ResamplingMethod,
+};
 use crate::datasets::external::netcdfcf::overviews::LOADING_INFO_FILE_NAME;
 use crate::datasets::listing::ProvenanceOutput;
 use crate::datasets::storage::MetaDataDefinition;
@@ -37,7 +39,6 @@ use geoengine_datatypes::primitives::{
 };
 use geoengine_datatypes::raster::{GdalGeoTransform, RasterDataType};
 use geoengine_datatypes::spatial_reference::SpatialReference;
-use geoengine_datatypes::util::gdal::ResamplingMethod;
 use geoengine_operators::engine::RasterOperator;
 use geoengine_operators::engine::TypedOperator;
 use geoengine_operators::source::GdalSource;

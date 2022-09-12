@@ -5,6 +5,7 @@ use crate::util::user_input::UserInput;
 use crate::{contexts::Context, tasks::TaskId};
 use actix_web::{web, Either, FromRequest, HttpResponse, Responder};
 use serde::{Deserialize, Serialize};
+use utoipa::ToSchema;
 
 pub(crate) fn init_task_routes<C>(cfg: &mut web::ServiceConfig)
 where
@@ -23,7 +24,7 @@ where
 }
 
 /// Create a task somewhere and respond with a task id to query the task status.
-#[derive(Debug, Clone, Deserialize, Serialize)]
+#[derive(Debug, Clone, Deserialize, Serialize, ToSchema)]
 pub struct TaskResponse {
     pub task_id: TaskId,
 }
