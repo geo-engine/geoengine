@@ -587,7 +587,7 @@ impl MetaData<GdalLoadingInfo, RasterResultDescriptor, RasterQueryRectangle>
             measurement: Measurement::Unitless,
             time: None,
             bbox: None,
-            resolution: None,
+            resolution: None, // TODO: determine from STAC or data or hardcode it
         })
     }
 
