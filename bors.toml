@@ -9,7 +9,7 @@ status = [
     "build (ubuntu-20.04, --all-features)",
     "build (ubuntu-20.04, --all-features, --release)",
     "clippy",
-    "coverage"
+    "coveralls"
 ]
 
 # One approval necessary for bors to work
