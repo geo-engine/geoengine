@@ -37,7 +37,7 @@ pub struct InterpolationParams {
 #[serde(rename_all = "camelCase", tag = "type")]
 pub enum InputResolution {
     Value(SpatialResolution),
-    Native,
+    Source,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone, Copy)]
