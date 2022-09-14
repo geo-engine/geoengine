@@ -472,9 +472,9 @@ impl NetCdfCfDataProvider {
             .context(error::CannotParseCrs)?
             .into(),
             measurement: derive_measurement(data_array.unit()),
-
             time: None,
             bbox: None,
+            resolution: None,
         };
 
         let params = GdalDatasetParameters {
@@ -1918,6 +1918,7 @@ mod tests {
                 measurement: Measurement::Unitless,
                 time: None,
                 bbox: None,
+                resolution: None,
             }
         );
 
@@ -2040,6 +2041,7 @@ mod tests {
                 measurement: Measurement::Unitless,
                 time: None,
                 bbox: None,
+                resolution: Some(SpatialResolution::new_unchecked(1000.0, 1000.0)),
             }
         );
 

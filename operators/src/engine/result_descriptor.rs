@@ -1,6 +1,6 @@
 use geoengine_datatypes::primitives::{
     AxisAlignedRectangle, BoundingBox2D, FeatureDataType, Measurement, SpatialPartition2D,
-    TimeInterval,
+    SpatialResolution, TimeInterval,
 };
 use geoengine_datatypes::{
     collections::VectorDataType, raster::RasterDataType, spatial_reference::SpatialReferenceOption,
@@ -56,6 +56,7 @@ pub struct RasterResultDescriptor {
     pub measurement: Measurement,
     pub time: Option<TimeInterval>,
     pub bbox: Option<SpatialPartition2D>,
+    pub resolution: Option<SpatialResolution>,
 }
 
 impl ResultDescriptor for RasterResultDescriptor {

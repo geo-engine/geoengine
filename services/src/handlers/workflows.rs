@@ -847,6 +847,7 @@ mod tests {
                         }),
                         time: None,
                         bbox: None,
+                        resolution: None,
                     },
                 },
             }
@@ -881,7 +882,8 @@ mod tests {
                     "unit": null
                 },
                 "time": null,
-                "bbox": null
+                "bbox": null,
+                "resolution": null
             })
         );
     }
@@ -1285,6 +1287,10 @@ mod tests {
                         "x": 180.0,
                         "y": -90.0
                     }
+                },
+                "resolution": {
+                    "x": 0.1,
+                    "y": 0.1
                 }
             })
         );

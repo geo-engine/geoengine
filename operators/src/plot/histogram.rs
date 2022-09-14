@@ -740,6 +740,7 @@ mod tests {
                     measurement: Measurement::Unitless,
                     time: None,
                     bbox: None,
+                    resolution: None,
                 },
             },
         }
@@ -1130,6 +1131,7 @@ mod tests {
                         measurement: Measurement::Unitless,
                         time: None,
                         bbox: None,
+                        resolution: None,
                     },
                 },
             }
@@ -1327,6 +1329,7 @@ mod tests {
                         measurement: Measurement::Unitless,
                         time: None,
                         bbox: None,
+                        resolution: None,
                     },
                 },
             }

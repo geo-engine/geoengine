@@ -901,6 +901,7 @@ mod tests {
                 measurement: Measurement::Unitless,
                 time: None,
                 bbox: None,
+                resolution: Some(SpatialResolution::new_unchecked(1.0, 1.0)),
             }
         );
 

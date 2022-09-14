@@ -476,6 +476,7 @@ mod tests {
                     ),
                     time: None,
                     bbox: None,
+                    resolution: None,
                 },
             },
         }
@@ -855,6 +856,7 @@ mod tests {
                         measurement,
                         time: None,
                         bbox: None,
+                        resolution: None,
                     },
                 },
             }
@@ -1053,6 +1055,7 @@ mod tests {
                         measurement,
                         time: None,
                         bbox: None,
+                        resolution: None,
                     },
                 },
             }

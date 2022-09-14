@@ -100,6 +100,7 @@ impl RasterOperator for Temperature {
             }),
             time: in_desc.time,
             bbox: in_desc.bbox,
+            resolution: in_desc.resolution,
         };
 
         let initialized_operator = InitializedTemperature {
