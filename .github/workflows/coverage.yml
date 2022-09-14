@@ -24,7 +24,7 @@ jobs:
         run: sudo apt-get update
       - name: Install lld & GDAL
         run: |
-          sudo apt-get lld install libgdal-dev gdal-bin build-essential
+          sudo apt-get install lld libgdal-dev gdal-bin build-essential
           export C_INCLUDE_PATH=/usr/include/gdal:$C_INCLUDE_PATH
           export CPLUS_INCLUDE_PATH=/usr/include/gdal:$CPLUS_INCLUDE_PATH
           sudo ldconfig
