@@ -51,7 +51,7 @@ pub enum InterpolationMethod {
 #[snafu(visibility(pub(crate)), context(suffix(false)), module(error))]
 pub enum InterpolationError {
     #[snafu(display(
-        "The input resolution was defined as `native` but the source resolution is unknown.",
+        "The input resolution was defined as `source` but the source resolution is unknown.",
     ))]
     UnknownInputResolution,
 }
