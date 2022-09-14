@@ -156,3 +156,5 @@ jobs:
         with:
           command: build
           args: ${{ matrix.features }} ${{ matrix.build }} --verbose --target-dir=target
+        env:
+          CARGO_TARGET_DIR: /home/runner/work/geoengine/geoengine/target
