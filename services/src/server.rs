@@ -27,12 +27,19 @@ use utoipa_swagger_ui::SwaggerUi;
 pub async fn start_server(static_files_dir: Option<PathBuf>) -> Result<()> {
     let web_config: config::Web = get_config_element()?;
 
+    let external_address = web_config
+        .external_address
+        .unwrap_or(Url::parse(&format!("http://{}/", web_config.bind_address))?);
+
     info!(
         "Starting server… local address: {}, external address: {}",
         Url::parse(&format!("http://{}/", web_config.bind_address))?,
-        web_config
-            .external_address
-            .unwrap_or(Url::parse(&format!("http://{}/", web_config.bind_address))?)
+        external_address
+    );
+
+    info!(
+        "API documentation is available at {}",
+        external_address.join("swagger-ui/")?
     );
 
     let session_config: crate::util::config::Session = get_config_element()?;
