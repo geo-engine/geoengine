@@ -132,7 +132,7 @@ jobs:
           # An additional cache key that is added alongside the automatic `job`-based
           # cache key and can be used to further differentiate jobs.
           # Default: empty
-          key: 2_${{ matrix.features }}_${{ matrix.build }}
+          key: 3_${{ matrix.features }}_${{ matrix.build }}
 
           # A whitespace separated list of env-var *prefixes* who's value contributes
           # to the environment cache key.
@@ -156,3 +156,5 @@ jobs:
         with:
           command: build
           args: ${{ matrix.features }} ${{ matrix.build }} --verbose
+        env:
+          CARGO_BUILD_TARGET_DIR: "target"
