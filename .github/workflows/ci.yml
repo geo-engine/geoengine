@@ -60,7 +60,7 @@ jobs:
           # An additional cache key that is added alongside the automatic `job`-based
           # cache key and can be used to further differentiate jobs.
           # Default: empty
-          key: ${{ matrix.build }}
+          key: 2_${{ matrix.features }}_${{ matrix.build }}
 
           # A whitespace separated list of env-var *prefixes* who's value contributes
           # to the environment cache key.
@@ -148,7 +148,7 @@ jobs:
           # An additional cache key that is added alongside the automatic `job`-based
           # cache key and can be used to further differentiate jobs.
           # Default: empty
-          key: 1_${{ matrix.features }}_${{ matrix.build }}
+          key: 2_${{ matrix.features }}_${{ matrix.build }}
 
           # A whitespace separated list of env-var *prefixes* who's value contributes
           # to the environment cache key.
