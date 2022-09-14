@@ -155,6 +155,4 @@ jobs:
         uses: actions-rs/cargo@v1
         with:
           command: build
-          args: ${{ matrix.features }} ${{ matrix.build }} --verbose
-        env:
-          CARGO_BUILD_TARGET_DIR: "target"
+          args: ${{ matrix.features }} ${{ matrix.build }} --verbose --target-dir="target"
