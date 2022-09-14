@@ -75,7 +75,7 @@ jobs:
       - name: Generate code coverage
         run: |
           cargo install cargo-tarpaulin
-          cargo tarpaulin --verbose --workspace --timeout 240 --out Lcov --all-features --tests  --implicit-test-threads --run-types Tests
+          cargo tarpaulin --verbose --workspace --timeout 240 --out Lcov --all-features --tests  --implicit-test-threads --run-types Tests  --skip-clean
         env:
           CARGO_TARGET_DIR: /home/runner/work/geoengine/geoengine/target
       - name: Upload coverage to Coveralls
