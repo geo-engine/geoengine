@@ -9,8 +9,11 @@ status = [
     "build (ubuntu-20.04, --all-features)",
     "build (ubuntu-20.04, --all-features, --release)",
     "clippy",
-    "coverage"
+    "coveralls"
 ]
 
 # One approval necessary for bors to work
 required_approvals = 1
+
+# Set bors's timeout to 4 hours
+timeout-sec = 7200
