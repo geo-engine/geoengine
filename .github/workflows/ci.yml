@@ -12,7 +12,7 @@ env:
   CARGO_TERM_COLOR: always
 
 jobs:
-  build:
+  test:
     runs-on: ${{matrix.os}}
 
     services:
@@ -47,7 +47,7 @@ jobs:
           export CPLUS_INCLUDE_PATH=/usr/include/gdal:$CPLUS_INCLUDE_PATH
           sudo ldconfig
       - name: init rust-toolchain
-        # somehow rustup will take care to initialize the version based on the toolchain file
+        # somehow rustup show will take care to initialize the version based on the toolchain file
         run: rustup show
       - name: setup rust build cache
         uses: Swatinem/rust-cache@v2
@@ -89,37 +89,21 @@ jobs:
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
           args: --all-targets ${{ matrix.features }} ${{ matrix.build }} -- -D warnings
-      - name: Build
-        uses: actions-rs/cargo@v1
-        with:
-          command: build
-          args: ${{ matrix.features }} ${{ matrix.build }} --verbose
       - name: Run tests
         uses: actions-rs/cargo@v1
         with:
           command: test
           args: ${{ matrix.features }} ${{ matrix.build }} --verbose
 
-  build-release:
+  build:
     runs-on: ${{matrix.os}}
-
-    services:
-      postgres:
-        image: postgis/postgis
-        env:
-          POSTGRES_USER: geoengine
-          POSTGRES_PASSWORD: geoengine
-          POSTGRES_DB: geoengine
-        ports:
-          - 5432:5432
-        options: --health-cmd pg_isready --health-interval 10s --health-timeout 5s --health-retries 5
 
     strategy:
       matrix:
         os:
           - ubuntu-20.04
         features: ["", "--features pro", "--all-features"]
-        build: ["--release"]
+        build: ["", "--release"]
 
     steps:
       - name: Checkout code
@@ -135,7 +119,7 @@ jobs:
           export CPLUS_INCLUDE_PATH=/usr/include/gdal:$CPLUS_INCLUDE_PATH
           sudo ldconfig
       - name: init rust-toolchain
-        # somehow rustup will take care to initialize the version based on the toolchain file
+        # somehow rustup show will take care to initialize the version based on the toolchain file
         run: rustup show
       - name: setup rust build cache
         uses: Swatinem/rust-cache@v2
