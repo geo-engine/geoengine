@@ -41,15 +41,24 @@ jobs:
           echo "FULL_TAG_NAME=${{ github.event.inputs.tag_name }}" >> $GITHUB_ENV
 
       - name: Set `FULL_TAG_NAME` wrt. cargo features
-        if: ${{ matrix.cargo-features != '' }}
+        if: matrix.cargo-features != ''
         run: |
           echo "FULL_TAG_NAME=${{matrix.cargo-features}}-${{env.TAG_NAME}}" >> $GITHUB_ENV
           echo "CARGO_FEATURES=--features=${{matrix.cargo-features}}" >> $GITHUB_ENV
 
       - name: Checkout code
+        if: github.head_ref == ''
         uses: actions/checkout@v3
         with:
           ref: ${{ github.ref_name }}
+          path: geoengine
+
+      # TODO: remove
+      - name: Checkout code
+        if: github.head_ref != ''
+        uses: actions/checkout@v3
+        with:
+          ref: ${{ github.head_ref }}
           path: geoengine
 
       - name: Checkout container files
@@ -73,5 +82,5 @@ jobs:
         run: podman push geoengine:${{env.FULL_TAG_NAME}} quay.io/geoengine/geoengine:${{env.FULL_TAG_NAME}}
 
       - name: Push nightly with date
-        if: ${{ env.TAG_NAME == 'nightly' }}
+        if: env.TAG_NAME == 'nightly'
         run: podman push geoengine:${{env.FULL_TAG_NAME}} quay.io/geoengine/geoengine:${{env.FULL_TAG_NAME}}-$(date +'%Y-%m-%d')
