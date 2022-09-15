@@ -6,6 +6,8 @@ on:
   # run every night
   schedule:
     - cron: "0 22 * * *"
+  pull_request: # TODO: remove
+    branches: [main]
 
 jobs:
   create-container:
@@ -35,7 +37,7 @@ jobs:
         uses: actions/checkout@v3
         with:
           repository: geo-engine/geoengine-container
-          token: ${{ secrets.CONTAINER_GITHUB_TOKEN }}
+          ssh-key: ${{ secrets.CONTAINER_GITHUB_TOKEN }}
           path: "container"
 
       - name: Copy Dockerfile
