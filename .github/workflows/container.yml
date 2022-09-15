@@ -1,16 +1,20 @@
 name: Create containers
 
 on:
-  # TODO: inputs
-  workflow_dispatch:
   # run every night
   schedule:
     - cron: "0 22 * * *"
-  # TODO: remove
-  # push:
-  #   branches: [container]
-  pull_request:
-    branches: [master]
+
+  # schedule manually
+  workflow_dispatch:
+    inputs:
+      # On workflow dispatch, `branch` is selected by default
+      # You can access it in `github.ref_name`
+
+      tag_name:
+        description: "Tag name for the container"
+        required: true
+        default: "nightly"
 
 jobs:
   create-container:
@@ -21,45 +25,48 @@ jobs:
     runs-on: ubuntu-22.04
 
     env:
-      # TODO: change with custom params
       TAG_NAME: nightly
-      REF_NAME: master
+      FULL_TAG_NAME: nightly
 
     steps:
-      # - name: Modify TAG_NAME if on `main` branch
-      #   if: ${{ github.ref_name == 'main' }}
-      #   run: echo "TAG_NAME=nightly" >> $GITHUB_ENV
+      - name: Modify TAG_NAME if on `tag_name` is set on `workflow_dispatch`
+        if: github.event.inputs.tag_name != ''
+        run: |
+          echo "TAG_NAME=${{ github.event.inputs.tag_name }}" >> $GITHUB_ENV
+          echo "FULL_TAG_NAME=${{ github.event.inputs.tag_name }}" >> $GITHUB_ENV
+
+      - name: Set `FULL_TAG_NAME` wrt. cargo features
+        if: ${{ matrix.cargo-features != '' }}
+        run: |
+          echo "FULL_TAG_NAME=${{matrix.cargo-features}}-${{env.TAG_NAME}}" >> $GITHUB_ENV
+          echo "CARGO_FEATURES=--features=${{matrix.cargo-features}}" >> $GITHUB_ENV
 
       - name: Checkout code
         uses: actions/checkout@v3
         with:
-          ref: ${{env.REF_NAME}}
+          ref: ${{ github.ref_name }}
           path: geoengine
 
       - name: Checkout container files
         uses: actions/checkout@v3
         with:
           repository: geo-engine/geoengine-container
-          ref: build-from-public-repo # TODO: change to `main`
           ssh-key: ${{ secrets.CONTAINER_GITHUB_TOKEN }}
           path: "container"
-
-      - name: Modify container tag
-        if: ${{ matrix.cargo-features != '' }}
-        run: |
-          echo "TAG_NAME=${{matrix.cargo-features}}-${{env.TAG_NAME}}" >> $GITHUB_ENV
-          echo "CARGO_FEATURES=--features=${{matrix.cargo-features}}" >> $GITHUB_ENV
 
       - name: Login to quay.io
         run: podman login -u="geoengine+bot" -p="${{secrets.QUAY_IO_TOKEN}}" quay.io
 
       - name: Build with podman
-        run: podman build --tag geoengine:${{env.TAG_NAME}} --build-arg GEO_ENGINE_CARGO_BUILD_PARAMS="--release ${{env.CARGO_FEATURES}}" -f container/geoengine/Dockerfile .
+        run: |
+          podman build \
+            --tag geoengine:${{env.FULL_TAG_NAME}} \
+            --build-arg GEO_ENGINE_CARGO_BUILD_PARAMS="--release ${{env.CARGO_FEATURES}}" \
+            -f container/geoengine/Dockerfile .
 
       - name: Push image to quay.io
-        run: podman push geoengine:${{env.TAG_NAME}} quay.io/geoengine/geoengine:${{env.TAG_NAME}}
+        run: podman push geoengine:${{env.FULL_TAG_NAME}} quay.io/geoengine/geoengine:${{env.FULL_TAG_NAME}}
 
       - name: Push nightly with date
-        # TODO: change
-        if: ${{ github.ref_name == 'main' }}
-        run: podman push geoengine:${{env.TAG_NAME}} quay.io/geoengine/geoengine:${{env.TAG_NAME}}-$(date +'%Y-%m-%d')
+        if: ${{ env.TAG_NAME == 'nightly' }}
+        run: podman push geoengine:${{env.FULL_TAG_NAME}} quay.io/geoengine/geoengine:${{env.FULL_TAG_NAME}}-$(date +'%Y-%m-%d')
