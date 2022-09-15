@@ -15,6 +15,8 @@ use actix_files::Files;
 use actix_web::{http, middleware, web, App, HttpServer};
 #[cfg(feature = "postgres")]
 use bb8_postgres::tokio_postgres::NoTls;
+use geoengine_datatypes::raster::TilingSpecification;
+use geoengine_operators::engine::ChunkByteSize;
 use log::{info, warn};
 use std::net::SocketAddr;
 use std::path::PathBuf;
@@ -57,10 +59,13 @@ where
             .configure(handlers::wcs::init_wcs_routes::<C>)
             .configure(handlers::wfs::init_wfs_routes::<C>)
             .configure(handlers::wms::init_wms_routes::<C>)
-            .configure(handlers::workflows::init_workflow_routes::<C>)
-            .service(
-                SwaggerUi::new("/swagger-ui/{_:.*}").url("/api-docs/openapi.json", openapi.clone()),
-            );
+            .configure(handlers::workflows::init_workflow_routes::<C>);
+
+        #[allow(unused_mut)] // clippy warns here otherwise if no additional feature is activated
+        let mut api_urls = vec![(
+            utoipa_swagger_ui::Url::new("Geo Engine Pro", "/api-docs/openapi.json"),
+            openapi.clone(),
+        )];
 
         #[cfg(feature = "odm")]
         {
@@ -70,12 +75,18 @@ where
         #[cfg(feature = "ebv")]
         {
             app = app.service(web::scope("/ebv").configure(handlers::ebv::init_ebv_routes::<C>()));
+            api_urls.push((
+                utoipa_swagger_ui::Url::new("EBV", "/api-docs/ebv/openapi.json"),
+                crate::handlers::ebv::ApiDoc::openapi(),
+            ));
         }
 
         #[cfg(feature = "nfdi")]
         {
             app = app.configure(handlers::gfbio::init_gfbio_routes::<C>);
         }
+
+        app = app.service(SwaggerUi::new("/swagger-ui/{_:.*}").urls(api_urls));
 
         if version_api {
             app = app.route(
@@ -109,12 +120,20 @@ pub async fn start_pro_server(static_files_dir: Option<PathBuf>) -> Result<()> {
 
     let web_config: config::Web = get_config_element()?;
 
+    let external_address = web_config
+        .external_address
+        .clone()
+        .unwrap_or(Url::parse(&format!("http://{}/", web_config.bind_address))?);
+
     info!(
         "Starting server… local address: {}, external address: {}",
         Url::parse(&format!("http://{}/", web_config.bind_address))?,
-        web_config
-            .external_address
-            .unwrap_or(Url::parse(&format!("http://{}/", web_config.bind_address))?)
+        external_address
+    );
+
+    info!(
+        "API documentation is available at {}",
+        external_address.join("swagger-ui/")?
     );
 
     let session_config: crate::util::config::Session = get_config_element()?;
@@ -153,64 +172,102 @@ pub async fn start_pro_server(static_files_dir: Option<PathBuf>) -> Result<()> {
 
     match web_config.backend {
         Backend::InMemory => {
-            info!("Using in memory backend");
-            let ctx = ProInMemoryContext::new_with_data(
-                data_path_config.dataset_defs_path,
-                data_path_config.provider_defs_path,
-                data_path_config.layer_defs_path,
-                data_path_config.layer_collection_defs_path,
+            start_in_memory(
+                data_path_config,
                 tiling_spec,
-                chunk_byte_size,
                 oidc_config,
-            )
-            .await;
-
-            start(
+                chunk_byte_size,
                 static_files_dir,
-                web_config.bind_address,
-                web_config.version_api,
-                ctx,
+                web_config,
             )
             .await
         }
         Backend::Postgres => {
-            #[cfg(feature = "postgres")]
-            {
-                info!("Using Postgres backend");
-
-                let db_config = config::get_config_element::<config::Postgres>()?;
-                let mut pg_config = bb8_postgres::tokio_postgres::Config::new();
-                pg_config
-                    .user(&db_config.user)
-                    .password(&db_config.password)
-                    .host(&db_config.host)
-                    .dbname(&db_config.database)
-                    // fix schema by providing `search_path` option
-                    .options(&format!("-c search_path={}", db_config.schema));
-
-                let ctx = PostgresContext::new_with_data(
-                    pg_config,
-                    NoTls,
-                    data_path_config.dataset_defs_path,
-                    data_path_config.provider_defs_path,
-                    data_path_config.layer_defs_path,
-                    data_path_config.layer_collection_defs_path,
-                    tiling_spec,
-                    chunk_byte_size,
-                    oidc_config,
-                )
-                .await?;
-
-                start(
-                    static_files_dir,
-                    web_config.bind_address,
-                    web_config.version_api,
-                    ctx,
-                )
-                .await
-            }
-            #[cfg(not(feature = "postgres"))]
-            panic!("Postgres backend was selected but the postgres feature wasn't activated during compilation")
+            start_postgres(
+                data_path_config,
+                tiling_spec,
+                oidc_config,
+                chunk_byte_size,
+                static_files_dir,
+                web_config,
+            )
+            .await
         }
     }
+}
+
+async fn start_in_memory(
+    data_path_config: config::DataProvider,
+    tiling_spec: TilingSpecification,
+    oidc_config: crate::pro::util::config::Oidc,
+    chunk_byte_size: ChunkByteSize,
+    static_files_dir: Option<PathBuf>,
+    web_config: config::Web,
+) -> Result<()> {
+    info!("Using in memory backend");
+    let ctx = ProInMemoryContext::new_with_data(
+        data_path_config.dataset_defs_path,
+        data_path_config.provider_defs_path,
+        data_path_config.layer_defs_path,
+        data_path_config.layer_collection_defs_path,
+        tiling_spec,
+        chunk_byte_size,
+        oidc_config,
+    )
+    .await;
+
+    start(
+        static_files_dir,
+        web_config.bind_address,
+        web_config.version_api,
+        ctx,
+    )
+    .await
+}
+
+async fn start_postgres(
+    data_path_config: config::DataProvider,
+    tiling_spec: TilingSpecification,
+    oidc_config: crate::pro::util::config::Oidc,
+    chunk_byte_size: ChunkByteSize,
+    static_files_dir: Option<PathBuf>,
+    web_config: config::Web,
+) -> Result<()> {
+    #[cfg(feature = "postgres")]
+    {
+        info!("Using Postgres backend");
+
+        let db_config = config::get_config_element::<config::Postgres>()?;
+        let mut pg_config = bb8_postgres::tokio_postgres::Config::new();
+        pg_config
+            .user(&db_config.user)
+            .password(&db_config.password)
+            .host(&db_config.host)
+            .dbname(&db_config.database)
+            // fix schema by providing `search_path` option
+            .options(&format!("-c search_path={}", db_config.schema));
+
+        let ctx = PostgresContext::new_with_data(
+            pg_config,
+            NoTls,
+            data_path_config.dataset_defs_path,
+            data_path_config.provider_defs_path,
+            data_path_config.layer_defs_path,
+            data_path_config.layer_collection_defs_path,
+            tiling_spec,
+            chunk_byte_size,
+            oidc_config,
+        )
+        .await?;
+
+        start(
+            static_files_dir,
+            web_config.bind_address,
+            web_config.version_api,
+            ctx,
+        )
+        .await
+    }
+    #[cfg(not(feature = "postgres"))]
+            panic!("Postgres backend was selected but the postgres feature wasn't activated during compilation")
 }

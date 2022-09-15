@@ -13,8 +13,10 @@ use crate::contexts::{SessionId, SimpleSession};
 use crate::datasets::listing::{Provenance, ProvenanceOutput};
 use crate::datasets::upload::UploadId;
 use crate::handlers;
+use crate::handlers::tasks::TaskAbortOptions;
 use crate::handlers::workflows::{RasterDatasetFromWorkflow, RasterDatasetFromWorkflowResult};
 use crate::projects::{ProjectId, STRectangle};
+use crate::tasks::{TaskFilter, TaskId, TaskListOptions, TaskStatus};
 use crate::util::server::VersionInfo;
 use crate::util::IdResponse;
 use crate::workflows::workflow::{Workflow, WorkflowId};
@@ -29,6 +31,9 @@ use utoipa::{Modify, OpenApi};
         handlers::session::session_handler,
         handlers::session::session_project_handler,
         handlers::session::session_view_handler,
+        handlers::tasks::abort_handler,
+        handlers::tasks::list_handler,
+        handlers::tasks::status_handler,
         handlers::workflows::dataset_from_workflow_handler,
         handlers::workflows::get_workflow_metadata_handler,
         handlers::workflows::get_workflow_provenance_handler,
@@ -47,6 +52,7 @@ use utoipa::{Modify, OpenApi};
             LayerId,
             ProjectId,
             SessionId,
+            TaskId,
             UploadId,
             WorkflowId,
 
@@ -86,6 +92,11 @@ use utoipa::{Modify, OpenApi};
             RasterQueryRectangle,
             // VectorQueryRectangle,
             // PlotQueryRectangle,
+
+            TaskAbortOptions,
+            TaskFilter,
+            TaskListOptions,
+            TaskStatus,
         ),
     ),
     modifiers(&SecurityAddon, &ApiDocInfo),

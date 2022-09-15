@@ -13,9 +13,11 @@ use crate::contexts::SessionId;
 use crate::datasets::listing::{Provenance, ProvenanceOutput};
 use crate::datasets::upload::UploadId;
 use crate::handlers;
+use crate::handlers::tasks::TaskAbortOptions;
 use crate::handlers::workflows::{RasterDatasetFromWorkflow, RasterDatasetFromWorkflowResult};
 use crate::pro;
 use crate::projects::{ProjectId, STRectangle};
+use crate::tasks::{TaskFilter, TaskId, TaskListOptions, TaskStatus};
 use crate::util::server::VersionInfo;
 use crate::util::IdResponse;
 use crate::workflows::workflow::{Workflow, WorkflowId};
@@ -29,6 +31,9 @@ use super::users::{UserCredentials, UserId, UserInfo, UserRegistration, UserSess
 #[openapi(
     paths(
         crate::util::server::show_version_handler,
+        handlers::tasks::abort_handler,
+        handlers::tasks::list_handler,
+        handlers::tasks::status_handler,
         handlers::workflows::dataset_from_workflow_handler,
         handlers::workflows::get_workflow_metadata_handler,
         handlers::workflows::get_workflow_provenance_handler,
@@ -57,6 +62,7 @@ use super::users::{UserCredentials, UserId, UserInfo, UserRegistration, UserSess
             ProjectId,
             RoleId,
             SessionId,
+            TaskId,
             UploadId,
             UserId,
             WorkflowId,
@@ -97,6 +103,11 @@ use super::users::{UserCredentials, UserId, UserInfo, UserRegistration, UserSess
             RasterQueryRectangle,
             // VectorQueryRectangle,
             // PlotQueryRectangle,
+
+            TaskAbortOptions,
+            TaskFilter,
+            TaskListOptions,
+            TaskStatus,
         ),
     ),
     modifiers(&SecurityAddon, &ApiDocInfo),
