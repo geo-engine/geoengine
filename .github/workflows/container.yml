@@ -46,8 +46,6 @@ jobs:
       - name: Copy Dockerfile
         run: cp container/Dockerfile $GITHUB_WORKSPACE/Dockerfile
 
-      - name: Copy docker-compose.yml
-
       - name: build container tag from matrix
         if: ${{ matrix.cargo-features != '' }}
         run: |
