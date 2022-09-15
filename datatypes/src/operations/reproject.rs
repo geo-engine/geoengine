@@ -399,6 +399,8 @@ pub fn suggest_pixel_size_from_diag_cross<P: CoordinateProjection, B: AxisAligne
 }
 
 /// A version of `suggest_pixel_size_from_diag_cross` that takes a `partition` and a projected counterpart as input
+/// The `spatial_resolution` corresponds to the `bbox`. The output of the function is the suggested resolution for
+/// the `bbox_projected` rectangle.
 pub fn suggest_pixel_size_from_diag_cross_projected<B: AxisAlignedRectangle>(
     bbox: B,
     bbox_projected: B,

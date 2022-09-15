@@ -47,6 +47,42 @@ pub struct RasterReprojectionState {
 }
 
 pub type Reprojection = Operator<ReprojectionParams, SingleRasterOrVectorSource>;
+
+impl Reprojection {
+    fn derive_raster_result_descriptor(
+        target_sref: SpatialReference,
+        in_desc: &RasterResultDescriptor,
+    ) -> Result<RasterResultDescriptor> {
+        let out_bbox = if let Some(bbox) = in_desc.bbox {
+            let in_srs: Option<SpatialReference> = in_desc.spatial_reference.into();
+            let projector = CoordinateProjector::from_known_srs(
+                in_srs.ok_or(Error::AllSourcesMustHaveSameSpatialReference)?,
+                target_sref,
+            )?;
+
+            Some(bbox.reproject_clipped(&projector)?)
+        } else {
+            None
+        };
+
+        let out_res = match (in_desc.bbox, in_desc.resolution, out_bbox) {
+            (Some(in_bbox), Some(in_res), Some(out_bbox)) => {
+                suggest_pixel_size_from_diag_cross_projected(in_bbox, out_bbox, in_res).ok()
+            }
+            _ => None,
+        };
+
+        Ok(RasterResultDescriptor {
+            spatial_reference: target_sref.into(),
+            data_type: in_desc.data_type,
+            measurement: in_desc.measurement.clone(),
+            time: in_desc.time,
+            bbox: out_bbox,
+            resolution: out_res,
+        })
+    }
+}
+
 pub struct InitializedVectorReprojection {
     result_descriptor: VectorResultDescriptor,
     source: Box<dyn InitializedVectorOperator>,
@@ -233,26 +269,8 @@ impl RasterOperator for Reprojection {
 
         let in_desc: &RasterResultDescriptor = raster_operator.result_descriptor();
 
-        let bbox = if let Some(bbox) = in_desc.bbox {
-            let in_srs: Option<SpatialReference> = in_desc.spatial_reference.into();
-            let projector = CoordinateProjector::from_known_srs(
-                in_srs.ok_or(Error::AllSourcesMustHaveSameSpatialReference)?,
-                self.params.target_spatial_reference,
-            )?;
-
-            Some(bbox.reproject_clipped(&projector)?)
-        } else {
-            None
-        };
-
-        let out_desc = RasterResultDescriptor {
-            spatial_reference: self.params.target_spatial_reference.into(),
-            data_type: in_desc.data_type,
-            measurement: in_desc.measurement.clone(),
-            time: in_desc.time,
-            bbox,
-            resolution: None, // TODO: calculate resolution
-        };
+        let out_desc =
+            Self::derive_raster_result_descriptor(self.params.target_spatial_reference, in_desc)?;
 
         let state = RasterReprojectionState {
             source_srs: Option::from(in_desc.spatial_reference).unwrap(),
@@ -1274,6 +1292,45 @@ mod tests {
                 (534_994.655_061_136_1, 9_329_005.182_447_437).into(),
                 (499_999.999_999_999_5, 4_649_776.224_819_178).into()
             ]
+        );
+    }
+
+    #[test]
+    fn it_derives_raster_result_descriptor() {
+        let in_proj = SpatialReference::epsg_4326();
+        let out_proj = SpatialReference::from_str("EPSG:3857").unwrap();
+
+        let in_desc = RasterResultDescriptor {
+            data_type: RasterDataType::U8,
+            spatial_reference: in_proj.into(),
+            measurement: Measurement::Unitless,
+            time: None,
+            bbox: Some(SpatialPartition2D::new_unchecked(
+                (-180., 90.).into(),
+                (180., -90.).into(),
+            )),
+            resolution: Some(SpatialResolution::new_unchecked(0.1, 0.1)),
+        };
+
+        let out_desc = Reprojection::derive_raster_result_descriptor(out_proj, &in_desc).unwrap();
+
+        assert_eq!(
+            out_desc,
+            RasterResultDescriptor {
+                data_type: RasterDataType::U8,
+                spatial_reference: out_proj.into(),
+                measurement: Measurement::Unitless,
+                time: None,
+                bbox: out_proj
+                    .area_of_use_projected::<SpatialPartition2D>()
+                    .unwrap()
+                    .into(),
+                // TODO: y resolution should be double the x resolution, but currently we only compute a uniform resolution
+                resolution: Some(SpatialResolution::new_unchecked(
+                    14_084.951_977_350_345,
+                    14_084.951_977_350_345
+                )),
+            }
         );
     }
 }
