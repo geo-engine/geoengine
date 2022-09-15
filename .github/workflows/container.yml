@@ -44,10 +44,7 @@ jobs:
           ssh-key: ${{ secrets.CONTAINER_GITHUB_TOKEN }}
           path: "container"
 
-      - name: Copy Dockerfile
-        run: cp container/Dockerfile $GITHUB_WORKSPACE/Dockerfile
-
-      - name: build container tag from matrix
+      - name: Modify container tag
         if: ${{ matrix.cargo-features != '' }}
         run: |
           echo "TAG_NAME=${{matrix.cargo-features}}-${{env.TAG_NAME}}" >> $GITHUB_ENV
@@ -57,7 +54,7 @@ jobs:
         run: podman login -u="geoengine+bot" -p="${{secrets.QUAY_IO_TOKEN}}" quay.io
 
       - name: Build with podman
-        run: podman build --tag geoengine:${{env.TAG_NAME}} --build-arg GEO_ENGINE_CARGO_BUILD_PARAMS="--release ${{env.CARGO_FEATURES}}" .
+        run: podman build --tag geoengine:${{env.TAG_NAME}} --build-arg GEO_ENGINE_CARGO_BUILD_PARAMS="--release ${{env.CARGO_FEATURES}}" -f container/geoengine/Dockerfile .
 
       - name: Push image to quay.io
         run: podman push geoengine:${{env.TAG_NAME}} quay.io/geoengine/geoengine:${{env.TAG_NAME}}
