@@ -16,11 +16,6 @@ on:
         required: true
         default: "nightly"
 
-  # TODO: remove
-  pull_request:
-    branches:
-      - master
-
 jobs:
   create-container:
     strategy:
@@ -47,18 +42,9 @@ jobs:
           echo "CARGO_FEATURES=--features=${{matrix.cargo-features}}" >> $GITHUB_ENV
 
       - name: Checkout code
-        if: github.head_ref == ''
         uses: actions/checkout@v3
         with:
           ref: ${{ github.ref_name }}
-          path: geoengine
-
-      # TODO: remove
-      - name: Checkout code
-        if: github.head_ref != ''
-        uses: actions/checkout@v3
-        with:
-          ref: ${{ github.head_ref }}
           path: geoengine
 
       - name: Checkout container files
