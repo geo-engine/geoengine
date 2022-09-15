@@ -1,0 +1,64 @@
+name: Create containers
+
+on:
+  workflow_dispatch:
+    # TODO: inputs
+  # run every night
+  schedule:
+    - cron: "0 22 * * *"
+
+jobs:
+  create-container:
+    strategy:
+      matrix:
+        cargo-features: ["pro", "nfdi", "ebv", ""]
+
+    runs-on: ubuntu-22.04
+
+    env:
+      # TODO: change with custom params
+      TAG_NAME: nightly
+      REF_NAME: master
+
+    steps:
+      # - name: Modify TAG_NAME if on `main` branch
+      #   if: ${{ github.ref_name == 'main' }}
+      #   run: echo "TAG_NAME=nightly" >> $GITHUB_ENV
+
+      - name: Checkout code
+        uses: actions/checkout@v3
+        with:
+          ref: ${{env.REF_NAME}}
+          path: geoengine
+
+      - name: Checkout container files
+        uses: actions/checkout@v3
+        with:
+          repository: geo-engine/geoengine-container
+          token: ${{ secrets.CONTAINER_GITHUB_TOKEN }}
+          path: "container"
+
+      - name: Copy Dockerfile
+        run: cp container/Dockerfile $GITHUB_WORKSPACE/Dockerfile
+
+      - name: Copy docker-compose.yml
+
+      - name: build container tag from matrix
+        if: ${{ matrix.cargo-features != '' }}
+        run: |
+          echo "TAG_NAME=${{matrix.cargo-features}}-${{env.TAG_NAME}}" >> $GITHUB_ENV
+          echo "CARGO_FEATURES=--features=${{matrix.cargo-features}}" >> $GITHUB_ENV
+
+      - name: Login to quay.io
+        run: podman login -u="geoengine+bot" -p="${{secrets.QUAY_IO_TOKEN}}" quay.io
+
+      - name: Build with podman
+        run: podman build --tag geoengine:${{env.TAG_NAME}} --build-arg GEO_ENGINE_CARGO_BUILD_PARAMS="--release ${{env.CARGO_FEATURES}}" .
+
+      - name: Push image to quay.io
+        run: podman push geoengine:${{env.TAG_NAME}} quay.io/geoengine/geoengine:${{env.TAG_NAME}}
+
+      - name: Push nightly with date
+        # TODO: change
+        if: ${{ github.ref_name == 'main' }}
+        run: podman push geoengine:${{env.TAG_NAME}} quay.io/geoengine/geoengine:${{env.TAG_NAME}}-$(date +'%Y-%m-%d')
