@@ -16,6 +16,11 @@ on:
         required: true
         default: "nightly"
 
+  # TODO: remove
+  pull_request:
+    branches:
+      - master
+
 jobs:
   create-container:
     strategy:
