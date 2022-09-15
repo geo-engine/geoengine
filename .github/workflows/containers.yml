@@ -76,7 +76,8 @@ jobs:
           podman build \
             --tag geoengine:${{env.FULL_TAG_NAME}} \
             --build-arg GEO_ENGINE_CARGO_BUILD_PARAMS="--release ${{env.CARGO_FEATURES}}" \
-            -f container/geoengine/Dockerfile .
+            -f container/geoengine/Dockerfile \
+            .
 
       - name: Push image to quay.io
         run: podman push geoengine:${{env.FULL_TAG_NAME}} quay.io/geoengine/geoengine:${{env.FULL_TAG_NAME}}
