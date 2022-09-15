@@ -6,8 +6,8 @@ on:
   # run every night
   schedule:
     - cron: "0 22 * * *"
-  pull_request: # TODO: remove
-    branches: [master]
+  push: # TODO: remove
+    branches: [container]
 
 jobs:
   create-container:
