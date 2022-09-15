@@ -7,7 +7,7 @@ on:
   schedule:
     - cron: "0 22 * * *"
   pull_request: # TODO: remove
-    branches: [main]
+    branches: [master]
 
 jobs:
   create-container:
