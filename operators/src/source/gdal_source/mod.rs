@@ -875,11 +875,16 @@ where
     let gdal_dataset_geotransform = GdalDatasetGeoTransform::from(dataset.geo_transform()?);
     let (gdal_dataset_pixels_x, gdal_dataset_pixels_y) = dataset.raster_size();
 
-    debug_assert!(approx_eq!(
-        GdalDatasetGeoTransform,
+    debug_assert!(
+        approx_eq!(
+            GdalDatasetGeoTransform,
+            gdal_dataset_geotransform,
+            dataset_params.geo_transform
+        ),
+        "dataset geo transform is different to the one retrieved from GDAL: {:?} != {:?}",
         gdal_dataset_geotransform,
         dataset_params.geo_transform
-    ));
+    );
     debug_assert_eq!(gdal_dataset_pixels_x, dataset_params.width);
     debug_assert_eq!(gdal_dataset_pixels_y, dataset_params.height);
 
