@@ -10,11 +10,11 @@ use super::layer::{
     ProviderLayerId,
 };
 use super::listing::{LayerCollectionId, LayerCollectionProvider};
+use crate::api::model::datatypes::{DataProviderId, LayerId};
 use crate::error::{Error, Result};
 use crate::util::user_input::UserInput;
 use crate::{contexts::Db, util::user_input::Validated};
 use async_trait::async_trait;
-use geoengine_datatypes::dataset::{DataProviderId, LayerId};
 use serde::{Deserialize, Serialize};
 use snafu::Snafu;
 use tokio::sync::RwLock;

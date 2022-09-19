@@ -1,6 +1,7 @@
 use std::convert::TryInto;
 use std::path::Path;
 
+use crate::api::model::datatypes::DatasetId;
 use crate::datasets::storage::{AddDataset, DatasetDefinition, DatasetStore, MetaDataDefinition};
 use crate::datasets::upload::{UploadId, UploadRootPath};
 use crate::error;
@@ -11,10 +12,8 @@ use crate::pro::util::config::Odm;
 use crate::util::config::get_config_element;
 use crate::util::user_input::UserInput;
 use crate::util::IdResponse;
-
 use actix_web::{web, Responder};
 use futures_util::StreamExt;
-use geoengine_datatypes::dataset::DatasetId;
 use geoengine_datatypes::primitives::Measurement;
 use geoengine_datatypes::raster::RasterDataType;
 use geoengine_datatypes::spatial_reference::SpatialReference;
@@ -309,8 +308,9 @@ async fn dataset_definition_from_geotiff(
                     data_type: RasterDataType::U8,
                     spatial_reference: spatial_reference.into(),
                     measurement: Measurement::Unitless,
-                    time: None, // TODO: determine time
-                    bbox: None, // TODO: determine bbox
+                    time: None,       // TODO: determine time
+                    bbox: None,       // TODO: determine bbox
+                    resolution: None, // TODO: determine resolution
                 },
             }),
         })
@@ -511,6 +511,7 @@ mod tests {
                 measurement: Measurement::Unitless,
                 time: None,
                 bbox: None,
+                resolution: None,
             }
         );
 

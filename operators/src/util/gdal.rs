@@ -9,10 +9,10 @@ use geoengine_datatypes::{
     dataset::{DataId, DatasetId},
     hashmap,
     primitives::{
-        DateTimeParseFormat, Measurement, SpatialPartition2D, TimeGranularity, TimeInstance,
-        TimeInterval, TimeStep,
+        DateTimeParseFormat, Measurement, SpatialPartition2D, SpatialResolution, TimeGranularity,
+        TimeInstance, TimeInterval, TimeStep,
     },
-    raster::RasterDataType,
+    raster::{GeoTransform, RasterDataType},
     spatial_reference::SpatialReference,
     util::Identifier,
 };
@@ -77,6 +77,7 @@ pub fn create_ndvi_meta_data() -> GdalMetaDataRegular {
                 (-180., 90.).into(),
                 (180., -90.).into(),
             )),
+            resolution: Some(SpatialResolution::new_unchecked(0.1, 0.1)),
         },
     }
 }
@@ -122,12 +123,15 @@ pub fn raster_descriptor_from_dataset(
     let data_type = RasterDataType::from_gdal_data_type(rasterband.band_type())
         .map_err(|_| Error::GdalRasterDataTypeNotSupported)?;
 
+    let geo_transfrom = GeoTransform::from(dataset.geo_transform()?);
+
     Ok(RasterResultDescriptor {
         data_type,
         spatial_reference: spatial_ref.into(),
         measurement: measurement_from_rasterband(dataset, band)?,
         time: None,
         bbox: None,
+        resolution: Some(geo_transfrom.spatial_resolution()),
     })
 }
 

@@ -1,5 +1,6 @@
 use std::collections::HashMap;
 
+use crate::api::model::datatypes::{DataId, DataProviderId, LayerId};
 use crate::datasets::listing::ProvenanceOutput;
 use crate::error::Result;
 use crate::layers::external::{DataProvider, DataProviderDefinition};
@@ -15,7 +16,6 @@ use crate::{
     util::user_input::Validated,
 };
 use async_trait::async_trait;
-use geoengine_datatypes::dataset::{DataId, DataProviderId, LayerId};
 use geoengine_datatypes::primitives::{RasterQueryRectangle, VectorQueryRectangle};
 use geoengine_operators::engine::{TypedOperator, VectorOperator};
 use geoengine_operators::mock::{MockDatasetDataSource, MockDatasetDataSourceParams};
@@ -179,7 +179,7 @@ impl
 {
     async fn meta_data(
         &self,
-        id: &DataId,
+        id: &geoengine_datatypes::dataset::DataId,
     ) -> Result<
         Box<
             dyn MetaData<
@@ -198,7 +198,7 @@ impl
         let dataset_def = self
             .datasets
             .iter()
-            .find(|d| d.properties.id.as_ref() == Some(&dataset))
+            .find(|d| d.properties.id.as_ref() == Some(&dataset.into()))
             .ok_or(geoengine_operators::error::Error::DatasetMetaData {
                 source: Box::new(error::Error::UnknownDataId),
             })?;
@@ -219,7 +219,7 @@ impl MetaDataProvider<OgrSourceDataset, VectorResultDescriptor, VectorQueryRecta
 {
     async fn meta_data(
         &self,
-        _id: &DataId,
+        _id: &geoengine_datatypes::dataset::DataId,
     ) -> Result<
         Box<dyn MetaData<OgrSourceDataset, VectorResultDescriptor, VectorQueryRectangle>>,
         geoengine_operators::error::Error,
@@ -234,7 +234,7 @@ impl MetaDataProvider<GdalLoadingInfo, RasterResultDescriptor, RasterQueryRectan
 {
     async fn meta_data(
         &self,
-        _id: &DataId,
+        _id: &geoengine_datatypes::dataset::DataId,
     ) -> Result<
         Box<dyn MetaData<GdalLoadingInfo, RasterResultDescriptor, RasterQueryRectangle>>,
         geoengine_operators::error::Error,

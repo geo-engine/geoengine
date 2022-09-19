@@ -2,7 +2,7 @@ use std::collections::HashMap;
 
 use serde::{Deserialize, Serialize};
 
-use geoengine_datatypes::dataset::{DataProviderId, LayerId};
+use crate::api::model::datatypes::{DataProviderId, LayerId};
 
 use crate::{
     error::Result, projects::Symbology, util::user_input::UserInput, workflows::workflow::Workflow,

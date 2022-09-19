@@ -636,6 +636,7 @@ mod tests {
     use std::str::FromStr;
 
     use super::*;
+    use crate::api::model::datatypes::{DataProviderId, DatasetId};
     use crate::datasets::external::mock::MockExternalLayerProviderDefinition;
     use crate::datasets::listing::SessionMetaDataProvider;
     use crate::datasets::listing::{DatasetListOptions, DatasetListing, ProvenanceOutput};
@@ -669,7 +670,6 @@ mod tests {
     use bb8_postgres::tokio_postgres::{self, NoTls};
     use futures::Future;
     use geoengine_datatypes::collections::VectorDataType;
-    use geoengine_datatypes::dataset::{DataProviderId, DatasetId};
     use geoengine_datatypes::primitives::{
         BoundingBox2D, Coordinate2D, DateTime, Duration, FeatureDataType, Measurement,
         SpatialResolution, TimeInterval, VectorQueryRectangle,
@@ -779,7 +779,7 @@ mod tests {
             let session = ctx
                 .user_db_ref()
                 .login(UserCredentials {
-                    email: "foo@bar.de".into(),
+                    email: "foo@example.com".into(),
                     password: "secret123".into(),
                 })
                 .await
@@ -828,7 +828,7 @@ mod tests {
 
     async fn set_session(ctx: &PostgresContext<NoTls>, projects: &[ProjectListing]) {
         let credentials = UserCredentials {
-            email: "foo@bar.de".into(),
+            email: "foo@example.com".into(),
             password: "secret123".into(),
         };
 
@@ -1078,7 +1078,7 @@ mod tests {
         let db = ctx.user_db_ref();
 
         let user_registration = UserRegistration {
-            email: "foo@bar.de".into(),
+            email: "foo@example.com".into(),
             password: "secret123".into(),
             real_name: "Foo Bar".into(),
         }
@@ -1088,7 +1088,7 @@ mod tests {
         let user_id = db.register(user_registration).await.unwrap();
 
         let credentials = UserCredentials {
-            email: "foo@bar.de".into(),
+            email: "foo@example.com".into(),
             password: "secret123".into(),
         };
 

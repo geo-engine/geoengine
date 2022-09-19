@@ -1,3 +1,5 @@
+use super::datetime::DateTimeError;
+use super::{DateTime, Duration};
 use crate::primitives::error;
 use crate::util::Result;
 #[cfg(feature = "postgres")]
@@ -14,9 +16,6 @@ use std::{
     ops::{Add, Sub},
     str::FromStr,
 };
-
-use super::datetime::DateTimeError;
-use super::{DateTime, Duration};
 
 #[derive(Clone, Copy, Serialize, PartialEq, Eq, PartialOrd, Ord, Debug)]
 #[repr(C)]

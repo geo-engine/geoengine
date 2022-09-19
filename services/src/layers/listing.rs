@@ -1,7 +1,7 @@
 use std::fmt;
 
+use crate::api::model::datatypes::LayerId;
 use async_trait::async_trait;
-use geoengine_datatypes::dataset::LayerId;
 
 use crate::error::Result;
 use crate::util::user_input::Validated;

@@ -1,7 +1,8 @@
 use serde::{Deserialize, Serialize};
+use utoipa::ToSchema;
 use uuid::Uuid;
 
-use geoengine_datatypes::identifier;
+use crate::identifier;
 use geoengine_operators::engine::TypedOperator;
 
 identifier!(WorkflowId);
@@ -17,7 +18,19 @@ impl WorkflowId {
     }
 }
 
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, Serialize, Deserialize, ToSchema)]
+#[schema(example = json!({
+    "type": "Vector",
+    "operator": {
+      "type": "MockPointSource",
+      "params": {
+        "points": [
+          { "x": 0.0, "y": 0.1 },
+          { "x": 1.0, "y": 1.1 }
+        ]
+      }
+    }
+ }))]
 pub struct Workflow {
     #[serde(flatten)]
     pub operator: TypedOperator,

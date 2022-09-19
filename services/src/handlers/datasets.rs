@@ -4,6 +4,7 @@ use std::{
     path::Path,
 };
 
+use crate::api::model::datatypes::DatasetId;
 use crate::datasets::upload::UploadRootPath;
 use crate::datasets::{
     listing::DatasetProvider,
@@ -29,7 +30,6 @@ use gdal::{
 };
 use geoengine_datatypes::{
     collections::VectorDataType,
-    dataset::DatasetId,
     primitives::{FeatureDataType, Measurement, VectorQueryRectangle},
     spatial_reference::{SpatialReference, SpatialReferenceOption},
 };
@@ -693,6 +693,7 @@ fn column_map_to_column_vecs(columns: &HashMap<String, ColumnDataType>) -> Colum
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::api::model::datatypes::DatasetId;
     use crate::contexts::{InMemoryContext, Session, SessionId, SimpleContext, SimpleSession};
     use crate::datasets::storage::{AddDataset, DatasetStore};
     use crate::datasets::upload::UploadId;
@@ -709,7 +710,6 @@ mod tests {
     use geoengine_datatypes::collections::{
         GeometryCollection, MultiPointCollection, VectorDataType,
     };
-    use geoengine_datatypes::dataset::DatasetId;
     use geoengine_datatypes::primitives::{BoundingBox2D, SpatialResolution};
     use geoengine_datatypes::raster::{GridShape2D, TilingSpecification};
     use geoengine_datatypes::spatial_reference::SpatialReferenceOption;

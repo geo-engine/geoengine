@@ -12,7 +12,7 @@ env:
   CARGO_TERM_COLOR: always
 
 jobs:
-  build:
+  test:
     runs-on: ${{matrix.os}}
 
     services:
@@ -31,7 +31,7 @@ jobs:
         os:
           - ubuntu-20.04
         features: ["", "--features pro", "--all-features"]
-        build: ["", "--release"]
+        build: [""]
 
     steps:
       - name: Checkout code
@@ -40,18 +40,45 @@ jobs:
         run: sudo add-apt-repository ppa:ubuntugis/ppa
       - name: APT update
         run: sudo apt-get update
-      - name: Install lld
-        run: sudo apt-get install lld
-      - name: Install GDAL
+      - name: Install lld & GDAL
         run: |
-          sudo apt-get install libgdal-dev gdal-bin build-essential
+          sudo apt-get install lld libgdal-dev gdal-bin build-essential
           export C_INCLUDE_PATH=/usr/include/gdal:$C_INCLUDE_PATH
           export CPLUS_INCLUDE_PATH=/usr/include/gdal:$CPLUS_INCLUDE_PATH
           sudo ldconfig
-      - name: Setup building
-        run: |
-          export CC="clang-9"
-          export CXX="clang++-9"
+      - name: init rust-toolchain
+        # somehow rustup show will take care to initialize the version based on the toolchain file
+        run: rustup show
+      - name: setup rust build cache
+        uses: Swatinem/rust-cache@v2
+        with:
+          # An explicit cache key that is used instead of the automatic `job`-based
+          # cache key and is thus stable across jobs.
+          # Default: empty
+          shared-key: ""
+
+          # An additional cache key that is added alongside the automatic `job`-based
+          # cache key and can be used to further differentiate jobs.
+          # Default: empty
+          key: 2_${{ matrix.features }}_${{ matrix.build }}
+
+          # A whitespace separated list of env-var *prefixes* who's value contributes
+          # to the environment cache key.
+          # The env-vars are matched by *prefix*, so the default `RUST` var will
+          # match all of `RUSTC`, `RUSTUP_*`, `RUSTFLAGS`, `RUSTDOC_*`, etc.
+          # Default: "CARGO CC CFLAGS CXX CMAKE RUST"
+          #env-vars: ""
+
+          # The cargo workspaces and target directory configuration.
+          # These entries are separated by newlines and have the form
+          # `$workspace -> $target`. The `$target` part is treated as a directory
+          # relative to the `$workspace` and defaults to "target" if not explicitly given.
+          # Default: ". -> target"
+          #workspaces: ""
+
+          # Determines if the cache should be saved even when the workflow has failed.
+          # Default: "false"
+          #cache-on-failure: ""
       - name: Check with Rustfmt
         uses: actions-rs/cargo@v1
         with:
@@ -61,31 +88,22 @@ jobs:
         uses: actions-rs/clippy-check@v1
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
-          args: --all-targets ${{ matrix.features }} -- -D warnings
-      - name: Build
-        uses: actions-rs/cargo@v1
-        with:
-          command: build
-          args: ${{ matrix.features }} ${{ matrix.build }} --verbose
+          args: --all-targets ${{ matrix.features }} ${{ matrix.build }} -- -D warnings
       - name: Run tests
         uses: actions-rs/cargo@v1
         with:
           command: test
-          args: ${{ matrix.features }} --verbose
+          args: ${{ matrix.features }} ${{ matrix.build }} --verbose
 
-  coverage:
-    runs-on: ubuntu-20.04
+  build:
+    runs-on: ${{matrix.os}}
 
-    services:
-      postgres:
-        image: postgis/postgis
-        env:
-          POSTGRES_USER: geoengine
-          POSTGRES_PASSWORD: geoengine
-          POSTGRES_DB: geoengine
-        ports:
-          - 5432:5432
-        options: --health-cmd pg_isready --health-interval 10s --health-timeout 5s --health-retries 5
+    strategy:
+      matrix:
+        os:
+          - ubuntu-20.04
+        features: ["", "--features pro", "--all-features"]
+        build: ["", "--release"]
 
     steps:
       - name: Checkout code
@@ -94,24 +112,49 @@ jobs:
         run: sudo add-apt-repository ppa:ubuntugis/ppa
       - name: APT update
         run: sudo apt-get update
-      - name: Install lld
-        run: sudo apt-get install lld
-      - name: Install GDAL
+      - name: Install lld & GDAL
         run: |
-          sudo apt-get install libgdal-dev gdal-bin build-essential
+          sudo apt-get install lld libgdal-dev gdal-bin build-essential
           export C_INCLUDE_PATH=/usr/include/gdal:$C_INCLUDE_PATH
           export CPLUS_INCLUDE_PATH=/usr/include/gdal:$CPLUS_INCLUDE_PATH
           sudo ldconfig
-      - name: Setup building
-        run: |
-          export CC="clang-9"
-          export CXX="clang++-9"
-      - name: Generate code coverage
-        run: |
-          cargo install cargo-tarpaulin
-          cargo tarpaulin --verbose --workspace --timeout 120 --out Lcov --all-features
-      - name: Upload coverage to Coveralls
-        uses: coverallsapp/github-action@v1.1.1
+      - name: init rust-toolchain
+        # somehow rustup show will take care to initialize the version based on the toolchain file
+        run: rustup show
+      - name: setup rust build cache
+        uses: Swatinem/rust-cache@v2
         with:
-          github-token: ${{ secrets.GITHUB_TOKEN }}
-          path-to-lcov: lcov.info
+          # An explicit cache key that is used instead of the automatic `job`-based
+          # cache key and is thus stable across jobs.
+          # Default: empty
+          shared-key: ""
+
+          # An additional cache key that is added alongside the automatic `job`-based
+          # cache key and can be used to further differentiate jobs.
+          # Default: empty
+          key: 4_${{ matrix.features }}_${{ matrix.build }}
+
+          # A whitespace separated list of env-var *prefixes* who's value contributes
+          # to the environment cache key.
+          # The env-vars are matched by *prefix*, so the default `RUST` var will
+          # match all of `RUSTC`, `RUSTUP_*`, `RUSTFLAGS`, `RUSTDOC_*`, etc.
+          # Default: "CARGO CC CFLAGS CXX CMAKE RUST"
+          #env-vars: ""
+
+          # The cargo workspaces and target directory configuration.
+          # These entries are separated by newlines and have the form
+          # `$workspace -> $target`. The `$target` part is treated as a directory
+          # relative to the `$workspace` and defaults to "target" if not explicitly given.
+          # Default: ". -> target"
+          #workspaces: ""
+
+          # Determines if the cache should be saved even when the workflow has failed.
+          # Default: "false"
+          #cache-on-failure: ""
+      - name: Build
+        uses: actions-rs/cargo@v1
+        with:
+          command: build
+          args: ${{ matrix.features }} ${{ matrix.build }} --verbose --target-dir=target
+        env:
+          CARGO_TARGET_DIR: /home/runner/work/geoengine/geoengine/target

@@ -4,6 +4,7 @@ mod time_estimation;
 pub mod util;
 
 use self::time_estimation::TimeEstimation;
+use crate::identifier;
 use crate::{
     error::Result,
     util::{
@@ -13,11 +14,13 @@ use crate::{
 };
 pub use error::TaskError;
 use futures::channel::oneshot;
-use geoengine_datatypes::{error::ErrorSource, identifier, util::AsAnyArc};
+use geoengine_datatypes::{error::ErrorSource, util::AsAnyArc};
 pub use in_memory::{SimpleTaskManager, SimpleTaskManagerContext};
 use serde::{Deserialize, Serialize, Serializer};
 use snafu::ensure;
 use std::{fmt, sync::Arc};
+use utoipa::openapi::{ObjectBuilder, OneOfBuilder, Schema, SchemaType};
+use utoipa::{IntoParams, ToSchema};
 
 /// A database that allows scheduling and retrieving tasks.
 #[async_trait::async_trait]
@@ -110,6 +113,62 @@ pub enum TaskStatus {
         error: Arc<dyn ErrorSource>,
         clean_up: TaskCleanUpStatus,
     },
+}
+
+// TODO: replace TaskStatus with a more API friendly type
+impl ToSchema for TaskStatus {
+    fn schema() -> Schema {
+        OneOfBuilder::new()
+            .item(
+                ObjectBuilder::new()
+                    .property(
+                        "status",
+                        ObjectBuilder::new()
+                            .schema_type(SchemaType::String)
+                            .enum_values::<[&str; 1], &str>(Some(["running"])),
+                    )
+                    .build(),
+            )
+            .item(
+                ObjectBuilder::new()
+                    .property(
+                        "status",
+                        ObjectBuilder::new()
+                            .schema_type(SchemaType::String)
+                            .enum_values::<[&str; 1], &str>(Some(["completed"])),
+                    )
+                    .property("info", utoipa::openapi::Object::new())
+                    .property(
+                        "timeTotal",
+                        ObjectBuilder::new().schema_type(SchemaType::String),
+                    )
+                    .build(),
+            )
+            .item(
+                ObjectBuilder::new()
+                    .property(
+                        "status",
+                        ObjectBuilder::new()
+                            .schema_type(SchemaType::String)
+                            .enum_values::<[&str; 1], &str>(Some(["aborted"])),
+                    )
+                    .property("cleanUp", utoipa::openapi::Object::new())
+                    .build(),
+            )
+            .item(
+                ObjectBuilder::new()
+                    .property(
+                        "status",
+                        ObjectBuilder::new()
+                            .schema_type(SchemaType::String)
+                            .enum_values::<[&str; 1], &str>(Some(["failed"])),
+                    )
+                    .property("error", utoipa::openapi::Object::new())
+                    .property("cleanUp", utoipa::openapi::Object::new())
+                    .build(),
+            )
+            .into()
+    }
 }
 
 /// One of the statuses a `Task` clean-up can be in.
@@ -266,7 +325,7 @@ erased_serde::serialize_trait_object!(TaskStatusInfo);
 impl TaskStatusInfo for () {}
 impl TaskStatusInfo for String {}
 
-#[derive(Debug, Serialize, Deserialize, Clone)]
+#[derive(Debug, Serialize, Deserialize, Clone, ToSchema, IntoParams)]
 pub struct TaskListOptions {
     #[serde(default)]
     pub filter: Option<TaskFilter>,
@@ -296,7 +355,7 @@ fn task_list_limit_default() -> u32 {
         .unwrap_or(1)
 }
 
-#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, ToSchema)]
 #[serde(rename_all = "camelCase")]
 pub enum TaskFilter {
     Running,

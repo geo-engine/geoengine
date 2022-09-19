@@ -30,10 +30,17 @@ use snafu::{ensure, Snafu};
 #[serde(rename_all = "camelCase")]
 pub struct InterpolationParams {
     pub interpolation: InterpolationMethod,
-    pub input_resolution: SpatialResolution,
+    pub input_resolution: InputResolution,
 }
 
-#[derive(Debug, Serialize, Deserialize, Clone)]
+#[derive(Debug, Serialize, Deserialize, Clone, Copy)]
+#[serde(rename_all = "camelCase", tag = "type")]
+pub enum InputResolution {
+    Value(SpatialResolution),
+    Source,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone, Copy)]
 #[serde(rename_all = "camelCase")]
 pub enum InterpolationMethod {
     NearestNeighbor,
@@ -44,14 +51,9 @@ pub enum InterpolationMethod {
 #[snafu(visibility(pub(crate)), context(suffix(false)), module(error))]
 pub enum InterpolationError {
     #[snafu(display(
-        "The query resolution ({:?}) must be smaller than the input resolution ({:?})",
-        query_resolution,
-        input_resolution
+        "The input resolution was defined as `source` but the source resolution is unknown.",
     ))]
-    QueryResolutionMustBeSmallerThanInputResolution {
-        query_resolution: SpatialResolution,
-        input_resolution: SpatialResolution,
-    },
+    UnknownInputResolution,
 }
 
 pub type Interpolation = Operator<InterpolationParams, SingleRasterSource>;
@@ -64,11 +66,34 @@ impl RasterOperator for Interpolation {
         context: &dyn ExecutionContext,
     ) -> Result<Box<dyn InitializedRasterOperator>> {
         let raster_source = self.sources.raster.initialize(context).await?;
+        let in_descriptor = raster_source.result_descriptor();
+
+        ensure!(
+            matches!(self.params.input_resolution, InputResolution::Value(_))
+                || in_descriptor.resolution.is_some(),
+            error::UnknownInputResolution
+        );
+
+        let input_resolution = if let InputResolution::Value(res) = self.params.input_resolution {
+            res
+        } else {
+            in_descriptor.resolution.expect("checked in ensure")
+        };
+
+        let out_descriptor = RasterResultDescriptor {
+            spatial_reference: in_descriptor.spatial_reference,
+            data_type: in_descriptor.data_type,
+            measurement: in_descriptor.measurement.clone(),
+            bbox: in_descriptor.bbox,
+            time: in_descriptor.time,
+            resolution: None, // after interpolation the resolution is uncapped
+        };
 
         let initialized_operator = InitializedInterpolation {
-            result_descriptor: raster_source.result_descriptor().clone(),
+            result_descriptor: out_descriptor,
             raster_source,
-            params: self.params,
+            interpolation_method: self.params.interpolation,
+            input_resolution,
             tiling_specification: context.tiling_specification(),
         };
 
@@ -79,7 +104,8 @@ impl RasterOperator for Interpolation {
 pub struct InitializedInterpolation {
     result_descriptor: RasterResultDescriptor,
     raster_source: Box<dyn InitializedRasterOperator>,
-    params: InterpolationParams,
+    interpolation_method: InterpolationMethod,
+    input_resolution: SpatialResolution,
     tiling_specification: TilingSpecification,
 }
 
@@ -88,16 +114,16 @@ impl InitializedRasterOperator for InitializedInterpolation {
         let source_processor = self.raster_source.query_processor()?;
 
         let res = call_on_generic_raster_processor!(
-            source_processor, p => match self.params.interpolation  {
+            source_processor, p => match self.interpolation_method  {
                 InterpolationMethod::NearestNeighbor => InterploationProcessor::<_,_, NearestNeighbor>::new(
                         p,
-                        self.params.clone(),
+                        self.input_resolution,
                         self.tiling_specification,
                     ).boxed()
                     .into(),
                 InterpolationMethod::BiLinear =>InterploationProcessor::<_,_, Bilinear>::new(
                         p,
-                        self.params.clone(),
+                        self.input_resolution,
                         self.tiling_specification,
                     ).boxed()
                     .into(),
@@ -119,7 +145,7 @@ where
     I: InterpolationAlgorithm<P>,
 {
     source: Q,
-    params: InterpolationParams,
+    input_resolution: SpatialResolution,
     tiling_specification: TilingSpecification,
     interpolation: PhantomData<I>,
 }
@@ -132,12 +158,12 @@ where
 {
     pub fn new(
         source: Q,
-        params: InterpolationParams,
+        input_resolution: SpatialResolution,
         tiling_specification: TilingSpecification,
     ) -> Self {
         Self {
             source,
-            params,
+            input_resolution,
             tiling_specification,
             interpolation: PhantomData,
         }
@@ -159,17 +185,16 @@ where
         query: RasterQueryRectangle,
         ctx: &'a dyn QueryContext,
     ) -> Result<BoxStream<'a, Result<Self::Output>>> {
-        ensure!(
-            query.spatial_resolution.x < self.params.input_resolution.x
-                && query.spatial_resolution.y < self.params.input_resolution.y,
-            error::QueryResolutionMustBeSmallerThanInputResolution {
-                query_resolution: query.spatial_resolution,
-                input_resolution: self.params.input_resolution,
-            }
-        );
+        // do not interpolate if the source resolution is already fine enough
+        if query.spatial_resolution.x >= self.input_resolution.x
+            && query.spatial_resolution.y >= self.input_resolution.y
+        {
+            // TODO: should we use the query or the input resolution here?
+            return self.source.query(query, ctx).await;
+        }
 
         let sub_query = InterpolationSubQuery::<_, P, I> {
-            input_resolution: self.params.input_resolution,
+            input_resolution: self.input_resolution,
             fold_fn: fold_future,
             tiling_specification: self.tiling_specification,
             phantom: PhantomData,
@@ -420,7 +445,7 @@ mod tests {
         let operator = Interpolation {
             params: InterpolationParams {
                 interpolation: InterpolationMethod::NearestNeighbor,
-                input_resolution: SpatialResolution::one(),
+                input_resolution: InputResolution::Value(SpatialResolution::one()),
             },
             sources: SingleRasterSource { raster },
         }
@@ -550,6 +575,7 @@ mod tests {
                     measurement: Measurement::Unitless,
                     time: None,
                     bbox: None,
+                    resolution: None,
                 },
             },
         }

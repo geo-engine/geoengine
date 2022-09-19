@@ -297,6 +297,7 @@ mod tests {
                     measurement: Measurement::Unitless,
                     time: None,
                     bbox: None,
+                    resolution: None,
                 },
             },
         }
@@ -350,7 +351,8 @@ mod tests {
                         "type": "unitless"
                     },
                     "time": null,
-                    "bbox": null
+                    "bbox": null,
+                    "resolution": null
                 }
             }
         });

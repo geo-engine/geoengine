@@ -1,15 +1,21 @@
 use pwhash::bcrypt;
 use serde::{Deserialize, Serialize};
 use snafu::ensure;
+use utoipa::ToSchema;
 
 use crate::error;
 use crate::error::{Error, Result};
+use crate::identifier;
 use crate::util::user_input::UserInput;
-use geoengine_datatypes::identifier;
 use geoengine_datatypes::util::Identifier;
 
-#[derive(Debug, PartialEq, Eq, Serialize, Deserialize, Clone, Hash)]
+#[derive(Debug, PartialEq, Eq, Serialize, Deserialize, Clone, Hash, ToSchema)]
 #[serde(rename_all = "camelCase")]
+#[schema(example = json!({
+    "email": "foo@example.com",
+    "password": "secret123",
+    "realName": "Foo Bar"
+}))]
 pub struct UserRegistration {
     pub email: String,
     pub password: String,
@@ -44,7 +50,11 @@ impl UserInput for UserRegistration {
     }
 }
 
-#[derive(Debug, PartialEq, Eq, Serialize, Deserialize, Clone, Hash)]
+#[derive(Debug, PartialEq, Eq, Serialize, Deserialize, Clone, Hash, ToSchema)]
+#[schema(example = json!({
+    "email": "foo@example.com",
+    "password": "secret123",
+}))]
 pub struct UserCredentials {
     pub email: String,
     pub password: String,
