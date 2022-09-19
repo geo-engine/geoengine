@@ -523,6 +523,7 @@ mod tests {
     }
 
     #[tokio::test]
+    #[allow(clippy::too_many_lines)]
     async fn two_rasters_implicit_names() {
         let tile_size_in_pixels = [3, 2].into();
         let tiling_specification = TilingSpecification {
@@ -550,6 +551,7 @@ mod tests {
                         measurement: Measurement::Unitless,
                         time: None,
                         bbox: None,
+                        resolution: None,
                     },
                 },
             }
@@ -573,6 +575,7 @@ mod tests {
                         measurement: Measurement::Unitless,
                         time: None,
                         bbox: None,
+                        resolution: None,
                     },
                 },
             }
@@ -634,6 +637,7 @@ mod tests {
     }
 
     #[tokio::test]
+    #[allow(clippy::too_many_lines)]
     async fn two_rasters_explicit_names() {
         let tile_size_in_pixels = [3, 2].into();
         let tiling_specification = TilingSpecification {
@@ -661,6 +665,7 @@ mod tests {
                         measurement: Measurement::Unitless,
                         time: None,
                         bbox: None,
+                        resolution: None,
                     },
                 },
             }
@@ -684,6 +689,7 @@ mod tests {
                         measurement: Measurement::Unitless,
                         time: None,
                         bbox: None,
+                        resolution: None,
                     },
                 },
             }
@@ -772,6 +778,7 @@ mod tests {
                         measurement: Measurement::Unitless,
                         time: None,
                         bbox: None,
+                        resolution: None,
                     },
                 },
             }
@@ -795,6 +802,7 @@ mod tests {
                         measurement: Measurement::Unitless,
                         time: None,
                         bbox: None,
+                        resolution: None,
                     },
                 },
             }
