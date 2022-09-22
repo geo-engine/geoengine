@@ -20,7 +20,6 @@ use geoengine_datatypes::{
         reproject_query, suggest_pixel_size_from_diag_cross_projected, CoordinateProjection,
         CoordinateProjector, Reproject, ReprojectClipped,
     },
-    primitives::AxisAlignedRectangle,
     primitives::{BoundingBox2D, RasterQueryRectangle, SpatialPartition2D, VectorQueryRectangle},
     raster::{Pixel, RasterTile2D, TilingSpecification},
     spatial_reference::SpatialReference,
@@ -53,31 +52,36 @@ impl Reprojection {
         target_sref: SpatialReference,
         in_desc: &RasterResultDescriptor,
     ) -> Result<RasterResultDescriptor> {
-        let out_bbox = if let Some(bbox) = in_desc.bbox {
-            let in_srs: Option<SpatialReference> = in_desc.spatial_reference.into();
-            let projector = CoordinateProjector::from_known_srs(
-                in_srs.ok_or(Error::AllSourcesMustHaveSameSpatialReference)?,
-                target_sref,
-            )?;
+        let source_sref: Option<SpatialReference> = in_desc.spatial_reference.into();
+        let source_sref = source_sref.ok_or(Error::SpatialReferenceMustNotBeUnreferenced)?;
 
-            Some(bbox.reproject_clipped(&projector)?)
+        let (in_bbox, out_bbox) = if let Some(bbox) = in_desc.bbox {
+            let projector = CoordinateProjector::from_known_srs(source_sref, target_sref)?;
+            let projector_inverse = CoordinateProjector::from_known_srs(target_sref, source_sref)?;
+
+            // compute the corresponding bounding boxes that are valid in source and target spatial reference
+            let out_bbox = bbox.reproject_clipped(&projector)?;
+            let in_bbox = out_bbox.reproject_clipped(&projector_inverse)?;
+
+            (in_bbox, out_bbox)
         } else {
-            None
+            // use the parts of the area of use that are valid in both spatial references
+            let valid_bounds_in = source_sref.valid_bounds(&target_sref)?;
+            let valid_bounds_out = target_sref.valid_bounds(&source_sref)?;
+
+            (valid_bounds_in, valid_bounds_out)
         };
 
-        let out_res = match (in_desc.bbox, in_desc.resolution, out_bbox) {
-            (Some(in_bbox), Some(in_res), Some(out_bbox)) => {
-                suggest_pixel_size_from_diag_cross_projected(in_bbox, out_bbox, in_res).ok()
-            }
-            _ => None,
-        };
+        let out_res = in_desc.resolution.and_then(|res| {
+            suggest_pixel_size_from_diag_cross_projected(in_bbox, out_bbox, res).ok()
+        });
 
         Ok(RasterResultDescriptor {
             spatial_reference: target_sref.into(),
             data_type: in_desc.data_type,
             measurement: in_desc.measurement.clone(),
             time: in_desc.time,
-            bbox: out_bbox,
+            bbox: in_desc.bbox.map(|_| out_bbox),
             resolution: out_res,
         })
     }
@@ -308,6 +312,7 @@ impl InitializedRasterOperator for InitializedRasterReprojection {
                     s.source_srs,
                     s.target_srs,
                     s.tiling_spec,
+                    self.result_descriptor.bbox,
                 )))
             }
             geoengine_datatypes::raster::RasterDataType::U16 => {
@@ -317,6 +322,7 @@ impl InitializedRasterOperator for InitializedRasterReprojection {
                     s.source_srs,
                     s.target_srs,
                     s.tiling_spec,
+                    self.result_descriptor.bbox,
                 )))
             }
 
@@ -327,6 +333,7 @@ impl InitializedRasterOperator for InitializedRasterReprojection {
                     s.source_srs,
                     s.target_srs,
                     s.tiling_spec,
+                    self.result_descriptor.bbox,
                 )))
             }
             geoengine_datatypes::raster::RasterDataType::U64 => {
@@ -336,6 +343,7 @@ impl InitializedRasterOperator for InitializedRasterReprojection {
                     s.source_srs,
                     s.target_srs,
                     s.tiling_spec,
+                    self.result_descriptor.bbox,
                 )))
             }
             geoengine_datatypes::raster::RasterDataType::I8 => {
@@ -345,6 +353,7 @@ impl InitializedRasterOperator for InitializedRasterReprojection {
                     s.source_srs,
                     s.target_srs,
                     s.tiling_spec,
+                    self.result_descriptor.bbox,
                 )))
             }
             geoengine_datatypes::raster::RasterDataType::I16 => {
@@ -354,6 +363,7 @@ impl InitializedRasterOperator for InitializedRasterReprojection {
                     s.source_srs,
                     s.target_srs,
                     s.tiling_spec,
+                    self.result_descriptor.bbox,
                 )))
             }
             geoengine_datatypes::raster::RasterDataType::I32 => {
@@ -363,6 +373,7 @@ impl InitializedRasterOperator for InitializedRasterReprojection {
                     s.source_srs,
                     s.target_srs,
                     s.tiling_spec,
+                    self.result_descriptor.bbox,
                 )))
             }
             geoengine_datatypes::raster::RasterDataType::I64 => {
@@ -372,6 +383,7 @@ impl InitializedRasterOperator for InitializedRasterReprojection {
                     s.source_srs,
                     s.target_srs,
                     s.tiling_spec,
+                    self.result_descriptor.bbox,
                 )))
             }
             geoengine_datatypes::raster::RasterDataType::F32 => {
@@ -381,6 +393,7 @@ impl InitializedRasterOperator for InitializedRasterReprojection {
                     s.source_srs,
                     s.target_srs,
                     s.tiling_spec,
+                    self.result_descriptor.bbox,
                 )))
             }
             geoengine_datatypes::raster::RasterDataType::F64 => {
@@ -390,6 +403,7 @@ impl InitializedRasterOperator for InitializedRasterReprojection {
                     s.source_srs,
                     s.target_srs,
                     s.tiling_spec,
+                    self.result_descriptor.bbox,
                 )))
             }
         })
@@ -404,6 +418,7 @@ where
     from: SpatialReference,
     to: SpatialReference,
     tiling_spec: TilingSpecification,
+    data_bounds: Option<SpatialPartition2D>,
     _phantom_data: PhantomData<P>,
 }
 
@@ -417,40 +432,15 @@ where
         from: SpatialReference,
         to: SpatialReference,
         tiling_spec: TilingSpecification,
+        data_bounds: Option<SpatialPartition2D>,
     ) -> Self {
         Self {
             source,
             from,
             to,
             tiling_spec,
+            data_bounds,
             _phantom_data: PhantomData,
-        }
-    }
-
-    fn valid_bounds<T>(
-        proj_out: SpatialReference,
-        proj_other: SpatialReference,
-    ) -> Result<Option<T>>
-    where
-        T: AxisAlignedRectangle,
-    {
-        // generate a projector which transforms wgs84 into the projection we want to produce.
-        let valid_bounds_proj =
-            CoordinateProjector::from_known_srs(SpatialReference::epsg_4326(), proj_out)?;
-
-        // transform the bounds of the input srs (coordinates are in wgs84) into the output projection.
-        // TODO check if  there is a better / smarter way to check if the coordinates are valid.
-        let area_out = proj_out.area_of_use::<T>()?;
-        let area_other = proj_other.area_of_use::<T>()?;
-
-        let x = area_out
-            .intersection(&area_other)
-            .map(|area| area.reproject(&valid_bounds_proj));
-
-        match x {
-            Some(Ok(area)) => Ok(Some(area)),
-            None => Ok(None),
-            Some(Err(e)) => Err(e.into()),
         }
     }
 }
@@ -471,13 +461,25 @@ where
     ) -> Result<BoxStream<'a, Result<Self::Output>>> {
         // calculate the intersection of input and output srs in both coordinate systems
         // TODO: do this in initialization?
-        let valid_bounds_in = Self::valid_bounds::<SpatialPartition2D>(self.from, self.to)?;
-        let valid_bounds_out = Self::valid_bounds::<SpatialPartition2D>(self.to, self.from)?;
+        let (valid_bounds_in, valid_bounds_out) = if let Some(data_bounds) = self.data_bounds {
+            let proj_from_to = CoordinateProjector::from_known_srs(self.from, self.to)?;
+            let proj_to_from = CoordinateProjector::from_known_srs(self.to, self.from)?;
+
+            let bounds_out = data_bounds.reproject_clipped(&proj_from_to)?;
+            let bounds_in = bounds_out.reproject_clipped(&proj_to_from)?;
+
+            (bounds_in, bounds_out)
+        } else {
+            let valid_bounds_in = self.from.valid_bounds(&self.to)?;
+            let valid_bounds_out = self.to.valid_bounds(&self.from)?;
+
+            (valid_bounds_in, valid_bounds_out)
+        };
 
         // calculate the spatial resolution the input data should have using the intersection and the requested resolution
         let in_spatial_res = suggest_pixel_size_from_diag_cross_projected(
-            valid_bounds_out.expect("projections must overlap"), // TODO: if there is no overlap return an empty stream?
-            valid_bounds_in.expect("projections must overlap"),
+            valid_bounds_out,
+            valid_bounds_in,
             query.spatial_resolution,
         )?;
 
@@ -487,8 +489,8 @@ where
             out_srs: self.to,
             fold_fn: fold_by_coordinate_lookup_future,
             in_spatial_res,
-            valid_bounds_in,
-            valid_bounds_out,
+            valid_bounds_in: Some(valid_bounds_in),
+            valid_bounds_out: Some(valid_bounds_out),
             _phantom_data: PhantomData,
         };
 
@@ -523,7 +525,7 @@ mod tests {
     use float_cmp::approx_eq;
     use futures::StreamExt;
     use geoengine_datatypes::collections::IntoGeometryIterator;
-    use geoengine_datatypes::primitives::DateTimeParseFormat;
+    use geoengine_datatypes::primitives::{AxisAlignedRectangle, DateTimeParseFormat};
     use geoengine_datatypes::{
         collections::{
             GeometryCollection, MultiLineStringCollection, MultiPointCollection,
@@ -1327,8 +1329,8 @@ mod tests {
                     .into(),
                 // TODO: y resolution should be double the x resolution, but currently we only compute a uniform resolution
                 resolution: Some(SpatialResolution::new_unchecked(
-                    14_084.951_977_350_345,
-                    14_084.951_977_350_345
+                    14_237.781_884_528_267,
+                    14_237.781_884_528_267
                 )),
             }
         );

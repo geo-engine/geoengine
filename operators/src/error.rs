@@ -298,6 +298,8 @@ pub enum Error {
     },
 
     AlphaBandAsMaskNotAllowed,
+
+    SpatialReferenceMustNotBeUnreferenced,
 }
 
 impl From<crate::adapters::SparseTilesFillAdapterError> for Error {

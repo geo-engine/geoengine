@@ -119,6 +119,30 @@ impl SpatialReference {
     pub fn srs_string(&self) -> String {
         format!("{}:{}", self.authority, self.code)
     }
+
+    /// Compute the bounding box of this spatial reference that is also valid in the `other` spatial reference
+    #[allow(clippy::trivially_copy_pass_by_ref)]
+    pub fn valid_bounds<T>(&self, other: &SpatialReference) -> Result<T>
+    where
+        T: AxisAlignedRectangle,
+    {
+        // generate a projector which transforms wgs84 into the projection we want to produce.
+        let valid_bounds_proj =
+            CoordinateProjector::from_known_srs(SpatialReference::epsg_4326(), *self)?;
+
+        // transform the bounds of the input srs (coordinates are in wgs84) into the output projection.
+        // TODO check if  there is a better / smarter way to check if the coordinates are valid.
+        let area_out = self.area_of_use::<T>()?;
+        let area_other = other.area_of_use::<T>()?;
+
+        area_out
+            .intersection(&area_other)
+            .ok_or(error::Error::SpatialReferencesDoNotIntersect {
+                a: *self,
+                b: *other,
+            })?
+            .reproject(&valid_bounds_proj)
+    }
 }
 
 impl std::fmt::Display for SpatialReference {

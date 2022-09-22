@@ -308,6 +308,11 @@ pub enum Error {
     ColorizerRescaleNotSupported {
         colorizer: String,
     },
+
+    SpatialReferencesDoNotIntersect {
+        a: SpatialReference,
+        b: SpatialReference,
+    },
 }
 
 impl From<arrow::error::ArrowError> for Error {
