@@ -678,7 +678,7 @@ mod tests {
     use geoengine_datatypes::util::test::TestDefault;
     use geoengine_datatypes::util::Identifier;
     use geoengine_operators::engine::{
-        MetaData, MultipleRasterSources, PlotOperator, StaticMetaData, TypedOperator,
+        MetaData, MultipleRasterOrSingleVectorSource, PlotOperator, StaticMetaData, TypedOperator,
         TypedResultDescriptor, VectorColumnInfo, VectorOperator, VectorResultDescriptor,
     };
     use geoengine_operators::mock::{MockPointSource, MockPointSourceParams};
@@ -687,6 +687,7 @@ mod tests {
         CsvHeader, FormatSpecifics, OgrSourceColumnSpec, OgrSourceDataset,
         OgrSourceDatasetTimeType, OgrSourceDurationSpec, OgrSourceErrorSpec, OgrSourceTimeFormat,
     };
+    use geoengine_operators::util::input::MultiRasterOrVectorOperator::Raster;
     use openidconnect::SubjectIdentifier;
     use rand::RngCore;
     use tokio::runtime::Handle;
@@ -981,8 +982,12 @@ mod tests {
             .workflow_registry_ref()
             .register(Workflow {
                 operator: Statistics {
-                    params: StatisticsParams {},
-                    sources: MultipleRasterSources { rasters: vec![] },
+                    params: StatisticsParams {
+                        column_names: vec![],
+                    },
+                    sources: MultipleRasterOrSingleVectorSource {
+                        source: Raster(vec![]),
+                    },
                 }
                 .boxed()
                 .into(),
