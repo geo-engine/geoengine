@@ -18,7 +18,7 @@ use crate::handlers::workflows::{RasterDatasetFromWorkflow, RasterDatasetFromWor
 use crate::projects::{ProjectId, STRectangle};
 use crate::tasks::{TaskFilter, TaskId, TaskListOptions, TaskStatus};
 use crate::util::server::VersionInfo;
-use crate::util::IdResponse;
+use crate::util::{apidoc::ServerInfo, IdResponse};
 use crate::workflows::workflow::{Workflow, WorkflowId};
 use utoipa::openapi::security::{HttpAuthScheme, HttpBuilder, SecurityScheme};
 use utoipa::{Modify, OpenApi};
@@ -99,7 +99,7 @@ use utoipa::{Modify, OpenApi};
             TaskStatus,
         ),
     ),
-    modifiers(&SecurityAddon, &ApiDocInfo),
+    modifiers(&SecurityAddon, &ApiDocInfo, &ServerInfo),
     external_docs(url = "https://docs.geoengine.io", description = "Geo Engine Docs")
 )]
 pub struct ApiDoc;

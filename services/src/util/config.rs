@@ -12,6 +12,7 @@ use geoengine_operators::util::raster_stream_to_geotiff::GdalCompressionNumThrea
 use lazy_static::lazy_static;
 use serde::Deserialize;
 use snafu::ResultExt;
+use url::Url;
 
 lazy_static! {
     static ref SETTINGS: RwLock<Config> = RwLock::new({
@@ -119,6 +120,15 @@ pub struct Web {
     pub external_address: Option<url::Url>,
     pub backend: Backend,
     pub version_api: bool,
+}
+
+impl Web {
+    pub fn external_address(&self) -> Result<Url> {
+        Ok(self
+            .external_address
+            .clone()
+            .unwrap_or(Url::parse(&format!("http://{}/", self.bind_address))?))
+    }
 }
 
 impl ConfigElement for Web {

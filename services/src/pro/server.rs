@@ -10,6 +10,7 @@ use crate::util::config::{self, get_config_element, Backend};
 use super::projects::ProProjectDb;
 use crate::util::server::{
     calculate_max_blocking_threads_per_worker, configure_extractors, render_404, render_405,
+    serve_openapi_json,
 };
 use actix_files::Files;
 use actix_web::{http, middleware, web, App, HttpServer};
@@ -61,11 +62,16 @@ where
             .configure(handlers::wms::init_wms_routes::<C>)
             .configure(handlers::workflows::init_workflow_routes::<C>);
 
-        #[allow(unused_mut)] // clippy warns here otherwise if no additional feature is activated
-        let mut api_urls = vec![(
-            utoipa_swagger_ui::Url::new("Geo Engine Pro", "/api-docs/openapi.json"),
+        let mut api_urls = vec![];
+
+        app = serve_openapi_json(
+            app,
+            &mut api_urls,
+            "Geo Engine Pro",
+            "../api-docs/openapi.json",
+            "/api-docs/openapi.json",
             openapi.clone(),
-        )];
+        );
 
         #[cfg(feature = "odm")]
         {
@@ -75,10 +81,15 @@ where
         #[cfg(feature = "ebv")]
         {
             app = app.service(web::scope("/ebv").configure(handlers::ebv::init_ebv_routes::<C>()));
-            api_urls.push((
-                utoipa_swagger_ui::Url::new("EBV", "/api-docs/ebv/openapi.json"),
+
+            app = serve_openapi_json(
+                app,
+                &mut api_urls,
+                "EBV",
+                "../api-docs/ebv/openapi.json",
+                "/api-docs/ebv/openapi.json",
                 crate::handlers::ebv::ApiDoc::openapi(),
-            ));
+            );
         }
 
         #[cfg(feature = "nfdi")]
@@ -120,10 +131,7 @@ pub async fn start_pro_server(static_files_dir: Option<PathBuf>) -> Result<()> {
 
     let web_config: config::Web = get_config_element()?;
 
-    let external_address = web_config
-        .external_address
-        .clone()
-        .unwrap_or(Url::parse(&format!("http://{}/", web_config.bind_address))?);
+    let external_address = web_config.external_address()?;
 
     info!(
         "Starting server… local address: {}, external address: {}",

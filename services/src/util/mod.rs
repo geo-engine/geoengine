@@ -7,6 +7,7 @@ use utoipa::ToSchema;
 pub use geoengine_datatypes::util::Identifier;
 pub use geoengine_operators::util::{spawn, spawn_blocking, spawn_blocking_with_thread_pool};
 
+pub mod apidoc;
 pub mod config;
 pub mod identifiers;
 pub mod operators;
