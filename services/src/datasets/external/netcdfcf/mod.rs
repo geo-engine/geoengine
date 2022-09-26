@@ -1032,7 +1032,7 @@ async fn listing_from_dir(
     path: &Path,
     options: &LayerCollectionListOptions,
 ) -> crate::error::Result<LayerCollection> {
-    let dir_path = base.join(&path);
+    let dir_path = base.join(path);
 
     let (name, description) = if path == Path::new(".") {
         (

@@ -109,7 +109,7 @@ where
         let mut streams_upper = None::<usize>;
 
         for (stream, value) in self.streams.iter().zip(&self.values) {
-            let value_len = if value.is_some() { 1 } else { 0 };
+            let value_len = usize::from(value.is_some());
 
             let (lower, upper) = stream.size_hint();
 
@@ -165,7 +165,7 @@ where
         let mut streams_upper = None::<usize>;
 
         for (stream, value) in self.streams.iter().zip(&self.values) {
-            let value_len = if value.is_some() { 1 } else { 0 };
+            let value_len = usize::from(value.is_some());
 
             let (lower, upper) = stream.size_hint();
 

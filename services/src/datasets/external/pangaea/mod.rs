@@ -100,7 +100,7 @@ impl DataProvider for PangaeaDataProvider {
             data: id.clone(),
             provenance: Some(Provenance {
                 citation: citation_text,
-                license: pmd.license.unwrap_or_else(|| String::new()),
+                license: pmd.license.unwrap_or_default(),
                 uri: pmd.url.to_string(),
             }),
         })

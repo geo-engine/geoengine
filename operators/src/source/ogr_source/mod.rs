@@ -1195,7 +1195,7 @@ where
         builder.push_time_interval(time_interval);
 
         for (column, data_type) in data_types {
-            let field = feature.field(&column);
+            let field = feature.field(column);
             let value =
                 Self::convert_field_value(*data_type, field, time_attribute_parser, error_spec)?;
             builder.push_data(column, value)?;

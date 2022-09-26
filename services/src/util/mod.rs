@@ -126,7 +126,7 @@ pub fn path_with_base_path(base: &Path, sub_path: &Path) -> Result<PathBuf> {
 
     let path = base.join(sub_path);
 
-    if !path.starts_with(&base) {
+    if !path.starts_with(base) {
         return Err(crate::error::Error::SubPathMustNotEscapeBasePath {
             base: base.into(),
             sub_path: sub_path.into(),
