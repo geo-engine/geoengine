@@ -284,9 +284,7 @@ mod tests {
     use crate::mock::{MockFeatureCollectionSource, MockRasterSource, MockRasterSourceParams};
     use crate::source::{GdalSource, GdalSourceParameters};
     use crate::util::gdal::add_ndvi_dataset;
-    use geoengine_datatypes::collections::{
-        MultiPointCollection, MultiPolygonCollection, ToGeoJson,
-    };
+    use geoengine_datatypes::collections::{MultiPointCollection, MultiPolygonCollection};
     use geoengine_datatypes::primitives::{BoundingBox2D, DateTime, FeatureData, MultiPolygon};
     use geoengine_datatypes::primitives::{Measurement, SpatialResolution};
     use geoengine_datatypes::primitives::{MultiPoint, TimeInterval};

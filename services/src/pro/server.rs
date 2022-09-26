@@ -117,6 +117,14 @@ where
     .map_err(Into::into)
 }
 
+#[allow(clippy::print_stderr)]
+fn print_pro_info_message() {
+    eprintln!("|===========================================================================|");
+    eprintln!("| Welcome to Geo Engine Pro Version: Please refer to our license agreement. |");
+    eprintln!("| If you have any question: Visit https://www.geoengine.io.                 |");
+    eprintln!("|===========================================================================|");
+}
+
 /// Starts the webserver for the Geo Engine API.
 ///
 /// # Panics
@@ -124,10 +132,7 @@ where
 ///
 ///
 pub async fn start_pro_server(static_files_dir: Option<PathBuf>) -> Result<()> {
-    println!("|===========================================================================|");
-    println!("| Welcome to Geo Engine Pro Version: Please refer to our license agreement. |");
-    println!("| If you have any question: Visit https://www.geoengine.io.                 |");
-    println!("|===========================================================================|");
+    print_pro_info_message();
 
     let web_config: config::Web = get_config_element()?;
 
