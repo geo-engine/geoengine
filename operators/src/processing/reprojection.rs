@@ -17,8 +17,8 @@ use futures::stream::BoxStream;
 use futures::StreamExt;
 use geoengine_datatypes::{
     operations::reproject::{
-        reproject_query, suggest_pixel_size_from_diag_cross_projected, CoordinateProjection,
-        CoordinateProjector, Reproject, ReprojectClipped,
+        reproject_and_unify_bbox, reproject_query, suggest_pixel_size_from_diag_cross_projected,
+        CoordinateProjection, CoordinateProjector, Reproject, ReprojectClipped,
     },
     primitives::{BoundingBox2D, RasterQueryRectangle, SpatialPartition2D, VectorQueryRectangle},
     raster::{Pixel, RasterTile2D, TilingSpecification},
@@ -56,14 +56,7 @@ impl Reprojection {
         let source_sref = source_sref.ok_or(Error::SpatialReferenceMustNotBeUnreferenced)?;
 
         let (in_bbox, out_bbox) = if let Some(bbox) = in_desc.bbox {
-            let projector = CoordinateProjector::from_known_srs(source_sref, target_sref)?;
-            let projector_inverse = CoordinateProjector::from_known_srs(target_sref, source_sref)?;
-
-            // compute the corresponding bounding boxes that are valid in source and target spatial reference
-            let out_bbox = bbox.reproject_clipped(&projector)?;
-            let in_bbox = out_bbox.reproject_clipped(&projector_inverse)?;
-
-            (in_bbox, out_bbox)
+            reproject_and_unify_bbox(bbox, source_sref, target_sref)?
         } else {
             // use the parts of the area of use that are valid in both spatial references
             let valid_bounds_in = source_sref.valid_bounds(&target_sref)?;
@@ -462,13 +455,7 @@ where
         // calculate the intersection of input and output srs in both coordinate systems
         // TODO: do this in initialization?
         let (valid_bounds_in, valid_bounds_out) = if let Some(data_bounds) = self.data_bounds {
-            let proj_from_to = CoordinateProjector::from_known_srs(self.from, self.to)?;
-            let proj_to_from = CoordinateProjector::from_known_srs(self.to, self.from)?;
-
-            let bounds_out = data_bounds.reproject_clipped(&proj_from_to)?;
-            let bounds_in = bounds_out.reproject_clipped(&proj_to_from)?;
-
-            (bounds_in, bounds_out)
+            reproject_and_unify_bbox(data_bounds, self.from, self.to)?
         } else {
             let valid_bounds_in = self.from.valid_bounds(&self.to)?;
             let valid_bounds_out = self.to.valid_bounds(&self.from)?;

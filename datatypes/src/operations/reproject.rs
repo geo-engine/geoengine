@@ -476,10 +476,45 @@ pub fn reproject_query<S: AxisAlignedRectangle>(
     })
 }
 
+/// Reproject a bounding box to the `target` projection and return the input and output bounding box
+/// as a pair where both elements cover the same area of the original `source_bbox` in WGS84.
+pub fn reproject_and_unify_bbox<T: AxisAlignedRectangle>(
+    source_bbox: T,
+    source: SpatialReference,
+    target: SpatialReference,
+) -> Result<(T, T)> {
+    let projector_source_target = CoordinateProjector::from_known_srs(source, target)?;
+    let projector_source_wgs84 =
+        CoordinateProjector::from_known_srs(source, SpatialReference::epsg_4326())?;
+    let projector_target_wgs84 =
+        CoordinateProjector::from_known_srs(target, SpatialReference::epsg_4326())?;
+    let projector_wgs84_source =
+        CoordinateProjector::from_known_srs(SpatialReference::epsg_4326(), source)?;
+    let projector_wgs84_target =
+        CoordinateProjector::from_known_srs(SpatialReference::epsg_4326(), target)?;
+
+    let target_bbox = source_bbox.reproject_clipped(&projector_source_target)?;
+
+    let source_area = source_bbox.reproject_clipped(&projector_source_wgs84)?;
+    let target_area = target_bbox.reproject_clipped(&projector_target_wgs84)?;
+
+    let common_area = source_area.intersection(&target_area).ok_or(
+        error::Error::SpatialBoundsDoNotIntersect {
+            bounds_a: source_area.as_bbox(),
+            bounds_b: target_area.as_bbox(),
+        },
+    )?;
+
+    let source_bbox = common_area.reproject(&projector_wgs84_source)?;
+    let target_bbox = common_area.reproject(&projector_wgs84_target)?;
+
+    Ok((source_bbox, target_bbox))
+}
+
 #[cfg(test)]
 mod tests {
 
-    use crate::primitives::BoundingBox2D;
+    use crate::primitives::{BoundingBox2D, SpatialPartition2D};
     use crate::spatial_reference::SpatialReferenceAuthority;
     use crate::util::well_known_data::{
         COLOGNE_EPSG_4326, COLOGNE_EPSG_900_913, HAMBURG_EPSG_4326, HAMBURG_EPSG_900_913,
@@ -785,5 +820,30 @@ mod tests {
             79.088_974_450_690_5, // this is the pixel size GDAL generates when reprojecting the SRTM tile.
             epsilon = 0.000_000_1
         ));
+    }
+
+    #[test]
+    fn it_reprojects_and_unifies_bbox() {
+        let bbox = SpatialPartition2D::new_unchecked((-180., 90.).into(), (180., -90.).into());
+
+        let (input, output) = reproject_and_unify_bbox(
+            bbox,
+            SpatialReference::epsg_4326(),
+            SpatialReference::new(SpatialReferenceAuthority::Epsg, 3857),
+        )
+        .unwrap();
+
+        assert_eq!(
+            input,
+            SpatialPartition2D::new_unchecked((-180., 85.06).into(), (180., -85.06).into())
+        );
+
+        assert_eq!(
+            output,
+            SpatialPartition2D::new_unchecked(
+                (-20_037_508.342_789_244, 20_048_966.104_014_594).into(),
+                (20_037_508.342_789_244, -20_048_966.104_014_6).into()
+            )
+        );
     }
 }
