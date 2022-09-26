@@ -63,8 +63,8 @@ impl actix_web::ResponseError for ErrorResponse {
 }
 
 impl fmt::Display for ErrorResponse {
-    fn fmt(&self, _f: &mut fmt::Formatter) -> fmt::Result {
-        unimplemented!("required by ResponseError")
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "{}: {}", self.error, self.message)
     }
 }
 
@@ -78,7 +78,7 @@ pub fn get_token(req: &HttpRequest) -> Result<SessionId> {
     let scheme = Bearer::parse(header).map_err(|_| Error::Authorization {
         source: Box::new(Error::InvalidAuthorizationScheme),
     })?;
-    SessionId::from_str(scheme.token()).map_err(|err| Error::Authorization {
-        source: Box::new(Error::InvalidUuid { source: err }),
+    SessionId::from_str(scheme.token()).map_err(|_err| Error::Authorization {
+        source: Box::new(Error::InvalidUuid),
     })
 }

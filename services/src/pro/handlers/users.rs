@@ -1,17 +1,17 @@
 use crate::error;
 use crate::error::Result;
-use crate::handlers;
 use crate::pro::contexts::ProContext;
-use crate::pro::users::UserCredentials;
 use crate::pro::users::UserDb;
 use crate::pro::users::UserRegistration;
 use crate::pro::users::UserSession;
+use crate::pro::users::{AuthCodeResponse, UserCredentials};
 use crate::projects::ProjectId;
 use crate::projects::STRectangle;
 use crate::util::config;
 use crate::util::user_input::UserInput;
 use crate::util::IdResponse;
 
+use crate::pro::users::OidcError::OidcDisabled;
 use actix_web::{web, HttpResponse, Responder};
 use snafu::ensure;
 use snafu::ResultExt;
@@ -24,40 +24,29 @@ where
         .service(web::resource("/anonymous").route(web::post().to(anonymous_handler::<C>)))
         .service(web::resource("/login").route(web::post().to(login_handler::<C>)))
         .service(web::resource("/logout").route(web::post().to(logout_handler::<C>)))
-        .service(
-            web::resource("/session").route(web::get().to(handlers::session::session_handler::<C>)),
-        )
+        .service(web::resource("/session").route(web::get().to(session_handler::<C>)))
         .service(
             web::resource("/session/project/{project}")
                 .route(web::post().to(session_project_handler::<C>)),
         )
-        .service(web::resource("/session/view").route(web::post().to(session_view_handler::<C>)));
+        .service(web::resource("/session/view").route(web::post().to(session_view_handler::<C>)))
+        .service(web::resource("/oidcInit").route(web::post().to(oidc_init::<C>)))
+        .service(web::resource("/oidcLogin").route(web::post().to(oidc_login::<C>)));
 }
 
-/// Registers a user by providing [`UserRegistration`] parameters.
-///
-/// # Example
-///
-/// ```text
-/// POST /user
-///
-/// {
-///   "email": "foo@bar.de",
-///   "password": "secret123",
-///   "realName": "Foo Bar"
-/// }
-/// ```
-/// Response:
-/// ```text
-/// {
-///   "id": "5b4466d2-8bab-4ed8-a182-722af3c80958"
-/// }
-/// ```
-///
-/// # Errors
-///
-/// This call fails if the [`UserRegistration`] is invalid
-/// or an account with the given e-mail already exists.
+/// Registers a user.
+#[utoipa::path(
+    tag = "Session",
+    post,
+    path = "/user",
+    request_body = UserRegistration,
+    responses(
+        (status = 200, description = "The id of the created user", body = UserId,
+            example = json!({
+                "id": "5b4466d2-8bab-4ed8-a182-722af3c80958"
+            })
+        )
+    ))]
 pub(crate) async fn register_user_handler<C: ProContext>(
     user: web::Json<UserRegistration>,
     ctx: web::Data<C>,
@@ -72,16 +61,235 @@ pub(crate) async fn register_user_handler<C: ProContext>(
     Ok(web::Json(IdResponse::from(id)))
 }
 
-/// Creates a session by providing [`UserCredentials`].
+/// Creates a session by providing user credentials. The session's id serves as a Bearer token for requests.
+#[utoipa::path(
+tag = "Session",
+post,
+path = "/login",
+request_body = UserCredentials,
+responses(
+    (status = 200, description = "The created session", body = UserSession,
+        example = json!({
+            "id": "208fa24e-7a92-4f57-a3fe-d1177d9f18ad",
+            "user": {
+                "id": "5b4466d2-8bab-4ed8-a182-722af3c80958",
+                "email": "foo@example.com",
+                "realName": "Foo Bar"
+            },
+            "created": "2021-04-26T13:47:10.579724800Z",
+            "validUntil": "2021-04-26T14:47:10.579775400Z",
+            "project": null,
+            "view": null,
+            "roles": [
+                "fa5be363-bc0d-4bfa-85c7-ebb5cd9a8783",
+                "4e8081b6-8aa6-4275-af0c-2fa2da557d28"
+            ]
+        })
+    )
+))]
+pub(crate) async fn login_handler<C: ProContext>(
+    user: web::Json<UserCredentials>,
+    ctx: web::Data<C>,
+) -> Result<impl Responder> {
+    let session = ctx
+        .user_db_ref()
+        .login(user.into_inner())
+        .await
+        .map_err(Box::new)
+        .context(error::Authorization)?;
+    Ok(web::Json(session))
+}
+
+/// Ends a session.
+#[utoipa::path(
+    tag = "Session",
+    post,
+    path = "/logout",
+    responses(
+        (status = 200, description = "The Session was deleted.")
+    ),
+    security(
+        ("session_token" = [])
+    )
+)]
+pub(crate) async fn logout_handler<C: ProContext>(
+    session: UserSession,
+    ctx: web::Data<C>,
+) -> Result<impl Responder> {
+    ctx.user_db_ref().logout(session.id).await?;
+    Ok(HttpResponse::Ok())
+}
+
+/// Retrieves details about the current session.
+#[utoipa::path(
+    tag = "Session",
+    get,
+    path = "/session",
+    responses(
+        (status = 200, description = "The current session", body = UserSession,
+            example = json!({
+                "id": "208fa24e-7a92-4f57-a3fe-d1177d9f18ad",
+                "user": {
+                    "id": "5b4466d2-8bab-4ed8-a182-722af3c80958",
+                    "email": "foo@example.com",
+                    "realName": "Foo Bar"
+                },
+                "created": "2021-04-26T13:47:10.579724800Z",
+                "validUntil": "2021-04-26T14:47:10.579775400Z",
+                "project": null,
+                "view": null,
+                "roles": [
+                    "fa5be363-bc0d-4bfa-85c7-ebb5cd9a8783",
+                    "4e8081b6-8aa6-4275-af0c-2fa2da557d28"
+                ]
+            })
+        )
+    ),
+    security(
+        ("session_token" = [])
+    )
+)]
+#[allow(clippy::unused_async)] // the function signature of request handlers requires it
+pub(crate) async fn session_handler<C: ProContext>(session: C::Session) -> impl Responder {
+    web::Json(session)
+}
+
+/// Creates session for anonymous user. The session's id serves as a Bearer token for requests.
+#[utoipa::path(
+    tag = "Session",
+    post,
+    path = "/anonymous",
+    responses(
+        (status = 200, description = "The created session", body = UserSession,
+            example = json!({
+                "id": "208fa24e-7a92-4f57-a3fe-d1177d9f18ad",
+                "user": {
+                    "id": "5b4466d2-8bab-4ed8-a182-722af3c80958",
+                    "email": null,
+                    "realName": null
+                },
+                "created": "2021-04-26T13:47:10.579724800Z",
+                "validUntil": "2021-04-26T14:47:10.579775400Z",
+                "project": null,
+                "view": null,
+                "roles": [
+                    "8a27e61f-cc4d-4d0b-ae8c-4f1c91d07f5a",
+                    "fd8e87bf-515c-4f36-8da6-1a53702ff102"
+                ]
+            })
+        )
+    )
+)]
+pub(crate) async fn anonymous_handler<C: ProContext>(ctx: web::Data<C>) -> Result<impl Responder> {
+    if !config::get_config_element::<crate::util::config::Session>()?.anonymous_access {
+        return Err(error::Error::Authorization {
+            source: Box::new(error::Error::AnonymousAccessDisabled),
+        });
+    }
+
+    let session = ctx.user_db_ref().anonymous().await?;
+    Ok(web::Json(session))
+}
+
+/// Sets the active project of the session.
+#[utoipa::path(
+    tag = "Session",
+    post,
+    path = "/session/project/{project}",
+    responses(
+        (status = 200, description = "The project of the session was updated."),
+    ),
+    params(
+        ("project" = ProjectId, description = "Project id")
+    ),
+    security(
+        ("session_token" = [])
+    )
+)]
+pub(crate) async fn session_project_handler<C: ProContext>(
+    project: web::Path<ProjectId>,
+    session: UserSession,
+    ctx: web::Data<C>,
+) -> Result<impl Responder> {
+    ctx.user_db_ref()
+        .set_session_project(&session, project.into_inner())
+        .await?;
+
+    Ok(HttpResponse::Ok())
+}
+
+// TODO: /view instead of /session/view
+#[utoipa::path(
+    tag = "Session",
+    post,
+    path = "/session/view",
+    request_body = STRectangle,
+    responses(
+        (status = 200, description = "The view of the session was updated."),
+    ),
+    security(
+        ("session_token" = [])
+    )
+)]
+pub(crate) async fn session_view_handler<C: ProContext>(
+    session: C::Session,
+    ctx: web::Data<C>,
+    view: web::Json<STRectangle>,
+) -> Result<impl Responder> {
+    ctx.user_db_ref()
+        .set_session_view(&session, view.into_inner())
+        .await?;
+
+    Ok(HttpResponse::Ok())
+}
+
+/// Initializes the Open Id Connect login procedure by requesting a parametrized url to the configured Id Provider.
 ///
 /// # Example
 ///
 /// ```text
-/// POST /login
+/// POST /oidcInit
+///
+/// ```
+/// Response:
+/// ```text
+/// {
+///   "url": "http://someissuer.com/authorize?client_id=someclient&redirect_uri=someuri&response_type=code&scope=somescope&state=somestate&nonce=somenonce&codechallenge=somechallenge&code_challenge_method=S256"
+/// }
+/// ```
+///
+/// # Errors
+///
+/// This call fails if Open ID Connect is disabled, misconfigured or the Id Provider is unreachable.
+pub(crate) async fn oidc_init<C: ProContext>(ctx: web::Data<C>) -> Result<impl Responder> {
+    ensure!(
+        config::get_config_element::<crate::pro::util::config::Oidc>()?.enabled,
+        crate::pro::users::OidcDisabled
+    );
+    let request_db = ctx.oidc_request_db().ok_or(OidcDisabled)?;
+    let oidc_client = request_db.get_client().await?;
+
+    let result = ctx
+        .oidc_request_db()
+        .ok_or(OidcDisabled)?
+        .generate_request(oidc_client)
+        .await?;
+
+    Ok(web::Json(result))
+}
+
+/// Creates a session for a user via a login with Open Id Connect.
+/// This call must be preceded by a call to oidcInit and match the parameters of that call.
+///
+/// # Example
+///
+/// ```text
+/// POST /oidcLogin
 ///
 /// {
-///   "email": "foo@bar.de",
-///   "password": "secret123"
+///   "session_state": "somesessionstate",
+///   "code": "somecode",
+///   "state": "somestate"
 /// }
 /// ```
 /// Response:
@@ -102,132 +310,28 @@ pub(crate) async fn register_user_handler<C: ProContext>(
 ///
 /// # Errors
 ///
-/// This call fails if the [`UserCredentials`] are invalid.
-pub(crate) async fn login_handler<C: ProContext>(
-    user: web::Json<UserCredentials>,
+/// This call fails if the [`AuthCodeResponse`] is invalid,
+/// if a previous oidcLogin call with the same state was already successfully or unsuccessfully resolved,
+/// if the Open Id Connect configuration is invalid,
+/// or if the Id Provider is unreachable.
+pub(crate) async fn oidc_login<C: ProContext>(
+    response: web::Json<AuthCodeResponse>,
     ctx: web::Data<C>,
 ) -> Result<impl Responder> {
-    let session = ctx
-        .user_db_ref()
-        .login(user.into_inner())
-        .await
-        .map_err(Box::new)
-        .context(error::Authorization)?;
-    Ok(web::Json(session))
-}
+    ensure!(
+        config::get_config_element::<crate::pro::util::config::Oidc>()?.enabled,
+        crate::pro::users::OidcDisabled
+    );
+    let request_db = ctx.oidc_request_db().ok_or(OidcDisabled)?;
+    let oidc_client = request_db.get_client().await?;
 
-/// Ends a session.
-///
-/// # Example
-///
-/// ```text
-/// POST /logout
-/// Authorization: Bearer fc9b5dc2-a1eb-400f-aeed-a7845d9935c9
-/// ```
-///
-/// # Errors
-///
-/// This call fails if the session is invalid.
-pub(crate) async fn logout_handler<C: ProContext>(
-    session: UserSession,
-    ctx: web::Data<C>,
-) -> Result<impl Responder> {
-    ctx.user_db_ref().logout(session.id).await?;
-    Ok(HttpResponse::Ok())
-}
-
-/// Creates session for anonymous user.
-///
-/// # Example
-///
-/// ```text
-/// POST /anonymous
-/// ```
-/// Response:
-/// ```text
-/// {
-///   "id": "2fee8652-3192-4d3e-8adc-14257064224a",
-///   "user": {
-///     "id": "744b83ff-2c5b-401a-b4bf-2ba7213ad5d5",
-///     "email": null,
-///     "realName": null
-///   },
-///   "created": "2021-04-18T16:54:55.728758Z",
-///   "validUntil": "2021-04-18T17:54:55.730196200Z",
-///   "project": null,
-///   "view": null
-/// }
-/// ```
-pub(crate) async fn anonymous_handler<C: ProContext>(ctx: web::Data<C>) -> Result<impl Responder> {
-    if !config::get_config_element::<crate::util::config::Session>()?.anonymous_access {
-        return Err(error::Error::Authorization {
-            source: Box::new(error::Error::AnonymousAccessDisabled),
-        });
-    }
-
-    let session = ctx.user_db_ref().anonymous().await?;
-    Ok(web::Json(session))
-}
-
-/// Sets the active project of the session.
-///
-/// # Example
-///
-/// ```text
-/// POST /session/project/c8d88d83-d409-46f7-bab2-815bba87ccd8
-/// Authorization: Bearer fc9b5dc2-a1eb-400f-aeed-a7845d9935c9
-/// ```
-///
-/// # Errors
-///
-/// This call fails if the session is invalid.
-pub(crate) async fn session_project_handler<C: ProContext>(
-    project: web::Path<ProjectId>,
-    session: UserSession,
-    ctx: web::Data<C>,
-) -> Result<impl Responder> {
-    ctx.user_db_ref()
-        .set_session_project(&session, project.into_inner())
+    let (user, duration) = request_db
+        .resolve_request(oidc_client, response.into_inner())
         .await?;
 
-    Ok(HttpResponse::Ok())
-}
+    let session = ctx.user_db_ref().login_external(user, duration).await?;
 
-// TODO: /view instead of /session/view
-/// Sets the active view of the session.
-///
-/// # Example
-///
-/// ```text
-/// POST /session/view
-/// Authorization: Bearer fc9b5dc2-a1eb-400f-aeed-a7845d9935c9
-///
-/// {
-///   "spatialReference": "",
-///   "boundingBox": {
-///     "lowerLeftCoordinate": { "x": 0, "y": 0 },
-///     "upperRightCoordinate": { "x": 1, "y": 1 }
-///   },
-///   "timeInterval": {
-///     "start": 0,
-///     "end": 1
-///   }
-/// }
-/// ```
-///
-/// # Errors
-///
-/// This call fails if the session is invalid.
-pub(crate) async fn session_view_handler<C: ProContext>(
-    session: C::Session,
-    ctx: web::Data<C>,
-    view: web::Json<STRectangle>,
-) -> Result<impl Responder> {
-    ctx.user_db_ref()
-        .set_session_view(&session, view.into_inner())
-        .await?;
-
-    Ok(HttpResponse::Ok())
+    Ok(web::Json(session))
 }
 
 #[cfg(test)]
@@ -236,6 +340,9 @@ mod tests {
 
     use crate::contexts::Session;
     use crate::handlers::ErrorResponse;
+    use crate::pro::util::tests::mock_oidc::{
+        mock_jwks, mock_provider_metadata, mock_token_response, MockTokenConfig, SINGLE_STATE,
+    };
     use crate::pro::util::tests::{
         create_project_helper, create_session_helper, send_pro_test_request,
     };
@@ -243,11 +350,16 @@ mod tests {
     use crate::util::tests::{check_allowed_http_methods, read_body_string};
     use crate::util::user_input::Validated;
 
+    use crate::pro::users::{AuthCodeRequestURL, OidcRequestDb};
+    use crate::pro::util::config::Oidc;
     use actix_web::dev::ServiceResponse;
     use actix_web::{http::header, http::Method, test};
     use actix_web_httpauth::headers::authorization::Bearer;
     use geoengine_datatypes::spatial_reference::SpatialReferenceOption;
     use geoengine_datatypes::util::test::TestDefault;
+    use httptest::matchers::request;
+    use httptest::responders::status_code;
+    use httptest::{Expectation, Server};
     use serde_json::json;
 
     async fn register_test_helper<C: ProContext>(
@@ -273,11 +385,11 @@ mod tests {
         send_pro_test_request(req, ctx).await
     }
 
-    #[tokio::test]
+    #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
     async fn register() {
         let ctx = ProInMemoryContext::test_default();
 
-        let res = register_test_helper(ctx, Method::POST, "foo@bar.de").await;
+        let res = register_test_helper(ctx, Method::POST, "foo@example.com").await;
 
         assert_eq!(res.status(), 200);
 
@@ -303,10 +415,10 @@ mod tests {
     async fn register_duplicate_email() {
         let ctx = ProInMemoryContext::test_default();
 
-        register_test_helper(ctx.clone(), Method::POST, "foo@bar.de").await;
+        register_test_helper(ctx.clone(), Method::POST, "foo@example.com").await;
 
         // register user
-        let res = register_test_helper(ctx, Method::POST, "foo@bar.de").await;
+        let res = register_test_helper(ctx, Method::POST, "foo@example.com").await;
 
         ErrorResponse::assert(
             res,
@@ -322,7 +434,7 @@ mod tests {
         let ctx = ProInMemoryContext::test_default();
 
         check_allowed_http_methods(
-            |method| register_test_helper(ctx.clone(), method, "foo@bar.de"),
+            |method| register_test_helper(ctx.clone(), method, "foo@example.com"),
             &[Method::POST],
         )
         .await;
@@ -398,7 +510,7 @@ mod tests {
 
         let user = Validated {
             user_input: UserRegistration {
-                email: "foo@bar.de".to_string(),
+                email: "foo@example.com".to_string(),
                 password: "secret123".to_string(),
                 real_name: " Foo Bar".to_string(),
             },
@@ -407,7 +519,7 @@ mod tests {
         ctx.user_db_ref().register(user).await.unwrap();
 
         let credentials = UserCredentials {
-            email: "foo@bar.de".to_string(),
+            email: "foo@example.com".to_string(),
             password: password.to_string(),
         };
 
@@ -476,7 +588,7 @@ mod tests {
 
         let user = Validated {
             user_input: UserRegistration {
-                email: "foo@bar.de".to_string(),
+                email: "foo@example.com".to_string(),
                 password: "secret123".to_string(),
                 real_name: " Foo Bar".to_string(),
             },
@@ -485,7 +597,7 @@ mod tests {
         ctx.user_db_ref().register(user).await.unwrap();
 
         let credentials = json!({
-            "email": "foo@bar.de",
+            "email": "foo@example.com",
         });
 
         let req = test::TestRequest::post()
@@ -498,7 +610,7 @@ mod tests {
             res,
             400,
             "BodyDeserializeError",
-            "missing field `password` at line 1 column 22",
+            "missing field `password` at line 1 column 27",
         )
         .await;
     }
@@ -508,7 +620,7 @@ mod tests {
 
         let user = Validated {
             user_input: UserRegistration {
-                email: "foo@bar.de".to_string(),
+                email: "foo@example.com".to_string(),
                 password: "secret123".to_string(),
                 real_name: " Foo Bar".to_string(),
             },
@@ -517,7 +629,7 @@ mod tests {
         ctx.user_db_ref().register(user).await.unwrap();
 
         let credentials = UserCredentials {
-            email: "foo@bar.de".to_string(),
+            email: "foo@example.com".to_string(),
             password: "secret123".to_string(),
         };
 
@@ -699,7 +811,7 @@ mod tests {
         let ctx = ProInMemoryContext::test_default();
 
         let user_reg = UserRegistration {
-            email: "foo@bar.de".to_owned(),
+            email: "foo@example.com".to_owned(),
             password: "secret123".to_owned(),
             real_name: "Foo Bar".to_owned(),
         };
@@ -729,6 +841,316 @@ mod tests {
             400,
             "UserRegistrationDisabled",
             "User registration is disabled",
+        )
+        .await;
+    }
+
+    const MOCK_CLIENT_ID: &str = "";
+
+    fn single_state_nonce_request_db(issuer: String) -> OidcRequestDb {
+        let oidc_config = Oidc {
+            enabled: true,
+            issuer,
+            client_id: MOCK_CLIENT_ID.to_string(),
+            client_secret: None,
+            redirect_uri: "https://dummy-redirect.com/".into(),
+            scopes: vec!["profile".to_string(), "email".to_string()],
+        };
+
+        OidcRequestDb::from_oidc_with_static_tokens(oidc_config)
+    }
+
+    fn mock_valid_provider_discovery(expected_discoveries: usize) -> Server {
+        let server = Server::run();
+        let server_url = format!("http://{}", server.addr());
+
+        let provider_metadata = mock_provider_metadata(server_url.as_str());
+        let jwks = mock_jwks();
+
+        server.expect(
+            Expectation::matching(request::method_path(
+                "GET",
+                "/.well-known/openid-configuration",
+            ))
+            .times(expected_discoveries)
+            .respond_with(
+                status_code(200)
+                    .insert_header("content-type", "application/json")
+                    .body(serde_json::to_string(&provider_metadata).unwrap()),
+            ),
+        );
+        server.expect(
+            Expectation::matching(request::method_path("GET", "/jwk"))
+                .times(expected_discoveries)
+                .respond_with(
+                    status_code(200)
+                        .insert_header("content-type", "application/json")
+                        .body(serde_json::to_string(&jwks).unwrap()),
+                ),
+        );
+        server
+    }
+
+    async fn oidc_init_test_helper(method: Method, ctx: ProInMemoryContext) -> ServiceResponse {
+        let req = test::TestRequest::default()
+            .method(method)
+            .uri("/oidcInit")
+            .append_header((header::CONTENT_LENGTH, 0));
+        send_pro_test_request(req, ctx).await
+    }
+
+    async fn oidc_login_test_helper(
+        method: Method,
+        ctx: ProInMemoryContext,
+        auth_code_response: AuthCodeResponse,
+    ) -> ServiceResponse {
+        let req = test::TestRequest::default()
+            .method(method)
+            .uri("/oidcLogin")
+            .append_header((header::CONTENT_LENGTH, 0))
+            .set_json(&auth_code_response);
+        send_pro_test_request(req, ctx).await
+    }
+
+    #[tokio::test]
+    async fn oidc_init() {
+        let server = mock_valid_provider_discovery(1);
+        let server_url = format!("http://{}", server.addr());
+        let request_db = single_state_nonce_request_db(server_url);
+
+        let ctx = ProInMemoryContext::new_with_oidc(request_db);
+        let res = oidc_init_test_helper(Method::POST, ctx).await;
+
+        assert_eq!(res.status(), 200);
+        let _auth_code_url: AuthCodeRequestURL = test::read_body_json(res).await;
+    }
+
+    #[tokio::test]
+    async fn oidc_illegal_provider() {
+        let server = Server::run();
+        let server_url = format!("http://{}", server.addr());
+        let request_db = single_state_nonce_request_db(server_url);
+
+        let error_message = serde_json::to_string(&json!({
+            "error_description": "Dummy bad request",
+            "error": "catch_all_error"
+        }))
+        .expect("Serde Json unsuccessful");
+
+        server.expect(
+            Expectation::matching(request::method_path(
+                "GET",
+                "/.well-known/openid-configuration",
+            ))
+            .respond_with(
+                status_code(404)
+                    .insert_header("content-type", "application/json")
+                    .body(error_message),
+            ),
+        );
+
+        let ctx = ProInMemoryContext::new_with_oidc(request_db);
+        let res = oidc_init_test_helper(Method::POST, ctx).await;
+
+        ErrorResponse::assert(
+            res,
+            400,
+            "OidcError",
+            "OidcError: ProviderDiscoveryError: Server returned invalid response: HTTP status code 404 Not Found",
+        ).await;
+    }
+
+    #[tokio::test]
+    async fn oidc_init_invalid_method() {
+        let ctx = ProInMemoryContext::test_default();
+
+        check_allowed_http_methods(
+            |method| oidc_init_test_helper(method, ctx.clone()),
+            &[Method::POST],
+        )
+        .await;
+    }
+
+    #[tokio::test]
+    async fn oidc_login() {
+        let server = mock_valid_provider_discovery(2);
+        let server_url = format!("http://{}", server.addr());
+        let request_db = single_state_nonce_request_db(server_url.clone());
+
+        let client = request_db.get_client().await.unwrap();
+        let request = request_db.generate_request(client).await;
+
+        assert!(request.is_ok());
+
+        let mock_token_config =
+            MockTokenConfig::create_from_issuer_and_client(server_url, MOCK_CLIENT_ID.to_string());
+        let token_response = mock_token_response(mock_token_config);
+        server.expect(
+            Expectation::matching(request::method_path("POST", "/token")).respond_with(
+                status_code(200)
+                    .insert_header("content-type", "application/json")
+                    .body(serde_json::to_string(&token_response).unwrap()),
+            ),
+        );
+
+        let auth_code_response = AuthCodeResponse {
+            session_state: "".to_string(),
+            code: "".to_string(),
+            state: SINGLE_STATE.to_string(),
+        };
+
+        let ctx = ProInMemoryContext::new_with_oidc(request_db);
+        let res = oidc_login_test_helper(Method::POST, ctx, auth_code_response).await;
+
+        assert_eq!(res.status(), 200);
+
+        let _id: UserSession = test::read_body_json(res).await;
+    }
+
+    #[tokio::test]
+    async fn oidc_login_illegal_request() {
+        let server = mock_valid_provider_discovery(1);
+        let server_url = format!("http://{}", server.addr());
+        let request_db = single_state_nonce_request_db(server_url.clone());
+
+        let auth_code_response = AuthCodeResponse {
+            session_state: "".to_string(),
+            code: "".to_string(),
+            state: SINGLE_STATE.to_string(),
+        };
+
+        let ctx = ProInMemoryContext::new_with_oidc(request_db);
+        let res = oidc_login_test_helper(Method::POST, ctx, auth_code_response).await;
+
+        ErrorResponse::assert(
+            res,
+            400,
+            "OidcError",
+            "OidcError: Login failed: Request unknown",
+        )
+        .await;
+    }
+
+    #[tokio::test]
+    async fn oidc_login_fail() {
+        let server = mock_valid_provider_discovery(2);
+        let server_url = format!("http://{}", server.addr());
+        let request_db = single_state_nonce_request_db(server_url);
+
+        let client = request_db.get_client().await.unwrap();
+        let request = request_db.generate_request(client).await;
+
+        assert!(request.is_ok());
+
+        let error_message = serde_json::to_string(&json!({
+            "error_description": "Dummy bad request",
+            "error": "catch_all_error"
+        }))
+        .expect("Serde Json unsuccessful");
+
+        server.expect(
+            Expectation::matching(request::method_path("POST", "/token")).respond_with(
+                status_code(404)
+                    .insert_header("content-type", "application/json")
+                    .body(error_message),
+            ),
+        );
+
+        let auth_code_response = AuthCodeResponse {
+            session_state: "".to_string(),
+            code: "".to_string(),
+            state: SINGLE_STATE.to_string(),
+        };
+
+        let ctx = ProInMemoryContext::new_with_oidc(request_db);
+        let res = oidc_login_test_helper(Method::POST, ctx, auth_code_response).await;
+
+        ErrorResponse::assert(
+            res,
+            400,
+            "OidcError",
+            "OidcError: Verification failed: Request for code to token exchange failed",
+        )
+        .await;
+    }
+
+    #[tokio::test]
+    async fn oidc_login_invalid_method() {
+        let ctx = ProInMemoryContext::test_default();
+
+        let auth_code_response = AuthCodeResponse {
+            session_state: "".to_string(),
+            code: "".to_string(),
+            state: "".to_string(),
+        };
+
+        check_allowed_http_methods(
+            |method| oidc_login_test_helper(method, ctx.clone(), auth_code_response.clone()),
+            &[Method::POST],
+        )
+        .await;
+    }
+
+    #[tokio::test]
+    async fn oidc_login_invalid_body() {
+        let ctx = ProInMemoryContext::test_default();
+
+        let req = test::TestRequest::post()
+            .uri("/oidcLogin")
+            .append_header((header::CONTENT_LENGTH, 0))
+            .set_payload("no json");
+        let res = send_pro_test_request(req, ctx).await;
+
+        ErrorResponse::assert(
+            res,
+            415,
+            "UnsupportedMediaType",
+            "Unsupported content type header.",
+        )
+        .await;
+    }
+
+    #[tokio::test]
+    async fn oidc_login_missing_fields() {
+        let ctx = ProInMemoryContext::test_default();
+
+        let auth_code_response = json!({
+            "sessionState": "",
+            "code": "",
+        });
+
+        // register user
+        let req = test::TestRequest::post()
+            .uri("/oidcLogin")
+            .append_header((header::CONTENT_LENGTH, 0))
+            .set_json(&auth_code_response);
+        let res = send_pro_test_request(req, ctx).await;
+
+        ErrorResponse::assert(
+            res,
+            400,
+            "BodyDeserializeError",
+            "missing field `state` at line 1 column 29",
+        )
+        .await;
+    }
+
+    #[tokio::test]
+    async fn oidc_login_invalid_type() {
+        let ctx = ProInMemoryContext::test_default();
+
+        // register user
+        let req = test::TestRequest::post()
+            .uri("/oidcLogin")
+            .append_header((header::CONTENT_LENGTH, 0))
+            .append_header((header::CONTENT_TYPE, "text/html"));
+        let res = send_pro_test_request(req, ctx).await;
+
+        ErrorResponse::assert(
+            res,
+            415,
+            "UnsupportedMediaType",
+            "Unsupported content type header.",
         )
         .await;
     }

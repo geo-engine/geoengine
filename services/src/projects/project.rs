@@ -1,12 +1,13 @@
 use std::{convert::TryInto, fmt::Debug};
 
 use crate::error::{Error, Result};
+use crate::identifier;
 use crate::util::config::ProjectService;
 use crate::util::user_input::UserInput;
 use crate::workflows::workflow::WorkflowId;
 use crate::{error, util::config::get_config_element};
+use geoengine_datatypes::operations::image::RgbaColor;
 use geoengine_datatypes::primitives::DateTime;
-use geoengine_datatypes::{identifier, operations::image::RgbaColor};
 use geoengine_datatypes::{operations::image::Colorizer, primitives::TimeInstance};
 use geoengine_datatypes::{
     primitives::{BoundingBox2D, Coordinate2D, TimeGranularity, TimeInterval, TimeStep},
@@ -21,6 +22,7 @@ use geoengine_operators::string_token;
 use postgres_types::{FromSql, ToSql};
 use serde::{Deserialize, Serialize};
 use snafu::{ensure, ResultExt};
+use utoipa::ToSchema;
 
 identifier!(ProjectId);
 
@@ -119,10 +121,29 @@ impl Project {
     }
 }
 
-#[derive(Debug, PartialEq, Serialize, Deserialize, Clone)]
+#[derive(Debug, PartialEq, Serialize, Deserialize, Clone, ToSchema)]
 #[cfg_attr(feature = "postgres", derive(ToSql, FromSql))]
 #[allow(clippy::upper_case_acronyms)]
 #[serde(rename_all = "camelCase")]
+// TODO: add example, once utoipas schema macro can co-exist with postgres OR: split type into API and database model
+// cf. utoipa issue: https://github.com/juhaku/utoipa/issues/266
+// #[schema(example = json!({
+//     "boundingBox": {
+//         "lowerLeftCoordinate": {
+//             "x": -180.0,
+//             "y": -90.0
+//         },
+//         "upperRightCoordinate": {
+//             "x": 180.0,
+//             "y": 90.0
+//         }
+//     },
+//     "spatialReference": "EPSG:4326",
+//     "timeInterval": {
+//         "end": 1_388_534_400_000_i64,
+//         "start": 1_388_534_400_000_i64
+//     }
+// }))]
 pub struct STRectangle {
     pub spatial_reference: SpatialReferenceOption,
     pub bounding_box: BoundingBox2D,
@@ -447,7 +468,7 @@ pub struct UpdateProject {
     pub time_step: Option<TimeStep>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(untagged)]
 pub enum VecUpdate<Content> {
     None(NoUpdate),
@@ -676,7 +697,7 @@ mod tests {
         });
 
         assert_eq!(
-            serde_json::to_string(&symbology).unwrap(),
+            serde_json::to_value(&symbology).unwrap(),
             json!({
                 "type": "point",
                 "radius": {
@@ -706,15 +727,14 @@ mod tests {
                     }
                 },
                 "text": null
-            })
-            .to_string(),
+            }),
         );
     }
 
     #[test]
     fn serialize_derived_number_param() {
         assert_eq!(
-            serde_json::to_string(&NumberParam::Derived(DerivedNumber {
+            serde_json::to_value(&NumberParam::Derived(DerivedNumber {
                 attribute: "foo".to_owned(),
                 factor: 1.,
                 default_value: 0.
@@ -726,7 +746,6 @@ mod tests {
                 "factor": 1.0,
                 "defaultValue": 0.0
             })
-            .to_string()
         );
     }
 }

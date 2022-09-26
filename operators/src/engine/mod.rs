@@ -6,8 +6,8 @@ pub use execution_context::{
     ExecutionContext, MetaData, MetaDataProvider, MockExecutionContext, StaticMetaData,
 };
 pub use operator::{
-    InitializedPlotOperator, InitializedRasterOperator, InitializedVectorOperator,
-    OperatorDatasets, PlotOperator, RasterOperator, TypedOperator, VectorOperator,
+    InitializedPlotOperator, InitializedRasterOperator, InitializedVectorOperator, OperatorData,
+    OperatorName, PlotOperator, RasterOperator, TypedOperator, VectorOperator,
 };
 pub use operator_impl::{
     MultipleRasterOrSingleVectorSource, MultipleRasterSources, MultipleVectorSources, Operator,
@@ -103,7 +103,7 @@ macro_rules! call_on_generic_raster_processor_gdal_types {
             $crate::engine::TypedRasterQueryProcessor::I32($processor_var) => Ok($function_call),
             $crate::engine::TypedRasterQueryProcessor::F32($processor_var) => Ok($function_call),
             $crate::engine::TypedRasterQueryProcessor::F64($processor_var) => Ok($function_call),
-            _ => Err(error::Error::RasterDataTypeNotSupportByGdal),
+            _ => Err($crate::error::Error::GdalRasterDataTypeNotSupported),
         }
     };
 }

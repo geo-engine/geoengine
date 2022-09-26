@@ -22,7 +22,7 @@ mod time_step;
 pub use bounding_box::{bboxes_extent, BoundingBox2D};
 pub use circle::Circle;
 pub use coordinate::Coordinate2D;
-pub use datetime::{DateTime, DateTimeParseFormat, Duration};
+pub use datetime::{DateTime, DateTimeError, DateTimeParseFormat, Duration};
 pub(crate) use error::PrimitivesError;
 pub use feature_data::{
     BoolDataRef, CategoryDataRef, DataRef, DateTimeDataRef, FeatureData, FeatureDataRef,

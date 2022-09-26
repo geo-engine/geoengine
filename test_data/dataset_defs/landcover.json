@@ -1,9 +1,6 @@
 {
   "properties": {
-    "id": {
-      "type": "internal",
-      "datasetId": "9ee3619e-d0f9-4ced-9c44-3d407c3aed69"
-    },
+    "id": "9ee3619e-d0f9-4ced-9c44-3d407c3aed69",
     "name": "Land Cover",
     "description": "Land Cover derived from MODIS/Terra+Aqua Land Cover",
     "sourceOperator": "GdalSource",
@@ -14,7 +11,7 @@
         "colors": {
           "0": [134, 201, 227, 255],
           "1": [30, 129, 62, 255],
-          "2": [59, 194, 212, 65],
+          "2": [59, 194, 212, 255],
           "3": [157, 194, 63, 255],
           "4": [159, 225, 127, 255],
           "5": [125, 194, 127, 255],
@@ -77,6 +74,10 @@
       "bbox": {
         "upperLeftCoordinate": [-180.0, 90.0],
         "lowerRightCoordinate": [180.0, -90.0]
+      },
+      "resolution": {
+        "x": 0.1,
+        "y": 0.1
       }
     },
     "params": {

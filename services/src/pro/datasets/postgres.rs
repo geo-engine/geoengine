@@ -1,20 +1,35 @@
+use std::collections::HashMap;
+use std::str::FromStr;
+
+use crate::api::model::datatypes::{DataId, DatasetId, LayerId};
 use crate::datasets::listing::ProvenanceOutput;
 use crate::datasets::listing::SessionMetaDataProvider;
+use crate::datasets::storage::DATASET_DB_LAYER_PROVIDER_ID;
+use crate::datasets::storage::DATASET_DB_ROOT_COLLECTION_ID;
 use crate::datasets::storage::{
-    AddDataset, Dataset, DatasetDb, DatasetProviderDb, DatasetProviderListOptions,
-    DatasetProviderListing, DatasetStore, DatasetStorer, ExternalDatasetProviderDefinition,
-    MetaDataDefinition,
+    AddDataset, Dataset, DatasetDb, DatasetStore, DatasetStorer, MetaDataDefinition,
 };
 use crate::datasets::upload::FileId;
 use crate::datasets::upload::{Upload, UploadDb, UploadId};
 use crate::error::{self, Error, Result};
+use crate::layers::layer::CollectionItem;
+use crate::layers::layer::Layer;
+use crate::layers::layer::LayerCollection;
+use crate::layers::layer::LayerCollectionListOptions;
+use crate::layers::layer::LayerListing;
+use crate::layers::layer::ProviderLayerCollectionId;
+use crate::layers::layer::ProviderLayerId;
+use crate::layers::listing::LayerCollectionId;
+use crate::layers::listing::LayerCollectionProvider;
+use crate::layers::storage::INTERNAL_PROVIDER_ID;
 use crate::pro::datasets::storage::UpdateDatasetPermissions;
 use crate::pro::datasets::RoleId;
+use crate::projects::Symbology;
+use crate::util::operators::source_operator_from_dataset;
 use crate::util::user_input::Validated;
+use crate::workflows::workflow::Workflow;
 use crate::{
-    datasets::listing::{
-        DatasetListOptions, DatasetListing, DatasetProvider, ExternalDatasetProvider,
-    },
+    datasets::listing::{DatasetListOptions, DatasetListing, DatasetProvider},
     pro::users::UserSession,
 };
 use async_trait::async_trait;
@@ -22,18 +37,20 @@ use bb8_postgres::bb8::Pool;
 use bb8_postgres::tokio_postgres::tls::{MakeTlsConnect, TlsConnect};
 use bb8_postgres::tokio_postgres::Socket;
 use bb8_postgres::PostgresConnectionManager;
-use geoengine_datatypes::dataset::{DatasetId, DatasetProviderId, InternalDatasetId};
 use geoengine_datatypes::primitives::RasterQueryRectangle;
 use geoengine_datatypes::primitives::VectorQueryRectangle;
 use geoengine_datatypes::util::Identifier;
 use geoengine_operators::engine::{
     MetaData, RasterResultDescriptor, StaticMetaData, TypedResultDescriptor, VectorResultDescriptor,
 };
+
 use geoengine_operators::mock::MockDatasetDataSourceLoadingInfo;
+
 use geoengine_operators::source::{GdalLoadingInfo, OgrSourceDataset};
 use log::info;
 use postgres_types::{FromSql, ToSql};
 use snafu::{ensure, ResultExt};
+use uuid::Uuid;
 
 use super::{DatasetPermission, Permission};
 
@@ -66,111 +83,6 @@ where
     <Tls as MakeTlsConnect<Socket>>::TlsConnect: Send,
     <<Tls as MakeTlsConnect<Socket>>::TlsConnect as TlsConnect<Socket>>::Future: Send,
 {
-}
-
-#[async_trait]
-impl<Tls> DatasetProviderDb<UserSession> for PostgresDatasetDb<Tls>
-where
-    Tls: MakeTlsConnect<Socket> + Clone + Send + Sync + 'static,
-    <Tls as MakeTlsConnect<Socket>>::Stream: Send + Sync,
-    <Tls as MakeTlsConnect<Socket>>::TlsConnect: Send,
-    <<Tls as MakeTlsConnect<Socket>>::TlsConnect as TlsConnect<Socket>>::Future: Send,
-{
-    async fn add_dataset_provider(
-        &self,
-        _session: &UserSession,
-        provider: Box<dyn ExternalDatasetProviderDefinition>,
-    ) -> Result<DatasetProviderId> {
-        // TODO: permissions
-        let conn = self.conn_pool.get().await?;
-
-        let stmt = conn
-            .prepare(
-                "
-            INSERT INTO dataset_providers (
-                id, 
-                type_name, 
-                name,
-                definition
-            )
-            VALUES ($1, $2, $3, $4)",
-            )
-            .await?;
-
-        let id = provider.id();
-        conn.execute(
-            &stmt,
-            &[
-                &id,
-                &provider.type_name(),
-                &provider.name(),
-                &serde_json::to_value(provider)?,
-            ],
-        )
-        .await?;
-        Ok(id)
-    }
-
-    async fn list_dataset_providers(
-        &self,
-        _session: &UserSession,
-        _options: Validated<DatasetProviderListOptions>,
-    ) -> Result<Vec<DatasetProviderListing>> {
-        // TODO: options
-        // TODO: permission
-        let conn = self.conn_pool.get().await?;
-
-        let stmt = conn
-            .prepare(
-                "
-            SELECT 
-                id, 
-                type_name, 
-                name
-            FROM 
-                dataset_providers",
-            )
-            .await?;
-
-        let rows = conn.query(&stmt, &[]).await?;
-
-        Ok(rows
-            .iter()
-            .map(|row| DatasetProviderListing {
-                id: row.get(0),
-                type_name: row.get(1),
-                name: row.get(2),
-            })
-            .collect())
-    }
-
-    async fn dataset_provider(
-        &self,
-        _session: &UserSession,
-        provider: DatasetProviderId,
-    ) -> Result<Box<dyn ExternalDatasetProvider>> {
-        // TODO: permissions
-        let conn = self.conn_pool.get().await?;
-
-        let stmt = conn
-            .prepare(
-                "
-            SELECT 
-                definition
-            FROM 
-                dataset_providers
-            WHERE
-                id = $1",
-            )
-            .await?;
-
-        let row = conn.query_one(&stmt, &[&provider]).await?;
-
-        let definition =
-            serde_json::from_value::<Box<dyn ExternalDatasetProviderDefinition>>(row.get(0))?;
-
-        definition.initialize().await
-    }
 }
 
 #[async_trait]
@@ -214,9 +126,7 @@ where
             .iter()
             .map(|row| {
                 Result::<DatasetListing>::Ok(DatasetListing {
-                    id: DatasetId::Internal {
-                        dataset_id: row.get(0),
-                    },
+                    id: row.get(0),
                     name: row.get(1),
                     description: row.get(2),
                     tags: row.get::<_, Option<_>>(3).unwrap_or_default(),
@@ -230,8 +140,6 @@ where
     }
 
     async fn load(&self, session: &UserSession, dataset: &DatasetId) -> Result<Dataset> {
-        let id = dataset.internal().ok_or(Error::InvalidDatasetId)?;
-
         let conn = self.conn_pool.get().await?;
         let stmt = conn
             .prepare(
@@ -255,12 +163,10 @@ where
             .await?;
 
         // TODO: throw proper dataset does not exist/no permission error
-        let row = conn.query_one(&stmt, &[&session.user.id, &id]).await?;
+        let row = conn.query_one(&stmt, &[&session.user.id, dataset]).await?;
 
         Ok(Dataset {
-            id: DatasetId::Internal {
-                dataset_id: row.get(0),
-            },
+            id: row.get(0),
             name: row.get(1),
             description: row.get(2),
             result_descriptor: serde_json::from_value(row.get(3))?,
@@ -275,8 +181,6 @@ where
         session: &UserSession,
         dataset: &DatasetId,
     ) -> Result<ProvenanceOutput> {
-        let id = dataset.internal().ok_or(Error::InvalidDatasetId)?;
-
         let conn = self.conn_pool.get().await?;
 
         let stmt = conn
@@ -292,10 +196,10 @@ where
             )
             .await?;
 
-        let row = conn.query_one(&stmt, &[&session.user.id, &id]).await?;
+        let row = conn.query_one(&stmt, &[&session.user.id, dataset]).await?;
 
         Ok(ProvenanceOutput {
-            dataset: dataset.clone(),
+            data: (*dataset).into(),
             provenance: serde_json::from_value(row.get(0)).context(error::SerdeJson)?,
         })
     }
@@ -318,7 +222,7 @@ where
     async fn session_meta_data(
         &self,
         _session: &UserSession,
-        _dataset: &DatasetId,
+        _id: &DataId,
     ) -> Result<
         Box<
             dyn MetaData<
@@ -349,10 +253,10 @@ where
     async fn session_meta_data(
         &self,
         session: &UserSession,
-        dataset: &DatasetId,
+        id: &DataId,
     ) -> Result<Box<dyn MetaData<OgrSourceDataset, VectorResultDescriptor, VectorQueryRectangle>>>
     {
-        let id = dataset.internal().ok_or(Error::InvalidDatasetId)?;
+        let id = id.internal().ok_or(error::Error::DataIdTypeMissMatch)?;
 
         let conn = self.conn_pool.get().await?;
         let stmt = conn
@@ -397,10 +301,10 @@ where
     async fn session_meta_data(
         &self,
         session: &UserSession,
-        dataset: &DatasetId,
+        id: &DataId,
     ) -> Result<Box<dyn MetaData<GdalLoadingInfo, RasterResultDescriptor, RasterQueryRectangle>>>
     {
-        let id = dataset.internal().ok_or(Error::InvalidDatasetId)?;
+        let id = id.internal().ok_or(error::Error::DataIdTypeMissMatch)?;
 
         let conn = self.conn_pool.get().await?;
         let stmt = conn
@@ -423,7 +327,7 @@ where
         Ok(match meta_data {
             MetaDataDefinition::GdalMetaDataRegular(m) => Box::new(m),
             MetaDataDefinition::GdalStatic(m) => Box::new(m),
-            _ => return Err(Error::DatasetIdTypeMissMatch),
+            _ => return Err(Error::DataIdTypeMissMatch),
         })
     }
 }
@@ -518,10 +422,7 @@ where
         meta_data: Box<dyn PostgresStorable<Tls>>,
     ) -> Result<DatasetId> {
         let dataset = dataset.user_input;
-        let id = dataset
-            .id
-            .unwrap_or_else(|| InternalDatasetId::new().into());
-        let internal_id = id.internal().ok_or(Error::InvalidDatasetId)?;
+        let id = dataset.id.unwrap_or_else(DatasetId::new);
 
         let meta_data_json = meta_data.to_json()?;
 
@@ -549,7 +450,7 @@ where
         tx.execute(
             &stmt,
             &[
-                &internal_id,
+                &id,
                 &dataset.name,
                 &dataset.description,
                 &dataset.source_operator,
@@ -575,11 +476,7 @@ where
 
         tx.execute(
             &stmt,
-            &[
-                &RoleId::from(session.user.id),
-                &internal_id,
-                &Permission::Owner,
-            ],
+            &[&RoleId::from(session.user.id), &id, &Permission::Owner],
         )
         .await?;
 
@@ -611,11 +508,7 @@ where
             session, permission
         );
 
-        let internal_id = permission.dataset.internal().ok_or(
-            geoengine_operators::error::Error::DatasetMetaData {
-                source: Box::new(error::Error::DatasetIdTypeMissMatch),
-            },
-        )?;
+        let id = permission.dataset;
 
         let mut conn = self.conn_pool.get().await?;
 
@@ -636,11 +529,7 @@ where
         let auth = tx
             .query_one(
                 &stmt,
-                &[
-                    &RoleId::from(session.user.id),
-                    &internal_id,
-                    &Permission::Owner,
-                ],
+                &[&RoleId::from(session.user.id), &id, &Permission::Owner],
             )
             .await;
 
@@ -666,10 +555,7 @@ where
             .await?;
 
         let duplicate = tx
-            .query_one(
-                &stmt,
-                &[&permission.role, &internal_id, &permission.permission],
-            )
+            .query_one(&stmt, &[&permission.role, &id, &permission.permission])
             .await?;
 
         ensure!(
@@ -693,11 +579,8 @@ where
             )
             .await?;
 
-        tx.execute(
-            &stmt,
-            &[&permission.role, &internal_id, &permission.permission],
-        )
-        .await?;
+        tx.execute(&stmt, &[&permission.role, &id, &permission.permission])
+            .await?;
 
         tx.commit().await?;
 
@@ -753,6 +636,140 @@ where
         )
         .await?;
         Ok(())
+    }
+}
+
+#[async_trait]
+impl<Tls> LayerCollectionProvider for PostgresDatasetDb<Tls>
+where
+    Tls: MakeTlsConnect<Socket> + Clone + Send + Sync + 'static,
+    <Tls as MakeTlsConnect<Socket>>::Stream: Send + Sync,
+    <Tls as MakeTlsConnect<Socket>>::TlsConnect: Send,
+    <<Tls as MakeTlsConnect<Socket>>::TlsConnect as TlsConnect<Socket>>::Future: Send,
+{
+    async fn collection(
+        &self,
+        collection: &LayerCollectionId,
+        options: Validated<LayerCollectionListOptions>,
+    ) -> Result<LayerCollection> {
+        ensure!(
+            *collection == self.root_collection_id().await?,
+            error::UnknownLayerCollectionId {
+                id: collection.clone()
+            }
+        );
+
+        let conn = self.conn_pool.get().await?;
+
+        let options = options.user_input;
+
+        // TODO: only list datasets that are accessible to the user as layer
+        // for now they are listed, but cannot be accessed
+        let stmt = conn
+            .prepare(
+                "
+                SELECT 
+                    concat(d.id, ''), 
+                    d.name, 
+                    d.description
+                FROM 
+                    datasets d
+                ORDER BY d.name ASC
+                LIMIT $1
+                OFFSET $2;",
+            )
+            .await?;
+
+        let rows = conn
+            .query(
+                &stmt,
+                &[&i64::from(options.limit), &i64::from(options.offset)],
+            )
+            .await?;
+
+        let items = rows
+            .iter()
+            .map(|row| {
+                Result::<CollectionItem>::Ok(CollectionItem::Layer(LayerListing {
+                    id: ProviderLayerId {
+                        provider_id: DATASET_DB_LAYER_PROVIDER_ID,
+                        layer_id: LayerId(row.get(0)),
+                    },
+                    name: row.get(1),
+                    description: row.get(2),
+                }))
+            })
+            .filter_map(Result::ok)
+            .collect();
+
+        Ok(LayerCollection {
+            id: ProviderLayerCollectionId {
+                provider_id: INTERNAL_PROVIDER_ID,
+                collection_id: collection.clone(),
+            },
+            name: "Datasets".to_string(),
+            description: "Basic Layers for all Datasets".to_string(),
+            items,
+            entry_label: None,
+            properties: vec![],
+        })
+    }
+
+    async fn root_collection_id(&self) -> Result<LayerCollectionId> {
+        Ok(LayerCollectionId(DATASET_DB_ROOT_COLLECTION_ID.to_string()))
+    }
+
+    async fn get_layer(&self, id: &LayerId) -> Result<Layer> {
+        let dataset_id = DatasetId::from_str(&id.0)?;
+
+        let conn = self.conn_pool.get().await?;
+
+        // TODO: check permission to dataset
+        // for now they dataset is returned, but cannot be accessed
+        let stmt = conn
+            .prepare(
+                "
+                SELECT 
+                    d.name, 
+                    d.description,
+                    d.source_operator,
+                    d.symbology
+                FROM 
+                    datasets d
+                WHERE id = $1;",
+            )
+            .await?;
+
+        let row = conn
+            .query_one(
+                &stmt,
+                &[
+                    &Uuid::from_str(&id.0).map_err(|_| error::Error::IdStringMustBeUuid {
+                        found: id.0.clone(),
+                    })?,
+                ],
+            )
+            .await?;
+
+        let name: String = row.get(0);
+        let description: String = row.get(1);
+        let source_operator: String = row.get(2);
+        let symbology: Option<Symbology> = serde_json::from_value(row.get(3))?;
+
+        let operator = source_operator_from_dataset(&source_operator, &dataset_id.into())?;
+
+        Ok(Layer {
+            id: ProviderLayerId {
+                provider_id: DATASET_DB_LAYER_PROVIDER_ID,
+                layer_id: id.clone(),
+            },
+            name,
+            description,
+            workflow: Workflow { operator },
+            symbology,
+            properties: vec![],
+            metadata: HashMap::new(),
+        })
     }
 }
 

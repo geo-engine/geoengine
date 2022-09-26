@@ -18,11 +18,11 @@ pub struct DateTime {
 impl DateTime {
     /// The minimum possible `DateTime`.
     pub const MIN: DateTime = DateTime {
-        datetime: chrono::MIN_DATETIME,
+        datetime: chrono::DateTime::<chrono::Utc>::MIN_UTC,
     };
     /// The maximum possible `DateTime`.
     pub const MAX: DateTime = DateTime {
-        datetime: chrono::MAX_DATETIME,
+        datetime: chrono::DateTime::<chrono::Utc>::MAX_UTC,
     };
 
     /// Creates a new `DateTime` from year, month day and hour, minute, second values.
@@ -173,6 +173,11 @@ impl DateTime {
     pub fn to_rfc3339(self) -> String {
         let chrono_date_time: chrono::DateTime<chrono::FixedOffset> = self.into();
         chrono_date_time.to_rfc3339()
+    }
+
+    pub fn to_rfc3339_with_millis(self) -> String {
+        let chrono_date_time: chrono::DateTime<chrono::FixedOffset> = self.into();
+        chrono_date_time.to_rfc3339_opts(chrono::SecondsFormat::Millis, true)
     }
 
     /// Now in UTC.
@@ -488,7 +493,7 @@ impl Serialize for DateTime {
     where
         S: serde::Serializer,
     {
-        serializer.serialize_str(&self.datetime.to_string())
+        serializer.serialize_str(&self.to_string())
     }
 }
 
@@ -533,26 +538,16 @@ impl Sub<Duration> for DateTime {
 #[cfg(feature = "postgres")]
 mod sql {
     use super::*;
-    use postgres_protocol::types::{timestamp_from_sql, timestamp_to_sql};
     use postgres_types::{
-        accepts, private::BytesMut, to_sql_checked, FromSql, IsNull, ToSql, Type, WrongType,
+        accepts, private::BytesMut, to_sql_checked, FromSql, IsNull, ToSql, Type,
     };
     use std::error::Error;
 
     impl<'a> FromSql<'a> for DateTime {
         fn from_sql(ty: &Type, raw: &'a [u8]) -> Result<Self, Box<dyn Error + Sync + Send>> {
-            if !<Self as postgres_types::FromSql>::accepts(ty) {
-                return Err(Box::new(WrongType::new::<Self>(ty.clone())));
-            }
-
-            let timestamp_microseconds = timestamp_from_sql(raw)?;
-            let timestamp_milliseconds = timestamp_microseconds / 1_000;
-            let time_instance = TimeInstance::try_from(timestamp_milliseconds)?;
-
-            match DateTime::try_from(time_instance) {
-                Ok(date_time) => Ok(date_time),
-                Err(err) => Err(Box::new(err)),
-            }
+            let naive = chrono::NaiveDateTime::from_sql(ty, raw)?;
+            let datetime = chrono::DateTime::from_utc(naive, chrono::Utc);
+            Ok(DateTime { datetime })
         }
 
         postgres_types::accepts!(TIMESTAMPTZ);
@@ -561,15 +556,10 @@ mod sql {
     impl ToSql for DateTime {
         fn to_sql(
             &self,
-            _: &Type,
+            type_: &Type,
             w: &mut BytesMut,
         ) -> Result<IsNull, Box<dyn Error + Sync + Send>> {
-            let timestamp_milliseconds = TimeInstance::from(self).inner();
-            let timestamp_microseconds = timestamp_milliseconds * 1_000;
-
-            timestamp_to_sql(timestamp_microseconds, w);
-
-            Ok(IsNull::No)
+            self.datetime.naive_utc().to_sql(type_, w)
         }
 
         accepts!(TIMESTAMPTZ);
@@ -705,5 +695,22 @@ mod tests {
     fn has_time() {
         assert!(!DateTimeParseFormat::custom("%Y-%m-%d".to_string()).has_time());
         assert!(DateTimeParseFormat::custom("%Y-%m-%dT%H:%M:%S%z".to_string()).has_time());
+    }
+
+    #[test]
+    fn test_serialize() {
+        assert_eq!(
+            serde_json::to_string(&DateTime::from_str("2010-01-02T03:04:05.000Z").unwrap())
+                .unwrap(),
+            "\"2010-01-02T03:04:05.000Z\""
+        );
+    }
+
+    #[test]
+    fn test_as_rfc() {
+        assert_eq!(
+            DateTime::new_utc(2010, 1, 2, 3, 4, 5).to_rfc3339_with_millis(),
+            "2010-01-02T03:04:05.000Z"
+        );
     }
 }

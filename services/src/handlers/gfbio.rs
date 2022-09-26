@@ -1,10 +1,11 @@
+use crate::api::model::datatypes::{DataId, ExternalDataId, LayerId};
 use crate::contexts::Context;
 use crate::error::Result;
+use crate::layers::storage::LayerProviderDb;
 use crate::util::config::{get_config_element, GFBio};
 use actix_web::{web, FromRequest, Responder};
 use futures::stream::FuturesUnordered;
 use futures::stream::StreamExt;
-use geoengine_datatypes::dataset::{DatasetId, ExternalDatasetId};
 use geoengine_datatypes::primitives::{DateTime, VectorQueryRectangle};
 use geoengine_operators::engine::{
     MetaDataProvider, TypedResultDescriptor, VectorResultDescriptor,
@@ -17,8 +18,7 @@ use std::collections::HashMap;
 
 use crate::datasets::external::gfbio::{GfbioDataProvider, GFBIO_PROVIDER_ID};
 use crate::datasets::external::pangaea::PANGAEA_PROVIDER_ID;
-use crate::datasets::storage::DatasetProviderDb;
-use geoengine_datatypes::identifier;
+use crate::identifier;
 use geoengine_operators::util::input::StringOrNumberRange;
 
 identifier!(BasketId);
@@ -39,8 +39,8 @@ async fn get_basket_handler<C: Context>(
     // Get basket content
     let config = get_config_element::<GFBio>()?;
     let abcd_provider = ctx
-        .dataset_db_ref()
-        .dataset_provider(&session, GFBIO_PROVIDER_ID)
+        .layer_provider_db()
+        .layer_provider(GFBIO_PROVIDER_ID)
         .await
         .ok();
 
@@ -142,9 +142,9 @@ impl Basket {
             };
         }
 
-        let id = DatasetId::External(ExternalDatasetId {
+        let id = DataId::External(ExternalDataId {
             provider_id: PANGAEA_PROVIDER_ID,
-            dataset_id: entry.doi,
+            layer_id: LayerId(entry.doi),
         });
         let mdp = ec as &dyn MetaDataProvider<
             OgrSourceDataset,
@@ -215,9 +215,9 @@ impl Basket {
             }
         };
 
-        let id = DatasetId::External(ExternalDatasetId {
+        let id = DataId::External(ExternalDataId {
             provider_id: GFBIO_PROVIDER_ID,
-            dataset_id: sg_id.to_string(),
+            layer_id: LayerId(sg_id.to_string()),
         });
 
         let mdp = provider
@@ -282,11 +282,11 @@ impl Basket {
 
     async fn generate_loading_info(
         title: String,
-        id: DatasetId,
+        id: DataId,
         mdp: &dyn MetaDataProvider<OgrSourceDataset, VectorResultDescriptor, VectorQueryRectangle>,
         filter: Option<Vec<AttributeFilter>>,
     ) -> BasketEntry {
-        let md = match mdp.meta_data(&id).await {
+        let md = match mdp.meta_data(&id.clone().into()).await {
             Ok(md) => md,
             Err(e) => {
                 return BasketEntry {
@@ -333,7 +333,7 @@ enum BasketEntryStatus {
 #[derive(Serialize, Debug)]
 #[serde(rename_all = "camelCase")]
 struct BasketEntryLoadingDetails {
-    dataset_id: DatasetId,
+    dataset_id: DataId,
     source_operator: String,
     result_descriptor: TypedResultDescriptor,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -430,12 +430,12 @@ impl TryFrom<BasketEntryInternal> for TypedBasketEntry {
 
 #[cfg(test)]
 mod tests {
+    use crate::api::model::datatypes::{DataId, DataProviderId, ExternalDataId, LayerId};
     use crate::handlers::gfbio::{
         AbcdEntry, Basket, BasketEntry, BasketEntryLoadingDetails, BasketEntryStatus,
         BasketInternal, TypedBasketEntry,
     };
     use geoengine_datatypes::collections::VectorDataType;
-    use geoengine_datatypes::dataset::{DatasetId, DatasetProviderId, ExternalDatasetId};
     use geoengine_datatypes::spatial_reference::{SpatialReference, SpatialReferenceOption};
     use geoengine_operators::engine::{TypedResultDescriptor, VectorResultDescriptor};
     use geoengine_operators::source::AttributeFilter;
@@ -477,9 +477,9 @@ mod tests {
 
     #[test]
     fn basket_entry_serialization_ok() {
-        let id = DatasetId::External(ExternalDatasetId {
-            provider_id: DatasetProviderId(Uuid::default()),
-            dataset_id: "1".to_string(),
+        let id = DataId::External(ExternalDataId {
+            provider_id: DataProviderId(Uuid::default()),
+            layer_id: LayerId("1".to_string()),
         });
 
         let be = BasketEntry {
@@ -520,9 +520,9 @@ mod tests {
 
     #[test]
     fn basket_entry_serialization_ok_with_filter() {
-        let id = DatasetId::External(ExternalDatasetId {
-            provider_id: DatasetProviderId(Uuid::default()),
-            dataset_id: "1".to_string(),
+        let id = DataId::External(ExternalDataId {
+            provider_id: DataProviderId(Uuid::default()),
+            layer_id: LayerId("1".to_string()),
         });
 
         let be = BasketEntry {

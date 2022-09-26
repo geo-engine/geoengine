@@ -213,7 +213,9 @@ struct WrappedPlotOutput {
 mod tests {
     use super::*;
     use crate::contexts::{InMemoryContext, Session, SimpleContext};
-    use crate::util::tests::{check_allowed_http_methods, read_body_string, send_test_request};
+    use crate::util::tests::{
+        check_allowed_http_methods, read_body_json, read_body_string, send_test_request,
+    };
     use crate::workflows::workflow::Workflow;
     use actix_web;
     use actix_web::dev::ServiceResponse;
@@ -232,12 +234,9 @@ mod tests {
     use geoengine_operators::plot::{
         Histogram, HistogramBounds, HistogramParams, Statistics, StatisticsParams,
     };
-    use num_traits::AsPrimitive;
-    use serde_json::json;
+    use serde_json::{json, Value};
 
     fn example_raster_source() -> Box<dyn RasterOperator> {
-        let no_data_value = None;
-
         MockRasterSource {
             params: MockRasterSourceParams {
                 data: vec![RasterTile2D::new_with_tile_info(
@@ -247,7 +246,7 @@ mod tests {
                         global_tile_position: [0, 0].into(),
                         tile_size_in_pixels: [3, 2].into(),
                     },
-                    Grid2D::new([3, 2].into(), vec![1, 2, 3, 4, 5, 6], no_data_value)
+                    Grid2D::new([3, 2].into(), vec![1, 2, 3, 4, 5, 6])
                         .unwrap()
                         .into(),
                 )],
@@ -255,9 +254,9 @@ mod tests {
                     data_type: RasterDataType::U8,
                     spatial_reference: SpatialReference::epsg_4326().into(),
                     measurement: Measurement::Unitless,
-                    no_data_value: no_data_value.map(AsPrimitive::as_),
                     time: None,
                     bbox: None,
+                    resolution: None,
                 },
             },
         }
@@ -275,7 +274,9 @@ mod tests {
 
         let workflow = Workflow {
             operator: Statistics {
-                params: StatisticsParams {},
+                params: StatisticsParams {
+                    column_names: vec![],
+                },
                 sources: vec![example_raster_source()].into(),
             }
             .boxed()
@@ -296,7 +297,7 @@ mod tests {
         ];
         let req = actix_web::test::TestRequest::get()
             .uri(&format!(
-                "/plot/{}/?{}",
+                "/plot/{}?{}",
                 id,
                 &serde_urlencoded::to_string(params).unwrap()
             ))
@@ -306,20 +307,21 @@ mod tests {
         assert_eq!(res.status(), 200);
 
         assert_eq!(
-            read_body_string(res).await,
+            read_body_json(res).await,
             json!({
                 "outputFormat": "JsonPlain",
                 "plotType": "Statistics",
-                "data": [{
-                    "pixelCount": 6,
-                    "nanCount": 0,
-                    "min": 1.0,
-                    "max": 6.0,
-                    "mean": 3.5,
-                    "stddev": 1.707_825_127_659_933
-                }]
+                "data": {
+                    "Raster-1": {
+                        "valueCount": 6,
+                        "validCount": 6,
+                        "min": 1.0,
+                        "max": 6.0,
+                        "mean": 3.5,
+                        "stddev": 1.707_825_127_659_933
+                    }
+                }
             })
-            .to_string()
         );
     }
 
@@ -359,7 +361,7 @@ mod tests {
         ];
         let req = actix_web::test::TestRequest::get()
             .uri(&format!(
-                "/plot/{}/?{}",
+                "/plot/{}?{}",
                 id,
                 &serde_urlencoded::to_string(params).unwrap()
             ))
@@ -368,17 +370,59 @@ mod tests {
 
         assert_eq!(res.status(), 200);
 
+        let response = serde_json::from_str::<Value>(&read_body_string(res).await).unwrap();
+
+        assert_eq!(response["outputFormat"], "JsonVega");
+        assert_eq!(response["plotType"], "Histogram");
+        assert!(response["plotType"]["metadata"].is_null());
+
+        let vega_json: Value =
+            serde_json::from_str(response["data"]["vegaString"].as_str().unwrap()).unwrap();
+
         assert_eq!(
-            read_body_string(res).await,
+            vega_json,
             json!({
-                "outputFormat": "JsonVega",
-                "plotType": "Histogram",
+                "$schema": "https://vega.github.io/schema/vega-lite/v4.json",
                 "data": {
-                    "vegaString": "{\"$schema\":\"https://vega.github.io/schema/vega-lite/v4.json\",\"data\":{\"values\":[{\"binStart\":0.0,\"binEnd\":2.5,\"Frequency\":2},{\"binStart\":2.5,\"binEnd\":5.0,\"Frequency\":2},{\"binStart\":5.0,\"binEnd\":7.5,\"Frequency\":2},{\"binStart\":7.5,\"binEnd\":10.0,\"Frequency\":0}]},\"mark\":\"bar\",\"encoding\":{\"x\":{\"field\":\"binStart\",\"bin\":{\"binned\":true,\"step\":2.5},\"axis\":{\"title\":\"\"}},\"x2\":{\"field\":\"binEnd\"},\"y\":{\"field\":\"Frequency\",\"type\":\"quantitative\"}}}",
-                    "metadata": null
+                    "values": [{
+                        "binStart": 0.0,
+                        "binEnd": 2.5,
+                        "Frequency": 2
+                    }, {
+                        "binStart": 2.5,
+                        "binEnd": 5.0,
+                        "Frequency": 2
+                    }, {
+                        "binStart": 5.0,
+                        "binEnd": 7.5,
+                        "Frequency": 2
+                    }, {
+                        "binStart": 7.5,
+                        "binEnd": 10.0,
+                        "Frequency": 0
+                    }]
+                },
+                "mark": "bar",
+                "encoding": {
+                    "x": {
+                        "field": "binStart",
+                        "bin": {
+                            "binned": true,
+                            "step": 2.5
+                        },
+                        "axis": {
+                            "title": ""
+                        }
+                    },
+                    "x2": {
+                        "field": "binEnd"
+                    },
+                    "y": {
+                        "field": "Frequency",
+                        "type": "quantitative"
+                    }
                 }
             })
-            .to_string()
         );
     }
 
@@ -415,7 +459,9 @@ mod tests {
 
             let workflow = Workflow {
                 operator: Statistics {
-                    params: StatisticsParams {},
+                    params: StatisticsParams {
+                        column_names: vec![],
+                    },
                     sources: vec![example_raster_source()].into(),
                 }
                 .boxed()
@@ -436,7 +482,7 @@ mod tests {
             let req = actix_web::test::TestRequest::default()
                 .method(method)
                 .uri(&format!(
-                    "/plot/{}/?{}",
+                    "/plot/{}?{}",
                     id,
                     &serde_urlencoded::to_string(params).unwrap()
                 ))

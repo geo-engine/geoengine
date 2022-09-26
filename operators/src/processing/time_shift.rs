@@ -472,7 +472,7 @@ mod tests {
     use futures::StreamExt;
     use geoengine_datatypes::{
         collections::MultiPointCollection,
-        dataset::InternalDatasetId,
+        dataset::DatasetId,
         primitives::{
             BoundingBox2D, DateTime, Measurement, MultiPoint, SpatialPartition2D,
             SpatialResolution, TimeGranularity,
@@ -481,7 +481,6 @@ mod tests {
         spatial_reference::SpatialReference,
         util::test::TestDefault,
     };
-    use num_traits::AsPrimitive;
 
     #[test]
     fn test_ser_de_absolute() {
@@ -490,7 +489,7 @@ mod tests {
                 source: RasterOrVectorOperator::Raster(
                     GdalSource {
                         params: GdalSourceParameters {
-                            dataset: InternalDatasetId::from_u128(1337).into(),
+                            data: DatasetId::from_u128(1337).into(),
                         },
                     }
                     .boxed(),
@@ -520,7 +519,7 @@ mod tests {
                     "source": {
                         "type": "GdalSource",
                         "params": {
-                            "dataset": {
+                            "data": {
                                 "type": "internal",
                                 "datasetId": "00000000-0000-0000-0000-000000000539"
                             }
@@ -542,7 +541,7 @@ mod tests {
                 source: RasterOrVectorOperator::Raster(
                     GdalSource {
                         params: GdalSourceParameters {
-                            dataset: InternalDatasetId::from_u128(1337).into(),
+                            data: DatasetId::from_u128(1337).into(),
                         },
                     }
                     .boxed(),
@@ -568,7 +567,7 @@ mod tests {
                     "source": {
                         "type": "GdalSource",
                         "params": {
-                            "dataset": {
+                            "data": {
                                 "type": "internal",
                                 "datasetId": "00000000-0000-0000-0000-000000000539"
                             }
@@ -768,8 +767,7 @@ mod tests {
     #[tokio::test]
     #[allow(clippy::too_many_lines)]
     async fn test_absolute_raster_shift() {
-        let no_data_value: u8 = 0;
-        let empty_grid = GridOrEmpty::Empty(EmptyGrid2D::new([3, 2].into(), no_data_value));
+        let empty_grid = GridOrEmpty::Empty(EmptyGrid2D::<u8>::new([3, 2].into()));
         let raster_tiles = vec![
             RasterTile2D::new_with_tile_info(
                 TimeInterval::new_unchecked(
@@ -852,9 +850,9 @@ mod tests {
                     data_type: RasterDataType::U8,
                     spatial_reference: SpatialReference::epsg_4326().into(),
                     measurement: Measurement::Unitless,
-                    no_data_value: Some(no_data_value.as_()),
                     time: None,
                     bbox: None,
+                    resolution: None,
                 },
             },
         }
@@ -931,8 +929,7 @@ mod tests {
     #[tokio::test]
     #[allow(clippy::too_many_lines)]
     async fn test_relative_raster_shift() {
-        let no_data_value: u8 = 0;
-        let empty_grid = GridOrEmpty::Empty(EmptyGrid2D::new([3, 2].into(), no_data_value));
+        let empty_grid = GridOrEmpty::Empty(EmptyGrid2D::<u8>::new([3, 2].into()));
         let raster_tiles = vec![
             RasterTile2D::new_with_tile_info(
                 TimeInterval::new_unchecked(
@@ -1015,9 +1012,9 @@ mod tests {
                     data_type: RasterDataType::U8,
                     spatial_reference: SpatialReference::epsg_4326().into(),
                     measurement: Measurement::Unitless,
-                    no_data_value: Some(no_data_value.as_()),
                     time: None,
                     bbox: None,
+                    resolution: None,
                 },
             },
         }
@@ -1095,7 +1092,7 @@ mod tests {
 
         let ndvi_source = GdalSource {
             params: GdalSourceParameters {
-                dataset: add_ndvi_dataset(&mut execution_context),
+                data: add_ndvi_dataset(&mut execution_context),
             },
         }
         .boxed();
@@ -1114,7 +1111,6 @@ mod tests {
             params: ExpressionParams {
                 expression: "A - B".to_string(),
                 output_type: RasterDataType::F64,
-                output_no_data_value: -9999.,
                 output_measurement: None,
                 map_no_data: false,
             },
@@ -1173,7 +1169,7 @@ mod tests {
 
         let ndvi_source = GdalSource {
             params: GdalSourceParameters {
-                dataset: add_ndvi_dataset(&mut execution_context),
+                data: add_ndvi_dataset(&mut execution_context),
             },
         }
         .boxed();
@@ -1231,5 +1227,109 @@ mod tests {
             )
             .unwrap()
         );
+    }
+
+    #[test]
+    fn shift_eternal() {
+        let eternal = TimeInterval::default();
+
+        let f_shift = RelativeForwardShift {
+            step: TimeStep {
+                granularity: TimeGranularity::Seconds,
+                step: 1,
+            },
+        };
+
+        let (shifted, state) = f_shift.shift(eternal).unwrap();
+        assert_eq!(shifted, eternal);
+        let reverse_shifted = f_shift.reverse_shift(eternal, state).unwrap();
+        assert_eq!(reverse_shifted, eternal);
+
+        let b_shift = RelativeBackwardShift {
+            step: TimeStep {
+                granularity: TimeGranularity::Seconds,
+                step: 1,
+            },
+        };
+
+        let (shifted, state) = b_shift.shift(eternal).unwrap();
+        assert_eq!(shifted, eternal);
+
+        let reverse_shifted = b_shift.reverse_shift(eternal, state).unwrap();
+        assert_eq!(reverse_shifted, eternal);
+    }
+
+    #[test]
+    fn shift_begin_of_time() {
+        let time = TimeInterval::new_unchecked(TimeInstance::MIN, TimeInstance::EPOCH_START);
+
+        let f_shift = RelativeForwardShift {
+            step: TimeStep {
+                granularity: TimeGranularity::Seconds,
+                step: 1,
+            },
+        };
+
+        let expected_shift =
+            TimeInterval::new_unchecked(TimeInstance::MIN, TimeInstance::EPOCH_START + 1_000);
+
+        let (shifted, state) = f_shift.shift(time).unwrap();
+        assert_eq!(shifted, expected_shift);
+
+        let reverse_shifted = f_shift.reverse_shift(expected_shift, state).unwrap();
+        assert_eq!(reverse_shifted, time);
+
+        let f_shift = RelativeBackwardShift {
+            step: TimeStep {
+                granularity: TimeGranularity::Seconds,
+                step: 1,
+            },
+        };
+
+        let expected_shift =
+            TimeInterval::new_unchecked(TimeInstance::MIN, TimeInstance::EPOCH_START - 1_000);
+
+        let (shifted, state) = f_shift.shift(time).unwrap();
+        assert_eq!(shifted, expected_shift);
+
+        let reverse_shifted = f_shift.reverse_shift(expected_shift, state).unwrap();
+        assert_eq!(reverse_shifted, time);
+    }
+
+    #[test]
+    fn shift_end_of_time() {
+        let time = TimeInterval::new_unchecked(TimeInstance::EPOCH_START, TimeInstance::MAX);
+
+        let f_shift = RelativeForwardShift {
+            step: TimeStep {
+                granularity: TimeGranularity::Seconds,
+                step: 1,
+            },
+        };
+
+        let expected_shift =
+            TimeInterval::new_unchecked(TimeInstance::EPOCH_START + 1_000, TimeInstance::MAX);
+
+        let (shifted, state) = f_shift.shift(time).unwrap();
+        assert_eq!(shifted, expected_shift);
+
+        let reverse_shifted = f_shift.reverse_shift(expected_shift, state).unwrap();
+        assert_eq!(reverse_shifted, time);
+
+        let f_shift = RelativeBackwardShift {
+            step: TimeStep {
+                granularity: TimeGranularity::Seconds,
+                step: 1,
+            },
+        };
+
+        let expected_shift =
+            TimeInterval::new_unchecked(TimeInstance::EPOCH_START - 1_000, TimeInstance::MAX);
+
+        let (shifted, state) = f_shift.shift(time).unwrap();
+        assert_eq!(shifted, expected_shift);
+
+        let reverse_shifted = f_shift.reverse_shift(expected_shift, state).unwrap();
+        assert_eq!(reverse_shifted, time);
     }
 }

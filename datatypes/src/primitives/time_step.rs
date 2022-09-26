@@ -1,11 +1,11 @@
-use std::ops::Sub;
+use std::ops::{Mul, Sub};
 use std::{cmp::max, convert::TryInto, ops::Add};
 
 use serde::{Deserialize, Serialize};
 
 #[cfg(feature = "postgres")]
 use postgres_types::{FromSql, ToSql};
-use snafu::OptionExt;
+use snafu::{ensure, OptionExt};
 
 use crate::error::{self, Error};
 use crate::primitives::TimeInstance;
@@ -36,7 +36,7 @@ pub struct TimeStep {
 }
 
 impl TimeStep {
-    /// Resolves how many `TimeSteps` fit into a given `TimeInterval`.
+    /// Resolves how many `TimeStep`-sized intervals fit into a given `TimeInterval`.
     /// Remember that `TimeInterval` is not inclusive.
     ///
     /// # Errors
@@ -62,47 +62,11 @@ impl TimeStep {
         }
 
         let num_steps: i64 = match self.granularity {
-            TimeGranularity::Millis => {
-                let s = duration.num_milliseconds() / i64::from(self.step);
-                if (duration - Duration::milliseconds(s * i64::from(self.step))).is_zero() {
-                    s - 1
-                } else {
-                    s
-                }
-            }
-
-            TimeGranularity::Seconds => {
-                let s = duration.num_seconds() / i64::from(self.step);
-                if (duration - Duration::seconds(s * i64::from(self.step))).is_zero() {
-                    s - 1
-                } else {
-                    s
-                }
-            }
-            TimeGranularity::Minutes => {
-                let s = duration.num_minutes() / i64::from(self.step);
-                if (duration - Duration::minutes(s * i64::from(self.step))).is_zero() {
-                    s - 1
-                } else {
-                    s
-                }
-            }
-            TimeGranularity::Hours => {
-                let s = duration.num_hours() / i64::from(self.step);
-                if (duration - Duration::hours(s * i64::from(self.step))).is_zero() {
-                    s - 1
-                } else {
-                    s
-                }
-            }
-            TimeGranularity::Days => {
-                let s = duration.num_days() / i64::from(self.step);
-                if (duration - Duration::days(s * i64::from(self.step))).is_zero() {
-                    s - 1
-                } else {
-                    s
-                }
-            }
+            TimeGranularity::Millis => duration.num_milliseconds() / i64::from(self.step),
+            TimeGranularity::Seconds => duration.num_seconds() / i64::from(self.step),
+            TimeGranularity::Minutes => duration.num_minutes() / i64::from(self.step),
+            TimeGranularity::Hours => duration.num_hours() / i64::from(self.step),
+            TimeGranularity::Days => duration.num_days() / i64::from(self.step),
             TimeGranularity::Months => {
                 let start = start.as_date_time().ok_or(Error::NoDateTimeValid {
                     time_instance: time_interval.start(),
@@ -114,20 +78,8 @@ impl TimeStep {
                 let diff_years = i64::from(end.year() - start.year());
                 let diff_months =
                     i64::from(end.month()) - i64::from(start.month()) + diff_years * 12;
-                let steps = diff_months / i64::from(self.step);
 
-                let shifted_start = (time_interval.start()
-                    + TimeStep {
-                        granularity: TimeGranularity::Months,
-                        step: self.step * steps as u32,
-                    })
-                .expect("is in valid range");
-
-                if (TimeInstance::from(end) - shifted_start).is_zero() {
-                    steps - 1
-                } else {
-                    steps
-                }
+                diff_months / i64::from(self.step)
             }
             TimeGranularity::Years => {
                 let start = start.as_date_time().ok_or(Error::NoDateTimeValid {
@@ -137,21 +89,29 @@ impl TimeStep {
                     time_instance: time_interval.start(),
                 })?;
 
-                let steps = i64::from(end.year() - start.year()) / i64::from(self.step);
-
-                let shifted_start = start
-                    .with_year(start.year() + (i64::from(self.step) * steps) as i32)
-                    .expect("is in valid range");
-
-                if (TimeInstance::from(end) - TimeInstance::from(shifted_start)).is_zero() {
-                    steps - 1
-                } else {
-                    steps
-                }
+                i64::from(end.year() - start.year()) / i64::from(self.step)
             }
         };
 
         Ok(max(0, num_steps as u32))
+    }
+
+    /// Resolves how many `TimeStep`-sized intervals fit into a given `TimeInterval`.
+    /// The last step is included into the result even if it does not fit completely.
+    /// Remember that `TimeInterval` is not inclusive.
+    ///
+    /// # Errors
+    /// This method uses chrono and therefore fails if a `TimeInstance` is outside chronos valid date range.
+    ///
+    pub fn num_steps_in_interval_ceil(self, time_interval: TimeInterval) -> Result<u32> {
+        // compute the number of steps that are still contained in the `time_interval`
+        // this has to be at least 1 as the start of the interval is always contained
+        let mut num_steps = self.num_steps_in_interval(time_interval)?.max(1);
+        if (time_interval.start() + (self * num_steps))? < time_interval.end() {
+            // the next step is partially contained so we need to add one more step
+            num_steps += 1;
+        }
+        Ok(num_steps)
     }
 
     /// Snaps a `TimeInstance` relative to a given reference `TimeInstance`.
@@ -314,6 +274,11 @@ impl Add<TimeStep> for TimeInstance {
     type Output = Result<TimeInstance>;
 
     fn add(self, rhs: TimeStep) -> Self::Output {
+        if self.is_min() || self.is_max() {
+            // begin and end of time are special values, we don't want to do arithmetics on them
+            return Ok(self);
+        }
+
         let date_time = self.as_date_time().ok_or(Error::NoDateTimeValid {
             time_instance: self,
         })?;
@@ -366,6 +331,11 @@ impl Sub<TimeStep> for TimeInstance {
     type Output = Result<TimeInstance>;
 
     fn sub(self, rhs: TimeStep) -> Self::Output {
+        if self.is_min() || self.is_max() {
+            // begin and end of time are special values, we don't want to do arithmetics on them
+            return Ok(self);
+        }
+
         let date_time = self.as_date_time().ok_or(Error::NoDateTimeValid {
             time_instance: self,
         })?;
@@ -438,65 +408,68 @@ impl Sub<TimeStep> for TimeInterval {
     }
 }
 
+impl Mul<u32> for TimeStep {
+    type Output = TimeStep;
+
+    fn mul(self, rhs: u32) -> Self::Output {
+        TimeStep {
+            granularity: self.granularity,
+            step: self.step * rhs,
+        }
+    }
+}
+
 /// An `Iterator` to iterate over time in steps
 #[derive(Debug, Clone)]
 pub struct TimeStepIter {
     reference_time: TimeInstance,
     time_step: TimeStep,
     curr: u32,
-    max: u32,
+    steps: u32,
 }
 
 impl TimeStepIter {
-    /// Create a new `TimeStepIter` which will include the start `TimeInstance`.
+    /// Create a new `TimeStepIter` with given amount of `steps`.
     /// # Errors
     /// This method fails if the interval [start, max) is not valid in chrono.
-    pub fn new_incl_start(
-        reference_time: TimeInstance,
-        time_step: TimeStep,
-        steps: u32,
-    ) -> Result<Self> {
+    pub fn new(reference_time: TimeInstance, time_step: TimeStep, steps: u32) -> Result<Self> {
+        ensure!(
+            !reference_time.is_min(),
+            error::TimeStepIterStartMustNotBeBeginOfTime,
+        );
+
         let _ = (reference_time
             + TimeStep {
                 granularity: time_step.granularity,
                 step: time_step.step * steps,
             })?;
-        Ok(Self::new_incl_start_unchecked(
-            reference_time,
-            time_step,
-            steps,
-        ))
+        Ok(Self::new_unchecked(reference_time, time_step, steps))
     }
 
-    /// Create a new `TimeStepIter` which will include the start `TimeInstance`.
+    /// Create a new `TimeStepIter` with given amount of `steps`.
     /// This method does not check if the generated `TimeInstance` values are valid.
-    pub fn new_incl_start_unchecked(
-        reference_time: TimeInstance,
-        time_step: TimeStep,
-        steps: u32,
-    ) -> Self {
+    pub fn new_unchecked(reference_time: TimeInstance, time_step: TimeStep, steps: u32) -> Self {
         Self {
             reference_time,
             time_step,
             curr: 0,
-            max: steps,
+            steps,
         }
     }
 
-    /// Create a new `TimeStepIter` which will include the start of the provided `TimeInterval`.
+    /// Create a new `TimeStepIter` which produces all `TimeInstance`s contained in the given `time_interval`.
     /// # Errors
-    /// This method fails if the start or end values of the interval are not valid in chrono.
-    pub fn new_with_interval_incl_start(
-        time_interval: TimeInterval,
-        time_step: TimeStep,
-    ) -> Result<Self> {
-        let num_steps = if time_interval.start() == time_interval.end() {
-            0
-        } else {
-            time_step.num_steps_in_interval(time_interval)?
-        };
+    /// This method fails if the start or end values of the interval are not valid in chrono, or if the start
+    /// value is the begin of time (`TimeInstance::MIN`).
+    pub fn new_with_interval(time_interval: TimeInterval, time_step: TimeStep) -> Result<Self> {
+        ensure!(
+            !time_interval.start().is_min(),
+            error::TimeStepIterStartMustNotBeBeginOfTime,
+        );
 
-        Self::new_incl_start(time_interval.start(), time_step, num_steps)
+        let num_steps = time_step.num_steps_in_interval_ceil(time_interval)?;
+
+        Self::new(time_interval.start(), time_step, num_steps)
     }
 
     /// Create a new `Iterator` which will return `TimeInterval` starting at each `TimeInstance`.
@@ -518,16 +491,11 @@ impl Iterator for TimeStepIter {
     type Item = TimeInstance;
 
     fn next(&mut self) -> Option<Self::Item> {
-        if self.curr > self.max {
+        if self.curr >= self.steps {
             return None;
         }
 
-        let next = (self.reference_time
-            + TimeStep {
-                granularity: self.time_step.granularity,
-                step: self.curr * self.time_step.step,
-            })
-        .unwrap();
+        let next = (self.reference_time + self.time_step * self.curr).unwrap();
 
         self.curr += 1;
 
@@ -1335,7 +1303,7 @@ mod tests {
             1,
             "2001-01-01T01:01:01.0",
             "2002-01-01T01:01:01.0",
-            0,
+            1,
         );
     }
 
@@ -1500,7 +1468,7 @@ mod tests {
             1,
             "2001-01-01T01:01:01.0",
             "2001-01-01T01:01:02.0",
-            0,
+            1,
         );
     }
 
@@ -1511,7 +1479,7 @@ mod tests {
             1,
             "2001-01-01T01:01:01.0",
             "2001-01-01T01:01:03.0",
-            1,
+            2,
         );
     }
 
@@ -1527,6 +1495,78 @@ mod tests {
     }
 
     #[test]
+    fn num_steps_millis() {
+        let step = TimeStep {
+            granularity: TimeGranularity::Millis,
+            step: 11,
+        };
+
+        assert_eq!(
+            step.num_steps_in_interval(TimeInterval::new_unchecked(0, 32))
+                .unwrap(),
+            2
+        );
+        assert_eq!(
+            step.num_steps_in_interval(TimeInterval::new_unchecked(0, 33))
+                .unwrap(),
+            3
+        );
+        assert_eq!(
+            step.num_steps_in_interval(TimeInterval::new_unchecked(0, 34))
+                .unwrap(),
+            3
+        );
+        assert_eq!(
+            step.num_steps_in_interval(TimeInterval::new_unchecked(0, 0))
+                .unwrap(),
+            0
+        );
+    }
+
+    #[test]
+    fn num_steps_ceil() {
+        let step = TimeStep {
+            granularity: TimeGranularity::Millis,
+            step: 10,
+        };
+
+        assert_eq!(
+            step.num_steps_in_interval_ceil(TimeInterval::new_unchecked(0, 5))
+                .unwrap(),
+            1
+        );
+
+        assert_eq!(
+            step.num_steps_in_interval_ceil(TimeInterval::new_unchecked(0, 10))
+                .unwrap(),
+            1
+        );
+
+        assert_eq!(
+            step.num_steps_in_interval_ceil(TimeInterval::new_unchecked(0, 11))
+                .unwrap(),
+            2
+        );
+
+        assert_eq!(
+            step.num_steps_in_interval_ceil(TimeInterval::new_unchecked(0, 15))
+                .unwrap(),
+            2
+        );
+        assert_eq!(
+            step.num_steps_in_interval_ceil(TimeInterval::new_unchecked(0, 20))
+                .unwrap(),
+            2
+        );
+
+        assert_eq!(
+            step.num_steps_in_interval_ceil(TimeInterval::new_unchecked(0, 21))
+                .unwrap(),
+            3
+        );
+    }
+
+    #[test]
     fn test_iter_h_0() {
         let t_1 = TimeInstance::from(DateTime::new_utc(2001, 1, 1, 0, 1, 1));
         let t_2 = TimeInstance::from(DateTime::new_utc(2001, 1, 1, 0, 1, 1));
@@ -1536,11 +1576,8 @@ mod tests {
             step: 1,
         };
 
-        let iter = TimeStepIter::new_with_interval_incl_start(
-            TimeInterval::new_unchecked(t_1, t_2),
-            t_step,
-        )
-        .unwrap();
+        let iter =
+            TimeStepIter::new_with_interval(TimeInterval::new_unchecked(t_1, t_2), t_step).unwrap();
 
         let t_vec: Vec<TimeInstance> = iter.collect();
 
@@ -1557,11 +1594,8 @@ mod tests {
             step: 1,
         };
 
-        let iter = TimeStepIter::new_with_interval_incl_start(
-            TimeInterval::new_unchecked(t_1, t_2),
-            t_step,
-        )
-        .unwrap();
+        let iter =
+            TimeStepIter::new_with_interval(TimeInterval::new_unchecked(t_1, t_2), t_step).unwrap();
 
         let t_vec: Vec<TimeInstance> = iter.collect();
 

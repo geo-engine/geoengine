@@ -1,8 +1,7 @@
 use geoengine_datatypes::primitives::{
     AxisAlignedRectangle, BoundingBox2D, FeatureDataType, Measurement, SpatialPartition2D,
-    TimeInterval,
+    SpatialResolution, TimeInterval,
 };
-use geoengine_datatypes::raster::FromPrimitive;
 use geoengine_datatypes::{
     collections::VectorDataType, raster::RasterDataType, spatial_reference::SpatialReferenceOption,
 };
@@ -55,9 +54,9 @@ pub struct RasterResultDescriptor {
     pub data_type: RasterDataType,
     pub spatial_reference: SpatialReferenceOption,
     pub measurement: Measurement,
-    pub no_data_value: Option<f64>,
     pub time: Option<TimeInterval>,
     pub bbox: Option<SpatialPartition2D>,
+    pub resolution: Option<SpatialResolution>,
 }
 
 impl ResultDescriptor for RasterResultDescriptor {
@@ -105,11 +104,7 @@ impl ResultDescriptor for RasterResultDescriptor {
     }
 }
 
-impl RasterResultDescriptor {
-    pub fn no_data_value_as_<T: FromPrimitive<f64>>(&self) -> Option<T> {
-        self.no_data_value.map(|v| T::from_(v))
-    }
-}
+impl RasterResultDescriptor {}
 
 /// A `ResultDescriptor` for vector queries
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]

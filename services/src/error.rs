@@ -1,12 +1,14 @@
-use crate::workflows::workflow::WorkflowId;
-use crate::{datasets::external::netcdfcf::NetCdfCf4DProviderError, handlers::ErrorResponse};
+use crate::api::model::datatypes::{
+    DataProviderId, DatasetId, LayerId, SpatialReferenceOption, TimeInstance,
+};
+#[cfg(feature = "ebv")]
+use crate::datasets::external::netcdfcf::NetCdfCf4DProviderError;
+use crate::handlers::ErrorResponse;
+use crate::{layers::listing::LayerCollectionId, workflows::workflow::WorkflowId};
 use actix_web::http::StatusCode;
 use actix_web::HttpResponse;
-use geoengine_datatypes::{
-    dataset::{DatasetId, DatasetProviderId},
-    spatial_reference::SpatialReferenceOption,
-};
 use snafu::prelude::*;
+use std::path::PathBuf;
 use strum::IntoStaticStr;
 use tonic::Status;
 
@@ -122,9 +124,7 @@ pub enum Error {
     TokioPostgresTimeout,
 
     #[snafu(display("Identifier does not have the right format."))]
-    InvalidUuid {
-        source: geoengine_datatypes::error::Error,
-    },
+    InvalidUuid,
     SessionNotInitialized,
 
     ConfigLockFailed,
@@ -143,10 +143,12 @@ pub enum Error {
 
     MissingSettingsDirectory,
 
-    DatasetIdTypeMissMatch,
-    UnknownDatasetId,
+    DataIdTypeMissMatch,
+    UnknownDataId,
     UnknownProviderId,
     MissingDatasetId,
+
+    UnknownDatasetId,
 
     #[snafu(display("Permission denied for dataset with id {:?}", dataset))]
     DatasetPermissionDenied {
@@ -225,10 +227,11 @@ pub enum Error {
 
     PangaeaNoTsv,
     GfbioMissingAbcdField,
-    ExpectedExternalDatasetId,
-    InvalidExternalDatasetId {
-        provider: DatasetProviderId,
+    ExpectedExternalDataId,
+    InvalidExternalDataId {
+        provider: DataProviderId,
     },
+    InvalidDataId,
 
     #[cfg(feature = "nature40")]
     Nature40UnknownRasterDbname,
@@ -314,17 +317,11 @@ pub enum Error {
     },
     MissingNFDIMetaData,
 
+    #[cfg(feature = "ebv")]
     #[snafu(context(false))]
     NetCdfCf4DProvider {
         source: NetCdfCf4DProviderError,
     },
-
-    #[cfg(feature = "ebv")]
-    #[snafu(context(false))]
-    EbvHandler {
-        source: crate::handlers::ebv::EbvError,
-    },
-
     #[cfg(feature = "nfdi")]
     #[snafu(display("Could not parse GFBio basket: {}", message,))]
     GFBioBasketParse {
@@ -338,9 +335,63 @@ pub enum Error {
         source: crate::layers::storage::LayerDbError,
     },
 
+    UnknownOperator {
+        operator: String,
+    },
+
+    IdStringMustBeUuid {
+        found: String,
+    },
+
     #[snafu(context(false))]
     TaskError {
         source: crate::tasks::TaskError,
+    },
+
+    UnknownLayerCollectionId {
+        id: LayerCollectionId,
+    },
+    UnknownLayerId {
+        id: LayerId,
+    },
+    InvalidLayerCollectionId,
+    InvalidLayerId,
+
+    #[snafu(context(false))]
+    WorkflowApi {
+        source: crate::handlers::workflows::WorkflowApiError,
+    },
+
+    SubPathMustNotEscapeBasePath {
+        base: PathBuf,
+        sub_path: PathBuf,
+    },
+
+    PathMustNotContainParentReferences {
+        base: PathBuf,
+        sub_path: PathBuf,
+    },
+
+    #[snafu(display("Time instance must be between {} and {}, but is {}", min.inner(), max.inner(), is))]
+    InvalidTimeInstance {
+        min: TimeInstance,
+        max: TimeInstance,
+        is: i64,
+    },
+
+    #[snafu(display("ParseU32: {}", source))]
+    ParseU32 {
+        source: <u32 as std::str::FromStr>::Err,
+    },
+    #[snafu(display("InvalidSpatialReferenceString: {}", spatial_reference_string))]
+    InvalidSpatialReferenceString {
+        spatial_reference_string: String,
+    },
+
+    #[cfg(feature = "pro")]
+    #[snafu(context(false))]
+    OidcError {
+        source: crate::pro::users::OidcError,
     },
 }
 

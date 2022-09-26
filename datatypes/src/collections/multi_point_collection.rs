@@ -132,22 +132,20 @@ impl<'l> GeometryRandomAccess<'l> for MultiPointCollection {
 }
 
 impl GeoFeatureCollectionRowBuilder<MultiPoint> for FeatureCollectionRowBuilder<MultiPoint> {
-    fn push_geometry(&mut self, geometry: MultiPoint) -> Result<()> {
+    fn push_geometry(&mut self, geometry: MultiPoint) {
         let coordinate_builder = self.geometries_builder.values();
 
         for _ in geometry.as_ref() {
-            coordinate_builder.append(true)?;
+            coordinate_builder.append(true);
         }
 
         let float_builder = coordinate_builder.values();
         for coordinate in geometry.as_ref() {
-            float_builder.append_value(coordinate.x)?;
-            float_builder.append_value(coordinate.y)?;
+            float_builder.append_value(coordinate.x);
+            float_builder.append_value(coordinate.y);
         }
 
-        self.geometries_builder.append(true)?;
-
-        Ok(())
+        self.geometries_builder.append(true);
     }
 }
 
@@ -317,23 +315,15 @@ mod tests {
             .unwrap();
         let mut builder = builder.finish_header();
 
-        builder
-            .push_geometry(Coordinate2D::new(0., 0.).into())
-            .unwrap();
-        builder
-            .push_time_interval(TimeInterval::new_unchecked(0, 1))
-            .unwrap();
+        builder.push_geometry(Coordinate2D::new(0., 0.).into());
+        builder.push_time_interval(TimeInterval::new_unchecked(0, 1));
         builder
             .push_data("foo", FeatureDataValue::Float(0.))
             .unwrap();
         builder.finish_row();
 
-        builder
-            .push_geometry(Coordinate2D::new(1., 1.).into())
-            .unwrap();
-        builder
-            .push_time_interval(TimeInterval::new_unchecked(0, 1))
-            .unwrap();
+        builder.push_geometry(Coordinate2D::new(1., 1.).into());
+        builder.push_time_interval(TimeInterval::new_unchecked(0, 1));
         builder
             .push_data("foo", FeatureDataValue::Float(1.))
             .unwrap();
@@ -369,23 +359,15 @@ mod tests {
                 .unwrap();
             let mut builder = builder.finish_header();
 
-            builder
-                .push_geometry(Coordinate2D::new(0., 0.).into())
-                .unwrap();
-            builder
-                .push_time_interval(TimeInterval::new_unchecked(0, 1))
-                .unwrap();
+            builder.push_geometry(Coordinate2D::new(0., 0.).into());
+            builder.push_time_interval(TimeInterval::new_unchecked(0, 1));
             builder
                 .push_data("foo", FeatureDataValue::Float(0.))
                 .unwrap();
             builder.finish_row();
 
-            builder
-                .push_geometry(Coordinate2D::new(1., 1.).into())
-                .unwrap();
-            builder
-                .push_time_interval(TimeInterval::new_unchecked(0, 1))
-                .unwrap();
+            builder.push_geometry(Coordinate2D::new(1., 1.).into());
+            builder.push_time_interval(TimeInterval::new_unchecked(0, 1));
             builder
                 .push_data("foo", FeatureDataValue::Float(1.))
                 .unwrap();
@@ -521,12 +503,8 @@ mod tests {
                 .unwrap();
             let mut builder = builder.finish_header();
 
-            builder
-                .push_geometry(Coordinate2D::new(0., 0.).into())
-                .unwrap();
-            builder
-                .push_time_interval(TimeInterval::new_unchecked(0, 1))
-                .unwrap();
+            builder.push_geometry(Coordinate2D::new(0., 0.).into());
+            builder.push_time_interval(TimeInterval::new_unchecked(0, 1));
             builder
                 .push_data("foo", FeatureDataValue::Float(0.))
                 .unwrap();
@@ -538,12 +516,8 @@ mod tests {
                 .unwrap();
             builder.finish_row();
 
-            builder
-                .push_geometry(MultiPoint::new(vec![(1., 1.).into(), (2., 2.).into()]).unwrap())
-                .unwrap();
-            builder
-                .push_time_interval(TimeInterval::new_unchecked(1, 2))
-                .unwrap();
+            builder.push_geometry(MultiPoint::new(vec![(1., 1.).into(), (2., 2.).into()]).unwrap());
+            builder.push_time_interval(TimeInterval::new_unchecked(1, 2));
             builder
                 .push_data("foo", FeatureDataValue::Float(1.))
                 .unwrap();
@@ -552,12 +526,8 @@ mod tests {
                 .unwrap();
             builder.finish_row();
 
-            builder
-                .push_geometry(Coordinate2D::new(3., 3.).into())
-                .unwrap();
-            builder
-                .push_time_interval(TimeInterval::new_unchecked(3, 4))
-                .unwrap();
+            builder.push_geometry(Coordinate2D::new(3., 3.).into());
+            builder.push_time_interval(TimeInterval::new_unchecked(3, 4));
             builder
                 .push_data("foo", FeatureDataValue::Float(2.))
                 .unwrap();
@@ -691,22 +661,14 @@ mod tests {
 
             assert!(builder.is_empty());
 
-            builder
-                .push_geometry(Coordinate2D::new(0., 0.).into())
-                .unwrap();
-            builder
-                .push_time_interval(TimeInterval::new_unchecked(0, 1))
-                .unwrap();
+            builder.push_geometry(Coordinate2D::new(0., 0.).into());
+            builder.push_time_interval(TimeInterval::new_unchecked(0, 1));
             builder
                 .push_data("number", FeatureDataValue::Float(0.))
                 .unwrap();
             builder.finish_row();
-            builder
-                .push_geometry(Coordinate2D::new(1., 1.).into())
-                .unwrap();
-            builder
-                .push_time_interval(TimeInterval::new_unchecked(0, 1))
-                .unwrap();
+            builder.push_geometry(Coordinate2D::new(1., 1.).into());
+            builder.push_time_interval(TimeInterval::new_unchecked(0, 1));
             builder
                 .push_data("number", FeatureDataValue::Float(1.))
                 .unwrap();
@@ -722,7 +684,6 @@ mod tests {
     }
 
     #[test]
-    #[allow(clippy::eq_op)]
     fn nan_equals() {
         let collection = {
             let mut builder = MultiPointCollection::builder();
@@ -733,12 +694,8 @@ mod tests {
 
             assert!(builder.is_empty());
 
-            builder
-                .push_geometry(Coordinate2D::new(0., 0.).into())
-                .unwrap();
-            builder
-                .push_time_interval(TimeInterval::new_unchecked(0, 1))
-                .unwrap();
+            builder.push_geometry(Coordinate2D::new(0., 0.).into());
+            builder.push_time_interval(TimeInterval::new_unchecked(0, 1));
             builder
                 .push_data("number", FeatureDataValue::Float(f64::NAN))
                 .unwrap();
@@ -753,7 +710,6 @@ mod tests {
     }
 
     #[test]
-    #[allow(clippy::eq_op)]
     fn null_equals() {
         let collection = {
             let mut builder = MultiPointCollection::builder();
@@ -762,12 +718,8 @@ mod tests {
                 .unwrap();
             let mut builder = builder.finish_header();
 
-            builder
-                .push_geometry(Coordinate2D::new(0., 0.).into())
-                .unwrap();
-            builder
-                .push_time_interval(TimeInterval::new_unchecked(0, 1))
-                .unwrap();
+            builder.push_geometry(Coordinate2D::new(0., 0.).into());
+            builder.push_time_interval(TimeInterval::new_unchecked(0, 1));
             builder
                 .push_data("number", FeatureDataValue::NullableFloat(None))
                 .unwrap();

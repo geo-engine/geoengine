@@ -1,24 +1,17 @@
-use std::ops::Add;
-
 use super::{
     grid_traits::{ChangeGridBounds, GridShapeAccess},
-    Grid, GridBoundingBox, GridBounds, GridIdx, GridIndexAccess, GridShape, GridShape1D,
-    GridShape2D, GridShape3D, GridSize, GridSpaceToLinearSpace, NoDataValue,
+    GridBoundingBox, GridBounds, GridIdx, GridShape, GridShape1D, GridShape2D, GridShape3D,
+    GridSize, GridSpaceToLinearSpace,
 };
-use crate::{
-    error::{self},
-    raster::GridContains,
-    util::Result,
-};
-use num_traits::AsPrimitive;
+use crate::util::Result;
 use serde::{Deserialize, Serialize};
-use snafu::ensure;
+use std::{marker::PhantomData, ops::Add};
 
 #[derive(Debug, Eq, PartialEq, Clone, Copy, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct EmptyGrid<D, T> {
     pub shape: D,
-    pub no_data_value: T,
+    pub phantom_data: PhantomData<T>,
 }
 
 pub type EmptyGrid1D<T> = EmptyGrid<GridShape1D, T>;
@@ -28,23 +21,22 @@ pub type EmptyGrid3D<T> = EmptyGrid<GridShape3D, T>;
 impl<D, T> EmptyGrid<D, T>
 where
     D: GridSize,
-    T: Copy,
 {
     /// Creates a new `NoDataGrid`
-    pub fn new(shape: D, no_data_value: T) -> Self {
+    pub fn new(shape: D) -> Self {
         Self {
             shape,
-            no_data_value,
+            phantom_data: PhantomData,
         }
     }
 
     /// Converts the data type of the raster by converting it pixel-wise
     pub fn convert_dtype<To>(self) -> EmptyGrid<D, To>
     where
-        T: AsPrimitive<To> + Copy + 'static,
-        To: Copy + 'static,
+        T: 'static,
+        To: 'static,
     {
-        EmptyGrid::new(self.shape, self.no_data_value.as_())
+        EmptyGrid::new(self.shape)
     }
 }
 
@@ -62,31 +54,6 @@ where
 
     fn number_of_elements(&self) -> usize {
         self.shape.number_of_elements()
-    }
-}
-
-impl<T, D, I, A> GridIndexAccess<T, I> for EmptyGrid<D, T>
-where
-    D: GridSize + GridSpaceToLinearSpace<IndexArray = A> + GridBounds<IndexArray = A>,
-    I: Into<GridIdx<A>>,
-    A: AsRef<[isize]> + Into<GridIdx<A>> + Clone,
-    T: Copy,
-{
-    fn get_at_grid_index(&self, grid_index: I) -> Result<T> {
-        let index = grid_index.into();
-        ensure!(
-            self.shape.contains(&index),
-            error::GridIndexOutOfBounds {
-                index: index.as_slice(),
-                min_index: self.shape.min_index().as_slice(),
-                max_index: self.shape.max_index().as_slice()
-            }
-        );
-        Ok(self.get_at_grid_index_unchecked(index))
-    }
-
-    fn get_at_grid_index_unchecked(&self, _grid_index: I) -> T {
-        self.no_data_value
     }
 }
 
@@ -118,31 +85,6 @@ where
     }
 }
 
-impl<D, T> From<EmptyGrid<D, T>> for Grid<D, T>
-where
-    T: Clone,
-    D: GridSize,
-{
-    fn from(no_grid_array: EmptyGrid<D, T>) -> Self {
-        Grid::new_filled(
-            no_grid_array.shape,
-            no_grid_array.no_data_value.clone(),
-            Some(no_grid_array.no_data_value),
-        )
-    }
-}
-
-impl<D, T> NoDataValue for EmptyGrid<D, T>
-where
-    T: PartialEq + Copy,
-{
-    type NoDataType = T;
-
-    fn no_data_value(&self) -> Option<Self::NoDataType> {
-        Some(self.no_data_value)
-    }
-}
-
 impl<D, T, I> ChangeGridBounds<I> for EmptyGrid<D, T>
 where
     I: AsRef<[isize]> + Clone,
@@ -154,14 +96,11 @@ where
     type Output = EmptyGrid<GridBoundingBox<I>, T>;
 
     fn shift_by_offset(self, offset: GridIdx<I>) -> Self::Output {
-        EmptyGrid {
-            shape: self.shift_bounding_box(offset),
-            no_data_value: self.no_data_value,
-        }
+        EmptyGrid::new(self.shift_bounding_box(offset))
     }
 
     fn set_grid_bounds(self, bounds: GridBoundingBox<I>) -> Result<Self::Output> {
-        Ok(EmptyGrid::new(bounds, self.no_data_value))
+        Ok(EmptyGrid::new(bounds))
     }
 }
 
@@ -174,22 +113,12 @@ mod tests {
 
     #[test]
     fn new() {
-        let n = EmptyGrid2D::new([2, 2].into(), 42);
+        let n: EmptyGrid2D<u8> = EmptyGrid2D::new([2, 2].into());
         let expected = EmptyGrid {
             shape: GridShape2D::from([2, 2]),
-            no_data_value: 42,
+            phantom_data: PhantomData,
         };
-
-        assert_eq!(n.no_data_value, 42);
         assert_eq!(n, expected);
-    }
-
-    #[test]
-    #[allow(clippy::float_cmp)]
-    fn convert_dtype() {
-        let n = EmptyGrid2D::new([2, 2].into(), 42);
-        let n_converted = n.convert_dtype::<f64>();
-        assert_eq!(n_converted.no_data_value, 42.);
     }
 
     #[test]
@@ -201,35 +130,20 @@ mod tests {
 
     #[test]
     fn axis_size() {
-        let n = EmptyGrid2D::new([2, 2].into(), 42);
+        let n: EmptyGrid2D<u8> = EmptyGrid2D::new([2, 2].into());
         assert_eq!(n.axis_size(), [2, 2]);
     }
 
     #[test]
     fn number_of_elements() {
-        let n = EmptyGrid2D::new([2, 2].into(), 42);
+        let n: EmptyGrid2D<u8> = EmptyGrid2D::new([2, 2].into());
         assert_eq!(n.number_of_elements(), 4);
-    }
-
-    #[test]
-    fn get_at_grid_index_unchecked() {
-        let n = EmptyGrid2D::new([2, 2].into(), 42);
-        assert_eq!(n.get_at_grid_index_unchecked([0, 0]), 42);
-        assert_eq!(n.get_at_grid_index_unchecked([100, 100]), 42);
-    }
-
-    #[test]
-    fn get_at_grid_index() {
-        let n = EmptyGrid2D::new([2, 2].into(), 42);
-        let result = n.get_at_grid_index([0, 0]).unwrap();
-        assert_eq!(result, 42);
-        assert!(n.get_at_grid_index([100, 100]).is_err());
     }
 
     #[test]
     fn grid_bounds_2d() {
         let dim: GridShape2D = [3, 2].into();
-        let raster2d = EmptyGrid::new(dim, 3);
+        let raster2d: EmptyGrid2D<u8> = EmptyGrid::new(dim);
 
         assert_eq!(raster2d.min_index(), GridIdx([0, 0]));
         assert_eq!(raster2d.max_index(), GridIdx([2, 1]));

@@ -4,10 +4,12 @@ use std::{
     path::Path,
 };
 
-use crate::datasets::listing::DatasetProvider;
-use crate::datasets::storage::{AddDataset, DatasetStore, MetaDataSuggestion, SuggestMetaData};
-use crate::datasets::storage::{DatasetProviderDb, DatasetProviderListOptions};
+use crate::api::model::datatypes::DatasetId;
 use crate::datasets::upload::UploadRootPath;
+use crate::datasets::{
+    listing::DatasetProvider,
+    storage::{AddDataset, DatasetStore, MetaDataSuggestion, SuggestMetaData},
+};
 use crate::datasets::{
     storage::{CreateDataset, MetaDataDefinition},
     upload::Upload,
@@ -21,11 +23,13 @@ use crate::{
     util::IdResponse,
 };
 use actix_web::{web, FromRequest, Responder};
-use gdal::{vector::Layer, Dataset};
 use gdal::{vector::OGRFieldType, DatasetOptions};
+use gdal::{
+    vector::{Layer, LayerAccess},
+    Dataset,
+};
 use geoengine_datatypes::{
     collections::VectorDataType,
-    dataset::{DatasetProviderId, InternalDatasetId},
     primitives::{FeatureDataType, Measurement, VectorQueryRectangle},
     spatial_reference::{SpatialReference, SpatialReferenceOption},
 };
@@ -46,49 +50,12 @@ where
 {
     cfg.service(
         web::scope("/dataset")
-            .service(web::resource("").route(web::post().to(create_dataset_handler::<C>)))
+            .service(web::resource("/suggest").route(web::get().to(suggest_meta_data_handler::<C>)))
             .service(web::resource("/auto").route(web::post().to(auto_create_dataset_handler::<C>)))
-            .service(
-                web::resource("/internal/{dataset}").route(web::get().to(get_dataset_handler::<C>)),
-            )
-            .service(
-                web::resource("/suggest").route(web::get().to(suggest_meta_data_handler::<C>)),
-            ),
+            .service(web::resource("/{dataset}").route(web::get().to(get_dataset_handler::<C>)))
+            .service(web::resource("").route(web::post().to(create_dataset_handler::<C>))), // must come last to not match other routes
     )
-    .service(web::resource("/providers").route(web::get().to(list_providers_handler::<C>)))
-    .service(web::resource("/datasets").route(web::get().to(list_datasets_handler::<C>)))
-    .service(
-        web::resource("/datasets/external/{provider}")
-            .route(web::get().to(list_external_datasets_handler::<C>)),
-    );
-}
-
-async fn list_providers_handler<C: Context>(
-    session: C::Session,
-    ctx: web::Data<C>,
-    options: web::Query<DatasetProviderListOptions>,
-) -> Result<impl Responder> {
-    let list = ctx
-        .dataset_db_ref()
-        .list_dataset_providers(&session, options.into_inner().validated()?)
-        .await?;
-    Ok(web::Json(list))
-}
-
-async fn list_external_datasets_handler<C: Context>(
-    provider: web::Path<DatasetProviderId>,
-    session: C::Session,
-    ctx: web::Data<C>,
-    options: web::Query<DatasetListOptions>,
-) -> Result<impl Responder> {
-    let options = options.into_inner().validated()?;
-    let list = ctx
-        .dataset_db_ref()
-        .dataset_provider(&session, provider.into_inner())
-        .await?
-        .list(options) // TODO: authorization
-        .await?;
-    Ok(web::Json(list))
+    .service(web::resource("/datasets").route(web::get().to(list_datasets_handler::<C>)));
 }
 
 /// Lists available [Datasets](crate::datasets::listing::DatasetListing).
@@ -157,13 +124,13 @@ async fn list_datasets_handler<C: Context>(
 /// }
 /// ```
 async fn get_dataset_handler<C: Context>(
-    dataset: web::Path<InternalDatasetId>,
+    dataset: web::Path<DatasetId>,
     session: C::Session,
     ctx: web::Data<C>,
 ) -> Result<impl Responder> {
     let dataset = ctx
         .dataset_db_ref()
-        .load(&session, &dataset.into_inner().into())
+        .load(&session, &dataset.into_inner())
         .await?;
     Ok(web::Json(dataset))
 }
@@ -726,6 +693,7 @@ fn column_map_to_column_vecs(columns: &HashMap<String, ColumnDataType>) -> Colum
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::api::model::datatypes::DatasetId;
     use crate::contexts::{InMemoryContext, Session, SessionId, SimpleContext, SimpleSession};
     use crate::datasets::storage::{AddDataset, DatasetStore};
     use crate::datasets::upload::UploadId;
@@ -733,7 +701,7 @@ mod tests {
     use crate::projects::{PointSymbology, Symbology};
     use crate::test_data;
     use crate::util::tests::{
-        read_body_string, send_test_request, SetMultipartBody, TestDataUploads,
+        read_body_json, read_body_string, send_test_request, SetMultipartBody, TestDataUploads,
     };
     use actix_web;
     use actix_web::http::header;
@@ -742,7 +710,6 @@ mod tests {
     use geoengine_datatypes::collections::{
         GeometryCollection, MultiPointCollection, VectorDataType,
     };
-    use geoengine_datatypes::dataset::{DatasetId, InternalDatasetId};
     use geoengine_datatypes::primitives::{BoundingBox2D, SpatialResolution};
     use geoengine_datatypes::raster::{GridShape2D, TilingSpecification};
     use geoengine_datatypes::spatial_reference::SpatialReferenceOption;
@@ -754,7 +721,7 @@ mod tests {
     use geoengine_operators::source::{
         OgrSource, OgrSourceDataset, OgrSourceErrorSpec, OgrSourceParameters,
     };
-    use serde_json::json;
+    use serde_json::{json, Value};
     use std::str::FromStr;
 
     #[tokio::test]
@@ -772,10 +739,7 @@ mod tests {
             bbox: None,
         };
 
-        let id = DatasetId::Internal {
-            dataset_id: InternalDatasetId::from_str("370e99ec-9fd8-401d-828d-d67b431a8742")
-                .unwrap(),
-        };
+        let id = DatasetId::from_str("370e99ec-9fd8-401d-828d-d67b431a8742")?;
         let ds = AddDataset {
             id: Some(id),
             name: "OgrDataset".to_string(),
@@ -808,10 +772,8 @@ mod tests {
             .add_dataset(&SimpleSession::default(), ds.validated()?, Box::new(meta))
             .await?;
 
-        let id2 = DatasetId::Internal {
-            dataset_id: InternalDatasetId::from_str("370e99ec-9fd8-401d-828d-d67b431a8742")
-                .unwrap(),
-        };
+        let id2 = DatasetId::from_str("370e99ec-9fd8-401d-828d-d67b431a8742")?;
+
         let ds = AddDataset {
             id: Some(id2),
             name: "OgrDataset2".to_string(),
@@ -861,12 +823,9 @@ mod tests {
         assert_eq!(res.status(), 200);
 
         assert_eq!(
-            read_body_string(res).await,
+            read_body_json(res).await,
             json!([{
-                "id": {
-                    "type": "internal",
-                    "datasetId": "370e99ec-9fd8-401d-828d-d67b431a8742"
-                },
+                "id": "370e99ec-9fd8-401d-828d-d67b431a8742",
                 "name": "OgrDataset2",
                 "description": "My Ogr dataset2",
                 "tags": [],
@@ -902,10 +861,7 @@ mod tests {
                     "text": null
                 }
             }, {
-                "id": {
-                    "type": "internal",
-                    "datasetId": "370e99ec-9fd8-401d-828d-d67b431a8742"
-                },
+                "id": "370e99ec-9fd8-401d-828d-d67b431a8742",
                 "name": "OgrDataset",
                 "description": "My Ogr dataset",
                 "tags": [],
@@ -920,7 +876,6 @@ mod tests {
                 },
                 "symbology": null
             }])
-            .to_string()
         );
 
         Ok(())
@@ -1050,7 +1005,7 @@ mod tests {
     ) -> Result<Box<dyn InitializedVectorOperator>> {
         OgrSource {
             params: OgrSourceParameters {
-                dataset: dataset_id,
+                data: dataset_id.into(),
                 attribute_projection: None,
                 attribute_filters: None,
             },
@@ -1634,22 +1589,19 @@ mod tests {
             .await?;
 
         let req = actix_web::test::TestRequest::get()
-            .uri(&format!("/dataset/internal/{}", id.internal().unwrap()))
+            .uri(&format!("/dataset/{}", id))
             .append_header((header::CONTENT_LENGTH, 0))
             .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())));
         let res = send_test_request(req, ctx).await;
 
         let res_status = res.status();
-        let res_body = read_body_string(res).await;
+        let res_body = serde_json::from_str::<Value>(&read_body_string(res).await).unwrap();
         assert_eq!(res_status, 200, "{}", res_body);
 
         assert_eq!(
             res_body,
             json!({
-                "id": {
-                    "type": "internal",
-                    "datasetId": id.internal().unwrap()
-                },
+                "id": id,
                 "name": "OgrDataset",
                 "description": "My Ogr dataset",
                 "resultDescriptor": {
@@ -1664,7 +1616,140 @@ mod tests {
                 "symbology": null,
                 "provenance": null,
             })
-            .to_string()
+        );
+
+        Ok(())
+    }
+
+    #[tokio::test]
+    #[allow(clippy::too_many_lines)]
+    async fn it_suggests_metadata() -> Result<()> {
+        let mut test_data = TestDataUploads::default(); // remember created folder and remove them on drop
+
+        let ctx = InMemoryContext::test_default();
+        let session_id = ctx.default_session_ref().await.id();
+
+        let body = vec![(
+            "test.json",
+            r#"{
+                "type": "FeatureCollection",
+                "features": [
+                  {
+                    "type": "Feature",
+                    "geometry": {
+                      "type": "Point",
+                      "coordinates": [
+                        1,
+                        1
+                      ]
+                    },
+                    "properties": {
+                      "name": "foo",
+                      "id": 1
+                    }
+                  },
+                  {
+                    "type": "Feature",
+                    "geometry": {
+                      "type": "Point",
+                      "coordinates": [
+                        2,
+                        2
+                      ]
+                    },
+                    "properties": {
+                      "name": "bar",
+                      "id": 2
+                    }
+                  }
+                ]
+              }"#,
+        )];
+
+        let req = actix_web::test::TestRequest::post()
+            .uri("/upload")
+            .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())))
+            .set_multipart(body.clone());
+
+        let res = send_test_request(req, ctx.clone()).await;
+
+        assert_eq!(res.status(), 200);
+
+        let upload: IdResponse<UploadId> = actix_web::test::read_body_json(res).await;
+        test_data.uploads.push(upload.id);
+
+        let upload_content =
+            std::fs::read_to_string(upload.id.root_path().unwrap().join("test.json")).unwrap();
+
+        assert_eq!(&upload_content, body[0].1);
+
+        let req = actix_web::test::TestRequest::get()
+            .uri(&format!("/dataset/suggest?upload={}", upload.id))
+            .append_header((header::CONTENT_LENGTH, 0))
+            .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())));
+        let res = send_test_request(req, ctx).await;
+
+        let res_status = res.status();
+        let res_body = read_body_string(res).await;
+        assert_eq!(res_status, 200, "{}", res_body);
+
+        assert_eq!(
+            serde_json::from_str::<serde_json::Value>(&res_body).unwrap(),
+            json!({
+              "mainFile": "test.json",
+              "metaData": {
+                "type": "OgrMetaData",
+                "loadingInfo": {
+                  "fileName": format!("test_upload/{}/test.json", upload.id),
+                  "layerName": "test",
+                  "dataType": "MultiPoint",
+                  "time": {
+                    "type": "none"
+                  },
+                  "defaultGeometry": null,
+                  "columns": {
+                    "formatSpecifics": null,
+                    "x": "",
+                    "y": null,
+                    "int": [
+                      "id"
+                    ],
+                    "float": [],
+                    "text": [
+                      "name"
+                    ],
+                    "bool": [],
+                    "datetime": [],
+                    "rename": null
+                  },
+                  "forceOgrTimeFilter": false,
+                  "forceOgrSpatialFilter": false,
+                  "onError": "ignore",
+                  "sqlQuery": null,
+                  "attributeQuery": null
+                },
+                "resultDescriptor": {
+                  "dataType": "MultiPoint",
+                  "spatialReference": "EPSG:4326",
+                  "columns": {
+                    "id": {
+                      "dataType": "int",
+                      "measurement": {
+                        "type": "unitless"
+                      }
+                    },
+                    "name": {
+                      "dataType": "text",
+                      "measurement": {
+                        "type": "unitless"
+                      }
+                    }
+                  },
+                  "time": null,
+                  "bbox": null
+                }
+              }
+            })
         );
 
         Ok(())

@@ -205,7 +205,10 @@ impl ArrowTyped for Coordinate2D {
     }
 
     fn arrow_builder(capacity: usize) -> Self::ArrowBuilder {
-        arrow::array::FixedSizeListBuilder::new(arrow::array::Float64Builder::new(capacity * 2), 2)
+        arrow::array::FixedSizeListBuilder::new(
+            arrow::array::Float64Builder::with_capacity(capacity * 2),
+            2,
+        )
     }
 
     fn concat(

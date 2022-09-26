@@ -207,18 +207,18 @@ impl ArrowTyped for MultiPolygon {
                             let floats_ref = coordinates.value(coordinate_index);
                             let floats: &Float64Array = downcast_array(&floats_ref);
 
-                            coordinate_builder.values().append_slice(floats.values())?;
+                            coordinate_builder.values().append_slice(floats.values());
 
-                            coordinate_builder.append(true)?;
+                            coordinate_builder.append(true);
                         }
 
-                        ring_builder.append(true)?;
+                        ring_builder.append(true);
                     }
 
-                    polygon_builder.append(true)?;
+                    polygon_builder.append(true);
                 }
 
-                multi_polygon_builder.append(true)?;
+                multi_polygon_builder.append(true);
             }
         }
 
@@ -259,18 +259,18 @@ impl ArrowTyped for MultiPolygon {
                         let floats_ref = coordinates.value(coordinate_index);
                         let floats: &Float64Array = downcast_array(&floats_ref);
 
-                        coordinate_builder.values().append_slice(floats.values())?;
+                        coordinate_builder.values().append_slice(floats.values());
 
-                        coordinate_builder.append(true)?;
+                        coordinate_builder.append(true);
                     }
 
-                    ring_builder.append(true)?;
+                    ring_builder.append(true);
                 }
 
-                polygon_builder.append(true)?;
+                polygon_builder.append(true);
             }
 
-            multi_polygon_builder.append(true)?;
+            multi_polygon_builder.append(true);
         }
 
         Ok(multi_polygon_builder.finish())
@@ -292,18 +292,18 @@ impl ArrowTyped for MultiPolygon {
 
                     for coordinate in ring {
                         let float_builder = coordinate_builder.values();
-                        float_builder.append_value(coordinate.x)?;
-                        float_builder.append_value(coordinate.y)?;
-                        coordinate_builder.append(true)?;
+                        float_builder.append_value(coordinate.x);
+                        float_builder.append_value(coordinate.y);
+                        coordinate_builder.append(true);
                     }
 
-                    ring_builder.append(true)?;
+                    ring_builder.append(true);
                 }
 
-                polygon_builder.append(true)?;
+                polygon_builder.append(true);
             }
 
-            builder.append(true)?;
+            builder.append(true);
         }
 
         Ok(builder.finish())

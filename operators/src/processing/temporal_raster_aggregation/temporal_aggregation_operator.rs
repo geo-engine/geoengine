@@ -1,3 +1,5 @@
+use std::marker::PhantomData;
+
 use crate::engine::{
     ExecutionContext, Operator, QueryProcessor, RasterOperator, SingleRasterSource,
 };
@@ -115,7 +117,6 @@ impl InitializedRasterOperator for InitializedTemporalRasterAggregation {
                 self.window_reference,
                 p,
                 self.tiling_specification,
-                self.source.result_descriptor().no_data_value
             ).boxed()
             .into()
         );
@@ -134,7 +135,6 @@ where
     window_reference: TimeInstance,
     source: Q,
     tiling_specification: TilingSpecification,
-    no_data_value: Option<P>,
 }
 
 impl<Q, P> TemporalRasterAggregationProcessor<Q, P>
@@ -148,7 +148,6 @@ where
         window_reference: TimeInstance,
         source: Q,
         tiling_specification: TilingSpecification,
-        no_data_value: Option<f64>,
     ) -> Self {
         Self {
             aggregation_type,
@@ -156,72 +155,54 @@ where
             window_reference,
             source,
             tiling_specification,
-            no_data_value: no_data_value.map(P::from_),
         }
     }
 
-    fn create_subquery<F>(
-        &self,
-        fold_fn: F,
-        initial_value: P,
-    ) -> TemporalRasterAggregationSubQuery<F, P> {
+    fn create_subquery<F>(&self, fold_fn: F) -> TemporalRasterAggregationSubQuery<F, P> {
         TemporalRasterAggregationSubQuery {
             fold_fn,
-            no_data_value: self.no_data_value,
-            initial_value,
             step: self.window,
             step_reference: self.window_reference,
+            _phantom_pixel_type: PhantomData,
         }
     }
 
     fn create_subquery_first<F>(
         &self,
         fold_fn: F,
-    ) -> Result<TemporalRasterAggregationSubQueryNoDataOnly<F, P>> {
-        self.no_data_value
-            .ok_or(error::Error::TemporalRasterAggregationFirstValidRequiresNoData)
-            .map(
-                |no_data_value| TemporalRasterAggregationSubQueryNoDataOnly {
-                    fold_fn,
-                    no_data_value,
-                    initial_value: no_data_value,
-                    step: self.window,
-                    step_reference: self.window_reference,
-                },
-            )
+    ) -> TemporalRasterAggregationSubQueryNoDataOnly<F, P> {
+        TemporalRasterAggregationSubQueryNoDataOnly {
+            fold_fn,
+            step: self.window,
+            step_reference: self.window_reference,
+            _phantom_pixel_type: PhantomData,
+        }
     }
 
     fn create_subquery_last<F>(
         &self,
         fold_fn: F,
-    ) -> Result<TemporalRasterAggregationSubQueryNoDataOnly<F, P>> {
-        self.no_data_value
-            .ok_or(error::Error::TemporalRasterAggregationLastValidRequiresNoData)
-            .map(
-                |no_data_value| TemporalRasterAggregationSubQueryNoDataOnly {
-                    fold_fn,
-                    no_data_value,
-                    initial_value: no_data_value,
-                    step: self.window,
-                    step_reference: self.window_reference,
-                },
-            )
+    ) -> TemporalRasterAggregationSubQueryNoDataOnly<F, P> {
+        TemporalRasterAggregationSubQueryNoDataOnly {
+            fold_fn,
+            step: self.window,
+            step_reference: self.window_reference,
+            _phantom_pixel_type: PhantomData,
+        }
     }
 
     fn create_subquery_mean<F>(
         &self,
         fold_fn: F,
         ignore_no_data: bool,
-    ) -> Result<TemporalRasterMeanAggregationSubQuery<F, P>> {
-        self.no_data_value
-            .ok_or(error::Error::TemporalRasterAggregationMeanRequiresNoData)
-            .map(|no_data_value| TemporalRasterMeanAggregationSubQuery {
-                fold_fn,
-                no_data_value,
-                step: self.window,
-                step_reference: self.window_reference,
-                ignore_no_data,
-            })
+    ) -> TemporalRasterMeanAggregationSubQuery<F, P> {
+        TemporalRasterMeanAggregationSubQuery {
+            fold_fn,
+            step: self.window,
+            step_reference: self.window_reference,
+            ignore_no_data,
+            _phantom_pixel_type: PhantomData,
+        }
     }
 }
 
@@ -244,99 +225,58 @@ where
             Aggregation::Min {
                 ignore_no_data: true,
             } => Ok(self
-                .create_subquery(
-                    no_data_ignoring_fold_future::<P, MinIgnoreNoDataAccFunction>,
-                    P::max_value(),
-                )
+                .create_subquery(no_data_ignoring_fold_future::<P, MinIgnoreNoDataAccFunction>)
                 .into_raster_subquery_adapter(&self.source, query, ctx, self.tiling_specification)
                 .expect("no tiles must be skipped in Aggregation::Min")),
             Aggregation::Min {
                 ignore_no_data: false,
             } => Ok(self
-                .create_subquery(fold_future::<P, MinAccFunction>, P::max_value())
+                .create_subquery(fold_future::<P, MinAccFunction>)
                 .into_raster_subquery_adapter(&self.source, query, ctx, self.tiling_specification)
                 .expect("no tiles must be skipped in Aggregation::Min")),
             Aggregation::Max {
                 ignore_no_data: true,
             } => Ok(self
-                .create_subquery(
-                    no_data_ignoring_fold_future::<P, MaxIgnoreNoDataAccFunction>,
-                    P::min_value(),
-                )
+                .create_subquery(no_data_ignoring_fold_future::<P, MaxIgnoreNoDataAccFunction>)
                 .into_raster_subquery_adapter(&self.source, query, ctx, self.tiling_specification)
                 .expect("no tiles must be skipped in Aggregation::Max")),
             Aggregation::Max {
                 ignore_no_data: false,
             } => Ok(self
-                .create_subquery(fold_future::<P, MaxAccFunction>, P::min_value())
+                .create_subquery(fold_future::<P, MaxAccFunction>)
                 .into_raster_subquery_adapter(&self.source, query, ctx, self.tiling_specification)
                 .expect("no tiles must be skipped in Aggregation::Max")),
 
             Aggregation::First {
                 ignore_no_data: true,
-            } => self
+            } => Ok(self
                 .create_subquery_first(no_data_ignoring_fold_future::<P, FirstValidAccFunction>)
-                .map(|o| {
-                    o.into_raster_subquery_adapter(
-                        &self.source,
-                        query,
-                        ctx,
-                        self.tiling_specification,
-                    )
-                    .expect("no tiles must be skipped in Aggregation::First")
-                }),
+                .into_raster_subquery_adapter(&self.source, query, ctx, self.tiling_specification)
+                .expect("no tiles must be skipped in Aggregation::First")),
             Aggregation::First {
                 ignore_no_data: false,
-            } => self
+            } => Ok(self
                 .create_subquery_first(first_tile_fold_future::<P>)
-                .map(|o| {
-                    o.into_raster_subquery_adapter(
-                        &self.source,
-                        query,
-                        ctx,
-                        self.tiling_specification,
-                    )
-                    .expect("no tiles must be skipped in Aggregation::First")
-                }),
+                .into_raster_subquery_adapter(&self.source, query, ctx, self.tiling_specification)
+                .expect("no tiles must be skipped in Aggregation::First")),
             Aggregation::Last {
                 ignore_no_data: true,
-            } => self
+            } => Ok(self
                 .create_subquery_last(no_data_ignoring_fold_future::<P, LastValidAccFunction>)
-                .map(|o| {
-                    o.into_raster_subquery_adapter(
-                        &self.source,
-                        query,
-                        ctx,
-                        self.tiling_specification,
-                    )
-                    .expect("no tiles must be skipped in Aggregation::Last")
-                }),
+                .into_raster_subquery_adapter(&self.source, query, ctx, self.tiling_specification)
+                .expect("no tiles must be skipped in Aggregation::Last")),
 
             Aggregation::Last {
                 ignore_no_data: false,
-            } => self
+            } => Ok(self
                 .create_subquery_last(last_tile_fold_future::<P>)
-                .map(|o| {
-                    o.into_raster_subquery_adapter(
-                        &self.source,
-                        query,
-                        ctx,
-                        self.tiling_specification,
-                    )
-                    .expect("no tiles must be skipped in Aggregation::Last")
-                }),
+                .into_raster_subquery_adapter(&self.source, query, ctx, self.tiling_specification)
+                .expect("no tiles must be skipped in Aggregation::Last")),
 
-            Aggregation::Mean { ignore_no_data } => self
+            Aggregation::Mean { ignore_no_data } => Ok(self
                 .create_subquery_mean(mean_tile_fold_future::<P>, ignore_no_data)
-                .map(|o| {
-                    o.into_raster_subquery_adapter(
-                        &self.source,
-                        query,
-                        ctx,
-                        self.tiling_specification,
-                    )
-                    .expect("no tiles must be skipped in Aggregation::Mean")
-                }),
+                .into_raster_subquery_adapter(&self.source, query, ctx, self.tiling_specification)
+                .expect("no tiles must be skipped in Aggregation::Mean")),
         }
     }
 }
@@ -346,11 +286,13 @@ mod tests {
     use futures::stream::StreamExt;
     use geoengine_datatypes::{
         primitives::{Measurement, SpatialResolution, TimeInterval},
-        raster::{EmptyGrid, EmptyGrid2D, Grid2D, GridOrEmpty, RasterDataType, TileInformation},
+        raster::{
+            EmptyGrid, EmptyGrid2D, Grid2D, GridOrEmpty, MaskedGrid2D, RasterDataType,
+            TileInformation,
+        },
         spatial_reference::SpatialReference,
         util::test::TestDefault,
     };
-    use num_traits::AsPrimitive;
 
     use crate::{
         engine::{MockExecutionContext, MockQueryContext},
@@ -362,7 +304,7 @@ mod tests {
     #[tokio::test]
     #[allow(clippy::too_many_lines)]
     async fn test_min() {
-        let (no_data_value, raster_tiles) = make_raster();
+        let raster_tiles = make_raster();
 
         let mrs = MockRasterSource {
             params: MockRasterSourceParams {
@@ -371,9 +313,9 @@ mod tests {
                     data_type: RasterDataType::U8,
                     spatial_reference: SpatialReference::epsg_4326().into(),
                     measurement: Measurement::Unitless,
-                    no_data_value: no_data_value.map(AsPrimitive::as_),
                     time: None,
                     bbox: None,
+                    resolution: None,
                 },
             },
         }
@@ -432,9 +374,7 @@ mod tests {
                     tile_size_in_pixels: [3, 2].into(),
                     global_geo_transform: TestDefault::test_default(),
                 },
-                GridOrEmpty::Grid(
-                    Grid2D::new([3, 2].into(), vec![1, 2, 3, 4, 5, 6], no_data_value).unwrap()
-                ),
+                GridOrEmpty::from(Grid2D::new([3, 2].into(), vec![1, 2, 3, 4, 5, 6]).unwrap()),
             )
         );
 
@@ -447,9 +387,7 @@ mod tests {
                     tile_size_in_pixels: [3, 2].into(),
                     global_geo_transform: TestDefault::test_default(),
                 },
-                GridOrEmpty::Grid(
-                    Grid2D::new([3, 2].into(), vec![6, 5, 4, 3, 2, 1], no_data_value).unwrap()
-                ),
+                GridOrEmpty::from(Grid2D::new([3, 2].into(), vec![6, 5, 4, 3, 2, 1]).unwrap()),
             )
         );
 
@@ -462,9 +400,7 @@ mod tests {
                     tile_size_in_pixels: [3, 2].into(),
                     global_geo_transform: TestDefault::test_default(),
                 },
-                GridOrEmpty::Grid(
-                    Grid2D::new([3, 2].into(), vec![1, 2, 3, 4, 5, 6], no_data_value).unwrap()
-                ),
+                GridOrEmpty::from(Grid2D::new([3, 2].into(), vec![1, 2, 3, 4, 5, 6]).unwrap()),
             )
         );
 
@@ -477,9 +413,7 @@ mod tests {
                     tile_size_in_pixels: [3, 2].into(),
                     global_geo_transform: TestDefault::test_default(),
                 },
-                GridOrEmpty::Grid(
-                    Grid2D::new([3, 2].into(), vec![6, 5, 4, 3, 2, 1], no_data_value).unwrap()
-                ),
+                GridOrEmpty::from(Grid2D::new([3, 2].into(), vec![6, 5, 4, 3, 2, 1]).unwrap()),
             )
         );
     }
@@ -487,7 +421,7 @@ mod tests {
     #[tokio::test]
     #[allow(clippy::too_many_lines)]
     async fn test_max() {
-        let (no_data_value, raster_tiles) = make_raster();
+        let raster_tiles = make_raster();
 
         let mrs = MockRasterSource {
             params: MockRasterSourceParams {
@@ -496,9 +430,9 @@ mod tests {
                     data_type: RasterDataType::U8,
                     spatial_reference: SpatialReference::epsg_4326().into(),
                     measurement: Measurement::Unitless,
-                    no_data_value: no_data_value.map(AsPrimitive::as_),
                     time: None,
                     bbox: None,
+                    resolution: None,
                 },
             },
         }
@@ -557,9 +491,7 @@ mod tests {
                     tile_size_in_pixels: [3, 2].into(),
                     global_geo_transform: TestDefault::test_default(),
                 },
-                GridOrEmpty::Grid(
-                    Grid2D::new([3, 2].into(), vec![12, 11, 10, 9, 8, 7], no_data_value).unwrap()
-                ),
+                GridOrEmpty::from(Grid2D::new([3, 2].into(), vec![12, 11, 10, 9, 8, 7]).unwrap()),
             )
         );
 
@@ -572,9 +504,7 @@ mod tests {
                     tile_size_in_pixels: [3, 2].into(),
                     global_geo_transform: TestDefault::test_default(),
                 },
-                GridOrEmpty::Grid(
-                    Grid2D::new([3, 2].into(), vec![7, 8, 9, 10, 11, 12], no_data_value).unwrap()
-                ),
+                GridOrEmpty::from(Grid2D::new([3, 2].into(), vec![7, 8, 9, 10, 11, 12]).unwrap()),
             )
         );
 
@@ -587,9 +517,7 @@ mod tests {
                     tile_size_in_pixels: [3, 2].into(),
                     global_geo_transform: TestDefault::test_default(),
                 },
-                GridOrEmpty::Grid(
-                    Grid2D::new([3, 2].into(), vec![12, 11, 10, 9, 8, 7], no_data_value).unwrap()
-                ),
+                GridOrEmpty::from(Grid2D::new([3, 2].into(), vec![12, 11, 10, 9, 8, 7]).unwrap()),
             )
         );
 
@@ -602,9 +530,7 @@ mod tests {
                     tile_size_in_pixels: [3, 2].into(),
                     global_geo_transform: TestDefault::test_default(),
                 },
-                GridOrEmpty::Grid(
-                    Grid2D::new([3, 2].into(), vec![7, 8, 9, 10, 11, 12], no_data_value).unwrap()
-                ),
+                GridOrEmpty::from(Grid2D::new([3, 2].into(), vec![7, 8, 9, 10, 11, 12]).unwrap()),
             )
         );
     }
@@ -612,12 +538,7 @@ mod tests {
     #[tokio::test]
     #[allow(clippy::too_many_lines)]
     async fn test_max_with_no_data() {
-        let (no_data_value, mut raster_tiles) = make_raster();
-        if let GridOrEmpty::Grid(ref mut g) = raster_tiles.get_mut(0).unwrap().grid_array {
-            g.data[0] = no_data_value.unwrap();
-        } else {
-            panic!("test tile should not be empty");
-        }
+        let raster_tiles = make_raster(); // TODO: switch to make_raster_with_no_data?
 
         let mrs = MockRasterSource {
             params: MockRasterSourceParams {
@@ -626,9 +547,9 @@ mod tests {
                     data_type: RasterDataType::U8,
                     spatial_reference: SpatialReference::epsg_4326().into(),
                     measurement: Measurement::Unitless,
-                    no_data_value: no_data_value.map(AsPrimitive::as_),
                     time: None,
                     bbox: None,
+                    resolution: None,
                 },
             },
         }
@@ -687,14 +608,7 @@ mod tests {
                     tile_size_in_pixels: [3, 2].into(),
                     global_geo_transform: TestDefault::test_default(),
                 },
-                GridOrEmpty::Grid(
-                    Grid2D::new(
-                        [3, 2].into(),
-                        vec![no_data_value.unwrap(), 11, 10, 9, 8, 7],
-                        no_data_value
-                    )
-                    .unwrap()
-                ),
+                GridOrEmpty::from(Grid2D::new([3, 2].into(), vec![12, 11, 10, 9, 8, 7],).unwrap()),
             )
         );
 
@@ -707,9 +621,7 @@ mod tests {
                     tile_size_in_pixels: [3, 2].into(),
                     global_geo_transform: TestDefault::test_default(),
                 },
-                GridOrEmpty::Grid(
-                    Grid2D::new([3, 2].into(), vec![7, 8, 9, 10, 11, 12], no_data_value).unwrap()
-                ),
+                GridOrEmpty::from(Grid2D::new([3, 2].into(), vec![7, 8, 9, 10, 11, 12]).unwrap()),
             )
         );
 
@@ -722,9 +634,7 @@ mod tests {
                     tile_size_in_pixels: [3, 2].into(),
                     global_geo_transform: TestDefault::test_default(),
                 },
-                GridOrEmpty::Grid(
-                    Grid2D::new([3, 2].into(), vec![12, 11, 10, 9, 8, 7], no_data_value).unwrap()
-                ),
+                GridOrEmpty::from(Grid2D::new([3, 2].into(), vec![12, 11, 10, 9, 8, 7]).unwrap()),
             )
         );
 
@@ -737,9 +647,7 @@ mod tests {
                     tile_size_in_pixels: [3, 2].into(),
                     global_geo_transform: TestDefault::test_default(),
                 },
-                GridOrEmpty::Grid(
-                    Grid2D::new([3, 2].into(), vec![7, 8, 9, 10, 11, 12], no_data_value).unwrap()
-                ),
+                GridOrEmpty::from(Grid2D::new([3, 2].into(), vec![7, 8, 9, 10, 11, 12]).unwrap()),
             )
         );
     }
@@ -747,12 +655,7 @@ mod tests {
     #[tokio::test]
     #[allow(clippy::too_many_lines)]
     async fn test_max_with_no_data_but_ignoring_it() {
-        let (no_data_value, mut raster_tiles) = make_raster();
-        if let GridOrEmpty::Grid(ref mut g) = raster_tiles.get_mut(0).unwrap().grid_array {
-            g.data[0] = no_data_value.unwrap();
-        } else {
-            panic!("test tile should not be empty");
-        }
+        let raster_tiles = make_raster(); // TODO: switch to make_raster_with_no_data?
 
         let mrs = MockRasterSource {
             params: MockRasterSourceParams {
@@ -761,9 +664,9 @@ mod tests {
                     data_type: RasterDataType::U8,
                     spatial_reference: SpatialReference::epsg_4326().into(),
                     measurement: Measurement::Unitless,
-                    no_data_value: no_data_value.map(AsPrimitive::as_),
                     time: None,
                     bbox: None,
+                    resolution: None,
                 },
             },
         }
@@ -822,9 +725,7 @@ mod tests {
                     tile_size_in_pixels: [3, 2].into(),
                     global_geo_transform: TestDefault::test_default(),
                 },
-                GridOrEmpty::Grid(
-                    Grid2D::new([3, 2].into(), vec![12, 11, 10, 9, 8, 7], no_data_value).unwrap()
-                ),
+                GridOrEmpty::from(Grid2D::new([3, 2].into(), vec![12, 11, 10, 9, 8, 7]).unwrap()),
             )
         );
 
@@ -837,9 +738,7 @@ mod tests {
                     tile_size_in_pixels: [3, 2].into(),
                     global_geo_transform: TestDefault::test_default(),
                 },
-                GridOrEmpty::Grid(
-                    Grid2D::new([3, 2].into(), vec![7, 8, 9, 10, 11, 12], no_data_value).unwrap()
-                ),
+                GridOrEmpty::from(Grid2D::new([3, 2].into(), vec![7, 8, 9, 10, 11, 12]).unwrap()),
             )
         );
 
@@ -852,9 +751,7 @@ mod tests {
                     tile_size_in_pixels: [3, 2].into(),
                     global_geo_transform: TestDefault::test_default(),
                 },
-                GridOrEmpty::Grid(
-                    Grid2D::new([3, 2].into(), vec![12, 11, 10, 9, 8, 7], no_data_value).unwrap()
-                ),
+                GridOrEmpty::from(Grid2D::new([3, 2].into(), vec![12, 11, 10, 9, 8, 7]).unwrap()),
             )
         );
 
@@ -867,9 +764,7 @@ mod tests {
                     tile_size_in_pixels: [3, 2].into(),
                     global_geo_transform: TestDefault::test_default(),
                 },
-                GridOrEmpty::Grid(
-                    Grid2D::new([3, 2].into(), vec![7, 8, 9, 10, 11, 12], no_data_value).unwrap()
-                ),
+                GridOrEmpty::from(Grid2D::new([3, 2].into(), vec![7, 8, 9, 10, 11, 12]).unwrap()),
             )
         );
     }
@@ -877,8 +772,6 @@ mod tests {
     #[tokio::test]
     #[allow(clippy::too_many_lines)]
     async fn test_only_no_data() {
-        let no_data_value: Option<u8> = Some(42);
-
         let mrs = MockRasterSource {
             params: MockRasterSourceParams {
                 data: vec![RasterTile2D::new_with_tile_info(
@@ -888,15 +781,15 @@ mod tests {
                         tile_size_in_pixels: [3, 2].into(),
                         global_geo_transform: TestDefault::test_default(),
                     },
-                    GridOrEmpty::Empty(EmptyGrid::new([3, 2].into(), no_data_value.unwrap())),
+                    GridOrEmpty::from(EmptyGrid2D::<u8>::new([3, 2].into())),
                 )],
                 result_descriptor: RasterResultDescriptor {
                     data_type: RasterDataType::U8,
                     spatial_reference: SpatialReference::epsg_4326().into(),
                     measurement: Measurement::Unitless,
-                    no_data_value: no_data_value.map(AsPrimitive::as_),
                     time: None,
                     bbox: None,
+                    resolution: None,
                 },
             },
         }
@@ -955,14 +848,14 @@ mod tests {
                     tile_size_in_pixels: [3, 2].into(),
                     global_geo_transform: TestDefault::test_default(),
                 },
-                GridOrEmpty::Empty(EmptyGrid::new([3, 2].into(), no_data_value.unwrap())),
+                GridOrEmpty::Empty(EmptyGrid::new([3, 2].into())),
             )
         );
     }
 
     #[tokio::test]
     async fn test_first_with_no_data() {
-        let (no_data_value, raster_tiles) = make_raster_with_no_data();
+        let raster_tiles = make_raster_with_no_data();
 
         let mrs = MockRasterSource {
             params: MockRasterSourceParams {
@@ -971,9 +864,9 @@ mod tests {
                     data_type: RasterDataType::U8,
                     spatial_reference: SpatialReference::epsg_4326().into(),
                     measurement: Measurement::Unitless,
-                    no_data_value: no_data_value.map(AsPrimitive::as_),
                     time: None,
                     bbox: None,
+                    resolution: None,
                 },
             },
         }
@@ -1032,9 +925,7 @@ mod tests {
                     tile_size_in_pixels: [3, 2].into(),
                     global_geo_transform: TestDefault::test_default(),
                 },
-                GridOrEmpty::Grid(
-                    Grid2D::new([3, 2].into(), vec![7, 8, 9, 16, 11, 12], no_data_value).unwrap()
-                ),
+                GridOrEmpty::from(Grid2D::new([3, 2].into(), vec![7, 8, 9, 16, 11, 12]).unwrap()),
             )
         );
 
@@ -1047,8 +938,13 @@ mod tests {
                     tile_size_in_pixels: [3, 2].into(),
                     global_geo_transform: TestDefault::test_default(),
                 },
-                GridOrEmpty::Grid(
-                    Grid2D::new([3, 2].into(), vec![1, 2, 3, 42, 5, 6], no_data_value).unwrap()
+                GridOrEmpty::from(
+                    MaskedGrid2D::new(
+                        Grid2D::new([3, 2].into(), vec![1, 2, 3, 42, 5, 6]).unwrap(),
+                        Grid2D::new([3, 2].into(), vec![true, true, true, false, true, true])
+                            .unwrap()
+                    )
+                    .unwrap()
                 ),
             )
         );
@@ -1056,7 +952,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_last_with_no_data() {
-        let (no_data_value, raster_tiles) = make_raster_with_no_data();
+        let raster_tiles = make_raster_with_no_data();
 
         let mrs = MockRasterSource {
             params: MockRasterSourceParams {
@@ -1065,9 +961,9 @@ mod tests {
                     data_type: RasterDataType::U8,
                     spatial_reference: SpatialReference::epsg_4326().into(),
                     measurement: Measurement::Unitless,
-                    no_data_value: no_data_value.map(AsPrimitive::as_),
                     time: None,
                     bbox: None,
+                    resolution: None,
                 },
             },
         }
@@ -1126,9 +1022,7 @@ mod tests {
                     tile_size_in_pixels: [3, 2].into(),
                     global_geo_transform: TestDefault::test_default(),
                 },
-                GridOrEmpty::Grid(
-                    Grid2D::new([3, 2].into(), vec![13, 8, 15, 16, 17, 18], no_data_value).unwrap()
-                ),
+                GridOrEmpty::from(Grid2D::new([3, 2].into(), vec![13, 8, 15, 16, 17, 18]).unwrap()),
             )
         );
 
@@ -1141,8 +1035,13 @@ mod tests {
                     tile_size_in_pixels: [3, 2].into(),
                     global_geo_transform: TestDefault::test_default(),
                 },
-                GridOrEmpty::Grid(
-                    Grid2D::new([3, 2].into(), vec![1, 2, 3, 42, 5, 6], no_data_value).unwrap()
+                GridOrEmpty::from(
+                    MaskedGrid2D::new(
+                        Grid2D::new([3, 2].into(), vec![1, 2, 3, 42, 5, 6]).unwrap(),
+                        Grid2D::new([3, 2].into(), vec![true, true, true, false, true, true])
+                            .unwrap()
+                    )
+                    .unwrap()
                 ),
             )
         );
@@ -1150,7 +1049,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_last() {
-        let (no_data_value, raster_tiles) = make_raster_with_no_data();
+        let raster_tiles = make_raster_with_no_data();
 
         let mrs = MockRasterSource {
             params: MockRasterSourceParams {
@@ -1159,9 +1058,9 @@ mod tests {
                     data_type: RasterDataType::U8,
                     spatial_reference: SpatialReference::epsg_4326().into(),
                     measurement: Measurement::Unitless,
-                    no_data_value: no_data_value.map(AsPrimitive::as_),
                     time: None,
                     bbox: None,
+                    resolution: None,
                 },
             },
         }
@@ -1220,9 +1119,13 @@ mod tests {
                     tile_size_in_pixels: [3, 2].into(),
                     global_geo_transform: TestDefault::test_default(),
                 },
-                GridOrEmpty::Grid(
-                    Grid2D::new([3, 2].into(), vec![13, 42, 15, 16, 17, 18], no_data_value)
-                        .unwrap()
+                GridOrEmpty::from(
+                    MaskedGrid2D::new(
+                        Grid2D::new([3, 2].into(), vec![13, 42, 15, 16, 17, 18]).unwrap(),
+                        Grid2D::new([3, 2].into(), vec![true, false, true, true, true, true])
+                            .unwrap()
+                    )
+                    .unwrap()
                 )
             )
         );
@@ -1236,14 +1139,14 @@ mod tests {
                     tile_size_in_pixels: [3, 2].into(),
                     global_geo_transform: TestDefault::test_default(),
                 },
-                GridOrEmpty::Empty(EmptyGrid2D::new([3, 2].into(), no_data_value.unwrap()))
+                GridOrEmpty::Empty(EmptyGrid2D::new([3, 2].into()))
             )
         );
     }
 
     #[tokio::test]
     async fn test_first() {
-        let (no_data_value, raster_tiles) = make_raster_with_no_data();
+        let raster_tiles = make_raster_with_no_data();
 
         let mrs = MockRasterSource {
             params: MockRasterSourceParams {
@@ -1252,9 +1155,9 @@ mod tests {
                     data_type: RasterDataType::U8,
                     spatial_reference: SpatialReference::epsg_4326().into(),
                     measurement: Measurement::Unitless,
-                    no_data_value: no_data_value.map(AsPrimitive::as_),
                     time: None,
                     bbox: None,
+                    resolution: None,
                 },
             },
         }
@@ -1313,7 +1216,7 @@ mod tests {
                     tile_size_in_pixels: [3, 2].into(),
                     global_geo_transform: TestDefault::test_default(),
                 },
-                GridOrEmpty::Empty(EmptyGrid2D::new([3, 2].into(), no_data_value.unwrap()))
+                GridOrEmpty::from(EmptyGrid2D::new([3, 2].into()))
             )
         );
 
@@ -1326,16 +1229,21 @@ mod tests {
                     tile_size_in_pixels: [3, 2].into(),
                     global_geo_transform: TestDefault::test_default(),
                 },
-                GridOrEmpty::Grid(
-                    Grid2D::new([3, 2].into(), vec![1, 2, 3, 42, 5, 6], no_data_value).unwrap()
-                )
+                GridOrEmpty::from(
+                    MaskedGrid2D::new(
+                        Grid2D::new([3, 2].into(), vec![1, 2, 3, 42, 5, 6]).unwrap(),
+                        Grid2D::new([3, 2].into(), vec![true, true, true, false, true, true])
+                            .unwrap()
+                    )
+                    .unwrap()
+                ),
             )
         );
     }
 
     #[tokio::test]
     async fn test_mean_nodata() {
-        let (no_data_value, raster_tiles) = make_raster_with_no_data();
+        let raster_tiles = make_raster_with_no_data();
 
         let mrs = MockRasterSource {
             params: MockRasterSourceParams {
@@ -1344,9 +1252,9 @@ mod tests {
                     data_type: RasterDataType::U8,
                     spatial_reference: SpatialReference::epsg_4326().into(),
                     measurement: Measurement::Unitless,
-                    no_data_value: no_data_value.map(AsPrimitive::as_),
                     time: None,
                     bbox: None,
+                    resolution: None,
                 },
             },
         }
@@ -1405,7 +1313,7 @@ mod tests {
                     tile_size_in_pixels: [3, 2].into(),
                     global_geo_transform: TestDefault::test_default(),
                 },
-                GridOrEmpty::Empty(EmptyGrid2D::new([3, 2].into(), no_data_value.unwrap()))
+                GridOrEmpty::from(EmptyGrid2D::new([3, 2].into()))
             )
         );
 
@@ -1418,16 +1326,21 @@ mod tests {
                     tile_size_in_pixels: [3, 2].into(),
                     global_geo_transform: TestDefault::test_default(),
                 },
-                GridOrEmpty::Grid(
-                    Grid2D::new([3, 2].into(), vec![1, 2, 3, 42, 5, 6], no_data_value).unwrap()
-                )
+                GridOrEmpty::from(
+                    MaskedGrid2D::new(
+                        Grid2D::new([3, 2].into(), vec![1, 2, 3, 0, 5, 6]).unwrap(),
+                        Grid2D::new([3, 2].into(), vec![true, true, true, false, true, true])
+                            .unwrap()
+                    )
+                    .unwrap()
+                ),
             )
         );
     }
 
     #[tokio::test]
     async fn test_mean_ignore_nodata() {
-        let (no_data_value, raster_tiles) = make_raster_with_no_data();
+        let raster_tiles = make_raster_with_no_data();
 
         let mrs = MockRasterSource {
             params: MockRasterSourceParams {
@@ -1436,9 +1349,9 @@ mod tests {
                     data_type: RasterDataType::U8,
                     spatial_reference: SpatialReference::epsg_4326().into(),
                     measurement: Measurement::Unitless,
-                    no_data_value: no_data_value.map(AsPrimitive::as_),
                     time: None,
                     bbox: None,
+                    resolution: None,
                 },
             },
         }
@@ -1497,9 +1410,7 @@ mod tests {
                     tile_size_in_pixels: [3, 2].into(),
                     global_geo_transform: TestDefault::test_default(),
                 },
-                GridOrEmpty::Grid(
-                    Grid2D::new([3, 2].into(), vec![10, 8, 12, 16, 14, 15], no_data_value).unwrap()
-                )
+                GridOrEmpty::from(Grid2D::new([3, 2].into(), vec![10, 8, 12, 16, 14, 15]).unwrap())
             )
         );
 
@@ -1512,16 +1423,21 @@ mod tests {
                     tile_size_in_pixels: [3, 2].into(),
                     global_geo_transform: TestDefault::test_default(),
                 },
-                GridOrEmpty::Grid(
-                    Grid2D::new([3, 2].into(), vec![1, 2, 3, 42, 5, 6], no_data_value).unwrap()
-                )
+                GridOrEmpty::from(
+                    MaskedGrid2D::new(
+                        Grid2D::new([3, 2].into(), vec![1, 2, 3, 0, 5, 6]).unwrap(),
+                        Grid2D::new([3, 2].into(), vec![true, true, true, false, true, true])
+                            .unwrap()
+                    )
+                    .unwrap()
+                ),
             )
         );
     }
 
     #[tokio::test]
     async fn test_query_not_aligned_with_window_reference() {
-        let (no_data_value, raster_tiles) = make_raster();
+        let raster_tiles = make_raster();
 
         let mrs = MockRasterSource {
             params: MockRasterSourceParams {
@@ -1530,9 +1446,9 @@ mod tests {
                     data_type: RasterDataType::U8,
                     spatial_reference: SpatialReference::epsg_4326().into(),
                     measurement: Measurement::Unitless,
-                    no_data_value: no_data_value.map(AsPrimitive::as_),
                     time: None,
                     bbox: None,
+                    resolution: None,
                 },
             },
         }
@@ -1590,9 +1506,7 @@ mod tests {
                     tile_size_in_pixels: [3, 2].into(),
                     global_geo_transform: TestDefault::test_default(),
                 },
-                GridOrEmpty::Grid(
-                    Grid2D::new([3, 2].into(), vec![1, 2, 3, 4, 5, 6], no_data_value).unwrap()
-                ),
+                GridOrEmpty::from(Grid2D::new([3, 2].into(), vec![1, 2, 3, 4, 5, 6]).unwrap()),
             )
         );
 
@@ -1605,18 +1519,12 @@ mod tests {
                     tile_size_in_pixels: [3, 2].into(),
                     global_geo_transform: TestDefault::test_default(),
                 },
-                GridOrEmpty::Grid(
-                    Grid2D::new([3, 2].into(), vec![7, 8, 9, 10, 11, 12], no_data_value).unwrap()
-                ),
+                GridOrEmpty::from(Grid2D::new([3, 2].into(), vec![7, 8, 9, 10, 11, 12]).unwrap()),
             )
         );
     }
 
-    fn make_raster() -> (
-        Option<u8>,
-        Vec<geoengine_datatypes::raster::RasterTile2D<u8>>,
-    ) {
-        let no_data_value = Some(42);
+    fn make_raster() -> Vec<geoengine_datatypes::raster::RasterTile2D<u8>> {
         let raster_tiles = vec![
             RasterTile2D::new_with_tile_info(
                 TimeInterval::new_unchecked(0, 10),
@@ -1625,9 +1533,7 @@ mod tests {
                     tile_size_in_pixels: [3, 2].into(),
                     global_geo_transform: TestDefault::test_default(),
                 },
-                GridOrEmpty::Grid(
-                    Grid2D::new([3, 2].into(), vec![1, 2, 3, 4, 5, 6], no_data_value).unwrap(),
-                ),
+                GridOrEmpty::from(Grid2D::new([3, 2].into(), vec![1, 2, 3, 4, 5, 6]).unwrap()),
             ),
             RasterTile2D::new_with_tile_info(
                 TimeInterval::new_unchecked(0, 10),
@@ -1636,9 +1542,7 @@ mod tests {
                     tile_size_in_pixels: [3, 2].into(),
                     global_geo_transform: TestDefault::test_default(),
                 },
-                GridOrEmpty::Grid(
-                    Grid2D::new([3, 2].into(), vec![7, 8, 9, 10, 11, 12], no_data_value).unwrap(),
-                ),
+                GridOrEmpty::from(Grid2D::new([3, 2].into(), vec![7, 8, 9, 10, 11, 12]).unwrap()),
             ),
             RasterTile2D::new_with_tile_info(
                 TimeInterval::new_unchecked(10, 20),
@@ -1647,9 +1551,7 @@ mod tests {
                     tile_size_in_pixels: [3, 2].into(),
                     global_geo_transform: TestDefault::test_default(),
                 },
-                GridOrEmpty::Grid(
-                    Grid2D::new([3, 2].into(), vec![12, 11, 10, 9, 8, 7], no_data_value).unwrap(),
-                ),
+                GridOrEmpty::from(Grid2D::new([3, 2].into(), vec![12, 11, 10, 9, 8, 7]).unwrap()),
             ),
             RasterTile2D::new_with_tile_info(
                 TimeInterval::new_unchecked(10, 20),
@@ -1658,9 +1560,7 @@ mod tests {
                     tile_size_in_pixels: [3, 2].into(),
                     global_geo_transform: TestDefault::test_default(),
                 },
-                GridOrEmpty::Grid(
-                    Grid2D::new([3, 2].into(), vec![6, 5, 4, 3, 2, 1], no_data_value).unwrap(),
-                ),
+                GridOrEmpty::from(Grid2D::new([3, 2].into(), vec![6, 5, 4, 3, 2, 1]).unwrap()),
             ),
             RasterTile2D::new_with_tile_info(
                 TimeInterval::new_unchecked(20, 30),
@@ -1669,9 +1569,7 @@ mod tests {
                     tile_size_in_pixels: [3, 2].into(),
                     global_geo_transform: TestDefault::test_default(),
                 },
-                GridOrEmpty::Grid(
-                    Grid2D::new([3, 2].into(), vec![1, 2, 3, 4, 5, 6], no_data_value).unwrap(),
-                ),
+                GridOrEmpty::from(Grid2D::new([3, 2].into(), vec![1, 2, 3, 4, 5, 6]).unwrap()),
             ),
             RasterTile2D::new_with_tile_info(
                 TimeInterval::new_unchecked(20, 30),
@@ -1680,9 +1578,7 @@ mod tests {
                     tile_size_in_pixels: [3, 2].into(),
                     global_geo_transform: TestDefault::test_default(),
                 },
-                GridOrEmpty::Grid(
-                    Grid2D::new([3, 2].into(), vec![7, 8, 9, 10, 11, 12], no_data_value).unwrap(),
-                ),
+                GridOrEmpty::from(Grid2D::new([3, 2].into(), vec![7, 8, 9, 10, 11, 12]).unwrap()),
             ),
             RasterTile2D::new_with_tile_info(
                 TimeInterval::new_unchecked(30, 40),
@@ -1691,9 +1587,7 @@ mod tests {
                     tile_size_in_pixels: [3, 2].into(),
                     global_geo_transform: TestDefault::test_default(),
                 },
-                GridOrEmpty::Grid(
-                    Grid2D::new([3, 2].into(), vec![12, 11, 10, 9, 8, 7], no_data_value).unwrap(),
-                ),
+                GridOrEmpty::from(Grid2D::new([3, 2].into(), vec![12, 11, 10, 9, 8, 7]).unwrap()),
             ),
             RasterTile2D::new_with_tile_info(
                 TimeInterval::new_unchecked(30, 40),
@@ -1702,19 +1596,13 @@ mod tests {
                     tile_size_in_pixels: [3, 2].into(),
                     global_geo_transform: TestDefault::test_default(),
                 },
-                GridOrEmpty::Grid(
-                    Grid2D::new([3, 2].into(), vec![6, 5, 4, 3, 2, 1], no_data_value).unwrap(),
-                ),
+                GridOrEmpty::from(Grid2D::new([3, 2].into(), vec![6, 5, 4, 3, 2, 1]).unwrap()),
             ),
         ];
-        (no_data_value, raster_tiles)
+        raster_tiles
     }
 
-    fn make_raster_with_no_data() -> (
-        Option<u8>,
-        Vec<geoengine_datatypes::raster::RasterTile2D<u8>>,
-    ) {
-        let no_data_value = 42;
+    fn make_raster_with_no_data() -> Vec<geoengine_datatypes::raster::RasterTile2D<u8>> {
         let raster_tiles = vec![
             RasterTile2D::new_with_tile_info(
                 TimeInterval::new_unchecked(0, 10),
@@ -1723,7 +1611,7 @@ mod tests {
                     tile_size_in_pixels: [3, 2].into(),
                     global_geo_transform: TestDefault::test_default(),
                 },
-                GridOrEmpty::Empty(EmptyGrid2D::new([3, 2].into(), no_data_value)),
+                GridOrEmpty::from(EmptyGrid2D::new([3, 2].into())),
             ),
             RasterTile2D::new_with_tile_info(
                 TimeInterval::new_unchecked(0, 10),
@@ -1732,9 +1620,13 @@ mod tests {
                     tile_size_in_pixels: [3, 2].into(),
                     global_geo_transform: TestDefault::test_default(),
                 },
-                GridOrEmpty::Grid(
-                    Grid2D::new([3, 2].into(), vec![1, 2, 3, 42, 5, 6], Some(no_data_value))
-                        .unwrap(),
+                GridOrEmpty::from(
+                    MaskedGrid2D::new(
+                        Grid2D::new([3, 2].into(), vec![1, 2, 3, 42, 5, 6]).unwrap(),
+                        Grid2D::new([3, 2].into(), vec![true, true, true, false, true, true])
+                            .unwrap(),
+                    )
+                    .unwrap(),
                 ),
             ),
             RasterTile2D::new_with_tile_info(
@@ -1744,11 +1636,11 @@ mod tests {
                     tile_size_in_pixels: [3, 2].into(),
                     global_geo_transform: TestDefault::test_default(),
                 },
-                GridOrEmpty::Grid(
-                    Grid2D::new(
-                        [3, 2].into(),
-                        vec![7, 8, 9, 42, 11, 12],
-                        Some(no_data_value),
+                GridOrEmpty::from(
+                    MaskedGrid2D::new(
+                        Grid2D::new([3, 2].into(), vec![7, 8, 9, 42, 11, 12]).unwrap(),
+                        Grid2D::new([3, 2].into(), vec![true, true, true, false, true, true])
+                            .unwrap(),
                     )
                     .unwrap(),
                 ),
@@ -1760,7 +1652,7 @@ mod tests {
                     tile_size_in_pixels: [3, 2].into(),
                     global_geo_transform: TestDefault::test_default(),
                 },
-                GridOrEmpty::Empty(EmptyGrid2D::new([3, 2].into(), no_data_value)),
+                GridOrEmpty::from(EmptyGrid2D::new([3, 2].into())),
             ),
             RasterTile2D::new_with_tile_info(
                 TimeInterval::new_unchecked(20, 30),
@@ -1769,11 +1661,11 @@ mod tests {
                     tile_size_in_pixels: [3, 2].into(),
                     global_geo_transform: TestDefault::test_default(),
                 },
-                GridOrEmpty::Grid(
-                    Grid2D::new(
-                        [3, 2].into(),
-                        vec![13, 42, 15, 16, 17, 18],
-                        Some(no_data_value),
+                GridOrEmpty::from(
+                    MaskedGrid2D::new(
+                        Grid2D::new([3, 2].into(), vec![13, 42, 15, 16, 17, 18]).unwrap(),
+                        Grid2D::new([3, 2].into(), vec![true, false, true, true, true, true])
+                            .unwrap(),
                     )
                     .unwrap(),
                 ),
@@ -1785,9 +1677,9 @@ mod tests {
                     tile_size_in_pixels: [3, 2].into(),
                     global_geo_transform: TestDefault::test_default(),
                 },
-                GridOrEmpty::Empty(EmptyGrid2D::new([3, 2].into(), no_data_value)),
+                GridOrEmpty::from(EmptyGrid2D::new([3, 2].into())),
             ),
         ];
-        (Some(no_data_value), raster_tiles)
+        raster_tiles
     }
 }

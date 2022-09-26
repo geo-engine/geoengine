@@ -3,7 +3,7 @@ use std::hint::black_box;
 use std::time::{Duration, Instant};
 
 use futures::TryStreamExt;
-use geoengine_datatypes::dataset::DatasetId;
+use geoengine_datatypes::dataset::{DataId, DatasetId};
 use geoengine_datatypes::primitives::{
     Measurement, QueryRectangle, RasterQueryRectangle, SpatialPartitioned,
 };
@@ -12,7 +12,6 @@ use geoengine_datatypes::spatial_reference::SpatialReference;
 
 use geoengine_datatypes::util::Identifier;
 use geoengine_datatypes::{
-    dataset::InternalDatasetId,
     primitives::{SpatialPartition2D, SpatialResolution, TimeInterval},
     raster::{GridSize, RasterTile2D, TilingSpecification},
 };
@@ -280,7 +279,6 @@ fn bench_mock_source_operator(bench_collector: &mut BenchmarkCollector) {
         tiling_spec: TilingSpecification,
         query_rect: RasterQueryRectangle,
     ) -> Box<dyn RasterOperator> {
-        let no_data_value = Some(42);
         let query_resolution = query_rect.spatial_resolution;
         let query_time = query_rect.time_interval;
         let tileing_strategy = tiling_spec.strategy(query_resolution.x, -1. * query_resolution.y);
@@ -292,7 +290,6 @@ fn bench_mock_source_operator(bench_collector: &mut BenchmarkCollector) {
                 let data = Grid2D::new(
                     tiling_spec.tile_size_in_pixels,
                     vec![(id % 255) as u8; tile_info.tile_size_in_pixels.number_of_elements()],
-                    no_data_value,
                 )
                 .unwrap();
                 RasterTile2D::new_with_tile_info(query_time, tile_info, data.into())
@@ -306,9 +303,9 @@ fn bench_mock_source_operator(bench_collector: &mut BenchmarkCollector) {
                     data_type: RasterDataType::U8,
                     spatial_reference: SpatialReference::epsg_4326().into(),
                     measurement: Measurement::Unitless,
-                    no_data_value: no_data_value.map(|v| v as f64),
                     time: None,
                     bbox: None,
+                    resolution: None,
                 },
             },
         }
@@ -350,7 +347,6 @@ fn bench_mock_source_operator_with_expression(bench_collector: &mut BenchmarkCol
         tiling_spec: TilingSpecification,
         query_rect: RasterQueryRectangle,
     ) -> Box<dyn RasterOperator> {
-        let no_data_value = Some(42);
         let query_resolution = query_rect.spatial_resolution;
         let query_time = query_rect.time_interval;
         let tileing_strategy = tiling_spec.strategy(query_resolution.x, -1. * query_resolution.y);
@@ -362,7 +358,6 @@ fn bench_mock_source_operator_with_expression(bench_collector: &mut BenchmarkCol
                 let data = Grid2D::new(
                     tiling_spec.tile_size_in_pixels,
                     vec![(id % 255) as u8; tile_info.tile_size_in_pixels.number_of_elements()],
-                    no_data_value,
                 )
                 .unwrap();
                 RasterTile2D::new_with_tile_info(query_time, tile_info, data.into())
@@ -376,9 +371,9 @@ fn bench_mock_source_operator_with_expression(bench_collector: &mut BenchmarkCol
                     data_type: RasterDataType::U8,
                     spatial_reference: SpatialReference::epsg_4326().into(),
                     measurement: Measurement::Unitless,
-                    no_data_value: no_data_value.map(|v| v as f64),
                     time: None,
                     bbox: None,
+                    resolution: None,
                 },
             },
         };
@@ -387,7 +382,6 @@ fn bench_mock_source_operator_with_expression(bench_collector: &mut BenchmarkCol
             params: ExpressionParams {
                 expression: "A+B".to_string(),
                 output_type: RasterDataType::U8,
-                output_no_data_value: 0., //  cast no_data_valuee to f64
                 output_measurement: Some(Measurement::Unitless),
                 map_no_data: false,
             },
@@ -434,7 +428,6 @@ fn bench_mock_source_operator_with_identity_reprojection(bench_collector: &mut B
         tiling_spec: TilingSpecification,
         query_rect: RasterQueryRectangle,
     ) -> Box<dyn RasterOperator> {
-        let no_data_value = Some(42);
         let query_resolution = query_rect.spatial_resolution;
         let query_time = query_rect.time_interval;
         let tileing_strategy = tiling_spec.strategy(query_resolution.x, -1. * query_resolution.y);
@@ -445,7 +438,6 @@ fn bench_mock_source_operator_with_identity_reprojection(bench_collector: &mut B
                 let data = Grid2D::new(
                     tiling_spec.tile_size_in_pixels,
                     vec![(id % 255) as u8; tile_info.tile_size_in_pixels.number_of_elements()],
-                    no_data_value,
                 )
                 .unwrap();
                 RasterTile2D::new_with_tile_info(query_time, tile_info, data.into())
@@ -459,9 +451,9 @@ fn bench_mock_source_operator_with_identity_reprojection(bench_collector: &mut B
                     data_type: RasterDataType::U8,
                     spatial_reference: SpatialReference::epsg_4326().into(),
                     measurement: Measurement::Unitless,
-                    no_data_value: no_data_value.map(|v| v as f64),
                     time: None,
                     bbox: None,
+                    resolution: None,
                 },
             },
         };
@@ -510,7 +502,6 @@ fn bench_mock_source_operator_with_4326_to_3857_reprojection(
         tiling_spec: TilingSpecification,
         query_rect: RasterQueryRectangle,
     ) -> Box<dyn RasterOperator> {
-        let no_data_value = Some(42);
         let query_resolution = query_rect.spatial_resolution;
         let query_time = query_rect.time_interval;
         let tileing_strategy = tiling_spec.strategy(query_resolution.x, -1. * query_resolution.y);
@@ -521,7 +512,6 @@ fn bench_mock_source_operator_with_4326_to_3857_reprojection(
                 let data = Grid2D::new(
                     tiling_spec.tile_size_in_pixels,
                     vec![(id % 255) as u8; tile_info.tile_size_in_pixels.number_of_elements()],
-                    no_data_value,
                 )
                 .unwrap();
                 RasterTile2D::new_with_tile_info(query_time, tile_info, data.into())
@@ -534,9 +524,9 @@ fn bench_mock_source_operator_with_4326_to_3857_reprojection(
                     data_type: RasterDataType::U8,
                     spatial_reference: SpatialReference::epsg_4326().into(),
                     measurement: Measurement::Unitless,
-                    no_data_value: no_data_value.map(|v| v as f64),
                     time: None,
                     bbox: None,
+                    resolution: None,
                 },
             },
         };
@@ -602,13 +592,11 @@ fn bench_gdal_source_operator_tile_size(bench_collector: &mut BenchmarkCollector
         // TilingSpecification::new((0., 0.).into(), [9000, 9000].into()),
     ];
 
-    let id: DatasetId = InternalDatasetId::new().into();
+    let id: DataId = DatasetId::new().into();
     let meta_data = create_ndvi_meta_data();
 
     let gdal_operator = GdalSource {
-        params: GdalSourceParameters {
-            dataset: id.clone(),
-        },
+        params: GdalSourceParameters { data: id.clone() },
     }
     .boxed();
 
@@ -654,20 +642,17 @@ fn bench_gdal_source_operator_with_expression_tile_size(bench_collector: &mut Be
         // TilingSpecification::new((0., 0.).into(), [9000, 9000].into()),
     ];
 
-    let id: DatasetId = InternalDatasetId::new().into();
+    let id: DataId = DatasetId::new().into();
     let meta_data = create_ndvi_meta_data();
 
     let gdal_operator = GdalSource {
-        params: GdalSourceParameters {
-            dataset: id.clone(),
-        },
+        params: GdalSourceParameters { data: id.clone() },
     };
 
     let expression_operator = Expression {
         params: ExpressionParams {
             expression: "A+B".to_string(),
             output_type: RasterDataType::U8,
-            output_no_data_value: 0., //  cast no_data_valuee to f64
             output_measurement: Some(Measurement::Unitless),
             map_no_data: false,
         },
@@ -717,13 +702,11 @@ fn bench_gdal_source_operator_with_identity_reprojection(bench_collector: &mut B
         // TilingSpecification::new((0., 0.).into(), [9000, 9000].into()),
     ];
 
-    let id: DatasetId = InternalDatasetId::new().into();
+    let id: DataId = DatasetId::new().into();
     let meta_data = create_ndvi_meta_data();
 
     let gdal_operator = GdalSource {
-        params: GdalSourceParameters {
-            dataset: id.clone(),
-        },
+        params: GdalSourceParameters { data: id.clone() },
     };
 
     let projection_operator = Reprojection {
@@ -781,13 +764,11 @@ fn bench_gdal_source_operator_with_4326_to_3857_reprojection(
         // TilingSpecification::new((0., 0.).into(), [9000, 9000].into()),
     ];
 
-    let id: DatasetId = InternalDatasetId::new().into();
+    let id: DataId = DatasetId::new().into();
     let meta_data = create_ndvi_meta_data();
 
     let gdal_operator = GdalSource {
-        params: GdalSourceParameters {
-            dataset: id.clone(),
-        },
+        params: GdalSourceParameters { data: id.clone() },
     };
 
     let projection_operator = Reprojection {

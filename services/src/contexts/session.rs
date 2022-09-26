@@ -1,6 +1,7 @@
 use crate::contexts::{Context, InMemoryContext};
 use crate::error::{self, Error};
 use crate::handlers::get_token;
+use crate::identifier;
 use crate::projects::ProjectId;
 use crate::projects::STRectangle;
 use crate::util::config;
@@ -8,10 +9,10 @@ use actix_http::Payload;
 use actix_web::{web, FromRequest, HttpRequest};
 use futures::future::{err, LocalBoxFuture};
 use futures_util::FutureExt;
-use geoengine_datatypes::identifier;
 use geoengine_datatypes::primitives::DateTime;
 use geoengine_datatypes::util::Identifier;
 use serde::{Deserialize, Serialize};
+use utoipa::ToSchema;
 
 identifier!(SessionId);
 
@@ -27,7 +28,7 @@ pub trait MockableSession: Session {
     fn mock() -> Self;
 }
 
-#[derive(Clone, Debug, Deserialize, Serialize, PartialEq)]
+#[derive(Clone, Debug, Deserialize, Serialize, PartialEq, ToSchema)]
 pub struct SimpleSession {
     id: SessionId,
     pub project: Option<ProjectId>,
@@ -171,5 +172,49 @@ impl From<AdminSession> for SimpleSession {
             project: admin_session.project(),
             view: admin_session.view().cloned(),
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    use geoengine_datatypes::{primitives::TimeInstance, spatial_reference::SpatialReference};
+    use std::str::FromStr;
+
+    #[test]
+    fn test_session_serialization() {
+        let session = SimpleSession {
+            id: SessionId::from_str("d1322969-5ada-4a2c-bacf-a3045383ba41").unwrap(),
+            project: Some(ProjectId::from_str("c26e05b2-6709-4d96-ad00-9361ee68a25c").unwrap()),
+            view: Some(
+                STRectangle::new(
+                    SpatialReference::epsg_4326(),
+                    0.,
+                    1.,
+                    2.,
+                    3.,
+                    TimeInstance::from(DateTime::from_str("2020-01-01T00:00:00Z").unwrap()),
+                    TimeInstance::from(DateTime::from_str("2021-01-01T00:00:00Z").unwrap()),
+                )
+                .unwrap(),
+            ),
+        };
+
+        assert_eq!(
+            serde_json::to_value(&session).unwrap(),
+            serde_json::json!({
+                "id": "d1322969-5ada-4a2c-bacf-a3045383ba41", // redundant, but id is not stable
+                "project": "c26e05b2-6709-4d96-ad00-9361ee68a25c",
+                "view": {
+                    "spatialReference": "EPSG:4326",
+                    "boundingBox": {
+                        "lowerLeftCoordinate": {"x": 0.0, "y": 1.0 },
+                        "upperRightCoordinate": {"x": 2.0, "y": 3.0}
+                    },
+                    "timeInterval": {"start": 1_577_836_800_000_i64, "end": 1_609_459_200_000_i64}
+                }
+            })
+        );
     }
 }

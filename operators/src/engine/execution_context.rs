@@ -7,7 +7,7 @@ use crate::mock::MockDatasetDataSourceLoadingInfo;
 use crate::source::{GdalLoadingInfo, OgrSourceDataset};
 use crate::util::{create_rayon_thread_pool, Result};
 use async_trait::async_trait;
-use geoengine_datatypes::dataset::DatasetId;
+use geoengine_datatypes::dataset::DataId;
 use geoengine_datatypes::primitives::{RasterQueryRectangle, VectorQueryRectangle};
 use geoengine_datatypes::raster::TilingSpecification;
 use geoengine_datatypes::util::test::TestDefault;
@@ -35,7 +35,7 @@ pub trait MetaDataProvider<L, R, Q>
 where
     R: ResultDescriptor,
 {
-    async fn meta_data(&self, dataset: &DatasetId) -> Result<Box<dyn MetaData<L, R, Q>>>;
+    async fn meta_data(&self, id: &DataId) -> Result<Box<dyn MetaData<L, R, Q>>>;
 }
 
 #[async_trait]
@@ -60,7 +60,7 @@ where
 
 pub struct MockExecutionContext {
     pub thread_pool: Arc<ThreadPool>,
-    pub meta_data: HashMap<DatasetId, Box<dyn Any + Send + Sync>>,
+    pub meta_data: HashMap<DataId, Box<dyn Any + Send + Sync>>,
     pub tiling_specification: TilingSpecification,
 }
 
@@ -94,17 +94,14 @@ impl MockExecutionContext {
         }
     }
 
-    pub fn add_meta_data<L, R, Q>(
-        &mut self,
-        dataset: DatasetId,
-        meta_data: Box<dyn MetaData<L, R, Q>>,
-    ) where
+    pub fn add_meta_data<L, R, Q>(&mut self, data: DataId, meta_data: Box<dyn MetaData<L, R, Q>>)
+    where
         L: Send + Sync + 'static,
         R: Send + Sync + 'static + ResultDescriptor,
         Q: Send + Sync + 'static,
     {
         self.meta_data
-            .insert(dataset, Box::new(meta_data) as Box<dyn Any + Send + Sync>);
+            .insert(data, Box::new(meta_data) as Box<dyn Any + Send + Sync>);
     }
 
     pub fn mock_query_context(&self, chunk_byte_size: ChunkByteSize) -> MockQueryContext {
@@ -132,19 +129,19 @@ where
     R: 'static + ResultDescriptor,
     Q: 'static,
 {
-    async fn meta_data(&self, dataset: &DatasetId) -> Result<Box<dyn MetaData<L, R, Q>>> {
+    async fn meta_data(&self, id: &DataId) -> Result<Box<dyn MetaData<L, R, Q>>> {
         let meta_data = self
             .meta_data
-            .get(dataset)
-            .ok_or(Error::UnknownDatasetId)?
+            .get(id)
+            .ok_or(Error::UnknownDataId)?
             .downcast_ref::<Box<dyn MetaData<L, R, Q>>>()
-            .ok_or(Error::DatasetLoadingInfoProviderMismatch)?;
+            .ok_or(Error::InvalidMetaDataType)?;
 
         Ok(meta_data.clone())
     }
 }
 
-#[derive(PartialEq, Debug, Clone, Serialize, Deserialize)]
+#[derive(PartialEq, Eq, Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct StaticMetaData<L, R, Q>
 where

@@ -30,7 +30,6 @@ fn expression_on_sources(
         params: ExpressionParams {
             expression: "(A - B) / (A + B)".to_string(),
             output_type: RasterDataType::F64,
-            output_no_data_value: 0.,
             output_measurement: Some(Measurement::Unitless),
             map_no_data: false,
         },
@@ -43,7 +42,7 @@ fn ndvi_source(execution_context: &mut MockExecutionContext) -> Box<dyn RasterOp
     let ndvi_id = add_ndvi_dataset(execution_context);
 
     let gdal_operator = GdalSource {
-        params: GdalSourceParameters { dataset: ndvi_id },
+        params: GdalSourceParameters { data: ndvi_id },
     };
 
     gdal_operator.boxed()

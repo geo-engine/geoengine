@@ -12,6 +12,7 @@ use geoengine_operators::util::raster_stream_to_geotiff::GdalCompressionNumThrea
 use lazy_static::lazy_static;
 use serde::Deserialize;
 use snafu::ResultExt;
+use url::Url;
 
 lazy_static! {
     static ref SETTINGS: RwLock<Config> = RwLock::new({
@@ -119,6 +120,15 @@ pub struct Web {
     pub external_address: Option<url::Url>,
     pub backend: Backend,
     pub version_api: bool,
+}
+
+impl Web {
+    pub fn external_address(&self) -> Result<Url> {
+        Ok(self
+            .external_address
+            .clone()
+            .unwrap_or(Url::parse(&format!("http://{}/", self.bind_address))?))
+    }
 }
 
 impl ConfigElement for Web {
@@ -329,6 +339,8 @@ impl ConfigElement for DataProvider {
 #[derive(Debug, Deserialize)]
 pub struct Gdal {
     pub compression_num_threads: GdalCompressionNumThreads,
+    pub compression_z_level: Option<u8>,
+    pub compression_algorithm: Option<Box<str>>,
 }
 
 impl ConfigElement for Gdal {
@@ -344,18 +356,6 @@ pub struct Session {
 
 impl ConfigElement for Session {
     const KEY: &'static str = "session";
-}
-
-#[cfg(feature = "ebv")]
-#[derive(Debug, Deserialize)]
-pub struct Ebv {
-    #[serde(deserialize_with = "deserialize_base_url")]
-    pub api_base_url: url::Url,
-}
-
-#[cfg(feature = "ebv")]
-impl ConfigElement for Ebv {
-    const KEY: &'static str = "ebv";
 }
 
 #[cfg(feature = "nfdi")]

@@ -7,7 +7,7 @@ use csv::{Position, Reader, StringRecord};
 use futures::stream::BoxStream;
 use futures::task::{Context, Poll};
 use futures::{Stream, StreamExt};
-use geoengine_datatypes::dataset::DatasetId;
+use geoengine_datatypes::dataset::DataId;
 use geoengine_datatypes::primitives::VectorQueryRectangle;
 use serde::{Deserialize, Serialize};
 use snafu::{ensure, OptionExt, ResultExt};
@@ -22,7 +22,7 @@ use geoengine_datatypes::{
 
 use crate::engine::QueryProcessor;
 use crate::engine::{
-    InitializedVectorOperator, OperatorDatasets, QueryContext, SourceOperator,
+    InitializedVectorOperator, OperatorData, QueryContext, SourceOperator,
     TypedVectorQueryProcessor, VectorOperator, VectorQueryProcessor, VectorResultDescriptor,
 };
 use crate::error;
@@ -145,8 +145,8 @@ pub struct CsvSourceStream {
 
 pub type CsvSource = SourceOperator<CsvSourceParameters>;
 
-impl OperatorDatasets for CsvSourceParameters {
-    fn datasets_collect(&self, _datasets: &mut Vec<DatasetId>) {}
+impl OperatorData for CsvSourceParameters {
+    fn data_ids_collect(&self, _data_ids: &mut Vec<DataId>) {}
 }
 
 #[typetag::serde]
@@ -348,8 +348,8 @@ impl Stream for CsvSourceStream {
 
                     // TODO: filter time
                     if bbox.contains_coordinate(&parsed_row.coordinate) {
-                        builder.push_geometry(parsed_row.coordinate.into())?;
-                        builder.push_time_interval(parsed_row.time_interval)?;
+                        builder.push_geometry(parsed_row.coordinate.into());
+                        builder.push_time_interval(parsed_row.time_interval);
                         builder.finish_row();
 
                         number_of_entries += 1;
@@ -630,7 +630,7 @@ x;y
 
         let operator = CsvSource { params }.boxed();
 
-        let operator_json = serde_json::to_string(&operator).unwrap();
+        let operator_json = serde_json::to_value(&operator).unwrap();
 
         assert_eq!(
             operator_json,
@@ -647,9 +647,8 @@ x;y
                     "time": "None"
                 }
             })
-            .to_string()
         );
 
-        let _operator: Box<dyn VectorOperator> = serde_json::from_str(&operator_json).unwrap();
+        let _operator: Box<dyn VectorOperator> = serde_json::from_value(operator_json).unwrap();
     }
 }

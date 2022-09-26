@@ -1,5 +1,5 @@
 use crate::util::statistics::StatisticsError;
-use geoengine_datatypes::dataset::DatasetId;
+use geoengine_datatypes::dataset::DataId;
 use geoengine_datatypes::error::ErrorSource;
 use geoengine_datatypes::primitives::FeatureDataType;
 use snafu::prelude::*;
@@ -165,15 +165,15 @@ pub enum Error {
         source: arrow::error::ArrowError,
     },
 
-    NoDatasetWithGivenId {
-        id: DatasetId,
+    NoDataWithGivenId {
+        id: DataId,
     },
 
     RasterRootPathNotConfigured, // TODO: remove when GdalSource uses LoadingInfo
 
-    InvalidDatasetId,
-    DatasetLoadingInfoProviderMismatch,
-    UnknownDatasetId,
+    InvalidDataId,
+    InvalidMetaDataType,
+    UnknownDataId,
 
     // TODO: this error should not be propagated to user
     #[snafu(display("Could not open gdal dataset for file path {:?}", file_path))]
@@ -296,6 +296,8 @@ pub enum Error {
     TimeShift {
         source: crate::processing::TimeShiftError,
     },
+
+    AlphaBandAsMaskNotAllowed,
 }
 
 impl From<crate::adapters::SparseTilesFillAdapterError> for Error {

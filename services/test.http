@@ -2,7 +2,7 @@ POST http://localhost:3030/user
 Content-Type: application/json
 
 {
-  "email": "foo@bar.de",
+  "email": "foo@example.com",
   "password": "secret123",
   "realName": "Foo Bar"
 }
@@ -13,12 +13,13 @@ POST http://localhost:3030/login
 Content-Type: application/json
 
 {
-  "email": "foo@bar.de",
+  "email": "foo@example.com",
   "password": "secret123"
 }
 
 ###
 
+# @name anonymousSession
 POST http://localhost:3030/anonymous
 Content-Type: application/json
 
@@ -36,7 +37,7 @@ Authorization: Bearer c04e0cd9-e7a9-476c-b201-521db83da0ce
 Content-Type: application/json
 
 {
-  "email": "foo@bar.de",
+  "email": "foo@example.com",
   "password": "secret123"
 }
 
@@ -47,7 +48,7 @@ POST http://localhost:3030/login
 Content-Type: application/json
 
 {
-  "email": "foo@bar.de",
+  "email": "foo@example.com",
   "password": "wrong"
 }
 
@@ -98,10 +99,11 @@ Authorization: Bearer 6d69326e-8694-4ae5-815a-b4b1ef02a8f6
 Content-Type: application/json
 
 
-###
+### 
 
+# @name getVectorWorkflow
 POST http://localhost:3030/workflow
-Authorization: Bearer 6d69326e-8694-4ae5-815a-b4b1ef02a8f6
+Authorization: Bearer {{anonymousSession.response.body.$.id}}
 Content-Type: application/json
 
 {
@@ -126,6 +128,12 @@ Content-Type: application/json
     }
   }
 }
+
+###
+
+GET http://localhost:3030/workflow/{{getVectorWorkflow.response.body.$.id}}/allMetadata/zip
+Authorization: Bearer {{anonymousSession.response.body.$.id}}
+Content-Type: application/json
 
 ###
 
@@ -224,24 +232,30 @@ POST http://localhost:3000/task/new/upload/530a6809-34c0-457f-8cb9-52c7b89f1ad6
 
 ###
 
-POST http://localhost:3030/ebv/create_overviews
+# @name lastTask
+PUT http://localhost:3030/ebv/overviews/all
 Authorization: Bearer 8aca8875-425a-4ef1-8ee6-cdfc62dd7525
 Accept: application/json
 
 ###
 
-POST http://localhost:3030/ebv/create_overview
+# @name lastTask
+PUT http://localhost:3030/ebv/overviews/dataset_sm.nc
 Authorization: Bearer 8aca8875-425a-4ef1-8ee6-cdfc62dd7525
 Content-Type: application/json
 Accept: application/json
 
-{
-  "file": "dataset_sm.nc"
-}
+###
+
+GET http://localhost:3030/tasks/{{lastTask.response.body.$.task_id}}/status
+Authorization: Bearer 8aca8875-425a-4ef1-8ee6-cdfc62dd7525
 
 ###
 
-GET http://localhost:3030/tasks/e2df22e4-83a8-4d90-8eec-08b83cb60a74/status
-Authorization: Bearer 18fec623-6600-41af-b82b-24ccf47cb9f9
+# @name lastTask
+DELETE http://localhost:3030/ebv/overviews/dataset_sm.nc
+Authorization: Bearer 8aca8875-425a-4ef1-8ee6-cdfc62dd7525
+Content-Type: application/json
+Accept: application/json
 
 ###

@@ -6,42 +6,36 @@ use std::{
     path::PathBuf,
 };
 
-use crate::error::Result;
-use crate::{
-    layers::layer::{
-        AddLayer, AddLayerCollection, LayerCollectionDefinition, LayerCollectionId, LayerDefinition,
-    },
-    workflows::registry::WorkflowRegistry,
+use crate::layers::layer::{
+    AddLayer, AddLayerCollection, LayerCollectionDefinition, LayerDefinition,
 };
+use crate::{error::Result, layers::listing::LayerCollectionId};
 use crate::{layers::storage::LayerDb, util::user_input::UserInput};
 
 use log::{info, warn};
+use uuid::Uuid;
 
-pub async fn add_layers_from_directory<L: LayerDb, W: WorkflowRegistry>(
-    layer_db: &mut L,
-    workflow_db: &mut W,
-    file_path: PathBuf,
-) {
-    async fn add_layer_from_dir_entry<L: LayerDb, W: WorkflowRegistry>(
+pub const UNSORTED_COLLECTION_ID: Uuid = Uuid::from_u128(0xffb2_dd9e_f5ad_427c_b7f1_c9a0_c7a0_ae3f);
+
+pub async fn add_layers_from_directory<L: LayerDb>(layer_db: &mut L, file_path: PathBuf) {
+    async fn add_layer_from_dir_entry<L: LayerDb>(
         layer_db: &mut L,
-        workflow_db: &mut W,
         entry: &DirEntry,
     ) -> Result<()> {
         let def: LayerDefinition =
             serde_json::from_reader(BufReader::new(File::open(entry.path())?))?;
 
-        let workflow_id = workflow_db.register(def.workflow).await?;
-
         layer_db
             .add_layer_with_id(
-                def.id,
+                &def.id,
                 AddLayer {
                     name: def.name,
                     description: def.description,
-                    workflow: workflow_id,
+                    workflow: def.workflow,
                     symbology: def.symbology,
                 }
                 .validated()?,
+                &LayerCollectionId(UNSORTED_COLLECTION_ID.to_string()),
             )
             .await?;
 
@@ -58,7 +52,7 @@ pub async fn add_layers_from_directory<L: LayerDb, W: WorkflowRegistry>(
     for entry in dir {
         match entry {
             Ok(entry) if entry.path().extension() == Some(OsStr::new("json")) => {
-                match add_layer_from_dir_entry(layer_db, workflow_db, &entry).await {
+                match add_layer_from_dir_entry(layer_db, &entry).await {
                     Ok(_) => info!("Added layer from directory entry: {:?}", entry),
                     Err(e) => warn!(
                         "Skipped adding layer from directory entry: {:?} error: {}",
@@ -91,10 +85,15 @@ pub async fn add_layer_collections_from_directory<L: LayerDb>(db: &mut L, file_p
         }
         .validated()?;
 
-        db.add_collection_with_id(def.id, collection).await?;
+        db.add_collection_with_id(
+            &def.id,
+            collection,
+            &LayerCollectionId(UNSORTED_COLLECTION_ID.to_string()),
+        )
+        .await?;
 
         for layer in &def.layers {
-            db.add_layer_to_collection(*layer, def.id).await?;
+            db.add_layer_to_collection(layer, &def.id).await?;
         }
 
         Ok(())
@@ -132,13 +131,21 @@ pub async fn add_layer_collections_from_directory<L: LayerDb>(db: &mut L, file_p
         }
     }
 
+    let root_id = db
+        .root_collection_id()
+        .await
+        .expect("root id must be resolved");
     let mut collection_children: HashMap<LayerCollectionId, Vec<LayerCollectionId>> =
         HashMap::new();
 
     for def in collection_defs {
-        let collection = add_collection_to_db(db, &def).await;
+        let ok = if def.id == root_id {
+            Ok(())
+        } else {
+            add_collection_to_db(db, &def).await
+        };
 
-        match collection {
+        match ok {
             Ok(_) => {
                 collection_children.insert(def.id, def.collections);
             }
@@ -150,7 +157,7 @@ pub async fn add_layer_collections_from_directory<L: LayerDb>(db: &mut L, file_p
 
     for (parent, children) in collection_children {
         for child in children {
-            let op = db.add_collection_to_parent(child, parent).await;
+            let op = db.add_collection_to_parent(&child, &parent).await;
 
             if let Err(e) = op {
                 warn!("Skipped adding child collection to db: {}", e);

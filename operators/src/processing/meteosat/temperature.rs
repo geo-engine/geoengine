@@ -7,8 +7,6 @@ use crate::engine::{
 };
 use crate::util::Result;
 use async_trait::async_trait;
-use rayon::iter::ParallelIterator;
-use rayon::slice::ParallelSlice;
 use rayon::ThreadPool;
 use TypedRasterQueryProcessor::F32 as QueryProcessorOut;
 
@@ -20,8 +18,7 @@ use geoengine_datatypes::primitives::{
     SpatialPartition2D,
 };
 use geoengine_datatypes::raster::{
-    EmptyGrid, Grid2D, GridShapeAccess, GridSize, NoDataValue, Pixel, RasterDataType,
-    RasterPropertiesKey, RasterTile2D,
+    MapElementsParallel, Pixel, RasterDataType, RasterPropertiesKey, RasterTile2D,
 };
 use serde::{Deserialize, Serialize};
 
@@ -32,8 +29,6 @@ use crate::processing::meteosat::{
     new_channel_key, new_offset_key, new_satellite_key, new_slope_key,
 };
 use RasterDataType::F32 as RasterOut;
-
-const OUT_NO_DATA_VALUE: PixelOut = PixelOut::NAN;
 
 /// Parameters for the `Temperature` operator.
 /// * `force_satellite` forces the use of the satellite with the given name.
@@ -103,9 +98,9 @@ impl RasterOperator for Temperature {
                 measurement: "temperature".into(),
                 unit: Some("k".into()),
             }),
-            no_data_value: Some(f64::from(OUT_NO_DATA_VALUE)),
             time: in_desc.time,
             bbox: in_desc.bbox,
+            resolution: in_desc.resolution,
         };
 
         let initialized_operator = InitializedTemperature {
@@ -216,35 +211,26 @@ where
         tile: RasterTile2D<P>,
         pool: Arc<ThreadPool>,
     ) -> Result<RasterTile2D<PixelOut>> {
-        if tile.is_empty() {
-            return Ok(RasterTile2D::new_with_properties(
-                tile.time,
-                tile.tile_position,
-                tile.global_geo_transform,
-                EmptyGrid::new(tile.grid_array.grid_shape(), OUT_NO_DATA_VALUE).into(),
-                tile.properties,
-            ));
-        }
-
         let satellite = self.satellite(&tile)?;
         let channel = self.channel(&tile, satellite)?;
         let offset = tile.properties.number_property::<f64>(&self.offset_key)?;
         let slope = tile.properties.number_property::<f64>(&self.slope_key)?;
-        let mat_tile = tile.into_materialized_tile(); // NOTE: the tile is already materialized.
 
-        let temp_grid = crate::util::spawn_blocking(move || {
+        let temp_tile = crate::util::spawn_blocking_with_thread_pool(pool.clone(), move || {
             let lut = create_lookup_table(channel, offset, slope, &pool);
-            process_tile(&mat_tile.grid_array, &lut, &pool)
-        })
-        .await??;
 
-        Ok(RasterTile2D::new_with_properties(
-            mat_tile.time,
-            mat_tile.tile_position,
-            mat_tile.global_geo_transform,
-            temp_grid.into(),
-            mat_tile.properties,
-        ))
+            let map_fn = move |pixel_option: Option<P>| {
+                pixel_option.and_then(|p| {
+                    let lut_idx: u64 = p.as_();
+                    lut.get(lut_idx as usize).copied()
+                })
+            };
+
+            tile.map_elements_parallel(map_fn)
+        })
+        .await?;
+
+        Ok(temp_tile)
     }
 }
 
@@ -257,35 +243,6 @@ fn create_lookup_table(channel: &Channel, offset: f64, slope: f64, _pool: &Threa
             channel.calculate_temperature_from_radiance(radiance) as f32
         })
         .collect::<Vec<f32>>()
-}
-
-fn process_tile<P: Pixel>(
-    grid: &Grid2D<P>,
-    lut: &[f32],
-    pool: &ThreadPool,
-) -> Result<Grid2D<PixelOut>> {
-    // Create result raster
-    pool.install(|| {
-        let out = grid
-            .data
-            .par_chunks(grid.axis_size_x())
-            .map(|row| {
-                row.iter().map(|p| {
-                    if grid.is_no_data(*p) {
-                        Some(OUT_NO_DATA_VALUE)
-                    } else {
-                        let lut_idx: u64 = p.as_();
-                        lut.get(lut_idx as usize).copied()
-                    }
-                })
-            })
-            .flatten_iter()
-            .collect::<Option<Vec<PixelOut>>>()
-            .ok_or(Error::UnsupportedRasterValue)?;
-
-        let res = Grid2D::new(grid.grid_shape(), out, Some(OUT_NO_DATA_VALUE))?;
-        Ok(res)
-    })
 }
 
 #[async_trait]
@@ -311,14 +268,12 @@ where
 #[cfg(test)]
 mod tests {
     use crate::engine::{MockExecutionContext, RasterOperator, SingleRasterSource};
-    use crate::processing::meteosat::temperature::{
-        Temperature, TemperatureParams, OUT_NO_DATA_VALUE,
-    };
+    use crate::processing::meteosat::temperature::{Temperature, TemperatureParams};
     use crate::processing::meteosat::test_util;
     use geoengine_datatypes::primitives::{
         ClassificationMeasurement, ContinuousMeasurement, Measurement,
     };
-    use geoengine_datatypes::raster::{EmptyGrid2D, Grid2D, TilingSpecification};
+    use geoengine_datatypes::raster::{EmptyGrid2D, Grid2D, MaskedGrid2D, TilingSpecification};
     use std::collections::HashMap;
 
     // #[tokio::test]
@@ -350,7 +305,11 @@ mod tests {
         let res = test_util::process(
             || {
                 let props = test_util::create_properties(Some(4), Some(1), Some(0.0), Some(1.0));
-                let src = test_util::create_mock_source::<u8>(props, Some(vec![]), None);
+                let src = test_util::create_mock_source::<u8>(
+                    props,
+                    Some(EmptyGrid2D::new([3, 2].into()).into()),
+                    None,
+                );
 
                 RasterOperator::boxed(Temperature {
                     params: TemperatureParams::default(),
@@ -365,9 +324,9 @@ mod tests {
         .await
         .unwrap();
 
-        assert!(geoengine_datatypes::util::test::eq_with_no_data(
+        assert!(geoengine_datatypes::util::test::grid_or_empty_grid_eq(
             &res.grid_array,
-            &EmptyGrid2D::new([3, 2].into(), OUT_NO_DATA_VALUE,).into()
+            &EmptyGrid2D::new([3, 2].into()).into()
         ));
     }
 
@@ -394,23 +353,21 @@ mod tests {
         .await
         .unwrap();
 
-        assert!(geoengine_datatypes::util::test::eq_with_no_data(
+        assert!(geoengine_datatypes::util::test::grid_or_empty_grid_eq(
             &res.grid_array,
-            &Grid2D::new(
-                [3, 2].into(),
-                vec![
-                    300.341_43,
-                    318.617_65,
-                    330.365_14,
-                    339.233_64,
-                    346.443_94,
-                    OUT_NO_DATA_VALUE,
-                ],
-                Some(OUT_NO_DATA_VALUE),
+            &MaskedGrid2D::new(
+                Grid2D::new(
+                    [3, 2].into(),
+                    vec![300.341_43, 318.617_65, 330.365_14, 339.233_64, 346.443_94, 0.,],
+                )
+                .unwrap(),
+                Grid2D::new([3, 2].into(), vec![true, true, true, true, true, false,],).unwrap(),
             )
             .unwrap()
             .into()
         ));
+
+        // TODO: add assert to check mask
     }
 
     #[tokio::test]
@@ -438,19 +395,15 @@ mod tests {
         .await
         .unwrap();
 
-        assert!(geoengine_datatypes::util::test::eq_with_no_data(
+        assert!(geoengine_datatypes::util::test::grid_or_empty_grid_eq(
             &res.grid_array,
-            &Grid2D::new(
-                [3, 2].into(),
-                vec![
-                    300.9428,
-                    319.250_15,
-                    331.019_04,
-                    339.9044,
-                    347.128_78,
-                    OUT_NO_DATA_VALUE
-                ],
-                Some(OUT_NO_DATA_VALUE),
+            &MaskedGrid2D::new(
+                Grid2D::new(
+                    [3, 2].into(),
+                    vec![300.9428, 319.250_15, 331.019_04, 339.9044, 347.128_78, 0.],
+                )
+                .unwrap(),
+                Grid2D::new([3, 2].into(), vec![true, true, true, true, true, false,],).unwrap(),
             )
             .unwrap()
             .into()
@@ -458,7 +411,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_fail_illegal_input() {
+    async fn test_ok_illegal_input_to_masked() {
         let tiling_specification = TilingSpecification::new([0.0, 0.0].into(), [3, 2].into());
         let ctx = MockExecutionContext::new_with_tiling_spec(tiling_specification);
 
@@ -467,7 +420,15 @@ mod tests {
                 let props = test_util::create_properties(Some(4), Some(1), Some(0.0), Some(1.0));
                 let src = test_util::create_mock_source::<u16>(
                     props,
-                    Some(vec![1, 2, 3, 4, 1024, 0]),
+                    Some(
+                        MaskedGrid2D::new(
+                            Grid2D::new([3, 2].into(), vec![1, 2, 3, 4, 1024, 0]).unwrap(),
+                            Grid2D::new([3, 2].into(), vec![true, true, true, true, true, false])
+                                .unwrap(),
+                        )
+                        .unwrap()
+                        .into(),
+                    ),
                     None,
                 );
 
@@ -482,8 +443,21 @@ mod tests {
             &ctx,
         )
         .await;
-
-        assert!(res.is_err());
+        assert!(res.is_ok());
+        let res = res.unwrap();
+        assert!(geoengine_datatypes::util::test::grid_or_empty_grid_eq(
+            &res.grid_array,
+            &MaskedGrid2D::new(
+                Grid2D::new(
+                    [3, 2].into(),
+                    vec![300.341_43, 318.617_65, 330.365_14, 339.233_64, 0., 0.],
+                )
+                .unwrap(),
+                Grid2D::new([3, 2].into(), vec![true, true, true, true, false, false,],).unwrap(),
+            )
+            .unwrap()
+            .into()
+        ));
     }
 
     #[tokio::test]

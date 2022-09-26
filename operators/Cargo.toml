@@ -13,16 +13,16 @@ edition = "2021"
 pro = ["geoengine-datatypes/pro"]
 
 [dependencies]
-arrow = { version = "16.0", features = ["simd"] }
+arrow = { version = "22.0", features = ["simd"] }
 async-trait = "0.1"
 chrono = "0.4"
 crossbeam = "0.8"
 csv = "1.1"
 float-cmp = "0.9"
 futures = "0.3"
-gdal = "0.12"
-gdal-sys = "0.6"
-geo = "0.21"
+gdal =  "0.13"
+gdal-sys = "0.7"
+geo = "0.22"
 geoengine-datatypes = { path = "../datatypes" }
 itertools = "0.10"
 lazy_static = "1.4"
@@ -46,7 +46,7 @@ snafu = "0.7"
 tempfile = "3.1"
 tokio = { version = "1.15", features = ["macros", "signal", "sync", "rt-multi-thread", "time"] }
 tracing = "0.1"
-typetag = "0.1"
+typetag = "0.2"
 uuid = { version = "1.1", features = ["serde", "v4", "v5"] }
 
 [dev-dependencies]

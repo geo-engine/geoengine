@@ -1,26 +1,31 @@
-use std::path::Path;
-
+use crate::api::model::datatypes::{DataId, DataProviderId, ExternalDataId, LayerId};
 use crate::datasets::listing::ProvenanceOutput;
 use crate::error::Error;
+use crate::error::Result;
+use crate::layers::external::{DataProvider, DataProviderDefinition};
+use crate::layers::layer::LayerCollection;
+use crate::layers::layer::ProviderLayerCollectionId;
+use crate::layers::layer::{
+    CollectionItem, Layer, LayerCollectionListOptions, LayerListing, ProviderLayerId,
+};
+use crate::layers::listing::{LayerCollectionId, LayerCollectionProvider};
 use crate::util::parsing::{deserialize_base_url, string_or_string_array};
 use crate::util::retry::retry;
-use crate::{datasets::listing::DatasetListOptions, error::Result};
-use crate::{
-    datasets::{
-        listing::{DatasetListing, ExternalDatasetProvider},
-        storage::ExternalDatasetProviderDefinition,
-    },
-    error,
-    util::user_input::Validated,
-};
+use crate::workflows::workflow::Workflow;
+use crate::{error, util::user_input::Validated};
 use async_trait::async_trait;
 use futures::future::join_all;
 use gdal::DatasetOptions;
 use gdal::Metadata;
-use geoengine_datatypes::dataset::{DatasetId, DatasetProviderId, ExternalDatasetId};
+use std::collections::HashMap;
+use std::path::Path;
+
 use geoengine_datatypes::primitives::{RasterQueryRectangle, VectorQueryRectangle};
-use geoengine_operators::engine::TypedResultDescriptor;
+use geoengine_operators::engine::RasterOperator;
+use geoengine_operators::engine::TypedOperator;
 use geoengine_operators::source::GdalMetaDataStatic;
+use geoengine_operators::source::GdalSource;
+use geoengine_operators::source::GdalSourceParameters;
 use geoengine_operators::util::gdal::{
     gdal_open_dataset_ex, gdal_parameters_from_dataset, raster_descriptor_from_dataset,
 };
@@ -34,13 +39,14 @@ use quick_xml::events::Event;
 use quick_xml::Reader;
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
+use snafu::ensure;
 use snafu::ResultExt;
 use url::Url;
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Nature40DataProviderDefinition {
-    id: DatasetProviderId,
+    id: DataProviderId,
     name: String,
     #[serde(deserialize_with = "deserialize_base_url")]
     base_url: Url,
@@ -71,8 +77,8 @@ impl Default for RequestRetries {
 
 #[typetag::serde]
 #[async_trait]
-impl ExternalDatasetProviderDefinition for Nature40DataProviderDefinition {
-    async fn initialize(self: Box<Self>) -> crate::error::Result<Box<dyn ExternalDatasetProvider>> {
+impl DataProviderDefinition for Nature40DataProviderDefinition {
+    async fn initialize(self: Box<Self>) -> crate::error::Result<Box<dyn DataProvider>> {
         Ok(Box::new(Nature40DataProvider {
             id: self.id,
             base_url: self.base_url,
@@ -82,22 +88,22 @@ impl ExternalDatasetProviderDefinition for Nature40DataProviderDefinition {
         }))
     }
 
-    fn type_name(&self) -> String {
-        "Nature4.0".to_owned()
+    fn type_name(&self) -> &'static str {
+        "Nature4.0"
     }
 
     fn name(&self) -> String {
         self.name.clone()
     }
 
-    fn id(&self) -> DatasetProviderId {
+    fn id(&self) -> DataProviderId {
         self.id
     }
 }
 
 #[derive(Debug)]
 pub struct Nature40DataProvider {
-    id: DatasetProviderId,
+    id: DataProviderId,
     base_url: Url,
     user: String,
     password: String,
@@ -109,6 +115,7 @@ struct RasterDb {
     name: String,
     title: String,
     #[serde(deserialize_with = "string_or_string_array", default)]
+    #[allow(dead_code)]
     tags: Vec<String>,
 }
 
@@ -135,12 +142,33 @@ struct RasterDbs {
 }
 
 #[async_trait]
-impl ExternalDatasetProvider for Nature40DataProvider {
-    async fn list(&self, _options: Validated<DatasetListOptions>) -> Result<Vec<DatasetListing>> {
+impl DataProvider for Nature40DataProvider {
+    async fn provenance(&self, id: &DataId) -> Result<ProvenanceOutput> {
+        Ok(ProvenanceOutput {
+            data: id.clone(),
+            provenance: None,
+        })
+    }
+}
+
+#[async_trait]
+impl LayerCollectionProvider for Nature40DataProvider {
+    async fn collection(
+        &self,
+        collection: &LayerCollectionId,
+        _options: Validated<LayerCollectionListOptions>,
+    ) -> Result<LayerCollection> {
+        ensure!(
+            *collection == self.root_collection_id().await?,
+            error::UnknownLayerCollectionId {
+                id: collection.clone()
+            }
+        );
+
         // TODO: query the other dbs as well
         let raster_dbs = self.load_raster_dbs().await?;
 
-        let mut listing = vec![];
+        let mut items = vec![];
 
         let datasets = raster_dbs
             .rasterdbs
@@ -154,56 +182,110 @@ impl ExternalDatasetProvider for Nature40DataProvider {
                 let (dataset, band_labels) = self.get_band_labels(dataset).await?;
 
                 for band_index in 1..=dataset.raster_count() {
-                    if let Ok(result_descriptor) =
-                        raster_descriptor_from_dataset(&dataset, band_index, None)
-                    {
-                        listing.push(Ok(DatasetListing {
-                            id: DatasetId::External(ExternalDatasetId {
-                                provider_id: self.id,
-                                dataset_id: format!("{}:{}", db.name.clone(), band_index),
-                            }),
-                            name: db.title.clone(),
-                            description: format!(
-                                "Band {}: {}",
-                                band_index,
-                                band_labels
-                                    .get((band_index - 1) as usize)
-                                    .unwrap_or(&"".to_owned())
-                            ),
-                            tags: db.tags.clone(),
-                            source_operator: "GdalSource".to_owned(),
-                            result_descriptor: TypedResultDescriptor::Raster(result_descriptor),
-                            symbology: None, // TODO: build symbology
-                        }));
-                    } else {
-                        info!(
-                            "Could not create restult descriptor for band {} of {}",
-                            band_index, db.name
-                        );
-                    }
+                    items.push(Ok(CollectionItem::Layer(LayerListing {
+                        id: ProviderLayerId {
+                            provider_id: self.id,
+                            layer_id: LayerId(format!("{}:{}", db.name.clone(), band_index)),
+                        },
+                        name: db.title.clone(),
+                        description: format!(
+                            "Band {}: {}",
+                            band_index,
+                            band_labels
+                                .get((band_index - 1) as usize)
+                                .unwrap_or(&"".to_owned())
+                        ),
+                    })));
                 }
             } else {
                 info!("Could not open dataset {}", db.name);
             }
         }
 
-        let mut listing: Vec<_> = listing
+        let mut items: Vec<_> = items
             .into_iter()
-            .filter_map(|d: Result<DatasetListing>| if let Ok(d) = d { Some(d) } else { None })
+            .filter_map(|d: Result<CollectionItem>| if let Ok(d) = d { Some(d) } else { None })
             .collect();
-        listing.sort_by(|a, b| a.name.cmp(&b.name));
-        Ok(listing)
-    }
+        items.sort_by(|a, b| a.name().cmp(b.name()));
 
-    async fn provenance(&self, dataset: &DatasetId) -> Result<ProvenanceOutput> {
-        Ok(ProvenanceOutput {
-            dataset: dataset.clone(),
-            provenance: None,
+        Ok(LayerCollection {
+            id: ProviderLayerCollectionId {
+                provider_id: self.id,
+                collection_id: collection.clone(),
+            },
+            name: "Nature 4.0".to_owned(),
+            description: "Nature 4.0".to_owned(),
+            items,
+            entry_label: None,
+            properties: vec![],
         })
     }
 
-    fn as_any(&self) -> &dyn std::any::Any {
-        self
+    async fn root_collection_id(&self) -> Result<LayerCollectionId> {
+        Ok(LayerCollectionId("root".to_owned()))
+    }
+
+    async fn get_layer(&self, id: &LayerId) -> Result<Layer> {
+        let split: Vec<_> = id.0.split(':').collect();
+
+        let (db_name, band_index) = match *split.as_slice() {
+            [db, band_index] => {
+                if let Ok(band_index) = band_index.parse::<usize>() {
+                    (db, band_index)
+                } else {
+                    return Err(Error::InvalidExternalDataId { provider: self.id });
+                }
+            }
+            _ => {
+                return Err(Error::InvalidExternalDataId { provider: self.id });
+            }
+        };
+
+        let dbs = self.load_raster_dbs().await?;
+
+        let db = dbs
+            .rasterdbs
+            .iter()
+            .find(|db| db.name == db_name)
+            .ok_or(Error::Nature40UnknownRasterDbname)?;
+
+        let dataset_url = db.url(&self.base_url)?;
+
+        let dataset = self.load_dataset(dataset_url).await?;
+
+        let (_dataset, band_labels) = self.get_band_labels(dataset).await?;
+
+        Ok(Layer {
+            id: ProviderLayerId {
+                provider_id: self.id,
+                layer_id: id.clone(),
+            },
+            name: db.title.clone(),
+            description: format!(
+                "Band {}: {}",
+                band_index,
+                band_labels
+                    .get((band_index - 1) as usize)
+                    .unwrap_or(&"".to_owned())
+            ),
+            workflow: Workflow {
+                operator: TypedOperator::Raster(
+                    GdalSource {
+                        params: GdalSourceParameters {
+                            data: DataId::External(ExternalDataId {
+                                provider_id: self.id,
+                                layer_id: id.clone(),
+                            })
+                            .into(),
+                        },
+                    }
+                    .boxed(),
+                ),
+            },
+            symbology: None,
+            properties: vec![],
+            metadata: HashMap::new(),
+        })
     }
 }
 
@@ -319,17 +401,19 @@ impl MetaDataProvider<GdalLoadingInfo, RasterResultDescriptor, RasterQueryRectan
 {
     async fn meta_data(
         &self,
-        dataset: &DatasetId,
+        id: &geoengine_datatypes::dataset::DataId,
     ) -> Result<
         Box<dyn MetaData<GdalLoadingInfo, RasterResultDescriptor, RasterQueryRectangle>>,
         geoengine_operators::error::Error,
     > {
-        let dataset = dataset
+        let id: DataId = id.clone().into();
+
+        let dataset = id
             .external()
             .ok_or(geoengine_operators::error::Error::LoadingInfo {
-                source: Box::new(Error::InvalidExternalDatasetId { provider: self.id }),
+                source: Box::new(Error::InvalidExternalDataId { provider: self.id }),
             })?;
-        let split: Vec<_> = dataset.dataset_id.split(':').collect();
+        let split: Vec<_> = dataset.layer_id.0.split(':').collect();
 
         let (db_name, band_index) = match *split.as_slice() {
             [db, band_index] => {
@@ -337,13 +421,13 @@ impl MetaDataProvider<GdalLoadingInfo, RasterResultDescriptor, RasterQueryRectan
                     (db, band_index)
                 } else {
                     return Err(geoengine_operators::error::Error::LoadingInfo {
-                        source: Box::new(Error::InvalidExternalDatasetId { provider: self.id }),
+                        source: Box::new(Error::InvalidExternalDataId { provider: self.id }),
                     });
                 }
             }
             _ => {
                 return Err(geoengine_operators::error::Error::LoadingInfo {
-                    source: Box::new(Error::InvalidExternalDatasetId { provider: self.id }),
+                    source: Box::new(Error::InvalidExternalDataId { provider: self.id }),
                 })
             }
         };
@@ -368,7 +452,7 @@ impl MetaDataProvider<GdalLoadingInfo, RasterResultDescriptor, RasterQueryRectan
                 None,
                 Some(self.auth().to_vec()),
             )?,
-            result_descriptor: raster_descriptor_from_dataset(&dataset, band_index as isize, None)?,
+            result_descriptor: raster_descriptor_from_dataset(&dataset, band_index as isize)?,
         }))
     }
 }
@@ -380,7 +464,7 @@ impl
 {
     async fn meta_data(
         &self,
-        _dataset: &DatasetId,
+        _id: &geoengine_datatypes::dataset::DataId,
     ) -> Result<
         Box<
             dyn MetaData<
@@ -401,7 +485,7 @@ impl MetaDataProvider<OgrSourceDataset, VectorResultDescriptor, VectorQueryRecta
 {
     async fn meta_data(
         &self,
-        _dataset: &DatasetId,
+        _id: &geoengine_datatypes::dataset::DataId,
     ) -> Result<
         Box<dyn MetaData<OgrSourceDataset, VectorResultDescriptor, VectorQueryRectangle>>,
         geoengine_operators::error::Error,
@@ -433,7 +517,7 @@ mod tests {
     };
     use serde_json::json;
 
-    use crate::{datasets::listing::OrderBy, test_data, util::user_input::UserInput};
+    use crate::{layers::layer::ProviderLayerCollectionId, test_data, util::user_input::UserInput};
 
     use super::*;
 
@@ -685,8 +769,10 @@ mod tests {
         expect_geonode_requests(&mut server);
         expect_lidar_requests(&mut server);
 
+        let provider_id = DataProviderId::from_str("2cb964d5-b9fa-4f8f-ab6f-f6c7fb47d4cd").unwrap();
+
         let provider = Box::new(Nature40DataProviderDefinition {
-            id: DatasetProviderId::from_str("2cb964d5-b9fa-4f8f-ab6f-f6c7fb47d4cd").unwrap(),
+            id: provider_id,
             name: "Nature40".to_owned(),
             base_url: Url::parse(&server.url_str("")).unwrap(),
             user: "geoengine".to_owned(),
@@ -697,11 +783,12 @@ mod tests {
         .await
         .unwrap();
 
-        let listing = provider
-            .list(
-                DatasetListOptions {
-                    filter: None,
-                    order: OrderBy::NameAsc,
+        let root_id = provider.root_collection_id().await.unwrap();
+
+        let collection = provider
+            .collection(
+                &root_id,
+                LayerCollectionListOptions {
                     offset: 0,
                     limit: 10,
                 }
@@ -712,117 +799,66 @@ mod tests {
             .unwrap();
 
         assert_eq!(
-            listing,
-            vec![
-                DatasetListing {
-                    id: DatasetId::External(ExternalDatasetId {
-                        provider_id: DatasetProviderId::from_str(
-                            "2cb964d5-b9fa-4f8f-ab6f-f6c7fb47d4cd"
-                        )
-                        .unwrap(),
-                        dataset_id: "geonode_ortho_muf_1m:1".to_owned()
-                    }),
-                    name: "MOF Luftbild".to_owned(),
-                    description: "Band 1: band1".to_owned(),
-                    tags: vec!["natur40".to_owned()],
-                    source_operator: "GdalSource".to_owned(),
-                    result_descriptor: TypedResultDescriptor::Raster(RasterResultDescriptor {
-                        data_type: RasterDataType::F32,
-                        spatial_reference: SpatialReference::new(
-                            SpatialReferenceAuthority::Epsg,
-                            3044
-                        )
-                        .into(),
-                        measurement: Measurement::Unitless,
-                        no_data_value: None,
-                        time: None,
-                        bbox: None,
-                    }),
-                    symbology: None
+            collection,
+            LayerCollection {
+                id: ProviderLayerCollectionId {
+                    provider_id,
+                    collection_id: root_id,
                 },
-                DatasetListing {
-                    id: DatasetId::External(ExternalDatasetId {
-                        provider_id: DatasetProviderId::from_str(
-                            "2cb964d5-b9fa-4f8f-ab6f-f6c7fb47d4cd"
-                        )
-                        .unwrap(),
-                        dataset_id: "geonode_ortho_muf_1m:2".to_owned()
+                name: "Nature 4.0".to_string(),
+                description: "Nature 4.0".to_string(),
+                items: vec![
+                    CollectionItem::Layer(LayerListing {
+                        id: ProviderLayerId {
+                            provider_id: DataProviderId::from_str(
+                                "2cb964d5-b9fa-4f8f-ab6f-f6c7fb47d4cd"
+                            )
+                            .unwrap(),
+                            layer_id: LayerId("geonode_ortho_muf_1m:1".to_owned())
+                        },
+                        name: "MOF Luftbild".to_owned(),
+                        description: "Band 1: band1".to_owned(),
                     }),
-                    name: "MOF Luftbild".to_owned(),
-                    description: "Band 2: band2".to_owned(),
-                    tags: vec!["natur40".to_owned()],
-                    source_operator: "GdalSource".to_owned(),
-                    result_descriptor: TypedResultDescriptor::Raster(RasterResultDescriptor {
-                        data_type: RasterDataType::F32,
-                        spatial_reference: SpatialReference::new(
-                            SpatialReferenceAuthority::Epsg,
-                            3044
-                        )
-                        .into(),
-                        measurement: Measurement::Unitless,
-                        no_data_value: None,
-                        time: None,
-                        bbox: None,
+                    CollectionItem::Layer(LayerListing {
+                        id: ProviderLayerId {
+                            provider_id: DataProviderId::from_str(
+                                "2cb964d5-b9fa-4f8f-ab6f-f6c7fb47d4cd"
+                            )
+                            .unwrap(),
+                            layer_id: LayerId("geonode_ortho_muf_1m:2".to_owned())
+                        },
+                        name: "MOF Luftbild".to_owned(),
+                        description: "Band 2: band2".to_owned(),
                     }),
-                    symbology: None
-                },
-                DatasetListing {
-                    id: DatasetId::External(ExternalDatasetId {
-                        provider_id: DatasetProviderId::from_str(
-                            "2cb964d5-b9fa-4f8f-ab6f-f6c7fb47d4cd"
-                        )
-                        .unwrap(),
-                        dataset_id: "geonode_ortho_muf_1m:3".to_owned()
+                    CollectionItem::Layer(LayerListing {
+                        id: ProviderLayerId {
+                            provider_id: DataProviderId::from_str(
+                                "2cb964d5-b9fa-4f8f-ab6f-f6c7fb47d4cd"
+                            )
+                            .unwrap(),
+                            layer_id: LayerId("geonode_ortho_muf_1m:3".to_owned())
+                        },
+                        name: "MOF Luftbild".to_owned(),
+                        description: "Band 3: band3".to_owned(),
                     }),
-                    name: "MOF Luftbild".to_owned(),
-                    description: "Band 3: band3".to_owned(),
-                    tags: vec!["natur40".to_owned()],
-                    source_operator: "GdalSource".to_owned(),
-                    result_descriptor: TypedResultDescriptor::Raster(RasterResultDescriptor {
-                        data_type: RasterDataType::F32,
-                        spatial_reference: SpatialReference::new(
-                            SpatialReferenceAuthority::Epsg,
-                            3044
-                        )
-                        .into(),
-                        measurement: Measurement::Unitless,
-                        no_data_value: None,
-                        time: None,
-                        bbox: None,
-                    }),
-                    symbology: None
-                },
-                DatasetListing {
-                    id: DatasetId::External(ExternalDatasetId {
-                        provider_id: DatasetProviderId::from_str(
-                            "2cb964d5-b9fa-4f8f-ab6f-f6c7fb47d4cd"
-                        )
-                        .unwrap(),
-                        dataset_id: "lidar_2018_wetness_1m:1".to_owned()
-                    }),
-                    name: "Topografic Wetness index".to_owned(),
-                    description: "Band 1: wetness".to_owned(),
-                    tags: vec!["natur40".to_owned()],
-                    source_operator: "GdalSource".to_owned(),
-                    result_descriptor: TypedResultDescriptor::Raster(RasterResultDescriptor {
-                        data_type: RasterDataType::F32,
-                        spatial_reference: SpatialReference::new(
-                            SpatialReferenceAuthority::Epsg,
-                            25832
-                        )
-                        .into(),
-                        measurement: Measurement::Unitless,
-                        no_data_value: None,
-                        time: None,
-                        bbox: None,
-                    }),
-                    symbology: None
-                }
-            ]
+                    CollectionItem::Layer(LayerListing {
+                        id: ProviderLayerId {
+                            provider_id: DataProviderId::from_str(
+                                "2cb964d5-b9fa-4f8f-ab6f-f6c7fb47d4cd"
+                            )
+                            .unwrap(),
+                            layer_id: LayerId("lidar_2018_wetness_1m:1".to_owned())
+                        },
+                        name: "Topografic Wetness index".to_owned(),
+                        description: "Band 1: wetness".to_owned(),
+                    })
+                ],
+                entry_label: None,
+                properties: vec![],
+            }
         );
     }
 
-    #[allow(clippy::eq_op)]
     #[tokio::test]
     async fn it_loads() {
         let mut server = Server::run();
@@ -830,7 +866,7 @@ mod tests {
         expect_lidar_requests(&mut server);
 
         let provider = Box::new(Nature40DataProviderDefinition {
-            id: DatasetProviderId::from_str("2cb964d5-b9fa-4f8f-ab6f-f6c7fb47d4cd").unwrap(),
+            id: DataProviderId::from_str("2cb964d5-b9fa-4f8f-ab6f-f6c7fb47d4cd").unwrap(),
             name: "Nature40".to_owned(),
             base_url: Url::parse(&server.url_str("")).unwrap(),
             user: "geoengine".to_owned(),
@@ -843,13 +879,16 @@ mod tests {
 
         let meta: Box<dyn MetaData<GdalLoadingInfo, RasterResultDescriptor, RasterQueryRectangle>> =
             provider
-                .meta_data(&DatasetId::External(ExternalDatasetId {
-                    provider_id: DatasetProviderId::from_str(
-                        "2cb964d5-b9fa-4f8f-ab6f-f6c7fb47d4cd",
-                    )
-                    .unwrap(),
-                    dataset_id: "lidar_2018_wetness_1m:1".to_owned(),
-                }))
+                .meta_data(
+                    &DataId::External(ExternalDataId {
+                        provider_id: DataProviderId::from_str(
+                            "2cb964d5-b9fa-4f8f-ab6f-f6c7fb47d4cd",
+                        )
+                        .unwrap(),
+                        layer_id: LayerId("lidar_2018_wetness_1m:1".to_owned()),
+                    })
+                    .into(),
+                )
                 .await
                 .unwrap();
 
@@ -860,9 +899,9 @@ mod tests {
                 spatial_reference: SpatialReference::new(SpatialReferenceAuthority::Epsg, 25832)
                     .into(),
                 measurement: Measurement::Unitless,
-                no_data_value: None,
                 time: None,
                 bbox: None,
+                resolution: Some(SpatialResolution::new_unchecked(1.0, 1.0)),
             }
         );
 
@@ -903,6 +942,7 @@ mod tests {
                         properties_mapping: None,
                         gdal_open_options: Some(vec!["UserPwd=geoengine:pwd".to_owned(), "HttpAuth=BASIC".to_owned()]),
                         gdal_config_options: None,
+                        allow_alphaband_as_mask: true,
                     })
                 }
             );

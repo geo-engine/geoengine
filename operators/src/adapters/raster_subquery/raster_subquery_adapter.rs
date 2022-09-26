@@ -18,14 +18,12 @@ use geoengine_datatypes::{
     primitives::TimeInstance,
     raster::{Blit, Pixel, RasterTile2D, TileInformation},
 };
-use geoengine_datatypes::{
-    primitives::TimeInterval,
-    raster::{NoDataValue, TilingSpecification},
-};
+use geoengine_datatypes::{primitives::TimeInterval, raster::TilingSpecification};
 
 use pin_project::pin_project;
 use rayon::ThreadPool;
 
+use std::marker::PhantomData;
 use std::sync::Arc;
 use std::task::Poll;
 
@@ -159,10 +157,7 @@ where
     }
 
     /// Wrap the `RasterSubQueryAdapter` with a filter and a `SparseTilesFillAdapter` to produce a `Stream` compatible with `RasterQueryProcessor`.
-    pub fn filter_and_fill(
-        self,
-        no_data_value: PixelType,
-    ) -> BoxStream<'a, Result<RasterTile2D<PixelType>>>
+    pub fn filter_and_fill(self) -> BoxStream<'a, Result<RasterTile2D<PixelType>>>
     where
         Self: Stream<Item = Result<Option<RasterTile2D<PixelType>>>> + 'a,
     {
@@ -178,13 +173,8 @@ where
             }
         });
 
-        let s_filled = SparseTilesFillAdapter::new(
-            s,
-            grid_bounds,
-            global_geo_transform,
-            tile_shape,
-            no_data_value,
-        );
+        let s_filled =
+            SparseTilesFillAdapter::new(s, grid_bounds, global_geo_transform, tile_shape);
         s_filled.boxed()
     }
 
@@ -503,7 +493,7 @@ impl<T: Pixel> FoldTileAccuMut for RasterTileAccu2D<T> {
 #[derive(Debug, Clone)]
 pub struct TileSubQueryIdentity<F, T> {
     fold_fn: F,
-    no_data_value: T,
+    _phantom_pixel_type: PhantomData<T>,
 }
 
 impl<'a, T, FoldM, FoldF> SubQueryTileAggregator<'a, T> for TileSubQueryIdentity<FoldM, T>
@@ -525,7 +515,7 @@ where
         query_rect: RasterQueryRectangle,
         pool: &Arc<ThreadPool>,
     ) -> Self::TileAccuFuture {
-        identity_accu(tile_info, query_rect, self.no_data_value, pool.clone()).boxed()
+        identity_accu(tile_info, query_rect, pool.clone()).boxed()
     }
 
     fn tile_query_rectangle(
@@ -549,12 +539,10 @@ where
 pub fn identity_accu<T: Pixel>(
     tile_info: TileInformation,
     query_rect: RasterQueryRectangle,
-    no_data_value: T,
     pool: Arc<ThreadPool>,
 ) -> impl Future<Output = Result<RasterTileAccu2D<T>>> {
     crate::util::spawn_blocking(move || {
-        let output_raster =
-            EmptyGrid2D::new(tile_info.tile_size_in_pixels, T::from_(no_data_value)).into();
+        let output_raster = EmptyGrid2D::new(tile_info.tile_size_in_pixels).into();
         let output_tile =
             RasterTile2D::new_with_tile_info(query_rect.time_interval, tile_info, output_raster);
         RasterTileAccu2D::new(output_tile, pool)
@@ -575,25 +563,15 @@ where
 
     accu_tile.time = t_union;
 
-    if tile.grid_array.is_empty() && accu_tile.no_data_value() == tile.no_data_value() {
+    if tile.grid_array.is_empty() && accu_tile.grid_array.is_empty() {
+        // only skip if both tiles are empty. There might be valid data in one otherwise.
         return Ok(RasterTileAccu2D::new(accu_tile, pool));
     }
 
-    let mut materialized_accu_tile = accu_tile.into_materialized_tile();
+    let mut materialized_tile = accu_tile.into_materialized_tile();
+    materialized_tile.blit(tile)?;
 
-    let blit_tile = match materialized_accu_tile.blit(tile) {
-        Ok(_) => materialized_accu_tile.into(),
-        Err(_error) => {
-            // Ignore lookup errors
-            //dbg!(
-            //    "Skipping non-overlapping area tiles in blit method. This schould not happen but the MockSource produces all tiles!!!",
-            //    error
-            //);
-            materialized_accu_tile.into()
-        }
-    };
-
-    Ok(RasterTileAccu2D::new(blit_tile, pool))
+    Ok(RasterTileAccu2D::new(materialized_tile.into(), pool))
 }
 
 #[allow(dead_code)]
@@ -626,35 +604,29 @@ mod tests {
     use crate::engine::{RasterOperator, RasterResultDescriptor};
     use crate::mock::{MockRasterSource, MockRasterSourceParams};
     use futures::StreamExt;
-    use num_traits::AsPrimitive;
 
     #[tokio::test]
     async fn identity() {
-        let no_data_value = Some(0);
         let data: Vec<RasterTile2D<u8>> = vec![
             RasterTile2D {
                 time: TimeInterval::new_unchecked(0, 5),
                 tile_position: [-1, 0].into(),
                 global_geo_transform: TestDefault::test_default(),
-                grid_array: Grid::new([2, 2].into(), vec![1, 2, 3, 4], no_data_value)
-                    .unwrap()
-                    .into(),
+                grid_array: Grid::new([2, 2].into(), vec![1, 2, 3, 4]).unwrap().into(),
                 properties: Default::default(),
             },
             RasterTile2D {
                 time: TimeInterval::new_unchecked(0, 5),
                 tile_position: [-1, 1].into(),
                 global_geo_transform: TestDefault::test_default(),
-                grid_array: Grid::new([2, 2].into(), vec![7, 8, 9, 10], no_data_value)
-                    .unwrap()
-                    .into(),
+                grid_array: Grid::new([2, 2].into(), vec![7, 8, 9, 10]).unwrap().into(),
                 properties: Default::default(),
             },
             RasterTile2D {
                 time: TimeInterval::new_unchecked(5, 10),
                 tile_position: [-1, 0].into(),
                 global_geo_transform: TestDefault::test_default(),
-                grid_array: Grid::new([2, 2].into(), vec![13, 14, 15, 16], no_data_value)
+                grid_array: Grid::new([2, 2].into(), vec![13, 14, 15, 16])
                     .unwrap()
                     .into(),
                 properties: Default::default(),
@@ -663,7 +635,7 @@ mod tests {
                 time: TimeInterval::new_unchecked(5, 10),
                 tile_position: [-1, 1].into(),
                 global_geo_transform: TestDefault::test_default(),
-                grid_array: Grid::new([2, 2].into(), vec![19, 20, 21, 22], no_data_value)
+                grid_array: Grid::new([2, 2].into(), vec![19, 20, 21, 22])
                     .unwrap()
                     .into(),
                 properties: Default::default(),
@@ -677,9 +649,9 @@ mod tests {
                     data_type: RasterDataType::U8,
                     spatial_reference: SpatialReference::epsg_4326().into(),
                     measurement: Measurement::Unitless,
-                    no_data_value: no_data_value.map(AsPrimitive::as_),
                     time: None,
                     bbox: None,
+                    resolution: None,
                 },
             },
         }
@@ -710,7 +682,7 @@ mod tests {
             &query_ctx,
             TileSubQueryIdentity {
                 fold_fn: fold_by_blit_future,
-                no_data_value: 0,
+                _phantom_pixel_type: PhantomData,
             },
         );
         let res = a
