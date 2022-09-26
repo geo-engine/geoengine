@@ -12,6 +12,7 @@ use std::cmp::min;
 use std::pin::Pin;
 use std::task::{Context, Poll};
 
+#[allow(clippy::large_enum_variant)] // TODO: investigate if we should larger `Box` variants
 #[pin_project(project = StateProjection)]
 enum State<T1, T2, F1, F2>
 where

@@ -13,6 +13,7 @@
     clippy::must_use_candidate,
     clippy::non_ascii_literal,
     clippy::option_if_let_else,
+    clippy::result_large_err, // TODO: investigate this
     clippy::similar_names,
     clippy::single_match_else,
     clippy::trait_duplication_in_bounds, // TODO: reactivate when bugs are fixed

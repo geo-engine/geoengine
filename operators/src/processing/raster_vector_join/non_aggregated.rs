@@ -828,7 +828,8 @@ mod tests {
         assert_eq!(result.len(), 1);
 
         let result = result.remove(0);
-        eprintln!("{}", result.to_geo_json());
+
+        // eprintln!("{}", result.to_geo_json());
 
         let t1 = TimeInterval::new(0, 10).unwrap();
         let t2 = TimeInterval::new(10, 20).unwrap();
@@ -988,7 +989,8 @@ mod tests {
         assert_eq!(result.len(), 1);
 
         let result = result.remove(0);
-        eprintln!("{}", result.to_geo_json());
+
+        // eprintln!("{}", result.to_geo_json());
 
         let t1 = TimeInterval::new(0, 10).unwrap();
         let t2 = TimeInterval::new(10, 20).unwrap();
