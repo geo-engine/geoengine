@@ -4,14 +4,14 @@ use crate::handlers::ErrorResponse;
 use actix_http::body::{BoxBody, EitherBody, MessageBody};
 use actix_http::uri::PathAndQuery;
 use actix_http::HttpMessage;
-use actix_web::dev::{ServiceRequest, ServiceResponse};
+use actix_web::dev::{ServiceFactory, ServiceRequest, ServiceResponse};
 use actix_web::error::{InternalError, JsonPayloadError, QueryPayloadError};
 use actix_web::{http, middleware, web, HttpResponse};
 use log::debug;
 use std::num::NonZeroUsize;
 use tracing::Span;
 use tracing_actix_web::{RequestId, RootSpanBuilder};
-use utoipa::ToSchema;
+use utoipa::{openapi::OpenApi, ToSchema};
 
 /// Custom root span for web requests that paste a request id to all logs.
 pub struct CustomRootSpanBuilder;
@@ -213,4 +213,26 @@ pub(crate) fn render_405(
     let response = response.map_body(|_, _| EitherBody::new(response_json_string.boxed()));
 
     Ok(middleware::ErrorHandlerResponse::Response(response))
+}
+
+// this is a workaround to be able to serve swagger UI and the openapi.json behind a proxy (/api)
+// TODO: remove this when utoipa allows configuring the paths to serve the openapi.json and to include it in the swagger UI separately
+pub fn serve_openapi_json<
+    T: ServiceFactory<ServiceRequest, Config = (), Error = actix_web::Error, InitError = ()>,
+>(
+    app: actix_web::App<T>,
+    api_urls: &mut Vec<(utoipa_swagger_ui::Url, OpenApi)>,
+    name: &'static str,
+    ui_url: &'static str,
+    serve_url: &str,
+    openapi: OpenApi,
+) -> actix_web::App<T> {
+    api_urls.push((utoipa_swagger_ui::Url::new(name, ui_url), openapi.clone()));
+    app.route(
+        serve_url,
+        web::get().to(move || {
+            let openapi = openapi.clone();
+            async move { web::Json(openapi) }
+        }),
+    )
 }

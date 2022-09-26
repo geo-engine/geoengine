@@ -18,6 +18,8 @@ on:
 
 jobs:
   create-container:
+    if: github.event_name != 'schedule' || github.repository_owner == 'geo-engine'
+
     strategy:
       matrix:
         cargo-features: ["pro", "nfdi", "ebv", ""]

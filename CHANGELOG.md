@@ -39,6 +39,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
   - https://github.com/geo-engine/geoengine/pull/587
 
+- Added statistics for vector data
+
+  - https://github.com/geo-engine/geoengine/pull/614
+
 ### Changed
 
 - The Interpolation operator's input resolution can now be set to `native` to take the best available resolution, if it is known.
@@ -86,3 +90,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
   - https://github.com/geo-engine/geoengine/pull/590
   - Uses the same format now as `Display` or `ToString`
+
+- Changed `Statistics` input and output format
+
+  - https://github.com/geo-engine/geoengine/pull/614
+  - The input parameters now include a field `column_names` to select vector columns/alias raster inputs
+  - The output was changed to a map from column names/raster aliases to the respective statistics
