@@ -42,7 +42,7 @@ gdal-sys = "0.7"
 geo = "0.22"
 geoengine-datatypes = { path = "../datatypes" }
 geoengine-operators = { path = "../operators" }
-geojson = {version = "0.23", features = ["geo-types"]}
+geojson = {version = "0.24", features = ["geo-types"]}
 image = "0.24"
 lazy_static = "1.4"
 log = "0.4"
