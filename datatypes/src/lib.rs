@@ -16,7 +16,6 @@
     clippy::result_large_err, // TODO: investigate this
     clippy::similar_names,
     clippy::single_match_else,
-    clippy::trait_duplication_in_bounds, // TODO: reactive when not buggy
     clippy::type_repetition_in_bounds,
     clippy::wildcard_imports
 )]
