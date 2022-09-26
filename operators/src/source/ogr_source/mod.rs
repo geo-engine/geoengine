@@ -1643,7 +1643,7 @@ mod tests {
     async fn early_error() {
         let dataset_information = OgrSourceDataset {
             file_name: "".into(),
-            layer_name: "".to_string(),
+            layer_name: String::new(),
             data_type: None,
             time: OgrSourceDatasetTimeType::None,
             default_geometry: None,
@@ -2098,7 +2098,7 @@ mod tests {
                     default_geometry: None,
                     columns: Some(OgrSourceColumnSpec {
                         format_specifics: None,
-                        x: "".to_string(),
+                        x: String::new(),
                         y: None,
                         int: vec!["scalerank".to_string()],
                         float: vec!["natlscale".to_string()],
@@ -3490,7 +3490,7 @@ mod tests {
                 format_specifics: Some(Csv {
                     header: CsvHeader::Auto,
                 }),
-                x: "".to_string(),
+                x: String::new(),
                 y: None,
                 float: vec!["b".to_string()],
                 int: vec!["a".to_string()],
@@ -3608,7 +3608,7 @@ mod tests {
                 format_specifics: Some(Csv {
                     header: CsvHeader::Auto,
                 }),
-                x: "".to_string(),
+                x: String::new(),
                 y: None,
                 float: vec!["b".to_string()],
                 int: vec!["a".to_string()],
@@ -4052,7 +4052,7 @@ mod tests {
                     default_geometry: None,
                     columns: Some(OgrSourceColumnSpec {
                         format_specifics: None,
-                        x: "".to_owned(),
+                        x: String::new(),
                         y: None,
                         int: vec![],
                         float: vec![],
@@ -4997,7 +4997,7 @@ mod tests {
                 format_specifics: Some(Csv {
                     header: CsvHeader::Yes,
                 }),
-                x: "".to_string(),
+                x: String::new(),
                 y: None,
                 float: vec!["b".to_string()],
                 int: vec!["a".to_string()],
@@ -5118,7 +5118,7 @@ mod tests {
                 format_specifics: Some(Csv {
                     header: CsvHeader::Yes,
                 }),
-                x: "".to_string(),
+                x: String::new(),
                 y: None,
                 float: vec!["b".to_string()],
                 int: vec!["a".to_string()],
@@ -5234,7 +5234,7 @@ mod tests {
                 format_specifics: Some(Csv {
                     header: CsvHeader::Yes,
                 }),
-                x: "".to_string(),
+                x: String::new(),
                 y: None,
                 float: vec!["b".to_string()],
                 int: vec!["a".to_string()],
@@ -5348,7 +5348,7 @@ mod tests {
                 format_specifics: Some(Csv {
                     header: CsvHeader::Yes,
                 }),
-                x: "".to_string(),
+                x: String::new(),
                 y: None,
                 float: vec!["b".to_string()],
                 int: vec!["a".to_string()],
@@ -5462,7 +5462,7 @@ mod tests {
                 format_specifics: Some(Csv {
                     header: CsvHeader::Yes,
                 }),
-                x: "".to_string(),
+                x: String::new(),
                 y: None,
                 float: vec!["b".to_string()],
                 int: vec!["a".to_string()],
@@ -5580,7 +5580,7 @@ mod tests {
                 format_specifics: Some(Csv {
                     header: CsvHeader::Yes,
                 }),
-                x: "".to_string(),
+                x: String::new(),
                 y: None,
                 float: vec!["b".to_string()],
                 int: vec!["a".to_string()],
@@ -5706,7 +5706,7 @@ mod tests {
                 format_specifics: Some(Csv {
                     header: CsvHeader::Yes,
                 }),
-                x: "".to_string(),
+                x: String::new(),
                 y: None,
                 float: vec!["b".to_string()],
                 int: vec!["a".to_string()],
@@ -5829,7 +5829,7 @@ mod tests {
                 format_specifics: Some(Csv {
                     header: CsvHeader::Yes,
                 }),
-                x: "".to_string(),
+                x: String::new(),
                 y: None,
                 float: vec!["b".to_string()],
                 int: vec!["a".to_string()],
@@ -5942,7 +5942,7 @@ mod tests {
                 format_specifics: Some(Csv {
                     header: CsvHeader::Yes,
                 }),
-                x: "".to_string(),
+                x: String::new(),
                 y: None,
                 float: vec!["natlscale".to_string()],
                 int: vec![],
@@ -6031,7 +6031,7 @@ mod tests {
                 format_specifics: Some(Csv {
                     header: CsvHeader::Yes,
                 }),
-                x: "".to_string(),
+                x: String::new(),
                 y: None,
                 float: vec!["natlscale".to_string()],
                 int: vec![],
@@ -6123,7 +6123,7 @@ mod tests {
                 format_specifics: Some(Csv {
                     header: CsvHeader::Yes,
                 }),
-                x: "".to_string(),
+                x: String::new(),
                 y: None,
                 float: vec!["natlscale".to_string()],
                 int: vec![],
@@ -6212,7 +6212,7 @@ mod tests {
                 format_specifics: Some(Csv {
                     header: CsvHeader::Yes,
                 }),
-                x: "".to_string(),
+                x: String::new(),
                 y: None,
                 float: vec!["natlscale".to_string()],
                 int: vec![],

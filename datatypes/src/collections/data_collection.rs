@@ -196,7 +196,7 @@ mod tests {
             vec![TimeInterval::default(); 2],
             [(
                 "foo".to_string(),
-                FeatureData::NullableText(vec![None, Some("".to_owned())]),
+                FeatureData::NullableText(vec![None, Some(String::new())]),
             )]
             .into_iter()
             .collect(),
@@ -211,7 +211,7 @@ mod tests {
         );
         assert_eq!(
             column.get_unchecked(1),
-            FeatureDataValue::NullableText(Some("".to_string()))
+            FeatureDataValue::NullableText(Some(String::new()))
         );
     }
 

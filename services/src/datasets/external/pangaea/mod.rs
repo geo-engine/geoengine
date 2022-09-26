@@ -100,7 +100,7 @@ impl DataProvider for PangaeaDataProvider {
             data: id.clone(),
             provenance: Some(Provenance {
                 citation: citation_text,
-                license: pmd.license.unwrap_or_else(|| "".to_string()),
+                license: pmd.license.unwrap_or_else(|| String::new()),
                 uri: pmd.url.to_string(),
             }),
         })
@@ -292,7 +292,7 @@ mod tests {
             .append_header("content-type", content_type.to_owned())
             .append_header("content-length", body.len())
             .body(if "HEAD" == method {
-                "".to_string()
+                String::new()
             } else {
                 body
             });

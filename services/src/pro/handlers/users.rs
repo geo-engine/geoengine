@@ -994,8 +994,8 @@ mod tests {
         );
 
         let auth_code_response = AuthCodeResponse {
-            session_state: "".to_string(),
-            code: "".to_string(),
+            session_state: String::new(),
+            code: String::new(),
             state: SINGLE_STATE.to_string(),
         };
 
@@ -1014,8 +1014,8 @@ mod tests {
         let request_db = single_state_nonce_request_db(server_url.clone());
 
         let auth_code_response = AuthCodeResponse {
-            session_state: "".to_string(),
-            code: "".to_string(),
+            session_state: String::new(),
+            code: String::new(),
             state: SINGLE_STATE.to_string(),
         };
 
@@ -1057,8 +1057,8 @@ mod tests {
         );
 
         let auth_code_response = AuthCodeResponse {
-            session_state: "".to_string(),
-            code: "".to_string(),
+            session_state: String::new(),
+            code: String::new(),
             state: SINGLE_STATE.to_string(),
         };
 
@@ -1079,9 +1079,9 @@ mod tests {
         let ctx = ProInMemoryContext::test_default();
 
         let auth_code_response = AuthCodeResponse {
-            session_state: "".to_string(),
-            code: "".to_string(),
-            state: "".to_string(),
+            session_state: String::new(),
+            code: String::new(),
+            state: String::new(),
         };
 
         check_allowed_http_methods(

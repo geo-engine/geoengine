@@ -1044,7 +1044,7 @@ async fn listing_from_dir(
             path.file_name()
                 .map(|n| n.to_string_lossy().to_string())
                 .unwrap_or_default(),
-            "".to_string(),
+            String::new(),
         )
     };
 
@@ -1070,7 +1070,7 @@ async fn listing_from_dir(
                     .try_into()?,
                 },
                 name: entry.file_name().to_string_lossy().to_string(),
-                description: "".to_string(),
+                description: String::new(),
             }));
         } else if entry.path().extension() == Some("nc".as_ref()) {
             let fp = entry
@@ -1313,7 +1313,7 @@ async fn listing_from_netcdf_file(
                         .try_into()?,
                     },
                     name: entity.name,
-                    description: "".to_string(),
+                    description: String::new(),
                 }))
             })
             .collect::<crate::error::Result<Vec<CollectionItem>>>()?

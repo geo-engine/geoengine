@@ -230,7 +230,7 @@ where
         let error: OdmErrorResponse = response.json().await.context(error::Reqwest)?;
 
         return Err(error::Error::Odm {
-            reason: error.error.unwrap_or_else(|| "".to_owned()),
+            reason: error.error.unwrap_or_else(|| String::new()),
         });
     }
 
@@ -296,7 +296,7 @@ async fn dataset_definition_from_geotiff(
             properties: AddDataset {
                 id: Some(DatasetId::new()),
                 name: "ODM Result".to_owned(), // TODO: more info
-                description: "".to_owned(),    // TODO: more info
+                description: String::new(),    // TODO: more info
                 source_operator: "GdalSource".to_owned(),
                 symbology: None,
                 provenance: None,

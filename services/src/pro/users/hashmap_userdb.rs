@@ -48,8 +48,8 @@ impl UserDb for HashMapUserDb {
         let user = User {
             id,
             email: id.to_string(),
-            password_hash: "".to_string(),
-            real_name: "".to_string(),
+            password_hash: String::new(),
+            real_name: String::new(),
             active: true,
         };
 

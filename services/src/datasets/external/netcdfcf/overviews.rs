@@ -1011,7 +1011,7 @@ mod tests {
                         description: "Randomly created data".to_string(),
                         data_type: Some(RasterDataType::I16),
                         data_range: Some((1., 97.)),
-                        unit: "".to_string(),
+                        unit: String::new(),
                         groups: vec![]
                     },
                     FullNetCdfGroup {
@@ -1020,7 +1020,7 @@ mod tests {
                         description: "Randomly created data".to_string(),
                         data_type: Some(RasterDataType::I16),
                         data_range: Some((1., 98.)),
-                        unit: "".to_string(),
+                        unit: String::new(),
                         groups: vec![]
                     }
                 ],

@@ -604,7 +604,7 @@ mod tests {
         let meta = StaticMetaData {
             loading_info: OgrSourceDataset {
                 file_name: Default::default(),
-                layer_name: "".to_string(),
+                layer_name: String::new(),
                 data_type: None,
                 time: Default::default(),
                 default_geometry: None,
@@ -700,7 +700,7 @@ mod tests {
         let meta = StaticMetaData {
             loading_info: OgrSourceDataset {
                 file_name: Default::default(),
-                layer_name: "".to_string(),
+                layer_name: String::new(),
                 data_type: None,
                 time: Default::default(),
                 default_geometry: None,
@@ -782,7 +782,7 @@ mod tests {
         let meta = StaticMetaData {
             loading_info: OgrSourceDataset {
                 file_name: Default::default(),
-                layer_name: "".to_string(),
+                layer_name: String::new(),
                 data_type: None,
                 time: Default::default(),
                 default_geometry: None,
@@ -844,7 +844,7 @@ mod tests {
         let meta = StaticMetaData {
             loading_info: OgrSourceDataset {
                 file_name: Default::default(),
-                layer_name: "".to_string(),
+                layer_name: String::new(),
                 data_type: None,
                 time: Default::default(),
                 default_geometry: None,
@@ -911,7 +911,7 @@ mod tests {
         let meta = StaticMetaData {
             loading_info: OgrSourceDataset {
                 file_name: Default::default(),
-                layer_name: "".to_string(),
+                layer_name: String::new(),
                 data_type: None,
                 time: Default::default(),
                 default_geometry: None,
@@ -978,7 +978,7 @@ mod tests {
         let meta = StaticMetaData {
             loading_info: OgrSourceDataset {
                 file_name: Default::default(),
-                layer_name: "".to_string(),
+                layer_name: String::new(),
                 data_type: None,
                 time: Default::default(),
                 default_geometry: None,

@@ -88,7 +88,7 @@ impl PangeaMetaData {
                 lat_column: y,
                 lon_column: x,
             } => (x.clone(), Some(y.clone())),
-            _ => ("".to_string(), None),
+            _ => (String::new(), None),
         };
 
         // Create name mapping

@@ -1688,7 +1688,7 @@ mod tests {
 
         assert_eq!(
             gdal::config::get_config_option("foo", "").unwrap(),
-            "".to_owned()
+            String::new()
         );
     }
 
