@@ -358,8 +358,6 @@ mod tests {
 
         assert!(result.is_ok());
 
-        // println!("{:?}", result);
-
         assert!(geoengine_datatypes::util::test::grid_or_empty_grid_eq(
             &result.unwrap().grid_array,
             &GridOrEmpty::from(EmptyGrid2D::new([3, 2].into()))
