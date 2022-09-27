@@ -93,8 +93,8 @@ where
         let plots = rows
             .into_iter()
             .map(|row| Plot {
-                workflow: WorkflowId(row.get(2)),
-                name: row.get(1),
+                workflow: WorkflowId(row.get(1)),
+                name: row.get(0),
             })
             .collect();
 
