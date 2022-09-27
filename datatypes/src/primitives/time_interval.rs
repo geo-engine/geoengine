@@ -61,6 +61,7 @@ impl TimeInterval {
     ///
     /// This constructor fails if `end` is before `start`
     ///
+    #[allow(clippy::trait_duplication_in_bounds)] // both `error::Error: From<A::Error> + From<B::Error>` is required
     pub fn new<A, B>(start: A, end: B) -> Result<Self>
     where
         A: TryInto<TimeInstance>,

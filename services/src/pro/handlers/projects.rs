@@ -631,7 +631,7 @@ mod tests {
             .uri("/project/versions")
             .append_header((header::CONTENT_LENGTH, 0))
             .append_header((header::AUTHORIZATION, Bearer::new(session.id.to_string())))
-            .set_json(&project);
+            .set_json(project);
         send_pro_test_request(req, ctx).await
     }
 
@@ -666,7 +666,7 @@ mod tests {
         let req = test::TestRequest::get()
             .uri("/project/versions")
             .append_header((header::CONTENT_LENGTH, 0))
-            .set_json(&project);
+            .set_json(project);
         let res = send_pro_test_request(req, ctx).await;
 
         ErrorResponse::assert(

@@ -230,7 +230,7 @@ where
         let error: OdmErrorResponse = response.json().await.context(error::Reqwest)?;
 
         return Err(error::Error::Odm {
-            reason: error.error.unwrap_or_else(|| "".to_owned()),
+            reason: error.error.unwrap_or_default(),
         });
     }
 
@@ -296,7 +296,7 @@ async fn dataset_definition_from_geotiff(
             properties: AddDataset {
                 id: Some(DatasetId::new()),
                 name: "ODM Result".to_owned(), // TODO: more info
-                description: "".to_owned(),    // TODO: more info
+                description: String::new(),    // TODO: more info
                 source_operator: "GdalSource".to_owned(),
                 symbology: None,
                 provenance: None,
@@ -340,7 +340,7 @@ async fn unzip(zip_path: &Path, target_path: &Path) -> Result<(), error::Error> 
             } else {
                 if let Some(p) = out_path.parent() {
                     if !p.exists() {
-                        std::fs::create_dir_all(&p).context(error::Io)?; // TODO
+                        std::fs::create_dir_all(p).context(error::Io)?; // TODO
                     }
                 }
                 let mut outfile = std::fs::File::create(&out_path).context(error::Io)?;
@@ -486,7 +486,7 @@ mod tests {
             .uri(&format!("/droneMapping/dataset/{}", task_uuid))
             .append_header((header::CONTENT_LENGTH, 0))
             .append_header((header::AUTHORIZATION, Bearer::new(session.id().to_string())))
-            .set_json(&task);
+            .set_json(task);
         let res = send_pro_test_request(req, ctx.clone()).await;
 
         let dataset_response: CreateDatasetResponse = test::read_body_json(res).await;

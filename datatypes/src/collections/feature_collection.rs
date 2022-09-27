@@ -1170,8 +1170,7 @@ where
         data: HashMap<String, FeatureData>,
     ) -> Result<Self> {
         let number_of_rows = time_intervals.len();
-        let number_of_column: usize =
-            data.len() + 1 + (if CollectionType::IS_GEOMETRY { 1 } else { 0 });
+        let number_of_column: usize = data.len() + 1 + usize::from(CollectionType::IS_GEOMETRY);
 
         let mut columns: Vec<Field> = Vec::with_capacity(number_of_column);
         let mut arrays: Vec<ArrayRef> = Vec::with_capacity(number_of_column);

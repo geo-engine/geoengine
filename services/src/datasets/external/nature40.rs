@@ -193,7 +193,7 @@ impl LayerCollectionProvider for Nature40DataProvider {
                             band_index,
                             band_labels
                                 .get((band_index - 1) as usize)
-                                .unwrap_or(&"".to_owned())
+                                .unwrap_or(&String::new())
                         ),
                     })));
                 }
@@ -266,7 +266,7 @@ impl LayerCollectionProvider for Nature40DataProvider {
                 band_index,
                 band_labels
                     .get((band_index - 1) as usize)
-                    .unwrap_or(&"".to_owned())
+                    .unwrap_or(&String::new())
             ),
             workflow: Workflow {
                 operator: TypedOperator::Raster(
@@ -381,7 +381,7 @@ impl Nature40DataProvider {
                             txt.push(
                                 reader
                                     .read_text(e.name(), &mut Vec::new())
-                                    .unwrap_or_else(|_| "".to_owned()),
+                                    .unwrap_or_else(|_| String::new()),
                             );
                         }
                     }

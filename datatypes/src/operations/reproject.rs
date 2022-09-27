@@ -427,7 +427,7 @@ pub fn project_coordinates_fail_tolerant<P: CoordinateProjection>(
     i: &[Coordinate2D],
     p: &P,
 ) -> Vec<Option<Coordinate2D>> {
-    if let Ok(projected_all) = p.project_coordinates(&i) {
+    if let Ok(projected_all) = p.project_coordinates(i) {
         return projected_all
             .into_iter()
             .map(Some)

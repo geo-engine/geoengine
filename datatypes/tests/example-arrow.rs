@@ -251,7 +251,7 @@ fn binary() {
             TimeInterval::new(2, 3).unwrap(),
         ] {
             let t_bytes: [u8; 16] = unsafe { mem::transmute(t) };
-            builder.append_value(&t_bytes).unwrap();
+            builder.append_value(t_bytes).unwrap();
         }
 
         builder.finish()
@@ -565,26 +565,26 @@ fn multipoint_builder_bytes() {
 
     multi_point_builder
         .values()
-        .append_value(&[0.0, 0.1].to_byte_slice())
+        .append_value([0.0, 0.1].to_byte_slice())
         .unwrap();
     multi_point_builder
         .values()
-        .append_value(&[1.0, 1.1].to_byte_slice())
+        .append_value([1.0, 1.1].to_byte_slice())
         .unwrap();
 
     multi_point_builder.append(true); // first multi point
 
     multi_point_builder
         .values()
-        .append_value(&[2.0, 2.1].to_byte_slice())
+        .append_value([2.0, 2.1].to_byte_slice())
         .unwrap();
     multi_point_builder
         .values()
-        .append_value(&[3.0, 3.1].to_byte_slice())
+        .append_value([3.0, 3.1].to_byte_slice())
         .unwrap();
     multi_point_builder
         .values()
-        .append_value(&[4.0, 4.1].to_byte_slice())
+        .append_value([4.0, 4.1].to_byte_slice())
         .unwrap();
 
     multi_point_builder.append(true); // second multi point
