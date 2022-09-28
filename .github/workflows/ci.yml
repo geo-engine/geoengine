@@ -60,7 +60,7 @@ jobs:
           # An additional cache key that is added alongside the automatic `job`-based
           # cache key and can be used to further differentiate jobs.
           # Default: empty
-          key: 2_${{ matrix.features }}_${{ matrix.build }}
+          key: 3_${{ matrix.features }}_${{ matrix.build }}
 
           # A whitespace separated list of env-var *prefixes* who's value contributes
           # to the environment cache key.
@@ -89,11 +89,15 @@ jobs:
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
           args: --all-targets ${{ matrix.features }} ${{ matrix.build }} -- -D warnings
+        env:
+          CARGO_TARGET_DIR: /home/runner/work/geoengine/geoengine/target
       - name: Run tests
         uses: actions-rs/cargo@v1
         with:
           command: test
           args: ${{ matrix.features }} ${{ matrix.build }} --verbose
+        env:
+          CARGO_TARGET_DIR: /home/runner/work/geoengine/geoengine/target
 
   build:
     runs-on: ${{matrix.os}}
