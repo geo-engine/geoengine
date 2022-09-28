@@ -2,6 +2,7 @@ use std::fmt;
 
 use crate::api::model::datatypes::LayerId;
 use async_trait::async_trait;
+use utoipa::ToSchema;
 
 use crate::error::Result;
 use crate::util::user_input::Validated;
@@ -10,7 +11,7 @@ use super::layer::{Layer, LayerCollection, LayerCollectionListOptions};
 
 use serde::{Deserialize, Serialize};
 
-#[derive(Debug, Serialize, Deserialize, Clone, PartialEq, Eq, Hash)]
+#[derive(Debug, Serialize, Deserialize, Clone, PartialEq, Eq, Hash, ToSchema)]
 pub struct LayerCollectionId(pub String);
 
 impl fmt::Display for LayerCollectionId {

@@ -1222,7 +1222,7 @@ pub fn layer_from_netcdf_overview(
         },
         symbology: Some(Symbology::Raster(RasterSymbology {
             opacity: 1.0,
-            colorizer,
+            colorizer: colorizer.into(),
         })),
         properties: [(
             "author".to_string(),
@@ -1238,7 +1238,8 @@ pub fn layer_from_netcdf_overview(
                     .creator_institution
                     .unwrap_or_else(|| "unknown".to_string())
             ),
-        )]
+        )
+            .into()]
         .into_iter()
         .collect(),
         metadata: [
@@ -1287,7 +1288,8 @@ async fn listing_from_netcdf_file(
                 tree.creator_institution
                     .unwrap_or_else(|| "unknown".to_string())
             ),
-        )]
+        )
+            .into()]
         .into_iter()
         .collect()
     } else {
@@ -1802,7 +1804,7 @@ mod tests {
                     description: "Randomly created data".to_string()
                 })],
                 entry_label: None,
-                properties: vec![("author".to_string(), "Luise Quoß, luise.quoss@idiv.de, German Centre for Integrative Biodiversity Research (iDiv)".to_string())]
+                properties: vec![("author".to_string(), "Luise Quoß, luise.quoss@idiv.de, German Centre for Integrative Biodiversity Research (iDiv)".to_string()).into()]
             }
         );
     }
@@ -1879,7 +1881,7 @@ mod tests {
                     description: "SSP5-RCP8.5".to_string()
                 })],
                 entry_label: None,
-                properties: vec![("author".to_string(), "Luise Quoß, luise.quoss@idiv.de, German Centre for Integrative Biodiversity Research (iDiv)".to_string())]
+                properties: vec![("author".to_string(), "Luise Quoß, luise.quoss@idiv.de, German Centre for Integrative Biodiversity Research (iDiv)".to_string()).into()]
             }
         );
     }
@@ -2174,7 +2176,7 @@ mod tests {
                     description: "SSP5-RCP8.5".to_string()
                 })],
                 entry_label: None,
-                properties: vec![("author".to_string(), "Luise Quoß, luise.quoss@idiv.de, German Centre for Integrative Biodiversity Research (iDiv)".to_string())]
+                properties: vec![("author".to_string(), "Luise Quoß, luise.quoss@idiv.de, German Centre for Integrative Biodiversity Research (iDiv)".to_string()).into()]
             }
         );
     }
