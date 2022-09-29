@@ -483,32 +483,13 @@ pub fn reproject_and_unify_bbox<T: AxisAlignedRectangle>(
     source: SpatialReference,
     target: SpatialReference,
 ) -> Result<(T, T)> {
-    let projector_source_target = CoordinateProjector::from_known_srs(source, target)?;
-    let projector_source_wgs84 =
-        CoordinateProjector::from_known_srs(source, SpatialReference::epsg_4326())?;
-    let projector_target_wgs84 =
-        CoordinateProjector::from_known_srs(target, SpatialReference::epsg_4326())?;
-    let projector_wgs84_source =
-        CoordinateProjector::from_known_srs(SpatialReference::epsg_4326(), source)?;
-    let projector_wgs84_target =
-        CoordinateProjector::from_known_srs(SpatialReference::epsg_4326(), target)?;
+    let proj_from_to = CoordinateProjector::from_known_srs(source, target)?;
+    let proj_to_from = CoordinateProjector::from_known_srs(target, source)?;
 
-    let target_bbox = source_bbox.reproject_clipped(&projector_source_target)?;
+    let bounds_out = source_bbox.reproject_clipped(&proj_from_to)?;
+    let bounds_in = bounds_out.reproject_clipped(&proj_to_from)?;
 
-    let source_area = source_bbox.reproject_clipped(&projector_source_wgs84)?;
-    let target_area = target_bbox.reproject_clipped(&projector_target_wgs84)?;
-
-    let common_area = source_area.intersection(&target_area).ok_or(
-        error::Error::SpatialBoundsDoNotIntersect {
-            bounds_a: source_area.as_bbox(),
-            bounds_b: target_area.as_bbox(),
-        },
-    )?;
-
-    let source_bbox = common_area.reproject(&projector_wgs84_source)?;
-    let target_bbox = common_area.reproject(&projector_wgs84_target)?;
-
-    Ok((source_bbox, target_bbox))
+    Ok((bounds_in, bounds_out))
 }
 
 #[cfg(test)]
