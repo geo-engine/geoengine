@@ -422,8 +422,9 @@ impl EbvPortalDataProvider {
                 (
                     "by".to_string(),
                     format!("{} ({})", dataset.author_name, dataset.author_institution),
-                ),
-                ("with license".to_string(), dataset.license),
+                )
+                    .into(),
+                ("with license".to_string(), dataset.license).into(),
             ]
             .into_iter()
             .collect(),
@@ -1404,8 +1405,8 @@ mod tests {
                     description: "Randomly created data".to_string(),
                 })],
                 entry_label: Some("Metric".to_string()),
-                properties: vec![("by".to_string(), "Kristin Böttcher (The Finnish Environment Institute (SYKE))".to_string()),
-                    ("with license".to_string(), "https://creativecommons.org/licenses/by/4.0".to_string())]              
+                properties: vec![("by".to_string(), "Kristin Böttcher (The Finnish Environment Institute (SYKE))".to_string()).into(),
+                    ("with license".to_string(), "https://creativecommons.org/licenses/by/4.0".to_string()).into()]              
         });
     }
 

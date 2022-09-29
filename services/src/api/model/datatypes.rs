@@ -6,9 +6,13 @@ use std::{
 
 use crate::error::{self, Result};
 use crate::identifier;
+use ordered_float::NotNan;
 use serde::{de::Visitor, Deserialize, Deserializer, Serialize, Serializer};
 use snafu::ResultExt;
-use utoipa::ToSchema;
+use utoipa::{
+    openapi::{ArrayBuilder, ObjectBuilder, Ref, SchemaType},
+    ToSchema,
+};
 
 identifier!(DataProviderId);
 
@@ -651,5 +655,170 @@ impl std::fmt::Display for ResamplingMethod {
             ResamplingMethod::CubicSpline => write!(f, "CUBICSPLINE"),
             ResamplingMethod::Lanczos => write!(f, "LANCZOS"),
         }
+    }
+}
+
+/// `RgbaColor` defines a 32 bit RGB color with alpha value
+#[derive(Copy, Clone, Debug, Deserialize, Serialize, PartialEq, Eq)]
+pub struct RgbaColor([u8; 4]);
+
+// manual implementation utoipa generates an integer field
+impl ToSchema for RgbaColor {
+    fn schema() -> utoipa::openapi::schema::Schema {
+        ArrayBuilder::new()
+            .items(ObjectBuilder::new().schema_type(SchemaType::Integer))
+            .min_items(Some(4))
+            .max_items(Some(4))
+            .into()
+    }
+}
+
+impl From<geoengine_datatypes::operations::image::RgbaColor> for RgbaColor {
+    fn from(color: geoengine_datatypes::operations::image::RgbaColor) -> Self {
+        Self(color.into_inner())
+    }
+}
+
+/// A container type for breakpoints that specify a value to color mapping
+#[derive(Clone, Debug, Deserialize, Serialize, Eq, PartialEq)]
+pub struct Breakpoint {
+    pub value: NotNan<f64>,
+    pub color: RgbaColor,
+}
+
+// manual implementation because of NotNan
+impl ToSchema for Breakpoint {
+    fn schema() -> utoipa::openapi::schema::Schema {
+        ObjectBuilder::new()
+            .property(
+                "value",
+                ObjectBuilder::new().schema_type(SchemaType::Number),
+            )
+            .property("color", Ref::from_schema_name("RgbaColor"))
+            .into()
+    }
+}
+
+impl From<geoengine_datatypes::operations::image::Breakpoint> for Breakpoint {
+    fn from(breakpoint: geoengine_datatypes::operations::image::Breakpoint) -> Self {
+        Self {
+            value: breakpoint.value,
+            color: breakpoint.color.into(),
+        }
+    }
+}
+
+/// A colorizer specifies a mapping between raster values and an output image
+/// There are different variants that perform different kinds of mapping.
+#[derive(Clone, Debug, Deserialize, Serialize, Eq, PartialEq, ToSchema)]
+#[serde(rename_all = "camelCase", tag = "type")]
+pub enum Colorizer {
+    #[serde(rename_all = "camelCase")]
+    LinearGradient {
+        breakpoints: Vec<Breakpoint>,
+        no_data_color: RgbaColor,
+        default_color: RgbaColor,
+    },
+    #[serde(rename_all = "camelCase")]
+    LogarithmicGradient {
+        breakpoints: Vec<Breakpoint>,
+        no_data_color: RgbaColor,
+        default_color: RgbaColor,
+    },
+    #[serde(rename_all = "camelCase")]
+    Palette {
+        colors: Palette,
+        no_data_color: RgbaColor,
+        default_color: RgbaColor,
+    },
+    Rgba,
+}
+
+impl From<geoengine_datatypes::operations::image::Colorizer> for Colorizer {
+    fn from(v: geoengine_datatypes::operations::image::Colorizer) -> Self {
+        match v {
+            geoengine_datatypes::operations::image::Colorizer::LinearGradient {
+                breakpoints,
+                no_data_color,
+                default_color,
+            } => Self::LinearGradient {
+                breakpoints: breakpoints
+                    .into_iter()
+                    .map(Into::into)
+                    .collect::<Vec<Breakpoint>>(),
+                no_data_color: no_data_color.into(),
+                default_color: default_color.into(),
+            },
+            geoengine_datatypes::operations::image::Colorizer::LogarithmicGradient {
+                breakpoints,
+                no_data_color,
+                default_color,
+            } => Self::LogarithmicGradient {
+                breakpoints: breakpoints
+                    .into_iter()
+                    .map(Into::into)
+                    .collect::<Vec<Breakpoint>>(),
+                no_data_color: no_data_color.into(),
+                default_color: default_color.into(),
+            },
+            geoengine_datatypes::operations::image::Colorizer::Palette {
+                colors,
+                no_data_color,
+                default_color,
+            } => Self::Palette {
+                colors: colors.into(),
+                no_data_color: no_data_color.into(),
+                default_color: default_color.into(),
+            },
+            geoengine_datatypes::operations::image::Colorizer::Rgba => Self::Rgba,
+        }
+    }
+}
+
+/// A map from value to color
+///
+/// It is assumed that is has at least one and at most 256 entries.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
+#[serde(try_from = "SerializablePalette", into = "SerializablePalette")]
+pub struct Palette(HashMap<NotNan<f64>, RgbaColor>);
+
+impl From<geoengine_datatypes::operations::image::Palette> for Palette {
+    fn from(palette: geoengine_datatypes::operations::image::Palette) -> Self {
+        Self(
+            palette
+                .into_inner()
+                .into_iter()
+                .map(|(value, color)| (value, color.into()))
+                .collect(),
+        )
+    }
+}
+
+/// A type that is solely for serde's serializability.
+/// You cannot serialize floats as JSON map keys.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct SerializablePalette(HashMap<String, RgbaColor>);
+
+impl From<Palette> for SerializablePalette {
+    fn from(palette: Palette) -> Self {
+        Self(
+            palette
+                .0
+                .into_iter()
+                .map(|(k, v)| (k.to_string(), v))
+                .collect(),
+        )
+    }
+}
+
+impl TryFrom<SerializablePalette> for Palette {
+    type Error = <NotNan<f64> as FromStr>::Err;
+
+    fn try_from(palette: SerializablePalette) -> Result<Self, Self::Error> {
+        let mut inner = HashMap::<NotNan<f64>, RgbaColor>::with_capacity(palette.0.len());
+        for (k, v) in palette.0 {
+            inner.insert(k.parse()?, v);
+        }
+        Ok(Self(inner))
     }
 }

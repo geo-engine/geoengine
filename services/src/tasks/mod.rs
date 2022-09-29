@@ -330,8 +330,10 @@ pub struct TaskListOptions {
     #[serde(default)]
     pub filter: Option<TaskFilter>,
     #[serde(default)]
+    #[param(example = 0)]
     pub offset: u32,
     #[serde(default = "task_list_limit_default")]
+    #[param(example = 20)]
     pub limit: u32,
 }
 
