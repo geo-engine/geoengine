@@ -517,8 +517,13 @@ pub type Breakpoints = Vec<Breakpoint>;
 /// It is assumed that is has at least one and at most 256 entries.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(try_from = "SerializablePalette", into = "SerializablePalette")]
-pub struct Palette(pub HashMap<NotNan<f64>, RgbaColor>);
+pub struct Palette(HashMap<NotNan<f64>, RgbaColor>);
 
+impl Palette {
+    pub fn into_inner(self) -> HashMap<NotNan<f64>, RgbaColor> {
+        self.0
+    }
+}
 /// A type that is solely for serde's serializability.
 /// You cannot serialize floats as JSON map keys.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -550,7 +555,7 @@ impl TryFrom<SerializablePalette> for Palette {
 
 /// `RgbaColor` defines a 32 bit RGB color with alpha value
 #[derive(Copy, Clone, Debug, Deserialize, Serialize, PartialEq, Eq)]
-pub struct RgbaColor(pub [u8; 4]);
+pub struct RgbaColor([u8; 4]);
 
 impl RgbaColor {
     /// Creates a new color from red, green, blue and alpha values
@@ -567,6 +572,10 @@ impl RgbaColor {
     /// ```
     pub fn new(red: u8, green: u8, blue: u8, alpha: u8) -> Self {
         RgbaColor([red, green, blue, alpha])
+    }
+
+    pub fn into_inner(self) -> [u8; 4] {
+        self.0
     }
 
     pub fn transparent() -> Self {

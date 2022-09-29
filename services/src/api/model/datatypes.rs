@@ -675,7 +675,7 @@ impl ToSchema for RgbaColor {
 
 impl From<geoengine_datatypes::operations::image::RgbaColor> for RgbaColor {
     fn from(color: geoengine_datatypes::operations::image::RgbaColor) -> Self {
-        Self(color.0)
+        Self(color.into_inner())
     }
 }
 
@@ -786,7 +786,7 @@ impl From<geoengine_datatypes::operations::image::Palette> for Palette {
     fn from(palette: geoengine_datatypes::operations::image::Palette) -> Self {
         Self(
             palette
-                .0
+                .into_inner()
                 .into_iter()
                 .map(|(value, color)| (value, color.into()))
                 .collect(),
