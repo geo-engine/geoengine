@@ -83,22 +83,6 @@ The PostgreSQL storage backend can optionally be enabled using `--features postg
 
 Copy `Settings-default.toml` to `Settings.toml` and edit per your requirements.
 
-### Docker
-
-#### Dev Container
-
-Build:
-
-`docker build --file=dev.Dockerfile --tag=geoengine:0.0.1 .`
-
-Execute:
-
-`docker container run --detach --name geoengine --publish 127.0.0.1:3030:8080 geoengine:0.0.1`
-
-Inspect the container:
-
-`docker exec -it geoengine bash`
-
 ## Troubleshooting
 
 ### Running out of memory map areas
