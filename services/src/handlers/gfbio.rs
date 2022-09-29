@@ -1,3 +1,4 @@
+use crate::api::model::datatypes::{DataId, ExternalDataId, LayerId};
 use crate::contexts::Context;
 use crate::error::Result;
 use crate::layers::storage::LayerProviderDb;
@@ -5,7 +6,6 @@ use crate::util::config::{get_config_element, GFBio};
 use actix_web::{web, FromRequest, Responder};
 use futures::stream::FuturesUnordered;
 use futures::stream::StreamExt;
-use geoengine_datatypes::dataset::{DataId, ExternalDataId, LayerId};
 use geoengine_datatypes::primitives::{DateTime, VectorQueryRectangle};
 use geoengine_operators::engine::{
     MetaDataProvider, TypedResultDescriptor, VectorResultDescriptor,
@@ -18,7 +18,7 @@ use std::collections::HashMap;
 
 use crate::datasets::external::gfbio::{GfbioDataProvider, GFBIO_PROVIDER_ID};
 use crate::datasets::external::pangaea::PANGAEA_PROVIDER_ID;
-use geoengine_datatypes::identifier;
+use crate::identifier;
 use geoengine_operators::util::input::StringOrNumberRange;
 
 identifier!(BasketId);
@@ -286,7 +286,7 @@ impl Basket {
         mdp: &dyn MetaDataProvider<OgrSourceDataset, VectorResultDescriptor, VectorQueryRectangle>,
         filter: Option<Vec<AttributeFilter>>,
     ) -> BasketEntry {
-        let md = match mdp.meta_data(&id).await {
+        let md = match mdp.meta_data(&id.clone().into()).await {
             Ok(md) => md,
             Err(e) => {
                 return BasketEntry {
@@ -430,12 +430,12 @@ impl TryFrom<BasketEntryInternal> for TypedBasketEntry {
 
 #[cfg(test)]
 mod tests {
+    use crate::api::model::datatypes::{DataId, DataProviderId, ExternalDataId, LayerId};
     use crate::handlers::gfbio::{
         AbcdEntry, Basket, BasketEntry, BasketEntryLoadingDetails, BasketEntryStatus,
         BasketInternal, TypedBasketEntry,
     };
     use geoengine_datatypes::collections::VectorDataType;
-    use geoengine_datatypes::dataset::{DataId, DataProviderId, ExternalDataId, LayerId};
     use geoengine_datatypes::spatial_reference::{SpatialReference, SpatialReferenceOption};
     use geoengine_operators::engine::{TypedResultDescriptor, VectorResultDescriptor};
     use geoengine_operators::source::AttributeFilter;

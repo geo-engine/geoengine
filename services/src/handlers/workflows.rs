@@ -1,6 +1,7 @@
 use std::collections::HashSet;
 use std::io::{Cursor, Write};
 
+use crate::api::model::datatypes::{DataId, DatasetId};
 use crate::datasets::listing::{DatasetProvider, ProvenanceOutput};
 use crate::datasets::storage::{AddDataset, DatasetDefinition, DatasetStore, MetaDataDefinition};
 use crate::datasets::upload::{UploadId, UploadRootPath};
@@ -14,7 +15,6 @@ use crate::workflows::registry::WorkflowRegistry;
 use crate::workflows::workflow::{Workflow, WorkflowId};
 use actix_web::{web, FromRequest, HttpResponse, Responder};
 use futures::future::join_all;
-use geoengine_datatypes::dataset::{DataId, DatasetId};
 use geoengine_datatypes::error::{BoxedResultExt, ErrorSource};
 use geoengine_datatypes::primitives::{AxisAlignedRectangle, RasterQueryRectangle};
 use geoengine_datatypes::spatial_reference::SpatialReference;
@@ -27,9 +27,11 @@ use geoengine_operators::util::raster_stream_to_geotiff::{
     raster_stream_to_geotiff, GdalGeoTiffDatasetMetadata, GdalGeoTiffOptions,
 };
 use geoengine_operators::{call_on_generic_raster_processor_gdal_types, call_on_typed_operator};
+
 use serde::{Deserialize, Serialize};
 use snafu::{ResultExt, Snafu};
 use tokio::fs;
+use utoipa::ToSchema;
 use zip::{write::FileOptions, ZipWriter};
 
 pub(crate) fn init_workflow_routes<C>(cfg: &mut web::ServiceConfig)
@@ -59,38 +61,26 @@ where
             ),
     )
     .service(
-        web::resource("datasetFromWorkflow/{workflow_id}")
+        web::resource("datasetFromWorkflow/{id}")
             .route(web::post().to(dataset_from_workflow_handler::<C>)),
     );
 }
 
-/// Registers a new [Workflow].
-///
-/// # Example
-///
-/// ```text
-/// POST /workflow
-/// Authorization: Bearer e9da345c-b1df-464b-901c-0335a0419227
-///
-/// {
-///   "type": "Vector",
-///   "operator": {
-///     "type": "MockPointSource",
-///     "params": {
-///       "points": [
-///         { "x": 0.0, "y": 0.1 },
-///         { "x": 1.0, "y": 1.1 }
-///       ]
-///     }
-///   }
-/// }
-/// ```
-/// Response:
-/// ```text
-/// {
-///   "id": "cee25e8c-18a0-5f1b-a504-0bc30de21e06"
-/// }
-/// ```
+/// Registers a new Workflow.
+#[utoipa::path(
+    tag = "Workflows",
+    post,
+    path = "/workflow",
+    request_body = Workflow,
+    responses(
+        (status = 200, description = "OK", body = IdResponse,
+            example = json!({"id": "cee25e8c-18a0-5f1b-a504-0bc30de21e06"})
+        )
+    ),
+    security(
+        ("session_token" = [])
+    )
+)]
 async fn register_workflow_handler<C: Context>(
     session: C::Session,
     ctx: web::Data<C>,
@@ -122,35 +112,23 @@ async fn register_workflow_handler<C: Context>(
     Ok(web::Json(IdResponse::from(id)))
 }
 
-/// Retrieves an existing [Workflow] using its id.
-///
-/// # Example
-///
-/// ```text
-/// GET /workflow/cee25e8c-18a0-5f1b-a504-0bc30de21e06
-/// Authorization: Bearer e9da345c-b1df-464b-901c-0335a0419227
-/// ```
-/// Response:
-/// ```text
-/// {
-///   "type": "Vector",
-///   "operator": {
-///     "type": "MockPointSource",
-///     "params": {
-///       "points": [
-///         {
-///           "x": 0.0,
-///           "y": 0.1
-///         },
-///         {
-///           "x": 1.0,
-///           "y": 1.1
-///         }
-///       ]
-///     }
-///   }
-/// }
-/// ```
+/// Retrieves an existing Workflow.
+#[utoipa::path(
+    tag = "Workflows",
+    get,
+    path = "/workflow/{id}",
+    responses(
+        (status = 200, description = "Workflow loaded from database", body = Workflow,
+            example = json!({"type": "Vector", "operator": {"type": "MockPointSource", "params": {"points": [{"x": 0.0, "y": 0.1}, {"x": 1.0, "y": 1.1}]}}})
+        )
+    ),
+    params(
+        ("id" = WorkflowId, description = "Workflow id")
+    ),
+    security(
+        ("session_token" = [])
+    )
+)]
 async fn load_workflow_handler<C: Context>(
     id: web::Path<WorkflowId>,
     _session: C::Session,
@@ -160,22 +138,23 @@ async fn load_workflow_handler<C: Context>(
     Ok(web::Json(wf))
 }
 
-/// Gets the metadata of a workflow.
-///
-/// # Example
-///
-/// ```text
-/// GET /workflow/cee25e8c-18a0-5f1b-a504-0bc30de21e06/metadata
-/// Authorization: Bearer e9da345c-b1df-464b-901c-0335a0419227
-/// ```
-/// Response:
-/// ```text
-/// {
-///   "dataType": "MultiPoint",
-///   "spatialReference": "EPSG:4326",
-///   "columns": {}
-/// }
-/// ```
+/// Gets the metadata of a workflow
+#[utoipa::path(
+    tag = "Workflows",
+    get,
+    path = "/workflow/{id}/metadata",
+    responses(
+        (status = 200, description = "Metadata of loaded workflow", body = TypedResultDescriptor,
+            example = json!({"type": "vector", "dataType": "MultiPoint", "spatialReference": "EPSG:4326", "columns": {}})
+        )
+    ),
+    params(
+        ("id" = WorkflowId, description = "Workflow id")
+    ),
+    security(
+        ("session_token" = [])
+    )
+)]
 async fn get_workflow_metadata_handler<C: Context>(
     id: web::Path<WorkflowId>,
     session: C::Session,
@@ -211,39 +190,28 @@ async fn workflow_metadata<C: Context>(
 }
 
 /// Gets the provenance of all datasets used in a workflow.
-///
-/// # Example
-///
-/// ```text
-/// GET /workflow/cee25e8c-18a0-5f1b-a504-0bc30de21e06/provenance
-/// Authorization: Bearer e9da345c-b1df-464b-901c-0335a0419227
-/// ```
-/// Response:
-/// ```text
-/// [{
-///   "id": {
-///     "type": "internal",
-///     "datasetId": "846a823a-6859-4b94-ab0a-c1de80f593d8"
-///   },
-///   "citation": "Author, Dataset Tile",
-///   "license": "Some license",
-///   "uri": "http://example.org/"
-/// }, {
-///   "id": {
-///     "type": "internal",
-///     "datasetId": "453cd398-f271-437b-9c3d-7f42213ea30a"
-///   },
-///   "citation": "Another Author, Another Dataset Tile",
-///   "license": "Some other license",
-///   "uri": "http://example.org/"
-/// }]
-/// ```
+#[utoipa::path(
+    tag = "Workflows",
+    get,
+    path = "/workflow/{id}/provenance",
+    responses(
+        (status = 200, description = "Provenance of used datasets", body = [ProvenanceOutput],
+            example = json!([{"dataset": {"type": "internal", "datasetId": "846a823a-6859-4b94-ab0a-c1de80f593d8"}, "provenance": {"citation": "Author, Dataset Tile", "license": "Some license", "uri": "http://example.org/"}}, {"dataset": {"type": "internal", "datasetId": "453cd398-f271-437b-9c3d-7f42213ea30a"}, "provenance": {"citation": "Another Author, Another Dataset Tile", "license": "Some other license", "uri": "http://example.org/"}}])
+        )
+    ),
+    params(
+        ("id" = WorkflowId, description = "Workflow id")
+    ),
+    security(
+        ("session_token" = [])
+    )
+)]
 async fn get_workflow_provenance_handler<C: Context>(
     id: web::Path<WorkflowId>,
     session: C::Session,
     ctx: web::Data<C>,
 ) -> Result<impl Responder> {
-    let workflow = ctx.workflow_registry_ref().load(&id.into_inner()).await?;
+    let workflow: Workflow = ctx.workflow_registry_ref().load(&id.into_inner()).await?;
 
     let provenance = workflow_provenance(&workflow, ctx.get_ref(), session).await?;
 
@@ -255,7 +223,12 @@ async fn workflow_provenance<C: Context>(
     ctx: &C,
     session: C::Session,
 ) -> Result<Vec<ProvenanceOutput>> {
-    let datasets = workflow.operator.data_ids();
+    let datasets: Vec<DataId> = workflow
+        .operator
+        .data_ids()
+        .into_iter()
+        .map(Into::into)
+        .collect();
 
     let db = ctx.dataset_db_ref();
     let providers = ctx.layer_provider_db_ref();
@@ -380,11 +353,13 @@ async fn resolve_provenance<C: Context>(
 }
 
 /// parameter for the dataset from workflow handler (body)
-#[derive(Clone, Debug, Deserialize, Serialize)]
-struct RasterDatasetFromWorkflow {
+#[derive(Clone, Debug, Deserialize, Serialize, ToSchema)]
+#[schema(example = json!({"name": "foo", "description": null, "query": {"spatialBounds": {"upperLeftCoordinate": {"x": -10.0, "y": 80.0}, "lowerRightCoordinate": {"x": 50.0, "y": 20.0}}, "timeInterval": {"start": 1_388_534_400_000_i64, "end": 1_388_534_401_000_i64}, "spatialResolution": {"x": 0.1, "y": 0.1}}}))]
+pub struct RasterDatasetFromWorkflow {
     name: String,
     description: Option<String>,
     query: RasterQueryRectangle,
+    #[schema(default = default_as_cog)]
     #[serde(default = "default_as_cog")]
     as_cog: bool,
 }
@@ -396,65 +371,40 @@ const fn default_as_cog() -> bool {
 }
 
 /// response of the dataset from workflow handler
-#[derive(Clone, Debug, Deserialize, Serialize)]
-struct RasterDatasetFromWorkflowResult {
+#[derive(Clone, Debug, Deserialize, Serialize, ToSchema)]
+pub struct RasterDatasetFromWorkflowResult {
     dataset: DatasetId,
     upload: UploadId,
 }
 
-/// Create a new dataset from the result of the given workflow and query
+/// Create a new dataset from the result of the workflow given by its `id` and the dataset parameters in the request body.
 /// Returns the id of the created dataset and upload
-///
-/// # Example
-///
-/// ```text
-/// POST /datasetFromWorkflow/{workflow_id}
-/// Authorization: Bearer fc9b5dc2-a1eb-400f-aeed-a7845d9935c9
-/// Content-Type: application/json
-///
-/// {
-///     "name": "foo",
-///     "description": null,
-///     "query": {
-///         "spatialBounds": {
-///             "upperLeftCoordinate": {
-///                 "x": -10.0,
-///                 "y": 80.0
-///             },
-///             "lowerRightCoordinate": {
-///                 "x": 50.0,
-///                 "y": 20.0
-///             }
-///         },
-///         "timeInterval": {
-///             "start": 1388534400000,
-///             "end": 1388534401000
-///         },
-///         "spatialResolution": {
-///             "x": 0.1,
-///             "y": 0.1
-///         }
-///     }
-/// }
-///
-/// ```text
-/// {
-///   "upload": "3086f494-d5a4-4b51-a14b-3b29f8bf7bb0",
-///   "data": {
-///     "type": "internal",
-///     "datasetId": "94230f0b-4e8a-4cba-9adc-3ace837fe5d4"
-///   }
-/// }
-/// ```
+#[utoipa::path(
+    tag = "Workflows",
+    post,
+    path = "/datasetFromWorkflow/{id}",
+    request_body = RasterDatasetFromWorkflow,
+    responses(
+        (status = 200, description = "Id of created dataset and upload", body = RasterDatasetFromWorkflowResult,
+            example = json!({"upload": "3086f494-d5a4-4b51-a14b-3b29f8bf7bb0", "dataset": {"type": "internal", "datasetId": "94230f0b-4e8a-4cba-9adc-3ace837fe5d4"}})
+        )
+    ),
+    params(
+        ("id" = WorkflowId, description = "Workflow id")
+    ),
+    security(
+        ("session_token" = [])
+    )
+)]
 async fn dataset_from_workflow_handler<C: Context>(
-    workflow_id: web::Path<WorkflowId>,
+    id: web::Path<WorkflowId>,
     session: C::Session,
     ctx: web::Data<C>,
     info: web::Json<RasterDatasetFromWorkflow>,
 ) -> Result<impl Responder> {
     // TODO: support datasets with multiple time steps
 
-    let workflow = ctx.workflow_registry_ref().load(&workflow_id).await?;
+    let workflow = ctx.workflow_registry_ref().load(&id).await?;
 
     let operator = workflow
         .operator
@@ -529,7 +479,7 @@ async fn create_dataset<C: Context>(
     result_descriptor: &geoengine_operators::engine::RasterResultDescriptor,
     ctx: &C,
     session: <C as Context>::Session,
-) -> Result<geoengine_datatypes::dataset::DatasetId> {
+) -> Result<DatasetId> {
     let dataset_id = DatasetId::new();
     let dataset_definition = DatasetDefinition {
         properties: AddDataset {
@@ -611,7 +561,9 @@ mod tests {
     use geoengine_datatypes::raster::{GridShape, RasterDataType, TilingSpecification};
     use geoengine_datatypes::spatial_reference::SpatialReference;
     use geoengine_datatypes::util::test::TestDefault;
-    use geoengine_operators::engine::{MultipleRasterSources, PlotOperator, TypedOperator};
+    use geoengine_operators::engine::{
+        MultipleRasterOrSingleVectorSource, PlotOperator, TypedOperator,
+    };
     use geoengine_operators::engine::{RasterOperator, RasterResultDescriptor, VectorOperator};
     use geoengine_operators::mock::{
         MockFeatureCollectionSource, MockPointSource, MockPointSourceParams, MockRasterSource,
@@ -619,6 +571,7 @@ mod tests {
     };
     use geoengine_operators::plot::{Statistics, StatisticsParams};
     use geoengine_operators::source::{GdalSource, GdalSourceParameters};
+    use geoengine_operators::util::input::MultiRasterOrVectorOperator::Raster;
     use geoengine_operators::util::raster_stream_to_geotiff::raster_stream_to_geotiff_bytes;
     use serde_json::json;
     use std::io::Read;
@@ -897,6 +850,7 @@ mod tests {
                         }),
                         time: None,
                         bbox: None,
+                        resolution: None,
                     },
                 },
             }
@@ -931,7 +885,8 @@ mod tests {
                     "unit": null
                 },
                 "time": null,
-                "bbox": null
+                "bbox": null,
+                "resolution": null
             })
         );
     }
@@ -990,8 +945,12 @@ mod tests {
 
         let workflow = Workflow {
             operator: Statistics {
-                params: StatisticsParams {},
-                sources: MultipleRasterSources { rasters: vec![] },
+                params: StatisticsParams {
+                    column_names: vec![],
+                },
+                sources: MultipleRasterOrSingleVectorSource {
+                    source: Raster(vec![]),
+                },
             }
             .boxed()
             .into(),
@@ -1149,10 +1108,11 @@ mod tests {
             uploads: vec![response.upload],
         };
 
+        let dataset_id: geoengine_datatypes::dataset::DatasetId = response.dataset.into();
         // query the newly created dataset
         let op = GdalSource {
             params: GdalSourceParameters {
-                data: response.dataset.into(),
+                data: dataset_id.into(),
             },
         }
         .boxed();
@@ -1334,6 +1294,10 @@ mod tests {
                         "x": 180.0,
                         "y": -90.0
                     }
+                },
+                "resolution": {
+                    "x": 0.1,
+                    "y": 0.1
                 }
             })
         );

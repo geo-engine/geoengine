@@ -13,15 +13,18 @@
     clippy::must_use_candidate,
     clippy::non_ascii_literal,
     clippy::option_if_let_else,
+    clippy::result_large_err, // TODO: investigate this
     clippy::similar_names,
     clippy::single_match_else,
-    clippy::trait_duplication_in_bounds, // TODO: reactivate when bugs are fixed
     clippy::type_repetition_in_bounds,
     clippy::wildcard_imports
 )]
 // enable some restriction lints
 #![warn(clippy::print_stdout, clippy::print_stderr, clippy::dbg_macro)]
 
+pub mod api;
+#[cfg(not(feature = "pro"))]
+pub mod apidoc;
 pub mod contexts;
 pub mod datasets;
 pub mod error;
@@ -29,6 +32,7 @@ pub mod handlers;
 pub mod layers;
 pub mod ogc;
 pub mod projects;
+#[cfg(not(feature = "pro"))]
 pub mod server;
 pub mod stac;
 #[macro_use]

@@ -181,7 +181,7 @@ where
 
                 let string_builder: &mut StringBuilder = downcast_mut_array(data_builder.as_mut());
                 if let Some(v) = &value {
-                    string_builder.append_value(&v);
+                    string_builder.append_value(v);
                 } else {
                     string_builder.append_null();
                 }

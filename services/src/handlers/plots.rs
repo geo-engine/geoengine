@@ -256,6 +256,7 @@ mod tests {
                     measurement: Measurement::Unitless,
                     time: None,
                     bbox: None,
+                    resolution: None,
                 },
             },
         }
@@ -273,7 +274,9 @@ mod tests {
 
         let workflow = Workflow {
             operator: Statistics {
-                params: StatisticsParams {},
+                params: StatisticsParams {
+                    column_names: vec![],
+                },
                 sources: vec![example_raster_source()].into(),
             }
             .boxed()
@@ -294,7 +297,7 @@ mod tests {
         ];
         let req = actix_web::test::TestRequest::get()
             .uri(&format!(
-                "/plot/{}/?{}",
+                "/plot/{}?{}",
                 id,
                 &serde_urlencoded::to_string(params).unwrap()
             ))
@@ -308,14 +311,16 @@ mod tests {
             json!({
                 "outputFormat": "JsonPlain",
                 "plotType": "Statistics",
-                "data": [{
-                    "pixelCount": 6,
-                    "nanCount": 0,
-                    "min": 1.0,
-                    "max": 6.0,
-                    "mean": 3.5,
-                    "stddev": 1.707_825_127_659_933
-                }]
+                "data": {
+                    "Raster-1": {
+                        "valueCount": 6,
+                        "validCount": 6,
+                        "min": 1.0,
+                        "max": 6.0,
+                        "mean": 3.5,
+                        "stddev": 1.707_825_127_659_933
+                    }
+                }
             })
         );
     }
@@ -356,7 +361,7 @@ mod tests {
         ];
         let req = actix_web::test::TestRequest::get()
             .uri(&format!(
-                "/plot/{}/?{}",
+                "/plot/{}?{}",
                 id,
                 &serde_urlencoded::to_string(params).unwrap()
             ))
@@ -454,7 +459,9 @@ mod tests {
 
             let workflow = Workflow {
                 operator: Statistics {
-                    params: StatisticsParams {},
+                    params: StatisticsParams {
+                        column_names: vec![],
+                    },
                     sources: vec![example_raster_source()].into(),
                 }
                 .boxed()
@@ -475,7 +482,7 @@ mod tests {
             let req = actix_web::test::TestRequest::default()
                 .method(method)
                 .uri(&format!(
-                    "/plot/{}/?{}",
+                    "/plot/{}?{}",
                     id,
                     &serde_urlencoded::to_string(params).unwrap()
                 ))

@@ -7,7 +7,8 @@ use crate::layers::storage::INTERNAL_LAYER_DB_ROOT_COLLECTION_ID;
 use crate::pro::datasets::{add_datasets_from_directory, PostgresDatasetDb, Role};
 use crate::pro::layers::postgres_layer_db::{PostgresLayerDb, PostgresLayerProviderDb};
 use crate::pro::projects::ProjectPermission;
-use crate::pro::users::{UserDb, UserId, UserSession};
+use crate::pro::users::{OidcRequestDb, UserDb, UserId, UserSession};
+use crate::pro::util::config::Oidc;
 use crate::pro::workflows::postgres_workflow_registry::PostgresWorkflowRegistry;
 use crate::projects::ProjectId;
 use crate::tasks::{SimpleTaskManager, SimpleTaskManagerContext};
@@ -55,6 +56,7 @@ where
     exe_ctx_tiling_spec: TilingSpecification,
     query_ctx_chunk_size: ChunkByteSize,
     task_manager: Arc<SimpleTaskManager>,
+    oidc_request_db: Arc<Option<OidcRequestDb>>,
 }
 
 impl<Tls> PostgresContext<Tls>
@@ -87,6 +89,7 @@ where
             thread_pool: create_rayon_thread_pool(0),
             exe_ctx_tiling_spec,
             query_ctx_chunk_size,
+            oidc_request_db: Arc::new(None),
         })
     }
 
@@ -101,6 +104,7 @@ where
         layer_collection_defs_path: PathBuf,
         exe_ctx_tiling_spec: TilingSpecification,
         query_ctx_chunk_size: ChunkByteSize,
+        oidc_config: Oidc,
     ) -> Result<Self> {
         let pg_mgr = PostgresConnectionManager::new(config, tls);
 
@@ -134,6 +138,7 @@ where
             thread_pool: create_rayon_thread_pool(0),
             exe_ctx_tiling_spec,
             query_ctx_chunk_size,
+            oidc_request_db: Arc::new(OidcRequestDb::try_from(oidc_config).ok()),
         })
     }
 
@@ -318,7 +323,7 @@ where
                             project_version_id UUID REFERENCES project_versions(id) ON DELETE CASCADE NOT NULL,                            
                             name character varying (256) NOT NULL,
                             workflow_id UUID NOT NULL, -- TODO: REFERENCES workflows(id)
-                            PRIMARY KEY (project_id, plot_index)            
+                            PRIMARY KEY (project_id, project_version_id, plot_index)            
                         );
 
                         CREATE TYPE "ProjectPermission" AS ENUM ('Read', 'Write', 'Owner');
@@ -451,7 +456,15 @@ where
 
                         -- TODO: uploads, providers permissions
 
-                        -- TODO: relationship between uploads and datasets?                        
+                        -- TODO: relationship between uploads and datasets?
+
+                        CREATE TABLE external_users (
+                            id UUID PRIMARY KEY REFERENCES users(id),
+                            external_id character varying (256) UNIQUE,
+                            email character varying (256),
+                            real_name character varying (256),
+                            active boolean NOT NULL
+                        );
                         "#
                     ,
                     system_role_id = Role::system_role_id(),
@@ -518,6 +531,9 @@ where
     }
     fn user_db_ref(&self) -> &Self::UserDB {
         &self.user_db
+    }
+    fn oidc_request_db(&self) -> Option<&OidcRequestDb> {
+        self.oidc_request_db.as_ref().as_ref()
     }
 }
 
@@ -620,6 +636,7 @@ mod tests {
     use std::str::FromStr;
 
     use super::*;
+    use crate::api::model::datatypes::{DataProviderId, DatasetId};
     use crate::datasets::external::mock::MockExternalLayerProviderDefinition;
     use crate::datasets::listing::SessionMetaDataProvider;
     use crate::datasets::listing::{DatasetListOptions, DatasetListing, ProvenanceOutput};
@@ -640,7 +657,7 @@ mod tests {
     };
     use crate::pro::datasets::{DatasetPermission, Permission, UpdateDatasetPermissions};
     use crate::pro::projects::{LoadVersion, ProProjectDb, UserProjectPermission};
-    use crate::pro::users::{UserCredentials, UserDb, UserRegistration};
+    use crate::pro::users::{ExternalUserClaims, UserCredentials, UserDb, UserRegistration};
     use crate::projects::{
         CreateProject, Layer, LayerUpdate, OrderBy, Plot, PlotUpdate, PointSymbology, ProjectDb,
         ProjectFilter, ProjectId, ProjectListOptions, ProjectListing, STRectangle, UpdateProject,
@@ -653,16 +670,15 @@ mod tests {
     use bb8_postgres::tokio_postgres::{self, NoTls};
     use futures::Future;
     use geoengine_datatypes::collections::VectorDataType;
-    use geoengine_datatypes::dataset::{DataProviderId, DatasetId};
     use geoengine_datatypes::primitives::{
-        BoundingBox2D, Coordinate2D, DateTime, FeatureDataType, Measurement, SpatialResolution,
-        TimeInterval, VectorQueryRectangle,
+        BoundingBox2D, Coordinate2D, DateTime, Duration, FeatureDataType, Measurement,
+        SpatialResolution, TimeInterval, VectorQueryRectangle,
     };
     use geoengine_datatypes::spatial_reference::{SpatialReference, SpatialReferenceOption};
     use geoengine_datatypes::util::test::TestDefault;
     use geoengine_datatypes::util::Identifier;
     use geoengine_operators::engine::{
-        MetaData, MultipleRasterSources, PlotOperator, StaticMetaData, TypedOperator,
+        MetaData, MultipleRasterOrSingleVectorSource, PlotOperator, StaticMetaData, TypedOperator,
         TypedResultDescriptor, VectorColumnInfo, VectorOperator, VectorResultDescriptor,
     };
     use geoengine_operators::mock::{MockPointSource, MockPointSourceParams};
@@ -671,6 +687,8 @@ mod tests {
         CsvHeader, FormatSpecifics, OgrSourceColumnSpec, OgrSourceDataset,
         OgrSourceDatasetTimeType, OgrSourceDurationSpec, OgrSourceErrorSpec, OgrSourceTimeFormat,
     };
+    use geoengine_operators::util::input::MultiRasterOrVectorOperator::Raster;
+    use openidconnect::SubjectIdentifier;
     use rand::RngCore;
     use tokio::runtime::Handle;
 
@@ -761,7 +779,7 @@ mod tests {
             let session = ctx
                 .user_db_ref()
                 .login(UserCredentials {
-                    email: "foo@bar.de".into(),
+                    email: "foo@example.com".into(),
                     password: "secret123".into(),
                 })
                 .await
@@ -784,9 +802,33 @@ mod tests {
         .await;
     }
 
+    #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
+    async fn test_external() {
+        with_temp_context(|ctx, _| async move {
+            anonymous(&ctx).await;
+
+            let session = external_user_login_twice(&ctx).await;
+
+            create_projects(&ctx, &session).await;
+
+            let projects = list_projects(&ctx, &session).await;
+
+            set_session_external(&ctx, &projects).await;
+
+            let project_id = projects[0].id;
+
+            update_projects(&ctx, &session, project_id).await;
+
+            add_permission(&ctx, &session, project_id).await;
+
+            delete_project(&ctx, &session, project_id).await;
+        })
+        .await;
+    }
+
     async fn set_session(ctx: &PostgresContext<NoTls>, projects: &[ProjectListing]) {
         let credentials = UserCredentials {
-            email: "foo@bar.de".into(),
+            email: "foo@example.com".into(),
             password: "secret123".into(),
         };
 
@@ -794,6 +836,31 @@ mod tests {
 
         let session = user_db.login(credentials).await.unwrap();
 
+        set_session_in_database(user_db, projects, session).await;
+    }
+
+    async fn set_session_external(ctx: &PostgresContext<NoTls>, projects: &[ProjectListing]) {
+        let external_user_claims = ExternalUserClaims {
+            external_id: SubjectIdentifier::new("Foo bar Id".into()),
+            email: "foo@bar.de".into(),
+            real_name: "Foo Bar".into(),
+        };
+
+        let user_db = ctx.user_db_ref();
+
+        let session = user_db
+            .login_external(external_user_claims, Duration::minutes(10))
+            .await
+            .unwrap();
+
+        set_session_in_database(user_db, projects, session).await;
+    }
+
+    async fn set_session_in_database(
+        user_db: &PostgresUserDb<NoTls>,
+        projects: &[ProjectListing],
+        session: UserSession,
+    ) {
         user_db
             .set_session_project(&session, projects[0].id)
             .await
@@ -879,6 +946,7 @@ mod tests {
         );
     }
 
+    #[allow(clippy::too_many_lines)]
     async fn update_projects(
         ctx: &PostgresContext<NoTls>,
         session: &UserSession,
@@ -915,8 +983,12 @@ mod tests {
             .workflow_registry_ref()
             .register(Workflow {
                 operator: Statistics {
-                    params: StatisticsParams {},
-                    sources: MultipleRasterSources { rasters: vec![] },
+                    params: StatisticsParams {
+                        column_names: vec![],
+                    },
+                    sources: MultipleRasterOrSingleVectorSource {
+                        source: Raster(vec![]),
+                    },
                 }
                 .boxed()
                 .into(),
@@ -930,6 +1002,7 @@ mod tests {
             .await
             .is_ok());
 
+        // add a plot
         let update = UpdateProject {
             id: project.id,
             name: Some("Test9 Updated".into()),
@@ -958,6 +1031,64 @@ mod tests {
             .await
             .unwrap();
         assert_eq!(versions.len(), 2);
+
+        // add second plot
+        let update = UpdateProject {
+            id: project.id,
+            name: Some("Test9 Updated".into()),
+            description: None,
+            layers: Some(vec![LayerUpdate::UpdateOrInsert(Layer {
+                workflow: layer_workflow_id,
+                name: "TestLayer".into(),
+                symbology: PointSymbology::default().into(),
+                visibility: Default::default(),
+            })]),
+            plots: Some(vec![
+                PlotUpdate::UpdateOrInsert(Plot {
+                    workflow: plot_workflow_id,
+                    name: "Test Plot".into(),
+                }),
+                PlotUpdate::UpdateOrInsert(Plot {
+                    workflow: plot_workflow_id,
+                    name: "Test Plot".into(),
+                }),
+            ]),
+            bounds: None,
+            time_step: None,
+        };
+        ctx.project_db_ref()
+            .update(session, update.validated().unwrap())
+            .await
+            .unwrap();
+
+        let versions = ctx
+            .project_db_ref()
+            .versions(session, project_id)
+            .await
+            .unwrap();
+        assert_eq!(versions.len(), 3);
+
+        // delete plots
+        let update = UpdateProject {
+            id: project.id,
+            name: None,
+            description: None,
+            layers: None,
+            plots: Some(vec![]),
+            bounds: None,
+            time_step: None,
+        };
+        ctx.project_db_ref()
+            .update(session, update.validated().unwrap())
+            .await
+            .unwrap();
+
+        let versions = ctx
+            .project_db_ref()
+            .versions(session, project_id)
+            .await
+            .unwrap();
+        assert_eq!(versions.len(), 4);
     }
 
     async fn list_projects(
@@ -1007,7 +1138,7 @@ mod tests {
         let db = ctx.user_db_ref();
 
         let user_registration = UserRegistration {
-            email: "foo@bar.de".into(),
+            email: "foo@example.com".into(),
             password: "secret123".into(),
             real_name: "Foo Bar".into(),
         }
@@ -1017,7 +1148,7 @@ mod tests {
         let user_id = db.register(user_registration).await.unwrap();
 
         let credentials = UserCredentials {
-            email: "foo@bar.de".into(),
+            email: "foo@example.com".into(),
             password: "secret123".into(),
         };
 
@@ -1030,6 +1161,63 @@ mod tests {
         assert!(db.session(session.id).await.is_err());
 
         user_id
+    }
+
+    //TODO: No duplicate tests for postgres and hashmap implementation possible?
+    async fn external_user_login_twice(ctx: &PostgresContext<NoTls>) -> UserSession {
+        let db = ctx.user_db_ref();
+
+        let external_user_claims = ExternalUserClaims {
+            external_id: SubjectIdentifier::new("Foo bar Id".into()),
+            email: "foo@bar.de".into(),
+            real_name: "Foo Bar".into(),
+        };
+        let duration = Duration::minutes(30);
+
+        //NEW
+        let login_result = db
+            .login_external(external_user_claims.clone(), duration)
+            .await;
+        assert!(login_result.is_ok());
+
+        let session_1 = login_result.unwrap();
+        let user_id = session_1.user.id; //TODO: Not a deterministic test.
+
+        assert!(session_1.user.email.is_some());
+        assert_eq!(session_1.user.email.unwrap(), "foo@bar.de");
+        assert!(session_1.user.real_name.is_some());
+        assert_eq!(session_1.user.real_name.unwrap(), "Foo Bar");
+
+        let expected_duration = session_1.created + duration;
+        assert_eq!(session_1.valid_until, expected_duration);
+
+        assert!(db.session(session_1.id).await.is_ok());
+
+        assert!(db.logout(session_1.id).await.is_ok());
+
+        assert!(db.session(session_1.id).await.is_err());
+
+        let duration = Duration::minutes(10);
+        let login_result = db
+            .login_external(external_user_claims.clone(), duration)
+            .await;
+        assert!(login_result.is_ok());
+
+        let session_2 = login_result.unwrap();
+        let result = session_2.clone();
+
+        assert!(session_2.user.email.is_some()); //TODO: Technically, user details could change for each login. For simplicity, this is not covered yet.
+        assert_eq!(session_2.user.email.unwrap(), "foo@bar.de");
+        assert!(session_2.user.real_name.is_some());
+        assert_eq!(session_2.user.real_name.unwrap(), "Foo Bar");
+        assert_eq!(session_2.user.id, user_id);
+
+        let expected_duration = session_2.created + duration;
+        assert_eq!(session_2.valid_until, expected_duration);
+
+        assert!(db.session(session_2.id).await.is_ok());
+
+        result
     }
 
     async fn anonymous(ctx: &PostgresContext<NoTls>) {
@@ -1423,7 +1611,7 @@ mod tests {
             let meta = StaticMetaData {
                 loading_info: OgrSourceDataset {
                     file_name: Default::default(),
-                    layer_name: "".to_string(),
+                    layer_name: String::new(),
                     data_type: None,
                     time: Default::default(),
                     default_geometry: None,
@@ -1513,7 +1701,7 @@ mod tests {
             let meta = StaticMetaData {
                 loading_info: OgrSourceDataset {
                     file_name: Default::default(),
-                    layer_name: "".to_string(),
+                    layer_name: String::new(),
                     data_type: None,
                     time: Default::default(),
                     default_geometry: None,
@@ -1579,7 +1767,7 @@ mod tests {
             let meta = StaticMetaData {
                 loading_info: OgrSourceDataset {
                     file_name: Default::default(),
-                    layer_name: "".to_string(),
+                    layer_name: String::new(),
                     data_type: None,
                     time: Default::default(),
                     default_geometry: None,
@@ -1651,7 +1839,7 @@ mod tests {
             let meta = StaticMetaData {
                 loading_info: OgrSourceDataset {
                     file_name: Default::default(),
-                    layer_name: "".to_string(),
+                    layer_name: String::new(),
                     data_type: None,
                     time: Default::default(),
                     default_geometry: None,
@@ -1723,7 +1911,7 @@ mod tests {
             let meta = StaticMetaData {
                 loading_info: OgrSourceDataset {
                     file_name: Default::default(),
-                    layer_name: "".to_string(),
+                    layer_name: String::new(),
                     data_type: None,
                     time: Default::default(),
                     default_geometry: None,

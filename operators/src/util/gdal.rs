@@ -9,10 +9,10 @@ use geoengine_datatypes::{
     dataset::{DataId, DatasetId},
     hashmap,
     primitives::{
-        DateTimeParseFormat, Measurement, SpatialPartition2D, TimeGranularity, TimeInstance,
-        TimeInterval, TimeStep,
+        DateTimeParseFormat, Measurement, SpatialPartition2D, SpatialResolution, TimeGranularity,
+        TimeInstance, TimeInterval, TimeStep,
     },
-    raster::RasterDataType,
+    raster::{GeoTransform, RasterDataType},
     spatial_reference::SpatialReference,
     util::Identifier,
 };
@@ -28,104 +28,6 @@ use crate::{
     test_data,
     util::Result,
 };
-
-pub fn create_mask_band(dataset: &Dataset, rasterband_index: isize) -> Result<()> {
-    // TODO: move most of this to the GDAL crate. Use all-valid flag to avoid writing data?
-
-    let n_flags = 0x02; // 2 is the flag for shared mask betweeen all bands. It is the only valid flag here!
-    unsafe {
-        let raster_band_ptr =
-            gdal_sys::GDALGetRasterBand(dataset.c_dataset(), rasterband_index as i32);
-        let res = gdal_sys::GDALCreateMaskBand(raster_band_ptr, n_flags);
-        if res != 0 {
-            return Err(Error::Gdal {
-                source: gdal::errors::GdalError::CplError {
-                    class: res,
-                    number: 0,
-                    msg: "Could not create MaskBand".to_string(),
-                },
-            });
-        }
-        Ok(())
-    }
-}
-
-pub fn open_mask_band(
-    dataset: &Dataset,
-    raster_band_index: i32,
-) -> Result<gdal::raster::RasterBand> {
-    // TODO: move most of this to the GDAL crate. Use all-valid flag to avoid writing data?
-    unsafe {
-        let raster_band_ptr = gdal_sys::GDALGetRasterBand(dataset.c_dataset(), raster_band_index);
-        if raster_band_ptr.is_null() {
-            return Err(Error::Gdal {
-                source: gdal::errors::GdalError::NullPointer {
-                    method_name: "GDALGetRasterBand",
-                    msg: "Could not open RasterBand".to_string(),
-                },
-            });
-        }
-        let mask_band_ptr = gdal_sys::GDALGetMaskBand(raster_band_ptr);
-        if mask_band_ptr.is_null() {
-            return Err(Error::Gdal {
-                source: gdal::errors::GdalError::NullPointer {
-                    method_name: "GDALGetMaskBand",
-                    msg: "Could not open MaskBand".to_string(),
-                },
-            });
-        }
-        let mask_band = gdal::raster::RasterBand::from_c_rasterband(dataset, mask_band_ptr);
-        Ok(mask_band)
-    }
-}
-
-/// Wrapper type for gdal mask flags
-pub struct GdalMaskFlags(i32);
-
-impl GdalMaskFlags {
-    const GMF_ALL_VALID: i32 = 0x01;
-    const GMF_PER_DATASET: i32 = 0x02;
-    const GMF_ALPHA: i32 = 0x04;
-    const GMF_NODATA: i32 = 0x08;
-
-    pub fn is_all_valid(&self) -> bool {
-        self.0 & Self::GMF_ALL_VALID != 0
-    }
-
-    pub fn is_per_dataset(&self) -> bool {
-        self.0 & Self::GMF_PER_DATASET != 0
-    }
-
-    pub fn is_alpha(&self) -> bool {
-        self.0 & Self::GMF_ALPHA != 0
-    }
-
-    pub fn is_nodata(&self) -> bool {
-        self.0 & Self::GMF_NODATA != 0
-    }
-}
-
-/// Read the band mask flags for a GDAL `RasterBand`.
-/// From the GDAL docs:
-/// - `GMF_ALL_VALID`(0x01): There are no invalid pixels, all mask values will be 255. When used this will normally be the only flag set.
-/// - `GMF_PER_DATASET`(0x02): The mask band is shared between all bands on the dataset.
-/// - `GMF_ALPHA`(0x04): The mask band is actually an alpha band and may have values other than 0 and 255.
-/// - `GMF_NODATA`(0x08): Indicates the mask is actually being generated from nodata values. (mutually exclusive of `GMF_ALPHA`)
-pub fn get_mask_flags(dataset: &Dataset, raster_band_index: i32) -> Result<GdalMaskFlags> {
-    let raster_band_ptr =
-        unsafe { gdal_sys::GDALGetRasterBand(dataset.c_dataset(), raster_band_index) };
-    if raster_band_ptr.is_null() {
-        return Err(Error::Gdal {
-            source: gdal::errors::GdalError::NullPointer {
-                method_name: "GDALGetRasterBand",
-                msg: "Could not open RasterBand".to_string(),
-            },
-        });
-    }
-    let band_mask_flags = unsafe { gdal_sys::GDALGetMaskFlags(raster_band_ptr) };
-
-    Ok(GdalMaskFlags(band_mask_flags))
-}
 
 // TODO: move test helper somewhere else?
 #[allow(clippy::missing_panics_doc)]
@@ -175,6 +77,7 @@ pub fn create_ndvi_meta_data() -> GdalMetaDataRegular {
                 (-180., 90.).into(),
                 (180., -90.).into(),
             )),
+            resolution: Some(SpatialResolution::new_unchecked(0.1, 0.1)),
         },
     }
 }
@@ -220,12 +123,15 @@ pub fn raster_descriptor_from_dataset(
     let data_type = RasterDataType::from_gdal_data_type(rasterband.band_type())
         .map_err(|_| Error::GdalRasterDataTypeNotSupported)?;
 
+    let geo_transfrom = GeoTransform::from(dataset.geo_transform()?);
+
     Ok(RasterResultDescriptor {
         data_type,
         spatial_reference: spatial_ref.into(),
         measurement: measurement_from_rasterband(dataset, band)?,
         time: None,
         bbox: None,
+        resolution: Some(geo_transfrom.spatial_resolution()),
     })
 }
 

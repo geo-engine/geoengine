@@ -4,6 +4,9 @@ use self::overviews::remove_overviews;
 use self::overviews::InProgressFlag;
 pub use self::overviews::OverviewGeneration;
 use self::overviews::{create_overviews, METADATA_FILE_NAME};
+use crate::api::model::datatypes::{
+    DataId, DataProviderId, ExternalDataId, LayerId, ResamplingMethod,
+};
 use crate::datasets::external::netcdfcf::overviews::LOADING_INFO_FILE_NAME;
 use crate::datasets::listing::ProvenanceOutput;
 use crate::datasets::storage::MetaDataDefinition;
@@ -28,9 +31,6 @@ use crate::workflows::workflow::Workflow;
 use async_trait::async_trait;
 use gdal::raster::{Dimension, Group};
 use gdal::{DatasetOptions, GdalOpenFlags};
-use geoengine_datatypes::dataset::DataProviderId;
-use geoengine_datatypes::dataset::LayerId;
-use geoengine_datatypes::dataset::{DataId, ExternalDataId};
 use geoengine_datatypes::error::BoxedResultExt;
 use geoengine_datatypes::operations::image::{Colorizer, RgbaColor};
 use geoengine_datatypes::primitives::{
@@ -39,7 +39,6 @@ use geoengine_datatypes::primitives::{
 };
 use geoengine_datatypes::raster::{GdalGeoTransform, RasterDataType};
 use geoengine_datatypes::spatial_reference::SpatialReference;
-use geoengine_datatypes::util::gdal::ResamplingMethod;
 use geoengine_operators::engine::RasterOperator;
 use geoengine_operators::engine::TypedOperator;
 use geoengine_operators::source::GdalSource;
@@ -58,7 +57,7 @@ use log::debug;
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 use snafu::{OptionExt, ResultExt};
-use std::collections::{HashMap, VecDeque};
+use std::collections::HashMap;
 use std::io::BufReader;
 use std::path::{Path, PathBuf};
 use std::str::FromStr;
@@ -368,69 +367,6 @@ impl NetCdfCfDataProvider {
         })
     }
 
-    #[allow(dead_code)]
-    pub(crate) fn listing_from_netcdf(
-        id: DataProviderId,
-        provider_path: &Path,
-        overview_path: Option<&Path>,
-        dataset_path: &Path,
-        stats_for_group: &HashMap<String, (f64, f64)>,
-    ) -> Result<Vec<LayerListing>> {
-        let tree =
-            Self::build_netcdf_tree(provider_path, overview_path, dataset_path, stats_for_group)?;
-
-        let mut paths: VecDeque<Vec<&NetCdfGroup>> = tree.groups.iter().map(|s| vec![s]).collect();
-
-        let mut listings = Vec::new();
-
-        while let Some(path) = paths.pop_front() {
-            let tail = path.last().context(error::PathToDataIsEmpty)?;
-
-            if !tail.groups.is_empty() {
-                for subgroup in &tail.groups {
-                    let mut updated_path = path.clone();
-                    updated_path.push(subgroup);
-                    paths.push_back(updated_path);
-                }
-
-                continue;
-            }
-
-            // emit datasets
-
-            let group_title_path = path
-                .iter()
-                .map(|s| s.title.as_str())
-                .collect::<Vec<&str>>()
-                .join(" > ");
-
-            let group_names = path.iter().map(|s| s.name.clone()).collect::<Vec<String>>();
-
-            for entity in &tree.entities {
-                let dataset_id = NetCdfCf4DDatasetId {
-                    file_name: tree.file_name.clone(),
-                    group_names: group_names.clone(),
-                    entity: entity.id,
-                };
-
-                listings.push(LayerListing {
-                    id: ProviderLayerId {
-                        provider_id: id,
-                        layer_id: LayerId(serde_json::to_string(&dataset_id).unwrap_or_default()),
-                    },
-                    name: format!(
-                        "{title}: {group_title_path} > {entity_name}",
-                        title = tree.title,
-                        entity_name = entity.name
-                    ),
-                    description: tree.summary.clone(),
-                });
-            }
-        }
-
-        Ok(listings)
-    }
-
     #[allow(clippy::too_many_lines)] // TODO: refactor method
     fn meta_data(
         path: &Path,
@@ -537,9 +473,9 @@ impl NetCdfCfDataProvider {
             .context(error::CannotParseCrs)?
             .into(),
             measurement: derive_measurement(data_array.unit()),
-
             time: None,
             bbox: None,
+            resolution: None,
         };
 
         let params = GdalDatasetParameters {
@@ -994,11 +930,75 @@ enum NetCdfLayerCollectionId {
     },
 }
 
+impl FromStr for NetCdfLayerCollectionId {
+    type Err = crate::error::Error;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        let s = if s.starts_with("root") {
+            s.replace("root", ".")
+        } else {
+            s.to_string()
+        };
+
+        let split_pos = s.find(".nc").map(|i| i + ".nc".len());
+
+        if let Some(split_pos) = split_pos {
+            let (path, rest) = s.split_at(split_pos);
+
+            if rest.is_empty() {
+                return Ok(NetCdfLayerCollectionId::Path {
+                    path: PathBuf::from(s),
+                });
+            }
+
+            let r = rest[1..].split('/').collect::<Vec<_>>();
+
+            Ok(match *r.as_slice() {
+                [.., entity] if entity.ends_with(".entity") => NetCdfLayerCollectionId::Entity {
+                    path: PathBuf::from(path),
+                    groups: r[..r.len() - 1].iter().map(ToString::to_string).collect(),
+                    entity: entity[0..entity.len() - ".entity".len()]
+                        .parse()
+                        .map_err(|_| crate::error::Error::InvalidLayerCollectionId)?,
+                },
+                _ => NetCdfLayerCollectionId::Group {
+                    path: PathBuf::from(path),
+                    groups: r.iter().map(ToString::to_string).collect(),
+                },
+            })
+        } else {
+            Ok(NetCdfLayerCollectionId::Path {
+                path: PathBuf::from(s),
+            })
+        }
+    }
+}
+
+fn path_to_string(path: &Path) -> String {
+    path.components()
+        .map(|c| match c.as_os_str().to_string_lossy().as_ref() {
+            "." => "root".to_string(),
+            s => s.to_string(),
+        })
+        .collect::<Vec<_>>()
+        .join("/")
+}
+
 impl TryFrom<NetCdfLayerCollectionId> for LayerCollectionId {
     type Error = crate::error::Error;
 
     fn try_from(id: NetCdfLayerCollectionId) -> crate::error::Result<Self> {
-        Ok(LayerCollectionId(serde_json::to_string(&id)?))
+        let s = match id {
+            NetCdfLayerCollectionId::Path { path } => path_to_string(&path),
+            NetCdfLayerCollectionId::Group { path, groups } => {
+                format!("{}/{}", path_to_string(&path), groups.join("/"))
+            }
+            NetCdfLayerCollectionId::Entity { .. } => {
+                return Err(crate::error::Error::InvalidLayerCollectionId)
+            }
+        };
+
+        Ok(LayerCollectionId(s))
     }
 }
 
@@ -1006,7 +1006,21 @@ impl TryFrom<NetCdfLayerCollectionId> for LayerId {
     type Error = crate::error::Error;
 
     fn try_from(id: NetCdfLayerCollectionId) -> crate::error::Result<Self> {
-        Ok(LayerId(serde_json::to_string(&id)?))
+        let s = match id {
+            NetCdfLayerCollectionId::Entity {
+                path,
+                groups,
+                entity,
+            } => format!(
+                "{}/{}/{}.entity",
+                path_to_string(&path),
+                groups.join("/"),
+                entity
+            ),
+            _ => return Err(crate::error::Error::InvalidLayerId),
+        };
+
+        Ok(LayerId(s))
     }
 }
 
@@ -1018,7 +1032,7 @@ async fn listing_from_dir(
     path: &Path,
     options: &LayerCollectionListOptions,
 ) -> crate::error::Result<LayerCollection> {
-    let dir_path = base.join(&path);
+    let dir_path = base.join(path);
 
     let (name, description) = if path == Path::new(".") {
         (
@@ -1030,7 +1044,7 @@ async fn listing_from_dir(
             path.file_name()
                 .map(|n| n.to_string_lossy().to_string())
                 .unwrap_or_default(),
-            "".to_string(),
+            String::new(),
         )
     };
 
@@ -1056,7 +1070,7 @@ async fn listing_from_dir(
                     .try_into()?,
                 },
                 name: entry.file_name().to_string_lossy().to_string(),
-                description: "".to_string(),
+                description: String::new(),
             }));
         } else if entry.path().extension() == Some("nc".as_ref()) {
             let fp = entry
@@ -1199,7 +1213,8 @@ pub fn layer_from_netcdf_overview(
                                 })
                                 .to_string(),
                             ),
-                        }),
+                        })
+                        .into(),
                     },
                 }
                 .boxed(),
@@ -1298,7 +1313,7 @@ async fn listing_from_netcdf_file(
                         .try_into()?,
                     },
                     name: entity.name,
-                    description: "".to_string(),
+                    description: String::new(),
                 }))
             })
             .collect::<crate::error::Result<Vec<CollectionItem>>>()?
@@ -1348,8 +1363,7 @@ impl LayerCollectionProvider for NetCdfCfDataProvider {
         collection: &LayerCollectionId,
         options: Validated<LayerCollectionListOptions>,
     ) -> crate::error::Result<LayerCollection> {
-        let id: NetCdfLayerCollectionId = serde_json::from_str(&collection.0)?;
-
+        let id = NetCdfLayerCollectionId::from_str(&collection.0)?;
         Ok(match id {
             NetCdfLayerCollectionId::Path { path }
                 if canonicalize_subpath(&self.path, &path).is_ok()
@@ -1402,7 +1416,7 @@ impl LayerCollectionProvider for NetCdfCfDataProvider {
     }
 
     async fn get_layer(&self, id: &LayerId) -> crate::error::Result<Layer> {
-        let netcdf_id = serde_json::from_str(&id.0)?;
+        let netcdf_id = NetCdfLayerCollectionId::from_str(&id.0)?;
 
         match netcdf_id {
             NetCdfLayerCollectionId::Entity {
@@ -1439,12 +1453,12 @@ impl MetaDataProvider<GdalLoadingInfo, RasterResultDescriptor, RasterQueryRectan
 {
     async fn meta_data(
         &self,
-        id: &DataId,
+        id: &geoengine_datatypes::dataset::DataId,
     ) -> Result<
         Box<dyn MetaData<GdalLoadingInfo, RasterResultDescriptor, RasterQueryRectangle>>,
         geoengine_operators::error::Error,
     > {
-        let dataset = id.clone();
+        let dataset = id.clone().into();
         let path = self.path.clone();
         let overviews = self.overviews.clone();
         crate::util::spawn_blocking(move || {
@@ -1465,7 +1479,7 @@ impl
 {
     async fn meta_data(
         &self,
-        _id: &DataId,
+        _id: &geoengine_datatypes::dataset::DataId,
     ) -> Result<
         Box<
             dyn MetaData<
@@ -1486,7 +1500,7 @@ impl MetaDataProvider<OgrSourceDataset, VectorResultDescriptor, VectorQueryRecta
 {
     async fn meta_data(
         &self,
-        _id: &DataId,
+        _id: &geoengine_datatypes::dataset::DataId,
     ) -> Result<
         Box<dyn MetaData<OgrSourceDataset, VectorResultDescriptor, VectorQueryRectangle>>,
         geoengine_operators::error::Error,
@@ -1501,7 +1515,6 @@ mod tests {
 
     use crate::tasks::util::NopTaskContext;
     use geoengine_datatypes::{
-        dataset::LayerId,
         primitives::{SpatialPartition2D, SpatialResolution, TimeInterval},
         spatial_reference::SpatialReferenceAuthority,
         test_data,
@@ -1511,6 +1524,87 @@ mod tests {
         FileNotFoundHandling, GdalDatasetGeoTransform, GdalDatasetParameters,
         GdalLoadingInfoTemporalSlice,
     };
+
+    use crate::util::user_input::UserInput;
+
+    #[test]
+    fn it_parses_netcdf_layer_collection_ids() {
+        assert!(matches!(
+            NetCdfLayerCollectionId::from_str("root"),
+            Ok(NetCdfLayerCollectionId::Path { path }) if path == Path::new(".")
+        ));
+
+        assert!(matches!(
+            NetCdfLayerCollectionId::from_str("root/foo/bar"),
+            Ok(NetCdfLayerCollectionId::Path { path }) if path == Path::new("./foo/bar")
+        ));
+
+        assert!(matches!(
+            NetCdfLayerCollectionId::from_str("root/foo/bar/baz.nc"),
+            Ok(NetCdfLayerCollectionId::Path { path }) if path == Path::new("./foo/bar/baz.nc")
+        ));
+
+        assert!(matches!(
+            NetCdfLayerCollectionId::from_str("root/foo/bar/baz.nc/group1"),
+            Ok(NetCdfLayerCollectionId::Group { path, groups }) if path == Path::new("./foo/bar/baz.nc") && groups == ["group1"]
+        ));
+
+        assert!(matches!(
+            NetCdfLayerCollectionId::from_str("root/foo/bar/baz.nc/group1/group2"),
+            Ok(NetCdfLayerCollectionId::Group { path, groups }) if path == Path::new("./foo/bar/baz.nc") && groups == ["group1", "group2"]
+        ));
+
+        assert!(matches!(
+            NetCdfLayerCollectionId::from_str("root/foo/bar/baz.nc/group1/group2/7.entity"),
+            Ok(NetCdfLayerCollectionId::Entity { path, groups, entity }) if path == Path::new("./foo/bar/baz.nc") && groups == ["group1", "group2"] && entity == 7
+        ));
+
+        assert!(matches!(
+            NetCdfLayerCollectionId::from_str("root/foo/bar/baz.nc/7.entity"),
+            Ok(NetCdfLayerCollectionId::Entity { path, groups, entity }) if path == Path::new("./foo/bar/baz.nc") && groups.is_empty() && entity == 7
+        ));
+    }
+
+    #[test]
+    fn it_serializes_netcdf_layer_collection_ids() {
+        let id: LayerCollectionId = NetCdfLayerCollectionId::Path {
+            path: PathBuf::from("."),
+        }
+        .try_into()
+        .unwrap();
+        assert_eq!(id.to_string(), "root");
+
+        let id: LayerCollectionId = NetCdfLayerCollectionId::Path {
+            path: PathBuf::from("./foo/bar"),
+        }
+        .try_into()
+        .unwrap();
+        assert_eq!(id.to_string(), "root/foo/bar");
+
+        let id: LayerCollectionId = NetCdfLayerCollectionId::Path {
+            path: PathBuf::from("./foo/bar/baz.nc"),
+        }
+        .try_into()
+        .unwrap();
+        assert_eq!(id.to_string(), "root/foo/bar/baz.nc");
+
+        let id: LayerCollectionId = NetCdfLayerCollectionId::Group {
+            path: PathBuf::from("./foo/bar/baz.nc"),
+            groups: vec!["group1".to_string(), "group2".to_string()],
+        }
+        .try_into()
+        .unwrap();
+        assert_eq!(id.to_string(), "root/foo/bar/baz.nc/group1/group2");
+
+        let id: LayerId = NetCdfLayerCollectionId::Entity {
+            path: PathBuf::from("./foo/bar/baz.nc"),
+            groups: vec!["group1".to_string(), "group2".to_string()],
+            entity: 7,
+        }
+        .try_into()
+        .unwrap();
+        assert_eq!(id.to_string(), "root/foo/bar/baz.nc/group1/group2/7.entity");
+    }
 
     #[test]
     fn test_parse_time_coverage() {
@@ -1590,180 +1684,202 @@ mod tests {
     }
 
     #[tokio::test]
-    #[allow(clippy::too_many_lines)]
-    async fn test_listing_from_netcdf_m() {
-        let provider_id = DataProviderId::from_str("bf6bb6ea-5d5d-467d-bad1-267bf3a54470").unwrap();
-
-        let listing = NetCdfCfDataProvider::listing_from_netcdf(
-            provider_id,
-            test_data!("netcdf4d"),
-            None,
-            Path::new("dataset_m.nc"),
-            &Default::default(),
-        )
+    async fn test_listing() {
+        let provider = Box::new(NetCdfCfDataProviderDefinition {
+            name: "NetCdfCfDataProvider".to_string(),
+            path: test_data!("netcdf4d").into(),
+            overviews: test_data!("netcdf4d/overviews").into(),
+        })
+        .initialize()
+        .await
         .unwrap();
 
-        assert_eq!(listing.len(), 6);
+        let root_id = provider.root_collection_id().await.unwrap();
+
+        let collection = provider
+            .collection(
+                &root_id,
+                LayerCollectionListOptions {
+                    offset: 0,
+                    limit: 20,
+                }
+                .validated()
+                .unwrap(),
+            )
+            .await
+            .unwrap();
 
         assert_eq!(
-            listing[0],
-            LayerListing {
-                id: ProviderLayerId {
-                    provider_id,
-                    layer_id: LayerId(
-                        serde_json::json!({
-                            "fileName": "dataset_m.nc",
-                            "groupNames": ["metric_1"],
-                            "entity": 0
-                        })
-                        .to_string()
-                    ),
+            collection,
+            LayerCollection {
+                id: ProviderLayerCollectionId {
+                    provider_id: NETCDF_CF_PROVIDER_ID,
+                    collection_id: root_id,
                 },
-                name: "Test dataset metric: Random metric 1 > entity01".into(),
-                description: "CFake description of test dataset with metric.".into(),
+                name: "NetCdfCfDataProvider".to_string(),
+                description: "NetCdfCfProviderDefinition".to_string(),
+                items: vec![
+                    CollectionItem::Collection(LayerCollectionListing {
+                        id: ProviderLayerCollectionId {
+                            provider_id: NETCDF_CF_PROVIDER_ID,
+                            collection_id: LayerCollectionId("dataset_irr_ts.nc".to_string())
+                        },
+                        name: "Test dataset irregular timesteps".to_string(),
+                        description: "Fake description of test dataset with metric and irregular timestep definition.".to_string()
+                    }),
+                    CollectionItem::Collection(LayerCollectionListing {
+                        id: ProviderLayerCollectionId {
+                            provider_id: NETCDF_CF_PROVIDER_ID,
+                            collection_id: LayerCollectionId("dataset_m.nc".to_string())
+                        },
+                        name: "Test dataset metric".to_string(),
+                        description: "CFake description of test dataset with metric.".to_string()
+                    }),
+                    CollectionItem::Collection(LayerCollectionListing {
+                        id: ProviderLayerCollectionId {
+                            provider_id: NETCDF_CF_PROVIDER_ID,
+                            collection_id: LayerCollectionId("dataset_sm.nc".to_string())
+                        },
+                        name: "Test dataset metric and scenario".to_string(),
+                        description: "Fake description of test dataset with metric and scenario."
+                            .to_string()
+                    })
+                ],
+                entry_label: None,
+                properties: vec![]
             }
         );
+    }
+
+    #[tokio::test]
+    async fn test_listing_from_netcdf_m() {
+        let provider = Box::new(NetCdfCfDataProviderDefinition {
+            name: "NetCdfCfDataProvider".to_string(),
+            path: test_data!("netcdf4d").into(),
+            overviews: test_data!("netcdf4d/overviews").into(),
+        })
+        .initialize()
+        .await
+        .unwrap();
+
+        let id = LayerCollectionId("dataset_m.nc".to_string());
+
+        let collection = provider
+            .collection(
+                &id,
+                LayerCollectionListOptions {
+                    offset: 0,
+                    limit: 20,
+                }
+                .validated()
+                .unwrap(),
+            )
+            .await
+            .unwrap();
+
         assert_eq!(
-            listing[1],
-            LayerListing {
-                id: ProviderLayerId {
-                    provider_id,
-                    layer_id: LayerId(
-                        serde_json::json!({
-                            "fileName": "dataset_m.nc",
-                            "groupNames": ["metric_1"],
-                            "entity": 1
-                        })
-                        .to_string()
-                    ),
+            collection,
+            LayerCollection {
+                id: ProviderLayerCollectionId {
+                    provider_id: NETCDF_CF_PROVIDER_ID,
+                    collection_id: id,
                 },
-                name: "Test dataset metric: Random metric 1 > entity02".into(),
-                description: "CFake description of test dataset with metric.".into(),
-            }
-        );
-        assert_eq!(
-            listing[2],
-            LayerListing {
-                id: ProviderLayerId {
-                    provider_id,
-                    layer_id: LayerId(
-                        serde_json::json!({
-                            "fileName": "dataset_m.nc",
-                            "groupNames": ["metric_1"],
-                            "entity": 2
-                        })
-                        .to_string()
-                    ),
-                },
-                name: "Test dataset metric: Random metric 1 > entity03".into(),
-                description: "CFake description of test dataset with metric.".into(),
-            }
-        );
-        assert_eq!(
-            listing[3],
-            LayerListing {
-                id: ProviderLayerId {
-                    provider_id,
-                    layer_id: LayerId(
-                        serde_json::json!({
-                            "fileName": "dataset_m.nc",
-                            "groupNames": ["metric_2"],
-                            "entity": 0
-                        })
-                        .to_string()
-                    ),
-                },
-                name: "Test dataset metric: Random metric 2 > entity01".into(),
-                description: "CFake description of test dataset with metric.".into(),
-            }
-        );
-        assert_eq!(
-            listing[4],
-            LayerListing {
-                id: ProviderLayerId {
-                    provider_id,
-                    layer_id: LayerId(
-                        serde_json::json!({
-                            "fileName": "dataset_m.nc",
-                            "groupNames": ["metric_2"],
-                            "entity": 1
-                        })
-                        .to_string()
-                    ),
-                },
-                name: "Test dataset metric: Random metric 2 > entity02".into(),
-                description: "CFake description of test dataset with metric.".into(),
-            }
-        );
-        assert_eq!(
-            listing[5],
-            LayerListing {
-                id: ProviderLayerId {
-                    provider_id,
-                    layer_id: LayerId(
-                        serde_json::json!({
-                            "fileName": "dataset_m.nc",
-                            "groupNames": ["metric_2"],
-                            "entity": 2
-                        })
-                        .to_string()
-                    ),
-                },
-                name: "Test dataset metric: Random metric 2 > entity03".into(),
-                description: "CFake description of test dataset with metric.".into(),
+                name: "Test dataset metric".to_string(),
+                description: "CFake description of test dataset with metric.".to_string(),
+                items: vec![CollectionItem::Collection(LayerCollectionListing {
+                    id: ProviderLayerCollectionId {
+                        provider_id: NETCDF_CF_PROVIDER_ID,
+                        collection_id: LayerCollectionId("dataset_m.nc/metric_1".to_string())
+                    },
+                    name: "Random metric 1".to_string(),
+                    description: "Randomly created data" .to_string()
+                }), CollectionItem::Collection(LayerCollectionListing {
+                    id: ProviderLayerCollectionId {
+                        provider_id: NETCDF_CF_PROVIDER_ID,
+                        collection_id: LayerCollectionId("dataset_m.nc/metric_2".to_string()) 
+                    },
+                    name: "Random metric 2".to_string(), 
+                    description: "Randomly created data".to_string()
+                })],
+                entry_label: None,
+                properties: vec![("author".to_string(), "Luise Quoß, luise.quoss@idiv.de, German Centre for Integrative Biodiversity Research (iDiv)".to_string())]
             }
         );
     }
 
     #[tokio::test]
     async fn test_listing_from_netcdf_sm() {
-        let provider_id = DataProviderId::from_str("bf6bb6ea-5d5d-467d-bad1-267bf3a54470").unwrap();
-
-        let listing = NetCdfCfDataProvider::listing_from_netcdf(
-            provider_id,
-            test_data!("netcdf4d"),
-            None,
-            Path::new("dataset_sm.nc"),
-            &Default::default(),
-        )
+        let provider = Box::new(NetCdfCfDataProviderDefinition {
+            name: "NetCdfCfDataProvider".to_string(),
+            path: test_data!("netcdf4d").into(),
+            overviews: test_data!("netcdf4d/overviews").into(),
+        })
+        .initialize()
+        .await
         .unwrap();
 
-        assert_eq!(listing.len(), 20);
+        let id = LayerCollectionId("dataset_sm.nc".to_string());
+
+        let collection = provider
+            .collection(
+                &id,
+                LayerCollectionListOptions {
+                    offset: 0,
+                    limit: 20,
+                }
+                .validated()
+                .unwrap(),
+            )
+            .await
+            .unwrap();
 
         assert_eq!(
-            listing[0],
-            LayerListing {
-                id: ProviderLayerId {
-                    provider_id,
-                    layer_id: LayerId(
-                        serde_json::json!({
-                            "fileName": "dataset_sm.nc",
-                            "groupNames": ["scenario_1", "metric_1"],
-                            "entity": 0
-                        })
-                        .to_string()
-                    ),
+            collection,
+            LayerCollection {
+                id: ProviderLayerCollectionId {
+                    provider_id: NETCDF_CF_PROVIDER_ID,
+                    collection_id: id,
                 },
-                name:
-                    "Test dataset metric and scenario: Sustainability > Random metric 1 > entity01"
-                        .into(),
-                description: "Fake description of test dataset with metric and scenario.".into(),
-            }
-        );
-        assert_eq!(
-            listing[19],
-            LayerListing {
-                id: ProviderLayerId {
-                    provider_id,
-                    layer_id: LayerId(serde_json::json!({
-                        "fileName": "dataset_sm.nc",
-                        "groupNames": ["scenario_5", "metric_2"],
-                        "entity": 1
-                    })
-                    .to_string()),
-                },
-                name: "Test dataset metric and scenario: Fossil-fueled Development > Random metric 2 > entity02".into(),
-                description: "Fake description of test dataset with metric and scenario.".into(),
+                name: "Test dataset metric and scenario".to_string(),
+                description: "Fake description of test dataset with metric and scenario.".to_string(),
+                items: vec![CollectionItem::Collection(LayerCollectionListing {
+                    id: ProviderLayerCollectionId {
+                        provider_id: NETCDF_CF_PROVIDER_ID,
+                        collection_id: LayerCollectionId("dataset_sm.nc/scenario_1".to_string())
+                    },
+                    name: "Sustainability".to_string(),
+                    description: "SSP1-RCP2.6" .to_string()
+                }), CollectionItem::Collection(LayerCollectionListing {
+                    id: ProviderLayerCollectionId {
+                        provider_id: NETCDF_CF_PROVIDER_ID,
+                        collection_id: LayerCollectionId("dataset_sm.nc/scenario_2".to_string())
+                    },
+                    name: "Middle of the Road ".to_string(),
+                    description: "SSP2-RCP4.5".to_string()
+                }), CollectionItem::Collection(LayerCollectionListing {
+                    id: ProviderLayerCollectionId {
+                        provider_id: NETCDF_CF_PROVIDER_ID,
+                        collection_id: LayerCollectionId("dataset_sm.nc/scenario_3".to_string())
+                    },
+                    name: "Regional Rivalry".to_string(), 
+                    description: "SSP3-RCP6.0".to_string()
+                }), CollectionItem::Collection(LayerCollectionListing {
+                    id: ProviderLayerCollectionId {
+                        provider_id: NETCDF_CF_PROVIDER_ID,
+                        collection_id: LayerCollectionId("dataset_sm.nc/scenario_4".to_string())
+                    },
+                    name: "Inequality".to_string(),
+                    description: "SSP4-RCP6.0".to_string()
+                }), CollectionItem::Collection(LayerCollectionListing {
+                    id: ProviderLayerCollectionId {
+                        provider_id: NETCDF_CF_PROVIDER_ID,
+                        collection_id: LayerCollectionId("dataset_sm.nc/scenario_5".to_string())
+                    },
+                    name: "Fossil-fueled Development".to_string(),
+                    description: "SSP5-RCP8.5".to_string()
+                })],
+                entry_label: None,
+                properties: vec![("author".to_string(), "Luise Quoß, luise.quoss@idiv.de, German Centre for Integrative Biodiversity Research (iDiv)".to_string())]
             }
         );
     }
@@ -1777,17 +1893,20 @@ mod tests {
         };
 
         let metadata = provider
-            .meta_data(&DataId::External(ExternalDataId {
-                provider_id: NETCDF_CF_PROVIDER_ID,
-                layer_id: LayerId(
-                    serde_json::json!({
-                        "fileName": "dataset_sm.nc",
-                        "groupNames": ["scenario_5", "metric_2"],
-                        "entity": 1
-                    })
-                    .to_string(),
-                ),
-            }))
+            .meta_data(
+                &DataId::External(ExternalDataId {
+                    provider_id: NETCDF_CF_PROVIDER_ID,
+                    layer_id: LayerId(
+                        serde_json::json!({
+                            "fileName": "dataset_sm.nc",
+                            "groupNames": ["scenario_5", "metric_2"],
+                            "entity": 1
+                        })
+                        .to_string(),
+                    ),
+                })
+                .into(),
+            )
             .await
             .unwrap();
 
@@ -1800,6 +1919,7 @@ mod tests {
                 measurement: Measurement::Unitless,
                 time: None,
                 bbox: None,
+                resolution: None,
             }
         );
 
@@ -1896,17 +2016,20 @@ mod tests {
             .unwrap();
 
         let metadata = provider
-            .meta_data(&DataId::External(ExternalDataId {
-                provider_id: NETCDF_CF_PROVIDER_ID,
-                layer_id: LayerId(
-                    serde_json::json!({
-                        "fileName": "dataset_sm.nc",
-                        "groupNames": ["scenario_5", "metric_2"],
-                        "entity": 1
-                    })
-                    .to_string(),
-                ),
-            }))
+            .meta_data(
+                &DataId::External(ExternalDataId {
+                    provider_id: NETCDF_CF_PROVIDER_ID,
+                    layer_id: LayerId(
+                        serde_json::json!({
+                            "fileName": "dataset_sm.nc",
+                            "groupNames": ["scenario_5", "metric_2"],
+                            "entity": 1
+                        })
+                        .to_string(),
+                    ),
+                })
+                .into(),
+            )
             .await
             .unwrap();
 
@@ -1919,6 +2042,7 @@ mod tests {
                 measurement: Measurement::Unitless,
                 time: None,
                 bbox: None,
+                resolution: Some(SpatialResolution::new_unchecked(1000.0, 1000.0)),
             }
         );
 
@@ -1980,63 +2104,77 @@ mod tests {
 
         let overview_folder = tempfile::tempdir().unwrap();
 
-        let provider = NetCdfCfDataProvider {
-            name: "Test Provider".to_string(),
-            path: test_data!("netcdf4d/").to_path_buf(),
+        let provider = Box::new(NetCdfCfDataProviderDefinition {
+            name: "NetCdfCfDataProvider".to_string(),
+            path: test_data!("netcdf4d").into(),
             overviews: overview_folder.path().to_path_buf(),
-        };
-
-        provider
-            .create_overviews(Path::new("dataset_sm.nc"), None, &NopTaskContext)
-            .unwrap();
-
-        let provider_id = DataProviderId::from_str("bf6bb6ea-5d5d-467d-bad1-267bf3a54470").unwrap();
-
-        let listing = NetCdfCfDataProvider::listing_from_netcdf(
-            provider_id,
-            test_data!("netcdf4d"),
-            Some(overview_folder.path()),
-            Path::new("dataset_sm.nc"),
-            &Default::default(),
-        )
+        })
+        .initialize()
+        .await
         .unwrap();
 
-        assert_eq!(listing.len(), 20);
+        let id = LayerCollectionId("dataset_sm.nc".to_string());
+
+        let collection = provider
+            .collection(
+                &id,
+                LayerCollectionListOptions {
+                    offset: 0,
+                    limit: 20,
+                }
+                .validated()
+                .unwrap(),
+            )
+            .await
+            .unwrap();
 
         assert_eq!(
-            listing[0],
-            LayerListing {
-                id: ProviderLayerId {
-                    provider_id,
-                    layer_id: LayerId(
-                        serde_json::json!({
-                            "fileName": "dataset_sm.nc",
-                            "groupNames": ["scenario_1", "metric_1"],
-                            "entity": 0
-                        })
-                        .to_string()
-                    ),
+            collection,
+            LayerCollection {
+                id: ProviderLayerCollectionId {
+                    provider_id: NETCDF_CF_PROVIDER_ID,
+                    collection_id: id,
                 },
-                name:
-                    "Test dataset metric and scenario: Sustainability > Random metric 1 > entity01"
-                        .into(),
-                description: "Fake description of test dataset with metric and scenario.".into(),
-            }
-        );
-        assert_eq!(
-            listing[19],
-            LayerListing {
-                id: ProviderLayerId {
-                    provider_id,
-                    layer_id: LayerId(serde_json::json!({
-                        "entity": 1,
-                        "fileName": "dataset_sm.nc",
-                        "groupNames": ["scenario_5", "metric_2"]
-                    })
-                    .to_string()),
-                },
-                name: "Test dataset metric and scenario: Fossil-fueled Development > Random metric 2 > entity02".into(),
-                description: "Fake description of test dataset with metric and scenario.".into(),
+                name: "Test dataset metric and scenario".to_string(),
+                description: "Fake description of test dataset with metric and scenario.".to_string(),
+                items: vec![CollectionItem::Collection(LayerCollectionListing {
+                    id: ProviderLayerCollectionId {
+                        provider_id: NETCDF_CF_PROVIDER_ID,
+                        collection_id: LayerCollectionId("dataset_sm.nc/scenario_1".to_string())
+                    },
+                    name: "Sustainability".to_string(),
+                    description: "SSP1-RCP2.6" .to_string()
+                }), CollectionItem::Collection(LayerCollectionListing {
+                    id: ProviderLayerCollectionId {
+                        provider_id: NETCDF_CF_PROVIDER_ID,
+                        collection_id: LayerCollectionId("dataset_sm.nc/scenario_2".to_string())
+                    },
+                    name: "Middle of the Road ".to_string(),
+                    description: "SSP2-RCP4.5".to_string()
+                }), CollectionItem::Collection(LayerCollectionListing {
+                    id: ProviderLayerCollectionId {
+                        provider_id: NETCDF_CF_PROVIDER_ID,
+                        collection_id: LayerCollectionId("dataset_sm.nc/scenario_3".to_string())
+                    },
+                    name: "Regional Rivalry".to_string(),
+                    description: "SSP3-RCP6.0".to_string()
+                }), CollectionItem::Collection(LayerCollectionListing {
+                    id: ProviderLayerCollectionId {
+                        provider_id: NETCDF_CF_PROVIDER_ID,
+                        collection_id: LayerCollectionId("dataset_sm.nc/scenario_4".to_string())
+                    },
+                    name: "Inequality".to_string(),
+                    description: "SSP4-RCP6.0".to_string()
+                }), CollectionItem::Collection(LayerCollectionListing {
+                    id: ProviderLayerCollectionId {
+                        provider_id: NETCDF_CF_PROVIDER_ID,
+                        collection_id: LayerCollectionId("dataset_sm.nc/scenario_5".to_string()) 
+                    },
+                    name: "Fossil-fueled Development".to_string(), 
+                    description: "SSP5-RCP8.5".to_string()
+                })],
+                entry_label: None,
+                properties: vec![("author".to_string(), "Luise Quoß, luise.quoss@idiv.de, German Centre for Integrative Biodiversity Research (iDiv)".to_string())]
             }
         );
     }

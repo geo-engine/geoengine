@@ -5,6 +5,7 @@ use crate::util::user_input::UserInput;
 use crate::{contexts::Context, tasks::TaskId};
 use actix_web::{web, Either, FromRequest, HttpResponse, Responder};
 use serde::{Deserialize, Serialize};
+use utoipa::{IntoParams, ToSchema};
 
 pub(crate) fn init_task_routes<C>(cfg: &mut web::ServiceConfig)
 where
@@ -23,7 +24,7 @@ where
 }
 
 /// Create a task somewhere and respond with a task id to query the task status.
-#[derive(Debug, Clone, Deserialize, Serialize)]
+#[derive(Debug, Clone, Deserialize, Serialize, ToSchema)]
 pub struct TaskResponse {
     pub task_id: TaskId,
 }
@@ -35,41 +36,26 @@ impl TaskResponse {
 }
 
 /// Retrieve the status of a task.
-///
-/// # Example
-///
-/// ```text
-/// GET /tasks/420b06de-0a7e-45cb-9c1c-ea901b46ab69/status
-/// Authorization: Bearer 4f0d02f9-68e8-46fb-9362-80f862b7db54
-/// ```
-///
-/// Response 1:
-///
-/// ```json
-/// {
-///     "status": "running",
-///     "pct_complete": 0,
-///     "info": (),
-/// }
-///
-/// Response 2:
-///
-/// ```json
-/// {
-///     "status": "completed",
-///     "info": {
-///        "code": 42,
-///     }
-/// }
-///
-/// Response 3:
-///
-/// ```json
-/// {
-///     "status": "failed",
-///     "error": "something went wrong",
-/// }
-/// ```
+#[utoipa::path(
+    tag = "Tasks",
+    get,
+    path = "/tasks/{id}/status",
+    responses(
+        (status = 200, description = "Status of the task (running)", body = TaskStatus,
+            example = json!({
+                "status": "running",
+                "pct_complete": 0,
+                "info": (),
+            })
+        )
+    ),
+    params(
+        ("id" = TaskId, description = "Task id")
+    ),
+    security(
+        ("session_token" = [])
+    )
+)]
 async fn status_handler<C: Context>(
     _session: Either<AdminSession, C::Session>, // TODO: check for session auth
     ctx: web::Data<C>,
@@ -82,27 +68,29 @@ async fn status_handler<C: Context>(
     Ok(web::Json(task))
 }
 
-/// Retrieve the status of a task.
-///
-/// # Example
-///
-/// ```text
-/// GET /tasks/list?offset=0&limit=10&filter=completed
-/// Authorization: Bearer 4f0d02f9-68e8-46fb-9362-80f862b7db54
-/// ```
-///
-/// Response:
-///
-/// ```json
-/// [
-///     {
-///         "task_id": "420b06de-0a7e-45cb-9c1c-ea901b46ab69",
-///         "status": "completed",
-///         "info": "completed",
-///     }
-/// ]
-/// ```
-///
+/// Retrieve the status of all tasks.
+#[utoipa::path(
+    tag = "Tasks",
+    get,
+    path = "/tasks/list",
+    responses(
+        (status = 200, description = "Status of all tasks", body = TaskStatus,
+            example = json!([
+                {
+                    "task_id": "420b06de-0a7e-45cb-9c1c-ea901b46ab69",
+                    "status": "completed",
+                    "info": "completed",
+                }
+            ])
+        )
+    ),
+    params(
+        TaskListOptions
+    ),
+    security(
+        ("session_token" = [])
+    )
+)]
 async fn list_handler<C: Context>(
     _session: Either<AdminSession, C::Session>, // TODO: check for session auth
     ctx: web::Data<C>,
@@ -115,7 +103,7 @@ async fn list_handler<C: Context>(
     Ok(web::Json(task))
 }
 
-#[derive(Debug, Serialize, Deserialize, Clone)]
+#[derive(Debug, Serialize, Deserialize, Clone, ToSchema, IntoParams)]
 pub struct TaskAbortOptions {
     #[serde(default)]
     pub force: bool,
@@ -127,31 +115,21 @@ pub struct TaskAbortOptions {
 ///
 /// * `force` - If true, the task will be aborted without clean-up.
 ///             You can abort a task that is already in the process of aborting.
-///
-/// # Example
-///
-/// ## Request 1
-///
-/// ```text
-/// GET /tasks/420b06de-0a7e-45cb-9c1c-ea901b46ab69/abort
-/// Authorization: Bearer 4f0d02f9-68e8-46fb-9362-80f862b7db54
-/// ```
-///
-/// Response:
-///
-/// 200 OK
-///
-/// ## Request 2
-///  
-/// ```text
-/// GET /tasks/420b06de-0a7e-45cb-9c1c-ea901b46ab69/abort?force=true
-/// Authorization: Bearer 4f0d02f9-68e8-46fb-9362-80f862b7db54
-/// ```
-///
-/// Response:
-///
-/// 200 OK
-///
+#[utoipa::path(
+    tag = "Tasks",
+    get,
+    path = "/tasks/{id}/abort",
+    responses(
+        (status = 200, description = "Task successfully aborted.")
+    ),
+    params(
+        TaskAbortOptions,
+        ("id" = TaskId, description = "Task id")
+    ),
+    security(
+        ("session_token" = [])
+    )
+)]
 async fn abort_handler<C: Context>(
     _session: Either<AdminSession, C::Session>, // TODO: check for session auth
     ctx: web::Data<C>,

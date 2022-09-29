@@ -476,6 +476,7 @@ mod tests {
                     ),
                     time: None,
                     bbox: None,
+                    resolution: None,
                 },
             },
         }
@@ -742,7 +743,7 @@ mod tests {
                     default_geometry: None,
                     columns: Some(OgrSourceColumnSpec {
                         format_specifics: None,
-                        x: "".to_string(),
+                        x: String::new(),
                         y: None,
                         int: vec!["natlscale".to_string()],
                         float: vec!["scalerank".to_string()],
@@ -855,6 +856,7 @@ mod tests {
                         measurement,
                         time: None,
                         bbox: None,
+                        resolution: None,
                     },
                 },
             }
@@ -1053,6 +1055,7 @@ mod tests {
                         measurement,
                         time: None,
                         bbox: None,
+                        resolution: None,
                     },
                 },
             }

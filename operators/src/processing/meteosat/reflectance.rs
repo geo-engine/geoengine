@@ -106,6 +106,7 @@ impl RasterOperator for Reflectance {
             }),
             time: in_desc.time,
             bbox: in_desc.bbox,
+            resolution: in_desc.resolution,
         };
 
         let initialized_operator = InitializedReflectance {
@@ -356,7 +357,7 @@ mod tests {
         let result = process_mock(ReflectanceParams::default(), Some(1), Some(1), true, None).await;
 
         assert!(result.is_ok());
-        println!("{:?}", result);
+
         assert!(geoengine_datatypes::util::test::grid_or_empty_grid_eq(
             &result.unwrap().grid_array,
             &GridOrEmpty::from(EmptyGrid2D::new([3, 2].into()))

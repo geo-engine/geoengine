@@ -1,6 +1,8 @@
 pub trait Identifier: Sized {
     /// Create a new (random) identifier
     fn new() -> Self;
+
+    fn uuid(&self) -> &uuid::Uuid;
 }
 
 #[macro_export]
@@ -18,6 +20,10 @@ macro_rules! identifier {
         impl $crate::util::Identifier for $id_name {
             fn new() -> Self {
                 Self(uuid::Uuid::new_v4())
+            }
+
+            fn uuid(&self) -> &uuid::Uuid {
+                &self.0
             }
         }
 

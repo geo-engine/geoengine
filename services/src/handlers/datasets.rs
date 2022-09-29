@@ -4,6 +4,7 @@ use std::{
     path::Path,
 };
 
+use crate::api::model::datatypes::DatasetId;
 use crate::datasets::upload::UploadRootPath;
 use crate::datasets::{
     listing::DatasetProvider,
@@ -29,7 +30,6 @@ use gdal::{
 };
 use geoengine_datatypes::{
     collections::VectorDataType,
-    dataset::DatasetId,
     primitives::{FeatureDataType, Measurement, VectorQueryRectangle},
     spatial_reference::{SpatialReference, SpatialReferenceOption},
 };
@@ -354,7 +354,7 @@ fn auto_detect_meta_data_definition(main_file_path: &Path) -> Result<MetaDataDef
     let columns_vecs = column_map_to_column_vecs(&columns_map);
 
     let mut geometry = detect_vector_geometry(&dataset);
-    let mut x = "".to_owned();
+    let mut x = String::new();
     let mut y: Option<String> = None;
 
     if geometry.data_type == VectorDataType::Data {
@@ -693,6 +693,7 @@ fn column_map_to_column_vecs(columns: &HashMap<String, ColumnDataType>) -> Colum
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::api::model::datatypes::DatasetId;
     use crate::contexts::{InMemoryContext, Session, SessionId, SimpleContext, SimpleSession};
     use crate::datasets::storage::{AddDataset, DatasetStore};
     use crate::datasets::upload::UploadId;
@@ -709,7 +710,6 @@ mod tests {
     use geoengine_datatypes::collections::{
         GeometryCollection, MultiPointCollection, VectorDataType,
     };
-    use geoengine_datatypes::dataset::DatasetId;
     use geoengine_datatypes::primitives::{BoundingBox2D, SpatialResolution};
     use geoengine_datatypes::raster::{GridShape2D, TilingSpecification};
     use geoengine_datatypes::spatial_reference::SpatialReferenceOption;
@@ -752,7 +752,7 @@ mod tests {
         let meta = StaticMetaData {
             loading_info: OgrSourceDataset {
                 file_name: Default::default(),
-                layer_name: "".to_string(),
+                layer_name: String::new(),
                 data_type: None,
                 time: Default::default(),
                 default_geometry: None,
@@ -786,7 +786,7 @@ mod tests {
         let meta = StaticMetaData {
             loading_info: OgrSourceDataset {
                 file_name: Default::default(),
-                layer_name: "".to_string(),
+                layer_name: String::new(),
                 data_type: None,
                 time: Default::default(),
                 default_geometry: None,
@@ -1104,7 +1104,7 @@ mod tests {
                     default_geometry: None,
                     columns: Some(OgrSourceColumnSpec {
                         format_specifics: None,
-                        x: "".to_string(),
+                        x: String::new(),
                         y: None,
                         int: vec!["scalerank".to_string()],
                         float: vec!["natlscale".to_string()],
@@ -1202,7 +1202,7 @@ mod tests {
                     default_geometry: None,
                     columns: Some(OgrSourceColumnSpec {
                         format_specifics: None,
-                        x: "".to_string(),
+                        x: String::new(),
                         y: None,
                         float: vec![],
                         int: vec![],
@@ -1275,7 +1275,7 @@ mod tests {
                     default_geometry: None,
                     columns: Some(OgrSourceColumnSpec {
                         format_specifics: None,
-                        x: "".to_string(),
+                        x: String::new(),
                         y: None,
                         float: vec![],
                         int: vec![],
@@ -1348,7 +1348,7 @@ mod tests {
                     default_geometry: None,
                     columns: Some(OgrSourceColumnSpec {
                         format_specifics: None,
-                        x: "".to_string(),
+                        x: String::new(),
                         y: None,
                         float: vec![],
                         int: vec![],
@@ -1415,7 +1415,7 @@ mod tests {
                     default_geometry: None,
                     columns: Some(OgrSourceColumnSpec {
                         format_specifics: None,
-                        x: "".to_string(),
+                        x: String::new(),
                         y: None,
                         float: vec![],
                         int: vec!["duration".to_owned()],
@@ -1564,7 +1564,7 @@ mod tests {
         let meta = StaticMetaData {
             loading_info: OgrSourceDataset {
                 file_name: Default::default(),
-                layer_name: "".to_string(),
+                layer_name: String::new(),
                 data_type: None,
                 time: Default::default(),
                 default_geometry: None,

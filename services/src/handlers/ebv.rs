@@ -3,6 +3,7 @@
 //! Connects to <https://portal.geobon.org/api/v1/>.
 
 use super::tasks::TaskResponse;
+use crate::api::model::datatypes::ResamplingMethod;
 use crate::contexts::AdminSession;
 use crate::datasets::external::netcdfcf::{
     error, EbvPortalDataProvider, NetCdfCf4DProviderError, OverviewGeneration, EBV_PROVIDER_ID,
@@ -12,6 +13,7 @@ use crate::error::Result;
 use crate::layers::external::DataProvider;
 use crate::layers::storage::LayerProviderDb;
 use crate::tasks::{Task, TaskContext, TaskId, TaskManager, TaskStatus, TaskStatusInfo};
+use crate::util::apidoc::ServerInfo;
 use crate::{contexts::Context, datasets::external::netcdfcf::NetCdfCfDataProvider};
 use actix_web::{
     web::{self, ServiceConfig},
@@ -20,11 +22,77 @@ use actix_web::{
 use futures::channel::oneshot;
 use futures::lock::Mutex;
 use geoengine_datatypes::error::{BoxedResultExt, ErrorSource};
-use geoengine_datatypes::util::gdal::ResamplingMethod;
 use log::debug;
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 use std::sync::Arc;
+use utoipa::openapi::security::{HttpAuthScheme, HttpBuilder, SecurityScheme};
+use utoipa::{Modify, OpenApi, ToSchema};
+
+#[derive(OpenApi)]
+#[openapi(
+    paths(
+        create_overviews,
+        create_overview,
+        remove_overview
+    ),
+    components(
+        schemas(
+            TaskId,
+            CreateOverviewsParams,
+            CreateOverviewParams,
+            RemoveOverviewParams,
+            TaskResponse,
+            ResamplingMethod
+        ),
+    ),
+    modifiers(&SecurityAddon, &ApiDocInfo, &ServerInfo)
+)]
+pub struct ApiDoc;
+
+struct SecurityAddon;
+
+impl Modify for SecurityAddon {
+    fn modify(&self, openapi: &mut utoipa::openapi::OpenApi) {
+        let components = openapi.components.as_mut().unwrap();
+        components.add_security_scheme(
+            "admin_token",
+            SecurityScheme::Http(
+                HttpBuilder::new()
+                    .scheme(HttpAuthScheme::Bearer)
+                    .bearer_format("UUID")
+                    .description(Some(
+                        "Use the configured admin session token to authenticate.",
+                    ))
+                    .build(),
+            ),
+        );
+    }
+}
+
+struct ApiDocInfo;
+
+impl Modify for ApiDocInfo {
+    fn modify(&self, openapi: &mut utoipa::openapi::OpenApi) {
+        openapi.info.title = "Geo Engine EBV API".to_string();
+
+        openapi.info.contact = Some(
+            utoipa::openapi::ContactBuilder::new()
+                .name(Some("Geo Engine Developers"))
+                .email(Some("dev@geoengine.de"))
+                .build(),
+        );
+
+        openapi.info.license = Some(
+            utoipa::openapi::LicenseBuilder::new()
+                .name("Apache 2.0 (pro features excluded)")
+                .url(Some(
+                    "https://github.com/geo-engine/geoengine/blob/master/LICENSE",
+                ))
+                .build(),
+        );
+    }
+}
 
 /// Initialize ebv routes
 ///
@@ -38,9 +106,6 @@ where
 {
     Box::new(move |cfg: &mut web::ServiceConfig| {
         cfg.service(
-            web::resource("/create_overviews").route(web::post().to(create_overviews::<C>)),
-        )
-        .service(
             web::scope("/overviews")
                 .route("/all", web::put().to(create_overviews::<C>))
                 .service(
@@ -105,13 +170,33 @@ struct NetCdfCfOverviewResponse {
     error: Vec<PathBuf>,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, ToSchema)]
 #[serde(rename_all = "camelCase")]
+#[schema(example = json!({
+    "resamplingMethod": "NEAREST"
+}))]
 struct CreateOverviewsParams {
     resampling_method: Option<ResamplingMethod>,
 }
 
-/// Create overviews for a all `NetCDF` files of the provider
+/// Create overviews for all NetCDF files of the provider
+#[utoipa::path(
+    tag = "Overviews",
+    put,
+    path = "/ebv/overviews/all",
+    request_body = Option<CreateOverviewsParams>,
+    responses(
+        (
+            status = 200,
+            description = "The id of the task that creates the overviews.", 
+            body = TaskResponse,
+            example = json!({"taskId": "ca0c86e0-04b2-47b6-9190-122c6f06c45c"})
+        )
+    ),
+    security(
+        ("admin_token" = [])
+    )
+)]
 async fn create_overviews<C: Context>(
     session: AdminSession,
     ctx: web::Data<C>,
@@ -265,12 +350,35 @@ impl<C: Context> Task<C::TaskContext> for EvbMultiOverviewTask<C> {
     }
 }
 
-#[derive(Debug, Deserialize, Default)]
+#[derive(Debug, Deserialize, Default, ToSchema)]
+#[schema(example = json!({
+    "resamplingMethod": "NEAREST"
+}))]
 struct CreateOverviewParams {
     resampling_method: Option<ResamplingMethod>,
 }
 
-/// Creates overview for a single `NetCDF` file
+/// Creates overview for a single NetCDF file
+#[utoipa::path(
+    tag = "Overviews",
+    put,
+    path = "/ebv/overviews/{path}",
+    request_body = Option<CreateOverviewParams>,
+    responses(
+        (
+            status = 200,
+            description = "The id of the task that creates the overview.", 
+            body = TaskResponse,
+            example = json!({"taskId": "ca0c86e0-04b2-47b6-9190-122c6f06c45c"})
+        )
+    ),
+    params(
+        ("path" = String, description = "The local path to the NetCDF file.")
+    ),
+    security(
+        ("admin_token" = [])
+    )
+)]
 async fn create_overview<C: Context>(
     session: AdminSession,
     ctx: web::Data<C>,
@@ -363,13 +471,37 @@ impl<C: Context> Task<C::TaskContext> for EvbOverviewTask<C> {
 
 impl TaskStatusInfo for NetCdfCfOverviewResponse {}
 
-#[derive(Debug, Deserialize, Default)]
+#[derive(Debug, Deserialize, Default, ToSchema)]
+#[schema(example = json!({
+    "force": "false"
+}))]
 struct RemoveOverviewParams {
     #[serde(default)]
     force: bool,
 }
 
-/// Removes an overview for a single `NetCDF` file
+/// Removes an overview for a single NetCDF file.
+/// - `force`: If true, the task will be aborted without calling clean-up functions.
+#[utoipa::path(
+    tag = "Overviews",
+    delete,
+    path = "/ebv/overviews/{path}",
+    request_body = Option<RemoveOverviewParams>,
+    responses(
+        (
+            status = 200,
+            description = "The id of the task that removes the overview.", 
+            body = TaskResponse,
+            example = json!({"taskId": "ca0c86e0-04b2-47b6-9190-122c6f06c45c"})
+        )
+    ),
+    params(
+        ("path" = String, description = "The local path to the NetCDF file.")
+    ),
+    security(
+        ("admin_token" = [])
+    )
+)]
 async fn remove_overview<C: Context>(
     session: AdminSession,
     ctx: web::Data<C>,
@@ -442,8 +574,8 @@ mod tests {
     use crate::{
         contexts::{InMemoryContext, Session, SimpleContext},
         datasets::external::netcdfcf::NetCdfCfDataProviderDefinition,
-        server::{configure_extractors, render_404, render_405},
         tasks::util::test::wait_for_task_to_finish,
+        util::server::{configure_extractors, render_404, render_405},
         util::tests::read_body_string,
     };
     use actix_web::{dev::ServiceResponse, http, http::header, middleware, test, web, App};

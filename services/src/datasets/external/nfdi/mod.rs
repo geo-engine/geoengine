@@ -10,7 +10,7 @@ use crate::util::operators::source_operator_from_dataset;
 use crate::util::user_input::Validated;
 use crate::workflows::workflow::Workflow;
 use geoengine_datatypes::collections::VectorDataType;
-use geoengine_datatypes::dataset::{DataId, ExternalDataId, DataProviderId, LayerId};
+use crate::api::model::datatypes::{DataId, ExternalDataId, DataProviderId, LayerId};
 use geoengine_datatypes::primitives::{
     FeatureDataType, Measurement, RasterQueryRectangle, VectorQueryRectangle,
 };
@@ -228,7 +228,8 @@ impl NFDIDataProvider {
                     &DataId::External(ExternalDataId {
                         provider_id: self.id,
                         layer_id: LayerId(ds.id.clone()),
-                    }),
+                    })
+                    .into(),
                 )?,
             },
             symbology: None,
@@ -279,6 +280,7 @@ impl NFDIDataProvider {
                 .map_or(Measurement::Unitless, Clone::clone),
             time: None,
             bbox: None,
+            resolution: None,
         }
     }
 
@@ -338,7 +340,7 @@ impl NFDIDataProvider {
 
         let column_spec = OgrSourceColumnSpec {
             format_specifics: None,
-            x: "".to_string(),
+            x: String::new(),
             y: None,
             int,
             float,
@@ -430,7 +432,7 @@ impl
 {
     async fn meta_data(
         &self,
-        _id: &DataId,
+        _id: &geoengine_datatypes::dataset::DataId,
     ) -> geoengine_operators::util::Result<
         Box<
             dyn MetaData<
@@ -450,17 +452,18 @@ impl MetaDataProvider<OgrSourceDataset, VectorResultDescriptor, VectorQueryRecta
 {
     async fn meta_data(
         &self,
-        id: &DataId,
+        id: &geoengine_datatypes::dataset::DataId,
     ) -> geoengine_operators::util::Result<
         Box<dyn MetaData<OgrSourceDataset, VectorResultDescriptor, VectorQueryRectangle>>,
     > {
-        let (_, md) = self.dataset_info(id).await.map_err(|e| {
+        let id: DataId = id.clone().into();
+        let (_, md) = self.dataset_info(&id).await.map_err(|e| {
             geoengine_operators::error::Error::DatasetMetaData {
                 source: Box::new(e),
             }
         })?;
 
-        let object = self.get_single_file_object(id).await.map_err(|e| {
+        let object = self.get_single_file_object(&id).await.map_err(|e| {
             geoengine_operators::error::Error::DatasetMetaData {
                 source: Box::new(e),
             }
@@ -494,17 +497,19 @@ impl MetaDataProvider<GdalLoadingInfo, RasterResultDescriptor, RasterQueryRectan
 {
     async fn meta_data(
         &self,
-        id: &DataId,
+        id: &geoengine_datatypes::dataset::DataId,
     ) -> geoengine_operators::util::Result<
         Box<dyn MetaData<GdalLoadingInfo, RasterResultDescriptor, RasterQueryRectangle>>,
     > {
-        let (_, md) = self.dataset_info(id).await.map_err(|e| {
+        let id: DataId = id.clone().into();
+
+        let (_, md) = self.dataset_info(&id).await.map_err(|e| {
             geoengine_operators::error::Error::DatasetMetaData {
                 source: Box::new(e),
             }
         })?;
 
-        let object = self.get_single_file_object(id).await.map_err(|e| {
+        let object = self.get_single_file_object(&id).await.map_err(|e| {
             geoengine_operators::error::Error::DatasetMetaData {
                 source: Box::new(e),
             }
@@ -624,7 +629,8 @@ impl LayerCollectionProvider for NFDIDataProvider {
                         data: DataId::External(ExternalDataId {
                             provider_id: self.id,
                             layer_id: id.clone(),
-                        }),
+                        })
+                        .into(),
                         attribute_projection: None,
                         attribute_filters: None,
                     },
@@ -637,7 +643,8 @@ impl LayerCollectionProvider for NFDIDataProvider {
                         data: DataId::External(ExternalDataId {
                             provider_id: self.id,
                             layer_id: id.clone(),
-                        }),
+                        })
+                        .into(),
                     },
                 }
                 .boxed(),
@@ -798,6 +805,7 @@ where
 
 #[cfg(test)]
 mod tests {
+    use crate::api::model::datatypes::{DataId, DataProviderId, ExternalDataId, LayerId};
     use crate::datasets::external::nfdi::metadata::{GEMetadata, METADATA_KEY};
     use crate::datasets::external::nfdi::{
         ExpiringDownloadLink, NFDIDataProvider, NFDIDataProviderDefinition,
@@ -806,7 +814,6 @@ mod tests {
     use crate::layers::layer::LayerCollectionListOptions;
     use crate::layers::listing::LayerCollectionProvider;
     use futures::StreamExt;
-    use geoengine_datatypes::dataset::{DataId, DataProviderId, ExternalDataId, LayerId};
     use httptest::responders::status_code;
     use httptest::{Expectation, Server};
     use scienceobjectsdb_rust_api::sciobjectsdb::sciobjsdb::api::storage::models::v1::{
@@ -926,7 +933,7 @@ mod tests {
             project_id: PROJECT_ID.to_string(),
             is_public: true,
             status: 0,
-            bucket: "".to_string(),
+            bucket: String::new(),
         };
         let md = NFDIDataProvider::extract_metadata(&ds).unwrap();
         let des = serde_json::from_value::<GEMetadata>(vector_meta_data()).unwrap();
@@ -945,7 +952,7 @@ mod tests {
             project_id: PROJECT_ID.to_string(),
             is_public: true,
             status: 0,
-            bucket: "".to_string(),
+            bucket: String::new(),
         };
         assert!(NFDIDataProvider::extract_metadata(&ds).is_err());
     }
@@ -967,7 +974,7 @@ mod tests {
             project_id: PROJECT_ID.to_string(),
             is_public: true,
             status: 0,
-            bucket: "".to_string(),
+            bucket: String::new(),
         };
         assert!(NFDIDataProvider::extract_metadata(&ds).is_err());
     }
@@ -989,7 +996,7 @@ mod tests {
             project_id: PROJECT_ID.to_string(),
             is_public: true,
             status: 0,
-            bucket: "".to_string(),
+            bucket: String::new(),
         };
 
         let server = TestProjectServer::start_default().await;
@@ -1039,7 +1046,7 @@ mod tests {
             project_id: PROJECT_ID.to_string(),
             is_public: true,
             status: 0,
-            bucket: "".to_string(),
+            bucket: String::new(),
         };
 
         let md = NFDIDataProvider::extract_metadata(&ds).unwrap();
@@ -1089,7 +1096,7 @@ mod tests {
             project_id: PROJECT_ID.to_string(),
             is_public: true,
             status: 0,
-            bucket: "".to_string(),
+            bucket: String::new(),
         };
 
         let md = NFDIDataProvider::extract_metadata(&ds).unwrap();
@@ -1129,7 +1136,7 @@ mod tests {
             project_id: PROJECT_ID.to_string(),
             is_public: true,
             status: 0,
-            bucket: "".to_string(),
+            bucket: String::new(),
         };
 
         let md = NFDIDataProvider::extract_metadata(&ds).unwrap();
@@ -1181,7 +1188,7 @@ mod tests {
                         project_id: PROJECT_ID.to_string(),
                         is_public: true,
                         status: 0,
-                        bucket: "".to_string(),
+                        bucket: String::new(),
                     }],
                 }),
         );
@@ -1229,7 +1236,7 @@ mod tests {
                         project_id: PROJECT_ID.to_string(),
                         is_public: true,
                         status: 0,
-                        bucket: "".to_string(),
+                        bucket: String::new(),
                     }),
                 }),
         );
@@ -1276,7 +1283,7 @@ mod tests {
                         project_id: PROJECT_ID.to_string(),
                         is_public: true,
                         status: 0,
-                        bucket: "".to_string(),
+                        bucket: String::new(),
                     }),
                 }),
         );
@@ -1298,15 +1305,15 @@ mod tests {
                         status: 0,
                         objects: vec![Object {
                             id: "OBJ".to_string(),
-                            filename: "".to_string(),
-                            filetype: "".to_string(),
+                            filename: String::new(),
+                            filetype: String::new(),
                             labels: vec![],
                             metadata: vec![],
                             created: None,
                             location: None,
                             origin: None,
                             content_len: 0,
-                            upload_id: "".to_string(),
+                            upload_id: String::new(),
                             generated: None,
                             object_group_id: "OG".to_string(),
                             dataset_id: DATASET_ID.to_string(),
@@ -1328,7 +1335,7 @@ mod tests {
 
         let res: geoengine_operators::util::Result<
             Box<dyn MetaData<OgrSourceDataset, VectorResultDescriptor, VectorQueryRectangle>>,
-        > = provider.meta_data(&id).await;
+        > = provider.meta_data(&id.into()).await;
 
         assert!(res.is_ok());
     }
@@ -1363,7 +1370,7 @@ mod tests {
                         project_id: PROJECT_ID.to_string(),
                         is_public: true,
                         status: 0,
-                        bucket: "".to_string(),
+                        bucket: String::new(),
                     }),
                 }),
         );
@@ -1393,7 +1400,7 @@ mod tests {
                             location: None,
                             origin: None,
                             content_len: 0,
-                            upload_id: "".to_string(),
+                            upload_id: String::new(),
                             generated: None,
                             object_group_id: "OG".to_string(),
                             dataset_id: DATASET_ID.to_string(),
@@ -1442,14 +1449,14 @@ mod tests {
 
         let meta: Box<
             dyn MetaData<OgrSourceDataset, VectorResultDescriptor, VectorQueryRectangle>,
-        > = provider.meta_data(&id).await.unwrap();
+        > = provider.meta_data(&id.clone().into()).await.unwrap();
 
         let mut context = MockExecutionContext::test_default();
-        context.add_meta_data(id.clone(), meta);
+        context.add_meta_data(id.clone().into(), meta);
 
         let src = OgrSource {
             params: OgrSourceParameters {
-                data: id,
+                data: id.into(),
                 attribute_projection: None,
                 attribute_filters: None,
             },

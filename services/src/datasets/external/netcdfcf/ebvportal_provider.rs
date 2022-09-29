@@ -1,10 +1,8 @@
-use std::path::PathBuf;
+use std::{path::PathBuf, str::FromStr};
 
+use crate::api::model::datatypes::{DataId, DataProviderId, LayerId};
 use async_trait::async_trait;
-use geoengine_datatypes::{
-    dataset::{DataId, DataProviderId, LayerId},
-    primitives::{RasterQueryRectangle, VectorQueryRectangle},
-};
+use geoengine_datatypes::primitives::{RasterQueryRectangle, VectorQueryRectangle};
 use geoengine_operators::{
     engine::{MetaData, MetaDataProvider, RasterResultDescriptor, VectorResultDescriptor},
     mock::MockDatasetDataSourceLoadingInfo,
@@ -85,7 +83,7 @@ impl DataProviderDefinition for EbvPortalDataProviderDefinition {
 impl DataProvider for EbvPortalDataProvider {
     async fn provenance(
         &self,
-        id: &geoengine_datatypes::dataset::DataId,
+        id: &DataId,
     ) -> crate::error::Result<crate::datasets::listing::ProvenanceOutput> {
         self.netcdf_cf_provider.provenance(id).await
     }
@@ -122,11 +120,79 @@ enum EbvCollectionId {
     },
 }
 
+impl FromStr for EbvCollectionId {
+    type Err = crate::error::Error;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        let split = s.split('/').collect::<Vec<_>>();
+
+        Ok(match *split.as_slice() {
+            ["classes"] => EbvCollectionId::Classes,
+            ["classes", class] => EbvCollectionId::Class {
+                class: class.to_string(),
+            },
+            ["classes", class, ebv] => EbvCollectionId::Ebv {
+                class: class.to_string(),
+                ebv: ebv.to_string(),
+            },
+            ["classes", class, ebv, dataset] => EbvCollectionId::Dataset {
+                class: class.to_string(),
+                ebv: ebv.to_string(),
+                dataset: dataset.to_string(),
+            },
+            ["classes", class, ebv, dataset, .., entity] if entity.ends_with(".entity") => {
+                EbvCollectionId::Entity {
+                    class: class.to_string(),
+                    ebv: ebv.to_string(),
+                    dataset: dataset.to_string(),
+                    groups: split[4..split.len() - 1]
+                        .iter()
+                        .map(ToString::to_string)
+                        .collect(),
+                    entity: entity[0..entity.len() - ".entity".len()]
+                        .parse()
+                        .map_err(|_| crate::error::Error::InvalidLayerCollectionId)?,
+                }
+            }
+            ["classes", class, ebv, dataset, ..] => EbvCollectionId::Group {
+                class: class.to_string(),
+                ebv: ebv.to_string(),
+                dataset: dataset.to_string(),
+                groups: split[4..split.len()]
+                    .iter()
+                    .map(ToString::to_string)
+                    .collect(),
+            },
+            _ => return Err(crate::error::Error::InvalidLayerCollectionId),
+        })
+    }
+}
+
 impl TryFrom<EbvCollectionId> for LayerCollectionId {
     type Error = crate::error::Error;
 
     fn try_from(id: EbvCollectionId) -> Result<Self> {
-        Ok(LayerCollectionId(serde_json::to_string(&id)?))
+        let s = match id {
+            EbvCollectionId::Classes => "classes".to_string(),
+            EbvCollectionId::Class { class } => format!("classes/{}", class),
+            EbvCollectionId::Ebv { class, ebv } => format!("classes/{}/{}", class, ebv),
+            EbvCollectionId::Dataset {
+                class,
+                ebv,
+                dataset,
+            } => format!("classes/{}/{}/{}", class, ebv, dataset),
+            EbvCollectionId::Group {
+                class,
+                ebv,
+                dataset,
+                groups,
+            } => format!("classes/{}/{}/{}/{}", class, ebv, dataset, groups.join("/")),
+            EbvCollectionId::Entity { .. } => {
+                return Err(crate::error::Error::InvalidLayerCollectionId)
+            }
+        };
+
+        Ok(LayerCollectionId(s))
     }
 }
 
@@ -134,7 +200,25 @@ impl TryFrom<EbvCollectionId> for LayerId {
     type Error = crate::error::Error;
 
     fn try_from(id: EbvCollectionId) -> Result<Self> {
-        Ok(LayerId(serde_json::to_string(&id)?))
+        let s = match id {
+            EbvCollectionId::Entity {
+                class,
+                ebv,
+                dataset,
+                groups,
+                entity,
+            } => format!(
+                "classes/{}/{}/{}/{}/{}.entity",
+                class,
+                ebv,
+                dataset,
+                groups.join("/"),
+                entity
+            ),
+            _ => return Err(crate::error::Error::InvalidLayerId),
+        };
+
+        Ok(LayerId(s))
     }
 }
 
@@ -161,7 +245,7 @@ impl EbvPortalDataProvider {
                         .try_into()?,
                     },
                     name: c.name,
-                    description: "".to_string(),
+                    description: String::new(),
                 }))
             })
             .collect::<Result<Vec<CollectionItem>>>()?;
@@ -209,7 +293,7 @@ impl EbvPortalDataProvider {
                         .try_into()?,
                     },
                     name: ebv,
-                    description: "".to_string(),
+                    description: String::new(),
                 }))
             })
             .collect::<Result<Vec<CollectionItem>>>()?;
@@ -220,7 +304,7 @@ impl EbvPortalDataProvider {
                 collection_id: collection.clone(),
             },
             name: class.to_string(),
-            description: "".to_string(),
+            description: String::new(),
             items,
             entry_label: Some("EBV Name".to_string()),
             properties: vec![],
@@ -264,7 +348,7 @@ impl EbvPortalDataProvider {
                 collection_id: collection.clone(),
             },
             name: ebv.to_string(),
-            description: "".to_string(),
+            description: String::new(),
             items,
             entry_label: Some("EBV Dataset".to_string()),
             properties: vec![],
@@ -395,7 +479,7 @@ impl EbvPortalDataProvider {
                             .try_into()?,
                         },
                         name: entity.name,
-                        description: "".to_string(),
+                        description: String::new(),
                     }))
                 })
                 .collect::<Result<Vec<CollectionItem>>>()?
@@ -452,7 +536,7 @@ impl LayerCollectionProvider for EbvPortalDataProvider {
         collection: &LayerCollectionId,
         options: Validated<LayerCollectionListOptions>,
     ) -> Result<LayerCollection> {
-        let id: EbvCollectionId = serde_json::from_str(&collection.0)?;
+        let id: EbvCollectionId = EbvCollectionId::from_str(&collection.0)?;
 
         let options = options.user_input;
 
@@ -493,7 +577,7 @@ impl LayerCollectionProvider for EbvPortalDataProvider {
     }
 
     async fn get_layer(&self, id: &LayerId) -> Result<Layer> {
-        let ebv_id: EbvCollectionId = serde_json::from_str(&id.0)?;
+        let ebv_id: EbvCollectionId = EbvCollectionId::from_str(&id.0)?;
 
         match &ebv_id {
             EbvCollectionId::Entity {
@@ -527,7 +611,7 @@ impl MetaDataProvider<GdalLoadingInfo, RasterResultDescriptor, RasterQueryRectan
 {
     async fn meta_data(
         &self,
-        id: &DataId,
+        id: &geoengine_datatypes::dataset::DataId,
     ) -> Result<
         Box<dyn MetaData<GdalLoadingInfo, RasterResultDescriptor, RasterQueryRectangle>>,
         geoengine_operators::error::Error,
@@ -543,7 +627,7 @@ impl
 {
     async fn meta_data(
         &self,
-        _id: &DataId,
+        _id: &geoengine_datatypes::dataset::DataId,
     ) -> Result<
         Box<
             dyn MetaData<
@@ -564,7 +648,7 @@ impl MetaDataProvider<OgrSourceDataset, VectorResultDescriptor, VectorQueryRecta
 {
     async fn meta_data(
         &self,
-        _id: &DataId,
+        _id: &geoengine_datatypes::dataset::DataId,
     ) -> Result<
         Box<dyn MetaData<OgrSourceDataset, VectorResultDescriptor, VectorQueryRectangle>>,
         geoengine_operators::error::Error,
@@ -583,6 +667,105 @@ mod tests {
     use crate::util::user_input::UserInput;
 
     use super::*;
+
+    #[test]
+    fn it_parses_layer_collection_ids() {
+        assert!(matches!(
+            EbvCollectionId::from_str("classes"),
+            Ok(EbvCollectionId::Classes)
+        ));
+
+        assert!(matches!(
+            EbvCollectionId::from_str("classes/FooClass"),
+            Ok(EbvCollectionId::Class { class }) if class == "FooClass"
+        ));
+
+        assert!(matches!(
+            EbvCollectionId::from_str("classes/FooClass/BarEbv"),
+            Ok(EbvCollectionId::Ebv { class, ebv }) if class == "FooClass" && ebv == "BarEbv"
+        ));
+
+        assert!(matches!(
+            EbvCollectionId::from_str("classes/FooClass/BarEbv/10"),
+            Ok(EbvCollectionId::Dataset { class, ebv, dataset }) if class == "FooClass" && ebv == "BarEbv" && dataset == "10"
+        ));
+
+        assert!(matches!(
+            EbvCollectionId::from_str("classes/FooClass/BarEbv/10/group1"),
+            Ok(EbvCollectionId::Group { class, ebv, dataset, groups }) if class == "FooClass" && ebv == "BarEbv" && dataset == "10" && groups == ["group1"]
+        ));
+
+        assert!(matches!(
+            EbvCollectionId::from_str("classes/FooClass/BarEbv/10/group1/group2"),
+            Ok(EbvCollectionId::Group { class, ebv, dataset, groups }) if class == "FooClass" && ebv == "BarEbv" && dataset == "10" && groups == ["group1", "group2"]
+        ));
+
+        assert!(matches!(
+            EbvCollectionId::from_str("classes/FooClass/BarEbv/10/group1/group2/group3"),
+            Ok(EbvCollectionId::Group { class, ebv, dataset, groups }) if class == "FooClass" && ebv == "BarEbv" && dataset == "10" && groups == ["group1", "group2", "group3"]
+        ));
+
+        assert!(matches!(
+            EbvCollectionId::from_str("classes/FooClass/BarEbv/10/group1/group2/group3/7.entity"),
+            Ok(EbvCollectionId::Entity { class, ebv, dataset, groups, entity }) if class == "FooClass" && ebv == "BarEbv" && dataset == "10" && groups == ["group1", "group2", "group3"] && entity == 7
+        ));
+
+        assert!(matches!(
+            EbvCollectionId::from_str("classes/FooClass/BarEbv/10/7.entity"),
+            Ok(EbvCollectionId::Entity { class, ebv, dataset, groups, entity }) if class == "FooClass" && ebv == "BarEbv" && dataset == "10" && groups.is_empty() && entity == 7
+        ));
+    }
+
+    #[test]
+    fn it_serializes_layer_collection_ids() {
+        let id: LayerCollectionId = EbvCollectionId::Classes.try_into().unwrap();
+        assert_eq!(id.to_string(), "classes");
+
+        let id: LayerCollectionId = EbvCollectionId::Class {
+            class: "FooClass".to_string(),
+        }
+        .try_into()
+        .unwrap();
+        assert_eq!(id.to_string(), "classes/FooClass");
+
+        let id: LayerCollectionId = EbvCollectionId::Ebv {
+            class: "FooClass".to_string(),
+            ebv: "BarEbv".to_string(),
+        }
+        .try_into()
+        .unwrap();
+        assert_eq!(id.to_string(), "classes/FooClass/BarEbv");
+
+        let id: LayerCollectionId = EbvCollectionId::Dataset {
+            class: "FooClass".to_string(),
+            ebv: "BarEbv".to_string(),
+            dataset: "10".to_string(),
+        }
+        .try_into()
+        .unwrap();
+        assert_eq!(id.to_string(), "classes/FooClass/BarEbv/10");
+
+        let id: LayerCollectionId = EbvCollectionId::Group {
+            class: "FooClass".to_string(),
+            ebv: "BarEbv".to_string(),
+            dataset: "10".to_string(),
+            groups: vec!["group1".to_string()],
+        }
+        .try_into()
+        .unwrap();
+        assert_eq!(id.to_string(), "classes/FooClass/BarEbv/10/group1");
+
+        let id: LayerId = EbvCollectionId::Entity {
+            class: "FooClass".to_string(),
+            ebv: "BarEbv".to_string(),
+            dataset: "10".to_string(),
+            groups: vec!["group1".to_string()],
+            entity: 7,
+        }
+        .try_into()
+        .unwrap();
+        assert_eq!(id.to_string(), "classes/FooClass/BarEbv/10/group1/7.entity");
+    }
 
     #[tokio::test]
     #[allow(clippy::too_many_lines)]
@@ -671,11 +854,11 @@ mod tests {
                             )
                             .unwrap(),
                             collection_id: LayerCollectionId(
-                                r#"{"type":"class","class":"Community composition"}"#.into()
+                                "classes/Community composition".into()
                             )
                         },
                         name: "Community composition".to_string(),
-                        description: "".to_string(),
+                        description: String::new(),
                     }),
                     CollectionItem::Collection(LayerCollectionListing {
                         id: ProviderLayerCollectionId {
@@ -684,11 +867,11 @@ mod tests {
                             )
                             .unwrap(),
                             collection_id: LayerCollectionId(
-                                r#"{"type":"class","class":"Ecosystem functioning"}"#.into()
+                                "classes/Ecosystem functioning".into()
                             )
                         },
                         name: "Ecosystem functioning".to_string(),
-                        description: "".to_string(),
+                        description: String::new(),
                     }),
                     CollectionItem::Collection(LayerCollectionListing {
                         id: ProviderLayerCollectionId {
@@ -696,12 +879,10 @@ mod tests {
                                 "77d0bf11-986e-43f5-b11d-898321f1854c"
                             )
                             .unwrap(),
-                            collection_id: LayerCollectionId(
-                                r#"{"type":"class","class":"Ecosystem structure"}"#.into()
-                            )
+                            collection_id: LayerCollectionId("classes/Ecosystem structure".into())
                         },
                         name: "Ecosystem structure".to_string(),
-                        description: "".to_string(),
+                        description: String::new(),
                     }),
                     CollectionItem::Collection(LayerCollectionListing {
                         id: ProviderLayerCollectionId {
@@ -709,12 +890,10 @@ mod tests {
                                 "77d0bf11-986e-43f5-b11d-898321f1854c"
                             )
                             .unwrap(),
-                            collection_id: LayerCollectionId(
-                                r#"{"type":"class","class":"Species populations"}"#.into()
-                            )
+                            collection_id: LayerCollectionId("classes/Species populations".into())
                         },
                         name: "Species populations".to_string(),
-                        description: "".to_string(),
+                        description: String::new(),
                     })
                 ],
                 entry_label: Some("EBV Class".to_string()),
@@ -778,7 +957,7 @@ mod tests {
         .await
         .unwrap();
 
-        let id = LayerCollectionId(r#"{"type":"class","class":"Ecosystem functioning"}"#.into());
+        let id = LayerCollectionId("classes/Ecosystem functioning".into());
         let collection = provider
             .collection(
                 &id,
@@ -792,33 +971,47 @@ mod tests {
             .await
             .unwrap();
 
-        assert_eq!(collection, LayerCollection {
-            id: ProviderLayerCollectionId {
-                provider_id: EBV_PROVIDER_ID,
-                collection_id: id,
-            },
-            name: "Ecosystem functioning".to_string(),
-            description: "".to_string(),
-            items: vec![
-                CollectionItem::Collection(LayerCollectionListing {
-                    id: ProviderLayerCollectionId {
-                        provider_id: DataProviderId::from_str("77d0bf11-986e-43f5-b11d-898321f1854c").unwrap(),
-                        collection_id: LayerCollectionId(r#"{"type":"ebv","class":"Ecosystem functioning","ebv":"Ecosystem phenology"}"#.into())
-                    },
-                    name: "Ecosystem phenology".to_string(),
-                    description: "".to_string(),
-                }),
-                CollectionItem::Collection(LayerCollectionListing {
-                    id: ProviderLayerCollectionId {
-                        provider_id: DataProviderId::from_str("77d0bf11-986e-43f5-b11d-898321f1854c").unwrap(),
-                        collection_id: LayerCollectionId(r#"{"type":"ebv","class":"Ecosystem functioning","ebv":"Primary productivity"}"#.into())
-                    },
-                    name: "Primary productivity".to_string(),
-                    description: "".to_string(),
-                })],
-            entry_label: Some("EBV Name".to_string()),
-            properties: vec![],
-        });
+        assert_eq!(
+            collection,
+            LayerCollection {
+                id: ProviderLayerCollectionId {
+                    provider_id: EBV_PROVIDER_ID,
+                    collection_id: id,
+                },
+                name: "Ecosystem functioning".to_string(),
+                description: String::new(),
+                items: vec![
+                    CollectionItem::Collection(LayerCollectionListing {
+                        id: ProviderLayerCollectionId {
+                            provider_id: DataProviderId::from_str(
+                                "77d0bf11-986e-43f5-b11d-898321f1854c"
+                            )
+                            .unwrap(),
+                            collection_id: LayerCollectionId(
+                                "classes/Ecosystem functioning/Ecosystem phenology".into()
+                            )
+                        },
+                        name: "Ecosystem phenology".to_string(),
+                        description: String::new(),
+                    }),
+                    CollectionItem::Collection(LayerCollectionListing {
+                        id: ProviderLayerCollectionId {
+                            provider_id: DataProviderId::from_str(
+                                "77d0bf11-986e-43f5-b11d-898321f1854c"
+                            )
+                            .unwrap(),
+                            collection_id: LayerCollectionId(
+                                "classes/Ecosystem functioning/Primary productivity".into()
+                            )
+                        },
+                        name: "Primary productivity".to_string(),
+                        description: String::new(),
+                    })
+                ],
+                entry_label: Some("EBV Name".to_string()),
+                properties: vec![],
+            }
+        );
     }
 
     #[tokio::test]
@@ -929,9 +1122,7 @@ mod tests {
         .await
         .unwrap();
 
-        let id = LayerCollectionId(
-            r#"{"type":"ebv","class":"Ecosystem functioning","ebv":"Ecosystem phenology"}"#.into(),
-        );
+        let id = LayerCollectionId("classes/Ecosystem functioning/Ecosystem phenology".into());
 
         let collection = provider
             .collection(
@@ -952,12 +1143,12 @@ mod tests {
                 collection_id: id,
             },
             name: "Ecosystem phenology".to_string(),
-            description: "".to_string(),
+            description: String::new(),
             items: vec![
                 CollectionItem::Collection(LayerCollectionListing {
                     id: ProviderLayerCollectionId {
                         provider_id: DataProviderId::from_str("77d0bf11-986e-43f5-b11d-898321f1854c").unwrap(),
-                        collection_id: LayerCollectionId(r#"{"type":"dataset","class":"Ecosystem functioning","ebv":"Ecosystem phenology","dataset":"10"}"#.into()) 
+                        collection_id: LayerCollectionId("classes/Ecosystem functioning/Ecosystem phenology/10".into()) 
                     },
                     name: "Vegetation Phenology in Finland".to_string(),
                     description: "Datasets present the yearly maps of the start of vegetation active period (VAP) in coniferous forests and deciduous vegetation during 2001-2019 in Finland. The start of the vegetation active period is defined as the day when coniferous trees start to photosynthesize and for deciduous vegetation as the day when trees unfold new leaves in spring. The datasets were derived from satellite observations of the Moderate Resolution Imaging Spectroradiometer (MODIS).".to_string(), 
@@ -1168,7 +1359,7 @@ mod tests {
         .await
         .unwrap();
 
-        let id = LayerCollectionId(r#"{"type":"dataset","class":"Ecosystem functioning","ebv":"Ecosystem phenology","dataset":"10"}"#.into());
+        let id = LayerCollectionId("classes/Ecosystem functioning/Ecosystem phenology/10".into());
 
         let collection = provider
             .collection(
@@ -1193,8 +1384,13 @@ mod tests {
                 description: "Datasets present the yearly maps of the start of vegetation active period (VAP) in coniferous forests and deciduous vegetation during 2001-2019 in Finland. The start of the vegetation active period is defined as the day when coniferous trees start to photosynthesize and for deciduous vegetation as the day when trees unfold new leaves in spring. The datasets were derived from satellite observations of the Moderate Resolution Imaging Spectroradiometer (MODIS).".to_string(),
                 items: vec![CollectionItem::Collection(LayerCollectionListing {
                     id: ProviderLayerCollectionId {
-                        provider_id: DataProviderId::from_str("77d0bf11-986e-43f5-b11d-898321f1854c").unwrap(),
-                        collection_id: LayerCollectionId(r#"{"type":"group","class":"Ecosystem functioning","ebv":"Ecosystem phenology","dataset":"10","groups":["metric_1"]}"#.into())
+                        provider_id: DataProviderId::from_str(
+                            "77d0bf11-986e-43f5-b11d-898321f1854c"
+                        )
+                        .unwrap(),
+                        collection_id: LayerCollectionId(
+                            "classes/Ecosystem functioning/Ecosystem phenology/10/metric_1".into()
+                        )
                     },
                     name: "Random metric 1".to_string(),
                     description: "Randomly created data".to_string(),
@@ -1202,7 +1398,7 @@ mod tests {
                 CollectionItem::Collection(LayerCollectionListing {
                     id: ProviderLayerCollectionId {
                         provider_id: DataProviderId::from_str("77d0bf11-986e-43f5-b11d-898321f1854c").unwrap(),
-                        collection_id: LayerCollectionId(r#"{"type":"group","class":"Ecosystem functioning","ebv":"Ecosystem phenology","dataset":"10","groups":["metric_2"]}"#.into())
+                        collection_id: LayerCollectionId("classes/Ecosystem functioning/Ecosystem phenology/10/metric_2".into())
                     },
                     name: "Random metric 2".to_string(),
                     description: "Randomly created data".to_string(),
@@ -1321,7 +1517,9 @@ mod tests {
         .await
         .unwrap();
 
-        let id = LayerCollectionId(r#"{"type":"group","class":"Ecosystem functioning","ebv":"Ecosystem phenology","dataset":"10","groups":["metric_1"]}"#.into());
+        let id = LayerCollectionId(
+            "classes/Ecosystem functioning/Ecosystem phenology/10/metric_1".into(),
+        );
 
         let collection = provider
             .collection(
@@ -1348,24 +1546,24 @@ mod tests {
                 items: vec![CollectionItem::Layer(LayerListing {
                         id: ProviderLayerId {
                             provider_id: DataProviderId::from_str("77d0bf11-986e-43f5-b11d-898321f1854c").unwrap(),
-                            layer_id: LayerId(r#"{"type":"entity","class":"Ecosystem functioning","ebv":"Ecosystem phenology","dataset":"10","groups":["metric_1"],"entity":0}"#.into())
+                            layer_id: LayerId("classes/Ecosystem functioning/Ecosystem phenology/10/metric_1/0.entity".into())
                         },
                         name: "entity01".to_string(),
-                        description: "".to_string(),
+                        description: String::new(),
                     }), CollectionItem::Layer(LayerListing {
                         id: ProviderLayerId {
                             provider_id: DataProviderId::from_str("77d0bf11-986e-43f5-b11d-898321f1854c").unwrap(),
-                            layer_id: LayerId(r#"{"type":"entity","class":"Ecosystem functioning","ebv":"Ecosystem phenology","dataset":"10","groups":["metric_1"],"entity":1}"#.into())
+                            layer_id: LayerId("classes/Ecosystem functioning/Ecosystem phenology/10/metric_1/1.entity".into())
                         },
                         name: "entity02".to_string(),
-                        description: "".to_string(),
+                        description: String::new(),
                     }), CollectionItem::Layer(LayerListing {
                         id: ProviderLayerId {
                             provider_id: DataProviderId::from_str("77d0bf11-986e-43f5-b11d-898321f1854c").unwrap(),
-                            layer_id: LayerId(r#"{"type":"entity","class":"Ecosystem functioning","ebv":"Ecosystem phenology","dataset":"10","groups":["metric_1"],"entity":2}"#.into())
+                            layer_id: LayerId("classes/Ecosystem functioning/Ecosystem phenology/10/metric_1/2.entity".into())
                         },
                         name: "entity03".to_string(),
-                        description: "".to_string(),
+                        description: String::new(),
                     })],
                 entry_label: Some("Entity".to_string()),
                 properties: vec![],

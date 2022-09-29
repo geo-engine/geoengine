@@ -1,6 +1,7 @@
 use std::collections::HashMap;
 use std::marker::PhantomData;
 
+use crate::api::model::datatypes::{DataId, DataProviderId, ExternalDataId, LayerId};
 use crate::datasets::listing::{Provenance, ProvenanceOutput};
 use crate::error::Result;
 use crate::error::{self, Error};
@@ -17,7 +18,6 @@ use bb8_postgres::bb8::{Pool, PooledConnection};
 use bb8_postgres::tokio_postgres::{Config, NoTls};
 use bb8_postgres::PostgresConnectionManager;
 use geoengine_datatypes::collections::VectorDataType;
-use geoengine_datatypes::dataset::{DataId, DataProviderId, ExternalDataId, LayerId};
 use geoengine_datatypes::primitives::{
     FeatureDataType, Measurement, RasterQueryRectangle, VectorQueryRectangle,
 };
@@ -227,7 +227,7 @@ impl LayerCollectionProvider for GfbioDataProvider {
                         layer_id: LayerId(row.get::<usize, i32>(0).to_string()),
                     },
                     name: row.get(1),
-                    description: row.try_get(2).unwrap_or_else(|_| "".to_owned()),
+                    description: row.try_get(2).unwrap_or_else(|_| String::new()),
                 })
             })
             .collect();
@@ -280,7 +280,7 @@ impl LayerCollectionProvider for GfbioDataProvider {
                 layer_id: id.clone(),
             },
             name: row.get(0),
-            description: row.try_get(1).unwrap_or_else(|_| "".to_owned()),
+            description: row.try_get(1).unwrap_or_else(|_| String::new()),
             workflow: Workflow {
                 operator: TypedOperator::Vector(
                     OgrSource {
@@ -288,7 +288,8 @@ impl LayerCollectionProvider for GfbioDataProvider {
                             data: DataId::External(ExternalDataId {
                                 provider_id: GFBIO_PROVIDER_ID,
                                 layer_id: id.clone(),
-                            }),
+                            })
+                            .into(),
                             attribute_projection: None,
                             attribute_filters: None,
                         },
@@ -347,9 +348,9 @@ impl DataProvider for GfbioDataProvider {
         Ok(ProvenanceOutput {
             data: id.clone(),
             provenance: Some(Provenance {
-                citation: row.try_get(0).unwrap_or_else(|_| "".to_owned()),
-                license: row.try_get(1).unwrap_or_else(|_| "".to_owned()),
-                uri: row.try_get(2).unwrap_or_else(|_| "".to_owned()),
+                citation: row.try_get(0).unwrap_or_else(|_| String::new()),
+                license: row.try_get(1).unwrap_or_else(|_| String::new()),
+                uri: row.try_get(2).unwrap_or_else(|_| String::new()),
             }),
         })
     }
@@ -361,11 +362,13 @@ impl MetaDataProvider<OgrSourceDataset, VectorResultDescriptor, VectorQueryRecta
 {
     async fn meta_data(
         &self,
-        id: &DataId,
+        id: &geoengine_datatypes::dataset::DataId,
     ) -> Result<
         Box<dyn MetaData<OgrSourceDataset, VectorResultDescriptor, VectorQueryRectangle>>,
         geoengine_operators::error::Error,
     > {
+        let id: DataId = id.clone().into();
+
         let surrogate_key: i32 = id
             .external()
             .ok_or(Error::InvalidDataId)
@@ -388,7 +391,7 @@ impl MetaDataProvider<OgrSourceDataset, VectorResultDescriptor, VectorQueryRecta
                 default_geometry: None,
                 columns: Some(OgrSourceColumnSpec {
                     format_specifics: None,
-                    x: "".to_owned(),
+                    x: String::new(),
                     y: None,
                     int: vec![],
                     float: vec![],
@@ -447,7 +450,7 @@ impl MetaDataProvider<GdalLoadingInfo, RasterResultDescriptor, RasterQueryRectan
 {
     async fn meta_data(
         &self,
-        _id: &DataId,
+        _id: &geoengine_datatypes::dataset::DataId,
     ) -> Result<
         Box<dyn MetaData<GdalLoadingInfo, RasterResultDescriptor, RasterQueryRectangle>>,
         geoengine_operators::error::Error,
@@ -463,7 +466,7 @@ impl
 {
     async fn meta_data(
         &self,
-        _id: &DataId,
+        _id: &geoengine_datatypes::dataset::DataId,
     ) -> Result<
         Box<
             dyn MetaData<
@@ -480,10 +483,10 @@ impl
 
 #[cfg(test)]
 mod tests {
+    use crate::api::model::datatypes::{ExternalDataId, LayerId};
     use bb8_postgres::bb8::ManageConnection;
     use futures::StreamExt;
     use geoengine_datatypes::collections::MultiPointCollection;
-    use geoengine_datatypes::dataset::{ExternalDataId, LayerId};
     use geoengine_datatypes::primitives::{
         BoundingBox2D, FeatureData, MultiPoint, SpatialResolution, TimeInterval,
     };
@@ -601,7 +604,7 @@ mod tests {
                         layer_id: LayerId("1".to_string()),
                     },
                     name: "Example Title".to_string(),
-                    description: "".to_string(),
+                    description: String::new(),
                 })],
                 entry_label: None,
                 properties: vec![],
@@ -635,10 +638,13 @@ mod tests {
             let meta: Box<
                 dyn MetaData<OgrSourceDataset, VectorResultDescriptor, VectorQueryRectangle>,
             > = provider
-                .meta_data(&DataId::External(ExternalDataId {
-                    provider_id: GFBIO_PROVIDER_ID,
-                    layer_id: LayerId("1".to_string()),
-                }))
+                .meta_data(
+                    &DataId::External(ExternalDataId {
+                        provider_id: GFBIO_PROVIDER_ID,
+                        layer_id: LayerId("1".to_string()),
+                    })
+                    .into(),
+                )
                 .await
                 .map_err(|e| e.to_string())?;
 
@@ -713,7 +719,7 @@ mod tests {
                 default_geometry: None,
                 columns: Some(OgrSourceColumnSpec {
                     format_specifics: None,
-                    x: "".to_owned(),
+                    x: String::new(),
                     y: None,
                     int: vec![],
                     float: vec![],
@@ -812,10 +818,13 @@ mod tests {
             let meta: Box<
                 dyn MetaData<OgrSourceDataset, VectorResultDescriptor, VectorQueryRectangle>,
             > = provider
-                .meta_data(&DataId::External(ExternalDataId {
-                    provider_id: GFBIO_PROVIDER_ID,
-                    layer_id: LayerId("1".to_string()),
-                }))
+                .meta_data(
+                    &DataId::External(ExternalDataId {
+                        provider_id: GFBIO_PROVIDER_ID,
+                        layer_id: LayerId("1".to_string()),
+                    })
+                    .into(),
+                )
                 .await
                 .map_err(|e| e.to_string())?;
 

@@ -21,10 +21,10 @@ pro = ["postgres", "geoengine-operators/pro", "geoengine-datatypes/pro"]
 
 [dependencies]
 actix-files = "0.6"
-actix-http = "3.0"
+actix-http = "3.2"
 actix-multipart = "0.4"
 actix-rt = "2.6"
-actix-web = "4.0"
+actix-web = { version = "4.2", features = ["macros", "compress-brotli", "compress-gzip", "cookies"], default-features = false } # TODO: use default feautures when https://github.com/actix/actix-web/issues/2869 is resolved
 actix-web-httpauth = "0.8"
 async-trait = "0.1"
 base64 = "0.13"
@@ -39,14 +39,16 @@ futures = "0.3"
 futures-util = "0.3"
 gdal =  "0.13"
 gdal-sys = "0.7"
-geo = "0.22"
+geo = "0.23"
 geoengine-datatypes = { path = "../datatypes" }
 geoengine-operators = { path = "../operators" }
-geojson = {version = "0.23", features = ["geo-types"]}
+geojson = {version = "0.24", features = ["geo-types"]}
 image = "0.24"
 lazy_static = "1.4"
 log = "0.4"
 mime = "0.3"
+oauth2 = "4.2.3"
+openidconnect = "2.3.2"
 num-traits = "0.2"
 paste = "1.0"
 postgres-types = { version = "0.2", features = ["derive"], optional = true }
@@ -73,6 +75,8 @@ tracing-actix-web = "0.6"
 tracing-subscriber = { version = "0.3", features = ["local-time", "ansi"] }
 typetag = "0.2"
 url = { version = "2.2", features = ["serde"] }
+utoipa = { version = "2.0", features = ["actix_extras", "chrono", "uuid"] }
+utoipa-swagger-ui = { version = "2.0", features = ["actix-web"] }
 uuid = { version = "1.1", features = ["serde", "v4", "v5"] } # must be compatible with `bb8-postgres`
 walkdir = "2.3"
 zip = "0.6"

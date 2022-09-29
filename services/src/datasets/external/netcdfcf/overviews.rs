@@ -1,5 +1,6 @@
 use super::{error, NetCdfCf4DProviderError, TimeCoverage};
 use crate::{
+    api::model::datatypes::ResamplingMethod,
     datasets::{external::netcdfcf::NetCdfCfDataProvider, storage::MetaDataDefinition},
     tasks::{TaskContext, TaskStatusInfo},
     util::{canonicalize_subpath, config::get_config_element, path_with_base_path},
@@ -16,7 +17,6 @@ use gdal_sys::GDALGetRasterStatistics;
 use geoengine_datatypes::{
     error::BoxedResultExt,
     primitives::{DateTimeParseFormat, TimeInstance, TimeInterval},
-    util::gdal::ResamplingMethod,
 };
 use geoengine_operators::{
     source::{
@@ -775,7 +775,7 @@ mod tests {
     use geoengine_datatypes::{
         hashmap,
         operations::image::{Colorizer, RgbaColor},
-        primitives::{DateTime, Measurement, TimeGranularity, TimeStep},
+        primitives::{DateTime, Measurement, SpatialResolution, TimeGranularity, TimeStep},
         raster::RasterDataType,
         spatial_reference::SpatialReference,
         test_data,
@@ -834,6 +834,7 @@ mod tests {
                     measurement: Measurement::Unitless,
                     time: None,
                     bbox: None,
+                    resolution: Some(SpatialResolution::new_unchecked(1.0, 1.0))
                 },
                 params: GdalDatasetParameters {
                     file_path: Path::new("foo/%_START_TIME_%.tiff").into(),
@@ -927,6 +928,7 @@ mod tests {
                     measurement: Measurement::Unitless,
                     time: None,
                     bbox: None,
+                    resolution: Some(SpatialResolution::new_unchecked(1.0, 1.0)),
                 },
                 params: GdalDatasetParameters {
                     file_path: tempdir_path.join("1/%_START_TIME_%.tiff"),
@@ -1009,7 +1011,7 @@ mod tests {
                         description: "Randomly created data".to_string(),
                         data_type: Some(RasterDataType::I16),
                         data_range: Some((1., 97.)),
-                        unit: "".to_string(),
+                        unit: String::new(),
                         groups: vec![]
                     },
                     FullNetCdfGroup {
@@ -1018,7 +1020,7 @@ mod tests {
                         description: "Randomly created data".to_string(),
                         data_type: Some(RasterDataType::I16),
                         data_range: Some((1., 98.)),
-                        unit: "".to_string(),
+                        unit: String::new(),
                         groups: vec![]
                     }
                 ],
@@ -1190,6 +1192,7 @@ mod tests {
                     measurement: Measurement::Unitless,
                     time: None,
                     bbox: None,
+                    resolution: Some(SpatialResolution::new_unchecked(1.0, 1.0)),
                 },
                 params: vec![
                     GdalLoadingInfoTemporalSlice {

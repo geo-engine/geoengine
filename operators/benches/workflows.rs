@@ -305,6 +305,7 @@ fn bench_mock_source_operator(bench_collector: &mut BenchmarkCollector) {
                     measurement: Measurement::Unitless,
                     time: None,
                     bbox: None,
+                    resolution: None,
                 },
             },
         }
@@ -372,6 +373,7 @@ fn bench_mock_source_operator_with_expression(bench_collector: &mut BenchmarkCol
                     measurement: Measurement::Unitless,
                     time: None,
                     bbox: None,
+                    resolution: None,
                 },
             },
         };
@@ -451,6 +453,7 @@ fn bench_mock_source_operator_with_identity_reprojection(bench_collector: &mut B
                     measurement: Measurement::Unitless,
                     time: None,
                     bbox: None,
+                    resolution: None,
                 },
             },
         };
@@ -523,6 +526,7 @@ fn bench_mock_source_operator_with_4326_to_3857_reprojection(
                     measurement: Measurement::Unitless,
                     time: None,
                     bbox: None,
+                    resolution: None,
                 },
             },
         };

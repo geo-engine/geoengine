@@ -352,7 +352,7 @@ mod tests {
             .user_db_ref()
             .register(
                 UserRegistration {
-                    email: "foo2@bar.de".to_string(),
+                    email: "foo2@example.com".to_string(),
                     password: "secret1234".to_string(),
                     real_name: "Foo2 Bar".to_string(),
                 }
@@ -390,7 +390,7 @@ mod tests {
             .user_db_ref()
             .register(
                 UserRegistration {
-                    email: "foo2@bar.de".to_string(),
+                    email: "foo2@example.com".to_string(),
                     password: "secret1234".to_string(),
                     real_name: "Foo2 Bar".to_string(),
                 }
@@ -431,7 +431,7 @@ mod tests {
             .user_db_ref()
             .register(
                 UserRegistration {
-                    email: "foo2@bar.de".to_string(),
+                    email: "foo2@example.com".to_string(),
                     password: "secret1234".to_string(),
                     real_name: "Foo2 Bar".to_string(),
                 }
@@ -464,7 +464,7 @@ mod tests {
         let target_user_session = ctx
             .user_db_ref()
             .login(UserCredentials {
-                email: "foo2@bar.de".to_string(),
+                email: "foo2@example.com".to_string(),
                 password: "secret1234".to_string(),
             })
             .await
@@ -487,7 +487,7 @@ mod tests {
             .user_db_ref()
             .register(
                 UserRegistration {
-                    email: "foo2@bar.de".to_string(),
+                    email: "foo2@example.com".to_string(),
                     password: "secret1234".to_string(),
                     real_name: "Foo2 Bar".to_string(),
                 }
@@ -533,7 +533,7 @@ mod tests {
             .user_db_ref()
             .register(
                 UserRegistration {
-                    email: "foo2@bar.de".to_string(),
+                    email: "foo2@example.com".to_string(),
                     password: "secret1234".to_string(),
                     real_name: "Foo2 Bar".to_string(),
                 }
@@ -577,7 +577,7 @@ mod tests {
             .user_db_ref()
             .register(
                 UserRegistration {
-                    email: "foo2@bar.de".to_string(),
+                    email: "foo2@example.com".to_string(),
                     password: "secret1234".to_string(),
                     real_name: "Foo2 Bar".to_string(),
                 }
@@ -631,7 +631,7 @@ mod tests {
             .uri("/project/versions")
             .append_header((header::CONTENT_LENGTH, 0))
             .append_header((header::AUTHORIZATION, Bearer::new(session.id.to_string())))
-            .set_json(&project);
+            .set_json(project);
         send_pro_test_request(req, ctx).await
     }
 
@@ -666,7 +666,7 @@ mod tests {
         let req = test::TestRequest::get()
             .uri("/project/versions")
             .append_header((header::CONTENT_LENGTH, 0))
-            .set_json(&project);
+            .set_json(project);
         let res = send_pro_test_request(req, ctx).await;
 
         ErrorResponse::assert(

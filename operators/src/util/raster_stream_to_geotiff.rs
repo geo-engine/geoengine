@@ -1,4 +1,3 @@
-use crate::util::gdal::{create_mask_band, open_mask_band};
 use crate::util::{Result, TemporaryGdalThreadLocalConfigOptions};
 use crate::{
     engine::{QueryContext, RasterQueryProcessor},
@@ -211,7 +210,7 @@ impl<P: Pixel + GdalType> GdalDatasetWriter<P> {
         if let Some(no_data) = gdal_tiff_metadata.no_data_value {
             band.set_no_data_value(no_data)?;
         } else {
-            create_mask_band(&dataset, rasterband_index)?;
+            band.create_mask_band(true)?;
         }
 
         drop(thread_local_configs); // ensure that we drop here
@@ -327,7 +326,7 @@ impl<P: Pixel + GdalType> GdalDatasetWriter<P> {
                 .map_elements(|is_valid| if is_valid { 255_u8 } else { 0 }); // TODO: investigate if we can transmute the vec of bool to u8.
         let mask_buffer = Buffer::new(window_size, mask_grid_gdal_values.data);
 
-        let mut mask_band = open_mask_band(&self.dataset, self.rasterband_index as i32)?;
+        let mut mask_band = raster_band.open_mask_band()?;
         mask_band.write(window, window_size, &mask_buffer)?;
 
         Ok(())
