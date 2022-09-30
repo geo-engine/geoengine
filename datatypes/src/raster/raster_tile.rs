@@ -6,7 +6,8 @@ use super::{
 };
 use super::{GridIndexAccessMut, RasterProperties};
 use crate::primitives::{
-    SpatialBounded, SpatialPartition2D, SpatialPartitioned, TemporalBounded, TimeInterval,
+    SpatialBounded, SpatialPartition2D, SpatialPartitioned, SpatialResolution, TemporalBounded,
+    TimeInterval,
 };
 use crate::raster::Pixel;
 use crate::util::Result;
@@ -79,6 +80,10 @@ where
             self.global_geo_transform.x_pixel_size(),
             self.global_geo_transform.y_pixel_size(),
         )
+    }
+
+    pub fn spatial_resolution(&self) -> SpatialResolution {
+        self.global_geo_transform.spatial_resolution()
     }
 }
 

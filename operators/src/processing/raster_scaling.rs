@@ -37,10 +37,10 @@ pub enum ScalingMode {
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
-#[serde(rename_all = "camelCase")]
+#[serde(rename_all = "camelCase", tag = "type")]
 enum PropertiesKeyOrValue {
     MetadataKey(RasterPropertiesKey),
-    Value(f64),
+    Constant { value: f64 },
 }
 
 /// The raster scaling operator scales/unscales the values of a raster by a given scale factor and offset.
@@ -60,7 +60,7 @@ enum PropertiesKeyOrValue {
 ///
 /// - offset: `msg.calibration_offset`
 /// - slope: `msg.calibration_slope`
-pub type RasterScalingOperator = Operator<RasterScalingParams, SingleRasterSource>;
+pub type RasterScaling = Operator<RasterScalingParams, SingleRasterSource>;
 
 pub struct InitializedRasterScalingOperator {
     scale_with: PropertiesKeyOrValue,
@@ -72,7 +72,7 @@ pub struct InitializedRasterScalingOperator {
 
 #[typetag::serde]
 #[async_trait]
-impl RasterOperator for RasterScalingOperator {
+impl RasterOperator for RasterScaling {
     async fn initialize(
         self: Box<Self>,
         context: &dyn ExecutionContext,
@@ -89,6 +89,7 @@ impl RasterOperator for RasterScalingOperator {
                 .unwrap_or_else(|| in_desc.measurement.clone()),
             bbox: in_desc.bbox,
             time: in_desc.time,
+            resolution: in_desc.resolution,
         };
 
         let initialized_operator = InitializedRasterScalingOperator {
@@ -190,7 +191,7 @@ where
     fn prop_value(prop_key_or_value: &PropertiesKeyOrValue, props: &RasterProperties) -> Result<P> {
         let value = match prop_key_or_value {
             PropertiesKeyOrValue::MetadataKey(key) => props.number_property::<P>(key)?,
-            PropertiesKeyOrValue::Value(value) => value.as_(),
+            PropertiesKeyOrValue::Constant { value } => value.as_(),
         };
         Ok(value)
     }
@@ -224,6 +225,7 @@ where
 
 #[cfg(test)]
 mod tests {
+
     use geoengine_datatypes::{
         primitives::{SpatialPartition2D, SpatialResolution, TimeInterval},
         raster::{
@@ -270,6 +272,8 @@ mod tests {
             raster_props,
         );
 
+        let spatial_resolution = raster_tile.spatial_resolution();
+
         let mrs = MockRasterSource {
             params: MockRasterSourceParams {
                 data: vec![raster_tile],
@@ -279,6 +283,7 @@ mod tests {
                     measurement: Measurement::Unitless,
                     bbox: None,
                     time: None,
+                    resolution: Some(spatial_resolution),
                 },
             },
         }
@@ -297,7 +302,7 @@ mod tests {
 
         let output_measurement = None;
 
-        let op = RasterScalingOperator {
+        let op = RasterScaling {
             params: RasterScalingParams {
                 scale_with,
                 offset_by,
@@ -382,6 +387,8 @@ mod tests {
             raster_props,
         );
 
+        let spatial_resolution = raster_tile.spatial_resolution();
+
         let mrs = MockRasterSource {
             params: MockRasterSourceParams {
                 data: vec![raster_tile],
@@ -391,6 +398,7 @@ mod tests {
                     measurement: Measurement::Unitless,
                     bbox: None,
                     time: None,
+                    resolution: Some(spatial_resolution),
                 },
             },
         }
@@ -404,18 +412,25 @@ mod tests {
             domain: None,
             key: "offset".to_string(),
         });
+        let offset_by = PropertiesKeyOrValue::Constant { value: 1.0 };
 
         let scaling_mode = ScalingMode::Scale;
 
         let output_measurement = None;
 
-        let op = RasterScalingOperator {
-            params: RasterScalingParams {
-                scale_with,
-                offset_by,
-                output_measurement,
-                scaling_mode,
-            },
+        let params = RasterScalingParams {
+            scale_with,
+            offset_by,
+            output_measurement,
+            scaling_mode,
+        };
+
+        let json_params = serde_json::to_string(&params).unwrap();
+
+        print!("{:?}", json_params);
+
+        let op = RasterScaling {
+            params,
             sources: SingleRasterSource { raster: mrs },
         }
         .boxed();
