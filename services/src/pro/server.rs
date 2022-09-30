@@ -9,8 +9,8 @@ use crate::util::config::{self, get_config_element, Backend};
 
 use super::projects::ProProjectDb;
 use crate::util::server::{
-    calculate_max_blocking_threads_per_worker, configure_extractors, render_404, render_405,
-    serve_openapi_json,
+    calculate_max_blocking_threads_per_worker, configure_extractors, log_server_info, render_404,
+    render_405, serve_openapi_json, server_info,
 };
 use actix_files::Files;
 use actix_web::{http, middleware, web, App, HttpServer};
@@ -101,8 +101,8 @@ where
 
         if version_api {
             app = app.route(
-                "/version",
-                web::get().to(crate::util::server::show_version_handler),
+                "/info",
+                web::get().to(crate::util::server::server_info_handler),
             );
         }
         if let Some(static_files_dir) = static_files_dir.clone() {
@@ -134,45 +134,27 @@ fn print_pro_info_message() {
 pub async fn start_pro_server(static_files_dir: Option<PathBuf>) -> Result<()> {
     print_pro_info_message();
 
-    let web_config: config::Web = get_config_element()?;
+    log_server_info()?;
 
-    let external_address = web_config.external_address()?;
-
-    info!(
-        "Starting server… local address: {}, external address: {}",
-        Url::parse(&format!("http://{}/", web_config.bind_address))?,
-        external_address
-    );
-
-    info!(
-        "API documentation is available at {}",
-        external_address.join("swagger-ui/")?
-    );
-
-    let session_config: crate::util::config::Session = get_config_element()?;
     let user_config: crate::pro::util::config::User = get_config_element()?;
     let oidc_config: crate::pro::util::config::Oidc = get_config_element()?;
+    let session_config: crate::util::config::Session = get_config_element()?;
+    let web_config: crate::util::config::Web = get_config_element()?;
 
-    if session_config.anonymous_access {
-        info!("Anonymous access is enabled");
+    if user_config.user_registration {
+        info!("User Registration: enabled");
     } else {
-        info!("Anonymous access is disabled");
+        info!("User Registration: disabled");
+    }
+
+    if oidc_config.enabled {
+        info!("OIDC: enabled");
+    } else {
+        info!("OIDC: disabled");
     }
 
     if session_config.fixed_session_token.is_some() {
         warn!("Fixed session token is set, but it will be ignored in Geo Engine Pro");
-    }
-
-    if user_config.user_registration {
-        info!("User registration is enabled");
-    } else {
-        info!("User registration is disabled");
-    }
-
-    if oidc_config.enabled {
-        info!("OIDC is enabled");
-    } else {
-        info!("OIDC is disabled");
     }
 
     let data_path_config: config::DataProvider = get_config_element()?;

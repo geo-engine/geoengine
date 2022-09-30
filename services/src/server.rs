@@ -4,10 +4,9 @@ use crate::error::{Error, Result};
 use crate::handlers;
 use crate::util::config;
 use crate::util::config::get_config_element;
-use crate::util::server::serve_openapi_json;
 use crate::util::server::{
-    calculate_max_blocking_threads_per_worker, configure_extractors, render_404, render_405,
-    CustomRootSpanBuilder,
+    calculate_max_blocking_threads_per_worker, configure_extractors, log_server_info, render_404,
+    render_405, serve_openapi_json, CustomRootSpanBuilder,
 };
 use actix_files::Files;
 use actix_web::{http, middleware, web, App, HttpServer};
@@ -15,7 +14,6 @@ use log::info;
 use std::net::SocketAddr;
 use std::path::PathBuf;
 use tracing_actix_web::TracingLogger;
-use url::Url;
 use utoipa::OpenApi;
 use utoipa_swagger_ui::SwaggerUi;
 
@@ -26,31 +24,13 @@ use utoipa_swagger_ui::SwaggerUi;
 ///
 ///
 pub async fn start_server(static_files_dir: Option<PathBuf>) -> Result<()> {
-    let web_config: config::Web = get_config_element()?;
+    log_server_info()?;
 
-    let external_address = web_config.external_address()?;
-
-    info!(
-        "Starting server… local address: {}, external address: {}",
-        Url::parse(&format!("http://{}/", web_config.bind_address))?,
-        external_address
-    );
-
-    info!(
-        "API documentation is available at {}",
-        external_address.join("swagger-ui/")?
-    );
-
+    let web_config: crate::util::config::Web = get_config_element()?;
     let session_config: crate::util::config::Session = get_config_element()?;
 
-    if session_config.anonymous_access {
-        info!("Anonymous access is enabled");
-    } else {
-        info!("Anonymous access is disabled");
-    }
-
     if let Some(session_token) = session_config.fixed_session_token {
-        info!("Fixed session token is set, it is {session_token}");
+        info!("Fixed Session Token: {session_token}");
     }
 
     info!("Using in memory backend");
@@ -153,8 +133,8 @@ where
 
         if version_api {
             app = app.route(
-                "/version",
-                web::get().to(crate::util::server::show_version_handler),
+                "/info",
+                web::get().to(crate::util::server::server_info_handler),
             );
         }
         if let Some(static_files_dir) = static_files_dir.clone() {
