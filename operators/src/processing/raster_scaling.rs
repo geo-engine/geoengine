@@ -412,7 +412,6 @@ mod tests {
             domain: None,
             key: "offset".to_string(),
         });
-        let offset_by = PropertiesKeyOrValue::Constant { value: 1.0 };
 
         let scaling_mode = ScalingMode::Scale;
 
@@ -424,10 +423,6 @@ mod tests {
             output_measurement,
             scaling_mode,
         };
-
-        let json_params = serde_json::to_string(&params).unwrap();
-
-        print!("{:?}", json_params);
 
         let op = RasterScaling {
             params,
