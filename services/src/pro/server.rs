@@ -10,7 +10,7 @@ use crate::util::config::{self, get_config_element, Backend};
 use super::projects::ProProjectDb;
 use crate::util::server::{
     calculate_max_blocking_threads_per_worker, configure_extractors, log_server_info, render_404,
-    render_405, serve_openapi_json, server_info,
+    render_405, serve_openapi_json,
 };
 use actix_files::Files;
 use actix_web::{http, middleware, web, App, HttpServer};
@@ -21,7 +21,6 @@ use geoengine_operators::engine::ChunkByteSize;
 use log::{info, warn};
 use std::net::SocketAddr;
 use std::path::PathBuf;
-use url::Url;
 use utoipa::OpenApi;
 use utoipa_swagger_ui::SwaggerUi;
 

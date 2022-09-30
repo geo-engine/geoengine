@@ -152,6 +152,8 @@ where
 
 #[cfg(test)]
 mod tests {
+    use url::Url;
+
     use super::*;
     use crate::contexts::{Session, SimpleSession};
     use crate::handlers::ErrorResponse;
