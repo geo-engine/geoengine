@@ -14,13 +14,13 @@ postgres = ["postgres-types", "postgres-protocol"]
 pro = ["postgres"]
 
 [dependencies]
-arrow = { version = "22.0", features = ["simd"] }
+arrow = { version = "23.0", features = ["simd"] }
 async-trait = "0.1"
 chrono = "0.4"
 float-cmp = "0.9"
 gdal =  "0.13"
-geo = "0.22"
-geojson = "0.23"
+geo = "0.23"
+geojson = "0.24"
 image = "0.24"
 num = "0.4"
 num-traits = "0.2"
@@ -36,9 +36,7 @@ snafu = "0.7"
 uuid = { version = "1.1", features = ["serde", "v4", "v5"] }
 
 [dev-dependencies]
-criterion = "0.3"
-ndarray = "0.14"
-vega_lite_4 = { version = "0.6", features = ["ndarray", "show_vega"]}
+criterion = "0.4"
 
 [[bench]]
 name = "multi_point_collection"

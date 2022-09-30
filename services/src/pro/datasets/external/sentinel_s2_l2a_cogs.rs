@@ -14,7 +14,7 @@ use crate::util::retry::retry;
 use crate::util::user_input::Validated;
 use crate::workflows::workflow::Workflow;
 use async_trait::async_trait;
-use geoengine_datatypes::operations::image::{Colorizer, RgbaColor};
+use geoengine_datatypes::operations::image::RgbaColor;
 use geoengine_datatypes::operations::reproject::{
     CoordinateProjection, CoordinateProjector, ReprojectClipped,
 };
@@ -163,7 +163,7 @@ impl SentinelS2L2aCogsDataProvider {
                             layer_id: layer_id.clone(),
                         },
                         name: format!("Sentinel S2 L2A COGS {}:{}", zone.name, band.name),
-                        description: "".to_owned(),
+                        description: String::new(),
                         workflow: Workflow {
                             operator: source_operator_from_dataset(
                                 GdalSource::TYPE_NAME,
@@ -177,19 +177,21 @@ impl SentinelS2L2aCogsDataProvider {
                         },
                         symbology: Some(Symbology::Raster(RasterSymbology {
                             opacity: 1.0,
-                            colorizer: Colorizer::linear_gradient(
-                                vec![
-                                    (0.0, RgbaColor::white())
-                                        .try_into()
-                                        .expect("valid breakpoint"),
-                                    (10_000.0, RgbaColor::black())
-                                        .try_into()
-                                        .expect("valid breakpoint"),
-                                ],
-                                RgbaColor::transparent(),
-                                RgbaColor::transparent(),
-                            )
-                            .expect("valid colorizer"),
+                            colorizer:
+                                geoengine_datatypes::operations::image::Colorizer::linear_gradient(
+                                    vec![
+                                        (0.0, RgbaColor::white())
+                                            .try_into()
+                                            .expect("valid breakpoint"),
+                                        (10_000.0, RgbaColor::black())
+                                            .try_into()
+                                            .expect("valid breakpoint"),
+                                    ],
+                                    RgbaColor::transparent(),
+                                    RgbaColor::transparent(),
+                                )
+                                .expect("valid colorizer")
+                                .into(),
                         })), // TODO: individual colorizer per band
                         properties: vec![],
                         metadata: HashMap::new(),

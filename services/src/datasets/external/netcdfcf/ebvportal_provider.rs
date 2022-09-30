@@ -245,7 +245,7 @@ impl EbvPortalDataProvider {
                         .try_into()?,
                     },
                     name: c.name,
-                    description: "".to_string(),
+                    description: String::new(),
                 }))
             })
             .collect::<Result<Vec<CollectionItem>>>()?;
@@ -293,7 +293,7 @@ impl EbvPortalDataProvider {
                         .try_into()?,
                     },
                     name: ebv,
-                    description: "".to_string(),
+                    description: String::new(),
                 }))
             })
             .collect::<Result<Vec<CollectionItem>>>()?;
@@ -304,7 +304,7 @@ impl EbvPortalDataProvider {
                 collection_id: collection.clone(),
             },
             name: class.to_string(),
-            description: "".to_string(),
+            description: String::new(),
             items,
             entry_label: Some("EBV Name".to_string()),
             properties: vec![],
@@ -348,7 +348,7 @@ impl EbvPortalDataProvider {
                 collection_id: collection.clone(),
             },
             name: ebv.to_string(),
-            description: "".to_string(),
+            description: String::new(),
             items,
             entry_label: Some("EBV Dataset".to_string()),
             properties: vec![],
@@ -422,8 +422,9 @@ impl EbvPortalDataProvider {
                 (
                     "by".to_string(),
                     format!("{} ({})", dataset.author_name, dataset.author_institution),
-                ),
-                ("with license".to_string(), dataset.license),
+                )
+                    .into(),
+                ("with license".to_string(), dataset.license).into(),
             ]
             .into_iter()
             .collect(),
@@ -479,7 +480,7 @@ impl EbvPortalDataProvider {
                             .try_into()?,
                         },
                         name: entity.name,
-                        description: "".to_string(),
+                        description: String::new(),
                     }))
                 })
                 .collect::<Result<Vec<CollectionItem>>>()?
@@ -858,7 +859,7 @@ mod tests {
                             )
                         },
                         name: "Community composition".to_string(),
-                        description: "".to_string(),
+                        description: String::new(),
                     }),
                     CollectionItem::Collection(LayerCollectionListing {
                         id: ProviderLayerCollectionId {
@@ -871,7 +872,7 @@ mod tests {
                             )
                         },
                         name: "Ecosystem functioning".to_string(),
-                        description: "".to_string(),
+                        description: String::new(),
                     }),
                     CollectionItem::Collection(LayerCollectionListing {
                         id: ProviderLayerCollectionId {
@@ -882,7 +883,7 @@ mod tests {
                             collection_id: LayerCollectionId("classes/Ecosystem structure".into())
                         },
                         name: "Ecosystem structure".to_string(),
-                        description: "".to_string(),
+                        description: String::new(),
                     }),
                     CollectionItem::Collection(LayerCollectionListing {
                         id: ProviderLayerCollectionId {
@@ -893,7 +894,7 @@ mod tests {
                             collection_id: LayerCollectionId("classes/Species populations".into())
                         },
                         name: "Species populations".to_string(),
-                        description: "".to_string(),
+                        description: String::new(),
                     })
                 ],
                 entry_label: Some("EBV Class".to_string()),
@@ -979,7 +980,7 @@ mod tests {
                     collection_id: id,
                 },
                 name: "Ecosystem functioning".to_string(),
-                description: "".to_string(),
+                description: String::new(),
                 items: vec![
                     CollectionItem::Collection(LayerCollectionListing {
                         id: ProviderLayerCollectionId {
@@ -992,7 +993,7 @@ mod tests {
                             )
                         },
                         name: "Ecosystem phenology".to_string(),
-                        description: "".to_string(),
+                        description: String::new(),
                     }),
                     CollectionItem::Collection(LayerCollectionListing {
                         id: ProviderLayerCollectionId {
@@ -1005,7 +1006,7 @@ mod tests {
                             )
                         },
                         name: "Primary productivity".to_string(),
-                        description: "".to_string(),
+                        description: String::new(),
                     })
                 ],
                 entry_label: Some("EBV Name".to_string()),
@@ -1143,7 +1144,7 @@ mod tests {
                 collection_id: id,
             },
             name: "Ecosystem phenology".to_string(),
-            description: "".to_string(),
+            description: String::new(),
             items: vec![
                 CollectionItem::Collection(LayerCollectionListing {
                     id: ProviderLayerCollectionId {
@@ -1404,8 +1405,8 @@ mod tests {
                     description: "Randomly created data".to_string(),
                 })],
                 entry_label: Some("Metric".to_string()),
-                properties: vec![("by".to_string(), "Kristin Böttcher (The Finnish Environment Institute (SYKE))".to_string()),
-                    ("with license".to_string(), "https://creativecommons.org/licenses/by/4.0".to_string())]              
+                properties: vec![("by".to_string(), "Kristin Böttcher (The Finnish Environment Institute (SYKE))".to_string()).into(),
+                    ("with license".to_string(), "https://creativecommons.org/licenses/by/4.0".to_string()).into()]              
         });
     }
 
@@ -1549,21 +1550,21 @@ mod tests {
                             layer_id: LayerId("classes/Ecosystem functioning/Ecosystem phenology/10/metric_1/0.entity".into())
                         },
                         name: "entity01".to_string(),
-                        description: "".to_string(),
+                        description: String::new(),
                     }), CollectionItem::Layer(LayerListing {
                         id: ProviderLayerId {
                             provider_id: DataProviderId::from_str("77d0bf11-986e-43f5-b11d-898321f1854c").unwrap(),
                             layer_id: LayerId("classes/Ecosystem functioning/Ecosystem phenology/10/metric_1/1.entity".into())
                         },
                         name: "entity02".to_string(),
-                        description: "".to_string(),
+                        description: String::new(),
                     }), CollectionItem::Layer(LayerListing {
                         id: ProviderLayerId {
                             provider_id: DataProviderId::from_str("77d0bf11-986e-43f5-b11d-898321f1854c").unwrap(),
                             layer_id: LayerId("classes/Ecosystem functioning/Ecosystem phenology/10/metric_1/2.entity".into())
                         },
                         name: "entity03".to_string(),
-                        description: "".to_string(),
+                        description: String::new(),
                     })],
                 entry_label: Some("Entity".to_string()),
                 properties: vec![],

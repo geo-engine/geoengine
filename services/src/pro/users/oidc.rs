@@ -453,7 +453,7 @@ mod tests {
     fn single_state_nonce_mocked_request_db(server_url: String) -> OidcRequestDb {
         OidcRequestDb {
             issuer: server_url,
-            client_id: "".to_string(),
+            client_id: String::new(),
             client_secret: None,
             redirect_uri: REDIRECT_URI.to_string(),
             scopes: vec!["profile".to_string(), "email".to_string()],
@@ -522,8 +522,8 @@ mod tests {
 
     fn auth_code_response_empty_with_valid_state() -> AuthCodeResponse {
         AuthCodeResponse {
-            session_state: "".to_string(),
-            code: "".to_string(),
+            session_state: String::new(),
+            code: String::new(),
             state: SINGLE_STATE.to_string(),
         }
     }
@@ -744,8 +744,8 @@ mod tests {
         let client = mock_client(&request_db).unwrap();
 
         let auth_code_response = AuthCodeResponse {
-            session_state: "".to_string(),
-            code: "".to_string(),
+            session_state: String::new(),
+            code: String::new(),
             state: "Illegal Request State".to_string(),
         };
 
@@ -763,8 +763,8 @@ mod tests {
         assert!(request.is_ok());
 
         let auth_code_response = AuthCodeResponse {
-            session_state: "".to_string(),
-            code: "".to_string(),
+            session_state: String::new(),
+            code: String::new(),
             state: "Illegal Request State".to_string(),
         };
 

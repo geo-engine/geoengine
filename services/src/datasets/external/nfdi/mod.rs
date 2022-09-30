@@ -340,7 +340,7 @@ impl NFDIDataProvider {
 
         let column_spec = OgrSourceColumnSpec {
             format_specifics: None,
-            x: "".to_string(),
+            x: String::new(),
             y: None,
             int,
             float,
@@ -933,7 +933,7 @@ mod tests {
             project_id: PROJECT_ID.to_string(),
             is_public: true,
             status: 0,
-            bucket: "".to_string(),
+            bucket: String::new(),
         };
         let md = NFDIDataProvider::extract_metadata(&ds).unwrap();
         let des = serde_json::from_value::<GEMetadata>(vector_meta_data()).unwrap();
@@ -952,7 +952,7 @@ mod tests {
             project_id: PROJECT_ID.to_string(),
             is_public: true,
             status: 0,
-            bucket: "".to_string(),
+            bucket: String::new(),
         };
         assert!(NFDIDataProvider::extract_metadata(&ds).is_err());
     }
@@ -974,7 +974,7 @@ mod tests {
             project_id: PROJECT_ID.to_string(),
             is_public: true,
             status: 0,
-            bucket: "".to_string(),
+            bucket: String::new(),
         };
         assert!(NFDIDataProvider::extract_metadata(&ds).is_err());
     }
@@ -996,7 +996,7 @@ mod tests {
             project_id: PROJECT_ID.to_string(),
             is_public: true,
             status: 0,
-            bucket: "".to_string(),
+            bucket: String::new(),
         };
 
         let server = TestProjectServer::start_default().await;
@@ -1046,7 +1046,7 @@ mod tests {
             project_id: PROJECT_ID.to_string(),
             is_public: true,
             status: 0,
-            bucket: "".to_string(),
+            bucket: String::new(),
         };
 
         let md = NFDIDataProvider::extract_metadata(&ds).unwrap();
@@ -1096,7 +1096,7 @@ mod tests {
             project_id: PROJECT_ID.to_string(),
             is_public: true,
             status: 0,
-            bucket: "".to_string(),
+            bucket: String::new(),
         };
 
         let md = NFDIDataProvider::extract_metadata(&ds).unwrap();
@@ -1136,7 +1136,7 @@ mod tests {
             project_id: PROJECT_ID.to_string(),
             is_public: true,
             status: 0,
-            bucket: "".to_string(),
+            bucket: String::new(),
         };
 
         let md = NFDIDataProvider::extract_metadata(&ds).unwrap();
@@ -1188,7 +1188,7 @@ mod tests {
                         project_id: PROJECT_ID.to_string(),
                         is_public: true,
                         status: 0,
-                        bucket: "".to_string(),
+                        bucket: String::new(),
                     }],
                 }),
         );
@@ -1236,7 +1236,7 @@ mod tests {
                         project_id: PROJECT_ID.to_string(),
                         is_public: true,
                         status: 0,
-                        bucket: "".to_string(),
+                        bucket: String::new(),
                     }),
                 }),
         );
@@ -1283,7 +1283,7 @@ mod tests {
                         project_id: PROJECT_ID.to_string(),
                         is_public: true,
                         status: 0,
-                        bucket: "".to_string(),
+                        bucket: String::new(),
                     }),
                 }),
         );
@@ -1305,15 +1305,15 @@ mod tests {
                         status: 0,
                         objects: vec![Object {
                             id: "OBJ".to_string(),
-                            filename: "".to_string(),
-                            filetype: "".to_string(),
+                            filename: String::new(),
+                            filetype: String::new(),
                             labels: vec![],
                             metadata: vec![],
                             created: None,
                             location: None,
                             origin: None,
                             content_len: 0,
-                            upload_id: "".to_string(),
+                            upload_id: String::new(),
                             generated: None,
                             object_group_id: "OG".to_string(),
                             dataset_id: DATASET_ID.to_string(),
@@ -1370,7 +1370,7 @@ mod tests {
                         project_id: PROJECT_ID.to_string(),
                         is_public: true,
                         status: 0,
-                        bucket: "".to_string(),
+                        bucket: String::new(),
                     }),
                 }),
         );
@@ -1400,7 +1400,7 @@ mod tests {
                             location: None,
                             origin: None,
                             content_len: 0,
-                            upload_id: "".to_string(),
+                            upload_id: String::new(),
                             generated: None,
                             object_group_id: "OG".to_string(),
                             dataset_id: DATASET_ID.to_string(),

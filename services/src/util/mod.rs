@@ -7,6 +7,7 @@ use utoipa::ToSchema;
 pub use geoengine_datatypes::util::Identifier;
 pub use geoengine_operators::util::{spawn, spawn_blocking, spawn_blocking_with_thread_pool};
 
+pub mod apidoc;
 pub mod config;
 pub mod identifiers;
 pub mod operators;
@@ -125,7 +126,7 @@ pub fn path_with_base_path(base: &Path, sub_path: &Path) -> Result<PathBuf> {
 
     let path = base.join(sub_path);
 
-    if !path.starts_with(&base) {
+    if !path.starts_with(base) {
         return Err(crate::error::Error::SubPathMustNotEscapeBasePath {
             base: base.into(),
             sub_path: sub_path.into(),

@@ -323,7 +323,7 @@ where
                             project_version_id UUID REFERENCES project_versions(id) ON DELETE CASCADE NOT NULL,                            
                             name character varying (256) NOT NULL,
                             workflow_id UUID NOT NULL, -- TODO: REFERENCES workflows(id)
-                            PRIMARY KEY (project_id, plot_index)            
+                            PRIMARY KEY (project_id, project_version_id, plot_index)            
                         );
 
                         CREATE TYPE "ProjectPermission" AS ENUM ('Read', 'Write', 'Owner');
@@ -946,6 +946,7 @@ mod tests {
         );
     }
 
+    #[allow(clippy::too_many_lines)]
     async fn update_projects(
         ctx: &PostgresContext<NoTls>,
         session: &UserSession,
@@ -1001,6 +1002,7 @@ mod tests {
             .await
             .is_ok());
 
+        // add a plot
         let update = UpdateProject {
             id: project.id,
             name: Some("Test9 Updated".into()),
@@ -1029,6 +1031,64 @@ mod tests {
             .await
             .unwrap();
         assert_eq!(versions.len(), 2);
+
+        // add second plot
+        let update = UpdateProject {
+            id: project.id,
+            name: Some("Test9 Updated".into()),
+            description: None,
+            layers: Some(vec![LayerUpdate::UpdateOrInsert(Layer {
+                workflow: layer_workflow_id,
+                name: "TestLayer".into(),
+                symbology: PointSymbology::default().into(),
+                visibility: Default::default(),
+            })]),
+            plots: Some(vec![
+                PlotUpdate::UpdateOrInsert(Plot {
+                    workflow: plot_workflow_id,
+                    name: "Test Plot".into(),
+                }),
+                PlotUpdate::UpdateOrInsert(Plot {
+                    workflow: plot_workflow_id,
+                    name: "Test Plot".into(),
+                }),
+            ]),
+            bounds: None,
+            time_step: None,
+        };
+        ctx.project_db_ref()
+            .update(session, update.validated().unwrap())
+            .await
+            .unwrap();
+
+        let versions = ctx
+            .project_db_ref()
+            .versions(session, project_id)
+            .await
+            .unwrap();
+        assert_eq!(versions.len(), 3);
+
+        // delete plots
+        let update = UpdateProject {
+            id: project.id,
+            name: None,
+            description: None,
+            layers: None,
+            plots: Some(vec![]),
+            bounds: None,
+            time_step: None,
+        };
+        ctx.project_db_ref()
+            .update(session, update.validated().unwrap())
+            .await
+            .unwrap();
+
+        let versions = ctx
+            .project_db_ref()
+            .versions(session, project_id)
+            .await
+            .unwrap();
+        assert_eq!(versions.len(), 4);
     }
 
     async fn list_projects(
@@ -1551,7 +1611,7 @@ mod tests {
             let meta = StaticMetaData {
                 loading_info: OgrSourceDataset {
                     file_name: Default::default(),
-                    layer_name: "".to_string(),
+                    layer_name: String::new(),
                     data_type: None,
                     time: Default::default(),
                     default_geometry: None,
@@ -1641,7 +1701,7 @@ mod tests {
             let meta = StaticMetaData {
                 loading_info: OgrSourceDataset {
                     file_name: Default::default(),
-                    layer_name: "".to_string(),
+                    layer_name: String::new(),
                     data_type: None,
                     time: Default::default(),
                     default_geometry: None,
@@ -1707,7 +1767,7 @@ mod tests {
             let meta = StaticMetaData {
                 loading_info: OgrSourceDataset {
                     file_name: Default::default(),
-                    layer_name: "".to_string(),
+                    layer_name: String::new(),
                     data_type: None,
                     time: Default::default(),
                     default_geometry: None,
@@ -1779,7 +1839,7 @@ mod tests {
             let meta = StaticMetaData {
                 loading_info: OgrSourceDataset {
                     file_name: Default::default(),
-                    layer_name: "".to_string(),
+                    layer_name: String::new(),
                     data_type: None,
                     time: Default::default(),
                     default_geometry: None,
@@ -1851,7 +1911,7 @@ mod tests {
             let meta = StaticMetaData {
                 loading_info: OgrSourceDataset {
                     file_name: Default::default(),
-                    layer_name: "".to_string(),
+                    layer_name: String::new(),
                     data_type: None,
                     time: Default::default(),
                     default_geometry: None,

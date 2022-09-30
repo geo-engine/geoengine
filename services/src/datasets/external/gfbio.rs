@@ -227,7 +227,7 @@ impl LayerCollectionProvider for GfbioDataProvider {
                         layer_id: LayerId(row.get::<usize, i32>(0).to_string()),
                     },
                     name: row.get(1),
-                    description: row.try_get(2).unwrap_or_else(|_| "".to_owned()),
+                    description: row.try_get(2).unwrap_or_else(|_| String::new()),
                 })
             })
             .collect();
@@ -280,7 +280,7 @@ impl LayerCollectionProvider for GfbioDataProvider {
                 layer_id: id.clone(),
             },
             name: row.get(0),
-            description: row.try_get(1).unwrap_or_else(|_| "".to_owned()),
+            description: row.try_get(1).unwrap_or_else(|_| String::new()),
             workflow: Workflow {
                 operator: TypedOperator::Vector(
                     OgrSource {
@@ -348,9 +348,9 @@ impl DataProvider for GfbioDataProvider {
         Ok(ProvenanceOutput {
             data: id.clone(),
             provenance: Some(Provenance {
-                citation: row.try_get(0).unwrap_or_else(|_| "".to_owned()),
-                license: row.try_get(1).unwrap_or_else(|_| "".to_owned()),
-                uri: row.try_get(2).unwrap_or_else(|_| "".to_owned()),
+                citation: row.try_get(0).unwrap_or_else(|_| String::new()),
+                license: row.try_get(1).unwrap_or_else(|_| String::new()),
+                uri: row.try_get(2).unwrap_or_else(|_| String::new()),
             }),
         })
     }
@@ -391,7 +391,7 @@ impl MetaDataProvider<OgrSourceDataset, VectorResultDescriptor, VectorQueryRecta
                 default_geometry: None,
                 columns: Some(OgrSourceColumnSpec {
                     format_specifics: None,
-                    x: "".to_owned(),
+                    x: String::new(),
                     y: None,
                     int: vec![],
                     float: vec![],
@@ -604,7 +604,7 @@ mod tests {
                         layer_id: LayerId("1".to_string()),
                     },
                     name: "Example Title".to_string(),
-                    description: "".to_string(),
+                    description: String::new(),
                 })],
                 entry_label: None,
                 properties: vec![],
@@ -719,7 +719,7 @@ mod tests {
                 default_geometry: None,
                 columns: Some(OgrSourceColumnSpec {
                     format_specifics: None,
-                    x: "".to_owned(),
+                    x: String::new(),
                     y: None,
                     int: vec![],
                     float: vec![],

@@ -213,6 +213,7 @@ pub(crate) async fn delete_project_handler<C: Context>(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::api::model::datatypes::Colorizer;
     use crate::contexts::{Session, SimpleContext, SimpleSession};
     use crate::handlers::ErrorResponse;
     use crate::util::tests::{
@@ -230,7 +231,6 @@ mod tests {
     use actix_web::dev::ServiceResponse;
     use actix_web::{http::header, http::Method, test};
     use actix_web_httpauth::headers::authorization::Bearer;
-    use geoengine_datatypes::operations::image::Colorizer;
     use geoengine_datatypes::primitives::{TimeGranularity, TimeStep};
     use geoengine_datatypes::spatial_reference::SpatialReference;
     use geoengine_datatypes::util::test::TestDefault;

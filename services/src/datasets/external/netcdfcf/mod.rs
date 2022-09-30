@@ -1032,7 +1032,7 @@ async fn listing_from_dir(
     path: &Path,
     options: &LayerCollectionListOptions,
 ) -> crate::error::Result<LayerCollection> {
-    let dir_path = base.join(&path);
+    let dir_path = base.join(path);
 
     let (name, description) = if path == Path::new(".") {
         (
@@ -1044,7 +1044,7 @@ async fn listing_from_dir(
             path.file_name()
                 .map(|n| n.to_string_lossy().to_string())
                 .unwrap_or_default(),
-            "".to_string(),
+            String::new(),
         )
     };
 
@@ -1070,7 +1070,7 @@ async fn listing_from_dir(
                     .try_into()?,
                 },
                 name: entry.file_name().to_string_lossy().to_string(),
-                description: "".to_string(),
+                description: String::new(),
             }));
         } else if entry.path().extension() == Some("nc".as_ref()) {
             let fp = entry
@@ -1222,7 +1222,7 @@ pub fn layer_from_netcdf_overview(
         },
         symbology: Some(Symbology::Raster(RasterSymbology {
             opacity: 1.0,
-            colorizer,
+            colorizer: colorizer.into(),
         })),
         properties: [(
             "author".to_string(),
@@ -1238,7 +1238,8 @@ pub fn layer_from_netcdf_overview(
                     .creator_institution
                     .unwrap_or_else(|| "unknown".to_string())
             ),
-        )]
+        )
+            .into()]
         .into_iter()
         .collect(),
         metadata: [
@@ -1287,7 +1288,8 @@ async fn listing_from_netcdf_file(
                 tree.creator_institution
                     .unwrap_or_else(|| "unknown".to_string())
             ),
-        )]
+        )
+            .into()]
         .into_iter()
         .collect()
     } else {
@@ -1313,7 +1315,7 @@ async fn listing_from_netcdf_file(
                         .try_into()?,
                     },
                     name: entity.name,
-                    description: "".to_string(),
+                    description: String::new(),
                 }))
             })
             .collect::<crate::error::Result<Vec<CollectionItem>>>()?
@@ -1802,7 +1804,7 @@ mod tests {
                     description: "Randomly created data".to_string()
                 })],
                 entry_label: None,
-                properties: vec![("author".to_string(), "Luise Quoß, luise.quoss@idiv.de, German Centre for Integrative Biodiversity Research (iDiv)".to_string())]
+                properties: vec![("author".to_string(), "Luise Quoß, luise.quoss@idiv.de, German Centre for Integrative Biodiversity Research (iDiv)".to_string()).into()]
             }
         );
     }
@@ -1879,7 +1881,7 @@ mod tests {
                     description: "SSP5-RCP8.5".to_string()
                 })],
                 entry_label: None,
-                properties: vec![("author".to_string(), "Luise Quoß, luise.quoss@idiv.de, German Centre for Integrative Biodiversity Research (iDiv)".to_string())]
+                properties: vec![("author".to_string(), "Luise Quoß, luise.quoss@idiv.de, German Centre for Integrative Biodiversity Research (iDiv)".to_string()).into()]
             }
         );
     }
@@ -2174,7 +2176,7 @@ mod tests {
                     description: "SSP5-RCP8.5".to_string()
                 })],
                 entry_label: None,
-                properties: vec![("author".to_string(), "Luise Quoß, luise.quoss@idiv.de, German Centre for Integrative Biodiversity Research (iDiv)".to_string())]
+                properties: vec![("author".to_string(), "Luise Quoß, luise.quoss@idiv.de, German Centre for Integrative Biodiversity Research (iDiv)".to_string()).into()]
             }
         );
     }

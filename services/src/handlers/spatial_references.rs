@@ -202,8 +202,8 @@ pub fn spatial_reference_specification(srs_string: &str) -> Result<SpatialRefere
         .context(error::DataType)?;
 
     let axis_labels = json.coordinate_system.axis.as_ref().map(|axes| {
-        let a0 = axes.get(0).map_or("".to_owned(), |a| a.name.clone());
-        let a1 = axes.get(1).map_or("".to_owned(), |a| a.name.clone());
+        let a0 = axes.get(0).map_or(String::new(), |a| a.name.clone());
+        let a1 = axes.get(1).map_or(String::new(), |a| a.name.clone());
 
         match json.axis_order() {
             None | Some(AxisOrder::EastNorth) => (a0, a1),
