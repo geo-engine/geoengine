@@ -1,3 +1,4 @@
+use crate::api::model::datatypes::Colorizer;
 use crate::contexts::SimpleContext;
 use crate::contexts::SimpleSession;
 use crate::datasets::listing::Provenance;
@@ -24,7 +25,6 @@ use actix_web::dev::ServiceResponse;
 use actix_web::{http, http::header, http::Method, middleware, test, web, App};
 use flexi_logger::Logger;
 use geoengine_datatypes::dataset::DatasetId;
-use geoengine_datatypes::operations::image::Colorizer;
 use geoengine_datatypes::spatial_reference::SpatialReferenceOption;
 use geoengine_operators::engine::{RasterOperator, TypedOperator};
 use geoengine_operators::source::{GdalSource, GdalSourceParameters};

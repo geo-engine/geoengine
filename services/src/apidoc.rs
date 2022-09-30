@@ -1,9 +1,9 @@
 use crate::api::model::datatypes::{
-    BoundingBox2D, ClassificationMeasurement, ContinuousMeasurement, Coordinate2D, DataId,
-    DataProviderId, DatasetId, ExternalDataId, FeatureDataType, LayerId, Measurement,
-    RasterDataType, RasterQueryRectangle, SpatialPartition2D, SpatialReference,
-    SpatialReferenceAuthority, SpatialReferenceOption, SpatialResolution, TimeInstance,
-    TimeInterval, VectorDataType,
+    BoundingBox2D, Breakpoint, ClassificationMeasurement, Colorizer, ContinuousMeasurement,
+    Coordinate2D, DataId, DataProviderId, DatasetId, ExternalDataId, FeatureDataType, LayerId,
+    Measurement, Palette, RasterDataType, RasterQueryRectangle, RgbaColor, SpatialPartition2D,
+    SpatialReference, SpatialReferenceAuthority, SpatialReferenceOption, SpatialResolution,
+    TimeInstance, TimeInterval, VectorDataType,
 };
 use crate::api::model::operators::{
     PlotResultDescriptor, RasterResultDescriptor, TypedOperator, TypedResultDescriptor,
@@ -15,7 +15,16 @@ use crate::datasets::upload::UploadId;
 use crate::handlers;
 use crate::handlers::tasks::TaskAbortOptions;
 use crate::handlers::workflows::{RasterDatasetFromWorkflow, RasterDatasetFromWorkflowResult};
-use crate::projects::{ProjectId, STRectangle};
+use crate::layers::layer::{
+    CollectionItem, Layer, LayerCollection, LayerCollectionListing, LayerListing, Property,
+    ProviderLayerCollectionId, ProviderLayerId,
+};
+use crate::layers::listing::LayerCollectionId;
+use crate::projects::{
+    ColorParam, DerivedColor, DerivedNumber, LineSymbology, NumberParam, PointSymbology,
+    PolygonSymbology, ProjectId, RasterSymbology, STRectangle, StrokeParam, Symbology,
+    TextSymbology,
+};
 use crate::tasks::{TaskFilter, TaskId, TaskListOptions, TaskStatus};
 use crate::util::server::VersionInfo;
 use crate::util::{apidoc::ServerInfo, IdResponse};
@@ -27,6 +36,9 @@ use utoipa::{Modify, OpenApi};
 #[openapi(
     paths(
         crate::util::server::show_version_handler,
+        handlers::layers::layer_handler,
+        handlers::layers::list_collection_handler,
+        handlers::layers::list_root_collections_handler,
         handlers::session::anonymous_handler,
         handlers::session::session_handler,
         handlers::session::session_project_handler,
@@ -55,6 +67,9 @@ use utoipa::{Modify, OpenApi};
             TaskId,
             UploadId,
             WorkflowId,
+            ProviderLayerId,
+            ProviderLayerCollectionId,
+            LayerCollectionId,
 
             TimeInstance,
             TimeInterval,
@@ -97,6 +112,29 @@ use utoipa::{Modify, OpenApi};
             TaskFilter,
             TaskListOptions,
             TaskStatus,
+
+            Layer,
+            LayerListing,
+            LayerCollection,
+            LayerCollectionListing,
+            Property,
+            CollectionItem,
+
+            Breakpoint,
+            ColorParam,
+            Colorizer,
+            DerivedColor,
+            DerivedNumber,
+            LineSymbology,
+            NumberParam,
+            Palette,
+            PointSymbology,
+            PolygonSymbology,
+            RasterSymbology,
+            RgbaColor,
+            StrokeParam,
+            Symbology,
+            TextSymbology,
         ),
     ),
     modifiers(&SecurityAddon, &ApiDocInfo, &ServerInfo),

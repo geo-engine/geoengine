@@ -1,5 +1,6 @@
 use std::{convert::TryInto, fmt::Debug};
 
+use crate::api::model::datatypes::Colorizer;
 use crate::error::{Error, Result};
 use crate::identifier;
 use crate::util::config::ProjectService;
@@ -8,7 +9,7 @@ use crate::workflows::workflow::WorkflowId;
 use crate::{error, util::config::get_config_element};
 use geoengine_datatypes::operations::image::RgbaColor;
 use geoengine_datatypes::primitives::DateTime;
-use geoengine_datatypes::{operations::image::Colorizer, primitives::TimeInstance};
+use geoengine_datatypes::primitives::TimeInstance;
 use geoengine_datatypes::{
     primitives::{BoundingBox2D, Coordinate2D, TimeGranularity, TimeInterval, TimeStep},
     spatial_reference::SpatialReferenceOption,
@@ -245,7 +246,7 @@ pub enum LayerType {
     Vector,
 }
 
-#[derive(Debug, PartialEq, Eq, Serialize, Deserialize, Clone)]
+#[derive(Debug, PartialEq, Eq, Serialize, Deserialize, Clone, ToSchema)]
 #[allow(clippy::large_enum_variant)]
 #[serde(rename_all = "camelCase", tag = "type")]
 pub enum Symbology {
@@ -255,7 +256,7 @@ pub enum Symbology {
     Polygon(PolygonSymbology),
 }
 
-#[derive(Debug, PartialEq, Serialize, Deserialize, Clone)]
+#[derive(Debug, PartialEq, Serialize, Deserialize, Clone, ToSchema)]
 pub struct RasterSymbology {
     pub opacity: f64,
     pub colorizer: Colorizer,
@@ -263,7 +264,7 @@ pub struct RasterSymbology {
 
 impl Eq for RasterSymbology {}
 
-#[derive(Debug, PartialEq, Eq, Serialize, Deserialize, Clone)]
+#[derive(Debug, PartialEq, Eq, Serialize, Deserialize, Clone, ToSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct TextSymbology {
     pub attribute: String,
@@ -271,7 +272,7 @@ pub struct TextSymbology {
     pub stroke: StrokeParam,
 }
 
-#[derive(Debug, PartialEq, Eq, Serialize, Deserialize, Clone)]
+#[derive(Debug, PartialEq, Eq, Serialize, Deserialize, Clone, ToSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct PointSymbology {
     pub radius: NumberParam,
@@ -304,14 +305,14 @@ impl From<PointSymbology> for Symbology {
     }
 }
 
-#[derive(Debug, PartialEq, Eq, Serialize, Deserialize, Clone)]
+#[derive(Debug, PartialEq, Eq, Serialize, Deserialize, Clone, ToSchema)]
 pub struct LineSymbology {
     pub stroke: StrokeParam,
 
     pub text: Option<TextSymbology>,
 }
 
-#[derive(Debug, PartialEq, Eq, Serialize, Deserialize, Clone)]
+#[derive(Debug, PartialEq, Eq, Serialize, Deserialize, Clone, ToSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct PolygonSymbology {
     pub fill_color: ColorParam,
@@ -321,14 +322,14 @@ pub struct PolygonSymbology {
     pub text: Option<TextSymbology>,
 }
 
-#[derive(Debug, PartialEq, Eq, Serialize, Deserialize, Clone)]
+#[derive(Debug, PartialEq, Eq, Serialize, Deserialize, Clone, ToSchema)]
 #[serde(rename_all = "camelCase", tag = "type")]
 pub enum NumberParam {
     Static { value: usize },
     Derived(DerivedNumber),
 }
 
-#[derive(Debug, PartialEq, Serialize, Deserialize, Clone)]
+#[derive(Debug, PartialEq, Serialize, Deserialize, Clone, ToSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct DerivedNumber {
     pub attribute: String,
@@ -336,7 +337,7 @@ pub struct DerivedNumber {
     pub default_value: f64,
 }
 
-#[derive(Debug, PartialEq, Eq, Serialize, Deserialize, Clone)]
+#[derive(Debug, PartialEq, Eq, Serialize, Deserialize, Clone, ToSchema)]
 pub struct StrokeParam {
     pub width: NumberParam,
     pub color: ColorParam,
@@ -345,14 +346,14 @@ pub struct StrokeParam {
 
 impl Eq for DerivedNumber {}
 
-#[derive(Debug, PartialEq, Eq, Serialize, Deserialize, Clone)]
+#[derive(Debug, PartialEq, Eq, Serialize, Deserialize, Clone, ToSchema)]
 #[serde(rename_all = "camelCase", tag = "type")]
 pub enum ColorParam {
     Static { color: RgbaColor },
     Derived(DerivedColor),
 }
 
-#[derive(Debug, PartialEq, Eq, Serialize, Deserialize, Clone)]
+#[derive(Debug, PartialEq, Eq, Serialize, Deserialize, Clone, ToSchema)]
 pub struct DerivedColor {
     pub attribute: String,
     pub colorizer: Colorizer,
