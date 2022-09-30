@@ -23,7 +23,7 @@ impl GeometryCollection for MultiLineStringCollection {
         let geometries_ref = self
             .table
             .column_by_name(Self::GEOMETRY_COLUMN_NAME)
-            .expect("There must exist a geometry column");
+            .expect("There should exist a geometry column");
         let geometries: &ListArray = downcast_array(geometries_ref);
 
         let line_strings_ref = geometries.values();
@@ -50,7 +50,7 @@ impl GeometryCollection for MultiLineStringCollection {
         let geometries_ref = self
             .table
             .column_by_name(Self::GEOMETRY_COLUMN_NAME)
-            .expect("There must exist a geometry column");
+            .expect("There should exist a geometry column");
         let geometries: &ListArray = downcast_array(geometries_ref);
 
         let data = geometries.data();
@@ -66,7 +66,7 @@ impl MultiLineStringCollection {
         let geometries_ref = self
             .table
             .column_by_name(Self::GEOMETRY_COLUMN_NAME)
-            .expect("There must exist a geometry column");
+            .expect("There should exist a geometry column");
         let geometries: &ListArray = downcast_array(geometries_ref);
 
         let line_strings_ref = geometries.values();

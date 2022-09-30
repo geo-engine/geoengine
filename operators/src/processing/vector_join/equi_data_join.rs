@@ -209,8 +209,8 @@ where
     fn compute_batch(&mut self) -> Result<FeatureCollection<G>> {
         let mut builder = self.builder.clone().finish_header();
 
-        let left_join_column = self.left.data(&self.left_column).expect("must exist");
-        let right_join_column = self.right.data(&self.right_column).expect("must exist");
+        let left_join_column = self.left.data(&self.left_column).expect("should exist");
+        let right_join_column = self.right.data(&self.right_column).expect("should exist");
         let left_time_intervals = self.left.time_intervals();
         let right_time_intervals = self.right.time_intervals();
 
@@ -223,7 +223,7 @@ where
             .map(|column_name| {
                 (
                     column_name.clone(),
-                    self.left.data(column_name).expect("must exist"),
+                    self.left.data(column_name).expect("should exist"),
                 )
             })
             .collect();
@@ -233,7 +233,7 @@ where
             .map(|(old_column_name, new_column_name)| {
                 (
                     new_column_name.clone(),
-                    self.right.data(old_column_name).expect("must exist"),
+                    self.right.data(old_column_name).expect("should exist"),
                 )
             })
             .collect();
@@ -242,7 +242,7 @@ where
             let geometry: G = self
                 .left
                 .geometry_at(left_idx)
-                .expect("index must exist")
+                .expect("index should exist")
                 .into();
 
             let join_inner_batch_matches = Self::join_inner_batch_matches(

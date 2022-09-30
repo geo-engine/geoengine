@@ -235,7 +235,7 @@ where
             .into());
         };
 
-        match self.types.get(column).expect("checked before") {
+        match self.types.get(column).expect("column should exist") {
             FeatureDataType::Category => {
                 let category_builder: &mut UInt8Builder = downcast_mut_array(data_builder.as_mut());
                 category_builder.append_null();
@@ -370,7 +370,7 @@ where
         builders.push(Box::new(self.time_intervals_builder));
 
         for (column_name, builder) in self.builders.drain() {
-            let column_type = self.types.get(&column_name).expect("column must exist");
+            let column_type = self.types.get(&column_name).expect("column should exist");
             columns.push(Field::new(
                 &column_name,
                 column_type.arrow_data_type(),

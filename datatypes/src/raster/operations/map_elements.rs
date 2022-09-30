@@ -99,8 +99,7 @@ where
                 }
             });
 
-        MaskedGrid::new(new_data, validity_mask)
-            .expect("Creation of grid with dimension failed before")
+        MaskedGrid::new(new_data, validity_mask).expect("Masked grid should have been created")
     }
 }
 
@@ -222,7 +221,7 @@ where
         } = self;
         let new_data = data.map_elements_parallel(map_fn);
         MaskedGrid::new(new_data, validity_mask)
-            .expect("the shape of the grid and the data size matched before")
+            .expect("the shape of the grid and the data size should match")
     }
 }
 
@@ -271,11 +270,11 @@ where
 
         MaskedGrid::new(
             Grid::new(shape.clone(), out_data)
-                .expect("the shape of the grid and the data size matched before"),
+                .expect("the shape of the grid and the data size should match"),
             Grid::new(shape, out_validity)
-                .expect("the shape of the grid and the data size matched before"),
+                .expect("the shape of the grid and the data size should match"),
         )
-        .expect("the shape of the grid and the data size matched before")
+        .expect("the shape of the grid and the data size should match")
     }
 }
 

@@ -265,7 +265,7 @@ where
             column_values.push(
                 self.table
                     .column_by_name(Self::GEOMETRY_COLUMN_NAME)
-                    .expect("The geometry column must exist")
+                    .expect("The geometry column should exist")
                     .clone(),
             );
         }
@@ -279,7 +279,7 @@ where
         column_values.push(
             self.table
                 .column_by_name(Self::TIME_COLUMN_NAME)
-                .expect("The time column must exist")
+                .expect("The time column should exist")
                 .clone(),
         );
 
@@ -293,7 +293,7 @@ where
             column_values.push(
                 self.table
                     .column_by_name(column_name)
-                    .expect("The attribute column must exist")
+                    .expect("The attribute column should exist")
                     .clone(),
             );
         }
@@ -361,7 +361,7 @@ where
             column_values.push(
                 self.table
                     .column_by_name(Self::GEOMETRY_COLUMN_NAME)
-                    .expect("The geometry column must exist")
+                    .expect("The geometry column should exist")
                     .clone(),
             );
         }
@@ -375,7 +375,7 @@ where
         column_values.push(
             self.table
                 .column_by_name(Self::TIME_COLUMN_NAME)
-                .expect("The time column must exist")
+                .expect("The time column should exist")
                 .clone(),
         );
 
@@ -394,7 +394,7 @@ where
             column_values.push(
                 self.table
                     .column_by_name(column_name)
-                    .expect("The attribute column must exist")
+                    .expect("The attribute column should exist")
                     .clone(),
             );
 
@@ -612,7 +612,7 @@ where
             column_values.push(
                 self.table
                     .column_by_name(Self::GEOMETRY_COLUMN_NAME)
-                    .expect("The geometry column must exist")
+                    .expect("The geometry column should exist")
                     .clone(),
             );
         }
@@ -626,7 +626,7 @@ where
         column_values.push(
             self.table
                 .column_by_name(Self::TIME_COLUMN_NAME)
-                .expect("The time column must exist")
+                .expect("The time column should exist")
                 .clone(),
         );
 
@@ -644,7 +644,7 @@ where
             column_values.push(
                 self.table
                     .column_by_name(old_column_name)
-                    .expect("The attribute column must exist")
+                    .expect("The attribute column should exist")
                     .clone(),
             );
 
@@ -662,7 +662,7 @@ where
         let time_column = self
             .table
             .column_by_name(Self::TIME_COLUMN_NAME)
-            .expect("must exist");
+            .expect("should exist");
 
         let sort_options = Some(arrow::compute::SortOptions {
             descending: false,
@@ -704,7 +704,7 @@ where
             column_values.push(
                 self.table
                     .column_by_name(Self::GEOMETRY_COLUMN_NAME)
-                    .expect("There must exist a geometry column")
+                    .expect("There should exist a geometry column")
                     .clone(),
             );
         }
@@ -729,7 +729,7 @@ where
             column_values.push(
                 self.table
                     .column_by_name(column_name)
-                    .expect("The attribute column must exist")
+                    .expect("The attribute column should exist")
                     .clone(),
             );
         }
@@ -1052,7 +1052,7 @@ where
         let features_ref = self
             .table
             .column_by_name(Self::TIME_COLUMN_NAME)
-            .expect("Time interval column must exist");
+            .expect("Time interval column should exist");
         let features: &<TimeInterval as ArrowTyped>::ArrowArray = downcast_array(features_ref);
 
         let number_of_time_intervals = self.len();
@@ -1135,7 +1135,7 @@ where
     /// ```
     pub fn empty() -> Self {
         Self::from_data(vec![], vec![], Default::default())
-            .expect("does not fail for empty collection")
+            .expect("should not fail for empty collection")
     }
 
     /// Create a `FeatureCollection` from data
@@ -1286,8 +1286,11 @@ where
         };
 
         for key in self.types.keys().map(String::as_str).chain(mandatory_keys) {
-            let c1 = self.table.column_by_name(key).expect("column must exist");
-            let c2 = other.table.column_by_name(key).expect("column must exist");
+            let c1 = self.table.column_by_name(key).expect("column should exist");
+            let c2 = other
+                .table
+                .column_by_name(key)
+                .expect("column should exist");
 
             if c1 != c2 {
                 return false;
@@ -1549,7 +1552,7 @@ where
         let geometries_ref = self
             .table
             .column_by_name(Self::GEOMETRY_COLUMN_NAME)
-            .expect("There must exist a geometry column");
+            .expect("There should exist a geometry column");
 
         let feature_array = Self::replace_raw_coords(geometries_ref, coords_buffer)?;
 
@@ -1576,7 +1579,7 @@ where
         column_values.push(
             self.table
                 .column_by_name(Self::TIME_COLUMN_NAME)
-                .expect("The time column must exist")
+                .expect("The time column should exist")
                 .clone(),
         );
 
@@ -1590,7 +1593,7 @@ where
             column_values.push(
                 self.table
                     .column_by_name(column_name)
-                    .expect("The attribute column must exist")
+                    .expect("The attribute column should exist")
                     .clone(),
             );
         }

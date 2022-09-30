@@ -58,7 +58,7 @@ where
             .map(|(lin_idx, i)| map_fn(lin_idx, i))
             .collect();
 
-        Grid::new(shape, out_data).expect("Grid creation with shape failed before.")
+        Grid::new(shape, out_data).expect("Grid should have been created.")
     }
 }
 
@@ -103,7 +103,7 @@ where
         } = self;
         let out_grid = inner_grid.map_indexed_elements(map_fn);
 
-        MaskedGrid::new(out_grid, validity_mask).expect("creation failed before.")
+        MaskedGrid::new(out_grid, validity_mask).expect("Masked grid should have been created.")
     }
 }
 
@@ -148,10 +148,10 @@ where
 
         MaskedGrid::new(
             Grid::new(data.shape, out_data)
-                .expect("the shape of the grid and the data size matched before"),
+                .expect("the shape of the grid and the data size should match"),
             validity_mask,
         )
-        .expect("the shape of the grid and the data size matched before")
+        .expect("the shape of the grid and the data size should match")
     }
 }
 
@@ -205,11 +205,11 @@ where
 
         MaskedGrid::new(
             Grid::new(self.shape.clone(), out_data)
-                .expect("the shape of the grid and the data size matched before"),
+                .expect("the shape of the grid and the data size should match"),
             Grid::new(self.shape, validity_mask)
-                .expect("the shape of the grid and the data size matched before"),
+                .expect("the shape of the grid and the data size should match"),
         )
-        .expect("the shape of the grid and the data size matched before")
+        .expect("the shape of the grid and the data size should match")
     }
 }
 
@@ -346,7 +346,7 @@ where
             .map(|(lin_idx, i)| map_fn(lin_idx, i))
             .collect_into_vec(out_data.as_mut());
 
-        Grid::new(shape, out_data).expect("Grid creation with shape failed before.")
+        Grid::new(shape, out_data).expect("Grid should have been created.")
     }
 }
 
@@ -391,7 +391,7 @@ where
         } = self;
         let out_grid = inner_grid.map_indexed_elements_parallel(map_fn);
 
-        MaskedGrid::new(out_grid, validity_mask).expect("creation failed before.")
+        MaskedGrid::new(out_grid, validity_mask).expect("Masked grid should have been created.")
     }
 }
 
@@ -448,11 +448,11 @@ where
 
         MaskedGrid::new(
             Grid::new(data.shape, out_data)
-                .expect("the shape of the grid and the data size matched before"),
+                .expect("the shape of the grid and the data size should match"),
             Grid::new(validity_mask.shape, out_validity)
-                .expect("the shape of the grid and the data size matched before"),
+                .expect("the shape of the grid and the data size should match"),
         )
-        .expect("the shape of the grid and the data size matched before")
+        .expect("the shape of the grid and the data size should match")
     }
 }
 
@@ -516,11 +516,11 @@ where
 
         MaskedGrid::new(
             Grid::new(self.shape.clone(), out_data)
-                .expect("the shape of the grid and the data size matched before"),
+                .expect("the shape of the grid and the data size should match"),
             Grid::new(self.shape, out_validity)
-                .expect("the shape of the grid and the data size matched before"),
+                .expect("the shape of the grid and the data size should match"),
         )
-        .expect("the shape of the grid and the data size matched before")
+        .expect("the shape of the grid and the data size should match")
     }
 }
 
