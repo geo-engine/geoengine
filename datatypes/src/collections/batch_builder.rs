@@ -152,9 +152,9 @@ impl RawFeatureCollectionBuilder {
                 ArrayData::builder(arrow::datatypes::DataType::Int64)
                     .len(self.num_features * 2)
                     .add_buffer(values_buffer)
-                    .build(),
+                    .build()?,
             )
-            .build();
+            .build()?;
 
         let array = Arc::new(FixedSizeListArray::from(data)) as ArrayRef;
 
@@ -163,7 +163,7 @@ impl RawFeatureCollectionBuilder {
         Ok(())
     }
 
-    pub fn set_default_time_intervals(&mut self) -> Result<()> {
+    pub fn set_default_time_intervals(&mut self) {
         let mut time_intervals_builder = TimeInterval::arrow_builder(self.num_features);
 
         let default = TimeInterval::default();
@@ -171,16 +171,14 @@ impl RawFeatureCollectionBuilder {
         let end = default.end().inner();
         for _ in 0..self.num_features {
             let date_builder = time_intervals_builder.values();
-            date_builder.append_value(start)?;
-            date_builder.append_value(end)?;
-            time_intervals_builder.append(true)?;
+            date_builder.append_value(start);
+            date_builder.append_value(end);
+            time_intervals_builder.append(true);
         }
 
         let array = Arc::new(time_intervals_builder.finish()) as ArrayRef;
 
         self.time_array = Some(array);
-
-        Ok(())
     }
 
     #[allow(clippy::unnecessary_wraps)]
@@ -201,11 +199,11 @@ impl RawFeatureCollectionBuilder {
                         ArrayData::builder(DataType::Float64)
                             .len(num_floats)
                             .add_buffer(coords)
-                            .build(),
+                            .build()?,
                     )
-                    .build(),
+                    .build()?,
             )
-            .build();
+            .build()?;
 
         let array = Arc::new(ListArray::from(data)) as ArrayRef;
 
@@ -239,13 +237,13 @@ impl RawFeatureCollectionBuilder {
                                 ArrayData::builder(DataType::Float64)
                                     .len(num_floats)
                                     .add_buffer(coords)
-                                    .build(),
+                                    .build()?,
                             )
-                            .build(),
+                            .build()?,
                     )
-                    .build(),
+                    .build()?,
             )
-            .build();
+            .build()?;
 
         let array = Arc::new(ListArray::from(data)) as ArrayRef;
 
@@ -285,15 +283,15 @@ impl RawFeatureCollectionBuilder {
                                         ArrayData::builder(DataType::Float64)
                                             .len(num_floats)
                                             .add_buffer(coords)
-                                            .build(),
+                                            .build()?,
                                     )
-                                    .build(),
+                                    .build()?,
                             )
-                            .build(),
+                            .build()?,
                     )
-                    .build(),
+                    .build()?,
             )
-            .build();
+            .build()?;
 
         let array = Arc::new(ListArray::from(data)) as ArrayRef;
 
@@ -327,11 +325,7 @@ impl RawFeatureCollectionBuilder {
             .len(self.num_features)
             .add_buffer(values_buffer);
 
-        let data = if let Some(nulls) = nulls_buffer {
-            builder.null_bit_buffer(nulls).build()
-        } else {
-            builder.build()
-        };
+        let data = builder.null_bit_buffer(nulls_buffer).build()?;
 
         let array = Arc::new(PrimitiveArray::<T>::from(data)) as ArrayRef;
 
@@ -425,7 +419,7 @@ impl RawFeatureCollectionBuilder {
         arrays.push(time.expect("checked"));
 
         Ok(FeatureCollection::<CollectionType>::new_from_internals(
-            struct_array_from_data(columns, arrays, self.num_features),
+            struct_array_from_data(columns, arrays, self.num_features)?,
             self.types.clone(),
         ))
     }
@@ -451,7 +445,7 @@ mod tests {
             .add_column("foo".into(), FeatureDataType::Float)
             .unwrap();
         let mut builder = builder.batch_builder(4, 0);
-        builder.set_default_time_intervals().unwrap();
+        builder.set_default_time_intervals();
 
         let numbers = vec![1., 2., 3., 4.];
         let nulls = vec![true, false, true, true];
@@ -481,15 +475,8 @@ mod tests {
 
         match collection.data("foo").unwrap() {
             FeatureDataRef::Float(n) => {
-                assert_eq!(n.as_ref()[0], 1.);
-                assert_eq!(n.as_ref()[1], 2.);
-                assert_eq!(n.as_ref()[2], 3.);
-                assert_eq!(n.as_ref()[3], 4.);
-
-                assert_eq!(n.nulls()[0], !true);
-                assert_eq!(n.nulls()[1], !false);
-                assert_eq!(n.nulls()[2], !true);
-                assert_eq!(n.nulls()[3], !true);
+                assert_eq!(n.as_ref(), &[1., 2., 3., 4.]);
+                assert_eq!(n.nulls(), &[false, true, false, false]);
             }
             _ => unreachable!(),
         }
@@ -498,7 +485,7 @@ mod tests {
     #[test]
     fn point_coords_to_array() {
         let mut builder = MultiPointCollection::builder().batch_builder(3, 8);
-        builder.set_default_time_intervals().unwrap();
+        builder.set_default_time_intervals();
 
         let coords: Vec<f64> = vec![0.0, 0.0, 1.1, 1.1, 2.2, 2.2, 3.3, 3.3];
         let offsets: Vec<i32> = vec![0, 1, 3, 4];
@@ -564,7 +551,7 @@ mod tests {
     #[test]
     fn points_with_time() {
         let mut builder = MultiPointCollection::builder().batch_builder(3, 8);
-        builder.set_default_time_intervals().unwrap();
+        builder.set_default_time_intervals();
 
         let coords: Vec<f64> = vec![0.0, 0.0, 1.1, 1.1, 2.2, 2.2, 3.3, 3.3];
         let offsets: Vec<i32> = vec![0, 1, 3, 4];
@@ -640,7 +627,7 @@ mod tests {
     #[test]
     fn line_builder() {
         let mut builder = RawFeatureCollectionBuilder::lines(Default::default(), 2, 3, 7);
-        builder.set_default_time_intervals().unwrap();
+        builder.set_default_time_intervals();
 
         let coords: Vec<f64> = vec![
             0.0, 0.1, 1.0, 1.1, 2.0, 2.1, 3.0, 3.1, 4.0, 4.1, 5.0, 5.1, 6.0, 6.1, 7.0, 7.1,
@@ -711,7 +698,7 @@ mod tests {
     #[test]
     fn polygon_builder() {
         let mut builder = RawFeatureCollectionBuilder::polygons(Default::default(), 2, 3, 4, 16);
-        builder.set_default_time_intervals().unwrap();
+        builder.set_default_time_intervals();
 
         let ring0_coords = [0.0, 0.1, 10.0, 10.1, 0.0, 10.1, 0.0, 0.1];
         let ring1_coords = [2.0, 2.1, 3.0, 3.1, 2.0, 3.1, 2.0, 2.1];

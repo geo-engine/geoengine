@@ -109,7 +109,7 @@ mod tests {
         assert_eq!(
             chart.to_vega_embeddable(false).unwrap(),
             PlotData {
-                vega_string: r#"{"$schema":"https://vega.github.io/schema/vega-lite/v4.17.0.json","data":{"values":[{"x":"1970-01-01T00:00:00+00:00","y":0.0,"series":"S0"},{"x":"1970-01-01T00:00:00+00:00","y":2.0,"series":"S1"},{"x":"1970-01-01T00:00:01+00:00","y":1.0,"series":"S0"}]},"description":"Multi Line Chart","encoding":{"x":{"field":"x","title":"Time","type":"temporal"},"y":{"field":"y","title":"","type":"quantitative"},"color":{"field":"series","scale":{"scheme":"category20"}}},"mark":{"type":"line","line":true,"point":true}}"#.to_owned(),
+                vega_string: r#"{"$schema":"https://vega.github.io/schema/vega-lite/v4.17.0.json","data":{"values":[{"series":"S0","x":"1970-01-01T00:00:00+00:00","y":0.0},{"series":"S1","x":"1970-01-01T00:00:00+00:00","y":2.0},{"series":"S0","x":"1970-01-01T00:00:01+00:00","y":1.0}]},"description":"Multi Line Chart","encoding":{"color":{"field":"series","scale":{"scheme":"category20"}},"x":{"field":"x","title":"Time","type":"temporal"},"y":{"field":"y","title":"","type":"quantitative"}},"mark":{"line":true,"point":true,"type":"line"}}"#.to_owned(),
                 metadata: PlotMetaData::None,
             }
         );

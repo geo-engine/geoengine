@@ -67,18 +67,14 @@ where
     A: AsRef<[isize]>,
 {
     fn contains(&self, rhs: &GridIdx<A>) -> bool {
-        for ((&min_idx, &max_idx), &idx) in self
-            .min_index()
+        debug_assert!(self.min_index().as_slice().len() == rhs.as_slice().len()); // this must never fail since the array type A has a fixed size. However, one might implement that for a Vec so better check it here.
+
+        self.min_index()
             .as_slice()
             .iter()
             .zip(self.max_index().as_slice())
             .zip(rhs.as_slice())
-        {
-            if !crate::util::ranges::value_in_range_inclusive(idx, min_idx, max_idx) {
-                return false;
-            }
-        }
-        true
+            .all(|((&min_idx, &max_idx), idx)| (min_idx..=max_idx).contains(idx))
     }
 }
 
@@ -101,6 +97,17 @@ pub trait GridSpaceToLinearSpace: GridSize {
     /// # Errors
     /// This method fails if the index is out of bounds
     fn linear_space_index<I: Into<GridIdx<Self::IndexArray>>>(&self, index: I) -> Result<usize>;
+
+    /// Returns the `GridIdx` of the linear_idx-th cell in the Grid.
+    fn grid_idx_unchecked(&self, linear_idx: usize) -> GridIdx<Self::IndexArray>;
+
+    /// Returns the `GridIdx` of the `linear_idx`-th cell in the Grid. Returns none if `linear_idx` is out of bounds.
+    fn grid_idx(&self, linear_idx: usize) -> Option<GridIdx<Self::IndexArray>> {
+        if linear_idx >= self.number_of_elements() {
+            return None;
+        }
+        Some(self.grid_idx_unchecked(linear_idx))
+    }
 }
 
 /// Mutate elements stored in a Grid
@@ -140,21 +147,6 @@ pub trait GridShapeAccess {
     }
 }
 
-/// Provides the the value used to represent a no data entry.
-pub trait NoDataValue {
-    type NoDataType: PartialEq + Copy;
-
-    fn no_data_value(&self) -> Option<Self::NoDataType>;
-
-    #[allow(clippy::eq_op)]
-    fn is_no_data(&self, value: Self::NoDataType) -> bool {
-        self.no_data_value().map_or(false, |no_data_value| {
-            // value is equal no-data value or both are NAN.
-            value == no_data_value || (no_data_value != no_data_value && value != value)
-        })
-    }
-}
-
 /// Change the bounds of gridded data.
 pub trait ChangeGridBounds<I>: BoundedGrid<IndexArray = I>
 where
@@ -179,31 +171,46 @@ where
     fn set_grid_bounds(self, bounds: GridBoundingBox<I>) -> Result<Self::Output>;
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
+pub trait GridStep<I>: GridSpaceToLinearSpace<IndexArray = I>
+where
+    I: AsRef<[isize]> + Into<GridIdx<I>> + Clone,
+    GridBoundingBox<I>: GridSize,
+{
+    // TODO: implement safe methods?
 
-    impl NoDataValue for f32 {
-        type NoDataType = f32;
-
-        fn no_data_value(&self) -> Option<Self::NoDataType> {
-            Some(*self)
+    /// Move the `GridIdx` along the positive axis directions
+    fn inc_idx_unchecked<Idx: Into<GridIdx<I>>>(
+        &self,
+        idx: Idx,
+        step: usize,
+    ) -> Option<GridIdx<I>> {
+        let l = self.linear_space_index_unchecked(idx);
+        if l >= self.number_of_elements() {
+            return None;
         }
+        let l = l + step;
+        self.grid_idx(l)
     }
 
-    #[test]
-    fn no_data_nan() {
-        let no_data_value = f32::NAN;
-
-        assert!(!no_data_value.is_no_data(42.));
-        assert!(no_data_value.is_no_data(f32::NAN));
+    /// Move the `GridIdx` along the negative axis directions
+    fn dec_idx_unckecked<Idx: Into<GridIdx<I>>>(
+        &self,
+        idx: Idx,
+        step: usize,
+    ) -> Option<GridIdx<I>> {
+        let l = self.linear_space_index_unchecked(idx);
+        if l >= self.number_of_elements() || step > l {
+            return None;
+        }
+        let l = l - step;
+        self.grid_idx(l)
     }
+}
 
-    #[test]
-    fn no_data_float() {
-        let no_data_value: f32 = 42.;
-
-        assert!(no_data_value.is_no_data(42.));
-        assert!(!no_data_value.is_no_data(f32::NAN));
-    }
+impl<G, I> GridStep<I> for G
+where
+    G: GridSpaceToLinearSpace<IndexArray = I>,
+    I: AsRef<[isize]> + Into<GridIdx<I>> + Clone,
+    GridBoundingBox<I>: GridSize,
+{
 }

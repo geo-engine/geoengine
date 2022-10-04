@@ -1,5 +1,5 @@
 use serde::{Deserialize, Serialize};
-use snafu::ensure;
+use snafu::prelude::*;
 
 use crate::error;
 use crate::raster::GridShape2D;
@@ -13,7 +13,7 @@ use super::SpatialResolution;
 
 /// Common trait for axis-parallel boxes
 pub trait AxisAlignedRectangle: Copy {
-    /// create a new instance defined by min and max coordinate values
+    /// create a new instance defined by `min` (lower left) and `max` (upper right) coordinate
     fn from_min_max(min: Coordinate2D, max: Coordinate2D) -> Result<Self>;
 
     fn lower_left(&self) -> Coordinate2D;
@@ -23,6 +23,11 @@ pub trait AxisAlignedRectangle: Copy {
 
     fn size_x(&self) -> f64;
     fn size_y(&self) -> f64;
+
+    fn intersection(&self, other: &Self) -> Option<Self>;
+
+    /// create a `BoundingBox2D` with `self.lower_left()` and `self.upper_right()`
+    fn as_bbox(&self) -> BoundingBox2D;
 }
 
 /// A partition of space that include the upper left but excludes the lower right coordinate
@@ -78,9 +83,9 @@ impl SpatialPartition2D {
     /// Checks if a coordinate is located inside spatial partition
     pub fn contains_coordinate(&self, coordinate: &Coordinate2D) -> bool {
         coordinate.x >= self.upper_left_coordinate.x
-            && coordinate.y >= self.upper_left_coordinate.y
+            && coordinate.y <= self.upper_left_coordinate.y
             && coordinate.x < self.lower_right_coordinate.x
-            && coordinate.y < self.lower_right_coordinate.y
+            && coordinate.y > self.lower_right_coordinate.y
     }
 
     /// Return true if the `other` partition has any space in common with the partition
@@ -186,6 +191,7 @@ impl SpatialPartition2D {
     }
 
     /// Align this partition by snapping bounds to the pixel borders defined by `origin` and `resolution`
+    #[must_use]
     pub fn snap_to_grid(&self, origin: Coordinate2D, resolution: SpatialResolution) -> Self {
         Self {
             upper_left_coordinate: (
@@ -211,6 +217,20 @@ impl SpatialPartition2D {
             (snapped.size_x() / resolution.x).round() as usize,
         ]
         .into()
+    }
+
+    #[must_use]
+    pub fn extend(&mut self, other: &Self) -> Self {
+        Self {
+            upper_left_coordinate: Coordinate2D::new(
+                self.upper_left().x.min(other.upper_left().x),
+                self.upper_left().y.max(other.upper_left().y),
+            ),
+            lower_right_coordinate: Coordinate2D::new(
+                self.lower_right().x.max(other.lower_right().x),
+                self.lower_right().y.min(other.lower_right().y),
+            ),
+        }
     }
 }
 
@@ -252,6 +272,14 @@ impl AxisAlignedRectangle for SpatialPartition2D {
     fn size_y(&self) -> f64 {
         self.upper_left_coordinate.y - self.lower_right_coordinate.y
     }
+
+    fn intersection(&self, other: &Self) -> Option<Self> {
+        self.intersection(other)
+    }
+
+    fn as_bbox(&self) -> BoundingBox2D {
+        BoundingBox2D::new_unchecked(self.lower_left(), self.upper_right())
+    }
 }
 
 impl From<geo::Rect<f64>> for SpatialPartition2D {
@@ -267,6 +295,27 @@ impl From<&SpatialPartition2D> for geo::Rect<f64> {
     fn from(partition: &SpatialPartition2D) -> geo::Rect<f64> {
         geo::Rect::new(partition.lower_left(), partition.upper_right())
     }
+}
+
+/// Compute the extent of all input partitions. If one partition is None, the output will also be None
+pub fn partitions_extent<I: Iterator<Item = Option<SpatialPartition2D>>>(
+    mut bboxes: I,
+) -> Option<SpatialPartition2D> {
+    let mut extent = if let Some(Some(first)) = bboxes.next() {
+        first
+    } else {
+        return None;
+    };
+
+    for bbox in bboxes {
+        if let Some(bbox) = bbox {
+            extent = extent.extend(&bbox);
+        } else {
+            return None;
+        }
+    }
+
+    Some(extent)
 }
 
 #[cfg(test)]
@@ -289,6 +338,17 @@ mod tests {
         let p2 = SpatialPartition2D::new_unchecked((0., 1.).into(), (0.5, 0.5).into());
         assert!(p1.contains(&p2));
         assert!(!p2.contains(&p1));
+    }
+
+    #[test]
+    fn it_contains_coord() {
+        let p1 = SpatialPartition2D::new_unchecked((0., 1.).into(), (1., 0.).into());
+
+        let c1 = Coordinate2D { x: 0.1, y: 0.1 };
+        let c2 = Coordinate2D { x: 1.1, y: 1.1 };
+
+        assert!(p1.contains_coordinate(&c1));
+        assert!(!p1.contains_coordinate(&c2));
     }
 
     #[test]
@@ -398,6 +458,41 @@ mod tests {
                 )
             ),
             [105, 187].into()
+        );
+    }
+
+    #[test]
+    fn extent() {
+        assert_eq!(partitions_extent([None].into_iter()), None);
+        assert_eq!(
+            partitions_extent(
+                [
+                    Some(SpatialPartition2D::new((-50., 50.).into(), (50., -50.).into()).unwrap()),
+                    Some(SpatialPartition2D::new((0., 70.).into(), (70., 0.).into()).unwrap())
+                ]
+                .into_iter()
+            ),
+            Some(SpatialPartition2D::new((-50., 70.).into(), (70., -50.).into()).unwrap())
+        );
+        assert_eq!(
+            partitions_extent(
+                [
+                    Some(SpatialPartition2D::new((-50., 50.).into(), (50., -50.).into()).unwrap()),
+                    None
+                ]
+                .into_iter()
+            ),
+            None
+        );
+        assert_eq!(
+            partitions_extent(
+                [
+                    None,
+                    Some(SpatialPartition2D::new((-50., 50.).into(), (50., -50.).into()).unwrap())
+                ]
+                .into_iter()
+            ),
+            None
         );
     }
 }

@@ -1,7 +1,8 @@
 use serde::{Deserialize, Serialize};
+use utoipa::ToSchema;
 use uuid::Uuid;
 
-use geoengine_datatypes::identifier;
+use crate::identifier;
 use geoengine_operators::engine::TypedOperator;
 
 identifier!(WorkflowId);
@@ -17,10 +18,31 @@ impl WorkflowId {
     }
 }
 
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, Serialize, Deserialize, ToSchema)]
+#[schema(example = json!({
+    "type": "Vector",
+    "operator": {
+      "type": "MockPointSource",
+      "params": {
+        "points": [
+          { "x": 0.0, "y": 0.1 },
+          { "x": 1.0, "y": 1.1 }
+        ]
+      }
+    }
+ }))]
 pub struct Workflow {
     #[serde(flatten)]
     pub operator: TypedOperator,
+}
+
+impl PartialEq for Workflow {
+    fn eq(&self, other: &Self) -> bool {
+        match (serde_json::to_string(self), serde_json::to_string(other)) {
+            (Ok(a), Ok(b)) => a == b,
+            _ => false,
+        }
+    }
 }
 
 #[cfg(test)]
@@ -43,7 +65,7 @@ mod tests {
             ),
         };
 
-        let serialized_workflow = serde_json::to_string(&workflow).unwrap();
+        let serialized_workflow = serde_json::to_value(&workflow).unwrap();
 
         assert_eq!(
             serialized_workflow,
@@ -65,7 +87,6 @@ mod tests {
                     }
                 }
             })
-            .to_string()
         );
 
         // TODO: check deserialization

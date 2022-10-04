@@ -212,7 +212,7 @@ impl<'l> GeometryRandomAccess<'l> for MultiLineStringCollection {
 impl GeoFeatureCollectionRowBuilder<MultiLineString>
     for FeatureCollectionRowBuilder<MultiLineString>
 {
-    fn push_geometry(&mut self, geometry: MultiLineString) -> Result<()> {
+    fn push_geometry(&mut self, geometry: MultiLineString) {
         let line_builder = self.geometries_builder.values();
 
         for line in geometry.lines() {
@@ -221,22 +221,20 @@ impl GeoFeatureCollectionRowBuilder<MultiLineString>
             for coordinate in line {
                 coordinate_builder
                     .values()
-                    .append_slice(coordinate.as_ref())?;
+                    .append_slice(coordinate.as_ref());
 
-                coordinate_builder.append(true)?;
+                coordinate_builder.append(true);
             }
 
-            line_builder.append(true)?;
+            line_builder.append(true);
         }
 
-        self.geometries_builder.append(true)?;
-
-        Ok(())
+        self.geometries_builder.append(true);
     }
 }
 
 impl ReplaceRawArrayCoords for MultiLineStringCollection {
-    fn replace_raw_coords(array_ref: &Arc<dyn Array>, new_coords: Buffer) -> ArrayData {
+    fn replace_raw_coords(array_ref: &Arc<dyn Array>, new_coords: Buffer) -> Result<ArrayData> {
         let geometries: &ListArray = downcast_array(array_ref);
 
         let feature_offset_array = geometries.data();
@@ -251,7 +249,7 @@ impl ReplaceRawArrayCoords for MultiLineStringCollection {
         let num_coords = new_coords.len() / std::mem::size_of::<Coordinate2D>();
         let num_floats = num_coords * 2;
 
-        ArrayData::builder(MultiLineString::arrow_data_type())
+        Ok(ArrayData::builder(MultiLineString::arrow_data_type())
             .len(num_features)
             .add_buffer(feature_offsets_buffer.clone())
             .add_child_data(
@@ -265,45 +263,43 @@ impl ReplaceRawArrayCoords for MultiLineStringCollection {
                                 ArrayData::builder(DataType::Float64)
                                     .len(num_floats)
                                     .add_buffer(new_coords)
-                                    .build(),
+                                    .build()?,
                             )
-                            .build(),
+                            .build()?,
                     )
-                    .build(),
+                    .build()?,
             )
-            .build()
+            .build()?)
     }
 }
 
 #[cfg(test)]
 mod tests {
+    use float_cmp::approx_eq;
+
     use super::*;
 
     use crate::collections::{BuilderProvider, FeatureCollectionModifications};
-    use crate::primitives::TimeInterval;
+    use crate::primitives::{FeatureDataRef, TimeInterval};
 
     #[test]
     fn single_line() {
         let mut builder = MultiLineStringCollection::builder().finish_header();
 
-        builder
-            .push_geometry(
-                MultiLineString::new(vec![vec![(0.0, 0.1).into(), (1.0, 1.1).into()]]).unwrap(),
-            )
-            .unwrap();
-        builder
-            .push_geometry(
-                MultiLineString::new(vec![vec![
-                    (4.0, 4.1).into(),
-                    (5.0, 5.1).into(),
-                    (6.0, 6.1).into(),
-                ]])
-                .unwrap(),
-            )
-            .unwrap();
+        builder.push_geometry(
+            MultiLineString::new(vec![vec![(0.0, 0.1).into(), (1.0, 1.1).into()]]).unwrap(),
+        );
+        builder.push_geometry(
+            MultiLineString::new(vec![vec![
+                (4.0, 4.1).into(),
+                (5.0, 5.1).into(),
+                (6.0, 6.1).into(),
+            ]])
+            .unwrap(),
+        );
 
         for _ in 0..2 {
-            builder.push_time_interval(TimeInterval::default()).unwrap();
+            builder.push_time_interval(TimeInterval::default());
 
             builder.finish_row();
         }
@@ -334,23 +330,19 @@ mod tests {
     fn multi_lines() {
         let mut builder = MultiLineStringCollection::builder().finish_header();
 
-        builder
-            .push_geometry(
-                MultiLineString::new(vec![vec![(0.0, 0.1).into(), (1.0, 1.1).into()]]).unwrap(),
-            )
-            .unwrap();
-        builder
-            .push_geometry(
-                MultiLineString::new(vec![
-                    vec![(4.0, 4.1).into(), (5.0, 5.1).into(), (6.0, 6.1).into()],
-                    vec![(7.0, 7.1).into(), (8.0, 8.1).into(), (9.0, 9.1).into()],
-                ])
-                .unwrap(),
-            )
-            .unwrap();
+        builder.push_geometry(
+            MultiLineString::new(vec![vec![(0.0, 0.1).into(), (1.0, 1.1).into()]]).unwrap(),
+        );
+        builder.push_geometry(
+            MultiLineString::new(vec![
+                vec![(4.0, 4.1).into(), (5.0, 5.1).into(), (6.0, 6.1).into()],
+                vec![(7.0, 7.1).into(), (8.0, 8.1).into(), (9.0, 9.1).into()],
+            ])
+            .unwrap(),
+        );
 
         for _ in 0..2 {
-            builder.push_time_interval(TimeInterval::default()).unwrap();
+            builder.push_time_interval(TimeInterval::default());
 
             builder.finish_row();
         }
@@ -381,27 +373,22 @@ mod tests {
     }
 
     #[test]
-    #[allow(clippy::eq_op)]
     fn equals() {
         let mut builder = MultiLineStringCollection::builder().finish_header();
 
-        builder
-            .push_geometry(
-                MultiLineString::new(vec![vec![(0.0, 0.1).into(), (1.0, 1.1).into()]]).unwrap(),
-            )
-            .unwrap();
-        builder
-            .push_geometry(
-                MultiLineString::new(vec![
-                    vec![(4.0, 4.1).into(), (5.0, 5.1).into(), (6.0, 6.1).into()],
-                    vec![(7.0, 7.1).into(), (8.0, 8.1).into(), (9.0, 9.1).into()],
-                ])
-                .unwrap(),
-            )
-            .unwrap();
+        builder.push_geometry(
+            MultiLineString::new(vec![vec![(0.0, 0.1).into(), (1.0, 1.1).into()]]).unwrap(),
+        );
+        builder.push_geometry(
+            MultiLineString::new(vec![
+                vec![(4.0, 4.1).into(), (5.0, 5.1).into(), (6.0, 6.1).into()],
+                vec![(7.0, 7.1).into(), (8.0, 8.1).into(), (9.0, 9.1).into()],
+            ])
+            .unwrap(),
+        );
 
         for _ in 0..2 {
-            builder.push_time_interval(TimeInterval::default()).unwrap();
+            builder.push_time_interval(TimeInterval::default());
 
             builder.finish_row();
         }
@@ -417,36 +404,30 @@ mod tests {
     fn filter() {
         let mut builder = MultiLineStringCollection::builder().finish_header();
 
-        builder
-            .push_geometry(
-                MultiLineString::new(vec![vec![(0.0, 0.1).into(), (1.0, 1.1).into()]]).unwrap(),
-            )
-            .unwrap();
-        builder
-            .push_geometry(
-                MultiLineString::new(vec![
-                    vec![(4.0, 4.1).into(), (5.0, 5.1).into(), (6.0, 6.1).into()],
-                    vec![(7.0, 7.1).into(), (8.0, 8.1).into(), (9.0, 9.1).into()],
-                ])
-                .unwrap(),
-            )
-            .unwrap();
-        builder
-            .push_geometry(
-                MultiLineString::new(vec![
-                    vec![(10.0, 10.1).into(), (11.0, 11.1).into()],
-                    vec![
-                        (12.0, 12.1).into(),
-                        (13.0, 13.1).into(),
-                        (14.0, 14.1).into(),
-                    ],
-                ])
-                .unwrap(),
-            )
-            .unwrap();
+        builder.push_geometry(
+            MultiLineString::new(vec![vec![(0.0, 0.1).into(), (1.0, 1.1).into()]]).unwrap(),
+        );
+        builder.push_geometry(
+            MultiLineString::new(vec![
+                vec![(4.0, 4.1).into(), (5.0, 5.1).into(), (6.0, 6.1).into()],
+                vec![(7.0, 7.1).into(), (8.0, 8.1).into(), (9.0, 9.1).into()],
+            ])
+            .unwrap(),
+        );
+        builder.push_geometry(
+            MultiLineString::new(vec![
+                vec![(10.0, 10.1).into(), (11.0, 11.1).into()],
+                vec![
+                    (12.0, 12.1).into(),
+                    (13.0, 13.1).into(),
+                    (14.0, 14.1).into(),
+                ],
+            ])
+            .unwrap(),
+        );
 
         for _ in 0..3 {
-            builder.push_time_interval(TimeInterval::default()).unwrap();
+            builder.push_time_interval(TimeInterval::default());
 
             builder.finish_row();
         }
@@ -482,28 +463,24 @@ mod tests {
     fn append() {
         let mut builder = MultiLineStringCollection::builder().finish_header();
 
-        builder
-            .push_geometry(
-                MultiLineString::new(vec![vec![(0.0, 0.1).into(), (1.0, 1.1).into()]]).unwrap(),
-            )
-            .unwrap();
-        builder.push_time_interval(TimeInterval::default()).unwrap();
+        builder.push_geometry(
+            MultiLineString::new(vec![vec![(0.0, 0.1).into(), (1.0, 1.1).into()]]).unwrap(),
+        );
+        builder.push_time_interval(TimeInterval::default());
         builder.finish_row();
 
         let collection_a = builder.build().unwrap();
 
         let mut builder = MultiLineStringCollection::builder().finish_header();
 
-        builder
-            .push_geometry(
-                MultiLineString::new(vec![
-                    vec![(4.0, 4.1).into(), (5.0, 5.1).into(), (6.0, 6.1).into()],
-                    vec![(7.0, 7.1).into(), (8.0, 8.1).into(), (9.0, 9.1).into()],
-                ])
-                .unwrap(),
-            )
-            .unwrap();
-        builder.push_time_interval(TimeInterval::default()).unwrap();
+        builder.push_geometry(
+            MultiLineString::new(vec![
+                vec![(4.0, 4.1).into(), (5.0, 5.1).into(), (6.0, 6.1).into()],
+                vec![(7.0, 7.1).into(), (8.0, 8.1).into(), (9.0, 9.1).into()],
+            ])
+            .unwrap(),
+        );
+        builder.push_time_interval(TimeInterval::default());
         builder.finish_row();
 
         let collection_b = builder.build().unwrap();
@@ -562,27 +539,47 @@ mod tests {
         )
         .unwrap();
 
-        let expected_collection = MultiLineStringCollection::from_slices(
-            &[
-                MultiLineString::new(vec![vec![MARBURG_EPSG_900_913, HAMBURG_EPSG_900_913]])
-                    .unwrap(),
-                MultiLineString::new(vec![
-                    vec![
-                        COLOGNE_EPSG_900_913,
-                        MARBURG_EPSG_900_913,
-                        HAMBURG_EPSG_900_913,
-                    ],
-                    vec![HAMBURG_EPSG_900_913, COLOGNE_EPSG_900_913],
-                ])
-                .unwrap(),
-            ],
-            &[TimeInterval::default(), TimeInterval::default()],
-            &[("A", FeatureData::Int(vec![1, 2]))],
-        )
-        .unwrap();
+        let expected = [
+            MultiLineString::new(vec![vec![MARBURG_EPSG_900_913, HAMBURG_EPSG_900_913]]).unwrap(),
+            MultiLineString::new(vec![
+                vec![
+                    COLOGNE_EPSG_900_913,
+                    MARBURG_EPSG_900_913,
+                    HAMBURG_EPSG_900_913,
+                ],
+                vec![HAMBURG_EPSG_900_913, COLOGNE_EPSG_900_913],
+            ])
+            .unwrap(),
+        ];
 
         let proj_collection = collection.reproject(&projector).unwrap();
 
-        assert_eq!(proj_collection, expected_collection);
+        // Assert geometrys are approx equal
+        proj_collection
+            .geometries()
+            .into_iter()
+            .zip(expected.iter())
+            .for_each(|(a, e)| {
+                assert!(approx_eq!(
+                    &MultiLineString,
+                    &a.into(),
+                    e,
+                    epsilon = 0.00001
+                ));
+            });
+
+        // Assert that feature time intervals did not move around
+        assert_eq!(proj_collection.time_intervals().len(), 2);
+        assert_eq!(
+            proj_collection.time_intervals(),
+            &[TimeInterval::default(), TimeInterval::default()]
+        );
+
+        // Assert that feature data did not magicaly disappear
+        if let FeatureDataRef::Int(numbers) = proj_collection.data("A").unwrap() {
+            assert_eq!(numbers.as_ref(), &[1, 2]);
+        } else {
+            unreachable!();
+        }
     }
 }

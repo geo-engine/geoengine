@@ -1,6 +1,8 @@
 pub trait Identifier: Sized {
     /// Create a new (random) identifier
     fn new() -> Self;
+
+    fn uuid(&self) -> &uuid::Uuid;
 }
 
 #[macro_export]
@@ -9,9 +11,19 @@ macro_rules! identifier {
         #[derive(Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize, Clone, Copy, Hash)]
         pub struct $id_name(pub uuid::Uuid);
 
-        impl crate::util::Identifier for $id_name {
+        impl $id_name {
+            pub const fn from_u128(v: u128) -> Self {
+                Self(uuid::Uuid::from_u128(v))
+            }
+        }
+
+        impl $crate::util::Identifier for $id_name {
             fn new() -> Self {
                 Self(uuid::Uuid::new_v4())
+            }
+
+            fn uuid(&self) -> &uuid::Uuid {
+                &self.0
             }
         }
 
@@ -22,11 +34,11 @@ macro_rules! identifier {
         }
 
         impl std::str::FromStr for $id_name {
-            type Err = crate::error::Error;
+            type Err = $crate::error::Error;
 
             fn from_str(s: &str) -> Result<Self, Self::Err> {
                 Ok(Self(
-                    uuid::Uuid::from_str(s).map_err(|_error| crate::error::Error::InvalidUuid)?,
+                    uuid::Uuid::from_str(s).map_err(|_error| $crate::error::Error::InvalidUuid)?,
                 ))
             }
         }

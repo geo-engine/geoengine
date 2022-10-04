@@ -93,8 +93,8 @@ where
         let plots = rows
             .into_iter()
             .map(|row| Plot {
-                workflow: WorkflowId(row.get(2)),
-                name: row.get(1),
+                workflow: WorkflowId(row.get(1)),
+                name: row.get(0),
             })
             .collect();
 
@@ -218,7 +218,7 @@ where
     }
 
     async fn create(
-        &mut self,
+        &self,
         session: &UserSession,
         create: Validated<CreateProject>,
     ) -> Result<ProjectId> {
@@ -289,11 +289,7 @@ where
     }
 
     #[allow(clippy::too_many_lines)]
-    async fn update(
-        &mut self,
-        session: &UserSession,
-        update: Validated<UpdateProject>,
-    ) -> Result<()> {
+    async fn update(&self, session: &UserSession, update: Validated<UpdateProject>) -> Result<()> {
         let update = update.user_input;
 
         let mut conn = self.conn_pool.get().await?;
@@ -391,7 +387,7 @@ where
         Ok(())
     }
 
-    async fn delete(&mut self, session: &UserSession, project: ProjectId) -> Result<()> {
+    async fn delete(&self, session: &UserSession, project: ProjectId) -> Result<()> {
         let conn = self.conn_pool.get().await?;
 
         PostgresContext::check_user_project_permission(
@@ -605,7 +601,7 @@ where
     }
 
     async fn add_permission(
-        &mut self,
+        &self,
         session: &UserSession,
         permission: UserProjectPermission,
     ) -> Result<()> {
@@ -641,7 +637,7 @@ where
     }
 
     async fn remove_permission(
-        &mut self,
+        &self,
         session: &UserSession,
         permission: UserProjectPermission,
     ) -> Result<()> {

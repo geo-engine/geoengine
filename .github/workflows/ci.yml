@@ -2,9 +2,9 @@ name: CI
 
 on:
   push:
-    branches: [master]
+    branches: [master, trying, staging]
   pull_request:
-    branches: [master]
+    branches: [master, trying, staging]
   # Allows you to run this workflow manually from the Actions tab
   workflow_dispatch:
 
@@ -12,7 +12,7 @@ env:
   CARGO_TERM_COLOR: always
 
 jobs:
-  build:
+  test:
     runs-on: ${{matrix.os}}
 
     services:
@@ -30,28 +30,55 @@ jobs:
       matrix:
         os:
           - ubuntu-20.04
-        features: ["", "--all-features"]
-        build: ["", "--release"]
+        features: ["", "--features pro", "--all-features"]
+        build: [""]
 
     steps:
       - name: Checkout code
         uses: actions/checkout@v2
+      - name: Add UbuntuGIS ppa
+        run: sudo add-apt-repository ppa:ubuntugis/ppa
       - name: APT update
         run: sudo apt-get update
-      - name: Install lld
-        run: sudo apt-get install lld
-      - name: Install OpenCL
-        run: sudo apt-get install ocl-icd-opencl-dev pocl-opencl-icd
-      - name: Install GDAL
+      - name: Install lld & GDAL
         run: |
-          sudo apt-get install libgdal-dev gdal-bin build-essential
+          sudo apt-get install lld libgdal-dev gdal-bin build-essential
           export C_INCLUDE_PATH=/usr/include/gdal:$C_INCLUDE_PATH
           export CPLUS_INCLUDE_PATH=/usr/include/gdal:$CPLUS_INCLUDE_PATH
           sudo ldconfig
-      - name: Setup building
-        run: |
-          export CC="clang-9"
-          export CXX="clang++-9"
+      - name: init rust-toolchain
+        # somehow rustup show will take care to initialize the version based on the toolchain file
+        run: rustup show
+      - name: setup rust build cache
+        uses: Swatinem/rust-cache@v2
+        with:
+          # An explicit cache key that is used instead of the automatic `job`-based
+          # cache key and is thus stable across jobs.
+          # Default: empty
+          shared-key: ""
+
+          # An additional cache key that is added alongside the automatic `job`-based
+          # cache key and can be used to further differentiate jobs.
+          # Default: empty
+          key: 3_${{ matrix.features }}_${{ matrix.build }}
+
+          # A whitespace separated list of env-var *prefixes* who's value contributes
+          # to the environment cache key.
+          # The env-vars are matched by *prefix*, so the default `RUST` var will
+          # match all of `RUSTC`, `RUSTUP_*`, `RUSTFLAGS`, `RUSTDOC_*`, etc.
+          # Default: "CARGO CC CFLAGS CXX CMAKE RUST"
+          #env-vars: ""
+
+          # The cargo workspaces and target directory configuration.
+          # These entries are separated by newlines and have the form
+          # `$workspace -> $target`. The `$target` part is treated as a directory
+          # relative to the `$workspace` and defaults to "target" if not explicitly given.
+          # Default: ". -> target"
+          #workspaces: ""
+
+          # Determines if the cache should be saved even when the workflow has failed.
+          # Default: "false"
+          #cache-on-failure: ""
       - name: Check with Rustfmt
         uses: actions-rs/cargo@v1
         with:
@@ -61,57 +88,84 @@ jobs:
         uses: actions-rs/clippy-check@v1
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
-          args: --all-targets ${{ matrix.features }} -- -D warnings
-      - name: Build
-        uses: actions-rs/cargo@v1
-        with:
-          command: build
-          args: ${{ matrix.features }} ${{ matrix.build }} --verbose
+          args: --all-targets ${{ matrix.features }} ${{ matrix.build }} -- -D warnings
+        env:
+          # utoipa packages the UI part of the SwaggerUI and the build.rs of utoipa moves this into a "wrong" folder.
+          # The folder where it is moved is not covered by the cache.
+          # However, utoipa tries to access the UI files and this crashes the test/build process.
+          # Using the CARGO_TARGET_DIR we can force cargo to move all build dependecies into a specific folder.
+          # TODO: remove this when utoipa is fixed
+          CARGO_TARGET_DIR: /home/runner/work/geoengine/geoengine/target
       - name: Run tests
         uses: actions-rs/cargo@v1
         with:
           command: test
-          args: ${{ matrix.features }} --verbose
-
-  coverage:
-    runs-on: ubuntu-20.04
-
-    services:
-      postgres:
-        image: postgis/postgis
+          args: ${{ matrix.features }} ${{ matrix.build }} --verbose
         env:
-          POSTGRES_USER: geoengine
-          POSTGRES_PASSWORD: geoengine
-          POSTGRES_DB: geoengine
-        ports:
-          - 5432:5432
-        options: --health-cmd pg_isready --health-interval 10s --health-timeout 5s --health-retries 5
+          # TODO: remove this when utoipa is fixed
+          CARGO_TARGET_DIR: /home/runner/work/geoengine/geoengine/target
+
+  build:
+    runs-on: ${{matrix.os}}
+
+    strategy:
+      matrix:
+        os:
+          - ubuntu-20.04
+        features: ["", "--features pro", "--all-features"]
+        build: ["", "--release"]
 
     steps:
       - name: Checkout code
         uses: actions/checkout@v2
+      - name: Add UbuntuGIS ppa
+        run: sudo add-apt-repository ppa:ubuntugis/ppa
       - name: APT update
         run: sudo apt-get update
-      - name: Install lld
-        run: sudo apt-get install lld
-      - name: Install OpenCL
-        run: sudo apt-get install ocl-icd-opencl-dev pocl-opencl-icd
-      - name: Install GDAL
+      - name: Install lld & GDAL
         run: |
-          sudo apt-get install libgdal-dev gdal-bin build-essential
+          sudo apt-get install lld libgdal-dev gdal-bin build-essential
           export C_INCLUDE_PATH=/usr/include/gdal:$C_INCLUDE_PATH
           export CPLUS_INCLUDE_PATH=/usr/include/gdal:$CPLUS_INCLUDE_PATH
           sudo ldconfig
-      - name: Setup building
-        run: |
-          export CC="clang-9"
-          export CXX="clang++-9"
-      - name: Generate code coverage
-        run: |
-          cargo install cargo-tarpaulin
-          cargo tarpaulin --verbose --workspace --timeout 120 --out Lcov --all-features
-      - name: Upload coverage to Coveralls
-        uses: coverallsapp/github-action@v1.1.1
+      - name: init rust-toolchain
+        # somehow rustup show will take care to initialize the version based on the toolchain file
+        run: rustup show
+      - name: setup rust build cache
+        uses: Swatinem/rust-cache@v2
         with:
-          github-token: ${{ secrets.GITHUB_TOKEN }}
-          path-to-lcov: lcov.info
+          # An explicit cache key that is used instead of the automatic `job`-based
+          # cache key and is thus stable across jobs.
+          # Default: empty
+          shared-key: ""
+
+          # An additional cache key that is added alongside the automatic `job`-based
+          # cache key and can be used to further differentiate jobs.
+          # Default: empty
+          key: 4_${{ matrix.features }}_${{ matrix.build }}
+
+          # A whitespace separated list of env-var *prefixes* who's value contributes
+          # to the environment cache key.
+          # The env-vars are matched by *prefix*, so the default `RUST` var will
+          # match all of `RUSTC`, `RUSTUP_*`, `RUSTFLAGS`, `RUSTDOC_*`, etc.
+          # Default: "CARGO CC CFLAGS CXX CMAKE RUST"
+          #env-vars: ""
+
+          # The cargo workspaces and target directory configuration.
+          # These entries are separated by newlines and have the form
+          # `$workspace -> $target`. The `$target` part is treated as a directory
+          # relative to the `$workspace` and defaults to "target" if not explicitly given.
+          # Default: ". -> target"
+          #workspaces: ""
+
+          # Determines if the cache should be saved even when the workflow has failed.
+          # Default: "false"
+          #cache-on-failure: ""
+      - name: Build
+        uses: actions-rs/cargo@v1
+        with:
+          command: build
+          args: ${{ matrix.features }} ${{ matrix.build }} --verbose --target-dir=target
+        env:
+          # TODO: remove this when utoipa is fixed
+          CARGO_TARGET_DIR: /home/runner/work/geoengine/geoengine/target

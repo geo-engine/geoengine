@@ -1,20 +1,28 @@
-use geoengine_datatypes::{dataset::DatasetProviderId, spatial_reference::SpatialReferenceOption};
-use snafu::Snafu;
+use crate::api::model::datatypes::{
+    DataProviderId, DatasetId, LayerId, SpatialReferenceOption, TimeInstance,
+};
+#[cfg(feature = "ebv")]
+use crate::datasets::external::netcdfcf::NetCdfCf4DProviderError;
+use crate::handlers::ErrorResponse;
+use crate::{layers::listing::LayerCollectionId, workflows::workflow::WorkflowId};
+use actix_web::http::StatusCode;
+use actix_web::HttpResponse;
+use snafu::prelude::*;
+use std::path::PathBuf;
 use strum::IntoStaticStr;
-use warp::reject::Reject;
+use tonic::Status;
 
 pub type Result<T, E = Error> = std::result::Result<T, E>;
+
 #[derive(Debug, Snafu, IntoStaticStr)]
-#[snafu(visibility = "pub(crate)")]
+#[snafu(visibility(pub(crate)))]
+#[snafu(context(suffix(false)))] // disables default `Snafu` suffix
 pub enum Error {
     DataType {
         source: geoengine_datatypes::error::Error,
     },
     Operator {
         source: geoengine_operators::error::Error,
-    },
-    Http {
-        source: warp::http::Error,
     },
     Uuid {
         source: uuid::Error,
@@ -37,9 +45,16 @@ pub enum Error {
         source: reqwest::Error,
     },
 
+    Url {
+        source: url::ParseError,
+    },
+
     #[cfg(feature = "xml")]
     QuickXml {
         source: quick_xml::Error,
+    },
+    Proj {
+        source: proj::ProjError,
     },
 
     TokioChannelSend,
@@ -64,6 +79,8 @@ pub enum Error {
     LogoutFailed,
     #[snafu(display("The session id is invalid."))]
     InvalidSession,
+    #[snafu(display("Invalid admin token"))]
+    InvalidAdminToken,
     #[snafu(display("Header with authorization token not provided."))]
     MissingAuthorizationHeader,
     #[snafu(display("Authentication scheme must be Bearer."))]
@@ -126,10 +143,31 @@ pub enum Error {
 
     MissingSettingsDirectory,
 
-    DatasetIdTypeMissMatch,
-    UnknownDatasetId,
+    DataIdTypeMissMatch,
+    UnknownDataId,
     UnknownProviderId,
     MissingDatasetId,
+
+    UnknownDatasetId,
+
+    #[snafu(display("Permission denied for dataset with id {:?}", dataset))]
+    DatasetPermissionDenied {
+        dataset: DatasetId,
+    },
+
+    #[snafu(display("Updating permission ({}, {:?}, {}) denied", role, dataset, permission))]
+    UpateDatasetPermission {
+        role: String,
+        dataset: DatasetId,
+        permission: String,
+    },
+
+    #[snafu(display("Permission ({}, {:?}, {}) already exists", role, dataset, permission))]
+    DuplicateDatasetPermission {
+        role: String,
+        dataset: DatasetId,
+        permission: String,
+    },
 
     #[snafu(display("Parameter {} must have length between {} and {}", parameter, min, max))]
     InvalidStringLength {
@@ -146,7 +184,9 @@ pub enum Error {
     UploadFieldMissingFileName,
     UnknownUploadId,
     PathIsNotAFile,
-    MultiPartBoundaryMissing,
+    Multipart {
+        source: actix_multipart::MultipartError,
+    },
     InvalidUploadFileName,
     InvalidDatasetName,
     DatasetHasNoAutoImportableLayer,
@@ -176,8 +216,6 @@ pub enum Error {
     },
     RasterDataTypeNotSupportByGdal,
 
-    ExternalAddressNotConfigured,
-
     MissingSpatialReference,
 
     WcsVersionNotSupported,
@@ -187,11 +225,13 @@ pub enum Error {
 
     InvalidDatasetId,
 
+    PangaeaNoTsv,
     GfbioMissingAbcdField,
-    ExpectedExternalDatasetId,
-    InvalidExternalDatasetId {
-        provider: DatasetProviderId,
+    ExpectedExternalDataId,
+    InvalidExternalDataId {
+        provider: DataProviderId,
     },
+    InvalidDataId,
 
     #[cfg(feature = "nature40")]
     Nature40UnknownRasterDbname,
@@ -212,9 +252,172 @@ pub enum Error {
     },
     #[cfg(feature = "odm")]
     OdmMissingContentTypeHeader,
+
+    UnknownSrsString {
+        srs_string: String,
+    },
+
+    AxisOrderingNotKnownForSrs {
+        srs_string: String,
+    },
+
+    #[snafu(display("Anonymous access is disabled, please log in"))]
+    AnonymousAccessDisabled,
+
+    #[snafu(display("User registration is disabled"))]
+    UserRegistrationDisabled,
+
+    #[snafu(display(
+        "WCS request endpoint {} must match identifier {}",
+        endpoint,
+        identifier
+    ))]
+    WCSEndpointIdentifierMissmatch {
+        endpoint: WorkflowId,
+        identifier: WorkflowId,
+    },
+    #[snafu(display(
+        "WCS request endpoint {} must match identifiers {}",
+        endpoint,
+        identifiers
+    ))]
+    WCSEndpointIdentifiersMissmatch {
+        endpoint: WorkflowId,
+        identifiers: WorkflowId,
+    },
+    #[snafu(display("WMS request endpoint {} must match layer {}", endpoint, layer))]
+    WMSEndpointLayerMissmatch {
+        endpoint: WorkflowId,
+        layer: WorkflowId,
+    },
+    #[snafu(display(
+        "WFS request endpoint {} must match type_names {}",
+        endpoint,
+        type_names
+    ))]
+    WFSEndpointTypeNamesMissmatch {
+        endpoint: WorkflowId,
+        type_names: WorkflowId,
+    },
+
+    Tonic {
+        source: tonic::Status,
+    },
+
+    TonicTransport {
+        source: tonic::transport::Error,
+    },
+
+    InvalidUri {
+        uri_string: String,
+    },
+
+    InvalidAPIToken {
+        message: String,
+    },
+    MissingNFDIMetaData,
+
+    #[cfg(feature = "ebv")]
+    #[snafu(context(false))]
+    NetCdfCf4DProvider {
+        source: NetCdfCf4DProviderError,
+    },
+    #[cfg(feature = "nfdi")]
+    #[snafu(display("Could not parse GFBio basket: {}", message,))]
+    GFBioBasketParse {
+        message: String,
+    },
+
+    BaseUrlMustEndWithSlash,
+
+    #[snafu(context(false))]
+    LayerDb {
+        source: crate::layers::storage::LayerDbError,
+    },
+
+    UnknownOperator {
+        operator: String,
+    },
+
+    IdStringMustBeUuid {
+        found: String,
+    },
+
+    #[snafu(context(false))]
+    TaskError {
+        source: crate::tasks::TaskError,
+    },
+
+    UnknownLayerCollectionId {
+        id: LayerCollectionId,
+    },
+    UnknownLayerId {
+        id: LayerId,
+    },
+    InvalidLayerCollectionId,
+    InvalidLayerId,
+
+    #[snafu(context(false))]
+    WorkflowApi {
+        source: crate::handlers::workflows::WorkflowApiError,
+    },
+
+    SubPathMustNotEscapeBasePath {
+        base: PathBuf,
+        sub_path: PathBuf,
+    },
+
+    PathMustNotContainParentReferences {
+        base: PathBuf,
+        sub_path: PathBuf,
+    },
+
+    #[snafu(display("Time instance must be between {} and {}, but is {}", min.inner(), max.inner(), is))]
+    InvalidTimeInstance {
+        min: TimeInstance,
+        max: TimeInstance,
+        is: i64,
+    },
+
+    #[snafu(display("ParseU32: {}", source))]
+    ParseU32 {
+        source: <u32 as std::str::FromStr>::Err,
+    },
+    #[snafu(display("InvalidSpatialReferenceString: {}", spatial_reference_string))]
+    InvalidSpatialReferenceString {
+        spatial_reference_string: String,
+    },
+
+    #[cfg(feature = "pro")]
+    #[snafu(context(false))]
+    OidcError {
+        source: crate::pro::users::OidcError,
+    },
 }
 
-impl Reject for Error {}
+impl actix_web::error::ResponseError for Error {
+    fn error_response(&self) -> HttpResponse {
+        // TODO: rethink this error handling since errors
+        // only have `Display`, `Debug` and `Error` implementations
+        let (error, message) = match self {
+            Error::Authorization { source } => (
+                Into::<&str>::into(source.as_ref()).to_string(),
+                source.to_string(),
+            ),
+            _ => (Into::<&str>::into(self).to_string(), self.to_string()),
+        };
+
+        HttpResponse::build(self.status_code()).json(ErrorResponse { error, message })
+    }
+
+    fn status_code(&self) -> StatusCode {
+        match self {
+            Error::Authorization { source: _ } => StatusCode::UNAUTHORIZED,
+            Error::Duplicate { reason: _ } => StatusCode::CONFLICT,
+            _ => StatusCode::BAD_REQUEST,
+        }
+    }
+}
 
 impl From<geoengine_datatypes::error::Error> for Error {
     fn from(e: geoengine_datatypes::error::Error) -> Self {
@@ -238,6 +441,7 @@ impl From<bb8_postgres::bb8::RunError<<bb8_postgres::PostgresConnectionManager<b
     }
 }
 
+// TODO: remove automatic conversion to our Error because we do not want to leak database internals in the API
 #[cfg(feature = "postgres")]
 impl From<bb8_postgres::tokio_postgres::error::Error> for Error {
     fn from(e: bb8_postgres::tokio_postgres::error::Error) -> Self {
@@ -269,6 +473,18 @@ impl From<reqwest::Error> for Error {
     }
 }
 
+impl From<actix_multipart::MultipartError> for Error {
+    fn from(source: actix_multipart::MultipartError) -> Self {
+        Self::Multipart { source }
+    }
+}
+
+impl From<url::ParseError> for Error {
+    fn from(source: url::ParseError) -> Self {
+        Self::Url { source }
+    }
+}
+
 #[cfg(feature = "xml")]
 impl From<quick_xml::Error> for Error {
     fn from(source: quick_xml::Error) -> Self {
@@ -279,5 +495,29 @@ impl From<quick_xml::Error> for Error {
 impl From<flexi_logger::FlexiLoggerError> for Error {
     fn from(source: flexi_logger::FlexiLoggerError) -> Self {
         Self::Logger { source }
+    }
+}
+
+impl From<proj::ProjError> for Error {
+    fn from(source: proj::ProjError) -> Self {
+        Self::Proj { source }
+    }
+}
+
+impl From<tonic::Status> for Error {
+    fn from(source: Status) -> Self {
+        Self::Tonic { source }
+    }
+}
+
+impl From<tonic::transport::Error> for Error {
+    fn from(source: tonic::transport::Error) -> Self {
+        Self::TonicTransport { source }
+    }
+}
+
+impl From<tokio::task::JoinError> for Error {
+    fn from(source: tokio::task::JoinError) -> Self {
+        Error::TokioJoin { source }
     }
 }

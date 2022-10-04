@@ -1,0 +1,65 @@
+{
+  "properties": {
+    "id": "a3f6955e-53cc-4752-9e4a-e9f0493add80",
+    "name": "NDVI3857",
+    "description": "NDVI data from MODIS reprojected to EPSG:3857",
+    "sourceOperator": "GdalSource",
+    "provenance": {
+      "citation": "Nasa Earth Observations, MODIS Vegetation Index Products",
+      "license": "https://earthdata.nasa.gov/collaborate/open-data-services-and-software/data-information-policy",
+      "uri": "https://modis.gsfc.nasa.gov/data/dataprod/mod13.php"
+    }
+  },
+  "metaData": {
+    "type": "GdalMetaDataRegular",
+    "resultDescriptor": {
+      "dataType": "U8",
+      "spatialReference": "EPSG:3857",
+      "measurement": {
+        "type": "unitless"
+      },
+      "time": {
+        "start": "2014-01-01T00:00:00.000Z",
+        "end": "2014-07-01T00:00:00.000Z"
+      },
+      "bbox": {
+        "upperLeftCoordinate": [-20026376.39, 20048966.1],
+        "lowerRightCoordinate": [20026376.39, -20048966.1]
+      },
+      "resolution": {
+        "x": 14052.95025804873876,
+        "y": 14057.88111778840539
+      }
+    },
+    "params": {
+      "filePath": "test_data/raster/modis_ndvi/projected_3857/MOD13A2_M_NDVI_%_START_TIME_%.TIFF",
+      "rasterbandChannel": 1,
+      "geoTransform": {
+        "originCoordinate": {
+          "x": -20037508.342789243906736,
+          "y": 19971868.880408562719822
+        },
+        "xPixelSize": 14052.95025804873876,
+        "yPixelSize": -14057.88111778840539
+      },
+      "width": 2851,
+      "height": 2841,
+      "fileNotFoundHandling": "NoData",
+      "noDataValue": 0.0
+    },
+    "timePlaceholders": {
+      "%_START_TIME_%": {
+        "format": "%Y-%m-%d",
+        "reference": "start"
+      }
+    },
+    "dataTime": {
+      "start": "2014-01-01T00:00:00.000Z",
+      "end": "2014-07-01T00:00:00.000Z"
+    },
+    "step": {
+      "granularity": "months",
+      "step": 1
+    }
+  }
+}

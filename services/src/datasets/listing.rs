@@ -1,3 +1,5 @@
+use crate::api::model::datatypes::{DataId, DatasetId};
+use crate::contexts::Session;
 use crate::datasets::storage::Dataset;
 use crate::error;
 use crate::error::Result;
@@ -5,17 +7,16 @@ use crate::projects::Symbology;
 use crate::util::config::{get_config_element, DatasetService};
 use crate::util::user_input::{UserInput, Validated};
 use async_trait::async_trait;
-use geoengine_datatypes::dataset::DatasetId;
+use geoengine_datatypes::primitives::{RasterQueryRectangle, VectorQueryRectangle};
 use geoengine_operators::engine::{
-    MetaDataProvider, RasterQueryRectangle, RasterResultDescriptor, TypedResultDescriptor,
-    VectorQueryRectangle, VectorResultDescriptor,
+    MetaData, RasterResultDescriptor, ResultDescriptor, TypedResultDescriptor,
+    VectorResultDescriptor,
 };
 use geoengine_operators::mock::MockDatasetDataSourceLoadingInfo;
 use geoengine_operators::source::{GdalLoadingInfo, OgrSourceDataset};
 use serde::{Deserialize, Serialize};
 use snafu::ensure;
-
-use super::provenance::ProvenanceProvider;
+use utoipa::ToSchema;
 
 #[derive(Debug, Serialize, Deserialize, Clone, PartialEq)]
 #[serde(rename_all = "camelCase")]
@@ -70,26 +71,54 @@ pub enum OrderBy {
     NameDesc,
 }
 
+/// This is like the `MetaDataProvider` trait but also accepts a session
+#[async_trait]
+pub trait SessionMetaDataProvider<S, L, R, Q>
+where
+    S: Session,
+    R: ResultDescriptor,
+{
+    async fn session_meta_data(
+        &self,
+        session: &S,
+        id: &DataId,
+    ) -> Result<Box<dyn MetaData<L, R, Q>>>;
+}
+
 /// Listing of stored datasets
 #[async_trait]
-pub trait DatasetProvider: Send
+pub trait DatasetProvider<S: Session>:
+    Send
     + Sync
-    + MetaDataProvider<MockDatasetDataSourceLoadingInfo, VectorResultDescriptor, VectorQueryRectangle>
-    + MetaDataProvider<OgrSourceDataset, VectorResultDescriptor, VectorQueryRectangle>
-    + MetaDataProvider<GdalLoadingInfo, RasterResultDescriptor, RasterQueryRectangle>
-    + ProvenanceProvider
+    + SessionMetaDataProvider<
+        S,
+        MockDatasetDataSourceLoadingInfo,
+        VectorResultDescriptor,
+        VectorQueryRectangle,
+    > + SessionMetaDataProvider<S, OgrSourceDataset, VectorResultDescriptor, VectorQueryRectangle>
+    + SessionMetaDataProvider<S, GdalLoadingInfo, RasterResultDescriptor, RasterQueryRectangle>
 {
     // TODO: filter, paging
     async fn list(
         &self,
-        // session: &S, // TODO: authorization
+        session: &S,
         options: Validated<DatasetListOptions>,
     ) -> Result<Vec<DatasetListing>>;
 
-    // TODO: is this method useful?
-    async fn load(
-        &self,
-        // session: &S, // TODO: authorization
-        dataset: &DatasetId,
-    ) -> Result<Dataset>;
+    async fn load(&self, session: &S, dataset: &DatasetId) -> Result<Dataset>;
+
+    async fn provenance(&self, session: &S, dataset: &DatasetId) -> Result<ProvenanceOutput>;
+}
+
+#[derive(Debug, Serialize, Deserialize, PartialEq, Eq, Hash, ToSchema)]
+pub struct ProvenanceOutput {
+    pub data: DataId,
+    pub provenance: Option<Provenance>,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone, PartialEq, Eq, Hash, ToSchema)]
+pub struct Provenance {
+    pub citation: String,
+    pub license: String,
+    pub uri: String,
 }

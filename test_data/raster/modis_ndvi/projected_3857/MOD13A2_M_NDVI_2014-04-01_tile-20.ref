@@ -1,0 +1,14 @@
+ref. system : WGS 84 / Pseudo-Mercator
+projection  : Mercator
+datum       : WGS_1984
+delta WGS84 : 0 2.08e-322 3.37e-321
+ellipsoid   : WGS 84
+major s-ax  : 6378137.000
+minor s-ax  : 6356752.314
+origin long : 0
+origin lat  : 0
+origin X    : 0
+origin Y    : 0
+scale fac   : 1
+units       : m
+parameters  : 0

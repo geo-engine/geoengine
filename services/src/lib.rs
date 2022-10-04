@@ -13,6 +13,7 @@
     clippy::must_use_candidate,
     clippy::non_ascii_literal,
     clippy::option_if_let_else,
+    clippy::result_large_err, // TODO: investigate this
     clippy::similar_names,
     clippy::single_match_else,
     clippy::type_repetition_in_bounds,
@@ -20,23 +21,27 @@
 )]
 // enable some restriction lints
 #![warn(clippy::print_stdout, clippy::print_stderr, clippy::dbg_macro)]
-//
-//
-// TODO: re-activate when https://github.com/rust-lang/rust-clippy/issues/7438 is fixed
-#![allow(clippy::semicolon_if_nothing_returned)]
 
+pub mod api;
+#[cfg(not(feature = "pro"))]
+pub mod apidoc;
 pub mod contexts;
 pub mod datasets;
 pub mod error;
 pub mod handlers;
+pub mod layers;
 pub mod ogc;
 pub mod projects;
+#[cfg(not(feature = "pro"))]
 pub mod server;
 pub mod stac;
 #[macro_use]
 pub mod util;
+pub mod tasks;
 pub mod workflows;
 
 /// Compiles Geo Engine Pro
 #[cfg(feature = "pro")]
 pub mod pro;
+
+pub use geoengine_datatypes::test_data;

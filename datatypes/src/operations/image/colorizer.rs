@@ -1,4 +1,4 @@
-use crate::error;
+use crate::error::{self, Error};
 use crate::operations::image::RgbaTransmutable;
 use crate::raster::Pixel;
 use crate::util::Result;
@@ -345,6 +345,77 @@ impl Colorizer {
 
         color_table
     }
+
+    /// Rescales the colorizer to the new `min` and `max` values. It distributes the breakpoints
+    /// evenly between the new `min` and `max` values and uses the original colors.
+    ///
+    /// Returns an error if the type of colorizer is not gradient
+    pub fn rescale(&self, min: f64, max: f64) -> Result<Self> {
+        ensure!(min < max, error::MinMustBeSmallerThanMax { min, max });
+
+        match self {
+            Self::LinearGradient {
+                breakpoints,
+                no_data_color,
+                default_color,
+            } => {
+                let step = (max - min) / (breakpoints.len() - 1) as f64;
+
+                Self::linear_gradient(
+                    breakpoints
+                        .iter()
+                        .enumerate()
+                        .map(|(i, b)| {
+                            (
+                                (min + i as f64 * step)
+                                    .try_into()
+                                    .expect("no operand is NaN"),
+                                b.color,
+                            )
+                                .into()
+                        })
+                        .collect(),
+                    *no_data_color,
+                    *default_color,
+                )
+            }
+            Self::LogarithmicGradient {
+                breakpoints,
+                no_data_color,
+                default_color,
+            } => {
+                let step = (max - min) / (breakpoints.len() - 1) as f64;
+
+                Self::logarithmic_gradient(
+                    breakpoints
+                        .iter()
+                        .enumerate()
+                        .map(|(i, b)| {
+                            (
+                                (min + i as f64 * step)
+                                    .try_into()
+                                    .expect("no operand is NaN"),
+                                b.color,
+                            )
+                                .into()
+                        })
+                        .collect(),
+                    *no_data_color,
+                    *default_color,
+                )
+            }
+            Self::Palette {
+                colors: _,
+                no_data_color: _,
+                default_color: _,
+            } => Err(Error::ColorizerRescaleNotSupported {
+                colorizer: "palette".to_string(),
+            }),
+            Self::Rgba => Err(Error::ColorizerRescaleNotSupported {
+                colorizer: "rgba".to_string(),
+            }),
+        }
+    }
 }
 
 /// A `ColorMapper` is a function for mapping raster values to colors
@@ -448,6 +519,11 @@ pub type Breakpoints = Vec<Breakpoint>;
 #[serde(try_from = "SerializablePalette", into = "SerializablePalette")]
 pub struct Palette(HashMap<NotNan<f64>, RgbaColor>);
 
+impl Palette {
+    pub fn into_inner(self) -> HashMap<NotNan<f64>, RgbaColor> {
+        self.0
+    }
+}
 /// A type that is solely for serde's serializability.
 /// You cannot serialize floats as JSON map keys.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -498,6 +574,10 @@ impl RgbaColor {
         RgbaColor([red, green, blue, alpha])
     }
 
+    pub fn into_inner(self) -> [u8; 4] {
+        self.0
+    }
+
     pub fn transparent() -> Self {
         RgbaColor::new(0, 0, 0, 0)
     }
@@ -529,6 +609,7 @@ impl RgbaColor {
     /// On debug, if factor is not in [0, 1]
     ///
     #[allow(unstable_name_collisions)]
+    #[must_use]
     pub fn factor_add(self, other: Self, factor: f64) -> Self {
         debug_assert!((0.0..=1.0).contains(&factor));
 
@@ -680,5 +761,37 @@ mod tests {
             serde_json::from_str::<Colorizer>(&serialized_colorizer.to_string()).unwrap(),
             colorizer
         );
+    }
+
+    #[test]
+    fn it_rescales() {
+        let colorizer = Colorizer::linear_gradient(
+            vec![
+                (1.0, RgbaColor::white()).try_into().unwrap(),
+                (2.0, RgbaColor::black()).try_into().unwrap(),
+                (3.0, RgbaColor::white()).try_into().unwrap(),
+            ],
+            RgbaColor::transparent(),
+            RgbaColor::transparent(),
+        )
+        .unwrap();
+
+        let rescaled = colorizer.rescale(0.0, 6.0).unwrap();
+
+        match rescaled {
+            Colorizer::LinearGradient {
+                breakpoints,
+                no_data_color: _,
+                default_color: _,
+            } => assert_eq!(
+                breakpoints,
+                vec![
+                    (0.0.try_into().unwrap(), RgbaColor::white()).into(),
+                    (3.0.try_into().unwrap(), RgbaColor::black()).into(),
+                    (6.0.try_into().unwrap(), RgbaColor::white()).into(),
+                ]
+            ),
+            _ => unreachable!(),
+        }
     }
 }

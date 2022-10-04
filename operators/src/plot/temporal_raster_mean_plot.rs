@@ -1,7 +1,7 @@
 use crate::engine::{
     ExecutionContext, InitializedPlotOperator, InitializedRasterOperator, Operator, PlotOperator,
     PlotQueryProcessor, PlotResultDescriptor, QueryContext, QueryProcessor, RasterQueryProcessor,
-    SingleRasterSource, TypedPlotQueryProcessor, VectorQueryRectangle,
+    SingleRasterSource, TypedPlotQueryProcessor,
 };
 use crate::util::math::average_floor;
 use crate::util::Result;
@@ -9,7 +9,9 @@ use async_trait::async_trait;
 use futures::stream::BoxStream;
 use futures::StreamExt;
 use geoengine_datatypes::plots::{AreaLineChart, Plot, PlotData};
-use geoengine_datatypes::primitives::{Measurement, TimeInstance, TimeInterval};
+use geoengine_datatypes::primitives::{
+    Measurement, TimeInstance, TimeInterval, VectorQueryRectangle,
+};
 use geoengine_datatypes::raster::{Pixel, RasterTile2D};
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
@@ -21,7 +23,7 @@ pub type MeanRasterPixelValuesOverTime =
     Operator<MeanRasterPixelValuesOverTimeParams, SingleRasterSource>;
 
 /// The parameter spec for `MeanRasterPixelValuesOverTime`
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct MeanRasterPixelValuesOverTimeParams {
     /// Where should the x-axis (time) tick be positioned?
@@ -37,7 +39,7 @@ const fn default_true() -> bool {
     true
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub enum MeanRasterPixelValuesOverTimePosition {
     Start,
@@ -52,9 +54,13 @@ impl PlotOperator for MeanRasterPixelValuesOverTime {
         self: Box<Self>,
         context: &dyn ExecutionContext,
     ) -> Result<Box<dyn InitializedPlotOperator>> {
+        let raster = self.sources.raster.initialize(context).await?;
+
+        let in_desc = raster.result_descriptor().clone();
+
         let initialized_operator = InitializedMeanRasterPixelValuesOverTime {
-            result_descriptor: PlotResultDescriptor {},
-            raster: self.sources.raster.initialize(context).await?,
+            result_descriptor: in_desc.into(),
+            raster,
             state: self.params,
         };
 
@@ -133,16 +139,14 @@ impl<P: Pixel> MeanRasterPixelValuesOverTimeQueryProcessor<P> {
         while let Some(tile) = tile_stream.next().await {
             let tile = tile?;
 
-            if tile.grid_array.is_empty() {
-                continue;
+            match tile.grid_array {
+                geoengine_datatypes::raster::GridOrEmpty::Grid(g) => {
+                    let time = Self::time_interval_projection(tile.time, position);
+                    let mean = means.entry(time).or_default();
+                    mean.add(g.masked_element_deref_iterator());
+                }
+                geoengine_datatypes::raster::GridOrEmpty::Empty(_) => (),
             }
-
-            let tile = tile.into_materialized_tile(); // this should be free since we checked for empty tiles
-
-            let time = Self::time_interval_projection(tile.time, position);
-
-            let mean = means.entry(time).or_default();
-            mean.add(&tile.grid_array.data, tile.grid_array.no_data_value);
         }
 
         Ok(means)
@@ -192,30 +196,10 @@ impl Default for MeanCalculator {
 
 impl MeanCalculator {
     #[inline]
-    fn add<P: Pixel>(&mut self, values: &[P], no_data: Option<P>) {
-        if let Some(no_data) = no_data {
-            self.add_with_no_data(values, no_data);
-        } else {
-            self.add_without_no_data(values);
-        }
-    }
-
-    #[inline]
-    fn add_without_no_data<P: Pixel>(&mut self, values: &[P]) {
-        for &value in values {
+    fn add<P: Pixel, I: Iterator<Item = Option<P>>>(&mut self, values: I) {
+        values.flatten().for_each(|value| {
             self.add_single_value(value);
-        }
-    }
-
-    #[inline]
-    fn add_with_no_data<P: Pixel>(&mut self, values: &[P], no_data: P) {
-        for &value in values {
-            if value == no_data {
-                continue;
-            }
-
-            self.add_single_value(value);
-        }
+        });
     }
 
     #[inline]
@@ -242,26 +226,27 @@ mod tests {
     use super::*;
 
     use crate::{
-        engine::{MockExecutionContext, MockQueryContext, RasterOperator, RasterResultDescriptor},
+        engine::{
+            ChunkByteSize, MockExecutionContext, MockQueryContext, RasterOperator,
+            RasterResultDescriptor,
+        },
         source::GdalSource,
     };
     use crate::{
         mock::{MockRasterSource, MockRasterSourceParams},
         source::GdalSourceParameters,
     };
-    use chrono::NaiveDate;
-    use geoengine_datatypes::raster::{Grid2D, RasterDataType, TileInformation};
-    use geoengine_datatypes::spatial_reference::SpatialReference;
-    use geoengine_datatypes::{
-        dataset::InternalDatasetId,
-        plots::{PlotData, PlotMetaData},
-    };
+    use geoengine_datatypes::{dataset::DatasetId, plots::PlotMetaData, primitives::DateTime};
     use geoengine_datatypes::{
         primitives::{BoundingBox2D, Measurement, SpatialResolution, TimeInterval},
         util::Identifier,
     };
-    use num_traits::AsPrimitive;
-    use serde_json::json;
+    use geoengine_datatypes::{raster::TilingSpecification, spatial_reference::SpatialReference};
+    use geoengine_datatypes::{
+        raster::{Grid2D, RasterDataType, TileInformation},
+        util::test::TestDefault,
+    };
+    use serde_json::{json, Value};
 
     #[test]
     fn serialization() {
@@ -273,7 +258,7 @@ mod tests {
             sources: SingleRasterSource {
                 raster: GdalSource {
                     params: GdalSourceParameters {
-                        dataset: InternalDatasetId::new().into(),
+                        data: DatasetId::new().into(),
                     },
                 }
                 .boxed(),
@@ -290,7 +275,7 @@ mod tests {
                 "raster": {
                     "type": "GdalSource",
                     "params": {
-                        "dataset": {
+                        "data": {
                             "type": "internal",
                             "datasetId": "a626c880-1c41-489b-9e19-9596d129859c"
                         }
@@ -311,6 +296,13 @@ mod tests {
 
     #[tokio::test]
     async fn single_raster() {
+        let tile_size_in_pixels = [3, 2].into();
+        let tiling_specification = TilingSpecification {
+            origin_coordinate: [0.0, 0.0].into(),
+            tile_size_in_pixels,
+        };
+        let execution_context = MockExecutionContext::new_with_tiling_spec(tiling_specification);
+
         let temporal_raster_mean_plot = MeanRasterPixelValuesOverTime {
             params: MeanRasterPixelValuesOverTimeParams {
                 time_position: MeanRasterPixelValuesOverTimePosition::Center,
@@ -319,16 +311,14 @@ mod tests {
             sources: SingleRasterSource {
                 raster: generate_mock_raster_source(
                     vec![TimeInterval::new(
-                        TimeInstance::from(NaiveDate::from_ymd(1990, 1, 1).and_hms(0, 0, 0)),
-                        TimeInstance::from(NaiveDate::from_ymd(2000, 1, 1).and_hms(0, 0, 0)),
+                        TimeInstance::from(DateTime::new_utc(1990, 1, 1, 0, 0, 0)),
+                        TimeInstance::from(DateTime::new_utc(2000, 1, 1, 0, 0, 0)),
                     )
                     .unwrap()],
                     vec![vec![1, 2, 3, 4, 5, 6]],
                 ),
             },
         };
-
-        let execution_context = MockExecutionContext::default();
 
         let temporal_raster_mean_plot = temporal_raster_mean_plot
             .boxed()
@@ -350,17 +340,44 @@ mod tests {
                     time_interval: TimeInterval::default(),
                     spatial_resolution: SpatialResolution::one(),
                 },
-                &MockQueryContext::new(0),
+                &MockQueryContext::new(ChunkByteSize::MIN),
             )
             .await
             .unwrap();
 
+        assert!(matches!(result.metadata, PlotMetaData::None));
+
+        let vega_json: Value = serde_json::from_str(&result.vega_string).unwrap();
+
         assert_eq!(
-            result,
-            PlotData {
-                vega_string: r#"{"$schema":"https://vega.github.io/schema/vega-lite/v4.17.0.json","data":{"values":[{"x":"1995-01-01T00:00:00+00:00","y":3.5}]},"description":"Area Plot","encoding":{"x":{"field":"x","title":"Time","type":"temporal"},"y":{"field":"y","title":"","type":"quantitative"}},"mark":{"type":"area","line":true,"point":true}}"#.to_owned(),
-                metadata: PlotMetaData::None,
-            }
+            vega_json,
+            json!({
+                "$schema": "https://vega.github.io/schema/vega-lite/v4.17.0.json",
+                "data": {
+                    "values": [{
+                        "x": "1995-01-01T00:00:00+00:00",
+                        "y": 3.5
+                    }]
+                },
+                "description": "Area Plot",
+                "encoding": {
+                    "x": {
+                        "field": "x",
+                        "title": "Time",
+                        "type": "temporal"
+                    },
+                    "y": {
+                        "field": "y",
+                        "title": "",
+                        "type": "quantitative"
+                    }
+                },
+                "mark": {
+                    "type": "area",
+                    "line": true,
+                    "point": true
+                }
+            })
         );
     }
 
@@ -371,20 +388,16 @@ mod tests {
         assert_eq!(time_intervals.len(), values_vec.len());
         assert!(values_vec.iter().all(|v| v.len() == 6));
 
-        let no_data_value = None;
-
         let mut tiles = Vec::with_capacity(time_intervals.len());
         for (time_interval, values) in time_intervals.into_iter().zip(values_vec) {
             tiles.push(RasterTile2D::new_with_tile_info(
                 time_interval,
                 TileInformation {
-                    global_geo_transform: Default::default(),
+                    global_geo_transform: TestDefault::test_default(),
                     global_tile_position: [0, 0].into(),
                     tile_size_in_pixels: [3, 2].into(),
                 },
-                Grid2D::new([3, 2].into(), values, no_data_value)
-                    .unwrap()
-                    .into(),
+                Grid2D::new([3, 2].into(), values).unwrap().into(),
             ));
         }
 
@@ -395,7 +408,9 @@ mod tests {
                     data_type: RasterDataType::U8,
                     spatial_reference: SpatialReference::epsg_4326().into(),
                     measurement: Measurement::Unitless,
-                    no_data_value: no_data_value.map(AsPrimitive::as_),
+                    time: None,
+                    bbox: None,
+                    resolution: None,
                 },
             },
         }
@@ -404,6 +419,13 @@ mod tests {
 
     #[tokio::test]
     async fn raster_series() {
+        let tile_size_in_pixels = [3, 2].into();
+        let tiling_specification = TilingSpecification {
+            origin_coordinate: [0.0, 0.0].into(),
+            tile_size_in_pixels,
+        };
+        let execution_context = MockExecutionContext::new_with_tiling_spec(tiling_specification);
+
         let temporal_raster_mean_plot = MeanRasterPixelValuesOverTime {
             params: MeanRasterPixelValuesOverTimeParams {
                 time_position: MeanRasterPixelValuesOverTimePosition::Start,
@@ -414,18 +436,18 @@ mod tests {
                 raster: generate_mock_raster_source(
                     vec![
                         TimeInterval::new(
-                            TimeInstance::from(NaiveDate::from_ymd(1990, 1, 1).and_hms(0, 0, 0)),
-                            TimeInstance::from(NaiveDate::from_ymd(1995, 1, 1).and_hms(0, 0, 0)),
+                            TimeInstance::from(DateTime::new_utc(1990, 1, 1, 0, 0, 0)),
+                            TimeInstance::from(DateTime::new_utc(1995, 1, 1, 0, 0, 0)),
                         )
                         .unwrap(),
                         TimeInterval::new(
-                            TimeInstance::from(NaiveDate::from_ymd(1995, 1, 1).and_hms(0, 0, 0)),
-                            TimeInstance::from(NaiveDate::from_ymd(2000, 1, 1).and_hms(0, 0, 0)),
+                            TimeInstance::from(DateTime::new_utc(1995, 1, 1, 0, 0, 0)),
+                            TimeInstance::from(DateTime::new_utc(2000, 1, 1, 0, 0, 0)),
                         )
                         .unwrap(),
                         TimeInterval::new(
-                            TimeInstance::from(NaiveDate::from_ymd(2000, 1, 1).and_hms(0, 0, 0)),
-                            TimeInstance::from(NaiveDate::from_ymd(2005, 1, 1).and_hms(0, 0, 0)),
+                            TimeInstance::from(DateTime::new_utc(2000, 1, 1, 0, 0, 0)),
+                            TimeInstance::from(DateTime::new_utc(2005, 1, 1, 0, 0, 0)),
                         )
                         .unwrap(),
                     ],
@@ -438,8 +460,6 @@ mod tests {
             },
         };
 
-        let execution_context = MockExecutionContext::default();
-
         let temporal_raster_mean_plot = temporal_raster_mean_plot
             .boxed()
             .initialize(&execution_context)
@@ -460,7 +480,7 @@ mod tests {
                     time_interval: TimeInterval::default(),
                     spatial_resolution: SpatialResolution::one(),
                 },
-                &MockQueryContext::new(0),
+                &MockQueryContext::new(ChunkByteSize::MIN),
             )
             .await
             .unwrap();
@@ -469,9 +489,9 @@ mod tests {
             result,
             AreaLineChart::new(
                 vec![
-                    TimeInstance::from(NaiveDate::from_ymd(1990, 1, 1).and_hms(0, 0, 0)),
-                    TimeInstance::from(NaiveDate::from_ymd(1995, 1, 1).and_hms(0, 0, 0)),
-                    TimeInstance::from(NaiveDate::from_ymd(2000, 1, 1).and_hms(0, 0, 0))
+                    TimeInstance::from(DateTime::new_utc(1990, 1, 1, 0, 0, 0)),
+                    TimeInstance::from(DateTime::new_utc(1995, 1, 1, 0, 0, 0)),
+                    TimeInstance::from(DateTime::new_utc(2000, 1, 1, 0, 0, 0))
                 ],
                 vec![3.5, 8.5, 5.5],
                 Measurement::Unitless,

@@ -1,7 +1,7 @@
 use crate::{
     error,
     operations::reproject::{CoordinateProjection, CoordinateProjector, Reproject},
-    primitives::BoundingBox2D,
+    primitives::AxisAlignedRectangle,
     util::Result,
 };
 use gdal::spatial_ref::SpatialRef;
@@ -85,7 +85,7 @@ impl SpatialReference {
     }
 
     /// Return the area of use in EPSG:4326 projection
-    pub fn area_of_use(self) -> Result<BoundingBox2D> {
+    pub fn area_of_use<A: AxisAlignedRectangle>(self) -> Result<A> {
         let proj_string = match self.proj_string() {
             Ok(s) => s,
             Err(e) => return Err(e),
@@ -99,19 +99,25 @@ impl SpatialReference {
             .context(error::ProjInternal)?
             .0
             .ok_or(error::Error::NoAreaOfUseDefined { proj_string })?;
-        BoundingBox2D::new(
+        A::from_min_max(
             (area.west, area.south).into(),
             (area.east, area.north).into(),
         )
     }
 
     /// Return the area of use in current projection
-    pub fn area_of_use_projected(self) -> Result<BoundingBox2D> {
+    pub fn area_of_use_projected<A: AxisAlignedRectangle>(self) -> Result<A> {
         if self == Self::epsg_4326() {
             return self.area_of_use();
         }
         let p = CoordinateProjector::from_known_srs(Self::epsg_4326(), self)?;
-        self.area_of_use()?.reproject(&p)
+        self.area_of_use::<A>()?.reproject(&p)
+    }
+
+    /// Return the srs-string "authority:code"
+    #[allow(clippy::trivially_copy_pass_by_ref)]
+    pub fn srs_string(&self) -> String {
+        format!("{}:{}", self.authority, self.code)
     }
 }
 

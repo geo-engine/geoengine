@@ -2,7 +2,7 @@ use crate::util::arrow::ArrowTyped;
 use arrow::array::{ArrayBuilder, BooleanArray, Float64Builder};
 use arrow::datatypes::{DataType, Field};
 use arrow::error::ArrowError;
-use ocl::OclPrm;
+use float_cmp::ApproxEq;
 #[cfg(feature = "postgres")]
 use postgres_types::{FromSql, ToSql};
 use proj::Coord;
@@ -20,9 +20,6 @@ pub struct Coordinate2D {
     pub x: f64,
     pub y: f64,
 }
-
-// Make coordinates transferable to OpenCl devices
-unsafe impl OclPrm for Coordinate2D {}
 
 impl Coordinate2D {
     /// Creates a new coordinate
@@ -42,6 +39,7 @@ impl Coordinate2D {
         Self { x, y }
     }
 
+    #[must_use]
     pub fn min_elements(&self, other: Self) -> Self {
         Coordinate2D {
             x: self.x.min(other.x),
@@ -49,11 +47,19 @@ impl Coordinate2D {
         }
     }
 
+    #[must_use]
     pub fn max_elements(&self, other: Self) -> Self {
         Coordinate2D {
             x: self.x.max(other.x),
             y: self.y.max(other.y),
         }
+    }
+
+    pub fn euclidean_distance(&self, other: &Self) -> f64 {
+        let x_diff = self.x - other.x;
+        let y_diff = self.y - other.y;
+        let sq_sum = x_diff * x_diff + y_diff * y_diff;
+        sq_sum.sqrt()
     }
 }
 
@@ -161,6 +167,15 @@ impl From<geo::Coordinate<f64>> for Coordinate2D {
     }
 }
 
+impl From<geo::Point<f64>> for Coordinate2D {
+    fn from(point: geo::Point<f64>) -> Coordinate2D {
+        Coordinate2D {
+            x: point.0.x,
+            y: point.0.y,
+        }
+    }
+}
+
 impl Coord<f64> for Coordinate2D {
     fn x(&self) -> f64 {
         self.x
@@ -190,7 +205,10 @@ impl ArrowTyped for Coordinate2D {
     }
 
     fn arrow_builder(capacity: usize) -> Self::ArrowBuilder {
-        arrow::array::FixedSizeListBuilder::new(arrow::array::Float64Builder::new(capacity * 2), 2)
+        arrow::array::FixedSizeListBuilder::new(
+            arrow::array::Float64Builder::with_capacity(capacity * 2),
+            2,
+        )
     }
 
     fn concat(
@@ -286,6 +304,18 @@ impl Div<f64> for Coordinate2D {
     }
 }
 
+impl ApproxEq for Coordinate2D {
+    type Margin = float_cmp::F64Margin;
+
+    fn approx_eq<M>(self, other: Self, margin: M) -> bool
+    where
+        M: Into<Self::Margin>,
+    {
+        let m = margin.into();
+        self.x.approx_eq(other.x, m) && self.y.approx_eq(other.y, m)
+    }
+}
+
 #[cfg(test)]
 mod test {
     use super::*;
@@ -343,5 +373,22 @@ mod test {
     fn div_scalar() {
         let res = Coordinate2D { x: 4., y: 8. } / 2.;
         assert_eq!(res, Coordinate2D { x: 2., y: 4. });
+    }
+
+    #[test]
+    #[allow(clippy::float_cmp)]
+    fn test_euclidean_distance() {
+        assert_eq!(
+            Coordinate2D::new(0., 0.).euclidean_distance(&(0., 1.).into()),
+            1.0
+        );
+        assert_eq!(
+            Coordinate2D::new(0., 0.).euclidean_distance(&(1., 0.).into()),
+            1.0
+        );
+        assert_eq!(
+            Coordinate2D::new(0., 0.).euclidean_distance(&(1., 1.).into()),
+            2.0_f64.sqrt()
+        );
     }
 }

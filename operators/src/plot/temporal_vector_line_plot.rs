@@ -1,14 +1,14 @@
-use crate::engine::QueryProcessor;
 use crate::engine::{
     ExecutionContext, InitializedPlotOperator, InitializedVectorOperator, Operator, PlotOperator,
     PlotQueryProcessor, PlotResultDescriptor, QueryContext, SingleVectorSource,
-    TypedPlotQueryProcessor, VectorQueryProcessor, VectorQueryRectangle,
+    TypedPlotQueryProcessor, VectorQueryProcessor,
 };
+use crate::engine::{QueryProcessor, VectorColumnInfo};
 use crate::error;
 use crate::util::Result;
 use async_trait::async_trait;
 use futures::StreamExt;
-use geoengine_datatypes::primitives::FeatureDataType;
+use geoengine_datatypes::primitives::{FeatureDataType, VectorQueryRectangle};
 use geoengine_datatypes::{
     collections::FeatureCollection,
     plots::{Plot, PlotData},
@@ -37,7 +37,7 @@ pub type FeatureAttributeValuesOverTime =
     Operator<FeatureAttributeValuesOverTimeParams, SingleVectorSource>;
 
 /// The parameter spec for `FeatureAttributeValuesOverTime`
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct FeatureAttributeValuesOverTimeParams {
     pub id_column: String,
@@ -53,7 +53,7 @@ impl PlotOperator for FeatureAttributeValuesOverTime {
     ) -> Result<Box<dyn InitializedPlotOperator>> {
         let source = self.sources.vector.initialize(context).await?;
         let result_descriptor = source.result_descriptor();
-        let columns: &HashMap<String, FeatureDataType> = &result_descriptor.columns;
+        let columns: &HashMap<String, VectorColumnInfo> = &result_descriptor.columns;
 
         ensure!(
             columns.contains_key(&self.params.id_column),
@@ -69,24 +69,32 @@ impl PlotOperator for FeatureAttributeValuesOverTime {
             }
         );
 
-        let id_type = columns.get(&self.params.id_column).expect("checked");
-        let value_type = columns.get(&self.params.value_column).expect("checked");
+        let id_type = columns
+            .get(&self.params.id_column)
+            .expect("checked")
+            .data_type;
+        let value_type = columns
+            .get(&self.params.value_column)
+            .expect("checked")
+            .data_type;
 
         // TODO: ensure column is really an id
         ensure!(
-            id_type == &FeatureDataType::Text
-                || id_type == &FeatureDataType::Int
-                || id_type == &FeatureDataType::Category,
+            id_type == FeatureDataType::Text
+                || id_type == FeatureDataType::Int
+                || id_type == FeatureDataType::Category,
             error::InvalidFeatureDataType,
         );
 
         ensure!(
-            value_type.is_numeric() || value_type == &FeatureDataType::Category,
+            value_type.is_numeric() || value_type == FeatureDataType::Category,
             error::InvalidFeatureDataType,
         );
 
+        let in_desc = source.result_descriptor().clone();
+
         Ok(InitializedFeatureAttributeValuesOverTime {
-            result_descriptor: PlotResultDescriptor {},
+            result_descriptor: in_desc.into(),
             vector_source: source,
             state: self.params,
         }
@@ -252,19 +260,23 @@ impl<const LENGTH: usize> FeatureAttributeValues<LENGTH> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use chrono::NaiveDate;
+    use geoengine_datatypes::util::test::TestDefault;
     use geoengine_datatypes::{
         collections::MultiPointCollection,
         plots::PlotMetaData,
-        primitives::{BoundingBox2D, FeatureData, MultiPoint, SpatialResolution, TimeInterval},
+        primitives::{
+            BoundingBox2D, DateTime, FeatureData, MultiPoint, SpatialResolution, TimeInterval,
+        },
     };
+    use serde_json::{json, Value};
 
     use crate::{
-        engine::{MockExecutionContext, MockQueryContext, VectorOperator},
+        engine::{ChunkByteSize, MockExecutionContext, MockQueryContext, VectorOperator},
         mock::MockFeatureCollectionSource,
     };
 
     #[tokio::test]
+    #[allow(clippy::too_many_lines)]
     async fn plot() {
         let point_source = MockFeatureCollectionSource::single(
             MultiPointCollection::from_data(
@@ -276,16 +288,16 @@ mod tests {
                 .unwrap(),
                 vec![
                     TimeInterval::new_unchecked(
-                        NaiveDate::from_ymd(2014, 1, 1).and_hms(0, 0, 0),
-                        NaiveDate::from_ymd(2014, 2, 1).and_hms(0, 0, 0),
+                        DateTime::new_utc(2014, 1, 1, 0, 0, 0),
+                        DateTime::new_utc(2014, 2, 1, 0, 0, 0),
                     ),
                     TimeInterval::new_unchecked(
-                        NaiveDate::from_ymd(2014, 1, 1).and_hms(0, 0, 0),
-                        NaiveDate::from_ymd(2014, 3, 1).and_hms(0, 0, 0),
+                        DateTime::new_utc(2014, 1, 1, 0, 0, 0),
+                        DateTime::new_utc(2014, 3, 1, 0, 0, 0),
                     ),
                     TimeInterval::new_unchecked(
-                        NaiveDate::from_ymd(2014, 2, 1).and_hms(0, 0, 0),
-                        NaiveDate::from_ymd(2014, 3, 1).and_hms(0, 0, 0),
+                        DateTime::new_utc(2014, 2, 1, 0, 0, 0),
+                        DateTime::new_utc(2014, 3, 1, 0, 0, 0),
                     ),
                 ],
                 [
@@ -303,7 +315,7 @@ mod tests {
         )
         .boxed();
 
-        let exe_ctc = MockExecutionContext::default();
+        let exe_ctc = MockExecutionContext::test_default();
 
         let operator = FeatureAttributeValuesOverTime {
             params: FeatureAttributeValuesOverTimeParams {
@@ -325,21 +337,64 @@ mod tests {
                     time_interval: TimeInterval::default(),
                     spatial_resolution: SpatialResolution::new(0.1, 0.1).unwrap(),
                 },
-                &MockQueryContext::new(0),
+                &MockQueryContext::new(ChunkByteSize::MIN),
             )
             .await
             .unwrap();
 
+        assert!(matches!(result.metadata, PlotMetaData::None));
+
+        let vega_json: Value = serde_json::from_str(&result.vega_string).unwrap();
+
         assert_eq!(
-            result,
-            PlotData {
-                vega_string: r#"{"$schema":"https://vega.github.io/schema/vega-lite/v4.17.0.json","data":{"values":[{"x":"2014-01-01T00:00:00+00:00","y":0.0,"series":"S0"},{"x":"2014-02-01T00:00:00+00:00","y":1.0,"series":"S0"},{"x":"2014-01-01T00:00:00+00:00","y":2.0,"series":"S1"}]},"description":"Multi Line Chart","encoding":{"x":{"field":"x","title":"Time","type":"temporal"},"y":{"field":"y","title":"","type":"quantitative"},"color":{"field":"series","scale":{"scheme":"category20"}}},"mark":{"type":"line","line":true,"point":true}}"#.to_owned(),
-                metadata: PlotMetaData::None,
-            }
+            vega_json,
+            json!({
+                "$schema": "https://vega.github.io/schema/vega-lite/v4.17.0.json",
+                "data": {
+                    "values": [{
+                        "x": "2014-01-01T00:00:00+00:00",
+                        "y": 0.0,
+                        "series": "S0"
+                    }, {
+                        "x": "2014-02-01T00:00:00+00:00",
+                        "y": 1.0,
+                        "series": "S0"
+                    }, {
+                        "x": "2014-01-01T00:00:00+00:00",
+                        "y": 2.0,
+                        "series": "S1"
+                    }]
+                },
+                "description": "Multi Line Chart",
+                "encoding": {
+                    "x": {
+                        "field": "x",
+                        "title": "Time",
+                        "type": "temporal"
+                    },
+                    "y": {
+                        "field": "y",
+                        "title": "",
+                        "type": "quantitative"
+                    },
+                    "color": {
+                        "field": "series",
+                        "scale": {
+                            "scheme": "category20"
+                        }
+                    }
+                },
+                "mark": {
+                    "type": "line",
+                    "line": true,
+                    "point": true
+                }
+            })
         );
     }
 
     #[tokio::test]
+    #[allow(clippy::too_many_lines)]
     async fn plot_with_nulls() {
         let point_source = MockFeatureCollectionSource::single(
             MultiPointCollection::from_data(
@@ -353,24 +408,24 @@ mod tests {
                 .unwrap(),
                 vec![
                     TimeInterval::new_unchecked(
-                        NaiveDate::from_ymd(2014, 1, 1).and_hms(0, 0, 0),
-                        NaiveDate::from_ymd(2014, 2, 1).and_hms(0, 0, 0),
+                        DateTime::new_utc(2014, 1, 1, 0, 0, 0),
+                        DateTime::new_utc(2014, 2, 1, 0, 0, 0),
                     ),
                     TimeInterval::new_unchecked(
-                        NaiveDate::from_ymd(2014, 1, 1).and_hms(0, 0, 0),
-                        NaiveDate::from_ymd(2014, 3, 1).and_hms(0, 0, 0),
+                        DateTime::new_utc(2014, 1, 1, 0, 0, 0),
+                        DateTime::new_utc(2014, 3, 1, 0, 0, 0),
                     ),
                     TimeInterval::new_unchecked(
-                        NaiveDate::from_ymd(2014, 2, 1).and_hms(0, 0, 0),
-                        NaiveDate::from_ymd(2014, 3, 1).and_hms(0, 0, 0),
+                        DateTime::new_utc(2014, 2, 1, 0, 0, 0),
+                        DateTime::new_utc(2014, 3, 1, 0, 0, 0),
                     ),
                     TimeInterval::new_unchecked(
-                        NaiveDate::from_ymd(2014, 1, 1).and_hms(0, 0, 0),
-                        NaiveDate::from_ymd(2014, 3, 1).and_hms(0, 0, 0),
+                        DateTime::new_utc(2014, 1, 1, 0, 0, 0),
+                        DateTime::new_utc(2014, 3, 1, 0, 0, 0),
                     ),
                     TimeInterval::new_unchecked(
-                        NaiveDate::from_ymd(2014, 2, 1).and_hms(0, 0, 0),
-                        NaiveDate::from_ymd(2014, 3, 1).and_hms(0, 0, 0),
+                        DateTime::new_utc(2014, 2, 1, 0, 0, 0),
+                        DateTime::new_utc(2014, 3, 1, 0, 0, 0),
                     ),
                 ],
                 [
@@ -403,7 +458,7 @@ mod tests {
         )
         .boxed();
 
-        let exe_ctc = MockExecutionContext::default();
+        let exe_ctc = MockExecutionContext::test_default();
 
         let operator = FeatureAttributeValuesOverTime {
             params: FeatureAttributeValuesOverTimeParams {
@@ -425,21 +480,64 @@ mod tests {
                     time_interval: TimeInterval::default(),
                     spatial_resolution: SpatialResolution::new(0.1, 0.1).unwrap(),
                 },
-                &MockQueryContext::new(0),
+                &MockQueryContext::new(ChunkByteSize::MIN),
             )
             .await
             .unwrap();
 
+        assert!(matches!(result.metadata, PlotMetaData::None));
+
+        let vega_json: Value = serde_json::from_str(&result.vega_string).unwrap();
+
         assert_eq!(
-            result,
-            PlotData {
-                vega_string: r#"{"$schema":"https://vega.github.io/schema/vega-lite/v4.17.0.json","data":{"values":[{"x":"2014-01-01T00:00:00+00:00","y":0.0,"series":"S0"},{"x":"2014-02-01T00:00:00+00:00","y":1.0,"series":"S0"},{"x":"2014-01-01T00:00:00+00:00","y":2.0,"series":"S1"}]},"description":"Multi Line Chart","encoding":{"x":{"field":"x","title":"Time","type":"temporal"},"y":{"field":"y","title":"","type":"quantitative"},"color":{"field":"series","scale":{"scheme":"category20"}}},"mark":{"type":"line","line":true,"point":true}}"#.to_owned(),
-                metadata: PlotMetaData::None,
-            }
+            vega_json,
+            json!({
+                "$schema": "https://vega.github.io/schema/vega-lite/v4.17.0.json",
+                "data": {
+                    "values": [{
+                        "x": "2014-01-01T00:00:00+00:00",
+                        "y": 0.0,
+                        "series": "S0"
+                    }, {
+                        "x": "2014-02-01T00:00:00+00:00",
+                        "y": 1.0,
+                        "series": "S0"
+                    }, {
+                        "x": "2014-01-01T00:00:00+00:00",
+                        "y": 2.0,
+                        "series": "S1"
+                    }]
+                },
+                "description": "Multi Line Chart",
+                "encoding": {
+                    "x": {
+                        "field": "x",
+                        "title": "Time",
+                        "type": "temporal"
+                    },
+                    "y": {
+                        "field": "y",
+                        "title": "",
+                        "type": "quantitative"
+                    },
+                    "color": {
+                        "field": "series",
+                        "scale": {
+                            "scheme": "category20"
+                        }
+                    }
+                },
+                "mark": {
+                    "type": "line",
+                    "line": true,
+                    "point": true
+                }
+            })
         );
     }
 
     #[tokio::test]
+    #[allow(clippy::too_many_lines)]
     async fn plot_with_duplicates() {
         let point_source = MockFeatureCollectionSource::single(
             MultiPointCollection::from_data(
@@ -452,20 +550,20 @@ mod tests {
                 .unwrap(),
                 vec![
                     TimeInterval::new_unchecked(
-                        NaiveDate::from_ymd(2014, 1, 1).and_hms(0, 0, 0),
-                        NaiveDate::from_ymd(2014, 2, 1).and_hms(0, 0, 0),
+                        DateTime::new_utc(2014, 1, 1, 0, 0, 0),
+                        DateTime::new_utc(2014, 2, 1, 0, 0, 0),
                     ),
                     TimeInterval::new_unchecked(
-                        NaiveDate::from_ymd(2014, 1, 1).and_hms(0, 0, 0),
-                        NaiveDate::from_ymd(2014, 3, 1).and_hms(0, 0, 0),
+                        DateTime::new_utc(2014, 1, 1, 0, 0, 0),
+                        DateTime::new_utc(2014, 3, 1, 0, 0, 0),
                     ),
                     TimeInterval::new_unchecked(
-                        NaiveDate::from_ymd(2014, 2, 1).and_hms(0, 0, 0),
-                        NaiveDate::from_ymd(2014, 3, 1).and_hms(0, 0, 0),
+                        DateTime::new_utc(2014, 2, 1, 0, 0, 0),
+                        DateTime::new_utc(2014, 3, 1, 0, 0, 0),
                     ),
                     TimeInterval::new_unchecked(
-                        NaiveDate::from_ymd(2014, 2, 1).and_hms(0, 0, 0),
-                        NaiveDate::from_ymd(2014, 3, 1).and_hms(0, 0, 0),
+                        DateTime::new_utc(2014, 2, 1, 0, 0, 0),
+                        DateTime::new_utc(2014, 3, 1, 0, 0, 0),
                     ),
                 ],
                 [
@@ -491,7 +589,7 @@ mod tests {
         )
         .boxed();
 
-        let exe_ctc = MockExecutionContext::default();
+        let exe_ctc = MockExecutionContext::test_default();
 
         let operator = FeatureAttributeValuesOverTime {
             params: FeatureAttributeValuesOverTimeParams {
@@ -513,17 +611,63 @@ mod tests {
                     time_interval: TimeInterval::default(),
                     spatial_resolution: SpatialResolution::new(0.1, 0.1).unwrap(),
                 },
-                &MockQueryContext::new(0),
+                &MockQueryContext::new(ChunkByteSize::MIN),
             )
             .await
             .unwrap();
 
+        assert!(matches!(result.metadata, PlotMetaData::None));
+
+        let vega_json: Value = serde_json::from_str(&result.vega_string).unwrap();
+
         assert_eq!(
-            result,
-            PlotData {
-                vega_string: r#"{"$schema":"https://vega.github.io/schema/vega-lite/v4.17.0.json","data":{"values":[{"x":"2014-01-01T00:00:00+00:00","y":0.0,"series":"S0"},{"x":"2014-02-01T00:00:00+00:00","y":1.0,"series":"S0"},{"x":"2014-02-01T00:00:00+00:00","y":1.0,"series":"S0"},{"x":"2014-01-01T00:00:00+00:00","y":2.0,"series":"S1"}]},"description":"Multi Line Chart","encoding":{"x":{"field":"x","title":"Time","type":"temporal"},"y":{"field":"y","title":"","type":"quantitative"},"color":{"field":"series","scale":{"scheme":"category20"}}},"mark":{"type":"line","line":true,"point":true}}"#.to_owned(),
-                metadata: PlotMetaData::None,
-            }
+            vega_json,
+            json!({
+                "$schema": "https://vega.github.io/schema/vega-lite/v4.17.0.json",
+                "data": {
+                    "values": [{
+                        "x": "2014-01-01T00:00:00+00:00",
+                        "y": 0.0,
+                        "series": "S0"
+                    }, {
+                        "x": "2014-02-01T00:00:00+00:00",
+                        "y": 1.0,
+                        "series": "S0"
+                    }, {
+                        "x": "2014-02-01T00:00:00+00:00",
+                        "y": 1.0,
+                        "series": "S0"
+                    }, {
+                        "x": "2014-01-01T00:00:00+00:00",
+                        "y": 2.0,
+                        "series": "S1"
+                    }]
+                },
+                "description": "Multi Line Chart",
+                "encoding": {
+                    "x": {
+                        "field": "x",
+                        "title": "Time",
+                        "type": "temporal"
+                    },
+                    "y": {
+                        "field": "y",
+                        "title": "",
+                        "type": "quantitative"
+                    },
+                    "color": {
+                        "field": "series",
+                        "scale": {
+                            "scheme": "category20"
+                        }
+                    }
+                },
+                "mark": {
+                    "type": "line",
+                    "line": true,
+                    "point": true
+                }
+            })
         );
     }
 }

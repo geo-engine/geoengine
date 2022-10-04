@@ -1,4 +1,4 @@
-use crate::engine::{OperatorDatasets, QueryContext, VectorQueryRectangle};
+use crate::engine::{OperatorData, QueryContext};
 use crate::{
     engine::{
         ExecutionContext, InitializedVectorOperator, SourceOperator, TypedVectorQueryProcessor,
@@ -9,7 +9,8 @@ use crate::{
 use async_trait::async_trait;
 use futures::stream::{self, BoxStream, StreamExt};
 use geoengine_datatypes::collections::VectorDataType;
-use geoengine_datatypes::dataset::DatasetId;
+use geoengine_datatypes::dataset::DataId;
+use geoengine_datatypes::primitives::VectorQueryRectangle;
 use geoengine_datatypes::{
     collections::MultiPointCollection,
     primitives::{Coordinate2D, TimeInterval},
@@ -30,7 +31,7 @@ impl VectorQueryProcessor for MockPointSourceProcessor {
         _query: VectorQueryRectangle,
         ctx: &'a dyn QueryContext,
     ) -> Result<BoxStream<'a, Result<Self::VectorType>>> {
-        let chunk_size = ctx.chunk_byte_size() / std::mem::size_of::<Coordinate2D>();
+        let chunk_size = usize::from(ctx.chunk_byte_size()) / std::mem::size_of::<Coordinate2D>();
         Ok(
             stream::iter(self.points.chunks(chunk_size).map(move |chunk| {
                 Ok(MultiPointCollection::from_data(
@@ -51,8 +52,8 @@ pub struct MockPointSourceParams {
 
 pub type MockPointSource = SourceOperator<MockPointSourceParams>;
 
-impl OperatorDatasets for MockPointSource {
-    fn datasets_collect(&self, _datasets: &mut Vec<DatasetId>) {}
+impl OperatorData for MockPointSource {
+    fn data_ids_collect(&self, _data_ids: &mut Vec<DataId>) {}
 }
 
 #[typetag::serde]
@@ -67,6 +68,8 @@ impl VectorOperator for MockPointSource {
                 data_type: VectorDataType::MultiPoint,
                 spatial_reference: SpatialReference::epsg_4326().into(),
                 columns: Default::default(),
+                time: None,
+                bbox: None,
             },
             points: self.params.points,
         }
@@ -102,6 +105,7 @@ mod tests {
     use futures::executor::block_on_stream;
     use geoengine_datatypes::collections::FeatureCollectionInfos;
     use geoengine_datatypes::primitives::{BoundingBox2D, SpatialResolution};
+    use geoengine_datatypes::util::test::TestDefault;
 
     #[test]
     fn serde() {
@@ -120,7 +124,7 @@ mod tests {
 
     #[tokio::test]
     async fn execute() {
-        let execution_context = MockExecutionContext::default();
+        let execution_context = MockExecutionContext::test_default();
         let points = vec![Coordinate2D::new(1., 2.); 3];
 
         let mps = MockPointSource {
@@ -140,7 +144,7 @@ mod tests {
             time_interval: TimeInterval::default(),
             spatial_resolution: SpatialResolution::zero_point_one(),
         };
-        let ctx = MockQueryContext::new(2 * std::mem::size_of::<Coordinate2D>());
+        let ctx = MockQueryContext::new((2 * std::mem::size_of::<Coordinate2D>()).into());
 
         let stream = point_processor.query(query_rectangle, &ctx).await.unwrap();
 

@@ -39,15 +39,11 @@ mod tests {
     fn time_intervals() {
         let mut builder = DataCollection::builder().finish_header();
 
-        builder.push_time_interval(TimeInterval::default()).unwrap();
+        builder.push_time_interval(TimeInterval::default());
         builder.finish_row();
-        builder
-            .push_time_interval(TimeInterval::new(0, 1).unwrap())
-            .unwrap();
+        builder.push_time_interval(TimeInterval::new(0, 1).unwrap());
         builder.finish_row();
-        builder
-            .push_time_interval(TimeInterval::new(2, 3).unwrap())
-            .unwrap();
+        builder.push_time_interval(TimeInterval::new(2, 3).unwrap());
         builder.finish_row();
 
         let collection = builder.build().unwrap();
@@ -95,14 +91,12 @@ mod tests {
             .unwrap();
         let mut builder = builder.finish_header();
 
-        builder.push_time_interval(TimeInterval::default()).unwrap();
+        builder.push_time_interval(TimeInterval::default());
         builder
             .push_data("a", FeatureDataValue::NullableInt(Some(42)))
             .unwrap();
         builder.finish_row();
-        builder
-            .push_time_interval(TimeInterval::new(0, 1).unwrap())
-            .unwrap();
+        builder.push_time_interval(TimeInterval::new(0, 1).unwrap());
         builder
             .push_data("a", FeatureDataValue::Float(13.37))
             .unwrap_err();
@@ -110,9 +104,7 @@ mod tests {
             .push_data("a", FeatureDataValue::NullableInt(None))
             .unwrap();
         builder.finish_row();
-        builder
-            .push_time_interval(TimeInterval::new(2, 3).unwrap())
-            .unwrap();
+        builder.push_time_interval(TimeInterval::new(2, 3).unwrap());
         builder
             .push_data("a", FeatureDataValue::NullableInt(Some(1337)))
             .unwrap();
@@ -198,6 +190,57 @@ mod tests {
     }
 
     #[test]
+    fn distinguish_null_and_empty_strings() {
+        let pc = DataCollection::from_data(
+            vec![],
+            vec![TimeInterval::default(); 2],
+            [(
+                "foo".to_string(),
+                FeatureData::NullableText(vec![None, Some(String::new())]),
+            )]
+            .into_iter()
+            .collect(),
+        )
+        .unwrap();
+        let column = pc.data("foo").unwrap();
+
+        assert_eq!(column.nulls(), vec![true, false]);
+        assert_eq!(
+            column.get_unchecked(0),
+            FeatureDataValue::NullableText(None)
+        );
+        assert_eq!(
+            column.get_unchecked(1),
+            FeatureDataValue::NullableText(Some(String::new()))
+        );
+    }
+
+    #[test]
+    fn check_has_nulls() {
+        let pc = DataCollection::from_data(
+            vec![],
+            vec![TimeInterval::default(); 1],
+            [
+                ("int1".to_string(), FeatureData::NullableInt(vec![Some(42)])),
+                ("int2".to_string(), FeatureData::NullableInt(vec![None])),
+                (
+                    "text1".to_string(),
+                    FeatureData::NullableText(vec![Some("a".to_string())]),
+                ),
+                ("text2".to_string(), FeatureData::NullableText(vec![None])),
+            ]
+            .into_iter()
+            .collect(),
+        )
+        .unwrap();
+
+        assert!(!pc.data("int1").unwrap().has_nulls());
+        assert!(pc.data("int2").unwrap().has_nulls());
+        assert!(!pc.data("text1").unwrap().has_nulls());
+        assert!(pc.data("text2").unwrap().has_nulls());
+    }
+
+    #[test]
     fn iterator() {
         let collection = DataCollection::from_data(
             vec![],
@@ -214,14 +257,14 @@ mod tests {
             .collect(),
         )
         .unwrap();
-        let mut iter = (&collection).into_iter();
+        let mut iter = collection.into_iter();
 
         let row = iter.next().unwrap();
         assert_eq!(NoGeometry, row.geometry);
         assert_eq!(TimeInterval::default(), row.time_interval);
         assert_eq!(Some(FeatureDataValue::Int(1)), row.get("foo"));
         assert_eq!(
-            Some(FeatureDataValue::NullableText(Some("a".to_string()))),
+            Some(FeatureDataValue::Text("a".to_string())),
             row.get("bar")
         );
 
@@ -230,7 +273,7 @@ mod tests {
         assert_eq!(TimeInterval::default(), row.time_interval);
         assert_eq!(Some(FeatureDataValue::Int(2)), row.get("foo"));
         assert_eq!(
-            Some(FeatureDataValue::NullableText(Some("b".to_string()))),
+            Some(FeatureDataValue::Text("b".to_string())),
             row.get("bar")
         );
 
@@ -239,7 +282,7 @@ mod tests {
         assert_eq!(TimeInterval::default(), row.time_interval);
         assert_eq!(Some(FeatureDataValue::Int(3)), row.get("foo"));
         assert_eq!(
-            Some(FeatureDataValue::NullableText(Some("c".to_string()))),
+            Some(FeatureDataValue::Text("c".to_string())),
             row.get("bar")
         );
 

@@ -1,12 +1,12 @@
-use geoengine_datatypes::dataset::DatasetId;
+use geoengine_datatypes::dataset::DataId;
 use serde::{Deserialize, Serialize};
 use snafu::ensure;
 
 use geoengine_datatypes::collections::VectorDataType;
 
 use crate::engine::{
-    ExecutionContext, InitializedVectorOperator, Operator, OperatorDatasets,
-    TypedVectorQueryProcessor, VectorOperator, VectorQueryProcessor, VectorResultDescriptor,
+    ExecutionContext, InitializedVectorOperator, Operator, OperatorData, TypedVectorQueryProcessor,
+    VectorOperator, VectorQueryProcessor, VectorResultDescriptor,
 };
 use crate::error;
 use crate::util::Result;
@@ -23,7 +23,7 @@ mod util;
 pub type VectorJoin = Operator<VectorJoinParams, VectorJoinSources>;
 
 /// A set of parameters for the `VectorJoin`
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
 pub struct VectorJoinParams {
     #[serde(flatten)]
@@ -37,15 +37,15 @@ pub struct VectorJoinSources {
     right: Box<dyn VectorOperator>,
 }
 
-impl OperatorDatasets for VectorJoinSources {
-    fn datasets_collect(&self, datasets: &mut Vec<DatasetId>) {
-        self.left.datasets_collect(datasets);
-        self.right.datasets_collect(datasets);
+impl OperatorData for VectorJoinSources {
+    fn data_ids_collect(&self, data_ids: &mut Vec<DataId>) {
+        self.left.data_ids_collect(data_ids);
+        self.right.data_ids_collect(data_ids);
     }
 }
 
 /// Define the type of join
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(tag = "type")]
 pub enum VectorJoinType {
     /// An inner equi-join between a `GeoFeatureCollection` and a `DataCollection`
@@ -108,7 +108,7 @@ impl VectorOperator for VectorJoin {
             for (right_column_name, right_column_type) in &right.result_descriptor().columns {
                 columns.insert(
                     column_translation_table[right_column_name].clone(),
-                    *right_column_type,
+                    right_column_type.clone(),
                 );
             }
             columns
@@ -129,7 +129,7 @@ impl VectorOperator for VectorJoin {
 }
 
 /// A set of parameters for the `VectorJoin`
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct InitializedVectorJoinParams {
     join_type: VectorJoinType,
     column_translation_table: HashMap<String, String>,
@@ -213,6 +213,7 @@ mod tests {
     use crate::mock::MockFeatureCollectionSource;
     use geoengine_datatypes::collections::{DataCollection, MultiPointCollection};
     use geoengine_datatypes::primitives::{FeatureData, NoGeometry, TimeInterval};
+    use geoengine_datatypes::util::test::TestDefault;
 
     #[test]
     fn params() {
@@ -229,12 +230,11 @@ mod tests {
             "left_column": "foo",
             "right_column": "bar",
             "right_column_suffix": "baz",
-        })
-        .to_string();
+        });
 
-        assert_eq!(json, serde_json::to_string(&params).unwrap());
+        assert_eq!(json, serde_json::to_value(&params).unwrap());
 
-        let params_deserialized: VectorJoinParams = serde_json::from_str(&json).unwrap();
+        let params_deserialized: VectorJoinParams = serde_json::from_value(json).unwrap();
 
         assert_eq!(params, params_deserialized);
     }
@@ -273,7 +273,7 @@ mod tests {
 
         operator
             .boxed()
-            .initialize(&MockExecutionContext::default())
+            .initialize(&MockExecutionContext::test_default())
             .await
             .unwrap();
     }

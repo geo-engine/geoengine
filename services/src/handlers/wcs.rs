@@ -1,70 +1,70 @@
 use std::str::FromStr;
 
-use geoengine_operators::util::raster_stream_to_geotiff::raster_stream_to_geotiff_bytes;
+use actix_web::{web, FromRequest, HttpResponse, Responder};
+use geoengine_operators::call_on_generic_raster_processor_gdal_types;
+use geoengine_operators::util::raster_stream_to_geotiff::{
+    raster_stream_to_geotiff_bytes, GdalGeoTiffDatasetMetadata, GdalGeoTiffOptions,
+};
 use log::info;
 use snafu::{ensure, ResultExt};
-use uuid::Uuid;
-use warp::Rejection;
-use warp::{http::Response, Filter};
+use url::Url;
 
-use geoengine_datatypes::primitives::AxisAlignedRectangle;
+use geoengine_datatypes::primitives::{
+    AxisAlignedRectangle, RasterQueryRectangle, SpatialPartition2D,
+};
 use geoengine_datatypes::{primitives::SpatialResolution, spatial_reference::SpatialReference};
 
-use crate::contexts::MockableSession;
 use crate::error::Result;
 use crate::error::{self, Error};
+use crate::handlers::spatial_references::{spatial_reference_specification, AxisOrder};
 use crate::handlers::Context;
+use crate::ogc::util::{ogc_endpoint_url, OgcProtocol};
 use crate::ogc::wcs::request::{DescribeCoverage, GetCapabilities, GetCoverage, WcsRequest};
+use crate::util::config;
 use crate::util::config::get_config_element;
+use crate::util::user_input::QueryEx;
 use crate::workflows::registry::WorkflowRegistry;
 use crate::workflows::workflow::WorkflowId;
 
 use geoengine_datatypes::primitives::{TimeInstance, TimeInterval};
+use geoengine_operators::engine::RasterOperator;
 use geoengine_operators::engine::ResultDescriptor;
-use geoengine_operators::engine::{RasterOperator, RasterQueryRectangle};
 use geoengine_operators::processing::{Reprojection, ReprojectionParams};
 
-pub(crate) fn wcs_handler<C: Context>(
-    ctx: C,
-) -> impl Filter<Extract = impl warp::Reply, Error = warp::Rejection> + Clone {
-    warp::path!("wcs" / Uuid)
-        .map(WorkflowId)
-        .and(warp::get())
-        .and(
-            warp::query::raw().and_then(|query_string: String| async move {
-                // TODO: make case insensitive by using serde-aux instead
-                let query_string = query_string.replace("REQUEST", "request");
-                info!("{}", query_string);
-
-                serde_urlencoded::from_str::<WcsRequest>(&query_string)
-                    .context(error::UnableToParseQueryString)
-                    .map_err(Rejection::from)
-            }),
-        )
-        .and(warp::any().map(move || ctx.clone()))
-        .and_then(wcs)
+pub(crate) fn init_wcs_routes<C>(cfg: &mut web::ServiceConfig)
+where
+    C: Context,
+    C::Session: FromRequest,
+{
+    cfg.service(web::resource("/wcs/{workflow}").route(web::get().to(wcs_handler::<C>)));
 }
 
-// TODO: move into handler once async closures are available?
-async fn wcs<C: Context>(
-    workflow: WorkflowId,
-    request: WcsRequest,
-    ctx: C,
-) -> Result<Box<dyn warp::Reply>, warp::Rejection> {
-    // TODO: authentication
-    match request {
-        WcsRequest::GetCapabilities(request) => get_capabilities(&request, &ctx, workflow).await,
-        WcsRequest::DescribeCoverage(request) => describe_coverage(&request, &ctx, workflow).await,
-        WcsRequest::GetCoverage(request) => get_coverage(&request, &ctx).await,
+async fn wcs_handler<C: Context>(
+    workflow: web::Path<WorkflowId>,
+    request: QueryEx<WcsRequest>,
+    ctx: web::Data<C>,
+    session: C::Session,
+) -> Result<impl Responder> {
+    match request.into_inner() {
+        WcsRequest::GetCapabilities(request) => {
+            get_capabilities(&request, ctx.get_ref(), workflow.into_inner()).await
+        }
+        WcsRequest::DescribeCoverage(request) => {
+            describe_coverage(&request, ctx.get_ref(), session, workflow.into_inner()).await
+        }
+        WcsRequest::GetCoverage(request) => {
+            get_coverage(&request, ctx.get_ref(), session, workflow.into_inner()).await
+        }
     }
 }
 
-fn wcs_url(workflow: WorkflowId) -> Result<String> {
-    let base = crate::util::config::get_config_element::<crate::util::config::Web>()?
+fn wcs_url(workflow: WorkflowId) -> Result<Url> {
+    let web_config = crate::util::config::get_config_element::<crate::util::config::Web>()?;
+    let base = web_config
         .external_address
-        .ok_or(Error::ExternalAddressNotConfigured)?;
+        .unwrap_or(Url::parse(&format!("http://{}/", web_config.bind_address))?);
 
-    Ok(format!("{}/wcs/{}", base, workflow.to_string()))
+    ogc_endpoint_url(&base, OgcProtocol::Wcs, workflow)
 }
 
 #[allow(clippy::unused_async)]
@@ -72,7 +72,7 @@ async fn get_capabilities<C: Context>(
     request: &GetCapabilities,
     _ctx: &C,
     workflow: WorkflowId,
-) -> Result<Box<dyn warp::Reply>, warp::Rejection> {
+) -> Result<HttpResponse> {
     info!("{:?}", request);
 
     // TODO: workflow bounding box
@@ -137,28 +137,34 @@ async fn get_capabilities<C: Context>(
         workflow = workflow
     );
 
-    Ok(Box::new(
-        Response::builder()
-            .header("Content-Type", "application/xml")
-            .body(mock)
-            .context(error::Http)?,
-    ))
+    Ok(HttpResponse::Ok().content_type(mime::TEXT_XML).body(mock))
 }
 
 async fn describe_coverage<C: Context>(
     request: &DescribeCoverage,
     ctx: &C,
-    workflow_id: WorkflowId,
-) -> Result<Box<dyn warp::Reply>, warp::Rejection> {
+    session: C::Session,
+    endpoint: WorkflowId,
+) -> Result<HttpResponse> {
     info!("{:?}", request);
+
+    let identifiers = WorkflowId::from_str(&request.identifiers)?;
+
+    ensure!(
+        endpoint == identifiers,
+        error::WCSEndpointIdentifiersMissmatch {
+            endpoint,
+            identifiers
+        }
+    );
 
     // TODO: validate request (version)?
 
-    let wcs_url = wcs_url(workflow_id)?;
+    let wcs_url = wcs_url(identifiers)?;
 
-    let workflow = ctx.workflow_registry_ref().await.load(&workflow_id).await?;
+    let workflow = ctx.workflow_registry_ref().load(&identifiers).await?;
 
-    let exe_ctx = ctx.execution_context(C::Session::mock())?; // TODO: use real session
+    let exe_ctx = ctx.execution_context(session)?;
     let operator = workflow
         .operator
         .get_raster()
@@ -173,26 +179,28 @@ async fn describe_coverage<C: Context>(
     let spatial_reference = spatial_reference.ok_or(error::Error::MissingSpatialReference)?;
 
     // TODO: give tighter bounds if possible
-    let area_of_use = spatial_reference
+    let area_of_use: SpatialPartition2D = spatial_reference
         .area_of_use_projected()
         .context(error::DataType)?;
 
-    // TODO: handle axis ordering properly
     let (bbox_ll_0, bbox_ll_1, bbox_ur_0, bbox_ur_1) =
-        if spatial_reference == SpatialReference::epsg_4326() {
-            (
-                area_of_use.lower_left().y,
-                area_of_use.lower_left().x,
-                area_of_use.upper_right().y,
-                area_of_use.upper_right().x,
-            )
-        } else {
-            (
+        match spatial_reference_specification(&spatial_reference.proj_string()?)?
+            .axis_order
+            .ok_or(Error::AxisOrderingNotKnownForSrs {
+                srs_string: spatial_reference.srs_string(),
+            })? {
+            AxisOrder::EastNorth => (
                 area_of_use.lower_left().x,
                 area_of_use.lower_left().y,
                 area_of_use.upper_right().x,
                 area_of_use.upper_right().y,
-            )
+            ),
+            AxisOrder::NorthEast => (
+                area_of_use.lower_left().y,
+                area_of_use.lower_left().x,
+                area_of_use.upper_right().y,
+                area_of_use.upper_right().x,
+            ),
         };
 
     let mock = format!(
@@ -226,7 +234,7 @@ async fn describe_coverage<C: Context>(
         </wcs:CoverageDescription>
     </wcs:CoverageDescriptions>"#,
         wcs_url = wcs_url,
-        workflow_id = workflow_id,
+        workflow_id = identifiers,
         srs_authority = spatial_reference.authority(),
         srs_code = spatial_reference.code(),
         origin_x = area_of_use.upper_left().x,
@@ -237,20 +245,28 @@ async fn describe_coverage<C: Context>(
         bbox_ur_1 = bbox_ur_1,
     );
 
-    Ok(Box::new(
-        Response::builder()
-            .header("Content-Type", "application/xml")
-            .body(mock)
-            .context(error::Http)?,
-    ))
+    Ok(HttpResponse::Ok().content_type(mime::TEXT_XML).body(mock))
 }
 
 #[allow(clippy::too_many_lines)]
 async fn get_coverage<C: Context>(
     request: &GetCoverage,
     ctx: &C,
-) -> Result<Box<dyn warp::Reply>, warp::Rejection> {
+    session: C::Session,
+    endpoint: WorkflowId,
+) -> Result<HttpResponse> {
     info!("{:?}", request);
+
+    let identifier = WorkflowId::from_str(&request.identifier)?;
+
+    ensure!(
+        endpoint == identifier,
+        error::WCSEndpointIdentifierMissmatch {
+            endpoint,
+            identifier
+        }
+    );
+
     ensure!(
         request.version == "1.1.1" || request.version == "1.1.0",
         error::WcsVersionNotSupported
@@ -260,7 +276,7 @@ async fn get_coverage<C: Context>(
 
     if let Some(gridorigin) = request.gridorigin {
         ensure!(
-            gridorigin.coordinate(request.gridbasecrs) == request_partition.upper_left(),
+            gridorigin.coordinate(request.gridbasecrs)? == request_partition.upper_left(),
             error::WcsGridOriginMustEqualBoundingboxUpperLeft
         );
     }
@@ -272,16 +288,11 @@ async fn get_coverage<C: Context>(
         );
     }
 
-    let workflow = ctx
-        .workflow_registry_ref()
-        .await
-        .load(&WorkflowId::from_str(&request.identifier)?)
-        .await?;
+    let workflow = ctx.workflow_registry_ref().load(&identifier).await?;
 
     let operator = workflow.operator.get_raster().context(error::Operator)?;
 
-    // TODO: use correct session when WCS uses authenticated access
-    let execution_context = ctx.execution_context(C::Session::mock())?;
+    let execution_context = ctx.execution_context(session)?;
 
     let initialized = operator
         .clone()
@@ -295,6 +306,7 @@ async fn get_coverage<C: Context>(
     let workflow_spatial_ref = workflow_spatial_ref.ok_or(error::Error::InvalidSpatialReference)?;
 
     let request_spatial_ref: SpatialReference = request.gridbasecrs;
+    let request_no_data_value = request.nodatavalue;
 
     // perform reprojection if necessary
     let initialized = if request_spatial_ref == workflow_spatial_ref {
@@ -314,8 +326,6 @@ async fn get_coverage<C: Context>(
             .context(error::Operator)?
     };
 
-    let no_data_value: Option<f64> = initialized.result_descriptor().no_data_value;
-
     let processor = initialized.query_processor().context(error::Operator)?;
 
     let spatial_resolution: SpatialResolution =
@@ -329,116 +339,72 @@ async fn get_coverage<C: Context>(
             }
         };
 
-    let query_rect: RasterQueryRectangle = RasterQueryRectangle {
+    let query_rect = RasterQueryRectangle {
         spatial_bounds: request_partition,
-        time_interval: request.time.unwrap_or_else(|| {
-            let time = TimeInstance::from(chrono::offset::Utc::now());
-            TimeInterval::new_unchecked(time, time)
-        }),
+        time_interval: request.time.unwrap_or_else(default_time_from_config),
         spatial_resolution,
     };
 
     let query_ctx = ctx.query_context()?;
 
-    let bytes = match processor {
-        geoengine_operators::engine::TypedRasterQueryProcessor::U8(p) => {
-            raster_stream_to_geotiff_bytes(
-                p,
-                query_rect,
-                query_ctx,
-                no_data_value,
-                request_spatial_ref,
-                Some(get_config_element::<crate::util::config::Wcs>()?.tile_limit),
-            )
-            .await
-        }
-        geoengine_operators::engine::TypedRasterQueryProcessor::U16(p) => {
-            raster_stream_to_geotiff_bytes(
-                p,
-                query_rect,
-                query_ctx,
-                no_data_value,
-                request_spatial_ref,
-                Some(get_config_element::<crate::util::config::Wcs>()?.tile_limit),
-            )
-            .await
-        }
-        geoengine_operators::engine::TypedRasterQueryProcessor::U32(p) => {
-            raster_stream_to_geotiff_bytes(
-                p,
-                query_rect,
-                query_ctx,
-                no_data_value,
-                request_spatial_ref,
-                Some(get_config_element::<crate::util::config::Wcs>()?.tile_limit),
-            )
-            .await
-        }
-        geoengine_operators::engine::TypedRasterQueryProcessor::I16(p) => {
-            raster_stream_to_geotiff_bytes(
-                p,
-                query_rect,
-                query_ctx,
-                no_data_value,
-                request_spatial_ref,
-                Some(get_config_element::<crate::util::config::Wcs>()?.tile_limit),
-            )
-            .await
-        }
-        geoengine_operators::engine::TypedRasterQueryProcessor::I32(p) => {
-            raster_stream_to_geotiff_bytes(
-                p,
-                query_rect,
-                query_ctx,
-                no_data_value,
-                request_spatial_ref,
-                Some(get_config_element::<crate::util::config::Wcs>()?.tile_limit),
-            )
-            .await
-        }
-        geoengine_operators::engine::TypedRasterQueryProcessor::F32(p) => {
-            raster_stream_to_geotiff_bytes(
-                p,
-                query_rect,
-                query_ctx,
-                no_data_value,
-                request_spatial_ref,
-                Some(get_config_element::<crate::util::config::Wcs>()?.tile_limit),
-            )
-            .await
-        }
-        geoengine_operators::engine::TypedRasterQueryProcessor::F64(p) => {
-            raster_stream_to_geotiff_bytes(
-                p,
-                query_rect,
-                query_ctx,
-                no_data_value,
-                request_spatial_ref,
-                Some(get_config_element::<crate::util::config::Wcs>()?.tile_limit),
-            )
-            .await
-        }
-        _ => return Err(error::Error::RasterDataTypeNotSupportByGdal.into()),
-    }
+    let bytes = call_on_generic_raster_processor_gdal_types!(processor, p =>
+        raster_stream_to_geotiff_bytes(
+            p,
+            query_rect,
+            query_ctx,
+            GdalGeoTiffDatasetMetadata {
+                no_data_value: request_no_data_value,
+                spatial_reference: request_spatial_ref,
+            },
+            GdalGeoTiffOptions {
+                compression_num_threads: get_config_element::<crate::util::config::Gdal>()?.compression_num_threads,
+                as_cog: false,
+                force_big_tiff: false,
+            },
+            Some(get_config_element::<crate::util::config::Wcs>()?.tile_limit),
+            
+        )
+        .await)?
     .map_err(error::Error::from)?;
 
-    Ok(Box::new(
-        Response::builder()
-            .header("Content-Type", "image/tiff")
-            .body(bytes)
-            .context(error::Http)?,
-    ))
+    Ok(HttpResponse::Ok().content_type("image/tiff").body(bytes))
+}
+
+fn default_time_from_config() -> TimeInterval {
+    get_config_element::<config::Wcs>()
+        .ok()
+        .and_then(|wcs| wcs.default_time)
+        .map_or_else(
+            || {
+                get_config_element::<config::Ogc>()
+                    .ok()
+                    .and_then(|ogc| ogc.default_time)
+                    .map_or_else(
+                        || {
+                            TimeInterval::new_instant(TimeInstance::now())
+                                .expect("is a valid time interval")
+                        },
+                        |time| time.time_interval(),
+                    )
+            },
+            |time| time.time_interval(),
+        )
 }
 
 #[cfg(test)]
 mod tests {
-    use super::*;
-    use crate::contexts::InMemoryContext;
-    use crate::util::tests::register_ndvi_workflow_helper;
+    use crate::contexts::{InMemoryContext, Session, SimpleContext};
+    use crate::util::tests::{read_body_string, register_ndvi_workflow_helper, send_test_request};
+    use actix_web::http::header;
+    use actix_web::test;
+    use actix_web_httpauth::headers::authorization::Bearer;
+    use geoengine_datatypes::raster::{GridShape2D, TilingSpecification};
+    use geoengine_datatypes::util::test::TestDefault;
 
     #[tokio::test]
     async fn get_capabilities() {
-        let ctx = InMemoryContext::default();
+        let ctx = InMemoryContext::test_default();
+        let session_id = ctx.default_session_ref().await.id();
 
         let (_, id) = register_ndvi_workflow_helper(&ctx).await;
 
@@ -448,18 +414,17 @@ mod tests {
             ("version", "1.1.1"),
         ];
 
-        let res = warp::test::request()
-            .method("GET")
-            .path(&format!(
+        let req = test::TestRequest::get()
+            .uri(&format!(
                 "/wcs/{}?{}",
                 &id.to_string(),
                 serde_urlencoded::to_string(params).unwrap()
             ))
-            .reply(&wcs_handler(ctx))
-            .await;
+            .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())));
+        let res = send_test_request(req, ctx).await;
 
         assert_eq!(res.status(), 200);
-        let body = std::str::from_utf8(res.body()).unwrap();
+        let body = read_body_string(res).await;
         assert_eq!(
             format!(
                 r#"<?xml version="1.0" encoding="UTF-8"?>
@@ -469,7 +434,7 @@ mod tests {
             xmlns:ogc="http://www.opengis.net/ogc"
             xmlns:ows="http://www.opengis.net/ows/1.1"
             xmlns:gml="http://www.opengis.net/gml"
-            xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.opengis.net/wcs/1.1.1 http://localhost:3030/wcs/{workflow_id}/schemas/wcs/1.1.1/wcsGetCapabilities.xsd" updateSequence="152">
+            xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.opengis.net/wcs/1.1.1 http://127.0.0.1:3030/wcs/{workflow_id}/schemas/wcs/1.1.1/wcsGetCapabilities.xsd" updateSequence="152">
             <ows:ServiceIdentification>
                 <ows:Title>Web Coverage Service</ows:Title>
                 <ows:ServiceType>WCS</ows:ServiceType>
@@ -484,21 +449,21 @@ mod tests {
                 <ows:Operation name="GetCapabilities">
                     <ows:DCP>
                         <ows:HTTP>
-                                <ows:Get xlink:href="http://localhost:3030/wcs/{workflow_id}?"/>
+                                <ows:Get xlink:href="http://127.0.0.1:3030/wcs/{workflow_id}?"/>
                         </ows:HTTP>
                     </ows:DCP>
                 </ows:Operation>
                 <ows:Operation name="DescribeCoverage">
                     <ows:DCP>
                         <ows:HTTP>
-                                <ows:Get xlink:href="http://localhost:3030/wcs/{workflow_id}?"/>
+                                <ows:Get xlink:href="http://127.0.0.1:3030/wcs/{workflow_id}?"/>
                         </ows:HTTP>
                     </ows:DCP>
                 </ows:Operation>
                 <ows:Operation name="GetCoverage">
                     <ows:DCP>
                         <ows:HTTP>
-                                <ows:Get xlink:href="http://localhost:3030/wcs/{workflow_id}?"/>
+                                <ows:Get xlink:href="http://127.0.0.1:3030/wcs/{workflow_id}?"/>
                         </ows:HTTP>
                     </ows:DCP>
                 </ows:Operation>
@@ -522,7 +487,8 @@ mod tests {
 
     #[tokio::test]
     async fn describe_coverage() {
-        let ctx = InMemoryContext::default();
+        let ctx = InMemoryContext::test_default();
+        let session_id = ctx.default_session_ref().await.id();
 
         let (_, id) = register_ndvi_workflow_helper(&ctx).await;
 
@@ -533,19 +499,17 @@ mod tests {
             ("identifiers", &id.to_string()),
         ];
 
-        let res = warp::test::request()
-            .method("GET")
-            .path(&format!(
+        let req = test::TestRequest::get()
+            .uri(&format!(
                 "/wcs/{}?{}",
                 &id.to_string(),
                 serde_urlencoded::to_string(params).unwrap()
             ))
-            .reply(&wcs_handler(ctx))
-            .await;
+            .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())));
+        let res = send_test_request(req, ctx).await;
 
         assert_eq!(res.status(), 200);
-        let body = std::str::from_utf8(res.body()).unwrap();
-        eprintln!("{}", body);
+        let body = read_body_string(res).await;
         assert_eq!(
             format!(
                 r#"<?xml version="1.0" encoding="UTF-8"?>
@@ -554,7 +518,7 @@ mod tests {
         xmlns:ogc="http://www.opengis.net/ogc"
         xmlns:ows="http://www.opengis.net/ows/1.1"
         xmlns:gml="http://www.opengis.net/gml"
-        xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.opengis.net/wcs/1.1.1 http://localhost:3030/wcs/{workflow_id}/schemas/wcs/1.1.1/wcsDescribeCoverage.xsd">
+        xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.opengis.net/wcs/1.1.1 http://127.0.0.1:3030/wcs/{workflow_id}/schemas/wcs/1.1.1/wcsDescribeCoverage.xsd">
         <wcs:CoverageDescription>
             <ows:Title>Workflow {workflow_id}</ows:Title>
             <wcs:Identifier>{workflow_id}</wcs:Identifier>
@@ -583,9 +547,21 @@ mod tests {
         );
     }
 
+    // TODO: add get_coverage with masked band
+
     #[tokio::test]
-    async fn get_coverage() {
-        let ctx = InMemoryContext::default();
+    async fn get_coverage_with_nodatavalue() {
+        let exe_ctx_tiling_spec = TilingSpecification {
+            origin_coordinate: (0., 0.).into(),
+            tile_size_in_pixels: GridShape2D::new([600, 600]),
+        };
+
+        // override the pixel size since this test was designed for 600 x 600 pixel tiles
+        let ctx = InMemoryContext::new_with_context_spec(
+            exe_ctx_tiling_spec,
+            TestDefault::test_default(),
+        );
+        let session_id = ctx.default_session_ref().await.id();
 
         let (_, id) = register_ndvi_workflow_helper(&ctx).await;
 
@@ -602,24 +578,24 @@ mod tests {
             ("gridorigin", "80,-10"),
             ("gridoffsets", "0.1,0.1"),
             ("time", "2014-01-01T00:00:00.0Z"),
+            ("nodatavalue", "0.0"),
         ];
 
-        let res = warp::test::request()
-            .method("GET")
-            .path(&format!(
+        let req = test::TestRequest::get()
+            .uri(&format!(
                 "/wcs/{}?{}",
                 &id.to_string(),
                 serde_urlencoded::to_string(params).unwrap()
             ))
-            .reply(&wcs_handler(ctx))
-            .await;
+            .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())));
+
+        let res = send_test_request(req, ctx).await;
 
         assert_eq!(res.status(), 200);
         assert_eq!(
-            include_bytes!(
-                "../../../operators/test-data/raster/geotiff_from_stream_compressed.tiff"
-            ) as &[u8],
-            res.body().to_vec().as_slice()
+            include_bytes!("../../../test_data/raster/geotiff_from_stream_compressed.tiff")
+                as &[u8],
+            test::read_body(res).await.as_ref()
         );
     }
 }

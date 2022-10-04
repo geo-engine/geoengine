@@ -5,7 +5,7 @@ mod util;
 
 use crate::engine::{
     ExecutionContext, InitializedRasterOperator, InitializedVectorOperator, Operator,
-    SingleVectorMultipleRasterSources, TypedVectorQueryProcessor, VectorOperator,
+    SingleVectorMultipleRasterSources, TypedVectorQueryProcessor, VectorColumnInfo, VectorOperator,
     VectorQueryProcessor, VectorResultDescriptor,
 };
 use crate::error::{self, Error};
@@ -32,7 +32,7 @@ pub type RasterVectorJoin = Operator<RasterVectorJoinParams, SingleVectorMultipl
 const MAX_NUMBER_OF_RASTER_INPUTS: usize = 8;
 
 /// The parameter spec for `RasterVectorJoin`
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct RasterVectorJoinParams {
     /// Each name reflects the output column of the join result.
@@ -49,7 +49,7 @@ pub struct RasterVectorJoinParams {
 /// How to aggregate the values for the geometries inside a feature e.g.
 /// the mean of all the raster values corresponding to the individual
 /// points inside a `MultiPoint` feature.
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Copy)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Copy)]
 #[serde(rename_all = "camelCase")]
 pub enum FeatureAggregationMethod {
     First,
@@ -60,7 +60,7 @@ pub enum FeatureAggregationMethod {
 /// If there are multiple rasters valid during the validity of a feature
 /// the featuer is either split into multiple (None-aggregation) or the
 /// values are aggreagated
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Copy)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Copy)]
 #[serde(rename_all = "camelCase")]
 pub enum TemporalAggregationMethod {
     None,
@@ -90,9 +90,10 @@ impl VectorOperator for RasterVectorJoin {
         );
 
         let vector_source = self.sources.vector.initialize(context).await?;
+        let vector_rd = vector_source.result_descriptor();
 
         ensure!(
-            vector_source.result_descriptor().data_type != VectorDataType::Data,
+            vector_rd.data_type != VectorDataType::Data,
             error::InvalidType {
                 expected: format!(
                     "{}, {} or {}",
@@ -114,9 +115,24 @@ impl VectorOperator for RasterVectorJoin {
         .into_iter()
         .collect::<Result<Vec<_>>>()?;
 
+        let spatial_reference = vector_rd.spatial_reference;
+
+        for other_spatial_reference in raster_sources
+            .iter()
+            .map(|source| source.result_descriptor().spatial_reference)
+        {
+            ensure!(
+                spatial_reference == other_spatial_reference,
+                crate::error::InvalidSpatialReference {
+                    expected: spatial_reference,
+                    found: other_spatial_reference,
+                }
+            );
+        }
+
         let params = self.params;
 
-        let result_descriptor = vector_source.result_descriptor().map_columns(|columns| {
+        let result_descriptor = vector_rd.map_columns(|columns| {
             let mut columns = columns.clone();
             for (i, new_column_name) in params.names.iter().enumerate() {
                 let feature_data_type = match params.temporal_aggregation {
@@ -135,7 +151,13 @@ impl VectorOperator for RasterVectorJoin {
                     }
                     TemporalAggregationMethod::Mean => FeatureDataType::Float,
                 };
-                columns.insert(new_column_name.clone(), feature_data_type);
+                columns.insert(
+                    new_column_name.clone(),
+                    VectorColumnInfo {
+                        data_type: feature_data_type,
+                        measurement: raster_sources[i].result_descriptor().measurement.clone(),
+                    },
+                );
             }
             columns
         });
@@ -166,7 +188,7 @@ impl InitializedVectorOperator for InitializedRasterVectorJoin {
         let typed_raster_processors = self
             .raster_sources
             .iter()
-            .map(|r| r.query_processor())
+            .map(InitializedRasterOperator::query_processor)
             .collect::<Result<Vec<_>>>()?;
 
         Ok(match self.vector_source.query_processor()? {
@@ -243,21 +265,23 @@ pub fn create_feature_aggregator<P: Pixel>(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::str::FromStr;
 
     use crate::engine::{
-        MockExecutionContext, MockQueryContext, QueryProcessor, RasterOperator,
-        VectorQueryRectangle,
+        ChunkByteSize, MockExecutionContext, MockQueryContext, QueryProcessor, RasterOperator,
     };
     use crate::mock::MockFeatureCollectionSource;
     use crate::source::{GdalSource, GdalSourceParameters};
     use crate::util::gdal::add_ndvi_dataset;
-    use chrono::NaiveDate;
     use futures::StreamExt;
     use geoengine_datatypes::collections::{FeatureCollectionInfos, MultiPointCollection};
-    use geoengine_datatypes::dataset::DatasetId;
+    use geoengine_datatypes::dataset::DataId;
     use geoengine_datatypes::primitives::{
-        BoundingBox2D, DataRef, FeatureDataRef, MultiPoint, SpatialResolution, TimeInterval,
+        BoundingBox2D, DataRef, DateTime, FeatureDataRef, MultiPoint, SpatialResolution,
+        TimeInterval, VectorQueryRectangle,
     };
+    use geoengine_datatypes::spatial_reference::SpatialReference;
+    use geoengine_datatypes::util::{gdal::hide_gdal_errors, test::TestDefault};
     use serde_json::json;
 
     #[test]
@@ -285,7 +309,9 @@ mod tests {
                 "vector": {
                     "type": "MockFeatureCollectionSourceMultiPoint",
                     "params": {
-                        "collections": []
+                        "collections": [],
+                        "spatialReference": "EPSG:4326",
+                        "measurements": {},
                     }
                 },
                 "rasters": [],
@@ -298,9 +324,9 @@ mod tests {
         assert_eq!(deserialized.params, raster_vector_join.params);
     }
 
-    fn ndvi_source(id: DatasetId) -> Box<dyn RasterOperator> {
+    fn ndvi_source(id: DataId) -> Box<dyn RasterOperator> {
         let gdal_source = GdalSource {
-            params: GdalSourceParameters { dataset: id },
+            params: GdalSourceParameters { data: id },
         };
 
         gdal_source.boxed()
@@ -319,8 +345,8 @@ mod tests {
                 .unwrap(),
                 vec![
                     TimeInterval::new(
-                        NaiveDate::from_ymd(2014, 1, 1).and_hms(0, 0, 0),
-                        NaiveDate::from_ymd(2014, 1, 1).and_hms(0, 0, 0),
+                        DateTime::new_utc(2014, 1, 1, 0, 0, 0),
+                        DateTime::new_utc(2014, 1, 1, 0, 0, 0),
                     )
                     .unwrap();
                     4
@@ -331,7 +357,7 @@ mod tests {
         )
         .boxed();
 
-        let mut exe_ctc = MockExecutionContext::default();
+        let mut exe_ctc = MockExecutionContext::test_default();
         let ndvi_id = add_ndvi_dataset(&mut exe_ctc);
 
         let operator = RasterVectorJoin {
@@ -358,7 +384,7 @@ mod tests {
                     time_interval: TimeInterval::default(),
                     spatial_resolution: SpatialResolution::new(0.1, 0.1).unwrap(),
                 },
-                &MockQueryContext::new(0),
+                &MockQueryContext::new(ChunkByteSize::MIN),
             )
             .await
             .unwrap()
@@ -392,8 +418,8 @@ mod tests {
                 .unwrap(),
                 vec![
                     TimeInterval::new(
-                        NaiveDate::from_ymd(2014, 1, 1).and_hms(0, 0, 0),
-                        NaiveDate::from_ymd(2014, 3, 1).and_hms(0, 0, 0),
+                        DateTime::new_utc(2014, 1, 1, 0, 0, 0),
+                        DateTime::new_utc(2014, 3, 1, 0, 0, 0),
                     )
                     .unwrap();
                     4
@@ -404,7 +430,7 @@ mod tests {
         )
         .boxed();
 
-        let mut exe_ctc = MockExecutionContext::default();
+        let mut exe_ctc = MockExecutionContext::test_default();
         let ndvi_id = add_ndvi_dataset(&mut exe_ctc);
 
         let operator = RasterVectorJoin {
@@ -431,7 +457,7 @@ mod tests {
                     time_interval: TimeInterval::default(),
                     spatial_resolution: SpatialResolution::new(0.1, 0.1).unwrap(),
                 },
-                &MockQueryContext::new(0),
+                &MockQueryContext::new(ChunkByteSize::MIN),
             )
             .await
             .unwrap()
@@ -462,6 +488,8 @@ mod tests {
     #[tokio::test]
     #[allow(clippy::float_cmp)]
     async fn ndvi_with_default_time() {
+        hide_gdal_errors();
+
         let point_source = MockFeatureCollectionSource::single(
             MultiPointCollection::from_data(
                 MultiPoint::many(vec![
@@ -478,7 +506,7 @@ mod tests {
         )
         .boxed();
 
-        let mut exe_ctc = MockExecutionContext::default();
+        let mut exe_ctc = MockExecutionContext::test_default();
         let ndvi_id = add_ndvi_dataset(&mut exe_ctc);
 
         let operator = RasterVectorJoin {
@@ -505,7 +533,7 @@ mod tests {
                     time_interval: TimeInterval::default(),
                     spatial_resolution: SpatialResolution::new(0.1, 0.1).unwrap(),
                 },
-                &MockQueryContext::new(0),
+                &MockQueryContext::new(ChunkByteSize::MIN),
             )
             .await
             .unwrap()
@@ -524,5 +552,51 @@ mod tests {
         assert_eq!(data.as_ref(), &[0., 0., 0., 0.]);
 
         assert_eq!(data.nulls(), vec![true, true, true, true]);
+    }
+
+    #[tokio::test]
+    async fn it_checks_sref() {
+        let point_source = MockFeatureCollectionSource::with_collections_and_sref(
+            vec![MultiPointCollection::from_data(
+                MultiPoint::many(vec![
+                    (-13.95, 20.05),
+                    (-14.05, 20.05),
+                    (-13.95, 19.95),
+                    (-14.05, 19.95),
+                ])
+                .unwrap(),
+                vec![TimeInterval::default(); 4],
+                Default::default(),
+            )
+            .unwrap()],
+            SpatialReference::from_str("EPSG:3857").unwrap(),
+        )
+        .boxed();
+
+        let mut exe_ctc = MockExecutionContext::test_default();
+        let ndvi_id = add_ndvi_dataset(&mut exe_ctc);
+
+        let operator = RasterVectorJoin {
+            params: RasterVectorJoinParams {
+                names: vec!["ndvi".to_string()],
+                feature_aggregation: FeatureAggregationMethod::First,
+                temporal_aggregation: TemporalAggregationMethod::Mean,
+            },
+            sources: SingleVectorMultipleRasterSources {
+                vector: point_source,
+                rasters: vec![ndvi_source(ndvi_id.clone())],
+            },
+        }
+        .boxed()
+        .initialize(&exe_ctc)
+        .await;
+
+        assert!(matches!(
+            operator,
+            Err(Error::InvalidSpatialReference {
+                expected: _,
+                found: _,
+            })
+        ));
     }
 }

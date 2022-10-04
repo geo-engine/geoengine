@@ -1,0 +1,60 @@
+{
+  "type": "SentinelS2L2ACogsProviderDefinition",
+  "id": "5779494c-f3a2-48b3-8a2d-5fbba8c5b6c5",
+  "name": "Element 84 AWS STAC",
+  "apiUrl": "https://earth-search.aws.element84.com/v0/collections/sentinel-s2-l2a-cogs/items",
+  "bands": [
+    {
+      "name": "B01",
+      "noDataValue": 0,
+      "dataType": "U16"
+    },
+    {
+      "name": "B02",
+      "noDataValue": 0,
+      "dataType": "U16"
+    },
+    {
+      "name": "B03",
+      "noDataValue": 0,
+      "dataType": "U16"
+    },
+    {
+      "name": "B04",
+      "noDataValue": 0,
+      "dataType": "U16"
+    },
+    {
+      "name": "B08",
+      "noDataValue": 0,
+      "dataType": "U16"
+    },
+    {
+      "name": "SCL",
+      "noDataValue": 0,
+      "dataType": "U8"
+    }
+  ],
+  "zones": [
+    {
+      "name": "UTM32N",
+      "epsg": 32632
+    },
+    {
+      "name": "UTM36N",
+      "epsg": 32636
+    },
+    {
+      "name": "UTM36S",
+      "epsg": 32736
+    },
+    {
+      "name": "UTM37N",
+      "epsg": 32637
+    },
+    {
+      "name": "UTM37S",
+      "epsg": 32737
+    }
+  ]
+}

@@ -1,0 +1,458 @@
+{
+  "@context": "http://schema.org/",
+  "@id": "https://doi.org/10.1594/PANGAEA.913417",
+  "@type": "Dataset",
+  "identifier": "https://doi.org/10.1594/PANGAEA.913417",
+  "url": "https://doi.pangaea.de/10.1594/PANGAEA.913417",
+  "creator": [
+    {
+      "@id": "https://orcid.org/0000-0001-8665-6382",
+      "@type": "Person",
+      "name": "Judith Weber",
+      "familyName": "Weber",
+      "givenName": "Judith",
+      "identifier": "https://orcid.org/0000-0001-8665-6382"
+    },
+    {
+      "@id": "https://orcid.org/0000-0003-1492-0337",
+      "@type": "Person",
+      "name": "Stephen Saikiu Shaida",
+      "familyName": "Shaida",
+      "givenName": "Stephen Saikiu",
+      "identifier": "https://orcid.org/0000-0003-1492-0337"
+    },
+    {
+      "@id": "https://orcid.org/0000-0001-5045-3065",
+      "@type": "Person",
+      "name": "Sen Claudine Henriette Ngomtcho",
+      "familyName": "Ngomtcho",
+      "givenName": "Sen Claudine Henriette",
+      "identifier": "https://orcid.org/0000-0001-5045-3065"
+    },
+    {
+      "@type": "Person",
+      "name": "Usman Baba Musa",
+      "familyName": "Musa",
+      "givenName": "Usman Baba"
+    },
+    {
+      "@type": "Person",
+      "name": "Ahmadu Adamu",
+      "familyName": "Adamu",
+      "givenName": "Ahmadu"
+    },
+    {
+      "@id": "https://orcid.org/0000-0002-2366-0082",
+      "@type": "Person",
+      "name": "Thaddeus Terlumun Gbem",
+      "familyName": "Gbem",
+      "givenName": "Thaddeus Terlumun",
+      "identifier": "https://orcid.org/0000-0002-2366-0082"
+    },
+    {
+      "@type": "Person",
+      "name": "Petra Berger",
+      "familyName": "Berger",
+      "givenName": "Petra"
+    },
+    {
+      "@type": "Person",
+      "name": "Mohammed Mamman",
+      "familyName": "Mamman",
+      "givenName": "Mohammed"
+    },
+    {
+      "@type": "Person",
+      "name": "Jonathan Andrew Nok",
+      "familyName": "Nok",
+      "givenName": "Jonathan Andrew"
+    },
+    {
+      "@id": "https://orcid.org/0000-0001-5277-9421",
+      "@type": "Person",
+      "name": "Sørge Kelm",
+      "familyName": "Kelm",
+      "givenName": "Sørge",
+      "identifier": "https://orcid.org/0000-0001-5277-9421"
+    }
+  ],
+  "name": "Collected tsetse tissue and tsetse species (Glossina sp.) collected in protected and tsetse invested areas in Nigeria",
+  "publisher": {
+    "@type": "Organization",
+    "name": "PANGAEA",
+    "disambiguatingDescription": "Data Publisher for Earth & Environmental Science",
+    "url": "https://www.pangaea.de/"
+  },
+  "includedInDataCatalog": {
+    "@type": "DataCatalog",
+    "name": "PANGAEA",
+    "disambiguatingDescription": "Data Publisher for Earth & Environmental Science",
+    "url": "https://www.pangaea.de/"
+  },
+  "datePublished": "2020-03-12",
+  "isPartOf": "https://doi.org/10.1594/PANGAEA.915145",
+  "description": "This data set includes data from a tsetse (Glossina sp.) collection carried out in Nigeria between 2014 and 2016. Traps were employed for one to three days in four different National Parks, one Game Reserve and two tsetse invested areas. Each tsetse was identified morphologically and dissected in the field. Wings were removed and stored dry. Legs were immersed in a DNA-preservation agent. Salivary glands and ovaries were dissected and stored in a DNA-preservation agent. The whole gut was dissected, homogenized in the field and partially preserved for DNA analysis and used to investigate for sialidase activity. The data table summarizes the available tissue, sex and species information for each dissected specimen. […]",
+  "abstract": "This data set includes data from a tsetse (Glossina sp.) collection carried out in Nigeria between 2014 and 2016. Traps were employed for one to three days in four different National Parks, one Game Reserve and two tsetse invested areas. Each tsetse was identified morphologically and dissected in the field. Wings were removed and stored dry. Legs were immersed in a DNA-preservation agent. Salivary glands and ovaries were dissected and stored in a DNA-preservation agent. The whole gut was dissected, homogenized in the field and partially preserved for DNA analysis and used to investigate for sialidase activity. The data table summarizes the available tissue, sex and species information for each dissected specimen.\nSpecies collected were G. morsitans submorsitans, G. tachinoides, G. palpalis palpalis and several unidentified Glossina species.",
+  "citation": [
+    {
+      "@id": "https://doi.org/10.1186/s12866-018-1293-6",
+      "@type": [
+        "CreativeWork",
+        "PublicationIssue"
+      ],
+      "identifier": "https://doi.org/10.1186/s12866-018-1293-6",
+      "url": "https://doi.org/10.1186/s12866-018-1293-6",
+      "creator": [
+        {
+          "@id": "https://orcid.org/0000-0003-1492-0337",
+          "@type": "Person",
+          "name": "Stephen Saikiu Shaida",
+          "familyName": "Shaida",
+          "givenName": "Stephen Saikiu",
+          "identifier": "https://orcid.org/0000-0003-1492-0337"
+        },
+        {
+          "@id": "https://orcid.org/0000-0001-8665-6382",
+          "@type": "Person",
+          "name": "Judith Sophie Weber",
+          "familyName": "Weber",
+          "givenName": "Judith Sophie",
+          "identifier": "https://orcid.org/0000-0001-8665-6382"
+        },
+        {
+          "@id": "https://orcid.org/0000-0002-2366-0082",
+          "@type": "Person",
+          "name": "Thaddeus Terlumun Gbem",
+          "familyName": "Gbem",
+          "givenName": "Thaddeus Terlumun",
+          "identifier": "https://orcid.org/0000-0002-2366-0082"
+        },
+        {
+          "@id": "https://orcid.org/0000-0001-5045-3065",
+          "@type": "Person",
+          "name": "Sen Claudine Henriette Ngomtcho",
+          "familyName": "Ngomtcho",
+          "givenName": "Sen Claudine Henriette",
+          "identifier": "https://orcid.org/0000-0001-5045-3065"
+        },
+        {
+          "@type": "Person",
+          "name": "Usman Baba Musa",
+          "familyName": "Musa",
+          "givenName": "Usman Baba"
+        },
+        {
+          "@type": "Person",
+          "name": "Mbunkah Daniel Achukwi",
+          "familyName": "Achukwi",
+          "givenName": "Mbunkah Daniel"
+        },
+        {
+          "@type": "Person",
+          "name": "Mohammed Mamman",
+          "familyName": "Mamman",
+          "givenName": "Mohammed"
+        },
+        {
+          "@type": "Person",
+          "name": "Iliya Shehu Ndams",
+          "familyName": "Ndams",
+          "givenName": "Iliya Shehu"
+        },
+        {
+          "@type": "Person",
+          "name": "Jonathan Andrew Nok",
+          "familyName": "Nok",
+          "givenName": "Jonathan Andrew"
+        },
+        {
+          "@id": "https://orcid.org/0000-0001-5277-9421",
+          "@type": "Person",
+          "name": "Sørge Kelm",
+          "familyName": "Kelm",
+          "givenName": "Sørge",
+          "identifier": "https://orcid.org/0000-0001-5277-9421"
+        }
+      ],
+      "name": "Diversity and phylogenetic relationships of Glossina populations in Nigeria and the Cameroonian border region",
+      "datePublished": "2018",
+      "issueNumber": "18(S1)",
+      "isPartOf": {
+        "@type": "CreativeWorkSeries",
+        "name": "BMC Microbiology"
+      }
+    },
+    {
+      "@id": "https://doi.org/10.1186/s13071-019-3718-y",
+      "@type": [
+        "CreativeWork",
+        "PublicationIssue"
+      ],
+      "identifier": "https://doi.org/10.1186/s13071-019-3718-y",
+      "url": "https://doi.org/10.1186/s13071-019-3718-y",
+      "creator": [
+        {
+          "@id": "https://orcid.org/0000-0001-8665-6382",
+          "@type": "Person",
+          "name": "Judith Sophie Weber",
+          "familyName": "Weber",
+          "givenName": "Judith Sophie",
+          "identifier": "https://orcid.org/0000-0001-8665-6382"
+        },
+        {
+          "@id": "https://orcid.org/0000-0001-5045-3065",
+          "@type": "Person",
+          "name": "Sen Claudine Henriette Ngomtcho",
+          "familyName": "Ngomtcho",
+          "givenName": "Sen Claudine Henriette",
+          "identifier": "https://orcid.org/0000-0001-5045-3065"
+        },
+        {
+          "@id": "https://orcid.org/0000-0003-1492-0337",
+          "@type": "Person",
+          "name": "Stephen Saikiu Shaida",
+          "familyName": "Shaida",
+          "givenName": "Stephen Saikiu",
+          "identifier": "https://orcid.org/0000-0003-1492-0337"
+        },
+        {
+          "@type": "Person",
+          "name": "Gloria Dada Chechet",
+          "familyName": "Chechet",
+          "givenName": "Gloria Dada"
+        },
+        {
+          "@id": "https://orcid.org/0000-0002-2366-0082",
+          "@type": "Person",
+          "name": "Thaddeus Terlumun Gbem",
+          "familyName": "Gbem",
+          "givenName": "Thaddeus Terlumun",
+          "identifier": "https://orcid.org/0000-0002-2366-0082"
+        },
+        {
+          "@type": "Person",
+          "name": "Jonathan Andrew Nok",
+          "familyName": "Nok",
+          "givenName": "Jonathan Andrew"
+        },
+        {
+          "@type": "Person",
+          "name": "Mohammed Mamman",
+          "familyName": "Mamman",
+          "givenName": "Mohammed"
+        },
+        {
+          "@type": "Person",
+          "name": "Mbunkah Daniel Achukwi",
+          "familyName": "Achukwi",
+          "givenName": "Mbunkah Daniel"
+        },
+        {
+          "@id": "https://orcid.org/0000-0001-5277-9421",
+          "@type": "Person",
+          "name": "Sørge Kelm",
+          "familyName": "Kelm",
+          "givenName": "Sørge",
+          "identifier": "https://orcid.org/0000-0001-5277-9421"
+        }
+      ],
+      "name": "Genetic diversity of trypanosome species in tsetse flies (Glossina spp.) in Nigeria",
+      "datePublished": "2019",
+      "issueNumber": "12(1)",
+      "isPartOf": {
+        "@type": "CreativeWorkSeries",
+        "name": "Parasites & Vectors"
+      }
+    },
+    {
+      "@id": "https://store.pangaea.de/Publications/Weber-etal_2020/Fly_sample_overview_codes.pdf",
+      "@type": [
+        "CreativeWork",
+        "WebPage"
+      ],
+      "identifier": "https://store.pangaea.de/Publications/Weber-etal_2020/Fly_sample_overview_codes.pdf",
+      "url": "https://store.pangaea.de/Publications/Weber-etal_2020/Fly_sample_overview_codes.pdf",
+      "name": "Tsetse fly sampling, tissue and analysis codes used in Weber et al., 2020"
+    },
+    {
+      "@type": [
+        "CreativeWork",
+        "PublicationIssue"
+      ],
+      "creator": {
+        "@type": "Person",
+        "name": "Howell Davies",
+        "familyName": "Davies",
+        "givenName": "Howell"
+      },
+      "name": "Tsetse flies in Nigeria. A handbook for junior control staff",
+      "datePublished": "1977",
+      "issueNumber": "3",
+      "pagination": "ix + 340",
+      "isPartOf": {
+        "@type": "CreativeWorkSeries",
+        "name": "Ibadan: Oxford University Press"
+      }
+    },
+    {
+      "@type": [
+        "CreativeWork",
+        "PublicationIssue"
+      ],
+      "creator": {
+        "@type": "Person",
+        "name": "J N Pollock",
+        "familyName": "Pollock",
+        "givenName": "J N"
+      },
+      "name": "Training manual for tsetse control personnel",
+      "datePublished": "1982",
+      "issueNumber": "1",
+      "pagination": "1- 280",
+      "isPartOf": {
+        "@type": "CreativeWorkSeries",
+        "name": "Food and Agriculture Organization of the United Nations, Rome, No. M/P5178/E."
+      }
+    }
+  ],
+  "variableMeasured": [
+    {
+      "@type": "PropertyValue",
+      "name": "Event label"
+    },
+    {
+      "@type": "PropertyValue",
+      "name": "Sample ID"
+    },
+    {
+      "@type": "PropertyValue",
+      "name": "Collector"
+    },
+    {
+      "@type": "PropertyValue",
+      "name": "DATE/TIME",
+      "url": "http://en.wikipedia.org/wiki/ISO_8601",
+      "subjectOf": {
+        "@type": "DefinedTermSet",
+        "hasDefinedTerm": {
+          "@id": "http://qudt.org/1.1/vocab/quantity#Time",
+          "@type": "DefinedTerm",
+          "identifier": "http://qudt.org/1.1/vocab/quantity#Time",
+          "name": "Time",
+          "alternateName": "T",
+          "url": "http://dbpedia.org/resource/Time"
+        }
+      }
+    },
+    {
+      "@type": "PropertyValue",
+      "name": "Dissector"
+    },
+    {
+      "@type": "PropertyValue",
+      "name": "Tissues"
+    },
+    {
+      "@type": "PropertyValue",
+      "name": "Tissues"
+    },
+    {
+      "@type": "PropertyValue",
+      "name": "Tissues"
+    },
+    {
+      "@type": "PropertyValue",
+      "name": "Tissues"
+    },
+    {
+      "@type": "PropertyValue",
+      "name": "Tissues"
+    },
+    {
+      "@type": "PropertyValue",
+      "name": "Tissues"
+    },
+    {
+      "@type": "PropertyValue",
+      "name": "Comment"
+    },
+    {
+      "@type": "PropertyValue",
+      "name": "Subsample ID"
+    },
+    {
+      "@type": "PropertyValue",
+      "name": "Sex",
+      "subjectOf": {
+        "@type": "DefinedTermSet",
+        "hasDefinedTerm": {
+          "@type": "DefinedTerm",
+          "name": "sex"
+        }
+      }
+    },
+    {
+      "@type": "PropertyValue",
+      "name": "Feeding status",
+      "description": "Teneral/ non teneral"
+    },
+    {
+      "@type": "PropertyValue",
+      "name": "Kingdom",
+      "url": "https://en.wikipedia.org/wiki/Kingdom_%28biology%29"
+    },
+    {
+      "@type": "PropertyValue",
+      "name": "Order"
+    },
+    {
+      "@type": "PropertyValue",
+      "name": "Family"
+    },
+    {
+      "@type": "PropertyValue",
+      "name": "Species",
+      "url": "https://en.wikipedia.org/wiki/Species",
+      "subjectOf": {
+        "@type": "DefinedTermSet",
+        "hasDefinedTerm": {
+          "@type": "DefinedTerm",
+          "name": "species"
+        }
+      }
+    },
+    {
+      "@type": "PropertyValue",
+      "name": "Reference/source"
+    }
+  ],
+  "spatialCoverage": {
+    "@type": "Place",
+    "geo": {
+      "@type": "GeoShape",
+      "box": "5.361 3.773 9.912 11.738"
+    }
+  },
+  "temporalCoverage": "2014-02-22T00:00:00/2016-03-21T00:00:00",
+  "inLanguage": "en",
+  "license": "https://creativecommons.org/licenses/by/4.0/",
+  "conditionsOfAccess": "unrestricted",
+  "isAccessibleForFree": true,
+  "size": {
+    "@type": "QuantitativeValue",
+    "value": 7326,
+    "unitText": "data points"
+  },
+  "distribution": [
+    {
+      "@type": "DataDownload",
+      "encodingFormat": "text/html",
+      "contentUrl": "https://doi.pangaea.de/10.1594/PANGAEA.913417?format=html"
+    },
+    {
+      "@type": "DataDownload",
+      "encodingFormat": "text/tab-separated-values",
+      "contentUrl": "https://doi.pangaea.de/10.1594/PANGAEA.913417?format=textfile"
+    }
+  ]
+}

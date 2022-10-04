@@ -1,7 +1,7 @@
 use std::{collections::HashMap, convert::TryFrom};
 
-use chrono::Utc;
 use geo::Rect;
+use geoengine_datatypes::primitives::DateTime;
 use serde::{de::value::MapDeserializer, de::Error, Deserialize, Deserializer};
 use serde_with::with_prefix;
 
@@ -16,7 +16,7 @@ pub struct FeatureCollection {
     pub links: Vec<Link>,
 }
 
-#[derive(Debug, Deserialize, Clone, PartialEq)]
+#[derive(Debug, Deserialize, Clone, PartialEq, Eq)]
 pub struct Context {
     pub page: u64,
     pub limit: u64,
@@ -24,7 +24,7 @@ pub struct Context {
     pub returned: u64,
 }
 
-#[derive(Debug, Deserialize, Clone, PartialEq)]
+#[derive(Debug, Deserialize, Clone, PartialEq, Eq)]
 pub struct Link {
     pub rel: String,
     pub title: Option<String>,
@@ -48,7 +48,7 @@ pub struct Feature {
 
 #[derive(Debug, Deserialize, Clone, PartialEq)]
 pub struct Properties {
-    pub datetime: chrono::DateTime<Utc>,
+    pub datetime: DateTime,
     pub platform: String,
     pub constellation: String,
     pub instruments: Vec<String>,
@@ -61,8 +61,8 @@ pub struct Properties {
     pub sentinel: Option<SentinelProperties>,
     #[serde(rename = "eo:cloud_cover")]
     pub eo_cloud_cover: Option<f32>,
-    pub created: chrono::DateTime<Utc>,
-    pub updated: chrono::DateTime<Utc>,
+    pub created: DateTime,
+    pub updated: DateTime,
     pub collection: Option<String>,
 }
 

@@ -7,7 +7,8 @@ use csv::{Position, Reader, StringRecord};
 use futures::stream::BoxStream;
 use futures::task::{Context, Poll};
 use futures::{Stream, StreamExt};
-use geoengine_datatypes::dataset::DatasetId;
+use geoengine_datatypes::dataset::DataId;
+use geoengine_datatypes::primitives::VectorQueryRectangle;
 use serde::{Deserialize, Serialize};
 use snafu::{ensure, OptionExt, ResultExt};
 
@@ -19,11 +20,11 @@ use geoengine_datatypes::{
     spatial_reference::SpatialReference,
 };
 
+use crate::engine::QueryProcessor;
 use crate::engine::{
-    InitializedVectorOperator, OperatorDatasets, QueryContext, SourceOperator,
+    InitializedVectorOperator, OperatorData, QueryContext, SourceOperator,
     TypedVectorQueryProcessor, VectorOperator, VectorQueryProcessor, VectorResultDescriptor,
 };
-use crate::engine::{QueryProcessor, VectorQueryRectangle};
 use crate::error;
 use crate::util::Result;
 use async_trait::async_trait;
@@ -144,8 +145,8 @@ pub struct CsvSourceStream {
 
 pub type CsvSource = SourceOperator<CsvSourceParameters>;
 
-impl OperatorDatasets for CsvSourceParameters {
-    fn datasets_collect(&self, _datasets: &mut Vec<DatasetId>) {}
+impl OperatorData for CsvSourceParameters {
+    fn data_ids_collect(&self, _data_ids: &mut Vec<DataId>) {}
 }
 
 #[typetag::serde]
@@ -160,6 +161,8 @@ impl VectorOperator for CsvSource {
                 data_type: VectorDataType::MultiPoint, // TODO: get as user input
                 spatial_reference: SpatialReference::epsg_4326().into(), // TODO: get as user input
                 columns: Default::default(), // TODO: get when source allows loading other columns
+                time: None,
+                bbox: None,
             },
             state: self.params,
         };
@@ -318,7 +321,7 @@ impl Stream for CsvSourceStream {
         let parameters = self.parameters.clone();
         let waker = cx.waker().clone();
 
-        tokio::task::spawn_blocking(move || {
+        crate::util::spawn_blocking(move || {
             let mut csv_reader = reader_state.lock().unwrap();
             let computation_result = || -> Result<Option<MultiPointCollection>> {
                 // TODO: is clone necessary?
@@ -340,13 +343,13 @@ impl Stream for CsvSourceStream {
                         None => break,
                     };
 
-                    let row = record.with_context(|| error::CsvSourceReader)?;
+                    let row = record.context(error::CsvSourceReader)?;
                     let parsed_row = CsvSourceStream::parse_row(header, &row)?;
 
                     // TODO: filter time
                     if bbox.contains_coordinate(&parsed_row.coordinate) {
-                        builder.push_geometry(parsed_row.coordinate.into())?;
-                        builder.push_time_interval(parsed_row.time_interval)?;
+                        builder.push_geometry(parsed_row.coordinate.into());
+                        builder.push_time_interval(parsed_row.time_interval);
                         builder.finish_row();
 
                         number_of_entries += 1;
@@ -559,7 +562,7 @@ x,y
             time_interval: TimeInterval::new_unchecked(0, 1),
             spatial_resolution: SpatialResolution::zero_point_one(),
         };
-        let ctx = MockQueryContext::new(10 * 8 * 2);
+        let ctx = MockQueryContext::new((10 * 8 * 2).into());
 
         let r: Vec<Result<MultiPointCollection>> =
             p.query(query, &ctx).await.unwrap().collect().await;
@@ -627,7 +630,7 @@ x;y
 
         let operator = CsvSource { params }.boxed();
 
-        let operator_json = serde_json::to_string(&operator).unwrap();
+        let operator_json = serde_json::to_value(&operator).unwrap();
 
         assert_eq!(
             operator_json,
@@ -644,9 +647,8 @@ x;y
                     "time": "None"
                 }
             })
-            .to_string()
         );
 
-        let _operator: Box<dyn VectorOperator> = serde_json::from_str(&operator_json).unwrap();
+        let _operator: Box<dyn VectorOperator> = serde_json::from_value(operator_json).unwrap();
     }
 }

@@ -6,24 +6,23 @@ pub use execution_context::{
     ExecutionContext, MetaData, MetaDataProvider, MockExecutionContext, StaticMetaData,
 };
 pub use operator::{
-    InitializedPlotOperator, InitializedRasterOperator, InitializedVectorOperator,
-    OperatorDatasets, PlotOperator, RasterOperator, TypedOperator, VectorOperator,
+    InitializedPlotOperator, InitializedRasterOperator, InitializedVectorOperator, OperatorData,
+    OperatorName, PlotOperator, RasterOperator, TypedOperator, VectorOperator,
 };
 pub use operator_impl::{
-    MultipleRasterSources, MultipleVectorSources, Operator, SingleRasterOrVectorSource,
-    SingleRasterSource, SingleVectorMultipleRasterSources, SingleVectorSource, SourceOperator,
+    MultipleRasterOrSingleVectorSource, MultipleRasterSources, MultipleVectorSources, Operator,
+    SingleRasterOrVectorSource, SingleRasterSource, SingleVectorMultipleRasterSources,
+    SingleVectorSource, SourceOperator,
 };
-pub use query::{
-    MockQueryContext, PlotQueryRectangle, QueryContext, QueryRectangle, RasterQueryRectangle,
-    VectorQueryRectangle,
-};
+pub use query::{ChunkByteSize, MockQueryContext, QueryContext};
 pub use query_processor::{
-    PlotQueryProcessor, QueryProcessor, RasterQueryProcessor, TypedPlotQueryProcessor,
-    TypedRasterQueryProcessor, TypedVectorQueryProcessor, VectorQueryProcessor,
+    BoxRasterQueryProcessor, PlotQueryProcessor, QueryProcessor, RasterQueryProcessor,
+    TypedPlotQueryProcessor, TypedRasterQueryProcessor, TypedVectorQueryProcessor,
+    VectorQueryProcessor,
 };
 pub use result_descriptor::{
     PlotResultDescriptor, RasterResultDescriptor, ResultDescriptor, TypedResultDescriptor,
-    VectorResultDescriptor,
+    VectorColumnInfo, VectorResultDescriptor,
 };
 
 mod clonable_operator;
@@ -40,34 +39,34 @@ macro_rules! call_generic_raster_processor {
     ($type_enum:expr, $function_call:expr) => {
         match $type_enum {
             geoengine_datatypes::raster::RasterDataType::U8 => {
-                crate::engine::TypedRasterQueryProcessor::U8($function_call)
+                $crate::engine::TypedRasterQueryProcessor::U8($function_call)
             }
             geoengine_datatypes::raster::RasterDataType::U16 => {
-                crate::engine::TypedRasterQueryProcessor::U16($function_call)
+                $crate::engine::TypedRasterQueryProcessor::U16($function_call)
             }
             geoengine_datatypes::raster::RasterDataType::U32 => {
-                crate::engine::TypedRasterQueryProcessor::U32($function_call)
+                $crate::engine::TypedRasterQueryProcessor::U32($function_call)
             }
             geoengine_datatypes::raster::RasterDataType::U64 => {
-                crate::engine::TypedRasterQueryProcessor::U64($function_call)
+                $crate::engine::TypedRasterQueryProcessor::U64($function_call)
             }
             geoengine_datatypes::raster::RasterDataType::I8 => {
-                crate::engine::TypedRasterQueryProcessor::I8($function_call)
+                $crate::engine::TypedRasterQueryProcessor::I8($function_call)
             }
             geoengine_datatypes::raster::RasterDataType::I16 => {
-                crate::engine::TypedRasterQueryProcessor::I16($function_call)
+                $crate::engine::TypedRasterQueryProcessor::I16($function_call)
             }
             geoengine_datatypes::raster::RasterDataType::I32 => {
-                crate::engine::TypedRasterQueryProcessor::I32($function_call)
+                $crate::engine::TypedRasterQueryProcessor::I32($function_call)
             }
             geoengine_datatypes::raster::RasterDataType::I64 => {
-                crate::engine::TypedRasterQueryProcessor::I64($function_call)
+                $crate::engine::TypedRasterQueryProcessor::I64($function_call)
             }
             geoengine_datatypes::raster::RasterDataType::F32 => {
-                crate::engine::TypedRasterQueryProcessor::F32($function_call)
+                $crate::engine::TypedRasterQueryProcessor::F32($function_call)
             }
             geoengine_datatypes::raster::RasterDataType::F64 => {
-                crate::engine::TypedRasterQueryProcessor::F64($function_call)
+                $crate::engine::TypedRasterQueryProcessor::F64($function_call)
             }
         }
     };
@@ -91,6 +90,24 @@ macro_rules! call_on_generic_raster_processor {
     };
 }
 
+/// like `call_on_generic_raster_processor` but produces a `Result` which is `Err` if
+/// `RasterDataType` isn't supported by GDAL
+#[macro_export]
+macro_rules! call_on_generic_raster_processor_gdal_types {
+    ($typed_raster:expr, $processor_var:ident => $function_call:expr) => {
+        match $typed_raster {
+            $crate::engine::TypedRasterQueryProcessor::U8($processor_var) => Ok($function_call),
+            $crate::engine::TypedRasterQueryProcessor::U16($processor_var) => Ok($function_call),
+            $crate::engine::TypedRasterQueryProcessor::U32($processor_var) => Ok($function_call),
+            $crate::engine::TypedRasterQueryProcessor::I16($processor_var) => Ok($function_call),
+            $crate::engine::TypedRasterQueryProcessor::I32($processor_var) => Ok($function_call),
+            $crate::engine::TypedRasterQueryProcessor::F32($processor_var) => Ok($function_call),
+            $crate::engine::TypedRasterQueryProcessor::F64($processor_var) => Ok($function_call),
+            _ => Err($crate::error::Error::GdalRasterDataTypeNotSupported),
+        }
+    };
+}
+
 #[macro_export]
 macro_rules! call_on_generic_vector_processor {
     ($typed_vector:expr, $processor_var:ident => $function_call:expr) => {
@@ -107,16 +124,16 @@ macro_rules! call_on_generic_vector_processor {
     };
 }
 
-/// Calls a function on two `TypedRQueryProcessor`s by calling it on their variant combination.
-/// Call via `call_bi_generic_processor!(input_a, input_b, (processor_a, processor_b) => function)`.
+/// Calls a function on two `TypedRasterQueryProcessor`s by calling it on their variant combination.
+/// Call via `call_on_bi_generic_raster_processor!(input_a, input_b, (processor_a, processor_b) => function)`.
 #[macro_export]
-macro_rules! call_bi_generic_processor {
+macro_rules! call_on_bi_generic_raster_processor {
     (
         $input_a:expr, $input_b:expr,
         ( $processor_a:ident, $processor_b:ident ) => $function_call:expr
     ) => {
         // TODO: this should be automated, but it seems like this requires a procedural macro
-        call_bi_generic_processor!(
+        call_on_bi_generic_raster_processor!(
             @variants
             $input_a, $input_b,
             ( $processor_a, $processor_b ) => $function_call,

@@ -2,8 +2,7 @@ use std::collections::HashMap;
 use std::sync::Arc;
 
 use float_cmp::approx_eq;
-use futures::stream;
-use futures::stream::BoxStream;
+use futures::stream::{self, BoxStream};
 use futures::StreamExt;
 
 use geoengine_datatypes::collections::{
@@ -11,12 +10,14 @@ use geoengine_datatypes::collections::{
     FeatureCollectionInfos, FeatureCollectionRowBuilder, GeoFeatureCollectionRowBuilder,
     GeometryRandomAccess,
 };
-use geoengine_datatypes::primitives::{BoundingBox2D, FeatureDataRef, Geometry, TimeInterval};
+use geoengine_datatypes::primitives::{
+    BoundingBox2D, FeatureDataRef, Geometry, TimeInterval, VectorQueryRectangle,
+};
 use geoengine_datatypes::util::arrow::ArrowTyped;
 
 use crate::adapters::FeatureCollectionChunkMerger;
+use crate::engine::QueryProcessor;
 use crate::engine::{QueryContext, VectorQueryProcessor};
-use crate::engine::{QueryProcessor, VectorQueryRectangle};
 use crate::error::Error;
 use crate::util::Result;
 use async_trait::async_trait;
@@ -272,8 +273,8 @@ where
 
             // add time and geo
             for (_, time_interval) in join_inner_batch_matches {
-                builder.push_geometry(geometry.clone())?;
-                builder.push_time_interval(time_interval)?;
+                builder.push_geometry(geometry.clone());
+                builder.push_time_interval(time_interval);
                 builder.finish_row();
             }
 
@@ -356,7 +357,7 @@ where
             .left_processor
             .query(query, ctx)
             .await?
-            .and_then(async move |left_collection| {
+            .and_then(move |left_collection| async move {
                 // This implementation is a nested-loop join
                 let left_collection = Arc::new(left_collection);
 
@@ -368,7 +369,7 @@ where
                             self.join(
                                 left_collection.clone(),
                                 right_collection,
-                                ctx.chunk_byte_size(),
+                                ctx.chunk_byte_size().into(),
                             )
                         }) {
                             Ok(batch_iter) => stream::iter(batch_iter).boxed(),
@@ -380,7 +381,10 @@ where
             })
             .try_flatten();
 
-        Ok(FeatureCollectionChunkMerger::new(result_stream.fuse(), ctx.chunk_byte_size()).boxed())
+        Ok(
+            FeatureCollectionChunkMerger::new(result_stream.fuse(), ctx.chunk_byte_size().into())
+                .boxed(),
+        )
     }
 }
 
@@ -392,8 +396,9 @@ mod tests {
     use geoengine_datatypes::primitives::{
         BoundingBox2D, FeatureData, MultiPoint, SpatialResolution, TimeInterval,
     };
+    use geoengine_datatypes::util::test::TestDefault;
 
-    use crate::engine::{MockExecutionContext, MockQueryContext, VectorOperator};
+    use crate::engine::{ChunkByteSize, MockExecutionContext, MockQueryContext, VectorOperator};
     use crate::mock::MockFeatureCollectionSource;
 
     use super::*;
@@ -406,7 +411,7 @@ mod tests {
         right_join_column: &str,
         right_suffix: &str,
     ) -> Vec<MultiPointCollection> {
-        let execution_context = MockExecutionContext::default();
+        let execution_context = MockExecutionContext::test_default();
 
         let left = MockFeatureCollectionSource::single(left)
             .boxed()
@@ -432,7 +437,7 @@ mod tests {
             spatial_resolution: SpatialResolution::zero_point_one(),
         };
 
-        let ctx = MockQueryContext::new(usize::MAX);
+        let ctx = MockQueryContext::new(ChunkByteSize::MAX);
 
         let processor = EquiGeoToDataJoinProcessor::new(
             left_processor,
