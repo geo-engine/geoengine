@@ -5,6 +5,7 @@ mod interpolation;
 mod map_query;
 mod meteosat;
 mod point_in_polygon;
+mod raster_kernel;
 mod raster_type_conversion;
 mod raster_vector_join;
 mod reprojection;
@@ -19,6 +20,7 @@ pub use point_in_polygon::{
     PointInPolygonFilter, PointInPolygonFilterParams, PointInPolygonFilterSource,
     PointInPolygonTester,
 };
+pub use raster_kernel::{RasterKernel, RasterKernelError, RasterKernelParams};
 pub use raster_type_conversion::{RasterTypeConversionParams, RasterTypeConversionQueryProcessor};
 pub use reprojection::{Reprojection, ReprojectionParams};
 pub use time_projection::{TimeProjection, TimeProjectionError, TimeProjectionParams};

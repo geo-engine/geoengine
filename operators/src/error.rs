@@ -298,6 +298,11 @@ pub enum Error {
     },
 
     AlphaBandAsMaskNotAllowed,
+
+    #[snafu(context(false))]
+    RasterKernelError {
+        source: crate::processing::RasterKernelError,
+    },
 }
 
 impl From<crate::adapters::SparseTilesFillAdapterError> for Error {
