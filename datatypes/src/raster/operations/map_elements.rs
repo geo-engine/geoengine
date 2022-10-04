@@ -99,7 +99,7 @@ where
                 }
             });
 
-        MaskedGrid::new(new_data, validity_mask).expect("Masked grid should have been created")
+        MaskedGrid::new(new_data, validity_mask).expect("Masked grid cration should work because `new_data` has the same shape as the original data and thus the dimensions must equal the validity mask.")
     }
 }
 
@@ -221,7 +221,7 @@ where
         } = self;
         let new_data = data.map_elements_parallel(map_fn);
         MaskedGrid::new(new_data, validity_mask)
-            .expect("the shape of the grid and the data size should match")
+            .expect("MaskedGrid creation should work because the shape of the grid and the data size are valid and left unchanged.")
     }
 }
 

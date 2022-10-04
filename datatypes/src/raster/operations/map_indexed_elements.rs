@@ -346,7 +346,9 @@ where
             .map(|(lin_idx, i)| map_fn(lin_idx, i))
             .collect_into_vec(out_data.as_mut());
 
-        Grid::new(shape, out_data).expect("Grid should have been created.")
+        Grid::new(shape, out_data).expect(
+            "Grid creation should work because shape and data size are taken from a valid grid.",
+        )
     }
 }
 
@@ -391,7 +393,7 @@ where
         } = self;
         let out_grid = inner_grid.map_indexed_elements_parallel(map_fn);
 
-        MaskedGrid::new(out_grid, validity_mask).expect("Masked grid should have been created.")
+        MaskedGrid::new(out_grid, validity_mask).expect("MaskedGrid creation should work because shape and validity mask size are taken from a valid grid.")
     }
 }
 
