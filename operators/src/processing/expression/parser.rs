@@ -2,7 +2,7 @@ use std::{cell::RefCell, collections::HashSet, rc::Rc};
 
 use pest::{
     iterators::{Pair, Pairs},
-    prec_climber::{Assoc, Operator, PrecClimber},
+    pratt_parser::{Assoc, Op, PrattParser},
     Parser,
 };
 use pest_derive::Parser;
@@ -36,16 +36,14 @@ pub struct ExpressionParser {
 }
 
 lazy_static::lazy_static! {
-    static ref EXPRESSION_CLIMBER: PrecClimber<Rule> = PrecClimber::new(vec![
-        Operator::new(Rule::add, Assoc::Left) | Operator::new(Rule::subtract, Assoc::Left),
-        Operator::new(Rule::multiply, Assoc::Left) | Operator::new(Rule::divide, Assoc::Left),
-        Operator::new(Rule::power, Assoc::Right),
-    ]);
+    static ref EXPRESSION_PARSER: PrattParser<Rule> = PrattParser::new()
+        .op(Op::infix(Rule::add, Assoc::Left) | Op::infix(Rule::subtract, Assoc::Left))
+        .op(Op::infix(Rule::multiply, Assoc::Left) | Op::infix(Rule::divide, Assoc::Left))
+        .op(Op::infix(Rule::power, Assoc::Right));
 
-    static ref BOOLEAN_EXPRESSION_CLIMBER: PrecClimber<Rule> = PrecClimber::new(vec![
-        Operator::new(Rule::or, Assoc::Left),
-        Operator::new(Rule::and, Assoc::Left),
-    ]);
+    static ref BOOLEAN_EXPRESSION_PARSER: PrattParser<Rule> = PrattParser::new()
+        .op(Op::infix(Rule::or, Assoc::Left))
+        .op(Op::infix(Rule::and, Assoc::Left));
 }
 
 impl ExpressionParser {
@@ -91,11 +89,11 @@ impl ExpressionParser {
     }
 
     fn build_ast(&self, pairs: Pairs<'_, Rule>) -> Result<AstNode> {
-        EXPRESSION_CLIMBER.climb(
-            pairs,
-            |pair| self.resolve_expression_rule(pair),
-            |left, op, right| self.resolve_infix_operations(left, &op, right),
-        )
+        EXPRESSION_PARSER
+            .map_primary(|primary| self.resolve_expression_rule(primary))
+            .map_infix(|left, op, right| self.resolve_infix_operations(left, &op, right))
+            // TODO: is there another way to remove EOIs?
+            .parse(pairs.filter(|pair| pair.as_rule() != Rule::EOI))
     }
 
     fn resolve_expression_rule(&self, pair: Pair<Rule>) -> Result<AstNode> {
@@ -273,11 +271,10 @@ impl ExpressionParser {
     }
 
     fn build_boolean_expression(&self, pairs: Pairs<'_, Rule>) -> Result<BooleanExpression> {
-        BOOLEAN_EXPRESSION_CLIMBER.climb(
-            pairs,
-            |pair| self.resolve_boolean_expression_rule(pair),
-            |left, op, right| Self::resolve_infix_boolean_operations(left, &op, right),
-        )
+        BOOLEAN_EXPRESSION_PARSER
+            .map_primary(|primary| self.resolve_boolean_expression_rule(primary))
+            .map_infix(|left, op, right| Self::resolve_infix_boolean_operations(left, &op, right))
+            .parse(pairs)
     }
 
     fn resolve_boolean_expression_rule(&self, pair: Pair<Rule>) -> Result<BooleanExpression> {
