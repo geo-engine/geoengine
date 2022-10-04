@@ -1,8 +1,11 @@
-use crate::primitives::{
-    AxisAlignedRectangle, Coordinate2D, SpatialPartition2D, SpatialPartitioned,
+use crate::{
+    primitives::{AxisAlignedRectangle, Coordinate2D, SpatialPartition2D, SpatialPartitioned},
+    util::test::TestDefault,
 };
 
-use super::{GeoTransform, GridBoundingBox2D, GridIdx, GridIdx2D, GridShape2D, GridSize};
+use super::{
+    GeoTransform, GridBoundingBox2D, GridIdx, GridIdx2D, GridShape2D, GridShapeAccess, GridSize,
+};
 
 use serde::{Deserialize, Serialize};
 
@@ -23,7 +26,31 @@ impl TilingSpecification {
 
     /// create a `TilingStrategy` from self and pixel sizes
     pub fn strategy(self, x_pixel_size: f64, y_pixel_size: f64) -> TilingStrategy {
+        debug_assert!(x_pixel_size > 0.0);
+        debug_assert!(y_pixel_size < 0.0);
+
         TilingStrategy::new_with_tiling_spec(self, x_pixel_size, y_pixel_size)
+    }
+}
+
+impl GridShapeAccess for TilingSpecification {
+    type ShapeArray = [usize; 2];
+
+    fn grid_shape_array(&self) -> Self::ShapeArray {
+        self.tile_size_in_pixels.shape_array
+    }
+
+    fn grid_shape(&self) -> GridShape2D {
+        self.tile_size_in_pixels
+    }
+}
+
+impl TestDefault for TilingSpecification {
+    fn test_default() -> Self {
+        Self {
+            origin_coordinate: Coordinate2D::new(0., 0.),
+            tile_size_in_pixels: GridShape2D::new([512, 512]),
+        }
     }
 }
 
@@ -57,30 +84,17 @@ impl TilingStrategy {
         }
     }
 
-    pub fn upper_left_pixel_idx(&self, partition: SpatialPartition2D) -> GridIdx2D {
-        self.geo_transform
-            .coordinate_to_grid_idx_2d(partition.upper_left())
-    }
-
-    pub fn lower_right_pixel_idx(&self, partition: SpatialPartition2D) -> GridIdx2D {
-        let lr_idx = self
-            .geo_transform
-            .coordinate_to_grid_idx_2d(partition.lower_right());
-
-        lr_idx - 1
-    }
-
     pub fn pixel_idx_to_tile_idx(&self, pixel_idx: GridIdx2D) -> GridIdx2D {
         let GridIdx([y_pixel_idx, x_pixel_idx]) = pixel_idx;
         let [y_tile_size, x_tile_size] = self.tile_size_in_pixels.into_inner();
-        let y_tile_idx = (y_pixel_idx as f32 / y_tile_size as f32).floor() as isize;
-        let x_tile_idx = (x_pixel_idx as f32 / x_tile_size as f32).floor() as isize;
+        let y_tile_idx = (y_pixel_idx as f64 / y_tile_size as f64).floor() as isize;
+        let x_tile_idx = (x_pixel_idx as f64 / x_tile_size as f64).floor() as isize;
         [y_tile_idx, x_tile_idx].into()
     }
 
     pub fn tile_grid_box(&self, partition: SpatialPartition2D) -> GridBoundingBox2D {
-        let start = self.pixel_idx_to_tile_idx(self.upper_left_pixel_idx(partition));
-        let end = self.pixel_idx_to_tile_idx(self.lower_right_pixel_idx(partition));
+        let start = self.pixel_idx_to_tile_idx(self.geo_transform.upper_left_pixel_idx(&partition));
+        let end = self.pixel_idx_to_tile_idx(self.geo_transform.lower_right_pixel_idx(&partition));
         GridBoundingBox2D::new_unchecked(start, end)
     }
 
@@ -91,10 +105,10 @@ impl TilingStrategy {
         partition: SpatialPartition2D,
     ) -> impl Iterator<Item = GridIdx2D> {
         let GridIdx([upper_left_tile_y, upper_left_tile_x]) =
-            self.pixel_idx_to_tile_idx(self.upper_left_pixel_idx(partition));
+            self.pixel_idx_to_tile_idx(self.geo_transform.upper_left_pixel_idx(&partition));
 
         let GridIdx([lower_right_tile_y, lower_right_tile_x]) =
-            self.pixel_idx_to_tile_idx(self.lower_right_pixel_idx(partition));
+            self.pixel_idx_to_tile_idx(self.geo_transform.lower_right_pixel_idx(&partition));
 
         let y_range = upper_left_tile_y..=lower_right_tile_y;
         let x_range = upper_left_tile_x..=lower_right_tile_x;
@@ -140,11 +154,11 @@ impl TileInformation {
         Self {
             tile_size_in_pixels: shape,
             global_tile_position: [0, 0].into(),
-            global_geo_transform: GeoTransform {
-                origin_coordinate: partition.upper_left(),
-                x_pixel_size: partition.size_x() / shape.axis_size_x() as f64,
-                y_pixel_size: -partition.size_y() / shape.axis_size_y() as f64,
-            },
+            global_geo_transform: GeoTransform::new(
+                partition.upper_left(),
+                partition.size_x() / shape.axis_size_x() as f64,
+                -partition.size_y() / shape.axis_size_y() as f64,
+            ),
         }
     }
 
@@ -199,12 +213,12 @@ impl TileInformation {
     pub fn tile_geo_transform(&self) -> GeoTransform {
         let tile_upper_left_coord = self
             .global_geo_transform
-            .grid_idx_to_upper_left_coordinate_2d(self.global_upper_left_pixel_idx());
+            .grid_idx_to_pixel_upper_left_coordinate_2d(self.global_upper_left_pixel_idx());
 
         GeoTransform::new(
             tile_upper_left_coord,
-            self.global_geo_transform.x_pixel_size,
-            self.global_geo_transform.y_pixel_size,
+            self.global_geo_transform.x_pixel_size(),
+            self.global_geo_transform.y_pixel_size(),
         )
     }
 }
@@ -213,10 +227,44 @@ impl SpatialPartitioned for TileInformation {
     fn spatial_partition(&self) -> SpatialPartition2D {
         let top_left_coord = self
             .global_geo_transform
-            .grid_idx_to_upper_left_coordinate_2d(self.global_upper_left_pixel_idx());
+            .grid_idx_to_pixel_upper_left_coordinate_2d(self.global_upper_left_pixel_idx());
         let lower_right_coord = self
             .global_geo_transform
-            .grid_idx_to_upper_left_coordinate_2d(self.global_lower_right_pixel_idx() + 1); // we need the border of the lower right pixel.
+            .grid_idx_to_pixel_upper_left_coordinate_2d(self.global_lower_right_pixel_idx() + 1); // we need the border of the lower right pixel.
         SpatialPartition2D::new_unchecked(top_left_coord, lower_right_coord)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+
+    use super::*;
+
+    #[test]
+    fn it_generates_only_intersected_tiles() {
+        let strat = TilingStrategy {
+            tile_size_in_pixels: [600, 600].into(),
+            geo_transform: GeoTransform::new(
+                (0., 0.).into(),
+                2.095_475_792_884_826_7E-8,
+                -2.095_475_792_884_826_7E-8,
+            ),
+        };
+
+        let partition = SpatialPartition2D::new(
+            (12.477_738_261_222_84, 43.881_293_535_232_544).into(),
+            (12.477_743_625_640_87, 43.881_288_170_814_514).into(),
+        )
+        .unwrap();
+
+        let tiles = strat
+            .tile_information_iterator(partition)
+            .collect::<Vec<_>>();
+
+        assert_eq!(tiles.len(), 2);
+
+        for tile in tiles {
+            assert!(partition.intersects(&tile.spatial_partition()));
+        }
     }
 }

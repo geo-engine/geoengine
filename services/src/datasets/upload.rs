@@ -2,12 +2,12 @@ use std::path::{Path, PathBuf};
 
 use crate::contexts::Session;
 use crate::error::Result;
+use crate::identifier;
 use crate::{
     error,
     util::config::{self, get_config_element},
 };
 use async_trait::async_trait;
-use geoengine_datatypes::identifier;
 use serde::{Deserialize, Serialize};
 
 identifier!(UploadId);
@@ -24,7 +24,7 @@ impl UploadRootPath for UploadId {
     }
 }
 
-#[derive(Debug, Serialize, Deserialize, Clone)]
+#[derive(Debug, Serialize, Deserialize, Clone, PartialEq, Eq)]
 pub struct Upload {
     pub id: UploadId,
     pub files: Vec<FileUpload>,
@@ -39,11 +39,11 @@ impl Upload {
     }
 }
 
-#[derive(Debug, Serialize, Deserialize, Clone)]
+#[derive(Debug, Serialize, Deserialize, Clone, PartialEq, Eq)]
 pub struct FileUpload {
     pub id: FileId,
     pub name: String,
-    pub byte_size: usize,
+    pub byte_size: u64,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -56,5 +56,5 @@ pub struct UploadListing {
 pub trait UploadDb<S: Session> {
     async fn get_upload(&self, session: &S, upload: UploadId) -> Result<Upload>;
 
-    async fn create_upload(&mut self, session: &S, upload: Upload) -> Result<()>;
+    async fn create_upload(&self, session: &S, upload: Upload) -> Result<()>;
 }

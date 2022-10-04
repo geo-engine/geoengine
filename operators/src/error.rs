@@ -1,15 +1,30 @@
-use chrono::ParseError;
-use geoengine_datatypes::dataset::DatasetId;
+use crate::util::statistics::StatisticsError;
+use geoengine_datatypes::dataset::DataId;
+use geoengine_datatypes::error::ErrorSource;
 use geoengine_datatypes::primitives::FeatureDataType;
-use snafu::Snafu;
+use snafu::prelude::*;
 use std::ops::Range;
+use std::path::PathBuf;
 
 #[derive(Debug, Snafu)]
-#[snafu(visibility = "pub(crate)")]
+#[snafu(visibility(pub(crate)))]
+#[snafu(context(suffix(false)))] // disables default `Snafu` suffix
 pub enum Error {
-    #[snafu(display("MissingRasterProperty Error: {}", property))]
-    MissingRasterProperty {
-        property: String,
+    UnsupportedRasterValue,
+
+    InvalidMeteosatSatellite,
+
+    InvalidUTCTimestamp,
+
+    #[snafu(display("InvalidChannel Error (requested channel: {})", channel))]
+    InvalidChannel {
+        channel: usize,
+    },
+
+    #[snafu(display("InvalidMeasurement Error; expected {}, found: {}", expected, found))]
+    InvalidMeasurement {
+        expected: String,
+        found: String,
     },
 
     #[snafu(display("CsvSource Error: {}", source))]
@@ -38,6 +53,9 @@ pub enum Error {
         found: geoengine_datatypes::spatial_reference::SpatialReferenceOption,
     },
 
+    AllSourcesMustHaveSameSpatialReference,
+
+    #[snafu(display("InvalidOperatorSpec: {}", reason))]
     InvalidOperatorSpec {
         reason: String,
     },
@@ -81,44 +99,29 @@ pub enum Error {
         source: serde_json::Error,
     },
 
-    Ocl {
-        ocl_error: ocl::error::Error,
-    },
-
-    ClProgramInvalidRasterIndex,
-
-    ClProgramInvalidRasterDataType,
-
-    ClProgramInvalidFeaturesIndex,
-
-    ClProgramInvalidVectorDataType,
-
-    ClProgramInvalidGenericIndex,
-
-    ClProgramInvalidGenericDataType,
-
-    ClProgramUnspecifiedRaster,
-
-    ClProgramUnspecifiedFeatures,
-
-    ClProgramUnspecifiedGenericBuffer,
-
-    ClProgramInvalidColumn,
-
-    ClInvalidInputsForIterationType,
-
     InvalidExpression,
 
     InvalidNumberOfExpressionInputs,
 
     InvalidNoDataValueValueForOutputDataType,
 
+    #[snafu(display("Invalid type: expected {} found {}", expected, found))]
     InvalidType {
         expected: String,
         found: String,
     },
 
-    InvalidOperatorType,
+    #[snafu(display("Invalid operator type: expected {} found {}", expected, found))]
+    InvalidOperatorType {
+        expected: String,
+        found: String,
+    },
+
+    #[snafu(display("Invalid vector type: expected {} found {}", expected, found))]
+    InvalidVectorType {
+        expected: String,
+        found: String,
+    },
 
     #[snafu(display("Column types do not match: {:?} - {:?}", left, right))]
     ColumnTypeMismatch {
@@ -145,10 +148,14 @@ pub enum Error {
     TimeIntervalDurationMissing,
 
     TimeParse {
-        source: chrono::format::ParseError,
+        source: Box<dyn ErrorSource>,
     },
 
     TimeInstanceNotDisplayable,
+
+    InvalidTimeStringPlaceholder {
+        name: String,
+    },
 
     DatasetMetaData {
         source: Box<dyn std::error::Error + Send + Sync>,
@@ -158,15 +165,15 @@ pub enum Error {
         source: arrow::error::ArrowError,
     },
 
-    NoDatasetWithGivenId {
-        id: DatasetId,
+    NoDataWithGivenId {
+        id: DataId,
     },
 
     RasterRootPathNotConfigured, // TODO: remove when GdalSource uses LoadingInfo
 
-    InvalidDatasetId,
-    DatasetLoadingInfoProviderMismatch,
-    UnknownDatasetId,
+    InvalidDataId,
+    InvalidMetaDataType,
+    UnknownDataId,
 
     // TODO: this error should not be propagated to user
     #[snafu(display("Could not open gdal dataset for file path {:?}", file_path))]
@@ -186,7 +193,7 @@ pub enum Error {
 
     OgrFieldValueIsNotDateTime,
     OgrFieldValueIsNotString,
-    OgrFieldValueIsNotValidForSeconds,
+    OgrFieldValueIsNotValidForTimestamp,
     OgrColumnFieldTypeMismatch {
         expected: String,
         field_value: gdal::vector::FieldValue,
@@ -194,6 +201,10 @@ pub enum Error {
 
     FeatureDataValueMustNotBeNull,
     InvalidFeatureDataType,
+    InvalidRasterDataType,
+
+    #[snafu(display("No candidate source resolutions were produced."))]
+    NoSourceResolution,
 
     WindowSizeMustNotBeZero,
 
@@ -201,6 +212,7 @@ pub enum Error {
 
     TemporalRasterAggregationLastValidRequiresNoData,
     TemporalRasterAggregationFirstValidRequiresNoData,
+    TemporalRasterAggregationMeanRequiresNoData,
 
     NoSpatialBoundsAvailable,
 
@@ -223,6 +235,91 @@ pub enum Error {
     OgrSqlQuery,
 
     GdalRasterDataTypeNotSupported,
+
+    DynamicGdalSourceSpecHasEmptyTimePlaceholders,
+
+    #[snafu(display("Input `{}` must be greater than zero at `{}`", name, scope))]
+    InputMustBeGreaterThanZero {
+        scope: &'static str,
+        name: &'static str,
+    },
+
+    #[snafu(display("Input `{}` must be zero or positive at `{}`", name, scope))]
+    InputMustBeZeroOrPositive {
+        scope: &'static str,
+        name: &'static str,
+    },
+
+    DuplicateOutputColumns,
+
+    #[snafu(display("Input column `{:}` is missing", name))]
+    MissingInputColumn {
+        name: String,
+    },
+
+    InvalidGdalFilePath {
+        file_path: PathBuf,
+    },
+
+    #[snafu(display(
+        "Raster data sets with a different origin than upper left are currently not supported"
+    ))]
+    GeoTransformOrigin,
+
+    #[snafu(display("Statistics error: {}", source))]
+    Statistics {
+        source: crate::util::statistics::StatisticsError,
+    },
+
+    #[snafu(display("SparseTilesFillAdapter error: {}", source))]
+    SparseTilesFillAdapter {
+        source: crate::adapters::SparseTilesFillAdapterError,
+    },
+    #[snafu(context(false))]
+    ExpressionOperator {
+        source: crate::processing::ExpressionError,
+    },
+
+    #[snafu(context(false))]
+    TimeProjectionOperator {
+        source: crate::processing::TimeProjectionError,
+    },
+    #[snafu(display("MockRasterSource error: {}", source))]
+    MockRasterSource {
+        source: crate::mock::MockRasterSourceError,
+    },
+    #[snafu(context(false))]
+    InterpolationOperator {
+        source: crate::processing::InterpolationError,
+    },
+    #[snafu(context(false))]
+    TimeShift {
+        source: crate::processing::TimeShiftError,
+    },
+
+    AlphaBandAsMaskNotAllowed,
+}
+
+impl From<crate::adapters::SparseTilesFillAdapterError> for Error {
+    fn from(source: crate::adapters::SparseTilesFillAdapterError) -> Self {
+        Error::SparseTilesFillAdapter { source }
+    }
+}
+
+impl From<crate::mock::MockRasterSourceError> for Error {
+    fn from(source: crate::mock::MockRasterSourceError) -> Self {
+        Error::MockRasterSource { source }
+    }
+}
+
+/// The error requires to be `Send`.
+/// This inner modules tries to enforce this.
+mod requirements {
+    use super::*;
+
+    trait RequiresSend: Send {}
+
+    impl RequiresSend for Error {}
 }
 
 impl From<geoengine_datatypes::error::Error> for Error {
@@ -253,18 +350,6 @@ impl From<serde_json::Error> for Error {
     }
 }
 
-impl From<chrono::format::ParseError> for Error {
-    fn from(source: ParseError) -> Self {
-        Self::TimeParse { source }
-    }
-}
-
-impl From<ocl::Error> for Error {
-    fn from(ocl_error: ocl::Error) -> Self {
-        Self::Ocl { ocl_error }
-    }
-}
-
 impl From<arrow::error::ArrowError> for Error {
     fn from(source: arrow::error::ArrowError) -> Self {
         Error::Arrow { source }
@@ -274,5 +359,11 @@ impl From<arrow::error::ArrowError> for Error {
 impl From<tokio::task::JoinError> for Error {
     fn from(source: tokio::task::JoinError) -> Self {
         Error::TokioJoin { source }
+    }
+}
+
+impl From<crate::util::statistics::StatisticsError> for Error {
+    fn from(source: StatisticsError) -> Self {
+        Error::Statistics { source }
     }
 }

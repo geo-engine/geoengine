@@ -2,6 +2,7 @@ use std::convert::{TryFrom, TryInto};
 
 use arrow::array::{ArrayBuilder, BooleanArray};
 use arrow::error::ArrowError;
+use float_cmp::{ApproxEq, F64Margin};
 use serde::{Deserialize, Serialize};
 use snafu::ensure;
 
@@ -150,12 +151,12 @@ impl ArrowTyped for MultiPoint {
                     let floats: &Float64Array = downcast_array(&floats_ref);
 
                     let new_floats = new_points.values();
-                    new_floats.append_slice(floats.values())?;
+                    new_floats.append_slice(floats.values());
 
-                    new_points.append(true)?;
+                    new_points.append(true);
                 }
 
-                new_multipoints.append(true)?;
+                new_multipoints.append(true);
             }
         }
 
@@ -183,12 +184,12 @@ impl ArrowTyped for MultiPoint {
                     let old_floats: &Float64Array = downcast_array(&old_floats_array);
 
                     let float_builder = coordinate_builder.values();
-                    float_builder.append_slice(old_floats.values())?;
+                    float_builder.append_slice(old_floats.values());
 
-                    coordinate_builder.append(true)?;
+                    coordinate_builder.append(true);
                 }
 
-                new_features.append(true)?;
+                new_features.append(true);
             }
         }
 
@@ -204,11 +205,11 @@ impl ArrowTyped for MultiPoint {
             let coordinate_builder = builder.values();
             for coordinate in multi_point.as_ref() {
                 let float_builder = coordinate_builder.values();
-                float_builder.append_value(coordinate.x)?;
-                float_builder.append_value(coordinate.y)?;
-                coordinate_builder.append(true)?;
+                float_builder.append_value(coordinate.x);
+                float_builder.append_value(coordinate.y);
+                coordinate_builder.append(true);
             }
-            builder.append(true)?;
+            builder.append(true);
         }
 
         Ok(builder.finish())
@@ -285,8 +286,24 @@ where
     }
 }
 
+impl ApproxEq for &MultiPoint {
+    type Margin = F64Margin;
+
+    fn approx_eq<M: Into<Self::Margin>>(self, other: Self, margin: M) -> bool {
+        let m = margin.into();
+        self.coordinates.len() == other.coordinates.len()
+            && self
+                .coordinates
+                .iter()
+                .zip(other.coordinates.iter())
+                .all(|(&a, &b)| a.approx_eq(b, m))
+    }
+}
+
 #[cfg(test)]
 mod tests {
+    use float_cmp::approx_eq;
+
     use super::*;
 
     #[test]
@@ -335,5 +352,44 @@ mod tests {
         ]);
         let mp = MultiPoint { coordinates };
         assert_eq!(mp.spatial_bounds(), expected);
+    }
+
+    #[test]
+    fn approx_equal() {
+        let a = MultiPoint::new(vec![
+            (0.5, 0.5).into(),
+            (0.5, 0.5).into(),
+            (0.5, 0.5).into(),
+        ])
+        .unwrap();
+
+        let b = MultiPoint::new(vec![
+            (0.5, 0.499_999_999).into(),
+            (0.5, 0.5).into(),
+            (0.5, 0.5).into(),
+        ])
+        .unwrap();
+
+        assert!(approx_eq!(&MultiPoint, &a, &b, epsilon = 0.000_001));
+    }
+
+    #[test]
+    fn not_approx_equal_len() {
+        let a = MultiPoint::new(vec![
+            (0.5, 0.5).into(),
+            (0.5, 0.5).into(),
+            (0.5, 0.5).into(),
+        ])
+        .unwrap();
+
+        let b = MultiPoint::new(vec![
+            (0.5, 0.5).into(),
+            (0.5, 0.5).into(),
+            (0.5, 0.5).into(),
+            (123_456_789.5, 123_456_789.5).into(),
+        ])
+        .unwrap();
+
+        assert!(!approx_eq!(&MultiPoint, &a, &b, F64Margin::default()));
     }
 }

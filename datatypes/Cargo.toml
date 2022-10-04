@@ -1,42 +1,55 @@
 [package]
 name = "geoengine-datatypes"
-version = "0.1.0"
+version = "0.7.0"
 authors = [
     "Christian Beilschmidt <beilschmidt@mathematik.uni-marburg.de>",
     "Johannes Drönner <droenner@mathematik.uni-marburg.de>",
     "Michael Mattig <mattig@mathematik.uni-marburg.de>"
 ]
-edition = "2018"
+edition = "2021"
 
 [features]
-postgres = ["postgres-types"]
+postgres = ["postgres-types", "postgres-protocol"]
 # This compiles Geo Engine Pro
 pro = ["postgres"]
 
 [dependencies]
-arrow = { version = "5.0", features = ["simd"] }
+arrow = { version = "23.0", features = ["simd"] }
+async-trait = "0.1"
 chrono = "0.4"
 float-cmp = "0.9"
-gdal = { version = "^0.9", features = ["datetime"] }
-geo = "0.18"
-geojson = "0.22"
-image = "0.23"
+gdal =  "0.13"
+geo = "0.23"
+geojson = "0.24"
+image = "0.24"
+num = "0.4"
 num-traits = "0.2"
-ocl = { git = "https://github.com/michaelmattig/ocl", branch = "tentative_master" } # TODO: use crates.io version once it builds again
-ordered-float = { version= "2.0", features = ["serde"] }
+ordered-float = { version= "3.0", features = ["serde"] }
 paste = "1.0"
-postgres-types = { version = "0.2", features = ["derive", "with-chrono-0_4", "with-uuid-0_8"], optional = true }
+postgres-protocol = { version = "0.6", optional = true }
+postgres-types = { version = "0.2", features = ["derive", "with-chrono-0_4", "with-uuid-1"], optional = true }
 proj = "0.22"
+rayon = "1.5"
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
-snafu = "0.6"
-uuid = { version = "0.8", features = ["serde", "v4", "v5"] }
+snafu = "0.7"
+uuid = { version = "1.1", features = ["serde", "v4", "v5"] }
 
 [dev-dependencies]
-criterion = "0.3"
-ndarray = "0.14"
-vega_lite_4 = { version = "0.6", features = ["ndarray", "show_vega"]}
+criterion = "0.4"
 
 [[bench]]
 name = "multi_point_collection"
+harness = false
+
+[[bench]]
+name = "grid_mapping"
+harness = false
+
+[[bench]]
+name = "grid_updates"
+harness = false
+
+[[bench]]
+name = "masked_grid_mapping"
 harness = false

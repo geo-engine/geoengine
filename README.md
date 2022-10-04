@@ -2,14 +2,29 @@
 
 [![CI](https://github.com/geo-engine/geoengine/actions/workflows/ci.yml/badge.svg)](https://github.com/geo-engine/geoengine/actions/workflows/ci.yml)
 [![Coverage Status](https://coveralls.io/repos/github/geo-engine/geoengine/badge.svg?branch=master)](https://coveralls.io/github/geo-engine/geoengine?branch=master)
+[![Documentation](https://img.shields.io/badge/documentation-docs.geoengine.io-blue)](https://docs.geoengine.io/)
 
 This workspace contains the Geo Engine crates.
+
+## Documentation
+
+- [Geo Engine Docs](https://docs.geoengine.io/)
 
 ## Development
 
 - While Geo Engine should build on Linux and Windows environments, we currently only support Ubuntu Linux 20.04 LTS.
 - You need a recent Rust environment with a Rust nightly compiler. We recommend rustup to manage Rust `https://rustup.rs/`.
-- Geo Engine uses OpenCL and therefore requires a functional OpenCL environment. On Linux you can use POCL to run OpenCL on CPUs.
+
+### Ubuntu Users
+
+We suggest to add the [UbuntuGIS PPA](https://wiki.ubuntu.com/UbuntuGIS) for a recent version of GDAL.
+
+```
+# Add ppa
+add-apt-repository ppa:ubuntugis/ubuntugis-unstable
+# Update
+apt update
+```
 
 ### Dependencies
 
@@ -18,12 +33,8 @@ This workspace contains the Geo Engine crates.
 apt install build-essential
 # lld linker
 apt install clang lld
-# GDAL
+# GDAL (>= 3.2.1)
 apt install libgdal-dev gdal-bin
-# OpenCL
-apt install ocl-icd-opencl-dev
-# (optional) OpenCL POCL
-apt install pocl-opencl-icd
 # Proj build dependencies (if libproj >= 7.2 not installed)
 apt install cmake sqlite3
 ```
@@ -72,21 +83,24 @@ The PostgreSQL storage backend can optionally be enabled using `--features postg
 
 Copy `Settings-default.toml` to `Settings.toml` and edit per your requirements.
 
-### Docker
+## Troubleshooting
 
-#### Dev Container
+### Running out of memory map areas
 
-Build:
+Problem: When running Geo Engine or its tests you encounter one of the following (or similar) errors:
 
-`docker build --file=dev.Dockerfile --tag=geoengine:0.0.1 .`
+- `Cannot allocate Memory (OS Error 12)`
+- `Os { code: 11, kind: WouldBlock, message: "Resource temporarily unavailable" }`
 
-Execute:
+Solution: Adjust the system's `max_map_count` parameter:
 
-`docker container run --detach --name geoengine --publish 127.0.0.1:3030:8080 geoengine:0.0.1`
-
-Inspect the container:
-
-`docker exec -it geoengine bash`
+- Temporary configuration:
+  - `sudo sysctl -w vm.max_map_count=262144`
+- Permanent configuration:
+  - Add the following line to /etc/sysctl.d/local.conf
+    - `vm.max_map_count=262144`
+  - Reload the system config:
+    - `sudo sysctl --system`
 
 ## Contributing
 

@@ -1,6 +1,8 @@
-use crate::error;
+use crate::error::{self, Error};
 use crate::operations::image::RgbaTransmutable;
 use crate::raster::TypedRasterConversion;
+use crate::util::Result;
+use gdal::raster::GDALDataType;
 use num_traits::{AsPrimitive, Bounded, Num};
 use serde::{Deserialize, Serialize};
 use std::convert::TryFrom;
@@ -105,6 +107,19 @@ impl RasterDataType {
             RasterDataType::I64 => value as i64 as f64 == value,
             RasterDataType::F32 => value.is_nan() || value as f32 as f64 == value,
             RasterDataType::F64 => true,
+        }
+    }
+
+    pub fn from_gdal_data_type(gdal_data_type: GDALDataType::Type) -> Result<Self> {
+        match gdal_data_type {
+            GDALDataType::GDT_Byte => Ok(Self::U8),
+            GDALDataType::GDT_UInt16 => Ok(Self::U16),
+            GDALDataType::GDT_Int16 => Ok(Self::I16),
+            GDALDataType::GDT_UInt32 => Ok(Self::U32),
+            GDALDataType::GDT_Int32 => Ok(Self::I32),
+            GDALDataType::GDT_Float32 => Ok(Self::F32),
+            GDALDataType::GDT_Float64 => Ok(Self::F64),
+            _ /* | GDALDataType::GDT_Unknown */ => Err(Error::GdalRasterDataTypeNotSupported),
         }
     }
 }
@@ -288,23 +303,6 @@ where
 {
     fn raster_data_type(&self) -> RasterDataType {
         R::TYPE
-    }
-}
-
-impl RasterDataType {
-    pub fn ocl_type(self) -> &'static str {
-        match self {
-            RasterDataType::U8 => "uchar",
-            RasterDataType::U16 => "ushort",
-            RasterDataType::U32 => "uint",
-            RasterDataType::U64 => "ulong",
-            RasterDataType::I8 => "char",
-            RasterDataType::I16 => "short",
-            RasterDataType::I32 => "int",
-            RasterDataType::I64 => "long",
-            RasterDataType::F32 => "float",
-            RasterDataType::F64 => "double",
-        }
     }
 }
 

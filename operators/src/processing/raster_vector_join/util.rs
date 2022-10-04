@@ -8,14 +8,14 @@ use geoengine_datatypes::{
     raster::{GridIdx2D, Pixel, RasterTile2D},
 };
 
-use crate::processing::PointInPolygonTester;
+use crate::processing::point_in_polygon::PointInPolygonTesterWithCollection;
 
 /// A `FeatureTimeSpan` combines a `TimeInterval` with a set of features it spans over.
 /// Thus, it is used in combination with a `FeatureCollection`.
 ///
 /// Both, `feature_index_start` and `feature_index_end` are inclusive.
 ///
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct FeatureTimeSpan {
     pub feature_index_start: usize,
     pub feature_index_end: usize,
@@ -107,7 +107,7 @@ pub struct MultiPointCoveredPixels {
     collection: FeatureCollection<MultiPoint>,
 }
 
-impl<'a> CoveredPixels<MultiPoint> for MultiPointCoveredPixels {
+impl CoveredPixels<MultiPoint> for MultiPointCoveredPixels {
     fn initialize(collection: FeatureCollection<MultiPoint>) -> Self {
         Self { collection }
     }
@@ -140,13 +140,13 @@ impl<'a> CoveredPixels<MultiPoint> for MultiPointCoveredPixels {
 }
 
 pub struct MultiPolygonCoveredPixels {
-    tester: PointInPolygonTester,
+    tester_with_collection: PointInPolygonTesterWithCollection,
 }
 
 impl CoveredPixels<MultiPolygon> for MultiPolygonCoveredPixels {
     fn initialize(collection: FeatureCollection<MultiPolygon>) -> Self {
         Self {
-            tester: PointInPolygonTester::new(collection), // TODO: parallelize
+            tester_with_collection: PointInPolygonTesterWithCollection::new(collection), // TODO: parallelize
         }
     }
 
@@ -159,16 +159,15 @@ impl CoveredPixels<MultiPolygon> for MultiPolygonCoveredPixels {
 
         let [height, width] = raster.grid_shape_array();
 
+        let tester = self.tester_with_collection.tester();
+
         let mut pixels = vec![];
         for row in 0..height {
             for col in 0..width {
                 let idx = [row as isize, col as isize].into();
-                let coordinate = geo_transform.grid_idx_to_upper_left_coordinate_2d(idx);
+                let coordinate = geo_transform.grid_idx_to_pixel_upper_left_coordinate_2d(idx);
 
-                if self
-                    .tester
-                    .is_coordinate_in_multi_polygon(coordinate, feature_index)
-                {
+                if tester.multi_polygon_contains_coordinate(coordinate, feature_index) {
                     pixels.push(idx);
                 }
             }
@@ -178,11 +177,11 @@ impl CoveredPixels<MultiPolygon> for MultiPolygonCoveredPixels {
     }
 
     fn collection_ref(&self) -> &FeatureCollection<MultiPolygon> {
-        self.tester.polygons_ref()
+        self.tester_with_collection.collection()
     }
 
     fn collection(self) -> FeatureCollection<MultiPolygon> {
-        self.tester.polygons()
+        self.tester_with_collection.into()
     }
 }
 

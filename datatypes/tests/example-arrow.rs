@@ -4,22 +4,19 @@ use arrow::array::{
     Int32Builder, ListArray, ListBuilder, StringArray, StringBuilder, StructBuilder, UInt64Array,
     UInt64Builder,
 };
-use arrow::buffer::{Buffer, MutableBuffer};
+use arrow::buffer::Buffer;
 use arrow::compute::gt_eq_scalar;
 use arrow::compute::kernels::filter::filter;
 use arrow::datatypes::{DataType, Field};
 use geoengine_datatypes::primitives::{Coordinate2D, TimeInterval};
-use ocl::ProQue;
 use std::{mem, slice};
 
 #[test]
 fn simple() {
-    let mut primitive_array_builder = Int32Builder::new(5);
-    primitive_array_builder.append_value(1).unwrap();
-    primitive_array_builder.append_value(2).unwrap();
-    primitive_array_builder
-        .append_slice(&(3..=5).collect::<Vec<i32>>())
-        .unwrap();
+    let mut primitive_array_builder = Int32Builder::with_capacity(5);
+    primitive_array_builder.append_value(1);
+    primitive_array_builder.append_value(2);
+    primitive_array_builder.append_slice(&(3..=5).collect::<Vec<i32>>());
 
     let primitive_array = primitive_array_builder.finish();
 
@@ -38,10 +35,10 @@ fn simple() {
 
 #[test]
 fn null_values() {
-    let mut primitive_array_builder = Int32Builder::new(5);
-    primitive_array_builder.append_value(1).unwrap();
-    primitive_array_builder.append_null().unwrap();
-    primitive_array_builder.append_slice(&[3, 4, 5]).unwrap();
+    let mut primitive_array_builder = Int32Builder::with_capacity(5);
+    primitive_array_builder.append_value(1);
+    primitive_array_builder.append_null();
+    primitive_array_builder.append_slice(&[3, 4, 5]);
 
     let primitive_array = primitive_array_builder.finish();
 
@@ -58,12 +55,12 @@ fn null_values() {
 
 #[test]
 fn null_bytes() {
-    let mut primitive_array_builder = Int32Builder::new(2);
-    primitive_array_builder.append_value(1).unwrap();
-    primitive_array_builder.append_null().unwrap();
-    primitive_array_builder.append_option(None).unwrap();
-    primitive_array_builder.append_option(Some(4)).unwrap();
-    primitive_array_builder.append_null().unwrap();
+    let mut primitive_array_builder = Int32Builder::with_capacity(2);
+    primitive_array_builder.append_value(1);
+    primitive_array_builder.append_null();
+    primitive_array_builder.append_option(None);
+    primitive_array_builder.append_option(Some(4));
+    primitive_array_builder.append_null();
 
     let primitive_array = primitive_array_builder.finish();
 
@@ -71,7 +68,7 @@ fn null_bytes() {
     assert_eq!(primitive_array.null_count(), 3);
 
     if let Some(null_bitmap) = primitive_array.data().null_bitmap() {
-        assert_eq!(null_bitmap.len(), 1);
+        assert_eq!(null_bitmap.bit_len(), 8); // bit_len returns number of bits
 
         assert_eq!(
             null_bitmap.clone().into_buffer().as_slice(), // must clone bitmap because there is no way to get a reference to the data
@@ -84,10 +81,8 @@ fn null_bytes() {
 #[allow(clippy::float_cmp)]
 fn offset() {
     let array = {
-        let mut array_builder = Float64Builder::new(5);
-        array_builder
-            .append_slice(&[2e10, 4e40, 20., 9.4, 0.])
-            .unwrap();
+        let mut array_builder = Float64Builder::with_capacity(5);
+        array_builder.append_slice(&[2e10, 4e40, 20., 9.4, 0.]);
         array_builder.finish()
     };
 
@@ -122,7 +117,8 @@ fn strings() {
             .len(offsets.len() - 1) // number of strings
             .add_buffer(Buffer::from(offsets.to_byte_slice()))
             .add_buffer(Buffer::from(strings.as_bytes()))
-            .build();
+            .build()
+            .unwrap();
 
         StringArray::from(data)
     };
@@ -142,10 +138,10 @@ fn strings() {
 #[test]
 fn strings2() {
     let array = {
-        let mut builder = StringBuilder::new(5);
+        let mut builder = StringBuilder::with_capacity(5, 5 * 3);
 
         for string in &["hello", "from", "the", "other", "side"] {
-            builder.append_value(string).unwrap();
+            builder.append_value(string);
         }
 
         builder.finish()
@@ -172,15 +168,15 @@ fn strings2() {
 #[test]
 fn list() {
     let array = {
-        let mut builder = ListBuilder::new(Int32Builder::new(0));
+        let mut builder = ListBuilder::new(Int32Builder::with_capacity(0));
 
-        builder.values().append_value(0).unwrap();
-        builder.values().append_value(1).unwrap();
-        builder.append(true).unwrap();
-        builder.values().append_value(2).unwrap();
-        builder.values().append_value(3).unwrap();
-        builder.values().append_value(4).unwrap();
-        builder.append(true).unwrap();
+        builder.values().append_value(0);
+        builder.values().append_value(1);
+        builder.append(true);
+        builder.values().append_value(2);
+        builder.values().append_value(3);
+        builder.values().append_value(4);
+        builder.append(true);
 
         builder.finish()
     };
@@ -199,26 +195,23 @@ fn list() {
             .values(),
         &[0, 1, 2, 3, 4],
     );
-    assert_eq!(
-        unsafe { array.data().buffers()[0].typed_data::<i32>() },
-        &[0, 2, 5]
-    ); // its in buffer 0... kind of unstable...
+    assert_eq!(array.data().buffers()[0].typed_data::<i32>(), &[0, 2, 5]); // its in buffer 0... kind of unstable...
 }
 
 #[test]
 fn fixed_size_list() {
     let array = {
-        let mut builder = FixedSizeListBuilder::new(Int32Builder::new(0), 2);
+        let mut builder = FixedSizeListBuilder::with_capacity(Int32Builder::with_capacity(0), 2, 2);
 
-        builder.values().append_value(0).unwrap();
-        builder.values().append_value(1).unwrap();
-        builder.append(true).unwrap();
-        builder.values().append_value(2).unwrap();
-        builder.values().append_value(3).unwrap();
-        builder.append(true).unwrap();
-        builder.values().append_value(4).unwrap();
-        builder.values().append_value(5).unwrap();
-        builder.append(true).unwrap();
+        builder.values().append_value(0);
+        builder.values().append_value(1);
+        builder.append(true);
+        builder.values().append_value(2);
+        builder.values().append_value(3);
+        builder.append(true);
+        builder.values().append_value(4);
+        builder.values().append_value(5);
+        builder.append(true);
 
         builder.finish()
     };
@@ -249,7 +242,8 @@ fn binary() {
     assert_eq!(t1, t2);
 
     let array = {
-        let mut builder = FixedSizeBinaryBuilder::new(3, mem::size_of::<TimeInterval>() as i32);
+        let mut builder =
+            FixedSizeBinaryBuilder::with_capacity(3, mem::size_of::<TimeInterval>() as i32);
 
         for &t in &[
             TimeInterval::new(0, 1).unwrap(),
@@ -257,7 +251,7 @@ fn binary() {
             TimeInterval::new(2, 3).unwrap(),
         ] {
             let t_bytes: [u8; 16] = unsafe { mem::transmute(t) };
-            builder.append_value(&t_bytes).unwrap();
+            builder.append_value(t_bytes).unwrap();
         }
 
         builder.finish()
@@ -296,74 +290,10 @@ fn binary() {
 }
 
 #[test]
-#[allow(clippy::cast_ptr_alignment)]
-fn ocl() {
-    let array = {
-        let mut builder = Int32Builder::new(5);
-        builder
-            .append_slice(&(1..=5).collect::<Vec<i32>>())
-            .unwrap();
-
-        builder.finish()
-    };
-
-    assert_eq!(array.len(), 5);
-
-    let src = r#"
-        __kernel void add(__global int* buffer, int scalar) {
-            buffer[get_global_id(0)] += scalar;
-        }
-    "#;
-
-    let pro_que = ProQue::builder()
-        .src(src)
-        .dims(array.len())
-        .build()
-        .unwrap();
-
-    let ocl_buffer = pro_que
-        .buffer_builder()
-        .copy_host_slice(array.values())
-        .build()
-        .unwrap();
-
-    let kernel = pro_que
-        .kernel_builder("add")
-        .arg(&ocl_buffer)
-        .arg(10_i32)
-        .build()
-        .unwrap();
-
-    unsafe {
-        kernel.enq().unwrap();
-    }
-
-    assert_eq!(ocl_buffer.len(), 5);
-
-    let result = {
-        let buffer = MutableBuffer::new(ocl_buffer.len() * mem::size_of::<i32>());
-        let buffer_raw: &mut [i32] =
-            unsafe { slice::from_raw_parts_mut(buffer.as_ptr() as *mut i32, ocl_buffer.len()) };
-        ocl_buffer.read(buffer_raw).enq().unwrap();
-
-        let data = ArrayData::builder(DataType::Int32)
-            .len(ocl_buffer.len())
-            .add_buffer(buffer.into())
-            .build();
-
-        Int32Array::from(data)
-    };
-
-    assert_eq!(result.values(), &[11, 12, 13, 14, 15]);
-}
-
-#[test]
 fn serialize() {
     let array = {
-        let mut builder = Int32Builder::new(5);
-        builder
-            .append_slice(&(1..=5).collect::<Vec<i32>>())
-            .unwrap();
+        let mut builder = Int32Builder::with_capacity(5);
+        builder.append_slice(&(1..=5).collect::<Vec<i32>>());
 
         builder.finish()
     };
@@ -388,14 +318,14 @@ fn table() {
 
         for &(feature_start, time) in &[(0_u64, 0_i64), (1, 10), (2, 20), (3, 30), (4, 40)] {
             builder
-                .field_builder(0)
-                .and_then(|builder: &mut UInt64Builder| builder.append_value(feature_start).ok())
-                .unwrap();
+                .field_builder::<UInt64Builder>(0)
+                .unwrap()
+                .append_value(feature_start);
             builder
-                .field_builder(1)
-                .and_then(|builder: &mut Date64Builder| builder.append_value(time).ok())
-                .unwrap();
-            builder.append(true).unwrap();
+                .field_builder::<Date64Builder>(1)
+                .unwrap()
+                .append_value(time);
+            builder.append(true);
         }
 
         builder.finish()
@@ -429,22 +359,18 @@ fn table() {
 #[test]
 fn nested_lists() {
     let array = {
-        let mut builder = ListBuilder::new(ListBuilder::new(Int32Builder::new(0)));
+        let mut builder = ListBuilder::new(ListBuilder::new(Int32Builder::with_capacity(0)));
 
         // [[[10, 11, 12], [20, 21]], [[30]]
-        builder
-            .values()
-            .values()
-            .append_slice(&[10, 11, 12])
-            .unwrap();
-        builder.values().append(true).unwrap();
-        builder.values().values().append_slice(&[20, 21]).unwrap();
-        builder.values().append(true).unwrap();
-        builder.append(true).unwrap();
+        builder.values().values().append_slice(&[10, 11, 12]);
+        builder.values().append(true);
+        builder.values().values().append_slice(&[20, 21]);
+        builder.values().append(true);
+        builder.append(true);
 
-        builder.values().values().append_slice(&[30]).unwrap();
-        builder.values().append(true).unwrap();
-        builder.append(true).unwrap();
+        builder.values().values().append_slice(&[30]);
+        builder.values().append(true);
+        builder.append(true);
 
         builder.finish()
     };
@@ -482,14 +408,14 @@ fn nested_lists() {
 
     assert_eq!(array.data().buffers().len(), 1);
     assert_eq!(
-        unsafe { array.data().buffers()[0].typed_data::<i32>() },
+        array.data().buffers()[0].typed_data::<i32>(),
         &[0, 2, 3], // indices of first level arrays in second level structure
     );
 
     assert_eq!(array.data().child_data().len(), 1);
     assert_eq!(array.data().child_data()[0].buffers().len(), 1);
     assert_eq!(
-        unsafe { array.data().child_data()[0].buffers()[0].typed_data::<i32>() },
+        array.data().child_data()[0].buffers()[0].typed_data::<i32>(),
         &[0, 3, 5, 6], // indices of second level arrays in actual data
     );
 
@@ -499,7 +425,7 @@ fn nested_lists() {
         1,
     );
     assert_eq!(
-        unsafe { array.data().child_data()[0].child_data()[0].buffers()[0].typed_data::<i32>() },
+        array.data().child_data()[0].child_data()[0].buffers()[0].typed_data::<i32>(),
         &[10, 11, 12, 20, 21, 30], // data
     );
 }
@@ -532,11 +458,14 @@ fn multipoints() {
                         ]
                         .to_byte_slice(),
                     ))
-                    .build(),
+                    .build()
+                    .unwrap(),
             )
-            .build(),
+            .build()
+            .unwrap(),
         )
-        .build();
+        .build()
+        .unwrap();
 
         ListArray::from(data)
     };
@@ -566,45 +495,40 @@ fn multipoints() {
 #[test]
 #[allow(clippy::float_cmp)]
 fn multipoint_builder() {
-    let float_builder = arrow::array::Float64Builder::new(0);
+    let float_builder = arrow::array::Float64Builder::with_capacity(0);
     let coordinate_builder = arrow::array::FixedSizeListBuilder::new(float_builder, 2);
     let mut multi_point_builder = arrow::array::ListBuilder::new(coordinate_builder);
 
     multi_point_builder
         .values()
         .values()
-        .append_slice(&[0.0, 0.1])
-        .unwrap();
-    multi_point_builder.values().append(true).unwrap();
+        .append_slice(&[0.0, 0.1]);
+    multi_point_builder.values().append(true);
     multi_point_builder
         .values()
         .values()
-        .append_slice(&[1.0, 1.1])
-        .unwrap();
-    multi_point_builder.values().append(true).unwrap();
+        .append_slice(&[1.0, 1.1]);
+    multi_point_builder.values().append(true);
 
-    multi_point_builder.append(true).unwrap(); // first multi point
+    multi_point_builder.append(true); // first multi point
 
     multi_point_builder
         .values()
         .values()
-        .append_slice(&[2.0, 2.1])
-        .unwrap();
-    multi_point_builder.values().append(true).unwrap();
+        .append_slice(&[2.0, 2.1]);
+    multi_point_builder.values().append(true);
     multi_point_builder
         .values()
         .values()
-        .append_slice(&[3.0, 3.1])
-        .unwrap();
-    multi_point_builder.values().append(true).unwrap();
+        .append_slice(&[3.0, 3.1]);
+    multi_point_builder.values().append(true);
     multi_point_builder
         .values()
         .values()
-        .append_slice(&[4.0, 4.1])
-        .unwrap();
-    multi_point_builder.values().append(true).unwrap();
+        .append_slice(&[4.0, 4.1]);
+    multi_point_builder.values().append(true);
 
-    multi_point_builder.append(true).unwrap(); // second multi point
+    multi_point_builder.append(true); // second multi point
 
     let multi_point = multi_point_builder.finish();
 
@@ -633,35 +557,37 @@ fn multipoint_builder() {
 fn multipoint_builder_bytes() {
     use arrow::datatypes::ToByteSlice;
 
-    let coordinate_builder =
-        arrow::array::FixedSizeBinaryBuilder::new(0, std::mem::size_of::<[f64; 2]>() as i32);
+    let coordinate_builder = arrow::array::FixedSizeBinaryBuilder::with_capacity(
+        0,
+        std::mem::size_of::<[f64; 2]>() as i32,
+    );
     let mut multi_point_builder = arrow::array::ListBuilder::new(coordinate_builder);
 
     multi_point_builder
         .values()
-        .append_value(&[0.0, 0.1].to_byte_slice())
+        .append_value([0.0, 0.1].to_byte_slice())
         .unwrap();
     multi_point_builder
         .values()
-        .append_value(&[1.0, 1.1].to_byte_slice())
+        .append_value([1.0, 1.1].to_byte_slice())
         .unwrap();
 
-    multi_point_builder.append(true).unwrap(); // first multi point
+    multi_point_builder.append(true); // first multi point
 
     multi_point_builder
         .values()
-        .append_value(&[2.0, 2.1].to_byte_slice())
+        .append_value([2.0, 2.1].to_byte_slice())
         .unwrap();
     multi_point_builder
         .values()
-        .append_value(&[3.0, 3.1].to_byte_slice())
+        .append_value([3.0, 3.1].to_byte_slice())
         .unwrap();
     multi_point_builder
         .values()
-        .append_value(&[4.0, 4.1].to_byte_slice())
+        .append_value([4.0, 4.1].to_byte_slice())
         .unwrap();
 
-    multi_point_builder.append(true).unwrap(); // second multi point
+    multi_point_builder.append(true); // second multi point
 
     let multi_point = multi_point_builder.finish();
 
@@ -671,7 +597,7 @@ fn multipoint_builder_bytes() {
 
     let floats: &[Coordinate2D] = unsafe {
         std::slice::from_raw_parts(
-            first_multi_point.value(0)[0] as *const u8 as *const _,
+            first_multi_point.value(0).as_ptr() as *const _,
             first_multi_point.len(),
         )
     };
@@ -683,7 +609,7 @@ fn multipoint_builder_bytes() {
 
     let floats: &[Coordinate2D] = unsafe {
         std::slice::from_raw_parts(
-            second_multi_point.value(0)[0] as *const u8 as *const _,
+            second_multi_point.value(0).as_ptr() as *const _,
             second_multi_point.len(),
         )
     };
@@ -694,30 +620,29 @@ fn multipoint_builder_bytes() {
 }
 
 #[test]
-#[allow(clippy::eq_op)]
 fn float_equality() {
-    let mut floats = Float64Builder::new(3);
-    floats.append_value(4.0).unwrap();
-    floats.append_null().unwrap();
-    floats.append_value(f64::NAN).unwrap();
+    let mut floats = Float64Builder::with_capacity(3);
+    floats.append_value(4.0);
+    floats.append_null();
+    floats.append_value(f64::NAN);
 
     let floats = floats.finish();
 
     assert_eq!(floats, floats);
 
-    let mut floats2 = Float64Builder::new(3);
-    floats2.append_value(4.0).unwrap();
-    floats2.append_null().unwrap();
-    floats2.append_value(f64::NAN).unwrap();
+    let mut floats2 = Float64Builder::with_capacity(3);
+    floats2.append_value(4.0);
+    floats2.append_null();
+    floats2.append_value(f64::NAN);
 
     let floats2 = floats2.finish();
 
     assert_eq!(floats, floats2);
 
-    let mut floats3 = Float64Builder::new(3);
-    floats3.append_value(f64::NAN).unwrap();
-    floats3.append_null().unwrap();
-    floats3.append_value(4.0).unwrap();
+    let mut floats3 = Float64Builder::with_capacity(3);
+    floats3.append_value(f64::NAN);
+    floats3.append_null();
+    floats3.append_value(4.0);
 
     let floats3 = floats3.finish();
 

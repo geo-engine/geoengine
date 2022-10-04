@@ -1,0 +1,22 @@
+# CI tasks that are required to succeed
+# TODO: use only wildcard once it works
+status = [
+    
+    "test (ubuntu-20.04)",
+    "test (ubuntu-20.04, --features pro)",
+    "test (ubuntu-20.04, --all-features)",
+    "build (ubuntu-20.04)",
+    "build (ubuntu-20.04, --release)",
+    "build (ubuntu-20.04, --features pro)",
+    "build (ubuntu-20.04, --features pro, --release)",
+    "build (ubuntu-20.04, --all-features)",
+    "build (ubuntu-20.04, --all-features, --release)",
+    "clippy",
+    "coveralls"
+]
+
+# One approval necessary for bors to work
+required_approvals = 1
+
+# Set bors's timeout to 4 hours
+timeout-sec = 7200

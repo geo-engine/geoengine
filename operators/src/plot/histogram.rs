@@ -1,5 +1,4 @@
 use crate::engine::QueryProcessor;
-use crate::engine::VectorQueryRectangle;
 use crate::error;
 use crate::error::Error;
 use crate::string_token;
@@ -19,7 +18,8 @@ use futures::stream::BoxStream;
 use futures::{StreamExt, TryFutureExt};
 use geoengine_datatypes::plots::{Plot, PlotData};
 use geoengine_datatypes::primitives::{
-    DataRef, FeatureDataRef, FeatureDataType, Geometry, Measurement,
+    AxisAlignedRectangle, BoundingBox2D, DataRef, FeatureDataRef, FeatureDataType, Geometry,
+    Measurement, VectorQueryRectangle,
 };
 use geoengine_datatypes::raster::{Pixel, RasterTile2D};
 use geoengine_datatypes::{
@@ -76,15 +76,25 @@ impl PlotOperator for Histogram {
                 ensure!(
                     self.params.column_name.is_none(),
                     error::InvalidOperatorSpec {
-                        reason: "Histogram on raster input must not have `column_name` field set"
+                        reason: "Histogram on raster input must not have `columnName` field set"
                             .to_string(),
                     }
                 );
 
+                let initialized = raster_source.initialize(context).await?;
+
+                let in_desc = initialized.result_descriptor();
                 InitializedHistogram::new(
-                    PlotResultDescriptor {},
+                    PlotResultDescriptor {
+                        spatial_reference: in_desc.spatial_reference,
+                        time: in_desc.time,
+                        // converting `SpatialPartition2D` to `BoundingBox2D` is ok here, because is makes the covered area only larger
+                        bbox: in_desc
+                            .bbox
+                            .and_then(|p| BoundingBox2D::new(p.lower_left(), p.upper_right()).ok()),
+                    },
                     self.params,
-                    raster_source.initialize(context).await?,
+                    initialized,
                 )
                 .boxed()
             }
@@ -94,13 +104,16 @@ impl PlotOperator for Histogram {
                         .column_name
                         .as_ref()
                         .context(error::InvalidOperatorSpec {
-                            reason: "Histogram on vector input is missing `column_name` field"
+                            reason: "Histogram on vector input is missing `columnName` field"
                                 .to_string(),
                         })?;
 
                 let vector_source = vector_source.initialize(context).await?;
 
-                match vector_source.result_descriptor().columns.get(column_name) {
+                match vector_source
+                    .result_descriptor()
+                    .column_data_type(column_name)
+                {
                     None => {
                         return Err(Error::ColumnDoesNotExist {
                             column: column_name.to_string(),
@@ -112,13 +125,19 @@ impl PlotOperator for Histogram {
                             reason: format!("column `{}` must be numerical", column_name),
                         });
                     }
-                    Some(FeatureDataType::Int | FeatureDataType::Float) => {
+                    Some(
+                        FeatureDataType::Int
+                        | FeatureDataType::Float
+                        | FeatureDataType::Bool
+                        | FeatureDataType::DateTime,
+                    ) => {
                         // okay
                     }
                 }
 
-                InitializedHistogram::new(PlotResultDescriptor {}, self.params, vector_source)
-                    .boxed()
+                let in_desc = vector_source.result_descriptor().clone();
+
+                InitializedHistogram::new(in_desc.into(), self.params, vector_source).boxed()
             }
         })
     }
@@ -181,7 +200,12 @@ impl InitializedPlotOperator for InitializedHistogram<Box<dyn InitializedVectorO
         let processor = HistogramVectorQueryProcessor {
             input: self.source.query_processor()?,
             column_name: self.column_name.clone().unwrap_or_default(),
-            measurement: Measurement::Unitless, // TODO: incorporate measurement once it is there
+            measurement: self
+                .source
+                .result_descriptor()
+                .column_measurement(self.column_name.as_deref().unwrap_or_default())
+                .cloned()
+                .into(),
             metadata: self.metadata,
             interactive: self.interactive,
         };
@@ -280,7 +304,7 @@ impl HistogramRasterQueryProcessor {
             while let Some(tile) = input.next().await {
                 match tile?.grid_array {
                     geoengine_datatypes::raster::GridOrEmpty::Grid(g) => {
-                        computed_metadata.add_raster_batch(&g.data, g.no_data_value);
+                        computed_metadata.add_raster_batch(g.masked_element_deref_iterator());
                     }
                     geoengine_datatypes::raster::GridOrEmpty::Empty(_) => {} // TODO: find out if we really do nothing for empty tiles?
                 }
@@ -322,7 +346,7 @@ impl HistogramRasterQueryProcessor {
 
 
                 match tile?.grid_array {
-                    geoengine_datatypes::raster::GridOrEmpty::Grid(g) => histogram.add_raster_data(&g.data, g.no_data_value),
+                    geoengine_datatypes::raster::GridOrEmpty::Grid(g) => histogram.add_raster_data(g.masked_element_deref_iterator()),
                     geoengine_datatypes::raster::GridOrEmpty::Empty(n) => histogram.add_nodata_batch(n.number_of_elements() as u64) // TODO: why u64?
                 }
             }
@@ -503,46 +527,25 @@ impl Default for HistogramMetadataInProgress {
 
 impl HistogramMetadataInProgress {
     #[inline]
-    fn add_raster_batch<T: Pixel>(&mut self, values: &[T], no_data: Option<T>) {
-        if let Some(no_data) = no_data {
-            for &v in values {
-                if v == no_data {
-                    continue;
-                }
-
+    fn add_raster_batch<T: Pixel, I: Iterator<Item = Option<T>>>(&mut self, values: I) {
+        values.for_each(|pixel_option| {
+            if let Some(p) = pixel_option {
                 self.n += 1;
-                self.update_minmax(v.as_());
+                self.update_minmax(p.as_());
             }
-        } else {
-            self.n += values.len();
-            for v in values {
-                self.update_minmax(v.as_());
-            }
-        }
+        });
     }
 
     #[inline]
     fn add_vector_batch(&mut self, values: FeatureDataRef) {
-        fn add_data_ref<'d, D, T>(metadata: &mut HistogramMetadataInProgress, data_ref: &D)
+        fn add_data_ref<'d, D, T>(metadata: &mut HistogramMetadataInProgress, data_ref: &'d D)
         where
             D: DataRef<'d, T>,
-            T: Pixel,
+            T: 'static,
         {
-            if data_ref.has_nulls() {
-                for (i, v) in data_ref.as_ref().iter().enumerate() {
-                    if data_ref.is_null(i) {
-                        continue;
-                    }
-
-                    metadata.n += 1;
-                    metadata.update_minmax(v.as_());
-                }
-            } else {
-                let values = data_ref.as_ref();
-                metadata.n += values.len();
-                for v in values {
-                    metadata.update_minmax(v.as_());
-                }
+            for v in data_ref.float_options_iter().flatten() {
+                metadata.n += 1;
+                metadata.update_minmax(v);
             }
         }
 
@@ -551,6 +554,12 @@ impl HistogramMetadataInProgress {
                 add_data_ref(self, &values);
             }
             FeatureDataRef::Float(values) => {
+                add_data_ref(self, &values);
+            }
+            FeatureDataRef::Bool(values) => {
+                add_data_ref(self, &values);
+            }
+            FeatureDataRef::DateTime(values) => {
                 add_data_ref(self, &values);
             }
             FeatureDataRef::Category(_) | FeatureDataRef::Text(_) => {
@@ -582,26 +591,29 @@ mod tests {
     use super::*;
 
     use crate::engine::{
-        MockExecutionContext, MockQueryContext, RasterOperator, RasterResultDescriptor,
-        StaticMetaData, VectorOperator, VectorResultDescriptor,
+        ChunkByteSize, MockExecutionContext, MockQueryContext, RasterOperator,
+        RasterResultDescriptor, StaticMetaData, VectorColumnInfo, VectorOperator,
+        VectorResultDescriptor,
     };
     use crate::mock::{MockFeatureCollectionSource, MockRasterSource, MockRasterSourceParams};
     use crate::source::{
         OgrSourceColumnSpec, OgrSourceDataset, OgrSourceDatasetTimeType, OgrSourceErrorSpec,
     };
-    use chrono::NaiveDate;
-    use geoengine_datatypes::dataset::{DatasetId, InternalDatasetId};
+    use crate::test_data;
+    use geoengine_datatypes::dataset::{DataId, DatasetId};
     use geoengine_datatypes::primitives::{
-        BoundingBox2D, FeatureData, NoGeometry, SpatialResolution, TimeInterval,
+        BoundingBox2D, DateTime, FeatureData, NoGeometry, SpatialResolution, TimeInterval,
     };
-    use geoengine_datatypes::raster::{Grid2D, RasterDataType, RasterTile2D, TileInformation};
+    use geoengine_datatypes::raster::{
+        EmptyGrid2D, Grid2D, RasterDataType, RasterTile2D, TileInformation, TilingSpecification,
+    };
     use geoengine_datatypes::spatial_reference::SpatialReference;
+    use geoengine_datatypes::util::test::TestDefault;
     use geoengine_datatypes::util::Identifier;
     use geoengine_datatypes::{
         collections::{DataCollection, VectorDataType},
         primitives::MultiPoint,
     };
-    use num_traits::AsPrimitive;
     use serde_json::json;
 
     #[test]
@@ -636,7 +648,9 @@ mod tests {
                 "source": {
                     "type": "MockFeatureCollectionSourceMultiPoint",
                     "params": {
-                        "collections": []
+                        "collections": [],
+                        "spatialReference": "EPSG:4326",
+                        "measurements": {},
                     }
                 }
             }
@@ -671,7 +685,9 @@ mod tests {
                 "source": {
                     "type": "MockFeatureCollectionSourceMultiPoint",
                     "params": {
-                        "collections": []
+                        "collections": [],
+                        "spatialReference": "EPSG:4326",
+                        "measurements": {},
                     }
                 }
             }
@@ -695,7 +711,7 @@ mod tests {
             sources: mock_raster_source().into(),
         };
 
-        let execution_context = MockExecutionContext::default();
+        let execution_context = MockExecutionContext::test_default();
 
         assert!(histogram
             .boxed()
@@ -705,17 +721,16 @@ mod tests {
     }
 
     fn mock_raster_source() -> Box<dyn RasterOperator> {
-        let no_data_value = None;
         MockRasterSource {
             params: MockRasterSourceParams {
                 data: vec![RasterTile2D::new_with_tile_info(
                     TimeInterval::default(),
                     TileInformation {
-                        global_geo_transform: Default::default(),
+                        global_geo_transform: TestDefault::test_default(),
                         global_tile_position: [0, 0].into(),
                         tile_size_in_pixels: [3, 2].into(),
                     },
-                    Grid2D::new([3, 2].into(), vec![1, 2, 3, 4, 5, 6], no_data_value)
+                    Grid2D::new([3, 2].into(), vec![1, 2, 3, 4, 5, 6])
                         .unwrap()
                         .into(),
                 )],
@@ -723,7 +738,9 @@ mod tests {
                     data_type: RasterDataType::U8,
                     spatial_reference: SpatialReference::epsg_4326().into(),
                     measurement: Measurement::Unitless,
-                    no_data_value: no_data_value.map(AsPrimitive::as_),
+                    time: None,
+                    bbox: None,
+                    resolution: None,
                 },
             },
         }
@@ -732,6 +749,13 @@ mod tests {
 
     #[tokio::test]
     async fn simple_raster() {
+        let tile_size_in_pixels = [3, 2].into();
+        let tiling_specification = TilingSpecification {
+            origin_coordinate: [0.0, 0.0].into(),
+            tile_size_in_pixels,
+        };
+        let execution_context = MockExecutionContext::new_with_tiling_spec(tiling_specification);
+
         let histogram = Histogram {
             params: HistogramParams {
                 column_name: None,
@@ -741,8 +765,6 @@ mod tests {
             },
             sources: mock_raster_source().into(),
         };
-
-        let execution_context = MockExecutionContext::default();
 
         let query_processor = histogram
             .boxed()
@@ -757,12 +779,11 @@ mod tests {
         let result = query_processor
             .plot_query(
                 VectorQueryRectangle {
-                    spatial_bounds: BoundingBox2D::new((-180., -90.).into(), (180., 90.).into())
-                        .unwrap(),
+                    spatial_bounds: BoundingBox2D::new((0., -3.).into(), (2., 0.).into()).unwrap(),
                     time_interval: TimeInterval::default(),
                     spatial_resolution: SpatialResolution::one(),
                 },
-                &MockQueryContext::new(0),
+                &MockQueryContext::new(ChunkByteSize::MIN),
             )
             .await
             .unwrap();
@@ -780,6 +801,13 @@ mod tests {
 
     #[tokio::test]
     async fn simple_raster_without_spec() {
+        let tile_size_in_pixels = [3, 2].into();
+        let tiling_specification = TilingSpecification {
+            origin_coordinate: [0.0, 0.0].into(),
+            tile_size_in_pixels,
+        };
+        let execution_context = MockExecutionContext::new_with_tiling_spec(tiling_specification);
+
         let histogram = Histogram {
             params: HistogramParams {
                 column_name: None,
@@ -789,8 +817,6 @@ mod tests {
             },
             sources: mock_raster_source().into(),
         };
-
-        let execution_context = MockExecutionContext::default();
 
         let query_processor = histogram
             .boxed()
@@ -805,12 +831,11 @@ mod tests {
         let result = query_processor
             .plot_query(
                 VectorQueryRectangle {
-                    spatial_bounds: BoundingBox2D::new((-180., -90.).into(), (180., 90.).into())
-                        .unwrap(),
+                    spatial_bounds: BoundingBox2D::new((0., -3.).into(), (2., 0.).into()).unwrap(),
                     time_interval: TimeInterval::default(),
                     spatial_resolution: SpatialResolution::one(),
                 },
-                &MockQueryContext::new(0),
+                &MockQueryContext::new(ChunkByteSize::MIN),
             )
             .await
             .unwrap();
@@ -854,7 +879,7 @@ mod tests {
             sources: vector_source.into(),
         };
 
-        let execution_context = MockExecutionContext::default();
+        let execution_context = MockExecutionContext::test_default();
 
         let query_processor = histogram
             .boxed()
@@ -874,7 +899,7 @@ mod tests {
                     time_interval: TimeInterval::default(),
                     spatial_resolution: SpatialResolution::one(),
                 },
-                &MockQueryContext::new(0),
+                &MockQueryContext::new(ChunkByteSize::MIN),
             )
             .await
             .unwrap();
@@ -922,7 +947,7 @@ mod tests {
             sources: vector_source.into(),
         };
 
-        let execution_context = MockExecutionContext::default();
+        let execution_context = MockExecutionContext::test_default();
 
         let query_processor = histogram
             .boxed()
@@ -942,7 +967,7 @@ mod tests {
                     time_interval: TimeInterval::default(),
                     spatial_resolution: SpatialResolution::one(),
                 },
-                &MockQueryContext::new(0),
+                &MockQueryContext::new(ChunkByteSize::MIN),
             )
             .await
             .unwrap();
@@ -959,8 +984,9 @@ mod tests {
     }
 
     #[tokio::test]
+    #[allow(clippy::too_many_lines)]
     async fn text_attribute() {
-        let dataset_id = InternalDatasetId::new();
+        let dataset_id = DatasetId::new();
 
         let workflow = serde_json::json!({
             "type": "Histogram",
@@ -972,7 +998,7 @@ mod tests {
                 "source": {
                     "type": "OgrSource",
                     "params": {
-                        "dataset": {
+                        "data": {
                             "type": "internal",
                             "datasetId": dataset_id
                         },
@@ -983,18 +1009,19 @@ mod tests {
         });
         let histogram: Histogram = serde_json::from_value(workflow).unwrap();
 
-        let mut execution_context = MockExecutionContext::default();
+        let mut execution_context = MockExecutionContext::test_default();
         execution_context.add_meta_data::<_, _, VectorQueryRectangle>(
-            DatasetId::Internal { dataset_id },
+            DataId::Internal { dataset_id },
             Box::new(StaticMetaData {
                 loading_info: OgrSourceDataset {
-                    file_name: "operators/test-data/vector/data/ne_10m_ports/ne_10m_ports.shp"
-                        .into(),
+                    file_name: test_data!("vector/data/ne_10m_ports/ne_10m_ports.shp").into(),
                     layer_name: "ne_10m_ports".to_string(),
                     data_type: Some(VectorDataType::MultiPoint),
                     time: OgrSourceDatasetTimeType::None,
+                    default_geometry: None,
                     columns: Some(OgrSourceColumnSpec {
-                        x: "".to_string(),
+                        format_specifics: None,
+                        x: String::new(),
                         y: None,
                         int: vec!["natlscale".to_string()],
                         float: vec!["scalerank".to_string()],
@@ -1003,6 +1030,8 @@ mod tests {
                             "name".to_string(),
                             "website".to_string(),
                         ],
+                        bool: vec![],
+                        datetime: vec![],
                         rename: None,
                     }),
                     force_ogr_time_filter: false,
@@ -1015,15 +1044,47 @@ mod tests {
                     data_type: VectorDataType::MultiPoint,
                     spatial_reference: SpatialReference::epsg_4326().into(),
                     columns: [
-                        ("natlscale".to_string(), FeatureDataType::Float),
-                        ("scalerank".to_string(), FeatureDataType::Int),
-                        ("featurecla".to_string(), FeatureDataType::Text),
-                        ("name".to_string(), FeatureDataType::Text),
-                        ("website".to_string(), FeatureDataType::Text),
+                        (
+                            "natlscale".to_string(),
+                            VectorColumnInfo {
+                                data_type: FeatureDataType::Float,
+                                measurement: Measurement::Unitless,
+                            },
+                        ),
+                        (
+                            "scalerank".to_string(),
+                            VectorColumnInfo {
+                                data_type: FeatureDataType::Int,
+                                measurement: Measurement::Unitless,
+                            },
+                        ),
+                        (
+                            "featurecla".to_string(),
+                            VectorColumnInfo {
+                                data_type: FeatureDataType::Text,
+                                measurement: Measurement::Unitless,
+                            },
+                        ),
+                        (
+                            "name".to_string(),
+                            VectorColumnInfo {
+                                data_type: FeatureDataType::Text,
+                                measurement: Measurement::Unitless,
+                            },
+                        ),
+                        (
+                            "website".to_string(),
+                            VectorColumnInfo {
+                                data_type: FeatureDataType::Text,
+                                measurement: Measurement::Unitless,
+                            },
+                        ),
                     ]
                     .iter()
                     .cloned()
                     .collect(),
+                    time: None,
+                    bbox: None,
                 },
                 phantom: Default::default(),
             }),
@@ -1040,7 +1101,12 @@ mod tests {
 
     #[tokio::test]
     async fn no_data_raster() {
-        let no_data_value = Some(0);
+        let tile_size_in_pixels = [3, 2].into();
+        let tiling_specification = TilingSpecification {
+            origin_coordinate: [0.0, 0.0].into(),
+            tile_size_in_pixels,
+        };
+        let execution_context = MockExecutionContext::new_with_tiling_spec(tiling_specification);
         let histogram = Histogram {
             params: HistogramParams {
                 column_name: None,
@@ -1053,27 +1119,25 @@ mod tests {
                     data: vec![RasterTile2D::new_with_tile_info(
                         TimeInterval::default(),
                         TileInformation {
-                            global_geo_transform: Default::default(),
+                            global_geo_transform: TestDefault::test_default(),
                             global_tile_position: [0, 0].into(),
-                            tile_size_in_pixels: [3, 2].into(),
+                            tile_size_in_pixels,
                         },
-                        Grid2D::new([3, 2].into(), vec![0, 0, 0, 0, 0, 0], no_data_value)
-                            .unwrap()
-                            .into(),
+                        EmptyGrid2D::<u8>::new(tile_size_in_pixels).into(),
                     )],
                     result_descriptor: RasterResultDescriptor {
                         data_type: RasterDataType::U8,
                         spatial_reference: SpatialReference::epsg_4326().into(),
                         measurement: Measurement::Unitless,
-                        no_data_value: no_data_value.map(AsPrimitive::as_),
+                        time: None,
+                        bbox: None,
+                        resolution: None,
                     },
                 },
             }
             .boxed()
             .into(),
         };
-
-        let execution_context = MockExecutionContext::default();
 
         let query_processor = histogram
             .boxed()
@@ -1088,12 +1152,11 @@ mod tests {
         let result = query_processor
             .plot_query(
                 VectorQueryRectangle {
-                    spatial_bounds: BoundingBox2D::new((-180., -90.).into(), (180., 90.).into())
-                        .unwrap(),
+                    spatial_bounds: BoundingBox2D::new((0., -3.).into(), (2., 0.).into()).unwrap(),
                     time_interval: TimeInterval::default(),
                     spatial_resolution: SpatialResolution::one(),
                 },
-                &MockQueryContext::new(0),
+                &MockQueryContext::new(ChunkByteSize::MIN),
             )
             .await
             .unwrap();
@@ -1130,7 +1193,7 @@ mod tests {
             sources: vector_source.into(),
         };
 
-        let execution_context = MockExecutionContext::default();
+        let execution_context = MockExecutionContext::test_default();
 
         let query_processor = histogram
             .boxed()
@@ -1150,7 +1213,7 @@ mod tests {
                     time_interval: TimeInterval::default(),
                     spatial_resolution: SpatialResolution::one(),
                 },
-                &MockQueryContext::new(0),
+                &MockQueryContext::new(ChunkByteSize::MIN),
             )
             .await
             .unwrap();
@@ -1167,13 +1230,19 @@ mod tests {
 
     #[tokio::test]
     async fn feature_collection_with_one_feature() {
-        let vector_source = MockFeatureCollectionSource::single(
-            DataCollection::from_slices(
+        let vector_source = MockFeatureCollectionSource::with_collections_and_measurements(
+            vec![DataCollection::from_slices(
                 &[] as &[NoGeometry],
                 &[TimeInterval::default()],
                 &[("foo", FeatureData::Float(vec![5.0]))],
             )
-            .unwrap(),
+            .unwrap()],
+            [(
+                "foo".to_string(),
+                Measurement::continuous("bar".to_string(), None),
+            )]
+            .into_iter()
+            .collect(),
         )
         .boxed();
 
@@ -1187,7 +1256,7 @@ mod tests {
             sources: vector_source.into(),
         };
 
-        let execution_context = MockExecutionContext::default();
+        let execution_context = MockExecutionContext::test_default();
 
         let query_processor = histogram
             .boxed()
@@ -1207,27 +1276,35 @@ mod tests {
                     time_interval: TimeInterval::default(),
                     spatial_resolution: SpatialResolution::one(),
                 },
-                &MockQueryContext::new(0),
+                &MockQueryContext::new(ChunkByteSize::MIN),
             )
             .await
             .unwrap();
 
         assert_eq!(
             result,
-            geoengine_datatypes::plots::Histogram::builder(1, 5., 5., Measurement::Unitless)
-                .counts(vec![1])
-                .build()
-                .unwrap()
-                .to_vega_embeddable(false)
-                .unwrap()
+            geoengine_datatypes::plots::Histogram::builder(
+                1,
+                5.,
+                5.,
+                Measurement::continuous("bar".to_string(), None)
+            )
+            .counts(vec![1])
+            .build()
+            .unwrap()
+            .to_vega_embeddable(false)
+            .unwrap()
         );
     }
 
     #[tokio::test]
     async fn single_value_raster_stream() {
-        let execution_context = MockExecutionContext::default();
-
-        let no_data_value = None;
+        let tile_size_in_pixels = [3, 2].into();
+        let tiling_specification = TilingSpecification {
+            origin_coordinate: [0.0, 0.0].into(),
+            tile_size_in_pixels,
+        };
+        let execution_context = MockExecutionContext::new_with_tiling_spec(tiling_specification);
         let histogram = Histogram {
             params: HistogramParams {
                 column_name: None,
@@ -1240,19 +1317,19 @@ mod tests {
                     data: vec![RasterTile2D::new_with_tile_info(
                         TimeInterval::default(),
                         TileInformation {
-                            global_geo_transform: Default::default(),
+                            global_geo_transform: TestDefault::test_default(),
                             global_tile_position: [0, 0].into(),
-                            tile_size_in_pixels: [3, 2].into(),
+                            tile_size_in_pixels,
                         },
-                        Grid2D::new([3, 2].into(), vec![4; 6], no_data_value)
-                            .unwrap()
-                            .into(),
+                        Grid2D::new(tile_size_in_pixels, vec![4; 6]).unwrap().into(),
                     )],
                     result_descriptor: RasterResultDescriptor {
                         data_type: RasterDataType::U8,
                         spatial_reference: SpatialReference::epsg_4326().into(),
                         measurement: Measurement::Unitless,
-                        no_data_value: no_data_value.map(AsPrimitive::as_),
+                        time: None,
+                        bbox: None,
+                        resolution: None,
                     },
                 },
             }
@@ -1273,15 +1350,14 @@ mod tests {
         let result = query_processor
             .plot_query(
                 VectorQueryRectangle {
-                    spatial_bounds: BoundingBox2D::new((-180., -90.).into(), (180., 90.).into())
-                        .unwrap(),
-                    time_interval: TimeInterval::new_instant(
-                        NaiveDate::from_ymd(2013, 12, 1).and_hms(12, 0, 0),
-                    )
+                    spatial_bounds: BoundingBox2D::new((0., -3.).into(), (2., 0.).into()).unwrap(),
+                    time_interval: TimeInterval::new_instant(DateTime::new_utc(
+                        2013, 12, 1, 12, 0, 0,
+                    ))
                     .unwrap(),
                     spatial_resolution: SpatialResolution::one(),
                 },
-                &MockQueryContext::default(),
+                &MockQueryContext::new(ChunkByteSize::MIN),
             )
             .await
             .unwrap();

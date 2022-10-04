@@ -1,14 +1,25 @@
+mod async_util;
 pub mod gdal;
 pub mod input;
 pub mod math;
 pub mod number_statistics;
 pub mod raster_stream_to_geotiff;
 pub mod raster_stream_to_png;
+mod rayon;
+pub mod statistics;
+pub mod stream_zip;
 pub mod string_token;
+pub mod sunpos;
+mod temporary_gdal_thread_local_config_options;
 
 use crate::error::Error;
+use std::collections::HashSet;
 use std::ops::Deref;
 use std::sync::{Mutex, MutexGuard};
+
+pub use self::async_util::{spawn, spawn_blocking, spawn_blocking_with_thread_pool};
+pub use self::rayon::create_rayon_thread_pool;
+pub(crate) use self::temporary_gdal_thread_local_config_options::TemporaryGdalThreadLocalConfigOptions;
 
 pub type Result<T, E = Error> = std::result::Result<T, E>;
 
@@ -21,5 +32,54 @@ where
     match lock.deref().lock() {
         Ok(guard) => guard,
         Err(poisoned) => poisoned.into_inner(),
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum DuplicateOrEmpty {
+    Ok,
+    Duplicate(String),
+    Empty,
+}
+
+/// Checks if a string is empty or duplicated within a slice
+pub fn duplicate_or_empty_str_slice<S: AsRef<str>>(strings: &[S]) -> DuplicateOrEmpty {
+    let mut set = HashSet::new();
+
+    for string in strings {
+        let string = string.as_ref();
+
+        if string.is_empty() {
+            return DuplicateOrEmpty::Empty;
+        }
+
+        if !set.insert(string) {
+            return DuplicateOrEmpty::Duplicate(string.to_string());
+        }
+    }
+
+    DuplicateOrEmpty::Ok
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_duplicate_or_empty_str_slice() {
+        assert_eq!(
+            duplicate_or_empty_str_slice(&["a", "b", "c"]),
+            DuplicateOrEmpty::Ok
+        );
+
+        assert_eq!(
+            duplicate_or_empty_str_slice(&["a", "", "c"]),
+            DuplicateOrEmpty::Empty
+        );
+
+        assert_eq!(
+            duplicate_or_empty_str_slice(&["a", "a", "c"]),
+            DuplicateOrEmpty::Duplicate("a".to_string())
+        );
     }
 }

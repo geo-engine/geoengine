@@ -1,12 +1,12 @@
 use arrow::error::ArrowError;
 use arrow::{
     array::FixedSizeListArray,
-    datatypes::{DataType, Field, Float64Type, Int64Type},
+    datatypes::{DataType, Date64Type, Field, Float64Type, Int64Type},
 };
 use arrow::{
     array::{
-        as_primitive_array, as_string_array, Array, ArrayData, ArrayRef, BooleanArray, ListArray,
-        StructArray,
+        as_boolean_array, as_primitive_array, as_string_array, Array, ArrayData, ArrayRef,
+        BooleanArray, ListArray, StructArray,
     },
     buffer::Buffer,
 };
@@ -18,12 +18,12 @@ use std::collections::hash_map;
 use std::collections::{HashMap, HashSet};
 use std::convert::{TryFrom, TryInto};
 use std::marker::PhantomData;
-use std::mem;
 use std::ops::{Bound, RangeBounds};
 use std::rc::Rc;
 use std::sync::Arc;
+use std::{mem, slice};
 
-use crate::primitives::Coordinate2D;
+use crate::primitives::{BoolDataRef, Coordinate2D, DateTimeDataRef, TimeInstance};
 use crate::primitives::{
     CategoryDataRef, FeatureData, FeatureDataRef, FeatureDataType, FeatureDataValue, FloatDataRef,
     Geometry, IntDataRef, TextDataRef, TimeInterval,
@@ -74,6 +74,14 @@ impl<CollectionType> FeatureCollection<CollectionType> {
             types,
             collection_type: Default::default(),
         }
+    }
+}
+
+impl<CollectionType> AsRef<FeatureCollection<CollectionType>>
+    for FeatureCollection<CollectionType>
+{
+    fn as_ref(&self) -> &FeatureCollection<CollectionType> {
+        self
     }
 }
 
@@ -300,7 +308,7 @@ where
                 data.arrow_data_type(),
                 data.nullable(),
             ));
-            column_values.push(data.arrow_builder().map(|mut builder| builder.finish())?);
+            column_values.push(data.arrow_builder().finish());
 
             types.insert(
                 new_column_name.to_string(),
@@ -309,7 +317,7 @@ where
         }
 
         Ok(Self::new_from_internals(
-            struct_array_from_data(columns, column_values, self.table.len()),
+            struct_array_from_data(columns, column_values, self.table.len())?,
             types,
         ))
     }
@@ -394,7 +402,7 @@ where
         }
 
         Ok(Self::new_from_internals(
-            struct_array_from_data(columns, column_values, self.table.len()),
+            struct_array_from_data(columns, column_values, self.table.len())?,
             types,
         ))
     }
@@ -456,6 +464,28 @@ where
                     arrow::compute::gt_utf8_scalar,
                     arrow::compute::lt_eq_utf8_scalar,
                     arrow::compute::lt_utf8_scalar,
+                )?;
+            }
+            FeatureDataType::Bool => {
+                apply_filters(
+                    as_boolean_array(column),
+                    &mut filter_array,
+                    ranges,
+                    arrow::compute::gt_eq_bool_scalar,
+                    arrow::compute::gt_bool_scalar,
+                    arrow::compute::lt_eq_bool_scalar,
+                    arrow::compute::lt_bool_scalar,
+                )?;
+            }
+            FeatureDataType::DateTime => {
+                apply_filters(
+                    as_primitive_array::<Date64Type>(column),
+                    &mut filter_array,
+                    ranges,
+                    arrow::compute::gt_eq_scalar,
+                    arrow::compute::gt_scalar,
+                    arrow::compute::lt_eq_scalar,
+                    arrow::compute::lt_scalar,
                 )?;
             }
             FeatureDataType::Category => {
@@ -622,7 +652,7 @@ where
         }
 
         Ok(Self::new_from_internals(
-            struct_array_from_data(columns, column_values, self.table.len()),
+            struct_array_from_data(columns, column_values, self.table.len())?,
             types,
         ))
     }
@@ -653,9 +683,9 @@ where
 
         for time_interval in time_intervals {
             let date_builder = time_intervals_builder.values();
-            date_builder.append_value(time_interval.start().inner())?;
-            date_builder.append_value(time_interval.end().inner())?;
-            time_intervals_builder.append(true)?;
+            date_builder.append_value(time_interval.start().inner());
+            date_builder.append_value(time_interval.end().inner());
+            time_intervals_builder.append(true);
         }
 
         let time_intervals = time_intervals_builder.finish();
@@ -705,7 +735,7 @@ where
         }
 
         Ok(Self::new_from_internals(
-            struct_array_from_data(columns, column_values, self.table.len()),
+            struct_array_from_data(columns, column_values, self.table.len())?,
             self.types.clone(),
         ))
     }
@@ -805,7 +835,7 @@ impl<'a, GeometryRef> FeatureCollectionRow<'a, GeometryRef> {
 
 pub struct FeatureCollectionIterator<'a, GeometryIter> {
     geometries: GeometryIter,
-    time_intervals: std::slice::Iter<'a, TimeInterval>,
+    time_intervals: slice::Iter<'a, TimeInterval>,
     data: Rc<HashMap<String, FeatureDataRef<'a>>>,
     row_num: usize,
 }
@@ -983,12 +1013,12 @@ where
                 }
                 FeatureDataType::Text => {
                     let array: &arrow::array::StringArray = downcast_array(column);
-                    TextDataRef::new(
-                        array.value_data(),
-                        array.value_offsets(),
-                        array.data_ref().null_bitmap(),
-                    )
-                    .into()
+                    let fixed_nulls = if column.null_count() > 0 {
+                        array.data_ref().null_bitmap()
+                    } else {
+                        None // StringBuilder assigns some null_bitmap even if there are no nulls
+                    };
+                    TextDataRef::new(array.value_data(), array.value_offsets(), fixed_nulls).into()
                 }
                 FeatureDataType::Int => {
                     let array: &arrow::array::Int64Array = downcast_array(column);
@@ -997,6 +1027,22 @@ where
                 FeatureDataType::Category => {
                     let array: &arrow::array::UInt8Array = downcast_array(column);
                     CategoryDataRef::new(array.values(), array.data_ref().null_bitmap()).into()
+                }
+                FeatureDataType::Bool => {
+                    let array: &arrow::array::BooleanArray = downcast_array(column);
+                    // TODO: This operation is quite expensive for getting a reference
+                    let transformed: Vec<_> = array.iter().map(|x| x.unwrap_or(false)).collect();
+                    BoolDataRef::new(transformed, array.data_ref().null_bitmap()).into()
+                }
+                FeatureDataType::DateTime => {
+                    let array: &arrow::array::Date64Array = downcast_array(column);
+                    let timestamps = unsafe {
+                        slice::from_raw_parts(
+                            array.values().as_ptr().cast::<TimeInstance>(),
+                            array.len(),
+                        )
+                    };
+                    DateTimeDataRef::new(timestamps, array.data_ref().null_bitmap()).into()
                 }
             },
         )
@@ -1015,7 +1061,7 @@ where
         let timestamps: &arrow::array::Int64Array = downcast_array(&timestamps_ref);
 
         unsafe {
-            std::slice::from_raw_parts(
+            slice::from_raw_parts(
                 timestamps.values().as_ptr().cast::<TimeInterval>(),
                 number_of_time_intervals,
             )
@@ -1116,7 +1162,7 @@ where
     ///
     /// # Errors
     ///
-    /// This constructor fails if the data lenghts are different or `data`'s keys use a reserved name
+    /// This constructor fails if the data lengths are different or `data`'s keys use a reserved name
     ///
     pub fn from_data(
         features: Vec<CollectionType>,
@@ -1124,8 +1170,7 @@ where
         data: HashMap<String, FeatureData>,
     ) -> Result<Self> {
         let number_of_rows = time_intervals.len();
-        let number_of_column: usize =
-            data.len() + 1 + (if CollectionType::IS_GEOMETRY { 1 } else { 0 });
+        let number_of_column: usize = data.len() + 1 + usize::from(CollectionType::IS_GEOMETRY);
 
         let mut columns: Vec<Field> = Vec::with_capacity(number_of_column);
         let mut arrays: Vec<ArrayRef> = Vec::with_capacity(number_of_column);
@@ -1177,13 +1222,13 @@ where
             );
 
             columns.push(column);
-            arrays.push(feature_data.arrow_builder()?.finish());
+            arrays.push(feature_data.arrow_builder().finish());
 
             types.insert(name, FeatureDataType::from(&feature_data));
         }
 
         Ok(Self::new_from_internals(
-            struct_array_from_data(columns, arrays, number_of_rows),
+            struct_array_from_data(columns, arrays, number_of_rows)?,
             types,
         ))
     }
@@ -1282,8 +1327,8 @@ pub fn struct_array_from_data(
     columns: Vec<Field>,
     column_values: Vec<ArrayRef>,
     number_of_features: usize,
-) -> StructArray {
-    StructArray::from(
+) -> Result<StructArray> {
+    Ok(StructArray::from(
         ArrayData::builder(arrow::datatypes::DataType::Struct(columns))
             .child_data(
                 column_values
@@ -1292,8 +1337,8 @@ pub fn struct_array_from_data(
                     .collect(),
             )
             .len(number_of_features)
-            .build(),
-    )
+            .build()?,
+    ))
 }
 
 /// Types that are suitable to act as filters
@@ -1444,7 +1489,7 @@ mod struct_serde {
         {
             let cursor = Cursor::new(v);
 
-            let mut reader = arrow::ipc::reader::FileReader::try_new(cursor)
+            let mut reader = arrow::ipc::reader::FileReader::try_new(cursor, None)
                 .map_err(|error| E::custom(error.to_string()))?;
 
             if reader.num_batches() != 1 {
@@ -1493,7 +1538,7 @@ where
 
         // transform the coordinates into a byte slice and create a Buffer from it.
         let coords_buffer = unsafe {
-            let coord_bytes: &[u8] = std::slice::from_raw_parts(
+            let coord_bytes: &[u8] = slice::from_raw_parts(
                 projected_coords.as_ptr().cast::<u8>(),
                 projected_coords.len() * std::mem::size_of::<Coordinate2D>(),
             );
@@ -1506,7 +1551,7 @@ where
             .column_by_name(Self::GEOMETRY_COLUMN_NAME)
             .expect("There must exist a geometry column");
 
-        let feature_array = Self::replace_raw_coords(geometries_ref, coords_buffer);
+        let feature_array = Self::replace_raw_coords(geometries_ref, coords_buffer)?;
 
         let mut columns = Vec::<arrow::datatypes::Field>::with_capacity(self.table.num_columns());
         let mut column_values =
@@ -1551,7 +1596,7 @@ where
         }
 
         Ok(Self::new_from_internals(
-            struct_array_from_data(columns, column_values, self.table.len()),
+            struct_array_from_data(columns, column_values, self.table.len())?,
             self.types.clone(),
         ))
     }
@@ -1584,11 +1629,11 @@ mod tests {
         }
 
         fn time_interval_size(length: usize) -> usize {
-            if length == 0 {
-                return 0;
-            }
-
             let base = 64;
+
+            if length == 0 {
+                return base;
+            }
             let buffer = (((length - 1) / 4) + 1) * ((8 + 8) * 4);
 
             base + buffer
@@ -1600,10 +1645,10 @@ mod tests {
             empty_hash_map_size
         );
 
-        let struct_stack_size = 144;
+        let struct_stack_size = 176;
         assert_eq!(mem::size_of::<StructArray>(), struct_stack_size);
 
-        let arrow_overhead_bytes = 256;
+        let arrow_overhead_bytes = 264;
 
         for i in 0..10 {
             assert_eq!(
@@ -1611,7 +1656,8 @@ mod tests {
                 empty_hash_map_size
                     + struct_stack_size
                     + arrow_overhead_bytes
-                    + time_interval_size(i)
+                    + time_interval_size(i),
+                "failed for i={i}"
             );
         }
     }

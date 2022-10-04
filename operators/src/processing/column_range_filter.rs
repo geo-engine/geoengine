@@ -1,7 +1,6 @@
 use crate::engine::{
     ExecutionContext, InitializedVectorOperator, Operator, QueryContext, QueryProcessor,
-    TypedVectorQueryProcessor, VectorOperator, VectorQueryProcessor, VectorQueryRectangle,
-    VectorResultDescriptor,
+    TypedVectorQueryProcessor, VectorOperator, VectorQueryProcessor, VectorResultDescriptor,
 };
 use crate::error;
 use crate::util::input::StringOrNumberRange;
@@ -13,7 +12,9 @@ use futures::StreamExt;
 use geoengine_datatypes::collections::{
     FeatureCollection, FeatureCollectionInfos, FeatureCollectionModifications,
 };
-use geoengine_datatypes::primitives::{BoundingBox2D, FeatureDataType, FeatureDataValue, Geometry};
+use geoengine_datatypes::primitives::{
+    BoundingBox2D, FeatureDataType, FeatureDataValue, Geometry, VectorQueryRectangle,
+};
 use geoengine_datatypes::util::arrow::ArrowTyped;
 use serde::{Deserialize, Serialize};
 use std::marker::PhantomData;
@@ -131,8 +132,18 @@ where
                         .cloned()
                         .map(|range| range.into_int_range().map(Into::into))
                         .collect(),
+                    FeatureDataType::Bool => ranges
+                        .iter()
+                        .cloned()
+                        .map(|range| range.into_int_range().map(Into::into))
+                        .collect(),
+                    FeatureDataType::DateTime => ranges
+                        .iter()
+                        .cloned()
+                        .map(|range| range.into_int_range().map(Into::into))
+                        .collect(),
                     FeatureDataType::Category => Err(error::Error::InvalidType {
-                        expected: "text, float, or int".to_string(),
+                        expected: "text, float, int, bool or datetime".to_string(),
                         found: "category".to_string(),
                     }),
                 };
@@ -143,7 +154,7 @@ where
         });
 
         let merged_chunks_stream =
-            FeatureCollectionChunkMerger::new(filter_stream.fuse(), ctx.chunk_byte_size());
+            FeatureCollectionChunkMerger::new(filter_stream.fuse(), ctx.chunk_byte_size().into());
 
         Ok(merged_chunks_stream.boxed())
     }
@@ -152,12 +163,13 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::engine::{MockExecutionContext, MockQueryContext, VectorQueryRectangle};
+    use crate::engine::{MockExecutionContext, MockQueryContext};
     use crate::mock::MockFeatureCollectionSource;
     use geoengine_datatypes::collections::{FeatureCollectionModifications, MultiPointCollection};
     use geoengine_datatypes::primitives::{
         BoundingBox2D, Coordinate2D, FeatureData, MultiPoint, SpatialResolution, TimeInterval,
     };
+    use geoengine_datatypes::util::test::TestDefault;
 
     #[test]
     fn serde() {
@@ -173,7 +185,7 @@ mod tests {
         }
         .boxed();
 
-        let serialized = serde_json::to_string(&filter).unwrap();
+        let serialized = serde_json::to_value(&filter).unwrap();
 
         assert_eq!(
             serialized,
@@ -190,15 +202,16 @@ mod tests {
                     "vector": {
                         "type": "MockFeatureCollectionSourceMultiPoint",
                         "params": {
-                            "collections": []
+                            "collections": [],
+                            "spatialReference": "EPSG:4326",
+                            "measurements": null,
                         }
                     }
                 },
             })
-            .to_string()
         );
 
-        let _operator: Box<dyn VectorOperator> = serde_json::from_str(&serialized).unwrap();
+        let _operator: Box<dyn VectorOperator> = serde_json::from_value(serialized).unwrap();
     }
 
     #[tokio::test]
@@ -231,7 +244,7 @@ mod tests {
         .boxed();
 
         let initialized = filter
-            .initialize(&MockExecutionContext::default())
+            .initialize(&MockExecutionContext::test_default())
             .await
             .unwrap();
 
@@ -246,7 +259,7 @@ mod tests {
             spatial_resolution: SpatialResolution::zero_point_one(),
         };
 
-        let ctx = MockQueryContext::new(2 * std::mem::size_of::<Coordinate2D>());
+        let ctx = MockQueryContext::new((2 * std::mem::size_of::<Coordinate2D>()).into());
 
         let stream = point_processor.query(query_rectangle, &ctx).await.unwrap();
 

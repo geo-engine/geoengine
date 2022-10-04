@@ -3,8 +3,10 @@ mod project;
 mod projectdb;
 
 pub use project::{
-    CreateProject, Layer, LayerType, LayerUpdate, LayerVisibility, OrderBy, Plot, PlotUpdate,
-    PointSymbology, Project, ProjectFilter, ProjectId, ProjectListOptions, ProjectListing,
-    ProjectVersion, ProjectVersionId, RasterSymbology, STRectangle, Symbology, UpdateProject,
+    ColorParam, CreateProject, DerivedColor, DerivedNumber, Layer, LayerType, LayerUpdate,
+    LayerVisibility, LineSymbology, NumberParam, OrderBy, Plot, PlotUpdate, PointSymbology,
+    PolygonSymbology, Project, ProjectFilter, ProjectId, ProjectListOptions, ProjectListing,
+    ProjectVersion, ProjectVersionId, RasterSymbology, STRectangle, StrokeParam, Symbology,
+    TextSymbology, UpdateProject,
 };
 pub use projectdb::ProjectDb;

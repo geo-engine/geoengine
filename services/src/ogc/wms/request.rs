@@ -18,14 +18,14 @@ pub enum WmsRequest {
     GetLegendGraphic(GetLegendGraphic),
 }
 
-#[derive(PartialEq, Debug, Deserialize, Serialize)]
+#[derive(PartialEq, Eq, Debug, Deserialize, Serialize)]
 pub struct GetCapabilities {
     pub version: Option<String>,
     pub service: String,
     pub format: Option<String>, // TODO: Option<GetCapabilitiesFormat>,
 }
 
-#[derive(PartialEq, Debug, Deserialize, Serialize)]
+#[derive(PartialEq, Eq, Debug, Deserialize, Serialize)]
 pub enum GetCapabilitiesFormat {
     TextXml, // TODO: remaining formats
 }
@@ -73,18 +73,18 @@ pub struct GetMap {
                                     // TODO: DIM_<name>
 }
 
-#[derive(PartialEq, Debug, Deserialize, Serialize)]
+#[derive(PartialEq, Eq, Debug, Deserialize, Serialize)]
 pub enum GetMapExceptionFormat {
     TextXml, // TODO: remaining formats
 }
 
-#[derive(PartialEq, Debug, Deserialize, Serialize)]
+#[derive(PartialEq, Eq, Debug, Deserialize, Serialize)]
 pub enum GetMapFormat {
     #[serde(rename = "image/png")]
     ImagePng, // TODO: remaining formats
 }
 
-#[derive(PartialEq, Debug, Deserialize, Serialize)]
+#[derive(PartialEq, Eq, Debug, Deserialize, Serialize)]
 pub struct GetFeatureInfo {
     pub version: String,
     pub query_layers: String,
@@ -92,18 +92,18 @@ pub struct GetFeatureInfo {
                                      // TODO: remaining fields
 }
 
-#[derive(PartialEq, Debug, Deserialize, Serialize)]
+#[derive(PartialEq, Eq, Debug, Deserialize, Serialize)]
 pub enum GetFeatureInfoFormat {
     TextXml, // TODO: remaining formats
 }
 
-#[derive(PartialEq, Debug, Deserialize, Serialize)]
+#[derive(PartialEq, Eq, Debug, Deserialize, Serialize)]
 pub struct GetStyles {
     pub version: String,
     pub layer: String,
 }
 
-#[derive(PartialEq, Debug, Deserialize, Serialize)]
+#[derive(PartialEq, Eq, Debug, Deserialize, Serialize)]
 pub struct GetLegendGraphic {
     pub version: String,
     pub layer: String,

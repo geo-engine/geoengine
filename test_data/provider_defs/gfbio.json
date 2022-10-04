@@ -1,0 +1,12 @@
+{
+  "type": "GfbioDataProviderDefinition",
+  "name": "GFBio",
+  "dbConfig": {
+    "user": "geoengine",
+    "password": "geoengine",
+    "host": "localhost",
+    "port": 5432,
+    "database": "abcd",
+    "schema": "public"
+  }
+}

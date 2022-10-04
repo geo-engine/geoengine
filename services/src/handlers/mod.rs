@@ -1,22 +1,25 @@
+use crate::contexts::Context;
 use crate::contexts::SessionId;
-use crate::error;
-use crate::error::Result;
-use crate::{contexts::Context, error::Error};
-use log::error;
+use crate::error::{Error, Result};
+use actix_web::dev::ServiceResponse;
+use actix_web::http::{header, StatusCode};
+use actix_web::{test, HttpRequest, HttpResponse};
+use actix_web_httpauth::headers::authorization::{Bearer, Scheme};
 use serde::{Deserialize, Serialize};
-use snafu::ResultExt;
-use std::error::Error as StdError;
+use std::fmt;
 use std::str::FromStr;
-use warp::http::{Response, StatusCode};
-use warp::hyper::body::Bytes;
-use warp::reject::{InvalidQuery, MethodNotAllowed, UnsupportedMediaType};
-use warp::{Filter, Rejection, Reply};
 
 pub mod datasets;
+#[cfg(feature = "ebv")]
+pub mod ebv;
+#[cfg(feature = "nfdi")]
+pub mod gfbio;
+pub mod layers;
 pub mod plots;
 pub mod projects;
 pub mod session;
 pub mod spatial_references;
+pub mod tasks;
 pub mod upload;
 pub mod wcs;
 pub mod wfs;
@@ -35,13 +38,13 @@ impl ErrorResponse {
     /// # Panics
     /// Panics if `status` or `error` do not match.
     ///
-    pub fn assert(res: &Response<Bytes>, status: u16, error: &str, message: &str) {
+    pub async fn assert(res: ServiceResponse, status: u16, error: &str, message: &str) {
         assert_eq!(res.status(), status);
 
-        let body = std::str::from_utf8(res.body()).unwrap();
+        let body: Self = test::read_body_json(res).await;
         assert_eq!(
-            serde_json::from_str::<ErrorResponse>(body).unwrap(),
-            ErrorResponse {
+            body,
+            Self {
                 error: error.to_string(),
                 message: message.to_string(),
             }
@@ -49,101 +52,33 @@ impl ErrorResponse {
     }
 }
 
-/// A handler for custom rejections
-#[allow(clippy::unused_async)]
-pub async fn handle_rejection(err: Rejection) -> Result<impl Reply, Rejection> {
-    error!("Warp rejection: {:?}", err);
-
-    let (code, error, message) = if let Some(e) = err.find::<Error>() {
-        // custom errors
-
-        // TODO: distinguish between client/server/temporary/permanent errors
-        match e {
-            error::Error::Authorization { source } => (
-                StatusCode::UNAUTHORIZED,
-                Into::<&str>::into(source.as_ref()).to_string(),
-                source.to_string(),
-            ),
-            error::Error::Duplicate { reason: _ } => (
-                StatusCode::CONFLICT,
-                Into::<&str>::into(e).to_string(),
-                e.to_string(),
-            ),
-            _ => (
-                StatusCode::BAD_REQUEST,
-                Into::<&str>::into(e).to_string(),
-                e.to_string(),
-            ),
-        }
-    } else if let Some(e) = err.find::<warp::filters::body::BodyDeserializeError>() {
-        (
-            StatusCode::BAD_REQUEST,
-            "BodyDeserializeError".to_string(),
-            e.source()
-                .map_or("Bad Request".to_string(), ToString::to_string),
-        )
-    } else if err.find::<MethodNotAllowed>().is_some() {
-        (
-            StatusCode::METHOD_NOT_ALLOWED,
-            "MethodNotAllowed".to_string(),
-            "HTTP method not allowed.".to_string(),
-        )
-    } else if err.find::<UnsupportedMediaType>().is_some() {
-        (
-            StatusCode::UNSUPPORTED_MEDIA_TYPE,
-            "UnsupportedMediaType".to_string(),
-            "Unsupported content type header.".to_string(),
-        )
-    } else if err.find::<InvalidQuery>().is_some() {
-        (
-            StatusCode::BAD_REQUEST,
-            "InvalidQuery".to_string(),
-            "Invalid query string.".to_string(),
-        )
-    } else {
-        // no matching filter
-
-        (
-            StatusCode::NOT_FOUND,
-            "NotFound".to_string(),
-            "Not Found".to_string(),
-        )
-    };
-
-    let json = warp::reply::json(&ErrorResponse { error, message });
-    Ok(warp::reply::with_status(json, code))
-}
-
-pub fn authenticate<C: Context>(
-    ctx: C,
-) -> impl warp::Filter<Extract = (C::Session,), Error = warp::Rejection> + Clone {
-    async fn do_authenticate<C: Context>(
-        ctx: C,
-        token: Option<String>,
-    ) -> Result<C::Session, warp::Rejection> {
-        if let Some(token) = token {
-            if !token.starts_with("Bearer ") {
-                return Err(Error::Authorization {
-                    source: Box::new(Error::InvalidAuthorizationScheme),
-                }
-                .into());
-            }
-
-            let token = SessionId::from_str(&token["Bearer ".len()..])
-                .map_err(Box::new)
-                .context(error::Authorization)?;
-
-            ctx.session_by_id(token).await.map_err(Into::into)
-        } else {
-            Err(Error::Authorization {
-                source: Box::new(Error::MissingAuthorizationHeader),
-            }
-            .into())
-        }
+impl actix_web::ResponseError for ErrorResponse {
+    fn error_response(&self) -> HttpResponse {
+        HttpResponse::build(self.status_code()).json(self)
     }
 
-    warp::any()
-        .and(warp::any().map(move || ctx.clone()))
-        .and(warp::header::optional::<String>("authorization"))
-        .and_then(do_authenticate)
+    fn status_code(&self) -> StatusCode {
+        StatusCode::BAD_REQUEST
+    }
+}
+
+impl fmt::Display for ErrorResponse {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "{}: {}", self.error, self.message)
+    }
+}
+
+pub fn get_token(req: &HttpRequest) -> Result<SessionId> {
+    let header = req
+        .headers()
+        .get(header::AUTHORIZATION)
+        .ok_or(Error::Authorization {
+            source: Box::new(Error::MissingAuthorizationHeader),
+        })?;
+    let scheme = Bearer::parse(header).map_err(|_| Error::Authorization {
+        source: Box::new(Error::InvalidAuthorizationScheme),
+    })?;
+    SessionId::from_str(scheme.token()).map_err(|_err| Error::Authorization {
+        source: Box::new(Error::InvalidUuid),
+    })
 }

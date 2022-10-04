@@ -3,6 +3,7 @@ use std::convert::TryFrom;
 use super::{AxisAlignedRectangle, Coordinate2D, SpatialBounded};
 use crate::error;
 use crate::util::Result;
+use float_cmp::ApproxEq;
 #[cfg(feature = "postgres")]
 use postgres_types::{FromSql, ToSql};
 use serde::{Deserialize, Serialize};
@@ -122,6 +123,35 @@ impl BoundingBox2D {
         let lower_left_coordinate = (upper_left_coordinate.x, lower_right_coordinate.y).into();
         let upper_right_coordinate = (lower_right_coordinate.x, upper_left_coordinate.y).into();
         BoundingBox2D::new_unchecked(lower_left_coordinate, upper_right_coordinate)
+    }
+
+    /// Creates a new bounding box with `upper_left` and `lower_right` coordinates
+    /// This is usually used with raster data and matches with the gdal geotransform
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use geoengine_datatypes::primitives::{Coordinate2D, BoundingBox2D};
+    ///
+    /// let ul = Coordinate2D::new(1.0, 2.0);
+    /// let lr = Coordinate2D::new(2.0, 1.0);
+    /// let bbox = BoundingBox2D::new_upper_left_lower_right(ul, lr).unwrap();
+    /// ```
+    ///
+    /// # Errors
+    ///
+    /// This constructor fails if the order of coordinates is not correct
+    ///
+    pub fn new_from_center(
+        center: Coordinate2D,
+        half_width: f64,
+        half_height: f64,
+    ) -> Result<Self> {
+        // TODO: fail if half_width or half_height is negative
+
+        let lower_left_coordinate = (center.x - half_width, center.y - half_height).into();
+        let upper_right_coordinate = (center.x + half_width, center.y + half_height).into();
+        BoundingBox2D::new(lower_left_coordinate, upper_right_coordinate)
     }
 
     /// Checks if a coordinate is located inside the bounding box
@@ -313,6 +343,18 @@ impl BoundingBox2D {
         self.upper_right_coordinate = self.upper_right_coordinate.max_elements(coord);
     }
 
+    #[must_use]
+    pub fn extend(&mut self, other: &Self) -> Self {
+        Self {
+            lower_left_coordinate: self
+                .lower_left_coordinate
+                .min_elements(other.lower_left_coordinate),
+            upper_right_coordinate: self
+                .upper_right_coordinate
+                .max_elements(other.upper_right_coordinate),
+        }
+    }
+
     pub fn from_coord_iter<I: IntoIterator<Item = Coordinate2D>>(iter: I) -> Option<Self> {
         let mut iterator = iter.into_iter();
 
@@ -339,6 +381,49 @@ impl BoundingBox2D {
             }
             f
         })
+    }
+
+    /// This method generates four new `BoundingBox2D`s by splitting the current one in four quadrants.
+    pub fn split_into_quarters(&self) -> (Self, Self, Self, Self) {
+        let half_width = self.size_x() / 2.;
+        let half_height = self.size_x() / 2.;
+
+        let upper_left = Self::new_unchecked(
+            Coordinate2D::new(
+                self.lower_left_coordinate.x,
+                self.lower_left_coordinate.y + half_height,
+            ),
+            Coordinate2D::new(
+                self.lower_left_coordinate.x + half_width,
+                self.upper_right_coordinate.y,
+            ),
+        );
+        let upper_right = Self::new_unchecked(
+            Coordinate2D::new(
+                self.lower_left_coordinate.x + half_width,
+                self.lower_left_coordinate.y + half_height,
+            ),
+            self.upper_right_coordinate,
+        );
+        let lower_left = Self::new_unchecked(
+            self.lower_left_coordinate,
+            Coordinate2D::new(
+                self.lower_left_coordinate.x + half_width,
+                self.lower_left_coordinate.y + half_height,
+            ),
+        );
+        let lower_right = Self::new_unchecked(
+            Coordinate2D::new(
+                self.lower_left_coordinate.x + half_width,
+                self.lower_left_coordinate.y,
+            ),
+            Coordinate2D::new(
+                self.upper_right_coordinate.x,
+                self.lower_left_coordinate.y + half_height,
+            ),
+        );
+
+        (lower_left, lower_right, upper_left, upper_right)
     }
 }
 
@@ -428,6 +513,14 @@ impl AxisAlignedRectangle for BoundingBox2D {
     fn size_y(&self) -> f64 {
         self.upper_right_coordinate.y - self.lower_left_coordinate.y
     }
+
+    fn intersection(&self, other: &Self) -> Option<Self> {
+        self.intersection(other)
+    }
+
+    fn as_bbox(&self) -> BoundingBox2D {
+        *self
+    }
 }
 
 impl From<BoundingBox2D> for geo::Rect<f64> {
@@ -469,10 +562,51 @@ impl TryFrom<BoundingBox2D> for gdal::vector::Geometry {
     }
 }
 
+impl ApproxEq for BoundingBox2D {
+    type Margin = float_cmp::F64Margin;
+
+    fn approx_eq<M>(self, other: Self, margin: M) -> bool
+    where
+        M: Into<Self::Margin>,
+    {
+        let m = margin.into();
+        self.upper_right_coordinate
+            .approx_eq(other.upper_right_coordinate, m)
+            && self
+                .lower_left_coordinate
+                .approx_eq(other.lower_left_coordinate, m)
+    }
+}
+
+/// Compute the extent of all input bboxes. If one bbox is None, the output will also be None
+pub fn bboxes_extent<I: Iterator<Item = Option<BoundingBox2D>>>(
+    mut bboxes: I,
+) -> Option<BoundingBox2D> {
+    let mut extent = if let Some(Some(first)) = bboxes.next() {
+        first
+    } else {
+        return None;
+    };
+
+    for bbox in bboxes {
+        if let Some(bbox) = bbox {
+            extent = extent.extend(&bbox);
+        } else {
+            return None;
+        }
+    }
+
+    Some(extent)
+}
+
 #[cfg(test)]
 mod tests {
 
-    use crate::primitives::{AxisAlignedRectangle, BoundingBox2D, Coordinate2D, SpatialBounded};
+    use crate::primitives::{
+        bounding_box::bboxes_extent, AxisAlignedRectangle, BoundingBox2D, Coordinate2D,
+        SpatialBounded,
+    };
+
     #[test]
     #[allow(clippy::float_cmp)]
     fn bounding_box_new() {
@@ -976,5 +1110,72 @@ mod tests {
         ]);
         let bbox = BoundingBox2D::from_coord_ref_iter(coordinates.iter()).unwrap();
         assert_eq!(bbox, expected);
+    }
+
+    #[test]
+    fn test_split_into_quarters() {
+        let bbox = BoundingBox2D::new((-50., -50.).into(), (50., 50.).into()).unwrap();
+
+        let (lower_left, lower_right, upper_left, upper_right) = bbox.split_into_quarters();
+
+        assert_eq!(
+            upper_left,
+            BoundingBox2D::new((-50., 0.).into(), (0., 50.).into()).unwrap()
+        );
+        assert_eq!(
+            upper_right,
+            BoundingBox2D::new((0., 0.).into(), (50., 50.).into()).unwrap()
+        );
+        assert_eq!(
+            lower_left,
+            BoundingBox2D::new((-50., -50.).into(), (0., 0.).into()).unwrap()
+        );
+        assert_eq!(
+            lower_right,
+            BoundingBox2D::new((0., -50.).into(), (50., 0.).into()).unwrap()
+        );
+    }
+
+    #[test]
+    fn test_new_from_center() {
+        assert_eq!(
+            BoundingBox2D::new_from_center((0., 0.).into(), 50., 50.).unwrap(),
+            BoundingBox2D::new((-50., -50.).into(), (50., 50.).into()).unwrap(),
+        );
+    }
+
+    #[test]
+    fn extent() {
+        assert_eq!(bboxes_extent([None].into_iter()), None);
+        assert_eq!(
+            bboxes_extent(
+                [
+                    Some(BoundingBox2D::new((-50., -50.).into(), (50., 50.).into()).unwrap()),
+                    Some(BoundingBox2D::new((0., 0.).into(), (70., 70.).into()).unwrap())
+                ]
+                .into_iter()
+            ),
+            Some(BoundingBox2D::new((-50., -50.).into(), (70., 70.).into()).unwrap())
+        );
+        assert_eq!(
+            bboxes_extent(
+                [
+                    Some(BoundingBox2D::new((-50., -50.).into(), (50., 50.).into()).unwrap()),
+                    None
+                ]
+                .into_iter()
+            ),
+            None
+        );
+        assert_eq!(
+            bboxes_extent(
+                [
+                    None,
+                    Some(BoundingBox2D::new((-50., -50.).into(), (50., 50.).into()).unwrap())
+                ]
+                .into_iter()
+            ),
+            None
+        );
     }
 }

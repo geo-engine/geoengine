@@ -1,0 +1,78 @@
+{
+  "properties": {
+    "id": "f47fc99c-c085-4fe3-90f3-120491facb28",
+    "name": "Natural Earth 10m Ports 3857",
+    "description": "Ports from Natural Earth reprojected to EPSG:3857",
+    "sourceOperator": "OgrSource",
+    "provenance": {
+      "citation": "Natural Earth, Cultural Vectors 10m Ports",
+      "license": "Public domain by Natural Earth http://www.naturalearthdata.com/about/terms-of-use/",
+      "uri": "https://www.naturalearthdata.com/downloads/10m-cultural-vectors/ports/"
+    }
+  },
+  "metaData": {
+    "type": "OgrMetaData",
+    "loadingInfo": {
+      "fileName": "test_data/vector/data/ne_10m_ports/projected_3857/ne_10m_ports.shp",
+      "layerName": "ne_10m_ports",
+      "dataType": "MultiPoint",
+      "time": {
+        "type": "none"
+      },
+      "columns": {
+        "x": "",
+        "y": null,
+        "float": ["natlscale"],
+        "int": ["scalerank"],
+        "text": ["featurecla", "name", "website"]
+      },
+      "forceOgrTimeFilter": false,
+      "onError": "ignore",
+      "provenance": null
+    },
+    "resultDescriptor": {
+      "dataType": "MultiPoint",
+      "spatialReference": "EPSG:3857",
+      "columns": {
+        "website": {
+          "dataType": "text",
+          "measurement": {
+            "type": "unitless"
+          }
+        },
+        "name": {
+          "dataType": "text",
+          "measurement": {
+            "type": "unitless"
+          }
+        },
+        "natlscale": {
+          "dataType": "float",
+          "measurement": {
+            "type": "unitless"
+          }
+        },
+        "scalerank": {
+          "dataType": "int",
+          "measurement": {
+            "type": "unitless"
+          }
+        },
+        "featurecla": {
+          "dataType": "text",
+          "measurement": {
+            "type": "unitless"
+          }
+        }
+      },
+      "time": {
+        "start": "-262144-01-01T00:00:00+00:00",
+        "end": "+262143-12-31T23:59:59.999+00:00"
+      },
+      "bbox": {
+        "lowerLeftCoordinate": [-19120007.589356, -7324970.649647],
+        "upperRightCoordinate": [19960627.094946, 14490886.335637]
+      }
+    }
+  }
+}

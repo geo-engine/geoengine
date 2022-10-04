@@ -1,14 +1,14 @@
 use crate::adapters::StreamStatisticsAdapter;
 use crate::engine::{
     InitializedRasterOperator, InitializedVectorOperator, QueryContext, QueryProcessor,
-    QueryRectangle, RasterResultDescriptor, TypedRasterQueryProcessor, TypedVectorQueryProcessor,
+    RasterResultDescriptor, TypedRasterQueryProcessor, TypedVectorQueryProcessor,
     VectorResultDescriptor,
 };
 use crate::util::Result;
 use async_trait::async_trait;
 use futures::stream::BoxStream;
 use futures::StreamExt;
-use geoengine_datatypes::primitives::AxisAlignedRectangle;
+use geoengine_datatypes::primitives::{AxisAlignedRectangle, QueryRectangle};
 use log::{debug, trace};
 
 pub struct InitializedProcessorStatistics<S> {

@@ -1,3 +1,4 @@
+use crate::contexts::Db;
 use crate::error::Result;
 use crate::projects::{
     CreateProject, OrderBy, Project, ProjectDb, ProjectFilter, ProjectId, ProjectListOptions,
@@ -10,7 +11,7 @@ use std::collections::HashMap;
 
 #[derive(Default)]
 pub struct HashMapProjectDb {
-    projects: HashMap<ProjectId, Project>,
+    projects: Db<HashMap<ProjectId, Project>>,
 }
 
 #[async_trait]
@@ -30,6 +31,8 @@ impl ProjectDb<SimpleSession> for HashMapProjectDb {
 
         let mut projects = self
             .projects
+            .read()
+            .await
             .values()
             .map(ProjectListing::from)
             .filter(|p| match &filter {
@@ -56,6 +59,8 @@ impl ProjectDb<SimpleSession> for HashMapProjectDb {
     /// Load a project
     async fn load(&self, _session: &SimpleSession, project: ProjectId) -> Result<Project> {
         self.projects
+            .read()
+            .await
             .get(&project)
             .cloned()
             .ok_or(error::Error::ProjectLoadFailed)
@@ -63,26 +68,26 @@ impl ProjectDb<SimpleSession> for HashMapProjectDb {
 
     /// Create a project
     async fn create(
-        &mut self,
+        &self,
         _session: &SimpleSession,
         create: Validated<CreateProject>,
     ) -> Result<ProjectId> {
         let project: Project = Project::from_create_project(create.user_input);
         let id = project.id;
-        self.projects.insert(id, project);
+        self.projects.write().await.insert(id, project);
         Ok(id)
     }
 
     /// Update a project
     async fn update(
-        &mut self,
+        &self,
         _session: &SimpleSession,
         update: Validated<UpdateProject>,
     ) -> Result<()> {
         let update = update.user_input;
 
-        let project = self
-            .projects
+        let mut projects = self.projects.write().await;
+        let project = projects
             .get_mut(&update.id)
             .ok_or(error::Error::ProjectUpdateFailed)?;
 
@@ -94,8 +99,10 @@ impl ProjectDb<SimpleSession> for HashMapProjectDb {
     }
 
     /// Delete a project
-    async fn delete(&mut self, _session: &SimpleSession, project: ProjectId) -> Result<()> {
+    async fn delete(&self, _session: &SimpleSession, project: ProjectId) -> Result<()> {
         self.projects
+            .write()
+            .await
             .remove(&project)
             .map(|_| ())
             .ok_or(error::Error::ProjectDeleteFailed)
@@ -113,7 +120,7 @@ mod test {
 
     #[tokio::test]
     async fn list() {
-        let mut project_db = HashMapProjectDb::default();
+        let project_db = HashMapProjectDb::default();
         let session = SimpleSession::mock();
 
         for i in 0..10 {
@@ -153,7 +160,7 @@ mod test {
 
     #[tokio::test]
     async fn load() {
-        let mut project_db = HashMapProjectDb::default();
+        let project_db = HashMapProjectDb::default();
         let session = SimpleSession::default();
 
         let create = CreateProject {
@@ -174,7 +181,7 @@ mod test {
 
     #[tokio::test]
     async fn create() {
-        let mut project_db = HashMapProjectDb::default();
+        let project_db = HashMapProjectDb::default();
         let session = SimpleSession::default();
 
         let create = CreateProject {
@@ -194,7 +201,7 @@ mod test {
 
     #[tokio::test]
     async fn update() {
-        let mut project_db = HashMapProjectDb::default();
+        let project_db = HashMapProjectDb::default();
         let session = SimpleSession::default();
 
         let create = CreateProject {
@@ -228,7 +235,7 @@ mod test {
 
     #[tokio::test]
     async fn delete() {
-        let mut project_db = HashMapProjectDb::default();
+        let project_db = HashMapProjectDb::default();
         let session = SimpleSession::default();
 
         let create = CreateProject {

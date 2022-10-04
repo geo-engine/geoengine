@@ -1,0 +1,2215 @@
+{
+  "@context": "http://schema.org/",
+  "@id": "https://doi.org/10.1594/PANGAEA.921338",
+  "@type": "Dataset",
+  "identifier": "https://doi.org/10.1594/PANGAEA.921338",
+  "url": "https://doi.pangaea.de/10.1594/PANGAEA.921338",
+  "creator": [
+    {
+      "@id": "https://orcid.org/0000-0001-5396-9075",
+      "@type": "Person",
+      "name": "Timo Pisternick",
+      "familyName": "Pisternick",
+      "givenName": "Timo",
+      "identifier": "https://orcid.org/0000-0001-5396-9075"
+    },
+    {
+      "@id": "https://orcid.org/0000-0003-3165-1079",
+      "@type": "Person",
+      "name": "Julian Lilkendey",
+      "familyName": "Lilkendey",
+      "givenName": "Julian",
+      "identifier": "https://orcid.org/0000-0003-3165-1079",
+      "email": "julian.lilkendey@icloud.com"
+    },
+    {
+      "@type": "Person",
+      "name": "Anishta Audit-Manna",
+      "familyName": "Audit-Manna",
+      "givenName": "Anishta"
+    },
+    {
+      "@type": "Person",
+      "name": "Danishta Dumur Neelayya",
+      "familyName": "Dumur Neelayya",
+      "givenName": "Danishta"
+    },
+    {
+      "@type": "Person",
+      "name": "Yashvin Neehaul",
+      "familyName": "Neehaul",
+      "givenName": "Yashvin"
+    },
+    {
+      "@id": "https://orcid.org/0000-0003-2822-8261",
+      "@type": "Person",
+      "name": "Nils Moosdorf",
+      "familyName": "Moosdorf",
+      "givenName": "Nils",
+      "identifier": "https://orcid.org/0000-0003-2822-8261",
+      "email": "nils@moosdorf.de"
+    }
+  ],
+  "name": "Fish abundances for Troux aux Biches lagoon, Mauritius",
+  "publisher": {
+    "@type": "Organization",
+    "name": "PANGAEA",
+    "disambiguatingDescription": "Data Publisher for Earth & Environmental Science",
+    "url": "https://www.pangaea.de/"
+  },
+  "includedInDataCatalog": {
+    "@type": "DataCatalog",
+    "name": "PANGAEA",
+    "disambiguatingDescription": "Data Publisher for Earth & Environmental Science",
+    "url": "https://www.pangaea.de/"
+  },
+  "datePublished": "2020-08-07",
+  "isPartOf": "https://doi.org/10.1594/PANGAEA.921340",
+  "description": "This dataset is about: Fish abundances for Troux aux Biches lagoon, Mauritius. Please consult parent dataset @ https://doi.org/10.1594/PANGAEA.921340 for more information.",
+  "citation": {
+    "@id": "https://doi.org/10.1111/maec.12610",
+    "@type": "CreativeWork",
+    "identifier": "https://doi.org/10.1111/maec.12610",
+    "url": "https://doi.org/10.1111/maec.12610",
+    "creator": [
+      {
+        "@id": "https://orcid.org/0000-0001-5396-9075",
+        "@type": "Person",
+        "name": "Timo Pisternick",
+        "familyName": "Pisternick",
+        "givenName": "Timo",
+        "identifier": "https://orcid.org/0000-0001-5396-9075"
+      },
+      {
+        "@id": "https://orcid.org/0000-0003-3165-1079",
+        "@type": "Person",
+        "name": "Julian Lilkendey",
+        "familyName": "Lilkendey",
+        "givenName": "Julian",
+        "identifier": "https://orcid.org/0000-0003-3165-1079",
+        "email": "julian.lilkendey@icloud.com"
+      },
+      {
+        "@type": "Person",
+        "name": "Anishta Audit-Manna",
+        "familyName": "Audit-Manna",
+        "givenName": "Anishta"
+      },
+      {
+        "@type": "Person",
+        "name": "Danishta Dumur Neelayya",
+        "familyName": "Dumur Neelayya",
+        "givenName": "Danishta"
+      },
+      {
+        "@type": "Person",
+        "name": "Yashvin Neehaul",
+        "familyName": "Neehaul",
+        "givenName": "Yashvin"
+      },
+      {
+        "@id": "https://orcid.org/0000-0003-2822-8261",
+        "@type": "Person",
+        "name": "Nils Moosdorf",
+        "familyName": "Moosdorf",
+        "givenName": "Nils",
+        "identifier": "https://orcid.org/0000-0003-2822-8261",
+        "email": "nils@moosdorf.de"
+      }
+    ],
+    "name": "Submarine groundwater springs are characterized by distinct fish communities",
+    "datePublished": "2020"
+  },
+  "variableMeasured": [
+    {
+      "@type": "PropertyValue",
+      "name": "Event label"
+    },
+    {
+      "@type": "PropertyValue",
+      "name": "Date/Time of event"
+    },
+    {
+      "@type": "PropertyValue",
+      "name": "Latitude of event"
+    },
+    {
+      "@type": "PropertyValue",
+      "name": "Longitude of event"
+    },
+    {
+      "@type": "PropertyValue",
+      "name": "Location",
+      "subjectOf": {
+        "@type": "DefinedTermSet",
+        "hasDefinedTerm": {
+          "@id": "urn:pangaea:obo:pato:syn:0_0000605",
+          "@type": "DefinedTerm",
+          "identifier": "urn:pangaea:obo:pato:syn:0_0000605",
+          "name": "location"
+        }
+      }
+    },
+    {
+      "@type": "PropertyValue",
+      "name": "Site",
+      "subjectOf": {
+        "@type": "DefinedTermSet",
+        "hasDefinedTerm": {
+          "@type": "DefinedTerm",
+          "name": "site"
+        }
+      }
+    },
+    {
+      "@type": "PropertyValue",
+      "name": "Replicate"
+    },
+    {
+      "@type": "PropertyValue",
+      "name": "Shannon Diversity Index",
+      "url": "https://doi.org/10.1007/978-94-017-8801-4_233"
+    },
+    {
+      "@type": "PropertyValue",
+      "name": "Pielou evenness index",
+      "url": "http://en.wikipedia.org/wiki/Species_evenness"
+    },
+    {
+      "@type": "PropertyValue",
+      "name": "Pisces",
+      "unitText": "#",
+      "url": "http://www.marinespecies.org/aphia.php?p=taxdetails&id=11676",
+      "measurementTechnique": "Digital camera, GoPro Hero 4",
+      "description": "total",
+      "subjectOf": {
+        "@type": "DefinedTermSet",
+        "hasDefinedTerm": [
+          {
+            "@id": "urn:lsid:marinespecies.org:taxname:11676",
+            "@type": "DefinedTerm",
+            "identifier": "urn:lsid:marinespecies.org:taxname:11676",
+            "name": "Pisces",
+            "url": "http://www.marinespecies.org/aphia.php?p=taxdetails&id=11676"
+          },
+          {
+            "@type": "DefinedTerm",
+            "name": "Abundance or Count"
+          }
+        ]
+      }
+    },
+    {
+      "@type": "PropertyValue",
+      "name": "Pisces",
+      "unitText": "#",
+      "url": "http://www.marinespecies.org/aphia.php?p=taxdetails&id=11676",
+      "measurementTechnique": "Digital camera, GoPro Hero 4",
+      "description": "total commercial",
+      "subjectOf": {
+        "@type": "DefinedTermSet",
+        "hasDefinedTerm": [
+          {
+            "@id": "urn:lsid:marinespecies.org:taxname:11676",
+            "@type": "DefinedTerm",
+            "identifier": "urn:lsid:marinespecies.org:taxname:11676",
+            "name": "Pisces",
+            "url": "http://www.marinespecies.org/aphia.php?p=taxdetails&id=11676"
+          },
+          {
+            "@type": "DefinedTerm",
+            "name": "Abundance or Count"
+          }
+        ]
+      }
+    },
+    {
+      "@type": "PropertyValue",
+      "name": "Species richness",
+      "measurementTechnique": "Digital camera, GoPro Hero 4",
+      "subjectOf": {
+        "@type": "DefinedTermSet",
+        "hasDefinedTerm": {
+          "@type": "DefinedTerm",
+          "name": "species richness"
+        }
+      }
+    },
+    {
+      "@type": "PropertyValue",
+      "name": "Abudefduf sexfasciatus",
+      "unitText": "#",
+      "url": "http://www.marinespecies.org/aphia.php?p=taxdetails&id=159289",
+      "measurementTechnique": "Digital camera, GoPro Hero 4",
+      "subjectOf": {
+        "@type": "DefinedTermSet",
+        "hasDefinedTerm": [
+          {
+            "@id": "urn:lsid:marinespecies.org:taxname:159289",
+            "@type": "DefinedTerm",
+            "identifier": "urn:lsid:marinespecies.org:taxname:159289",
+            "name": "Abudefduf sexfasciatus",
+            "url": "http://www.marinespecies.org/aphia.php?p=taxdetails&id=159289"
+          },
+          {
+            "@type": "DefinedTerm",
+            "name": "Abundance or Count"
+          }
+        ]
+      }
+    },
+    {
+      "@type": "PropertyValue",
+      "name": "Abudefduf sparoides",
+      "unitText": "#",
+      "url": "http://www.marinespecies.org/aphia.php?p=taxdetails&id=212862",
+      "measurementTechnique": "Digital camera, GoPro Hero 4",
+      "subjectOf": {
+        "@type": "DefinedTermSet",
+        "hasDefinedTerm": [
+          {
+            "@id": "urn:lsid:marinespecies.org:taxname:212862",
+            "@type": "DefinedTerm",
+            "identifier": "urn:lsid:marinespecies.org:taxname:212862",
+            "name": "Abudefduf sparoides",
+            "url": "http://www.marinespecies.org/aphia.php?p=taxdetails&id=212862"
+          },
+          {
+            "@type": "DefinedTerm",
+            "name": "Abundance or Count"
+          }
+        ]
+      }
+    },
+    {
+      "@type": "PropertyValue",
+      "name": "Acanthuridae spp.",
+      "unitText": "#",
+      "url": "http://www.marinespecies.org/aphia.php?p=taxdetails&id=125515",
+      "measurementTechnique": "Digital camera, GoPro Hero 4",
+      "subjectOf": {
+        "@type": "DefinedTermSet",
+        "hasDefinedTerm": [
+          {
+            "@id": "urn:lsid:marinespecies.org:taxname:125515",
+            "@type": "DefinedTerm",
+            "identifier": "urn:lsid:marinespecies.org:taxname:125515",
+            "name": "Acanthuridae",
+            "url": "http://www.marinespecies.org/aphia.php?p=taxdetails&id=125515"
+          },
+          {
+            "@type": "DefinedTerm",
+            "name": "Abundance or Count"
+          }
+        ]
+      }
+    },
+    {
+      "@type": "PropertyValue",
+      "name": "Acanthurus nigricauda",
+      "unitText": "#",
+      "url": "http://www.marinespecies.org/aphia.php?p=taxdetails&id=219626",
+      "measurementTechnique": "Digital camera, GoPro Hero 4",
+      "subjectOf": {
+        "@type": "DefinedTermSet",
+        "hasDefinedTerm": [
+          {
+            "@id": "urn:lsid:marinespecies.org:taxname:219626",
+            "@type": "DefinedTerm",
+            "identifier": "urn:lsid:marinespecies.org:taxname:219626",
+            "name": "Acanthurus nigricauda",
+            "url": "http://www.marinespecies.org/aphia.php?p=taxdetails&id=219626"
+          },
+          {
+            "@type": "DefinedTerm",
+            "name": "Abundance or Count"
+          }
+        ]
+      }
+    },
+    {
+      "@type": "PropertyValue",
+      "name": "Acanthurus nigrofuscus",
+      "unitText": "#",
+      "url": "http://www.marinespecies.org/aphia.php?p=taxdetails&id=219640",
+      "measurementTechnique": "Digital camera, GoPro Hero 4",
+      "subjectOf": {
+        "@type": "DefinedTermSet",
+        "hasDefinedTerm": [
+          {
+            "@id": "urn:lsid:marinespecies.org:taxname:219640",
+            "@type": "DefinedTerm",
+            "identifier": "urn:lsid:marinespecies.org:taxname:219640",
+            "name": "Acanthurus nigrofuscus",
+            "url": "http://www.marinespecies.org/aphia.php?p=taxdetails&id=219640"
+          },
+          {
+            "@type": "DefinedTerm",
+            "name": "Abundance or Count"
+          }
+        ]
+      }
+    },
+    {
+      "@type": "PropertyValue",
+      "name": "Acanthurus triostegus",
+      "unitText": "#",
+      "url": "http://www.marinespecies.org/aphia.php?p=taxdetails&id=219630",
+      "measurementTechnique": "Digital camera, GoPro Hero 4",
+      "subjectOf": {
+        "@type": "DefinedTermSet",
+        "hasDefinedTerm": [
+          {
+            "@id": "urn:lsid:marinespecies.org:taxname:219630",
+            "@type": "DefinedTerm",
+            "identifier": "urn:lsid:marinespecies.org:taxname:219630",
+            "name": "Acanthurus triostegus",
+            "url": "http://www.marinespecies.org/aphia.php?p=taxdetails&id=219630"
+          },
+          {
+            "@type": "DefinedTerm",
+            "name": "Abundance or Count"
+          }
+        ]
+      }
+    },
+    {
+      "@type": "PropertyValue",
+      "name": "Arothron nigropunctatus",
+      "unitText": "#",
+      "url": "http://www.marinespecies.org/aphia.php?p=taxdetails&id=219921",
+      "measurementTechnique": "Digital camera, GoPro Hero 4",
+      "subjectOf": {
+        "@type": "DefinedTermSet",
+        "hasDefinedTerm": [
+          {
+            "@id": "urn:lsid:marinespecies.org:taxname:219921",
+            "@type": "DefinedTerm",
+            "identifier": "urn:lsid:marinespecies.org:taxname:219921",
+            "name": "Arothron nigropunctatus",
+            "url": "http://www.marinespecies.org/aphia.php?p=taxdetails&id=219921"
+          },
+          {
+            "@type": "DefinedTerm",
+            "name": "Abundance or Count"
+          }
+        ]
+      }
+    },
+    {
+      "@type": "PropertyValue",
+      "name": "Aulostomus chinensis",
+      "unitText": "#",
+      "url": "http://www.marinespecies.org/aphia.php?p=taxdetails&id=217964",
+      "measurementTechnique": "Digital camera, GoPro Hero 4",
+      "subjectOf": {
+        "@type": "DefinedTermSet",
+        "hasDefinedTerm": [
+          {
+            "@id": "urn:lsid:marinespecies.org:taxname:217964",
+            "@type": "DefinedTerm",
+            "identifier": "urn:lsid:marinespecies.org:taxname:217964",
+            "name": "Aulostomus chinensis",
+            "url": "http://www.marinespecies.org/aphia.php?p=taxdetails&id=217964"
+          },
+          {
+            "@type": "DefinedTerm",
+            "name": "Abundance or Count"
+          }
+        ]
+      }
+    },
+    {
+      "@type": "PropertyValue",
+      "name": "Cantherhines pardalis",
+      "unitText": "#",
+      "url": "http://www.marinespecies.org/aphia.php?p=taxdetails&id=220058",
+      "measurementTechnique": "Digital camera, GoPro Hero 4",
+      "subjectOf": {
+        "@type": "DefinedTermSet",
+        "hasDefinedTerm": [
+          {
+            "@id": "urn:lsid:marinespecies.org:taxname:220058",
+            "@type": "DefinedTerm",
+            "identifier": "urn:lsid:marinespecies.org:taxname:220058",
+            "name": "Cantherhines pardalis",
+            "url": "http://www.marinespecies.org/aphia.php?p=taxdetails&id=220058"
+          },
+          {
+            "@type": "DefinedTerm",
+            "name": "Abundance or Count"
+          }
+        ]
+      }
+    },
+    {
+      "@type": "PropertyValue",
+      "name": "Canthigaster bennetti",
+      "unitText": "#",
+      "url": "http://www.marinespecies.org/aphia.php?p=taxdetails&id=219938",
+      "measurementTechnique": "Digital camera, GoPro Hero 4",
+      "subjectOf": {
+        "@type": "DefinedTermSet",
+        "hasDefinedTerm": [
+          {
+            "@id": "urn:lsid:marinespecies.org:taxname:219938",
+            "@type": "DefinedTerm",
+            "identifier": "urn:lsid:marinespecies.org:taxname:219938",
+            "name": "Canthigaster bennetti",
+            "url": "http://www.marinespecies.org/aphia.php?p=taxdetails&id=219938"
+          },
+          {
+            "@type": "DefinedTerm",
+            "name": "Abundance or Count"
+          }
+        ]
+      }
+    },
+    {
+      "@type": "PropertyValue",
+      "name": "Carangidae sp.",
+      "unitText": "#",
+      "url": "http://www.marinespecies.org/aphia.php?p=taxdetails&id=125523",
+      "measurementTechnique": "Digital camera, GoPro Hero 4",
+      "subjectOf": {
+        "@type": "DefinedTermSet",
+        "hasDefinedTerm": [
+          {
+            "@id": "urn:lsid:marinespecies.org:taxname:125523",
+            "@type": "DefinedTerm",
+            "identifier": "urn:lsid:marinespecies.org:taxname:125523",
+            "name": "Carangidae",
+            "url": "http://www.marinespecies.org/aphia.php?p=taxdetails&id=125523"
+          },
+          {
+            "@type": "DefinedTerm",
+            "name": "Abundance or Count"
+          }
+        ]
+      }
+    },
+    {
+      "@type": "PropertyValue",
+      "name": "Caranx melampygus",
+      "unitText": "#",
+      "url": "http://www.marinespecies.org/aphia.php?p=taxdetails&id=218419",
+      "measurementTechnique": "Digital camera, GoPro Hero 4",
+      "subjectOf": {
+        "@type": "DefinedTermSet",
+        "hasDefinedTerm": [
+          {
+            "@id": "urn:lsid:marinespecies.org:taxname:218419",
+            "@type": "DefinedTerm",
+            "identifier": "urn:lsid:marinespecies.org:taxname:218419",
+            "name": "Caranx melampygus",
+            "url": "http://www.marinespecies.org/aphia.php?p=taxdetails&id=218419"
+          },
+          {
+            "@type": "DefinedTerm",
+            "name": "Abundance or Count"
+          }
+        ]
+      }
+    },
+    {
+      "@type": "PropertyValue",
+      "name": "Chaetodon auriga",
+      "unitText": "#",
+      "url": "http://www.marinespecies.org/aphia.php?p=taxdetails&id=218730",
+      "measurementTechnique": "Digital camera, GoPro Hero 4",
+      "subjectOf": {
+        "@type": "DefinedTermSet",
+        "hasDefinedTerm": [
+          {
+            "@id": "urn:lsid:marinespecies.org:taxname:218730",
+            "@type": "DefinedTerm",
+            "identifier": "urn:lsid:marinespecies.org:taxname:218730",
+            "name": "Chaetodon auriga",
+            "url": "http://www.marinespecies.org/aphia.php?p=taxdetails&id=218730"
+          },
+          {
+            "@type": "DefinedTerm",
+            "name": "Abundance or Count"
+          }
+        ]
+      }
+    },
+    {
+      "@type": "PropertyValue",
+      "name": "Chaetodon interruptus",
+      "unitText": "#",
+      "url": "http://www.marinespecies.org/aphia.php?p=taxdetails&id=273344",
+      "measurementTechnique": "Digital camera, GoPro Hero 4",
+      "subjectOf": {
+        "@type": "DefinedTermSet",
+        "hasDefinedTerm": [
+          {
+            "@id": "urn:lsid:marinespecies.org:taxname:273344",
+            "@type": "DefinedTerm",
+            "identifier": "urn:lsid:marinespecies.org:taxname:273344",
+            "name": "Chaetodon interruptus",
+            "url": "http://www.marinespecies.org/aphia.php?p=taxdetails&id=273344"
+          },
+          {
+            "@type": "DefinedTerm",
+            "name": "Abundance or Count"
+          }
+        ]
+      }
+    },
+    {
+      "@type": "PropertyValue",
+      "name": "Chaetodon lunula",
+      "unitText": "#",
+      "url": "http://www.marinespecies.org/aphia.php?p=taxdetails&id=218733",
+      "measurementTechnique": "Digital camera, GoPro Hero 4",
+      "subjectOf": {
+        "@type": "DefinedTermSet",
+        "hasDefinedTerm": [
+          {
+            "@id": "urn:lsid:marinespecies.org:taxname:218733",
+            "@type": "DefinedTerm",
+            "identifier": "urn:lsid:marinespecies.org:taxname:218733",
+            "name": "Chaetodon lunula",
+            "url": "http://www.marinespecies.org/aphia.php?p=taxdetails&id=218733"
+          },
+          {
+            "@type": "DefinedTerm",
+            "name": "Abundance or Count"
+          }
+        ]
+      }
+    },
+    {
+      "@type": "PropertyValue",
+      "name": "Chaetodon trifascialis",
+      "unitText": "#",
+      "url": "http://www.marinespecies.org/aphia.php?p=taxdetails&id=218719",
+      "measurementTechnique": "Digital camera, GoPro Hero 4",
+      "subjectOf": {
+        "@type": "DefinedTermSet",
+        "hasDefinedTerm": [
+          {
+            "@id": "urn:lsid:marinespecies.org:taxname:218719",
+            "@type": "DefinedTerm",
+            "identifier": "urn:lsid:marinespecies.org:taxname:218719",
+            "name": "Chaetodon trifascialis",
+            "url": "http://www.marinespecies.org/aphia.php?p=taxdetails&id=218719"
+          },
+          {
+            "@type": "DefinedTerm",
+            "name": "Abundance or Count"
+          }
+        ]
+      }
+    },
+    {
+      "@type": "PropertyValue",
+      "name": "Chaetodon trifasciatus",
+      "unitText": "#",
+      "url": "http://www.marinespecies.org/aphia.php?p=taxdetails&id=218741",
+      "measurementTechnique": "Digital camera, GoPro Hero 4",
+      "subjectOf": {
+        "@type": "DefinedTermSet",
+        "hasDefinedTerm": [
+          {
+            "@id": "urn:lsid:marinespecies.org:taxname:218741",
+            "@type": "DefinedTerm",
+            "identifier": "urn:lsid:marinespecies.org:taxname:218741",
+            "name": "Chaetodon trifasciatus",
+            "url": "http://www.marinespecies.org/aphia.php?p=taxdetails&id=218741"
+          },
+          {
+            "@type": "DefinedTerm",
+            "name": "Abundance or Count"
+          }
+        ]
+      }
+    },
+    {
+      "@type": "PropertyValue",
+      "name": "Chaetodon vagabundus",
+      "unitText": "#",
+      "url": "http://www.marinespecies.org/aphia.php?p=taxdetails&id=218754",
+      "measurementTechnique": "Digital camera, GoPro Hero 4",
+      "subjectOf": {
+        "@type": "DefinedTermSet",
+        "hasDefinedTerm": [
+          {
+            "@id": "urn:lsid:marinespecies.org:taxname:218754",
+            "@type": "DefinedTerm",
+            "identifier": "urn:lsid:marinespecies.org:taxname:218754",
+            "name": "Chaetodon vagabundus",
+            "url": "http://www.marinespecies.org/aphia.php?p=taxdetails&id=218754"
+          },
+          {
+            "@type": "DefinedTerm",
+            "name": "Abundance or Count"
+          }
+        ]
+      }
+    },
+    {
+      "@type": "PropertyValue",
+      "name": "Chaetodon xanthocephalus",
+      "unitText": "#",
+      "url": "http://www.marinespecies.org/aphia.php?p=taxdetails&id=218721",
+      "measurementTechnique": "Digital camera, GoPro Hero 4",
+      "subjectOf": {
+        "@type": "DefinedTermSet",
+        "hasDefinedTerm": [
+          {
+            "@id": "urn:lsid:marinespecies.org:taxname:218721",
+            "@type": "DefinedTerm",
+            "identifier": "urn:lsid:marinespecies.org:taxname:218721",
+            "name": "Chaetodon xanthocephalus",
+            "url": "http://www.marinespecies.org/aphia.php?p=taxdetails&id=218721"
+          },
+          {
+            "@type": "DefinedTerm",
+            "name": "Abundance or Count"
+          }
+        ]
+      }
+    },
+    {
+      "@type": "PropertyValue",
+      "name": "Cheilinus chlorourus",
+      "unitText": "#",
+      "url": "http://www.marinespecies.org/aphia.php?p=taxdetails&id=218941",
+      "measurementTechnique": "Digital camera, GoPro Hero 4",
+      "subjectOf": {
+        "@type": "DefinedTermSet",
+        "hasDefinedTerm": [
+          {
+            "@id": "urn:lsid:marinespecies.org:taxname:218941",
+            "@type": "DefinedTerm",
+            "identifier": "urn:lsid:marinespecies.org:taxname:218941",
+            "name": "Cheilinus chlorourus",
+            "url": "http://www.marinespecies.org/aphia.php?p=taxdetails&id=218941"
+          },
+          {
+            "@type": "DefinedTerm",
+            "name": "Abundance or Count"
+          }
+        ]
+      }
+    },
+    {
+      "@type": "PropertyValue",
+      "name": "Cheilinus trilobatus",
+      "unitText": "#",
+      "url": "http://www.marinespecies.org/aphia.php?p=taxdetails&id=218944",
+      "measurementTechnique": "Digital camera, GoPro Hero 4",
+      "subjectOf": {
+        "@type": "DefinedTermSet",
+        "hasDefinedTerm": [
+          {
+            "@id": "urn:lsid:marinespecies.org:taxname:218944",
+            "@type": "DefinedTerm",
+            "identifier": "urn:lsid:marinespecies.org:taxname:218944",
+            "name": "Cheilinus trilobatus",
+            "url": "http://www.marinespecies.org/aphia.php?p=taxdetails&id=218944"
+          },
+          {
+            "@type": "DefinedTerm",
+            "name": "Abundance or Count"
+          }
+        ]
+      }
+    },
+    {
+      "@type": "PropertyValue",
+      "name": "Cheilio inermis",
+      "unitText": "#",
+      "url": "http://www.marinespecies.org/aphia.php?p=taxdetails&id=218948",
+      "measurementTechnique": "Digital camera, GoPro Hero 4",
+      "subjectOf": {
+        "@type": "DefinedTermSet",
+        "hasDefinedTerm": [
+          {
+            "@id": "urn:lsid:marinespecies.org:taxname:218948",
+            "@type": "DefinedTerm",
+            "identifier": "urn:lsid:marinespecies.org:taxname:218948",
+            "name": "Cheilio inermis",
+            "url": "http://www.marinespecies.org/aphia.php?p=taxdetails&id=218948"
+          },
+          {
+            "@type": "DefinedTerm",
+            "name": "Abundance or Count"
+          }
+        ]
+      }
+    },
+    {
+      "@type": "PropertyValue",
+      "name": "Cheilodipterus quinquelineatus",
+      "unitText": "#",
+      "url": "http://www.marinespecies.org/aphia.php?p=taxdetails&id=209371",
+      "measurementTechnique": "Digital camera, GoPro Hero 4",
+      "subjectOf": {
+        "@type": "DefinedTermSet",
+        "hasDefinedTerm": [
+          {
+            "@id": "urn:lsid:marinespecies.org:taxname:209371",
+            "@type": "DefinedTerm",
+            "identifier": "urn:lsid:marinespecies.org:taxname:209371",
+            "name": "Cheilodipterus quinquelineatus",
+            "url": "http://www.marinespecies.org/aphia.php?p=taxdetails&id=209371"
+          },
+          {
+            "@type": "DefinedTerm",
+            "name": "Abundance or Count"
+          }
+        ]
+      }
+    },
+    {
+      "@type": "PropertyValue",
+      "name": "Chlorurus sordidus",
+      "unitText": "#",
+      "url": "http://www.marinespecies.org/aphia.php?p=taxdetails&id=219082",
+      "measurementTechnique": "Digital camera, GoPro Hero 4",
+      "subjectOf": {
+        "@type": "DefinedTermSet",
+        "hasDefinedTerm": [
+          {
+            "@id": "urn:lsid:marinespecies.org:taxname:219082",
+            "@type": "DefinedTerm",
+            "identifier": "urn:lsid:marinespecies.org:taxname:219082",
+            "name": "Chlorurus sordidus",
+            "url": "http://www.marinespecies.org/aphia.php?p=taxdetails&id=219082"
+          },
+          {
+            "@type": "DefinedTerm",
+            "name": "Abundance or Count"
+          }
+        ]
+      }
+    },
+    {
+      "@type": "PropertyValue",
+      "name": "Chromis viridis",
+      "unitText": "#",
+      "url": "http://www.marinespecies.org/aphia.php?p=taxdetails&id=212811",
+      "measurementTechnique": "Digital camera, GoPro Hero 4",
+      "subjectOf": {
+        "@type": "DefinedTermSet",
+        "hasDefinedTerm": [
+          {
+            "@id": "urn:lsid:marinespecies.org:taxname:212811",
+            "@type": "DefinedTerm",
+            "identifier": "urn:lsid:marinespecies.org:taxname:212811",
+            "name": "Chromis viridis",
+            "url": "http://www.marinespecies.org/aphia.php?p=taxdetails&id=212811"
+          },
+          {
+            "@type": "DefinedTerm",
+            "name": "Abundance or Count"
+          }
+        ]
+      }
+    },
+    {
+      "@type": "PropertyValue",
+      "name": "Chrysiptera unimaculata",
+      "unitText": "#",
+      "url": "http://www.marinespecies.org/aphia.php?p=taxdetails&id=218782",
+      "measurementTechnique": "Digital camera, GoPro Hero 4",
+      "subjectOf": {
+        "@type": "DefinedTermSet",
+        "hasDefinedTerm": [
+          {
+            "@id": "urn:lsid:marinespecies.org:taxname:218782",
+            "@type": "DefinedTerm",
+            "identifier": "urn:lsid:marinespecies.org:taxname:218782",
+            "name": "Chrysiptera unimaculata",
+            "url": "http://www.marinespecies.org/aphia.php?p=taxdetails&id=218782"
+          },
+          {
+            "@type": "DefinedTerm",
+            "name": "Abundance or Count"
+          }
+        ]
+      }
+    },
+    {
+      "@type": "PropertyValue",
+      "name": "Corythoichthys schultzi",
+      "unitText": "#",
+      "url": "http://www.marinespecies.org/aphia.php?p=taxdetails&id=217993",
+      "measurementTechnique": "Digital camera, GoPro Hero 4",
+      "subjectOf": {
+        "@type": "DefinedTermSet",
+        "hasDefinedTerm": [
+          {
+            "@id": "urn:lsid:marinespecies.org:taxname:217993",
+            "@type": "DefinedTerm",
+            "identifier": "urn:lsid:marinespecies.org:taxname:217993",
+            "name": "Corythoichthys schultzi",
+            "url": "http://www.marinespecies.org/aphia.php?p=taxdetails&id=217993"
+          },
+          {
+            "@type": "DefinedTerm",
+            "name": "Abundance or Count"
+          }
+        ]
+      }
+    },
+    {
+      "@type": "PropertyValue",
+      "name": "Crenimugil buchanani",
+      "unitText": "#",
+      "url": "http://www.marinespecies.org/aphia.php?p=taxdetails&id=1042834",
+      "measurementTechnique": "Digital camera, GoPro Hero 4",
+      "subjectOf": {
+        "@type": "DefinedTermSet",
+        "hasDefinedTerm": [
+          {
+            "@id": "urn:lsid:marinespecies.org:taxname:1042834",
+            "@type": "DefinedTerm",
+            "identifier": "urn:lsid:marinespecies.org:taxname:1042834",
+            "name": "Crenimugil buchanani",
+            "url": "http://www.marinespecies.org/aphia.php?p=taxdetails&id=1042834"
+          },
+          {
+            "@type": "DefinedTerm",
+            "name": "Abundance or Count"
+          }
+        ]
+      }
+    },
+    {
+      "@type": "PropertyValue",
+      "name": "Ctenochaetus binotatus",
+      "unitText": "#",
+      "url": "http://www.marinespecies.org/aphia.php?p=taxdetails&id=219655",
+      "measurementTechnique": "Digital camera, GoPro Hero 4",
+      "subjectOf": {
+        "@type": "DefinedTermSet",
+        "hasDefinedTerm": [
+          {
+            "@id": "urn:lsid:marinespecies.org:taxname:219655",
+            "@type": "DefinedTerm",
+            "identifier": "urn:lsid:marinespecies.org:taxname:219655",
+            "name": "Ctenochaetus binotatus",
+            "url": "http://www.marinespecies.org/aphia.php?p=taxdetails&id=219655"
+          },
+          {
+            "@type": "DefinedTerm",
+            "name": "Abundance or Count"
+          }
+        ]
+      }
+    },
+    {
+      "@type": "PropertyValue",
+      "name": "Ctenochaetus striatus",
+      "unitText": "#",
+      "url": "http://www.marinespecies.org/aphia.php?p=taxdetails&id=219659",
+      "measurementTechnique": "Digital camera, GoPro Hero 4",
+      "subjectOf": {
+        "@type": "DefinedTermSet",
+        "hasDefinedTerm": [
+          {
+            "@id": "urn:lsid:marinespecies.org:taxname:219659",
+            "@type": "DefinedTerm",
+            "identifier": "urn:lsid:marinespecies.org:taxname:219659",
+            "name": "Ctenochaetus striatus",
+            "url": "http://www.marinespecies.org/aphia.php?p=taxdetails&id=219659"
+          },
+          {
+            "@type": "DefinedTerm",
+            "name": "Abundance or Count"
+          }
+        ]
+      }
+    },
+    {
+      "@type": "PropertyValue",
+      "name": "Dascyllus aruanus",
+      "unitText": "#",
+      "url": "http://www.marinespecies.org/aphia.php?p=taxdetails&id=212843",
+      "measurementTechnique": "Digital camera, GoPro Hero 4",
+      "subjectOf": {
+        "@type": "DefinedTermSet",
+        "hasDefinedTerm": [
+          {
+            "@id": "urn:lsid:marinespecies.org:taxname:212843",
+            "@type": "DefinedTerm",
+            "identifier": "urn:lsid:marinespecies.org:taxname:212843",
+            "name": "Dascyllus aruanus",
+            "url": "http://www.marinespecies.org/aphia.php?p=taxdetails&id=212843"
+          },
+          {
+            "@type": "DefinedTerm",
+            "name": "Abundance or Count"
+          }
+        ]
+      }
+    },
+    {
+      "@type": "PropertyValue",
+      "name": "Epinephelus merra",
+      "unitText": "#",
+      "url": "http://www.marinespecies.org/aphia.php?p=taxdetails&id=218228",
+      "measurementTechnique": "Digital camera, GoPro Hero 4",
+      "subjectOf": {
+        "@type": "DefinedTermSet",
+        "hasDefinedTerm": [
+          {
+            "@id": "urn:lsid:marinespecies.org:taxname:218228",
+            "@type": "DefinedTerm",
+            "identifier": "urn:lsid:marinespecies.org:taxname:218228",
+            "name": "Epinephelus merra",
+            "url": "http://www.marinespecies.org/aphia.php?p=taxdetails&id=218228"
+          },
+          {
+            "@type": "DefinedTerm",
+            "name": "Abundance or Count"
+          }
+        ]
+      }
+    },
+    {
+      "@type": "PropertyValue",
+      "name": "Gomphosus caeruleus",
+      "unitText": "#",
+      "url": "http://www.marinespecies.org/aphia.php?p=taxdetails&id=218976",
+      "measurementTechnique": "Digital camera, GoPro Hero 4",
+      "subjectOf": {
+        "@type": "DefinedTermSet",
+        "hasDefinedTerm": [
+          {
+            "@id": "urn:lsid:marinespecies.org:taxname:218976",
+            "@type": "DefinedTerm",
+            "identifier": "urn:lsid:marinespecies.org:taxname:218976",
+            "name": "Gomphosus caeruleus",
+            "url": "http://www.marinespecies.org/aphia.php?p=taxdetails&id=218976"
+          },
+          {
+            "@type": "DefinedTerm",
+            "name": "Abundance or Count"
+          }
+        ]
+      }
+    },
+    {
+      "@type": "PropertyValue",
+      "name": "Gnatholepis sp.",
+      "unitText": "#",
+      "url": "http://www.marinespecies.org/aphia.php?p=taxdetails&id=204522",
+      "measurementTechnique": "Digital camera, GoPro Hero 4",
+      "subjectOf": {
+        "@type": "DefinedTermSet",
+        "hasDefinedTerm": [
+          {
+            "@id": "urn:lsid:marinespecies.org:taxname:204522",
+            "@type": "DefinedTerm",
+            "identifier": "urn:lsid:marinespecies.org:taxname:204522",
+            "name": "Gnatholepis",
+            "url": "http://www.marinespecies.org/aphia.php?p=taxdetails&id=204522"
+          },
+          {
+            "@type": "DefinedTerm",
+            "name": "Abundance or Count"
+          }
+        ]
+      }
+    },
+    {
+      "@type": "PropertyValue",
+      "name": "Grammistes sexlineatus",
+      "unitText": "#",
+      "url": "http://www.marinespecies.org/aphia.php?p=taxdetails&id=211864",
+      "measurementTechnique": "Digital camera, GoPro Hero 4",
+      "subjectOf": {
+        "@type": "DefinedTermSet",
+        "hasDefinedTerm": [
+          {
+            "@id": "urn:lsid:marinespecies.org:taxname:211864",
+            "@type": "DefinedTerm",
+            "identifier": "urn:lsid:marinespecies.org:taxname:211864",
+            "name": "Grammistes sexlineatus",
+            "url": "http://www.marinespecies.org/aphia.php?p=taxdetails&id=211864"
+          },
+          {
+            "@type": "DefinedTerm",
+            "name": "Abundance or Count"
+          }
+        ]
+      }
+    },
+    {
+      "@type": "PropertyValue",
+      "name": "Halichoeres hortulanus",
+      "unitText": "#",
+      "url": "http://www.marinespecies.org/aphia.php?p=taxdetails&id=218985",
+      "measurementTechnique": "Digital camera, GoPro Hero 4",
+      "subjectOf": {
+        "@type": "DefinedTermSet",
+        "hasDefinedTerm": [
+          {
+            "@id": "urn:lsid:marinespecies.org:taxname:218985",
+            "@type": "DefinedTerm",
+            "identifier": "urn:lsid:marinespecies.org:taxname:218985",
+            "name": "Halichoeres hortulanus",
+            "url": "http://www.marinespecies.org/aphia.php?p=taxdetails&id=218985"
+          },
+          {
+            "@type": "DefinedTerm",
+            "name": "Abundance or Count"
+          }
+        ]
+      }
+    },
+    {
+      "@type": "PropertyValue",
+      "name": "Halichoeres marginatus",
+      "unitText": "#",
+      "url": "http://www.marinespecies.org/aphia.php?p=taxdetails&id=218991",
+      "measurementTechnique": "Digital camera, GoPro Hero 4",
+      "subjectOf": {
+        "@type": "DefinedTermSet",
+        "hasDefinedTerm": [
+          {
+            "@id": "urn:lsid:marinespecies.org:taxname:218991",
+            "@type": "DefinedTerm",
+            "identifier": "urn:lsid:marinespecies.org:taxname:218991",
+            "name": "Halichoeres marginatus",
+            "url": "http://www.marinespecies.org/aphia.php?p=taxdetails&id=218991"
+          },
+          {
+            "@type": "DefinedTerm",
+            "name": "Abundance or Count"
+          }
+        ]
+      }
+    },
+    {
+      "@type": "PropertyValue",
+      "name": "Halichoeres nebulosus",
+      "unitText": "#",
+      "url": "http://www.marinespecies.org/aphia.php?p=taxdetails&id=218986",
+      "measurementTechnique": "Digital camera, GoPro Hero 4",
+      "subjectOf": {
+        "@type": "DefinedTermSet",
+        "hasDefinedTerm": [
+          {
+            "@id": "urn:lsid:marinespecies.org:taxname:218986",
+            "@type": "DefinedTerm",
+            "identifier": "urn:lsid:marinespecies.org:taxname:218986",
+            "name": "Halichoeres nebulosus",
+            "url": "http://www.marinespecies.org/aphia.php?p=taxdetails&id=218986"
+          },
+          {
+            "@type": "DefinedTerm",
+            "name": "Abundance or Count"
+          }
+        ]
+      }
+    },
+    {
+      "@type": "PropertyValue",
+      "name": "Halichoeres scapularis",
+      "unitText": "#",
+      "url": "http://www.marinespecies.org/aphia.php?p=taxdetails&id=218990",
+      "measurementTechnique": "Digital camera, GoPro Hero 4",
+      "subjectOf": {
+        "@type": "DefinedTermSet",
+        "hasDefinedTerm": [
+          {
+            "@id": "urn:lsid:marinespecies.org:taxname:218990",
+            "@type": "DefinedTerm",
+            "identifier": "urn:lsid:marinespecies.org:taxname:218990",
+            "name": "Halichoeres scapularis",
+            "url": "http://www.marinespecies.org/aphia.php?p=taxdetails&id=218990"
+          },
+          {
+            "@type": "DefinedTerm",
+            "name": "Abundance or Count"
+          }
+        ]
+      }
+    },
+    {
+      "@type": "PropertyValue",
+      "name": "Hemigymnus fasciatus",
+      "unitText": "#",
+      "url": "http://www.marinespecies.org/aphia.php?p=taxdetails&id=218999",
+      "measurementTechnique": "Digital camera, GoPro Hero 4",
+      "subjectOf": {
+        "@type": "DefinedTermSet",
+        "hasDefinedTerm": [
+          {
+            "@id": "urn:lsid:marinespecies.org:taxname:218999",
+            "@type": "DefinedTerm",
+            "identifier": "urn:lsid:marinespecies.org:taxname:218999",
+            "name": "Hemigymnus fasciatus",
+            "url": "http://www.marinespecies.org/aphia.php?p=taxdetails&id=218999"
+          },
+          {
+            "@type": "DefinedTerm",
+            "name": "Abundance or Count"
+          }
+        ]
+      }
+    },
+    {
+      "@type": "PropertyValue",
+      "name": "Hipposcarus harid",
+      "unitText": "#",
+      "url": "http://www.marinespecies.org/aphia.php?p=taxdetails&id=219090",
+      "measurementTechnique": "Digital camera, GoPro Hero 4",
+      "subjectOf": {
+        "@type": "DefinedTermSet",
+        "hasDefinedTerm": [
+          {
+            "@id": "urn:lsid:marinespecies.org:taxname:219090",
+            "@type": "DefinedTerm",
+            "identifier": "urn:lsid:marinespecies.org:taxname:219090",
+            "name": "Hipposcarus harid",
+            "url": "http://www.marinespecies.org/aphia.php?p=taxdetails&id=219090"
+          },
+          {
+            "@type": "DefinedTerm",
+            "name": "Abundance or Count"
+          }
+        ]
+      }
+    },
+    {
+      "@type": "PropertyValue",
+      "name": "Labroides dimidiatus",
+      "unitText": "#",
+      "url": "http://www.marinespecies.org/aphia.php?p=taxdetails&id=219014",
+      "measurementTechnique": "Digital camera, GoPro Hero 4",
+      "subjectOf": {
+        "@type": "DefinedTermSet",
+        "hasDefinedTerm": [
+          {
+            "@id": "urn:lsid:marinespecies.org:taxname:219014",
+            "@type": "DefinedTerm",
+            "identifier": "urn:lsid:marinespecies.org:taxname:219014",
+            "name": "Labroides dimidiatus",
+            "url": "http://www.marinespecies.org/aphia.php?p=taxdetails&id=219014"
+          },
+          {
+            "@type": "DefinedTerm",
+            "name": "Abundance or Count"
+          }
+        ]
+      }
+    },
+    {
+      "@type": "PropertyValue",
+      "name": "Lethrinus harak",
+      "unitText": "#",
+      "url": "http://www.marinespecies.org/aphia.php?p=taxdetails&id=212063",
+      "measurementTechnique": "Digital camera, GoPro Hero 4",
+      "subjectOf": {
+        "@type": "DefinedTermSet",
+        "hasDefinedTerm": [
+          {
+            "@id": "urn:lsid:marinespecies.org:taxname:212063",
+            "@type": "DefinedTerm",
+            "identifier": "urn:lsid:marinespecies.org:taxname:212063",
+            "name": "Lethrinus harak",
+            "url": "http://www.marinespecies.org/aphia.php?p=taxdetails&id=212063"
+          },
+          {
+            "@type": "DefinedTerm",
+            "name": "Abundance or Count"
+          }
+        ]
+      }
+    },
+    {
+      "@type": "PropertyValue",
+      "name": "Lethrinus nebulosus",
+      "unitText": "#",
+      "url": "http://www.marinespecies.org/aphia.php?p=taxdetails&id=212081",
+      "measurementTechnique": "Digital camera, GoPro Hero 4",
+      "subjectOf": {
+        "@type": "DefinedTermSet",
+        "hasDefinedTerm": [
+          {
+            "@id": "urn:lsid:marinespecies.org:taxname:212081",
+            "@type": "DefinedTerm",
+            "identifier": "urn:lsid:marinespecies.org:taxname:212081",
+            "name": "Lethrinus nebulosus",
+            "url": "http://www.marinespecies.org/aphia.php?p=taxdetails&id=212081"
+          },
+          {
+            "@type": "DefinedTerm",
+            "name": "Abundance or Count"
+          }
+        ]
+      }
+    },
+    {
+      "@type": "PropertyValue",
+      "name": "Lethrinus sp.",
+      "unitText": "#",
+      "url": "http://www.marinespecies.org/aphia.php?p=taxdetails&id=206059",
+      "measurementTechnique": "Digital camera, GoPro Hero 4",
+      "subjectOf": {
+        "@type": "DefinedTermSet",
+        "hasDefinedTerm": [
+          {
+            "@id": "urn:lsid:marinespecies.org:taxname:206059",
+            "@type": "DefinedTerm",
+            "identifier": "urn:lsid:marinespecies.org:taxname:206059",
+            "name": "Lethrinus",
+            "url": "http://www.marinespecies.org/aphia.php?p=taxdetails&id=206059"
+          },
+          {
+            "@type": "DefinedTerm",
+            "name": "Abundance or Count"
+          }
+        ]
+      }
+    },
+    {
+      "@type": "PropertyValue",
+      "name": "Lutjanus kasmira",
+      "unitText": "#",
+      "url": "http://www.marinespecies.org/aphia.php?p=taxdetails&id=218482",
+      "measurementTechnique": "Digital camera, GoPro Hero 4",
+      "subjectOf": {
+        "@type": "DefinedTermSet",
+        "hasDefinedTerm": [
+          {
+            "@id": "urn:lsid:marinespecies.org:taxname:218482",
+            "@type": "DefinedTerm",
+            "identifier": "urn:lsid:marinespecies.org:taxname:218482",
+            "name": "Lutjanus kasmira",
+            "url": "http://www.marinespecies.org/aphia.php?p=taxdetails&id=218482"
+          },
+          {
+            "@type": "DefinedTerm",
+            "name": "Abundance or Count"
+          }
+        ]
+      }
+    },
+    {
+      "@type": "PropertyValue",
+      "name": "Mulloidichthys flavolineatus",
+      "unitText": "#",
+      "url": "http://www.marinespecies.org/aphia.php?p=taxdetails&id=218647",
+      "measurementTechnique": "Digital camera, GoPro Hero 4",
+      "subjectOf": {
+        "@type": "DefinedTermSet",
+        "hasDefinedTerm": [
+          {
+            "@id": "urn:lsid:marinespecies.org:taxname:218647",
+            "@type": "DefinedTerm",
+            "identifier": "urn:lsid:marinespecies.org:taxname:218647",
+            "name": "Mulloidichthys flavolineatus",
+            "url": "http://www.marinespecies.org/aphia.php?p=taxdetails&id=218647"
+          },
+          {
+            "@type": "DefinedTerm",
+            "name": "Abundance or Count"
+          }
+        ]
+      }
+    },
+    {
+      "@type": "PropertyValue",
+      "name": "Muraenidae sp.",
+      "unitText": "#",
+      "url": "http://www.marinespecies.org/aphia.php?p=taxdetails&id=125431",
+      "measurementTechnique": "Digital camera, GoPro Hero 4",
+      "subjectOf": {
+        "@type": "DefinedTermSet",
+        "hasDefinedTerm": [
+          {
+            "@id": "urn:lsid:marinespecies.org:taxname:125431",
+            "@type": "DefinedTerm",
+            "identifier": "urn:lsid:marinespecies.org:taxname:125431",
+            "name": "Muraenidae",
+            "url": "http://www.marinespecies.org/aphia.php?p=taxdetails&id=125431"
+          },
+          {
+            "@type": "DefinedTerm",
+            "name": "Abundance or Count"
+          }
+        ]
+      }
+    },
+    {
+      "@type": "PropertyValue",
+      "name": "Mulloidichthys vanicolensis",
+      "unitText": "#",
+      "url": "http://www.marinespecies.org/aphia.php?p=taxdetails&id=218648",
+      "measurementTechnique": "Digital camera, GoPro Hero 4",
+      "subjectOf": {
+        "@type": "DefinedTermSet",
+        "hasDefinedTerm": [
+          {
+            "@id": "urn:lsid:marinespecies.org:taxname:218648",
+            "@type": "DefinedTerm",
+            "identifier": "urn:lsid:marinespecies.org:taxname:218648",
+            "name": "Mulloidichthys vanicolensis",
+            "url": "http://www.marinespecies.org/aphia.php?p=taxdetails&id=218648"
+          },
+          {
+            "@type": "DefinedTerm",
+            "name": "Abundance or Count"
+          }
+        ]
+      }
+    },
+    {
+      "@type": "PropertyValue",
+      "name": "Naso unicornis",
+      "unitText": "#",
+      "url": "http://www.marinespecies.org/aphia.php?p=taxdetails&id=219668",
+      "measurementTechnique": "Digital camera, GoPro Hero 4",
+      "subjectOf": {
+        "@type": "DefinedTermSet",
+        "hasDefinedTerm": [
+          {
+            "@id": "urn:lsid:marinespecies.org:taxname:219668",
+            "@type": "DefinedTerm",
+            "identifier": "urn:lsid:marinespecies.org:taxname:219668",
+            "name": "Naso unicornis",
+            "url": "http://www.marinespecies.org/aphia.php?p=taxdetails&id=219668"
+          },
+          {
+            "@type": "DefinedTerm",
+            "name": "Abundance or Count"
+          }
+        ]
+      }
+    },
+    {
+      "@type": "PropertyValue",
+      "name": "Ostorhinchus spp.",
+      "unitText": "#",
+      "url": "http://www.marinespecies.org/aphia.php?p=taxdetails&id=297317",
+      "measurementTechnique": "Digital camera, GoPro Hero 4",
+      "subjectOf": {
+        "@type": "DefinedTermSet",
+        "hasDefinedTerm": [
+          {
+            "@id": "urn:lsid:marinespecies.org:taxname:297317",
+            "@type": "DefinedTerm",
+            "identifier": "urn:lsid:marinespecies.org:taxname:297317",
+            "name": "Ostorhinchus",
+            "url": "http://www.marinespecies.org/aphia.php?p=taxdetails&id=297317"
+          },
+          {
+            "@type": "DefinedTerm",
+            "name": "Abundance or Count"
+          }
+        ]
+      }
+    },
+    {
+      "@type": "PropertyValue",
+      "name": "Ostorhinchus cyanosoma",
+      "unitText": "#",
+      "url": "http://www.marinespecies.org/aphia.php?p=taxdetails&id=319876",
+      "measurementTechnique": "Digital camera, GoPro Hero 4",
+      "subjectOf": {
+        "@type": "DefinedTermSet",
+        "hasDefinedTerm": [
+          {
+            "@id": "urn:lsid:marinespecies.org:taxname:319876",
+            "@type": "DefinedTerm",
+            "identifier": "urn:lsid:marinespecies.org:taxname:319876",
+            "name": "Ostorhinchus cyanosoma",
+            "url": "http://www.marinespecies.org/aphia.php?p=taxdetails&id=319876"
+          },
+          {
+            "@type": "DefinedTerm",
+            "name": "Abundance or Count"
+          }
+        ]
+      }
+    },
+    {
+      "@type": "PropertyValue",
+      "name": "Ostorhinchus taeniophorus",
+      "unitText": "#",
+      "url": "http://www.marinespecies.org/aphia.php?p=taxdetails&id=712689",
+      "measurementTechnique": "Digital camera, GoPro Hero 4",
+      "subjectOf": {
+        "@type": "DefinedTermSet",
+        "hasDefinedTerm": [
+          {
+            "@id": "urn:lsid:marinespecies.org:taxname:712689",
+            "@type": "DefinedTerm",
+            "identifier": "urn:lsid:marinespecies.org:taxname:712689",
+            "name": "Ostorhinchus taeniophorus",
+            "url": "http://www.marinespecies.org/aphia.php?p=taxdetails&id=712689"
+          },
+          {
+            "@type": "DefinedTerm",
+            "name": "Abundance or Count"
+          }
+        ]
+      }
+    },
+    {
+      "@type": "PropertyValue",
+      "name": "Ostracion cubicus",
+      "unitText": "#",
+      "url": "http://www.marinespecies.org/aphia.php?p=taxdetails&id=219911",
+      "measurementTechnique": "Digital camera, GoPro Hero 4",
+      "subjectOf": {
+        "@type": "DefinedTermSet",
+        "hasDefinedTerm": [
+          {
+            "@id": "urn:lsid:marinespecies.org:taxname:219911",
+            "@type": "DefinedTerm",
+            "identifier": "urn:lsid:marinespecies.org:taxname:219911",
+            "name": "Ostracion cubicus",
+            "url": "http://www.marinespecies.org/aphia.php?p=taxdetails&id=219911"
+          },
+          {
+            "@type": "DefinedTerm",
+            "name": "Abundance or Count"
+          }
+        ]
+      }
+    },
+    {
+      "@type": "PropertyValue",
+      "name": "Ostracion meleagris",
+      "unitText": "#",
+      "url": "http://www.marinespecies.org/aphia.php?p=taxdetails&id=219905",
+      "measurementTechnique": "Digital camera, GoPro Hero 4",
+      "subjectOf": {
+        "@type": "DefinedTermSet",
+        "hasDefinedTerm": [
+          {
+            "@id": "urn:lsid:marinespecies.org:taxname:219905",
+            "@type": "DefinedTerm",
+            "identifier": "urn:lsid:marinespecies.org:taxname:219905",
+            "name": "Ostracion meleagris",
+            "url": "http://www.marinespecies.org/aphia.php?p=taxdetails&id=219905"
+          },
+          {
+            "@type": "DefinedTerm",
+            "name": "Abundance or Count"
+          }
+        ]
+      }
+    },
+    {
+      "@type": "PropertyValue",
+      "name": "Ostracion sp.",
+      "unitText": "#",
+      "url": "http://www.marinespecies.org/aphia.php?p=taxdetails&id=206484",
+      "measurementTechnique": "Digital camera, GoPro Hero 4",
+      "subjectOf": {
+        "@type": "DefinedTermSet",
+        "hasDefinedTerm": [
+          {
+            "@id": "urn:lsid:marinespecies.org:taxname:206484",
+            "@type": "DefinedTerm",
+            "identifier": "urn:lsid:marinespecies.org:taxname:206484",
+            "name": "Ostracion",
+            "url": "http://www.marinespecies.org/aphia.php?p=taxdetails&id=206484"
+          },
+          {
+            "@type": "DefinedTerm",
+            "name": "Abundance or Count"
+          }
+        ]
+      }
+    },
+    {
+      "@type": "PropertyValue",
+      "name": "Oxymonacanthus longirostris",
+      "unitText": "#",
+      "url": "http://www.marinespecies.org/aphia.php?p=taxdetails&id=220063",
+      "measurementTechnique": "Digital camera, GoPro Hero 4",
+      "subjectOf": {
+        "@type": "DefinedTermSet",
+        "hasDefinedTerm": [
+          {
+            "@id": "urn:lsid:marinespecies.org:taxname:220063",
+            "@type": "DefinedTerm",
+            "identifier": "urn:lsid:marinespecies.org:taxname:220063",
+            "name": "Oxymonacanthus longirostris",
+            "url": "http://www.marinespecies.org/aphia.php?p=taxdetails&id=220063"
+          },
+          {
+            "@type": "DefinedTerm",
+            "name": "Abundance or Count"
+          }
+        ]
+      }
+    },
+    {
+      "@type": "PropertyValue",
+      "name": "Pardachirus marmoratus",
+      "unitText": "#",
+      "url": "http://www.marinespecies.org/aphia.php?p=taxdetails&id=219829",
+      "measurementTechnique": "Digital camera, GoPro Hero 4",
+      "subjectOf": {
+        "@type": "DefinedTermSet",
+        "hasDefinedTerm": [
+          {
+            "@id": "urn:lsid:marinespecies.org:taxname:219829",
+            "@type": "DefinedTerm",
+            "identifier": "urn:lsid:marinespecies.org:taxname:219829",
+            "name": "Pardachirus marmoratus",
+            "url": "http://www.marinespecies.org/aphia.php?p=taxdetails&id=219829"
+          },
+          {
+            "@type": "DefinedTerm",
+            "name": "Abundance or Count"
+          }
+        ]
+      }
+    },
+    {
+      "@type": "PropertyValue",
+      "name": "Parupeneus barberinus",
+      "unitText": "#",
+      "url": "http://www.marinespecies.org/aphia.php?p=taxdetails&id=218660",
+      "measurementTechnique": "Digital camera, GoPro Hero 4",
+      "subjectOf": {
+        "@type": "DefinedTermSet",
+        "hasDefinedTerm": [
+          {
+            "@id": "urn:lsid:marinespecies.org:taxname:218660",
+            "@type": "DefinedTerm",
+            "identifier": "urn:lsid:marinespecies.org:taxname:218660",
+            "name": "Parupeneus barberinus",
+            "url": "http://www.marinespecies.org/aphia.php?p=taxdetails&id=218660"
+          },
+          {
+            "@type": "DefinedTerm",
+            "name": "Abundance or Count"
+          }
+        ]
+      }
+    },
+    {
+      "@type": "PropertyValue",
+      "name": "Parupeneus trifasciatus",
+      "unitText": "#",
+      "url": "http://www.marinespecies.org/aphia.php?p=taxdetails&id=277826",
+      "measurementTechnique": "Digital camera, GoPro Hero 4",
+      "subjectOf": {
+        "@type": "DefinedTermSet",
+        "hasDefinedTerm": [
+          {
+            "@id": "urn:lsid:marinespecies.org:taxname:277826",
+            "@type": "DefinedTerm",
+            "identifier": "urn:lsid:marinespecies.org:taxname:277826",
+            "name": "Parupeneus trifasciatus",
+            "url": "http://www.marinespecies.org/aphia.php?p=taxdetails&id=277826"
+          },
+          {
+            "@type": "DefinedTerm",
+            "name": "Abundance or Count"
+          }
+        ]
+      }
+    },
+    {
+      "@type": "PropertyValue",
+      "name": "Parupeneus ciliatus",
+      "unitText": "#",
+      "url": "http://www.marinespecies.org/aphia.php?p=taxdetails&id=218661",
+      "measurementTechnique": "Digital camera, GoPro Hero 4",
+      "subjectOf": {
+        "@type": "DefinedTermSet",
+        "hasDefinedTerm": [
+          {
+            "@id": "urn:lsid:marinespecies.org:taxname:218661",
+            "@type": "DefinedTerm",
+            "identifier": "urn:lsid:marinespecies.org:taxname:218661",
+            "name": "Parupeneus ciliatus",
+            "url": "http://www.marinespecies.org/aphia.php?p=taxdetails&id=218661"
+          },
+          {
+            "@type": "DefinedTerm",
+            "name": "Abundance or Count"
+          }
+        ]
+      }
+    },
+    {
+      "@type": "PropertyValue",
+      "name": "Parupeneus macronemus",
+      "unitText": "#",
+      "url": "http://www.marinespecies.org/aphia.php?p=taxdetails&id=277817",
+      "measurementTechnique": "Digital camera, GoPro Hero 4",
+      "subjectOf": {
+        "@type": "DefinedTermSet",
+        "hasDefinedTerm": [
+          {
+            "@id": "urn:lsid:marinespecies.org:taxname:277817",
+            "@type": "DefinedTerm",
+            "identifier": "urn:lsid:marinespecies.org:taxname:277817",
+            "name": "Parupeneus macronemus",
+            "url": "http://www.marinespecies.org/aphia.php?p=taxdetails&id=277817"
+          },
+          {
+            "@type": "DefinedTerm",
+            "name": "Abundance or Count"
+          }
+        ]
+      }
+    },
+    {
+      "@type": "PropertyValue",
+      "name": "Plotosus lineatus",
+      "unitText": "#",
+      "url": "http://www.marinespecies.org/aphia.php?p=taxdetails&id=217659",
+      "measurementTechnique": "Digital camera, GoPro Hero 4",
+      "subjectOf": {
+        "@type": "DefinedTermSet",
+        "hasDefinedTerm": [
+          {
+            "@id": "urn:lsid:marinespecies.org:taxname:217659",
+            "@type": "DefinedTerm",
+            "identifier": "urn:lsid:marinespecies.org:taxname:217659",
+            "name": "Plotosus lineatus",
+            "url": "http://www.marinespecies.org/aphia.php?p=taxdetails&id=217659"
+          },
+          {
+            "@type": "DefinedTerm",
+            "name": "Abundance or Count"
+          }
+        ]
+      }
+    },
+    {
+      "@type": "PropertyValue",
+      "name": "Pseudodax moluccanus",
+      "unitText": "#",
+      "url": "http://www.marinespecies.org/aphia.php?p=taxdetails&id=219046",
+      "measurementTechnique": "Digital camera, GoPro Hero 4",
+      "subjectOf": {
+        "@type": "DefinedTermSet",
+        "hasDefinedTerm": [
+          {
+            "@id": "urn:lsid:marinespecies.org:taxname:219046",
+            "@type": "DefinedTerm",
+            "identifier": "urn:lsid:marinespecies.org:taxname:219046",
+            "name": "Pseudodax moluccanus",
+            "url": "http://www.marinespecies.org/aphia.php?p=taxdetails&id=219046"
+          },
+          {
+            "@type": "DefinedTerm",
+            "name": "Abundance or Count"
+          }
+        ]
+      }
+    },
+    {
+      "@type": "PropertyValue",
+      "name": "Rhinecanthus aculeatus",
+      "unitText": "#",
+      "url": "http://www.marinespecies.org/aphia.php?p=taxdetails&id=219890",
+      "measurementTechnique": "Digital camera, GoPro Hero 4",
+      "subjectOf": {
+        "@type": "DefinedTermSet",
+        "hasDefinedTerm": [
+          {
+            "@id": "urn:lsid:marinespecies.org:taxname:219890",
+            "@type": "DefinedTerm",
+            "identifier": "urn:lsid:marinespecies.org:taxname:219890",
+            "name": "Rhinecanthus aculeatus",
+            "url": "http://www.marinespecies.org/aphia.php?p=taxdetails&id=219890"
+          },
+          {
+            "@type": "DefinedTerm",
+            "name": "Abundance or Count"
+          }
+        ]
+      }
+    },
+    {
+      "@type": "PropertyValue",
+      "name": "Sargocentron diadema",
+      "unitText": "#",
+      "url": "http://www.marinespecies.org/aphia.php?p=taxdetails&id=217947",
+      "measurementTechnique": "Digital camera, GoPro Hero 4",
+      "subjectOf": {
+        "@type": "DefinedTermSet",
+        "hasDefinedTerm": [
+          {
+            "@id": "urn:lsid:marinespecies.org:taxname:217947",
+            "@type": "DefinedTerm",
+            "identifier": "urn:lsid:marinespecies.org:taxname:217947",
+            "name": "Sargocentron diadema",
+            "url": "http://www.marinespecies.org/aphia.php?p=taxdetails&id=217947"
+          },
+          {
+            "@type": "DefinedTerm",
+            "name": "Abundance or Count"
+          }
+        ]
+      }
+    },
+    {
+      "@type": "PropertyValue",
+      "name": "Saurida nebulosa",
+      "unitText": "#",
+      "url": "http://www.marinespecies.org/aphia.php?p=taxdetails&id=217664",
+      "measurementTechnique": "Digital camera, GoPro Hero 4",
+      "subjectOf": {
+        "@type": "DefinedTermSet",
+        "hasDefinedTerm": [
+          {
+            "@id": "urn:lsid:marinespecies.org:taxname:217664",
+            "@type": "DefinedTerm",
+            "identifier": "urn:lsid:marinespecies.org:taxname:217664",
+            "name": "Saurida nebulosa",
+            "url": "http://www.marinespecies.org/aphia.php?p=taxdetails&id=217664"
+          },
+          {
+            "@type": "DefinedTerm",
+            "name": "Abundance or Count"
+          }
+        ]
+      }
+    },
+    {
+      "@type": "PropertyValue",
+      "name": "Scaridae spp., juvenile",
+      "unitText": "#",
+      "url": "http://www.marinespecies.org/aphia.php?p=taxdetails&id=125557",
+      "measurementTechnique": "Digital camera, GoPro Hero 4",
+      "subjectOf": {
+        "@type": "DefinedTermSet",
+        "hasDefinedTerm": [
+          {
+            "@id": "urn:lsid:marinespecies.org:taxname:125557",
+            "@type": "DefinedTerm",
+            "identifier": "urn:lsid:marinespecies.org:taxname:125557",
+            "name": "Scaridae",
+            "url": "http://www.marinespecies.org/aphia.php?p=taxdetails&id=125557"
+          },
+          {
+            "@id": "urn:obo:pato:term:0001190",
+            "@type": "DefinedTerm",
+            "identifier": "urn:obo:pato:term:0001190",
+            "name": "juvenile",
+            "url": "http://purl.obolibrary.org/obo/PATO_0001190"
+          },
+          {
+            "@type": "DefinedTerm",
+            "name": "Abundance or Count"
+          }
+        ]
+      }
+    },
+    {
+      "@type": "PropertyValue",
+      "name": "Scarus ghobban",
+      "unitText": "#",
+      "url": "http://www.marinespecies.org/aphia.php?p=taxdetails&id=219127",
+      "measurementTechnique": "Digital camera, GoPro Hero 4",
+      "subjectOf": {
+        "@type": "DefinedTermSet",
+        "hasDefinedTerm": [
+          {
+            "@id": "urn:lsid:marinespecies.org:taxname:219127",
+            "@type": "DefinedTerm",
+            "identifier": "urn:lsid:marinespecies.org:taxname:219127",
+            "name": "Scarus ghobban",
+            "url": "http://www.marinespecies.org/aphia.php?p=taxdetails&id=219127"
+          },
+          {
+            "@type": "DefinedTerm",
+            "name": "Abundance or Count"
+          }
+        ]
+      }
+    },
+    {
+      "@type": "PropertyValue",
+      "name": "Scarus psittacus",
+      "unitText": "#",
+      "url": "http://www.marinespecies.org/aphia.php?p=taxdetails&id=219125",
+      "measurementTechnique": "Digital camera, GoPro Hero 4",
+      "subjectOf": {
+        "@type": "DefinedTermSet",
+        "hasDefinedTerm": [
+          {
+            "@id": "urn:lsid:marinespecies.org:taxname:219125",
+            "@type": "DefinedTerm",
+            "identifier": "urn:lsid:marinespecies.org:taxname:219125",
+            "name": "Scarus psittacus",
+            "url": "http://www.marinespecies.org/aphia.php?p=taxdetails&id=219125"
+          },
+          {
+            "@type": "DefinedTerm",
+            "name": "Abundance or Count"
+          }
+        ]
+      }
+    },
+    {
+      "@type": "PropertyValue",
+      "name": "Scarus scaber",
+      "unitText": "#",
+      "url": "http://www.marinespecies.org/aphia.php?p=taxdetails&id=219114",
+      "measurementTechnique": "Digital camera, GoPro Hero 4",
+      "subjectOf": {
+        "@type": "DefinedTermSet",
+        "hasDefinedTerm": [
+          {
+            "@id": "urn:lsid:marinespecies.org:taxname:219114",
+            "@type": "DefinedTerm",
+            "identifier": "urn:lsid:marinespecies.org:taxname:219114",
+            "name": "Scarus scaber",
+            "url": "http://www.marinespecies.org/aphia.php?p=taxdetails&id=219114"
+          },
+          {
+            "@type": "DefinedTerm",
+            "name": "Abundance or Count"
+          }
+        ]
+      }
+    },
+    {
+      "@type": "PropertyValue",
+      "name": "Scarus spp.",
+      "unitText": "#",
+      "url": "http://www.marinespecies.org/aphia.php?p=taxdetails&id=159299",
+      "measurementTechnique": "Digital camera, GoPro Hero 4",
+      "subjectOf": {
+        "@type": "DefinedTermSet",
+        "hasDefinedTerm": [
+          {
+            "@id": "urn:lsid:marinespecies.org:taxname:159299",
+            "@type": "DefinedTerm",
+            "identifier": "urn:lsid:marinespecies.org:taxname:159299",
+            "name": "Scarus",
+            "url": "http://www.marinespecies.org/aphia.php?p=taxdetails&id=159299"
+          },
+          {
+            "@type": "DefinedTerm",
+            "name": "Abundance or Count"
+          }
+        ]
+      }
+    },
+    {
+      "@type": "PropertyValue",
+      "name": "Siganus argenteus",
+      "unitText": "#",
+      "url": "http://www.marinespecies.org/aphia.php?p=taxdetails&id=219686",
+      "measurementTechnique": "Digital camera, GoPro Hero 4",
+      "subjectOf": {
+        "@type": "DefinedTermSet",
+        "hasDefinedTerm": [
+          {
+            "@id": "urn:lsid:marinespecies.org:taxname:219686",
+            "@type": "DefinedTerm",
+            "identifier": "urn:lsid:marinespecies.org:taxname:219686",
+            "name": "Siganus argenteus",
+            "url": "http://www.marinespecies.org/aphia.php?p=taxdetails&id=219686"
+          },
+          {
+            "@type": "DefinedTerm",
+            "name": "Abundance or Count"
+          }
+        ]
+      }
+    },
+    {
+      "@type": "PropertyValue",
+      "name": "Siganus spp., juvenile",
+      "unitText": "#",
+      "url": "http://www.marinespecies.org/aphia.php?p=taxdetails&id=126071",
+      "measurementTechnique": "Digital camera, GoPro Hero 4",
+      "subjectOf": {
+        "@type": "DefinedTermSet",
+        "hasDefinedTerm": [
+          {
+            "@id": "urn:lsid:marinespecies.org:taxname:126071",
+            "@type": "DefinedTerm",
+            "identifier": "urn:lsid:marinespecies.org:taxname:126071",
+            "name": "Siganus",
+            "url": "http://www.marinespecies.org/aphia.php?p=taxdetails&id=126071"
+          },
+          {
+            "@id": "urn:obo:pato:term:0001190",
+            "@type": "DefinedTerm",
+            "identifier": "urn:obo:pato:term:0001190",
+            "name": "juvenile",
+            "url": "http://purl.obolibrary.org/obo/PATO_0001190"
+          },
+          {
+            "@type": "DefinedTerm",
+            "name": "Abundance or Count"
+          }
+        ]
+      }
+    },
+    {
+      "@type": "PropertyValue",
+      "name": "Stegastes lividus",
+      "unitText": "#",
+      "url": "http://www.marinespecies.org/aphia.php?p=taxdetails&id=218848",
+      "measurementTechnique": "Digital camera, GoPro Hero 4",
+      "subjectOf": {
+        "@type": "DefinedTermSet",
+        "hasDefinedTerm": [
+          {
+            "@id": "urn:lsid:marinespecies.org:taxname:218848",
+            "@type": "DefinedTerm",
+            "identifier": "urn:lsid:marinespecies.org:taxname:218848",
+            "name": "Stegastes lividus",
+            "url": "http://www.marinespecies.org/aphia.php?p=taxdetails&id=218848"
+          },
+          {
+            "@type": "DefinedTerm",
+            "name": "Abundance or Count"
+          }
+        ]
+      }
+    },
+    {
+      "@type": "PropertyValue",
+      "name": "Stegastes nigricans",
+      "unitText": "#",
+      "url": "http://www.marinespecies.org/aphia.php?p=taxdetails&id=218849",
+      "measurementTechnique": "Digital camera, GoPro Hero 4",
+      "subjectOf": {
+        "@type": "DefinedTermSet",
+        "hasDefinedTerm": [
+          {
+            "@id": "urn:lsid:marinespecies.org:taxname:218849",
+            "@type": "DefinedTerm",
+            "identifier": "urn:lsid:marinespecies.org:taxname:218849",
+            "name": "Stegastes nigricans",
+            "url": "http://www.marinespecies.org/aphia.php?p=taxdetails&id=218849"
+          },
+          {
+            "@type": "DefinedTerm",
+            "name": "Abundance or Count"
+          }
+        ]
+      }
+    },
+    {
+      "@type": "PropertyValue",
+      "name": "Stethojulis albovittata",
+      "unitText": "#",
+      "url": "http://www.marinespecies.org/aphia.php?p=taxdetails&id=219058",
+      "measurementTechnique": "Digital camera, GoPro Hero 4",
+      "subjectOf": {
+        "@type": "DefinedTermSet",
+        "hasDefinedTerm": [
+          {
+            "@id": "urn:lsid:marinespecies.org:taxname:219058",
+            "@type": "DefinedTerm",
+            "identifier": "urn:lsid:marinespecies.org:taxname:219058",
+            "name": "Stethojulis albovittata",
+            "url": "http://www.marinespecies.org/aphia.php?p=taxdetails&id=219058"
+          },
+          {
+            "@type": "DefinedTerm",
+            "name": "Abundance or Count"
+          }
+        ]
+      }
+    },
+    {
+      "@type": "PropertyValue",
+      "name": "Stethojulis strigiventer",
+      "unitText": "#",
+      "url": "http://www.marinespecies.org/aphia.php?p=taxdetails&id=219061",
+      "measurementTechnique": "Digital camera, GoPro Hero 4",
+      "subjectOf": {
+        "@type": "DefinedTermSet",
+        "hasDefinedTerm": [
+          {
+            "@id": "urn:lsid:marinespecies.org:taxname:219061",
+            "@type": "DefinedTerm",
+            "identifier": "urn:lsid:marinespecies.org:taxname:219061",
+            "name": "Stethojulis strigiventer",
+            "url": "http://www.marinespecies.org/aphia.php?p=taxdetails&id=219061"
+          },
+          {
+            "@type": "DefinedTerm",
+            "name": "Abundance or Count"
+          }
+        ]
+      }
+    },
+    {
+      "@type": "PropertyValue",
+      "name": "Synodontidae sp.",
+      "unitText": "#",
+      "url": "http://www.marinespecies.org/aphia.php?p=taxdetails&id=125449",
+      "measurementTechnique": "Digital camera, GoPro Hero 4",
+      "subjectOf": {
+        "@type": "DefinedTermSet",
+        "hasDefinedTerm": [
+          {
+            "@id": "urn:lsid:marinespecies.org:taxname:125449",
+            "@type": "DefinedTerm",
+            "identifier": "urn:lsid:marinespecies.org:taxname:125449",
+            "name": "Synodontidae",
+            "url": "http://www.marinespecies.org/aphia.php?p=taxdetails&id=125449"
+          },
+          {
+            "@type": "DefinedTerm",
+            "name": "Abundance or Count"
+          }
+        ]
+      }
+    },
+    {
+      "@type": "PropertyValue",
+      "name": "Thalassoma genivittatum",
+      "unitText": "#",
+      "url": "http://www.marinespecies.org/aphia.php?p=taxdetails&id=212215",
+      "measurementTechnique": "Digital camera, GoPro Hero 4",
+      "subjectOf": {
+        "@type": "DefinedTermSet",
+        "hasDefinedTerm": [
+          {
+            "@id": "urn:lsid:marinespecies.org:taxname:212215",
+            "@type": "DefinedTerm",
+            "identifier": "urn:lsid:marinespecies.org:taxname:212215",
+            "name": "Thalassoma genivittatum",
+            "url": "http://www.marinespecies.org/aphia.php?p=taxdetails&id=212215"
+          },
+          {
+            "@type": "DefinedTerm",
+            "name": "Abundance or Count"
+          }
+        ]
+      }
+    },
+    {
+      "@type": "PropertyValue",
+      "name": "Thalassoma hardwicke",
+      "unitText": "#",
+      "url": "http://www.marinespecies.org/aphia.php?p=taxdetails&id=212217",
+      "measurementTechnique": "Digital camera, GoPro Hero 4",
+      "subjectOf": {
+        "@type": "DefinedTermSet",
+        "hasDefinedTerm": [
+          {
+            "@id": "urn:lsid:marinespecies.org:taxname:212217",
+            "@type": "DefinedTerm",
+            "identifier": "urn:lsid:marinespecies.org:taxname:212217",
+            "name": "Thalassoma hardwicke",
+            "url": "http://www.marinespecies.org/aphia.php?p=taxdetails&id=212217"
+          },
+          {
+            "@type": "DefinedTerm",
+            "name": "Abundance or Count"
+          }
+        ]
+      }
+    },
+    {
+      "@type": "PropertyValue",
+      "name": "Zanclus cornutus",
+      "unitText": "#",
+      "url": "http://www.marinespecies.org/aphia.php?p=taxdetails&id=220083",
+      "measurementTechnique": "Digital camera, GoPro Hero 4",
+      "subjectOf": {
+        "@type": "DefinedTermSet",
+        "hasDefinedTerm": [
+          {
+            "@id": "urn:lsid:marinespecies.org:taxname:220083",
+            "@type": "DefinedTerm",
+            "identifier": "urn:lsid:marinespecies.org:taxname:220083",
+            "name": "Zanclus cornutus",
+            "url": "http://www.marinespecies.org/aphia.php?p=taxdetails&id=220083"
+          },
+          {
+            "@type": "DefinedTerm",
+            "name": "Abundance or Count"
+          }
+        ]
+      }
+    },
+    {
+      "@type": "PropertyValue",
+      "name": "Zebrasoma desjardinii",
+      "unitText": "#",
+      "url": "http://www.marinespecies.org/aphia.php?p=taxdetails&id=277555",
+      "measurementTechnique": "Digital camera, GoPro Hero 4",
+      "subjectOf": {
+        "@type": "DefinedTermSet",
+        "hasDefinedTerm": [
+          {
+            "@id": "urn:lsid:marinespecies.org:taxname:277555",
+            "@type": "DefinedTerm",
+            "identifier": "urn:lsid:marinespecies.org:taxname:277555",
+            "name": "Zebrasoma desjardinii",
+            "url": "http://www.marinespecies.org/aphia.php?p=taxdetails&id=277555"
+          },
+          {
+            "@type": "DefinedTerm",
+            "name": "Abundance or Count"
+          }
+        ]
+      }
+    },
+    {
+      "@type": "PropertyValue",
+      "name": "Zebrasoma scopas",
+      "unitText": "#",
+      "url": "http://www.marinespecies.org/aphia.php?p=taxdetails&id=219679",
+      "measurementTechnique": "Digital camera, GoPro Hero 4",
+      "subjectOf": {
+        "@type": "DefinedTermSet",
+        "hasDefinedTerm": [
+          {
+            "@id": "urn:lsid:marinespecies.org:taxname:219679",
+            "@type": "DefinedTerm",
+            "identifier": "urn:lsid:marinespecies.org:taxname:219679",
+            "name": "Zebrasoma scopas",
+            "url": "http://www.marinespecies.org/aphia.php?p=taxdetails&id=219679"
+          },
+          {
+            "@type": "DefinedTerm",
+            "name": "Abundance or Count"
+          }
+        ]
+      }
+    }
+  ],
+  "spatialCoverage": {
+    "@type": "Place",
+    "geo": {
+      "@type": "GeoShape",
+      "box": "-20.0400306 57.53992753 -20.02619704 57.54448504"
+    }
+  },
+  "temporalCoverage": "2017-10-31T00:00:00/2017-12-28T00:00:00",
+  "inLanguage": "en",
+  "license": "https://creativecommons.org/licenses/by/4.0/",
+  "conditionsOfAccess": "unrestricted",
+  "isAccessibleForFree": true,
+  "keywords": "Biodiversity; Coral Reef; fish abundance; Mauritius; Mauritius Oceanography Institute; nutrients; submarine groundwater discharge",
+  "size": {
+    "@type": "QuantitativeValue",
+    "value": 2484,
+    "unitText": "data points"
+  },
+  "distribution": [
+    {
+      "@type": "DataDownload",
+      "encodingFormat": "text/html",
+      "contentUrl": "https://doi.pangaea.de/10.1594/PANGAEA.921338?format=html"
+    },
+    {
+      "@type": "DataDownload",
+      "encodingFormat": "text/tab-separated-values",
+      "contentUrl": "https://doi.pangaea.de/10.1594/PANGAEA.921338?format=textfile"
+    }
+  ]
+}

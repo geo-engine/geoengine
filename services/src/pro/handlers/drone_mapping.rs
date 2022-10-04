@@ -1,18 +1,19 @@
 use std::convert::TryInto;
 use std::path::Path;
 
+use crate::api::model::datatypes::DatasetId;
 use crate::datasets::storage::{AddDataset, DatasetDefinition, DatasetStore, MetaDataDefinition};
 use crate::datasets::upload::{UploadId, UploadRootPath};
 use crate::error;
-use crate::handlers::authenticate;
+use crate::error::Result;
 use crate::pro::contexts::ProContext;
 use crate::pro::projects::ProProjectDb;
-use crate::util::config::{get_config_element, Odm};
+use crate::pro::util::config::Odm;
+use crate::util::config::get_config_element;
 use crate::util::user_input::UserInput;
 use crate::util::IdResponse;
-
+use actix_web::{web, Responder};
 use futures_util::StreamExt;
-use geoengine_datatypes::dataset::{DatasetId, InternalDatasetId};
 use geoengine_datatypes::primitives::Measurement;
 use geoengine_datatypes::raster::RasterDataType;
 use geoengine_datatypes::spatial_reference::SpatialReference;
@@ -23,14 +24,25 @@ use geoengine_operators::util::gdal::{gdal_open_dataset, gdal_parameters_from_da
 use log::info;
 use reqwest::header::CONTENT_TYPE;
 use reqwest::multipart::{self, Part};
+use reqwest::Body;
 use serde::{Deserialize, Serialize};
 use snafu::ResultExt;
 use tokio::fs::{self, File};
 use tokio::io::AsyncWriteExt;
 use tokio_util::codec::{BytesCodec, FramedRead};
 use uuid::Uuid;
-use warp::hyper::Body;
-use warp::Filter;
+
+pub(crate) fn init_drone_mapping_routes<C>(cfg: &mut web::ServiceConfig)
+where
+    C: ProContext,
+    C::ProjectDB: ProProjectDb,
+{
+    cfg.service(web::resource("/droneMapping/task").route(web::post().to(start_task_handler::<C>)))
+        .service(
+            web::resource("/droneMapping/dataset/{task_id}")
+                .route(web::post().to(dataset_from_drone_mapping_handler::<C>)),
+        );
+}
 
 #[derive(Deserialize, Serialize, Clone, Debug)]
 pub struct TaskStart {
@@ -77,26 +89,11 @@ pub struct CreateDatasetResponse {
 ///   "id": "aae098a4-3272-439b-bd93-40b6c39560cb",
 /// },
 /// ```
-pub(crate) fn start_task_handler<C: ProContext>(
-    ctx: C,
-) -> impl Filter<Extract = (impl warp::Reply,), Error = warp::Rejection> + Clone
-where
-    C::ProjectDB: ProProjectDb,
-{
-    warp::path!("droneMapping" / "task")
-        .and(warp::post())
-        .and(authenticate(ctx.clone()))
-        .and(warp::any().map(move || ctx.clone()))
-        .and(warp::body::json())
-        .and_then(start_task)
-}
-
-// TODO: move into handler once async closures are available?
-async fn start_task<C: ProContext>(
+async fn start_task_handler<C: ProContext>(
     _session: C::Session,
-    _ctx: C,
-    task_start: TaskStart,
-) -> Result<impl warp::Reply, warp::Rejection>
+    _ctx: web::Data<C>,
+    task_start: web::Json<TaskStart>,
+) -> Result<impl Responder>
 where
     C::ProjectDB: ProProjectDb,
 {
@@ -107,7 +104,7 @@ where
 
     // create task
     let response: OdmTaskStartResponse = client
-        .post(format!("{}task/new/init", base_url))
+        .post(base_url.join("task/new/init").context(error::Url)?)
         .send()
         .await
         .context(error::Reqwest)?
@@ -116,7 +113,7 @@ where
         .context(error::Reqwest)?;
 
     if let Some(error) = response.error {
-        return Err(error::Error::Odm { reason: error }.into());
+        return Err(error::Error::Odm { reason: error });
     };
 
     let task_id = response.uuid.ok_or(error::Error::OdmInvalidResponse {
@@ -144,7 +141,11 @@ where
         let form = multipart::Form::new().part("images", Part::stream(reader).file_name(file_name));
 
         let response: OdmTaskNewUploadResponse = client
-            .post(format!("{}task/new/upload/{}", base_url, task_id))
+            .post(
+                base_url
+                    .join(&format!("task/new/upload/{}", task_id))
+                    .context(error::Url)?,
+            )
             .multipart(form)
             .send()
             .await
@@ -154,7 +155,7 @@ where
             .context(error::Reqwest)?;
 
         if let Some(error) = response.error {
-            return Err(error::Error::Odm { reason: error }.into());
+            return Err(error::Error::Odm { reason: error });
         };
 
         info!("Uploaded {:?}", entry);
@@ -162,12 +163,16 @@ where
 
     // commit (start) the task
     client
-        .post(format!("{}task/new/commit/{}", base_url, task_id))
+        .post(
+            base_url
+                .join(&format!("task/new/commit/{}", task_id))
+                .context(error::Url)?,
+        )
         .send()
         .await
         .context(error::Reqwest)?;
 
-    Ok(warp::reply::json(&IdResponse::from(task_id)))
+    Ok(web::Json(IdResponse::from(task_id)))
 }
 
 /// Create a new dataset from the drone mapping result of the task with the given id.
@@ -186,31 +191,15 @@ where
 /// ```text
 /// {
 ///   "upload": "3086f494-d5a4-4b51-a14b-3b29f8bf7bb0",
-///   "dataset": {
-///     "type": "internal",
-///     "datasetId": "94230f0b-4e8a-4cba-9adc-3ace837fe5d4"
+///   "dataset": "94230f0b-4e8a-4cba-9adc-3ace837fe5d4"
 ///   }
 /// }
 /// ```
-pub(crate) fn dataset_from_drone_mapping_handler<C: ProContext>(
-    ctx: C,
-) -> impl Filter<Extract = (impl warp::Reply,), Error = warp::Rejection> + Clone
-where
-    C::ProjectDB: ProProjectDb,
-{
-    warp::path!("droneMapping" / "dataset" / Uuid)
-        .and(warp::post())
-        .and(authenticate(ctx.clone()))
-        .and(warp::any().map(move || ctx.clone()))
-        .and_then(dataset_from_drone_mapping)
-}
-
-// TODO: move into handler once async closures are available?
-async fn dataset_from_drone_mapping<C: ProContext>(
-    task_id: Uuid,
+async fn dataset_from_drone_mapping_handler<C: ProContext>(
+    task_id: web::Path<Uuid>,
     session: C::Session,
-    ctx: C,
-) -> Result<impl warp::Reply, warp::Rejection>
+    ctx: web::Data<C>,
+) -> Result<impl Responder>
 where
     C::ProjectDB: ProProjectDb,
 {
@@ -221,10 +210,11 @@ where
 
     // request the zip archive of the drone mapping result
     let response = client
-        .get(format!(
-            "{}task/{}/download/{}",
-            base_url, task_id, "all.zip"
-        ))
+        .get(
+            base_url
+                .join(&format!("task/{}/download/all.zip", task_id))
+                .context(error::Url)?,
+        )
         .send()
         .await
         .context(error::Reqwest)?;
@@ -240,9 +230,8 @@ where
         let error: OdmErrorResponse = response.json().await.context(error::Reqwest)?;
 
         return Err(error::Error::Odm {
-            reason: error.error.unwrap_or_else(|| "".to_owned()),
-        }
-        .into());
+            reason: error.error.unwrap_or_default(),
+        });
     }
 
     // create a new geo engine upload
@@ -276,14 +265,14 @@ where
 
     let dataset_definition = dataset_definition_from_geotiff(&tiff_path).await?;
 
-    let mut db = ctx.dataset_db_ref_mut().await;
+    let db = ctx.dataset_db_ref();
     let meta = db.wrap_meta_data(dataset_definition.meta_data);
 
     let dataset = db
         .add_dataset(&session, dataset_definition.properties.validated()?, meta)
         .await?;
 
-    Ok(warp::reply::json(&CreateDatasetResponse {
+    Ok(web::Json(CreateDatasetResponse {
         upload: upload_id,
         dataset,
     }))
@@ -294,7 +283,7 @@ async fn dataset_definition_from_geotiff(
     tiff_path: &Path,
 ) -> Result<DatasetDefinition, error::Error> {
     let tiff_path = tiff_path.to_owned();
-    tokio::task::spawn_blocking(move || {
+    crate::util::spawn_blocking(move || {
         let dataset = gdal_open_dataset(&tiff_path).context(error::Operator)?;
 
         let gdal_params = gdal_parameters_from_dataset(&dataset, 1, &tiff_path, None, None)
@@ -305,9 +294,9 @@ async fn dataset_definition_from_geotiff(
 
         Ok(DatasetDefinition {
             properties: AddDataset {
-                id: Some(InternalDatasetId::new().into()),
+                id: Some(DatasetId::new()),
                 name: "ODM Result".to_owned(), // TODO: more info
-                description: "".to_owned(),    // TODO: more info
+                description: String::new(),    // TODO: more info
                 source_operator: "GdalSource".to_owned(),
                 symbology: None,
                 provenance: None,
@@ -319,7 +308,9 @@ async fn dataset_definition_from_geotiff(
                     data_type: RasterDataType::U8,
                     spatial_reference: spatial_reference.into(),
                     measurement: Measurement::Unitless,
-                    no_data_value: None, // TODO
+                    time: None,       // TODO: determine time
+                    bbox: None,       // TODO: determine bbox
+                    resolution: None, // TODO: determine resolution
                 },
             }),
         })
@@ -333,7 +324,7 @@ async fn unzip(zip_path: &Path, target_path: &Path) -> Result<(), error::Error> 
     let zip_path = zip_path.to_owned();
     let target_path = target_path.to_owned();
 
-    tokio::task::spawn_blocking(move || {
+    crate::util::spawn_blocking(move || {
         let zip_file_read = std::fs::File::open(&zip_path).context(error::Io)?;
         let mut archive = zip::ZipArchive::new(zip_file_read).unwrap(); // TODO
 
@@ -344,12 +335,12 @@ async fn unzip(zip_path: &Path, target_path: &Path) -> Result<(), error::Error> 
                 None => continue,
             };
 
-            if (&*file.name()).ends_with('/') {
+            if file.name().ends_with('/') {
                 std::fs::create_dir_all(&out_path).context(error::Io)?; // TODO
             } else {
                 if let Some(p) = out_path.parent() {
                     if !p.exists() {
-                        std::fs::create_dir_all(&p).context(error::Io)?; // TODO
+                        std::fs::create_dir_all(p).context(error::Io)?; // TODO
                     }
                 }
                 let mut outfile = std::fs::File::create(&out_path).context(error::Io)?;
@@ -364,12 +355,15 @@ async fn unzip(zip_path: &Path, target_path: &Path) -> Result<(), error::Error> 
 
 #[cfg(test)]
 mod tests {
-    use geoengine_datatypes::primitives::{SpatialPartition2D, SpatialResolution, TimeInterval};
-    use geoengine_datatypes::raster::{GeoTransform, RasterTile2D};
+    use geoengine_datatypes::primitives::{
+        RasterQueryRectangle, SpatialPartition2D, SpatialResolution, TimeInterval,
+    };
+    use geoengine_datatypes::raster::RasterTile2D;
     use geoengine_datatypes::spatial_reference::SpatialReferenceAuthority;
+    use geoengine_datatypes::util::test::TestDefault;
     use geoengine_operators::source::{
-        FileNotFoundHandling, GdalDatasetParameters, GdalLoadingInfo, GdalLoadingInfoPart,
-        GdalSource, GdalSourceParameters,
+        FileNotFoundHandling, GdalDatasetGeoTransform, GdalDatasetParameters, GdalLoadingInfo,
+        GdalLoadingInfoTemporalSlice, GdalSource, GdalSourceParameters,
     };
     use httptest::responders::status_code;
     use httptest::{matchers::request, responders::json_encoded, Expectation, Server};
@@ -380,36 +374,24 @@ mod tests {
     use super::*;
     use crate::contexts::{Context, Session};
     use crate::error::Result;
-    use crate::util::test_data_dir;
+    use crate::test_data;
+    use crate::util::tests::TestDataUploads;
     use crate::{
-        pro::{contexts::ProInMemoryContext, util::tests::create_session_helper},
+        pro::{
+            contexts::ProInMemoryContext,
+            util::tests::{create_session_helper, send_pro_test_request},
+        },
         util::config,
     };
-    use geoengine_operators::engine::{
-        MetaData, MetaDataProvider, RasterOperator, RasterQueryRectangle,
-    };
+    use actix_web::{http::header, test};
+    use actix_web_httpauth::headers::authorization::Bearer;
+    use geoengine_operators::engine::{MetaData, MetaDataProvider, RasterOperator};
     use std::io::Write;
     use std::io::{Cursor, Read};
     use std::path::PathBuf;
 
-    /// Helper struct that removes all specified uploads on drop
-    #[derive(Default)]
-    struct TestDataUploads {
-        pub uploads: Vec<UploadId>,
-    }
-
-    impl Drop for TestDataUploads {
-        fn drop(&mut self) {
-            for upload in &self.uploads {
-                if let Ok(path) = upload.root_path() {
-                    let _res = std::fs::remove_dir_all(path);
-                }
-            }
-        }
-    }
-
     #[allow(clippy::too_many_lines)]
-    #[tokio::test]
+    #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
     async fn it_works() -> Result<()> {
         let mut test_data = TestDataUploads::default(); // remember created folder and remove them on drop
 
@@ -442,7 +424,7 @@ mod tests {
         // manipulate config to use the mock nodeodm server
         config::set_config("odm.endpoint", mock_nodeodm.url_str("/")).unwrap();
 
-        let ctx = ProInMemoryContext::default();
+        let ctx = ProInMemoryContext::test_default();
         let session = create_session_helper(&ctx).await;
 
         // file upload into geo engine
@@ -454,10 +436,9 @@ mod tests {
         test_data.uploads.push(upload_id);
 
         // copy the test data into upload directory
-        let mut drone_images_dir =
-            fs::read_dir(test_data_dir().join("pro/drone_mapping/drone_images"))
-                .await
-                .context(error::Io)?;
+        let mut drone_images_dir = fs::read_dir(test_data!("pro/drone_mapping/drone_images"))
+            .await
+            .context(error::Io)?;
 
         while let Some(entry) = drone_images_dir.next_entry().await.context(error::Io)? {
             if entry.path().is_dir() {
@@ -469,29 +450,23 @@ mod tests {
         // submit the task via geo engine
         let task = TaskStart { upload: upload_id };
 
-        let res = warp::test::request()
-            .method("POST")
-            .path("/droneMapping/task")
-            .header("Content-Length", "0")
-            .header(
-                "Authorization",
-                format!("Bearer {}", session.id().to_string()),
-            )
-            .json(&task)
-            .reply(&start_task_handler(ctx.clone()))
-            .await;
+        let req = test::TestRequest::post()
+            .uri("/droneMapping/task")
+            .append_header((header::CONTENT_LENGTH, 0))
+            .append_header((header::AUTHORIZATION, Bearer::new(session.id().to_string())))
+            .set_json(&task);
+        let res = send_pro_test_request(req, ctx.clone()).await;
 
         assert_eq!(res.status(), 200);
 
-        let body = std::str::from_utf8(res.body()).unwrap();
-        let task = serde_json::from_str::<IdResponse<Uuid>>(body)?;
+        let task: IdResponse<Uuid> = test::read_body_json(res).await;
 
         let task_uuid = task.id;
 
         // create a dataset from the nodeodm result
 
         // create zip archive from test data
-        let odm_test_data_dir = test_data_dir().join("pro/drone_mapping/odm_result");
+        let odm_test_data_dir = test_data!("pro/drone_mapping/odm_result").into();
         let odm_all_zip_bytes = zip_dir(odm_test_data_dir).await.unwrap();
 
         mock_nodeodm.expect(
@@ -507,20 +482,14 @@ mod tests {
         );
 
         // download odm result through geo engine and create dataset
-        let res = warp::test::request()
-            .method("POST")
-            .path(&format!("/droneMapping/dataset/{}", task_uuid))
-            .header("Content-Length", "0")
-            .header(
-                "Authorization",
-                format!("Bearer {}", session.id().to_string()),
-            )
-            .json(&task)
-            .reply(&dataset_from_drone_mapping_handler(ctx.clone()))
-            .await;
+        let req = test::TestRequest::post()
+            .uri(&format!("/droneMapping/dataset/{}", task_uuid))
+            .append_header((header::CONTENT_LENGTH, 0))
+            .append_header((header::AUTHORIZATION, Bearer::new(session.id().to_string())))
+            .set_json(task);
+        let res = send_pro_test_request(req, ctx.clone()).await;
 
-        let body = std::str::from_utf8(res.body()).unwrap();
-        let dataset_response = serde_json::from_str::<CreateDatasetResponse>(body).unwrap();
+        let dataset_response: CreateDatasetResponse = test::read_body_json(res).await;
         test_data.uploads.push(dataset_response.upload);
 
         // test if the meta data is correct
@@ -528,7 +497,7 @@ mod tests {
         let meta: Box<dyn MetaData<GdalLoadingInfo, RasterResultDescriptor, RasterQueryRectangle>> =
             ctx.execution_context(session.clone())
                 .unwrap()
-                .meta_data(&dataset_id)
+                .meta_data(&dataset_id.into())
                 .await
                 .unwrap();
 
@@ -540,7 +509,9 @@ mod tests {
                 spatial_reference: SpatialReference::new(SpatialReferenceAuthority::Epsg, 32630)
                     .into(),
                 measurement: Measurement::Unitless,
-                no_data_value: None,
+                time: None,
+                bbox: None,
+                resolution: None,
             }
         );
 
@@ -558,7 +529,7 @@ mod tests {
         let part = loading_info.info.next().unwrap().unwrap();
         assert!(loading_info.info.next().is_none());
 
-        let file_path = &part.params.file_path;
+        let file_path = &part.params.as_ref().unwrap().file_path;
 
         assert_eq!(
             file_path,
@@ -572,26 +543,32 @@ mod tests {
 
         assert_eq!(
             part,
-            GdalLoadingInfoPart {
+            GdalLoadingInfoTemporalSlice {
                 time: TimeInterval::default(),
-                params: GdalDatasetParameters {
+                params: Some(GdalDatasetParameters {
                     file_path: file_path.clone(),
                     rasterband_channel: 1,
-                    geo_transform: GeoTransform::new_with_coordinate_x_y(0., 1., 0., -1.),
+                    geo_transform: GdalDatasetGeoTransform {
+                        origin_coordinate: (0.0, 0.0).into(),
+                        x_pixel_size: 1.0,
+                        y_pixel_size: -1.0,
+                    },
                     width: 200,
                     height: 200,
                     file_not_found_handling: FileNotFoundHandling::Error,
                     no_data_value: None,
                     properties_mapping: None,
                     gdal_open_options: None,
-                },
+                    gdal_config_options: None,
+                    allow_alphaband_as_mask: true,
+                }),
             }
         );
 
         // test if the data can be loaded
         let op = GdalSource {
             params: GdalSourceParameters {
-                dataset: dataset_id,
+                data: dataset_id.into(),
             },
         }
         .boxed();
@@ -616,7 +593,7 @@ mod tests {
 
     /// create a zip file from the content of `source_dir` and its subfolders and output it as a byte vector
     async fn zip_dir(source_dir: PathBuf) -> Result<Vec<u8>> {
-        tokio::task::spawn_blocking(move || {
+        crate::util::spawn_blocking(move || {
             let mut output = vec![];
             {
                 let mut zip = zip::ZipWriter::new(Cursor::new(&mut output));
@@ -633,7 +610,7 @@ mod tests {
                         zip.start_file(name, options).unwrap();
                         let mut f = std::fs::File::open(path)?;
                         f.read_to_end(&mut buffer)?;
-                        zip.write_all(&*buffer)?;
+                        zip.write_all(&buffer)?;
                         buffer.clear();
                     } else if !name.is_empty() {
                         zip.add_directory(name, options).unwrap();

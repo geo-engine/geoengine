@@ -3,12 +3,12 @@ use std::ops::Add;
 use super::{
     empty_grid::EmptyGrid,
     grid_traits::{ChangeGridBounds, GridShapeAccess},
+    masked_grid::MaskedGrid,
     Grid, GridBoundingBox, GridBounds, GridIdx, GridIndexAccess, GridShape, GridShape1D,
-    GridShape2D, GridShape3D, GridSize, GridSpaceToLinearSpace, NoDataValue,
+    GridShape2D, GridShape3D, GridSize, GridSpaceToLinearSpace,
 };
 
 use crate::util::Result;
-use num_traits::AsPrimitive;
 use serde::{Deserialize, Serialize};
 
 pub type GridOrEmpty1D<T> = GridOrEmpty<GridShape1D, T>;
@@ -19,14 +19,14 @@ pub type GridOrEmpty3D<T> = GridOrEmpty<GridShape3D, T>;
 #[serde(rename_all = "camelCase")]
 #[serde(tag = "type")]
 pub enum GridOrEmpty<D, T> {
-    Grid(Grid<D, T>),
+    Grid(MaskedGrid<D, T>),
     Empty(EmptyGrid<D, T>),
 }
 
 impl<D, T> GridOrEmpty<D, T>
 where
-    D: GridSize,
-    T: Clone,
+    D: GridSize + PartialEq + Clone,
+    T: Clone + Default,
 {
     pub fn is_empty(&self) -> bool {
         matches!(self, GridOrEmpty::Empty(_))
@@ -38,35 +38,56 @@ where
 
     pub fn shape_ref(&self) -> &D {
         match self {
-            GridOrEmpty::Grid(g) => &g.shape,
+            GridOrEmpty::Grid(g) => g.shape(),
             GridOrEmpty::Empty(n) => &n.shape,
         }
     }
 
-    /// Converts the data type of the raster by converting it pixel-wise
-    pub fn convert_dtype<To>(self) -> GridOrEmpty<D, To>
-    where
-        T: AsPrimitive<To> + Copy + 'static,
-        To: Copy + 'static,
-    {
+    /// Transforms `self`into a `MaskedGrid`
+    pub fn into_materialized_masked_grid(self) -> MaskedGrid<D, T> {
         match self {
-            GridOrEmpty::Grid(g) => GridOrEmpty::Grid(g.convert_dtype()),
-            GridOrEmpty::Empty(n) => GridOrEmpty::Empty(n.convert_dtype()),
+            GridOrEmpty::Grid(g) => g,
+            GridOrEmpty::Empty(n) => MaskedGrid::from(n),
         }
     }
 
-    pub fn into_materialized_grid(self) -> Grid<D, T> {
+    /// Creates an `EmptyGrid` with the same shape and type.
+    pub fn matching_empty_grid(&self) -> EmptyGrid<D, T> {
         match self {
-            GridOrEmpty::Grid(g) => g,
-            GridOrEmpty::Empty(n) => n.into(),
+            GridOrEmpty::Grid(g) => EmptyGrid::new(g.shape().clone()),
+            GridOrEmpty::Empty(n) => n.clone(),
+        }
+    }
+
+    /// Materialize the inner grid. This is a no-op if the grid is already materialized.
+    pub fn materialize(&mut self) {
+        if self.is_empty() {
+            let grid = self.clone().into_materialized_masked_grid();
+            *self = GridOrEmpty::Grid(grid);
+        }
+    }
+
+    /// Returns an option of a reference to the inner grid.
+    pub fn as_masked_grid(&self) -> Option<&MaskedGrid<D, T>> {
+        match self {
+            GridOrEmpty::Grid(g) => Some(g),
+            GridOrEmpty::Empty(_) => None,
+        }
+    }
+
+    /// Returns an option of a mutable reference to the inner grid.
+    pub fn as_masked_grid_mut(&mut self) -> Option<&mut MaskedGrid<D, T>> {
+        match self {
+            GridOrEmpty::Grid(g) => Some(g),
+            GridOrEmpty::Empty(_) => None,
         }
     }
 }
 
 impl<D, T> GridSize for GridOrEmpty<D, T>
 where
-    D: GridSize + GridSpaceToLinearSpace,
-    T: Clone,
+    D: GridSize + GridSpaceToLinearSpace + PartialEq + Clone,
+    T: Clone + Default,
 {
     type ShapeArray = D::ShapeArray;
 
@@ -81,24 +102,22 @@ where
     }
 }
 
-impl<T, D, I, A> GridIndexAccess<T, I> for GridOrEmpty<D, T>
+impl<T, D, I> GridIndexAccess<Option<T>, I> for GridOrEmpty<D, T>
 where
-    D: GridSize + GridSpaceToLinearSpace<IndexArray = A> + GridBounds<IndexArray = A>,
-    I: Into<GridIdx<A>>,
-    A: AsRef<[isize]> + Into<GridIdx<A>> + Clone,
+    MaskedGrid<D, T>: GridIndexAccess<Option<T>, I>,
     T: Copy,
 {
-    fn get_at_grid_index(&self, grid_index: I) -> Result<T> {
+    fn get_at_grid_index(&self, grid_index: I) -> Result<Option<T>> {
         match self {
             GridOrEmpty::Grid(g) => g.get_at_grid_index(grid_index),
-            GridOrEmpty::Empty(n) => n.get_at_grid_index(grid_index),
+            GridOrEmpty::Empty(_) => Ok(None), // TODO: check if index in bounds?
         }
     }
 
-    fn get_at_grid_index_unchecked(&self, grid_index: I) -> T {
+    fn get_at_grid_index_unchecked(&self, grid_index: I) -> Option<T> {
         match self {
             GridOrEmpty::Grid(g) => g.get_at_grid_index_unchecked(grid_index),
-            GridOrEmpty::Empty(n) => n.get_at_grid_index_unchecked(grid_index),
+            GridOrEmpty::Empty(_) => None,
         }
     }
 }
@@ -151,26 +170,22 @@ where
     }
 }
 
-impl<D, T> From<Grid<D, T>> for GridOrEmpty<D, T>
+impl<D, T> From<MaskedGrid<D, T>> for GridOrEmpty<D, T>
 where
     T: Clone,
 {
-    fn from(grid: Grid<D, T>) -> Self {
+    fn from(grid: MaskedGrid<D, T>) -> Self {
         GridOrEmpty::Grid(grid)
     }
 }
 
-impl<D, T> NoDataValue for GridOrEmpty<D, T>
+impl<D, T> From<Grid<D, T>> for GridOrEmpty<D, T>
 where
-    T: PartialEq + Copy,
+    T: Clone,
+    D: GridSize + std::cmp::PartialEq + Clone,
 {
-    type NoDataType = T;
-
-    fn no_data_value(&self) -> Option<Self::NoDataType> {
-        match self {
-            GridOrEmpty::Grid(g) => g.no_data_value(),
-            GridOrEmpty::Empty(n) => n.no_data_value(),
-        }
+    fn from(grid: Grid<D, T>) -> Self {
+        Self::from(MaskedGrid::from(grid))
     }
 }
 
@@ -208,7 +223,7 @@ mod tests {
     #[test]
     fn grid_bounds_2d_empty_grid() {
         let dim: GridShape2D = [3, 2].into();
-        let raster2d: GridOrEmpty2D<_> = EmptyGrid::new(dim, 3).into();
+        let raster2d: GridOrEmpty2D<u8> = EmptyGrid::new(dim).into(); // FIXME: find out why type is needed
 
         assert_eq!(raster2d.min_index(), GridIdx([0, 0]));
         assert_eq!(raster2d.max_index(), GridIdx([2, 1]));
@@ -221,7 +236,7 @@ mod tests {
     fn grid_bounds_2d_grid() {
         let dim: GridShape2D = [3, 2].into();
         let data = [1, 2, 3, 4, 5, 6].into();
-        let raster2d: GridOrEmpty2D<_> = Grid2D::new(dim, data, Some(3)).unwrap().into();
+        let raster2d: GridOrEmpty2D<_> = Grid2D::new(dim, data).unwrap().into();
 
         assert_eq!(raster2d.min_index(), GridIdx([0, 0]));
         assert_eq!(raster2d.max_index(), GridIdx([2, 1]));

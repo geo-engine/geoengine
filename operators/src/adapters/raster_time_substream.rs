@@ -145,12 +145,13 @@ mod tests {
     use futures::stream::{self, StreamExt};
     use geoengine_datatypes::primitives::TimeInterval;
     use geoengine_datatypes::raster::{Grid2D, TileInformation};
+    use geoengine_datatypes::util::test::TestDefault;
     use tokio::pin;
 
     #[tokio::test]
     async fn simple() {
         let tile_information = TileInformation {
-            global_geo_transform: Default::default(),
+            global_geo_transform: TestDefault::test_default(),
             global_tile_position: [0, 0].into(),
             tile_size_in_pixels: [3, 2].into(),
         };
@@ -159,21 +160,21 @@ mod tests {
             RasterTile2D::new_with_tile_info(
                 TimeInterval::new(0, 1).unwrap(),
                 tile_information,
-                Grid2D::new([3, 2].into(), vec![1, 2, 3, 4, 5, 6], None)
+                Grid2D::new([3, 2].into(), vec![1, 2, 3, 4, 5, 6])
                     .unwrap()
                     .into(),
             ),
             RasterTile2D::new_with_tile_info(
                 TimeInterval::new(1, 2).unwrap(),
                 tile_information,
-                Grid2D::new([3, 2].into(), vec![1, 2, 3, 4, 5, 6], None)
+                Grid2D::new([3, 2].into(), vec![1, 2, 3, 4, 5, 6])
                     .unwrap()
                     .into(),
             ),
             RasterTile2D::new_with_tile_info(
                 TimeInterval::new(2, 3).unwrap(),
                 tile_information,
-                Grid2D::new([3, 2].into(), vec![1, 2, 3, 4, 5, 6], None)
+                Grid2D::new([3, 2].into(), vec![1, 2, 3, 4, 5, 6])
                     .unwrap()
                     .into(),
             ),
@@ -211,7 +212,7 @@ mod tests {
     #[tokio::test]
     async fn first_value() {
         let tile_information = TileInformation {
-            global_geo_transform: Default::default(),
+            global_geo_transform: TestDefault::test_default(),
             global_tile_position: [0, 0].into(),
             tile_size_in_pixels: [3, 2].into(),
         };
@@ -220,28 +221,28 @@ mod tests {
             RasterTile2D::new_with_tile_info(
                 TimeInterval::new(0, 1).unwrap(),
                 tile_information,
-                Grid2D::new([3, 2].into(), vec![1, 2, 3, 4, 5, 6], None)
+                Grid2D::new([3, 2].into(), vec![1, 2, 3, 4, 5, 6])
                     .unwrap()
                     .into(),
             ),
             RasterTile2D::new_with_tile_info(
                 TimeInterval::new(1, 2).unwrap(),
                 tile_information,
-                Grid2D::new([3, 2].into(), vec![1, 2, 3, 4, 5, 6], None)
+                Grid2D::new([3, 2].into(), vec![1, 2, 3, 4, 5, 6])
                     .unwrap()
                     .into(),
             ),
             RasterTile2D::new_with_tile_info(
                 TimeInterval::new(1, 2).unwrap(),
                 tile_information,
-                Grid2D::new([3, 2].into(), vec![6, 5, 4, 3, 2, 1], None)
+                Grid2D::new([3, 2].into(), vec![6, 5, 4, 3, 2, 1])
                     .unwrap()
                     .into(),
             ),
             RasterTile2D::new_with_tile_info(
                 TimeInterval::new(2, 3).unwrap(),
                 tile_information,
-                Grid2D::new([3, 2].into(), vec![1, 2, 3, 4, 5, 6], None)
+                Grid2D::new([3, 2].into(), vec![1, 2, 3, 4, 5, 6])
                     .unwrap()
                     .into(),
             ),

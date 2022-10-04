@@ -1,0 +1,101 @@
+/* DATA DESCRIPTION:
+Citation:	Stainbank, Stephanie; Kroon, Dick; de Leau, Erica S; Spezzaferri, Silvia (2021): Stable carbon and oxygen isotope ratios of Globigerinoides ruber (white) of IODP Hole 359-U1467A, recent. PANGAEA, https://doi.org/10.1594/PANGAEA.933024, 
+	In: Stainbank, S et al. (2021): Individual foraminiferal analysis (IFA) geochemical data generated from IODP Site 359-U1467. PANGAEA, https://doi.org/10.1594/PANGAEA.933025
+Keyword(s):	Foraminifera; Globigerinoides ruber; International Ocean Discovery Program (IODP); stable isotope geochemistry; Trilobatus sacculifer
+Project(s):	Integrated Ocean Drilling Program / International Ocean Discovery Program (IODP) (URI: http://www.iodp.org/)
+Coverage:	LATITUDE: 4.850232 * LONGITUDE: 73.283667
+	DATE/TIME START: 2015-10-28T15:18:00 * DATE/TIME END: 2015-10-29T04:00:00
+	MINIMUM ELEVATION: -487.0 m * MAXIMUM ELEVATION: -487.0 m
+Event(s):	359-U1467A * LATITUDE: 4.850232 * LONGITUDE: 73.283667 * DATE/TIME START: 2015-10-28T15:18:00 * DATE/TIME END: 2015-10-29T04:00:00 * ELEVATION: -487.0 m * Penetration: 62.0 m * Recovery: 31.49 m * CAMPAIGN: Exp359 * BASIS: Joides Resolution (URI: http://www-odp.tamu.edu/resolutn.html) * METHOD/DEVICE: Drilling/drill rig (DRILL) * COMMENT: Cored interval 32.0 m, Recover 98 %
+Domain attribute(s):	Curation level: Enhanced curation
+Parameter(s):	Sample code/label (Sample label) * PI: Stainbank, Stephanie (https://orcid.org/0000-0002-5404-5146, stephaniehayman.23@gmail.com)
+	Globigerinoides ruber white, δ13C [‰ PDB] (G. ruber w δ13C) * PI: Stainbank, Stephanie (https://orcid.org/0000-0002-5404-5146, stephaniehayman.23@gmail.com) * METHOD/DEVICE: Mass spectrometer Thermo Electron Delta plus Advantage, integrated with a Kiel carbonate III automated extraction line * COMMENT: 355-400 µm size fraction
+	Globigerinoides ruber white, δ18O [‰ PDB] (G. ruber w δ18O) * PI: Stainbank, Stephanie (https://orcid.org/0000-0002-5404-5146, stephaniehayman.23@gmail.com) * METHOD/DEVICE: Mass spectrometer Thermo Electron Delta plus Advantage, integrated with a Kiel carbonate III automated extraction line * COMMENT: 355-400 µm size fraction
+License:	Creative Commons Attribution 4.0 International (CC-BY-4.0)
+Size:	252 data points
+*/
+Sample label	G. ruber w δ13C [‰ PDB]	G. ruber w δ18O [‰ PDB]
+359-U1467A, Mudline	0.95	-2.72
+359-U1467A, Mudline	1.69	-2.35
+359-U1467A, Mudline	1.59	-2.47
+359-U1467A, Mudline	1.23	-2.60
+359-U1467A, Mudline	1.79	-2.61
+359-U1467A, Mudline	1.65	-2.08
+359-U1467A, Mudline	1.77	-3.01
+359-U1467A, Mudline	1.60	-2.29
+359-U1467A, Mudline	0.92	-2.80
+359-U1467A, Mudline	1.38	-2.55
+359-U1467A, Mudline	1.28	-2.93
+359-U1467A, Mudline	1.42	-2.63
+359-U1467A, Mudline	1.45	-2.70
+359-U1467A, Mudline	1.49	-2.61
+359-U1467A, Mudline	1.95	-2.76
+359-U1467A, Mudline	0.96	-3.21
+359-U1467A, Mudline	0.89	-3.09
+359-U1467A, Mudline	1.06	-2.82
+359-U1467A, Mudline	1.44	-2.99
+359-U1467A, Mudline	1.13	-2.44
+359-U1467A, Mudline	1.52	-2.56
+359-U1467A, Mudline	1.55	-2.95
+359-U1467A, Mudline	1.21	-2.53
+359-U1467A, Mudline	1.61	-2.63
+359-U1467A, Mudline	1.62	-2.78
+359-U1467A, Mudline	1.13	-2.98
+359-U1467A, Mudline	1.08	-2.43
+359-U1467A, Mudline	1.79	-2.42
+359-U1467A, Mudline	1.38	-2.36
+359-U1467A, Mudline	1.47	-2.34
+359-U1467A, Mudline	1.05	-2.60
+359-U1467A, Mudline	1.61	-2.92
+359-U1467A, Mudline	1.25	-2.97
+359-U1467A, Mudline	0.94	-2.57
+359-U1467A, Mudline	0.43	-2.88
+359-U1467A, Mudline	1.75	-2.65
+359-U1467A, Mudline	1.50	-3.19
+359-U1467A, Mudline	1.12	-2.78
+359-U1467A, Mudline	0.97	-2.68
+359-U1467A, Mudline	1.26	-2.67
+359-U1467A, Mudline	1.37	-2.68
+359-U1467A, Mudline	1.71	-2.38
+359-U1467A, Mudline	0.68	-2.87
+359-U1467A, Mudline	1.63	-2.66
+359-U1467A, Mudline	1.19	-2.81
+359-U1467A, Mudline	1.77	-2.83
+359-U1467A, Mudline	1.46	-2.99
+359-U1467A, Mudline	1.27	-2.85
+359-U1467A, Mudline	1.68	-2.71
+359-U1467A, Mudline	1.29	-2.61
+359-U1467A, Mudline	1.39	-2.81
+359-U1467A, Mudline	1.28	-2.26
+359-U1467A, Mudline	1.14	-2.91
+359-U1467A, Mudline	0.62	-2.59
+359-U1467A, Mudline	1.36	-2.36
+359-U1467A, Mudline	0.80	-2.75
+359-U1467A, Mudline	1.25	-2.57
+359-U1467A, Mudline	0.46	-3.04
+359-U1467A, Mudline	1.28	-3.10
+359-U1467A, Mudline	2.02	-2.85
+359-U1467A, Mudline	1.31	-3.05
+359-U1467A, Mudline	1.59	-3.13
+359-U1467A, Mudline	1.62	-3.37
+359-U1467A, Mudline	1.75	-3.05
+359-U1467A, Mudline	2.34	-2.90
+359-U1467A, Mudline	1.13	-2.91
+359-U1467A, Mudline	2.58	-2.91
+359-U1467A, Mudline	1.94	-2.43
+359-U1467A, Mudline	1.17	-2.70
+359-U1467A, Mudline	1.42	-3.25
+359-U1467A, Mudline	1.19	-2.71
+359-U1467A, Mudline	1.89	-2.76
+359-U1467A, Mudline	2.24	-2.23
+359-U1467A, Mudline	1.54	-2.93
+359-U1467A, Mudline	0.98	-3.35
+359-U1467A, Mudline	1.92	-2.49
+359-U1467A, Mudline	1.24	-3.51
+359-U1467A, Mudline	2.13	-2.60
+359-U1467A, Mudline	1.82	-2.91
+359-U1467A, Mudline	1.83	-2.64
+359-U1467A, Mudline	1.71	-2.39
+359-U1467A, Mudline	0.97	-3.15
+359-U1467A, Mudline	1.73	-3.18
+359-U1467A, Mudline	1.43	-2.71

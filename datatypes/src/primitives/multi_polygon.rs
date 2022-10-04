@@ -2,6 +2,7 @@ use std::convert::TryFrom;
 
 use arrow::array::{ArrayBuilder, BooleanArray};
 use arrow::error::ArrowError;
+use float_cmp::{ApproxEq, F64Margin};
 use geo::intersects::Intersects;
 use serde::{Deserialize, Serialize};
 use snafu::ensure;
@@ -206,18 +207,18 @@ impl ArrowTyped for MultiPolygon {
                             let floats_ref = coordinates.value(coordinate_index);
                             let floats: &Float64Array = downcast_array(&floats_ref);
 
-                            coordinate_builder.values().append_slice(floats.values())?;
+                            coordinate_builder.values().append_slice(floats.values());
 
-                            coordinate_builder.append(true)?;
+                            coordinate_builder.append(true);
                         }
 
-                        ring_builder.append(true)?;
+                        ring_builder.append(true);
                     }
 
-                    polygon_builder.append(true)?;
+                    polygon_builder.append(true);
                 }
 
-                multi_polygon_builder.append(true)?;
+                multi_polygon_builder.append(true);
             }
         }
 
@@ -258,18 +259,18 @@ impl ArrowTyped for MultiPolygon {
                         let floats_ref = coordinates.value(coordinate_index);
                         let floats: &Float64Array = downcast_array(&floats_ref);
 
-                        coordinate_builder.values().append_slice(floats.values())?;
+                        coordinate_builder.values().append_slice(floats.values());
 
-                        coordinate_builder.append(true)?;
+                        coordinate_builder.append(true);
                     }
 
-                    ring_builder.append(true)?;
+                    ring_builder.append(true);
                 }
 
-                polygon_builder.append(true)?;
+                polygon_builder.append(true);
             }
 
-            multi_polygon_builder.append(true)?;
+            multi_polygon_builder.append(true);
         }
 
         Ok(multi_polygon_builder.finish())
@@ -291,18 +292,18 @@ impl ArrowTyped for MultiPolygon {
 
                     for coordinate in ring {
                         let float_builder = coordinate_builder.values();
-                        float_builder.append_value(coordinate.x)?;
-                        float_builder.append_value(coordinate.y)?;
-                        coordinate_builder.append(true)?;
+                        float_builder.append_value(coordinate.x);
+                        float_builder.append_value(coordinate.y);
+                        coordinate_builder.append(true);
                     }
 
-                    ring_builder.append(true)?;
+                    ring_builder.append(true);
                 }
 
-                polygon_builder.append(true)?;
+                polygon_builder.append(true);
             }
 
-            builder.append(true)?;
+            builder.append(true);
         }
 
         Ok(builder.finish())
@@ -401,8 +402,34 @@ impl<'g> From<&MultiPolygonRef<'g>> for MultiPolygon {
     }
 }
 
+impl ApproxEq for &MultiPolygon {
+    type Margin = F64Margin;
+
+    fn approx_eq<M: Into<Self::Margin>>(self, other: Self, margin: M) -> bool {
+        let m = margin.into();
+        self.polygons().len() == other.polygons().len()
+            && self
+                .polygons()
+                .iter()
+                .zip(other.polygons())
+                .all(|(polygon_a, polygon_b)| {
+                    polygon_a.len() == polygon_b.len()
+                        && polygon_a.iter().zip(polygon_b).all(|(ring_a, ring_b)| {
+                            ring_a.len() == ring_b.len()
+                                && ring_a.iter().zip(ring_b).all(
+                                    |(&coordinate_a, &coordinate_b)| {
+                                        coordinate_a.approx_eq(coordinate_b, m)
+                                    },
+                                )
+                        })
+                })
+    }
+}
+
 #[cfg(test)]
 mod tests {
+    use float_cmp::approx_eq;
+
     use super::*;
 
     #[test]
@@ -452,5 +479,205 @@ mod tests {
 
         assert_eq!(aggregate(&multi_polygon), (1, 2, 8));
         assert_eq!(aggregate(&multi_polygon), aggregate(&multi_polygon_ref));
+    }
+
+    #[test]
+    fn approx_equal() {
+        let a = MultiPolygon::new(vec![
+            vec![
+                vec![
+                    (0.1, 0.1).into(),
+                    (0.8, 0.1).into(),
+                    (0.8, 0.8).into(),
+                    (0.1, 0.1).into(),
+                ],
+                vec![
+                    (0.2, 0.2).into(),
+                    (0.9, 0.2).into(),
+                    (0.9, 0.9).into(),
+                    (0.2, 0.2).into(),
+                ],
+            ],
+            vec![
+                vec![
+                    (1.1, 1.1).into(),
+                    (1.8, 1.1).into(),
+                    (1.8, 1.8).into(),
+                    (1.1, 1.1).into(),
+                ],
+                vec![
+                    (1.2, 1.2).into(),
+                    (1.9, 1.2).into(),
+                    (1.9, 1.9).into(),
+                    (1.2, 1.2).into(),
+                ],
+            ],
+        ])
+        .unwrap();
+
+        let b = MultiPolygon::new(vec![
+            vec![
+                vec![
+                    (0.1, 0.099_999_999).into(),
+                    (0.8, 0.1).into(),
+                    (0.8, 0.8).into(),
+                    (0.1, 0.099_999_999).into(),
+                ],
+                vec![
+                    (0.2, 0.2).into(),
+                    (0.9, 0.2).into(),
+                    (0.9, 0.9).into(),
+                    (0.2, 0.2).into(),
+                ],
+            ],
+            vec![
+                vec![
+                    (1.1, 1.1).into(),
+                    (1.8, 1.1).into(),
+                    (1.8, 1.8).into(),
+                    (1.1, 1.1).into(),
+                ],
+                vec![
+                    (1.2, 1.2).into(),
+                    (1.9, 1.2).into(),
+                    (1.9, 1.9).into(),
+                    (1.2, 1.2).into(),
+                ],
+            ],
+        ])
+        .unwrap();
+
+        assert!(approx_eq!(&MultiPolygon, &a, &b, epsilon = 0.000_001));
+    }
+
+    #[test]
+    fn not_approx_equal_ring_len() {
+        let a = MultiPolygon::new(vec![
+            vec![
+                vec![
+                    (0.1, 0.1).into(),
+                    (0.8, 0.1).into(),
+                    (0.8, 0.8).into(),
+                    (0.1, 0.1).into(),
+                ],
+                vec![
+                    (0.2, 0.2).into(),
+                    (0.9, 0.2).into(),
+                    (0.9, 0.9).into(),
+                    (0.2, 0.2).into(),
+                ],
+            ],
+            vec![vec![
+                (1.1, 1.1).into(),
+                (1.8, 1.1).into(),
+                (1.8, 1.8).into(),
+                (1.1, 1.1).into(),
+            ]],
+        ])
+        .unwrap();
+
+        let b = MultiPolygon::new(vec![
+            vec![
+                vec![
+                    (0.1, 0.1).into(),
+                    (0.8, 0.1).into(),
+                    (0.8, 0.8).into(),
+                    (0.1, 0.1).into(),
+                ],
+                vec![
+                    (0.2, 0.2).into(),
+                    (0.9, 0.2).into(),
+                    (0.9, 0.9).into(),
+                    (0.2, 0.2).into(),
+                ],
+            ],
+            vec![
+                vec![
+                    (1.1, 1.1).into(),
+                    (1.8, 1.1).into(),
+                    (1.8, 1.8).into(),
+                    (1.1, 1.1).into(),
+                ],
+                vec![
+                    (1.2, 1.2).into(),
+                    (1.9, 1.2).into(),
+                    (1.9, 1.9).into(),
+                    (1.2, 1.2).into(),
+                ],
+            ],
+        ])
+        .unwrap();
+
+        assert!(!approx_eq!(&MultiPolygon, &a, &b, F64Margin::default()));
+    }
+
+    #[test]
+    fn not_approx_equal_inner_len() {
+        let a = MultiPolygon::new(vec![
+            vec![
+                vec![
+                    (0.1, 0.1).into(),
+                    (0.8, 0.1).into(),
+                    (0.8, 0.8).into(),
+                    (0.1, 0.1).into(),
+                ],
+                vec![
+                    (0.2, 0.2).into(),
+                    (0.9, 0.2).into(),
+                    (0.9, 0.9).into(),
+                    (0.2, 0.2).into(),
+                ],
+            ],
+            vec![
+                vec![
+                    (1.1, 1.1).into(),
+                    (1.8, 1.1).into(),
+                    (1.8, 1.8).into(),
+                    (1.1, 1.1).into(),
+                ],
+                vec![
+                    (1.2, 1.2).into(),
+                    (1.9, 1.2).into(),
+                    (1.9, 1.9).into(),
+                    (1.2, 1.2).into(),
+                ],
+            ],
+        ])
+        .unwrap();
+
+        let b = MultiPolygon::new(vec![
+            vec![
+                vec![
+                    (0.1, 0.1).into(),
+                    (0.8, 0.1).into(),
+                    (0.8, 0.8).into(),
+                    (0.1, 0.1).into(),
+                ],
+                vec![
+                    (0.2, 0.2).into(),
+                    (0.9, 0.2).into(),
+                    (0.9, 0.9).into(),
+                    (0.2, 0.2).into(),
+                ],
+            ],
+            vec![
+                vec![
+                    (1.1, 1.1).into(),
+                    (1.8, 1.1).into(),
+                    (1.8, 1.8).into(),
+                    (1.1, 1.1).into(),
+                ],
+                vec![
+                    (1.2, 1.2).into(),
+                    (1.7, 1.2).into(),
+                    (1.9, 1.2).into(),
+                    (1.9, 1.9).into(),
+                    (1.2, 1.2).into(),
+                ],
+            ],
+        ])
+        .unwrap();
+
+        assert!(!approx_eq!(&MultiPolygon, &a, &b, F64Margin::default()));
     }
 }

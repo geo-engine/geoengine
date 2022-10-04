@@ -6,12 +6,13 @@ pub use self::csv::{
     CsvGeometrySpecification, CsvSource, CsvSourceParameters, CsvSourceStream, CsvTimeSpecification,
 };
 pub use self::gdal_source::{
-    FileNotFoundHandling, GdalDatasetParameters, GdalLoadingInfo, GdalLoadingInfoPart,
-    GdalLoadingInfoPartIterator, GdalMetaDataRegular, GdalMetaDataStatic, GdalSource,
-    GdalSourceParameters, GdalSourceProcessor,
+    FileNotFoundHandling, GdalDatasetGeoTransform, GdalDatasetParameters, GdalLoadingInfo,
+    GdalLoadingInfoTemporalSlice, GdalLoadingInfoTemporalSliceIterator, GdalMetaDataList,
+    GdalMetaDataRegular, GdalMetaDataStatic, GdalMetadataMapping, GdalMetadataNetCdfCf, GdalSource,
+    GdalSourceParameters, GdalSourceProcessor, GdalSourceTimePlaceholder, TimeReference,
 };
 pub use self::ogr_source::{
-    OgrSource, OgrSourceColumnSpec, OgrSourceDataset, OgrSourceDatasetTimeType,
-    OgrSourceDurationSpec, OgrSourceErrorSpec, OgrSourceParameters, OgrSourceProcessor,
-    OgrSourceTimeFormat,
+    AttributeFilter, CsvHeader, FormatSpecifics, OgrSource, OgrSourceColumnSpec, OgrSourceDataset,
+    OgrSourceDatasetTimeType, OgrSourceDurationSpec, OgrSourceErrorSpec, OgrSourceParameters,
+    OgrSourceProcessor, OgrSourceTimeFormat, UnixTimeStampType,
 };

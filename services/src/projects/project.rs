@@ -1,13 +1,15 @@
 use std::{convert::TryInto, fmt::Debug};
 
+use crate::api::model::datatypes::Colorizer;
 use crate::error::{Error, Result};
+use crate::identifier;
 use crate::util::config::ProjectService;
 use crate::util::user_input::UserInput;
 use crate::workflows::workflow::WorkflowId;
 use crate::{error, util::config::get_config_element};
-use chrono::{DateTime, Utc};
-use geoengine_datatypes::{identifier, operations::image::RgbaColor};
-use geoengine_datatypes::{operations::image::Colorizer, primitives::TimeInstance};
+use geoengine_datatypes::operations::image::RgbaColor;
+use geoengine_datatypes::primitives::DateTime;
+use geoengine_datatypes::primitives::TimeInstance;
 use geoengine_datatypes::{
     primitives::{BoundingBox2D, Coordinate2D, TimeGranularity, TimeInterval, TimeStep},
     spatial_reference::SpatialReferenceOption,
@@ -21,6 +23,7 @@ use geoengine_operators::string_token;
 use postgres_types::{FromSql, ToSql};
 use serde::{Deserialize, Serialize};
 use snafu::{ensure, ResultExt};
+use utoipa::ToSchema;
 
 identifier!(ProjectId);
 
@@ -119,10 +122,29 @@ impl Project {
     }
 }
 
-#[derive(Debug, PartialEq, Serialize, Deserialize, Clone)]
+#[derive(Debug, PartialEq, Serialize, Deserialize, Clone, ToSchema)]
 #[cfg_attr(feature = "postgres", derive(ToSql, FromSql))]
 #[allow(clippy::upper_case_acronyms)]
 #[serde(rename_all = "camelCase")]
+// TODO: add example, once utoipas schema macro can co-exist with postgres OR: split type into API and database model
+// cf. utoipa issue: https://github.com/juhaku/utoipa/issues/266
+// #[schema(example = json!({
+//     "boundingBox": {
+//         "lowerLeftCoordinate": {
+//             "x": -180.0,
+//             "y": -90.0
+//         },
+//         "upperRightCoordinate": {
+//             "x": 180.0,
+//             "y": 90.0
+//         }
+//     },
+//     "spatialReference": "EPSG:4326",
+//     "timeInterval": {
+//         "end": 1_388_534_400_000_i64,
+//         "start": 1_388_534_400_000_i64
+//     }
+// }))]
 pub struct STRectangle {
     pub spatial_reference: SpatialReferenceOption,
     pub bounding_box: BoundingBox2D,
@@ -224,7 +246,7 @@ pub enum LayerType {
     Vector,
 }
 
-#[derive(Debug, PartialEq, Eq, Serialize, Deserialize, Clone)]
+#[derive(Debug, PartialEq, Eq, Serialize, Deserialize, Clone, ToSchema)]
 #[allow(clippy::large_enum_variant)]
 #[serde(rename_all = "camelCase", tag = "type")]
 pub enum Symbology {
@@ -234,7 +256,7 @@ pub enum Symbology {
     Polygon(PolygonSymbology),
 }
 
-#[derive(Debug, PartialEq, Serialize, Deserialize, Clone)]
+#[derive(Debug, PartialEq, Serialize, Deserialize, Clone, ToSchema)]
 pub struct RasterSymbology {
     pub opacity: f64,
     pub colorizer: Colorizer,
@@ -242,7 +264,7 @@ pub struct RasterSymbology {
 
 impl Eq for RasterSymbology {}
 
-#[derive(Debug, PartialEq, Eq, Serialize, Deserialize, Clone)]
+#[derive(Debug, PartialEq, Eq, Serialize, Deserialize, Clone, ToSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct TextSymbology {
     pub attribute: String,
@@ -250,7 +272,7 @@ pub struct TextSymbology {
     pub stroke: StrokeParam,
 }
 
-#[derive(Debug, PartialEq, Eq, Serialize, Deserialize, Clone)]
+#[derive(Debug, PartialEq, Eq, Serialize, Deserialize, Clone, ToSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct PointSymbology {
     pub radius: NumberParam,
@@ -283,14 +305,14 @@ impl From<PointSymbology> for Symbology {
     }
 }
 
-#[derive(Debug, PartialEq, Eq, Serialize, Deserialize, Clone)]
+#[derive(Debug, PartialEq, Eq, Serialize, Deserialize, Clone, ToSchema)]
 pub struct LineSymbology {
     pub stroke: StrokeParam,
 
     pub text: Option<TextSymbology>,
 }
 
-#[derive(Debug, PartialEq, Eq, Serialize, Deserialize, Clone)]
+#[derive(Debug, PartialEq, Eq, Serialize, Deserialize, Clone, ToSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct PolygonSymbology {
     pub fill_color: ColorParam,
@@ -300,14 +322,14 @@ pub struct PolygonSymbology {
     pub text: Option<TextSymbology>,
 }
 
-#[derive(Debug, PartialEq, Eq, Serialize, Deserialize, Clone)]
+#[derive(Debug, PartialEq, Eq, Serialize, Deserialize, Clone, ToSchema)]
 #[serde(rename_all = "camelCase", tag = "type")]
 pub enum NumberParam {
     Static { value: usize },
     Derived(DerivedNumber),
 }
 
-#[derive(Debug, PartialEq, Serialize, Deserialize, Clone)]
+#[derive(Debug, PartialEq, Serialize, Deserialize, Clone, ToSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct DerivedNumber {
     pub attribute: String,
@@ -315,7 +337,7 @@ pub struct DerivedNumber {
     pub default_value: f64,
 }
 
-#[derive(Debug, PartialEq, Eq, Serialize, Deserialize, Clone)]
+#[derive(Debug, PartialEq, Eq, Serialize, Deserialize, Clone, ToSchema)]
 pub struct StrokeParam {
     pub width: NumberParam,
     pub color: ColorParam,
@@ -324,14 +346,14 @@ pub struct StrokeParam {
 
 impl Eq for DerivedNumber {}
 
-#[derive(Debug, PartialEq, Eq, Serialize, Deserialize, Clone)]
+#[derive(Debug, PartialEq, Eq, Serialize, Deserialize, Clone, ToSchema)]
 #[serde(rename_all = "camelCase", tag = "type")]
 pub enum ColorParam {
     Static { color: RgbaColor },
     Derived(DerivedColor),
 }
 
-#[derive(Debug, PartialEq, Eq, Serialize, Deserialize, Clone)]
+#[derive(Debug, PartialEq, Eq, Serialize, Deserialize, Clone, ToSchema)]
 pub struct DerivedColor {
     pub attribute: String,
     pub colorizer: Colorizer,
@@ -353,7 +375,7 @@ impl Default for LayerVisibility {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Plot {
     pub workflow: WorkflowId,
     pub name: String,
@@ -370,8 +392,8 @@ pub enum OrderBy {
 impl OrderBy {
     pub fn to_sql_string(&self) -> &'static str {
         match self {
-            OrderBy::DateAsc => "time ASC",
-            OrderBy::DateDesc => "time DESC",
+            OrderBy::DateAsc => "changed ASC",
+            OrderBy::DateDesc => "changed DESC",
             OrderBy::NameAsc => "name ASC",
             OrderBy::NameDesc => "name DESC",
         }
@@ -386,7 +408,7 @@ pub struct ProjectListing {
     pub description: String,
     pub layer_names: Vec<String>,
     pub plot_names: Vec<String>,
-    pub changed: DateTime<Utc>,
+    pub changed: DateTime,
 }
 
 impl From<&Project> for ProjectListing {
@@ -447,7 +469,7 @@ pub struct UpdateProject {
     pub time_step: Option<TimeStep>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(untagged)]
 pub enum VecUpdate<Content> {
     None(NoUpdate),
@@ -499,17 +521,17 @@ impl UserInput for ProjectListOptions {
 
 identifier!(ProjectVersionId);
 
-#[derive(Debug, PartialEq, Serialize, Deserialize, Clone, Copy)]
+#[derive(Debug, PartialEq, Eq, Serialize, Deserialize, Clone, Copy)]
 pub struct ProjectVersion {
     pub id: ProjectVersionId,
-    pub changed: DateTime<Utc>,
+    pub changed: DateTime,
 }
 
 impl ProjectVersion {
     fn new() -> Self {
         Self {
             id: ProjectVersionId::new(),
-            changed: chrono::offset::Utc::now(),
+            changed: DateTime::now(),
         }
     }
 }
@@ -676,7 +698,7 @@ mod tests {
         });
 
         assert_eq!(
-            serde_json::to_string(&symbology).unwrap(),
+            serde_json::to_value(&symbology).unwrap(),
             json!({
                 "type": "point",
                 "radius": {
@@ -706,15 +728,14 @@ mod tests {
                     }
                 },
                 "text": null
-            })
-            .to_string(),
+            }),
         );
     }
 
     #[test]
     fn serialize_derived_number_param() {
         assert_eq!(
-            serde_json::to_string(&NumberParam::Derived(DerivedNumber {
+            serde_json::to_value(&NumberParam::Derived(DerivedNumber {
                 attribute: "foo".to_owned(),
                 factor: 1.,
                 default_value: 0.
@@ -726,7 +747,6 @@ mod tests {
                 "factor": 1.0,
                 "defaultValue": 0.0
             })
-            .to_string()
         );
     }
 }
