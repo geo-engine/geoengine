@@ -13,7 +13,7 @@ use crate::error::Result;
 use crate::layers::external::DataProvider;
 use crate::layers::storage::LayerProviderDb;
 use crate::tasks::{Task, TaskContext, TaskId, TaskManager, TaskStatus, TaskStatusInfo};
-use crate::util::apidoc::ServerInfo;
+use crate::util::apidoc::OpenApiServerInfo;
 use crate::{contexts::Context, datasets::external::netcdfcf::NetCdfCfDataProvider};
 use actix_web::{
     web::{self, ServiceConfig},
@@ -46,7 +46,7 @@ use utoipa::{Modify, OpenApi, ToSchema};
             ResamplingMethod
         ),
     ),
-    modifiers(&SecurityAddon, &ApiDocInfo, &ServerInfo)
+    modifiers(&SecurityAddon, &ApiDocInfo, &OpenApiServerInfo)
 )]
 pub struct ApiDoc;
 
